@@ -23,7 +23,7 @@ def human_process(monkeypatch: pytest.MonkeyPatch) -> None:
 def query(root: Path, **arguments: object) -> dict:
     """Exercise the native gateway, including argument and authority validation."""
     result = bind(root, desktop_observer=True)({'action': 'execute', 'feature': 'desktop_activity',
-                             'arguments': {'ticket_id': '148', **arguments}})
+                             'arguments': {'task_id': '148', **arguments}})
     assert not result.failed, result.document
     return result.document
 
@@ -93,10 +93,10 @@ def test_agent_cannot_use_human_observation_or_forge_path(tmp_path: Path) -> Non
     """Registered Agents see only their own Session through the authenticated gateway."""
     runner, _, _ = prepare(tmp_path, 'codex', [message('private')])
     with pytest.raises(RunnerError, match='desktop host binding'):
-        handle_request({'action': 'execute', 'feature': 'desktop_activity', 'arguments': {'ticket_id': '148'}}, cwd=tmp_path)
+        handle_request({'action': 'execute', 'feature': 'desktop_activity', 'arguments': {'task_id': '148'}}, cwd=tmp_path)
     with runtime_caller(runner, 'research@x1'):
         allowed = handle_request({'action': 'execute', 'feature': 'desktop_activity',
-            'arguments': {'ticket_id': '148', 'alias': 'research@x1'}}, cwd=tmp_path)
+            'arguments': {'task_id': '148', 'alias': 'research@x1'}}, cwd=tmp_path)
         assert not allowed.failed
         assert allowed.document['scope'] == 'self'
         assert [member['alias'] for member in allowed.document['agents']] == ['research@x1']
@@ -105,9 +105,9 @@ def test_agent_cannot_use_human_observation_or_forge_path(tmp_path: Path) -> Non
             with pytest.raises(RunnerError, match='own Session'):
                 query(tmp_path, alias=target)
         with pytest.raises(RunnerError, match='own Session'):
-            query(tmp_path, ticket_id='other')
+            query(tmp_path, task_id='other')
     refused = bind(tmp_path, desktop_observer=True)({'action': 'execute', 'feature': 'desktop_activity',
-        'arguments': {'ticket_id': '148', 'path': '/private/elsewhere'}})
+        'arguments': {'task_id': '148', 'path': '/private/elsewhere'}})
     assert refused.failed and 'unexpected parameter' in refused.document['error']
     with pytest.raises(ValueError, match='actual member'):
         query(tmp_path, alias='other@x1')
@@ -293,7 +293,7 @@ def test_installed_observer_streams_updates_and_reconnects(
       const { ActivityReader } = await import(pathToFileURL(process.argv[1]));
       const reader = new ActivityReader();
       const root = process.argv[2];
-      const request = { ticket_id: '148', alias: 'research@x1' };
+      const request = { task_id: '148', alias: 'research@x1' };
       try {
         const first = await reader.read(root, request);
         assert.equal(first.events[0].text, 'first native record');
@@ -330,7 +330,7 @@ def test_installed_desktop_flag_preserves_actual_agent_identity(
     result = subprocess.run(
         [str(installed_commands.product.with_name('graphtraj-tool')), '--desktop-observer'],
         cwd=tmp_path, input=json.dumps({'action': 'execute', 'feature': 'desktop_activity',
-            'arguments': {'ticket_id': '148', 'alias': 'research@x1'}}) + '\n',
+            'arguments': {'task_id': '148', 'alias': 'research@x1'}}) + '\n',
         text=True, capture_output=True, timeout=20,
     )
     assert result.returncode == 0, result.stderr
@@ -354,7 +354,7 @@ def test_desktop_option_keeps_authenticated_cli_forwarding(
         return ToolResult({'error': 'Agent query refused'}, failed=True)
 
     monkeypatch.setattr('graphtraj.interfaces.hosted_cli.forward_request', forwarded)
-    request = {'action': 'execute', 'feature': 'desktop_activity', 'arguments': {'ticket_id': '148'}}
+    request = {'action': 'execute', 'feature': 'desktop_activity', 'arguments': {'task_id': '148'}}
     reply = answer(request, cwd=tmp_path, desktop_observer=True)
     assert reply['failed'] and calls == [(request, tmp_path)]
 
@@ -377,7 +377,7 @@ def test_self_query_is_registered_for_authenticated_runtime_hosts(tmp_path: Path
     from graphtraj.execution.runner_status import NativeCaller
 
     runner, _, _ = prepare(tmp_path, 'codex', [message('own retained content')])
-    request = {'action': 'execute', 'feature': 'desktop_activity', 'arguments': {'ticket_id': '148'}}
+    request = {'action': 'execute', 'feature': 'desktop_activity', 'arguments': {'task_id': '148'}}
     with runtime_caller(runner, 'research@x1'):
         result = handle_request(request, cwd=tmp_path, allowed_features=native_operation_features())
         assert not result.failed and result.document['scope'] == 'self'
@@ -419,7 +419,7 @@ def test_usage_pages_progress_across_65_readable_agents(tmp_path: Path) -> None:
     aliases = [f'research@x{index}' for index in range(1, 66)]
     for index, alias in enumerate(aliases, 1):
         if index > 3:
-            request = {'phase': 'member', 'ticket_id': '148', 'member': f'member{index}',
+            request = {'phase': 'member', 'task_id': '148', 'member': f'member{index}',
                        'role': 'researcher', 'session_ref': alias,
                        'caused_by_event_ids': [read_worldline(tmp_path / 'state', tmp_path)[-1]['event_id']],
                        'evidence_refs': ['evidence.md']}
@@ -474,9 +474,9 @@ def test_windows_adoption_fixture_projects_retired_content_and_usage(
 
     root = temporary_git_repository
     operation(root, 'project_setup', {'source_repository': str(root), 'apply': True, 'create_dev': True})
-    registered = operation(root, 'ticket_register', {
-        'ticket_id': '1', 'ticket_name': 'controlled', 'title': 'Controlled',
-        'source': 'https://github.com/example/controlled/issues/1',
+    registered = operation(root, 'task_register', {
+        'task_id': '1', 'task_name': 'controlled', 'title': 'Controlled',
+        'source': 'https://github.com/example/controlled/issues/1', 'schema_version': 2, 'parent_id': None, 'disposition': 'active', 'replaced_by': [], 'retirement_reason': None,
         'body': 'Controlled fixture, no Runtime execution.', 'dependencies': [],
     })
     # Match Node's adoption seed bytes on Windows as well as POSIX.
@@ -488,20 +488,20 @@ def test_windows_adoption_fixture_projects_retired_content_and_usage(
         ['node', '--preserve-symlinks', '--preserve-symlinks-main', '--input-type=module', '-e',
          f'import {{retainedRecords}} from {json.dumps(fixture)}; '
          f'console.log(await retainedRecords(process.argv[1], process.argv[2], {json.dumps(parallel)}));',
-         str(root), registered['ticket_directory']],
+         str(root), registered['task_directory']],
         text=True, capture_output=True, timeout=15, check=False,
     )
     assert generated.returncode == 0, generated.stderr
     if parallel:
         for status, ordinal in [('ready', None), ('implementing', 1)]:
-            operation(root, 'ticket_update', {
-                'ticket_id': '1', 'status': status, 'active_team_ordinal': ordinal,
+            operation(root, 'task_update', {
+                'task_id': '1', 'status': status, 'active_team_ordinal': ordinal,
                 'worktree': None, 'branch': None, 'current_candidate': None,
                 'caused_by_event_ids': [], 'evidence_refs': ['seed.txt'],
             })
     alias = generated.stdout.strip()
     observer = bind(root, desktop_observer=True)
-    arguments = {'ticket_id': '1', 'alias': alias}
+    arguments = {'task_id': '1', 'alias': alias}
     response = observer({'action': 'execute', 'feature': 'desktop_activity', 'arguments': arguments})
     assert not response.failed, response.document
     observed = response.document
@@ -519,7 +519,7 @@ def test_windows_adoption_fixture_projects_retired_content_and_usage(
     assert any(event.get('result') == 'controlled tool output' for event in events)
     usage = next(event['usage'] for event in events if event['kind'] == 'usage')
     assert usage['tokens'] == {'input': 1000, 'cache_read': 600, 'output': 80, 'reasoning': 20}
-    assert usage['session'] == agent['session'] and usage['agent'] == alias and usage['ticket_id'] == '1'
+    assert usage['session'] == agent['session'] and usage['agent'] == alias and usage['task_id'] == '1'
     assert usage['attributable'] and usage['identity']
     replay = observer({'action': 'execute', 'feature': 'desktop_activity', 'arguments': arguments})
     assert not replay.failed, replay.document

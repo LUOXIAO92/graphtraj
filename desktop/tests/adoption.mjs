@@ -146,12 +146,12 @@ function uiAutomation(lines) {
  * installed app's observer process does. The expected UI content is taken from
  * this boundary so the assertion is not invented at the interface.
  */
-function queryActivity(root, ticketId, alias) {
+function queryActivity(root, taskId, alias) {
   const reply = JSON.parse(execFileSync(process.env.GRAPHTRAJ_TOOL || 'graphtraj-tool',
     ['--desktop-observer', '--allowed-features', 'desktop_activity'], {
       cwd: root, encoding: 'utf8',
       input: JSON.stringify({ action: 'execute', feature: 'desktop_activity',
-        arguments: { ticket_id: ticketId, ...(alias ? { alias } : {}) } }) + '\n',
+        arguments: { task_id: taskId, ...(alias ? { alias } : {}) } }) + '\n',
     }));
   if (reply.failed) throw new Error(JSON.stringify(reply));
   assert.equal(reply.result.scope, 'human', 'CI must be an unbound desktop host; never strip Agent identity to obtain access');
@@ -364,13 +364,13 @@ async function usageHistoryAdoption() {
       total_token_usage: { input_tokens: totalInput, output_tokens: totalOutput },
     } },
   });
-  const trace = await fixtures.recordActivity(first, { ticketId: '1', ticketName: 'usage-first', alias: 'research@x1',
+  const trace = await fixtures.recordActivity(first, { taskId: '1', taskName: 'usage-first', alias: 'research@x1',
     records: [
       { type: 'turn_context', payload: { model: 'gpt-5.3-codex' } },
       ...longRecords('usage-first'), count(yesterday, 2000, 1000, 160), count(today, 1000, 600, 80, 3000, 240),
     ], additionalMembers: [{ alias: 'undated@x2', historical: true, records: [count(null, 11, 1, 2)] }],
   });
-  await fixtures.recordActivity(second, { ticketId: '1', ticketName: 'usage-second', alias: 'second-only@x1',
+  await fixtures.recordActivity(second, { taskId: '1', taskName: 'usage-second', alias: 'second-only@x1',
     records: [{ type: 'turn_context', payload: { model: 'unpriced-controlled-model' } }, count(today, 500, 50, 40)] });
   const native = queryActivity(first, '1', 'research@x1');
   assert.equal(native.events.filter(event => event.kind === 'usage').length, 2);
@@ -409,12 +409,12 @@ async function usageHistoryAdoption() {
     await page.getByRole('button', { name: 'Add project', exact: true }).click();
     await projectEntry(page, 'usage-second').waitFor();
     await projectEntry(page, 'usage-first').click();
-    // Selection saves asynchronously; both retained project monitors have a Ticket 1.
+    // Selection saves asynchronously; both retained project monitors have a Task 1.
     // Require this project's title so click cannot latch onto the outgoing monitor.
     const firstNode = page.locator('.monitor-page:visible .react-flow__node[data-id="1"]')
       .filter({ has: page.getByText('usage first', { exact: true }) });
     await firstNode.click();
-    // The collapsed Ticket detail shows the roster; chat readers activate on expansion.
+    // The collapsed Task detail shows the roster; chat readers activate on expansion.
     await page.getByRole('button', { name: 'Expand chat', exact: true }).click();
     const column = page.locator('.monitor-page:visible')
       .getByRole('article', { name: 'research@x1', exact: true }).locator('.activity-history');
@@ -433,7 +433,7 @@ async function usageHistoryAdoption() {
     await selectDates(localDate(today), localDate(today));
     await waitInput('Model breakdown', 'gpt-5.3-codex', 1000);
     assert.match(await table('Model breakdown').innerText(), /0\.001925/);
-    await page.locator('.usage-filters').getByLabel('Ticket', { exact: false }).selectOption('1');
+    await page.locator('.usage-filters').getByLabel('Task', { exact: false }).selectOption('1');
     await page.locator('.usage-filters select').nth(1).selectOption('research@x1');
     await page.locator('.usage-filters select').nth(2).selectOption('gpt-5.3-codex');
     await waitInput('Daily trend (local dates)', localDate(today), 1000);
@@ -496,7 +496,7 @@ async function usageHistoryAdoption() {
     await bounded('close usage adoption', handle.close(), 15000);
     handle = null;
     assert.equal(await waitForNoDesktopProcesses(), '');
-    assert.equal(fixtures.operate(first, 'ticket_graph').tickets.length, 2);
+    assert.equal(fixtures.operate(first, 'task_graph').tasks.length, 2);
     facts.passed = true;
   } finally {
     if (!facts.passed && page && handle) facts.screenshots.push(await shot(page, 'usage-failure.png').catch(() => 'screenshot unavailable'));
@@ -512,7 +512,7 @@ async function settingsOnlyAdoption() {
   await fs.mkdir(isolatedHome, { recursive: true });
   const first = await fixtures.makeProject(path.join(root, 'settings-first'), 'settings-first');
   const second = await fixtures.makeProject(path.join(root, 'settings-second'), 'settings-second');
-  await fixtures.recordActivity(first, { ticketId: '1', ticketName: 'settings-first', alias: 'research@x1',
+  await fixtures.recordActivity(first, { taskId: '1', taskName: 'settings-first', alias: 'research@x1',
     records: longRecords('settings-monitor'),
   });
   const rolesFile = path.join(first, '.graphtraj', 'roles.yml');
@@ -641,7 +641,7 @@ async function main() {
   // A clearly labeled controlled record set for the selected project. These are
   // hand-written native rollout records, not a model run: no model is invoked.
   const primaryTrace = await fixtures.recordActivity(first, {
-    ticketId: '1', ticketName: 'first-project', alias: 'research@x1',
+    taskId: '1', taskName: 'first-project', alias: 'research@x1',
     records: [
       { type: 'turn_context', payload: { model: 'actual-model', turn_id: 'turn-1' } },
       { type: 'response_item', payload: { type: 'message', role: 'assistant',
@@ -661,12 +661,13 @@ async function main() {
       { alias: 'previous@x4', historical: true, records: longRecords('first/previous') },
     ],
   });
-  await fixtures.recordActivity(second, { ticketId: '1', ticketName: 'second-project', alias: 'research@x1',
+  await fixtures.recordActivity(second, { taskId: '1', taskName: 'second-project', alias: 'research@x1',
     records: longRecords('second/research') });
-  fixtures.operate(first, 'ticket_revise', { product_preserving: true, caused_by_event_ids: [],
-    evidence_refs: ['evidence.md'], tickets: [
-      { ...fixtures.ticket('2', 'dependent', ['1']), active: false, replaced_by: ['3'] },
-      { ...fixtures.ticket('3', 'successor', ['1']), active: true, replaced_by: [] },
+  fixtures.operate(first, 'task_revise', { product_preserving: true, caused_by_event_ids: [],
+    evidence_refs: ['evidence.md'], tasks: [
+      { ...fixtures.task('2', 'dependent', ['1']), disposition: 'superseded', replaced_by: ['3'],
+        retirement_reason: 'Replaced by successor.', current_definition: 'task.md' },
+      { ...fixtures.task('3', 'successor', ['1']), current_definition: null },
     ] });
   const rolesFile = path.join(first, '.graphtraj', 'roles.yml');
   const originalRoles = 'roles:\n  custom_group:\n    observer:\n      runtime: codex\n'
@@ -735,7 +736,7 @@ async function main() {
     step('added two isolated fixture projects and selected the second one');
 
     await page.locator('.monitor-page:visible .react-flow__node[data-id="2"]').click();
-    await page.getByRole('complementary', { name: 'Ticket details' }).waitFor();
+    await page.getByRole('complementary', { name: 'Task details' }).waitFor();
     await page.getByText('No participating Agents recorded.').waitFor();
     facts.screenshots.push(await shot(page, '02-node-detail-chat-empty.png'));
     step('opened a node without records: the Chat surface rendered its empty state (not adoption evidence)');
@@ -747,12 +748,12 @@ async function main() {
     step('switched the selected project: the graph shows only the selected project');
 
     const monitor = page.locator('.monitor-page:visible');
-    const nativeGraph = fixtures.operate(first, 'ticket_graph');
-    for (const ticket of nativeGraph.tickets) {
-      const node = monitor.locator(`.react-flow__node[data-id="${ticket.ticket_id}"]`);
+    const nativeGraph = fixtures.operate(first, 'task_graph');
+    for (const task of nativeGraph.tasks) {
+      const node = monitor.locator(`.react-flow__node[data-id="${task.task_id}"]`);
       await node.waitFor();
-      assert.equal(await node.locator('.status').innerText(), ticket.status);
-      if (!ticket.active) assert.match(await node.innerText(), /Replaced \/ inactive/);
+      assert.equal(await node.locator('.status').innerText(), task.status);
+      if (!task.active) assert.match(await node.innerText(), /Replaced \/ inactive/);
     }
     facts.graph = nativeGraph;
     const globalToggle = page.getByRole('button', { name: /^GLOBAL/ });
@@ -783,7 +784,7 @@ async function main() {
     const initialViewport = await monitor.locator('.react-flow__viewport').getAttribute('style');
     await monitor.locator('.react-flow__controls-zoomin').click();
     await page.waitForFunction(before => document.querySelector('.monitor-page:not([hidden]) .react-flow__viewport')?.getAttribute('style') !== before, initialViewport);
-    const status = nativeGraph.tickets.find(ticket => ticket.ticket_id === '1').status;
+    const status = nativeGraph.tasks.find(task => task.task_id === '1').status;
     await monitor.getByRole('combobox').selectOption(status);
     await monitor.getByRole('searchbox').fill('first project');
 
@@ -797,7 +798,7 @@ async function main() {
     assert.ok(message && message.text && toolCall && toolCall.name,
       'the public boundary must return the controlled message and tool call');
     await page.locator('.monitor-page:visible .react-flow__node[data-id="1"]').click();
-    await page.getByRole('complementary', { name: 'Ticket details' }).waitFor();
+    await page.getByRole('complementary', { name: 'Task details' }).waitFor();
     await page.getByRole('button', { name: 'Expand chat', exact: true }).click();
     await page.getByText(message.text).first().waitFor();
     await page.getByText(toolCall.name, { exact: true }).first().waitFor();
@@ -912,7 +913,7 @@ async function main() {
     facts.screenshots.push(await shot(page, '04-usage-dashboard.png'));
     facts.controlledRecords = {
       origin: 'Hand-written native rollout records retained in the fixture project; no model invoked, no cost.',
-      ticket: '1', alias: 'research@x1',
+      task: '1', alias: 'research@x1',
       chat: { message: message.text, tool: toolCall.name, arguments: toolCall.arguments },
       usage: usage.tokens,
     };
@@ -1018,7 +1019,7 @@ async function main() {
     await page.getByRole('button', { name: `Remove ${relocatedEntry.root}`, exact: true }).click();
     await projectEntry(page, 'relocated-project').waitFor({ state: 'detached' });
     assert.deepEqual(changed(relocationBefore, await snapshot(relocated)), [], 'relocate/remove must not modify project files');
-    assert.equal(fixtures.operate(relocated, 'ticket_graph').tickets.length, 2);
+    assert.equal(fixtures.operate(relocated, 'task_graph').tasks.length, 2);
     assert.equal(await fs.readFile(legacyFile, 'utf8'), legacyText, 'migration/relocation/removal must leave legacy input intact');
     facts.index.relocated = { id: relocatedEntry.id, root: relocatedEntry.root, projectFilesUnchanged: true };
     step('invalid legacy path relocated through the native dialog entry; removing its index preserved every project file');
@@ -1055,7 +1056,7 @@ async function main() {
     await page.getByRole('button', { name: `Remove ${secondRoot}`, exact: true }).click();
     await projectEntry(page, 'second-project').waitFor({ state: 'detached' });
     assert.deepEqual(changed(removalBefore, await snapshot(second)), [], 'removing second-project must only edit the global index');
-    assert.equal(fixtures.operate(second, 'ticket_graph').tickets.length, 2);
+    assert.equal(fixtures.operate(second, 'task_graph').tasks.length, 2);
     facts.screenshots.push(await shot(page, '08b-index-only-removal.png'));
 
     // Optionality: the GUI is gone, the native operations are not.
@@ -1063,10 +1064,10 @@ async function main() {
     appHandle = null;
     const leftovers = await waitForNoDesktopProcesses();
     assert.equal(leftovers, '', `the desktop must leave no process behind: ${leftovers}`);
-    fixtures.operate(second, 'ticket_register', fixtures.ticket('3', 'after-gui-exit', ['2']));
-    assert.equal(fixtures.operate(second, 'ticket_graph').tickets.length, 3);
+    fixtures.operate(second, 'task_register', fixtures.task('3', 'after-gui-exit', ['2']));
+    assert.equal(fixtures.operate(second, 'task_graph').tasks.length, 3);
     step('native operations still worked after the window closed and no desktop process remained');
-    facts.optionality = { leftoverProcesses: leftovers, ticketsAfterExit: 3 };
+    facts.optionality = { leftoverProcesses: leftovers, tasksAfterExit: 3 };
 
     // Evidence split: what the controlled entry covered, and the real native
     // dialog attempts recorded with their exact commands and outcomes.

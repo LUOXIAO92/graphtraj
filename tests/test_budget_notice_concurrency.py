@@ -65,7 +65,7 @@ def test_delivery_serializes_retries_and_preserves_concurrent_budget_updates(
     import sys
     import graphtraj.execution.execution_budget as budget
 
-    (tmp_path / 'ticket.yml').write_text('current_definition: definition.md\n')
+    (tmp_path / 'task.yml').write_text('current_definition: definition.md\n')
     (tmp_path / 'definition.md').write_text(_budget_body(total=1))
     monkeypatch.setattr(budget.time, 'time', lambda: 1000)
     monkeypatch.setattr(budget.random, 'uniform', lambda a, b: a)

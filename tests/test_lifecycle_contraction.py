@@ -16,12 +16,12 @@ def test_installed_commands_reject_delivery_run_inputs(
         fake_codex=fake_codex, answers="y\ny\n",
     )
     assert setup.returncode == 0, setup.stdout + setup.stderr
-    ticket = root / "old-ticket.md"
-    ticket.write_text("Historical Ticket\n")
+    task = root / "old-task.md"
+    task.write_text("Historical Task\n")
     batch = root / "old-batch.yml"
     batch.write_text(yaml.safe_dump({"run_id": "20260906-obsolete", "tasks": [{
-        "ticket_id": "87", "ticket_name": "contraction", "role": "engineer",
-        "ticket_file": str(ticket),
+        "task_id": "87", "task_name": "contraction", "role": "engineer",
+        "task_file": str(task),
     }]}))
     launch = run_process(
         [str(installed_commands.runner), "--swarm-input", str(batch)],
@@ -44,7 +44,7 @@ def test_team_engineer_leaves_repository_skill_selection_to_runtime(
 ):
     import json
     from runner_fixtures import configure_harness
-    from test_team_round import _register_ready_inline_ticket
+    from test_team_round import _register_ready_inline_task
 
     for name in ("selected", "disabled"):
         skill = temporary_git_repository / ".agents" / "skills" / name / "SKILL.md"
@@ -55,10 +55,10 @@ def test_team_engineer_leaves_repository_skill_selection_to_runtime(
     root, worktrees, _, environment = configure_harness(
         installed_commands, temporary_git_repository, fake_codex, tmp_path,
     )
-    _register_ready_inline_ticket(root, installed_commands.product)
+    _register_ready_inline_task(root, installed_commands.product)
     batch = root / "team.yml"
     batch.write_text(yaml.safe_dump({"tasks": [{
-        "ticket_id": "75", "ticket_name": "inline-specialist", "role": "team-leader",
+        "task_id": "75", "task_name": "inline-specialist", "role": "team-leader",
     }]}))
     environment.update(
         FAKE_CODEX_LIFECYCLE_ACTION="complete-team-round",

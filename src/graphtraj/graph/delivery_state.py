@@ -1,4 +1,4 @@
-"""Strict Delivery State requests for Ticket and Team semantic state."""
+"""Strict Delivery State requests for Task and Team semantic state."""
 
 from __future__ import annotations
 
@@ -20,16 +20,16 @@ from graphtraj.graph.delivery_worldline import (
 from graphtraj.execution.runner_io import write_yaml_durably, _sync_directory
 from graphtraj.execution.runner_status import caller_alias, read_alias_mapping, require_task_authority
 from graphtraj.workspace.runner_project import discover_runner_directory, run_git
-from graphtraj.graph.ticket_graph import _TRANSITIONS, _load_states
+from graphtraj.graph.task_graph import _TRANSITIONS, _load_states
 from graphtraj.graph.task_protocol import execution_record
 
 
-_COMMON = {"phase", "ticket_id", "caused_by_event_ids", "evidence_refs"}
+_COMMON = {"phase", "task_id", "caused_by_event_ids", "evidence_refs"}
 
 
 def current_result_rework_cause(
     events: list[dict[str, Any]],
-    ticket: Mapping[str, Any],
+    task: Mapping[str, Any],
     team: Mapping[str, Any],
 ) -> dict[str, Any] | None:
     """Return a rejection or explicit reopening until result work consumes it.
@@ -38,14 +38,14 @@ def current_result_rework_cause(
     decision or rework transition does; never search past one for an old rejection.
     """
     for event in reversed(events):
-        if event["event"] == "ticket-graph-revised" and ticket["ticket_id"] in event.get("reopened_ticket_ids", []):
-            reopened = event.get("reopened_results", {}).get(ticket["ticket_id"], {})
-            if (reopened.get("team_ordinal") == ticket["active_team_ordinal"]
-                    and reopened.get("candidate") == ticket["current_candidate"]):
+        if event["event"] == "task-graph-revised" and task["task_id"] in event.get("reopened_task_ids", []):
+            reopened = event.get("reopened_results", {}).get(task["task_id"], {})
+            if (reopened.get("team_ordinal") == task["active_team_ordinal"]
+                    and reopened.get("candidate") == task["current_candidate"]):
                 return event
             return None
-        if (event.get("ticket_id") != ticket["ticket_id"]
-                or event.get("team_ordinal") != ticket["active_team_ordinal"]):
+        if (event.get("task_id") != task["task_id"]
+                or event.get("team_ordinal") != task["active_team_ordinal"]):
             continue
         if event["event"] not in {
             "result-submitted", "team-round-accepted",
@@ -93,30 +93,30 @@ def apply_delivery_state_request(
     _validate_string_list(request, "caused_by_event_ids", empty=False)
     _validate_string_list(request, "evidence_refs", empty=False)
 
-    tickets = state_directory / "tickets"
-    current = _load_states(tickets)
-    ticket_id = request["ticket_id"]
-    if not isinstance(ticket_id, str) or ticket_id not in current:
-        raise ValueError("Delivery State request names an unknown Ticket")
-    ticket_directory, ticket = current[ticket_id]
-    if phase in {"start", "final", "rework"} and not ticket["active"]:
-        raise ValueError("Delivery requires an active Ticket")
-    if phase == "start" and ticket.get("schema_version") == 2 and ticket["status"] == "integrated":
+    tasks = state_directory / "tasks"
+    current = _load_states(tasks)
+    task_id = request["task_id"]
+    if not isinstance(task_id, str) or task_id not in current:
+        raise ValueError("Delivery State request names an unknown Task")
+    task_directory, task = current[task_id]
+    if phase in {"start", "final", "rework"} and not task["active"]:
+        raise ValueError("Delivery requires an active Task")
+    if phase == "start" and task["status"] == "integrated":
         raise ValueError("Completed tasks must explicitly reopen through task-graph revision")
-    ordinal = ticket["active_team_ordinal"] or 1
+    ordinal = task["active_team_ordinal"] or 1
     replacing = False
-    if phase == "start" and ticket["active_team_ordinal"] is not None:
-        previous = read_team(ticket_directory / "teams" / str(ordinal) / "team.yml")
+    if phase == "start" and task["active_team_ordinal"] is not None:
+        previous = read_team(task_directory / "teams" / str(ordinal) / "team.yml")
         if previous["status"] != "retired":
             raise ValueError("The previous Team must be retired before replacement")
         ordinal += 1
         replacing = True
-    team_directory = ticket_directory / "teams" / str(ordinal)
+    team_directory = task_directory / "teams" / str(ordinal)
     team_file = team_directory / "team.yml"
-    original_ticket = (ticket_directory / "ticket.yml").read_bytes()
+    original_task = (task_directory / "task.yml").read_bytes()
     original_team = team_file.read_bytes() if team_file.is_file() else None
     team_directory_existed = team_directory.exists()
-    ticket_update = dict(ticket)
+    task_update = dict(task)
     team_update: dict[str, Any] | None = None
     close_round = False
     open_round = False
@@ -124,12 +124,12 @@ def apply_delivery_state_request(
 
     if phase == "start":
         if (
-            not replacing and (ticket["status"] != "ready"
-            or ticket["active_team_ordinal"] is not None
-            or ticket["current_candidate"] is not None)
+            not replacing and (task["status"] != "ready"
+            or task["active_team_ordinal"] is not None
+            or task["current_candidate"] is not None)
             or team_file.exists()
         ):
-            raise ValueError("Ticket cannot start Team generation 1")
+            raise ValueError("Task cannot start Team generation 1")
         # Retained callers may still supply empty seats. Persist actual members only.
         members = {
             name: member for name, member in _validate_members(request["members"]).items()
@@ -139,18 +139,18 @@ def apply_delivery_state_request(
             raise ValueError("Team start must identify at least one actual Session")
         worktree = _validate_worktree(harness_root, request["worktree"])
         if request["branch"] != "agent/{0}-{1}".format(
-            ticket_id, ticket["ticket_name"]
+            task_id, task["task_name"]
         ):
             raise ValueError("Delivery State request has an invalid branch")
-        ticket_update.update(
-            status="implementing" if replacing else _transition(ticket, "implementing"),
+        task_update.update(
+            status="implementing" if replacing else _transition(task, "implementing"),
             active_team_ordinal=ordinal,
             current_candidate=None,
             worktree=worktree,
             branch=request["branch"],
         )
-        if replacing and (worktree != ticket["worktree"] or request["branch"] != ticket["branch"]):
-            raise ValueError("A replacement Team must reuse the Ticket Worktree and branch")
+        if replacing and (worktree != task["worktree"] or request["branch"] != task["branch"]):
+            raise ValueError("A replacement Team must reuse the Task Worktree and branch")
         kind = "team-replaced" if replacing else "team-started"
     else:
         if not team_file.is_file():
@@ -184,7 +184,7 @@ def apply_delivery_state_request(
             )
             retirement = yaml.safe_load((session_directory / "session.yml").read_text()).get("retirement")
             if (not retirement or retirement["mapping"] != mapping
-                    or mapping["ticket_id"] != ticket_id or mapping["team_generation"] != ordinal):
+                    or mapping["task_id"] != task_id or mapping["team_generation"] != ordinal):
                 raise ValueError("Member retirement requires the Runner's retained Session binding")
             member = team_update["members"].get(request["member"])
             if member is None or member["session_ref"] != request["session_ref"]:
@@ -216,17 +216,17 @@ def apply_delivery_state_request(
             # A conflict starts actual work after the accepted Round closed.
             # Open its next Round once, preserving all original reports.
             round_directory = team_directory / "rounds" / str(round_ordinal)
-            if ticket["status"] == "resolving-integration" and not round_directory.stat().st_mode & 0o200:
+            if task["status"] == "resolving-integration" and not round_directory.stat().st_mode & 0o200:
                 team_update["current_round"] += 1
                 open_round = True
             team_update["members"].update(registered)
             kind = "team-member-started"
         elif phase == "rework":
             previous = current_result_rework_cause(
-                read_worldline(state_directory, harness_root), ticket, team_update,
+                read_worldline(state_directory, harness_root), task, team_update,
             )
             if (
-                ticket["status"] not in {"reworking", "resolving-integration"}
+                task["status"] not in {"reworking", "resolving-integration"}
                 or previous is None
                 or request["caused_by_event_ids"] != [previous["event_id"]]
             ):
@@ -235,32 +235,32 @@ def apply_delivery_state_request(
             author = caller_alias(runner)
             if author is None:
                 raise ValueError("Result correction requires its own Session")
-            require_task_authority(state_directory, runner, ticket_id, author, "submit")
-            if ticket["status"] != "resolving-integration":
-                ticket_update.update(status=_transition(ticket, "implementing"), current_candidate=None)
+            require_task_authority(state_directory, runner, task_id, author, "submit")
+            if task["status"] != "resolving-integration":
+                task_update.update(status=_transition(task, "implementing"), current_candidate=None)
             team_update["current_round"] += 1
             open_round = True
             kind = "team-round-rework-started"
         else:
             submission, author, prior_acceptance = _validate_result_decision(
-                state_directory, harness_root, request, ticket, team_update,
+                state_directory, harness_root, request, task, team_update,
                 read_worldline(state_directory, harness_root),
             )
             snapshots = _decision_evidence(harness_root, submission, author, request["evidence_refs"])
-            integration = ticket["status"] == "resolving-integration"
+            integration = task["status"] == "resolving-integration"
             if not integration:
-                ticket_update["current_candidate"] = submission["candidate"]
+                task_update["current_candidate"] = submission["candidate"]
             # Submission and acceptance can happen without a separate Review step.
-            if ticket["status"] == "implementing":
-                ticket_update["status"] = _transition(ticket, "reviewing")
+            if task["status"] == "implementing":
+                task_update["status"] = _transition(task, "reviewing")
             close_round = True
             if request["decision"] == "accepted":
                 if not integration:
-                    ticket_update["status"] = _transition(ticket_update, "awaiting-integration")
+                    task_update["status"] = _transition(task_update, "awaiting-integration")
                 kind = "team-round-accepted"
             else:
                 if not integration:
-                    ticket_update["status"] = _transition(ticket_update, "reworking")
+                    task_update["status"] = _transition(task_update, "reworking")
                 # Retain the existing event kind for all rejected task results.
                 kind = "team-round-implementation-rejected"
 
@@ -268,7 +268,7 @@ def apply_delivery_state_request(
         "event": kind,
         "caused_by_event_ids": list(request["caused_by_event_ids"]),
         "evidence_refs": list(request["evidence_refs"]),
-        "ticket_id": ticket_id,
+        "task_id": task_id,
         "team_ordinal": ordinal,
         "team_round": round_ordinal + 1 if open_round else round_ordinal,
     }
@@ -288,18 +288,18 @@ def apply_delivery_state_request(
         previous_modes: dict[Path, int] = {}
         retained: Path | None = None
         current_team = team_file.read_bytes() if team_file.is_file() else None
-        if ((ticket_directory / "ticket.yml").read_bytes() != original_ticket
+        if ((task_directory / "task.yml").read_bytes() != original_task
                 or current_team != original_team):
             raise ValueError("The task changed before the delivery transition; inspect it again")
         if phase == "rework":
             rejection = current_result_rework_cause(
-                _read_shards(state_directory)[1], ticket, read_team(team_file),
+                _read_shards(state_directory)[1], task, read_team(team_file),
             )
             if rejection is None or request["caused_by_event_ids"] != [rejection["event_id"]]:
                 raise ValueError("Rework requires a confirmed result rejection or explicit graph reopening")
         if phase == "final":
             _validate_result_decision(
-                state_directory, harness_root, request, ticket, team_update,
+                state_directory, harness_root, request, task, team_update,
                 _read_shards(state_directory)[1],
             )
         try:
@@ -334,8 +334,8 @@ def apply_delivery_state_request(
                     team_update["retired_at"] = recorded["captured_at"]
                 _validate_team(team_update)
                 write_yaml_durably(team_file, team_update)
-            write_yaml_durably(ticket_directory / "ticket.yml", execution_record(ticket_update))
-            _load_states(tickets)
+            write_yaml_durably(task_directory / "task.yml", execution_record(task_update))
+            _load_states(tasks)
             if open_round:
                 (team_directory / "rounds" / str(round_ordinal + 1)).mkdir(parents=True)
             if close_round:
@@ -346,7 +346,7 @@ def apply_delivery_state_request(
         except Exception:
             if retained is not None and retained.exists():
                 shutil.rmtree(retained)
-            _restore(ticket_directory / "ticket.yml", original_ticket)
+            _restore(task_directory / "task.yml", original_task)
             _restore_team(
                 team_directory, team_file, original_team, team_directory_existed
             )
@@ -358,7 +358,7 @@ def apply_delivery_state_request(
                 shutil.rmtree(retained)
             if open_round:
                 (team_directory / "rounds" / str(round_ordinal + 1)).rmdir()
-            _restore(ticket_directory / "ticket.yml", original_ticket)
+            _restore(task_directory / "task.yml", original_task)
             _restore_team(
                 team_directory, team_file, original_team, team_directory_existed
             )
@@ -409,7 +409,7 @@ def _validate_result_decision(
     state: Path,
     harness: Path,
     request: Mapping[str, Any],
-    ticket: Mapping[str, Any],
+    task: Mapping[str, Any],
     team: Mapping[str, Any],
     events: list[dict[str, Any]],
 ) -> tuple[dict[str, Any], str | None, dict[str, Any] | None]:
@@ -420,27 +420,27 @@ def _validate_result_decision(
     if not isinstance(request["reason"], str) or not request["reason"].strip():
         raise ValueError("Result decision requires a reason")
     submissions = [event for event in events if event["event"] == "result-submitted"
-                   and event.get("ticket_id") == ticket["ticket_id"]
-                   and event.get("team_ordinal") == ticket["active_team_ordinal"]
+                   and event.get("task_id") == task["task_id"]
+                   and event.get("team_ordinal") == task["active_team_ordinal"]
                    and event.get("round") == team["current_round"]]
     if not submissions or submissions[-1]["event_id"] != request["submission_id"]:
         raise ValueError("Decision must identify the latest submission in the current Round")
     submission = submissions[-1]
     runner = discover_runner_directory(harness)
-    mapping = require_task_authority(state, runner, ticket["ticket_id"], submission["alias"], "accept")
+    mapping = require_task_authority(state, runner, task["task_id"], submission["alias"], "accept")
     author = caller_alias(runner)
     decisions = [event for event in events
                  if event.get("submission_id") == request["submission_id"]]
-    returning = ticket["status"] == "awaiting-integration"
+    returning = task["status"] == "awaiting-integration"
     if (mapping["session"] != submission["session"]
-            or ticket["status"] not in {"implementing", "reviewing", "resolving-integration", "awaiting-integration"}
+            or task["status"] not in {"implementing", "reviewing", "resolving-integration", "awaiting-integration"}
             or candidate != submission["candidate"]
             or request["submission_id"] not in request["caused_by_event_ids"]
             or (decisions and not returning)):
         raise ValueError("Decision does not match an undecided submitted version")
     if returning:
         session = read_alias_mapping(runner, author)[0]["session"] if author is not None else None
-        if (request["decision"] != "rejected" or candidate != ticket["current_candidate"]
+        if (request["decision"] != "rejected" or candidate != task["current_candidate"]
                 or len(decisions) != 1 or decisions[0]["event"] != "team-round-accepted"
                 or decisions[0].get("alias") != author or decisions[0].get("session") != session):
             raise ValueError("Only the accepting parent may return the current accepted result for correction")
@@ -448,7 +448,7 @@ def _validate_result_decision(
         # accepted version; its replacement still needs a fresh submission/decision.
         return submission, author, decisions[0]
     worktree = Path(mapping["worktree_path"])
-    if ticket["status"] == "resolving-integration":
+    if task["status"] == "resolving-integration":
         from graphtraj.configuration.project_configuration import load_project_configuration
 
         if worktree != load_project_configuration(harness).integration_worktree:
@@ -521,16 +521,16 @@ def _validate_team(team: Any) -> None:
 
 def _validate_worktree(harness_root: Path, value: Any) -> str:
     if not isinstance(value, str) or not value or Path(value).is_absolute():
-        raise ValueError("Ticket Worktree must be Harness-root relative")
+        raise ValueError("Task Worktree must be Harness-root relative")
     relative = Path(value)
     normalized = Path(os.path.normpath(value))
     if normalized.as_posix() != relative.as_posix():
-        raise ValueError("Ticket Worktree must use a normalized relative path")
+        raise ValueError("Task Worktree must use a normalized relative path")
     resolved = (harness_root / relative).resolve()
     try:
         resolved.relative_to(harness_root.resolve())
     except ValueError as error:
-        raise ValueError("Ticket Worktree escapes the Harness Project") from error
+        raise ValueError("Task Worktree escapes the Harness Project") from error
     return relative.as_posix()
 
 
@@ -544,9 +544,9 @@ def _validate_candidate(value: Any) -> str:
     return value
 
 
-def _transition(ticket: Mapping[str, Any], status: str) -> str:
-    if status not in _TRANSITIONS[ticket["status"]]:
-        raise ValueError("Delivery State request has an invalid Ticket transition")
+def _transition(task: Mapping[str, Any], status: str) -> str:
+    if status not in _TRANSITIONS[task["status"]]:
+        raise ValueError("Delivery State request has an invalid Task transition")
     return status
 
 

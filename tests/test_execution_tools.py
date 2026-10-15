@@ -35,9 +35,9 @@ from test_codex_app_server import peer
     (['interrupt', 'child'], 'interrupt', {'alias': 'child'}),
     (['replace', 'child', '--actor', 'user', '--caused-by-event-id', 'cause'],
      'replace', {'alias': 'child', 'actor': 'user', 'caused_by_event_ids': ['cause']}),
-    (['continue', '--ticket-id', '205', '--caused-by-event-id', 'cause', '--budget-only'],
-     'continue', {'ticket_id': '205', 'caused_by_event_ids': ['cause'], 'budget_only': True}),
-    (['cleanup', '--ticket-id', '205'], 'cleanup', {'ticket_id': '205'}),
+    (['continue', '--task-id', '205', '--caused-by-event-id', 'cause', '--budget-only'],
+     'continue', {'task_id': '205', 'caused_by_event_ids': ['cause'], 'budget_only': True}),
+    (['cleanup', '--task-id', '205'], 'cleanup', {'task_id': '205'}),
     (['submit-result', '--commit', 'head', '--result-ref', 'a', '--result-ref', 'b',
       '--evidence-ref', 'report', '--completion', 'Done', '--unresolved', 'Remaining'],
      'submit_result', {'commit': 'head', 'result_refs': ['a', 'b'], 'evidence_refs': ['report'],
@@ -80,7 +80,7 @@ def test_cli_passes_execution_arguments_to_registered_operation(
 
 
 @pytest.mark.parametrize('operation, command, document', [
-    ('cleanup', ['cleanup', '--ticket-id', '205'], {'error': {'message': 'refused'}}),
+    ('cleanup', ['cleanup', '--task-id', '205'], {'error': {'message': 'refused'}}),
     ('alias_status', ['status', 'missing'], {'aliases': [{'alias': 'missing', 'error': {'message': 'missing'}}]}),
     ('alias_status', ['status'], {'agents': [{'alias': 'missing', 'error': {'message': 'missing'}}]}),
 ])

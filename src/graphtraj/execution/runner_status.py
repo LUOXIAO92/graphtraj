@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import os
 import re
 from contextlib import contextmanager
@@ -19,7 +20,7 @@ from graphtraj.execution.runner_process import process_ancestors
 from graphtraj.execution.runner_transport import valid_terminal_launch_failure
 from graphtraj.runtimes import runtime_adapter
 from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError
-from graphtraj.workspace.runner_project import discover_runner_directory
+from graphtraj.workspace.runner_project import discover_project_root, discover_runner_directory
 
 
 _runtime_caller: ContextVar[tuple[Path, str | None] | None] = ContextVar('runtime_caller', default=None)
@@ -66,7 +67,7 @@ def runtime_caller(runner_directory: Path, identity: str | None) -> Iterator[Non
         _runtime_caller.reset(token)
 
 
-# One Agent alias. A current alias names the Ticket, its whole-Team handover
+# One Agent alias. A current alias names the Task, its whole-Team handover
 # generation counted from zero, the configured role and the entity, joined by
 # '-' with '_' inside a word group; the entity name after '@' may be any
 # non-English name. A retained alias keeps its historical Team suffix, role
@@ -87,7 +88,7 @@ SESSION_MAPPING_FIELDS = frozenset(
         "alias",
         "runtime",
         "session",
-        "ticket_id",
+        "task_id",
         "team_generation",
         "role",
         "parent",
@@ -104,7 +105,7 @@ SESSION_MAPPING_FIELDS = frozenset(
 SESSION_BINDING_FIELDS = (
     "alias",
     "runtime",
-    "ticket_id",
+    "task_id",
     "team_generation",
     "role",
     "parent",
@@ -276,7 +277,7 @@ def require_direct_authority(
 def require_task_authority(
     state_directory: Path,
     runner_directory: Path,
-    ticket_id: str,
+    task_id: str,
     alias: str,
     operation: str,
 ) -> dict[str, Any]:
@@ -289,16 +290,16 @@ def require_task_authority(
     Role names and caller-supplied identity fields confer no authority.
     """
     from graphtraj.graph.delivery_state import read_team
-    from graphtraj.graph.ticket_graph import _load_states
+    from graphtraj.graph.task_graph import _load_states
 
     mapping, _ = read_alias_mapping(runner_directory, alias)
-    if mapping["ticket_id"] != ticket_id:
+    if mapping["task_id"] != task_id:
         raise _authority_denied()
-    record = _load_states(state_directory / "tickets").get(ticket_id)
+    record = _load_states(state_directory / "tasks").get(task_id)
     if record is None:
         raise _authority_denied()
-    directory, ticket = record
-    if ticket["active_team_ordinal"] != mapping["team_generation"]:
+    directory, task = record
+    if task["active_team_ordinal"] != mapping["team_generation"]:
         raise _authority_denied()
     team = read_team(directory / "teams" / str(mapping["team_generation"]) / "team.yml")
     if team["status"] != "active":
@@ -833,17 +834,13 @@ def _status_session(
         identity.update(session=mapping["session"], execution_id=mapping["execution_id"])
     execution_file = session_directory / "execution.yml"
     if os.path.lexists(str(execution_file)):
-        return {
-            **identity, "activity": "idle",
-            "last_outcome": read_terminal_outcome(execution_file),
-        }
+        return {**identity, **_retained_activity(mapping, session_directory)}
     try:
         status = session_operation(mapping, "status")
     except RunnerError:
         # Completion can close the socket between the file read and the request.
         if execution_file.is_file():
-            return {**identity, "activity": "idle",
-                    "last_outcome": read_terminal_outcome(execution_file)}
+            return {**identity, **_retained_activity(mapping, session_directory)}
         unresponsive = _unresponsive_status(mapping, session_directory)
         if unresponsive["activity"] == "abnormal" and respond_to_abnormal:
             # The judged abnormality is answered here, as part of the judgement
@@ -953,7 +950,7 @@ def _numstat_file(entry: bytes) -> Dict[str, Any]:
 
 
 def retained_session_directories(runner_directory: Path) -> list[Path]:
-    """Locate retired Session records within the existing durable Ticket Traces."""
+    """Locate retired Session records within the existing durable Task Traces."""
     from graphtraj.configuration.project_configuration import load_project_configuration
     from graphtraj.workspace.runner_project import discover_project_root
 
@@ -961,7 +958,7 @@ def retained_session_directories(runner_directory: Path) -> list[Path]:
         configuration = load_project_configuration(discover_project_root(runner_directory))
     except (OSError, ValueError, RunnerError):
         return []
-    return [directory for directory in (configuration.state / "tickets").glob("*/teams/*/traces/*/runner")
+    return [directory for directory in (configuration.state / "tasks").glob("*/teams/*/traces/*/runner")
             if (directory / "session.yml").is_file()]
 
 
@@ -1108,7 +1105,8 @@ def _valid_session_mapping(mapping: Dict[str, Any], alias: str) -> bool:
     )
 
 
-def read_terminal_outcome(turn_file: Path) -> str:
+def read_execution_result(turn_file: Path) -> dict:
+    """Read a valid retained outcome without claiming termination was confirmed."""
     if turn_file.is_symlink() or not turn_file.is_file():
         raise _invalid_activity()
     try:
@@ -1119,10 +1117,46 @@ def read_terminal_outcome(turn_file: Path) -> str:
         not isinstance(turn, dict)
         or not isinstance(turn.get("outcome"), str)
         or turn["outcome"] not in TERMINAL_OUTCOMES
-        or turn.get("terminal_confirmed") is False
     ):
         raise _invalid_activity()
-    return turn["outcome"]
+    return turn
+
+
+def read_terminal_outcome(turn_file: Path) -> str:
+    """Require original terminal evidence or a separately retained confirmation."""
+    turn = read_execution_result(turn_file)
+    if turn.get('terminal_confirmed') is False:
+        try:
+            directory = turn_file.parent
+            alias = directory.parent.name if directory.name == 'runner' else directory.name
+            runner = discover_runner_directory(discover_project_root(directory))
+            mapping, _ = read_alias_mapping(runner, alias)
+            receipt_file = directory / f"terminal-confirmation-{mapping['execution_id']}.yml"
+            if receipt_file.parent != directory or receipt_file.is_symlink():
+                raise ValueError('Invalid confirmation path')
+            receipt = yaml.safe_load(receipt_file.read_text())
+            if (not isinstance(receipt, dict) or receipt.get('terminal_confirmed') is not True
+                    or receipt.get('execution_sha256') != hashlib.sha256(turn_file.read_bytes()).hexdigest()
+                    or any(receipt.get(key) != mapping[key] for key in
+                           ('session', 'execution_id', 'worker_pid', 'runtime_pid'))):
+                raise ValueError('Confirmation does not match this execution')
+        except (OSError, ValueError, KeyError, yaml.YAMLError) as error:
+            raise _invalid_activity() from error
+    return turn['outcome']
+
+
+def _retained_activity(mapping: dict, directory: Path) -> dict:
+    """Expose unconfirmed failures without treating them as an idle execution."""
+    turn_file = directory / 'execution.yml'
+    turn = read_execution_result(turn_file)
+    try:
+        outcome = read_terminal_outcome(turn_file)
+    except RunnerError:
+        if turn.get('terminal_confirmed') is not False:
+            raise
+        return {**_unresponsive_status(mapping, directory), 'last_outcome': turn['outcome'],
+                'terminal_confirmed': False}
+    return {'activity': 'idle', 'last_outcome': outcome}
 
 
 def _authority_denied() -> RunnerError:

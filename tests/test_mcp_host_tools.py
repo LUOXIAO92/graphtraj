@@ -21,7 +21,7 @@ import yaml
 from conftest import FakeCodex, InstalledCommands, run_process
 from graphtraj.interfaces import gateway, tools
 from runner_fixtures import configure_harness
-from test_ticket_graph import _configure, _ticket, _write
+from test_task_graph import _configure, _task, _write
 
 
 # The MCP surface exposes exactly one tool; features are reached through it.
@@ -209,10 +209,10 @@ def test_installed_mcp_server_discovers_tools_and_reads_the_same_graph_as_the_cl
     registered = _cli(
         installed_commands,
         project,
-        "ticket",
+        "task",
         "register",
-        "--ticket-file",
-        str(_write(project / "issue.yml", _ticket("73", "shared-graph"))),
+        "--task-file",
+        str(_write(project / "issue.yml", _task("73", "shared-graph"))),
     )
     assert registered.returncode == 0, registered.stderr
 
@@ -231,38 +231,38 @@ def test_installed_mcp_server_discovers_tools_and_reads_the_same_graph_as_the_cl
         # discover and describe are reached through the same single tool.
         found = server.request("tools/call", {
             "name": MCP_TOOL_NAME,
-            "arguments": {"action": "discover", "query": "ticket graph"},
+            "arguments": {"action": "discover", "query": "task graph"},
         })["result"]
         assert found["isError"] is False
-        assert "ticket_graph" in {
+        assert "task_graph" in {
             feature["feature"] for feature in found["structuredContent"]["features"]
         }
 
         described = server.request("tools/call", {
             "name": MCP_TOOL_NAME,
-            "arguments": {"action": "describe", "feature": "ticket_graph"},
+            "arguments": {"action": "describe", "feature": "task_graph"},
         })["result"]
         description = described["structuredContent"]
-        assert description["feature"] == "ticket_graph"
+        assert description["feature"] == "task_graph"
         assert set(description) == {"feature", "description", "manual_ref"}
         reference = Path(description["manual_ref"])
         assert reference.is_absolute() and reference.read_text(encoding="utf-8")
         parameters = server.request("tools/call", {
             "name": MCP_TOOL_NAME,
-            "arguments": {"action": "describe", "feature": "ticket_graph", "schema": True},
+            "arguments": {"action": "describe", "feature": "task_graph", "schema": True},
         })["result"]
-        assert parameters["structuredContent"] == {"input_schema": tools.TOOLS["ticket_graph"].input_schema}
+        assert parameters["structuredContent"] == {"input_schema": tools.TOOLS["task_graph"].input_schema}
         assert described["isError"] is ("error" in description)
 
-        call = server.call("ticket_graph", {})
+        call = server.call("task_graph", {})
         assert call["result"]["isError"] is False
-        graph = _cli(installed_commands, project, "ticket", "graph")
+        graph = _cli(installed_commands, project, "task", "graph")
         assert graph.returncode == 0, graph.stderr
         assert call["result"]["structuredContent"] == yaml.safe_load(graph.stdout)
-        node = call["result"]["structuredContent"]["tickets"][0]
+        node = call["result"]["structuredContent"]["tasks"][0]
         expected = {
-            "ticket_id":    "73",
-            "ticket_name":  "shared-graph",
+            "task_id":    "73",
+            "task_name":  "shared-graph",
             "status":       "pending",
             "active":       True,
             "ready":        True,
@@ -286,18 +286,18 @@ def test_installed_mcp_server_submits_the_same_graph_operations_as_the_cli(
         project.mkdir()
         _configure(project)
         (project / "evidence.md").write_text("Validated.\n", encoding="utf-8")
-    issue = _ticket("73", "shared-graph")
-    dependent = _ticket("74", "second-graph", dependencies=["73"])
+    issue = _task("73", "shared-graph")
+    dependent = _task("74", "second-graph", dependencies=["73"])
     revision = {
         "product_preserving":  True,
         "caused_by_event_ids": [],
         "evidence_refs":       ["evidence.md"],
-        "tickets":             [
-            {**_ticket("74", "second-graph"), "active": True, "replaced_by": []}
+        "tasks":             [
+            {**_task("74", "second-graph"), "active": True, "replaced_by": []}
         ],
     }
     change = {
-        "ticket_id":           "74",
+        "task_id":           "74",
         "status":              "ready",
         "active_team_ordinal": None,
         "worktree":            None,
@@ -310,24 +310,24 @@ def test_installed_mcp_server_submits_the_same_graph_operations_as_the_cli(
     host_directories = []
     with _started_mcp(mcp_executable, host_project) as server:
         for definition in (issue, dependent):
-            registered = server.call("ticket_register", definition)["result"]
+            registered = server.call("task_register", definition)["result"]
             assert registered["isError"] is False
             host_directories.append(
-                Path(registered["structuredContent"]["ticket_directory"])
+                Path(registered["structuredContent"]["task_directory"])
             )
-        revised = server.call("ticket_revise", revision)["result"]
+        revised = server.call("task_revise", revision)["result"]
         assert revised["isError"] is False
-        updated = server.call("ticket_update", change)["result"]
+        updated = server.call("task_update", change)["result"]
         assert updated["isError"] is False
-        host_graph = server.call("ticket_graph", {})["result"]["structuredContent"]
+        host_graph = server.call("task_graph", {})["result"]["structuredContent"]
 
     for definition, host_directory in zip((issue, dependent), host_directories):
         cli_registered = _cli(
             installed_commands,
             cli_project,
-            "ticket",
+            "task",
             "register",
-            "--ticket-file",
+            "--task-file",
             str(_write(cli_project / "issue.yml", definition)),
         )
         assert cli_registered.returncode == 0, cli_registered.stderr
@@ -337,7 +337,7 @@ def test_installed_mcp_server_submits_the_same_graph_operations_as_the_cli(
     cli_revised = _cli(
         installed_commands,
         cli_project,
-        "ticket",
+        "task",
         "revise",
         "--revision-file",
         str(_write(cli_project / "revision.yml", revision)),
@@ -346,13 +346,13 @@ def test_installed_mcp_server_submits_the_same_graph_operations_as_the_cli(
     cli_updated = _cli(
         installed_commands,
         cli_project,
-        "ticket",
+        "task",
         "update",
         "--state-file",
         str(_write(cli_project / "change.yml", change)),
     )
     assert cli_updated.returncode == 0, cli_updated.stderr
-    cli_graph = _cli(installed_commands, cli_project, "ticket", "graph")
+    cli_graph = _cli(installed_commands, cli_project, "task", "graph")
     assert cli_graph.returncode == 0, cli_graph.stderr
 
     assert set(revised["structuredContent"]) == set(yaml.safe_load(cli_revised.stdout))
@@ -364,15 +364,15 @@ def test_installed_mcp_server_submits_the_same_graph_operations_as_the_cli(
         yaml.safe_load(cli_updated.stdout)
     )
     cli_view = yaml.safe_load(cli_graph.stdout)
-    for host_node, cli_node in zip(host_graph["tickets"], cli_view["tickets"], strict=True):
+    for host_node, cli_node in zip(host_graph["tasks"], cli_view["tasks"], strict=True):
         assert {key: value for key, value in host_node.items() if key != "current_definition"} == {
             key: value for key, value in cli_node.items() if key != "current_definition"
         }
-        directory = f".graphtraj/state/tickets/{host_node['ticket_id']}-{host_node['ticket_name']}"
+        directory = f".graphtraj/state/tasks/{host_node['task_id']}-{host_node['task_name']}"
         assert (host_project / directory / host_node["current_definition"]).read_bytes() == (
             cli_project / directory / cli_node["current_definition"]
         ).read_bytes()
-    assert [ticket["status"] for ticket in host_graph["tickets"]] == [
+    assert [task["status"] for task in host_graph["tasks"]] == [
         "pending", "ready",
     ]
 
@@ -404,22 +404,22 @@ def test_installed_mcp_server_reports_invalid_input_and_unknown_requests(
     project = tmp_path / "project"
     project.mkdir()
     _configure(project)
-    invalid = {"ticket_id": "74"}
+    invalid = {"task_id": "74"}
 
     with _started_mcp(mcp_executable, project) as server:
-        rejected = server.call("ticket_register", invalid)["result"]
+        rejected = server.call("task_register", invalid)["result"]
         unknown_tool = server.request(
-            "tools/call", {"name": "ticket_send", "arguments": {}}
+            "tools/call", {"name": "task_send", "arguments": {}}
         )
-        unknown_feature = server.call("ticket_send", {})["result"]
+        unknown_feature = server.call("task_send", {})["result"]
         unknown_method = server.request("resources/list", {})
 
     cli = _cli(
         installed_commands,
         project,
-        "ticket",
+        "task",
         "register",
-        "--ticket-file",
+        "--task-file",
         str(_write(project / "invalid.yml", invalid)),
     )
     assert cli.returncode == 1
@@ -428,7 +428,7 @@ def test_installed_mcp_server_reports_invalid_input_and_unknown_requests(
     assert rejected["content"][0]["text"]
     assert unknown_tool["error"]["code"] == -32602
     assert unknown_feature["isError"] is True
-    assert "ticket_send" in unknown_feature["structuredContent"]["error"]
+    assert "task_send" in unknown_feature["structuredContent"]["error"]
     assert unknown_method["error"]["code"] == -32601
 
 
@@ -446,7 +446,7 @@ def test_installed_mcp_server_survives_a_rejected_alias_status_call(
             "alias_status", {"aliases": ["missing@l1"], "baseline": "abc123"}
         )["result"]
         # The same process must keep serving the other tools afterwards.
-        after = server.call("ticket_graph", {})["result"]
+        after = server.call("task_graph", {})["result"]
 
     cli = _runner(
         installed_commands,
@@ -460,7 +460,7 @@ def test_installed_mcp_server_survives_a_rejected_alias_status_call(
     assert rejected["isError"] is True
     assert rejected["content"][0]["text"] == (yaml.safe_load(cli.stdout).get("error") or yaml.safe_load(cli.stdout)["tasks"][0]["error"])["message"]
     assert after["isError"] is False
-    assert after["structuredContent"] == {"schema_version": 2, "tickets": []}
+    assert after["structuredContent"]["tasks"] == []
 
 
 def test_installed_mcp_server_reports_a_missing_project_root_like_the_graph_tools(
@@ -473,9 +473,9 @@ def test_installed_mcp_server_reports_a_missing_project_root_like_the_graph_tool
 
     with _started_mcp(mcp_executable, plain) as server:
         status = server.call("alias_status", {"aliases": ["missing@l1"]})["result"]
-        graph = server.call("ticket_graph", {})["result"]
+        graph = server.call("task_graph", {})["result"]
 
-    cli = _cli(installed_commands, plain, "ticket", "graph")
+    cli = _cli(installed_commands, plain, "task", "graph")
     assert cli.returncode == 1
     message = cli.stderr.strip().removeprefix("Error: ")
     assert status["isError"] is True
@@ -511,8 +511,8 @@ def _inline_task(instruction: str = "hold") -> dict:
     """Select the existing inline temporary role for the registered task."""
 
     return {
-        "ticket_id":   "113",
-        "ticket_name": "managed-probe",
+        "task_id":   "113",
+        "task_name": "managed-probe",
         "role":        {
             "managed-probe": {
                 "runtime":          "codex",
@@ -564,14 +564,14 @@ def managed_mcp(
     """
 
     from graphtraj.graph.delivery_worldline import append_project_worldline_event
-    from graphtraj.graph.ticket_graph import register_ticket
+    from graphtraj.graph.task_graph import register_task
 
     root, _, _, environment = configure_harness(
         installed_commands, temporary_git_repository, fake_codex, tmp_path,
     )
     state = root / ".graphtraj/state"
-    register_ticket(state, root, _ticket("113", "managed-probe"))
-    from test_ticket_graph import _change_status
+    register_task(state, root, _task("113", "managed-probe"))
+    from test_task_graph import _change_status
     _change_status(installed_commands, root, '113', 'ready')
     roles_file = root / '.graphtraj/roles.yml'
     roles = yaml.safe_load(roles_file.read_text())
@@ -627,7 +627,7 @@ def test_installed_mcp_server_dispatches_and_controls_a_managed_child(
     assert set(dispatched) == {"retained_batch_file", "tasks"}
     task, = dispatched["tasks"]
     assert task["launch_status"] == "launched"
-    assert task["ticket_id"] == "113"
+    assert task["task_id"] == "113"
     assert task["role"] == "managed-probe"
     alias, session = task["alias"], task["session"]
     assert Path(dispatched["retained_batch_file"]).is_file()
@@ -741,12 +741,12 @@ def test_installed_mcp_server_rejects_execution_input_like_the_cli(
     managed_mcp.environment["CODEX_THREAD_ID"] = "managed-main"
     empty_batch = _write(root / "empty-batch.yml", {"tasks": []})
     unregistered = _write(
-        root / "unregistered-batch.yml", {"tasks": [_inline_task() | {"ticket_id": "999"}]}
+        root / "unregistered-batch.yml", {"tasks": [_inline_task() | {"task_id": "999"}]}
     )
     stale_request = _write(root / "stale-request.yml", {"alias": "missing@l1"})
     cases = (
         ("swarm", {"tasks": []}, ["--swarm-input", str(empty_batch)]),
-        ("swarm", {"tasks": [_inline_task() | {"ticket_id": "999"}]},
+        ("swarm", {"tasks": [_inline_task() | {"task_id": "999"}]},
          ["--swarm-input", str(unregistered)]),
         ("send_instruction", {"alias": "missing@l1", "instruction": "steer",
                               "caused_by_event_ids": []},
@@ -757,12 +757,12 @@ def test_installed_mcp_server_rejects_execution_input_like_the_cli(
                               "response": {}},
          ["reply", "missing@l1", "--request-file", str(stale_request),
           "--response", "{}"]),
-        ("continue", {"ticket_id": "113", "caused_by_event_ids": [cause]},
-         ["continue", "--ticket-id", "113", "--caused-by-event-id", cause]),
-        ("continue", {"ticket_id": "999", "caused_by_event_ids": [cause]},
-         ["continue", "--ticket-id", "999", "--caused-by-event-id", cause]),
-        ("continue", {"ticket_id": "113", "caused_by_event_ids": []},
-         ["continue", "--ticket-id", "113", "--caused-by-event-id", ""]),
+        ("continue", {"task_id": "113", "caused_by_event_ids": [cause]},
+         ["continue", "--task-id", "113", "--caused-by-event-id", cause]),
+        ("continue", {"task_id": "999", "caused_by_event_ids": [cause]},
+         ["continue", "--task-id", "999", "--caused-by-event-id", cause]),
+        ("continue", {"task_id": "113", "caused_by_event_ids": []},
+         ["continue", "--task-id", "113", "--caused-by-event-id", ""]),
     )
 
     for tool, arguments, cli_arguments in cases:
@@ -793,7 +793,7 @@ def test_installed_mcp_server_rejects_execution_input_like_the_cli(
     assert missing["structuredContent"] == yaml.safe_load(cli_missing.stdout)
 
 
-def test_installed_mcp_server_continues_a_stopped_ticket_with_unchanged_semantics(
+def test_installed_mcp_server_continues_a_stopped_task_with_unchanged_semantics(
     installed_commands: InstalledCommands,
     mcp_executable: Path,
     temporary_git_repository: Path,
@@ -803,12 +803,12 @@ def test_installed_mcp_server_continues_a_stopped_ticket_with_unchanged_semantic
     """The dispatch stop and the explicit continue are the existing D.3 path."""
 
     from test_execution_budgets import _budget_body
-    from test_session_alias_control import _register_ready_ticket
+    from test_session_alias_control import _register_ready_task
 
     harness, _, _, environment = configure_harness(
         installed_commands, temporary_git_repository, fake_codex, tmp_path,
     )
-    _register_ready_ticket(installed_commands, harness, body=_budget_body(total=1))
+    _register_ready_task(installed_commands, harness, body=_budget_body(total=1))
     clock = tmp_path / "mcp-continue-clock"
     clock.write_text(str(time.time()), encoding="utf-8")
     environment, _ = _controlled_budget_server(
@@ -816,19 +816,19 @@ def test_installed_mcp_server_continues_a_stopped_ticket_with_unchanged_semantic
         BUDGET_CLOCK=str(clock), FAKE_CODEX_FINAL_LEADER_CLOCK=str(clock),
         FAKE_CODEX_CAPTURE_STDIN="1",
     )
-    ticket = harness / ".graphtraj/state/tickets/76-session-alias-control"
+    task_directory = harness / ".graphtraj/state/tasks/76-session-alias-control"
 
     with _started_mcp(mcp_executable, harness, environment) as server:
         stopped = server.call("swarm", {"tasks": [{
-            "ticket_id":   "76",
-            "ticket_name": "session-alias-control",
+            "task_id":   "76",
+            "task_name": "session-alias-control",
             "role":        "coding-team.team-leader",
         }]}, thread_id="thread-main")["result"]
         assert stopped["isError"] is True
         assert stopped["structuredContent"]["tasks"][0]["launch_status"] == "stopped"
-        usage_before = yaml.safe_load((ticket / "execution-budget.yml").read_text())
+        usage_before = yaml.safe_load((task_directory / "execution-budget.yml").read_text())
         assert usage_before["stopped"] is True
-        state = yaml.safe_load((ticket / "ticket.yml").read_text())
+        state = yaml.safe_load((task_directory / "task.yml").read_text())
         assert state["status"] == "implementing"
         assert state['current_candidate'] is None
         candidate = next(json.loads(line)['candidate']
@@ -850,7 +850,7 @@ def test_installed_mcp_server_continues_a_stopped_ticket_with_unchanged_semantic
         decision_file = _write(
             harness / "continuation-decision.yml",
             {
-                "event":                "ticket-continuation-decided",
+                "event":                "task-continuation-decided",
                 "caused_by_event_ids": [stop_event],
                 "evidence_refs":       ["stopped-team-diagnosis.md"],
                 "decision":            "continue",
@@ -866,9 +866,9 @@ def test_installed_mcp_server_continues_a_stopped_ticket_with_unchanged_semantic
             "product_preserving":  True,
             "caused_by_event_ids": [decision_id],
             "evidence_refs":       ["stopped-team-diagnosis.md"],
-            "tickets":             [
+            "tasks":             [
                 {
-                    **_ticket("76", "session-alias-control"),
+                    **_task("76", "session-alias-control"),
                     "body":        _budget_body(
                         total=10,
                         revision_reason="Main accepted the retained stop diagnosis.",
@@ -879,32 +879,32 @@ def test_installed_mcp_server_continues_a_stopped_ticket_with_unchanged_semantic
             ],
         })
         revised = _cli(
-            installed_commands, harness, "ticket", "revise",
+            installed_commands, harness, "task", "revise",
             "--revision-file", str(revision),
         )
         assert revised.returncode == 0, revised.stderr
         again = server.call("swarm", {"tasks": [{
-            "ticket_id":   "76",
-            "ticket_name": "session-alias-control",
+            "task_id":   "76",
+            "task_name": "session-alias-control",
             "role":        "coding-team.team-leader",
         }]})["result"]
         assert again["isError"] is True
         assert again["structuredContent"]["tasks"][0]["launch_status"] == "stopped"
         continued = server.call("continue", {
-            "ticket_id": "76", "caused_by_event_ids": [decision_id],
+            "task_id": "76", "caused_by_event_ids": [decision_id],
         })["result"]
 
     assert continued["isError"] is False, continued
     continuation = continued["structuredContent"]
     assert continuation["tasks"]
     assert all(task["send_status"] == "sent" for task in continuation["tasks"])
-    from runner_fixtures import wait_for_ticket_status
-    wait_for_ticket_status(installed_commands, harness, "76", "awaiting-integration")
-    after = yaml.safe_load((ticket / "ticket.yml").read_text())
+    from runner_fixtures import wait_for_task_status
+    wait_for_task_status(installed_commands, harness, "76", "awaiting-integration")
+    after = yaml.safe_load((task_directory / "task.yml").read_text())
     assert after["status"] == "awaiting-integration"
     assert after["active_team_ordinal"] == 1
     assert after["current_candidate"] == candidate
-    usage = yaml.safe_load((ticket / "execution-budget.yml").read_text())
+    usage = yaml.safe_load((task_directory / "execution-budget.yml").read_text())
     assert usage["stopped"] is False
     for field in (
         "started_at", "sessions", "corrections", "allowance_minutes",
@@ -1015,7 +1015,7 @@ def test_real_codex_host_discovers_and_calls_the_mcp_graph_tools_offline(
         "tool_timeout_sec = 30\n".format(mcp_executable, project),
         encoding="utf-8",
     )
-    issue = _ticket("73", "shared-graph")
+    issue = _task("73", "shared-graph")
 
     with CodexHost(project, codex_home) as host:
         host.request(
@@ -1045,7 +1045,7 @@ def test_real_codex_host_discovers_and_calls_the_mcp_graph_tools_offline(
                 "server":    "graphtraj",
                 "threadId":  host.thread_id,
                 "tool":      MCP_TOOL_NAME,
-                "arguments": tool_envelope("ticket_register", issue),
+                "arguments": tool_envelope("task_register", issue),
             },
         )["result"]
         assert registered["isError"] is False
@@ -1073,17 +1073,17 @@ def test_real_codex_host_discovers_and_calls_the_mcp_graph_tools_offline(
                 "server":    "graphtraj",
                 "threadId":  host.thread_id,
                 "tool":      MCP_TOOL_NAME,
-                "arguments": tool_envelope("ticket_graph", {}),
+                "arguments": tool_envelope("task_graph", {}),
             },
         )["result"]
 
-    assert Path(registered["structuredContent"]["ticket_directory"]).name == (
+    assert Path(registered["structuredContent"]["task_directory"]).name == (
         "73-shared-graph"
     )
-    cli = _cli(installed_commands, project, "ticket", "graph")
+    cli = _cli(installed_commands, project, "task", "graph")
     assert cli.returncode == 0, cli.stderr
     assert graph["structuredContent"] == yaml.safe_load(cli.stdout)
-    assert graph["structuredContent"]["tickets"][0]["ticket_name"] == "shared-graph"
+    assert graph["structuredContent"]["tasks"][0]["task_name"] == "shared-graph"
 
 
 HOST_PROBE = Path(
@@ -1174,13 +1174,13 @@ def test_real_codex_host_dispatches_and_controls_a_managed_child_offline(
     """
 
     from graphtraj.graph.delivery_worldline import append_project_worldline_event
-    from graphtraj.graph.ticket_graph import register_ticket
+    from graphtraj.graph.task_graph import register_task
 
     harness, _, _, environment = configure_harness(
         installed_commands, temporary_git_repository, fake_codex, tmp_path,
     )
     state = harness / ".graphtraj/state"
-    register_ticket(state, harness, _ticket("113", "managed-probe"))
+    register_task(state, harness, _task("113", "managed-probe"))
     (harness / "instruction.md").write_text(
         "Exercise the dispatched child.\n", encoding="utf-8"
     )
@@ -1306,13 +1306,13 @@ def test_real_codex_host_dispatches_and_controls_a_managed_child_offline(
 
         continued = _host_tool(
             host, probe, "continue",
-            {"ticket_id": "113", "caused_by_event_ids": [cause]},
+            {"task_id": "113", "caused_by_event_ids": [cause]},
         )
 
     # The D.3 continuation is the same operation the CLI exposes; this project
     # has no stopped Team, so both interfaces report the same rejection.
     cli = _runner(
-        installed_commands, harness, "continue", "--ticket-id", "113",
+        installed_commands, harness, "continue", "--task-id", "113",
         "--caused-by-event-id", cause, environment=environment,
     )
     assert cli.returncode == 1, cli.stderr
@@ -1409,13 +1409,13 @@ def test_installed_mcp_server_returns_a_budget_stop_to_the_request_caller(
     """A stop produced by the MCP dispatch returns with that tool call."""
 
     from test_execution_budgets import _budget_body
-    from test_session_alias_control import _register_ready_ticket
+    from test_session_alias_control import _register_ready_task
 
     harness, _, _, environment = configure_harness(
         installed_commands, temporary_git_repository, fake_codex, tmp_path,
     )
     require_no_retro_skill(harness)
-    _register_ready_ticket(installed_commands, harness, body=_budget_body(total=1))
+    _register_ready_task(installed_commands, harness, body=_budget_body(total=1))
     clock = tmp_path / "mcp-caller-clock"
     clock.write_text(str(time.time()), encoding="utf-8")
     mcp_environment, protocol = _controlled_budget_server(
@@ -1428,10 +1428,10 @@ def test_installed_mcp_server_returns_a_budget_stop_to_the_request_caller(
         FAKE_CODEX_FINAL_LEADER_CLOCK=str(clock),
         FAKE_CODEX_CAPTURE_STDIN="1",
     )
-    ticket = harness / ".graphtraj/state/tickets/76-session-alias-control"
+    task_directory = harness / ".graphtraj/state/tasks/76-session-alias-control"
     task = {
-        "ticket_id":   "76",
-        "ticket_name": "session-alias-control",
+        "task_id":   "76",
+        "task_name": "session-alias-control",
         "role":        "coding-team.team-leader",
     }
 
@@ -1444,7 +1444,7 @@ def test_installed_mcp_server_returns_a_budget_stop_to_the_request_caller(
 
         # Accounting and retention keep the existing shapes and thresholds.
         usage = yaml.safe_load(
-            (ticket / "execution-budget.yml").read_text(encoding="utf-8")
+            (task_directory / "execution-budget.yml").read_text(encoding="utf-8")
         )
         assert usage["stopped"] is True
         assert len(usage["notifications"]) > 1
@@ -1455,8 +1455,8 @@ def test_installed_mcp_server_returns_a_budget_stop_to_the_request_caller(
         delivery = stopped["structuredContent"]["stop_deliveries"][0]
         assert delivery["stop_id"] == "71034556-830a-5f40-8ec6-80c65b263a52"
         assert delivery["stop"] == "stochastic_stop:2"
-        assert delivery["ticket"] == {
-            "ticket_id": "76", "ticket_name": "session-alias-control",
+        assert delivery["task"] == {
+            "task_id": "76", "task_name": "session-alias-control",
         }
         triggered_at = datetime.fromisoformat(delivery["triggered_at"])
         delivered_at = datetime.fromisoformat(delivery["delivered_at"])
@@ -1485,13 +1485,13 @@ def test_installed_runner_returns_a_budget_stop_with_the_awaiting_call(
     """The installed CLI returns the enforced stop in the result Main awaits."""
 
     from test_execution_budgets import _budget_body
-    from test_session_alias_control import _register_ready_ticket
+    from test_session_alias_control import _register_ready_task
 
     harness, _, _, environment = configure_harness(
         installed_commands, temporary_git_repository, fake_codex, tmp_path,
     )
     require_no_retro_skill(harness)
-    _register_ready_ticket(installed_commands, harness, body=_budget_body(total=1))
+    _register_ready_task(installed_commands, harness, body=_budget_body(total=1))
     clock = tmp_path / "cli-caller-clock"
     clock.write_text(str(time.time()), encoding="utf-8")
     run_environment, protocol = _controlled_budget_server(
@@ -1507,8 +1507,8 @@ def test_installed_runner_returns_a_budget_stop_with_the_awaiting_call(
     batch = harness / "cli-caller-batch.yml"
     batch.write_text(
         "tasks:\n"
-        '  - ticket_id: "76"\n'
-        "    ticket_name: session-alias-control\n"
+        '  - task_id: "76"\n'
+        "    task_name: session-alias-control\n"
         "    role: coding-team.team-leader\n",
         encoding="utf-8",
     )
@@ -1524,8 +1524,8 @@ def test_installed_runner_returns_a_budget_stop_with_the_awaiting_call(
     delivery = document["stop_deliveries"][0]
     assert delivery["stop_id"] == "71034556-830a-5f40-8ec6-80c65b263a52"
     assert delivery["stop"] == "stochastic_stop:2"
-    assert delivery["ticket"] == {
-        "ticket_id": "76", "ticket_name": "session-alias-control",
+    assert delivery["task"] == {
+        "task_id": "76", "task_name": "session-alias-control",
     }
     triggered_at = datetime.fromisoformat(delivery["triggered_at"])
     delivered_at = datetime.fromisoformat(delivery["delivered_at"])
@@ -1545,18 +1545,18 @@ def test_installed_mcp_server_returns_each_caller_its_own_stop(
     """Two request identities served by one server do not cross-deliver."""
 
     from test_execution_budgets import _budget_body
-    from test_session_alias_control import _register_ready_ticket
-    from test_ticket_graph import _change_status, _register, _ticket
+    from test_session_alias_control import _register_ready_task
+    from test_task_graph import _change_status, _register, _task
 
     harness, _, _, environment = configure_harness(
         installed_commands, temporary_git_repository, fake_codex, tmp_path,
     )
     require_no_retro_skill(harness)
-    _register_ready_ticket(installed_commands, harness, body=_budget_body(total=1))
+    _register_ready_task(installed_commands, harness, body=_budget_body(total=1))
     _register(
         installed_commands,
         harness,
-        {**_ticket("77", "mcp-cross-caller"), "body": _budget_body(total=1)},
+        {**_task("77", "mcp-cross-caller"), "body": _budget_body(total=1)},
     )
     _change_status(installed_commands, harness, "77", "ready")
     clock = tmp_path / "mcp-cross-clock"
@@ -1572,26 +1572,26 @@ def test_installed_mcp_server_returns_each_caller_its_own_stop(
     )
     tasks = {
         "76": {
-            "ticket_id":   "76",
-            "ticket_name": "session-alias-control",
+            "task_id":   "76",
+            "task_name": "session-alias-control",
             "role":        "coding-team.team-leader",
         },
         "77": {
-            "ticket_id":   "77",
-            "ticket_name": "mcp-cross-caller",
+            "task_id":   "77",
+            "task_name": "mcp-cross-caller",
             "role":        "coding-team.team-leader",
         },
     }
 
     with _started_mcp(mcp_executable, harness, mcp_environment) as server:
-        for ticket_id, thread_id in (("76", "thread-one"), ("77", "thread-two")):
+        for task_id, thread_id in (("76", "thread-one"), ("77", "thread-two")):
             stopped = server.call(
-                "swarm", {"tasks": [tasks[ticket_id]]}, thread_id=thread_id
+                "swarm", {"tasks": [tasks[task_id]]}, thread_id=thread_id
             )["result"]
             assert stopped["isError"] is True, stopped
             assert stopped["structuredContent"]["tasks"][0]["launch_status"] == "stopped"
             delivery = stopped["structuredContent"]["stop_deliveries"][0]
-            assert delivery["ticket"]["ticket_id"] == ticket_id
+            assert delivery["task"]["task_id"] == task_id
 
         assert _native_queue_submissions(protocol) == []
 
@@ -1606,18 +1606,18 @@ def test_installed_mcp_server_does_not_queue_a_late_stop_without_a_waiting_call(
     """A stop sampled after the tool call returned has no in-band carrier.
 
     A generic request resumes detached work without a caller channel. Its later
-    stop stays retained in the Ticket's budget state and is not attached to a
+    stop stays retained in the Task's budget state and is not attached to a
     different caller's next request or queued into Main's native input.
     """
 
     from test_execution_budgets import _budget_body
-    from test_session_alias_control import _register_ready_ticket
+    from test_session_alias_control import _register_ready_task
 
     harness, _, _, environment = configure_harness(
         installed_commands, temporary_git_repository, fake_codex, tmp_path,
     )
     require_no_retro_skill(harness)
-    _register_ready_ticket(installed_commands, harness, body=_budget_body(total=0.01))
+    _register_ready_task(installed_commands, harness, body=_budget_body(total=0.01))
     started = time.time()
     clock = tmp_path / "mcp-late-clock"
     clock.write_text(str(started), encoding="utf-8")
@@ -1635,10 +1635,10 @@ def test_installed_mcp_server_does_not_queue_a_late_stop_without_a_waiting_call(
         FAKE_CODEX_CAPTURE_STDIN="1",
         FAKE_CODEX_RELEASE_FILE=str(release),
     )
-    ticket = harness / ".graphtraj/state/tickets/76-session-alias-control"
+    task_directory = harness / ".graphtraj/state/tasks/76-session-alias-control"
     task = {
-        "ticket_id":   "76",
-        "ticket_name": "session-alias-control",
+        "task_id":   "76",
+        "task_name": "session-alias-control",
         "role":        "coding-team.team-leader",
     }
 
@@ -1674,7 +1674,7 @@ def test_installed_mcp_server_does_not_queue_a_late_stop_without_a_waiting_call(
             deadline = time.monotonic() + 20
             while time.monotonic() < deadline:
                 if yaml.safe_load(
-                    (ticket / "execution-budget.yml").read_text(encoding="utf-8")
+                    (task_directory / "execution-budget.yml").read_text(encoding="utf-8")
                 )["stopped"]:
                     break
                 time.sleep(0.02)
@@ -1688,7 +1688,7 @@ def test_installed_mcp_server_does_not_queue_a_late_stop_without_a_waiting_call(
         assert "stop_deliveries" not in observed["structuredContent"]
         assert _native_queue_submissions(protocol) == []
 
-    usage = yaml.safe_load((ticket / "execution-budget.yml").read_text(encoding="utf-8"))
+    usage = yaml.safe_load((task_directory / "execution-budget.yml").read_text(encoding="utf-8"))
     assert usage["stopped"] is True
 
 
@@ -1702,14 +1702,14 @@ def test_installed_mcp_server_keeps_the_continue_path_on_the_request_caller(
     """The D.3 continuation runs on the caller binding it started over."""
 
     from test_execution_budgets import _budget_body
-    from test_session_alias_control import _register_ready_ticket
-    from test_ticket_graph import _ticket
+    from test_session_alias_control import _register_ready_task
+    from test_task_graph import _task
 
     harness, _, _, environment = configure_harness(
         installed_commands, temporary_git_repository, fake_codex, tmp_path,
     )
     require_no_retro_skill(harness)
-    _register_ready_ticket(installed_commands, harness, body=_budget_body(total=1))
+    _register_ready_task(installed_commands, harness, body=_budget_body(total=1))
     clock = tmp_path / "mcp-continue-clock"
     clock.write_text(str(time.time()), encoding="utf-8")
     mcp_environment, protocol = _controlled_budget_server(
@@ -1722,10 +1722,10 @@ def test_installed_mcp_server_keeps_the_continue_path_on_the_request_caller(
         FAKE_CODEX_CAPTURE_STDIN="1",
         FAKE_CODEX_FINAL_LEADER_CLOCK=str(clock),
     )
-    ticket = harness / ".graphtraj/state/tickets/76-session-alias-control"
+    task_directory = harness / ".graphtraj/state/tasks/76-session-alias-control"
     task = {
-        "ticket_id":   "76",
-        "ticket_name": "session-alias-control",
+        "task_id":   "76",
+        "task_name": "session-alias-control",
         "role":        "coding-team.team-leader",
     }
 
@@ -1754,7 +1754,7 @@ def test_installed_mcp_server_keeps_the_continue_path_on_the_request_caller(
         decision_file = _write(
             harness / "continuation-decision.yml",
             {
-                "event":                "ticket-continuation-decided",
+                "event":                "task-continuation-decided",
                 "caused_by_event_ids": [stop_event],
                 "evidence_refs":       ["stopped-team-diagnosis.md"],
                 "decision":            "continue",
@@ -1772,9 +1772,9 @@ def test_installed_mcp_server_keeps_the_continue_path_on_the_request_caller(
                 "product_preserving":  True,
                 "caused_by_event_ids": [decision_id],
                 "evidence_refs":       ["stopped-team-diagnosis.md"],
-                "tickets":             [
+                "tasks":             [
                     {
-                        **_ticket("76", "session-alias-control"),
+                        **_task("76", "session-alias-control"),
                         "body":        _budget_body(
                             total=10,
                             revision_reason="Main accepted the retained stop diagnosis.",
@@ -1786,14 +1786,14 @@ def test_installed_mcp_server_keeps_the_continue_path_on_the_request_caller(
             },
         )
         revised = _cli(
-            installed_commands, harness, "ticket", "revise",
+            installed_commands, harness, "task", "revise",
             "--revision-file", str(revision),
         )
         assert revised.returncode == 0, revised.stderr
 
         continued = server.call(
             "continue",
-            {"ticket_id": "76", "caused_by_event_ids": [decision_id]},
+            {"task_id": "76", "caused_by_event_ids": [decision_id]},
             thread_id="thread-main",
         )["result"]
         assert continued["isError"] is False, continued
@@ -1809,9 +1809,9 @@ def test_installed_mcp_server_keeps_the_continue_path_on_the_request_caller(
         assert "stop_deliveries" not in continuation
         assert _native_queue_submissions(protocol) == []
 
-    from runner_fixtures import wait_for_ticket_status
-    wait_for_ticket_status(installed_commands, harness, "76", "awaiting-integration")
-    after = yaml.safe_load((ticket / "ticket.yml").read_text(encoding="utf-8"))
+    from runner_fixtures import wait_for_task_status
+    wait_for_task_status(installed_commands, harness, "76", "awaiting-integration")
+    after = yaml.safe_load((task_directory / "task.yml").read_text(encoding="utf-8"))
     assert after["status"] == "awaiting-integration"
-    usage = yaml.safe_load((ticket / "execution-budget.yml").read_text(encoding="utf-8"))
+    usage = yaml.safe_load((task_directory / "execution-budget.yml").read_text(encoding="utf-8"))
     assert usage["stopped"] is False

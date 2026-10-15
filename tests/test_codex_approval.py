@@ -75,7 +75,7 @@ def managed(
     directory = tmp_path / 'session'
     directory.mkdir()
     monkeypatch.setenv('MANAGED_NATIVE_ROOT', str(tmp_path / 'native'))
-    monkeypatch.setenv('GRAPHTRAJ_TICKET_ID', '145')
+    monkeypatch.setenv('GRAPHTRAJ_TASK_ID', '145')
     monkeypatch.setenv('GRAPHTRAJ_ROLE', 'temporary-role')
     monkeypatch.setenv('DEEPSEEK_API_KEY', 'test-key')
     monkeypatch.setenv('DEFAULT_REVIEW_KEY', 'default-key')
@@ -301,14 +301,14 @@ def resume_settings(
     }, 'normal': {'temporary-role': {'runtime': 'codex', 'model': 'other'}}}}))
     batch = root / 'batch.yml'
     batch.write_text(yaml.safe_dump({'tasks': [{
-        'ticket_id': '145', 'ticket_name': 'resume-probe',
+        'task_id': '145', 'task_name': 'resume-probe',
         'role': {'inline-role': settings} if inline else 'expert.temporary-role',
         'instruction': 'Keep the existing Session.',
     }]}))
     mapping = {
         'role': 'inline-role' if inline else 'temporary-role',
         'role_reference': 'inline-role' if inline else 'expert.temporary-role',
-        'retained_batch_file': str(batch), 'ticket_id': '145',
+        'retained_batch_file': str(batch), 'task_id': '145',
         'session': yaml.safe_load((directory / 'session.yml').read_text())['session'],
         'parent_alias': 'actual-parent',
         'started_at': '2026-09-28T00:00:00Z', 'execution_budget': {'total': 30},

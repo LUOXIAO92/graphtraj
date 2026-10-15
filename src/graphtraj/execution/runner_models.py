@@ -23,8 +23,8 @@ PUBLIC_ERROR_CODES = frozenset(
         "invalid-config",
         "unsupported-runtime",
         "integration-not-ready",
-        "invalid-ticket",
-        "ticket-already-live",
+        "invalid-task",
+        "task-already-live",
         "worktree-conflict",
         "worktree-busy",
         "launch-failed",
@@ -49,9 +49,9 @@ DETAIL_ERROR_CATEGORIES = {
     "BATCH_SCHEMA_INVALID": "invalid-input",
     "TASK_COUNT_UNSUPPORTED": "invalid-input",
     "TASK_SCHEMA_INVALID": "invalid-input",
-    "TICKET_ID_INVALID": "invalid-input",
-    "TICKET_ID_DUPLICATE": "invalid-input",
-    "TICKET_NAME_INVALID": "invalid-input",
+    "TASK_ID_INVALID": "invalid-input",
+    "TASK_ID_DUPLICATE": "invalid-input",
+    "TASK_NAME_INVALID": "invalid-input",
     "ROLE_NOT_CONFIGURED": "invalid-input",
     "INSTRUCTION_INVALID": "invalid-input",
     "SKILL_SELECTION_INVALID": "invalid-input",
@@ -75,8 +75,8 @@ DETAIL_ERROR_CATEGORIES = {
     "RUNTIME_UNSUPPORTED": "unsupported-runtime",
     "INTEGRATION_WORKTREE_INVALID": "integration-not-ready",
     "INTEGRATION_WORKTREE_DIRTY": "integration-not-ready",
-    "TICKET_FILE_INVALID": "invalid-ticket",
-    "TICKET_ALREADY_ACTIVE": "ticket-already-live",
+    "TASK_FILE_INVALID": "invalid-task",
+    "TASK_ALREADY_ACTIVE": "task-already-live",
     "WORKTREE_CONFLICT": "worktree-conflict",
     "WORKTREE_TURN_ACTIVE": "worktree-busy",
     "ACTIVE_TURN_RESERVATION_FAILED": "launch-failed",
@@ -124,11 +124,11 @@ class RunnerError(Exception):
 
 @dataclass(frozen=True)
 class Task:
-    ticket_id: str
-    ticket_name: str
+    task_id: str
+    task_name: str
     role: str
-    ticket_file: Optional[Path]
-    ticket_content: str
+    task_file: Optional[Path]
+    task_content: str
     instruction: Optional[str]
     requested_skills: Tuple[str, ...] = ()
     report_file: Optional[Path] = None

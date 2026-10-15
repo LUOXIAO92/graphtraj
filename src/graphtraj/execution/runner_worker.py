@@ -332,7 +332,7 @@ def _register_created_member(
     from graphtraj.execution.runner_status import read_alias_mapping
     from graphtraj.graph.delivery_state import apply_delivery_state_request, read_team
     from graphtraj.graph.delivery_worldline import read_worldline
-    from graphtraj.graph.ticket_graph import _load_states
+    from graphtraj.graph.task_graph import _load_states
     from graphtraj.workspace.runner_project import discover_project, discover_project_root
 
     project = discover_project(discover_project_root(job_file.parent), require_clean_integration=False)
@@ -351,39 +351,39 @@ def _register_created_member(
     assignment = job["member_registration"]
     if not isinstance(assignment, dict) or set(assignment) != {"member", "replaces"}:
         raise ValueError("Invalid Runner member assignment")
-    ticket_directory, ticket = _load_states(project.state_directory / "tickets")[mapping["ticket_id"]]
-    team_file = ticket_directory / "teams" / str(mapping["team_generation"]) / "team.yml"
+    task_directory, task = _load_states(project.state_directory / "tasks")[mapping["task_id"]]
+    team_file = task_directory / "teams" / str(mapping["team_generation"]) / "team.yml"
     if not created:
-        if (ticket["active_team_ordinal"] != mapping["team_generation"] or not team_file.is_file()
+        if (task["active_team_ordinal"] != mapping["team_generation"] or not team_file.is_file()
                 or not any(member["session_ref"] == mapping["alias"]
                            for member in read_team(team_file)["members"].values())):
             raise ValueError("A resumed task Session must already be a registered member")
         return
     predecessor = next(
         event["event_id"] for event in reversed(read_worldline(project.state_directory, project.harness_root))
-        if event.get("ticket_id") == mapping["ticket_id"]
+        if event.get("task_id") == mapping["task_id"]
     )
     request = {
-        "ticket_id": mapping["ticket_id"], "caused_by_event_ids": [predecessor],
+        "task_id": mapping["task_id"], "caused_by_event_ids": [predecessor],
         "evidence_refs": [(directory / "mapping.yml").relative_to(project.harness_root).as_posix()],
     }
     if not team_file.exists():
-        expected = (ticket["active_team_ordinal"] or 0) + 1
+        expected = (task["active_team_ordinal"] or 0) + 1
         if mapping["team_generation"] != expected or assignment["replaces"] is not None:
             raise ValueError("The created Session does not start the next Team")
         request.update(
             phase="start", worktree=Path(mapping["worktree_path"]).relative_to(project.harness_root).as_posix(),
-            branch="agent/" + ticket["ticket_id"] + "-" + ticket["ticket_name"],
+            branch="agent/" + task["task_id"] + "-" + task["task_name"],
             members={assignment["member"]: {"role": mapping["role"], "session_ref": mapping["alias"]}},
         )
     else:
-        if ticket["active_team_ordinal"] != mapping["team_generation"]:
+        if task["active_team_ordinal"] != mapping["team_generation"]:
             raise ValueError("The created Session does not belong to the active Team")
         team = read_team(team_file)
         member = assignment["member"]
         if assignment["replaces"] is not None:
             previous, previous_directory = read_alias_mapping(project.runner_directory, assignment["replaces"])
-            if any(previous[key] != mapping[key] for key in ("parent", "ticket_id", "team_generation", "role")):
+            if any(previous[key] != mapping[key] for key in ("parent", "task_id", "team_generation", "role")):
                 raise ValueError("Replacement must retain the actual parent and task binding")
             retirement = yaml.safe_load((previous_directory / "session.yml").read_text()).get("retirement")
             member = retirement["member"] if retirement else None

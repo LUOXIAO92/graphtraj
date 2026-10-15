@@ -532,7 +532,7 @@ def test_reviewer_send_refreshes_exact_replacement_report_permissions(
 
     refreshed = _refresh_current_team_report_request(
         request,
-        {"runtime": "codex", "role": role, "report_file": report.as_posix(), "ticket_id": "148", "team_generation": 1},
+        {"runtime": "codex", "role": role, "report_file": report.as_posix(), "task_id": "148", "team_generation": 1},
         worktree,
         {
             "GRAPHTRAJ_EVIDENCE": str(evidence),
@@ -609,7 +609,7 @@ def test_resume_preserves_captured_permissions_and_refreshes_reports(
 
     refreshed = _refresh_current_team_report_request(
         request,
-        {"runtime": "codex", "role": role, "ticket_id": "148", "team_generation": 1,
+        {"runtime": "codex", "role": role, "task_id": "148", "team_generation": 1,
          "report_file": ".state/teams/1/rounds/1/retained.md"},
         worktree,
         {
@@ -675,7 +675,7 @@ def test_explicit_read_access_is_enforced_by_native_sandbox(
     monkeypatch.setenv('CODEX_HOME', str(tmp_path / 'native-home'))
     root = tmp_path / 'worktree'
     root.mkdir()
-    evidence = root / '.graphtraj/state/tickets/task'
+    evidence = root / '.graphtraj/state/tasks/task'
     evidence.mkdir(parents=True)
     (root / 'candidate.txt').write_text('unchanged')
     report = evidence / 'teams/1/rounds/1/findings.md'

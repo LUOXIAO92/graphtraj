@@ -50,7 +50,7 @@ right one — once you actually know what the change has to touch.
 **Bug fix = root cause, not symptom.** A report names a symptom. Before you
 edit, grep every caller of the function you're about to touch. The lazy fix IS
 the root-cause fix: one guard in the shared function is a smaller diff than a
-guard in every caller — and patching only the path the ticket names leaves
+guard in every caller — and patching only the path the task names leaves
 every sibling caller still broken. Fix it once, where all callers route through.
 
 ## Rules

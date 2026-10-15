@@ -15,7 +15,7 @@ import yaml
 from conftest import FakeCodex, InstalledCommands, run_process, wait_for_file
 from graphtraj.execution.execution_budget import execution_budget_monitor
 from runner_fixtures import configure_harness, engineer_probe
-from test_session_alias_control import _register_ready_ticket
+from test_session_alias_control import _register_ready_task
 
 
 def _budget_body(
@@ -126,9 +126,9 @@ def test_installed_runner_notifies_its_nested_caller_before_the_worker_finishes(
             item for item in notices
             if item["threshold"] == {"kind": "elapsed_minutes", "limit": 0.01}
         )
-        assert notice["ticket"] == {
-            "ticket_id": "82",
-            "ticket_name": "adapter-probe",
+        assert notice["task"] == {
+            "task_id": "82",
+            "task_name": "adapter-probe",
         }
         assert notice["actual"]["elapsed_minutes"] >= 0.01
 
@@ -209,7 +209,7 @@ def test_installed_runner_delivers_sampled_stop_to_leader_before_engineer_stops(
         started = float(clock.read_text(encoding="utf-8"))
         usage_file = (
             harness
-            / ".graphtraj/state/tickets/82-adapter-probe/execution-budget.yml"
+            / ".graphtraj/state/tasks/82-adapter-probe/execution-budget.yml"
         )
         clock.write_text(str(started + 0.61), encoding="utf-8")
         deadline = time.monotonic() + 10
@@ -299,7 +299,7 @@ def test_installed_runner_collects_reviews_already_running_at_sampled_stop(
     harness, _, _, environment = configure_harness(
         installed_commands, temporary_git_repository, fake_codex, tmp_path
     )
-    _register_ready_ticket(
+    _register_ready_task(
         installed_commands, harness, body=_budget_body(total=0.01)
     )
     clock = tmp_path / "review-budget-clock"
@@ -323,8 +323,8 @@ def test_installed_runner_collects_reviews_already_running_at_sampled_stop(
     batch = harness / "review-stop-batch.yml"
     batch.write_text(
         "tasks:\n"
-        "  - ticket_id: \"76\"\n"
-        "    ticket_name: session-alias-control\n"
+        "  - task_id: \"76\"\n"
+        "    task_name: session-alias-control\n"
         "    role: coding-team.team-leader\n",
         encoding="utf-8",
     )
@@ -366,7 +366,7 @@ def test_installed_runner_collects_reviews_already_running_at_sampled_stop(
         clock.write_text(str(started + 121), encoding="utf-8")
         usage_file = (
             harness
-            / ".graphtraj/state/tickets/76-session-alias-control/execution-budget.yml"
+            / ".graphtraj/state/tasks/76-session-alias-control/execution-budget.yml"
         )
         deadline = time.monotonic() + 10
         while time.monotonic() < deadline:
@@ -423,7 +423,7 @@ def test_installed_runner_stops_final_leader_before_acceptance(
     harness, _, integration, environment = configure_harness(
         installed_commands, temporary_git_repository, fake_codex, tmp_path
     )
-    _register_ready_ticket(
+    _register_ready_task(
         installed_commands, harness, body=_budget_body(total=1)
     )
     clock = tmp_path / "final-leader-clock"
@@ -446,8 +446,8 @@ def test_installed_runner_stops_final_leader_before_acceptance(
     batch = harness / "final-leader-stop-batch.yml"
     batch.write_text(
         "tasks:\n"
-        "  - ticket_id: \"76\"\n"
-        "    ticket_name: session-alias-control\n"
+        "  - task_id: \"76\"\n"
+        "    task_name: session-alias-control\n"
         "    role: coding-team.team-leader\n",
         encoding="utf-8",
     )
@@ -471,11 +471,11 @@ def test_installed_runner_stops_final_leader_before_acceptance(
 
     assert result.returncode == 1, result.stdout + result.stderr
     assert yaml.safe_load(result.stdout)["tasks"][0]["launch_status"] == "stopped"
-    ticket = harness / ".graphtraj/state/tickets/76-session-alias-control"
-    state = yaml.safe_load((ticket / "ticket.yml").read_text(encoding="utf-8"))
+    task_directory = harness / ".graphtraj/state/tasks/76-session-alias-control"
+    state = yaml.safe_load((task_directory / "task.yml").read_text(encoding="utf-8"))
     assert state["status"] == "implementing"
     assert state["current_candidate"] is None
-    usage = yaml.safe_load((ticket / "execution-budget.yml").read_text())
+    usage = yaml.safe_load((task_directory / "execution-budget.yml").read_text())
     assert usage["stopped"] is True
     assert all(notice.get("channel_written", False) for notice in usage["parent_notices"])
     leader_inputs = [
@@ -494,12 +494,12 @@ def test_installed_runner_stops_final_leader_before_acceptance(
                      for shard in (harness / '.graphtraj/state/worldline').glob('*.jsonl')
                      for line in shard.read_text().splitlines()
                      if json.loads(line)['event'] == 'result-submitted')
-    round_directory = ticket / "teams/1/rounds/1"
+    round_directory = task_directory / "teams/1/rounds/1"
     preserved_reports = {
         name: (round_directory / name).read_bytes()
         for name in ("engineer.md", "validation.md", "standards.md", "spec.md")
     }
-    usage_before = yaml.safe_load((ticket / "execution-budget.yml").read_text())
+    usage_before = yaml.safe_load((task_directory / "execution-budget.yml").read_text())
     stop_event = [
         json.loads(line)["event_id"]
         for path in (harness / ".graphtraj/state/worldline").glob("*.jsonl")
@@ -511,7 +511,7 @@ def test_installed_runner_stops_final_leader_before_acceptance(
     decision_file.write_text(
         yaml.safe_dump(
             {
-                "event": "ticket-continuation-decided",
+                "event": "task-continuation-decided",
                 "caused_by_event_ids": [stop_event],
                 "evidence_refs": ["stopped-team-diagnosis.md"],
                 "decision": "continue",
@@ -539,10 +539,10 @@ def test_installed_runner_stops_final_leader_before_acceptance(
                 "product_preserving": True,
                 "caused_by_event_ids": [decision_id],
                 "evidence_refs": ["stopped-team-diagnosis.md"],
-                "tickets": [
+                "tasks": [
                     {
-                        "ticket_id": "76",
-                        "ticket_name": "session-alias-control",
+                        "task_id": "76",
+                        "task_name": "session-alias-control",
                         "source": "https://github.com/example/project/issues/76",
                         "title": "Session Alias Control",
                         "body": _budget_body(
@@ -550,8 +550,12 @@ def test_installed_runner_stops_final_leader_before_acceptance(
                             revision_reason="Main accepted the retained stop diagnosis.",
                         ),
                         "dependencies": [],
-                        "active": True,
+                        "schema_version": 2,
+                        "parent_id": None,
+                        "disposition": "active",
                         "replaced_by": [],
+                        "retirement_reason": None,
+                        "current_definition": "task.md",
                     }
                 ],
             },
@@ -562,7 +566,7 @@ def test_installed_runner_stops_final_leader_before_acceptance(
     revised = run_process(
         [
             str(installed_commands.product),
-            "ticket",
+            "task",
             "revise",
             "--revision-file",
             str(revision_file),
@@ -578,15 +582,15 @@ def test_installed_runner_stops_final_leader_before_acceptance(
     )
     assert ordinary_dispatch.returncode == 1, ordinary_dispatch.stderr
     assert yaml.safe_load(ordinary_dispatch.stdout)["tasks"][0]["launch_status"] == "stopped"
-    (integration / "other-ticket-in-progress.txt").write_text(
-        "temporary work from another Ticket\n", encoding="utf-8"
+    (integration / "other-task-in-progress.txt").write_text(
+        "temporary work from another Task\n", encoding="utf-8"
     )
 
     continued = run_process(
         [
             str(installed_commands.runner),
             "continue",
-            "--ticket-id",
+            "--task-id",
             "76",
             "--caused-by-event-id",
             decision_id,
@@ -600,9 +604,9 @@ def test_installed_runner_stops_final_leader_before_acceptance(
     continuation = yaml.safe_load(continued.stdout)
     assert continuation["tasks"]
     assert all(task["send_status"] == "sent" for task in continuation["tasks"])
-    from runner_fixtures import wait_for_ticket_status
-    wait_for_ticket_status(installed_commands, harness, "76", "awaiting-integration")
-    state = yaml.safe_load((ticket / "ticket.yml").read_text(encoding="utf-8"))
+    from runner_fixtures import wait_for_task_status
+    wait_for_task_status(installed_commands, harness, "76", "awaiting-integration")
+    state = yaml.safe_load((task_directory / "task.yml").read_text(encoding="utf-8"))
     assert state["status"] == "awaiting-integration"
     assert state["active_team_ordinal"] == 1
     assert state["current_candidate"] == candidate
@@ -610,7 +614,7 @@ def test_installed_runner_stops_final_leader_before_acceptance(
         name: (round_directory / name).read_bytes()
         for name in preserved_reports
     } == preserved_reports
-    usage = yaml.safe_load((ticket / "execution-budget.yml").read_text())
+    usage = yaml.safe_load((task_directory / "execution-budget.yml").read_text())
     assert usage["stopped"] is False
     for field in (
         "started_at",
@@ -643,7 +647,7 @@ def test_installed_runner_delivers_elapsed_notices_to_final_leader(
     harness, _, _, environment = configure_harness(
         installed_commands, temporary_git_repository, fake_codex, tmp_path
     )
-    _register_ready_ticket(
+    _register_ready_task(
         installed_commands, harness, body=_budget_body(total=2.5)
     )
     clock = tmp_path / "final-leader-notice-clock"
@@ -666,8 +670,8 @@ def test_installed_runner_delivers_elapsed_notices_to_final_leader(
     batch = harness / "final-leader-notice-batch.yml"
     batch.write_text(
         "tasks:\n"
-        "  - ticket_id: \"76\"\n"
-        "    ticket_name: session-alias-control\n"
+        "  - task_id: \"76\"\n"
+        "    task_name: session-alias-control\n"
         "    role: coding-team.team-leader\n",
         encoding="utf-8",
     )
@@ -690,10 +694,10 @@ def test_installed_runner_delivers_elapsed_notices_to_final_leader(
 
     assert result.returncode == 0, result.stdout + result.stderr
     assert yaml.safe_load(result.stdout)["tasks"][0]["launch_status"] == "launched"
-    ticket = harness / ".graphtraj/state/tickets/76-session-alias-control"
-    state = yaml.safe_load((ticket / "ticket.yml").read_text(encoding="utf-8"))
+    task = harness / ".graphtraj/state/tasks/76-session-alias-control"
+    state = yaml.safe_load((task / "task.yml").read_text(encoding="utf-8"))
     assert state["status"] == "awaiting-integration"
-    usage = yaml.safe_load((ticket / "execution-budget.yml").read_text())
+    usage = yaml.safe_load((task / "execution-budget.yml").read_text())
     assert usage["stopped"] is False
     assert len(usage["parent_notices"]) == 2
     assert all(notice.get("channel_written", False) for notice in usage["parent_notices"])
@@ -734,16 +738,20 @@ def test_installed_runner_uses_a_revised_budget_while_its_worker_is_running(
             "product_preserving": True,
             "caused_by_event_ids": [],
             "evidence_refs": ["budget-revision.md"],
-            "tickets": [
+            "tasks": [
                 {
-                    "ticket_id": "82",
-                    "ticket_name": "adapter-probe",
+                    "task_id": "82",
+                    "task_name": "adapter-probe",
                     "source": "https://github.com/example/project/issues/82",
                     "title": "Adapter Probe",
                     "body": _budget_body(total=0.01),
                     "dependencies": [],
-                    "active": True,
+                    "schema_version": 2,
+                    "parent_id": None,
+                    "disposition": "active",
                     "replaced_by": [],
+                    "retirement_reason": None,
+                    "current_definition": "task.md",
                 }
             ],
         }
@@ -754,7 +762,7 @@ def test_installed_runner_uses_a_revised_budget_while_its_worker_is_running(
         unapproved = run_process(
             [
                 str(installed_commands.product),
-                "ticket",
+                "task",
                 "revise",
                 "--revision-file",
                 str(revision),
@@ -763,7 +771,7 @@ def test_installed_runner_uses_a_revised_budget_while_its_worker_is_running(
         )
         assert unapproved.returncode == 1
         assert "requires its reason" in unapproved.stderr
-        revision_document["tickets"][0]["body"] = revised
+        revision_document["tasks"][0]["body"] = revised
         revision.write_text(
             yaml.safe_dump(revision_document, sort_keys=False),
             encoding="utf-8",
@@ -771,7 +779,7 @@ def test_installed_runner_uses_a_revised_budget_while_its_worker_is_running(
         revised_result = run_process(
             [
                 str(installed_commands.product),
-                "ticket",
+                "task",
                 "revise",
                 "--revision-file",
                 str(revision),
@@ -789,15 +797,15 @@ def test_installed_runner_uses_a_revised_budget_while_its_worker_is_running(
 
         assert len(notices) == 1
         assert notices[0]["threshold"] == {"kind": "elapsed_minutes", "limit": 0.01}
-        ticket = harness / ".graphtraj/state/tickets/82-adapter-probe"
-        state = yaml.safe_load((ticket / "ticket.yml").read_text(encoding="utf-8"))
+        task = harness / ".graphtraj/state/tasks/82-adapter-probe"
+        state = yaml.safe_load((task / "task.yml").read_text(encoding="utf-8"))
         assert state["current_definition"].startswith("definitions/")
-        assert (ticket / "ticket.md").read_text(encoding="utf-8").startswith(
+        assert (task / "task.md").read_text(encoding="utf-8").startswith(
             _budget_body(total=5).split("\n\n", 1)[0]
         )
-        current = ticket / state["current_definition"]
+        current = task / state["current_definition"]
         assert current.read_text(encoding="utf-8").startswith(revised.split("\n\n", 1)[0])
-        usage = yaml.safe_load((ticket / "execution-budget.yml").read_text(encoding="utf-8"))
+        usage = yaml.safe_load((task / "execution-budget.yml").read_text(encoding="utf-8"))
         assert usage["budget"]["execution_budget"]["revision_reason"] == (
             "Caller approved the observed Runtime wait before dispatch continued"
         )
@@ -817,7 +825,7 @@ def test_installed_send_notifies_its_caller_while_a_budgeted_resume_runs(
     harness, _, _, environment = configure_harness(
         installed_commands, temporary_git_repository, fake_codex, tmp_path
     )
-    _register_ready_ticket(
+    _register_ready_task(
         installed_commands,
         harness,
         body=_budget_body(total=60),
@@ -825,8 +833,8 @@ def test_installed_send_notifies_its_caller_while_a_budgeted_resume_runs(
     batch = harness / "budget-send-batch.yml"
     batch.write_text(
         "tasks:\n"
-        "  - ticket_id: \"76\"\n"
-        "    ticket_name: session-alias-control\n"
+        "  - task_id: \"76\"\n"
+        "    task_name: session-alias-control\n"
         "    role: coding-team.team-leader\n",
         encoding="utf-8",
     )
@@ -841,8 +849,8 @@ def test_installed_send_notifies_its_caller_while_a_budgeted_resume_runs(
         timeout=30,
     )
     assert launched.returncode == 0, launched.stdout + launched.stderr
-    ticket = harness / ".graphtraj/state/tickets/76-session-alias-control"
-    team_file = ticket / "teams/1/team.yml"
+    task = harness / ".graphtraj/state/tasks/76-session-alias-control"
+    team_file = task / "teams/1/team.yml"
     team = yaml.safe_load(team_file.read_text(encoding="utf-8"))
     team["current_round"] = 2
     team_file.write_text(yaml.safe_dump(team), encoding="utf-8")
@@ -870,16 +878,20 @@ def test_installed_send_notifies_its_caller_while_a_budgeted_resume_runs(
                 "product_preserving": True,
                 "caused_by_event_ids": [],
                 "evidence_refs": ["send-budget-revision.md"],
-                "tickets": [
+                "tasks": [
                     {
-                        "ticket_id": "76",
-                        "ticket_name": "session-alias-control",
+                        "task_id": "76",
+                        "task_name": "session-alias-control",
                         "source": "https://github.com/example/project/issues/76",
                         "title": "Session Alias Control",
                         "body": revised,
                         "dependencies": [],
-                        "active": True,
+                        "schema_version": 2,
+                        "parent_id": None,
+                        "disposition": "active",
                         "replaced_by": [],
+                        "retirement_reason": None,
+                        "current_definition": "task.md",
                     }
                 ],
             },
@@ -890,7 +902,7 @@ def test_installed_send_notifies_its_caller_while_a_budgeted_resume_runs(
     revised_result = run_process(
         [
             str(installed_commands.product),
-            "ticket",
+            "task",
             "revise",
             "--revision-file",
             str(revision),
@@ -986,7 +998,7 @@ def test_installed_send_notifies_its_caller_while_a_budgeted_resume_runs(
     assert cause in (mapping_file.parent / "events.jsonl").read_text(encoding="utf-8")
     assert (mapping_file.parent / "worker-stderr.log").is_file()
 
-    usage_file = ticket / "execution-budget.yml"
+    usage_file = task / "execution-budget.yml"
     usage = yaml.safe_load(usage_file.read_text(encoding="utf-8"))
     clock = tmp_path / "send-stop-clock"
     clock.write_text(
@@ -1070,7 +1082,7 @@ def test_installed_send_notifies_its_caller_while_a_budgeted_resume_runs(
     assert "Execution was stopped by Runner" in leader_inputs[-1]
     usage = yaml.safe_load(usage_file.read_text(encoding="utf-8"))
     assert all(notice.get("channel_written", False) for notice in usage["parent_notices"])
-    assert (ticket / "teams/1/rounds/2/leader.md").is_file()
+    assert (task / "teams/1/rounds/2/leader.md").is_file()
 
 
 def test_installed_send_delivers_elapsed_notices_to_the_resumed_leader(
@@ -1082,7 +1094,7 @@ def test_installed_send_delivers_elapsed_notices_to_the_resumed_leader(
     harness, _, _, environment = configure_harness(
         installed_commands, temporary_git_repository, fake_codex, tmp_path
     )
-    _register_ready_ticket(
+    _register_ready_task(
         installed_commands, harness, body=_budget_body(total=1)
     )
     clock = tmp_path / "detached-leader-clock"
@@ -1106,8 +1118,8 @@ def test_installed_send_delivers_elapsed_notices_to_the_resumed_leader(
     batch = harness / "detached-leader-notices-batch.yml"
     batch.write_text(
         "tasks:\n"
-        "  - ticket_id: \"76\"\n"
-        "    ticket_name: session-alias-control\n"
+        "  - task_id: \"76\"\n"
+        "    task_name: session-alias-control\n"
         "    role: coding-team.team-leader\n",
         encoding="utf-8",
     )
@@ -1143,7 +1155,7 @@ def test_installed_send_delivers_elapsed_notices_to_the_resumed_leader(
     run_environment["FAKE_CODEX_RELEASE_FILE"] = str(release)
     usage_file = (
         harness
-        / ".graphtraj/state/tickets/76-session-alias-control/execution-budget.yml"
+        / ".graphtraj/state/tasks/76-session-alias-control/execution-budget.yml"
     )
     stdout = tmp_path / "detached-leader-notices.stdout"
     stderr = tmp_path / "detached-leader-notices.stderr"
@@ -1197,7 +1209,7 @@ def test_installed_send_collects_reports_without_sampling_the_stop(
     harness, _, _, environment = configure_harness(
         installed_commands, temporary_git_repository, fake_codex, tmp_path
     )
-    _register_ready_ticket(
+    _register_ready_task(
         installed_commands, harness, body=_budget_body(total=1)
     )
     clock = tmp_path / "report-collection-clock"
@@ -1221,8 +1233,8 @@ def test_installed_send_collects_reports_without_sampling_the_stop(
     batch = harness / "report-collection-batch.yml"
     batch.write_text(
         "tasks:\n"
-        "  - ticket_id: \"76\"\n"
-        "    ticket_name: session-alias-control\n"
+        "  - task_id: \"76\"\n"
+        "    task_name: session-alias-control\n"
         "    role: coding-team.team-leader\n",
         encoding="utf-8",
     )
@@ -1251,13 +1263,13 @@ def test_installed_send_collects_reports_without_sampling_the_stop(
     ][-1]
     usage_file = (
         harness
-        / ".graphtraj/state/tickets/76-session-alias-control/execution-budget.yml"
+        / ".graphtraj/state/tasks/76-session-alias-control/execution-budget.yml"
     )
     retained = yaml.safe_load(usage_file.read_text(encoding="utf-8"))
     assert retained["stopping_checks"] == 0
     assert retained["stopped"] is False
 
-    # The Ticket is already past its planned budget, its allowance and the
+    # The Task is already past its planned budget, its allowance and the
     # first stopping interval when Main collects the existing conclusion,
     # which is the reported failure.
     clock.write_text(str(started + 190), encoding="utf-8")
@@ -1299,7 +1311,7 @@ def test_installed_send_collects_reports_without_sampling_the_stop(
         ]
         assert leader_inputs and instruction in leader_inputs[-1]
 
-        # The same Ticket still samples a stop for ordinary budget control.
+        # The same Task still samples a stop for ordinary budget control.
         import graphtraj.execution.execution_budget as budget_module
 
         real_time = budget_module.time.time
@@ -1350,14 +1362,14 @@ def test_installed_send_retains_a_late_stop_without_an_awaiting_call(
     """A stop after `send` returned has no in-band call to return through.
 
     The acknowledged caller is gone before the Worker samples the stop, so the
-    delivery stays retained in the Ticket's budget state instead of being
+    delivery stays retained in the Task's budget state instead of being
     queued into Main's native input.
     """
 
     harness, _, _, environment = configure_harness(
         installed_commands, temporary_git_repository, fake_codex, tmp_path
     )
-    _register_ready_ticket(installed_commands, harness, body=_budget_body(total=1))
+    _register_ready_task(installed_commands, harness, body=_budget_body(total=1))
     clock = tmp_path / "late-stop-clock"
     clock.write_text(str(time.time()), encoding="utf-8")
     started = float(clock.read_text(encoding="utf-8"))
@@ -1390,8 +1402,8 @@ def test_installed_send_retains_a_late_stop_without_an_awaiting_call(
     batch = harness / "late-stop-batch.yml"
     batch.write_text(
         "tasks:\n"
-        "  - ticket_id: \"76\"\n"
-        "    ticket_name: session-alias-control\n"
+        "  - task_id: \"76\"\n"
+        "    task_name: session-alias-control\n"
         "    role: coding-team.team-leader\n",
         encoding="utf-8",
     )
@@ -1464,7 +1476,7 @@ def test_installed_send_retains_a_late_stop_without_an_awaiting_call(
         }
     usage_file = (
         harness
-        / ".graphtraj/state/tickets/76-session-alias-control/execution-budget.yml"
+        / ".graphtraj/state/tasks/76-session-alias-control/execution-budget.yml"
     )
     clock.write_text(str(started + 260), encoding="utf-8")
     try:
@@ -1488,18 +1500,18 @@ def test_retained_engineer_session_identity_keeps_its_planned_session(
     tmp_path: Path,
 ) -> None:
     """A retained Session counts under its actual stored Engineer identity."""
-    ticket = tmp_path / "ticket"
-    ticket.mkdir()
-    (ticket / "ticket.yml").write_text(
-        "current_definition: ticket.md\n", encoding="utf-8"
+    task = tmp_path / "task"
+    task.mkdir()
+    (task / "task.yml").write_text(
+        "current_definition: task.md\n", encoding="utf-8"
     )
-    (ticket / "ticket.md").write_text(_budget_body(total=60), encoding="utf-8")
-    monitor = execution_budget_monitor(ticket, "76", "session-alias-control")
+    (task / "task.md").write_text(_budget_body(total=60), encoding="utf-8")
+    monitor = execution_budget_monitor(task, "76", "session-alias-control")
     assert monitor is not None
 
     monitor.record_session("engineer", "engineer")
 
     usage = yaml.safe_load(
-        (ticket / "execution-budget.yml").read_text(encoding="utf-8")
+        (task / "execution-budget.yml").read_text(encoding="utf-8")
     )
     assert usage["sessions"]["engineer"] == 1

@@ -12,11 +12,11 @@ from graphtraj.execution.runner_batch import retain_batch
 from graphtraj.execution.runner_capacity import capacity_positions
 from graphtraj.execution.runner_launch import launch_swarm
 from graphtraj.execution.runner_models import Batch, Project, RunnerError
-from graphtraj.graph.ticket_graph import register_ticket, update_ticket_state
+from graphtraj.graph.task_graph import register_task, update_task_state
 from graphtraj.runtimes import runtime_adapter
 from graphtraj.teams import team_round
 from graphtraj.workspace.project_initialization import plan_project_setup
-from test_ticket_graph import _ticket
+from test_task_graph import _task
 
 
 class Prepared(Exception):
@@ -82,10 +82,10 @@ def test_first_task_preparation_uses_selected_context(
     }))
     roles_before = roles_path.read_bytes()
     state = root / ".graphtraj/state"
-    register_ticket(state, root, _ticket("213", "runtime-selection"))
+    register_task(state, root, _task("213", "runtime-selection"))
     (root / "ready.md").write_text("Authorized preparation probe.\n")
-    update_ticket_state(state, root, {
-        "ticket_id": "213", "status": "ready", "active_team_ordinal": None,
+    update_task_state(state, root, {
+        "task_id": "213", "status": "ready", "active_team_ordinal": None,
         "worktree": None, "branch": None, "current_candidate": None,
         "caused_by_event_ids": [], "evidence_refs": ["ready.md"],
     })
@@ -120,7 +120,7 @@ def test_first_task_preparation_uses_selected_context(
     ) -> None:
         """Run task preparation in process so the selection injection is local."""
         with capacity_positions(project, 1, capacity_fd) as positions:
-            team_round._deliver_ticket(
+            team_round._deliver_task(
                 project, batch.tasks[0], retain_batch(project.state_directory, batch),
                 positions[0].fileno(),
             )
@@ -136,7 +136,7 @@ def test_first_task_preparation_uses_selected_context(
     monkeypatch.setattr(runtime_adapter, "select_runtime_adapter", select)
     monkeypatch.setattr(team_round, "_run_batch_workers", in_process_batch)
     monkeypatch.setattr(team_round, "_run_session_worker", observe_worker)
-    request = {"tasks": [{"ticket_id": "213", "role": "author"}]}
+    request = {"tasks": [{"task_id": "213", "role": "author"}]}
     if runtime == "unsupported":
         with pytest.raises(RunnerError) as failure:
             launch_swarm(request, root)
@@ -216,10 +216,10 @@ def test_task_failure_uses_selected_runtime_diagnostic(
         "role_tree": {"author": {}},
     }))
     state = root / ".graphtraj/state"
-    register_ticket(state, root, _ticket("217", "runtime-diagnostic"))
+    register_task(state, root, _task("217", "runtime-diagnostic"))
     (root / "ready.md").write_text("Authorized diagnostic probe.\n")
-    update_ticket_state(state, root, {
-        "ticket_id": "217", "status": "ready", "active_team_ordinal": None,
+    update_task_state(state, root, {
+        "task_id": "217", "status": "ready", "active_team_ordinal": None,
         "worktree": None, "branch": None, "current_candidate": None,
         "caused_by_event_ids": [], "evidence_refs": ["ready.md"],
     })
@@ -263,7 +263,7 @@ def test_task_failure_uses_selected_runtime_diagnostic(
     ) -> None:
         """Keep selection injection local while exercising actual task delivery."""
         with capacity_positions(project, 1, capacity_fd) as positions:
-            team_round._deliver_ticket(
+            team_round._deliver_task(
                 project, batch.tasks[0], retain_batch(project.state_directory, batch),
                 positions[0].fileno(),
             )
@@ -298,7 +298,7 @@ def test_task_failure_uses_selected_runtime_diagnostic(
     monkeypatch.setattr(team_round, "_run_agent", run_and_wait)
     monkeypatch.setattr(team_round, "_run_session_worker", worker)
     with pytest.raises(RunnerError) as failure:
-        launch_swarm({"tasks": [{"ticket_id": "217", "role": "author"}]}, root)
+        launch_swarm({"tasks": [{"task_id": "217", "role": "author"}]}, root)
     assert failure.value.code == code
     assert message in failure.value.message
     assert "quoted by successful command" not in failure.value.message

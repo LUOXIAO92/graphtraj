@@ -14,7 +14,7 @@ from graphtraj.configuration.project_configuration import ProjectConfigurationEr
 from graphtraj.interfaces import tools
 from graphtraj.interfaces.cli.graphtraj import main
 from test_delivery_worldline import _configure_project, _event_file
-from test_ticket_graph import _configure, _ticket, _write
+from test_task_graph import _configure, _task, _write
 
 
 def test_project_definitions_name_the_cli_inputs() -> None:
@@ -30,8 +30,8 @@ def test_project_definitions_name_the_cli_inputs() -> None:
         "request", "facts",
     }
 
-    integrate = tools.TOOLS["ticket_integrate"].input_schema
-    assert set(integrate["required"]) == {"ticket_id", "validation_command"}
+    integrate = tools.TOOLS["task_integrate"].input_schema
+    assert set(integrate["required"]) == {"task_id", "validation_command"}
     assert integrate["properties"]["validation_command"]["items"] == {"type": "string"}
     assert integrate["properties"]["role"]["type"] == ["string", "object", "null"]
 
@@ -83,8 +83,8 @@ def test_project_read_outside_the_root_matches_the_cli(
 
     monkeypatch.chdir(tmp_path)
     with pytest.raises(ProjectConfigurationError) as error:
-        tools.TOOLS["ticket_graph"].handler({})
-    graph = CliRunner().invoke(main, ["ticket", "graph"])
+        tools.TOOLS["task_graph"].handler({})
+    graph = CliRunner().invoke(main, ["task", "graph"])
     assert graph.exit_code == 1
     assert str(error.value) in graph.stderr
 
@@ -116,8 +116,8 @@ def test_delivery_state_facts_mismatch_matches_the_cli_without_side_effects(
     project = tmp_path / "project"
     project.mkdir()
     state = _configure(project)
-    request = {"phase": "start", "ticket_id": "73"}
-    facts = {**request, "ticket_id": "74"}
+    request = {"phase": "start", "task_id": "73"}
+    facts = {**request, "task_id": "74"}
     monkeypatch.chdir(project)
 
     with pytest.raises(ValueError) as error:
@@ -140,8 +140,8 @@ def test_integrate_definition_rejects_a_command_that_is_not_argv(
 
     monkeypatch.chdir(tmp_path)
     with pytest.raises(ValueError) as error:
-        tools.TOOLS["ticket_integrate"].handler(
-            {"ticket_id": "73", "validation_command": "pytest"}
+        tools.TOOLS["task_integrate"].handler(
+            {"task_id": "73", "validation_command": "pytest"}
         )
     assert "validation_command must be a list of strings" in str(error.value)
 
@@ -184,22 +184,22 @@ def test_project_setup_previews_without_writing_and_fails_when_ambiguous(
     assert "Setup could not select a Source Repository." in str(error.value)
 
 
-def test_registered_ticket_definition_matches_a_handler_call(
+def test_registered_task_definition_matches_a_handler_call(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """The CLI register command returns the shared handler's ticket directory."""
+    """The CLI register command returns the shared handler's task directory."""
 
     python_root, cli_root = tmp_path / "python", tmp_path / "cli"
     python_root.mkdir()
     _configure(python_root)
-    issue = _ticket("73", "shared-project")
+    issue = _task("73", "shared-project")
     shutil.copytree(python_root, cli_root)
-    ticket_file = _write(cli_root / "issue.yml", issue)
+    task_file = _write(cli_root / "issue.yml", issue)
     monkeypatch.chdir(python_root)
 
-    directory = tools.TOOLS["ticket_register"].handler(issue).document["ticket_directory"]
+    directory = tools.TOOLS["task_register"].handler(issue).document["task_directory"]
     monkeypatch.chdir(cli_root)
-    result = CliRunner().invoke(main, ["ticket", "register", "--ticket-file", str(ticket_file)])
+    result = CliRunner().invoke(main, ["task", "register", "--task-file", str(task_file)])
     assert result.exit_code == 0, result.stderr
     assert Path(result.stdout.strip()).relative_to(cli_root) == (
         Path(directory).relative_to(python_root)

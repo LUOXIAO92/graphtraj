@@ -1,10 +1,10 @@
 ---
 name: implement
-description: "Implement software from an engineering spec or code tickets."
+description: "Implement software from an engineering spec or code tasks."
 disable-model-invocation: true
 ---
 
-Implement the software behavior described by the user in the spec or code tickets.
+Implement the software behavior described by the user in the spec or code tasks.
 
 Use the Leader's scope and difficulty assessment. Small fixes and test
 modifications must not use TDD or code-review Skills. For other work, use TDD
@@ -28,7 +28,7 @@ or repairing a report alone does not require another full suite.
 
 When assigned to a GraphTraj Team, self-review the work and return the candidate
 and validation evidence to the Team Leader. That Leader chooses Review scope;
-each axis runs at most once per Ticket and Reviewers never run tests. Subsequent
+each axis runs at most once per Task and Reviewers never run tests. Subsequent
 corrections return to the Leader for verification, not another Review cycle.
 Return concrete blockers promptly to that owner. Follow
 [task-delivery](../../../manuals/task-delivery/guide.md) for event handling and the shared

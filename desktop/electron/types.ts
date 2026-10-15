@@ -1,18 +1,17 @@
 import type { Call } from './usage';
 import type { Activity, ActivityRequest } from './activity';
 export type Delivery = {
-  event_id: string; event: string; ticket_id: string; candidate: string | null;
+  event_id: string; event: string; task_id: string; candidate: string | null;
   dev_commit: string | null; reason: string | null;
   accepted_definition: string | null; evidence_refs: string[];
 };
-export type Ticket = {
-  ticket_id: string;
-  ticket_name: string;
+export type Task = {
+  task_id: string;
+  task_name: string;
   title: string;
   schema_version?: number;
   parent_id?: string | null;
   disposition?: string;
-  parent_known?: boolean;
   progress?: { total: number; completed: number };
   status: string;
   active: boolean;
@@ -21,7 +20,7 @@ export type Ticket = {
   replaced_by: string[];
   delivery?: Delivery[];
 };
-export type Graph = { tickets: Ticket[]; schema_version?: number };
+export type Graph = { tasks: Task[]; schema_version?: number };
 export type Project = { id: string; root: string; unavailable?: string };
 export type Preferences = { projects: Project[]; selected: string | null; importedLegacy?: string[] };
 export type Observation = { projectId: string; graph: Graph; updatedAt: string };

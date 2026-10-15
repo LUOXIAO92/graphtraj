@@ -673,8 +673,8 @@ async def run_native_operation(
             if not set(arguments) <= set(tool.input_schema['properties']):
                 raise RunnerError('invalid-input', 'Supply only supported tool arguments.')
         if thread != native_session:
-            allowed_features = {'alias_status', 'ticket_graph', *METHOD_FEATURE_NAMES}
-            if action == 'execute' and feature not in ('alias_status', 'ticket_graph'):
+            allowed_features = {'alias_status', 'task_graph', *METHOD_FEATURE_NAMES}
+            if action == 'execute' and feature not in ('alias_status', 'task_graph'):
                 raise RunnerError('authority-denied', 'Temporary native helpers have read-only Runner access.')
         identity = root_alias if thread == native_session else thread
 

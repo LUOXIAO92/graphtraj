@@ -62,8 +62,8 @@ test('receiving structures isolate different targets, relation kinds and reverse
 
 test('source selection follows its branch and shared receipt without selecting sibling branches', () => {
   const {nodes,edges}=fixture();
-  const graph={tickets:[...['A','B','C'].map(ticket_id=>({ticket_id,parent_id:'T',dependencies:[],replaced_by:[],delivery:[{event:'ticket-completed',ticket_id:'T'}]})),
-    {ticket_id:'T',parent_id:null,dependencies:[],replaced_by:[]}]};
+  const graph={tasks:[...['A','B','C'].map(task_id=>({task_id,parent_id:'T',dependencies:[],replaced_by:[],delivery:[{event:'task-completed',task_id:'T'}]})),
+    {task_id:'T',parent_id:null,dependencies:[],replaced_by:[]}]};
   const focus=taskFocus(graph,'A');
   assert.deepEqual(Array.from(focus).sort(),['A','T']);
   const drawing=taskPaths(nodes,edges);
@@ -75,8 +75,8 @@ test('source selection follows its branch and shared receipt without selecting s
 });
 
 test('collapsed visible pairs retain all relations before common-target drawing', () => {
-  const task=(ticket_id,parent_id,dependencies=[])=>({ticket_id,parent_id,dependencies,title:ticket_id,status:'pending',active:true,replaced_by:[]});
-  const graph={tickets:[task('S',null),task('A','S'),task('B','S'),task('T',null,['A','B'])]};
+  const task=(task_id,parent_id,dependencies=[])=>({task_id,parent_id,dependencies,title:task_id,status:'pending',active:true,replaced_by:[]});
+  const graph={tasks:[task('S',null),task('A','S'),task('B','S'),task('T',null,['A','B'])]};
   for(const expanded of [[],['S']]) {
     const view=monitorGraph(graph,new Set(expanded)), drawing=taskPaths(view.nodes,view.edges);
     assert.equal(drawing.paths.filter(p=>p.arrow).length,1);

@@ -162,7 +162,7 @@ def test_native_root_owner_outlives_historical_checker_membership(
 
     # Use public retirement, which is also the last-child cleanup path. The
     # owning Main must still organize roles and dispatch after the active
-    # mapping has moved into the Ticket's retained Trace.
+    # mapping has moved into the Task's retained Trace.
     stopped = tool({'action': 'execute', 'feature': 'interrupt',
                     'arguments': {'alias': target}})
     assert not stopped.failed, stopped.document
@@ -302,7 +302,7 @@ def test_interrupt_scopes_full_mapping_checks_to_descendants(
         path.write_text(yaml.safe_dump({
             'alias': alias, 'purpose': purpose, 'parent': ancestor,
             'runtime': 'codex', 'hosted': True, 'role': purpose,
-            'ticket_id': None, 'team_generation': None,
+            'task_id': None, 'team_generation': None,
             'worktree_path': str(root), 'session': None,
             'worker_pid': 123, 'runtime_pid': 123,
         }))

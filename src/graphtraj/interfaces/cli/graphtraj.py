@@ -14,13 +14,13 @@ from graphtraj.interfaces.cli.projection import (
 
 from graphtraj.interfaces.cli.worldline import worldline
 from graphtraj.interfaces.cli.project_setup import setup, doctor
-from graphtraj.interfaces.cli.ticket import delivery_state, ticket
+from graphtraj.interfaces.cli.task import delivery_state, task
 from graphtraj.interfaces.cli.finalize import bind_command
 
 
 @click.group(cls=OperationGroup)
 def main() -> None:
-    """Set up GraphTraj and manage Ticket, Team, and Project Worldline evidence.
+    """Set up GraphTraj and manage Task, Team, and Project Worldline evidence.
 
     Configuration lives in .graphtraj; historical Delivery Runs have no
     compatibility reader or migration."""
@@ -52,11 +52,26 @@ def organize_command(change_file: Path | None) -> None:
 main.add_command(setup)
 main.add_command(doctor)
 main.add_command(worldline)
-main.add_command(ticket)
+main.add_command(task)
 main.add_command(delivery_state)
 main.add_command(roles)
 
 main.add_command(bind_command)
+
+
+@main.command("migrate-tickets")
+def migrate_tickets_command() -> None:
+    """Convert this project's retained Ticket state to the Task format once.
+
+    Stop all Agents first. The previous state and Runner records are copied
+    to .graphtraj/backups and restored automatically if conversion fails."""
+    from graphtraj.workspace.task_migration import migrate_project
+
+    try:
+        result = migrate_project(Path.cwd())
+    except (OSError, ValueError, yaml.YAMLError) as error:
+        raise click.ClickException(str(error)) from error
+    click.echo(yaml.safe_dump(result, sort_keys=False), nl=False)
 
 
 @main.command("connections", cls=OperationCommand, feature="runtime_connections")

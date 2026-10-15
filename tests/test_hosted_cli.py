@@ -18,13 +18,22 @@ from test_result_submission import result_project
 from test_codex_app_server import context, peer
 
 
-def run_cli(module: str, root: Path, address: str, *arguments: str, **claims: str) -> subprocess.CompletedProcess:
+def run_cli(
+    module: str,
+    root: Path,
+    address: str,
+    *arguments: str,
+    process_timeout: float = 20,
+    input_text: str | None = None,
+    **claims: str,
+) -> subprocess.CompletedProcess:
     """Execute one public entry in a distinct process, retaining real kernel locks."""
     environment = {**os.environ, 'PYTHONPATH': str(Path(__file__).resolve().parents[1] / 'src'),
                    CONNECTION_ENV: address, **claims}
     return subprocess.run(
         [sys.executable, '-c', f'from {module} import main; main()', *arguments],
-        cwd=root, env=environment, capture_output=True, text=True, timeout=20,
+        cwd=root, env=environment, capture_output=True, text=True,
+        timeout=process_timeout, input=input_text,
     )
 
 
@@ -96,9 +105,9 @@ def test_cli_host_accepts_the_session_worktree_and_refuses_other_directories(tmp
                          '.state/teams/1/rounds/1/researcher-x1.md', '--completion', 'Complete')
         assert submission.returncode == 0, submission.stdout + submission.stderr
         assert yaml.safe_load(submission.stdout)['alias'] == 'research@x1'
-        graph = product_cli(worktree, address, 'ticket', 'graph')
+        graph = product_cli(worktree, address, 'task', 'graph')
         assert graph.returncode == 0, graph.stdout + graph.stderr
-        assert [item['ticket_id'] for item in yaml.safe_load(graph.stdout)['tickets']] == ['148']
+        assert [item['task_id'] for item in yaml.safe_load(graph.stdout)['tasks']] == ['148']
         assert cli(nested, address, 'reports', 'research@x1').returncode == 0
         refused = cli(foreign, address, 'reports', 'research@x1')
         assert refused.returncode == 1

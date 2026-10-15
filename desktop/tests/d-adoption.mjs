@@ -34,7 +34,7 @@ const first = await fs.realpath(await fixtures.makeProject(path.join(work, 'deli
 const second = await fs.realpath(await fixtures.makeProject(path.join(work, 'documentation-project'), 'documentation'));
 if (!roleFlow) {
 for (const [id, name, dependencies] of [['3','usage-accounting',['1']], ['4','agent-timeline',['1']], ['5','desktop-integration',['2','3','4']], ['6','retained-experiment',[]]]) {
-  fixtures.operate(first, 'ticket_register', fixtures.ticket(id, name, dependencies));
+  fixtures.operate(first, 'task_register', fixtures.task(id, name, dependencies));
 }
 const time = new Date().toISOString();
 const tokens = { input_tokens: 100000, cached_input_tokens: 60000, output_tokens: 8000 };
@@ -47,9 +47,9 @@ const records = name => [
   { timestamp: time, type: 'response_item', payload: { type: 'function_call_output', call_id: `${name}-read`, output: 'Controlled retained tool output\n' + 'line of recorded output\n'.repeat(50) } },
   { timestamp: time, type: 'event_msg', payload: { type: 'token_count', info: { last_token_usage: tokens, total_token_usage: tokens } } },
 ];
-await fixtures.recordActivity(first, { ticketId: '1', ticketName: 'connect-provider', alias: 'previous-handover0-engineer@engineer', records: records('previous'),
+await fixtures.recordActivity(first, { taskId: '1', taskName: 'connect-provider', alias: 'previous-handover0-engineer@engineer', records: records('previous'),
   additionalMembers: ['lead','engineer','reviewer'].map(name => ({ alias: `current-handover0-${name}@${name}`, records: records(name), historical: false })) });
-await fixtures.recordActivity(second, { ticketId: '1', ticketName: 'documentation', alias: 'docs-handover0-writer@writer', records: records('docs') });
+await fixtures.recordActivity(second, { taskId: '1', taskName: 'documentation', alias: 'docs-handover0-writer@writer', records: records('docs') });
 }
 const rolesFile = path.join(first, '.graphtraj', 'roles.yml');
 await fs.writeFile(rolesFile, `roles:
@@ -320,13 +320,13 @@ role_tree:
   assert.ok(firstId && secondId);
   await monitor.locator('.react-flow__node[data-id="1"]').click();
   await monitor.locator('.d-task-shelf .member-pills button').nth(3).waitFor();
-  const members = await page.evaluate(id => window.graphtraj.activity(id,{ticket_id:'1'}),firstId);
+  const members = await page.evaluate(id => window.graphtraj.activity(id,{task_id:'1'}),firstId);
   assert.equal(members.agents.length,4);
   assert.equal(members.agents.filter(agent => agent.historical).length,1);
   for (const agent of members.agents) {
     assert.equal(agent.runtime,'codex'); assert.equal(agent.model,'recorded-model');
     assert.notEqual(agent.state,'unavailable');
-    const activity = await page.evaluate(({id,alias}) => window.graphtraj.activity(id,{ticket_id:'1',alias}),{id:firstId,alias:agent.alias});
+    const activity = await page.evaluate(({id,alias}) => window.graphtraj.activity(id,{task_id:'1',alias}),{id:firstId,alias:agent.alias});
     assert.ok(activity.events.some(event => event.kind === 'message'), `${agent.alias} must expose its recorded messages`);
   }
   facts.members=members.agents;
@@ -423,7 +423,7 @@ role_tree:
   facts.approvalResponses=approvals.map(item=>item.response);
   assert.deepEqual(facts.pageErrors,[]);
   await app.close(); app=null;
-  assert.equal(fixtures.operate(first,'ticket_graph').tickets.length,roleFlow ? 2 : 6);
+  assert.equal(fixtures.operate(first,'task_graph').tasks.length,roleFlow ? 2 : 6);
   facts.passed=true;
   step('Closing the optional desktop leaves the native graph available. Unchanged live-Runner optionality and real system-dialog/platform evidence are reused from prior delivery.');
 } catch(error) {

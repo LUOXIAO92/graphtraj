@@ -66,7 +66,7 @@ def test_engineer_batch_reference_keeps_the_supplied_reference() -> None:
     from graphtraj.execution.runner_models import RunnerError
 
     document = {"tasks": [{
-        "ticket_id": "73", "ticket_name": "shared-graph",
+        "task_id": "73", "task_name": "shared-graph",
         "role": "coding-team.engineer-junior",
     }]}
     task = parse_batch(document).tasks[0]
@@ -107,7 +107,7 @@ def test_a_configured_tier_role_keeps_its_own_identity_and_edge(
     assert roles.preset("coding_team.engineer").model == "gpt-5.6-sol"
 
     task = parse_batch({"tasks": [{
-        "ticket_id": "73", "ticket_name": "shared-graph",
+        "task_id": "73", "task_name": "shared-graph",
         "role": reference,
     }]}).tasks[0]
 
@@ -120,7 +120,7 @@ def test_a_configured_tier_role_keeps_its_own_identity_and_edge(
     assert selected.reasoning_effort == "high"
     retained = tmp_path / "current-batch.yml"
     retained.write_bytes(parse_batch({"tasks": [{
-        "ticket_id": "73", "ticket_name": "shared-graph", "role": reference,
+        "task_id": "73", "task_name": "shared-graph", "role": reference,
     }]}).source_bytes)
     assert read_batch(retained, tmp_path).tasks[0] == task
 
@@ -179,7 +179,7 @@ def test_inline_engineer_role_keeps_its_name(reference: str) -> None:
 def test_non_engineer_task_keeps_its_role_reference() -> None:
     """A non-Engineer task keeps its role identity and selects no Skills by name."""
     batch = parse_batch({"tasks": [{
-        "ticket_id": "73", "ticket_name": "shared-graph",
+        "task_id": "73", "task_name": "shared-graph",
         "role": "team-leader",
     }]})
 
@@ -192,8 +192,8 @@ def test_retained_tiered_batch_still_resolves_for_recovery(tmp_path: Path) -> No
     retained = tmp_path / "retained-batch.yml"
     retained.write_text(
         "tasks:\n"
-        '  - ticket_id: "73"\n'
-        "    ticket_name: shared-graph\n"
+        '  - task_id: "73"\n'
+        "    task_name: shared-graph\n"
         "    role: coding-team.engineer-senior\n"
         "    skills: [implement]\n",
         encoding="utf-8",
@@ -238,10 +238,10 @@ def test_retained_session_binding_requires_unique_actual_facts(
 
     retained = tmp_path / 'batch.yml'
     retained.write_text(yaml.safe_dump({'tasks': [
-        {'ticket_id': '169', 'ticket_name': 'binding', 'role': role} for role in roles
+        {'task_id': '169', 'task_name': 'binding', 'role': role} for role in roles
     ]}))
     original = retained.read_bytes()
-    mapping = {'ticket_id': '169', 'role': 'editor', 'retained_batch_file': str(retained)}
+    mapping = {'task_id': '169', 'role': 'editor', 'retained_batch_file': str(retained)}
     if reference is not None:
         mapping['role_reference'] = reference
     if succeeds:

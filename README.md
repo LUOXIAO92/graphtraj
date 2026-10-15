@@ -22,7 +22,7 @@ uv tool install "git+https://github.com/LUOXIAO92/graphtraj.git@<tag-or-commit>"
 cd /path/to/your-project
 graphtraj setup
 graphtraj doctor
-graphtraj ticket graph
+graphtraj task graph
 ```
 
 Setup shows its plan and asks before creating the `dev` branch. It creates or
@@ -81,20 +81,21 @@ introduces the workflow; installing a Skill alone does not register the tool.
 
 With the tool available, start from a task you have agreed to do, for example:
 
-> Use GraphTraj to deliver the research task in this GitHub Issue: [issue URL].
+> Use GraphTraj to register and deliver this research task: [agreed scope].
 > Use the researcher role, retain the sources with the document, and show me
 > the result and any remaining work.
 
 The [task delivery guide](manuals/task-delivery/guide.md) covers registration,
 dispatch, result decisions and integration. The tool can describe each operation
-and its inputs when needed. Current Ticket registration requires a GitHub Issue
-URL; provide its accepted scope and completion criteria to your Agent.
+and its inputs when needed. Tasks belong to your local project and have stable
+local IDs. Provide the accepted scope and completion criteria; a GitHub Issue
+URL can be a source reference, but is not required or used as the task's identity.
 
 ## How work progresses
 
-1. **Define the work.** Tasks are registered as Tickets with completion criteria
+1. **Define the work.** Register tasks with completion criteria
    and dependencies on the results they need.
-2. **Run ready tasks.** Configured Agents work in Ticket worktrees. Independent
+2. **Run ready tasks.** Configured Agents work in Task worktrees. Independent
    tasks can run in parallel within the project's concurrency and budget limits.
 3. **Assess the result.** An Agent submits a committed version and evidence;
    its authorized parent accepts it or requests a correction. An Agent finishing
@@ -110,10 +111,13 @@ not required for every kind of work.
 These commands give you an overview from the project root:
 
 ```sh
-graphtraj ticket graph    # Tasks, dependencies and readiness
+graphtraj task graph      # Open work with folded history
 agent-runner status      # Agent tree and current activity
 graphtraj worldline read # Recorded project events
 ```
+
+Use `--view full` to list every Task, `--task-id <id>` to select a scope,
+or `--details <id>` to include definitions and execution facts.
 
 For direct CLI use, start with `graphtraj --help` and `agent-runner --help`.
 Individual command help includes its input schema; the
@@ -165,8 +169,9 @@ recovery; recovery still requires the calling parent's selected reviewer.
 Runner retains the native Session on continuation, checks registration before
 releasing the first prompt, and distinguishes an interrupt request from verified
 termination. Native helpers and background tasks are disabled for these children.
-Raw structured output and the native transcript location remain available to
-collectors; this adapter does not implement unified Session storage. Interactive
+Managed output and supported native Main hook records are collected into
+[project-local Session archives](examples/sessions/README.md#claude-collection).
+Collection does not install hooks or migrate existing history. Interactive
 Claude Main hosting and its replacement approval route are explicitly unavailable.
 Unknown approval capability fails closed.
 

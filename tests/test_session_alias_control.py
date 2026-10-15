@@ -12,19 +12,19 @@ from conftest import app_server_peer, FakeCodex, InstalledCommands, run_process,
 from runner_fixtures import configure_harness
 
 
-def _register_ready_ticket(
+def _register_ready_task(
     installed_commands: InstalledCommands,
     harness_root: Path,
     *,
     body: str = "Deliver the accepted Session transport behavior.",
 ) -> None:
-    ticket = harness_root / "ticket.yml"
-    ticket.write_text(
+    task = harness_root / "task.yml"
+    task.write_text(
         yaml.safe_dump(
             {
-                "ticket_id": "76",
-                "ticket_name": "session-alias-control",
-                "source": "https://github.com/example/project/issues/76",
+                "task_id": "76",
+                "task_name": "session-alias-control",
+                "source": "https://github.com/example/project/issues/76", "schema_version": 2, "parent_id": None, "disposition": "active", "replaced_by": [], "retirement_reason": None,
                 "title": "Session alias control",
                 "body": body,
                 "dependencies": [],
@@ -36,22 +36,22 @@ def _register_ready_ticket(
     registered = run_process(
         [
             str(installed_commands.product),
-            "ticket",
+            "task",
             "register",
-            "--ticket-file",
-            str(ticket),
+            "--task-file",
+            str(task),
         ],
         cwd=harness_root,
     )
     assert registered.returncode == 0, registered.stderr
 
     readiness = harness_root / "readiness.md"
-    readiness.write_text("The Ticket is ready.\n", encoding="utf-8")
+    readiness.write_text("The Task is ready.\n", encoding="utf-8")
     state = harness_root / "state.yml"
     state.write_text(
         yaml.safe_dump(
             {
-                "ticket_id": "76",
+                "task_id": "76",
                 "status": "ready",
                 "active_team_ordinal": None,
                 "worktree": None,
@@ -67,7 +67,7 @@ def _register_ready_ticket(
     ready = run_process(
         [
             str(installed_commands.product),
-            "ticket",
+            "task",
             "update",
             "--state-file",
             str(state),
@@ -97,12 +97,12 @@ def test_installed_alias_control_resumes_and_interrupts_one_team_session(
     assert send_help.returncode == 0
     assert "--caused-by-event-id" in send_help.stdout
     assert "--caused-by-worldline-seq" not in send_help.stdout
-    _register_ready_ticket(installed_commands, harness_root)
+    _register_ready_task(installed_commands, harness_root)
     batch = harness_root / "batch.yml"
     batch.write_text(
         "tasks:\n"
-        "  - ticket_id: \"76\"\n"
-        "    ticket_name: session-alias-control\n"
+        "  - task_id: \"76\"\n"
+        "    task_name: session-alias-control\n"
         "    role: team-leader\n",
         encoding="utf-8",
     )
@@ -127,7 +127,7 @@ def test_installed_alias_control_resumes_and_interrupts_one_team_session(
     mapping = yaml.safe_load(mapping_file.read_text(encoding="utf-8"))
     alias = mapping["alias"]
     session = mapping["session"]
-    # The first Team names the Ticket, handover0, the configured role and the
+    # The first Team names the Task, handover0, the configured role and the
     # entity for every Session it starts.
     assert alias == "76-session_alias_control-handover0-team_leader@team_leader"
     assert all(
@@ -136,14 +136,14 @@ def test_installed_alias_control_resumes_and_interrupts_one_team_session(
         )
         for path in session_root.glob("*/mapping.yml")
     )
-    ticket_directory = (
-        harness_root / ".graphtraj" / "state" / "tickets" / "76-session-alias-control"
+    task_directory = (
+        harness_root / ".graphtraj" / "state" / "tasks" / "76-session-alias-control"
     )
-    team_file = ticket_directory / "teams" / "1" / "team.yml"
+    team_file = task_directory / "teams" / "1" / "team.yml"
     team = yaml.safe_load(team_file.read_text(encoding="utf-8"))
     team["current_round"] = 2
     team_file.write_text(yaml.safe_dump(team), encoding="utf-8")
-    trace = ticket_directory / "teams" / "1" / "traces" / alias / "events.jsonl"
+    trace = task_directory / "teams" / "1" / "traces" / alias / "events.jsonl"
     session_records = mapping_file.parent / "events.jsonl"
     records_before = session_records.read_text(encoding="utf-8")
     worldline = [
@@ -162,8 +162,8 @@ def test_installed_alias_control_resumes_and_interrupts_one_team_session(
         if yaml.safe_load(path.read_text())["role"] == "engineer"
     )
     peer_alias = yaml.safe_load(peer_mapping_file.read_text())["alias"]
-    (integration / "other-ticket-in-progress.txt").write_text(
-        "temporary work from another Ticket\n", encoding="utf-8"
+    (integration / "other-task-in-progress.txt").write_text(
+        "temporary work from another Task\n", encoding="utf-8"
     )
 
     policy_log = tmp_path / "resumed-policy.jsonl"
@@ -321,21 +321,21 @@ def test_installed_alias_control_resumes_and_interrupts_one_team_session(
         for path, access in filesystem.items()
         if access == "write"
         and (
-            path.startswith(str(ticket_directory / "teams"))
+            path.startswith(str(task_directory / "teams"))
             or path.startswith(str(worktree_root / "76-session-alias-control" / ".state" / "teams"))
         )
     }
-    report = ticket_directory / "teams" / "1" / "rounds" / "2" / "leader.md"
+    report = task_directory / "teams" / "1" / "rounds" / "2" / "leader.md"
     assert filesystem[str(report)] == "read"
     assert report_writes == set()
     assert "hooks" not in policy["settings"]
     assert (worktree_root / "76-session-alias-control").is_dir()
     assert "run_id" not in resumed_mapping
     assert "turn" not in resumed_mapping
-    assert not list((ticket_directory / "teams" / "1" / "traces" / alias).glob("turn-*"))
+    assert not list((task_directory / "teams" / "1" / "traces" / alias).glob("turn-*"))
 
 
-def test_new_ticket_uses_committed_dev_without_copying_uncommitted_work(
+def test_new_task_uses_committed_dev_without_copying_uncommitted_work(
     installed_commands: InstalledCommands,
     temporary_git_repository: Path,
     fake_codex: FakeCodex,
@@ -347,15 +347,15 @@ def test_new_ticket_uses_committed_dev_without_copying_uncommitted_work(
         fake_codex,
         tmp_path,
     )
-    _register_ready_ticket(installed_commands, harness_root)
-    (integration / "other-ticket-in-progress.txt").write_text(
-        "temporary work from another Ticket\n", encoding="utf-8"
+    _register_ready_task(installed_commands, harness_root)
+    (integration / "other-task-in-progress.txt").write_text(
+        "temporary work from another Task\n", encoding="utf-8"
     )
     batch = harness_root / "batch.yml"
     batch.write_text(
         "tasks:\n"
-        "  - ticket_id: \"76\"\n"
-        "    ticket_name: session-alias-control\n"
+        "  - task_id: \"76\"\n"
+        "    task_name: session-alias-control\n"
         "    role: team-leader\n",
         encoding="utf-8",
     )
@@ -370,8 +370,8 @@ def test_new_ticket_uses_committed_dev_without_copying_uncommitted_work(
     assert launched.returncode == 0, launched.stdout + launched.stderr
     task = yaml.safe_load(launched.stdout)['tasks'][0]
     assert task['launch_status'] == 'launched'
-    assert (integration / 'other-ticket-in-progress.txt').read_text() == 'temporary work from another Ticket\n'
-    assert not (Path(task['worktree_path']) / 'other-ticket-in-progress.txt').exists()
+    assert (integration / 'other-task-in-progress.txt').read_text() == 'temporary work from another Task\n'
+    assert not (Path(task['worktree_path']) / 'other-task-in-progress.txt').exists()
 
 
 
@@ -390,12 +390,12 @@ def test_installed_leader_registration_does_not_grant_budget_write_paths(
         fake_codex,
         tmp_path,
     )
-    _register_ready_ticket(
+    _register_ready_task(
         installed_commands,
         harness_root,
         body="""---
 difficulty: medium
-difficulty_reason: Nested registration checks the Ticket budget
+difficulty_reason: Nested registration checks the Task budget
 execution_budget:
   engineer_tier: senior
   tier_reason: The Runner resumes one Team Leader
@@ -421,8 +421,8 @@ Deliver the accepted Session transport behavior.
     batch = harness_root / "batch.yml"
     batch.write_text(
         "tasks:\n"
-        "  - ticket_id: \"76\"\n"
-        "    ticket_name: session-alias-control\n"
+        "  - task_id: \"76\"\n"
+        "    task_name: session-alias-control\n"
         "    role: team-leader\n",
         encoding="utf-8",
     )
@@ -441,8 +441,8 @@ Deliver the accepted Session transport behavior.
     )
 
     assert result.returncode == 0, result.stdout + result.stderr
-    ticket = harness_root / ".graphtraj" / "state" / "tickets" / "76-session-alias-control"
-    assert (ticket / "execution-budget.yml").is_file()
+    task = harness_root / ".graphtraj" / "state" / "tasks" / "76-session-alias-control"
+    assert (task / "execution-budget.yml").is_file()
     leaders = [
         json.loads(line)
         for line in policy_log.read_text(encoding="utf-8").splitlines()
@@ -453,9 +453,9 @@ Deliver the accepted Session transport behavior.
         filesystem = leader["settings"]["permissions"][
             leader["settings"]["default_permissions"]
         ]["filesystem"]
-        assert str(ticket / ".execution-budget.lock") not in filesystem
-        assert str(ticket / "execution-budget.yml") not in filesystem
-        assert filesystem.get(str(ticket)) != "write"
+        assert str(task / ".execution-budget.lock") not in filesystem
+        assert str(task / "execution-budget.yml") not in filesystem
+        assert filesystem.get(str(task)) != "write"
 
 
 def test_installed_status_reports_native_requests_and_commit_diff(
@@ -491,7 +491,7 @@ def test_installed_status_reports_native_requests_and_commit_diff(
         harness_root
         / ".graphtraj"
         / "state"
-        / "tickets"
+        / "tasks"
         / "96-diagnostics"
         / "teams"
         / "1"
@@ -526,7 +526,7 @@ def test_installed_status_reports_native_requests_and_commit_diff(
                 "alias": alias,
                 "runtime": "codex",
                 "session": "native-session",
-                "ticket_id": "96",
+                "task_id": "96",
                 "team_generation": 1,
                 "role": "engineer",
                 "parent": None,
@@ -589,7 +589,7 @@ def _retained_session(
                 "alias": alias,
                 "runtime": "codex",
                 "session": "native-session",
-                "ticket_id": "76",
+                "task_id": "76",
                 "team_generation": 1,
                 "role": role,
                 "parent": None,

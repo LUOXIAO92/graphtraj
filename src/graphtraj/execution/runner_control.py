@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import subprocess
@@ -41,6 +42,7 @@ from graphtraj.execution.runner_status import (
     owning_execution,
     read_alias_mapping,
     read_terminal_outcome,
+    read_execution_result,
     require_direct_authority,
     session_occupied,
     require_descendant_authority,
@@ -344,8 +346,7 @@ def read_session_reports(alias: str, cwd: Path) -> dict:
         result['submissions'] = submissions
     terminal = directory / 'execution.yml'
     if terminal.is_file():
-        read_terminal_outcome(terminal)
-        retained = yaml.safe_load(terminal.read_text())
+        retained = read_execution_result(terminal)
         # Only the direct owner reaches this projection; missing historical
         # confirmation or stop-source fields remain unknown, not inferred.
         result['execution'] = {
@@ -363,6 +364,14 @@ def read_session_reports(alias: str, cwd: Path) -> dict:
         message = retained.get('last_agent_message')
         if isinstance(message, str):
             result['last_agent_message'] = message
+        if retained.get('terminal_confirmed') is False:
+            try:
+                read_terminal_outcome(terminal)
+            except RunnerError:
+                pass
+            else:
+                confirmation = directory / f"terminal-confirmation-{mapping['execution_id']}.yml"
+                result['termination_confirmation'] = yaml.safe_load(confirmation.read_text())
     return result
 
 
@@ -377,7 +386,7 @@ def submit_session_report(name: str, text: str, cwd: Path) -> dict:
     runner = discover_runner_directory(cwd)
     mapping, _ = read_alias_mapping(runner, alias)
     require_task_authority(
-        load_project_configuration(cwd).state, runner, mapping['ticket_id'], alias, 'submit',
+        load_project_configuration(cwd).state, runner, mapping['task_id'], alias, 'submit',
     )
     paths = [path for path in _session_report_paths(alias, cwd) if path.name == name]
     if len(paths) != 1:
@@ -464,7 +473,7 @@ def _send_session_locked(
     A report collection never attaches the budget monitor, so returning
     evidence the Session already holds advances no stopping check, emits no
     new stop notice and produces no new stop input. Every other resume keeps
-    the monitor and the Ticket's budget control.
+    the monitor and the Task's budget control.
     """
     execution_file = session_directory / "execution.yml"
     if not os.path.lexists(str(execution_file)):
@@ -496,17 +505,17 @@ def _send_session_locked(
     _attest_runtime_session(session_directory, mapping)
     team_environment = _team_runtime_environment(mapping, cwd)
     evidence = team_environment.get("GRAPHTRAJ_EVIDENCE")
-    ticket_name = team_environment.get("GRAPHTRAJ_TICKET_NAME")
+    task_name = team_environment.get("GRAPHTRAJ_TASK_NAME")
     monitor = (
-        execution_budget_monitor(Path(evidence), mapping["ticket_id"], ticket_name)
-        if isinstance(evidence, str) and isinstance(ticket_name, str)
+        execution_budget_monitor(Path(evidence), mapping["task_id"], task_name)
+        if isinstance(evidence, str) and isinstance(task_name, str)
         else None
     )
     stopped = monitor is not None and monitor.is_stopped()
     if stopped and require_budget_permission:
         raise RunnerError(
             "execution-budget-stopped",
-            "The Ticket stopped again before approved recovery could resume it.",
+            "The Task stopped again before approved recovery could resume it.",
         )
     from graphtraj.teams.team_replacement import require_active_session
 
@@ -702,12 +711,12 @@ def _interrupt_allocation(runner: Path, alias: str) -> dict:
                 or launch.get("operation") != "launch" or mapping.get("alias") != alias
                 or any(field not in mapping for field in SESSION_BINDING_FIELDS)):
             raise _invalid_mapping()
-        from graphtraj.graph.ticket_graph import _load_states
+        from graphtraj.graph.task_graph import _load_states
 
         configuration = load_project_configuration(runner.parent.parent)
-        ticket_directory, ticket = _load_states(configuration.state / "tickets")[mapping["ticket_id"]]
-        trace = ticket_directory / "teams" / str(mapping["team_generation"]) / "traces" / alias / "events.jsonl"
-        worktree = configuration.agent_worktrees / (mapping["ticket_id"] + "-" + ticket["ticket_name"])
+        task_directory, task = _load_states(configuration.state / "tasks")[mapping["task_id"]]
+        trace = task_directory / "teams" / str(mapping["team_generation"]) / "traces" / alias / "events.jsonl"
+        worktree = configuration.agent_worktrees / (mapping["task_id"] + "-" + task["task_name"])
         if (mapping.get("trace_file") != str(trace)
                 or mapping.get("worktree_path") != str(worktree)):
             raise _invalid_mapping()
@@ -791,7 +800,12 @@ def _interrupt_session(
     """Confirm a terminal member or await its exact native Turn interruption."""
     execution_file = session_directory / "execution.yml"
     if os.path.lexists(str(execution_file)):
-        read_terminal_outcome(execution_file)
+        try:
+            read_terminal_outcome(execution_file)
+        except RunnerError:
+            if read_execution_result(execution_file).get('terminal_confirmed') is not False:
+                raise
+            return _confirm_termination(alias, session_directory, mapping)
         return {"alias": alias, "interrupt_status": "stopped"}
     try:
         session_operation(mapping, "interrupt")
@@ -803,6 +817,39 @@ def _interrupt_session(
             raise
         return {"alias": alias, "interrupt_status": "stopped"}
     return {"alias": alias, "interrupt_status": "interrupted"}
+
+
+def _confirm_termination(alias: str, directory: Path, mapping: dict) -> dict:
+    """Recheck an ended owner's native evidence without replacing its failure.
+
+    Startup and confirmation share the same lock. The Adapter may stop an
+    exactly verified owned group; resume and administrative changes stay separate.
+    """
+    runner = directory.parent.parent
+    with execution_start_lock(runner):
+        current, _ = read_alias_mapping(runner, alias)
+        if current != mapping or ownership_is_held(directory, mapping['worker_pid']):
+            raise RunnerError('termination-unconfirmed', 'The original Worker still owns this execution or its mapping changed.')
+        adapter = runtime_adapter.select_runtime_adapter(mapping['runtime'])
+        confirm = getattr(adapter, 'confirm_termination', None)
+        if confirm is None:
+            raise RunnerError('termination-unconfirmed', 'This Runtime has no retained native termination confirmation.')
+        request, _, _ = _read_session_resume_request(directory, mapping)
+        try:
+            evidence = confirm(directory, mapping, request)
+        except RuntimeAdapterError as error:
+            raise RunnerError(error.code, error.message) from error
+        execution_file = directory / 'execution.yml'
+        receipt = {
+            **{key: mapping[key] for key in ('session', 'execution_id', 'worker_pid', 'runtime_pid')},
+            'execution_sha256': hashlib.sha256(execution_file.read_bytes()).hexdigest(),
+            'original_execution': read_execution_result(execution_file),
+            'terminal_confirmed': True, 'evidence': evidence,
+        }
+        path = directory / f"terminal-confirmation-{mapping['execution_id']}.yml"
+        write_yaml_durably(path, receipt)
+        read_terminal_outcome(execution_file)
+    return {'alias': alias, 'interrupt_status': 'stopped', 'evidence': str(path)}
 
 
 ABNORMAL_RESPONSE_FILE = "abnormal-response.yml"
@@ -1018,31 +1065,31 @@ def _team_runtime_environment(mapping: Dict[str, Any], cwd: Path) -> Dict[str, s
     try:
         configuration = load_project_configuration(cwd)
         matches = []
-        for evidence in (configuration.state / "tickets").iterdir():
+        for evidence in (configuration.state / "tasks").iterdir():
             if (
                 evidence.is_symlink()
                 or not evidence.is_dir()
-                or not evidence.name.startswith(mapping["ticket_id"] + "-")
+                or not evidence.name.startswith(mapping["task_id"] + "-")
             ):
                 continue
-            ticket = yaml.safe_load((evidence / "ticket.yml").read_text(encoding="utf-8"))
-            if isinstance(ticket, dict) and ticket.get("ticket_id") == mapping["ticket_id"]:
-                matches.append((evidence, ticket))
+            task = yaml.safe_load((evidence / "task.yml").read_text(encoding="utf-8"))
+            if isinstance(task, dict) and task.get("task_id") == mapping["task_id"]:
+                matches.append((evidence, task))
         if len(matches) != 1:
-            raise ValueError("missing Ticket context")
-        evidence, ticket = matches[0]
-        ticket_name = ticket.get("ticket_name")
+            raise ValueError("missing Task context")
+        evidence, task = matches[0]
+        task_name = task.get("task_name")
         if (
-            not isinstance(ticket, dict)
-            or not isinstance(ticket_name, str)
-            or not ticket_name
+            not isinstance(task, dict)
+            or not isinstance(task_name, str)
+            or not task_name
         ):
-            raise ValueError("invalid Ticket context")
+            raise ValueError("invalid Task context")
         environment = {
             "GRAPHTRAJ_ROLE": mapping["role"],
             "GRAPHTRAJ_EVIDENCE": str(evidence),
-            "GRAPHTRAJ_TICKET_ID": mapping["ticket_id"],
-            "GRAPHTRAJ_TICKET_NAME": ticket_name,
+            "GRAPHTRAJ_TASK_ID": mapping["task_id"],
+            "GRAPHTRAJ_TASK_NAME": task_name,
             "GRAPHTRAJ_HARNESS_ROOT": str(configuration.harness_root),
             "GRAPHTRAJ_TEAM_GENERATION": str(mapping["team_generation"]),
         }
@@ -1098,7 +1145,7 @@ def _recover_report_mapping(
     """Recover historical assignments in memory from exact retained grants.
 
     A singular report reference is an assignment. Otherwise only exact writable
-    Markdown paths within this Ticket's evidence establish report ownership;
+    Markdown paths within this Task's evidence establish report ownership;
     readable paths can belong to other members and must never become writable.
     The original mapping and launch records remain unchanged.
     """

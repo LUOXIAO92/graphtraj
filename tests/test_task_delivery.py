@@ -9,7 +9,7 @@ import yaml
 
 from conftest import app_server_peer, run_process
 from test_project_setup import install_user_skills, run_setup, setup_environment
-from test_ticket_graph import _change_status, _register, _ticket
+from test_task_graph import _change_status, _register, _task
 
 
 # Controlled Team decisions at the installed Runtime boundary. Main's decisions
@@ -23,10 +23,10 @@ if sys.argv[1:] == ['exec', '--help']:
     raise SystemExit(0)
 prompt = sys.stdin.read()
 root = Path(os.environ['GRAPHTRAJ_HARNESS_ROOT'])
-ticket = os.environ['GRAPHTRAJ_TICKET_ID']
+task = os.environ['GRAPHTRAJ_TASK_ID']
 assert Path('CONTEXT.md').read_text() == 'Existing project context.\n'
 assert Path('docs/decision.md').read_text() == 'Existing project decision.\n'
-if ticket == '1':
+if task == '1':
     Path('render.py').write_text('from settings import greeting\ndef render():\n    return greeting\n\nif __name__ == "__main__":\n    print(render())\n')
     if 'settings.py together' in prompt:
         Path('settings.py').write_text('greeting = "hello"\n')
@@ -37,12 +37,12 @@ else:
 subprocess.run(['git', 'add', *names], check=True, capture_output=True)
 subprocess.run(['git', 'commit', '--allow-empty', '-m', 'Deliver task result'], check=True, capture_output=True)
 commit = subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip()
-validated = subprocess.run([sys.executable, 'cli.py' if ticket == '3' else 'render.py'], text=True, capture_output=True)
+validated = subprocess.run([sys.executable, 'cli.py' if task == '3' else 'render.py'], text=True, capture_output=True)
 report = tools.submit_report({'name': 'validation.md', 'text': validated.stdout + validated.stderr}, cwd=root).document
 tools.submit_report({'name': 'engineer.md', 'text': 'Candidate commit: ' + commit}, cwd=root)
 tools.submit_result({'commit': commit, 'result_refs': names, 'evidence_refs': [report['report']], 'completion': 'Validation evidence retained'}, cwd=root)
 print(json.dumps({'type': 'item.completed', 'item': {'type': 'agent_message', 'text': 'Submitted'}}))
-''', "'fake-' + os.environ['GRAPHTRAJ_TICKET_ID']")
+''', "'fake-' + os.environ['GRAPHTRAJ_TASK_ID']")
 
 
 
@@ -106,23 +106,23 @@ def test_installed_delivery_corrects_a_split_and_delivers_the_current_graph(
         return yaml.safe_load(result.stdout)
 
     def record(identifier, name):
-        return yaml.safe_load((state / "tickets" / (identifier + "-" + name) / "ticket.yml").read_text())
+        return yaml.safe_load((state / "tasks" / (identifier + "-" + name) / "task.yml").read_text())
 
     def events():
         result = run_process([str(installed_commands.product), "worldline", "read"], cwd=root)
         assert result.returncode == 0, result.stderr
         return [json.loads(line) for line in result.stdout.splitlines()]
 
-    first = {**_ticket("1", "renderer"), "body": "Deliver render.py importing greeting from settings. Defer settings.py to Ticket 2."}
-    second = {**_ticket("2", "settings", dependencies=["1"]), "body": "Deliver settings.py with greeting hello."}
-    dependent = {**_ticket("3", "cli", dependencies=["1", "2"]), "body": "Deliver cli.py printing hello world using render()."}
-    for ticket in (first, second, dependent):
-        _register(installed_commands, root, ticket)
-    original_definitions = {path: path.read_bytes() for path in state.glob("tickets/*/ticket.md")}
-    assert [item["ticket_id"] for item in product("ticket", "graph")["tickets"] if item["ready"]] == ["1"]
+    first = {**_task("1", "renderer"), "body": "Deliver render.py importing greeting from settings. Defer settings.py to Task 2."}
+    second = {**_task("2", "settings", dependencies=["1"]), "body": "Deliver settings.py with greeting hello."}
+    dependent = {**_task("3", "cli", dependencies=["1", "2"]), "body": "Deliver cli.py printing hello world using render()."}
+    for task in (first, second, dependent):
+        _register(installed_commands, root, task)
+    original_definitions = {path: path.read_bytes() for path in state.glob("tasks/*/task.md")}
+    assert [item["task_id"] for item in product("task", "graph")["tasks"] if item["ready"]] == ["1"]
     _change_status(installed_commands, root, "1", "ready")
     batch = root / "frontier.yml"
-    batch.write_text(yaml.safe_dump({"tasks": [{"ticket_id": "1", "ticket_name": "renderer", "role": "engineer"}]}))
+    batch.write_text(yaml.safe_dump({"tasks": [{"task_id": "1", "task_name": "renderer", "role": "engineer"}]}))
     first_delivery = runner("--swarm-input", str(batch))
     assert first_delivery["tasks"][0]["launch_status"] == "launched"
     author = first_delivery['tasks'][0]['alias']
@@ -136,12 +136,12 @@ def test_installed_delivery_corrects_a_split_and_delivers_the_current_graph(
                '--evidence-ref', submission['evidence_refs'][0])
 
     decide(author, 'rejected')
-    original_ticket = record("1", "renderer")
-    first_round = state / "tickets/1-renderer/teams/1/rounds/1"
+    original_task = record("1", "renderer")
+    first_round = state / "tasks/1-renderer/teams/1/rounds/1"
     assert "ModuleNotFoundError" in (first_round / "validation.md").read_text()
     assert not (first_round.parent / "2").exists()
     historical = {path: path.read_bytes() for path in first_round.iterdir()}
-    traces = {path: path.read_bytes() for path in state.glob("tickets/*/teams/*/traces/*/events.jsonl")}
+    traces = {path: path.read_bytes() for path in state.glob("tasks/*/teams/*/traces/*/events.jsonl")}
     batches = {path: path.read_bytes() for path in (state / "batches").glob("*.yml")}
     before = events()
 
@@ -151,17 +151,17 @@ def test_installed_delivery_corrects_a_split_and_delivers_the_current_graph(
         "product_preserving": True,
         "caused_by_event_ids": [before[-1]["event_id"]],
         "evidence_refs": [str((first_round / "validation.md").relative_to(root)), str((first_round / "engineer.md").relative_to(root))],
-        "tickets": [
+        "tasks": [
             {**first, "body": "Deliver render.py and settings.py together; render() returns hello.", "active": True, "replaced_by": []},
             {**second, "active": False, "replaced_by": ["1"]},
             {**dependent, "dependencies": ["1"], "active": True, "replaced_by": []},
         ],
     }))
-    revised = product("ticket", "revise", "--revision-file", str(revision))
+    revised = product("task", "revise", "--revision-file", str(revision))
     assert revised["caused_by_event_ids"] == [before[-1]["event_id"]]
-    assert not any(item["ready"] for item in product("ticket", "graph")["tickets"])
+    assert not any(item["ready"] for item in product("task", "graph")["tasks"])
     # A new Leader reads the corrected definition and the retired Leader Trace,
-    # continuing the same Ticket branch rather than treating a graph error as rework.
+    # continuing the same Task branch rather than treating a graph error as rework.
     runner("send", author, "--instruction", "Deliver render.py and settings.py together", "--caused-by-event-id", revised["event_id"])
     from test_generic_role_execution import wait_for_idle
     wait_for_idle(installed_commands, root, environment, author)
@@ -169,21 +169,21 @@ def test_installed_delivery_corrects_a_split_and_delivers_the_current_graph(
     combined = record("1", "renderer")
     assert combined["status"] == "awaiting-integration"
     assert combined["active_team_ordinal"] == 1
-    assert combined["worktree"] == original_ticket["worktree"]
-    assert combined["branch"] == original_ticket["branch"]
-    assert not any(item["ready"] for item in product("ticket", "graph")["tickets"])
+    assert combined["worktree"] == original_task["worktree"]
+    assert combined["branch"] == original_task["branch"]
+    assert not any(item["ready"] for item in product("task", "graph")["tasks"])
 
-    integrated = product("ticket", "integrate", "--ticket-id", "1", "--", sys.executable, "-c", "from render import render; assert render() == 'hello'")
+    integrated = product("task", "integrate", "--task-id", "1", "--", sys.executable, "-c", "from render import render; assert render() == 'hello'")
     assert integrated["status"] == "integrated"
-    assert [item["ticket_id"] for item in product("ticket", "graph")["tickets"] if item["ready"]] == ["3"]
-    runner("cleanup", "--ticket-id", "1")
-    batch.write_text(yaml.safe_dump({"tasks": [{"ticket_id": "3", "ticket_name": "cli", "role": "engineer"}]}))
+    assert [item["task_id"] for item in product("task", "graph")["tasks"] if item["ready"]] == ["3"]
+    runner("cleanup", "--task-id", "1")
+    batch.write_text(yaml.safe_dump({"tasks": [{"task_id": "3", "task_name": "cli", "role": "engineer"}]}))
     delivered = runner("--swarm-input", str(batch))
     decide(delivered["tasks"][0]["alias"], "accepted")
-    product("ticket", "integrate", "--ticket-id", "3", "--", sys.executable, "-c", "import subprocess, sys; assert subprocess.check_output([sys.executable, 'cli.py'], text=True) == 'hello world\\n'")
-    runner("cleanup", "--ticket-id", "3")
-    graph = product("ticket", "graph")["tickets"]
-    assert {item["ticket_id"] for item in graph if item["active"]} == {"1", "3"}
+    product("task", "integrate", "--task-id", "3", "--", sys.executable, "-c", "import subprocess, sys; assert subprocess.check_output([sys.executable, 'cli.py'], text=True) == 'hello world\\n'")
+    runner("cleanup", "--task-id", "3")
+    graph = product("task", "graph")["tasks"]
+    assert {item["task_id"] for item in graph if item["active"]} == {"1", "3"}
     assert all(item["status"] == "integrated" for item in graph if item["active"])
     assert not any(item["ready"] for item in graph)
     assert not (worktrees / "1-renderer").exists()
@@ -200,7 +200,7 @@ def test_installed_delivery_corrects_a_split_and_delivers_the_current_graph(
     assert {path: path.read_bytes() for path in batches} == batches
     assert all(path.read_bytes().startswith(content) for path, content in traces.items())
     assert events()[:len(before)] == before
-    assert {path.name for path in state.iterdir()} == {"tickets", "batches", "worldline"}
+    assert {path.name for path in state.iterdir()} == {"tasks", "batches", "worldline"}
     assert not any(path.name in {"run.yml", "metadata.yml", "ledger.yml", "dag.md", "handoff.md"} for path in state.rglob("*"))
 
     assert {path.relative_to(old_state): path.read_bytes() for path in old_state.rglob("*") if path.is_file()} == old_evidence

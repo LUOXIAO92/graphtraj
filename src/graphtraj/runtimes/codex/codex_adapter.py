@@ -93,7 +93,7 @@ NATIVE_RUNNER_TOOLS = {
     'graphtraj_submit_report': 'submit_report',
     'graphtraj_submit_result': 'submit_result',
     'graphtraj_decide_result': 'decide_result',
-    'graphtraj_ticket_graph': 'ticket_graph',
+    'graphtraj_task_graph': 'task_graph',
 }
 
 
@@ -240,7 +240,7 @@ class _CodexRuntimePreflight:
     _connection_revision: str | None = None
 
     def finalize(self) -> RuntimeContext:
-        """Resolve Ticket Worktree facts shared by supported role boundaries."""
+        """Resolve Task Worktree facts shared by supported role boundaries."""
 
         request = self._role._launch_request(
             executable=self._executable,
@@ -1131,7 +1131,7 @@ def _reject_legacy_user_sandbox_config(codex_home: Path | None = None) -> None:
 def _harness_approvals_reviewer(runtime_store: Path) -> Any | None:
     """Return the approvals reviewer the Harness Runtime Store selects.
 
-    One Session runs with its Ticket Worktree as the native project root, so
+    One Session runs with its Task Worktree as the native project root, so
     the Runtime Store configuration sits outside the native lookup. Only this
     selected value is forwarded; a missing, unreadable or unparsable file adds
     no override and keeps the native default.
@@ -1349,7 +1349,7 @@ def codex_connection_environment(
 
 
 def _harness_native_skills(runtime_store: Path) -> Mapping[str, Any] | None:
-    """Forward explicit native resources outside the Ticket's config lookup.
+    """Forward explicit native resources outside the Task's config lookup.
 
     Relative resource paths are anchored at the Harness config directory.
     Discovery and selection remain native; no Skill contents or professional
@@ -1384,7 +1384,7 @@ def _canonical_report_write_paths(
     evidence: Path,
     report_files: Tuple[Path, ...],
 ) -> Tuple[Path, ...]:
-    """Return the native canonical target for each exact ticket report."""
+    """Return the native canonical target for each exact task report."""
     paths: list[Path] = []
     for report in report_files:
         if (

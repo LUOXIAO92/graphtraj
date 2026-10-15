@@ -17,7 +17,7 @@ from graphtraj.execution import execution_budget as budgets
 from graphtraj.execution.runner_process import process_is_alive
 from runner_fixtures import configure_harness
 from test_task_budget_control import BODY, commands, sample_stop
-from test_ticket_graph import _change_status, _register, _ticket
+from test_task_graph import _change_status, _register, _task
 
 
 @pytest.mark.parametrize('surface,stop,inherited,stop_instruction', [
@@ -58,9 +58,9 @@ def test_bound_top_level_transport_lasts_until_execution_ends(
         'roles': {'researcher': {'runtime': 'codex', 'model': 'selected'}},
         'role_tree': {'researcher': {}},
     }))
-    ticket = _ticket('153', 'research')
-    ticket['body'] = BODY + ticket['body']
-    _register(commands, root, ticket)
+    task = _task('153', 'research')
+    task['body'] = BODY + task['body']
+    _register(commands, root, task)
     _change_status(commands, root, '153', 'ready')
     release = tmp_path / 'release'
     scenario = '''
@@ -80,7 +80,7 @@ print(json.dumps({'type': 'item.completed', 'item': {'type': 'agent_message', 't
         '#!' + sys.executable + '\n' + scenario, "os.environ['GRAPHTRAJ_PARENT_ALIAS']",
     ))
     env.update(CODEX_THREAD_ID='existing-external-caller', PROBE_RELEASE=str(release))
-    tasks = {'tasks': [{'role': 'researcher', 'ticket_id': '153'}]}
+    tasks = {'tasks': [{'role': 'researcher', 'task_id': '153'}]}
     if surface == 'cli':
         batch = root / 'batch.yml'
         batch.write_text(yaml.safe_dump(tasks))
@@ -103,7 +103,7 @@ print(json.dumps({'type': 'item.completed', 'item': {'type': 'agent_message', 't
         env['GRAPHTRAJ_BUDGET_NOTICE_FD'] = str(write_fd)
 
     worktree = worktrees / '153-research'
-    evidence = root / '.graphtraj/state/tickets/153-research'
+    evidence = root / '.graphtraj/state/tasks/153-research'
     with ThreadPoolExecutor(max_workers=1) as executor:
         launched = executor.submit(
             subprocess.run, command, cwd=root, env=env, input=request,
@@ -147,7 +147,7 @@ print(json.dumps({'type': 'item.completed', 'item': {'type': 'agent_message', 't
             assert not process_is_alive(mapping['worker_pid'])
             assert (worktree / 'result.md').read_text() == 'Retained research'
             assert (evidence / 'teams/1/traces' / alias / 'events.jsonl').read_text()
-            state = yaml.safe_load((evidence / 'ticket.yml').read_text())
+            state = yaml.safe_load((evidence / 'task.yml').read_text())
             assert state['current_candidate'] is None and state['status'] != 'integrated'
             usage = yaml.safe_load((evidence / 'execution-budget.yml').read_text())
             for field in ('started_at', 'allowance_minutes', 'sessions'):
@@ -160,12 +160,12 @@ print(json.dumps({'type': 'item.completed', 'item': {'type': 'agent_message', 't
                     notices = [json.loads(line) for line in os.read(read_fd, 10000).splitlines()]
                     assert len(notices) == 3
                     assert notices[-1]['threshold']['kind'] == 'stochastic_stop'
-                    assert notices[-1]['ticket'] == {'ticket_id': '153', 'ticket_name': 'research'}
+                    assert notices[-1]['task'] == {'task_id': '153', 'task_name': 'research'}
                     assert 'stop_deliveries' not in document
                 else:
                     deliveries = document['stop_deliveries']
                     assert len(deliveries) == 1
-                    assert deliveries[0]['ticket'] == {'ticket_id': '153', 'ticket_name': 'research'}
+                    assert deliveries[0]['task'] == {'task_id': '153', 'task_name': 'research'}
                     assert deliveries[0]['triggered_at'] and deliveries[0]['delivered_at']
                     if stop_instruction == '':
                         assert 'instruction' not in deliveries[0]

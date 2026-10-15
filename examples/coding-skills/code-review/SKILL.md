@@ -1,12 +1,12 @@
 ---
 name: code-review
-description: "Review the changes since a fixed point (commit, branch, tag, or merge-base) along two axes: Standards (does the code follow this repo's documented coding standards?) and Spec (does the code match what the originating issue/spec asked for?). Uses only the necessary axes, at most once per axis per Ticket; Reviewers do not run tests. Use when the user wants to review a branch, a PR, work-in-progress changes, or asks to \"review since X\"."
+description: "Review the changes since a fixed point (commit, branch, tag, or merge-base) along two axes: Standards (does the code follow this repo's documented coding standards?) and Spec (does the code match what the originating issue/spec asked for?). Uses only the necessary axes, at most once per axis per Task; Reviewers do not run tests. Use when the user wants to review a branch, a PR, work-in-progress changes, or asks to \"review since X\"."
 ---
 
 Do not use this Skill for small fixes, test modifications, or instruction-only
 changes to prompts, Skills and guidance. The Leader first
 assesses difficulty and scope. Each Review axis may be invoked at most once per
-Ticket or standalone review task; a changed candidate, Round, Session or Agent
+Task or standalone review task; a changed candidate, Round, Session or Agent
 does not reset that limit. Keep the report and evidence for subsequent correction
 verification by the Leader.
 
@@ -87,7 +87,7 @@ Each smell reads *what it is* → *how to fix*; match it against the diff:
 ### 4. Dispatch the necessary axes once
 
 Reuse existing reports and evidence for unchanged behavior. Dispatch an axis
-only if it is needed and has not already run for this Ticket. Candidate corrections
+only if it is needed and has not already run for this Task. Candidate corrections
 do not create permission to repeat an axis. A missing report copy calls for
 report recovery through its parent, not repeating the review.
 

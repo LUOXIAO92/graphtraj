@@ -12,7 +12,7 @@ import yaml
 
 from conftest import FakeCodex, InstalledCommands, app_server_peer, run_process
 from runner_fixtures import configure_harness
-from test_session_alias_control import _register_ready_ticket
+from test_session_alias_control import _register_ready_task
 from test_task_budget_control import BODY
 
 
@@ -100,11 +100,11 @@ async def main():
         def launch():
             """Exercise both detached return and an original waiting call."""
             if os.environ['HOST_WAIT'] != '1':
-                return call('swarm', {'tasks':[{'ticket_id':'76','role':'researcher','instruction':'request:'+os.environ['HOST_MODE'] if os.environ['HOST_MODE'] in {'approval','input'} else 'initial'}]})
+                return call('swarm', {'tasks':[{'task_id':'76','role':'researcher','instruction':'request:'+os.environ['HOST_MODE'] if os.environ['HOST_MODE'] in {'approval','input'} else 'initial'}]})
             read_fd, write_fd = os.pipe()
             try:
                 with budget_notice_output(write_fd):
-                    return call('swarm', {'tasks':[{'ticket_id':'76','role':'researcher','instruction':'request:'+os.environ['HOST_MODE'] if os.environ['HOST_MODE'] in {'approval','input'} else 'initial'}]})
+                    return call('swarm', {'tasks':[{'task_id':'76','role':'researcher','instruction':'request:'+os.environ['HOST_MODE'] if os.environ['HOST_MODE'] in {'approval','input'} else 'initial'}]})
             finally:
                 os.close(write_fd)
                 os.close(read_fd)
@@ -160,7 +160,7 @@ async def main():
             if os.environ['HOST_MODE']=='stop':
                 from graphtraj.execution.execution_budget import execution_budget_monitor
                 from unittest.mock import patch
-                evidence=root/'.graphtraj/state/tickets/76-session-alias-control'
+                evidence=root/'.graphtraj/state/tasks/76-session-alias-control'
                 monitor=execution_budget_monitor(evidence,'76','session-alias-control')
                 usage=yaml.safe_load((evidence/'execution-budget.yml').read_text())
                 with patch('graphtraj.execution.execution_budget.time.time',return_value=usage['started_at']+1200), patch('graphtraj.execution.execution_budget.random.random',return_value=.999):
@@ -209,7 +209,7 @@ def test_owning_host_processes_events_during_and_after_tool_call(
         'roles': {'researcher': {'runtime': 'codex', 'model': 'selected'}},
         'role_tree': {'researcher': {}},
     }))
-    _register_ready_ticket(installed_commands, root, body=BODY)
+    _register_ready_task(installed_commands, root, body=BODY)
     fake_codex.executable.write_text(app_server_peer(
         '#!' + sys.executable + '\n' + CHILD, "os.environ['GRAPHTRAJ_PARENT_ALIAS']",
     ))

@@ -12,7 +12,7 @@ import { collect, records, groups, metrics, localDate, defaultDates } from '../s
 
 const desktop = fileURLToPath(new URL('..', import.meta.url));
 const project = process.env.GRAPHTRAJ_LIVE_PROJECT;
-const ticket = process.env.GRAPHTRAJ_LIVE_TICKET;
+const task = process.env.GRAPHTRAJ_LIVE_TASK;
 const tool = process.env.GRAPHTRAJ_TOOL;
 const executable = process.env.GRAPHTRAJ_ELECTRON_EXECUTABLE || electronExecutable;
 // The caller may opt in only after this execution's native/host approval.
@@ -23,7 +23,7 @@ const deadline = typeof deadlineText === 'string' && /T.*(?:Z|[+-]\d{2}:\d{2})$/
 
 test('owned Electron Dashboard matches native quantities, filters and replay', {
   timeout: Number.isFinite(deadline) ? Math.max(1, deadline - Date.now()) : 1000,
-  skip: !project || !ticket || !tool,
+  skip: !project || !task || !tool,
 }, async () => {
   assert.ok(Number.isFinite(deadline) && deadline > Date.now() + 10000,
     'Provide GRAPHTRAJ_LIVE_DEADLINE as a future absolute ISO time with timezone; no deadline is inferred.');
@@ -34,7 +34,7 @@ test('owned Electron Dashboard matches native quantities, filters and replay', {
   const evidence = await fs.mkdtemp(path.join(artifactRoot, 'graphtraj-usage-live-'));
   const cutoff = localDate(new Date());
   const start = defaultDates().from;
-  const facts = { project, ticket, executable, noSandbox, deadline: deadlineText, cutoff, steps: [], passed: false };
+  const facts = { project, task, executable, noSandbox, deadline: deadlineText, cutoff, steps: [], passed: false };
   let launch;
   let app;
   let stopping = false;
@@ -57,7 +57,7 @@ test('owned Electron Dashboard matches native quantities, filters and replay', {
     if (stopping || Date.now() >= deadline - 3000) throw new Error('Execution stopped or deadline reached');
   }
   async function run() {
-    const own = await reader.read(project, { ticket_id: ticket });
+    const own = await reader.read(project, { task_id: task });
     assert.equal(own.scope, 'self');
     assert.equal(own.agents.length, 1);
     const alias = own.agents[0].alias;
@@ -65,12 +65,12 @@ test('owned Electron Dashboard matches native quantities, filters and replay', {
     let cursor;
     do {
       check();
-      const page = await reader.read(project, { ticket_id: ticket, alias, cursor });
+      const page = await reader.read(project, { task_id: task, alias, cursor });
       assert.equal(page.availability, 'available');
       collect(calls, project, page.events ?? []);
       cursor = page.has_more ? page.cursor : undefined;
     } while (cursor);
-    const selected = records(calls, { ticket, agent: alias, from: start, to: cutoff });
+    const selected = records(calls, { task, agent: alias, from: start, to: cutoff });
     const expected = groups(selected, 'model');
     assert.ok(expected.some(row => row.tokens.input.value > 0), 'Requires real usage in the selected local calendar dates');
     facts.expected = expected;
@@ -86,7 +86,7 @@ test('owned Electron Dashboard matches native quantities, filters and replay', {
     page.setDefaultTimeout(Math.min(30000, deadline - Date.now() - 3000));
     await page.getByRole('button', { name: 'Project usage', exact: true }).click();
     // Wrapping select labels include option text; scope to the filter label prefix.
-    await page.locator('.usage-filters > label').filter({ hasText: /^Ticket/ }).locator('select').selectOption(ticket);
+    await page.locator('.usage-filters > label').filter({ hasText: /^Task/ }).locator('select').selectOption(task);
     await page.getByLabel('Start date').fill(start);
     await page.getByLabel('End date').fill(cutoff);
     await page.getByText('This connection covers only its own Session.', { exact: true }).waitFor();

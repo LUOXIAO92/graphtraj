@@ -94,7 +94,7 @@ def test_describe_tracks_single_source_updates(tmp_path: Path, monkeypatch: pyte
     ({"actor": "Main"}, "actor"),
     ({"caller": "parent"}, "caller"),
     ({"cwd": "/tmp"}, "cwd"),
-    ({"allowed_features": ["ticket_update"]}, "allowed_features"),
+    ({"allowed_features": ["task_update"]}, "allowed_features"),
     ({"_meta": {"threadId": "parent"}}, "_meta"),
 ])
 def test_selected_validation_rejects_wrong_types_and_context(
@@ -134,7 +134,7 @@ def test_invalid_envelope_is_a_local_failure(envelope: Any, feature: list) -> No
     ("swarm", {"tasks": [{"role": 1}]}, "tasks[0].role"),
     ("submit_result", {"commit": "abc", "completion": "done", "result_refs": []}, "result_refs"),
     ("decide_result", {"submission_id": "a", "commit": "abc", "decision": "maybe", "reason": "x", "evidence_refs": ["x"]}, "decision"),
-    ("ticket_revise", {"product_preserving": 1, "caused_by_event_ids": [], "evidence_refs": [], "tickets": []}, "product_preserving"),
+    ("task_revise", {"product_preserving": 1, "caused_by_event_ids": [], "evidence_refs": [], "tasks": []}, "product_preserving"),
 ])
 def test_real_selected_constraints(name: str, arguments: dict, field: str) -> None:
     """Nested, required, enum, const and cardinality constraints reject before execution."""
@@ -148,17 +148,17 @@ def test_missing_manual_does_not_gate_direct_core_execution(tmp_path: Path, monk
     config = tmp_path / ".graphtraj/config.yml"
     config.parent.mkdir()
     config.write_text(default_configuration_content(tmp_path, tmp_path))
-    monkeypatch.setitem(tools.TOOLS, "ticket_graph", replace(tools.TOOLS["ticket_graph"], manual_ref="absent.txt"))
+    monkeypatch.setitem(tools.TOOLS, "task_graph", replace(tools.TOOLS["task_graph"], manual_ref="absent.txt"))
     before = {path.relative_to(tmp_path): path.read_bytes() for path in tmp_path.rglob("*") if path.is_file()}
-    direct = gateway.handle_request({"action": "execute", "feature": "ticket_graph", "arguments": {}}, cwd=tmp_path)
+    direct = gateway.handle_request({"action": "execute", "feature": "task_graph", "arguments": {}}, cwd=tmp_path)
     assert not direct.failed
-    described = gateway.handle_request({"action": "describe", "feature": "ticket_graph"}, cwd=tmp_path)
+    described = gateway.handle_request({"action": "describe", "feature": "task_graph"}, cwd=tmp_path)
     assert described.failed
     assert "absent.txt" in described.document["error"]
-    parameters = gateway.handle_request({"action": "describe", "feature": "ticket_graph", "schema": True})
+    parameters = gateway.handle_request({"action": "describe", "feature": "task_graph", "schema": True})
     assert not parameters.failed
-    assert parameters.document == {"input_schema": tools.TOOLS["ticket_graph"].input_schema}
-    assert gateway.handle_request({"action": "execute", "feature": "ticket_graph", "arguments": {}}, cwd=tmp_path) == direct
+    assert parameters.document == {"input_schema": tools.TOOLS["task_graph"].input_schema}
+    assert gateway.handle_request({"action": "execute", "feature": "task_graph", "arguments": {}}, cwd=tmp_path) == direct
     assert gateway.handle_request({"action": "discover"}, cwd=tmp_path).document["features"]
     after = {path.relative_to(tmp_path): path.read_bytes() for path in tmp_path.rglob("*") if path.is_file()}
     assert before == after
@@ -190,10 +190,10 @@ def test_delivered_guide_resolution_is_independent_of_the_process_directory(
     assert refused.document == {"error": "Feature is not executable: task-breakdown"}
 
     executed = gateway.handle_request(
-        {"action": "execute", "feature": "ticket_graph", "arguments": {}},
+        {"action": "execute", "feature": "task_graph", "arguments": {}},
         cwd=tmp_path,
     )
-    assert executed.document == {"schema_version": 2, "tickets": []}
+    assert executed.document["tasks"] == []
 
 
 def test_method_only_rows_use_guide_names_and_frontmatter_descriptions(
@@ -258,15 +258,15 @@ def test_handler_result_and_business_rejection_are_preserved(monkeypatch: pytest
         """Use the original no-cwd convention and return retained business state."""
         return expected
 
-    monkeypatch.setitem(tools.TOOLS, "ticket_graph", replace(tools.TOOLS["ticket_graph"], handler=handler))
-    request = {"action": "execute", "feature": "ticket_graph", "arguments": {}}
+    monkeypatch.setitem(tools.TOOLS, "task_graph", replace(tools.TOOLS["task_graph"], handler=handler))
+    request = {"action": "execute", "feature": "task_graph", "arguments": {}}
     assert gateway.handle_request(request) is expected
 
     def denied(arguments: Mapping[str, Any]) -> tools.ToolResult:
         """Represent the existing business authorization boundary."""
         raise PermissionError("not the parent")
 
-    monkeypatch.setitem(tools.TOOLS, "ticket_graph", replace(tools.TOOLS["ticket_graph"], handler=denied))
+    monkeypatch.setitem(tools.TOOLS, "task_graph", replace(tools.TOOLS["task_graph"], handler=denied))
     with pytest.raises(PermissionError, match="not the parent"):
         gateway.handle_request(request)
 

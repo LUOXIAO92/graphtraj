@@ -1,5 +1,5 @@
 import dagre from '@dagrejs/dagre';
-import type { Graph, Ticket } from '../electron/types';
+import type { Graph, Task } from '../electron/types';
 
 /** Metro must turn through 90 degrees at the explicit normal terminal waypoints.
  * Its 45-degree default otherwise loops around a waypoint before entering a card.
@@ -11,7 +11,7 @@ export const taskRouterOptions = {
 
 export type Size = { width: number; height: number };
 export type Bounds = Size & { x: number; y: number };
-export type MonitorNode = Size & { id: string; ticket: Ticket; x: number; y: number;
+export type MonitorNode = Size & { id: string; task: Task; x: number; y: number;
   children: string[]; expanded: boolean; frame?: Bounds };
 export type TaskRelation = { source: string; target: string; kind: 'dependency' | 'replacement' | 'acceptance'; event_id?: string };
 export type MonitorEdge = TaskRelation & { id: string;
@@ -19,20 +19,20 @@ export type MonitorEdge = TaskRelation & { id: string;
 
 /** Preserve direct native relationships, including each step of replacement chains. */
 export function taskRelations(graph: Graph): TaskRelation[] {
-  const ids = new Set(graph.tickets.map(ticket => ticket.ticket_id));
-  return graph.tickets.flatMap(ticket => [
-    ...ticket.dependencies.filter(id => ids.has(id)).map(source => ({ source, target: ticket.ticket_id, kind: 'dependency' as const })),
-    ...(ticket.delivery ?? []).filter(fact => fact.event === 'ticket-completed' && fact.ticket_id !== ticket.ticket_id && ids.has(fact.ticket_id))
-      .map(fact => ({ source: ticket.ticket_id, target: fact.ticket_id, kind: 'acceptance' as const, event_id: fact.event_id })),
-    ...ticket.replaced_by.filter(id => ids.has(id)).map(target => ({ source: ticket.ticket_id, target, kind: 'replacement' as const })),
+  const ids = new Set(graph.tasks.map(task => task.task_id));
+  return graph.tasks.flatMap(task => [
+    ...task.dependencies.filter(id => ids.has(id)).map(source => ({ source, target: task.task_id, kind: 'dependency' as const })),
+    ...(task.delivery ?? []).filter(fact => fact.event === 'task-completed' && fact.task_id !== task.task_id && ids.has(fact.task_id))
+      .map(fact => ({ source: task.task_id, target: fact.task_id, kind: 'acceptance' as const, event_id: fact.event_id })),
+    ...task.replaced_by.filter(id => ids.has(id)).map(target => ({ source: task.task_id, target, kind: 'replacement' as const })),
   ]);
 }
 
 /** Read only explicit native parents; legacy unknown parents remain unknown. */
 export function taskChildren(graph: Graph): Map<string, string[]> {
-  const children = new Map(graph.tickets.map(ticket => [ticket.ticket_id, [] as string[]]));
-  for (const ticket of graph.tickets) {
-    if (ticket.parent_id) children.get(ticket.parent_id)?.push(ticket.ticket_id);
+  const children = new Map(graph.tasks.map(task => [task.task_id, [] as string[]]));
+  for (const task of graph.tasks) {
+    if (task.parent_id) children.get(task.parent_id)?.push(task.task_id);
   }
   return children;
 }
@@ -44,9 +44,9 @@ export function taskChildren(graph: Graph): Map<string, string[]> {
 export function monitorGraph(graph: Graph, expanded: ReadonlySet<string>, sizes: Record<string, Size> = {}): {
   nodes: MonitorNode[]; edges: MonitorEdge[]; endpoints: Map<string, string>;
 } {
-  const tickets = new Map(graph.tickets.map(ticket => [ticket.ticket_id, ticket]));
+  const tasks = new Map(graph.tasks.map(task => [task.task_id, task]));
   const children = taskChildren(graph);
-  const roots = graph.tickets.filter(ticket => !ticket.parent_id || !tickets.has(ticket.parent_id)).map(ticket => ticket.ticket_id);
+  const roots = graph.tasks.filter(task => !task.parent_id || !tasks.has(task.parent_id)).map(task => task.task_id);
   const endpoints = new Map<string, string>();
   const nodes: MonitorNode[] = [];
   const nativeEdges = taskRelations(graph).map(edge => ({ ...edge, id: JSON.stringify([edge.kind, edge.source, edge.target]) }));
@@ -59,7 +59,7 @@ export function monitorGraph(graph: Graph, expanded: ReadonlySet<string>, sizes:
 
   function place(ids: string[]): { nodes: MonitorNode[]; width: number; height: number; routes: Map<string, { x: number; y: number }[]> } {
     const branches = ids.map(id => {
-      const ticket = tickets.get(id)!;
+      const task = tasks.get(id)!;
       const descendants = children.get(id)!;
       const open = expanded.has(id) && descendants.length > 0;
       const size = sizes[id] ?? { width: 320, height: 150 };
@@ -68,7 +68,7 @@ export function monitorGraph(graph: Graph, expanded: ReadonlySet<string>, sizes:
       // at the delivery side, rather than sending receipt arrows back over it.
       const frame = inner ? { x: 0, y: 0, width: inner.width + 140 + size.width + 48,
         height: Math.max(size.height, inner.height) + 48 } : undefined;
-      const node: MonitorNode = { id, ticket, ...size, x: 0, y: 0, children: descendants, expanded: open, frame };
+      const node: MonitorNode = { id, task, ...size, x: 0, y: 0, children: descendants, expanded: open, frame };
       return { node, inner, size: frame ?? size };
     });
     const layout = new dagre.graphlib.Graph().setGraph({ rankdir: 'LR', ranksep: 140, nodesep: 64, edgesep: 28, marginx: 0, marginy: 0 });
@@ -137,13 +137,13 @@ export function monitorGraph(graph: Graph, expanded: ReadonlySet<string>, sizes:
 
 /** Trace native input and replacement paths, including selected summary internals. */
 export function taskFocus(graph: Graph, selected: string | null): Set<string> {
-  if (!selected) return new Set(graph.tickets.map(ticket => ticket.ticket_id));
+  if (!selected) return new Set(graph.tasks.map(task => task.task_id));
   const children = taskChildren(graph);
   const seeds = new Set<string>();
   function include(id: string): void { seeds.add(id); (children.get(id) ?? []).forEach(include); }
   include(selected);
-  const upstream = new Map(graph.tickets.map(ticket => [ticket.ticket_id, [] as string[]]));
-  const downstream = new Map(graph.tickets.map(ticket => [ticket.ticket_id, [] as string[]]));
+  const upstream = new Map(graph.tasks.map(task => [task.task_id, [] as string[]]));
+  const downstream = new Map(graph.tasks.map(task => [task.task_id, [] as string[]]));
   for (const edge of taskRelations(graph)) {
     upstream.get(edge.target)?.push(edge.source);
     downstream.get(edge.source)?.push(edge.target);
@@ -159,9 +159,9 @@ export function taskFocus(graph: Graph, selected: string | null): Set<string> {
 }
 
 /** Prefer disposition over a retained historical execution stage. */
-export function taskStatus(ticket: Ticket): string {
-  return ticket.disposition && ticket.disposition !== 'active' ? ticket.disposition
-    : !ticket.active ? 'inactive' : ticket.status;
+export function taskStatus(task: Task): string {
+  return task.disposition && task.disposition !== 'active' ? task.disposition
+    : !task.active ? 'inactive' : task.status;
 }
 
 /** Order ports and reserve separate horizontal passages between terminal points.

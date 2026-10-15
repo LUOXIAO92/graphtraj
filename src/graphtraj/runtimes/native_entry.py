@@ -77,6 +77,11 @@ def dsh_event(event: dict, cwd: Path) -> dict:
     """Consume DSH's native agent/created header without reading its private store."""
     from graphtraj.runtimes.dsh.session_entry import current_connection, session_source
 
+    if event.get('event') == 'session/collect':
+        from graphtraj.runtimes.dsh.session_entry import collect_session
+
+        return collect_session(event, cwd)
+
     if process_caller_alias(discover_runner_directory(cwd), os.getpid()) is not None:
         return {'source': 'member'}
     connection = current_connection()
@@ -103,15 +108,34 @@ def dsh_event(event: dict, cwd: Path) -> dict:
 
 
 @click.command()
-@click.argument('runtime', type=click.Choice(['pi', 'dsh']))
-def main(runtime: str) -> None:
+@click.argument('runtime', type=click.Choice(['pi', 'dsh', 'claude']))
+@click.option('--collect', is_flag=True, help='Collect the owning Pi extension event pipe.')
+def main(runtime: str, collect: bool = False) -> None:
     """Handle one native extension event without exporting config in environment."""
+    if collect:
+        if runtime != 'pi':
+            raise click.UsageError('--collect is only available for Pi.')
+        from graphtraj.runtimes.pi.collector import collect_stdio
+
+        collect_stdio()
+        return
     try:
         event = json.load(sys.stdin)
         if not isinstance(event, dict):
             raise ValueError('A native event object is required.')
-        result = (pi_event if runtime == 'pi' else dsh_event)(event, Path.cwd())
+        if runtime == 'claude':
+            from graphtraj.runtimes.claude.collection import collect_hook
+
+            collect_hook(event, Path.cwd())
+            # Claude command hooks accept their own output schema, not the
+            # collector's internal result metadata. Successful collection is silent.
+            result = {}
+        else:
+            result = (pi_event if runtime == 'pi' else dsh_event)(event, Path.cwd())
     except Exception as error:
+        if runtime == 'claude':
+            click.echo(f'Claude Session collection failed: {error}', err=True)
+            raise click.exceptions.Exit(1) from error
         result = {'error': str(error)}
     click.echo(json.dumps(result, ensure_ascii=False))
 

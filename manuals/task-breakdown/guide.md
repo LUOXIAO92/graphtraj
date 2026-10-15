@@ -37,7 +37,7 @@ names alone are not an assessment. Use the project's ordinary descriptions or
 rating scale without introducing a mandatory grading schema.
 
 Include this assessment in the node's existing description and carry it into
-the task ticket before dispatch. Delivery uses the recorded assessment rather
+the Task definition before dispatch. Delivery uses the recorded assessment rather
 than creating a separate one. When new evidence changes scope, resource fit or
 difficulty, update the assessment and affected decomposition through this skill;
 a changed estimate does not authorize more time or different user settings.
@@ -127,5 +127,5 @@ Record the cause. Product-preserving details belong to the executor; unresolved
 changes to the promised outcome or authority return to the user.
 
 Present the nodes with their difficulty assessments, dependency reasons,
-resource assumptions and remaining uncertainties. Publish tickets and execute
+resource assumptions and remaining uncertainties. Register tasks and execute
 only within the user's authorization.

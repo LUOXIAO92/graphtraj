@@ -36,30 +36,49 @@ def _write(path: Path, value: object) -> Path:
     return path
 
 
-def _ticket(
-    ticket_id: str,
+def _task(
+    task_id: str,
     name: str,
     *,
     dependencies: list[str] | None = None,
 ) -> dict[str, object]:
     return {
-        "ticket_id": ticket_id,
-        "ticket_name": name,
-        "source": f"https://github.com/example/project/issues/{ticket_id}",
-        "title": name.replace("-", " ").title(),
-        "body": f"Deliver {name}.",
-        "dependencies": dependencies or [],
+        "task_id":           task_id,
+        "task_name":         name,
+        "source":            f"https://github.com/example/project/issues/{task_id}",
+        "title":             name.replace("-", " ").title(),
+        "body":              f"Deliver {name}.",
+        "dependencies":      dependencies or [],
+        "schema_version":    2,
+        "parent_id":         None,
+        "disposition":       "active",
+        "replaced_by":       [],
+        "retirement_reason": None,
     }
 
 
-def _non_coding_ticket(
-    ticket_id: str,
+def _revised(
+    task: dict[str, object],
+    current_definition: str | None = "task.md",
+    **facts: object,
+) -> dict[str, object]:
+    """Return one revision entry based on the observed current definition."""
+    return {**task, **facts, "current_definition": current_definition}
+
+
+def _metadata(snapshot: str) -> dict[str, object]:
+    """Read the Task metadata stored ahead of a definition's exact body."""
+    return yaml.safe_load(snapshot.split("---\n", 2)[1])["task"]
+
+
+def _non_coding_task(
+    task_id: str,
     name: str,
     *,
     task_type: str,
 ) -> dict[str, object]:
     return {
-        **_ticket(ticket_id, name),
+        **_task(task_id, name),
         "body": (
             "---\n"
             "task_type: {0}\n"
@@ -69,54 +88,26 @@ def _non_coding_ticket(
     }
 
 
-def test_graph_keeps_legacy_parentage_unknown_without_prose_inference(
-    installed_commands: InstalledCommands,
-    temporary_git_repository: Path,
-) -> None:
-    """Legacy prose remains readable but cannot establish formal parentage."""
-    project = temporary_git_repository
-    _configure(project)
-    bodies = [
-        "## Parent\n\nhttps://github.com/example/project/issues/90\n\n## Scope\nSee #91.",
-        "Parent: #91. Prior work #90 is a dependency, not membership.",
-        "属于 #90、#91。Shared work.",
-        "See #90; depends on #91.\n```\nParent: #92\n```",
-        "Part of #91。Source task node. Prior result #90 stays a dependency.",
-    ]
-    for index, body in enumerate(bodies, 1):
-        _register(installed_commands, project, {
-            **_ticket(str(index), f"task-{index}", dependencies=[str(index - 1)] if index > 1 else []),
-            "body": body,
-        })
-    result = _run(installed_commands, project, "graph")
-    assert result.returncode == 0, result.stderr
-    graph = yaml.safe_load(result.stdout)
-    assert all(ticket["parent_known"] is False and "parent_id" not in ticket
-               and ticket["schema_version"] == 1 for ticket in graph["tickets"])
-    assert [ticket["dependencies"] for ticket in graph["tickets"]] == [[], ["1"], ["2"], ["3"], ["4"]]
-    assert all(ticket["status"] == "pending" for ticket in graph["tickets"])
-
-
 def _run(
     commands: InstalledCommands, project: Path, *arguments: str
 ):
-    return run_process([str(commands.product), "ticket", *arguments], cwd=project)
+    return run_process([str(commands.product), "task", *arguments], cwd=project)
 
 
 def _register(
     commands: InstalledCommands,
     project: Path,
-    ticket: dict[str, object],
+    task: dict[str, object],
 ) -> None:
-    path = _write(project / "register.yml", ticket)
-    result = _run(commands, project, "register", "--ticket-file", str(path))
+    path = _write(project / "register.yml", task)
+    result = _run(commands, project, "register", "--task-file", str(path))
     assert result.returncode == 0, result.stderr
 
 
 def _change_status(
     commands: InstalledCommands,
     project: Path,
-    ticket_id: str,
+    task_id: str,
     status: str,
 ) -> None:
     evidence = project / "delivery-evidence.md"
@@ -124,7 +115,7 @@ def _change_status(
     change = _write(
         project / "state-change.yml",
         {
-            "ticket_id": ticket_id,
+            "task_id": task_id,
             "status": status,
             "active_team_ordinal": None,
             "worktree": None,
@@ -138,39 +129,35 @@ def _change_status(
     assert result.returncode == 0, result.stderr
 
 
-def test_installed_command_registers_an_accepted_issue_as_a_ticket(
+def test_installed_command_registers_an_accepted_issue_as_a_task(
     installed_commands: InstalledCommands,
     temporary_git_repository: Path,
 ) -> None:
     project = temporary_git_repository
     state = _configure(project)
-    issue = _write(project / "issue.yml", _ticket("73", "ticket-readiness"))
+    issue = _write(project / "issue.yml", _task("73", "task-readiness"))
 
     result = _run(
-        installed_commands, project, "register", "--ticket-file", str(issue)
+        installed_commands, project, "register", "--task-file", str(issue)
     )
 
     assert result.returncode == 0, result.stderr
-    directory = state / "tickets" / "73-ticket-readiness"
+    directory = state / "tasks" / "73-task-readiness"
     assert directory.is_dir()
-    snapshot = (directory / "ticket.md").read_text(encoding="utf-8")
-    assert "# Ticket 73: Ticket Readiness" in snapshot
-    assert "Ticket name: ticket-readiness" in snapshot
-    assert "Source: https://github.com/example/project/issues/73" in snapshot
-    assert "Dependencies: none" in snapshot
-    assert snapshot.endswith("Deliver ticket-readiness.\n")
-    assert yaml.safe_load((directory / "ticket.yml").read_text(encoding="utf-8")) == {
-        "ticket_id": "73",
-        "ticket_name": "ticket-readiness",
-        "current_definition": "ticket.md",
-        "active": True,
-        "replaced_by": [],
-        "dependencies": [],
+    snapshot = (directory / "task.md").read_text(encoding="utf-8")
+    assert "  task_id: '73'\n" in snapshot
+    assert "  source: https://github.com/example/project/issues/73\n" in snapshot
+    assert snapshot.endswith("---\nDeliver task-readiness.")
+    assert yaml.safe_load((directory / "task.yml").read_text(encoding="utf-8")) == {
+        "task_id": "73",
+        "task_name": "task-readiness",
+        "current_definition": "task.md",
         "status": "pending",
         "active_team_ordinal": None,
         "worktree": None,
         "branch": None,
         "current_candidate": None,
+        "schema_version": 2,
     }
     events = [
         json.loads(line)
@@ -178,86 +165,83 @@ def test_installed_command_registers_an_accepted_issue_as_a_ticket(
         for line in path.read_text(encoding="utf-8").splitlines()
     ]
     assert len(events) == 1
-    assert events[0]["event"] == "ticket-registered"
-    assert events[0]["ticket_id"] == "73"
+    assert events[0]["event"] == "task-registered"
+    assert events[0]["task_id"] == "73"
     assert events[0]["evidence_refs"] == [
-        ".graphtraj/state/tickets/73-ticket-readiness/ticket.md"
+        ".graphtraj/state/tasks/73-task-readiness/task.md"
     ]
 
 
-def test_installed_command_registers_an_accepted_ticket_without_an_engineer_tier(
+def test_installed_command_registers_an_accepted_task_without_an_engineer_tier(
     installed_commands: InstalledCommands,
     temporary_git_repository: Path,
 ) -> None:
     """Registration keeps difficulty and its budget without an Engineer tier."""
     project = temporary_git_repository
     state = _configure(project)
-    issue = _write(
-        project / "issue.yml",
-        {
-            **_ticket("77", "unified-engineer"),
-            "body": (
-                "---\n"
-                "difficulty: medium\n"
-                "difficulty_reason: One role source spans setup and dispatch\n"
-                "execution_budget:\n"
-                "  estimated_minutes:\n"
-                "    implementation: 10\n"
-                "    validation: 10\n"
-                "    review: 5\n"
-                "    total: 30\n"
-                "  planned_sessions:\n"
-                "    team_leader: 1\n"
-                "    engineer: 1\n"
-                "    standards_reviewer: 1\n"
-                "    spec_reviewer: 1\n"
-                "    delivery_state: 1\n"
-                "  correction_rounds: 1\n"
-                "  estimation_note: The accepted budget selects no Engineer role\n"
-                "  on_exceed: Notify the caller and preserve the running Session\n"
-                "---\n"
-                "\n"
-                "Deliver unified-engineer.\n"
-            ),
-        },
-    )
+    definition = {
+        **_task("77", "unified-engineer"),
+        "body": (
+            "---\n"
+            "difficulty: medium\n"
+            "difficulty_reason: One role source spans setup and dispatch\n"
+            "execution_budget:\n"
+            "  estimated_minutes:\n"
+            "    implementation: 10\n"
+            "    validation: 10\n"
+            "    review: 5\n"
+            "    total: 30\n"
+            "  planned_sessions:\n"
+            "    team_leader: 1\n"
+            "    engineer: 1\n"
+            "    standards_reviewer: 1\n"
+            "    spec_reviewer: 1\n"
+            "    delivery_state: 1\n"
+            "  correction_rounds: 1\n"
+            "  estimation_note: The accepted budget selects no Engineer role\n"
+            "  on_exceed: Notify the caller and preserve the running Session\n"
+            "---\n"
+            "\n"
+            "Deliver unified-engineer.\n"
+        ),
+    }
+    issue = _write(project / "issue.yml", definition)
 
     result = _run(
-        installed_commands, project, "register", "--ticket-file", str(issue)
+        installed_commands, project, "register", "--task-file", str(issue)
     )
 
     assert result.returncode == 0, result.stderr
-    snapshot = (state / "tickets" / "77-unified-engineer" / "ticket.md").read_text(
+    snapshot = (state / "tasks" / "77-unified-engineer" / "task.md").read_text(
         encoding="utf-8"
     )
-    assert snapshot.startswith("---\ndifficulty: medium\n")
+    assert snapshot.endswith("---\n" + definition["body"])
     assert "engineer_tier" not in snapshot
 
 
-def test_installed_command_registers_non_coding_ticket_with_front_matter(
+def test_installed_command_registers_non_coding_task_with_front_matter(
     installed_commands: InstalledCommands,
     temporary_git_repository: Path,
 ) -> None:
     project = temporary_git_repository
     state = _configure(project)
     issue = _write(
-        project / "research-ticket.yml",
-        _non_coding_ticket("74", "research-ticket", task_type="research"),
+        project / "research-task.yml",
+        _non_coding_task("74", "research-task", task_type="research"),
     )
 
     result = _run(
-        installed_commands, project, "register", "--ticket-file", str(issue)
+        installed_commands, project, "register", "--task-file", str(issue)
     )
 
     assert result.returncode == 0, result.stderr
-    snapshot = (state / "tickets" / "74-research-ticket" / "ticket.md").read_text(
+    snapshot = (state / "tasks" / "74-research-task" / "task.md").read_text(
         encoding="utf-8"
     )
-    assert snapshot.startswith("---\ntask_type: research\n---\n")
-    assert snapshot.endswith("Investigate research-ticket.\n")
+    assert snapshot.endswith("---\n---\ntask_type: research\n---\n\nInvestigate research-task.")
 
 
-def test_installed_command_revises_non_coding_ticket_with_front_matter(
+def test_installed_command_revises_non_coding_task_with_front_matter(
     installed_commands: InstalledCommands,
     temporary_git_repository: Path,
 ) -> None:
@@ -266,7 +250,7 @@ def test_installed_command_revises_non_coding_ticket_with_front_matter(
     _register(
         installed_commands,
         project,
-        _non_coding_ticket("74", "research-ticket", task_type="research"),
+        _non_coding_task("74", "research-task", task_type="research"),
     )
     evidence = project / "research-revision.md"
     evidence.write_text("Research scope changed.\n", encoding="utf-8")
@@ -276,14 +260,8 @@ def test_installed_command_revises_non_coding_ticket_with_front_matter(
             "product_preserving": True,
             "caused_by_event_ids": [],
             "evidence_refs": ["research-revision.md"],
-            "tickets": [
-                {
-                    **_non_coding_ticket(
-                        "74", "research-ticket", task_type="analysis"
-                    ),
-                    "active": True,
-                    "replaced_by": [],
-                }
+            "tasks": [
+                _revised(_non_coding_task("74", "research-task", task_type="analysis"))
             ],
         },
     )
@@ -295,43 +273,41 @@ def test_installed_command_revises_non_coding_ticket_with_front_matter(
     assert result.returncode == 0, result.stderr
     event = yaml.safe_load(result.stdout)
     state_record = yaml.safe_load(
-        (state / "tickets" / "74-research-ticket" / "ticket.yml").read_text(
+        (state / "tasks" / "74-research-task" / "task.yml").read_text(
             encoding="utf-8"
         )
     )
     snapshot = (
         state
-        / "tickets"
-        / "74-research-ticket"
+        / "tasks"
+        / "74-research-task"
         / state_record["current_definition"]
     ).read_text(encoding="utf-8")
     assert state_record["current_definition"] == f"definitions/{event['event_id']}.md"
-    assert snapshot.startswith("---\ntask_type: analysis\n---\n")
+    assert snapshot.endswith("---\n---\ntask_type: analysis\n---\n\nInvestigate research-task.")
 
 
-def test_installed_command_revises_non_coding_ticket_with_source_front_matter(
+def test_installed_command_revises_non_coding_task_with_source_front_matter(
     installed_commands: InstalledCommands,
     temporary_git_repository: Path,
 ) -> None:
     project = temporary_git_repository
     state = _configure(project)
-    ticket = {
-        **_non_coding_ticket("74", "research-ticket", task_type="research"),
+    task = {
+        **_non_coding_task("74", "research-task", task_type="research"),
         "body": (
             "---\n"
             "task_type: research\n"
             "Source: field-notes\n"
             "---\n\n"
-            "Investigate research-ticket."
+            "Investigate research-task."
         ),
     }
-    _register(installed_commands, project, ticket)
-    directory = state / "tickets" / "74-research-ticket"
-    initial_snapshot = (directory / "ticket.md").read_text(encoding="utf-8")
-    assert initial_snapshot.startswith(
-        "---\ntask_type: research\nSource: field-notes\n---\n"
-    )
-    assert "Source: https://github.com/example/project/issues/74" in initial_snapshot
+    _register(installed_commands, project, task)
+    directory = state / "tasks" / "74-research-task"
+    initial_snapshot = (directory / "task.md").read_text(encoding="utf-8")
+    assert initial_snapshot.endswith("---\n" + task["body"])
+    assert _metadata(initial_snapshot)["source"] == "https://github.com/example/project/issues/74"
 
     evidence = project / "source-revision.md"
     evidence.write_text("Research notes were extended.\n", encoding="utf-8")
@@ -341,13 +317,8 @@ def test_installed_command_revises_non_coding_ticket_with_source_front_matter(
             "product_preserving": True,
             "caused_by_event_ids": [],
             "evidence_refs": ["source-revision.md"],
-            "tickets": [
-                {
-                    **ticket,
-                    "body": ticket["body"] + "\n\nPreserve field notes.",
-                    "active": True,
-                    "replaced_by": [],
-                }
+            "tasks": [
+                _revised({**task, "body": task["body"] + "\n\nPreserve field notes."})
             ],
         },
     )
@@ -357,16 +328,14 @@ def test_installed_command_revises_non_coding_ticket_with_source_front_matter(
     )
 
     assert result.returncode == 0, result.stderr
-    state_record = yaml.safe_load((directory / "ticket.yml").read_text(encoding="utf-8"))
+    state_record = yaml.safe_load((directory / "task.yml").read_text(encoding="utf-8"))
     revised_snapshot = (directory / state_record["current_definition"]).read_text(
         encoding="utf-8"
     )
     assert state_record["current_definition"].startswith("definitions/")
-    assert (directory / "ticket.md").read_text(encoding="utf-8") == initial_snapshot
-    assert revised_snapshot.startswith(
-        "---\ntask_type: research\nSource: field-notes\n---\n"
-    )
-    assert "Source: https://github.com/example/project/issues/74" in revised_snapshot
+    assert (directory / "task.md").read_text(encoding="utf-8") == initial_snapshot
+    assert revised_snapshot.endswith("---\n" + task["body"] + "\n\nPreserve field notes.")
+    assert _metadata(revised_snapshot)["source"] == "https://github.com/example/project/issues/74"
 
 
 def test_installed_command_corrects_a_dependency_and_generates_current_readiness(
@@ -375,11 +344,11 @@ def test_installed_command_corrects_a_dependency_and_generates_current_readiness
 ) -> None:
     project = temporary_git_repository
     state = _configure(project)
-    _register(installed_commands, project, _ticket("1", "foundation"))
+    _register(installed_commands, project, _task("1", "foundation"))
     _register(
         installed_commands,
         project,
-        _ticket("2", "feature", dependencies=["1"]),
+        _task("2", "feature", dependencies=["1"]),
     )
     evidence = project / "validation.md"
     evidence.write_text("The feature is independent.\n", encoding="utf-8")
@@ -389,12 +358,8 @@ def test_installed_command_corrects_a_dependency_and_generates_current_readiness
             "product_preserving": True,
             "caused_by_event_ids": [],
             "evidence_refs": ["validation.md"],
-            "tickets": [
-                {
-                    **_ticket("2", "feature"),
-                    "active": True,
-                    "replaced_by": [],
-                }
+            "tasks": [
+                _revised(_task("2", "feature"))
             ],
         },
     )
@@ -405,27 +370,27 @@ def test_installed_command_corrects_a_dependency_and_generates_current_readiness
 
     assert result.returncode == 0, result.stderr
     event = yaml.safe_load(result.stdout)
-    ticket_directory = state / "tickets" / "2-feature"
-    ticket_state = yaml.safe_load(
-        (ticket_directory / "ticket.yml").read_text(encoding="utf-8")
+    task_directory = state / "tasks" / "2-feature"
+    task_state = yaml.safe_load(
+        (task_directory / "task.yml").read_text(encoding="utf-8")
     )
-    assert ticket_state["dependencies"] == []
-    assert ticket_state["current_definition"] == (
+    assert _metadata((task_directory / task_state["current_definition"]).read_text(
+        encoding="utf-8"))["dependencies"] == []
+    assert task_state["current_definition"] == (
         f"definitions/{event['event_id']}.md"
     )
-    assert (ticket_directory / ticket_state["current_definition"]).is_file()
-    initial_snapshot = (ticket_directory / "ticket.md").read_text(encoding="utf-8")
-    assert "# Ticket 2: Feature" in initial_snapshot
-    assert "Dependencies: 1" in initial_snapshot
-    assert initial_snapshot.endswith("Deliver feature.\n")
+    assert (task_directory / task_state["current_definition"]).is_file()
+    initial_snapshot = (task_directory / "task.md").read_text(encoding="utf-8")
+    assert _metadata(initial_snapshot)["dependencies"] == ["1"]
+    assert initial_snapshot.endswith("---\nDeliver feature.")
     graph = _run(installed_commands, project, "graph")
     assert graph.returncode == 0, graph.stderr
     projection = yaml.safe_load(graph.stdout)
     expected = {
-        "tickets": [
+        "tasks": [
             {
-                "ticket_id": "1",
-                "ticket_name": "foundation",
+                "task_id": "1",
+                "task_name": "foundation",
                 "title": "Foundation",
                 "status": "pending",
                 "active": True,
@@ -434,8 +399,8 @@ def test_installed_command_corrects_a_dependency_and_generates_current_readiness
                 "replaced_by": [],
             },
             {
-                "ticket_id": "2",
-                "ticket_name": "feature",
+                "task_id": "2",
+                "task_name": "feature",
                 "title": "Feature",
                 "status": "pending",
                 "active": True,
@@ -445,21 +410,20 @@ def test_installed_command_corrects_a_dependency_and_generates_current_readiness
             },
         ]
     }
-    for actual, wanted in zip(projection["tickets"], expected["tickets"], strict=True):
+    for actual, wanted in zip(projection["tasks"], expected["tasks"], strict=True):
         assert {key: actual[key] for key in wanted} == wanted
-    assert all(node["parent_known"] is False for node in projection["tickets"])
     assert not (state / "dag.md").exists()
     assert not (state / "task-map.yml").exists()
 
 
-def test_installed_command_merges_two_tickets_into_one_new_ticket_atomically(
+def test_installed_command_merges_two_tasks_into_one_new_task_atomically(
     installed_commands: InstalledCommands,
     temporary_git_repository: Path,
 ) -> None:
     project = temporary_git_repository
     state = _configure(project)
-    _register(installed_commands, project, _ticket("1", "first-half"))
-    _register(installed_commands, project, _ticket("2", "second-half"))
+    _register(installed_commands, project, _task("1", "first-half"))
+    _register(installed_commands, project, _task("2", "second-half"))
     evidence = project / "merge-validation.md"
     evidence.write_text(
         "The halves are not independently deliverable.\n", encoding="utf-8"
@@ -470,22 +434,12 @@ def test_installed_command_merges_two_tickets_into_one_new_ticket_atomically(
             "product_preserving": True,
             "caused_by_event_ids": [],
             "evidence_refs": ["merge-validation.md"],
-            "tickets": [
-                {
-                    **_ticket("1", "first-half"),
-                    "active": False,
-                    "replaced_by": ["3"],
-                },
-                {
-                    **_ticket("2", "second-half"),
-                    "active": False,
-                    "replaced_by": ["3"],
-                },
-                {
-                    **_ticket("3", "combined-ticket"),
-                    "active": True,
-                    "replaced_by": [],
-                },
+            "tasks": [
+                _revised(_task("1", "first-half"), disposition="superseded",
+                         replaced_by=["3"], retirement_reason="Merged into Task 3."),
+                _revised(_task("2", "second-half"), disposition="superseded",
+                         replaced_by=["3"], retirement_reason="Merged into Task 3."),
+                _revised(_task("3", "combined-task"), None),
             ],
         },
     )
@@ -496,54 +450,42 @@ def test_installed_command_merges_two_tickets_into_one_new_ticket_atomically(
 
     assert result.returncode == 0, result.stderr
     event = yaml.safe_load(result.stdout)
-    assert event["affected_ticket_ids"] == ["1", "2", "3"]
-    states = {
-        path.parent.name: yaml.safe_load(path.read_text(encoding="utf-8"))
-        for path in (state / "tickets").glob("*/ticket.yml")
-    }
-    assert states["1-first-half"]["active"] is False
-    assert states["1-first-half"]["replaced_by"] == ["3"]
-    assert states["2-second-half"]["active"] is False
-    assert states["2-second-half"]["replaced_by"] == ["3"]
-    assert states["3-combined-ticket"]["active"] is True
-    assert states["3-combined-ticket"]["current_definition"] == "ticket.md"
+    assert event["affected_task_ids"] == ["1", "2", "3"]
     graph = yaml.safe_load(_run(installed_commands, project, "graph").stdout)
-    assert [ticket["ticket_id"] for ticket in graph["tickets"] if ticket["ready"]] == [
+    tasks = {task["task_id"]: task for task in graph["tasks"]}
+    for task_id in ("1", "2"):
+        assert tasks[task_id]["active"] is False
+        assert tasks[task_id]["disposition"] == "superseded"
+        assert tasks[task_id]["replaced_by"] == ["3"]
+    assert tasks["3"]["active"] is True
+    assert tasks["3"]["current_definition"] == "task.md"
+    assert (state / "tasks/3-combined-task/task.md").is_file()
+    assert [task["task_id"] for task in graph["tasks"] if task["ready"]] == [
         "3"
     ]
 
 
-def test_revision_keeps_created_ticket_evidence_unique_and_worldline_readable(
+def test_revision_keeps_created_task_evidence_unique_and_worldline_readable(
     installed_commands: InstalledCommands,
     temporary_git_repository: Path,
 ) -> None:
     project = temporary_git_repository
     _configure(project)
-    _register(installed_commands, project, _ticket("1", "first-half"))
-    _register(installed_commands, project, _ticket("2", "second-half"))
-    created_evidence = ".graphtraj/state/tickets/3-combined-ticket/ticket.md"
+    _register(installed_commands, project, _task("1", "first-half"))
+    _register(installed_commands, project, _task("2", "second-half"))
+    created_evidence = ".graphtraj/state/tasks/3-combined-task/task.md"
     revision = _write(
         project / "merge-with-created-evidence.yml",
         {
             "product_preserving": True,
             "caused_by_event_ids": [],
             "evidence_refs": [created_evidence],
-            "tickets": [
-                {
-                    **_ticket("1", "first-half"),
-                    "active": False,
-                    "replaced_by": ["3"],
-                },
-                {
-                    **_ticket("2", "second-half"),
-                    "active": False,
-                    "replaced_by": ["3"],
-                },
-                {
-                    **_ticket("3", "combined-ticket"),
-                    "active": True,
-                    "replaced_by": [],
-                },
+            "tasks": [
+                _revised(_task("1", "first-half"), disposition="superseded",
+                         replaced_by=["3"], retirement_reason="Merged into Task 3."),
+                _revised(_task("2", "second-half"), disposition="superseded",
+                         replaced_by=["3"], retirement_reason="Merged into Task 3."),
+                _revised(_task("3", "combined-task"), None),
             ],
         },
     )
@@ -561,21 +503,21 @@ def test_revision_keeps_created_ticket_evidence_unique_and_worldline_readable(
     assert event["evidence_refs"].count(created_evidence) == 1
 
 
-def test_revision_rejects_an_active_dependency_on_an_inactive_ticket_without_changes(
+def test_revision_rejects_a_dependency_on_an_unregistered_task_without_changes(
     installed_commands: InstalledCommands,
     temporary_git_repository: Path,
 ) -> None:
     project = temporary_git_repository
     state = _configure(project)
-    _register(installed_commands, project, _ticket("1", "foundation"))
+    _register(installed_commands, project, _task("1", "foundation"))
     _register(
         installed_commands,
         project,
-        _ticket("2", "feature", dependencies=["1"]),
+        _task("2", "feature", dependencies=["1"]),
     )
-    ticket_states = {
+    task_states = {
         path: path.read_bytes()
-        for path in (state / "tickets").glob("*/ticket.yml")
+        for path in (state / "tasks").glob("*/task.yml")
     }
     worldline = {
         path: path.read_bytes() for path in (state / "worldline").glob("*.jsonl")
@@ -588,12 +530,8 @@ def test_revision_rejects_an_active_dependency_on_an_inactive_ticket_without_cha
             "product_preserving": True,
             "caused_by_event_ids": [],
             "evidence_refs": ["invalid-validation.md"],
-            "tickets": [
-                {
-                    **_ticket("1", "foundation"),
-                    "active": False,
-                    "replaced_by": [],
-                }
+            "tasks": [
+                _revised(_task("2", "feature", dependencies=["9"]))
             ],
         },
     )
@@ -603,20 +541,20 @@ def test_revision_rejects_an_active_dependency_on_an_inactive_ticket_without_cha
     )
 
     assert result.returncode == 1
-    assert "inactive" in result.stderr
-    assert {path: path.read_bytes() for path in ticket_states} == ticket_states
+    assert "dangling" in result.stderr
+    assert {path: path.read_bytes() for path in task_states} == task_states
     assert {path: path.read_bytes() for path in worldline} == worldline
-    assert not tuple((state / "tickets" / "1-foundation").glob("definitions/*"))
+    assert not tuple((state / "tasks" / "2-feature").glob("definitions/*"))
 
 
-def test_revision_with_missing_evidence_rolls_back_ticket_and_worldline(
+def test_revision_with_missing_evidence_rolls_back_task_and_worldline(
     installed_commands: InstalledCommands,
     temporary_git_repository: Path,
 ) -> None:
     project = temporary_git_repository
     state = _configure(project)
-    _register(installed_commands, project, _ticket("1", "foundation"))
-    state_path = state / "tickets" / "1-foundation" / "ticket.yml"
+    _register(installed_commands, project, _task("1", "foundation"))
+    state_path = state / "tasks" / "1-foundation" / "task.yml"
     before_state = state_path.read_bytes()
     shard = next((state / "worldline").glob("*.jsonl"))
     before_worldline = shard.read_bytes()
@@ -626,13 +564,8 @@ def test_revision_with_missing_evidence_rolls_back_ticket_and_worldline(
             "product_preserving": True,
             "caused_by_event_ids": [],
             "evidence_refs": ["missing.md"],
-            "tickets": [
-                {
-                    **_ticket("1", "foundation", dependencies=[]),
-                    "title": "Corrected Foundation",
-                    "active": True,
-                    "replaced_by": [],
-                }
+            "tasks": [
+                _revised({**_task("1", "foundation"), "title": "Corrected Foundation"})
             ],
         },
     )
@@ -647,19 +580,19 @@ def test_revision_with_missing_evidence_rolls_back_ticket_and_worldline(
     assert not tuple((state_path.parent / "definitions").glob("*.md"))
 
 
-def test_installed_command_records_a_validated_ticket_state_change(
+def test_installed_command_records_a_validated_task_state_change(
     installed_commands: InstalledCommands,
     temporary_git_repository: Path,
 ) -> None:
     project = temporary_git_repository
     state = _configure(project)
-    _register(installed_commands, project, _ticket("1", "foundation"))
+    _register(installed_commands, project, _task("1", "foundation"))
     evidence = project / "readiness.md"
     evidence.write_text("Main confirmed dispatch readiness.\n", encoding="utf-8")
     change = _write(
         project / "state-change.yml",
         {
-            "ticket_id": "1",
+            "task_id": "1",
             "status": "ready",
             "active_team_ordinal": None,
             "worktree": None,
@@ -676,7 +609,7 @@ def test_installed_command_records_a_validated_ticket_state_change(
 
     assert result.returncode == 0, result.stderr
     event = yaml.safe_load(result.stdout)
-    assert event["event"] == "ticket-state-changed"
+    assert event["event"] == "task-state-changed"
     assert event["from_status"] == "pending"
     assert event["to_status"] == "ready"
     assert event["active_team_ordinal"] is None
@@ -687,7 +620,7 @@ def test_installed_command_records_a_validated_ticket_state_change(
         "event",
         "caused_by_event_ids",
         "evidence_refs",
-        "ticket_id",
+        "task_id",
         "from_status",
         "to_status",
         "active_team_ordinal",
@@ -696,7 +629,7 @@ def test_installed_command_records_a_validated_ticket_state_change(
         "current_candidate",
     }
     current = yaml.safe_load(
-        (state / "tickets" / "1-foundation" / "ticket.yml").read_text(
+        (state / "tasks" / "1-foundation" / "task.yml").read_text(
             encoding="utf-8"
         )
     )
@@ -705,21 +638,21 @@ def test_installed_command_records_a_validated_ticket_state_change(
     assert current["current_candidate"] is None
 
 
-def test_generic_ticket_updates_cannot_unlock_dependents_without_integration(
+def test_generic_task_updates_cannot_unlock_dependents_without_integration(
     installed_commands: InstalledCommands,
     temporary_git_repository: Path,
 ) -> None:
     project = temporary_git_repository
     _configure(project)
-    _register(installed_commands, project, _ticket("1", "foundation"))
+    _register(installed_commands, project, _task("1", "foundation"))
     _register(
         installed_commands,
         project,
-        _ticket("2", "feature", dependencies=["1"]),
+        _task("2", "feature", dependencies=["1"]),
     )
 
     before = yaml.safe_load(_run(installed_commands, project, "graph").stdout)
-    assert next(item for item in before["tickets"] if item["ticket_id"] == "2")[
+    assert next(item for item in before["tasks"] if item["task_id"] == "2")[
         "ready"
     ] is False
 
@@ -732,6 +665,6 @@ def test_generic_ticket_updates_cannot_unlock_dependents_without_integration(
         _change_status(installed_commands, project, "1", status)
 
     after = yaml.safe_load(_run(installed_commands, project, "graph").stdout)
-    assert next(item for item in after["tickets"] if item["ticket_id"] == "2")[
+    assert next(item for item in after["tasks"] if item["task_id"] == "2")[
         "ready"
     ] is False

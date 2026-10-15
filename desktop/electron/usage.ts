@@ -2,12 +2,12 @@ import type { ActivityEvent } from './activity';
 
 export type Tokens = Partial<Record<'input' | 'input_uncached' | 'output' | 'cache_read' | 'cache_write' | 'reasoning', number>>;
 export type Call = {
-  key: string; project: string; ticket: string; agent: string; session: string;
+  key: string; project: string; task: string; agent: string; session: string;
   model: string; time: string | null; tokens: Tokens; phase: string; offset: number;
   counter: boolean; cumulative?: Tokens; baseline?: Tokens | null; attributable: boolean;
   source?: ActivityEvent['source'] & { event_id?: string };
 };
-export type Filters = { ticket?: string; agent?: string; model?: string; from?: string; to?: string };
+export type Filters = { task?: string; agent?: string; model?: string; from?: string; to?: string };
 export const metrics = ['input', 'output', 'cache_read', 'cache_write'] as const;
 
 /** Calendar dates use the viewer's local timezone, including DST boundaries. */
@@ -55,7 +55,7 @@ export function collect(calls: Map<string, Call>, project: string, events: Activ
     const cumulative = usage.cumulative ? convert(usage.cumulative as Record<string, number>) : undefined;
     const baseline = usage.previous_cumulative === undefined ? undefined : usage.previous_cumulative === null
       ? null : convert(usage.previous_cumulative as Record<string, number>);
-    const call: Call = { key, project, session, ticket: String(usage.ticket_id ?? ''),
+    const call: Call = { key, project, session, task: String(usage.task_id ?? ''),
       agent: String(usage.agent ?? ''), model: event.model || 'Unknown model',
       time: old?.counter ? old.time : event.time == null || !Number.isFinite(new Date(event.time).getTime()) ? null : new Date(event.time).toISOString(),
       tokens: { ...old?.tokens, ...tokens }, phase: usage.phase, offset: event.source.offset, counter: Boolean(cumulative), cumulative, baseline, source: { ...event.source, event_id: event.id },
@@ -111,7 +111,7 @@ export function records(calls: Map<string, Call>, filters: Filters = {}): Call[]
       result.push(row); previous.set(key, { totals: call.cumulative, row });
     }
   }
-  return result.filter(call => (!filters.ticket || call.ticket === filters.ticket) &&
+  return result.filter(call => (!filters.task || call.task === filters.task) &&
     (!filters.agent || call.agent === filters.agent) && (!filters.model || call.model === filters.model) &&
     (!filters.from || call.time !== null && new Date(call.time).getTime() >= boundary(filters.from, false)) &&
     (!filters.to || call.time !== null && new Date(call.time).getTime() <= boundary(filters.to, true)));

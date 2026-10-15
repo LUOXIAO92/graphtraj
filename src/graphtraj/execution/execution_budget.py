@@ -38,7 +38,7 @@ _BUDGET_FIELDS = frozenset(
         "on_exceed",
     }
 )
-# Already accepted Tickets retain their estimation-only tier fields.
+# Already accepted Tasks retain their estimation-only tier fields.
 _LEGACY_BUDGET_FIELDS = frozenset({"engineer_tier", "tier_reason"})
 
 
@@ -75,7 +75,7 @@ def split_execution_budget_front_matter(
 
 
 def read_execution_budget(body: str) -> ExecutionBudget | None:
-    """Read the optional task budget at the very beginning of a Ticket body."""
+    """Read the optional task budget at the very beginning of a Task body."""
 
     front_matter = split_execution_budget_front_matter(body)
     if front_matter is None:
@@ -95,21 +95,21 @@ def read_execution_budget(body: str) -> ExecutionBudget | None:
 
 
 def execution_budget_monitor(
-    ticket_directory: Path, ticket_id: str, ticket_name: str
+    task_directory: Path, task_id: str, task_name: str
 ) -> "ExecutionBudgetMonitor | None":
-    """Return a monitor only for a registered Ticket with a budget."""
+    """Return a monitor only for a registered Task with a budget."""
 
-    if not (ticket_directory / "ticket.yml").is_file():
+    if not (task_directory / "task.yml").is_file():
         return None
     try:
-        budget = _current_budget(ticket_directory)
+        budget = _current_budget(task_directory)
     except ExecutionBudgetError as error:
         raise RunnerError(
-            "TICKET_FILE_INVALID", "The selected Ticket execution budget is invalid."
+            "TASK_FILE_INVALID", "The selected Task execution budget is invalid."
         ) from error
     if budget is None:
         return None
-    return ExecutionBudgetMonitor(ticket_directory, ticket_id, ticket_name)
+    return ExecutionBudgetMonitor(task_directory, task_id, task_name)
 
 
 def execution_budget_monitor_from_environment(
@@ -118,18 +118,18 @@ def execution_budget_monitor_from_environment(
     """Resolve one resumed Session's monitor from its retained Team context."""
 
     evidence = os.environ.get("GRAPHTRAJ_EVIDENCE")
-    ticket_id = mapping.get("ticket_id")
-    ticket_name = os.environ.get("GRAPHTRAJ_TICKET_NAME")
+    task_id = mapping.get("task_id")
+    task_name = os.environ.get("GRAPHTRAJ_TASK_NAME")
     if (
         not isinstance(evidence, str)
         or not evidence
-        or not isinstance(ticket_id, str)
-        or not ticket_id
-        or not isinstance(ticket_name, str)
-        or not ticket_name
+        or not isinstance(task_id, str)
+        or not task_id
+        or not isinstance(task_name, str)
+        or not task_name
     ):
         return None
-    return execution_budget_monitor(Path(evidence), ticket_id, ticket_name)
+    return execution_budget_monitor(Path(evidence), task_id, task_name)
 
 
 _NOTICE_OUTPUT: ContextVar[int | None] = ContextVar("budget_notice_output", default=None)
@@ -181,13 +181,13 @@ def _session_key(role: str) -> str:
 class ExecutionBudgetMonitor:
     """Persist actual use and emit each budget threshold crossing once."""
 
-    def __init__(self, ticket_directory: Path, ticket_id: str, ticket_name: str) -> None:
-        self.ticket_directory = ticket_directory
-        self.ticket_id = ticket_id
-        self.ticket_name = ticket_name
+    def __init__(self, task_directory: Path, task_id: str, task_name: str) -> None:
+        self.task_directory = task_directory
+        self.task_id = task_id
+        self.task_name = task_name
 
     def record_session(self, role: str, stage: str) -> None:
-        """Count one created Session against the shared Ticket budget."""
+        """Count one created Session against the shared Task budget."""
         self._observe(role, stage, session=True)
 
     def record_correction(self, role: str) -> None:
@@ -198,45 +198,45 @@ class ExecutionBudgetMonitor:
         return self._observe(role, stage)
 
     def is_stopped(self) -> bool:
-        lock_path = self.ticket_directory / ".execution-budget.lock"
+        lock_path = self.task_directory / ".execution-budget.lock"
         with lock_path.open("a+", encoding="utf-8") as lock:
             file_lock.flock(lock.fileno(), file_lock.LOCK_EX)
             try:
-                budget = _current_budget(self.ticket_directory)
+                budget = _current_budget(self.task_directory)
                 if budget is None:
                     return False
-                state, changed = _read_usage(self.ticket_directory, budget)
+                state, changed = _read_usage(self.task_directory, budget)
                 if changed:
                     write_yaml_durably(
-                        self.ticket_directory / "execution-budget.yml", state
+                        self.task_directory / "execution-budget.yml", state
                     )
                 return state["stopped"]
             finally:
                 file_lock.flock(lock.fileno(), file_lock.LOCK_UN)
 
     def continue_after_stop(self) -> None:
-        """Clear one sampled stop while retaining the Ticket's accounting."""
+        """Clear one sampled stop while retaining the Task's accounting."""
 
-        lock_path = self.ticket_directory / ".execution-budget.lock"
+        lock_path = self.task_directory / ".execution-budget.lock"
         with lock_path.open("a+", encoding="utf-8") as lock:
             file_lock.flock(lock.fileno(), file_lock.LOCK_EX)
             try:
-                budget = _current_budget(self.ticket_directory)
+                budget = _current_budget(self.task_directory)
                 if budget is None:
                     raise RunnerError(
                         "invalid-input",
-                        "Explicit continuation requires a Ticket execution budget.",
+                        "Explicit continuation requires a Task execution budget.",
                     )
-                state, _ = _read_usage(self.ticket_directory, budget)
+                state, _ = _read_usage(self.task_directory, budget)
                 if not state["stopped"]:
                     raise RunnerError(
                         "invalid-input",
-                        "Explicit continuation requires a sampled stopped Ticket.",
+                        "Explicit continuation requires a sampled stopped Task.",
                     )
                 state["budget"] = budget.definition
                 state["stopped"] = False
                 write_yaml_durably(
-                    self.ticket_directory / "execution-budget.yml", state
+                    self.task_directory / "execution-budget.yml", state
                 )
             finally:
                 file_lock.flock(lock.fileno(), file_lock.LOCK_UN)
@@ -282,17 +282,17 @@ class ExecutionBudgetMonitor:
 
     def _mark_channel_written(self, key: str) -> None:
         """Retain a caller-channel write without asserting native receipt."""
-        with (self.ticket_directory / ".execution-budget.lock").open("a+") as lock:
+        with (self.task_directory / ".execution-budget.lock").open("a+") as lock:
             file_lock.flock(lock.fileno(), file_lock.LOCK_EX)
             try:
-                budget = _current_budget(self.ticket_directory)
+                budget = _current_budget(self.task_directory)
                 if budget is None:
                     return
-                state, _ = _read_usage(self.ticket_directory, budget)
+                state, _ = _read_usage(self.task_directory, budget)
                 for notice in state["parent_notices"]:
                     if notice["key"] == key:
                         notice["channel_written"] = True
-                write_yaml_durably(self.ticket_directory / "execution-budget.yml", state)
+                write_yaml_durably(self.task_directory / "execution-budget.yml", state)
             finally:
                 file_lock.flock(lock.fileno(), file_lock.LOCK_UN)
 
@@ -302,7 +302,7 @@ class ExecutionBudgetMonitor:
         """Serialize delivery without holding the budget lock across the callback."""
         # Session recovery reads the budget while holding its launch lock.
         # Delivery may need that Session lock, so use a separate persistent lock.
-        lock_path = self.ticket_directory / ".execution-budget-notices.lock"
+        lock_path = self.task_directory / ".execution-budget-notices.lock"
         with lock_path.open("a+", encoding="utf-8") as lock:
             file_lock.flock(lock.fileno(), file_lock.LOCK_EX)
             try:
@@ -317,14 +317,14 @@ class ExecutionBudgetMonitor:
 
     def pending_parent_notices(self) -> list[dict[str, Any]]:
         """Return retained notices without confirmed parent receipt."""
-        lock_path = self.ticket_directory / ".execution-budget.lock"
+        lock_path = self.task_directory / ".execution-budget.lock"
         with lock_path.open("a+", encoding="utf-8") as lock:
             file_lock.flock(lock.fileno(), file_lock.LOCK_EX)
             try:
-                budget = _current_budget(self.ticket_directory)
+                budget = _current_budget(self.task_directory)
                 if budget is None:
                     return []
-                state, _ = _read_usage(self.ticket_directory, budget)
+                state, _ = _read_usage(self.task_directory, budget)
                 return [
                     dict(notice)
                     for notice in state["parent_notices"]
@@ -335,19 +335,19 @@ class ExecutionBudgetMonitor:
 
     def mark_parent_notices_delivered(self, keys: list[str]) -> None:
         """Record only keys acknowledged by the bound parent transport."""
-        lock_path = self.ticket_directory / ".execution-budget.lock"
+        lock_path = self.task_directory / ".execution-budget.lock"
         with lock_path.open("a+", encoding="utf-8") as lock:
             file_lock.flock(lock.fileno(), file_lock.LOCK_EX)
             try:
-                budget = _current_budget(self.ticket_directory)
+                budget = _current_budget(self.task_directory)
                 if budget is None:
                     return
-                state, _ = _read_usage(self.ticket_directory, budget)
+                state, _ = _read_usage(self.task_directory, budget)
                 for notice in state["parent_notices"]:
                     if notice["key"] in keys:
                         notice["delivered"] = True
                 write_yaml_durably(
-                    self.ticket_directory / "execution-budget.yml", state
+                    self.task_directory / "execution-budget.yml", state
                 )
             finally:
                 file_lock.flock(lock.fileno(), file_lock.LOCK_UN)
@@ -361,20 +361,20 @@ class ExecutionBudgetMonitor:
         correction: bool = False,
     ) -> bool:
         notices = []
-        lock_path = self.ticket_directory / ".execution-budget.lock"
+        lock_path = self.task_directory / ".execution-budget.lock"
         with lock_path.open("a+", encoding="utf-8") as lock:
             file_lock.flock(lock.fileno(), file_lock.LOCK_EX)
             try:
                 try:
-                    budget = _current_budget(self.ticket_directory)
+                    budget = _current_budget(self.task_directory)
                 except ExecutionBudgetError as error:
                     raise RunnerError(
-                        "TICKET_FILE_INVALID",
-                        "The selected Ticket execution budget is invalid.",
+                        "TASK_FILE_INVALID",
+                        "The selected Task execution budget is invalid.",
                     ) from error
                 if budget is None:
                     return False
-                state, created = _read_usage(self.ticket_directory, budget)
+                state, created = _read_usage(self.task_directory, budget)
                 changed = created or state["budget"] != budget.definition
                 if changed:
                     state["budget"] = budget.definition
@@ -390,7 +390,7 @@ class ExecutionBudgetMonitor:
                     state["stopping_checks"], state["stopped"]
                 )
                 notices = _new_notices(
-                    state, budget, self.ticket_id, self.ticket_name, role, stage
+                    state, budget, self.task_id, self.task_name, role, stage
                 )
                 changed = changed or stochastic_before != (
                     state["stopping_checks"], state["stopped"]
@@ -412,20 +412,20 @@ class ExecutionBudgetMonitor:
                     changed = True
                 if changed:
                     write_yaml_durably(
-                        self.ticket_directory / "execution-budget.yml", state
+                        self.task_directory / "execution-budget.yml", state
                     )
             finally:
                 file_lock.flock(lock.fileno(), file_lock.LOCK_UN)
         return state["stopped"]
 
 
-def _current_budget(ticket_directory: Path) -> ExecutionBudget | None:
+def _current_budget(task_directory: Path) -> ExecutionBudget | None:
     try:
-        state = yaml.safe_load((ticket_directory / "ticket.yml").read_text(encoding="utf-8"))
-        definition = ticket_directory / state["current_definition"]
+        state = yaml.safe_load((task_directory / "task.yml").read_text(encoding="utf-8"))
+        definition = task_directory / state["current_definition"]
         body = definition.read_text(encoding="utf-8")
     except (KeyError, OSError, TypeError, yaml.YAMLError) as error:
-        raise ExecutionBudgetError("Ticket budget snapshot is unreadable") from error
+        raise ExecutionBudgetError("Task budget snapshot is unreadable") from error
     return read_execution_budget(body)
 
 
@@ -445,9 +445,9 @@ def _emit_notice(output: str) -> bool:
 
 
 def _read_usage(
-    ticket_directory: Path, budget: ExecutionBudget
+    task_directory: Path, budget: ExecutionBudget
 ) -> tuple[dict[str, Any], bool]:
-    path = ticket_directory / "execution-budget.yml"
+    path = task_directory / "execution-budget.yml"
     if not path.exists():
         definition = budget.definition["execution_budget"]
         base_allowance = min(
@@ -479,7 +479,7 @@ def _read_usage(
         state = yaml.safe_load(path.read_text(encoding="utf-8"))
     except (OSError, UnicodeError, yaml.YAMLError) as error:
         raise RunnerError(
-            "TICKET_FILE_INVALID", "The Ticket execution budget accounting is invalid."
+            "TASK_FILE_INVALID", "The Task execution budget accounting is invalid."
         ) from error
     legacy = set(state) == {
         "started_at", "budget", "sessions", "corrections", "notifications"
@@ -546,7 +546,7 @@ def _read_usage(
         )
     ):
         raise RunnerError(
-            "TICKET_FILE_INVALID", "The Ticket execution budget accounting is invalid."
+            "TASK_FILE_INVALID", "The Task execution budget accounting is invalid."
         )
     return state, legacy
 
@@ -554,8 +554,8 @@ def _read_usage(
 def _new_notices(
     state: dict[str, Any],
     budget: ExecutionBudget,
-    ticket_id: str,
-    ticket_name: str,
+    task_id: str,
+    task_name: str,
     role: str,
     stage: str,
 ) -> list[dict[str, Any]]:
@@ -619,7 +619,7 @@ def _new_notices(
             notice = {
                     "type": "execution-budget-exceeded",
                     "occurred_at": _event_instant(observed_at),
-                    "ticket": {"ticket_id": ticket_id, "ticket_name": ticket_name},
+                    "task": {"task_id": task_id, "task_name": task_name},
                     "threshold": {"kind": kind, "limit": limit},
                     "actual": actual,
                     "stage": stage,
@@ -627,7 +627,7 @@ def _new_notices(
                     "notification_key": key,
                 }
             notice["message"] = message or (
-                f"System notice: Ticket {ticket_id} exceeded {kind} ({limit})."
+                f"System notice: Task {task_id} exceeded {kind} ({limit})."
             )
             notices.append(notice)
     return notices

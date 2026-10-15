@@ -8,7 +8,7 @@ import yaml
 
 from conftest import FakeCodex, InstalledCommands, run_process
 from runner_fixtures import configure_harness
-from test_ticket_graph import _register, _change_status, _ticket
+from test_task_graph import _register, _change_status, _task
 
 
 def _observed_runtime(fake: FakeCodex, tmp_path: Path) -> None:
@@ -52,7 +52,7 @@ def test_native_creation_registers_members_before_execution(
     root, _, _, env = configure_harness(
         installed_commands, temporary_git_repository, fake_codex, tmp_path,
     )
-    _register(installed_commands, root, _ticket('148', 'creation-order'))
+    _register(installed_commands, root, _task('148', 'creation-order'))
     _change_status(installed_commands, root, '148', 'ready')
     _observed_runtime(fake_codex, tmp_path)
     observation = tmp_path / 'member-observations.jsonl'
@@ -67,17 +67,17 @@ def test_native_creation_registers_members_before_execution(
     elif failure:
         env['FAIL_MEMBER_ROLE'] = failure
     batch = root / 'batch.yml'
-    batch.write_text('tasks:\n  - ticket_id: "148"\n    ticket_name: creation-order\n    role: coding-team.team-leader\n')
+    batch.write_text('tasks:\n  - task_id: "148"\n    task_name: creation-order\n    role: coding-team.team-leader\n')
     result = run_process(
         [str(installed_commands.runner), '--swarm-input', str(batch)],
         cwd=root, env=env, timeout=45,
     )
     assert result.returncode == (1 if failure in {'engineer', 'registration'} else 0), result.stderr
-    ticket = root / '.graphtraj/state/tickets/148-creation-order'
+    task = root / '.graphtraj/state/tasks/148-creation-order'
     mappings = [yaml.safe_load(path.read_text()) for path in (root / '.graphtraj/runner/sessions').glob('*/mapping.yml')]
     if failure == 'registration':
         assert not observation.exists()
-        assert not (ticket / 'teams/1/team.yml').exists()
+        assert not (task / 'teams/1/team.yml').exists()
         assert len(mappings) == 1 and mappings[0]['session']
         terminal = yaml.safe_load((root / '.graphtraj/runner/sessions' / mappings[0]['alias'] / 'execution.yml').read_text())
         assert terminal['error']['code'] == 'MEMBER_REGISTRATION_FAILED'
@@ -94,7 +94,7 @@ def test_native_creation_registers_members_before_execution(
         assert not observation.exists()
         return
     rows = [json.loads(line) for line in observation.read_text().splitlines()]
-    team = yaml.safe_load((ticket / 'teams/1/team.yml').read_text())
+    team = yaml.safe_load((task / 'teams/1/team.yml').read_text())
     events = [json.loads(line) for shard in (root / '.graphtraj/state/worldline').glob('*.jsonl') for line in shard.read_text().splitlines()]
     actual = {entry['session_ref'] for entry in team['members'].values()}
     assert None not in actual
@@ -113,7 +113,7 @@ def test_native_creation_registers_members_before_execution(
 
     if failure is None:
         # An ordinary process cannot impersonate the trusted creating Worker.
-        before = (ticket / 'teams/1/team.yml').read_bytes()
+        before = (task / 'teams/1/team.yml').read_bytes()
         alias = rows[0]['alias']
         directory = root / '.graphtraj/runner/sessions' / alias
         attempted = run_process(
@@ -127,4 +127,4 @@ def test_native_creation_registers_members_before_execution(
         )
         assert attempted.returncode != 0
         assert 'owning Runner creation job' in attempted.stderr
-        assert (ticket / 'teams/1/team.yml').read_bytes() == before
+        assert (task / 'teams/1/team.yml').read_bytes() == before

@@ -55,7 +55,7 @@ try {
   // Never replace an existing human index, even on a misconfigured runner.
   await assert.rejects(fs.access(path.join(os.homedir(), '.graphtraj/projects.json')), { code: 'ENOENT' });
   const project = await fs.realpath(await fixtures.makeProject(path.join(work, 'usage-project'), 'usage-project'));
-  const trace = await fixtures.recordActivity(project, { ticketId: '1', ticketName: 'usage-project',
+  const trace = await fixtures.recordActivity(project, { taskId: '1', taskName: 'usage-project',
     alias: 'usage293-handover0-engineer@engineer', records: [
       { type: 'turn_context', payload: { model: 'gpt-5.3-codex', turn_id: 'controlled-usage' } }, count(100),
     ] });

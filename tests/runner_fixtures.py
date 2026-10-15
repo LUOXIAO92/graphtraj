@@ -111,9 +111,9 @@ def retained_state(path: Path) -> bytes | str:
 @contextlib.contextmanager
 def engineer_probe(commands, harness, fake_codex, environment, *, body="Probe the Adapter.", executable=None):
     """Dispatch a real Team Leader with only the Engineer's Runtime substituted."""
-    from test_ticket_graph import _change_status, _register, _ticket
+    from test_task_graph import _change_status, _register, _task
 
-    _register(commands, harness, {**_ticket("82", "adapter-probe"), "body": body})
+    _register(commands, harness, {**_task("82", "adapter-probe"), "body": body})
     _change_status(commands, harness, "82", "ready")
     driver = fake_codex.executable.with_name("controlled-codex")
     shutil.copyfile(fake_codex.executable, driver)
@@ -135,7 +135,7 @@ def engineer_probe(commands, harness, fake_codex, environment, *, body="Probe th
     env["PATH"] = str(fake_codex.executable.parent) + os.pathsep + env.get("PATH", "")
     batch = harness / "probe-batch.yml"
     batch.write_text(yaml.safe_dump({"tasks": [{
-        "ticket_id": "82", "ticket_name": "adapter-probe", "role": "team-leader",
+        "task_id": "82", "task_name": "adapter-probe", "role": "team-leader",
     }]}))
     with (harness / "probe-output.log").open("w+") as output:
         process = subprocess.Popen(
@@ -181,14 +181,14 @@ def engineer_probe(commands, harness, fake_codex, environment, *, body="Probe th
             process.wait(timeout=60)
 
 
-def wait_for_ticket_status(commands: InstalledCommands, root: Path, ticket_id: str, status: str) -> None:
+def wait_for_task_status(commands: InstalledCommands, root: Path, task_id: str, status: str) -> None:
     """Wait for this controlled asynchronous task's public delivery outcome."""
     deadline = time.monotonic() + 20
     while time.monotonic() < deadline:
-        result = run_process([str(commands.product), 'ticket', 'graph'], cwd=root)
+        result = run_process([str(commands.product), 'task', 'graph'], cwd=root)
         result.check_returncode()
-        tickets = yaml.safe_load(result.stdout)['tickets']
-        current = next(ticket for ticket in tickets if ticket['ticket_id'] == ticket_id)
+        tasks = yaml.safe_load(result.stdout)['tasks']
+        current = next(task for task in tasks if task['task_id'] == task_id)
         if current['status'] == status:
             return
         time.sleep(.05)

@@ -26,14 +26,14 @@ from graphtraj.graph.delivery_worldline import (
     append_project_worldline_event,
     read_worldline,
 )
-from graphtraj.graph.ticket_graph import (
+from graphtraj.graph.task_graph import (
     read_graph,
-    register_ticket,
-    revise_tickets,
-    update_ticket_state,
-    complete_ticket,
+    register_task,
+    revise_tasks,
+    update_task_state,
+    complete_task,
 )
-from graphtraj.teams.ticket_integration import integrate_ticket
+from graphtraj.teams.task_integration import integrate_task
 from graphtraj.workspace.git_repository import GitRepositoryError
 from graphtraj.workspace.project_initialization import (
     ProjectSetupError,
@@ -60,8 +60,8 @@ _ALIAS_SCHEMA = {
 _SWARM_TASK_SCHEMA = {
     "type": "object",
     "properties": {
-        "ticket_id":   {"type": "string"},
-        "ticket_name": {"type": "string"},
+        "task_id":   {"type": "string"},
+        "task_name": {"type": "string"},
         "role":        {"type": ["string", "object"]},
         "instruction": {"type": "string"},
     },
@@ -81,7 +81,7 @@ _SEND_SCHEMA = {
         "instruction":         {"type": "string"},
         "caused_by_event_ids": {"type": "array", "items": {"type": "string"}},
         "reports_only":        {"type": "boolean", "default": False,
-                                "description": "Collect existing reports without sampling the Ticket budget."},
+                                "description": "Collect existing reports without sampling the Task budget."},
     },
     "required":             ["alias", "instruction"],
     "additionalProperties": False,
@@ -89,12 +89,12 @@ _SEND_SCHEMA = {
 _CONTINUE_SCHEMA = {
     "type": "object",
     "properties": {
-        "ticket_id":           {"type": "string"},
+        "task_id":           {"type": "string"},
         "caused_by_event_ids": {"type": "array", "items": {"type": "string"}},
         "budget_only":         {"type": "boolean", "default": False,
                                 "description": "Restore budget permission without executing old Sessions."},
     },
-    "required":             ["ticket_id", "caused_by_event_ids"],
+    "required":             ["task_id", "caused_by_event_ids"],
     "additionalProperties": False,
 }
 _REQUESTS_SCHEMA = {
@@ -144,7 +144,7 @@ _DELIVERY_STATE_SCHEMA = {
 _INTEGRATE_SCHEMA = {
     "type": "object",
     "properties": {
-        "ticket_id":          {"type": "string"},
+        "task_id":          {"type": "string"},
         "validation_command": {
             "type": "array", "minItems": 1, "items": {"type": "string"},
         },
@@ -155,7 +155,7 @@ _INTEGRATE_SCHEMA = {
         "role":               {"type": ["string", "object", "null"],
                                "description": "Explicit configured role reference or inline YAML role definition for conflict work."},
     },
-    "required":             ["ticket_id", "validation_command"],
+    "required":             ["task_id", "validation_command"],
     "additionalProperties": False,
 }
 
@@ -204,48 +204,84 @@ def register_tool(
 
 
 def read_current_graph(arguments: Mapping[str, Any], *, cwd: Path | None = None) -> ToolResult:
-    """Return the current Ticket DAG and readiness view for the project."""
+    """Return the current Task DAG and readiness view for the project.
+
+    The current view defaults to the calling Session's own Task; Main, the
+    human desktop and helper forks have none and see the whole project's open work.
+    """
+    from graphtraj.execution.runner_models import RunnerError
+    from graphtraj.execution.runner_status import caller_alias, read_alias_mapping
+    from graphtraj.workspace.runner_project import discover_runner_directory
 
     if arguments.get("schema", False):
         return ToolResult(TASK_SCHEMA)
     configuration = load_project_configuration(cwd or Path.cwd())
-    return ToolResult(read_graph(configuration.state))
+    view          = arguments.get("view", "current")
+    task_id       = arguments.get("task_id")
+    if view == "current" and task_id is None:
+        runner = discover_runner_directory(configuration.harness_root)
+        caller = caller_alias(runner)
+        try:
+            if caller is not None:
+                task_id = read_alias_mapping(runner, caller)[0]["task_id"]
+        except RunnerError as error:
+            # Helper and checker forks act for a caller without their own Task.
+            if error.code != "alias-not-found":
+                raise
+    return ToolResult(read_graph(
+        configuration.state, view, task_id, arguments.get("details", []),
+    ))
 
 
-def register_current_ticket(arguments: Mapping[str, Any]) -> ToolResult:
-    """Register one accepted Ticket definition in the project graph."""
+def register_current_task(arguments: Mapping[str, Any]) -> ToolResult:
+    """Register one accepted Task definition in the project graph."""
 
     configuration = load_project_configuration(Path.cwd())
-    directory = register_ticket(
+    directory = register_task(
         configuration.state, configuration.harness_root, arguments
     )
-    return ToolResult({"ticket_directory": str(directory)})
+    return ToolResult({"task_directory": str(directory)})
 
 
-def revise_current_tickets(arguments: Mapping[str, Any]) -> ToolResult:
+def revise_current_tasks(arguments: Mapping[str, Any]) -> ToolResult:
     """Apply one validated product-preserving Task Graph revision."""
 
     configuration = load_project_configuration(Path.cwd())
-    recorded = revise_tickets(
+    recorded = revise_tasks(
         configuration.state, configuration.harness_root, arguments
     )
     return ToolResult(recorded)
 
 
-def complete_current_ticket(arguments: Mapping[str, Any]) -> ToolResult:
+def complete_current_task(arguments: Mapping[str, Any]) -> ToolResult:
     """Record independent task acceptance without manufacturing file delivery."""
     configuration = load_project_configuration(Path.cwd())
-    return ToolResult(complete_ticket(configuration.state, configuration.harness_root, arguments))
+    return ToolResult(complete_task(configuration.state, configuration.harness_root, arguments))
 
 
-def update_current_ticket_state(arguments: Mapping[str, Any]) -> ToolResult:
-    """Apply one evidence-backed current Ticket state transition."""
+def update_current_task_state(arguments: Mapping[str, Any]) -> ToolResult:
+    """Apply one evidence-backed current Task state transition."""
 
     configuration = load_project_configuration(Path.cwd())
-    recorded = update_ticket_state(
+    recorded = update_task_state(
         configuration.state, configuration.harness_root, arguments
     )
     return ToolResult(recorded)
+
+
+def backup_current_task(arguments: Mapping[str, Any], *, cwd: Path | None = None) -> ToolResult:
+    """Publish one local Task to its explicitly mapped GitHub Issue."""
+    from graphtraj.graph.github_backup import backup_task
+
+    configuration = load_project_configuration(cwd or Path.cwd())
+    document, failed = backup_task(
+        configuration.state,
+        _string_argument(arguments, "task_id"),
+        _string_argument(arguments, "repository"),
+        arguments.get("host") or "github.com",
+        arguments.get("confirm_remote"),
+    )
+    return ToolResult(document, failed=failed)
 
 
 def preview_or_apply_project_setup(
@@ -354,10 +390,10 @@ def apply_state_request(
     return ToolResult(recorded)
 
 
-def integrate_current_ticket(
+def integrate_current_task(
     arguments: Mapping[str, Any], *, cwd: Path | None = None
 ) -> ToolResult:
-    """Merge or recover an accepted Ticket under its actual task authority."""
+    """Merge or recover an accepted Task under its actual task authority."""
 
     validation_command = arguments.get("validation_command")
     if not isinstance(validation_command, list) or any(
@@ -366,9 +402,9 @@ def integrate_current_ticket(
         raise ValueError("validation_command must be a list of strings")
     try:
         configuration = load_project_configuration(cwd or Path.cwd())
-        result = integrate_ticket(
+        result = integrate_task(
             configuration,
-            _string_argument(arguments, "ticket_id"),
+            _string_argument(arguments, "task_id"),
             tuple(validation_command),
             _optional_string_argument(arguments, "resolve_conflict"),
             arguments.get("role"),
@@ -487,7 +523,7 @@ def launch_swarm_tool(
 ) -> ToolResult:
     """Activate one swarm input; the returned identity stays owned.
 
-    The calling Session's Ticket and the registered Ticket state supply the
+    The calling Session's Task and the registered Task state supply the
     identity each task does not repeat.
     """
 
@@ -506,7 +542,7 @@ def send_session_instruction(
     """Steer an active execution or continue an idle mapped Session.
 
     ``reports_only`` resumes the Session to return evidence it already holds
-    without sampling the Ticket budget, so a report collection cannot repeat a
+    without sampling the Task budget, so a report collection cannot repeat a
     sampled stop or deliver another stop instruction.
     """
 
@@ -531,16 +567,16 @@ def interrupt_session_execution(
     )
 
 
-def continue_ticket_execution(
+def continue_task_execution(
     arguments: Mapping[str, Any], *, cwd: Path | None = None,
 ) -> ToolResult:
     """Restore task budget permission, optionally without executing old Sessions."""
 
-    from graphtraj.teams.team_round import continue_stopped_ticket
+    from graphtraj.teams.team_round import continue_stopped_task
 
     return ToolResult(
-        continue_stopped_ticket(
-            _string_argument(arguments, "ticket_id"),
+        continue_stopped_task(
+            _string_argument(arguments, "task_id"),
             _string_list_argument(arguments, "caused_by_event_ids"),
             cwd or Path.cwd(),
             budget_only=_boolean_argument(arguments, "budget_only"),
@@ -603,50 +639,60 @@ def read_desktop_activity(arguments: Mapping[str, Any], *, cwd: Path | None = No
     """Expose the native human monitor without widening Agent report access."""
     from graphtraj.execution.desktop_activity import observe
 
-    return ToolResult(observe(cwd or Path.cwd(), arguments.get('ticket_id'),
+    return ToolResult(observe(cwd or Path.cwd(), arguments.get('task_id'),
                               arguments.get('alias'), arguments.get('cursor')))
 
 
 register_tool(
     "desktop_activity",
     "Read associated Main Sessions, actual project members and bounded native Chat/usage records. "
-    "Omit ticket_id to list project sources in the human desktop. "
-    "Verified registered Agents may read only their own Session and mapped Ticket; no messaging or control is provided.",
+    "Omit task_id to list project sources in the human desktop. "
+    "Verified registered Agents may read only their own Session and mapped Task; no messaging or control is provided.",
     {"type": "object", "properties": {
-        "ticket_id": {"type": "string"}, "alias": {"type": "string"},
+        "task_id": {"type": "string"}, "alias": {"type": "string"},
         "cursor": {"type": "string"},
     }, "additionalProperties": False},
     read_desktop_activity,
     manual_ref="manuals/task-delivery/guide.md",
-    examples=({"ticket_id": "1"},),
+    examples=({"task_id": "1"},),
 )
 
 
 register_tool(
-    "ticket_graph",
-    "Read the current Ticket DAG, states and dependency readiness for the project "
-    "in the server working directory. Equivalent to `graphtraj ticket graph`.",
-    {"type": "object", "properties": {"schema": {"type": "boolean", "default": False}}, "additionalProperties": False},
+    "task_graph",
+    "Read the current Task DAG, states and dependency readiness for the project "
+    "in the server working directory from its light index. The default view expands "
+    "open work in the caller's scope and folds completed history; request view full, "
+    "another task_id, or details explicitly. Equivalent to `graphtraj task graph`.",
+    {"type": "object", "properties": {
+        "schema":  {"type": "boolean", "default": False},
+        "view":    {"enum": ["current", "full"], "default": "current",
+                    "description": "current expands open work in scope and folds history; full lists every Task."},
+        "task_id": {"type": "string",
+                    "description": "Scope of the current view; defaults to the caller's own Task."},
+        "details": {"type": "array", "items": {"type": "string"},
+                    "description": "Tasks whose full definitions and execution facts to include."},
+    }, "additionalProperties": False},
     read_current_graph,
     manual_ref="manuals/task-breakdown/guide.md",
     examples=({},),
 )
 register_tool(
-    "ticket_register",
-    "Register one accepted Ticket definition with its dependencies. Equivalent to "
-    "`graphtraj ticket register --ticket-file`.",
+    "task_register",
+    "Register one accepted Task definition with its dependencies. Equivalent to "
+    "`graphtraj task register --task-file`.",
     _ISSUE_SCHEMA,
-    register_current_ticket,
+    register_current_task,
     manual_ref="manuals/task-breakdown/guide.md",
     examples=(
         {
             "schema_version": 2,
-            "ticket_id":    "1",
+            "task_id":    "1",
             "parent_id": None,
             "disposition": "active",
             "replaced_by": [],
             "retirement_reason": None,
-            "ticket_name":  "paper-summary",
+            "task_name":  "paper-summary",
             "source":       "local:paper-1",
             "title":        "Summarize the first paper",
             "body":         "Read the paper and deliver a cited summary with links to related papers.",
@@ -655,27 +701,48 @@ register_tool(
     ),
 )
 register_tool(
-    "ticket_revise",
-    "Apply one validated product-preserving Ticket graph revision and return its "
-    "recorded causal event. Equivalent to `graphtraj ticket revise`.",
+    "task_revise",
+    "Apply one validated product-preserving Task graph revision and return its "
+    "recorded causal event. Equivalent to `graphtraj task revise`.",
     _REVISION_SCHEMA,
-    revise_current_tickets,
+    revise_current_tasks,
     manual_ref="manuals/task-breakdown/guide.md",
 )
 register_tool(
-    "ticket_complete",
+    "task_complete",
     "Complete a task with its own acceptance reason and existing evidence, without file delivery.",
     COMPLETE_SCHEMA,
-    complete_current_ticket,
+    complete_current_task,
     manual_ref="manuals/task-delivery/guide.md",
 )
 register_tool(
-    "ticket_update",
-    "Apply one evidence-backed Ticket state transition and return its recorded "
-    "causal event. Equivalent to `graphtraj ticket update`.",
+    "task_update",
+    "Apply one evidence-backed Task state transition and return its recorded "
+    "causal event. Equivalent to `graphtraj task update`.",
     _STATE_CHANGE_SCHEMA,
-    update_current_ticket_state,
+    update_current_task_state,
     manual_ref="manuals/task-delivery/guide.md",
+)
+register_tool(
+    "task_backup",
+    "Back up one local Task to its mapped GitHub Issue, creating the Issue once. "
+    "Publishing is one-way: remote edits are reported as a conflict with their "
+    "differences and never change the local Task. Equivalent to `graphtraj task backup`.",
+    {"type": "object", "properties": {
+        "task_id":    {"type": "string"},
+        "repository": {"type": "string", "description": "GitHub repository as owner/name."},
+        "host":       {"type": "string", "default": "github.com",
+                       "description": "GitHub host used by the installed gh login."},
+        "confirm_remote": {
+            "type": ["string", "null"],
+            "description": "remote_digest from a reported conflict. Supply it after reviewing "
+                           "the differences and revising the local Task through Task operations "
+                           "when needed; publishes the local Task over exactly that remote copy.",
+        },
+    }, "required": ["task_id", "repository"], "additionalProperties": False},
+    backup_current_task,
+    manual_ref="manuals/task-delivery/guide.md",
+    examples=({"task_id": "42", "repository": "owner/name"},),
 )
 register_tool(
     "project_setup",
@@ -729,11 +796,11 @@ register_tool(
     manual_ref="manuals/task-delivery/guide.md",
 )
 register_tool(
-    "ticket_integrate",
-    "Merge or recover an accepted Ticket under its actual task authority. "
-    "Equivalent to `graphtraj ticket integrate`.",
+    "task_integrate",
+    "Merge or recover an accepted Task under its actual task authority. "
+    "Equivalent to `graphtraj task integrate`.",
     _INTEGRATE_SCHEMA,
-    integrate_current_ticket,
+    integrate_current_task,
     manual_ref="manuals/task-delivery/guide.md",
 )
 register_tool(
@@ -792,11 +859,11 @@ register_tool(
     "budget_only leaves old Sessions stopped for a later ordinary swarm dispatch. Equivalent to "
     "`agent-runner continue`.",
     _CONTINUE_SCHEMA,
-    continue_ticket_execution,
+    continue_task_execution,
     manual_ref="manuals/task-delivery/guide.md",
     examples=(
         {
-            "ticket_id":           "paper-1",
+            "task_id":           "paper-1",
             "caused_by_event_ids": ["<actual-authorization-event-id>"],
             "budget_only":         True,
         },
@@ -849,7 +916,7 @@ register_tool(
         'forbidden_scope': {'type': 'string'},
         'caused_by_event_ids': {'type': 'array', 'items': {'type': 'string'}},
         'additional_minutes': {'type': 'number', 'description': 'Explicit time increment; preserves original clock and randomized allowance.'},
-        'restore_active': {'type': 'boolean', 'description': 'Correct Ticket/Team administrative state and reopen the same Round for authorized work.'},
+        'restore_active': {'type': 'boolean', 'description': 'Correct Task/Team administrative state and reopen the same Round for authorized work.'},
         'resume': {'type': 'boolean', 'description': 'Resume the original Session after repair (default true). False applies administrative repair without changing stops or sending input.'},
         'retry_event_id': {'type': 'string', 'description': 'Applied recovery event; retry continuation without another repair.'},
     }, 'required': ['alias'], 'additionalProperties': False},
@@ -1068,13 +1135,13 @@ def retire_session_execution(arguments: Mapping[str, Any], *, cwd: Path | None =
     return ToolResult(retire_session(_string_argument(arguments, "alias"), cwd or Path.cwd()))
 
 
-def cleanup_ticket_execution(
+def cleanup_task_execution(
     arguments: Mapping[str, Any], *, cwd: Path | None = None,
 ) -> ToolResult:
     """Return the existing cleanup result without changing its safety checks."""
-    from graphtraj.execution.runner_cleanup import cleanup_ticket
+    from graphtraj.execution.runner_cleanup import cleanup_task
 
-    response = cleanup_ticket(cwd or Path.cwd(), _string_argument(arguments, "ticket_id"))
+    response = cleanup_task(cwd or Path.cwd(), _string_argument(arguments, "task_id"))
     return ToolResult(response.document, failed=not response.succeeded)
 
 
@@ -1130,10 +1197,10 @@ register_tool(
 )
 register_tool(
     "cleanup",
-    "Clean up one safely integrated ticket by stable identity.",
-    {"type": "object", "properties": {"ticket_id": {"type": "string"}},
-     "required": ["ticket_id"], "additionalProperties": False},
-    cleanup_ticket_execution,
+    "Clean up one safely integrated task by stable identity.",
+    {"type": "object", "properties": {"task_id": {"type": "string"}},
+     "required": ["task_id"], "additionalProperties": False},
+    cleanup_task_execution,
     manual_ref="manuals/task-delivery/guide.md",
 )
 register_tool(
@@ -1153,11 +1220,12 @@ register_tool(
 # CLI names and decoding are presentation metadata, not another parameter schema.
 # Unlisted parameters use their Python name and Click's existing scalar/repeated form.
 _CLI = {
-    "ticket_graph": (("graphtraj", "ticket", "graph"), {}),
-    "ticket_register": (("graphtraj", "ticket", "register"), {"ticket_file": ("", "yaml")}),
-    "ticket_revise": (("graphtraj", "ticket", "revise"), {"revision_file": ("", "yaml")}),
-    "ticket_complete": (("graphtraj", "ticket", "complete"), {"completion_file": ("", "yaml")}),
-    "ticket_update": (("graphtraj", "ticket", "update"), {"state_file": ("", "yaml")}),
+    "task_graph": (("graphtraj", "task", "graph"), {}),
+    "task_register": (("graphtraj", "task", "register"), {"task_file": ("", "yaml")}),
+    "task_revise": (("graphtraj", "task", "revise"), {"revision_file": ("", "yaml")}),
+    "task_complete": (("graphtraj", "task", "complete"), {"completion_file": ("", "yaml")}),
+    "task_update": (("graphtraj", "task", "update"), {"state_file": ("", "yaml")}),
+    "task_backup": (("graphtraj", "task", "backup"), {}),
     "project_setup": (("graphtraj", "setup"), {}),
     "project_doctor": (("graphtraj", "doctor"), {}),
     "worldline_append": (("graphtraj", "worldline", "append"), {"event_file": ("event", "yaml")}),
@@ -1166,7 +1234,7 @@ _CLI = {
     "delivery_state_apply": (("graphtraj", "delivery-state", "apply"), {
         "request_file": ("request", "yaml"), "facts_file": ("facts", "yaml"),
     }),
-    "ticket_integrate": (("graphtraj", "ticket", "integrate"), {"role": ("role", "yaml-value")}),
+    "task_integrate": (("graphtraj", "task", "integrate"), {"role": ("role", "yaml-value")}),
     "alias_status": (("agent-runner", "status"), {}),
     "parent_status": (("agent-runner", "parent-status"), {}),
     "swarm": (("agent-runner", "--swarm-input"), {"swarm_input": ("", "yaml")}),

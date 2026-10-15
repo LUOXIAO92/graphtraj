@@ -252,7 +252,7 @@ def test_child_caller_cannot_organize_roles(project: Path) -> None:
     reviews: list[dict] = []
     before = snapshot(project)
     runner = project / ".graphtraj" / "runner"
-    with runtime_caller(runner, "253-ticket@engineer"):
+    with runtime_caller(runner, "253-task@engineer"):
         code, message = refusal(project, ADD, lambda proposal: reviews.append(proposal) or {"decision": "accept"})
     assert code == "authority-denied"
     assert message
@@ -435,7 +435,7 @@ def test_child_caller_cannot_author_prompts(project: Path) -> None:
     reviews: list[dict] = []
     before = snapshot(project)
     runner = project / ".graphtraj" / "runner"
-    with runtime_caller(runner, "254-ticket@engineer"):
+    with runtime_caller(runner, "254-task@engineer"):
         code, message = refusal(
             project,
             {"change": {"set_presets": {

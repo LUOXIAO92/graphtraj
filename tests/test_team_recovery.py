@@ -11,7 +11,7 @@ import yaml
 from conftest import FakeCodex, InstalledCommands, app_server_peer, run_process
 from runner_fixtures import configure_harness
 from test_generic_role_execution import wait_for_idle
-from test_ticket_graph import _change_status, _register, _ticket
+from test_task_graph import _change_status, _register, _task
 
 
 RUNTIME = r'''
@@ -61,13 +61,13 @@ def test_explicit_retry_preserves_session_without_automatic_report_gates(
     (root / '.graphtraj/roles.yml').write_text(yaml.safe_dump({
         'roles': {role: {'runtime': 'codex', 'model': 'selected'}}, 'role_tree': {role: {}},
     }))
-    _register(installed_commands, root, _ticket('169', 'explicit-recovery'))
+    _register(installed_commands, root, _task('169', 'explicit-recovery'))
     _change_status(installed_commands, root, '169', 'ready')
     env['RECOVERY_CASE'] = failure
     fake_codex.executable.write_text(app_server_peer('#!' + sys.executable + '\n' + RUNTIME,
                                                     "os.environ['GRAPHTRAJ_PARENT_ALIAS']"))
     launch = root / 'launch.yml'
-    launch.write_text(yaml.safe_dump({'tasks': [{'role': role, 'ticket_id': '169'}]}))
+    launch.write_text(yaml.safe_dump({'tasks': [{'role': role, 'task_id': '169'}]}))
     result = run_process([str(installed_commands.runner), '--swarm-input', str(launch)],
                          cwd=root, env=env, timeout=30)
     assert result.returncode == 0, result.stdout + result.stderr
@@ -87,8 +87,8 @@ def test_explicit_retry_preserves_session_without_automatic_report_gates(
     trace = Path(original['trace_file']).read_bytes()
     worktree = Path(task['worktree_path'])
     assert (worktree / 'visits.txt').read_text() == '1'
-    ticket = root / '.graphtraj/state/tickets/169-explicit-recovery'
-    state = yaml.safe_load((ticket / 'ticket.yml').read_text())
+    task_directory = root / '.graphtraj/state/tasks/169-explicit-recovery'
+    state = yaml.safe_load((task_directory / 'task.yml').read_text())
     assert state['status'] == 'implementing' and state['current_candidate'] is None
     history = [json.loads(line) for shard in sorted((root / '.graphtraj/state/worldline').glob('*.jsonl'))
                for line in shard.read_text().splitlines()]
@@ -108,7 +108,7 @@ def test_explicit_retry_preserves_session_without_automatic_report_gates(
     submission = delivered['submissions'][0]
     assert submission['candidate'] == run_process(['git', 'rev-parse', 'HEAD'], cwd=worktree).stdout.strip()
     assert (root / submission['evidence_refs'][0]).read_text() == 'Restored evidence'
-    team = yaml.safe_load((ticket / 'teams/1/team.yml').read_text())
+    team = yaml.safe_load((task_directory / 'teams/1/team.yml').read_text())
     assert [member['session_ref'] for member in team['members'].values()] == [alias]
     after = [json.loads(line) for shard in sorted((root / '.graphtraj/state/worldline').glob('*.jsonl'))
              for line in shard.read_text().splitlines()]

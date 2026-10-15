@@ -35,7 +35,7 @@ def result_project(tmp_path: Path, *, multiple: bool = True) -> tuple[Path, Path
         directory.mkdir(parents=True)
         (directory / 'mapping.yml').write_text(yaml.safe_dump({
             'alias': alias, 'runtime': 'codex', 'session': 'native-' + alias,
-            'ticket_id': '148', 'team_generation': 1, 'role': 'researcher',
+            'task_id': '148', 'team_generation': 1, 'role': 'researcher',
             'parent': None, 'retained_batch_file': 'batch.yml',
             'worktree_path': str(worktree), 'trace_file': 'events.jsonl',
             'worker_pid': 1, 'runtime_pid': 1,
@@ -94,7 +94,7 @@ def test_researchers_submit_distinct_retained_results_without_coding_reports(tmp
         assert result['submissions'] == [submission]
         assert submission['session'] == 'native-' + alias
         assert submission['candidate'] == commit
-        assert submission['ticket_id'] == '148'
+        assert submission['task_id'] == '148'
         assert submission['team_ordinal'] == submission['round'] == 1
         assert (tmp_path / submission['evidence_refs'][0]).read_text() == note
     assert submissions[0]['evidence_refs'] != submissions[1]['evidence_refs']
@@ -117,7 +117,7 @@ def test_submission_rejects_unowned_or_invalid_inputs(tmp_path: Path) -> None:
     with runtime_caller(runner, None), pytest.raises(RunnerError):
         tools.submit_result(arguments, cwd=tmp_path)
     with runtime_caller(runner, 'research@x1'):
-        for extra in ({'alias': 'research@x2'}, {'ticket_id': 'other'}, {'role': 'engineer'}):
+        for extra in ({'alias': 'research@x2'}, {'task_id': 'other'}, {'role': 'engineer'}):
             with pytest.raises(ValueError):
                 tools.submit_result({**arguments, **extra}, cwd=tmp_path)
         for extra in ({'result_refs': ['absent.md']}, {'commit': '0' * 40},
@@ -126,7 +126,7 @@ def test_submission_rejects_unowned_or_invalid_inputs(tmp_path: Path) -> None:
             with pytest.raises((ValueError, RunnerError)):
                 tools.submit_result({**arguments, **extra}, cwd=tmp_path)
     assert read_worldline(state, tmp_path) == before
-    request = {'phase': 'retiring', 'ticket_id': '148', 'actor': 'user',
+    request = {'phase': 'retiring', 'task_id': '148', 'actor': 'user',
                'caused_by_event_ids': [before[-1]['event_id']], 'evidence_refs': ['evidence.md']}
     apply_delivery_state_request(state, tmp_path, request, request)
     with runtime_caller(runner, 'research@x1'), pytest.raises(RunnerError):
@@ -135,7 +135,7 @@ def test_submission_rejects_unowned_or_invalid_inputs(tmp_path: Path) -> None:
     trace.parent.mkdir(parents=True)
     trace.write_text('Retained Session trace\n')
     trace_ref = trace.relative_to(tmp_path).as_posix()
-    retired = {'phase': 'retired', 'ticket_id': '148', 'session_ref': 'research@x1',
+    retired = {'phase': 'retired', 'task_id': '148', 'session_ref': 'research@x1',
                'trace_ref': trace_ref, 'evidence_refs': [trace_ref],
                'caused_by_event_ids': [read_worldline(state, tmp_path)[-1]['event_id']]}
     apply_delivery_state_request(state, tmp_path, retired, retired)
@@ -146,7 +146,7 @@ def test_submission_rejects_unowned_or_invalid_inputs(tmp_path: Path) -> None:
         **mapping, 'alias': 'research@x4', 'session': 'native-new', 'team_generation': 2,
         'report_files': [str(path) for path in assign_session_reports('researcher', 'research@x4', 2, 1)],
     }))
-    start = {'phase': 'start', 'ticket_id': '148',
+    start = {'phase': 'start', 'task_id': '148',
              'caused_by_event_ids': [read_worldline(state, tmp_path)[-1]['event_id']],
              'evidence_refs': ['evidence.md'], 'worktree': 'worktrees/research',
              'branch': 'agent/148-research',
@@ -234,7 +234,7 @@ def test_new_role_aliases_get_distinct_named_reports(tmp_path: Path) -> None:
     reports = []
     for number, entity in enumerate(('researcher', 'researcher_2'), 1):
         alias = f'148-research-handover0-researcher@{entity}'
-        request = {'phase': 'member', 'ticket_id': '148',
+        request = {'phase': 'member', 'task_id': '148',
                    'caused_by_event_ids': [read_worldline(tmp_path / 'state', tmp_path)[-1]['event_id']],
                    'evidence_refs': ['evidence.md'], 'member': f'new{number}',
                    'role': 'researcher', 'session_ref': alias}

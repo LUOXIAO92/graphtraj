@@ -1,6 +1,6 @@
 # Task execution budget
 
-Read the current Ticket's budget and accepted scope before dispatch. Estimate
+Read the current Task's budget and accepted scope before dispatch. Estimate
 actual implementation and validation needs, reuse known findings and evidence,
 and count only the selected work and Sessions. Professional phases can describe
 an estimate; they do not define a separate task lifecycle or mandatory roles.
@@ -8,7 +8,7 @@ Use the installed task definition schema and preserve its existing values on
 continuation. Difficulty does not itself choose a model or increase the budget.
 
 Present the expected time and configured executor before launch. Keep the
-original Ticket-shared accounting, thresholds and stop policy. Record a changed
+original Task-shared accounting, thresholds and stop policy. Record a changed
 scope or estimate through the existing task revision workflow with its cause;
 that revision alone grants neither extra time nor permission to resume.
 

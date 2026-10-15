@@ -32,8 +32,8 @@ def _records(root: Path) -> set[str]:
 
 
 def _budget(root: Path) -> bytes | None:
-    """Read the Ticket budget record, if this project has one."""
-    budget = next(root.glob(".graphtraj/state/tickets/*/execution-budget.yml"), None)
+    """Read the Task budget record, if this project has one."""
+    budget = next(root.glob(".graphtraj/state/tasks/*/execution-budget.yml"), None)
     return budget.read_bytes() if budget is not None else None
 
 

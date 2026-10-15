@@ -50,7 +50,7 @@ let page;
 try {
   const project = await fs.realpath(await fixtures.makeProject(path.join(work, 'sanitized-292'), 'activity-adoption'));
   // Reuse the existing disposable fixture seam; never edit an actual Session.
-  const trace = await fixtures.recordActivity(project, { ticketId: '1', ticketName: 'activity-adoption', alias, records,
+  const trace = await fixtures.recordActivity(project, { taskId: '1', taskName: 'activity-adoption', alias, records,
     additionalMembers: [{ alias: otherAlias, historical: false,
       records: [message('Sanitized other Agent; usage must not be attached here.')] }] });
   // Exercise the exact desktop bridge/public observer before opening a window.
@@ -59,7 +59,7 @@ try {
   const reader = new ActivityReader();
   facts.preflight = { agents: [], pages: [] };
   try {
-    const members = await reader.read(project, { ticket_id: '1' });
+    const members = await reader.read(project, { task_id: '1' });
     facts.preflight.agents = members.agents;
     assert.deepEqual(members.agents.map(agent => agent.alias).sort(), [alias, otherAlias].sort());
     for (const agent of members.agents) {
@@ -68,7 +68,7 @@ try {
       assert.equal(agent.historical, agent.alias === alias);
       assert.notEqual(agent.state, 'unavailable', `Native fixture member ${agent.alias}: ${JSON.stringify(agent)}`);
     }
-    const otherPage = await reader.read(project, { ticket_id: '1', alias: otherAlias });
+    const otherPage = await reader.read(project, { task_id: '1', alias: otherAlias });
     facts.preflight.other = { availability: otherPage.availability, count: otherPage.events?.length };
     assert.equal(otherPage.availability, 'available');
     assert.ok(otherPage.events.some(event => event.kind === 'message' && event.agent === otherAlias));
@@ -76,7 +76,7 @@ try {
     let cursor;
     let more;
     do {
-      const page = await reader.read(project, { ticket_id: '1', alias, ...(cursor ? { cursor } : {}) });
+      const page = await reader.read(project, { task_id: '1', alias, ...(cursor ? { cursor } : {}) });
       facts.preflight.pages.push({ availability: page.availability, count: page.events?.length,
         has_more: page.has_more, reason: page.reason });
       assert.equal(page.availability, 'available', JSON.stringify(facts.preflight));
@@ -162,7 +162,7 @@ try {
   facts.screenshots.push({ file: shot, ...dimensions, sha256: createHash('sha256').update(bytes).digest('hex') });
   assert.deepEqual(facts.pageErrors, []);
   await app.close(); app = null;
-  assert.equal(fixtures.operate(project, 'ticket_graph').tickets.length, 2);
+  assert.equal(fixtures.operate(project, 'task_graph').tasks.length, 2);
   step('D activity screenshot retained; native graph remains available after closing the optional window.');
   facts.passed = true;
 } catch (error) {

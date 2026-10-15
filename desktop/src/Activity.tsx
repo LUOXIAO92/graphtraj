@@ -89,8 +89,8 @@ export function MemberPills({ agents, onRead, focus }: { agents: Agent[]; onRead
 }
 
 /** Keep each actual member in its own independently scrolling column. */
-export function ActivityView({ projectId, ticketId, active = true, expanded = true, focusAgent, onActivity, onError, refreshKey = 0 }: {
-  projectId: string; ticketId?: string; active?: boolean; expanded?: boolean; focusAgent?: string | null; onActivity?: (activity: Activity) => void;
+export function ActivityView({ projectId, taskId, active = true, expanded = true, focusAgent, onActivity, onError, refreshKey = 0 }: {
+  projectId: string; taskId?: string; active?: boolean; expanded?: boolean; focusAgent?: string | null; onActivity?: (activity: Activity) => void;
   onError?: (message: string) => void; refreshKey?: number;
 }) {
   const [activity, setActivity] = useState<Activity | null>(null);
@@ -109,12 +109,12 @@ export function ActivityView({ projectId, ticketId, active = true, expanded = tr
     async function refresh() {
       setLoading(true);
       try {
-        const next = await window.graphtraj.activity(projectId, ticketId ? { ticket_id: ticketId } : {});
-        if (!ticketId) next.agents = next.agents.filter(agent => agent.kind === 'main');
+        const next = await window.graphtraj.activity(projectId, taskId ? { task_id: taskId } : {});
+        if (!taskId) next.agents = next.agents.filter(agent => agent.kind === 'main');
         if (alive) { setActivity(next); setError(next.reason || ''); onError?.(next.reason || ''); onActivity?.(next); }
       } catch {
         if (alive) {
-          const message = ticketId ? 'Could not load this task’s Agent sessions. Retrying automatically.' : 'Could not load Main sessions for this project. Retrying automatically.';
+          const message = taskId ? 'Could not load this task’s Agent sessions. Retrying automatically.' : 'Could not load Main sessions for this project. Retrying automatically.';
           setError(message); onError?.(message);
         }
       }
@@ -122,7 +122,7 @@ export function ActivityView({ projectId, ticketId, active = true, expanded = tr
     }
     void refresh();
     return () => { alive = false; clearTimeout(timer); };
-  }, [projectId, ticketId, active, retry, refreshKey]);
+  }, [projectId, taskId, active, retry, refreshKey]);
   const [scroll, setScroll] = useState({ left: 0, max: 0, thumb: 0 });
   function updateEdges() {
     const element = columns.current;
@@ -140,19 +140,19 @@ export function ActivityView({ projectId, ticketId, active = true, expanded = tr
     {activity?.scope === 'self' && <p className="native-notice">This Agent connection shows only its own Session.</p>}
     {error && <div className="native-notice error" role="alert">{error} <Button variant="ghost" onPress={() => setRetry(value => value + 1)}>Retry now</Button></div>}
     {activity?.notices?.map(notice => <p className="native-notice" key={notice}>{notice}</p>)}
-    {!activity?.agents.length && !error && <p className="native-notice" role="status">{activity ? ticketId ? 'No participating Agents recorded.' : 'No associated Main sessions recorded for this project.' : loading ? ticketId ? 'Loading Agent sessions…' : 'Loading Main sessions…' : 'Session list unavailable.'}</p>}
+    {!activity?.agents.length && !error && <p className="native-notice" role="status">{activity ? taskId ? 'No participating Agents recorded.' : 'No associated Main sessions recorded for this project.' : loading ? taskId ? 'Loading Agent sessions…' : 'Loading Main sessions…' : 'Session list unavailable.'}</p>}
     <div className="agent-columns" ref={columns} tabIndex={0} aria-label="Agent columns" role="region"
       onKeyDown={event => { if (event.target !== event.currentTarget) return; if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') { event.preventDefault(); move(event.key === 'ArrowLeft' ? -1 : 1); } }}
       onScroll={event => { if (active && expanded) horizontal.current = event.currentTarget.scrollLeft; updateEdges(); }}>
-      {activity?.agents.map(agent => <AgentColumn key={agent.alias} projectId={projectId} ticketId={ticketId} agent={agent} active={active && expanded}/>)}
+      {activity?.agents.map(agent => <AgentColumn key={agent.alias} projectId={projectId} taskId={taskId} agent={agent} active={active && expanded}/>)}
     </div>
     <input className="agent-horizontal-scrollbar" type="range" min={0} max={Math.max(1, scroll.max)} step={1} value={Math.min(scroll.left, Math.max(1, scroll.max))} disabled={scroll.max < 1} aria-label="Agent columns horizontal scrollbar" style={{ '--scroll-thumb-width': `${scroll.thumb}px` } as React.CSSProperties} onChange={event => { if (columns.current) columns.current.scrollLeft = Number(event.target.value); updateEdges(); }}/>
     <footer className="columns-footer"><span><Icon name="left" size={13}/><Icon name="right" size={13}/>{activity ? `Drag the bottom scrollbar to see all ${activity.agents.length} agents · ${new Date(activity.updated_at).toLocaleTimeString()}` : error ? 'Session list unavailable' : 'Loading Session list…'}</span><div><Button isIconOnly variant="ghost" aria-label="Previous agent columns" isDisabled={scroll.left < 2} onPress={() => move(-1)}><Icon name="left" size={16}/></Button><Button isIconOnly variant="ghost" aria-label="Next agent columns" isDisabled={scroll.left >= scroll.max - 2} onPress={() => move(1)}><Icon name="right" size={16}/></Button></div></footer>
   </section>;
 }
 
-function AgentColumn({ projectId, ticketId, agent, active }: {
-  projectId: string; ticketId?: string; agent: Agent; active: boolean;
+function AgentColumn({ projectId, taskId, agent, active }: {
+  projectId: string; taskId?: string; agent: Agent; active: boolean;
 }) {
   const [activity, setActivity] = useState<Activity | null>(null);
   const [error, setError] = useState('');
@@ -182,7 +182,7 @@ function AgentColumn({ projectId, ticketId, agent, active }: {
     async function refresh() {
       try {
         const next = await window.graphtraj.activity(projectId, {
-          ...(ticketId ? { ticket_id: ticketId } : {}), alias: agent.alias, ...(cursor.current ? { cursor: cursor.current } : {}),
+          ...(taskId ? { task_id: taskId } : {}), alias: agent.alias, ...(cursor.current ? { cursor: cursor.current } : {}),
         });
         if (!alive) return;
         if (next.availability === 'cursor-expired' || next.availability === 'trace-changed') {
@@ -213,7 +213,7 @@ function AgentColumn({ projectId, ticketId, agent, active }: {
     }
     void refresh();
     return () => { alive = false; clearTimeout(timer); };
-  }, [projectId, ticketId, agent.alias, active, retry]);
+  }, [projectId, taskId, agent.alias, active, retry]);
 
   useLayoutEffect(() => {
     if (active && following && history.current) history.current.scrollTop = history.current.scrollHeight;

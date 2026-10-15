@@ -12,23 +12,23 @@ from graphtraj.execution.runner_heartbeat import hold_ownership
 from graphtraj.execution.runner_models import RunnerError
 from graphtraj.execution.runner_status import require_task_authority, runtime_caller
 from graphtraj.graph.delivery_state import apply_delivery_state_request, read_team
-from graphtraj.graph.ticket_graph import register_ticket, update_ticket_state
+from graphtraj.graph.task_graph import register_task, update_task_state
 from graphtraj.graph.delivery_worldline import read_worldline
-from test_ticket_graph import _ticket
+from test_task_graph import _task
 
 
 def _register_research_team(tmp_path: Path, *, multiple: bool = True) -> Path:
     """A Team needs no fixed seats and may contain repeated roles."""
     state = tmp_path / 'state'
-    directory = register_ticket(state, tmp_path, _ticket('148', 'research'))
+    directory = register_task(state, tmp_path, _task('148', 'research'))
     (tmp_path / 'evidence.md').write_text('Task evidence\n')
-    event = update_ticket_state(state, tmp_path, {
-        'ticket_id': '148', 'status': 'ready', 'active_team_ordinal': None,
+    event = update_task_state(state, tmp_path, {
+        'task_id': '148', 'status': 'ready', 'active_team_ordinal': None,
         'worktree': None, 'branch': None, 'current_candidate': None,
         'caused_by_event_ids': [], 'evidence_refs': ['evidence.md'],
     })
     request = {
-        'phase': 'start', 'ticket_id': '148',
+        'phase': 'start', 'task_id': '148',
         'caused_by_event_ids': [event['event_id']], 'evidence_refs': ['evidence.md'],
         'worktree': 'worktrees/research', 'branch': 'agent/148-research',
         'members': {'first': {'role': 'researcher', 'session_ref': 'research@x1'}},
@@ -45,7 +45,7 @@ def _register_research_team(tmp_path: Path, *, multiple: bool = True) -> Path:
         ('third', 'analyst', 'research@x3'),
     ]:
         request = {
-            'phase': 'member', 'ticket_id': '148',
+            'phase': 'member', 'task_id': '148',
             'caused_by_event_ids': [read_worldline(state, tmp_path)[-1]['event_id']],
             'evidence_refs': ['evidence.md'], 'member': name, 'role': role,
             'session_ref': alias,
@@ -80,7 +80,7 @@ def test_task_authority_uses_actual_parent_and_member_session(
         directory.mkdir(parents=True)
         (directory / 'mapping.yml').write_text(yaml.safe_dump({
             'alias': alias, 'runtime': 'codex', 'session': 'native-' + alias,
-            'ticket_id': '148', 'team_generation': 1, 'role': role, 'parent': parent,
+            'task_id': '148', 'team_generation': 1, 'role': role, 'parent': parent,
             'retained_batch_file': 'batch.yml', 'worktree_path': str(tmp_path),
             'trace_file': 'events.jsonl', 'worker_pid': 1, 'runtime_pid': 1,
         }))
@@ -95,7 +95,7 @@ def test_task_authority_uses_actual_parent_and_member_session(
         with pytest.raises(RunnerError):
             require_task_authority(state, runner, '148', 'research@x4', 'accept')
         with pytest.raises(RunnerError):
-            require_task_authority(state, runner, 'wrong-ticket', 'research@x3', 'accept')
+            require_task_authority(state, runner, 'wrong-task', 'research@x3', 'accept')
     monkeypatch.setenv('GRAPHTRAJ_ROLE', 'team-leader')
     monkeypatch.setenv('GRAPHTRAJ_PARENT_ALIAS', 'research@x1')
     with runtime_caller(runner, 'research@x2'):
@@ -161,7 +161,7 @@ def test_duplicate_session_cannot_register_as_a_second_member(tmp_path: Path) ->
     state = tmp_path / 'state'
     events = read_worldline(state, tmp_path)
     request = {
-        'phase': 'member', 'ticket_id': '148',
+        'phase': 'member', 'task_id': '148',
         'caused_by_event_ids': [events[-1]['event_id']], 'evidence_refs': ['evidence.md'],
         'member': 'renamed', 'role': 'team-leader', 'session_ref': 'research@x1',
     }

@@ -13,13 +13,13 @@ import yaml
 from conftest import FakeCodex, InstalledCommands, app_server_peer, run_process, wait_for_file
 from runner_fixtures import configure_harness
 from test_task_budget_control import BODY, sample_stop
-from test_ticket_graph import _change_status, _register, _ticket
+from test_task_graph import _change_status, _register, _task
 
 
 @pytest.fixture
 def installed_commands(request: pytest.FixtureRequest) -> InstalledCommands:
     """Use the independent candidate installation retained outside pytest scratch."""
-    candidate = os.environ.get('TICKET154_CANDIDATE_BIN')
+    candidate = os.environ.get('TASK154_CANDIDATE_BIN')
     if candidate is None:
         return request.getfixturevalue('installed_commands')
     directory = Path(candidate)
@@ -75,10 +75,10 @@ def prepare(
         'roles': roles,
         'role_tree': {role: {'analyst': {}}} if child or replacement_child else {role: {}},
     }))
-    ticket = _ticket('154', 'recovery')
-    ticket['body'] = BODY.replace('planned_sessions: {researcher: 1}',
-                                 'planned_sessions: {' + role.rpartition('.')[2].replace('-', '_') + ': 1}') + ticket['body']
-    _register(commands, root, ticket)
+    task_record = _task('154', 'recovery')
+    task_record['body'] = BODY.replace('planned_sessions: {researcher: 1}',
+                                 'planned_sessions: {' + role.rpartition('.')[2].replace('-', '_') + ': 1}') + task_record['body']
+    _register(commands, root, task_record)
     _change_status(commands, root, '154', 'ready')
     env['RECOVERY_RELEASE'] = str(tmp_path / 'release')
     env['RECOVERY_STARTED'] = str(tmp_path / 'started')
@@ -94,13 +94,13 @@ def prepare(
     if preflight_failure:
         invalid = tmp_path / 'invalid-swarm.yml'
         invalid.write_text(yaml.safe_dump({'tasks': [
-            {'role': role, 'ticket_id': '154', 'skills': ['implement']},
+            {'role': role, 'task_id': '154', 'skills': ['implement']},
         ]}))
         failed = command(commands, root, env, '--swarm-input', str(invalid))
         assert failed.returncode != 0, failed.stdout + failed.stderr
         sessions = root / '.graphtraj/runner/sessions'
         assert not sessions.exists() or not list(sessions.iterdir())
-        traces = root / '.graphtraj/state/tickets/154-recovery/teams/1/traces'
+        traces = root / '.graphtraj/state/tasks/154-recovery/teams/1/traces'
         assert not traces.exists() or not list(traces.iterdir())
 
     result = subprocess.run(
@@ -108,7 +108,7 @@ def prepare(
         input=json.dumps({'jsonrpc': '2.0', 'id': 1, 'method': 'tools/call',
                           'params': {'name': 'graphtraj', 'arguments': {
                               'action': 'execute', 'feature': 'swarm', 'arguments': {
-                                  'tasks': [{'role': selection, 'ticket_id': '154'}]}}}}) + '\n',
+                                  'tasks': [{'role': selection, 'task_id': '154'}]}}}}) + '\n',
         text=True, capture_output=True, timeout=20,
     )
     assert result.returncode == 0, result.stdout + result.stderr
@@ -134,7 +134,7 @@ def test_external_inline_resources_survive_recovery(
     alias = task['alias']
     sessions = root / '.graphtraj/runner/sessions'
     directory = sessions / alias
-    ticket = root / '.graphtraj/state/tickets/154-recovery'
+    task_directory = root / '.graphtraj/state/tasks/154-recovery'
     try:
         if operation == 'send':
             Path(env['RECOVERY_RELEASE']).touch()
@@ -161,7 +161,7 @@ def test_external_inline_resources_survive_recovery(
         batch_before = batch_file.read_bytes()
         launch_before = (directory / 'launch.yml').read_bytes()
         launch = yaml.safe_load(launch_before)
-        before = yaml.safe_load((ticket / 'execution-budget.yml').read_text())
+        before = yaml.safe_load((task_directory / 'execution-budget.yml').read_text())
         captured = launch['adapter_request']['session_parameters']
         assert captured['config']['skills']['config'] == [
             {'path': str(root / 'external-method'), 'enabled': True},
@@ -202,7 +202,7 @@ def test_external_inline_resources_survive_recovery(
             assert params['config']['skills']['config'] == [
                 {'path': str(root / 'external-method'), 'enabled': False},
             ]
-        after = yaml.safe_load((ticket / 'execution-budget.yml').read_text())
+        after = yaml.safe_load((task_directory / 'execution-budget.yml').read_text())
         for field in ('started_at', 'allowance_minutes'):
             assert after[field] == before[field]
         assert after['sessions']['researcher'] == (1 if operation == 'send' else 2)
@@ -228,7 +228,7 @@ def test_explicitly_stopped_member_is_replaced_without_executing_old_session(
     root, env, task = prepare(installed_commands, temporary_git_repository, fake_codex, tmp_path, role)
     alias = task['alias']
     runner = root / '.graphtraj/runner/sessions'
-    ticket = root / '.graphtraj/state/tickets/154-recovery'
+    task_directory = root / '.graphtraj/state/tasks/154-recovery'
     cause = events(root)[-1]['event_id']
     try:
         refused = command(installed_commands, root, env, 'replace', alias, '--caused-by-event-id', cause)
@@ -264,7 +264,7 @@ def test_explicitly_stopped_member_is_replaced_without_executing_old_session(
         replacement = yaml.safe_load(replaced.stdout)['replacement_alias']
         wait_for_file(runner / replacement / 'execution.yml')
         current = yaml.safe_load((runner / replacement / 'mapping.yml').read_text())
-        usage = yaml.safe_load((ticket / 'execution-budget.yml').read_text())
+        usage = yaml.safe_load((task_directory / 'execution-budget.yml').read_text())
         actual_role = role.rpartition('.')[2]
         key = actual_role.replace('-', '_')
         assert usage['sessions'] == {key: 2}
@@ -278,7 +278,7 @@ def test_explicitly_stopped_member_is_replaced_without_executing_old_session(
         assert (Path(original['trace_file']).parent / 'runner/stop.yml').read_bytes() == marker
         assert Path(original['trace_file']).read_bytes() == trace
         assert Path(reports[0]['path']).read_text() == reports[0]['text']
-        team = yaml.safe_load((ticket / 'teams/1/team.yml').read_text())
+        team = yaml.safe_load((task_directory / 'teams/1/team.yml').read_text())
         assert team['status'] == 'active'
         assert [member['session_ref'] for member in team['members'].values()] == [replacement]
         stale = command(installed_commands, root, env, 'send', alias, '--instruction', 'Work',
@@ -294,7 +294,7 @@ def test_explicitly_stopped_member_is_replaced_without_executing_old_session(
         )
         assert accepted.returncode == 0, accepted.stdout + accepted.stderr
         integrated = run_process(
-            [str(installed_commands.product), 'ticket', 'integrate', '--ticket-id', '154', '--',
+            [str(installed_commands.product), 'task', 'integrate', '--task-id', '154', '--',
              sys.executable, '-c', "from pathlib import Path; assert '# Research' in Path('result.md').read_text()"],
             cwd=root, env=env, timeout=20,
         )
@@ -303,7 +303,7 @@ def test_explicitly_stopped_member_is_replaced_without_executing_old_session(
         retained = {path: path.read_bytes() for path in state.rglob('*') if path.is_file()}
         batch = Path(original['retained_batch_file'])
         assert batch in retained and Path(original['trace_file']) in retained
-        cleaned = command(installed_commands, root, env, 'cleanup', '--ticket-id', '154')
+        cleaned = command(installed_commands, root, env, 'cleanup', '--task-id', '154')
         assert cleaned.returncode == 0, cleaned.stdout + cleaned.stderr
         assert yaml.safe_load(cleaned.stdout)['cleanup_status'] == 'cleaned'
         assert not Path(task['worktree_path']).exists()
@@ -334,28 +334,28 @@ def test_sampled_stop_continues_original_researcher_with_unchanged_accounting(
                               tmp_path, 'researcher', external_inline=True)
     alias = task['alias']
     directory = root / '.graphtraj/runner/sessions' / alias
-    ticket = root / '.graphtraj/state/tickets/154-recovery'
+    task_directory = root / '.graphtraj/state/tasks/154-recovery'
     cause = events(root)[-1]['event_id']
     original = yaml.safe_load((directory / 'mapping.yml').read_text())
     original_launch = (directory / 'launch.yml').read_bytes()
     original_batch = Path(original['retained_batch_file']).read_bytes()
     try:
-        busy = command(installed_commands, root, env, 'continue', '--ticket-id', '154',
+        busy = command(installed_commands, root, env, 'continue', '--task-id', '154',
                        '--caused-by-event-id', cause)
         assert busy.returncode == 1
         assert yaml.safe_load((directory / 'mapping.yml').read_text())['execution_id'] == original['execution_id']
-        monitor = budgets.execution_budget_monitor(ticket, '154', 'recovery')
+        monitor = budgets.execution_budget_monitor(task_directory, '154', 'recovery')
         sample_stop(monitor, monkeypatch)
         wait_for_file(directory / 'execution.yml')
         terminal = yaml.safe_load((directory / 'execution.yml').read_text())
         assert terminal['outcome'] == 'interrupted' and terminal['budget_stopped']
-        before = yaml.safe_load((ticket / 'execution-budget.yml').read_text())
+        before = yaml.safe_load((task_directory / 'execution-budget.yml').read_text())
         assert before['stopped']
         (root / 'role.txt').unlink()
         trace = Path(original['trace_file']).read_bytes()
         decision = root / 'continue.yml'
         decision.write_text(yaml.safe_dump({
-            'event': 'ticket-continuation-decided', 'ticket_id': '154',
+            'event': 'task-continuation-decided', 'task_id': '154',
             'caused_by_event_ids': [events(root)[-1]['event_id']],
             'evidence_refs': [str(Path(original['trace_file']).relative_to(root))],
             'decision': 'Continue within the original task allowance',
@@ -366,7 +366,7 @@ def test_sampled_stop_continues_original_researcher_with_unchanged_accounting(
         decision_id = yaml.safe_load(authorized.stdout)['event_id']
         Path(env['RECOVERY_RELEASE']).touch()
         if surface == 'cli':
-            resumed = command(installed_commands, root, env, 'continue', '--ticket-id', '154',
+            resumed = command(installed_commands, root, env, 'continue', '--task-id', '154',
                               '--caused-by-event-id', decision_id)
             assert resumed.returncode == 0, resumed.stdout + resumed.stderr
         else:
@@ -376,7 +376,7 @@ def test_sampled_stop_continues_original_researcher_with_unchanged_accounting(
                                   'params': {'name': 'graphtraj', 'arguments': {
                                       'action': 'execute', 'feature': 'continue',
                                       'arguments': {
-                                          'ticket_id': '154',
+                                          'task_id': '154',
                                           'caused_by_event_ids': [decision_id]}}}}) + '\n',
                 text=True, capture_output=True, timeout=20,
             )
@@ -390,9 +390,9 @@ def test_sampled_stop_continues_original_researcher_with_unchanged_accounting(
         assert current['parent'] == original['parent']
         assert current['retained_batch_file'] == original['retained_batch_file']
         assert Path(original['trace_file']).read_bytes().startswith(trace)
-        team = yaml.safe_load((ticket / 'teams/1/team.yml').read_text())
+        team = yaml.safe_load((task_directory / 'teams/1/team.yml').read_text())
         assert [member['session_ref'] for member in team['members'].values()] == [alias]
-        after = yaml.safe_load((ticket / 'execution-budget.yml').read_text())
+        after = yaml.safe_load((task_directory / 'execution-budget.yml').read_text())
         assert not after['stopped']
         for field in ('started_at', 'allowance_minutes', 'sessions', 'stopping_checks', 'notifications'):
             assert after[field] == before[field]
@@ -424,31 +424,31 @@ def test_cancelled_task_is_neither_recoverable_nor_cleanable(
     try:
         stopped = command(installed_commands, root, env, 'interrupt', alias)
         assert stopped.returncode == 0, stopped.stdout + stopped.stderr
-        definition = _ticket('154', 'recovery')
+        definition = _task('154', 'recovery')
         definition.update(body=BODY + definition['body'], active=False, replaced_by=[])
         revision = root / 'cancel.yml'
         revision.write_text(yaml.safe_dump({
-            'product_preserving': True, 'tickets': [definition],
+            'product_preserving': True, 'tasks': [definition],
             'caused_by_event_ids': [events(root)[-1]['event_id']],
             'evidence_refs': ['delivery-evidence.md'],
         }))
-        cancelled = run_process([str(installed_commands.product), 'ticket', 'revise',
+        cancelled = run_process([str(installed_commands.product), 'task', 'revise',
                                  '--revision-file', str(revision)], cwd=root, env=env)
         assert cancelled.returncode == 0, cancelled.stdout + cancelled.stderr
         cause = events(root)[-1]['event_id']
-        ticket = root / '.graphtraj/state/tickets/154-recovery'
-        retained = {path: path.read_bytes() for path in ticket.rglob('*') if path.is_file()}
+        task_directory = root / '.graphtraj/state/tasks/154-recovery'
+        retained = {path: path.read_bytes() for path in task_directory.rglob('*') if path.is_file()}
         for args in (
-            ('continue', '--ticket-id', '154', '--caused-by-event-id', cause),
+            ('continue', '--task-id', '154', '--caused-by-event-id', cause),
             ('replace', alias, '--caused-by-event-id', cause),
             ('send', alias, '--instruction', 'Resume', '--caused-by-event-id', cause),
-            ('cleanup', '--ticket-id', '154'),
+            ('cleanup', '--task-id', '154'),
         ):
             refused = command(installed_commands, root, env, *args)
             assert refused.returncode == 1, refused.stdout + refused.stderr
         assert all(path.read_bytes() == content for path, content in retained.items())
-        graph = run_process([str(installed_commands.product), 'ticket', 'graph'], cwd=root, env=env)
-        record = yaml.safe_load(graph.stdout)['tickets'][0]
+        graph = run_process([str(installed_commands.product), 'task', 'graph'], cwd=root, env=env)
+        record = yaml.safe_load(graph.stdout)['tasks'][0]
         assert record['status'] == 'implementing' and not record['active'] and not record['ready']
         assert Path(task['worktree_path']).exists()
     finally:
@@ -469,7 +469,7 @@ def test_failed_first_creation_can_continue_budget_before_ordinary_launch(
     from graphtraj.execution import execution_budget as budgets
     from graphtraj.execution.runner_models import RunnerError
     from graphtraj.execution.runner_status import runtime_caller
-    from graphtraj.teams.team_round import continue_stopped_ticket
+    from graphtraj.teams.team_round import continue_stopped_task
 
     root, _, _, env = configure_harness(
         installed_commands, temporary_git_repository, fake_codex, tmp_path,
@@ -478,13 +478,13 @@ def test_failed_first_creation_can_continue_budget_before_ordinary_launch(
         'roles': {'researcher': {'runtime': 'codex', 'model': 'selected'}},
         'role_tree': {'researcher': {}},
     }))
-    definition = _ticket('160', 'first-session')
+    definition = _task('160', 'first-session')
     definition['body'] = BODY + definition['body']
     _register(installed_commands, root, definition)
     _change_status(installed_commands, root, '160', 'ready')
     batch = root / 'batch.yml'
-    batch.write_text(yaml.safe_dump({'tasks': [{'role': 'researcher', 'ticket_id': '160'}]}))
-    ticket = root / '.graphtraj/state/tickets/160-first-session'
+    batch.write_text(yaml.safe_dump({'tasks': [{'role': 'researcher', 'task_id': '160'}]}))
+    task_directory = root / '.graphtraj/state/tasks/160-first-session'
     runner = root / '.graphtraj/runner'
     env['FAKE_CODEX_EVENTS'] = '[]'
     failed = command(installed_commands, root, env, '--swarm-input', str(batch))
@@ -492,14 +492,14 @@ def test_failed_first_creation_can_continue_budget_before_ordinary_launch(
     failures = {path: path.read_bytes() for path in (runner / 'sessions').glob('*/launch-error.yml')}
     assert failures
     assert not list((runner / 'sessions').glob('*/mapping.yml'))
-    assert yaml.safe_load((ticket / 'ticket.yml').read_text())['active_team_ordinal'] is None
-    monitor = budgets.execution_budget_monitor(ticket, '160', 'first-session')
+    assert yaml.safe_load((task_directory / 'task.yml').read_text())['active_team_ordinal'] is None
+    monitor = budgets.execution_budget_monitor(task_directory, '160', 'first-session')
     cause = events(root)[-1]['event_id']
-    refused = command(installed_commands, root, env, 'continue', '--ticket-id', '160',
+    refused = command(installed_commands, root, env, 'continue', '--task-id', '160',
                       '--caused-by-event-id', cause)
-    assert refused.returncode == 1 and 'sampled stopped Ticket' in refused.stdout
+    assert refused.returncode == 1 and 'sampled stopped Task' in refused.stdout
     sample_stop(monitor, monkeypatch)
-    before = yaml.safe_load((ticket / 'execution-budget.yml').read_text())
+    before = yaml.safe_load((task_directory / 'execution-budget.yml').read_text())
     assert before['stopped'] and sum(before['sessions'].values()) == 0
 
     definition.update(active=True, replaced_by=[])
@@ -509,10 +509,10 @@ def test_failed_first_creation_can_continue_budget_before_ordinary_launch(
     )
     revision = root / 'revision.yml'
     revision.write_text(yaml.safe_dump({
-        'product_preserving': True, 'tickets': [definition],
+        'product_preserving': True, 'tasks': [definition],
         'caused_by_event_ids': [cause], 'evidence_refs': ['delivery-evidence.md'],
     }))
-    revised = run_process([str(installed_commands.product), 'ticket', 'revise',
+    revised = run_process([str(installed_commands.product), 'task', 'revise',
                            '--revision-file', str(revision)], cwd=root, env=env)
     assert revised.returncode == 0, revised.stdout + revised.stderr
     cause = yaml.safe_load(revised.stdout)['event_id']
@@ -520,30 +520,30 @@ def test_failed_first_creation_can_continue_budget_before_ordinary_launch(
     assert blocked.returncode == 1
     assert yaml.safe_load(blocked.stdout)['tasks'][0]['launch_status'] == 'stopped', blocked.stdout
     assert monitor.is_stopped()
-    revised_budget = yaml.safe_load((ticket / 'execution-budget.yml').read_text())
+    revised_budget = yaml.safe_load((task_directory / 'execution-budget.yml').read_text())
     assert revised_budget['budget']['execution_budget']['estimated_minutes']['total'] == 35
     for field in ('started_at', 'allowance_minutes', 'stopping_checks', 'sessions', 'notifications'):
         assert revised_budget[field] == before[field]
-    retained = (ticket / 'execution-budget.yml').read_bytes()
+    retained = (task_directory / 'execution-budget.yml').read_bytes()
     history = events(root)
     with runtime_caller(runner, 'unrelated-native-session'):
         with pytest.raises(RunnerError, match='Only the root caller'):
-            continue_stopped_ticket('160', (cause,), root)
+            continue_stopped_task('160', (cause,), root)
     for causes in ((), ('missing-event',), (cause, cause)):
         with pytest.raises(RunnerError):
-            continue_stopped_ticket('160', causes, root)
-    assert (ticket / 'execution-budget.yml').read_bytes() == retained
+            continue_stopped_task('160', causes, root)
+    assert (task_directory / 'execution-budget.yml').read_bytes() == retained
     assert events(root) == history
 
-    continued = command(installed_commands, root, env, 'continue', '--ticket-id', '160',
+    continued = command(installed_commands, root, env, 'continue', '--task-id', '160',
                         '--caused-by-event-id', cause, *(['--budget-only'] if budget_only else []))
     assert continued.returncode == 0, continued.stdout + continued.stderr
     result = yaml.safe_load(continued.stdout)
     assert result['tasks'] == []
-    after = yaml.safe_load((ticket / 'execution-budget.yml').read_text())
+    after = yaml.safe_load((task_directory / 'execution-budget.yml').read_text())
     assert after == dict(revised_budget, stopped=False)
-    assert yaml.safe_load((ticket / 'ticket.yml').read_text())['active_team_ordinal'] is None
-    assert not list(ticket.glob('teams/*/team.yml'))
+    assert yaml.safe_load((task_directory / 'task.yml').read_text())['active_team_ordinal'] is None
+    assert not list(task_directory.glob('teams/*/team.yml'))
     continuation = next(e for e in events(root) if e['event_id'] == result['continuation_event_id'])
     assert continuation['caused_by_event_ids'] == [cause]
     assert 'team_ordinal' not in continuation and 'team_round' not in continuation
@@ -556,9 +556,9 @@ def test_failed_first_creation_can_continue_budget_before_ordinary_launch(
     wait_for_file(directory / 'execution.yml')
     mapping = yaml.safe_load((directory / 'mapping.yml').read_text())
     assert mapping['session'] == task['session'] and mapping['parent'] is None
-    team = yaml.safe_load((ticket / 'teams/1/team.yml').read_text())
+    team = yaml.safe_load((task_directory / 'teams/1/team.yml').read_text())
     assert [member['session_ref'] for member in team['members'].values()] == [task['alias']]
-    final_budget = yaml.safe_load((ticket / 'execution-budget.yml').read_text())
+    final_budget = yaml.safe_load((task_directory / 'execution-budget.yml').read_text())
     for field in ('started_at', 'allowance_minutes', 'stopping_checks', 'notifications'):
         assert final_budget[field] == after[field]
     assert final_budget['sessions'] == {'researcher': 1}
@@ -580,7 +580,7 @@ def test_task_continuation_requires_active_ready_task_before_first_session(
     root, _, _, env = configure_harness(
         installed_commands, temporary_git_repository, fake_codex, tmp_path,
     )
-    definition = _ticket('160', 'first-session')
+    definition = _task('160', 'first-session')
     definition['body'] = BODY + definition['body']
     _register(installed_commands, root, definition)
     if cancelled:
@@ -588,23 +588,23 @@ def test_task_continuation_requires_active_ready_task_before_first_session(
         definition.update(active=False, replaced_by=[])
         revision = root / 'cancel.yml'
         revision.write_text(yaml.safe_dump({
-            'product_preserving': True, 'tickets': [definition],
+            'product_preserving': True, 'tasks': [definition],
             'caused_by_event_ids': [events(root)[-1]['event_id']],
             'evidence_refs': ['delivery-evidence.md'],
         }))
-        result = run_process([str(installed_commands.product), 'ticket', 'revise',
+        result = run_process([str(installed_commands.product), 'task', 'revise',
                               '--revision-file', str(revision)], cwd=root, env=env)
         assert result.returncode == 0, result.stdout + result.stderr
-    ticket = root / '.graphtraj/state/tickets/160-first-session'
-    monitor = budgets.execution_budget_monitor(ticket, '160', 'first-session')
+    task = root / '.graphtraj/state/tasks/160-first-session'
+    monitor = budgets.execution_budget_monitor(task, '160', 'first-session')
     assert not monitor.is_stopped()
     sample_stop(monitor, monkeypatch)
-    retained = (ticket / 'execution-budget.yml').read_bytes()
+    retained = (task / 'execution-budget.yml').read_bytes()
     history = events(root)
-    result = command(installed_commands, root, env, 'continue', '--ticket-id', '160',
+    result = command(installed_commands, root, env, 'continue', '--task-id', '160',
                      '--caused-by-event-id', history[-1]['event_id'])
     assert result.returncode == 1 and 'invalid-input' in result.stdout
-    assert (ticket / 'execution-budget.yml').read_bytes() == retained
+    assert (task / 'execution-budget.yml').read_bytes() == retained
     assert events(root) == history
 
 
@@ -621,7 +621,7 @@ def test_budget_only_continuation_leaves_old_subtree_for_new_configured_root(
     from graphtraj.execution import execution_budget as budgets
     from graphtraj.execution.runner_models import RunnerError
     from graphtraj.execution.runner_status import runtime_caller
-    from graphtraj.teams.team_round import continue_stopped_ticket
+    from graphtraj.teams.team_round import continue_stopped_task
 
     root, env, task = prepare(
         installed_commands, temporary_git_repository, fake_codex, tmp_path,
@@ -629,20 +629,20 @@ def test_budget_only_continuation_leaves_old_subtree_for_new_configured_root(
     )
     alias = task['alias']
     runner = root / '.graphtraj/runner'
-    ticket = root / '.graphtraj/state/tickets/154-recovery'
+    task_directory = root / '.graphtraj/state/tasks/154-recovery'
     child = json.loads((Path(task['worktree_path']) / 'child.json').read_text())['alias']
     directories = [runner / 'sessions' / member for member in (alias, child)]
     cause = events(root)[-1]['event_id']
     try:
         # The child is really executing; budget-only must not bypass subtree checks.
-        busy = command(installed_commands, root, env, 'continue', '--ticket-id', '154',
+        busy = command(installed_commands, root, env, 'continue', '--task-id', '154',
                        '--budget-only', '--caused-by-event-id', cause)
         assert busy.returncode == 1 and 'replacement-not-stopped' in busy.stdout
-        monitor = budgets.execution_budget_monitor(ticket, '154', 'recovery')
+        monitor = budgets.execution_budget_monitor(task_directory, '154', 'recovery')
         sample_stop(monitor, monkeypatch)
         for directory in directories:
             wait_for_file(directory / 'execution.yml')
-        before = yaml.safe_load((ticket / 'execution-budget.yml').read_text())
+        before = yaml.safe_load((task_directory / 'execution-budget.yml').read_text())
         assert before['stopped']
         originals = [yaml.safe_load((directory / 'mapping.yml').read_text())
                      for directory in directories]
@@ -656,11 +656,11 @@ def test_budget_only_continuation_leaves_old_subtree_for_new_configured_root(
         history = events(root)
         with runtime_caller(runner, originals[1]['session']):
             with pytest.raises(RunnerError) as refused:
-                continue_stopped_ticket('154', (cause,), root, budget_only=True)
+                continue_stopped_task('154', (cause,), root, budget_only=True)
             assert refused.value.code == 'authority-denied'
         for causes in ((), ('missing-event',), (cause, cause)):
             with pytest.raises(RunnerError):
-                continue_stopped_ticket('154', causes, root, budget_only=True)
+                continue_stopped_task('154', causes, root, budget_only=True)
 
         # A resolved member from another Team must fail before permission changes.
         from graphtraj.teams import team_round
@@ -674,12 +674,12 @@ def test_budget_only_continuation_leaves_old_subtree_for_new_configured_root(
         with monkeypatch.context() as patch:
             patch.setattr(team_round, 'read_alias_mapping', mismatched_member)
             with pytest.raises(RunnerError, match='retained lifecycle'):
-                continue_stopped_ticket('154', (cause,), root, budget_only=True)
-        assert yaml.safe_load((ticket / 'execution-budget.yml').read_text()) == before
+                continue_stopped_task('154', (cause,), root, budget_only=True)
+        assert yaml.safe_load((task_directory / 'execution-budget.yml').read_text()) == before
         assert events(root) == history
 
         if surface == 'cli':
-            continued = command(installed_commands, root, env, 'continue', '--ticket-id', '154',
+            continued = command(installed_commands, root, env, 'continue', '--task-id', '154',
                                 '--budget-only', '--caused-by-event-id', cause)
             assert continued.returncode == 0, continued.stdout + continued.stderr
             result = yaml.safe_load(continued.stdout)
@@ -690,7 +690,7 @@ def test_budget_only_continuation_leaves_old_subtree_for_new_configured_root(
                                   'params': {'name': 'graphtraj', 'arguments': {
                                       'action': 'execute', 'feature': 'continue',
                                       'arguments': {
-                                          'ticket_id': '154',
+                                          'task_id': '154',
                                           'caused_by_event_ids': [cause],
                                           'budget_only': True}}}}) + '\n',
                 text=True, capture_output=True, timeout=20,
@@ -700,14 +700,14 @@ def test_budget_only_continuation_leaves_old_subtree_for_new_configured_root(
             assert not document['isError'], document
             result = document['structuredContent']
         assert result['tasks'] == []
-        after = yaml.safe_load((ticket / 'execution-budget.yml').read_text())
+        after = yaml.safe_load((task_directory / 'execution-budget.yml').read_text())
         assert after == dict(before, stopped=False)
         assert all(path.read_bytes() == content for path, content in retained.items())
         continuation = next(e for e in events(root) if e['event_id'] == result['continuation_event_id'])
         assert continuation['caused_by_event_ids'] == [cause]
-        repeated = command(installed_commands, root, env, 'continue', '--ticket-id', '154',
+        repeated = command(installed_commands, root, env, 'continue', '--task-id', '154',
                            '--budget-only', '--caused-by-event-id', cause)
-        assert repeated.returncode == 1 and 'sampled stopped Ticket' in repeated.stdout
+        assert repeated.returncode == 1 and 'sampled stopped Task' in repeated.stdout
 
         roles_path = root / '.graphtraj/roles.yml'
         roles = yaml.safe_load(roles_path.read_text())
@@ -715,7 +715,7 @@ def test_budget_only_continuation_leaves_old_subtree_for_new_configured_root(
         roles['role_tree']['expert'] = {}
         roles_path.write_text(yaml.safe_dump(roles))
         batch = root / 'expert.yml'
-        batch.write_text(yaml.safe_dump({'tasks': [{'role': 'expert', 'ticket_id': '154'}]}))
+        batch.write_text(yaml.safe_dump({'tasks': [{'role': 'expert', 'task_id': '154'}]}))
         Path(env['RECOVERY_RELEASE']).touch()
         launched = command(installed_commands, root, env, '--swarm-input', str(batch))
         assert launched.returncode == 0, launched.stdout + launched.stderr
@@ -727,12 +727,12 @@ def test_budget_only_continuation_leaves_old_subtree_for_new_configured_root(
         assert mapping['session'] not in {old['session'] for old in originals}
         assert mapping['parent'] is None and mapping['role'] == 'expert'
         assert Path(mapping['trace_file']).is_file()
-        team = yaml.safe_load((ticket / 'teams/1/team.yml').read_text())
+        team = yaml.safe_load((task_directory / 'teams/1/team.yml').read_text())
         assert {member['session_ref'] for member in team['members'].values()} == {
             alias, child, new['alias'],
         }
         assert all(path.read_bytes() == content for path, content in retained.items())
-        final = yaml.safe_load((ticket / 'execution-budget.yml').read_text())
+        final = yaml.safe_load((task_directory / 'execution-budget.yml').read_text())
         for field in ('started_at', 'allowance_minutes', 'stopping_checks', 'notifications'):
             assert final[field] == after[field]
         assert final['sessions'] == dict(after['sessions'], expert=1)

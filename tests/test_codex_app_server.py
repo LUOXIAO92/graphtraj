@@ -225,17 +225,17 @@ def test_active_input_and_interrupt_target_only_the_expected_execution(
     asyncio.run(exercise())
 
 
-def _controlled_stop_ticket(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
-    """Return a Ticket monitor whose next stopping check samples a real stop."""
+def _controlled_stop_task(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
+    """Return a Task monitor whose next stopping check samples a real stop."""
     from graphtraj.execution import execution_budget
     from graphtraj.execution.execution_budget import execution_budget_monitor
 
-    ticket = tmp_path / "ticket"
-    ticket.mkdir()
-    (ticket / "ticket.yml").write_text(
-        "current_definition: ticket.md\n", encoding="utf-8"
+    task = tmp_path / "task"
+    task.mkdir()
+    (task / "task.yml").write_text(
+        "current_definition: task.md\n", encoding="utf-8"
     )
-    (ticket / "ticket.md").write_text(
+    (task / "task.md").write_text(
         "---\n"
         "difficulty: high\n"
         "difficulty_reason: controlled caller delivery\n"
@@ -252,7 +252,7 @@ def _controlled_stop_ticket(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
     monkeypatch.setattr(execution_budget.time, "time", lambda: now[0])
     monkeypatch.setattr(execution_budget.random, "uniform", lambda lower, upper: lower)
     monkeypatch.setattr(execution_budget.random, "random", lambda: 0.99)
-    monitor = execution_budget_monitor(ticket, "116", "session-budget-control")
+    monitor = execution_budget_monitor(task, "116", "session-budget-control")
     assert monitor is not None
     return monitor, now
 
@@ -265,7 +265,7 @@ def test_budget_stop_returns_one_in_band_delivery_to_the_awaiting_call(
 
     from graphtraj.execution.execution_budget import budget_notice_output
 
-    monitor, now = _controlled_stop_ticket(monkeypatch, tmp_path)
+    monitor, now = _controlled_stop_task(monkeypatch, tmp_path)
     bin_directory = tmp_path / "bin"
     bin_directory.mkdir()
     native_client_log = tmp_path / "native-client.log"
@@ -282,7 +282,7 @@ def test_budget_stop_returns_one_in_band_delivery_to_the_awaiting_call(
     reminder = {
         "type": "execution-budget-exceeded",
         "occurred_at": datetime.fromtimestamp(1000.0).astimezone().isoformat(timespec="seconds"),
-        "ticket": {"ticket_id": "116", "ticket_name": "session-budget-control"},
+        "task": {"task_id": "116", "task_name": "session-budget-control"},
         "threshold": {"kind": "estimated_minutes", "limit": "total"},
         "actual": {"elapsed_minutes": 0.5},
         "message": "System reminder: Elapsed time: 00:00:30.",
@@ -303,7 +303,7 @@ def test_budget_stop_returns_one_in_band_delivery_to_the_awaiting_call(
                 json.dumps({
                     "type": "execution-budget-exceeded",
                     "occurred_at": datetime.fromtimestamp(1120.7).astimezone().isoformat(timespec="seconds"),
-                    "ticket": {"ticket_id": "116", "ticket_name": "session-budget-control"},
+                    "task": {"task_id": "116", "task_name": "session-budget-control"},
                     "threshold": {"kind": "stochastic_stop", "limit": 2},
                     "actual": {"elapsed_minutes": 2.011},
                 }) + "\n"
@@ -314,14 +314,14 @@ def test_budget_stop_returns_one_in_band_delivery_to_the_awaiting_call(
     assert len(deliveries) == 1
     delivery = deliveries[0]
     assert set(delivery) == {
-        "stop_id", "stop", "ticket", "triggered_at", "delivered_at",
+        "stop_id", "stop", "task", "triggered_at", "delivered_at",
         "elapsed", "instruction",
     }
     assert isinstance(delivery["instruction"], str) and delivery["instruction"]
     assert delivery["stop_id"] == "fd403ef4-1047-54e3-9eb3-ec71c26912eb"
     assert delivery["stop"] == "stochastic_stop:2"
-    assert delivery["ticket"] == {
-        "ticket_id": "116", "ticket_name": "session-budget-control",
+    assert delivery["task"] == {
+        "task_id": "116", "task_name": "session-budget-control",
     }
     assert delivery["elapsed"] == "00:02:00"
     triggered_at = datetime.fromisoformat(delivery["triggered_at"])
@@ -363,7 +363,7 @@ def test_main_recovery_keeps_delivery_error_visible_when_runner_fails(
     stop = {
         "type": "execution-budget-exceeded",
         "occurred_at": "2026-09-17T02:20:24",
-        "ticket": {"ticket_id": "116", "ticket_name": "session-budget-control"},
+        "task": {"task_id": "116", "task_name": "session-budget-control"},
         "threshold": {"kind": "stochastic_stop", "limit": 2},
         "actual": {"elapsed_minutes": 2.011},
     }
@@ -382,7 +382,7 @@ def test_main_recovery_close_releases_the_caller_channel_once(tmp_path: Path) ->
     stop = {
         "type": "execution-budget-exceeded",
         "occurred_at": datetime.now().astimezone().isoformat(timespec="seconds"),
-        "ticket": {"ticket_id": "116", "ticket_name": "session-budget-control"},
+        "task": {"task_id": "116", "task_name": "session-budget-control"},
         "threshold": {"kind": "stochastic_stop", "limit": 2},
         "actual": {"elapsed_minutes": 2.011},
     }
@@ -414,7 +414,7 @@ def test_agent_runner_returns_the_delivered_stop_with_its_result(
     stop = {
         "type": "execution-budget-exceeded",
         "occurred_at": datetime.fromtimestamp(1000.0).astimezone().isoformat(timespec="seconds"),
-        "ticket": {"ticket_id": "116", "ticket_name": "session-budget-control"},
+        "task": {"task_id": "116", "task_name": "session-budget-control"},
         "threshold": {"kind": "stochastic_stop", "limit": 2},
         "actual": {"elapsed_minutes": 2.011},
     }
@@ -1188,7 +1188,7 @@ def test_harness_approvals_reviewer_reaches_create_and_resume(
     report_files = (Path('.state/teams/1/rounds/1/engineer.md'),)
     resolved = context(
         root, peer,
-        ResolvedChildRole('engineer', 'Implement the Ticket.',
+        ResolvedChildRole('engineer', 'Implement the Task.',
                           RolePreset('codex', 'chosen-model', None, None, reasoning_effort='low')),
         report_files=report_files,
     )
@@ -1221,7 +1221,7 @@ def test_parent_projection_keeps_control_files_private(
     child_alias = '144-native-dispatch-permissions@e1'
     sessions = root / '.graphtraj' / 'runner' / 'sessions'
     for alias, parent in [
-        (leader_alias, None), (child_alias, leader_alias), ('other-ticket@e1', 'other-ticket@l1'),
+        (leader_alias, None), (child_alias, leader_alias), ('other-task@e1', 'other-task@l1'),
     ]:
         directory = sessions / alias
         directory.mkdir(parents=True)
@@ -1277,9 +1277,9 @@ def test_parent_projection_keeps_control_files_private(
     assert filesystem.get(str(worldline_lock)) != 'write'
     assert filesystem.get(str(capacity)) != 'write'
     assert resumed['session_parameters']['config']['agents']['enabled'] is True
-    # No wildcard, no shared Runner directory and no other Ticket's Session.
+    # No wildcard, no shared Runner directory and no other Task's Session.
     assert filesystem.get(str(sessions)) != 'write'
-    assert filesystem.get(str(sessions / 'other-ticket@e1')) != 'write'
+    assert filesystem.get(str(sessions / 'other-task@e1')) != 'write'
     assert filesystem[':workspace_roots']['.'] == 'write'
 
 
@@ -1292,7 +1292,7 @@ def test_role_assignments_survive_native_followup_permissions(
     async def exercise() -> None:
         root = tmp_path / 'worktree'
         root.mkdir()
-        evidence = tmp_path / '.graphtraj/state/tickets/149-reports'
+        evidence = tmp_path / '.graphtraj/state/tasks/149-reports'
         role = ResolvedChildRole(
             'engineer', 'Implement the assigned task.',
             RolePreset('codex', 'chosen-model', None, None),

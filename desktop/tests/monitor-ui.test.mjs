@@ -14,14 +14,14 @@ test('D navigation preserves separate project graphs and independent column read
     window.graphtraj = {
       projects: async () => ({ projects, selected }),
       selectProject: async id => ({ projects, selected: selected = id }),
-      graph: async projectId => ({ projectId, updatedAt: new Date().toISOString(), graph: { tickets: [
-        { ticket_id: '1', ticket_name: 'current', title: `${projectId} current`, status: 'implementing', active: true, dependencies: [], replaced_by: [] },
-        { ticket_id: '2', ticket_name: 'previous', title: `${projectId} previous`, status: 'integrated', active: false, dependencies: ['1'], replaced_by: ['1'] },
+      graph: async projectId => ({ projectId, updatedAt: new Date().toISOString(), graph: { tasks: [
+        { task_id: '1', task_name: 'current', title: `${projectId} current`, status: 'implementing', active: true, dependencies: [], replaced_by: [] },
+        { task_id: '2', task_name: 'previous', title: `${projectId} previous`, status: 'integrated', active: false, dependencies: ['1'], replaced_by: ['1'] },
       ] } }),
       activity: async (projectId, request) => {
         const agents = ['alpha', 'beta', 'historical', 'delta'].map(alias => ({ alias,
           historical: alias === 'historical', state: alias === 'historical' ? 'retired' : 'running', runtime: 'codex' }));
-        return { ticket_id: request.ticket_id, agents, updated_at: new Date().toISOString(),
+        return { task_id: request.task_id, agents, updated_at: new Date().toISOString(),
           availability: 'available', cursor: '80', has_more: false,
           events: !request.alias || request.cursor ? [] : Array.from({ length: 80 }, (_, i) => ({
             id: `${projectId}:${request.alias}:${i}`, kind: i === 79 ? 'tool' : 'message',
@@ -121,16 +121,16 @@ test('native task selection preserves layout; only expansion reveals nested task
   t.after(() => browser.close());
   const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
   await page.addInitScript(() => {
-    const tickets = [
+    const tasks = [
       ['1', null, [], 'A summary with a long title that remains readable when wrapped across multiple lines'],
       ['2', '1', [], 'Nested summary'], ['3', '2', [], 'First native result'],
       ['4', null, ['3'], 'External consumer'], ['5', '2', ['4'], 'Return to a different internal result'],
       ['6', null, [], 'Unrelated work'],
-    ].map(([ticket_id, parent_id, dependencies, title]) => ({ ticket_id, parent_id, dependencies, title,
-      schema_version: 2, ticket_name: `task-${ticket_id}`, status: 'pending', active: true, replaced_by: [] }));
+    ].map(([task_id, parent_id, dependencies, title]) => ({ task_id, parent_id, dependencies, title,
+      schema_version: 2, task_name: `task-${task_id}`, status: 'pending', active: true, replaced_by: [] }));
     window.graphtraj = {
       projects: async () => ({ projects: [{ id: 'test', root: '/native-tasks' }], selected: 'test' }),
-      graph: async projectId => ({ projectId, graph: { tickets }, updatedAt: new Date().toISOString() }),
+      graph: async projectId => ({ projectId, graph: { tasks }, updatedAt: new Date().toISOString() }),
       activity: async () => ({ agents: [], events: [], availability: 'available', has_more: false }),
       connections: async () => ({ revision: '1', catalog: { version: 1, runtimes: {} }, capabilities: { model_discovery: {}, custom_api: {} }, account_access: 'unknown' }),
     };

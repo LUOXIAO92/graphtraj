@@ -53,7 +53,7 @@ def _session(root: Path, alias: str, runtime: str, trace_text: str) -> Path:
                 "alias": alias,
                 "runtime": runtime,
                 "session": "native-session",
-                "ticket_id": "216",
+                "task_id": "216",
                 "team_generation": 1,
                 "role": "engineer",
                 "parent": None,

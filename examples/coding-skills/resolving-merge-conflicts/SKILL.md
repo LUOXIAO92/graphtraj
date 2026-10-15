@@ -5,7 +5,7 @@ description: "Resolve software implementation conflicts in an in-progress Git me
 
 1. **See the current state** of the merge/rebase. Check git history, and the conflicting files.
 
-2. **Find the primary sources** for each conflict. Understand deeply why each change was made, and what the original intent was. Read the commit messages, check the PRs, check original issues/tickets.
+2. **Find the primary sources** for each conflict. Understand deeply why each change was made, and what the original intent was. Read the commit messages, check the PRs, check original issues/tasks.
 
 3. **Resolve each hunk.** Preserve both intents where possible. Where incompatible, pick the one matching the merge's stated goal and note the trade-off. Do **not** invent new behaviour. Resolve within the accepted requirements; report incompatible requirements to the caller. Do not `--abort` the caller’s operation.
 

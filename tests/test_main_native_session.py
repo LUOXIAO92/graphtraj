@@ -80,7 +80,7 @@ def test_main_summarizes_actual_native_status_callback(
     config.write_text(default_configuration_content(tmp_path, tmp_path))
     mapping = {'alias': 'child@e1', 'parent': None, 'session': 'private-session',
                'execution_id': 'private-turn', 'worker_pid': 1, 'runtime_pid': 1,
-               'runtime': 'codex', 'ticket_id': '133', 'team_generation': 2,
+               'runtime': 'codex', 'task_id': '133', 'team_generation': 2,
                'role': 'engineer', 'retained_batch_file': 'batch.yml',
                'worktree_path': str(tmp_path), 'trace_file': 'unused'}
     (directory / 'mapping.yml').write_text(yaml.safe_dump(mapping))

@@ -33,10 +33,11 @@ def test_binding_description_delivers_manual(tmp_path: Path) -> None:
 
 
 PEER = r'''
-import json, os, sys
+import json, os, sys, threading, time
 from pathlib import Path
 root = Path(os.environ['FINALIZE_TEST_ROOT'])
 options = json.loads((root / 'options.json').read_text())
+interrupted = threading.Event()
 
 def send(message):
     print(json.dumps(message), flush=True)
@@ -50,7 +51,7 @@ def main_thread():
 for line in sys.stdin:
     request = json.loads(line)
     with (root / 'wire.jsonl').open('a') as stream:
-        stream.write(json.dumps(request) + '\n')
+        stream.write(json.dumps({**request, 'observed_at': time.time()}) + '\n')
     method, params = request['method'], request.get('params', {})
     if method == 'initialized': continue
     result = {}
@@ -65,11 +66,17 @@ for line in sys.stdin:
                   'params':{'threadId':'main','turnId':'main-turn','itemId':'parent-command',
                             'command':'read approved source','cwd':str(root)}})
     elif method == 'thread/turns/list':
+        if options.get('wait_before_start') and (root / 'child-context.json').exists():
+            (root / 'snapshot-fixed').touch()
+            while not (root / 'delivery-sent').exists(): time.sleep(.01)
         result = {'data':[{'id':options.get('current_turn','main-turn'), 'status':'inProgress'}]}
     elif method == 'thread/fork':
         if options.get('history_mode') == 'paginated' and not params.get('excludeTurns'):
             send({'id':request['id'],'error':{'code':-32600,'message':'history must be excluded'}})
             continue
+        if options.get('wait_during_fork'):
+            (root / 'snapshot-fixed').touch()
+            while not (root / 'delivery-sent').exists(): time.sleep(.01)
         if options.get('fork_error'):
             send({'id':request['id'],'error':{'code':-32600,'message':'fork unavailable'}})
             continue
@@ -91,6 +98,16 @@ for line in sys.stdin:
                   'reasoningEffort':params.get('config',{}).get('model_reasoning_effort')}
         if options.get('supersede_during_fork'): options['current_turn'] = 'new-main-turn'
     elif method == 'turn/start':
+        if params['threadId'] == 'main':
+            if options.get('delay_delivery'):
+                (root / 'delivery-pending').touch()
+                time.sleep(options['delay_delivery'])
+            if options.get('refuse_delivery'):
+                send({'id':request['id'], 'error':{'code':-32600, 'message':'delivery refused'}})
+            else:
+                send({'id':request['id'], 'result':{'turn':{
+                    'id':options.get('delivery_turn', 'main-turn'), 'status':'inProgress', 'items':[]}}})
+            continue
         assert params['threadId'] == options.get('child','checker')
         context = json.loads((root / 'child-context.json').read_text())
         context.append(params['input'][0]['text'])
@@ -119,7 +136,17 @@ for line in sys.stdin:
                 'threadId':params['threadId'],'tokenUsage':options['usage']}})
         for notice in options.get('notifications', []): send(notice)
         text = options.get('output',json.dumps({'status':'completed',
-            'conclusion':'Main may end this turn.','reason':'All required tickets integrated.','nodes':[]}))
+            'conclusion':'Main may end this turn.','reason':'All required tasks integrated.','nodes':[]}))
+        if options.get('hold_check'):
+            def finish_later(thread_id=params['threadId'], output=text):
+                if not interrupted.wait(options['hold_check']):
+                    send({'method':'item/completed','params':{'threadId':thread_id,'turnId':'check-turn',
+                          'item':{'id':'answer','type':'agentMessage','text':output}}})
+                    send({'method':'turn/completed','params':{'threadId':thread_id,
+                          'turn':{'id':'check-turn','status':'completed','items':[]}}})
+            threading.Thread(target=finish_later, daemon=True).start()
+            (root / 'checker-running').touch()
+            continue
         send({'method':'item/completed','params':{'threadId':params['threadId'],'turnId':'check-turn',
               'item':{'id':'answer','type':'agentMessage','text':text}}})
         turn['status'] = 'completed'
@@ -129,6 +156,12 @@ for line in sys.stdin:
                     stream.write(json.dumps(record) + '\n')
         send({'method':'turn/completed','params':{'threadId':params['threadId'],'turn':turn}})
         if options.get('interrupt_during_check'): options['stopped'] = True
+        continue
+    elif method == 'turn/interrupt':
+        interrupted.set()
+        send({'id':request['id'], 'result':{}})
+        send({'method':'turn/completed','params':{'threadId':params['threadId'],
+              'turn':{'id':params['turnId'],'status':'interrupted','items':[]}}})
         continue
     send({'id':request['id'],'result':result})
 '''
@@ -175,7 +208,7 @@ def stop(binding: Path, **changes: object) -> dict:
 
 
 @pytest.mark.parametrize('status,reason,nodes', [
-    ('completed', 'All required tickets integrated.', []),
+    ('completed', 'All required tasks integrated.', []),
     ('waiting', 'Required child execution remains running.', ['237']),
     ('waiting', 'User approval pending; no other actionable node.', ['238']),
     ('waiting', 'External event pending; no other actionable node.', ['239']),
@@ -205,7 +238,7 @@ def test_main_end_decision(
     visible = [result[key] for key in ('systemMessage', 'reason', 'stopReason') if key in result]
     assert len(visible) == 1 and visible[0].count(reason) == 1
     # One layered message: English title/status, checker conclusion and reason,
-    # optional related Tickets, then this check's usage line, with no blank rows.
+    # optional related Tasks, then this check's usage line, with no blank rows.
     lines = visible[0].splitlines()
     assert lines[0] == f'Completion Check · {status}'
     assert lines[1] == f'Conclusion · {conclusion}'
@@ -289,7 +322,13 @@ def test_stopped_or_changed_main_is_not_continued(host: tuple[Path, Path], optio
     options['output'] = json.dumps({'status':'actionable', 'conclusion':'Main must continue this turn.',
                                     'reason':'unfinished', 'nodes':['237']})
     (root / 'options.json').write_text(json.dumps(options))
-    assert stop(binding) == {}
+    result = stop(binding)
+    if options.get('interrupt_during_check'):
+        assert set(result) == {'systemMessage'}
+        assert 'cancelled' in result['systemMessage']
+        assert 'unfinished' not in result['systemMessage']
+    else:
+        assert result == {}
 
 
 def test_binding_rejects_managed_caller(host: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch) -> None:
@@ -380,7 +419,7 @@ def test_other_adapter_uses_opaque_host_event(
     }
 
 
-@pytest.mark.parametrize('feature,allowed', [('ticket_graph', True), ('send_instruction', False)])
+@pytest.mark.parametrize('feature,allowed', [('task_graph', True), ('send_instruction', False)])
 def test_checker_has_no_sibling_control(
     host: tuple[Path, Path], feature: str, allowed: bool,
 ) -> None:
@@ -1080,12 +1119,184 @@ def test_superseded_fork_retains_cancellation(host: tuple[Path, Path], options: 
     """A new Main turn cancels the old snapshot and never wakes Main with its result."""
     root, binding = host
     (root / 'options.json').write_text(json.dumps(options))
-    assert stop(binding) == {}
+    result = stop(binding)
+    assert set(result) == {'systemMessage'}
+    assert 'cancelled' in result['systemMessage']
+    assert 'All required tasks integrated.' not in result['systemMessage']
     evidence = yaml.safe_load(next(binding.parent.glob('checks/*/execution.yml')).read_text())
     assert evidence['outcome'] == 'cancelled'
     if options.get('supersede_during_fork'):
         wire = [json.loads(line) for line in (root / 'wire.jsonl').read_text().splitlines()]
         assert not any(message['method'] == 'turn/start' for message in wire)
+
+    # Cancellation is not a task verdict or turn-ID deduplication: another
+    # legitimate Stop in the same Main turn must still check the current task.
+    (root / 'options.json').write_text(json.dumps({'child': 'next-checker'}))
+    resumed = stop(binding)
+    assert set(resumed) == {'systemMessage'}
+    assert 'completed' in resumed['systemMessage']
+    wire = [json.loads(line) for line in (root / 'wire.jsonl').read_text().splitlines()]
+    starts = [message['params']['threadId'] for message in wire if message['method'] == 'turn/start']
+    assert starts[-1] == 'next-checker'
+    assert 'main' not in starts
+
+
+@pytest.mark.parametrize('delivery', ['same-turn', 'different-turn', 'refused'])
+@pytest.mark.parametrize('sender_directory', ['root', 'worktree'])
+def test_acknowledged_input_cancels_running_check(
+    host: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch, delivery: str,
+    sender_directory: str,
+) -> None:
+    """A real send receipt interrupts the peer before its delayed verdict exists."""
+    import threading
+    from conftest import wait_for_file
+    from graphtraj.runtimes.codex import app_server, host_events
+
+    root, binding = host
+    cwd = root if sender_directory == 'root' else root / '.graphtraj' / '.agent-worktrees' / 'child'
+    cwd.mkdir(parents=True, exist_ok=True)
+    monkeypatch.chdir(cwd)
+    monkeypatch.setattr(app_server, 'CodexAppServer', lambda **kwargs: CodexAppServer(
+        cwd=root, command=(sys.executable, str(root / 'peer.py')), experimental_api=True,
+    ))
+    options = {'hold_check': 2 if delivery == 'same-turn' else 0.3,
+               'output': json.dumps({'status': 'actionable', 'conclusion': 'Continue Main.',
+                                     'reason': 'Old task verdict.', 'nodes': ['237']})}
+    if delivery == 'different-turn':
+        options['delivery_turn'] = 'another-turn'
+    if delivery == 'refused':
+        options['refuse_delivery'] = True
+    (root / 'options.json').write_text(json.dumps(options))
+    sends = []
+
+    def deliver() -> None:
+        """Exercise the production root notification path while Stop is pending."""
+        try:
+            wait_for_file(root / 'checker-running')
+            sends.append(host_events.send_event(
+                {'session': 'main', 'codex_home': str(root)},
+                {'source': 'graphtraj', 'alias': 'child', 'event': 'completed', 'message': 'New task result.'},
+            ))
+        except Exception as error:
+            sends.append(error)
+
+    sender = threading.Thread(target=deliver)
+    sender.start()
+    result = stop(binding)
+    sender.join(timeout=5)
+    assert not sender.is_alive() and len(sends) == 1
+    wire = [json.loads(line) for line in (root / 'wire.jsonl').read_text().splitlines()]
+    interrupts = [row for row in wire if row['method'] == 'turn/interrupt']
+    evidence = yaml.safe_load(next(binding.parent.glob('checks/*/execution.yml')).read_text())
+    if delivery == 'same-turn':
+        assert isinstance(sends[0], dict)
+        assert set(result) == {'systemMessage'} and 'cancelled' in result['systemMessage']
+        assert 'Old task verdict.' not in result['systemMessage']
+        assert evidence['outcome'] == 'cancelled' and evidence['output'] is None
+        assert len(interrupts) == 1 and interrupts[0]['params']['threadId'] == 'checker'
+        accepted = evidence['cancellation']['accepted_at']
+        assert 0 <= interrupts[0]['observed_at'] - accepted < 1
+        assert evidence['cancellation']['confirmed_at'] >= interrupts[0]['observed_at']
+    else:
+        assert not interrupts and result['decision'] == 'block'
+        assert evidence['outcome'] == 'completed'
+        if delivery == 'refused':
+            assert 'delivery refused' in str(sends[0])
+    assert not list(binding.parent.glob('pending-*'))
+
+    # Reusing the same native turn does not reuse a cancelled snapshot.
+    (root / 'options.json').write_text(json.dumps({'child': 'next-checker'}))
+    assert 'completed' in stop(binding)['systemMessage']
+
+
+def test_late_send_acknowledgement_does_not_cancel_later_snapshot(
+    host: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A send captures only checks already active before its native submission."""
+    import threading
+    from conftest import wait_for_file
+    from graphtraj.runtimes.codex import app_server, host_events
+
+    root, binding = host
+    monkeypatch.chdir(root)
+    monkeypatch.setattr(app_server, 'CodexAppServer', lambda **kwargs: CodexAppServer(
+        cwd=root, command=(sys.executable, str(root / 'peer.py')), experimental_api=True,
+    ))
+    (root / 'options.json').write_text(json.dumps({'hold_check': 0.2, 'delay_delivery': 0.6}))
+    sends = []
+
+    def deliver() -> None:
+        """Hold the native reply while another Stop forks the current context."""
+        wait_for_file(root / 'checker-running')
+        sends.append(host_events.send_event(
+            {'session': 'main', 'codex_home': str(root)},
+            {'source': 'graphtraj', 'alias': 'child', 'event': 'completed', 'message': 'New input.'},
+        ))
+
+    sender = threading.Thread(target=deliver)
+    sender.start()
+    assert 'completed' in stop(binding)['systemMessage']
+    wait_for_file(root / 'delivery-pending')
+    (root / 'options.json').write_text(json.dumps({'child': 'next-checker', 'hold_check': 0.8}))
+    assert 'completed' in stop(binding)['systemMessage']
+    sender.join(timeout=5)
+    assert not sender.is_alive() and len(sends) == 1
+    wire = [json.loads(line) for line in (root / 'wire.jsonl').read_text().splitlines()]
+    assert not any(row['method'] == 'turn/interrupt' for row in wire)
+    assert not list(binding.parent.glob('pending-*'))
+
+
+@pytest.mark.parametrize('stage', ['during_fork', 'before_start'])
+def test_input_before_inference_prevents_checker_start(
+    host: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch, stage: str,
+) -> None:
+    """Input during or after fork cancels without spending a checker turn."""
+    import threading
+    from conftest import wait_for_file
+    from graphtraj.runtimes.codex import app_server, host_events
+
+    root, binding = host
+    monkeypatch.chdir(root)
+    monkeypatch.setattr(app_server, 'CodexAppServer', lambda **kwargs: CodexAppServer(
+        cwd=root, command=(sys.executable, str(root / 'peer.py')), experimental_api=True,
+    ))
+    (root / 'options.json').write_text(json.dumps({'wait_' + stage: True}))
+    sends = []
+
+    def deliver() -> None:
+        """Finish a normal delivery before the pending check can start inference."""
+        wait_for_file(root / 'snapshot-fixed')
+        try:
+            sends.append(host_events.send_event(
+                {'session': 'main', 'codex_home': str(root)},
+                {'source': 'graphtraj', 'alias': 'child', 'event': 'completed', 'message': 'New input.'},
+            ))
+        finally:
+            (root / 'delivery-sent').touch()
+
+    sender = threading.Thread(target=deliver)
+    sender.start()
+    result = stop(binding)
+    sender.join(timeout=5)
+    assert not sender.is_alive() and len(sends) == 1
+    assert set(result) == {'systemMessage'} and 'cancelled' in result['systemMessage']
+    wire = [json.loads(line) for line in (root / 'wire.jsonl').read_text().splitlines()]
+    starts = [row['params']['threadId'] for row in wire if row['method'] == 'turn/start']
+    assert starts == ['main']
+    assert not list(binding.parent.glob('pending-*'))
+
+
+def test_replayed_same_turn_input_is_not_a_new_delivery(host: tuple[Path, Path]) -> None:
+    """Native item replay alone cannot invalidate a newly fixed snapshot."""
+    root, binding = host
+    (root / 'options.json').write_text(json.dumps({'notifications': [
+        {'method': 'item/completed', 'params': {'threadId': 'main', 'turnId': 'main-turn',
+         'item': {'id': 'old-input', 'type': 'functionCallOutput', 'name': 'graphtraj',
+                  'namespace': None, 'output': 'Earlier completion event.'}}},
+    ]}))
+    assert 'completed' in stop(binding)['systemMessage']
+    wire = [json.loads(line) for line in (root / 'wire.jsonl').read_text().splitlines()]
+    assert not any(row['method'] == 'turn/interrupt' for row in wire)
 
 
 def test_fork_preserves_observed_configuration(host: tuple[Path, Path]) -> None:

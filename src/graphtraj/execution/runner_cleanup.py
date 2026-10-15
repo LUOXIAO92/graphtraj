@@ -1,4 +1,4 @@
-"""Fail-closed cleanup for one integrated Ticket Worktree."""
+"""Fail-closed cleanup for one integrated Task Worktree."""
 
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ from typing import Any
 
 import yaml
 
-from graphtraj.execution.runner_batch import valid_ticket_id
+from graphtraj.execution.runner_batch import valid_task_id
 from graphtraj.execution.runner_heartbeat import execution_start_lock
 from graphtraj.execution.runner_retirement import retire_session
 from graphtraj.execution.runner_status import read_alias_mapping, require_stopped_subtree
@@ -26,33 +26,33 @@ from graphtraj.workspace.runner_project import (
     run_git,
 )
 from graphtraj.execution.runner_transport import valid_terminal_launch_failure
-from graphtraj.graph.ticket_graph import _load_states
+from graphtraj.graph.task_graph import _load_states
 
 
 @dataclass(frozen=True)
 class CleanupTarget:
-    """The canonical disposable resources for one integrated Ticket."""
+    """The canonical disposable resources for one integrated Task."""
 
     project: Project
-    ticket_id: str
-    ticket_name: str
-    ticket_directory: Path
+    task_id: str
+    task_name: str
+    task_directory: Path
     worktree: Path
     branch: str
     status: str
     candidate: str | None
 
 
-def cleanup_ticket(cwd: Path, ticket_id: str) -> CleanupResponse:
-    """Remove one integrated Ticket's disposable resources by Ticket identity."""
+def cleanup_task(cwd: Path, task_id: str) -> CleanupResponse:
+    """Remove one integrated Task's disposable resources by Task identity."""
 
-    if not valid_ticket_id(ticket_id):
+    if not valid_task_id(task_id):
         raise RunnerError(
-            "TICKET_ID_INVALID",
-            "ticket_id must be 1-32 ASCII letters, digits, dots, underscores, or hyphens.",
+            "TASK_ID_INVALID",
+            "task_id must be 1-32 ASCII letters, digits, dots, underscores, or hyphens.",
         )
     project = discover_project(cwd, require_clean_integration=False)
-    target = _target(project, ticket_id)
+    target = _target(project, task_id)
     if isinstance(target, CleanupResponse):
         return target
     try:
@@ -66,48 +66,48 @@ def cleanup_ticket(cwd: Path, ticket_id: str) -> CleanupResponse:
         )
 
 
-def _target(project: Project, ticket_id: str) -> CleanupTarget | CleanupResponse:
+def _target(project: Project, task_id: str) -> CleanupTarget | CleanupResponse:
     try:
-        states = _load_states(project.state_directory / "tickets")
+        states = _load_states(project.state_directory / "tasks")
     except (OSError, UnicodeError, ValueError, yaml.YAMLError):
         return _unknown_refusal(
-            ticket_id,
+            task_id,
             "cleanup-ownership-mismatch",
-            "The canonical Ticket state cannot be verified.",
-            {"ticket": "invalid"},
+            "The canonical Task state cannot be verified.",
+            {"task": "invalid"},
         )
-    if ticket_id not in states:
+    if task_id not in states:
         return _unknown_refusal(
-            ticket_id,
+            task_id,
             "cleanup-ownership-mismatch",
-            "No canonical Ticket belongs to the supplied identity.",
-            {"ticket": "not-found"},
+            "No canonical Task belongs to the supplied identity.",
+            {"task": "not-found"},
         )
-    ticket_directory, state = states[ticket_id]
-    ticket_name = state["ticket_name"]
-    worktree = project.worktree_root / (ticket_id + "-" + ticket_name)
-    branch = "agent/" + ticket_id + "-" + ticket_name
+    task_directory, state = states[task_id]
+    task_name = state["task_name"]
+    worktree = project.worktree_root / (task_id + "-" + task_name)
+    branch = "agent/" + task_id + "-" + task_name
     try:
         relative_worktree = worktree.relative_to(project.harness_root).as_posix()
     except ValueError:
         return _unknown_refusal(
-            ticket_id,
+            task_id,
             "cleanup-ownership-mismatch",
-            "The canonical Ticket state cannot be verified.",
-            {"ticket": "invalid"},
+            "The canonical Task state cannot be verified.",
+            {"task": "invalid"},
         )
     if state["worktree"] != relative_worktree or state["branch"] != branch:
         return _unknown_refusal(
-            ticket_id,
+            task_id,
             "cleanup-ownership-mismatch",
-            "The canonical Ticket resources do not match its current state.",
-            {"ticket": "coordinates-mismatch"},
+            "The canonical Task resources do not match its current state.",
+            {"task": "coordinates-mismatch"},
         )
     return CleanupTarget(
         project=project,
-        ticket_id=ticket_id,
-        ticket_name=ticket_name,
-        ticket_directory=ticket_directory,
+        task_id=task_id,
+        task_name=task_name,
+        task_directory=task_directory,
         worktree=worktree,
         branch=branch,
         status=state["status"],
@@ -120,12 +120,12 @@ def _cleanup(target: CleanupTarget) -> CleanupResponse:
         return _refused(
             target,
             "cleanup-not-integrated",
-            "The Ticket has not completed validated integration.",
-            {"ticket_status": target.status},
+            "The Task has not completed validated integration.",
+            {"task_status": target.status},
         )
 
     allocation_failures: dict[str, Any] = {}
-    mappings, mapping_errors, busy_aliases = _ticket_mappings(target, allocation_failures)
+    mappings, mapping_errors, busy_aliases = _task_mappings(target, allocation_failures)
     if mapping_errors:
         return _refused(
             target,
@@ -138,7 +138,7 @@ def _cleanup(target: CleanupTarget) -> CleanupResponse:
         return _refused(
             target,
             "worktree-busy",
-            "The Ticket Worktree has an executing Agent.",
+            "The Task Worktree has an executing Agent.",
             {"aliases": busy_aliases},
         )
 
@@ -163,7 +163,7 @@ def _cleanup(target: CleanupTarget) -> CleanupResponse:
             return _refused(
                 target,
                 "cleanup-ownership-mismatch",
-                "The live Runner mappings outlast their canonical Ticket resources.",
+                "The live Runner mappings outlast their canonical Task resources.",
                 {"mappings": [path.name for path in mappings]},
             )
         return _already_cleaned(target)
@@ -186,7 +186,7 @@ def _cleanup(target: CleanupTarget) -> CleanupResponse:
         return _refused(
             target,
             "cleanup-ownership-mismatch",
-            "The canonical Ticket Worktree and branch cannot be verified.",
+            "The canonical Task Worktree and branch cannot be verified.",
             {"worktree": str(target.worktree), "branch": target.branch},
         )
 
@@ -197,26 +197,26 @@ def _cleanup(target: CleanupTarget) -> CleanupResponse:
         return _refused(
             target,
             "cleanup-dirty",
-            "The Ticket Worktree is not clean.",
+            "The Task Worktree is not clean.",
             {"worktree_status": status},
         )
-    ticket_commit = (target.candidate if branch_only else
+    task_commit = (target.candidate if branch_only else
                      run_git(target.project.repository, "rev-parse", target.branch))
     if not git_succeeds(
         target.project.repository,
         "merge-base",
         "--is-ancestor",
-        ticket_commit,
+        task_commit,
         target.project.dev_commit,
     ):
         return _refused(
             target,
             "cleanup-not-integrated",
-            "The Ticket branch is not merged into registered dev.",
+            "The Task branch is not merged into registered dev.",
             {
                 "integration_branch": target.project.integration_branch,
                 "integration_commit": target.project.dev_commit,
-                "ticket_commit": ticket_commit,
+                "task_commit": task_commit,
             },
         )
 
@@ -227,14 +227,14 @@ def _cleanup(target: CleanupTarget) -> CleanupResponse:
                 retire_session(directory.name, target.project.harness_root)
                 completed_actions.append("retired:" + directory.name)
             else:
-                trace = next(target.ticket_directory.glob("teams/*/traces/" + directory.name))
+                trace = next(target.task_directory.glob("teams/*/traces/" + directory.name))
                 directory.rename(trace / "runner")
         if not branch_only:
             completed_actions.append("members-retired")
         # A shared Worktree user can start between the initial check and retirement.
         # Hold the same lock as every execution startup through resource deletion.
         with execution_start_lock(target.project.runner_directory):
-            remaining, errors, busy = _ticket_mappings(target)
+            remaining, errors, busy = _task_mappings(target)
             if errors or busy or (branch_only and remaining):
                 return _refused(target, "worktree-busy", "The Worktree is still in use.",
                                 {"aliases": busy, "mapping_mismatches": errors,
@@ -248,27 +248,27 @@ def _cleanup(target: CleanupTarget) -> CleanupResponse:
                     or record.get("branch") == expected_ref for record in records
                 ):
                     return _refused(target, "cleanup-ownership-mismatch",
-                                    "The Ticket resources changed during cleanup.", {})
+                                    "The Task resources changed during cleanup.", {})
             else:
                 run_git(target.project.repository, "worktree", "remove", str(target.worktree))
                 if os.path.lexists(str(target.worktree)):
-                    raise OSError("Ticket Worktree path still exists")
+                    raise OSError("Task Worktree path still exists")
                 completed_actions.append("worktree-removed")
                 # Original Session and result records remain retained.
                 completed_actions.append("mappings-removed")
-            _delete_branch_if_dev_unchanged(target, ticket_commit)
+            _delete_branch_if_dev_unchanged(target, task_commit)
         completed_actions.append("branch-removed")
     except (OSError, RunnerError, shutil.Error) as error:
         return _refused(
             target,
             "cleanup-failed",
-            "The integrated Ticket Worktree could not be cleaned up.",
+            "The integrated Task Worktree could not be cleaned up.",
             {"completed_actions": completed_actions,
              **({"cause": error.as_document()} if isinstance(error, RunnerError) else {})},
         )
     return CleanupResponse(
         document={
-            "ticket_id": target.ticket_id,
+            "task_id": target.task_id,
             "cleanup_status": "cleaned",
             "worktree_path": str(target.worktree),
             "branch": target.branch,
@@ -276,14 +276,14 @@ def _cleanup(target: CleanupTarget) -> CleanupResponse:
             "evidence": {
                 "integration_branch": target.project.integration_branch,
                 "integration_commit": target.project.dev_commit,
-                "ticket_commit": ticket_commit,
+                "task_commit": task_commit,
             },
         },
         succeeded=True,
     )
 
 
-def _ticket_mappings(
+def _task_mappings(
     target: CleanupTarget,
     allocation_failures: dict[str, Any] | None = None,
 ) -> tuple[list[Path], list[str], list[str]]:
@@ -295,12 +295,12 @@ def _ticket_mappings(
     mappings: list[Path] = []
     errors: list[str] = []
     busy: list[str] = []
-    # A current alias spells the Ticket name with underscores and names the
+    # A current alias spells the Task name with underscores and names the
     # whole-Team handover generation; a retained alias keeps its historical
     # hyphenated name, Team suffix and role marker.
-    retained_prefix = re.escape(target.ticket_id + "-" + target.ticket_name)
+    retained_prefix = re.escape(target.task_id + "-" + target.task_name)
     current_prefix = re.escape(
-        target.ticket_id + "-" + target.ticket_name.replace("-", "_")
+        target.task_id + "-" + target.task_name.replace("-", "_")
     )
     prefix = re.compile(
         retained_prefix + r"(?:-team[1-9][0-9]*)?@"
@@ -355,12 +355,12 @@ def _ticket_mappings(
                 require_stopped_subtree(target.project.runner_directory, directory.name)
             except RunnerError:
                 busy.append(directory.name)
-        if mapping.get("ticket_id") != target.ticket_id or "run_id" in mapping:
+        if mapping.get("task_id") != target.task_id or "run_id" in mapping:
             if alias_candidate:
                 errors.append(directory.name)
             continue
         if not alias_candidate or not _valid_mapping(
-            mapping, directory.name, target.ticket_id
+            mapping, directory.name, target.task_id
         ):
             errors.append(directory.name)
             continue
@@ -395,7 +395,7 @@ def _unstarted_session_directory(
     """
     events = directory / "events.jsonl"
     trace = (
-        target.ticket_directory
+        target.task_directory
         / "teams"
         / generation
         / "traces"
@@ -427,12 +427,12 @@ def _unstarted_session_directory(
             and launch.get("operation") == "launch"
             and isinstance(mapping, dict)
             and mapping.get("alias") == directory.name
-            and mapping.get("ticket_id") == target.ticket_id
+            and mapping.get("task_id") == target.task_id
             and mapping.get("team_generation") == int(generation)
             and isinstance(mapping.get("retained_batch_file"), str)
             and bool(mapping["retained_batch_file"])
         )
-        evidence["launch_matches_ticket"] = launch_matches
+        evidence["launch_matches_task"] = launch_matches
         # Attribution remains useful when a Worker failed before publishing its
         # error. Missing or unreadable terminal evidence never proves stopping.
         evidence["terminal_confirmed"] = None
@@ -522,12 +522,12 @@ def _allocation_artifacts(
     return result
 
 
-def _valid_mapping(mapping: dict[str, Any], alias: str, ticket_id: str) -> bool:
-    strings = ("alias", "runtime", "session", "ticket_id", "role", "retained_batch_file")
+def _valid_mapping(mapping: dict[str, Any], alias: str, task_id: str) -> bool:
+    strings = ("alias", "runtime", "session", "task_id", "role", "retained_batch_file")
     return (
         all(isinstance(mapping.get(key), str) and mapping[key] for key in strings)
         and mapping["alias"] == alias
-        and mapping["ticket_id"] == ticket_id
+        and mapping["task_id"] == task_id
         and isinstance(mapping.get("team_generation"), int)
         and not isinstance(mapping["team_generation"], bool)
         and mapping["team_generation"] > 0
@@ -551,7 +551,7 @@ def _process_alive(pid: int) -> bool:
 
 
 def _delete_branch_if_dev_unchanged(
-    target: CleanupTarget, ticket_commit: str
+    target: CleanupTarget, task_commit: str
 ) -> None:
     """Delete only the verified ref while dev still names the checked commit."""
     project = target.project
@@ -566,7 +566,7 @@ def _delete_branch_if_dev_unchanged(
         project.integration_branch,
         project.dev_commit,
         target.branch,
-        ticket_commit,
+        task_commit,
     )
     try:
         run_git(project.repository, "update-ref", "--stdin", input_text=transaction)
@@ -594,7 +594,7 @@ def _refused(
 ) -> CleanupResponse:
     return CleanupResponse(
         document={
-            "ticket_id": target.ticket_id,
+            "task_id": target.task_id,
             "cleanup_status": "refused",
             "worktree_path": str(target.worktree),
             "branch": target.branch,
@@ -606,14 +606,14 @@ def _refused(
 
 
 def _unknown_refusal(
-    ticket_id: str,
+    task_id: str,
     code: str,
     message: str,
     evidence: dict[str, Any],
 ) -> CleanupResponse:
     return CleanupResponse(
         document={
-            "ticket_id": ticket_id,
+            "task_id": task_id,
             "cleanup_status": "refused",
             "error": {"code": code, "message": message},
             "evidence": evidence,
@@ -625,7 +625,7 @@ def _unknown_refusal(
 def _already_cleaned(target: CleanupTarget) -> CleanupResponse:
     return CleanupResponse(
         document={
-            "ticket_id": target.ticket_id,
+            "task_id": target.task_id,
             "cleanup_status": "already-cleaned",
             "worktree_path": str(target.worktree),
             "branch": target.branch,

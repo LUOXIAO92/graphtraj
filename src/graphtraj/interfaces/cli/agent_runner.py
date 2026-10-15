@@ -373,37 +373,37 @@ def recover(
 
 
 @main.command("continue", cls=OperationCommand, feature="continue")
-@click.option("--ticket-id")
+@click.option("--task-id")
 @click.option("--caused-by-event-id", multiple=True)
 @click.option(
     "--budget-only", is_flag=True
 )
-def continue_ticket(
-    ticket_id: str, caused_by_event_id: tuple[str, ...], budget_only: bool,
+def continue_task(
+    task_id: str, caused_by_event_id: tuple[str, ...], budget_only: bool,
 ) -> None:
     """Restore an authorized task budget and, by default, resume original roots."""
     try:
         response = invoke_tool("continue",
-            {"ticket_id": ticket_id, "caused_by_event_ids": list(caused_by_event_id),
+            {"task_id": task_id, "caused_by_event_ids": list(caused_by_event_id),
              "budget_only": budget_only}, cwd=Path.cwd().resolve(),
         ).document
     except RunnerError as error:
-        _fail(error, ticket_id=ticket_id)
+        _fail(error, task_id=task_id)
     _emit_result(response)
 
 
 @main.command(cls=OperationCommand, feature="cleanup")
-@click.option("--ticket-id")
-def cleanup(ticket_id: str | None) -> None:
-    """Clean up one safely integrated ticket by stable identity."""
-    if ticket_id is None:
+@click.option("--task-id")
+def cleanup(task_id: str | None) -> None:
+    """Clean up one safely integrated task by stable identity."""
+    if task_id is None:
         error = RunnerError(
             "invalid-input",
-            "Cleanup requires --ticket-id.",
+            "Cleanup requires --task-id.",
         )
         _fail(error)
     try:
-        response = invoke_tool("cleanup", {"ticket_id": ticket_id}, cwd=Path.cwd().resolve())
+        response = invoke_tool("cleanup", {"task_id": task_id}, cwd=Path.cwd().resolve())
     except RunnerError as error:
         _fail(error)
     _emit_result(response.document)

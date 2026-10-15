@@ -115,7 +115,7 @@ def parse_check_result(text: str) -> dict[str, Any]:
         raise ValueError('The completion checker returned no reason.')
     nodes = result['nodes']
     if not isinstance(nodes, list) or any(not isinstance(n, str) or not n.strip() for n in nodes):
-        raise ValueError('Completion nodes must be nonempty Ticket identifiers or URLs.')
+        raise ValueError('Completion nodes must be nonempty Task identifiers or URLs.')
     if result['status'] == 'actionable' and not nodes:
         raise ValueError('Actionable work must identify concrete unfinished nodes.')
     return result
@@ -177,7 +177,7 @@ def check_main_finalize(binding_file: Path, event: dict[str, Any]) -> dict[str, 
         usage = adapter.finalize_usage(native)
         write_yaml_durably(child_binding[1] / 'execution.yml', {**native, 'usage': usage.document()})
         if native.get('outcome') == 'cancelled':
-            return adapter.finalize_response(None, False)
+            return adapter.finalize_response({'outcome': 'cancelled'}, False)
         if native.get('outcome') == 'error':
             raise ValueError(native['error'])
         result = parse_check_result(native['output'])

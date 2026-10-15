@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { Button } from '@heroui/react';
-import type { DesktopAPI, Observation, Preferences, Project, Ticket } from '../electron/types';
+import type { DesktopAPI, Observation, Preferences, Project, Task } from '../electron/types';
 import type { Activity } from '../electron/activity';
 import { taskChildren, taskFocus, taskRelations, taskStatus } from './monitor-graph';
 import { TaskCanvas, type TaskCanvasHandle } from './TaskCanvas';
@@ -53,16 +53,16 @@ function GraphView({ project, active, sidebarButton }: { project: Project; activ
     void refresh();
     return () => { alive = false; clearTimeout(timer); };
   }, [projectId, retry, active]);
-  const tickets = observation?.graph.tickets;
-  const nativeGraph = observation?.graph ?? { tickets: [] };
+  const tasks = observation?.graph.tasks;
+  const nativeGraph = observation?.graph ?? { tasks: [] };
   const children = taskChildren(nativeGraph);
-  const groups = (tickets ?? []).filter(ticket => children.get(ticket.ticket_id)?.length);
+  const groups = (tasks ?? []).filter(task => children.get(task.task_id)?.length);
   const graphActive = active && !mainExpanded && !(expanded && selected);
   function fitGraph(): void { canvas.current?.fit(); }
-  const visible = new Set((tickets ?? []).filter(ticket => status === 'all' || (status === 'inactive' ? !ticket.active : taskStatus(ticket) === status)).map(ticket => ticket.ticket_id));
-  const matches = (tickets ?? []).filter(ticket => visible.has(ticket.ticket_id) && `${ticket.ticket_id} ${ticket.title} ${ticket.ticket_name}`.toLowerCase().includes(query.toLowerCase()));
-  const matchIds = new Set(matches.map(ticket => ticket.ticket_id));
-  const detail = tickets?.find(ticket => ticket.ticket_id === selected);
+  const visible = new Set((tasks ?? []).filter(task => status === 'all' || (status === 'inactive' ? !task.active : taskStatus(task) === status)).map(task => task.task_id));
+  const matches = (tasks ?? []).filter(task => visible.has(task.task_id) && `${task.task_id} ${task.title} ${task.task_name}`.toLowerCase().includes(query.toLowerCase()));
+  const matchIds = new Set(matches.map(task => task.task_id));
+  const detail = tasks?.find(task => task.task_id === selected);
   const focus = taskFocus(nativeGraph, selected);
   const focusedEdges = selected ? taskRelations(nativeGraph)
     .filter(edge => focus.has(edge.source) && focus.has(edge.target)) : [];
@@ -70,14 +70,14 @@ function GraphView({ project, active, sidebarButton }: { project: Project; activ
   function toggleSummary(id: string): void {
     setOpenGroups(previous => { const next = new Set(previous); if (next.has(id)) next.delete(id); else next.add(id); return next; });
   }
-  function locate(ticket: Ticket): void {
+  function locate(task: Task): void {
     // Search is an explicit reveal action. Ordinary card selection never opens ancestors.
     const ancestors: string[] = [];
-    let parent = ticket.parent_id;
-    while (parent) { ancestors.push(parent); parent = tickets?.find(item => item.ticket_id === parent)?.parent_id; }
+    let parent = task.parent_id;
+    while (parent) { ancestors.push(parent); parent = tasks?.find(item => item.task_id === parent)?.parent_id; }
     setOpenGroups(previous => new Set([...previous, ...ancestors]));
-    select(ticket.ticket_id);
-    canvas.current?.locate(ticket.ticket_id);
+    select(task.task_id);
+    canvas.current?.locate(task.task_id);
   }
   function read(alias?: string): void { setFocusAgent(alias ?? null); setExpanded(true); }
   const members = activity?.agents ?? [];
@@ -89,23 +89,23 @@ function GraphView({ project, active, sidebarButton }: { project: Project; activ
       <div className={`d-monitor-view ${mainExpanded || expanded && detail ? 'concealed' : ''}`} aria-hidden={mainExpanded || expanded && !!detail} inert={mainExpanded || expanded && !!detail}>
         <section className={`d-map-workspace ${detail ? 'has-shelf' : ''}`}>
           <div className="d-floating-tools"><div className="new-graph-controls"><label><Icon name="search" size={15}/><input type="search" aria-label="Search tasks" placeholder="Find task or number" value={query} onChange={event => setQuery(event.target.value)} onKeyDown={event => { if (event.key === 'Enter' && matches[0]) locate(matches[0]); }}/></label>
-            <select aria-label="Task status" value={status} onChange={event => setStatus(event.target.value)}><option value="all">All statuses</option><option value="inactive">Replaced / inactive</option>{[...new Set(tickets?.map(ticket => taskStatus(ticket)))].sort().map(value => <option key={value}>{value}</option>)}</select></div>
+            <select aria-label="Task status" value={status} onChange={event => setStatus(event.target.value)}><option value="all">All statuses</option><option value="inactive">Replaced / inactive</option>{[...new Set(tasks?.map(task => taskStatus(task)))].sort().map(value => <option key={value}>{value}</option>)}</select></div>
             <span className="canvas-readonly"><Button variant="ghost" onPress={() => { select(null); setOpenGroups(new Set()); requestAnimationFrame(fitGraph); }}>Overview</Button><Button variant="ghost" onPress={fitGraph}><Icon name="fit" size={14}/>Fit graph</Button><Icon name="eye" size={14}/>Read-only graph</span></div>
-          <div className="d-canvas-title"><h1>Task summaries and dependencies</h1><p>{tickets?.length ?? 0} tasks · {groups.length} summaries · {matches.length} matching tasks</p>
-            {!!groups.length && <select aria-label="Selected summary" value={groups.some(ticket => ticket.ticket_id === selected) ? selected! : ''} onChange={event => select(event.target.value || null)}><option value="">Select a summary</option>{groups.map(ticket => <option key={ticket.ticket_id} value={ticket.ticket_id}>{ticket.title} · #{ticket.ticket_id}</option>)}</select>}</div>
+          <div className="d-canvas-title"><h1>Task summaries and dependencies</h1><p>{tasks?.length ?? 0} tasks · {groups.length} summaries · {matches.length} matching tasks</p>
+            {!!groups.length && <select aria-label="Selected summary" value={groups.some(task => task.task_id === selected) ? selected! : ''} onChange={event => select(event.target.value || null)}><option value="">Select a summary</option>{groups.map(task => <option key={task.task_id} value={task.task_id}>{task.title} · #{task.task_id}</option>)}</select>}</div>
           <div className="d-map-surface"><div className="map-canvas" aria-label="Task dependency graph">
             <TaskCanvas ref={canvas} projectName={projectName(project)} graph={nativeGraph} expanded={openGroups} selected={selected} matches={matchIds} active={graphActive} select={select} toggle={toggleSummary}/>
             <div className="map-caption"><span className="map-caption-line"/>Boundary = membership · Solid = dependency · Dashed = replacement · Arc = crossing · Hover for real endpoints <Icon name="arrow" size={14}/></div>
-            {query && <div className="map-search-results" aria-label="Search results"><strong>{matches.length} matching tasks</strong>{matches.map(ticket => <button key={ticket.ticket_id} onClick={() => locate(ticket)}>#{ticket.ticket_id} {ticket.title}</button>)}</div>}
-            {!tickets?.length && <div className="d-empty-configuration"><Icon name="graph" size={30}/><h2>{!observation ? loading ? 'Loading task graph…' : 'Graph unavailable' : 'No tickets registered'}</h2></div>}
-            {!!tickets?.length && !matches.length && <div className="graph-filter-empty" role="status">No tasks match these filters. <Button variant="ghost" onPress={() => { setQuery(''); setStatus('all'); }}>Clear filters</Button></div>}
+            {query && <div className="map-search-results" aria-label="Search results"><strong>{matches.length} matching tasks</strong>{matches.map(task => <button key={task.task_id} onClick={() => locate(task)}>#{task.task_id} {task.title}</button>)}</div>}
+            {!tasks?.length && <div className="d-empty-configuration"><Icon name="graph" size={30}/><h2>{!observation ? loading ? 'Loading task graph…' : 'Graph unavailable' : 'No tasks registered'}</h2></div>}
+            {!!tasks?.length && !matches.length && <div className="graph-filter-empty" role="status">No tasks match these filters. <Button variant="ghost" onPress={() => { setQuery(''); setStatus('all'); }}>Clear filters</Button></div>}
           </div></div>
-          {detail ? <aside className="d-task-shelf" aria-label="Ticket details"><div><h2><span className="shelf-task-id">#{detail.ticket_id}</span>{detail.title}</h2><p>{detail.ticket_name}</p><Status value={taskStatus(detail)}/><span className="shelf-deps">Depends on {detail.dependencies.map(id => `#${id}`).join(', ') || 'no tasks'}</span><details className="native-delivery-facts"><summary>Delivery evidence · {detail.delivery?.length ?? 0} records</summary>{detail.delivery?.map(fact => <div key={fact.event_id}><p>{fact.ticket_id !== detail.ticket_id ? <button onClick={() => select(fact.ticket_id)}>Accepted in #{fact.ticket_id} · {tickets?.find(ticket => ticket.ticket_id === fact.ticket_id)?.title}</button> : fact.dev_commit ? `Integrated commit ${fact.dev_commit}` : 'Own acceptance recorded'}</p><p>{fact.event_id}<br/>{fact.reason}{fact.accepted_definition && <><br/>Accepted definition: {fact.accepted_definition}</>}</p><ul>{fact.evidence_refs.map(ref => <li key={ref}>{ref}</li>)}</ul></div>)}{!detail.delivery?.length && <p>No current delivery evidence available.</p>}</details><p>Parent: {detail.parent_id ? <button onClick={() => select(detail.parent_id!)}>#{detail.parent_id}</button> : detail.parent_known === false ? 'Unknown' : 'Project'}</p><details className="native-ticket-facts"><summary>Ticket facts</summary><p>{detail.active ? 'Active' : 'Replaced / inactive'} · {detail.ready ? 'Ready' : 'Not ready'}<br/>Historical execution: {detail.status}.<br/>Replaced by: {detail.replaced_by.join(', ') || 'None'}. Execution finishing is not acceptance.</p></details>{!!focusedEdges.length && <details className="native-dependency-list"><summary>{focusedEdges.length} related relationships · real endpoints</summary>{focusedEdges.map(edge => <div key={`${edge.kind}:${edge.source}:${edge.target}`}>#{edge.source} {tickets?.find(ticket => ticket.ticket_id === edge.source)?.title} {edge.kind === 'replacement' ? 'replaced by' : edge.kind === 'acceptance' ? 'accepted into' : '→'} #{edge.target} {tickets?.find(ticket => ticket.ticket_id === edge.target)?.title}</div>)}</details>}</div>
+          {detail ? <aside className="d-task-shelf" aria-label="Task details"><div><h2><span className="shelf-task-id">#{detail.task_id}</span>{detail.title}</h2><p>{detail.task_name}</p><Status value={taskStatus(detail)}/><span className="shelf-deps">Depends on {detail.dependencies.map(id => `#${id}`).join(', ') || 'no tasks'}</span><details className="native-delivery-facts"><summary>Delivery evidence · {detail.delivery?.length ?? 0} records</summary>{detail.delivery?.map(fact => <div key={fact.event_id}><p>{fact.task_id !== detail.task_id ? <button onClick={() => select(fact.task_id)}>Accepted in #{fact.task_id} · {tasks?.find(task => task.task_id === fact.task_id)?.title}</button> : fact.dev_commit ? `Integrated commit ${fact.dev_commit}` : 'Own acceptance recorded'}</p><p>{fact.event_id}<br/>{fact.reason}{fact.accepted_definition && <><br/>Accepted definition: {fact.accepted_definition}</>}</p><ul>{fact.evidence_refs.map(ref => <li key={ref}>{ref}</li>)}</ul></div>)}{!detail.delivery?.length && <p>No current delivery evidence available.</p>}</details><p>Parent: {detail.parent_id ? <button onClick={() => select(detail.parent_id!)}>#{detail.parent_id}</button> : 'Project'}</p><details className="native-task-facts"><summary>Task facts</summary><p>{detail.active ? 'Active' : 'Replaced / inactive'} · {detail.ready ? 'Ready' : 'Not ready'}<br/>Historical execution: {detail.status}.<br/>Replaced by: {detail.replaced_by.join(', ') || 'None'}. Execution finishing is not acceptance.</p></details>{!!focusedEdges.length && <details className="native-dependency-list"><summary>{focusedEdges.length} related relationships · real endpoints</summary>{focusedEdges.map(edge => <div key={`${edge.kind}:${edge.source}:${edge.target}`}>#{edge.source} {tasks?.find(task => task.task_id === edge.source)?.title} {edge.kind === 'replacement' ? 'replaced by' : edge.kind === 'acceptance' ? 'accepted into' : '→'} #{edge.target} {tasks?.find(task => task.task_id === edge.target)?.title}</div>)}</details>}</div>
             <div><div className="shelf-team-heading"><span className="section-label">TEAM &amp; RETAINED HISTORY</span><Button variant="primary" onPress={() => read()}><Icon name="expand" size={14}/>Expand chat</Button><Button isIconOnly variant="ghost" aria-label="Close details" onPress={() => setSelected(null)}><Icon name="close" size={14}/></Button></div><MemberPills agents={members} onRead={read}/>{activityError ? <div role="alert">{activityError} <Button variant="ghost" onPress={() => setActivityRetry(value => value + 1)}>Retry now</Button></div> : !members.length && <p>{activity ? activity.reason || 'No participating Agents recorded.' : 'Loading members…'}</p>}</div></aside>
             : null}
         </section>
       </div>
-      {detail && <div className={`d-monitor-view ${expanded && !mainExpanded ? '' : 'concealed'}`} aria-hidden={!expanded || mainExpanded} inert={!expanded || mainExpanded}><section className="new-reader d-reader" aria-label="Expanded agent conversations"><header className="d-reading-head"><Button variant="ghost" aria-label="Collapse chat" onPress={() => setExpanded(false)}><Icon name="left" size={16}/>Back to task graph</Button><span>#{detail.ticket_id}</span><h1>{detail.title}</h1><Status value={taskStatus(detail)}/></header><div className="d-reading-index"><span>JUMP TO AGENT</span><MemberPills agents={members} onRead={setFocusAgent} focus={focusAgent}/></div><ActivityView key={`${projectId}:${detail.ticket_id}`} projectId={projectId} ticketId={detail.ticket_id} active={active && !mainExpanded} expanded={expanded} focusAgent={focusAgent} onActivity={setActivity} onError={setActivityError} refreshKey={activityRetry}/></section></div>}
+      {detail && <div className={`d-monitor-view ${expanded && !mainExpanded ? '' : 'concealed'}`} aria-hidden={!expanded || mainExpanded} inert={!expanded || mainExpanded}><section className="new-reader d-reader" aria-label="Expanded agent conversations"><header className="d-reading-head"><Button variant="ghost" aria-label="Collapse chat" onPress={() => setExpanded(false)}><Icon name="left" size={16}/>Back to task graph</Button><span>#{detail.task_id}</span><h1>{detail.title}</h1><Status value={taskStatus(detail)}/></header><div className="d-reading-index"><span>JUMP TO AGENT</span><MemberPills agents={members} onRead={setFocusAgent} focus={focusAgent}/></div><ActivityView key={`${projectId}:${detail.task_id}`} projectId={projectId} taskId={detail.task_id} active={active && !mainExpanded} expanded={expanded} focusAgent={focusAgent} onActivity={setActivity} onError={setActivityError} refreshKey={activityRetry}/></section></div>}
       <div className={`d-monitor-view ${mainExpanded ? '' : 'concealed'}`} aria-hidden={!mainExpanded} inert={!mainExpanded}><section className="new-reader d-reader" aria-label="Main conversations"><header className="d-reading-head"><Button variant="ghost" aria-label="Collapse Main chat" onPress={() => setMainExpanded(false)}><Icon name="left" size={16}/>{expanded && detail ? 'Back to agent conversations' : 'Back to task graph'}</Button><h1>Main sessions</h1></header><ActivityView projectId={projectId} active={active && mainExpanded}/></section></div>
     </div></div>
   </>;

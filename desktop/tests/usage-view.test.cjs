@@ -32,7 +32,7 @@ test('Dashboard filters persisted usage by local dates and keeps global comparis
   const { UsageView } = require(output);
   const fact = (id, model) => ({ id, kind: 'usage', model, time: new Date().toISOString(),
     source: { runtime: 'pi', offset: Number(id) }, usage: { identity: 's:' + id, session: 's',
-      agent: 'child', ticket_id: '263', attributable: true, phase: 'final',
+      agent: 'child', task_id: '263', attributable: true, phase: 'final',
       tokens: { input: 1000000, cache_read: 600000, output: 100000 } } });
   const events = [fact('1', 'gpt-5.3-codex'), fact('2', 'unknown-model')];
   const requests = [];

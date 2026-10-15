@@ -46,6 +46,7 @@ def main() -> None:
     if not records and not os.environ.get('PI_FIXTURE_UNESTABLISHED'):
         session_file.write_text(json.dumps({'type': 'session', 'id': session, 'version': 3}) + '\n')
     output_lock = threading.Lock()
+    traffic = {'bytes': 0, 'records': 0}
     active = False
     queued = []
     stop = threading.Event()
@@ -54,12 +55,54 @@ def main() -> None:
     def emit(document: dict) -> None:
         """Keep interleaved asynchronous events valid JSONL."""
         with output_lock:
-            print(json.dumps(document), flush=True)
+            encoded = json.dumps(document)
+            traffic['bytes'] += len(encoded.encode()) + 1
+            traffic['records'] += 1
+            print(encoded, flush=True)
 
     def record(message: dict) -> None:
         """Append native message records as a real Session would."""
         with session_file.open('a') as stream:
             stream.write(json.dumps({'type': 'message', 'message': message}) + '\n')
+
+    def streamed(text: str) -> dict:
+        """Send equal semantic content with controlled real stdout fragmentation."""
+        size = int(os.environ.get('PI_FIXTURE_CHUNK', '512'))
+        answer = 'hello世界 ' * 1024
+        message = {'role': 'assistant', 'content': [], 'provider': provider, 'model': model,
+                   'api': 'fixture', 'timestamp': 1791936000000, 'stopReason': 'stop',
+                   'usage': {'input': 17, 'output': 4096, 'cacheRead': 3, 'cacheWrite': 0}}
+        emit({'type': 'message_start', 'message': message})
+        for index, (kind, body) in enumerate([('thinking', 'private summary'), ('text', answer),
+                                             ('toolcall', '{"path":"/tmp/result"}')]):
+            block = ({'type': 'thinking', 'thinking': '', 'thinkingSignature': 'cipher:sig'} if kind == 'thinking'
+                     else {'type': 'text', 'text': ''} if kind == 'text'
+                     else {'type': 'toolCall', 'id': 'call-1', 'name': 'read', 'arguments': {}})
+            message['content'].append(block)
+            emit({'type': 'message_update', 'message': message,
+                  'assistantMessageEvent': {'type': kind + '_start', 'contentIndex': index, 'partial': message}})
+            for start in range(0, len(body), size):
+                delta = body[start:start + size]
+                if kind != 'toolcall':
+                    block['thinking' if kind == 'thinking' else 'text'] += delta
+                update = {'type': kind + '_delta', 'contentIndex': index, 'delta': delta, 'partial': message}
+                emit({'type': 'message_update', 'message': message, 'assistantMessageEvent': update})
+            if kind == 'toolcall':
+                block['arguments'] = json.loads(body)
+            emit({'type': 'message_update', 'message': message, 'assistantMessageEvent': {
+                'type': kind + '_end', 'contentIndex': index, 'partial': message,
+                **({'toolCall': block} if kind == 'toolcall' else {'content': body}),
+            }})
+        emit({'type': 'fixture_probability', 'requestId': 'request-1', 'model': model,
+              'tokenizer': 'fixture-tokenizer', 'logprobs': [{'position': 0, 'logprob': -0.25}]})
+        emit({'type': 'fixture_opaque', 'ciphertext': 'cipher:payload', 'unknown': {'keep': True}})
+        if text == 'stream-crash':
+            (session_file.parent / 'traffic.json').write_text(json.dumps(traffic))
+            os._exit(7)
+        message['stopReason'] = {'stream-error': 'error', 'stream-abort': 'aborted'}.get(text, 'stop')
+        if text == 'stream-error':
+            message['errorMessage'] = 'fixture failed after partial output'
+        return message
 
     def finish(text: str) -> None:
         """Run asynchronously so steer/abort and ACK/settled races are observable."""
@@ -92,8 +135,18 @@ def main() -> None:
                    'stopReason': 'error' if text == 'provider-error' else 'stop'}
         if text == 'provider-error':
             message['errorMessage'] = 'fixture provider rejected request'
+        if text.startswith('stream-'):
+            message = streamed(text)
         record(message)
         emit({'type': 'message_end', 'message': message})
+        if text == 'stream-ok':
+            emit({'type': 'tool_execution_start', 'toolCallId': 'call-1', 'toolName': 'read', 'args': {'path': '/tmp/result'}})
+            tool = {'role': 'toolResult', 'toolCallId': 'call-1', 'toolName': 'read',
+                    'content': [{'type': 'text', 'text': 'tool result'}], 'isError': False, 'timestamp': 1791936000001}
+            record(tool)
+            emit({'type': 'tool_execution_end', 'toolCallId': 'call-1', 'toolName': 'read', 'result': tool, 'isError': False})
+            emit({'type': 'message_start', 'message': tool})
+            emit({'type': 'message_end', 'message': tool})
         queued.clear()
         active = False
         if text == 'settled-race':
@@ -163,6 +216,7 @@ def main() -> None:
             dialog.set()
             continue
         emit(response)
+    (session_file.parent / 'traffic.json').write_text(json.dumps(traffic))
 
 
 if __name__ == '__main__':

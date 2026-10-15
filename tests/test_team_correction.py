@@ -19,13 +19,13 @@ def test_public_state_rejects_obsolete_candidate_and_correction(
 
     _, team, commit = result_project(tmp_path)
     before = read_worldline(tmp_path / 'state', tmp_path)
-    original = (team.parents[2] / 'ticket.yml').read_bytes()
+    original = (team.parents[2] / 'task.yml').read_bytes()
     request_file = tmp_path / 'request.yml'
     for fields in ({'phase': 'candidate', 'candidate': commit},
                    {'phase': 'correction', 'responsible_role': role,
                     'session_ref': 'research@x1'}):
         request_file.write_text(yaml.safe_dump({
-            **fields, 'ticket_id': '148', 'evidence_refs': ['evidence.md'],
+            **fields, 'task_id': '148', 'evidence_refs': ['evidence.md'],
             'caused_by_event_ids': [before[-1]['event_id']],
         }))
         result = run_process([
@@ -34,7 +34,7 @@ def test_public_state_rejects_obsolete_candidate_and_correction(
         ], cwd=tmp_path)
         assert result.returncode == 1, result.stdout + result.stderr
         assert 'invalid schema' in result.stderr
-    assert (team.parents[2] / 'ticket.yml').read_bytes() == original
+    assert (team.parents[2] / 'task.yml').read_bytes() == original
     assert read_worldline(tmp_path / 'state', tmp_path) == before
 
 
@@ -75,7 +75,7 @@ def test_common_correction_invalidates_candidate_for_every_role(
     if entry == 'state-cli':
         request_file = tmp_path / 'rework.yml'
         request_file.write_text(yaml.safe_dump({
-            'phase': 'rework', 'ticket_id': '148',
+            'phase': 'rework', 'task_id': '148',
             'caused_by_event_ids': [rejected['event_id']],
             'evidence_refs': rejected['evidence_refs'],
         }))
@@ -92,13 +92,13 @@ def test_common_correction_invalidates_candidate_for_every_role(
         with runtime_caller(runner, 'research@x1'):
             tools.submit_report({'name': 'researcher-x1.md', 'text': 'Correcting conclusion.'},
                               cwd=tmp_path)
-    state = yaml.safe_load((team.parents[2] / 'ticket.yml').read_text())
+    state = yaml.safe_load((team.parents[2] / 'task.yml').read_text())
     assert state['current_candidate'] is None
     assert state['status'] == 'implementing'
     assert yaml.safe_load(team.read_text())['current_round'] == 2
     assert read_worldline(tmp_path / 'state', tmp_path)[:len(history)] == history
     with runtime_caller(runner, None):
-        denied = CliRunner().invoke(main, ['ticket', 'integrate', '--ticket-id', '148',
+        denied = CliRunner().invoke(main, ['task', 'integrate', '--task-id', '148',
                                           '--', sys.executable, '-c', 'pass'])
         assert denied.exit_code == 1, denied.output
         assert 'requires acceptance' in denied.output
@@ -119,7 +119,7 @@ def test_common_correction_invalidates_candidate_for_every_role(
             **decision, 'submission_id': second['event_id'], 'commit': corrected,
             'decision': 'accepted', 'evidence_refs': second['evidence_refs'],
         }, cwd=tmp_path).document
-    state = yaml.safe_load((team.parents[2] / 'ticket.yml').read_text())
+    state = yaml.safe_load((team.parents[2] / 'task.yml').read_text())
     assert state['current_candidate'] == accepted['candidate'] == corrected
     assert state['status'] == 'awaiting-integration'
     assert (tmp_path / first['evidence_refs'][0]).read_text() == 'A versioned research result\n'

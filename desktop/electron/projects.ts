@@ -23,7 +23,7 @@ export class GraphReader {
     if (this.closed) throw new Error('Desktop observer is closed.');
     return new Promise((resolve, reject) => {
       const command = nativeCommand(this.executable);
-      const child = execFile(command.executable, [...command.args, '--allowed-features', 'ticket_graph'], {
+      const child = execFile(command.executable, [...command.args, '--allowed-features', 'task_graph'], {
         cwd: root, timeout: 15000, maxBuffer: 16 * 1024 * 1024, windowsHide: true,
       }, (error, stdout) => {
         this.children.delete(child);
@@ -34,18 +34,18 @@ export class GraphReader {
         try {
           const reply = JSON.parse(stdout);
           if (reply.failed) throw new Error(reply.error || reply.result?.error || 'Native query failed.');
-          if (!reply.result || !Array.isArray(reply.result.tickets)) {
+          if (!reply.result || !Array.isArray(reply.result.tasks)) {
             throw new Error('Native query returned no task graph.');
           }
-          if (reply.result.tickets.some((ticket: { title?: unknown }) => typeof ticket.title !== 'string')) {
-            throw new Error('Install the matching Python GraphTraj version: ticket titles are missing.');
+          if (reply.result.tasks.some((task: { title?: unknown }) => typeof task.title !== 'string')) {
+            throw new Error('Install the matching Python GraphTraj version: task titles are missing.');
           }
           resolve(reply.result);
         } catch (error) { reject(error); }
       });
       this.children.add(child);
       child.stdin?.on('error', () => { /* execFile reports a failed process. */ });
-      child.stdin?.end(JSON.stringify({ action: 'execute', feature: 'ticket_graph', arguments: {} }) + '\n');
+      child.stdin?.end(JSON.stringify({ action: 'execute', feature: 'task_graph', arguments: { view: 'full' } }) + '\n');
     });
   }
 
@@ -207,13 +207,13 @@ export class Projects {
   close(): void { this.closed = true; this.activityReader.close(); }
 
   async activity(value: unknown): Promise<Activity> {
-    if (!value || typeof value !== 'object') throw new Error('Choose a Ticket.');
-    const { projectId, ticket_id, alias, cursor } = value as Record<string, unknown>;
+    if (!value || typeof value !== 'object') throw new Error('Choose a Task.');
+    const { projectId, task_id, alias, cursor } = value as Record<string, unknown>;
     const project = this.project(projectId);
-    if ((ticket_id !== undefined && typeof ticket_id !== 'string') || (alias !== undefined && typeof alias !== 'string') ||
+    if ((task_id !== undefined && typeof task_id !== 'string') || (alias !== undefined && typeof alias !== 'string') ||
         (cursor !== undefined && typeof cursor !== 'string')) throw new Error('Invalid activity selection.');
     if (await realpath(project.root) !== project.root) throw new Error('Project directory changed. Add it again.');
-    const request: ActivityRequest = { ...(ticket_id === undefined ? {} : { ticket_id }), ...(alias === undefined ? {} : { alias }),
+    const request: ActivityRequest = { ...(task_id === undefined ? {} : { task_id }), ...(alias === undefined ? {} : { alias }),
       ...(cursor === undefined ? {} : { cursor }) };
     const page = await this.activityReader.read(project.root, request);
     if (page.events?.some(event => event.kind === 'usage')) await this.history.receive(project.id, page.events);

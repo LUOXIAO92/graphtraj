@@ -94,9 +94,9 @@ def test_steering_and_refusal_keep_one_execution_for_the_session(
     assert after["session"] == launched["session"]
     assert after["parent"] == owner["parent"]
     # The continuation keeps the Agent Entity's immutable binding unchanged.
-    assert (after["role"], after["ticket_id"], after["team_generation"]) == (
+    assert (after["role"], after["task_id"], after["team_generation"]) == (
         owner["role"],
-        owner["ticket_id"],
+        owner["task_id"],
         owner["team_generation"],
     )
     assert after["worker_pid"] != owner["worker_pid"]

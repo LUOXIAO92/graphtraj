@@ -290,7 +290,7 @@ def review_recovery(proposal: dict, cwd: Path) -> dict:
         launch = yaml.safe_load((directory / 'launch.yml').read_text())
         params = launch['adapter_request']['session_parameters']
         custom = params.get('config', {}).get('model_provider', 'openai') != 'openai'
-        context = {'task': task.ticket_content, 'instruction': task.instruction,
+        context = {'task': task.task_content, 'instruction': task.instruction,
                    'developer_instructions': params.get('developerInstructions')}
     route = approval_route(settings, custom=custom, defaults=defaults)
     if route is None:

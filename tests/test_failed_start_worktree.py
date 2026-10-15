@@ -12,7 +12,7 @@ import yaml
 from conftest import FakeCodex, InstalledCommands, run_process, wait_for_file
 from runner_fixtures import configure_harness
 from test_task_recovery import installed_commands
-from test_ticket_graph import _change_status, _register, _ticket
+from test_task_graph import _change_status, _register, _task
 
 
 def _prepare(
@@ -21,17 +21,17 @@ def _prepare(
     runtime: FakeCodex,
     tmp_path: Path,
 ) -> tuple[Path, Path, Path, dict[str, str]]:
-    """Set up and register an isolated ready Ticket through public commands."""
+    """Set up and register an isolated ready Task through public commands."""
     root, worktrees, _, env = configure_harness(commands, repository, runtime, tmp_path)
     roles = root / '.graphtraj/roles.yml'
     document = yaml.safe_load(roles.read_text())
     document['role_tree'] = {'coding-team.engineer': {}}
     roles.write_text(yaml.safe_dump(document))
-    _register(commands, root, _ticket('268', 'failed-start'))
+    _register(commands, root, _task('268', 'failed-start'))
     _change_status(commands, root, '268', 'ready')
     batch = root / 'swarm.yml'
     batch.write_text(yaml.safe_dump({'tasks': [{
-        'ticket_id': '268', 'role': 'coding-team.engineer',
+        'task_id': '268', 'role': 'coding-team.engineer',
     }]}))
     return root, worktrees / '268-failed-start', batch, env
 
@@ -46,7 +46,7 @@ def _launch(commands: InstalledCommands, root: Path, batch: Path, env: dict[str,
 
 def _cleanup(commands: InstalledCommands, root: Path, env: dict[str, str]):
     """Request native cleanup without introducing an alias or changing state."""
-    result = run_process([str(commands.runner), 'cleanup', '--ticket-id', '268'],
+    result = run_process([str(commands.runner), 'cleanup', '--task-id', '268'],
                          cwd=root, env=env, timeout=30)
     print(result.stdout, result.stderr)
     return result
@@ -117,11 +117,11 @@ def test_pre_registration_git_failure_retains_native_recovery(
     retained = Path(response['retained_batch_file'])
     original = retained.read_bytes()
     input_before = batch.read_bytes()
-    assert yaml.safe_load(original)['tasks'][0]['ticket_id'] == '268'
+    assert yaml.safe_load(original)['tasks'][0]['task_id'] == '268'
     sessions = root / '.graphtraj/runner/sessions'
     assert not sessions.exists() or not list(sessions.iterdir())
-    ticket = root / '.graphtraj/state/tickets/268-failed-start/ticket.yml'
-    before = ticket.read_bytes()
+    task = root / '.graphtraj/state/tasks/268-failed-start/task.yml'
+    before = task.read_bytes()
     state = yaml.safe_load(before)
     assert state['active_team_ordinal'] is None
 
@@ -153,7 +153,7 @@ def test_pre_registration_git_failure_retains_native_recovery(
             ], cwd=root, env=env)
             assert accepted.returncode == 0, accepted.stdout + accepted.stderr
             integrated = run_process([
-                str(installed_commands.product), 'ticket', 'integrate', '--ticket-id', '268',
+                str(installed_commands.product), 'task', 'integrate', '--task-id', '268',
                 '--', sys.executable, '-c', 'pass',
             ], cwd=root, env=env, timeout=30)
             assert integrated.returncode == 0, integrated.stdout + integrated.stderr
@@ -216,27 +216,27 @@ def test_cleaned_task_reopens_with_fresh_member_and_preserved_history(
     ], cwd=root, env=env)
     assert accepted.returncode == 0, accepted.stdout + accepted.stderr
     integrated = run_process([
-        str(installed_commands.product), 'ticket', 'integrate', '--ticket-id', '268',
+        str(installed_commands.product), 'task', 'integrate', '--task-id', '268',
         '--', sys.executable, '-c', 'pass',
     ], cwd=root, env=env, timeout=30)
     assert integrated.returncode == 0, integrated.stdout + integrated.stderr
     cleaned = _cleanup(installed_commands, root, env)
     assert cleaned.returncode == 0, cleaned.stdout + cleaned.stderr
     assert not worktree.exists()
-    evidence = root / '.graphtraj/state/tickets/268-failed-start'
+    evidence = root / '.graphtraj/state/tasks/268-failed-start'
     retained = {path: path.read_bytes() for path in (evidence / 'teams/1').rglob('*') if path.is_file()}
     original_batch = batch.read_bytes()
-    graph = run_process([str(installed_commands.product), 'ticket', 'graph'], cwd=root, env=env)
-    previous = yaml.safe_load(graph.stdout)['tickets'][0]
-    definition = {**_ticket('268', 'failed-start'), 'schema_version': 2, 'parent_id': None,
+    graph = run_process([str(installed_commands.product), 'task', 'graph'], cwd=root, env=env)
+    previous = yaml.safe_load(graph.stdout)['tasks'][0]
+    definition = {**_task('268', 'failed-start'), 'schema_version': 2, 'parent_id': None,
                   'disposition': 'active', 'replaced_by': [], 'retirement_reason': None,
                   'current_definition': previous['current_definition']}
     revision = root / 'reopen.yml'
     revision.write_text(yaml.safe_dump({
         'product_preserving': True, 'caused_by_event_ids': [], 'evidence_refs': ['swarm.yml'],
-        'tickets': [definition], 'reopen_ticket_ids': ['268'],
+        'tasks': [definition], 'reopen_task_ids': ['268'],
     }))
-    revised = run_process([str(installed_commands.product), 'ticket', 'revise',
+    revised = run_process([str(installed_commands.product), 'task', 'revise',
                            '--revision-file', str(revision)], cwd=root, env=env)
     assert revised.returncode == 0, revised.stdout + revised.stderr
     env.update(FAKE_CODEX_LIFECYCLE_ACTION='deliver-document',

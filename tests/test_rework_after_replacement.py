@@ -52,12 +52,12 @@ def test_replacement_member_corrects_current_rejection(
         'report_files': [str(path) for path in reports],
     }))
     replacement = {
-        'phase': 'replace-member', 'ticket_id': '148', 'member': 'first',
+        'phase': 'replace-member', 'task_id': '148', 'member': 'first',
         'role': 'researcher', 'session_ref': 'research@x4',
         'caused_by_event_ids': [rejected['event_id']], 'evidence_refs': ['evidence.md'],
     }
     apply_delivery_state_request(state, tmp_path, replacement, replacement)
-    replay = {'phase': 'rework', 'ticket_id': '148',
+    replay = {'phase': 'rework', 'task_id': '148',
               'caused_by_event_ids': [rejected['event_id']],
               'evidence_refs': rejected['evidence_refs']}
     after_replacement = read_worldline(state, tmp_path)
@@ -100,7 +100,7 @@ def test_replacement_member_corrects_current_rejection(
             apply_delivery_state_request(state, tmp_path, replay, replay)
         with pytest.raises(ValueError, match='not accepting'):
             tools.submit_result(arguments, cwd=tmp_path)
-    # Even while the Ticket is reworking again, the first rejection is spent.
+    # Even while the Task is reworking again, the first rejection is spent.
     with runtime_caller(runner, parent):
         latest = tools.decide_result({**decision, 'submission_id': second['event_id']},
                                    cwd=tmp_path).document

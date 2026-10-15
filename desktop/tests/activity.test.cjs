@@ -65,7 +65,7 @@ test('Follow drains long pages and reconnect replay; pause preserves the older v
   const { ActivityView } = await components(t);
   t.mock.timers.enable({ apis: ['setTimeout'] });
   const member = { alias: 'worker', historical: false, runtime: 'codex', state: 'running' };
-  const base = { ticket_id: '1', agents: [member], updated_at: '2026-10-06T00:00:00Z' };
+  const base = { task_id: '1', agents: [member], updated_at: '2026-10-06T00:00:00Z' };
   const records = Array.from({ length: 405 }, (_, i) => event(i));
   let reconnect = false;
   const requests = [];
@@ -83,7 +83,7 @@ test('Follow drains long pages and reconnect replay; pause preserves the older v
   let tree;
   // Layout/programmatic scroll while a page is replaced must not pause fetching.
   const historyNode = { scrollHeight: 1000, scrollTop: 0, clientHeight: 300 };
-  await act(async () => { tree = create(React.createElement(ActivityView, { projectId: 'p', ticketId: '1' }), {
+  await act(async () => { tree = create(React.createElement(ActivityView, { projectId: 'p', taskId: '1' }), {
     createNodeMock: element => element.props.className?.includes('activity-history') ? historyNode : {
       scrollIntoView() {
         const history = tree.root.findAll(node => node.props.className?.includes('activity-history'))[0];
@@ -148,13 +148,13 @@ test('parallel current/history columns retain independent pause and cursor state
   let count = 2;
   globalThis.window = { graphtraj: { activity: async (projectId, request) => {
     requests.push({ projectId, ...request });
-    const base = { ticket_id: '1', agents: members, updated_at: '2026-10-11T00:00:00Z' };
+    const base = { task_id: '1', agents: members, updated_at: '2026-10-11T00:00:00Z' };
     if (!request.alias) return base;
     return { ...base, availability: 'available', cursor: String(count), events:
       Array.from({ length: count }, (_, i) => event(i, { text: `${request.alias} message ${i}` })) };
   } } };
   let tree;
-  await act(async () => { tree = create(React.createElement(ActivityView, { projectId: 'one', ticketId: '1' })); });
+  await act(async () => { tree = create(React.createElement(ActivityView, { projectId: 'one', taskId: '1' })); });
   t.after(async () => { await act(async () => tree.unmount()); });
   const columns = tree.root.findAll(node => node.type === 'article' && node.props.className?.split(' ').includes('agent-column'));
   assert.equal(columns.length, 2);
@@ -165,51 +165,51 @@ test('parallel current/history columns retain independent pause and cursor state
   assert.match(text(tree), /current message 2/);
   assert.ok(button(tree, 'Follow new messages (1)'));
   assert.ok(button(tree, 'Pause following'));
-  await act(async () => { tree.update(React.createElement(ActivityView, { projectId: 'one', ticketId: '1', active: false })); });
+  await act(async () => { tree.update(React.createElement(ActivityView, { projectId: 'one', taskId: '1', active: false })); });
   const before = requests.length;
   await act(async () => t.mock.timers.tick(6000));
   assert.equal(requests.length, before, 'hidden monitor must stop polling');
-  await act(async () => { tree.update(React.createElement(ActivityView, { projectId: 'one', ticketId: '1', active: true })); });
+  await act(async () => { tree.update(React.createElement(ActivityView, { projectId: 'one', taskId: '1', active: true })); });
   assert.ok(button(tree, 'Follow new messages (1)'));
   assert.deepEqual(requests.filter(request => request.alias).slice(-2).map(request => request.cursor), ['3', '3']);
   assert.ok(requests.every(request => request.projectId === 'one'));
 });
 
-test('Main conversations use project associations without inventing Ticket membership', async t => {
+test('Main conversations use project associations without inventing Task membership', async t => {
   const { ActivityView } = await components(t);
   const requests = [];
   const main = { alias: 'Main:codex:main-session', kind: 'main', runtime: 'codex', session: 'main-session', historical: false, state: 'associated' };
   globalThis.window = { graphtraj: { activity: async (projectId, request) => {
     requests.push({ projectId, ...request });
-    return { ticket_id: null, updated_at: '2026-10-11T00:00:00Z',
-      agents: [main, { alias: 'ticket-member', kind: 'member', historical: false, state: 'running' }],
+    return { task_id: null, updated_at: '2026-10-11T00:00:00Z',
+      agents: [main, { alias: 'task-member', kind: 'member', historical: false, state: 'running' }],
       availability: 'available', events: request.alias ? [event(1, { text: 'Owned Main output' })] : [] };
   } } };
   let tree;
   await act(async () => { tree = create(React.createElement(ActivityView, { projectId: 'one' })); });
   t.after(async () => { await act(async () => tree.unmount()); });
   assert.equal(tree.root.findAll(node => node.type === 'article' && node.props['data-agent-id'] === main.alias).length, 1);
-  assert.equal(tree.root.findAll(node => node.type === 'article' && node.props['data-agent-id'] === 'ticket-member').length, 0);
+  assert.equal(tree.root.findAll(node => node.type === 'article' && node.props['data-agent-id'] === 'task-member').length, 0);
   assert.match(text(tree), /Owned Main output/);
-  assert.ok(requests.every(request => request.projectId === 'one' && !('ticket_id' in request)));
+  assert.ok(requests.every(request => request.projectId === 'one' && !('task_id' in request)));
 });
 
-for (const ticketId of [undefined, '1']) {
-  test(`${ticketId ? 'Agent' : 'Main'} first failure, disconnect, retry and genuine empty results stay distinct`, async t => {
+for (const taskId of [undefined, '1']) {
+  test(`${taskId ? 'Agent' : 'Main'} first failure, disconnect, retry and genuine empty results stay distinct`, async t => {
     const { ActivityView } = await components(t);
     t.mock.timers.enable({ apis: ['setTimeout'] });
     let mode = 'list-error', version = 1;
     const errors = [];
     globalThis.window = { graphtraj: { activity: async (_project, request) => {
       if (!request.alias && mode === 'list-error' || request.alias && mode === 'message-error') throw new Error('Controlled outage');
-      return { ticket_id: ticketId ?? null, updated_at: '2026-10-12T00:00:00Z', availability: 'available', cursor: String(version),
-        agents: mode === 'empty' ? [] : [{ alias: 'reader', kind: ticketId ? 'member' : 'main', state: 'running' }],
+      return { task_id: taskId ?? null, updated_at: '2026-10-12T00:00:00Z', availability: 'available', cursor: String(version),
+        agents: mode === 'empty' ? [] : [{ alias: 'reader', kind: taskId ? 'member' : 'main', state: 'running' }],
         events: request.alias && mode !== 'no-messages' ? [event(version, { text: `Retained content ${version}` })] : [] };
     } } };
     let tree;
-    await act(async () => { tree = create(React.createElement(ActivityView, { projectId: 'project', ticketId, onError: value => errors.push(value) })); });
+    await act(async () => { tree = create(React.createElement(ActivityView, { projectId: 'project', taskId, onError: value => errors.push(value) })); });
     t.after(async () => { await act(async () => tree.unmount()); });
-    assert.match(text(tree), ticketId ? /Could not load this task/ : /Could not load Main/);
+    assert.match(text(tree), taskId ? /Could not load this task/ : /Could not load Main/);
     assert.doesNotMatch(text(tree), /Loading|No participating|No associated|remain readable/);
     assert.ok(errors.at(-1));
     mode = 'message-error';
@@ -239,7 +239,7 @@ for (const ticketId of [undefined, '1']) {
     assert.doesNotMatch(text(tree), /Loading|No participating|No associated/);
     mode = 'empty';
     await act(async () => button(tree, 'Retry now').props.onClick());
-    assert.match(text(tree), ticketId ? /No participating Agents recorded/ : /No associated Main sessions recorded/);
+    assert.match(text(tree), taskId ? /No participating Agents recorded/ : /No associated Main sessions recorded/);
     assert.doesNotMatch(text(tree), /Could not load|Loading/);
   });
 }

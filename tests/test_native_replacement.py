@@ -77,8 +77,8 @@ def test_invalid_channel_does_not_fall_back(monkeypatch) -> None:
 def test_recorded_runtime_controls_native_stage(tmp_path: Path, monkeypatch, runtime: str) -> None:
     """The actual caller binding selects capability, even with forged environment."""
     root = tmp_path / "runner"
-    parent = "132-ticket-handover0-team_leader@leader"
-    caller = "132-ticket-handover0-engineer@caller"
+    parent = "132-task-handover0-team_leader@leader"
+    caller = "132-task-handover0-engineer@caller"
     _record_direct_session(root, parent, "team-leader", None)
     _record_direct_session(root, caller, "engineer", parent)
     path = root / "sessions" / caller / "mapping.yml"
@@ -113,8 +113,8 @@ def test_public_replacement_checks_descendants_with_failed_launch_residue(
 ) -> None:
     """Unrelated roots do not block; actual or possible uncertain descendants do."""
     root = tmp_path / "runner"
-    parent = "132-ticket-handover0-team_leader@leader"
-    child = "132-ticket-handover0-engineer@child"
+    parent = "132-task-handover0-team_leader@leader"
+    child = "132-task-handover0-engineer@child"
     _record_direct_session(root, parent, "team-leader", None)
     _record_direct_session(root, child, "engineer", parent)
     (root / "sessions" / parent / "execution.yml").write_text("outcome: completed\n")
@@ -122,7 +122,7 @@ def test_public_replacement_checks_descendants_with_failed_launch_residue(
     monkeypatch.setattr(runner_status, "caller_alias", lambda directory: None)
     if child_activity == "idle":
         (root / "sessions" / child / "execution.yml").write_text("outcome: completed\n")
-    failed = root / "sessions" / "132-ticket-handover0-engineer@failed"
+    failed = root / "sessions" / "132-task-handover0-engineer@failed"
     failed.mkdir()
     (failed / "launch.yml").write_text(yaml.safe_dump({
         "operation": "launch",
@@ -193,8 +193,8 @@ def test_selected_reviewer_refusal_preserves_retirement(
     from graphtraj.interfaces import local_tool
 
     root = tmp_path / "runner"
-    parent = "132-ticket-handover0-team_leader@leader"
-    child = "132-ticket-handover0-engineer@child"
+    parent = "132-task-handover0-team_leader@leader"
+    child = "132-task-handover0-engineer@child"
     for alias, role, owner in ((parent, "team-leader", None), (child, "engineer", parent)):
         _record_direct_session(root, alias, role, owner)
         (root / "sessions" / alias / "session.yml").write_text("{}\n")

@@ -88,7 +88,7 @@ for line in sys.stdin:
             stream.write(json.dumps({'type': 'turn_context', 'payload': {
                 'execution_id': execution, 'model': parameters['model'],
                 'effort': parameters['config']['model_reasoning_effort'],
-                'ticket_id': os.environ['GRAPHTRAJ_TICKET_ID'],
+                'task_id': os.environ['GRAPHTRAJ_TASK_ID'],
                 'role': os.environ['GRAPHTRAJ_ROLE'], 'cwd': parameters['cwd'],
             }}) + '\n')
         result = {'turn': {'id': execution, 'status': 'inProgress', 'items': []}}

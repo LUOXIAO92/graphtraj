@@ -85,6 +85,13 @@ message changes the message surface. A real fork uses `parentSession`,
 `isSeeded: true` and a `session/end-seed {inherited: true}` at the exact inherited
 prefix cut. The last tagged marker is that Session's cut. An ordinary untagged
 end-seed is a lifecycle boundary; neither is Agent or Task parentage.
+The marker cannot classify child-local hooks or collection observations as
+parent history. When native ancestry arrives late, preserve available raw
+observations durably without prematurely fixing an incorrect ancestry or log
+order. Appending a marker later cannot repair a boundary before already committed
+child events. Collector and storage implementations must preserve both facts
+and the canonical inheritance semantics; an opaque ancestry field is not a
+replacement for that contract.
 
 ## Provenance, absent data and reversibility
 
@@ -241,3 +248,60 @@ user envelope and a compaction boundary. Opaque cases deliberately preserve
 facts that lack enough context for a faithful DSH semantic projection. The
 future collectors must resolve context before promoting them; this protocol
 does not assert opaque records are resumable across Runtimes.
+
+## DSH collection
+
+The DSH adapter archives Sessions as `dsh:<native-id>` and checkpoints native
+event sequence numbers. It retains seed and appended records, including streams,
+tool calls, failed attempts and unknown fields, through the Python Session store.
+Existing source classification and managed ownership checks distinguish Main
+from children; a Header association alone does not grant access.
+
+Attachment references retain archived bytes or a specific missing reason.
+`graphtraj.usage` selects final usage, or the latest stream usage snapshot when
+the final value is absent, once per attempt; `usageSource` identifies the selected
+location. DSH's uncached and cached input counters remain distinct. Flush and
+disposal drain pending semantic records, with failed flushes available for retry.
+
+The installed-library callback checks cover collection, flush, replay and
+disposal. The JSON files above remain structural examples, not live model captures
+or evidence that an existing project's history has been migrated.
+
+## Pi collection
+
+The Pi adapter archives native Session records and branch ancestry in the same
+project-local store. Complete native JSONL records supply replay checkpoints;
+missing parent history remains an explicit missing inherited boundary.
+
+Streaming text and reasoning use compact runs instead of a permanent raw RPC
+log for each fragment. Tool, permission, error, usage and completion boundaries
+remain separate. Fragment size does not turn one response into more messages
+or duplicate its usage. Interruption preserves received partial output.
+
+Committed drafts and replayable native records support recovery. A hard crash
+can still lose received RPC output after the last checkpoint if Pi has not
+persisted that output; the archive does not claim this tail is recoverable.
+Controlled native SessionManager and subprocess checks cover these paths;
+they do not constitute live provider inference or migration of existing history.
+
+## Claude collection
+
+The Claude adapter retains native messages, tool exchanges, thinking/signatures,
+unknown records and final results in `claude:<native-id>` archives. The observed
+model comes from native output; a requested model is not proof of the model used.
+Unavailable probability or hidden content carries a missing reason. Intermediate
+message usage and final result usage remain distinguishable, not additive charges.
+
+When ancestry is not yet known, `session_read.pending` can contain
+`graphtraj/collection-pending`: durable raw observations, not canonical history.
+The store uses its existing draft and source checkpoints. Before any canonical
+event is published, `finish_initial_collection` confirms the ancestry and orders
+actual inherited records, their exact marker, then local observations in one
+transaction. Identity stays stable and the original Header observation is retained.
+This operation cannot rewrite already published history. Unknown ancestry stays
+pending and remains readable from an exported archive if its native source disappears.
+
+`session_read` retains its own-Session or human-project authorization boundary.
+Use bounded pages for large native records; Runtime clients can spill oversized
+tool results into files outside an Agent's permitted read paths. A successful
+request alone does not mean the Agent observed the returned content.

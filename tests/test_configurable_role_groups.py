@@ -88,8 +88,8 @@ def _batch_task(harness_root: Path, role: str) -> Path:
     batch = harness_root / "batch.yml"
     batch.write_text(
         "tasks:\n"
-        '  - ticket_id: "143"\n'
-        "    ticket_name: configurable-role-dispatch\n"
+        '  - task_id: "143"\n'
+        "    task_name: configurable-role-dispatch\n"
         "    role: " + role + "\n",
         encoding="utf-8",
     )
@@ -183,9 +183,9 @@ def test_a_configured_group_reaches_a_real_launch(
     harness_root, _, _, environment = configure_harness(
         installed_commands, temporary_git_repository, fake_codex, tmp_path
     )
-    from test_ticket_graph import _change_status, _register, _ticket
+    from test_task_graph import _change_status, _register, _task
 
-    _register(installed_commands, harness_root, _ticket("143", "configurable-role-dispatch"))
+    _register(installed_commands, harness_root, _task("143", "configurable-role-dispatch"))
     _change_status(installed_commands, harness_root, "143", "ready")
 
     document = yaml.safe_load((harness_root / ".graphtraj/roles.yml").read_text())
@@ -325,7 +325,7 @@ def test_new_role_name_selection_directs_caller_to_native_resources(
         parse_inline_role(selection)
     retained = tmp_path / 'retained.yml'
     content = yaml.safe_dump({'tasks': [{
-        'ticket_id': '177', 'ticket_name': 'retained-inline', 'role': selection,
+        'task_id': '177', 'task_name': 'retained-inline', 'role': selection,
     }]}).encode()
     retained.write_bytes(content)
     batch = read_batch(retained, tmp_path)
@@ -342,7 +342,7 @@ def test_new_swarm_rejects_name_selection_but_retained_batch_stays_readable(
     from graphtraj.execution.runner_batch import parse_swarm, read_batch
     from graphtraj.execution.runner_models import RunnerError
 
-    document = {'tasks': [{'ticket_id': '176', 'ticket_name': 'native-skills',
+    document = {'tasks': [{'task_id': '176', 'task_name': 'native-skills',
                           'role': 'author', 'skills': skills}]}
     with pytest.raises(RunnerError, match='Runtime native Skill selection'):
         parse_swarm(document, None, {'176': 'native-skills'})

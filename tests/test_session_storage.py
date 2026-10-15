@@ -282,8 +282,8 @@ def test_graph_query_does_not_open_session_archives(tmp_path: Path) -> None:
     path = session_path(tmp_path / 'state', 'canonical')
     path.parent.mkdir(parents=True)
     path.write_bytes(b'not a readable Session database')
-    result = handle_request({'action': 'execute', 'feature': 'ticket_graph', 'arguments': {}}, cwd=tmp_path)
-    assert not result.failed and result.document['tickets']
+    result = handle_request({'action': 'execute', 'feature': 'task_graph', 'arguments': {}}, cwd=tmp_path)
+    assert not result.failed and result.document['tasks']
 
 
 def test_one_native_record_commits_all_its_semantic_events(tmp_path: Path) -> None:
@@ -306,3 +306,47 @@ def test_one_native_record_commits_all_its_semantic_events(tmp_path: Path) -> No
         assert store.next_seq == 2 and store.pending() is not None
         writer.finish(interrupted=True, following=[boundary])
         assert store.next_seq == 4 and store.pending() is None
+
+
+def test_pending_initial_ancestry_is_portable_atomic_and_one_way(tmp_path: Path) -> None:
+    """Early hooks stay outside parent history; failed confirmation changes nothing."""
+    path = tmp_path / 'initial.sqlite3'
+    original = header()
+    hook = retain_native('codex', {'hook': 'start'}, session_id='native', locator='hook', seq=0, time=1)
+    parent = retain_native('codex', {'inherited': 'actual'}, session_id='native', locator='parent', seq=0, time=2)
+    with SessionStore.create(path, original) as store:
+        assert store.stage_initial_observation(hook, source='hooks', position=0)
+        assert not store.stage_initial_observation(hook, source='hooks', position=0)
+        assert store.stage_initial_observation(parent, source='file', position=12)
+        assert store.page()['events'] == []
+        store.export(tmp_path / 'export.sqlite3')
+    path.unlink()
+    with SessionStore(tmp_path / 'export.sqlite3') as store:
+        before = store.pending()
+        with pytest.raises(ValueError):
+            store.finish_initial_collection(parent_session='parent', inherited=[('file', 99)])
+        assert store.header == original and store.pending() == before
+        assert store.position('file') == 12 and store.next_seq == 0
+        store.finish_initial_collection(parent_session='parent', inherited=[('file', 12)])
+        events = store.page()['events']
+        assert events[0]['data']['record'] == {'inherited': 'actual'}
+        assert events[1]['type'] == 'session/end-seed'
+        assert events[2]['data']['record'] == {'hook': 'start'}
+        assert events[2]['graphtraj']['initialHeader'] == original
+        assert store.header['graphtraj'] == original['graphtraj']
+        assert store.header['parentSession'] == 'parent' and store.pending() is None
+        store.validate()
+        with pytest.raises(ValueError, match='already started'):
+            store.stage_initial_observation(hook, source='hooks', position=1)
+        with pytest.raises(ValueError, match='Only pending'):
+            store.finish_initial_collection(parent_session='other', inherited=[('file', 12)])
+        assert store.page()['events'] == events
+
+
+def test_initial_pending_cannot_be_validated_as_canonical_history() -> None:
+    """Ordinary protocol consumers must not treat undecided observations as history."""
+    from graphtraj.sessions.protocol import INITIAL_COLLECTION_TYPE, validate_session
+
+    event = {'type': INITIAL_COLLECTION_TYPE, 'seq': 0, 'time': 1, 'data': {}}
+    with pytest.raises(ValueError, match='pending-collection'):
+        validate_session(header(), [event])

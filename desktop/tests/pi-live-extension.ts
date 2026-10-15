@@ -1,4 +1,4 @@
-/** Temporary Ticket262 acceptance resource; load explicitly, never auto-discover. */
+/** Temporary Task262 acceptance resource; load explicitly, never auto-discover. */
 import { spawn, type ChildProcess } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -29,7 +29,7 @@ export default function (pi: ExtensionAPI) {
   };
   pi.on('session_shutdown', close);
   pi.registerTool({
-    name: 'ticket262_live', label: 'Ticket262 owned desktop test',
+    name: 'task262_live', label: 'Task262 owned desktop test',
     description: 'Temporary one-launch fixture; probe/start require an explicitly authorized deadline. probe starts a non-GUI Pi-owned child; status returns actual stage; stop closes only that child. start launches the existing tracked live test once. Use ordinary bash tools for genuine markers.',
     parameters: Type.Object({ action: Type.Union([
       Type.Literal('probe'), Type.Literal('start'), Type.Literal('status'), Type.Literal('stop'),
@@ -57,7 +57,7 @@ export default function (pi: ExtensionAPI) {
           TMPDIR: '/tmp/claude/262-native-boundary', CLAUDE_TMPDIR: '/tmp/claude/262-native-boundary',
           ELECTRON_OVERRIDE_DIST_PATH: '/private/tmp/262-pi-runtime/electron',
           GRAPHTRAJ_TOOL: path.resolve(root, '../../../.venv-runner/bin/graphtraj-tool'),
-          GRAPHTRAJ_LIVE_PROJECT: root, GRAPHTRAJ_LIVE_TICKET: '262', GRAPHTRAJ_LIVE_NO_SANDBOX: '1',
+          GRAPHTRAJ_LIVE_PROJECT: root, GRAPHTRAJ_LIVE_TASK: '262', GRAPHTRAJ_LIVE_NO_SANDBOX: '1',
         } });
         const owned = child;
         let pending = '';

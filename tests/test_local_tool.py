@@ -16,10 +16,10 @@ from graphtraj.interfaces import gateway, local_tool, tools
 
 
 ISSUE = {
-    "ticket_id":   "900",
-    "ticket_name": "probe-ticket",
-    "source":      "https://github.com/example/project/issues/900",
-    "title":       "Probe Ticket",
+    "task_id":   "900",
+    "task_name": "probe-task",
+    "source":      "https://github.com/example/project/issues/900", "schema_version": 2, "parent_id": None, "disposition": "active", "replaced_by": [], "retirement_reason": None,
+    "title":       "Probe Task",
     "body":        "Deliver probe.",
     "dependencies": [],
 }
@@ -30,35 +30,35 @@ def test_graph_monitor_reads_title_without_changing_delivery(project: Path, body
     """The desktop's public read seam returns authored labels and delivery facts."""
     call = local_tool.bind(cwd=project)
     registered = call({
-        "action": "execute", "feature": "ticket_register",
+        "action": "execute", "feature": "task_register",
         "arguments": {**ISSUE, "title": "A human-readable graph title", "body": body},
     })
     assert not registered.failed
-    request = {"action": "execute", "feature": "ticket_graph", "arguments": {}}
-    observed = local_tool.answer(request, cwd=project, allowed_features=["ticket_graph"])
-    assert observed["result"]["tickets"][0]["title"] == "A human-readable graph title"
-    assert observed["result"]["tickets"][0]["status"] == "pending"
-    assert local_tool.answer(request, cwd=project, allowed_features=["ticket_graph"]) == observed
+    request = {"action": "execute", "feature": "task_graph", "arguments": {}}
+    observed = local_tool.answer(request, cwd=project, allowed_features=["task_graph"])
+    assert observed["result"]["tasks"][0]["title"] == "A human-readable graph title"
+    assert observed["result"]["tasks"][0]["status"] == "pending"
+    assert local_tool.answer(request, cwd=project, allowed_features=["task_graph"]) == observed
     refused = local_tool.answer({
-        "action": "execute", "feature": "ticket_register", "arguments": ISSUE,
-    }, cwd=project, allowed_features=["ticket_graph"])
+        "action": "execute", "feature": "task_register", "arguments": ISSUE,
+    }, cwd=project, allowed_features=["task_graph"])
     assert refused["failed"]
 
 
 @pytest.fixture
 def project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    """Provide a configured local project and controlled material for ticket_graph."""
+    """Provide a configured local project and controlled material for task_graph."""
     configuration = tmp_path / ".graphtraj/config.yml"
     configuration.parent.mkdir()
     configuration.write_text(default_configuration_content(tmp_path, tmp_path))
-    (tmp_path / "ticket-graph.md").write_text(
-        "Fixture manual for ticket_graph.", encoding="utf-8"
+    (tmp_path / "task-graph.md").write_text(
+        "Fixture manual for task_graph.", encoding="utf-8"
     )
     # A relative reference resolves to the distribution's delivered data
     # location, so point that location at the fixture material.
     monkeypatch.setattr(gateway, "delivered_manuals_root", lambda: tmp_path)
-    monkeypatch.setitem(tools.TOOLS, "ticket_graph", replace(
-        tools.TOOLS["ticket_graph"], manual_ref="ticket-graph.md",
+    monkeypatch.setitem(tools.TOOLS, "task_graph", replace(
+        tools.TOOLS["task_graph"], manual_ref="task-graph.md",
     ))
     # Ambient-directory handlers read the process working directory, exactly as
     # the host's spawned bridge process does.
@@ -82,59 +82,59 @@ def test_python_binding_discovers_describes_reads_and_writes(project: Path) -> N
     call = local_tool.bind(cwd=project)
 
     discovered = call({"action": "discover", "query": "graph"})
-    assert discovered.document["features"][0]["feature"] == "ticket_graph"
+    assert discovered.document["features"][0]["feature"] == "task_graph"
 
-    described = call({"action": "describe", "feature": "ticket_graph"})
-    assert Path(described.document["manual_ref"]).read_text() == "Fixture manual for ticket_graph."
+    described = call({"action": "describe", "feature": "task_graph"})
+    assert Path(described.document["manual_ref"]).read_text() == "Fixture manual for task_graph."
     assert set(described.document) == {"feature", "description", "manual_ref"}
-    parameters = call({"action": "describe", "feature": "ticket_graph", "schema": True})
-    assert parameters.document == {"input_schema": tools.TOOLS["ticket_graph"].input_schema}
+    parameters = call({"action": "describe", "feature": "task_graph", "schema": True})
+    assert parameters.document == {"input_schema": tools.TOOLS["task_graph"].input_schema}
 
-    assert call({"action": "execute", "feature": "ticket_graph", "arguments": {}}).document == {"schema_version": 2, "tickets": []}
-    written = call({"action": "execute", "feature": "ticket_register", "arguments": ISSUE})
+    assert call({"action": "execute", "feature": "task_graph", "arguments": {}}).document["tasks"] == []
+    written = call({"action": "execute", "feature": "task_register", "arguments": ISSUE})
     assert not written.failed
 
-    tickets = call({"action": "execute", "feature": "ticket_graph", "arguments": {}}).document["tickets"]
-    assert [ticket["ticket_id"] for ticket in tickets] == ["900"]
+    tasks = call({"action": "execute", "feature": "task_graph", "arguments": {}}).document["tasks"]
+    assert [task["task_id"] for task in tasks] == ["900"]
 
 
 def test_host_context_is_not_taken_from_the_request(project: Path) -> None:
     """Smuggled context fields are rejected and later calls still run."""
     call = local_tool.bind(cwd=project)
     smuggled = [
-        {"action": "execute", "feature": "ticket_graph", "arguments": {}, "cwd": "/tmp"},
-        {"action": "execute", "feature": "ticket_graph", "arguments": {},
-         "allowed_features": ["ticket_register"]},
-        {"action": "execute", "feature": "ticket_graph", "arguments": {"actor": "Main"}},
+        {"action": "execute", "feature": "task_graph", "arguments": {}, "cwd": "/tmp"},
+        {"action": "execute", "feature": "task_graph", "arguments": {},
+         "allowed_features": ["task_register"]},
+        {"action": "execute", "feature": "task_graph", "arguments": {"actor": "Main"}},
     ]
     for request in smuggled:
         rejected = call(request)
         assert rejected.failed
         assert "error" in rejected.document
 
-    assert not call({"action": "execute", "feature": "ticket_graph", "arguments": {}}).failed
+    assert not call({"action": "execute", "feature": "task_graph", "arguments": {}}).failed
 
 
 def test_host_launch_boundary_restricts_features(project: Path) -> None:
     """The binding's feature restriction comes from the host, not the request."""
-    call = local_tool.bind(cwd=project, allowed_features=("ticket_graph",))
-    assert [item["feature"] for item in call({"action": "discover"}).document["features"]] == ["ticket_graph"]
+    call = local_tool.bind(cwd=project, allowed_features=("task_graph",))
+    assert [item["feature"] for item in call({"action": "discover"}).document["features"]] == ["task_graph"]
 
-    denied = call({"action": "execute", "feature": "ticket_register", "arguments": ISSUE})
+    denied = call({"action": "execute", "feature": "task_register", "arguments": ISSUE})
     assert denied.failed
     assert "Unknown feature" in denied.document["error"]
-    assert not call({"action": "execute", "feature": "ticket_graph", "arguments": {}}).failed
+    assert not call({"action": "execute", "feature": "task_graph", "arguments": {}}).failed
 
 
 def test_launch_option_restricts_features(
     project: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """The bridge command reads its feature restriction from the launch options."""
-    monkeypatch.setattr(sys, "argv", ["graphtraj-tool", "--allowed-features", "ticket_graph"])
+    monkeypatch.setattr(sys, "argv", ["graphtraj-tool", "--allowed-features", "task_graph"])
     monkeypatch.setattr(sys, "stdin", io.StringIO("\n".join([
         json.dumps({"action": "discover"}),
-        json.dumps({"action": "execute", "feature": "ticket_register", "arguments": ISSUE}),
-        json.dumps({"action": "execute", "feature": "ticket_graph", "arguments": {}}),
+        json.dumps({"action": "execute", "feature": "task_register", "arguments": ISSUE}),
+        json.dumps({"action": "execute", "feature": "task_graph", "arguments": {}}),
     ]) + "\n"))
     output = io.StringIO()
     monkeypatch.setattr(sys, "stdout", output)
@@ -142,9 +142,9 @@ def test_launch_option_restricts_features(
     local_tool.main()
 
     replies = [json.loads(line) for line in output.getvalue().splitlines()]
-    assert [item["feature"] for item in replies[0]["result"]["features"]] == ["ticket_graph"]
+    assert [item["feature"] for item in replies[0]["result"]["features"]] == ["task_graph"]
     assert replies[1]["failed"] and "Unknown feature" in replies[1]["result"]["error"]
-    assert replies[2]["result"] == {"schema_version": 2, "tickets": []}
+    assert replies[2]["result"]["tasks"] == []
 
 
 def test_bridge_answers_bad_requests_and_keeps_serving(project: Path) -> None:
@@ -155,26 +155,26 @@ def test_bridge_answers_bad_requests_and_keeps_serving(project: Path) -> None:
         json.dumps(["not", "an", "object"]),
         json.dumps({"action": "other"}),
         json.dumps({"action": "execute", "feature": "unknown", "arguments": {}}),
-        json.dumps({"action": "describe", "feature": "ticket_graph"}),
-        json.dumps({"action": "execute", "feature": "ticket_graph", "arguments": {}}),
-        json.dumps({"action": "execute", "feature": "ticket_register", "arguments": ISSUE}),
-        json.dumps({"action": "execute", "feature": "ticket_graph", "arguments": {}}),
+        json.dumps({"action": "describe", "feature": "task_graph"}),
+        json.dumps({"action": "execute", "feature": "task_graph", "arguments": {}}),
+        json.dumps({"action": "execute", "feature": "task_register", "arguments": ISSUE}),
+        json.dumps({"action": "execute", "feature": "task_graph", "arguments": {}}),
     ]
     output = io.StringIO()
     local_tool.serve(io.StringIO("\n".join(lines) + "\n"), output, cwd=project)
 
     replies = [json.loads(line) for line in output.getvalue().splitlines()]
     assert len(replies) == len(lines)
-    assert replies[0]["result"]["features"][0]["feature"] == "ticket_graph"
+    assert replies[0]["result"]["features"][0]["feature"] == "task_graph"
     assert replies[1] == {"failed": True, "error": "Parse error"}
     assert replies[2] == {"failed": True, "error": "Invalid request"}
     assert replies[3]["failed"] and "error" in replies[3]["result"]
     assert replies[4]["failed"] and "Unknown feature" in replies[4]["result"]["error"]
-    assert Path(replies[5]["result"]["manual_ref"]).read_text() == "Fixture manual for ticket_graph."
-    assert replies[6]["result"] == {"schema_version": 2, "tickets": []}
+    assert Path(replies[5]["result"]["manual_ref"]).read_text() == "Fixture manual for task_graph."
+    assert replies[6]["result"]["tasks"] == []
     assert not replies[7]["failed"]
-    assert Path(replies[7]["result"]["ticket_directory"]).is_dir()
-    assert [ticket["ticket_id"] for ticket in replies[8]["result"]["tickets"]] == ["900"]
+    assert Path(replies[7]["result"]["task_directory"]).is_dir()
+    assert [task["task_id"] for task in replies[8]["result"]["tasks"]] == ["900"]
 
 
 def test_process_bridge_uses_launch_context_without_mcp(project: Path) -> None:
@@ -196,9 +196,9 @@ sys.meta_path.insert(0, NoMcp())
 sys.path.insert(0, source)
 from graphtraj.interfaces import local_tool, tools
 assert Path(tools.__file__).is_relative_to(Path(source)), tools.__file__
-tools.TOOLS["ticket_graph"] = replace(
-    tools.TOOLS["ticket_graph"],
-    manual_ref=str(Path(sys.argv[2]) / "ticket-graph.md"),
+tools.TOOLS["task_graph"] = replace(
+    tools.TOOLS["task_graph"],
+    manual_ref=str(Path(sys.argv[2]) / "task-graph.md"),
 )
 sys.argv = ["graphtraj-tool"]
 local_tool.main()
@@ -207,9 +207,9 @@ sys.stderr.write("mcp_imported={0}\\n".format("graphtraj.interfaces.mcp" in sys.
     lines = [
         "not json",
         json.dumps({"action": "discover", "query": "graph"}),
-        json.dumps({"action": "describe", "feature": "ticket_graph"}),
-        json.dumps({"action": "execute", "feature": "ticket_graph", "arguments": {}}),
-        json.dumps({"action": "execute", "feature": "ticket_register", "arguments": ISSUE}),
+        json.dumps({"action": "describe", "feature": "task_graph"}),
+        json.dumps({"action": "execute", "feature": "task_graph", "arguments": {}}),
+        json.dumps({"action": "execute", "feature": "task_register", "arguments": ISSUE}),
     ]
     completed = subprocess.run(
         [sys.executable, "-c", script, str(source), str(project)],
@@ -221,12 +221,12 @@ sys.stderr.write("mcp_imported={0}\\n".format("graphtraj.interfaces.mcp" in sys.
 
     replies = [json.loads(line) for line in completed.stdout.splitlines()]
     assert replies[0] == {"failed": True, "error": "Parse error"}
-    assert replies[1]["result"]["features"][0]["feature"] == "ticket_graph"
-    assert Path(replies[2]["result"]["manual_ref"]).read_text() == "Fixture manual for ticket_graph."
-    assert replies[3]["result"] == {"schema_version": 2, "tickets": []}
+    assert replies[1]["result"]["features"][0]["feature"] == "task_graph"
+    assert Path(replies[2]["result"]["manual_ref"]).read_text() == "Fixture manual for task_graph."
+    assert replies[3]["result"]["tasks"] == []
     assert not replies[4]["failed"]
     # The write landed in the host's launch directory, not the test process one.
-    assert (project / ".graphtraj/state/tickets/900-probe-ticket").is_dir()
+    assert (project / ".graphtraj/state/tasks/900-probe-task").is_dir()
 
 
 def test_event_receiver_is_trusted_host_context_and_has_explicit_lifetime(project: Path) -> None:
@@ -234,9 +234,9 @@ def test_event_receiver_is_trusted_host_context_and_has_explicit_lifetime(projec
     from graphtraj.execution.runner_models import RunnerError
 
     with local_tool.bind(project, event_receiver=lambda event: None) as call:
-        rejected = call({'action': 'execute', 'feature': 'ticket_graph',
+        rejected = call({'action': 'execute', 'feature': 'task_graph',
                          'arguments': {}, 'event_receiver': 'replace owner'})
         assert rejected.failed
-        assert not call({'action': 'execute', 'feature': 'ticket_graph', 'arguments': {}}).failed
+        assert not call({'action': 'execute', 'feature': 'task_graph', 'arguments': {}}).failed
     with pytest.raises(RunnerError, match='closed'):
-        call({'action': 'execute', 'feature': 'ticket_graph', 'arguments': {}})
+        call({'action': 'execute', 'feature': 'task_graph', 'arguments': {}})

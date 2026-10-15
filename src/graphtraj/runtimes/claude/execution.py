@@ -58,6 +58,9 @@ class ClaudeExecution:
         self.sent = 0
         self.results = 0
         self.native_state: str | None = None
+        self.drained_native_state: str | None = None
+        self.stdout_eof = False
+        self.stderr_eof = False
         self.task_released = False
         self.diagnostics = {'session_id': self.native_id, 'execution_id': self.execution_id,
                             'launch': 'unknown', 'popen_returned': False,
@@ -108,8 +111,10 @@ class ClaudeExecution:
 
     def _prompt(self, text: str) -> None:
         """Queue a native user message while counting each expected result."""
-        self._send({'type': 'user', 'session_id': self.native_id,
-                    'message': {'role': 'user', 'content': text}, 'parent_tool_use_id': None})
+        message = {'type': 'user', 'session_id': self.native_id,
+                   'message': {'role': 'user', 'content': text}, 'parent_tool_use_id': None}
+        self._send(message)
+        self.events.put({**message, 'graphtraj_direction': 'sent'})
         self.sent += 1
 
     def _prepare(self, address: str) -> tuple[list[str], dict]:
@@ -139,7 +144,9 @@ class ClaudeExecution:
                 'deny': [rule for p in denied_read for rule in (f'Read(/{p})', f'Read(/{p}/**)')]
                         + [rule for p in denied_write for rule in (f'Edit(/{p})', f'Edit(/{p}/**)')]
                         + (['Edit', 'Write', 'NotebookEdit'] if request['worktree_access'] == 'read' else []),
-                'additionalDirectories': [str(p) for p in resources if p.is_dir()],
+                # Native additional working directories are writable sandbox
+                # roots. Read-only resources belong solely in allowRead below.
+                'additionalDirectories': [],
             },
             'sandbox': {
                 'enabled': True, 'failIfUnavailable': True, 'allowUnsandboxedCommands': False,
@@ -200,8 +207,6 @@ class ClaudeExecution:
         try:
             with self.trace.open('a', encoding='utf-8') as trace:
                 for line in self.proc.stdout:
-                    trace.write(line)
-                    trace.flush()
                     try:
                         event = json.loads(line)
                         if not isinstance(event, dict):
@@ -209,7 +214,15 @@ class ClaudeExecution:
                     except ValueError:
                         self.events.put({'type': 'transport_error'})
                         return
+                    # Partial text is compacted in the canonical archive, not copied
+                    # to a second permanent per-fragment transport log.
+                    if event.get('type') != 'stream_event':
+                        trace.write(line)
+                        trace.flush()
+                    if event.get('type') == 'system' and event.get('subtype') == 'session_state_changed':
+                        self.drained_native_state = event.get('state')
                     self.events.put(event)
+                self.stdout_eof = True
         finally:
             self.events.put({'type': 'eof'})
 
@@ -265,6 +278,7 @@ class ClaudeExecution:
         from graphtraj.interfaces.hosted_cli import cli_connection
         from graphtraj.runtimes.codex.managed_session import native_operation_features
         from graphtraj.runtimes.activity import redact
+        from graphtraj.runtimes.claude.collection import open_archive, StreamCollector
 
         last = None
         result_error = None
@@ -272,6 +286,22 @@ class ClaudeExecution:
         stderr_reader = None
         failure = None
         with ExitStack() as resources:
+            # Runner supplies Task context before the native registration hook;
+            # mapping.yml does not exist until that hook has been acknowledged.
+            task_id = os.environ.get('GRAPHTRAJ_TASK_ID')
+            archive = resources.enter_context(open_archive(
+                Path(self.request['state_directory']), Path(self.request['harness_root']),
+                self.native_id, self.directory.name, source='managed',
+                task_ids=[task_id] if task_id else []))
+            if archive.pending():
+                from graphtraj.sessions.storage import StreamWriter
+
+                StreamWriter(archive, archive.pending()['source']).finish(content=[], interrupted=True)
+            provider = self.request.get('provider', 'native')
+            if provider == 'native' and not self.request.get('base_url'):
+                provider = 'anthropic'
+            collector = StreamCollector(archive, self.execution_id, self.request['model'], provider)
+            source_position = 0
             address = resources.enter_context(cli_connection(
                 Path(self.request['harness_root']), self.directory.name, native_operation_features()))
             argv, environment = self._prepare(address)
@@ -295,6 +325,7 @@ class ClaudeExecution:
                         stderr.write(line)
                         stderr.flush()
                         self._diagnostic_warning('stderr', line)
+                    self.stderr_eof = True
 
                 stderr_reader = threading.Thread(target=drain_stderr, daemon=True)
                 stderr_reader.start()
@@ -302,6 +333,7 @@ class ClaudeExecution:
                 reader.start()
                 initialization = self._control('initialize', hooks={
                     'UserPromptSubmit': [{'matcher': None, 'hookCallbackIds': ['graphtraj_start']}],
+                    'SubagentStop': [{'matcher': None, 'hookCallbackIds': ['graphtraj_collect_child']}],
                 })
                 startup_deadline = time.monotonic() + 45
                 stop_deadline = None
@@ -316,6 +348,9 @@ class ClaudeExecution:
                         event = self.events.get(timeout=0.1)
                     except queue.Empty:
                         continue
+                    source_position += 1
+                    if event.get('type') != 'eof':
+                        collector.accept(event, source_position)
                     kind = event.get('type')
                     if kind in ('warning', 'error') or (
                             kind == 'system' and event.get('subtype') in ('warning', 'error')):
@@ -342,6 +377,11 @@ class ClaudeExecution:
                             self._bind(request)
                             self._reply(event['request_id'], {})
                             self.task_released = True
+                        elif request.get('subtype') == 'hook_callback' and request.get('callback_id') == 'graphtraj_collect_child':
+                            from graphtraj.runtimes.claude.collection import collect_hook
+
+                            collect_hook(request['input'], Path(self.request['worktree_path']))
+                            self._reply(event['request_id'], {})
                         elif request.get('subtype') == 'can_use_tool':
                             self._permission(event)
                         else:
@@ -404,16 +444,41 @@ class ClaudeExecution:
                     self._close()
                 except RuntimeAdapterError as error:
                     failure = error
+                process_group_closed = self.terminal_confirmed
                 if reader is not None:
                     reader.join(timeout=5)
                 if stderr_reader is not None:
                     stderr_reader.join(timeout=5)
                 pipes_drained = all(thread is None or not thread.is_alive()
                                     for thread in (reader, stderr_reader))
+                try:
+                    if pipes_drained:
+                        while not self.events.empty():
+                            event = self.events.get_nowait()
+                            source_position += 1
+                            if event.get('type') != 'eof':
+                                collector.accept(event, source_position)
+                        collector.close()
+                    elif collector.writer:
+                        collector.writer.checkpoint()
+                except Exception as error:
+                    failure = RuntimeAdapterError('RUNTIME_ARCHIVE_FAILED', str(error))
                 if self.proc is not None and pipes_drained:
                     for stream in (self.proc.stdout, self.proc.stderr):
                         if stream is not None:
                             stream.close()
+                if self.proc is not None:
+                    # Keep the owner's separate observations: the native idle
+                    # event may arrive while _close drains after the loop ends.
+                    write_yaml_durably(self.directory / f'claude-termination-{self.execution_id}.yml', {
+                        'session': self.session, 'execution_id': self.execution_id,
+                        'runtime_pid': self.proc.pid, 'worker_pid': os.getpid(),
+                        'process_group_closed': process_group_closed,
+                        'runtime_exit_code': self.proc.poll(),
+                        'stdout_eof': self.stdout_eof, 'stderr_eof': self.stderr_eof,
+                        'pipes_closed': pipes_drained and self.proc.stdout.closed and self.proc.stderr.closed,
+                        'native_idle': self.drained_native_state == 'idle',
+                    })
                 if not pipes_drained or self.task_released and self.native_state != 'idle':
                     self.terminal_confirmed = False
                     failure = RuntimeAdapterError(

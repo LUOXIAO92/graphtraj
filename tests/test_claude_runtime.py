@@ -365,6 +365,28 @@ def test_claude_configuration_is_exact_and_approval_fails_closed(tmp_path: Path,
         context(tmp_path, model='opus')
 
 
+def test_read_resources_do_not_become_native_working_directories(
+    tmp_path: Path, claude_environment: None,
+) -> None:
+    """Deliver read grants without promoting them to writable native workspaces."""
+    result_project(tmp_path)
+    resources = [tmp_path / 'authorized/bin', tmp_path / 'authorized/lib']
+    for path in resources:
+        path.mkdir(parents=True)
+    with ExitStack() as stack:
+        turn, _, _ = execution(tmp_path, stack, 'Inspect native permission configuration',
+                               claude={'read_paths': list(map(str, resources))})
+        turn.run()
+    launch = json.loads((tmp_path / 'native-permissions.json').read_text())
+    settings = launch['settings']
+    assert settings['permissions']['additionalDirectories'] == []
+    filesystem = settings['sandbox']['filesystem']
+    for path in resources:
+        assert str(path.resolve()) in filesystem['allowRead']
+        assert str(path.resolve()) in filesystem['denyWrite']
+        assert str(path.resolve()) not in filesystem['allowWrite']
+
+
 def test_claude_resource_grants_and_read_only_recovery(tmp_path: Path, claude_environment: None) -> None:
     """Retain external read-only resources and refuse grants to private state."""
     result_project(tmp_path)
@@ -398,3 +420,29 @@ def test_claude_stop_without_native_settlement_is_unconfirmed(
             future.result(timeout=15)
         assert not caught.value.terminal_confirmed
         assert turn.proc.poll() is not None and turn.outcome is None
+
+
+def test_default_home_is_not_injected_into_native_environment(
+    tmp_path: Path, claude_environment: None, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Observe the actual native launch environment without querying credentials."""
+    import subprocess
+
+    result_project(tmp_path)
+    monkeypatch.delenv('CLAUDE_CONFIG_DIR', raising=False)
+    captured = []
+    popen = subprocess.Popen
+
+    def observe(argv: list[str], **kwargs: object):
+        """Capture only nonsecret home-selection fields on the process boundary."""
+        if '--input-format' in argv:
+            environment = kwargs['env']
+            captured.append({key: environment.get(key) for key in ('HOME', 'CLAUDE_CONFIG_DIR')})
+        return popen(argv, **kwargs)
+
+    monkeypatch.setattr(subprocess, 'Popen', observe)
+    with ExitStack() as stack:
+        turn, _, _ = execution(tmp_path, stack, 'home-environment')
+        assert turn.request['explicit_runtime_home'] is False
+        assert turn.run()['outcome'] == 'completed'
+    assert captured == [{'HOME': os.environ.get('HOME'), 'CLAUDE_CONFIG_DIR': None}]

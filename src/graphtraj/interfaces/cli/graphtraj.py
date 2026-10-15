@@ -109,3 +109,17 @@ def connections_command(
     except (OSError, ValueError, yaml.YAMLError, RunnerError) as error:
         raise click.ClickException(str(error)) from error
     click.echo(yaml.safe_dump(result, sort_keys=False), nl=False)
+
+
+@main.command("migration-prefix")
+@click.option("--session", required=True, help="Exact associated Main native Session ID.")
+@click.option("--capture", type=click.Path(path_type=Path), help="Capture only its declared inherited prefix in a new directory.")
+def migration_prefix_command(session: str, capture: Path | None) -> None:
+    """Read declared inheritance metadata through Main's existing native host."""
+    from graphtraj.workspace.migration_prefix import inspect_prefix
+
+    try:
+        result = inspect_prefix(Path.cwd(), session, capture=capture)
+    except (OSError, ValueError, yaml.YAMLError, RunnerError) as error:
+        raise click.ClickException(str(error)) from error
+    click.echo(yaml.safe_dump(result, sort_keys=False), nl=False)

@@ -125,13 +125,13 @@ def register_child_batch(batch: Batch, cwd: Path, registration: Path) -> LaunchR
     ]
     try:
         with execution_start_lock(project.runner_directory):
-            require_execution_allowed(
-                project.runner_directory, caller,
-                read_alias_mapping(project.runner_directory, caller)[0],
-            )
+            mapping = read_alias_mapping(project.runner_directory, caller)[0]
+            require_execution_allowed(project.runner_directory, caller, mapping)
+            _withdraw_ended_registration(registration, mapping["execution_id"])
             with registration.open("x", encoding="utf-8") as stream:
                 retained = retain_batch(project.state_directory, batch)
-                yaml.safe_dump({"retained_batch_file": str(retained), "tasks": children}, stream)
+                yaml.safe_dump({"execution_id": mapping["execution_id"],
+                                "retained_batch_file": str(retained), "tasks": children}, stream)
     except (OSError, yaml.YAMLError) as error:
         raise RunnerError("BATCH_RETENTION_FAILED", "The parent worker could not register the child Batch.") from error
     return LaunchResponse(
@@ -545,8 +545,10 @@ def _run_registered_children(
             file_lock.flock(driver, file_lock.LOCK_EX | file_lock.LOCK_NB)
         except BlockingIOError:
             return
-        while registration.exists():
-            mapping, _ = read_alias_mapping(project.runner_directory, alias)
+        mapping, _ = read_alias_mapping(project.runner_directory, alias)
+        # Only the completed execution that registered a Batch starts it; an
+        # earlier or unattributed registration is never replayed here.
+        while _registered_execution(registration) == mapping["execution_id"]:
             worktree = Path(mapping["worktree_path"])
             batch, retained = _registered_batch(registration, worktree)
             children = _run_batch_workers(project, batch, retained, alias, capacity_fd)
@@ -581,6 +583,78 @@ def _registered_batch(registration: Path, worktree: Path) -> tuple[Batch, Path]:
     registration.unlink()
     retained = Path(document["retained_batch_file"])
     return read_batch(retained, worktree), retained
+
+
+def _registered_execution(registration: Path) -> str | None:
+    """Return the execution that registered a pending child Batch, if recorded."""
+    if not registration.is_file():
+        return None
+    return yaml.safe_load(registration.read_text(encoding="utf-8")).get("execution_id")
+
+
+def _withdraw_ended_registration(registration: Path, execution_id: str) -> None:
+    """Clear a registration left by an ended execution before a new one.
+
+    The caller holds the execution startup lock, so the live execution is
+    ``execution_id`` and any other recorded owner has ended without starting
+    its Batch. An unattributed registration is neither started nor discarded.
+
+    Raises
+    ------
+    RunnerError
+        When this execution already registered a Batch, or the existing
+        registration records no owning execution.
+    """
+    if not registration.is_file():
+        return
+    document = yaml.safe_load(registration.read_text(encoding="utf-8"))
+    owner = document.get("execution_id")
+    if owner == execution_id:
+        raise RunnerError(
+            "child-batch-registered",
+            "This execution already registered child Batch "
+            f"{document['retained_batch_file']}; Runner starts it when this turn completes.",
+        )
+    if owner is None:
+        raise RunnerError(
+            "child-registration-unowned",
+            f"{registration} (Batch {document['retained_batch_file']}) records no owning "
+            "execution, so Runner can neither start nor discard it. Return this to the "
+            "direct parent: interrupting this Session withdraws the registration, then "
+            "approved recovery resumes it.",
+        )
+    withdraw_child_registration(registration, f"Execution {owner} ended without starting it.")
+
+
+def withdraw_pending_children(directory: Path) -> None:
+    """Withdraw a stopped Session's unstarted child Batch.
+
+    A Driver that already holds the Session's children lock has consumed the
+    registration it runs and observes the stop through its parent itself.
+    """
+    registration = directory / "child-registration.yml"
+    if not registration.is_file():
+        return
+    with (directory / "children.lock").open("a+b") as driver:
+        try:
+            file_lock.flock(driver, file_lock.LOCK_EX | file_lock.LOCK_NB)
+        except BlockingIOError:
+            return
+        if registration.is_file():
+            withdraw_child_registration(registration, "The Session was interrupted before it started.")
+
+
+def withdraw_child_registration(registration: Path, reason: str) -> None:
+    """Retain the withdrawn registration in its Session events, then remove it."""
+    document = yaml.safe_load(registration.read_text(encoding="utf-8"))
+    with (registration.parent / "events.jsonl").open("a", encoding="utf-8") as events:
+        events.write(json.dumps({
+            "type": "runner-child-registration-withdrawn",
+            "registration": document, "reason": reason,
+        }) + "\n")
+        events.flush()
+        os.fsync(events.fileno())
+    registration.unlink()
 
 
 def _trace_ref(project: Any, traces: Path, alias: str) -> str:

@@ -673,6 +673,12 @@ def interrupt_session(alias: str, cwd: Path) -> Dict[str, Any]:
             pending.extend(
                 name for name, child in records.items() if child.get("parent") == current
             )
+        from graphtraj.teams.team_round import withdraw_pending_children
+
+        # The stop prohibits further subtree work, including registered
+        # children no completed parent turn has started yet.
+        for member in members:
+            withdraw_pending_children(runner_directory / "sessions" / member)
 
     def stop_member(member: str) -> Dict[str, Any]:
         """Return terminal confirmation or the member whose stop is unconfirmed."""

@@ -4,6 +4,7 @@ import os
 import shutil
 import subprocess
 import sys
+import sysconfig
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -540,6 +541,12 @@ def _install_commands(environment: Path, wheel: Path) -> InstalledCommands:
     site = run_process([str(python), '-c',
                         "import sysconfig; print(sysconfig.get_path('purelib'))"], cwd=environment)
     site.check_returncode()
+    if sys.prefix != sys.base_prefix:
+        # A venv made from this venv inherits only the base interpreter's
+        # packages; the test interpreter's own dependencies live here.
+        Path(site.stdout.strip(), 'graphtraj_test_dependencies.pth').write_text(
+            sysconfig.get_path('purelib') + '\n'
+        )
     Path(site.stdout.strip(), 'graphtraj_test_clock.py').write_text(
         "import os, sys\n"
         "from pathlib import Path\n"

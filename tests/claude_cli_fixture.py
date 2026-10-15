@@ -54,14 +54,19 @@ def result(text: str, error: bool = False) -> None:
 
 
 
-def tool(feature: str, arguments: dict) -> dict:
+def call(feature: str, arguments: dict) -> dict:
     """Call an actual public tool through the owned stdio MCP subprocess."""
     command = json.loads(args[args.index('--mcp-config') + 1])['mcpServers']['graphtraj']
     query = {'jsonrpc': '2.0', 'id': 1, 'method': 'tools/call', 'params': {
         'name': 'graphtraj', 'arguments': {'action': 'execute', 'feature': feature, 'arguments': arguments}}}
     response = subprocess.run([command['command'], *command['args']], input=json.dumps(query) + '\n',
                               text=True, capture_output=True, env={**os.environ, **command['env']})
-    value = json.loads(response.stdout)['result']
+    return json.loads(response.stdout)['result']
+
+
+def tool(feature: str, arguments: dict) -> dict:
+    """Return a public tool's structured result, failing on its error."""
+    value = call(feature, arguments)
     if value['isError']:
         raise RuntimeError(value)
     return value['structuredContent']
@@ -95,6 +100,9 @@ def prompt(message: dict) -> None:
                                          'evidence_refs': [report['report']], 'completion': 'Controlled result',
                                          'unresolved': []})
         result(json.dumps(submitted))
+    elif text.startswith('register'):
+        # Register one direct helper child, then answer with the tool outcome.
+        result(json.dumps(call('swarm', {'tasks': [{'role': 'helper'}]})), text == 'register-error')
     elif text.startswith('wait'):
         waiting.append(text)
     else:

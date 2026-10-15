@@ -117,6 +117,92 @@ def test_claude_public_launch_resume_interrupt(
     assert not Path(task['worktree_path']).exists()
 
 
+def test_child_registration_follows_its_owning_execution(
+    installed_commands: InstalledCommands,
+    temporary_git_repository: Path,
+    fake_codex: FakeCodex,
+    tmp_path: Path,
+) -> None:
+    """Only the completed registering execution starts its children.
+
+    A registration left by a failed execution does not block the original
+    Session's next one, and an unattributed one is reported, never replayed,
+    until interruption withdraws it.
+    """
+    root, environment = setup(installed_commands, temporary_git_repository, fake_codex, tmp_path)
+    roles_file = root / '.graphtraj/roles.yml'
+    roles = yaml.safe_load(roles_file.read_text())
+    roles['roles']['helper'] = {'runtime': 'claude', 'model': 'claude-opus-5-5', 'reasoning_effort': 'high'}
+    roles['role_tree'] = {'researcher': {'helper': {}}}
+    roles_file.write_text(yaml.safe_dump(roles))
+    batch = root / 'probe.yml'
+    batch.write_text(yaml.safe_dump({'tasks': [{'task_id': '320', 'role': 'researcher'}]}))
+    launched = command(installed_commands, root, environment, '--swarm-input', str(batch))
+    assert launched.returncode == 0, launched.stdout + launched.stderr
+    alias = yaml.safe_load(launched.stdout)['tasks'][0]['alias']
+    first = settled(installed_commands, root, environment, alias)
+    sessions = root / '.graphtraj/runner/sessions'
+    registration = sessions / alias / 'child-registration.yml'
+    history = tmp_path / (first['session'].split(':')[-1] + '.json')
+    trace, = (root / '.graphtraj/state').glob(f'**/traces/{alias}/events.jsonl')
+
+    def send(instruction: str) -> dict:
+        """Continue the original Session and observe its settled execution."""
+        sent = command(installed_commands, root, environment, 'send', alias, '--instruction', instruction,
+                       '--caused-by-event-id', events(root)[-1]['event_id'])
+        assert sent.returncode == 0, sent.stdout + sent.stderr
+        return settled(installed_commands, root, environment, alias)
+
+    def helpers() -> list[Path]:
+        """Return the helper Sessions Runner has started."""
+        return [path for path in sessions.iterdir() if 'helper' in path.name]
+
+    def withdrawn() -> list[dict]:
+        """Return the registrations retained as withdrawn in the Session events."""
+        records = [json.loads(line) for line in (sessions / alias / 'events.jsonl').read_text().splitlines()]
+        return [record['registration'] for record in records
+                if record.get('type') == 'runner-child-registration-withdrawn']
+
+    def last_tool_result() -> dict:
+        """Read the swarm outcome the native peer answered with in its Trace."""
+        results = [json.loads(line) for line in trace.read_text().splitlines()
+                   if json.loads(line).get('type') == 'result']
+        return json.loads(results[-1]['result'])
+
+    failed = send('register-error')
+    assert failed['last_outcome'] == 'runtime-error'
+    stale = yaml.safe_load(registration.read_text())
+    assert stale['execution_id'] == failed['execution_id']
+    assert helpers() == []
+
+    resumed = send('register')
+    assert resumed['execution_id'] != failed['execution_id']
+    assert not last_tool_result()['isError']
+    assert withdrawn() == [stale]
+    deadline = time.monotonic() + 60
+    while not any('Direct child execution results' in text for text in json.loads(history.read_text())):
+        assert time.monotonic() < deadline, 'registered child results never reached the parent'
+        time.sleep(0.1)
+    assert settled(installed_commands, root, environment, alias)['last_outcome'] == 'completed'
+    assert len(helpers()) == 1 and not registration.exists()
+
+    # A registration written before ownership was recorded names no execution.
+    legacy = {key: value for key, value in stale.items() if key != 'execution_id'}
+    registration.write_text(yaml.safe_dump(legacy))
+    assert send('register')['last_outcome'] == 'completed'
+    refused = last_tool_result()
+    # MCP reports the message alone; it names the exact unattributed record.
+    refusal = refused['content'][0]['text']
+    assert refused['isError']
+    assert str(registration) in refusal and legacy['retained_batch_file'] in refusal
+    assert yaml.safe_load(registration.read_text()) == legacy
+    assert len(helpers()) == 1
+    stopped = command(installed_commands, root, environment, 'interrupt', alias)
+    assert stopped.returncode == 0, stopped.stdout + stopped.stderr
+    assert not registration.exists() and withdrawn() == [stale, legacy]
+    assert len(helpers()) == 1
+
+
 @pytest.mark.parametrize('native_idle', [True, False])
 def test_claude_public_interrupt_rechecks_drained_termination(
     installed_commands: InstalledCommands,

@@ -665,8 +665,9 @@ async function main() {
     records: longRecords('second/research') });
   fixtures.operate(first, 'task_revise', { product_preserving: true, caused_by_event_ids: [],
     evidence_refs: ['evidence.md'], tasks: [
-      { ...fixtures.task('2', 'dependent', ['1']), active: false, replaced_by: ['3'] },
-      { ...fixtures.task('3', 'successor', ['1']), active: true, replaced_by: [] },
+      { ...fixtures.task('2', 'dependent', ['1']), disposition: 'superseded', replaced_by: ['3'],
+        retirement_reason: 'Replaced by successor.', current_definition: 'task.md' },
+      { ...fixtures.task('3', 'successor', ['1']), current_definition: null },
     ] });
   const rolesFile = path.join(first, '.graphtraj', 'roles.yml');
   const originalRoles = 'roles:\n  custom_group:\n    observer:\n      runtime: codex\n'

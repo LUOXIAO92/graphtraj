@@ -85,9 +85,9 @@ test('native desktop bridge isolates projects, persists preferences and reconnec
   const reopened = new Projects(file, reader);
   await reopened.load();
   assert.deepEqual(reopened.list(), projects.list());
-  const original = operate(first, 'task_graph');
+  const original = operate(first, 'task_graph', { view: 'full' });
   await projects.graph(firstId);
-  assert.deepEqual(operate(first, 'task_graph'), original);
+  assert.deepEqual(operate(first, 'task_graph', { view: 'full' }), original);
 
   // Public graph revision appears on the next read, including historical nodes.
   await fs.writeFile(path.join(first, 'evidence.txt'), 'Replace dependent with successor.\n');
@@ -112,7 +112,7 @@ test('native desktop bridge isolates projects, persists preferences and reconnec
   await fs.rename(moved, first);
   assert.equal((await projects.graph(firstId)).graph.tasks.length, 3);
   await projects.remove(firstId);
-  assert.deepEqual(operate(first, 'task_graph'), updated);
+  assert.deepEqual(operate(first, 'task_graph', { view: 'full' }), updated);
   assert.equal(projects.list().projects.length, 1);
   await assert.rejects(projects.graph(firstId), /Choose an added project/);
   reader.close();

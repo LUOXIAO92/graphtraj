@@ -206,9 +206,10 @@ def register_tool(
 def read_current_graph(arguments: Mapping[str, Any], *, cwd: Path | None = None) -> ToolResult:
     """Return the current Task DAG and readiness view for the project.
 
-    The current view defaults to the calling Session's own Task; Main and
-    the human desktop have none and see the whole project's open work.
+    The current view defaults to the calling Session's own Task; Main, the
+    human desktop and helper forks have none and see the whole project's open work.
     """
+    from graphtraj.execution.runner_models import RunnerError
     from graphtraj.execution.runner_status import caller_alias, read_alias_mapping
     from graphtraj.workspace.runner_project import discover_runner_directory
 
@@ -220,8 +221,13 @@ def read_current_graph(arguments: Mapping[str, Any], *, cwd: Path | None = None)
     if view == "current" and task_id is None:
         runner = discover_runner_directory(configuration.harness_root)
         caller = caller_alias(runner)
-        if caller is not None:
-            task_id = read_alias_mapping(runner, caller)[0]["task_id"]
+        try:
+            if caller is not None:
+                task_id = read_alias_mapping(runner, caller)[0]["task_id"]
+        except RunnerError as error:
+            # Helper and checker forks act for a caller without their own Task.
+            if error.code != "alias-not-found":
+                raise
     return ToolResult(read_graph(
         configuration.state, view, task_id, arguments.get("details", []),
     ))

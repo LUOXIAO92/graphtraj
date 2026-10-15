@@ -50,8 +50,11 @@ def read_index(state: Path) -> dict[str, Any]:
         light records; ``deliveries`` maps IDs to their latest delivery event.
     """
     worldline = state / "worldline"
-    if not (state / "tasks").is_dir() or not worldline.is_dir():
+    if not (state / "tasks").is_dir():
         return {"revision": 0, "event_id": None, "tasks": {}, "deliveries": {}}
+    if not worldline.is_dir():
+        # No event can mark an index yet, so project the Task state directly.
+        return _rebuild(state)
 
     # Task state is written only inside Worldline appends, so the shared
     # Worldline lock gives one consistent snapshot of both.

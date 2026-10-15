@@ -85,9 +85,11 @@ def test_migration_converts_structure_and_keeps_text_and_identity(
     assert yaml.safe_load(result.stdout)["backup"].startswith(".graphtraj/backups/")
     assert _migrate(installed_commands, tmp_path).returncode != 0
 
-    graph = run_process([str(installed_commands.product), "task", "graph"], cwd=tmp_path)
+    graph = run_process([str(installed_commands.product), "task", "graph", "--view", "full",
+                         "--details", "1", "--details", "2"], cwd=tmp_path)
     assert graph.returncode == 0, graph.stderr
-    tasks = {task["task_id"]: task for task in yaml.safe_load(graph.stdout)["tasks"]}
+    document = yaml.safe_load(graph.stdout)
+    tasks = {task["task_id"]: {**document["details"][task["task_id"]], **task} for task in document["tasks"]}
     assert tasks["1"]["children"] == ["2"] and tasks["2"]["parent_id"] == "1"
     assert tasks["2"]["current_definition"] == REVISION and tasks["2"]["status"] == "implementing"
     assert tasks["2"]["body"] == "Revised ticket body.\n" and tasks["1"]["current_definition"] == "task.md"

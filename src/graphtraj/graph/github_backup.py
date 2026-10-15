@@ -103,9 +103,8 @@ def backup_task(
     """
     if _REPOSITORY.fullmatch(repository) is None or _HOST.fullmatch(host) is None:
         raise ValueError("repository must be owner/name and host a GitHub host name")
-    task = next((item for item in read_graph(state)["tasks"] if item["task_id"] == task_id), None)
-    if task is None:
-        raise ValueError(f"Task {task_id} is not registered")
+    # Unregistered Tasks raise the same ValueError from the graph query.
+    task = read_graph(state, "full", details=[task_id])["details"][task_id]
 
     descriptor = os.open(str(state / ".task-backups.lock"), os.O_RDWR | os.O_CREAT, 0o600)
     file_lock.flock(descriptor, file_lock.LOCK_EX)

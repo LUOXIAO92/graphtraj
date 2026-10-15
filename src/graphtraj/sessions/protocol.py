@@ -419,9 +419,11 @@ def validate_event(event: dict) -> None:
         _fields(data, {'retryId': str, 'retry': int}, 'retry')
         _integer(data['retry'], 'retry.retry')
         if kind == 'llm/retry':
-            _fields(data, {'provider': str, 'mode': str, 'policyKey': str, 'delayMs': int}, 'retry')
+            _fields(data, {'provider': str, 'mode': str, 'policyKey': str}, 'retry')
             _require(data['mode'] in {'normal', 'always'}, 'retry.mode')
-            _integer(data['delayMs'], 'retry.delayMs')
+            # Native retry jitter retains fractional milliseconds without rounding.
+            delay = data.get('delayMs')
+            _require(type(delay) in (int, float) and delay >= 0, 'retry.delayMs')
             if data['mode'] == 'normal':
                 _integer(data.get('maxRetries'), 'retry.maxRetries')
             _failure(data.get('failure'))

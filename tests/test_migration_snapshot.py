@@ -153,7 +153,11 @@ def test_snapshot_preserves_pi_parent_attachments_and_other_runtime_cursors(
         dsh: [{'version': 4, 'id': 'd1', 'createdAt': 1, 'isSeeded': False},
               {'type': 'user/message', 'seq': 0, 'time': 1, 'surfaceOp': 'append',
                'data': {'id': 'm1', 'role': 'user', 'content': [{'type': 'text', 'text': 'dsh-original'}],
-                        'source': {'kind': 'user'}}}],
+                        'source': {'kind': 'user'}}},
+              {'type': 'llm/retry', 'seq': 1, 'time': 2, 'data': {
+                  'turn': 0, 'step': 0, 'retryId': 'r1', 'retry': 1, 'provider': 'deepseek', 'mode': 'normal',
+                  'policyKey': 'default', 'delayMs': 488.02348886860193, 'maxRetries': 2,
+                  'failure': {'message': 'temporary failure', 'code': 'RATE_LIMIT'}}}],
     }
     for path, values in records.items():
         path.write_text(''.join(json.dumps(value) + '\n' for value in values))
@@ -190,7 +194,10 @@ def test_snapshot_preserves_pi_parent_attachments_and_other_runtime_cursors(
         assert store.next_seq == original_events
         assert store.header['graphtraj']['projectId'] == str(origin)
     with SessionStore(session_path(state, 'dsh:d1'), readonly=True) as store:
-        assert store.page()['events'][0]['data']['content'][0]['text'] == 'dsh-original'
+        events = store.page()['events']
+        assert events[0]['data']['content'][0]['text'] == 'dsh-original'
+        assert events[1]['data']['delayMs'] == 488.02348886860193
+        assert events[1]['graphtraj']['native']['record'] == records[dsh][2]
         assert store.header['graphtraj']['projectId'] == str(origin)
 
 

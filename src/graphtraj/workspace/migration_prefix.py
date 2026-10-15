@@ -411,3 +411,98 @@ def adopt_prefix_chain(cwd: Path, session: str, manifest: Path) -> dict:
     return {**result, 'session': session, 'agent': chain['agent'],
             'segments': len(segments), 'backup': backup.relative_to(configuration.harness_root).as_posix(),
             'logical_parent': header.get('parentSession'), 'pending': False}
+
+def diagnose_next_prefix(cwd: Path, session: str, manifest: Path) -> dict:
+    """Diagnose only a verified partial capture's next declared native reference.
+
+    Retained bytes authenticate the chain and boundary before any daemon query.
+    The returned native source is never opened, even when its identity matches.
+    """
+    from graphtraj.runtimes.codex.finalize import proxy
+
+    configuration = load_project_configuration(cwd)
+    project = configuration.harness_root
+    chain = yaml.safe_load(manifest.read_text(encoding='utf-8'))
+    if (not isinstance(chain, dict) or chain.get('project') != str(project)
+            or chain.get('session') != session or chain.get('complete') is not False
+            or not chain.get('segments')):
+        raise ValueError('An incomplete retained chain for this exact project/Main is required.')
+    edge = chain['history_base']
+    visited = set()
+    for item in chain['segments']:
+        relative = Path(item['stored'])
+        local = manifest.parent / relative
+        if (relative.is_absolute() or '..' in relative.parts
+                or not local.resolve().is_relative_to(manifest.parent.resolve())):
+            raise ValueError('Retained segment must remain within its capture directory.')
+        if (item['source_rollout'] in visited or item['source_rollout'] != edge['thread_id']
+                or item['end_ordinal_exclusive'] != edge['end_ordinal_exclusive']
+                or item['bytes'] != edge['end_byte_offset']
+                or local.stat().st_size != item['bytes']):
+            raise ValueError('Retained chain has a conflicting edge or byte boundary.')
+        visited.add(item['source_rollout'])
+        with local.open('rb') as stream:
+            digest = hashlib.file_digest(stream, 'sha256').hexdigest()
+        if digest != item['sha256']:
+            raise ValueError('Retained segment hash differs from its capture manifest.')
+        header, ordinal = _metadata(local, item['source_logical_session'])
+        if (header.get('cwd') != str(project) or header.get('history_mode') != 'paginated'
+                or type(ordinal) is not int or ordinal != item['first_ordinal']):
+            raise ValueError('Retained source header conflicts with its capture metadata.')
+        with local.open('rb') as stream:
+            for line in stream:
+                if not line.endswith(b'\n') or json.loads(line).get('ordinal') != ordinal:
+                    raise ValueError('Retained segment ordinal sequence is incomplete.')
+                ordinal += 1
+        if ordinal != edge['end_ordinal_exclusive']:
+            raise ValueError('Retained segment does not meet its declared ordinal cut.')
+        edge = declared_prefix(header)
+        if edge['end_ordinal_exclusive'] != item['first_ordinal']:
+            raise ValueError('Retained declaration does not meet the preceding boundary.')
+    if edge != chain.get('next_reference') or edge['thread_id'] in visited:
+        raise ValueError('Next reference conflicts with the retained declaration or forms a cycle.')
+
+    inventory = session_sources(configuration.state, project / '.graphtraj/runner', project)
+    owned = {item['session']: item for item in inventory
+             if item.get('runtime') == 'codex' and item.get('agent') and not item.get('identity_conflicts')}
+    main = owned.get(session)
+    if main is None or main.get('kind') != 'main':
+        raise ValueError('An unambiguous associated Main is required.')
+    binding = yaml.safe_load(Path(main['association']).read_text(encoding='utf-8'))
+    connection = binding.get('connection', {})
+    if connection.get('runtime') != 'codex' or connection.get('session') != session:
+        raise ValueError('The original owning Main connection is unavailable.')
+
+    async def diagnose() -> dict:
+        """Query the exact next edge without reading its returned source path."""
+        async with proxy(connection) as client:
+            current = await client.read_thread(session)
+            path = Path(current.get('path') or '')
+            if current.get('id') != session or not path.is_absolute():
+                raise ValueError('Native Main source is unavailable.')
+            header, _ = _metadata(path, session)
+            if declared_prefix(header) != chain['history_base']:
+                raise ValueError('Current Main declaration differs from the retained chain.')
+            observed = await client.inspect_thread_reference(edge['thread_id'])
+            logical = observed.get('id')
+            source = Path(observed.get('path') or '')
+            try:
+                identities = rollout_identity(source)
+                name_error = None
+            except ValueError as error:
+                identities = (None, None)
+                name_error = str(error)
+            checks = {'associated_native_session': logical in owned,
+                      'absolute_native_path': source.is_absolute(),
+                      'native_project_matches': observed.get('cwd') == str(project),
+                      'native_history_paginated': observed.get('historyMode') == 'paginated',
+                      'canonical_logical_id_matches': identities[0] == logical,
+                      'canonical_physical_id_matches': identities[1] == edge['thread_id']}
+            return {'project': str(project), 'session': session, 'next_reference': edge,
+                    'verified_retained_segments': len(chain['segments']),
+                    'native_metadata': observed, 'parsed_logical_id': identities[0],
+                    'parsed_physical_id': identities[1], 'canonical_name_error': name_error,
+                    'ownership_checks': checks, 'source_eligible': all(checks.values()),
+                    'referenced_file_read': False, 'complete': False}
+
+    return asyncio.run(diagnose())

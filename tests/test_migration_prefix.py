@@ -356,3 +356,63 @@ def test_chain_follows_only_owned_declared_segments_and_stops_cycles(tmp_path: P
     report = yaml.safe_load((destination / 'chain.yml').read_text())
     assert report['complete'] is False and 'cycle' in report['missing']
     assert calls == [main_id, second_id] and len(report['segments']) == 1
+
+
+def test_next_diagnostic_reuses_capture_and_reports_physical_mismatch(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A logical ID resolving to a newer file never authorizes reading that file."""
+    import hashlib
+
+    root, _, _, calls = _project(tmp_path, monkeypatch)
+    main_id = '11111111-1111-4111-8111-111111111111'
+    physical = '22222222-2222-4222-8222-222222222222'
+    next_edge = {'thread_id': main_id, 'end_ordinal_exclusive': 2, 'end_byte_offset': 500}
+    capture = tmp_path / 'retained'
+    capture.mkdir()
+    segment = capture / 'segment.jsonl'
+    record = {'type': 'session_meta', 'ordinal': 2, 'payload': {
+        'id': 'main', 'cwd': str(root), 'history_mode': 'paginated', 'history_base': next_edge}}
+    data = (json.dumps(record) + '\n').encode()
+    segment.write_bytes(data)
+    initial = {'thread_id': physical, 'end_ordinal_exclusive': 3, 'end_byte_offset': len(data)}
+    current = tmp_path / 'native-main.jsonl'
+    current.write_text(json.dumps({'type': 'session_meta', 'ordinal': 3,
+        'payload': {'id': 'main', 'history_base': initial}}) + '\n')
+    chain = {'project': str(root), 'session': 'main', 'complete': False,
+             'history_base': initial, 'next_reference': next_edge, 'segments': [{
+                 'stored': segment.name, 'source_rollout': physical, 'source_logical_session': 'main',
+                 'first_ordinal': 2, 'end_ordinal_exclusive': 3, 'bytes': len(data),
+                 'sha256': hashlib.sha256(data).hexdigest()}]}
+    manifest = capture / 'chain.yml'
+    manifest.write_text(yaml.safe_dump(chain))
+    untouched = _snapshot(capture)
+
+    class Host:
+        """Return a nonexistent current physical path for the old logical reference."""
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return None
+
+        async def read_thread(self, identity: str) -> dict:
+            calls.append(identity)
+            return {'id': 'main', 'path': str(current)}
+
+        async def inspect_thread_reference(self, identity: str) -> dict:
+            calls.append(identity)
+            return {'id': 'main', 'cwd': str(root), 'historyMode': 'paginated',
+                    'path': str(tmp_path / f'rollout-2026-10-12T05-52-41-{main_id}_{physical}.jsonl')}
+
+    monkeypatch.setattr('graphtraj.runtimes.codex.finalize.proxy', lambda connection: Host())
+    command = ['migration-prefix-next', '--session', 'main', '--manifest', str(manifest)]
+    result = CliRunner().invoke(main, command)
+    assert result.exit_code == 0, result.output
+    facts = yaml.safe_load(result.output)
+    assert facts['referenced_file_read'] is False and facts['complete'] is False
+    assert facts['ownership_checks']['associated_native_session'] is True
+    assert facts['ownership_checks']['canonical_physical_id_matches'] is False
+    assert facts['parsed_physical_id'] == physical and facts['next_reference'] == next_edge
+    assert calls == ['main', main_id] and _snapshot(capture) == untouched
+    segment.write_bytes(data.replace(b'paginated', b'altered!!'))
+    assert CliRunner().invoke(main, command).exit_code != 0
+    assert calls == ['main', main_id]

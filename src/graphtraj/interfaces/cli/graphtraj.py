@@ -171,3 +171,17 @@ def migration_prefix_adopt_command(session: str, manifest: Path) -> None:
     except (OSError, ValueError, yaml.YAMLError) as error:
         raise click.ClickException(str(error)) from error
     click.echo(yaml.safe_dump(result, sort_keys=False), nl=False)
+
+
+@main.command("migration-prefix-next")
+@click.option("--session", required=True)
+@click.option("--manifest", type=click.Path(path_type=Path, exists=True, dir_okay=False), required=True)
+def migration_prefix_next_command(session: str, manifest: Path) -> None:
+    """Diagnose the next exact edge of a retained partial capture, without source reads."""
+    from graphtraj.workspace.migration_prefix import diagnose_next_prefix
+
+    try:
+        result = diagnose_next_prefix(Path.cwd(), session, manifest)
+    except (OSError, ValueError, yaml.YAMLError, RunnerError) as error:
+        raise click.ClickException(str(error)) from error
+    click.echo(yaml.safe_dump(result, sort_keys=False), nl=False)

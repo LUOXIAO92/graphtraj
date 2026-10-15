@@ -121,6 +121,28 @@ def update_command(state_file: Path) -> None:
     click.echo(yaml.safe_dump(recorded, sort_keys=False), nl=False)
 
 
+@task.command("backup", cls=OperationCommand, feature="task_backup")
+@click.option("--task-id", required=True)
+@click.option("--repository", required=True)
+@click.option("--host")
+@click.option("--confirm-remote")
+def backup_command(
+    task_id: str, repository: str, host: str, confirm_remote: str | None,
+) -> None:
+    """Back up one local Task to its mapped GitHub Issue."""
+
+    try:
+        result = invoke_tool("task_backup", {
+            "task_id": task_id, "repository": repository,
+            "host": host, "confirm_remote": confirm_remote,
+        })
+    except (OSError, ValueError, ProjectConfigurationError) as error:
+        raise click.ClickException(str(error)) from error
+    click.echo(yaml.safe_dump(result.document, sort_keys=False), nl=False)
+    if result.failed:
+        raise click.ClickException("Backup was not published; see the reported result")
+
+
 @click.group("delivery-state", cls=OperationGroup)
 def delivery_state() -> None:
     """Apply semantic state requests with their authoritative facts."""

@@ -248,6 +248,21 @@ def update_current_task_state(arguments: Mapping[str, Any]) -> ToolResult:
     return ToolResult(recorded)
 
 
+def backup_current_task(arguments: Mapping[str, Any], *, cwd: Path | None = None) -> ToolResult:
+    """Publish one local Task to its explicitly mapped GitHub Issue."""
+    from graphtraj.graph.github_backup import backup_task
+
+    configuration = load_project_configuration(cwd or Path.cwd())
+    document, failed = backup_task(
+        configuration.state,
+        _string_argument(arguments, "task_id"),
+        _string_argument(arguments, "repository"),
+        arguments.get("host") or "github.com",
+        arguments.get("confirm_remote"),
+    )
+    return ToolResult(document, failed=failed)
+
+
 def preview_or_apply_project_setup(
     arguments: Mapping[str, Any], *, cwd: Path | None = None
 ) -> ToolResult:
@@ -676,6 +691,27 @@ register_tool(
     _STATE_CHANGE_SCHEMA,
     update_current_task_state,
     manual_ref="manuals/task-delivery/guide.md",
+)
+register_tool(
+    "task_backup",
+    "Back up one local Task to its mapped GitHub Issue, creating the Issue once. "
+    "Publishing is one-way: remote edits are reported as a conflict with their "
+    "differences and never change the local Task. Equivalent to `graphtraj task backup`.",
+    {"type": "object", "properties": {
+        "task_id":    {"type": "string"},
+        "repository": {"type": "string", "description": "GitHub repository as owner/name."},
+        "host":       {"type": "string", "default": "github.com",
+                       "description": "GitHub host used by the installed gh login."},
+        "confirm_remote": {
+            "type": ["string", "null"],
+            "description": "remote_digest from a reported conflict. Supply it after reviewing "
+                           "the differences and revising the local Task through Task operations "
+                           "when needed; publishes the local Task over exactly that remote copy.",
+        },
+    }, "required": ["task_id", "repository"], "additionalProperties": False},
+    backup_current_task,
+    manual_ref="manuals/task-delivery/guide.md",
+    examples=({"task_id": "42", "repository": "owner/name"},),
 )
 register_tool(
     "project_setup",
@@ -1158,6 +1194,7 @@ _CLI = {
     "task_revise": (("graphtraj", "task", "revise"), {"revision_file": ("", "yaml")}),
     "task_complete": (("graphtraj", "task", "complete"), {"completion_file": ("", "yaml")}),
     "task_update": (("graphtraj", "task", "update"), {"state_file": ("", "yaml")}),
+    "task_backup": (("graphtraj", "task", "backup"), {}),
     "project_setup": (("graphtraj", "setup"), {}),
     "project_doctor": (("graphtraj", "doctor"), {}),
     "worldline_append": (("graphtraj", "worldline", "append"), {"event_file": ("event", "yaml")}),

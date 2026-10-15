@@ -404,7 +404,7 @@ def test_installed_cleanup_uses_only_task_identity_and_preserves_trajectory(
     archives = {}
     for directory in mappings:
         mapping = yaml.safe_load((directory / 'mapping.yml').read_text())
-        path = session_path(ticket.state, 'codex:' + mapping['session'])
+        path = session_path(task.state, 'codex:' + mapping['session'])
         with SessionStore(path, readonly=True) as archive:
             archives[path] = archive.page()
 

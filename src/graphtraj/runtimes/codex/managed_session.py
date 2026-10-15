@@ -220,7 +220,7 @@ class CodexManagedExecution:
                     mapping = yaml.safe_load((self.directory / 'mapping.yml').read_text())
                     archive = CodexSessionArchive(
                         configuration.state, str(configuration.harness_root),
-                        self.directory.name, session.thread_id, (mapping['ticket_id'],),
+                        self.directory.name, session.thread_id, (mapping['task_id'],),
                     )
                 adapter.retain_native_trace(session, self.trace_file, archive=archive)
                 if self.termination_requested:

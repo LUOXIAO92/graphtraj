@@ -222,6 +222,7 @@ def test_managed_archive_is_readable_after_native_shutdown(managed_project: Mana
     assert not result.failed
     assert [native_record(event) for event in result.document['events']] == expected
     assert result.document['header']['graphtraj']['agentId'] == alias
+    assert result.document['header']['graphtraj']['taskIds'] == ['113']
 
 
 @pytest.mark.skipif(not os.environ.get('CODEX_ARCHIVE_PROBE_HOME'),

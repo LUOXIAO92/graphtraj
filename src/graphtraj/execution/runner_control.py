@@ -157,7 +157,9 @@ def notify_direct_parent(
         elif mapping.get("parent_connection") is not None:
             address = mapping["parent_connection"]
             record["parent_connection"] = address
-            connection_operation(address, json.loads(message))
+            # Once the parent's host takes the notice, await its own receipt:
+            # a late receipt must not make retries forward the notice twice.
+            connection_operation(address, json.loads(message), await_accepted=True)
             record["delivery"] = "received"
     except RunnerError as error:
         record["delivery"] = "not-delivered"

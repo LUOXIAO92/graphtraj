@@ -68,6 +68,11 @@ for line in sys.stdin:
             send({'id':'parent-approval','method':'item/commandExecution/requestApproval',
                   'params':{'threadId':'main','turnId':'main-turn','itemId':'parent-command',
                             'command':'read approved source','cwd':str(root)}})
+    elif method == 'thread/turns/list' and params['threadId'] in options.get('stale_turns', {}):
+        if options.get('stale_read_fails'):
+            send({'id':request['id'], 'error':{'code':-32000, 'message':'stale thread unavailable'}})
+            continue
+        result = {'data': options['stale_turns'][params['threadId']]}
     elif method == 'thread/turns/list':
         if options.get('wait_before_start') and (root / 'child-context.json').exists():
             (root / 'snapshot-fixed').touch()
@@ -163,6 +168,12 @@ for line in sys.stdin:
                     stream.write(json.dumps(record) + '\n')
         send({'method':'turn/completed','params':{'threadId':params['threadId'],'turn':turn}})
         if options.get('interrupt_during_check'): options['stopped'] = True
+        continue
+    elif method == 'turn/interrupt' and params['threadId'] in options.get('stale_turns', {}):
+        if not options.get('ignore_stale_interrupt'):
+            for turn in options['stale_turns'][params['threadId']]:
+                if turn['id'] == params['turnId']: turn['status'] = 'interrupted'
+        send({'id':request['id'], 'result':{}})
         continue
     elif method == 'turn/interrupt':
         interrupted.set()
@@ -1856,3 +1867,86 @@ def test_ephemeral_fork_excluded_history_is_unknown_not_an_empty_seed(
         assert [native_record(event) for event in archive.page()['events']] == [
             json.loads(line) for line in (root / 'rollout.jsonl').read_text().splitlines()
         ]
+
+
+
+def stale_check(binding: Path, child: str = 'stale-checker') -> tuple[Path, Path]:
+    """Leave the records a Stop hook leaves when it exits before recording its check."""
+    import hashlib
+    import tempfile
+
+    directory = binding.parent / 'checks' / hashlib.sha256(child.encode()).hexdigest()
+    directory.mkdir(parents=True)
+    (directory / 'session.yml').write_text(yaml.safe_dump({'runtime': 'codex', 'session': child, 'parent': 'main'}))
+    pending = Path(tempfile.mkdtemp(prefix='pending-', dir=binding.parent))
+    (pending / 'turn').write_text('earlier-main-turn\n')
+    return directory, pending
+
+
+@pytest.mark.parametrize('turns', [[{'id': 'old', 'status': 'completed'}], []])
+def test_unrecorded_finished_check_is_recorded_as_unknown_error(host: tuple[Path, Path], turns: list) -> None:
+    """An idle or terminal stale checker is never called cancelled; pending is removed."""
+    root, binding = host
+    directory, pending = stale_check(binding)
+    (root / 'options.json').write_text(json.dumps({'stale_turns': {'stale-checker': turns}}))
+    stop(binding)
+    record = yaml.safe_load((directory / 'execution.yml').read_text())
+    assert record == {'session': 'stale-checker', 'outcome': 'error', 'error': main_finalize.STALE_CHECK_ERROR}
+    assert (directory / 'session.yml').exists() and not pending.exists()
+    wire = [json.loads(line) for line in (root / 'wire.jsonl').read_text().splitlines()]
+    assert not any(message['method'] == 'turn/interrupt' and message['params']['threadId'] == 'stale-checker'
+                   for message in wire)
+
+
+@pytest.mark.parametrize('confirmed', [True, False])
+def test_running_stale_checker_is_cancelled_only_when_confirmed(
+    host: tuple[Path, Path], confirmed: bool,
+) -> None:
+    """This recovery interrupts a still-running stale checker; only confirmation records cancelled."""
+    root, binding = host
+    directory, _ = stale_check(binding)
+    (root / 'options.json').write_text(json.dumps({
+        'stale_turns': {'stale-checker': [{'id': 'stale-turn', 'status': 'inProgress'}]},
+        'ignore_stale_interrupt': not confirmed}))
+    stop(binding)
+    record = yaml.safe_load((directory / 'execution.yml').read_text())
+    wire = [json.loads(line) for line in (root / 'wire.jsonl').read_text().splitlines()]
+    assert any(message['method'] == 'turn/interrupt' and message['params'] == {
+        'threadId': 'stale-checker', 'turnId': 'stale-turn'} for message in wire)
+    if confirmed:
+        assert record['outcome'] == 'cancelled' and record['cancellation']['interrupted_turn'] == 'stale-turn'
+    else:
+        assert record == {'session': 'stale-checker', 'outcome': 'error', 'error': main_finalize.STALE_CHECK_ERROR}
+
+
+def test_check_owned_by_a_live_process_is_untouched(host: tuple[Path, Path]) -> None:
+    """A record whose owner still holds its lock is left as it is."""
+    import os
+
+    from graphtraj import file_lock
+
+    root, binding = host
+    directory, pending = stale_check(binding)
+    (root / 'options.json').write_text(json.dumps({'stale_turns': {'stale-checker': []}}))
+    held = [os.open(directory, os.O_RDONLY), os.open(pending, os.O_RDONLY)]
+    try:
+        for descriptor in held:
+            file_lock.flock(descriptor, file_lock.LOCK_EX)
+        stop(binding)
+    finally:
+        for descriptor in held:
+            os.close(descriptor)
+    assert not (directory / 'execution.yml').exists() and pending.exists()
+
+
+
+def test_stale_check_read_failure_is_recorded_with_its_cause(host: tuple[Path, Path]) -> None:
+    """A failed native read keeps the unknown-cause error and shows the real failure."""
+    root, binding = host
+    directory, pending = stale_check(binding)
+    (root / 'options.json').write_text(json.dumps({
+        'stale_turns': {'stale-checker': []}, 'stale_read_fails': True}))
+    stop(binding)
+    record = yaml.safe_load((directory / 'execution.yml').read_text())
+    assert record['outcome'] == 'error' and record['error'].startswith(main_finalize.STALE_CHECK_ERROR)
+    assert 'stale thread unavailable' in record['error'] and not pending.exists()

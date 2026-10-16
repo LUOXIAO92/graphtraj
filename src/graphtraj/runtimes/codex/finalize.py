@@ -32,6 +32,29 @@ def control_socket(codex_home: str) -> str:
     return os.path.realpath(Path(codex_home) / 'app-server-control' / 'app-server-control.sock')
 
 
+def end_stale_check(binding: dict, child: str) -> dict | None:
+    """Interrupt a stale checker's in-progress turn; return facts only if confirmed.
+
+    Returns None when nothing was running or no confirmation arrived; failures raise.
+    """
+    async def run() -> dict | None:
+        async with proxy(binding['connection']) as client:
+            active = [turn for turn, status in await client.turn_states(child) if status == 'inProgress']
+            if not active:
+                return None
+            requested_at = time.time()
+            await client.interrupt_turn(child, active[0])
+            deadline = time.monotonic() + 10
+            while time.monotonic() < deadline:
+                if dict(await client.turn_states(child)).get(active[0]) == 'interrupted':
+                    return {'interrupted_turn': active[0], 'requested_at': requested_at,
+                            'confirmed_at': time.time()}
+                await asyncio.sleep(0.1)
+            return None
+
+    return asyncio.run(run())  # Read or interrupt failures reach the caller's record.
+
+
 def proxy(
     connection: dict,
     on_request: Callable[[CodexServerRequest], Awaitable[dict]] | None = None,
@@ -261,6 +284,13 @@ def check(
             pending = Path(resources.enter_context(tempfile.TemporaryDirectory(
                 prefix='pending-', dir=directory,
             )))
+            if os.name != 'nt':
+                # Held for this attempt; the kernel releases it on any exit.
+                from graphtraj import file_lock
+
+                held = os.open(pending, os.O_RDONLY)
+                resources.callback(os.close, held)
+                file_lock.flock(held, file_lock.LOCK_EX)
             (pending / 'turn').write_text(context['turn'] + '\n', encoding='utf-8')
 
             def receipt() -> dict | None:

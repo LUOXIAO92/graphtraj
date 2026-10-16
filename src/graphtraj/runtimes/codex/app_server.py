@@ -575,6 +575,18 @@ class CodexAppServer:
         if result.get('turnId') != execution.turn_id:
             raise self._protocol_failure('turn/steer did not acknowledge the expected native turn ID')
 
+    async def turn_states(self, thread_id: str) -> list[tuple[str, str]]:
+        """Recent turn ids and statuses only, without conversation content."""
+        response = await self._call('thread/turns/list', {
+            'threadId': _native_id(thread_id), 'limit': 5, 'sortDirection': 'desc',
+            'itemsView': 'notLoaded',
+        })
+        return [(turn.get('id'), turn.get('status')) for turn in response.get('data') or []]
+
+    async def interrupt_turn(self, thread_id: str, turn_id: str) -> None:
+        """Request interruption of a turn this connection did not start."""
+        await self._call('turn/interrupt', {'threadId': _native_id(thread_id), 'turnId': _native_id(turn_id)})
+
     async def interrupt(self, execution: CodexExecution) -> None:
         """Request interruption of this turn; wait separately for its terminal result."""
         self._require_active(execution)

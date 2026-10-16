@@ -386,6 +386,12 @@ class CodexRuntimeAdapter:
 
         return check(binding, context, prompt, created)
 
+    def end_stale_check(self, binding: dict, child: str) -> dict | None:
+        """Interrupt a stale checker turn and return confirmation facts, if any."""
+        from graphtraj.runtimes.codex.finalize import end_stale_check
+
+        return end_stale_check(binding, child)
+
     def finalize_response(self, result: dict | None, continued: bool) -> dict:
         """Render native continuation, including bounded error handling."""
         from graphtraj.runtimes.codex.finalize import response

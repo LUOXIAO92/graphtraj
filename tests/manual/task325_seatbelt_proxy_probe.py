@@ -13,10 +13,13 @@ accepted=true refutes that.
 
 Phase C applies the checker profile GraphTraj requests on its fork (extends
 :workspace, managed network enabled, only this run's socket allowed). C
-accepted=true shows that profile admits exactly the allowed socket. Phase D
-uses the documented ``--allow-unix-socket`` for this run's directory only; if
-C fails while D connects, the difference is managed-proxy startup, not the
-seatbelt socket rule. Only this run's temporary socket is ever allowed.
+accepted=true shows only that the allowed socket is reachable. Phase D uses the
+documented ``--allow-unix-socket`` for this run's directory only; compare C and
+D through their stderr tails. Phases E and F keep C's profile and check what it
+does not allow: E connects to a second temporary socket that is not allowed
+(expected denied), F connects over TCP to a 127.0.0.1 listener owned by this
+run (expected denied; whatever happens is recorded). Only this run's temporary
+socket is ever allowed.
 
 Run with the task venv's Python; the report is JSON on stdout.
 """
@@ -42,11 +45,11 @@ def now() -> str:
 
 
 class Listener:
-    """Accept one connection on a bound AF_UNIX socket and record whether it came."""
+    """Accept connections on a bound socket and record whether one came."""
 
-    def __init__(self, path: str) -> None:
-        self.server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-        self.server.bind(path)
+    def __init__(self, address, family=socket.AF_UNIX) -> None:
+        self.server = socket.socket(family, socket.SOCK_STREAM)
+        self.server.bind(address)
         self.server.listen(1)
         self.server.settimeout(0.2)
         self.accepted = False
@@ -103,9 +106,12 @@ def main() -> None:
     report['codex_version'] = run([codex, '--version'], 20)
     directory = tempfile.mkdtemp(prefix='t325-', dir='/tmp')
     path = os.path.join(directory, 's')
-    listener = None
+    other = os.path.join(directory, 't')
+    listener = other_listener = tcp_listener = None
     try:
         listener = Listener(path)
+        other_listener = Listener(other)
+        tcp_listener = Listener(('127.0.0.1', 0), socket.AF_INET)
         connect = ('import socket,sys; s=socket.socket(socket.AF_UNIX); '
                    's.connect(sys.argv[1]); s.close()')
         report['phase_a'] = run([sys.executable, '-c', connect, path], 15)
@@ -137,6 +143,25 @@ def main() -> None:
         time.sleep(0.5)
         report['phase_c']['accepted'] = listener.accepted
         listener.reset()
+        allowed_profile = [
+            codex, 'sandbox',
+            '-c', f'permissions.{profile}.extends=":workspace"',
+            '-c', f'permissions.{profile}.network.enabled=true',
+            '-c', f'permissions.{profile}.network.unix_sockets={{"{path}"="allow"}}',
+            '-P', profile, '--log-denials', '--',
+        ]
+        # Phase E: C's profile, but a sibling socket that is not allowed.
+        report['phase_e'] = run(allowed_profile + [codex, 'app-server', 'proxy', '--sock', other], 20)
+        time.sleep(0.5)
+        report['phase_e']['accepted'] = other_listener.accepted
+        # Phase F: C's profile, a direct TCP connect to this run's loopback listener.
+        port = tcp_listener.server.getsockname()[1]
+        tcp = ('import socket,sys; s=socket.create_connection(("127.0.0.1", int(sys.argv[1])), 5); '
+               's.close()')
+        report['phase_f'] = run(allowed_profile + [sys.executable, '-c', tcp, str(port)], 20)
+        report['phase_f']['port'] = port
+        time.sleep(0.5)
+        report['phase_f']['accepted'] = tcp_listener.accepted
         # Phase D: the documented `--allow-unix-socket` limited to this run's
         # directory, separating seatbelt socket rules from proxy startup.
         report['phase_d'] = run([
@@ -146,10 +171,12 @@ def main() -> None:
         time.sleep(0.5)
         report['phase_d']['accepted'] = listener.accepted
     finally:
-        if listener is not None:
-            listener.close()
-        if os.path.exists(path):
-            os.unlink(path)
+        for each in (listener, other_listener, tcp_listener):
+            if each is not None:
+                each.close()
+        for each in (path, other):
+            if os.path.exists(each):
+                os.unlink(each)
         os.rmdir(directory)
         report['finished_at'] = now()
         print(json.dumps(report, indent=2))

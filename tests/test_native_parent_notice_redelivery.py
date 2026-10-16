@@ -152,3 +152,63 @@ def test_cancelling_a_waiting_sender_returns_promptly(tmp_path: Path, monkeypatc
     started = time.monotonic()
     asyncio.run(asyncio.wait_for(cancel_while_waiting(), timeout=5))
     assert time.monotonic() - started < 2 and len(daemon.starts) == 1
+
+
+SENDER = '''
+import asyncio, sys
+from pathlib import Path
+from graphtraj.runtimes.codex import app_server, host_events
+from graphtraj.workspace import runner_project
+
+marks = Path(sys.argv[1])
+
+class Transport(app_server.CodexAppServer):
+    """Alive, but never replies to turn/start; records its own close."""
+    async def __aenter__(self):
+        self._process = object()
+        self._timeout = 0.2
+        return self
+    async def __aexit__(self, *args):
+        with marks.open('a') as stream:
+            stream.write('closed\\n')
+    async def _send(self, message):
+        with marks.open('a') as stream:
+            stream.write('written\\n')
+
+app_server.CodexAppServer = Transport
+runner_project.runtime_executable = lambda name: Path('/usr/bin/true')
+result = host_events.send_event(
+    {'runtime': 'codex', 'session': 'main-thread', 'codex_home': str(marks.parent)},
+    {'source': 'graphtraj', 'alias': 'research@x1', 'event': 'completed', 'message': 'done'})
+with marks.open('a') as stream:
+    stream.write('received\\n')
+'''
+
+
+def test_stop_signal_ends_a_waiting_production_sender_and_closes_its_proxy(tmp_path: Path) -> None:
+    """send_event, run as the CLI runs it, stops on SIGINT and closes its proxy."""
+    import os
+    import signal
+    import subprocess
+    import sys
+    import time
+
+    marks = tmp_path / 'marks'
+    sender = subprocess.Popen([sys.executable, '-c', SENDER, str(marks)], cwd=tmp_path,
+                              stderr=subprocess.PIPE, text=True)
+    deadline = time.monotonic() + 5
+    while 'written' not in (marks.read_text() if marks.exists() else ''):
+        assert time.monotonic() < deadline and sender.poll() is None, sender.stderr.read()
+        time.sleep(0.05)
+    time.sleep(0.5)  # past the ordinary deadline, still awaiting the reply
+    assert sender.poll() is None
+    stopped = time.monotonic()
+    sender.send_signal(signal.SIGINT)
+    try:
+        sender.wait(timeout=2)
+    finally:
+        if sender.poll() is None:
+            os.kill(sender.pid, signal.SIGKILL)
+    assert time.monotonic() - stopped < 2
+    assert sender.returncode != 0
+    assert marks.read_text().splitlines() == ['written', 'closed']  # closed, never received

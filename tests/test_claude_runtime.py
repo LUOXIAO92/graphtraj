@@ -314,6 +314,20 @@ def test_claude_send_and_confirmed_stop(tmp_path: Path, claude_environment: None
         assert 'finish' in future.result(timeout=10)['last_agent_message']
 
 
+def test_claude_mid_turn_input_shares_its_turn_result(tmp_path: Path, claude_environment: None) -> None:
+    """Echoed input joined to a running turn completes with that turn's one result."""
+    result_project(tmp_path)
+    with ExitStack() as stack, ThreadPoolExecutor(max_workers=1) as pool:
+        turn, ready, _ = execution(tmp_path, stack, 'merge')
+        future = pool.submit(turn.run)
+        assert ready.wait(5)
+        turn.operate({'operation': 'send', 'session': turn.session, 'execution_id': turn.execution_id,
+                      'instruction': 'finish'})
+        completed = future.result(timeout=10)
+        assert completed['outcome'] == 'completed'
+        assert completed['last_agent_message'] == 'merge|finish'
+
+
 def test_claude_startup_failure_and_registration_refusal(tmp_path: Path, claude_environment: None, monkeypatch: pytest.MonkeyPatch) -> None:
     """Reap failed pre-registration processes without creating a false Session."""
     result_project(tmp_path)

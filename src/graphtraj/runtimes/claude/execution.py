@@ -57,6 +57,7 @@ class ClaudeExecution:
         self.accepting = True
         self.sent = 0
         self.results = 0
+        self.echoes = 0
         self.native_state: str | None = None
         self.drained_native_state: str | None = None
         self.stdout_eof = False
@@ -170,7 +171,8 @@ class ClaudeExecution:
             settings['permissions']['defaultMode'] = request['permission_mode']
         argv = [request['executable'], '--print', '--verbose', '--input-format', 'stream-json',
                 '--output-format', 'stream-json', '--include-partial-messages',
-                # Native echoes of stdin input stay in the Trace as consumption evidence.
+                # Native echoes stay in the Trace. One observed run echoed mid-turn
+                # input when it joined the running turn, before that turn's result.
                 '--replay-user-messages',
                 '--permission-prompt-tool', 'stdio',
                 '--restricted', '--strict-mcp-config',
@@ -339,6 +341,8 @@ class ClaudeExecution:
                 })
                 startup_deadline = time.monotonic() + 45
                 stop_deadline = None
+                last_echo = last_result = 0
+                queued_turns = None
                 while True:
                     if self.stopping.is_set() and stop_deadline is None:
                         stop_deadline = time.monotonic() + 5
@@ -414,6 +418,8 @@ class ClaudeExecution:
                         if event.get('session_id') != self.session:
                             raise RuntimeAdapterError('RUNTIME_SESSION_MISSING', 'Claude result has a different Session.')
                         self.results += 1
+                        last_result = source_position
+                        queued_turns = event.get('queued_turn_count')
                         last = event.get('result') or last
                         if event.get('is_error'):
                             result_error = redact(str(event.get('errors') or event.get('result') or event.get('subtype')))
@@ -423,6 +429,10 @@ class ClaudeExecution:
                             raise RuntimeAdapterError('RUNTIME_REQUEST_FAILED', 'Claude changed the configured model.')
                         last = '\n'.join(block.get('text', '') for block in event.get('message', {}).get('content', [])
                                          if block.get('type') == 'text') or last
+                    elif kind == 'user' and event.get('isReplay') is True:
+                        # The native echo of input it has taken into a turn.
+                        self.echoes += 1
+                        last_echo = source_position
                     elif kind in {'transport_error', 'notification_error'}:
                         raise RuntimeAdapterError('RUNTIME_TRANSPORT_FAILED', 'Claude transport or permission delivery failed.')
                     elif kind == 'eof':
@@ -432,7 +442,12 @@ class ClaudeExecution:
                             raise RuntimeAdapterError('RUNTIME_TRANSPORT_FAILED', 'Claude exited before a native terminal result.')
                         break
                     with self.lock:
-                        if self.results and self.results >= self.sent and self.native_state == 'idle':
+                        # Input joined to a running turn shares its single result:
+                        # every sent input is echoed before that result, which
+                        # reports no queued turn. A missing count is not assumed.
+                        settled = self.results >= self.sent or (
+                            self.echoes >= self.sent and last_result > last_echo and queued_turns == 0)
+                        if self.results and settled and self.native_state == 'idle':
                             self.accepting = False
                             break
                 if result_error and not self.stopping.is_set():

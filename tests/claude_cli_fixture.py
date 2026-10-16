@@ -40,14 +40,15 @@ Path(os.environ['CLAUDE_FIXTURE_HOME'], 'native-endpoint.json').write_text(
     json.dumps(os.environ.get('ANTHROPIC_BASE_URL')))
 started = False
 waiting = []
+merging = []
 
 
-def result(text: str, error: bool = False) -> None:
+def result(text: str, error: bool = False, queued: int = 0) -> None:
     """Emit distinct result and quiescence records with native usage."""
     emit({'type': 'assistant', 'session_id': session, 'message': {
         'role': 'assistant', 'content': [{'type': 'text', 'text': text}]}})
     emit({'type': 'result', 'session_id': session, 'uuid': str(uuid.uuid4()),
-          'is_error': error, 'result': text, 'usage': {
+          'is_error': error, 'result': text, 'queued_turn_count': queued, 'usage': {
               'input_tokens': 11, 'cache_read_input_tokens': 7,
               'cache_creation_input_tokens': 2, 'output_tokens': 5}})
     emit({'type': 'system', 'subtype': 'session_state_changed', 'state': 'idle'})
@@ -78,7 +79,16 @@ def prompt(message: dict) -> None:
     messages.append(text)
     history.write_text(json.dumps(messages))
     emit({'type': 'system', 'subtype': 'session_state_changed', 'state': 'running'})
-    if text == 'permission':
+    if '--replay-user-messages' in args:
+        # As observed: the echo is emitted when input joins the running turn.
+        emit({'type': 'user', 'isReplay': True, 'session_id': session, 'message': message['message']})
+    if merging:
+        # Input delivered during this turn joins it and shares its one result.
+        result('|'.join(merging + [text]))
+        merging.clear()
+    elif text == 'merge':
+        merging.append(text)
+    elif text == 'permission':
         emit({'type': 'control_request', 'request_id': 'permission-1', 'request': {
             'subtype': 'can_use_tool', 'tool_name': 'Bash', 'input': {'command': 'echo approved'},
             'tool_use_id': 'tool-1'}})
@@ -109,7 +119,7 @@ def prompt(message: dict) -> None:
         waiting.append(text)
     else:
         while waiting:
-            result(waiting.pop(0))
+            result(waiting.pop(0), queued=len(waiting) + 1)
         result('|'.join(messages), text == 'provider-error')
 
 

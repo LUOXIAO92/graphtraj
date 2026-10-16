@@ -18,8 +18,10 @@ documented ``--allow-unix-socket`` for this run's directory only; compare C and
 D through their stderr tails. Phases E and F keep C's profile and check what it
 does not allow: E connects to a second temporary socket that is not allowed
 (expected denied), F connects over TCP to a 127.0.0.1 listener owned by this
-run (expected denied; whatever happens is recorded). Only this run's temporary
-socket is ever allowed.
+run (expected denied; whatever happens is recorded). Phase G mirrors the real
+control socket, a symlink to the daemon's socket: only a symlink to this run's
+socket is allowed, and the proxy connects through it. Only this run's temporary
+paths are ever allowed.
 
 Run with the task venv's Python; the report is JSON on stdout.
 """
@@ -107,6 +109,7 @@ def main() -> None:
     directory = tempfile.mkdtemp(prefix='t325-', dir='/tmp')
     path = os.path.join(directory, 's')
     other = os.path.join(directory, 't')
+    link = os.path.join(directory, 'link')
     listener = other_listener = tcp_listener = None
     try:
         listener = Listener(path)
@@ -162,6 +165,19 @@ def main() -> None:
         report['phase_f']['port'] = port
         time.sleep(0.5)
         report['phase_f']['accepted'] = tcp_listener.accepted
+        listener.reset()
+        # Phase G: C's profile allowing only a symlink to the listening socket.
+        os.symlink(path, link)
+        report['phase_g'] = run([
+            codex, 'sandbox',
+            '-c', f'permissions.{profile}.extends=":workspace"',
+            '-c', f'permissions.{profile}.network.enabled=true',
+            '-c', f'permissions.{profile}.network.unix_sockets={{"{link}"="allow"}}',
+            '-P', profile, '--log-denials',
+            '--', codex, 'app-server', 'proxy', '--sock', link,
+        ], 20)
+        time.sleep(0.5)
+        report['phase_g']['accepted'] = listener.accepted
         # Phase D: the documented `--allow-unix-socket` limited to this run's
         # directory, separating seatbelt socket rules from proxy startup.
         report['phase_d'] = run([
@@ -174,8 +190,8 @@ def main() -> None:
         for each in (listener, other_listener, tcp_listener):
             if each is not None:
                 each.close()
-        for each in (path, other):
-            if os.path.exists(each):
+        for each in (link, path, other):
+            if os.path.lexists(each):
                 os.unlink(each)
         os.rmdir(directory)
         report['finished_at'] = now()

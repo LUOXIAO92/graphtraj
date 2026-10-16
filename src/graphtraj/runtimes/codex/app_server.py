@@ -286,7 +286,8 @@ class CodexAppServer:
                     await asyncio.wait_for(self._websocket.open(), self._timeout)
                 except Exception as error:
                     raise CodexAdapterError(
-                        'RUNTIME_CONNECTION_FAILED', f'Codex WebSocket Upgrade failed: {error}',
+                        'RUNTIME_CONNECTION_FAILED',
+                        f'Codex WebSocket Upgrade failed: {error}{await self._stderr_detail()}',
                         terminal_confirmed=False,
                     ) from error
             self._reader = asyncio.create_task(self._read())
@@ -358,6 +359,19 @@ class CodexAppServer:
     def stderr_tail(self) -> str:
         """Return the last 16 KiB of service diagnostics, including startup errors."""
         return self._stderr.decode('utf-8', errors='replace')
+
+    async def _stderr_detail(self) -> str:
+        """Return the proxy's own refusal as a short redacted suffix, if it wrote one.
+
+        A process that already failed closes stderr promptly; the wait is
+        bounded so a still-running proxy cannot delay the reported failure.
+        """
+        from graphtraj.runtimes.activity import redact
+
+        if self._stderr_reader is not None:
+            await asyncio.wait({self._stderr_reader}, timeout=1)
+        tail = redact(self.stderr_tail.strip())[-500:]
+        return f' Proxy stderr: {tail}' if tail else ''
 
     async def _read_stderr(self) -> None:
         """Drain stderr so diagnostics cannot stall native control traffic."""

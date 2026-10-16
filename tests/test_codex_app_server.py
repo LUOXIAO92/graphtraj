@@ -1342,3 +1342,24 @@ def test_role_assignments_survive_native_followup_permissions(
                 assert await observe(adapter, resumed, index) == original[index]
 
     asyncio.run(exercise())
+
+
+def test_proxy_refusal_is_kept_in_the_connection_failure(tmp_path: Path) -> None:
+    """A proxy that refuses before the Upgrade reports its own redacted reason."""
+    codex = tmp_path / 'codex'
+    codex.write_text('#!' + sys.executable + '\nimport sys\nsys.stderr.write('
+                     '"Error: failed to connect to app-server control socket: '
+                     'Operation not permitted (os error 1) key sk-abcdefghijklmnop\\n")\nsys.exit(1)\n')
+    codex.chmod(0o755)
+
+    async def connect() -> None:
+        """Open the proxy transport exactly as the finalize hook does."""
+        async with CodexAppServer(command=(str(codex), 'app-server', 'proxy'), cwd=tmp_path):
+            pass
+
+    with pytest.raises(RuntimeAdapterError) as caught:
+        asyncio.run(connect())
+    assert caught.value.code == 'RUNTIME_CONNECTION_FAILED'
+    assert caught.value.message.startswith('Codex WebSocket Upgrade failed: ')
+    assert 'Operation not permitted (os error 1)' in caught.value.message
+    assert 'sk-abcdefghijklmnop' not in caught.value.message

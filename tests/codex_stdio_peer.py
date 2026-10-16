@@ -233,6 +233,10 @@ for line in incoming():
             time.sleep(float(os.environ['PEER_PAUSE_QUEUE']))
         queued += 1
         result = {'queuedSubmission': {'id': f'queued-{queued}'}}
+    elif method == 'turn/start' and os.environ.get('PEER_SILENT_TURN_START'):
+        # Alive, but never replies to this submission.
+        Path(os.environ['PEER_SILENT_TURN_START']).write_text(str(os.getpid()))
+        continue
     elif method == 'turn/start':
         sequence += 1
         thread_id = params['threadId']

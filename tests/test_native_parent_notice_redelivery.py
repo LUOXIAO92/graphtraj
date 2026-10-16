@@ -12,6 +12,7 @@ import yaml
 from graphtraj.runtimes.codex import app_server
 from graphtraj.runtimes.codex.codex_adapter import CodexAdapterError
 from graphtraj.workspace import runner_project
+from test_codex_app_server import peer  # noqa: F401  (fixture)
 from test_task_budget_control import monitor_at, sample_stop
 
 
@@ -212,3 +213,101 @@ def test_stop_signal_ends_a_waiting_production_sender_and_closes_its_proxy(tmp_p
     assert time.monotonic() - stopped < 2
     assert sender.returncode != 0
     assert marks.read_text().splitlines() == ['written', 'closed']  # closed, never received
+
+
+WORKER_LIKE = '''
+import os, signal, sys, threading, time
+from pathlib import Path
+from graphtraj.runtimes.codex import app_server, host_events
+from graphtraj.workspace import runner_project
+
+marks, peer = Path(sys.argv[1]), Path(sys.argv[2])
+
+def note(text):
+    with marks.open('a') as stream:
+        stream.write(text + '\\n')
+
+# Like the Worker during a managed execution: SIGTERM does not raise.
+signal.signal(signal.SIGTERM, lambda signum, frame: note('worker-sigterm'))
+runner_project.runtime_executable = lambda name: peer
+close = app_server.CodexAppServer.close
+
+async def recorded_close(self):
+    await close(self)
+    note(f'proxy-exit {self._process.returncode}')
+
+app_server.CodexAppServer.close = recorded_close
+
+def deliver():
+    try:
+        host_events.send_event(
+            {'runtime': 'codex', 'session': 'main-thread', 'codex_home': str(marks.parent)},
+            {'source': 'graphtraj', 'alias': 'research@x1', 'event': 'completed', 'message': 'done'})
+        note('received')
+    except Exception as error:
+        note('sender-error ' + getattr(error, 'code', type(error).__name__))
+
+sender = threading.Thread(target=deliver, daemon=True)
+sender.start()
+sender.join(timeout=8)
+note('sender-ended' if not sender.is_alive() else 'sender-stuck')
+'''
+
+
+def test_group_sigterm_unblocks_a_waiting_worker_sender(tmp_path: Path, peer: Path) -> None:
+    """The Runner's group stop, on a Worker whose sender awaits a written host event."""
+    import os
+    import signal
+    import subprocess
+    import sys
+    import time
+
+
+    marks, written = tmp_path / 'marks', tmp_path / 'written'
+    worker = subprocess.Popen(
+        [sys.executable, '-c', WORKER_LIKE, str(marks), str(peer)], cwd=tmp_path,
+        env={**os.environ, 'PEER_SILENT_TURN_START': str(written)},
+        stderr=subprocess.PIPE, text=True, start_new_session=True)
+    pgid = worker.pid
+    escalated = False
+    try:
+        deadline = time.monotonic() + 10
+        while not written.exists():
+            assert time.monotonic() < deadline and worker.poll() is None, worker.stderr.read()
+            time.sleep(0.05)
+        time.sleep(0.5)  # turn/start written; still awaiting its reply
+        os.killpg(pgid, signal.SIGTERM)  # runner_process.py:138
+        try:
+            worker.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            escalated = True
+            os.killpg(pgid, signal.SIGKILL)
+            worker.wait(timeout=5)
+    finally:
+        if worker.poll() is None:
+            os.killpg(pgid, signal.SIGKILL)
+    proxy = int(written.read_text())  # the proxy pid, in its own session (app_server.py:272-276)
+
+    def gone(check) -> bool:
+        deadline = time.monotonic() + 3
+        while time.monotonic() < deadline:
+            try:
+                check()
+            except ProcessLookupError:
+                return True
+            time.sleep(0.05)
+        return False
+
+    group_gone = gone(lambda: os.killpg(pgid, 0))
+    proxy_gone = gone(lambda: os.kill(proxy, 0))
+    if not proxy_gone:
+        os.kill(proxy, signal.SIGKILL)
+    lines = marks.read_text().splitlines()
+    print('marks', lines, 'worker-exit', worker.returncode, 'escalated', escalated,
+          'group-gone', group_gone, 'proxy-gone', proxy_gone)
+    # Observed: the group SIGTERM reaches only the Worker, whose handler does not
+    # raise, so its sender stays blocked; the existing SIGKILL escalation ends the
+    # Worker, and the separate-session proxy then exits on its closed stdin.
+    assert 'worker-sigterm' in lines and 'received' not in lines
+    assert escalated and worker.returncode == -signal.SIGKILL
+    assert group_gone and proxy_gone

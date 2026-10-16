@@ -497,7 +497,16 @@ class ClaudeExecution:
                         'pipes_closed': pipes_drained and self.proc.stdout.closed and self.proc.stderr.closed,
                         'native_idle': self.drained_native_state == 'idle',
                     })
-                if not pipes_drained or self.task_released and self.native_state != 'idle':
+                # A runtime killed after its stop window never reports idle. Its
+                # exit, closed group and drained pipes confirm termination; idle
+                # is still required while the runtime could continue.
+                unsettled = self.task_released and self.native_state != 'idle'
+                exited = (process_group_closed and self.proc is not None
+                          and self.proc.poll() is not None)
+                if unsettled and exited and pipes_drained and failure is None and not self.stopping.is_set():
+                    failure = RuntimeAdapterError('RUNTIME_TRANSPORT_FAILED',
+                                                  'Claude exited before native settlement.')
+                if not pipes_drained or unsettled and not exited:
                     self.terminal_confirmed = False
                     failure = RuntimeAdapterError(
                         'RUNTIME_SHUTDOWN_FAILED',

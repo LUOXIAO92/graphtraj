@@ -3,6 +3,7 @@ import json
 import os
 from pathlib import Path
 import shutil
+import signal
 import subprocess
 import time
 
@@ -250,15 +251,73 @@ def test_stopped_child_is_reported_as_stopped(
     assert child['error']['code'] == 'subtree-stopped'
 
 
+def test_public_interrupt_reconfirms_an_undrained_worker(
+    installed_commands: InstalledCommands,
+    temporary_git_repository: Path,
+    fake_codex: FakeCodex,
+    tmp_path: Path,
+) -> None:
+    """A Worker whose pipes stay open reports unconfirmed; the public interrupt rechecks the group."""
+    root, environment = setup(installed_commands, temporary_git_repository, fake_codex, tmp_path)
+    environment['CLAUDE_FIXTURE_NO_SETTLE'] = '1'
+    escaped = tmp_path / 'escaped.pid'
+    environment['CLAUDE_FIXTURE_ESCAPED_PIPE'] = str(escaped)
+    batch = root / 'probe.yml'
+    batch.write_text(yaml.safe_dump({'tasks': [{'task_id': '320', 'role': 'researcher'}]}))
+    launched = command(installed_commands, root, environment, '--swarm-input', str(batch))
+    assert launched.returncode == 0, launched.stdout + launched.stderr
+    alias = yaml.safe_load(launched.stdout)['tasks'][0]['alias']
+    settled(installed_commands, root, environment, alias)
+    sent = command(installed_commands, root, environment, 'send', alias, '--instruction', 'wait-late-idle',
+                   '--caused-by-event-id', events(root)[-1]['event_id'])
+    assert sent.returncode == 0, sent.stdout + sent.stderr
+    command(installed_commands, root, environment, 'interrupt', alias)
+    deadline = time.monotonic() + 45
+    while (status := settled(installed_commands, root, environment, alias))['activity'] != 'abnormal':
+        assert time.monotonic() < deadline, status
+        time.sleep(0.1)
+    assert status['terminal_confirmed'] is False
+    directory = root / '.graphtraj/runner/sessions' / alias
+    evidence = yaml.safe_load((directory / f"claude-termination-{status['execution_id']}.yml").read_text())
+    assert evidence['pipes_closed'] is False
+    # The owned group cannot see the escaped child, so recheck only after it
+    # is released and has ended: retained unconfirmed, confirmed later.
+    pid = int(escaped.read_text())
+    escaped.with_name(escaped.name + '.release').touch()
+    released = time.monotonic() + 10
+    try:
+        while True:
+            try:
+                os.kill(pid, 0)
+            except ProcessLookupError:
+                break
+            assert time.monotonic() < released, 'the released child never ended'
+            time.sleep(0.1)
+    finally:
+        try:
+            os.kill(pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+    response = command(installed_commands, root, environment, 'interrupt', alias)
+    assert response.returncode == 0, response.stdout + response.stderr
+    member = yaml.safe_load(response.stdout)['members'][0]
+    assert member['interrupt_status'] == 'stopped', response.stdout
+    receipt = yaml.safe_load(Path(member['evidence']).read_text())
+    assert receipt['evidence']['method'] == 'current-process-group'
+    assert receipt['evidence']['running_members'] == []
+    assert receipt['original_execution']['terminal_confirmed'] is False
+    assert settled(installed_commands, root, environment, alias)['activity'] == 'idle'
+
+
 @pytest.mark.parametrize('native_idle', [True, False])
-def test_claude_public_interrupt_rechecks_drained_termination(
+def test_claude_interrupt_confirms_a_killed_unsettled_runtime(
     installed_commands: InstalledCommands,
     temporary_git_repository: Path,
     fake_codex: FakeCodex,
     tmp_path: Path,
     native_idle: bool,
 ) -> None:
-    """Confirm retained settlement or current stopping when old receipts are missing."""
+    """A runtime killed after its stop window is terminated, interrupted and recoverable."""
     root, environment = setup(installed_commands, temporary_git_repository, fake_codex, tmp_path)
     # The peer receives cancellation but settles only after the five-second
     # read loop ends, while the original Worker drains and closes its pipes.
@@ -275,78 +334,37 @@ def test_claude_public_interrupt_rechecks_drained_termination(
                    '--caused-by-event-id', events(root)[-1]['event_id'])
     assert sent.returncode == 0, sent.stdout + sent.stderr
     command(installed_commands, root, environment, 'interrupt', alias)
+    # The peer settles too late (or never) and is killed after its stop
+    # window: its exit and closed group confirm termination directly, while
+    # the retained native observation stays as it was.
     status = settled(installed_commands, root, environment, alias)
-    assert status['activity'] in {'abnormal', 'unreachable'}
-    assert status['terminal_confirmed'] is False
+    assert status['activity'] == 'idle', status
     directory = root / '.graphtraj/runner/sessions' / alias
-    original = (directory / 'execution.yml').read_bytes()
-    reports = command(installed_commands, root, environment, 'reports', alias)
-    assert reports.returncode == 0, reports.stdout + reports.stderr
-    assert yaml.safe_load(reports.stdout)['execution']['terminal_confirmed'] is False
-
-    # Wait for the public observation that the original Worker released its
-    # lock, then attempt confirmation once; no PID or error prose is used.
-    deadline = time.monotonic() + 15
-    while settled(installed_commands, root, environment, alias)['activity'] != 'abnormal':
-        assert time.monotonic() < deadline
-        time.sleep(0.1)
-    if not native_idle:
-        # A historical Worker did not retain these fields. Public control must
-        # establish present stopping without inventing an old EOF/idle receipt.
-        (directory / f"claude-termination-{status['execution_id']}.yml").unlink()
-    response = command(installed_commands, root, environment, 'interrupt', alias)
-    assert response.returncode == 0, response.stdout + response.stderr
-    result = yaml.safe_load(response.stdout)
-    member = result['members'][0]
-    assert (directory / 'execution.yml').read_bytes() == original
-    if native_idle:
-        assert member['interrupt_status'] == 'stopped', result
-        assert settled(installed_commands, root, environment, alias)['activity'] == 'idle'
-        confirmation = Path(member['evidence']).read_bytes()
-        retained = command(installed_commands, root, environment, 'reports', alias)
-        report = yaml.safe_load(retained.stdout)
-        assert report['execution']['terminal_confirmed'] is False
-        assert report['termination_confirmation']['evidence']['native_idle'] is True
-        again = command(installed_commands, root, environment, 'interrupt', alias)
-        assert yaml.safe_load(again.stdout)['interrupt_status'] == 'interrupted'
-        assert Path(member['evidence']).read_bytes() == confirmation
-        denied = command(installed_commands, root, environment, 'send', alias, '--instruction', 'continue',
-                         '--caused-by-event-id', events(root)[-1]['event_id'])
-        assert denied.returncode != 0
-        assert 'subtree-stopped' in denied.stdout + denied.stderr
-        retired = command(installed_commands, root, environment, 'retire', alias)
-        assert retired.returncode == 0, retired.stdout + retired.stderr
-        assert settled(installed_commands, root, environment, alias)['activity'] == 'idle'
-    else:
-        assert member['interrupt_status'] == 'stopped', result
-        evidence = yaml.safe_load(Path(member['evidence']).read_text())['evidence']
-        assert evidence['method'] == 'current-process-group'
-        assert evidence['running_members'] == []
-        assert settled(installed_commands, root, environment, alias)['activity'] == 'idle'
-        assert (directory / 'execution.yml').read_bytes() == original
-        receipt = Path(member['evidence'])
-        retained = receipt.read_bytes()
-        assert yaml.safe_load(retained)['original_execution']['terminal_confirmed'] is False
-        budget_file = root / '.graphtraj/state/tasks/320-claude-probe/execution-budget.yml'
-        budget = yaml.safe_load(budget_file.read_text())
-        # No new spending, reviewer, interactive prompt or replacement Session.
-        recovered = command(
-            installed_commands, root, environment, 'recover', alias,
-            '--reason', 'Current native group stopping was verified',
-            '--instruction', 'Complete the authorized original task',
-            '--allowed-scope', 'Same Session fixture continuation',
-            '--forbidden-scope', 'No new time or replacement',
-            '--caused-by-event-id', events(root)[-1]['event_id'],
-        )
-        assert recovered.returncode == 0, recovered.stdout + recovered.stderr
-        assert yaml.safe_load(recovered.stdout)['recovery_status'] == 'resumed'
-        resumed = settled(installed_commands, root, environment, alias)
-        assert resumed['session'] == status['session']
-        assert resumed['execution_id'] != status['execution_id']
-        assert receipt.read_bytes() == retained
-        after = yaml.safe_load(budget_file.read_text())
-        for key in ('started_at', 'allowance_minutes', 'approved_minutes', 'sessions'):
-            assert after.get(key) == budget.get(key)
+    execution = yaml.safe_load((directory / 'execution.yml').read_text())
+    assert execution['outcome'] == 'interrupted' and execution['terminal_confirmed'] is True
+    evidence = yaml.safe_load((directory / f"claude-termination-{status['execution_id']}.yml").read_text())
+    assert evidence['process_group_closed'] is True and evidence['pipes_closed'] is True
+    assert evidence['native_idle'] is native_idle
+    assert not (directory / f"terminal-confirmation-{status['execution_id']}.yml").exists()
+    budget_file = root / '.graphtraj/state/tasks/320-claude-probe/execution-budget.yml'
+    budget = yaml.safe_load(budget_file.read_text())
+    # No second interrupt, new spending, reviewer or replacement Session.
+    recovered = command(
+        installed_commands, root, environment, 'recover', alias,
+        '--reason', 'Native group stopping was confirmed at close',
+        '--instruction', 'Complete the authorized original task',
+        '--allowed-scope', 'Same Session fixture continuation',
+        '--forbidden-scope', 'No new time or replacement',
+        '--caused-by-event-id', events(root)[-1]['event_id'],
+    )
+    assert recovered.returncode == 0, recovered.stdout + recovered.stderr
+    assert yaml.safe_load(recovered.stdout)['recovery_status'] == 'resumed'
+    resumed = settled(installed_commands, root, environment, alias)
+    assert resumed['session'] == status['session']
+    assert resumed['execution_id'] != status['execution_id']
+    after = yaml.safe_load(budget_file.read_text())
+    for key in ('started_at', 'allowance_minutes', 'approved_minutes', 'sessions'):
+        assert after.get(key) == budget.get(key)
 
 
 @pytest.mark.parametrize('connection_role', [False, True])

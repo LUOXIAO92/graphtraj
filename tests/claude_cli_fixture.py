@@ -148,6 +148,16 @@ for line in sys.stdin:
                     'hook_event_name': 'UserPromptSubmit', 'session_id': session,
                     'source': 'resume' if '--resume' in args else 'startup', 'transcript_path': str(history)}}})
         elif request['subtype'] == 'interrupt':
+            if os.environ.get('CLAUDE_FIXTURE_ESCAPED_PIPE'):
+                # A tool child outside the owned group keeps stdout open until
+                # the test releases it (bounded, so it never outlives the test).
+                child = subprocess.Popen([sys.executable, '-c', (
+                    'import os,sys,time\n'
+                    'deadline = time.monotonic() + 120\n'
+                    'while not os.path.exists(sys.argv[1]) and time.monotonic() < deadline:\n'
+                    '    time.sleep(0.05)\n'), os.environ['CLAUDE_FIXTURE_ESCAPED_PIPE'] + '.release'],
+                    start_new_session=True)
+                Path(os.environ['CLAUDE_FIXTURE_ESCAPED_PIPE']).write_text(str(child.pid))
             if os.environ.get('CLAUDE_FIXTURE_NO_SETTLE'):
                 continue
             time.sleep(float(os.environ.get('CLAUDE_FIXTURE_STOP_DELAY', '0')))

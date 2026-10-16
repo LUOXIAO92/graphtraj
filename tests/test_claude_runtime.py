@@ -443,10 +443,10 @@ def test_claude_resource_grants_and_read_only_recovery(tmp_path: Path, claude_en
         context(tmp_path, claude={'read_paths': [str(tmp_path / 'state')]})
 
 
-def test_claude_stop_without_native_settlement_is_unconfirmed(
+def test_claude_stop_without_native_settlement_confirms_only_exit(
     tmp_path: Path, claude_environment: None, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """An interrupt ACK followed by pipe exit cannot certify native tool settlement."""
+    """An exited runtime whose group closed is terminated, still interrupted, never idle."""
     result_project(tmp_path)
     monkeypatch.setenv('CLAUDE_FIXTURE_NO_SETTLE', '1')
     with ExitStack() as stack, ThreadPoolExecutor(max_workers=1) as pool:
@@ -454,10 +454,36 @@ def test_claude_stop_without_native_settlement_is_unconfirmed(
         future = pool.submit(turn.run)
         assert ready.wait(5)
         turn.terminate()
+        outcome = future.result(timeout=30)
+        assert outcome['outcome'] == 'interrupted' and outcome['terminal_confirmed'] is True
+        assert turn.proc.poll() is not None
+        evidence = yaml.safe_load(
+            (turn.directory / f'claude-termination-{turn.execution_id}.yml').read_text())
+        assert evidence['native_idle'] is False and evidence['process_group_closed'] is True
+
+
+def test_claude_stop_with_a_live_unsettled_runtime_stays_unconfirmed(
+    tmp_path: Path, claude_environment: None, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Without an observed exit and closed group, missing settlement still blocks confirmation."""
+    result_project(tmp_path)
+    monkeypatch.setenv('CLAUDE_FIXTURE_NO_SETTLE', '1')
+    with ExitStack() as stack, ThreadPoolExecutor(max_workers=1) as pool:
+        turn, ready, _ = execution(tmp_path, stack, 'wait-unconfirmed')
+        close = turn._close
+
+        def unobserved_close() -> None:
+            """Reap the peer but leave its exit unobserved, as if the group remained."""
+            close()
+            turn.terminal_confirmed = False
+
+        monkeypatch.setattr(turn, '_close', unobserved_close)
+        future = pool.submit(turn.run)
+        assert ready.wait(5)
+        turn.terminate()
         with pytest.raises(RuntimeAdapterError) as caught:
-            future.result(timeout=15)
-        assert not caught.value.terminal_confirmed
-        assert turn.proc.poll() is not None and turn.outcome is None
+            future.result(timeout=30)
+        assert not caught.value.terminal_confirmed and turn.outcome is None
 
 
 def test_default_home_is_not_injected_into_native_environment(

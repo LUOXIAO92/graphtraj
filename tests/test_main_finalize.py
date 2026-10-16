@@ -1651,8 +1651,8 @@ CHECKER_WORKSPACE = {'sandbox': {'type': 'workspaceWrite', 'writableRoots': [], 
                      'activePermissionProfile': {'id': 'graphtraj_checker', 'extends': ':workspace'}}
 
 
-def test_checker_profile_adds_only_main_control_socket(host: tuple[Path, Path]) -> None:
-    """The fork extends Main's profile with only Main's Codex control socket."""
+def test_checker_profile_enables_managed_network_on_main_profile(host: tuple[Path, Path]) -> None:
+    """The fork extends Main's profile with managed network and Main's socket entry."""
     root, binding = host
     (root / 'options.json').write_text(json.dumps({
         'configuration': MAIN_WORKSPACE, 'fork_configuration': CHECKER_WORKSPACE,

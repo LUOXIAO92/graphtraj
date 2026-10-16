@@ -235,7 +235,7 @@ def check(
             # and can differ from actual per-turn model selection.
             parent = {**parent, 'model': context['model'], 'configuration': configuration}
             parent['turn_settings'] = dict(context.get('settings', {}))
-            # The checker may reach only the control socket of Main's own daemon.
+            # Main's own daemon socket, which the checker's CLI must reach.
             parent['control_socket'] = str(Path(binding['connection']['codex_home'])
                                            / 'app-server-control' / 'app-server-control.sock')
             if 'effort' not in parent['turn_settings'] and 'reasoningEffort' in configuration:
@@ -291,7 +291,7 @@ def check(
             }
             profile = child.configuration.get('activePermissionProfile') or {}
             if profile.get('id') == CHECKER_PERMISSION_PROFILE:
-                # The checker's only authorized difference from Main.
+                # The checker's authorized difference from Main: managed network.
                 evidence['authorized_difference'] = {
                     'permission_profile': profile, 'unix_socket': parent['control_socket'],
                     'network_access': {

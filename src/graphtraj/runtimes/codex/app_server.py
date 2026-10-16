@@ -29,7 +29,7 @@ from graphtraj.runtimes.codex.session_archive import CodexSessionArchive
 
 
 _DEFAULT_TIMEOUT = object()
-# A fork-only profile extending Main's, adding Main's Codex control socket.
+# A fork-only profile extending Main's with Codex managed network enabled.
 CHECKER_PERMISSION_PROFILE = 'graphtraj_checker'
 # Reported sandbox policy types and their thread/fork SandboxMode selections.
 _SANDBOX_MODES = {
@@ -829,10 +829,10 @@ class CodexAppServer:
         profile = configuration.get('activePermissionProfile')
         socket = parent.get('control_socket')
         if isinstance(profile, dict) and isinstance(profile.get('id'), str) and socket:
-            # Main's own profile plus only its Codex control socket, so the
-            # checker's GraphTraj CLI can verify its caller natively. Codex
-            # applies Unix-socket rules through its managed network proxy,
-            # which blocks every domain this profile does not allow.
+            # Main's own profile with Codex managed network enabled for this
+            # check, so the checker's GraphTraj CLI can verify its caller
+            # natively. The socket entry is not a limit: other Unix sockets
+            # and loopback TCP stay reachable under managed network.
             parameters['permissions'] = CHECKER_PERMISSION_PROFILE
             parameters['config'] = {'permissions': {CHECKER_PERMISSION_PROFILE: {
                 'extends': profile['id'],
@@ -867,7 +867,7 @@ class CodexAppServer:
                 raise self._protocol_failure(f'thread/fork changed Main {key}.')
         # The effective policy decides; a profile name is checked only when
         # Main selected one, since an unnamed policy may be reported by name.
-        # The only authorized difference is network access for the socket rule.
+        # The only authorized difference is the managed network access.
         ignored = {'networkAccess'} if parameters.get('permissions') == CHECKER_PERMISSION_PROFILE else set()
         if 'sandbox' in configuration and (
                 not isinstance(response.get('sandbox'), dict)

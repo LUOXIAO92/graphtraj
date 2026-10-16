@@ -61,6 +61,10 @@ def _attachments(store: SessionStore, value: object, path: str = '') -> list[dic
     return found
 
 
+class HistoryUnavailable(ValueError):
+    """The declared inherited prefix is not available in this project's archive."""
+
+
 class CodexSessionArchive:
     """Incrementally archive one trusted native Session, independently of Tasks.
 
@@ -77,6 +81,8 @@ class CodexSessionArchive:
         agent_id: str,
         session_id: str,
         task_ids: tuple[str, ...] = (),
+        *,
+        source_paths: dict[str, Path] | None = None,
     ) -> None:
         """Capture authorized associations without opening a native transcript."""
         self.path = session_path(state, 'codex:' + session_id)
@@ -85,6 +91,7 @@ class CodexSessionArchive:
         self.agent_id = agent_id
         self.session_id = session_id
         self.task_ids = task_ids
+        self.source_paths = source_paths
 
     def seed_fork(self, thread: dict, *, history_excluded: bool = False) -> None:
         """Retain the history returned atomically by native thread/fork.
@@ -234,10 +241,13 @@ class CodexSessionArchive:
         whichever records the parent has acquired since the fork. No Runtime
         Home search or unrelated Session import is authorized by the reference.
         """
-        if store.position('history-base') >= 0:
+        if store.position('history-base') >= base['end_byte_offset'] and store.next_seq:
             return
         cutoff = base['end_ordinal_exclusive']
-        with SessionStore(session_path(self.state, 'codex:' + base['thread_id']), readonly=True) as parent:
+        parent_path = session_path(self.state, 'codex:' + base['thread_id'])
+        if not parent_path.is_file():
+            raise HistoryUnavailable('Declared parent archive is unavailable in this project.')
+        with SessionStore(parent_path, readonly=True) as parent:
             owner = parent.header['graphtraj']
             if owner['projectId'] != self.project_id:
                 raise ValueError('Native inherited history belongs to another project.')
@@ -245,9 +255,9 @@ class CodexSessionArchive:
                 # A still-open Main may have flushed its terminal record after
                 # Stop. Refresh only this already-owned source, never scan Home.
                 source = owner['native'].get('sourcePath')
-                if source:
+                if source and (self.source_paths is None or source in self.source_paths):
                     CodexSessionArchive(self.state, self.project_id, owner['agentId'],
-                                        owner['native']['sessionId']).collect(Path(source))
+                                        owner['native']['sessionId'], source_paths=self.source_paths).collect(Path(source))
             events = []
             after = -1
             while len(events) < cutoff:
@@ -257,7 +267,7 @@ class CodexSessionArchive:
                         continue
                     record = native_record(event)
                     if type(record.get('ordinal')) is not int:
-                        raise ValueError('Native inherited ordinal prefix is unavailable.')
+                        raise HistoryUnavailable('Native inherited ordinal prefix is unavailable.')
                     if record['ordinal'] >= cutoff:
                         continue
                     for attachment in event.get('graphtraj', {}).get('attachments', []):
@@ -271,12 +281,22 @@ class CodexSessionArchive:
                 after = page['after']
             events.sort(key=lambda event: native_record(event)['ordinal'])
             if [native_record(event)['ordinal'] for event in events] != list(range(cutoff)):
-                raise ValueError('Native inherited prefix has not been collected in this project.')
+                raise HistoryUnavailable('Native inherited prefix has not been collected in this project.')
             for seq, event in enumerate(events):
                 event['seq'] = seq
-        events.append({'type': 'session/end-seed', 'seq': len(events),
-                       'time': store.header['createdAt'], 'data': {'inherited': True}})
-        store.append_many(events, source='history-base', position=base['end_byte_offset'])
+        if store.pending() is not None:
+            inherited = []
+            observations = []
+            for index, event in enumerate(events):
+                position = base['end_byte_offset'] if index == len(events) - 1 else index
+                observations.append({'event': event, 'source': 'history-base', 'position': position})
+                inherited.append(('history-base', position))
+            store.stage_initial_observations(observations)
+            store.finish_initial_collection(parent_session=store.header['parentSession'], inherited=inherited)
+        else:
+            events.append({'type': 'session/end-seed', 'seq': len(events),
+                           'time': store.header['createdAt'], 'data': {'inherited': True}})
+            store.append_many(events, source='history-base', position=base['end_byte_offset'])
 
     def _rollout_event(
         self,
@@ -329,19 +349,97 @@ class CodexSessionArchive:
         if self._promote_copied_prefix(store, parent):
             return True
         stream.seek(max(store.position('rollout'), 0))
+        observations = []
         while True:
             start = stream.tell()
             line = stream.readline()
             if not line.endswith(b'\n'):
+                store.stage_initial_observations(observations)
                 return False
             record = json.loads(line)
             event = self._rollout_event(store, record, start, 0)
-            store.stage_initial_observation(event, source='rollout', position=stream.tell())
+            observations.append({'event': event, 'source': 'rollout', 'position': stream.tell()})
+            if self.source_paths is None or len(observations) >= 256:
+                store.stage_initial_observations(observations)
+                observations.clear()
             payload = record.get('payload', {})
             if (record.get('type') == 'event_msg'
                     and payload.get('type') == 'thread_settings_applied'
                     and payload.get('thread_id') == self.session_id):
+                store.stage_initial_observations(observations)
                 return self._promote_copied_prefix(store, parent)
+
+    def collect_history_prefix(self, segments: list[dict], base: dict) -> dict:
+        """Resolve verified physical segments using the distinct logical fork cut.
+
+        Segments are supplied newest-first, with contained local paths. Earlier
+        own records precede the current draft; only the explicit native logical
+        fork range is inherited. Each physical source keeps its own coordinates.
+        """
+        import hashlib
+
+        with SessionStore(self.path) as store:
+            owner = store.header['graphtraj']
+            if owner['projectId'] != self.project_id or owner['agentId'] != self.agent_id:
+                raise ValueError('Captured prefix does not own this project/Agent archive.')
+            if store.next_seq:
+                if store.position('history-base') != base['end_byte_offset']:
+                    raise ValueError('Canonical archive has no identical committed prefix.')
+                for segment in segments:
+                    if hashlib.sha256(store.attachment(segment['sha256'])).hexdigest() != segment['sha256']:
+                        raise ValueError('Previously committed physical source bytes differ.')
+                return {'changed': False, 'events': store.next_seq}
+            pending = store.pending()
+            if pending is None:
+                raise ValueError('A retained Main initial-collection draft is required.')
+            observations = pending['event']['data']['observations']
+            first = observations[0]['event']['data']['record']
+            metadata = first.get('payload', {})
+            logical_cut = metadata.get('forked_from_ordinal_exclusive')
+            if (first.get('type') != 'session_meta' or metadata.get('id') != self.session_id
+                    or metadata.get('history_base') != base
+                    or type(logical_cut) is not int or not 0 < logical_cut <= base['end_ordinal_exclusive']
+                    or store.header.get('parentSession') != 'codex:' + metadata.get('forked_from_id', '')
+                    or first.get('ordinal') != base['end_ordinal_exclusive']):
+                raise ValueError('Pending Main does not establish this physical prefix and logical fork boundary.')
+            for index, observation in enumerate(observations):
+                if observation['event']['data']['record'].get('ordinal') != base['end_ordinal_exclusive'] + index:
+                    raise ValueError('Retained Main observations have a native ordinal gap.')
+            earlier = []
+            inherited = []
+            for segment in reversed(segments):
+                prefix = segment['path']
+                source_key = 'history-base:' + segment['source_rollout']
+                first_event = len(earlier)
+                with prefix.open('rb') as stream:
+                    while line := stream.readline():
+                        start = stream.tell() - len(line)
+                        record = json.loads(line)
+                        ordinal = len(earlier)
+                        if not line.endswith(b'\n') or record.get('ordinal') != ordinal:
+                            raise ValueError('Captured chain lacks a contiguous native ordinal range.')
+                        event = self._rollout_event(store, record, start, 0)
+                        event['graphtraj']['native'].update(
+                            sessionId=segment['source_logical_session'],
+                            locator=f"rollout:{segment['source_rollout']}:byte:{start}",
+                            rolloutId=segment['source_rollout'], sourcePath=segment['source'])
+                        position = stream.tell()
+                        earlier.append({'event': event, 'source': source_key, 'position': position})
+                        if ordinal < logical_cut:
+                            inherited.append((source_key, position))
+                if len(earlier) != segment['end_ordinal_exclusive']:
+                    raise ValueError('Captured physical segment does not end at its declared ordinal.')
+                raw = store.copy_attachment(prefix)
+                if raw['sha256'] != segment['sha256']:
+                    raise ValueError('Captured source changed while importing its bytes.')
+                earlier[first_event]['event']['graphtraj']['attachments'].append({'nativePath': 'history_base', **raw})
+            if len(earlier) != base['end_ordinal_exclusive']:
+                raise ValueError('Captured chain does not reach the current Main prefix boundary.')
+            store.stage_initial_observations(earlier, before_existing=True)
+            store.finish_initial_collection(parent_session=store.header['parentSession'], inherited=inherited,
+                                            checkpoint=('history-base', base['end_byte_offset']))
+            return {'changed': True, 'events': store.next_seq, 'logical_inherited_records': logical_cut,
+                    'physical_prefix_records': len(earlier), 'local_records': len(observations)}
 
     def collect(self, rollout: Path) -> None:
         """Commit complete native records; retry unfinished input on the next call.
@@ -349,6 +447,14 @@ class CodexSessionArchive:
         Each call closes its database so shutdown and cleanup do not own archive
         lifetime. A malformed complete line fails visibly without skipping it.
         """
+        provenance = str(rollout)
+        if self.source_paths is not None:
+            captured = self.source_paths.get(provenance)
+            if captured is None:
+                raise FileNotFoundError('Native source is not in the captured project set.')
+            rollout = captured
+        else:
+            provenance = str(rollout.resolve())
         with rollout.open('rb') as stream:
             first = stream.readline()
             if not first.endswith(b'\n'):
@@ -373,7 +479,7 @@ class CodexSessionArchive:
                     'graphtraj': {'version': 1, 'projectId': self.project_id,
                                  'agentId': self.agent_id, 'taskIds': list(self.task_ids),
                                  'native': {'runtime': 'codex', 'sessionId': self.session_id,
-                                            'locator': 'byte:0', 'sourcePath': str(rollout.resolve())},
+                                            'locator': 'byte:0', 'sourcePath': provenance},
                                  'missing': missing},
                 }
                 if parent and base:
@@ -384,7 +490,26 @@ class CodexSessionArchive:
                 if header['projectId'] != self.project_id or header['agentId'] != self.agent_id:
                     raise ValueError('Codex archive already belongs to another project or Agent.')
                 if metadata.get('forked_from_id') and metadata.get('history_base'):
-                    self._seed_reference(store, metadata['history_base'])
+                    try:
+                        self._seed_reference(store, metadata['history_base'])
+                    except HistoryUnavailable as error:
+                        if self.source_paths is None or store.next_seq:
+                            raise
+                        stream.seek(max(0, store.position('rollout')))
+                        observations = []
+                        while True:
+                            start = stream.tell()
+                            line = stream.readline()
+                            if not line.endswith(b'\n'):
+                                break
+                            event = self._rollout_event(store, json.loads(line), start, 0)
+                            event['graphtraj']['missing'].append({'path': 'history_base', 'reason': str(error)})
+                            observations.append({'event': event, 'source': 'rollout', 'position': stream.tell()})
+                            if len(observations) >= 256:
+                                store.stage_initial_observations(observations)
+                                observations.clear()
+                        store.stage_initial_observations(observations)
+                        return
                 position = store.position('rollout')
                 if rollout.stat().st_size < position:
                     raise ValueError('Codex rollout was truncated before its committed cursor.')

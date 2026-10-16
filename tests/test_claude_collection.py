@@ -312,3 +312,23 @@ def test_unknown_fork_stays_pending_after_terminal_and_source_loss(tmp_path: Pat
     assert pending['graphtraj']['missing'][0]['path'] == 'parentSession/isSeeded'
     records = [o['event']['data']['record'] for o in pending['data']['observations']]
     assert records == [record, event, {**event, 'hook_event_name': 'Stop'}]
+
+
+def test_offline_initial_transcript_batches_replay_once(tmp_path: Path) -> None:
+    """A copied transcript retains every record across batch and partial-line boundaries."""
+    from graphtraj.runtimes.claude.collection import open_archive, collect_transcript, finish_transcript_collection
+
+    path = tmp_path / 'copied.jsonl'
+    provenance = Path('/original-project/owned-transcript.jsonl')
+    rows = [{'type': 'user', 'sessionId': 'bulk', 'uuid': str(index),
+             'message': {'role': 'user', 'content': 'record-' + str(index)}} for index in range(300)]
+    path.write_text(''.join(json.dumps(row) + '\n' for row in rows) + '{')
+    with open_archive(tmp_path / 'state', tmp_path, 'bulk', 'agent', source='member') as store:
+        assert collect_transcript(store, path, source_path=provenance) == 300
+        assert collect_transcript(store, path, source_path=provenance) == 0
+        pending = store.pending()['event']['data']['observations']
+        assert [item['event']['data']['record'] for item in pending] == rows
+        assert store.position('transcript:' + str(provenance)) == path.stat().st_size - 1
+        finish_transcript_collection(store, 'bulk', terminal=True)
+        assert store.next_seq == 300 and store.pending() is None
+        store.validate()

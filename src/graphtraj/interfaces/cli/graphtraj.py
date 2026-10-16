@@ -60,15 +60,26 @@ main.add_command(bind_command)
 
 
 @main.command("migrate-tickets")
-def migrate_tickets_command() -> None:
+@click.option("--preview", is_flag=True, help="List project sources and gaps without changing state.")
+@click.option("--restore", type=click.Path(path_type=Path), help="Restore a complete local pre-cutover backup.")
+@click.option("--snapshot", type=click.Path(path_type=Path), help="Copy project migration data and associated source bytes to a new isolated directory.")
+def migrate_tickets_command(preview: bool, restore: Path | None, snapshot: Path | None) -> None:
     """Convert this project's retained Ticket state to the Task format once.
 
     Stop all Agents first. The previous state and Runner records are copied
     to .graphtraj/backups and restored automatically if conversion fails."""
-    from graphtraj.workspace.task_migration import migrate_project
+    from graphtraj.workspace.task_migration import migrate_project, restore_project
 
     try:
-        result = migrate_project(Path.cwd())
+        if sum((preview, restore is not None, snapshot is not None)) > 1:
+            raise ValueError("Choose only one of preview, snapshot or restore.")
+        if snapshot is not None:
+            from graphtraj.workspace.migration_snapshot import snapshot_project
+
+            result = snapshot_project(Path.cwd(), snapshot)
+        else:
+            result = (restore_project(Path.cwd(), restore) if restore
+                      else migrate_project(Path.cwd(), preview=preview))
     except (OSError, ValueError, yaml.YAMLError) as error:
         raise click.ClickException(str(error)) from error
     click.echo(yaml.safe_dump(result, sort_keys=False), nl=False)
@@ -98,3 +109,99 @@ def connections_command(
     except (OSError, ValueError, yaml.YAMLError, RunnerError) as error:
         raise click.ClickException(str(error)) from error
     click.echo(yaml.safe_dump(result, sort_keys=False), nl=False)
+
+
+@main.command("migration-prefix")
+@click.option("--session", required=True, help="Exact associated Main native Session ID.")
+@click.option("--expect-prefix", type=(str, int, int), required=True, metavar="THREAD ORDINAL BYTES",
+              help="Refuse any different source ID or exclusive ordinal/byte boundary before querying it.")
+@click.option("--capture", type=click.Path(path_type=Path), help="Capture only its declared inherited prefix in a new directory.")
+@click.option("--diagnose", is_flag=True, help="Return only requested/actual reference metadata; do not read its file.")
+@click.option("--chain", is_flag=True, help="Capture only the verified decreasing chain declared by source headers.")
+def migration_prefix_command(
+    session: str,
+    expect_prefix: tuple[str, int, int],
+    capture: Path | None,
+    diagnose: bool,
+    chain: bool,
+) -> None:
+    """Read declared inheritance metadata through Main's existing native host."""
+    from graphtraj.workspace.migration_prefix import inspect_prefix
+
+    try:
+        if chain:
+            if capture is None or diagnose:
+                raise ValueError('Chain capture requires --capture and cannot be combined with --diagnose.')
+            from graphtraj.workspace.migration_prefix import capture_prefix_chain
+
+            result = capture_prefix_chain(Path.cwd(), session, expect_prefix, capture)
+        else:
+            result = inspect_prefix(Path.cwd(), session, expect_prefix, capture=capture, diagnose=diagnose)
+    except (OSError, ValueError, yaml.YAMLError, RunnerError) as error:
+        raise click.ClickException(str(error)) from error
+    click.echo(yaml.safe_dump(result, sort_keys=False), nl=False)
+    if chain and not result['complete']:
+        raise click.exceptions.Exit(1)
+
+
+@main.command("migration-mappings")
+@click.option("--file", "source", type=click.Path(path_type=Path, exists=True, dir_okay=False), required=True)
+@click.option("--evidence-ref", required=True)
+@click.option("--preview", is_flag=True)
+def migration_mappings_command(source: Path, evidence_ref: str, preview: bool) -> None:
+    """Adopt explicitly confirmed remote identities after Task-format migration."""
+    from graphtraj.workspace.migration_mappings import adopt_mappings
+
+    try:
+        result = adopt_mappings(Path.cwd(), source, evidence_ref, preview=preview)
+    except (OSError, ValueError, yaml.YAMLError) as error:
+        raise click.ClickException(str(error)) from error
+    click.echo(yaml.safe_dump(result, sort_keys=False), nl=False)
+
+
+@main.command("migration-prefix-adopt")
+@click.option("--session", required=True)
+@click.option("--manifest", type=click.Path(path_type=Path, exists=True, dir_okay=False), required=True)
+def migration_prefix_adopt_command(session: str, manifest: Path) -> None:
+    """Restore one pending Main from a complete locally captured declared chain."""
+    from graphtraj.workspace.migration_prefix import adopt_prefix_chain
+
+    try:
+        result = adopt_prefix_chain(Path.cwd(), session, manifest)
+    except (OSError, ValueError, yaml.YAMLError) as error:
+        raise click.ClickException(str(error)) from error
+    click.echo(yaml.safe_dump(result, sort_keys=False), nl=False)
+
+
+@main.command("migration-prefix-next")
+@click.option("--session", required=True)
+@click.option("--manifest", type=click.Path(path_type=Path, exists=True, dir_okay=False), required=True)
+def migration_prefix_next_command(session: str, manifest: Path) -> None:
+    """Diagnose the next exact edge of a retained partial capture, without source reads."""
+    from graphtraj.workspace.migration_prefix import diagnose_next_prefix
+
+    try:
+        result = diagnose_next_prefix(Path.cwd(), session, manifest)
+    except (OSError, ValueError, yaml.YAMLError, RunnerError) as error:
+        raise click.ClickException(str(error)) from error
+    click.echo(yaml.safe_dump(result, sort_keys=False), nl=False)
+
+
+@main.command("migration-prefix-continue")
+@click.option("--session", required=True)
+@click.option("--manifest", type=click.Path(path_type=Path, exists=True, dir_okay=False), required=True)
+@click.option("--capture", type=click.Path(path_type=Path), required=True)
+def migration_prefix_continue_command(session: str, manifest: Path, capture: Path) -> None:
+    """Continue a verified capture by exact physical names in the owning sessions directory."""
+    from graphtraj.workspace.migration_prefix import capture_prefix_chain
+
+    try:
+        chain = yaml.safe_load(manifest.read_text(encoding='utf-8'))
+        base = chain['history_base']
+        expected = (base['thread_id'], base['end_ordinal_exclusive'], base['end_byte_offset'])
+        result = capture_prefix_chain(Path.cwd(), session, expected, capture, retained=manifest)
+    except (OSError, ValueError, KeyError, TypeError, yaml.YAMLError, RunnerError) as error:
+        raise click.ClickException(str(error)) from error
+    click.echo(yaml.safe_dump(result, sort_keys=False), nl=False)
+    if not result['complete']:
+        raise click.exceptions.Exit(1)

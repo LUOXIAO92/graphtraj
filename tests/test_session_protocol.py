@@ -301,3 +301,17 @@ def test_compaction_summary_and_developer_tool_updates() -> None:
     update['data']['headerSeq'] = 1
     with pytest.raises(ValueError, match='headerSeq'):
         validate_session(header(), [request, update])
+
+
+@pytest.mark.parametrize('delay', [0, 1, 488.02348886860193])
+def test_retry_preserves_native_numeric_milliseconds(delay: float) -> None:
+    """Jitter is a duration, not an integer sequence or counter."""
+    retry = event('llm/retry', {'turn': 0, 'step': 0, 'retryId': 'r', 'retry': 1, 'provider': 'dsh',
+                              'mode': 'always', 'policyKey': 'default',
+                              'delayMs': delay, 'failure': {'message': 'retry', 'code': 'RATE_LIMIT'}})
+    validate_event(retry)
+    assert retry['data']['delayMs'] == delay
+    for invalid in (-1, True, '1', None, float('inf'), float('nan')):
+        retry['data']['delayMs'] = invalid
+        with pytest.raises(ValueError):
+            validate_event(retry)

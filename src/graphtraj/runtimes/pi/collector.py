@@ -10,6 +10,7 @@ from copy import deepcopy
 from datetime import datetime
 from hashlib import sha256
 import json
+import os
 from pathlib import Path
 import sys
 import time
@@ -152,12 +153,21 @@ class PiCollector:
         tasks: list[str] | None = None,
         execution: str | None = None,
         header: dict | None = None,
+        parent_sources: set[Path] | None = None,
+        attachment_root: Path | None = None,
+        source_paths: dict[str, Path] | None = None,
     ) -> None:
-        """Open the archive after the caller has verified native ownership."""
+        """Open an owned archive, optionally limiting offline source acquisition.
+
+        Migration supplies its associated parent files and project attachment
+        root; native paths in content cannot broaden that acquisition scope.
+        """
         self.native = native
+        self.source_paths = source_paths
+        self.attachment_root = (Path(os.path.abspath(attachment_root)) if attachment_root else None)
         self.session = session
         self.state = state.resolve()
-        self.project = Path(project).resolve()
+        self.project = Path(os.path.abspath(project)) if source_paths is not None else Path(project).resolve()
         self.source = 'rpc:' + (execution or uuid.uuid4().hex)
         self.position = 0
         self.writer: StreamWriter | None = None
@@ -189,7 +199,14 @@ class PiCollector:
                 canonical['origin'] = 'subagent'
             if header.get('parentSession'):
                 try:
-                    parent, end = inherited_prefix(native, Path(header['parentSession']))
+                    parent_path = (Path(os.path.abspath(header['parentSession'])) if source_paths is not None
+                                   else Path(header['parentSession']).resolve())
+                    if parent_sources is not None and parent_path not in parent_sources:
+                        raise ValueError('Native parent is not an associated project source.')
+                    captured_parent = source_paths.get(str(parent_path)) if source_paths is not None else parent_path
+                    if captured_parent is None:
+                        raise ValueError('Native parent source was not captured.')
+                    parent, end = inherited_prefix(native, captured_parent)
                     canonical.update(parentSession=parent, isSeeded=True)
                     metadata['native']['inheritedPrefixEnd'] = end
                 except (OSError, ValueError, KeyError):
@@ -223,15 +240,20 @@ class PiCollector:
                 path = block.get('path')
                 if isinstance(path, str):
                     candidate = Path(path)
-                    root = Path(self.store.header.get('cwd') or self.project).resolve()
+                    root = Path(self.store.header.get('cwd') or self.project)
+                    root = Path(os.path.abspath(root)) if self.source_paths is not None else root.resolve()
                     if not candidate.is_absolute():
                         candidate = root / candidate
-                    candidate = candidate.resolve()
+                    candidate = (Path(os.path.abspath(candidate)) if self.source_paths is not None
+                                 else candidate.resolve())
                     private = (self.state, self.project / '.graphtraj', self.project / '.codex')
                     # Model-authored paths must not extend a managed Runtime's
                     # filesystem grants through the host-side archive writer.
-                    if candidate.is_relative_to(root) and not any(candidate.is_relative_to(p) for p in private):
-                        reference = self.store.copy_attachment(candidate)
+                    in_scope = self.attachment_root is None or candidate.is_relative_to(self.attachment_root)
+                    if in_scope and candidate.is_relative_to(root) and not any(candidate.is_relative_to(p) for p in private):
+                        acquired = self.source_paths.get(str(candidate)) if self.source_paths is not None else candidate
+                        reference = (self.store.copy_attachment(acquired) if acquired is not None else
+                                     {'missing': {'path': str(candidate), 'reason': 'Attachment was not captured.'}})
                     else:
                         reference = {'missing': {'path': path, 'reason': 'Outside the captured Session directories; not acquired.'}}
                     location = f'/message/content/{index}/path'

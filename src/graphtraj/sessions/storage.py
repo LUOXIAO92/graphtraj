@@ -195,33 +195,53 @@ class SessionStore:
         The existing draft is queryable and exported with the archive. This seam
         cannot reopen initialization after any canonical event has committed.
         """
-        event = snapshot_event(event)
+        return bool(self.stage_initial_observations([
+            {'event': event, 'source': source, 'position': position}]))
+
+    def stage_initial_observations(self, observations: list[dict], *, before_existing: bool = False) -> int:
+        """Atomically retain a batch, deduplicating each durable source cursor.
+
+        Offline imports serialize the growing initial draft once per batch,
+        instead of once per native line. A failed batch advances no cursors.
+        A verified earlier physical prefix may be placed before current observations.
+        """
         with self._transaction():
             if self.next_seq:
                 raise ValueError('Canonical collection has already started.')
-            if not self._fresh(source, position):
-                return False
             pending = self.pending()
             if pending and pending['event']['type'] != INITIAL_COLLECTION_TYPE:
                 raise ValueError('Another unfinished collection occupies the draft.')
-            draft = pending['event'] if pending else {
-                'type': INITIAL_COLLECTION_TYPE, 'seq': 0, 'time': event['time'],
-                'data': {'observations': []}, 'graphtraj': {
-                    'version': 1, 'initialHeader': self.header,
-                    'missing': [{'path': 'parentSession/isSeeded',
-                                 'reason': 'Native ancestry and inherited cut not yet confirmed.'}]}}
-            draft['data']['observations'].append({
-                'source': source, 'position': position, 'event': event})
-            self.db.execute('INSERT OR REPLACE INTO draft VALUES (1, ?, ?)',
-                            ('initial-collection', _json(draft)))
-            self._advance(source, position)
-        return True
+            draft = pending['event'] if pending else None
+            added = 0
+            fresh = []
+            for observation in observations:
+                source, position = observation['source'], observation['position']
+                if not self._fresh(source, position):
+                    continue
+                event = snapshot_event(observation['event'])
+                if draft is None:
+                    draft = {
+                        'type': INITIAL_COLLECTION_TYPE, 'seq': 0, 'time': event['time'],
+                        'data': {'observations': []}, 'graphtraj': {
+                            'version': 1, 'initialHeader': self.header,
+                            'missing': [{'path': 'parentSession/isSeeded',
+                                         'reason': 'Native ancestry and inherited cut not yet confirmed.'}]}}
+                fresh.append({'source': source, 'position': position, 'event': event})
+                self._advance(source, position)
+                added += 1
+            if added:
+                previous = draft['data']['observations']
+                draft['data']['observations'] = fresh + previous if before_existing else previous + fresh
+                self.db.execute('INSERT OR REPLACE INTO draft VALUES (1, ?, ?)',
+                                ('initial-collection', _json(draft)))
+        return added
 
     def finish_initial_collection(
         self,
         *,
         parent_session: str | None,
         inherited: list[tuple[str, int]],
+        checkpoint: tuple[str, int] | None = None,
     ) -> None:
         """Confirm initial ancestry once, before publishing any canonical events.
 
@@ -245,8 +265,9 @@ class SessionStore:
             if inherited:
                 events.append({'type': 'session/end-seed', 'seq': 0,
                                'time': events[-1]['time'], 'data': {'inherited': True}})
+            inherited_keys = set(inherited)
             local = [deepcopy(o['event']) for o in observations
-                     if (o['source'], o['position']) not in set(inherited)]
+                     if (o['source'], o['position']) not in inherited_keys]
             if not local:
                 raise ValueError('Retain a local collection observation for the original header.')
             local[0].setdefault('graphtraj', {'version': 1})['initialHeader'] = pending['event']['graphtraj']['initialHeader']
@@ -264,6 +285,10 @@ class SessionStore:
             for event in events:
                 self._insert(event)
             self.db.execute('DELETE FROM draft')
+            if checkpoint is not None:
+                if not self._fresh(*checkpoint):
+                    raise ValueError('Initial completion checkpoint must advance its source.')
+                self._advance(*checkpoint)
 
     def page(self, after: int = -1, limit: int = 200) -> dict:
         """Read an indexed bounded page; its cursor remains valid as events append."""

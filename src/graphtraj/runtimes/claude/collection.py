@@ -40,15 +40,17 @@ def open_archive(
     child_id: str | None = None,
     fork_parent: str | None = None,
     task_ids: list[str] | None = None,
+    project_identity: str | None = None,
 ) -> SessionStore:
     """Open a stable archive without changing its original collection metadata."""
     identity = 'claude:' + native_id + (':agent:' + child_id if child_id else '')
     path = session_path(state, identity)
     if path.exists():
         return SessionStore(path)
+    origin = project_identity if project_identity is not None else str(project.resolve())
     header = {'version': 4, 'id': identity, 'createdAt': int(time.time() * 1000),
-              'isSeeded': False, 'cwd': str(project.resolve()), 'graphtraj': {
-                  'version': 1, 'projectId': str(project.resolve()), 'agentId': agent_id,
+              'isSeeded': False, 'cwd': origin, 'graphtraj': {
+                  'version': 1, 'projectId': origin, 'agentId': agent_id,
                   'taskIds': task_ids or [], 'native': {'runtime': 'claude', 'sessionId': native_id,
                                            'locator': 'collection', 'source': source},
                   'missing': [{'path': 'createdAt', 'reason': 'Collection creation time; native creation time unavailable.'},
@@ -112,15 +114,22 @@ def fork_source(record: dict, native_id: str) -> dict | None:
     return None
 
 
-def collect_transcript(store: SessionStore, path: Path, *, child_id: str | None = None) -> int:
-    """Read complete JSONL records once, committing each record and byte cursor.
+def collect_transcript(
+    store: SessionStore,
+    path: Path,
+    *,
+    child_id: str | None = None,
+    source_path: Path | None = None,
+) -> int:
+    """Read complete JSONL records once with durable event and byte cursors.
 
     An incomplete trailing line is replayed on the next hook. No directory scan
     or unrelated Session import is performed. Source paths are retained solely
     as provenance; the archive contains the actual record values.
     """
-    source = 'transcript:' + str(path.resolve())
+    source = 'transcript:' + (str(source_path) if source_path is not None else str(path.resolve()))
     count = 0
+    observations = []
     with path.open('rb') as stream:
         stream.seek(max(0, store.position(source)))
         while line := stream.readline():
@@ -142,13 +151,57 @@ def collect_transcript(store: SessionStore, path: Path, *, child_id: str | None 
             event = native_event(store, record, source + ':' + str(position))
             fork = fork_source(record, native) if not child_id else None
             if store.next_seq == 0:
-                store.stage_initial_observation(event, source=source, position=position)
+                observations.append({'event': event, 'source': source, 'position': position})
+                if source_path is None or len(observations) >= 256:
+                    store.stage_initial_observations(observations)
+                    observations.clear()
             elif fork:
                 raise ValueError('Late inherited history after canonical publication requires unresolved ancestry handling.')
             else:
                 store.append(event, source=source, position=position)
             count += 1
+    if observations:
+        store.stage_initial_observations(observations)
     return count
+
+
+def finish_transcript_collection(
+    store: SessionStore,
+    native_id: str,
+    *,
+    child: bool = False,
+    terminal: bool = False,
+) -> None:
+    """Publish a collected native prefix only when its ancestry is established.
+
+    Offline migration may supply a stopped transcript, but does not synthesize
+    a native hook. Recorded hooks still participate in fork classification.
+    """
+    if store.next_seq or not store.pending():
+        return
+    observations = store.pending()['event']['data']['observations']
+    inherited = []
+    parents = set()
+    local_message = False
+    fork_expected = False
+    for observation in observations:
+        record = observation['event']['data']['record']
+        if observation['source'] == 'hooks':
+            fork_expected |= record.get('source') == 'fork'
+            continue
+        fork = fork_source(record, native_id) if not child else None
+        if fork:
+            if local_message:
+                raise ValueError('Inherited records follow child-local messages; ancestry remains pending.')
+            parents.add('claude:' + fork['sessionId'])
+            inherited.append((observation['source'], observation['position']))
+        elif record.get('type') in {'user', 'assistant'}:
+            local_message = True
+    if len(parents) > 1:
+        raise ValueError('Conflicting native fork parents; ancestry remains pending.')
+    if (local_message or (terminal and inherited)) and (not fork_expected or inherited or child):
+        store.finish_initial_collection(parent_session=next(iter(parents), None),
+                                        inherited=inherited)
 
 
 def collect_hook(event: dict, cwd: Path) -> dict:
@@ -204,30 +257,9 @@ def collect_hook(event: dict, cwd: Path) -> dict:
             store.append(retained, source=hook_source, position=position)
         else:
             store.stage_initial_observation(retained, source=hook_source, position=position)
-            observations = store.pending()['event']['data']['observations']
-            inherited = []
-            parents = set()
-            local_message = False
-            fork_expected = False
-            for observation in observations:
-                record = observation['event']['data']['record']
-                if observation['source'] == 'hooks':
-                    fork_expected |= record.get('source') == 'fork'
-                    continue
-                fork = fork_source(record, native_id) if not child else None
-                if fork:
-                    if local_message:
-                        raise ValueError('Inherited records follow child-local messages; ancestry remains pending.')
-                    parents.add('claude:' + fork['sessionId'])
-                    inherited.append((observation['source'], observation['position']))
-                elif record.get('type') in {'user', 'assistant'}:
-                    local_message = True
-            if len(parents) > 1:
-                raise ValueError('Conflicting native fork parents; ancestry remains pending.')
-            terminal = kind in {'Stop', 'StopFailure', 'SessionEnd', 'SubagentStop'}
-            if (local_message or (terminal and inherited)) and (not fork_expected or inherited or child):
-                store.finish_initial_collection(parent_session=next(iter(parents), None),
-                                                inherited=inherited)
+            finish_transcript_collection(
+                store, native_id, child=bool(child),
+                terminal=kind in {'Stop', 'StopFailure', 'SessionEnd', 'SubagentStop'})
         return {'session_id': store.header['id'], 'source': source, 'records': count,
                 'missing': unavailable}
 

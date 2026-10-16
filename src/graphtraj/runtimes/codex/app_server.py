@@ -703,6 +703,24 @@ class CodexAppServer:
             raise self._protocol_failure('thread/read returned a different native Session.')
         return thread
 
+    async def inspect_thread_reference(self, reference: str) -> dict[str, Any]:
+        """Report metadata returned for a declared storage reference, without asserting identity.
+
+        This diagnostic never authenticates a Session or relaxes read_thread's
+        exact-ID contract. It excludes preview text, turns and configuration.
+        Callers must not read the returned path merely because it was returned.
+        """
+        response = await self._call('thread/read', {
+            'threadId': _native_id(reference), 'includeTurns': False,
+        })
+        thread = response.get('thread')
+        if not isinstance(thread, dict) or not isinstance(thread.get('id'), str):
+            raise self._protocol_failure('Native reference metadata has no Session identity.')
+        fields = ('id', 'path', 'cwd', 'sessionId', 'forkedFromId', 'parentThreadId',
+                  'historyMode', 'ephemeral', 'source')
+        return {key: thread[key] for key in fields
+                if key in thread and (thread[key] is None or type(thread[key]) in (str, int, bool))}
+
     async def subscribe_host(self, thread_id: str) -> dict[str, Any]:
         """Rejoin an already-loaded host to receive its native lifecycle events.
 

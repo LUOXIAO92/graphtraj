@@ -305,3 +305,40 @@ def test_checker_unknown_delta_fields_and_interrupt_preserve_received_content(tm
         assert native_record(events[3]) == unknown
         assert events[4]['data']['stream'][0]['text'] == 'a'
         assert events[4]['data']['interrupted'] is True
+
+
+def test_missing_reference_promotes_once_when_owned_parent_arrives(tmp_path: Path) -> None:
+    """Late authorized parent history resolves the gap without replacing child records."""
+    state = tmp_path / 'state'
+    parent = tmp_path / 'parent.jsonl'
+    child = tmp_path / 'child.jsonl'
+    parent_records = [
+        {'type': 'session_meta', 'ordinal': 0, 'payload': {'id': 'parent'}},
+        {'type': 'response_item', 'ordinal': 1, 'payload': {'text': 'original parent'}},
+    ]
+    write_records(parent, parent_records)
+    child_records = [
+        {'type': 'session_meta', 'ordinal': 2, 'payload': {
+            'id': 'child', 'forked_from_id': 'parent', 'history_base': {
+                'thread_id': 'parent', 'end_ordinal_exclusive': 2,
+                'end_byte_offset': parent.stat().st_size}}},
+        {'type': 'response_item', 'ordinal': 3, 'payload': {'encrypted_content': 'opaque'}},
+    ]
+    write_records(child, child_records)
+    sources = {str(parent):parent, str(child):child}
+    archive = CodexSessionArchive(state, 'project', 'child-agent', 'child', source_paths=sources)
+    archive.collect(child)
+    archive.collect(child)
+    with SessionStore(archive.path, readonly=True) as store:
+        assert store.next_seq == 0
+        assert len(store.pending()['event']['data']['observations']) == 2
+    CodexSessionArchive(state, 'project', 'parent-agent', 'parent', source_paths=sources).collect(parent)
+    archive.collect(child)
+    archive.collect(child)
+    with SessionStore(archive.path, readonly=True) as store:
+        store.validate()
+        events = store.page()['events']
+        assert store.header['parentSession'] == 'codex:parent'
+        assert store.header['graphtraj']['agentId'] == 'child-agent'
+        assert store.pending() is None and store.next_seq == 5
+        assert [native_record(item) for item in events if item['type'] != 'session/end-seed'] == parent_records + child_records

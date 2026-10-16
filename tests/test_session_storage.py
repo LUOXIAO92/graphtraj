@@ -350,3 +350,23 @@ def test_initial_pending_cannot_be_validated_as_canonical_history() -> None:
     event = {'type': INITIAL_COLLECTION_TYPE, 'seq': 0, 'time': 1, 'data': {}}
     with pytest.raises(ValueError, match='pending-collection'):
         validate_session(header(), [event])
+
+
+def test_initial_batch_cursors_are_atomic_and_idempotent(tmp_path: Path) -> None:
+    """Interrupted bulk ingestion replays without losing or duplicating raw records."""
+    event = retain_native('codex', {'encrypted_content': 'opaque'}, session_id='native',
+                          locator='byte:0', seq=0, time=1)
+    observations = [{'event': event, 'source': 'rollout', 'position': i} for i in range(300)]
+    path = tmp_path / 'bulk.sqlite3'
+    with SessionStore.create(path, header()) as store:
+        assert store.stage_initial_observations(observations[:256]) == 256
+        before = store.pending()
+        with pytest.raises((ValueError, KeyError)):
+            store.stage_initial_observations(observations[256:] + [
+                {'event': {}, 'source': 'rollout', 'position': 300}])
+        assert store.position('rollout') == 255 and store.pending() == before
+    with SessionStore(path) as store:
+        assert store.stage_initial_observations(observations) == 44
+        assert store.stage_initial_observations(observations) == 0
+        assert len(store.pending()['event']['data']['observations']) == 300
+        assert store.position('rollout') == 299 and store.next_seq == 0

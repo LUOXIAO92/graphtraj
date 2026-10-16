@@ -169,17 +169,27 @@ def _publish(
             return outcome, None
 
     remote = gh_api(host, "GET", "{0}/{1}".format(base, mapping["issue"]["number"]))
+    if mapping["issue"]["node_id"] is None:
+        # One-time imported mappings know the confirmed URL/number, not an
+        # invented object ID or a full published baseline. Read only that Issue.
+        if (remote.get("number") != mapping["issue"]["number"]
+                or remote.get("html_url") != mapping["issue"]["url"]
+                or type(remote.get("id")) is not int
+                or not isinstance(remote.get("node_id"), str) or not remote["node_id"]):
+            raise RemoteError("the imported Issue URL does not match the remote object")
+        mapping["issue"].update(id=remote["id"], node_id=remote["node_id"])
     if remote["node_id"] != mapping["issue"]["node_id"]:
         raise RemoteError("the mapped Issue number now refers to a different remote object")
     current = _content(remote)
     digest  = hashlib.sha256(json.dumps(current, sort_keys=True).encode()).hexdigest()
+    published = mapping["published"] or {}
     if current != mapping["published"] and confirm_remote != digest:
         return "conflict", {
             "remote_digest": digest,
             "differences": {
-                field: {"published": mapping["published"][field], "remote": current[field],
+                field: {"published": published.get(field), "remote": current[field],
                         "local": desired[field]}
-                for field in _FIELDS if current[field] != mapping["published"][field]
+                for field in _FIELDS if current[field] != published.get(field)
             },
         }
     if current == desired:

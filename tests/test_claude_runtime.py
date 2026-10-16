@@ -510,3 +510,31 @@ def test_default_home_is_not_injected_into_native_environment(
         assert turn.request['explicit_runtime_home'] is False
         assert turn.run()['outcome'] == 'completed'
     assert captured == [{'HOME': os.environ.get('HOME'), 'CLAUDE_CONFIG_DIR': None}]
+
+
+def test_transport_failure_names_only_its_kind(tmp_path: Path, claude_environment: None) -> None:
+    """A non-JSON native line is classified without copying the line."""
+    result_project(tmp_path)
+    with ExitStack() as stack:
+        turn, _, _ = execution(tmp_path, stack, 'garbage')
+        with pytest.raises(RuntimeAdapterError) as caught:
+            turn.run()
+    assert caught.value.code == 'RUNTIME_TRANSPORT_FAILED'
+    assert '(transport_error; exception=JSONDecodeError)' in caught.value.message
+    assert 'secret-token' not in caught.value.message and 'not json' not in caught.value.message
+
+
+def test_permission_delivery_failure_names_its_receipt(
+    tmp_path: Path, claude_environment: None, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An unaccepted parent notice is classified by its delivery state."""
+    from graphtraj.execution import runner_control
+
+    result_project(tmp_path)
+    monkeypatch.setattr(runner_control, 'notify_direct_parent', lambda *args: {'delivery': 'queued'})
+    with ExitStack() as stack:
+        turn, _, _ = execution(tmp_path, stack, 'permission')
+        with pytest.raises(RuntimeAdapterError) as caught:
+            turn.run()
+    assert caught.value.code == 'RUNTIME_TRANSPORT_FAILED'
+    assert '(notification_error; exception=ValueError, delivery=queued)' in caught.value.message

@@ -96,6 +96,8 @@ def prompt(message: dict) -> None:
         merging.clear()
     elif text in ('merge', 'merge-late'):
         merging.append(text)
+    elif text == 'garbage':
+        print('not json secret-token', flush=True)
     elif text == 'permission':
         emit({'type': 'control_request', 'request_id': 'permission-1', 'request': {
             'subtype': 'can_use_tool', 'tool_name': 'Bash', 'input': {'command': 'echo approved'},

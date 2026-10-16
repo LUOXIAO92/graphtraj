@@ -215,8 +215,9 @@ class ClaudeExecution:
                         event = json.loads(line)
                         if not isinstance(event, dict):
                             raise ValueError('object')
-                    except ValueError:
-                        self.events.put({'type': 'transport_error'})
+                    except ValueError as error:
+                        # Only the failure class is kept, never the native line.
+                        self.events.put({'type': 'transport_error', 'exception': type(error).__name__})
                         return
                     # Partial text is compacted in the canonical archive, not copied
                     # to a second permanent per-fragment transport log.
@@ -267,13 +268,16 @@ class ClaudeExecution:
 
         def notify() -> None:
             """Deliver without blocking the pipe that must still accept interruption."""
+            receipt = None
             try:
                 receipt = notify_direct_parent(self.directory, 'Claude requires a native permission reply:\n'
                                                + json.dumps(details), details)
                 if receipt is not None and receipt.get('delivery') not in {'received', 'no-direct-parent'}:
                     raise ValueError('delivery')
-            except Exception:
-                self.events.put({'type': 'notification_error'})
+            except Exception as error:
+                delivery = receipt.get('delivery') if isinstance(receipt, dict) else None
+                self.events.put({'type': 'notification_error', 'exception': type(error).__name__,
+                                 'delivery': delivery if isinstance(delivery, str) else None})
 
         threading.Thread(target=notify, daemon=True).start()
 
@@ -435,7 +439,11 @@ class ClaudeExecution:
                         self.echoes += 1
                         last_echo = source_position
                     elif kind in {'transport_error', 'notification_error'}:
-                        raise RuntimeAdapterError('RUNTIME_TRANSPORT_FAILED', 'Claude transport or permission delivery failed.')
+                        cause = ', '.join(f'{key}={event[key]}' for key in ('exception', 'delivery')
+                                          if event.get(key) is not None)
+                        raise RuntimeAdapterError('RUNTIME_TRANSPORT_FAILED',
+                                                  f'Claude transport or permission delivery failed ({kind}'
+                                                  + (f'; {cause}' if cause else '') + ').')
                     elif kind == 'eof':
                         if self.stopping.is_set():
                             break

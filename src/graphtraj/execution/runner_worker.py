@@ -38,6 +38,12 @@ from graphtraj.runtimes.runtime_adapter import (
 )
 
 
+# A stopped Worker must exit while stop_worker (runner_process.py) still waits
+# to reap it; its last notice transport gets the rest of that window.
+STOP_EXIT_MARGIN_SECONDS = 2.0
+DELIVERY_JOIN_SECONDS = OPERATION_TIMEOUT_SECONDS - STOP_EXIT_MARGIN_SECONDS
+
+
 def run(job_file: Path) -> int:
     """Own one current Session execution without creating a Turn record."""
 
@@ -505,10 +511,10 @@ def _monitor_execution_budget(
             break
         stop.wait(0.05)
     # The native execution has already received interruption independently.
-    # Allow its outstanding transport to finish, bounded by the existing
-    # operation timeout; an unavailable parent cannot retain the Worker forever.
+    # Allow its outstanding transport to finish, bounded inside the stop's own
+    # reap window; an unavailable parent cannot retain the Worker forever.
     if delivery is not None:
-        delivery.join(timeout=OPERATION_TIMEOUT_SECONDS)
+        delivery.join(timeout=DELIVERY_JOIN_SECONDS)
 
 
 def _previous_outcome(execution_file: Path) -> str | None:

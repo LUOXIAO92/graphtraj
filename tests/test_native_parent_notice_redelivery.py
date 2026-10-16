@@ -227,7 +227,7 @@ def note(text):
     with marks.open('a') as stream:
         stream.write(text + '\\n')
 
-from graphtraj.execution.runner_process import OPERATION_TIMEOUT_SECONDS
+from graphtraj.execution.runner_worker import DELIVERY_JOIN_SECONDS
 
 stopping = threading.Event()
 
@@ -259,7 +259,7 @@ sender = threading.Thread(target=deliver, daemon=True)
 sender.start()
 stopping.wait()
 # The Worker leaves its loop and joins its delivery thread (runner_worker.py:507-510).
-sender.join(timeout=OPERATION_TIMEOUT_SECONDS)
+sender.join(timeout=DELIVERY_JOIN_SECONDS)
 note('worker-exit sender-' + ('alive' if sender.is_alive() else 'ended'))
 '''
 
@@ -320,3 +320,4 @@ def test_real_worker_stop_with_a_sender_awaiting_a_written_host_event(tmp_path: 
           'group-gone', group_gone, 'proxy-gone', proxy_gone, 'cleanup-needed', cleanup)
     assert 'worker-sigterm' in lines and 'received' not in lines
     assert group_gone and proxy_gone and not cleanup
+    assert stopped and status is not None  # confirmed by an actual reap within the stop's bound

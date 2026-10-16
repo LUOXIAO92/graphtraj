@@ -11,6 +11,13 @@ checker's permission profile, with no Unix-socket allowance. B accepted=false
 with a socket denial in stderr shows the seatbelt blocks the connect;
 accepted=true refutes that.
 
+Phase C applies the checker profile GraphTraj requests on its fork (extends
+:workspace, managed network enabled, only this run's socket allowed). C
+accepted=true shows that profile admits exactly the allowed socket. Phase D
+uses the documented ``--allow-unix-socket`` for this run's directory only; if
+C fails while D connects, the difference is managed-proxy startup, not the
+seatbelt socket rule. Only this run's temporary socket is ever allowed.
+
 Run with the task venv's Python; the report is JSON on stdout.
 """
 
@@ -114,6 +121,30 @@ def main() -> None:
         ], 20)
         time.sleep(0.5)
         report['phase_b']['accepted'] = listener.accepted
+        listener.reset()
+        # Phase C: the same profile GraphTraj's checker fork requests
+        # (app_server.CHECKER_PERMISSION_PROFILE), extending :workspace with
+        # only this run's temporary socket, given as one-run `-c` overrides.
+        profile = 'graphtraj_checker'
+        report['phase_c'] = run([
+            codex, 'sandbox',
+            '-c', f'permissions.{profile}.extends=":workspace"',
+            '-c', f'permissions.{profile}.network.enabled=true',
+            '-c', f'permissions.{profile}.network.unix_sockets={{"{path}"="allow"}}',
+            '-P', profile, '--log-denials',
+            '--', codex, 'app-server', 'proxy', '--sock', path,
+        ], 20)
+        time.sleep(0.5)
+        report['phase_c']['accepted'] = listener.accepted
+        listener.reset()
+        # Phase D: the documented `--allow-unix-socket` limited to this run's
+        # directory, separating seatbelt socket rules from proxy startup.
+        report['phase_d'] = run([
+            codex, 'sandbox', '-P', ':workspace', '--allow-unix-socket', directory, '--log-denials',
+            '--', codex, 'app-server', 'proxy', '--sock', path,
+        ], 20)
+        time.sleep(0.5)
+        report['phase_d']['accepted'] = listener.accepted
     finally:
         if listener is not None:
             listener.close()

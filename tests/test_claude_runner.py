@@ -3,6 +3,7 @@ import json
 import os
 from pathlib import Path
 import shutil
+import subprocess
 import time
 
 import pytest
@@ -478,15 +479,14 @@ def test_real_claude_input_echo_order(
     )
     batch = root / 'echo-probe.yml'
     batch.write_text(yaml.safe_dump({'tasks': [{'task_id': '320', 'role': 'researcher'}]}))
-    launched = command(installed_commands, root, environment, '--swarm-input', str(batch))
     print('REAL_CLAUDE_325_HARNESS=' + str(root))
-    assert launched.returncode == 0, launched.stdout + launched.stderr
-    alias = yaml.safe_load(launched.stdout)['tasks'][0]['alias']
-    trace, = (root / '.graphtraj/state').glob(f'**/traces/{alias}/events.jsonl')
+    sessions = root / '.graphtraj/runner/sessions'
+    alias = None
+    trace = None
 
     def records() -> list[dict]:
         """Read the retained native records in arrival order."""
-        return [json.loads(line) for line in trace.read_text().splitlines()]
+        return [json.loads(line) for line in trace.read_text().splitlines()] if trace else []
 
     def wait(condition, seconds: float) -> bool:
         """Poll an observation without treating timeout as evidence."""
@@ -504,7 +504,18 @@ def test_real_claude_input_echo_order(
         return yaml.safe_load(listed.stdout)['requests']
 
     marks = {}
+    launch_log = (tmp_path / 'swarm.log').open('w', encoding='utf-8')
+    # The root launch keeps its reader alive through the first execution,
+    # which waits on the permission request this probe must answer.
+    launched = None
     try:
+        launched = subprocess.Popen([str(installed_commands.runner), '--swarm-input', str(batch)],
+                                    cwd=root, env=environment, text=True,
+                                    stdout=launch_log, stderr=subprocess.STDOUT)
+        assert wait(lambda: any((path / 'mapping.yml').is_file() for path in sessions.glob('320-*')), 120), \
+            'no Session mapping'
+        alias, = [path.name for path in sessions.glob('320-*') if (path / 'mapping.yml').is_file()]
+        trace, = (root / '.graphtraj/state').glob(f'**/traces/{alias}/events.jsonl')
         assert wait(lambda: bool(pending()), 180), 'no native permission request'
         request = pending()[0]
         marks['request_method'] = request['method']
@@ -522,7 +533,7 @@ def test_real_claude_input_echo_order(
                           '--request-file', str(request_file), '--response', json.dumps({'behavior': 'allow'}))
         assert replied.returncode == 0, replied.stdout + replied.stderr
         marks['after_reply'] = len(records())
-        wait(lambda: any(record.get('type') == 'result' for record in records()[marks['after_reply']:]), 240)
+        wait(lambda: any(record.get('type') == 'result' for record in records()[marks['before_reply']:]), 240)
         time.sleep(20)
     finally:
         retained = records()
@@ -535,11 +546,21 @@ def test_real_claude_input_echo_order(
             'mark_2': 'MARK-325-SECOND' in json.dumps(record),
             'keys': sorted(record),
         } for index, record in enumerate(retained) if record.get('type') != 'stream_event']
+        print('REAL_CLAUDE_325_ALIAS=' + str(alias))
         print('REAL_CLAUDE_325_MARKS=' + json.dumps(marks))
         print('REAL_CLAUDE_325_ORDER=' + json.dumps(summary))
-        print('REAL_CLAUDE_325_STATUS=' + command(installed_commands, root, environment, 'status', alias).stdout)
-        stopped = command(installed_commands, root, environment, 'interrupt', alias)
-        print('REAL_CLAUDE_325_INTERRUPT=' + stopped.stdout + stopped.stderr)
+        if alias is not None:
+            print('REAL_CLAUDE_325_STATUS=' + command(installed_commands, root, environment, 'status', alias).stdout)
+            stopped = command(installed_commands, root, environment, 'interrupt', alias)
+            print('REAL_CLAUDE_325_INTERRUPT=' + stopped.stdout + stopped.stderr)
+        if launched is not None:
+            try:
+                print('REAL_CLAUDE_325_SWARM_EXIT=' + str(launched.wait(timeout=60)))
+            except subprocess.TimeoutExpired:
+                # An unconfirmed process is reported, never signalled here.
+                print('REAL_CLAUDE_325_SWARM_STILL_RUNNING pid=' + str(launched.pid))
+        launch_log.close()
+        print('REAL_CLAUDE_325_SWARM_OUTPUT=' + (tmp_path / 'swarm.log').read_text())
 
 
 @pytest.mark.skipif(not os.environ.get('CLAUDE_REAL_TEST_BINARY'), reason='Explicit real CLI probe only')

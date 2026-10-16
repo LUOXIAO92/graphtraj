@@ -29,6 +29,10 @@ from graphtraj.runtimes.codex.session_archive import CodexSessionArchive
 
 
 _DEFAULT_TIMEOUT = object()
+# Reported sandbox policy types and their thread/fork SandboxMode selections.
+_SANDBOX_MODES = {
+    'readOnly': 'read-only', 'workspaceWrite': 'workspace-write', 'dangerFullAccess': 'danger-full-access',
+}
 
 
 _DEFAULT_STOP_INSTRUCTION = (
@@ -803,8 +807,20 @@ class CodexAppServer:
         for key in ('serviceTier', 'cwd', 'runtimeWorkspaceRoots', 'approvalPolicy', 'approvalsReviewer'):
             if key in configuration:
                 parameters[key] = configuration[key]
-        # Native fork inherits history and permissions but rebuilds model config.
-        # Preserve the checked turn's observed effort instead of project defaults.
+        # Native fork does not inherit Main's sandbox. Select Main's named
+        # profile or its sandbox mode (never both); the response is checked
+        # against Main's full policy below.
+        profile = configuration.get('activePermissionProfile')
+        if isinstance(profile, dict) and isinstance(profile.get('id'), str):
+            parameters['permissions'] = profile['id']
+        elif 'sandbox' in configuration:
+            policy = configuration['sandbox']
+            mode = _SANDBOX_MODES.get(policy.get('type')) if isinstance(policy, dict) else None
+            if mode is None:
+                raise CodexAdapterError('RUNTIME_REQUEST_INVALID', 'Main sandbox has no fork selection.')
+            parameters['sandbox'] = mode
+        # Native fork rebuilds model config. Preserve the checked turn's
+        # observed effort instead of project defaults.
         if 'effort' in settings:
             parameters['config'] = {'model_reasoning_effort': settings['effort']}
         response = await self._call('thread/fork', parameters)
@@ -822,6 +838,14 @@ class CodexAppServer:
         for key in ('serviceTier', 'cwd', 'runtimeWorkspaceRoots', 'approvalPolicy', 'approvalsReviewer'):
             if key in configuration and response.get(key) != configuration[key]:
                 raise self._protocol_failure(f'thread/fork changed Main {key}.')
+        # The effective policy decides; a profile name is checked only when
+        # Main selected one, since an unnamed policy may be reported by name.
+        if 'sandbox' in configuration and response.get('sandbox') != configuration['sandbox']:
+            raise self._protocol_failure('thread/fork changed Main sandbox.')
+        if 'permissions' in parameters and (
+                not isinstance(response.get('activePermissionProfile'), dict)
+                or response['activePermissionProfile'].get('id') != parameters['permissions']):
+            raise self._protocol_failure('thread/fork changed Main permission profile.')
         path = thread.get('path')
         rollout = Path(path) if isinstance(path, str) and Path(path).is_absolute() else None
         # Keep native configuration facts, not inherited conversation or previews.

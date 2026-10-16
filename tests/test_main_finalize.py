@@ -95,6 +95,7 @@ for line in sys.stdin:
         (root / 'child-context.json').write_text(json.dumps(parent_context))
         result = {'thread':child, 'model':options.get('fork_model','actual-model'),
                   'modelProvider':'actual-provider', **options.get('configuration', {}),
+                  **options.get('fork_configuration', {}),
                   'reasoningEffort':params.get('config',{}).get('model_reasoning_effort')}
         if options.get('supersede_during_fork'): options['current_turn'] = 'new-main-turn'
     elif method == 'turn/start':
@@ -1322,6 +1323,38 @@ def test_fork_preserves_observed_configuration(host: tuple[Path, Path]) -> None:
     assert fork['config']['model_reasoning_effort'] == 'high'
     evidence = yaml.safe_load(next(binding.parent.glob('checks/*/execution.yml')).read_text())
     assert all(evidence['configuration'][key] == value for key, value in configuration.items())
+
+
+MAIN_READ_ONLY = {'sandbox': {'type': 'readOnly', 'networkAccess': False},
+                  'activePermissionProfile': None}
+
+
+def test_fork_selects_main_sandbox_and_accepts_its_named_equivalent(host: tuple[Path, Path]) -> None:
+    """The checker requests Main's sandbox; the same policy reported by name passes."""
+    root, binding = host
+    (root / 'options.json').write_text(json.dumps({
+        'configuration': MAIN_READ_ONLY,
+        'fork_configuration': {'activePermissionProfile': {'id': ':read-only', 'extends': None}},
+    }))
+    assert 'Completion Check · completed' in stop(binding)['systemMessage']
+    wire = [json.loads(line) for line in (root / 'wire.jsonl').read_text().splitlines()]
+    fork = next(message['params'] for message in wire if message['method'] == 'thread/fork')
+    assert fork['sandbox'] == 'read-only' and 'permissions' not in fork
+
+
+def test_fork_with_a_wider_sandbox_never_starts_the_checker(host: tuple[Path, Path]) -> None:
+    """A fork reporting a broader policy than Main's is an error before any turn."""
+    root, binding = host
+    (root / 'options.json').write_text(json.dumps({
+        'configuration': MAIN_READ_ONLY,
+        'fork_configuration': {'sandbox': {'type': 'workspaceWrite', 'writableRoots': [],
+                                           'networkAccess': False},
+                               'activePermissionProfile': {'id': ':workspace', 'extends': None}},
+    }))
+    result = stop(binding)
+    assert result['continue'] is False and 'sandbox' in result['stopReason']
+    wire = [json.loads(line) for line in (root / 'wire.jsonl').read_text().splitlines()]
+    assert not any(message['method'] == 'turn/start' for message in wire)
 
 
 def test_fork_uses_current_turn_collaboration_settings(host: tuple[Path, Path]) -> None:

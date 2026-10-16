@@ -140,29 +140,36 @@ def response(result: dict | None, continued: bool) -> dict:
 
 
 async def _owned_request_result(binding: dict) -> dict | None:
-    """Return an actionable result when Main's own direct child awaits its reply.
+    """Return an actionable result when Main's own direct child awaits Main.
 
-    Ending Main would leave that request unanswered, so no checker is needed.
-    Unreadable Runner evidence is not proof of no request; the full check decides.
+    A pending native request needs Main's reply, and a latest-Round result of
+    Main's own root Session needs Main's decision, so no checker is needed.
+    Unreadable Runner or result evidence is not proof of neither; the full
+    check decides.
     """
-    from graphtraj.execution.runner_control import owned_root_requests
+    from graphtraj.execution.runner_control import owned_root_requests, owned_root_undecided_results
     from graphtraj.execution.runner_models import RunnerError
     from graphtraj.workspace.runner_project import discover_runner_directory
 
+    root = Path(binding['cwd'])
     try:
-        owned = await asyncio.to_thread(
-            owned_root_requests, discover_runner_directory(Path(binding['cwd'])), binding['connection'],
-        )
-    except (RunnerError, OSError, ValueError):
+        owned = await asyncio.to_thread(owned_root_requests, discover_runner_directory(root), binding['connection'])
+        if owned:
+            pending = '; '.join(f"{mapping['alias']} awaits {request.get('method')} request {request.get('request_id')}"
+                                for mapping, request in owned)
+            reason = f"Main's direct child Session needs its native reply; no checker ran. {pending}."
+        else:
+            owned = await asyncio.to_thread(owned_root_undecided_results, root, binding['connection'])
+            submitted = '; '.join(f"{mapping['alias']} submitted {submission['candidate']}"
+                                  for mapping, submission in owned)
+            reason = f'Main must decide this result; no checker ran. {submitted}.'
+    except (RunnerError, OSError, ValueError, KeyError, TypeError):
         return None
     if not owned:
         return None
-    waiting = '; '.join(f"{mapping['alias']} awaits {request.get('method')} request {request.get('request_id')}"
-                        for mapping, request in owned)
     return {'outcome': 'completed', 'decided_before_fork': True,
             'usage': CheckUsage(0, 0, 0, 0, 0, 0), 'output': json.dumps({
-        'status': 'actionable', 'conclusion': 'Main must continue this turn.',
-        'reason': f"Main's direct child Session needs its native reply; no checker ran. {waiting}.",
+        'status': 'actionable', 'conclusion': 'Main must continue this turn.', 'reason': reason,
         'nodes': sorted({mapping['task_id'] for mapping, _ in owned}),
     })}
 

@@ -243,18 +243,63 @@ def owned_root_requests(runner_directory: Path, connection: Mapping[str, Any]) -
     -------
     Each owned Session mapping with one of its pending requests.
     """
-    records, failures = _recorded_sessions(runner_directory)
-    if failures:
-        raise failures[0][1]
     pending = []
-    for alias, mapping in sorted(records.items()):
-        owner = mapping.get('parent_connection')
-        if (mapping.get('parent') is not None or not isinstance(owner, dict)
-                or any(owner.get(key) != connection.get(key) for key in ('runtime', 'session', 'codex_home'))):
-            continue
+    for alias, mapping in _owned_roots(runner_directory, connection):
         _, directory = read_alias_mapping(runner_directory, alias)
         pending.extend((mapping, request) for request in _execution_requests(mapping, directory))
     return pending
+
+
+def owned_root_undecided_results(harness_root: Path, connection: Mapping[str, Any]) -> list[tuple[dict, dict]]:
+    """Return a host Main's root Sessions whose latest-Round submission is undecided.
+
+    Main directly owns these Sessions, so their submitted results are Main's
+    to decide. An unreadable Session, Task, Team or Worldline record raises.
+
+    Returns
+    -------
+    Each owned Session mapping with its undecided ``result-submitted`` event.
+    """
+    from graphtraj.graph.delivery_state import read_team
+    from graphtraj.graph.delivery_worldline import read_worldline
+    from graphtraj.graph.task_graph import _load_states
+
+    roots = _owned_roots(discover_runner_directory(harness_root), connection)
+    if not roots:
+        return []
+    configuration = load_project_configuration(harness_root)
+    events = read_worldline(configuration.state, configuration.harness_root)
+    decided = {event['submission_id'] for event in events if 'submission_id' in event}
+    tasks = _load_states(configuration.state / 'tasks')
+    undecided = []
+    for alias, mapping in roots:
+        directory, _ = tasks[mapping['task_id']]
+        team = read_team(directory / 'teams' / str(mapping['team_generation']) / 'team.yml')
+        # Only the latest submission in the current Round can be decided.
+        submissions = [event for event in events if event['event'] == 'result-submitted'
+                       and event.get('task_id') == mapping['task_id']
+                       and event.get('team_ordinal') == mapping['team_generation']
+                       and event.get('round') == team['current_round']]
+        if (submissions and submissions[-1].get('alias') == alias
+                and submissions[-1]['event_id'] not in decided):
+            undecided.append((mapping, submissions[-1]))
+    return undecided
+
+
+def _owned_roots(runner_directory: Path, connection: Mapping[str, Any]) -> list[tuple[str, dict]]:
+    """Return the top-level Sessions whose recorded native owner is ``connection``.
+
+    Ownership follows ``is_direct_owner``; any unreadable record raises.
+    """
+    records, failures = _recorded_sessions(runner_directory)
+    if failures:
+        raise failures[0][1]
+    return [
+        (alias, mapping) for alias, mapping in sorted(records.items())
+        if mapping.get('parent') is None and isinstance(mapping.get('parent_connection'), dict)
+        and all(mapping['parent_connection'].get(key) == connection.get(key)
+                for key in ('runtime', 'session', 'codex_home'))
+    ]
 
 
 def reply_to_request(alias: str, request: dict, response: dict, cwd: Path) -> dict:

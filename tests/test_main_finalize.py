@@ -463,11 +463,12 @@ def test_checker_observer_does_not_answer_main_approval(
 
 @contextmanager
 def owned_child(root: Path, requests: list, *, outcome: str | None = None,
-                drop: str | None = None, on_query: Callable[[], None] | None = None):
+                drop: str | None = None, on_query: Callable[[], None] | None = None,
+                alias: str = 'engineer@x1', task_id: str = '237', parent: str | None = None):
     """Run Main's own top-level Runner Session with a live control owner."""
     from graphtraj.execution.runner_connection import worker_connection
 
-    directory = root / '.graphtraj/runner/sessions/engineer@x1'
+    directory = root / '.graphtraj/runner/sessions' / alias
     directory.mkdir(parents=True)
 
     def operate(request: dict) -> dict:
@@ -479,9 +480,9 @@ def owned_child(root: Path, requests: list, *, outcome: str | None = None,
 
     with worker_connection(directory, operate) as address:
         mapping = {
-            'alias': 'engineer@x1', 'runtime': 'claude', 'session': 'native-child',
-            'execution_id': 'child-execution', 'task_id': '237', 'team_generation': 1,
-            'role': 'engineer', 'parent': None, 'retained_batch_file': 'batch.yml',
+            'alias': alias, 'runtime': 'claude', 'session': 'native-child',
+            'execution_id': 'child-execution', 'task_id': task_id, 'team_generation': 1,
+            'role': 'engineer', 'parent': parent, 'retained_batch_file': 'batch.yml',
             'parent_connection': {'runtime': 'codex', 'session': 'main', 'codex_home': str(root)},
             'worktree_path': str(root), 'trace_file': 'events.jsonl', 'worker_pid': 1,
             'runtime_pid': 1, 'control_directory': address, 'report_files': [],
@@ -548,6 +549,90 @@ def test_new_input_before_a_pre_fork_verdict_cancels_it(
 
     with owned_child(root, [{'request_id': 'permission-1', 'method': 'claude/can_use_tool'}],
                      on_query=accept_send):
+        result = stop(binding)
+    assert set(result) == {'systemMessage'} and 'cancelled' in result['systemMessage']
+    assert 'thread/fork' not in wire(root)
+
+
+def submitted_result(root: Path, alias: str = 'research@x1') -> tuple[Path, dict]:
+    """Register Task 148 and record one latest-Round submission from ``alias``."""
+    from graphtraj.graph.delivery_worldline import append_project_worldline_event, read_worldline
+    from test_generic_members import _register_research_team
+
+    configuration = root / '.graphtraj/config.yml'
+    document = yaml.safe_load(configuration.read_text())
+    document['paths']['state'] = 'state'
+    configuration.write_text(yaml.safe_dump(document))
+    _register_research_team(root, multiple=False)
+    state = root / 'state'
+    submission = append_project_worldline_event(state, root, {
+        'event': 'result-submitted', 'task_id': '148', 'alias': alias, 'session': 'native-child',
+        'role': 'researcher', 'team_ordinal': 1, 'round': 1, 'candidate': 'a' * 40,
+        'result_refs': ['result.md'], 'completion': 'Done', 'unresolved': [],
+        'caused_by_event_ids': [read_worldline(state, root)[-1]['event_id']], 'evidence_refs': [],
+    })
+    return state, submission
+
+
+def test_undecided_root_result_continues_main_without_a_checker(host: tuple[Path, Path]) -> None:
+    """Main's own child result awaiting Main's decision is actionable before any fork."""
+    root, binding = host
+    submitted_result(root)
+    with owned_child(root, [], alias='research@x1', task_id='148'):
+        result = stop(binding)
+    assert result['decision'] == 'block'
+    assert 'Completion Check · actionable' in result['reason'] and 'Related · 148' in result['reason']
+    assert 'research@x1 submitted ' + 'a' * 40 in result['reason']
+    assert 'Main must decide this result; no checker ran' in result['reason']
+    assert 'thread/fork' not in wire(root)
+
+
+@pytest.mark.parametrize('decision', ['accepted', 'rejected'])
+def test_decided_root_result_reaches_the_full_check(host: tuple[Path, Path], decision: str) -> None:
+    """A result Main already decided is no longer evidence for continuing."""
+    from graphtraj.graph.delivery_worldline import append_project_worldline_event
+
+    root, binding = host
+    state, submission = submitted_result(root)
+    append_project_worldline_event(state, root, {
+        'event': 'team-round-accepted' if decision == 'accepted' else 'team-round-implementation-rejected',
+        'caused_by_event_ids': [submission['event_id']], 'evidence_refs': [], 'task_id': '148',
+        'team_ordinal': 1, 'team_round': 1, 'candidate': 'a' * 40, 'decision': decision,
+        'submission_id': submission['event_id'], 'reason': 'Decided by Main.', 'alias': None, 'session': None,
+    })
+    with owned_child(root, [], alias='research@x1', task_id='148'):
+        result = stop(binding)
+    assert 'Completion Check · completed' in result['systemMessage']
+    assert 'thread/fork' in wire(root)
+
+
+@pytest.mark.parametrize('case', ['leader-child', 'unreadable'])
+def test_other_results_reach_the_full_check(host: tuple[Path, Path], case: str) -> None:
+    """A Leader's child result is the Leader's to decide; unreadable results prove nothing."""
+    root, binding = host
+    state, _ = submitted_result(root)
+    if case == 'unreadable':
+        shard = next((state / 'worldline').glob('*.jsonl'))
+        shard.write_text(shard.read_text() + 'not json\n')
+    with owned_child(root, [], alias='research@x1', task_id='148',
+                     parent='leader@x1' if case == 'leader-child' else None):
+        result = stop(binding)
+    assert 'Completion Check · completed' in result['systemMessage']
+    assert 'thread/fork' in wire(root)
+
+
+def test_new_input_cancels_an_undecided_result_verdict(host: tuple[Path, Path]) -> None:
+    """The result verdict is also rechecked against new input before it returns."""
+    root, binding = host
+    submitted_result(root)
+
+    def accept_send() -> None:
+        """Append the receipt a native-accepted send writes to this attempt."""
+        turn, = binding.parent.glob('pending-*/turn')
+        with turn.open('a', encoding='utf-8') as stream:
+            stream.write(json.dumps({'turn': 'main-turn', 'submitted_at': 1, 'accepted_at': 2}) + '\n')
+
+    with owned_child(root, [], alias='research@x1', task_id='148', on_query=accept_send):
         result = stop(binding)
     assert set(result) == {'systemMessage'} and 'cancelled' in result['systemMessage']
     assert 'thread/fork' not in wire(root)

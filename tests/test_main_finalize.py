@@ -1124,6 +1124,93 @@ def test_native_mcp_call_context_does_not_leak_between_sessions(
     assert caller_alias(runner) is None
 
 
+@pytest.fixture
+def routed(host: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch) -> tuple[Path, Path, list[str]]:
+    """Record the Codex home each identity read targets, as in an MCP server env."""
+    root, binding = host
+    homes: list[str] = []
+    connect = finalize.proxy
+
+    def record(connection: dict, on_request=None):
+        """Retain the daemon selection, then use the same fake native peer."""
+        homes.append(connection['codex_home'])
+        return connect(connection, on_request)
+
+    monkeypatch.setattr(finalize, 'proxy', record)
+    monkeypatch.delenv('CODEX_HOME', raising=False)
+    return root, binding, homes
+
+
+def test_mcp_caller_without_codex_home_uses_its_recorded_daemon(
+    routed: tuple[Path, Path, list[str]],
+) -> None:
+    """An MCP server env omits CODEX_HOME; Main's association names its daemon."""
+    from graphtraj.execution.runner_status import caller_alias
+    from graphtraj.runtimes.codex.host_events import calling_session
+    from graphtraj.workspace.runner_project import discover_runner_directory
+
+    root, _, homes = routed
+    with calling_session('main'):
+        assert caller_alias(discover_runner_directory(root)) is None
+    assert homes == [str(root)]
+
+
+def test_explicit_codex_home_keeps_precedence(
+    routed: tuple[Path, Path, list[str]], monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A caller that carries CODEX_HOME keeps it and is still verified natively."""
+    from graphtraj.execution.runner_status import caller_alias
+    from graphtraj.runtimes.codex.host_events import calling_session
+    from graphtraj.workspace.runner_project import discover_runner_directory
+
+    root, _, homes = routed
+    monkeypatch.setenv('CODEX_HOME', str(root / 'explicit'))
+    with calling_session('main'):
+        assert caller_alias(discover_runner_directory(root)) is None
+    assert homes == [str(root / 'explicit')]
+
+
+@pytest.mark.parametrize('record', ['invalid', 'conflicting'])
+def test_unusable_association_never_routes_elsewhere(
+    routed: tuple[Path, Path, list[str]], record: str,
+) -> None:
+    """An unreadable or contradictory association fails before any daemon is chosen."""
+    import hashlib
+
+    from graphtraj.execution.runner_status import caller_alias
+    from graphtraj.runtimes.codex.host_events import calling_session
+    from graphtraj.workspace.runner_project import discover_runner_directory
+
+    root, binding, homes = routed
+    if record == 'invalid':
+        binding.write_text('session: main\n')
+    else:
+        checker = binding.parent / 'checks' / hashlib.sha256(b'main').hexdigest() / 'session.yml'
+        checker.parent.mkdir(parents=True)
+        checker.write_text(yaml.safe_dump({'runtime': 'codex', 'session': 'main', 'parent': 'other',
+                                           'parent_connection': {'codex_home': str(root / 'other')}}))
+    with calling_session('main'), pytest.raises(RunnerError):
+        caller_alias(discover_runner_directory(root))
+    assert homes == []
+
+
+def test_unregistered_default_home_entry_keeps_official_resolution(
+    routed: tuple[Path, Path, list[str]],
+) -> None:
+    """A Session with no association still reaches Codex's default home and is verified."""
+    import os
+
+    from graphtraj.execution.runner_status import caller_alias
+    from graphtraj.runtimes.codex.host_events import calling_session
+    from graphtraj.workspace.runner_project import discover_runner_directory
+
+    root, _, homes = routed
+    (root / 'options.json').write_text(json.dumps({'read_id_from_request': True}))
+    with calling_session('fresh'), pytest.raises(RunnerError, match='association is unavailable'):
+        caller_alias(discover_runner_directory(root))
+    assert homes == [os.path.abspath(Path.home() / '.codex')]
+
+
 def test_hook_configuration_is_only_adoption_material(tmp_path: Path) -> None:
     """Producing configuration does not activate hooks or require identity input."""
     reply = CliRunner().invoke(stop_hook, ['--configuration'])

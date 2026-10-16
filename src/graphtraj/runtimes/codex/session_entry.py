@@ -147,6 +147,50 @@ def association_status(connection: dict, thread: dict) -> dict:
         return {'status': 'unavailable', 'error': str(error)}
 
 
+def routed_connection(runner: Path, connection: dict) -> dict:
+    """Route a caller without CODEX_HOME to the daemon its association recorded.
+
+    Codex starts MCP servers with an environment allowlist that omits
+    CODEX_HOME, so the default home may name another daemon. An established
+    Main or checker association records the home that reached this Session.
+    Without one, the official default-home resolution stays unchanged. The
+    record only selects the daemon; caller_identity still verifies the thread.
+
+    Raises
+    ------
+    RunnerError
+        When an existing association is unreadable or names conflicting homes.
+    """
+    import hashlib
+    import os
+    import yaml
+    from graphtraj.execution.runner_models import RunnerError
+
+    if os.environ.get('CODEX_HOME'):
+        return connection
+    session = connection['session']
+    main = runner / 'main-sessions' / ('finalize_' + hashlib.sha256(('codex:' + session).encode()).hexdigest())
+    records = [(main / 'session.yml', 'connection')] if (main / 'session.yml').exists() else []
+    records.extend((path, 'parent_connection') for path in (runner / 'main-sessions').glob(
+        '*/checks/' + hashlib.sha256(session.encode()).hexdigest() + '/session.yml'))
+    try:
+        homes = set()
+        for path, field in records:
+            record = yaml.safe_load(path.read_text(encoding='utf-8'))
+            if record['runtime'] != 'codex' or record['session'] != session:
+                raise ValueError('The association names another Session.')
+            home = record[field]['codex_home']
+            if not isinstance(home, str) or not Path(home).is_absolute():
+                raise ValueError('The association has no absolute Codex home.')
+            homes.add(home)
+    except (OSError, KeyError, TypeError, ValueError, yaml.YAMLError) as error:
+        raise RunnerError('authority-unavailable',
+                          f'The recorded native association cannot route this Session: {error}') from error
+    if len(homes) > 1:
+        raise RunnerError('authority-unavailable', 'Recorded native associations name conflicting Codex homes.')
+    return {**connection, 'codex_home': homes.pop()} if homes else connection
+
+
 def caller_identity(runner: Path, connection: dict) -> str | None:
     """Resolve the native caller against its source and existing association.
 

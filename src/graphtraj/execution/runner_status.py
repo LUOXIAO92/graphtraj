@@ -162,7 +162,9 @@ def caller_alias(runner_directory: Path) -> str | None:
         if connection is None:
             return None
         if connection['runtime'] == 'codex':
-            from graphtraj.runtimes.codex.session_entry import caller_identity
+            from graphtraj.runtimes.codex.session_entry import caller_identity, routed_connection
+
+            connection = routed_connection(runner_directory, connection)
         elif connection['runtime'] == 'pi':
             from graphtraj.runtimes.pi.session_entry import caller_identity
         elif connection['runtime'] == 'dsh':

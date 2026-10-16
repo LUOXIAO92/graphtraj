@@ -1238,3 +1238,49 @@ def test_task_cli_recovery_matches_shared_tool(
     assert yaml.safe_load(cli.output) == invoke(root, request)
     assert len(proposals) == 1
     assert proposals[0]['request']['resume'] is False
+
+
+def unconfirmed(root: Path, mapping: dict) -> Path:
+    """Mark the target's retained outcome as ended without confirmed termination."""
+    _, directory = recovery.read_alias_mapping(root / '.graphtraj/runner', mapping['alias'])
+    execution = directory / 'execution.yml'
+    outcome = yaml.safe_load(execution.read_text())
+    execution.write_text(yaml.safe_dump({**outcome, 'terminal_confirmed': False}))
+    return directory
+
+
+def test_recovery_first_confirms_an_unconfirmed_target(target: tuple, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Recovery runs the interrupt's own confirmation before its stop gate."""
+    root, _, mapping, arguments = target
+    directory = unconfirmed(root, mapping)
+    adapter = type(recovery.runtime_adapter.select_runtime_adapter(mapping['runtime']))
+    confirmed = []
+    monkeypatch.setattr(adapter, 'confirm_termination',
+                        lambda self, *args: confirmed.append(args[1]['alias']) or {'group_stopped': True},
+                        raising=False)
+    monkeypatch.setattr(recovery, '_send_session_locked', lambda *args, **kwargs: {'session': mapping['session']})
+    result = invoke(root, {**arguments, 'additional_minutes': 0, 'restore_active': False})
+    assert result['recovery_status'] == 'resumed', result
+    assert confirmed == [mapping['alias']]
+    receipt = yaml.safe_load((directory / f"terminal-confirmation-{mapping['execution_id']}.yml").read_text())
+    assert receipt['terminal_confirmed'] is True and receipt['evidence'] == {'group_stopped': True}
+
+
+def test_failed_confirmation_still_refuses_recovery(target: tuple, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Unconfirmable termination keeps the original refusal and fabricates nothing."""
+    root, _, mapping, arguments = target
+    directory = unconfirmed(root, mapping)
+    adapter = type(recovery.runtime_adapter.select_runtime_adapter(mapping['runtime']))
+
+    def refuse(self: object, *args: object) -> dict:
+        """Report that the original process group cannot be shown stopped."""
+        raise recovery.runtime_adapter.RuntimeAdapterError(
+            'termination-unconfirmed', 'Group still present.', terminal_confirmed=False)
+
+    monkeypatch.setattr(adapter, 'confirm_termination', refuse, raising=False)
+    sent = []
+    monkeypatch.setattr(recovery, '_send_session_locked', lambda *args, **kwargs: sent.append(args))
+    with pytest.raises(RunnerError, match='Group still present') as refused:
+        invoke(root, {**arguments, 'additional_minutes': 0, 'restore_active': False})
+    assert refused.value.code == 'termination-unconfirmed' and not sent
+    assert not (directory / f"terminal-confirmation-{mapping['execution_id']}.yml").exists()

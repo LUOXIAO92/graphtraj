@@ -6,19 +6,22 @@ import copy
 import hashlib
 import json
 import math
+import os
 from pathlib import Path
 from typing import Any
 
 import yaml
 
 from graphtraj import file_lock
-from graphtraj.execution.runner_control import _require_project_events, _send_session_locked
+from graphtraj.execution.runner_control import (
+    _confirm_termination, _require_project_events, _send_session_locked,
+)
 from graphtraj.execution.runner_heartbeat import execution_start_lock
 from graphtraj.execution.runner_io import write_yaml_durably
 from graphtraj.execution.runner_models import RunnerError
 from graphtraj.execution.runner_status import (
-    caller_alias, read_alias_mapping, require_direct_authority, require_stopped_subtree,
-    require_execution_allowed, caller_runtime_name,
+    caller_alias, read_alias_mapping, read_execution_result, require_direct_authority,
+    require_stopped_subtree, require_execution_allowed, caller_runtime_name,
 )
 from graphtraj.graph.delivery_state import read_team
 from graphtraj.graph.delivery_worldline import append_project_worldline_event, read_worldline, _read_shards
@@ -78,6 +81,7 @@ def approved_recovery(arguments: dict, cwd: Path) -> dict:
         'request': request, 'before': before, 'after': after,
         'authority': [event for event in events if event['event_id'] in causes],
     }
+    _confirm_unconfirmed_target(project.runner_directory, alias)
     require_stopped_subtree(project.runner_directory, alias)
     if minutes:
         decision = review_proposal(proposal, cwd, project.runner_directory)
@@ -149,6 +153,23 @@ def _repair_snapshot(project: Any, before: dict, request: dict) -> dict:
     if not after['task']['active'] or after['team']['status'] != 'active':
         raise RunnerError('team-not-active', 'This recovery needs restore_active to repair administrative state.')
     return after
+
+
+def _confirm_unconfirmed_target(runner: Path, alias: str) -> None:
+    """Run the interrupt's own termination confirmation for an unconfirmed target.
+
+    Only a retained outcome marked unconfirmed and still lacking its receipt is
+    rechecked, under the same lock and Adapter evidence; failure still refuses.
+    """
+    mapping, directory = read_alias_mapping(runner, alias)
+    execution = directory / 'execution.yml'
+    if not execution.is_file() or execution.is_symlink():
+        return
+    if read_execution_result(execution).get('terminal_confirmed') is not False:
+        return
+    if os.path.lexists(directory / f"terminal-confirmation-{mapping['execution_id']}.yml"):
+        return
+    _confirm_termination(alias, directory, mapping)
 
 
 def _snapshot(

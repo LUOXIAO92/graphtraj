@@ -21,6 +21,7 @@ def setup(
     fake_codex: FakeCodex,
     tmp_path: Path,
     native: str | None = None,
+    request: str = 'Reply with only CLAUDE-RUNNER-320. Do not use tools.',
 ) -> tuple[Path, dict]:
     """Create a disposable Harness using Setup; configure its explicit test role."""
     root, _, _, environment = configure_harness(commands, repository, fake_codex, tmp_path)
@@ -45,7 +46,7 @@ def setup(
     if os.environ.get('CLAUDE_CONFIG_DIR'):
         environment['CLAUDE_CONFIG_DIR'] = os.environ['CLAUDE_CONFIG_DIR']
     task = _task('320', 'claude-probe')
-    task['body'] = BODY + 'Reply with only CLAUDE-RUNNER-320. Do not use tools.'
+    task['body'] = BODY + request
     _register(commands, root, task)
     _change_status(commands, root, '320', 'ready')
     return root, environment
@@ -411,6 +412,89 @@ def test_real_claude_public_runner_startup(
     terminal = settled(installed_commands, root, environment, task['alias'])
     print(json.dumps(terminal))
     assert terminal['last_outcome'] == 'completed', terminal
+
+
+@pytest.mark.skipif(not os.environ.get('CLAUDE_REAL_TEST_BINARY'), reason='Explicit real CLI probe only')
+def test_real_claude_input_echo_order(
+    installed_commands: InstalledCommands,
+    temporary_git_repository: Path,
+    fake_codex: FakeCodex,
+    tmp_path: Path,
+) -> None:
+    """Record where Claude echoes input delivered while a permission request waits.
+
+    Only record kinds, states, identities and marker presence are printed;
+    the probe judges nothing and always interrupts its own Session.
+    """
+    root, environment = setup(
+        installed_commands, temporary_git_repository, fake_codex, tmp_path,
+        os.environ['CLAUDE_REAL_TEST_BINARY'],
+        'Use the Write tool to create probe-325.txt containing PROBE-325, then reply with only DONE-325.',
+    )
+    batch = root / 'echo-probe.yml'
+    batch.write_text(yaml.safe_dump({'tasks': [{'task_id': '320', 'role': 'researcher'}]}))
+    launched = command(installed_commands, root, environment, '--swarm-input', str(batch))
+    print('REAL_CLAUDE_325_HARNESS=' + str(root))
+    assert launched.returncode == 0, launched.stdout + launched.stderr
+    alias = yaml.safe_load(launched.stdout)['tasks'][0]['alias']
+    trace, = (root / '.graphtraj/state').glob(f'**/traces/{alias}/events.jsonl')
+
+    def records() -> list[dict]:
+        """Read the retained native records in arrival order."""
+        return [json.loads(line) for line in trace.read_text().splitlines()]
+
+    def wait(condition, seconds: float) -> bool:
+        """Poll an observation without treating timeout as evidence."""
+        deadline = time.monotonic() + seconds
+        while time.monotonic() < deadline:
+            if condition():
+                return True
+            time.sleep(0.2)
+        return False
+
+    def pending() -> list[dict]:
+        """Read the public pending native requests of this Session."""
+        listed = command(installed_commands, root, environment, 'requests', alias)
+        assert listed.returncode == 0, listed.stdout + listed.stderr
+        return yaml.safe_load(listed.stdout)['requests']
+
+    marks = {}
+    try:
+        assert wait(lambda: bool(pending()), 180), 'no native permission request'
+        request = pending()[0]
+        marks['request_method'] = request['method']
+        marks['before_send_2'] = len(records())
+        sent = command(installed_commands, root, environment, 'send', alias, '--instruction',
+                       'MARK-325-SECOND: after the file step also reply with SECOND-325.',
+                       '--caused-by-event-id', events(root)[-1]['event_id'])
+        assert sent.returncode == 0, sent.stdout + sent.stderr
+        marks['after_send_2'] = len(records())
+        time.sleep(5)
+        marks['before_reply'] = len(records())
+        request_file = tmp_path / 'probe-request.yml'
+        request_file.write_text(yaml.safe_dump(request))
+        replied = command(installed_commands, root, environment, 'reply', alias,
+                          '--request-file', str(request_file), '--response', json.dumps({'behavior': 'allow'}))
+        assert replied.returncode == 0, replied.stdout + replied.stderr
+        marks['after_reply'] = len(records())
+        wait(lambda: any(record.get('type') == 'result' for record in records()[marks['after_reply']:]), 240)
+        time.sleep(20)
+    finally:
+        retained = records()
+        summary = [{
+            'line': index, 'type': record.get('type'), 'subtype': record.get('subtype'),
+            'state': record.get('state'), 'isReplay': record.get('isReplay'),
+            'uuid': record.get('uuid'), 'parent_tool_use_id': record.get('parent_tool_use_id'),
+            'tool_result': '"tool_result"' in json.dumps(record),
+            'mark_1': 'probe-325.txt' in json.dumps(record),
+            'mark_2': 'MARK-325-SECOND' in json.dumps(record),
+            'keys': sorted(record),
+        } for index, record in enumerate(retained) if record.get('type') != 'stream_event']
+        print('REAL_CLAUDE_325_MARKS=' + json.dumps(marks))
+        print('REAL_CLAUDE_325_ORDER=' + json.dumps(summary))
+        print('REAL_CLAUDE_325_STATUS=' + command(installed_commands, root, environment, 'status', alias).stdout)
+        stopped = command(installed_commands, root, environment, 'interrupt', alias)
+        print('REAL_CLAUDE_325_INTERRUPT=' + stopped.stdout + stopped.stderr)
 
 
 @pytest.mark.skipif(not os.environ.get('CLAUDE_REAL_TEST_BINARY'), reason='Explicit real CLI probe only')

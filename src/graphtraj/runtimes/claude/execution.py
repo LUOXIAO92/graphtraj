@@ -170,6 +170,8 @@ class ClaudeExecution:
             settings['permissions']['defaultMode'] = request['permission_mode']
         argv = [request['executable'], '--print', '--verbose', '--input-format', 'stream-json',
                 '--output-format', 'stream-json', '--include-partial-messages',
+                # Native echoes of stdin input stay in the Trace as consumption evidence.
+                '--replay-user-messages',
                 '--permission-prompt-tool', 'stdio',
                 '--restricted', '--strict-mcp-config',
                 '--mcp-config', json.dumps(mcp), '--settings', json.dumps(settings),

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from contextlib import contextmanager
 import sys
 from pathlib import Path
 from typing import Awaitable, Callable
@@ -60,6 +61,7 @@ for line in sys.stdin:
         if options.get('read_id_from_request'): result['thread']['id'] = params['threadId']
         if options.get('session_id_from_request'): result['thread']['sessionId'] = params['threadId']
     elif method == 'thread/resume':
+        if options.get('disconnect_on_resume'): sys.exit(0)
         result = {'thread':main_thread(), **options.get('configuration', {})}
         if options.get('parent_approval'):
             send({'id':'parent-approval','method':'item/commandExecution/requestApproval',
@@ -70,6 +72,7 @@ for line in sys.stdin:
             (root / 'snapshot-fixed').touch()
             while not (root / 'delivery-sent').exists(): time.sleep(.01)
         result = {'data':[{'id':options.get('current_turn','main-turn'), 'status':'inProgress'}]}
+        if options.get('supersede_after_turn_read'): options['current_turn'] = 'new-main-turn'
     elif method == 'thread/fork':
         if options.get('history_mode') == 'paginated' and not params.get('excludeTurns'):
             send({'id':request['id'],'error':{'code':-32600,'message':'history must be excluded'}})
@@ -456,6 +459,119 @@ def test_checker_observer_does_not_answer_main_approval(
     assert 'Completion Check · completed' in result['systemMessage']
     wire = [json.loads(line) for line in (root / 'wire.jsonl').read_text().splitlines()]
     assert not any(item.get('id') == 'parent-approval' for item in wire)
+
+
+@contextmanager
+def owned_child(root: Path, requests: list, *, outcome: str | None = None,
+                drop: str | None = None, on_query: Callable[[], None] | None = None):
+    """Run Main's own top-level Runner Session with a live control owner."""
+    from graphtraj.execution.runner_connection import worker_connection
+
+    directory = root / '.graphtraj/runner/sessions/engineer@x1'
+    directory.mkdir(parents=True)
+
+    def operate(request: dict) -> dict:
+        """Answer the Runner's own pending-request query."""
+        assert request['operation'] == 'requests'
+        if on_query is not None:
+            on_query()
+        return {'requests': requests}
+
+    with worker_connection(directory, operate) as address:
+        mapping = {
+            'alias': 'engineer@x1', 'runtime': 'claude', 'session': 'native-child',
+            'execution_id': 'child-execution', 'task_id': '237', 'team_generation': 1,
+            'role': 'engineer', 'parent': None, 'retained_batch_file': 'batch.yml',
+            'parent_connection': {'runtime': 'codex', 'session': 'main', 'codex_home': str(root)},
+            'worktree_path': str(root), 'trace_file': 'events.jsonl', 'worker_pid': 1,
+            'runtime_pid': 1, 'control_directory': address, 'report_files': [],
+        }
+        mapping.pop(drop, None)
+        (directory / 'mapping.yml').write_text(yaml.safe_dump(mapping))
+        if outcome is not None:
+            (directory / 'execution.yml').write_text(yaml.safe_dump({'outcome': outcome}))
+        yield
+
+
+def wire(root: Path) -> list[str]:
+    """Return the native methods this Stop sent to its host."""
+    return [json.loads(line)['method'] for line in (root / 'wire.jsonl').read_text().splitlines()]
+
+
+def test_pending_child_request_continues_main_without_a_checker(host: tuple[Path, Path]) -> None:
+    """Main's own child waiting on its reply is actionable before any fork or model."""
+    root, binding = host
+    request = {'request_id': 'permission-1', 'method': 'claude/can_use_tool'}
+    with owned_child(root, [request]):
+        result = stop(binding)
+    assert result['decision'] == 'block'
+    assert 'Completion Check · actionable' in result['reason']
+    assert 'Related · 237' in result['reason']
+    assert 'engineer@x1' in result['reason'] and 'permission-1' in result['reason']
+    assert 'Input 0' in result['reason'] and 'no checker ran' in result['reason']
+    assert 'thread/fork' not in wire(root) and 'turn/start' not in wire(root)
+
+
+@pytest.mark.parametrize('state', ['running', 'runtime-error', 'interrupted', 'unreadable'])
+def test_children_without_a_pending_request_reach_the_full_check(
+    host: tuple[Path, Path], state: str,
+) -> None:
+    """A running, failed, stopped or unreadable child is decided by the full check.
+
+    Terminal and unreadable children still offer a request, so only their
+    recorded state keeps it from deciding the Stop.
+    """
+    root, binding = host
+    offered = [] if state == 'running' else [{'request_id': 'stale-1', 'method': 'claude/can_use_tool'}]
+    with owned_child(root, offered, outcome=state if state in ('runtime-error', 'interrupted') else None,
+                     drop='session' if state == 'unreadable' else None):
+        result = stop(binding)
+    assert 'Completion Check · completed' in result['systemMessage']
+    assert 'thread/fork' in wire(root) and 'turn/start' in wire(root)
+
+
+@pytest.mark.parametrize('change', ['receipt', 'turn'])
+def test_new_input_before_a_pre_fork_verdict_cancels_it(
+    host: tuple[Path, Path], change: str,
+) -> None:
+    """A verdict decided before the fork is never returned for a superseded snapshot."""
+    root, binding = host
+    if change == 'turn':
+        (root / 'options.json').write_text(json.dumps({'supersede_after_turn_read': True}))
+
+    def accept_send() -> None:
+        """Append the receipt a native-accepted send writes to this attempt."""
+        if change == 'receipt':
+            turn, = binding.parent.glob('pending-*/turn')
+            with turn.open('a', encoding='utf-8') as stream:
+                stream.write(json.dumps({'turn': 'main-turn', 'submitted_at': 1, 'accepted_at': 2}) + '\n')
+
+    with owned_child(root, [{'request_id': 'permission-1', 'method': 'claude/can_use_tool'}],
+                     on_query=accept_send):
+        result = stop(binding)
+    assert set(result) == {'systemMessage'} and 'cancelled' in result['systemMessage']
+    assert 'thread/fork' not in wire(root)
+
+
+def test_unmarked_childless_result_is_not_a_verdict(
+    host: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Only the explicit pre-fork decision may lack a bound checker."""
+    root, binding = host
+    output = json.dumps({'status': 'completed', 'conclusion': 'Done.', 'reason': 'Forged.', 'nodes': []})
+    monkeypatch.setattr(finalize, 'check', lambda *args: {'outcome': 'completed', 'output': output})
+    result = stop(binding)
+    assert result['continue'] is False and 'Completion Check · error' in result['stopReason']
+
+
+def test_lost_host_connection_is_a_check_error(host: tuple[Path, Path]) -> None:
+    """A transport failure is a visible error, never a waiting or completed verdict."""
+    root, binding = host
+    (root / 'options.json').write_text(json.dumps({'disconnect_on_resume': True}))
+    result = stop(binding)
+    assert result['continue'] is False
+    assert result['stopReason'].startswith('Completion Check · error')
+    assert 'waiting' not in result['stopReason'] and 'turn/start' not in wire(root)
 
 
 def test_checker_approval_is_left_to_its_native_owner(host: tuple[Path, Path]) -> None:

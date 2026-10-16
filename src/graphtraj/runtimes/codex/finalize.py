@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Any, Awaitable, Callable
 
 from graphtraj.runtimes.codex.app_server import CodexAppServer, CodexServerRequest
-from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError
+from graphtraj.runtimes.runtime_adapter import CheckUsage, RuntimeAdapterError
 from graphtraj.workspace.runner_project import runtime_executable
 from graphtraj.runtimes.codex.session_entry import session_source, event_record
 from graphtraj.runtimes.codex.usage import CodexCheckUsage
@@ -139,6 +139,34 @@ def response(result: dict | None, continued: bool) -> dict:
     return {'continue': False, 'stopReason': message}
 
 
+async def _owned_request_result(binding: dict) -> dict | None:
+    """Return an actionable result when Main's own direct child awaits its reply.
+
+    Ending Main would leave that request unanswered, so no checker is needed.
+    Unreadable Runner evidence is not proof of no request; the full check decides.
+    """
+    from graphtraj.execution.runner_control import owned_root_requests
+    from graphtraj.execution.runner_models import RunnerError
+    from graphtraj.workspace.runner_project import discover_runner_directory
+
+    try:
+        owned = await asyncio.to_thread(
+            owned_root_requests, discover_runner_directory(Path(binding['cwd'])), binding['connection'],
+        )
+    except (RunnerError, OSError, ValueError):
+        return None
+    if not owned:
+        return None
+    waiting = '; '.join(f"{mapping['alias']} awaits {request.get('method')} request {request.get('request_id')}"
+                        for mapping, request in owned)
+    return {'outcome': 'completed', 'decided_before_fork': True,
+            'usage': CheckUsage(0, 0, 0, 0, 0, 0), 'output': json.dumps({
+        'status': 'actionable', 'conclusion': 'Main must continue this turn.',
+        'reason': f"Main's direct child Session needs its native reply; no checker ran. {waiting}.",
+        'nodes': sorted({mapping['task_id'] for mapping, _ in owned}),
+    })}
+
+
 def check(
     binding: dict,
     context: dict,
@@ -210,6 +238,26 @@ def check(
                 prefix='pending-', dir=directory,
             )))
             (pending / 'turn').write_text(context['turn'] + '\n', encoding='utf-8')
+
+            def receipt() -> dict | None:
+                """Read a send appended only after native acceptance of this turn."""
+                lines = (pending / 'turn').read_text(encoding='utf-8').splitlines()
+                if len(lines) < 2:
+                    return None
+                try:
+                    return json.loads(lines[1])
+                except json.JSONDecodeError:
+                    # The sender appends to this file only after native success.
+                    # A concurrent write need not delay cancellation for timing data.
+                    return {'turn': context['turn'], 'submitted_at': None, 'accepted_at': None}
+
+            if (gated := await _owned_request_result(binding)) is not None:
+                # A verdict for a superseded Main turn is never returned.
+                if (not await client.is_current_turn(binding['session'], context['turn'])
+                        or receipt() is not None):
+                    return {'outcome': 'cancelled', 'decided_before_fork': True,
+                            'usage': CheckUsage(0, 0, 0, 0, 0, 0)}
+                return gated
             child = await client.fork_session(parent)
             child_id = child.thread_id
             created(child_id)
@@ -230,17 +278,6 @@ def check(
                                          if key != 'thread' and key in configuration},
             }
 
-            def receipt() -> dict | None:
-                """Read a send appended only after native acceptance of this turn."""
-                lines = (pending / 'turn').read_text(encoding='utf-8').splitlines()
-                if len(lines) < 2:
-                    return None
-                try:
-                    return json.loads(lines[1])
-                except json.JSONDecodeError:
-                    # The sender appends to this file only after native success.
-                    # A concurrent write need not delay cancellation for timing data.
-                    return {'turn': context['turn'], 'submitted_at': None, 'accepted_at': None}
             # Stop's turn is still in progress, so native lastTurnId is invalid.
             # The fork itself fixes its history boundary. Reject a superseding
             # Main turn before starting any model request against that snapshot.

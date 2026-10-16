@@ -214,17 +214,47 @@ def pending_requests(
         raise RunnerError('operation-failed', 'The requested execution is no longer mapped.')
     identity = {'alias': alias, 'session': mapping['session'],
                 'execution_id': mapping['execution_id']}
+    return {**identity, 'requests': _execution_requests(mapping, directory)}
+
+
+def _execution_requests(mapping: Mapping[str, Any], directory: Path) -> list:
+    """Read the mapped execution's pending native requests; a terminal one has none."""
     terminal = directory / 'execution.yml'
     if terminal.is_file():
         read_terminal_outcome(terminal)
-        return {**identity, 'requests': []}
+        return []
     try:
-        return {**identity, **session_operation(mapping, 'requests')}
+        return session_operation(dict(mapping), 'requests')['requests']
     except RunnerError:
         if terminal.is_file():
             read_terminal_outcome(terminal)
-            return {**identity, 'requests': []}
+            return []
         raise
+
+
+def owned_root_requests(runner_directory: Path, connection: Mapping[str, Any]) -> list[tuple[dict, dict]]:
+    """Return pending native requests of the top-level Sessions a host Main owns.
+
+    The trusted host binding supplies ``connection``; ownership is the recorded
+    native owner, as in ``is_direct_owner``. An unreadable record or owner
+    raises, so a caller never treats missing evidence as no request.
+
+    Returns
+    -------
+    Each owned Session mapping with one of its pending requests.
+    """
+    records, failures = _recorded_sessions(runner_directory)
+    if failures:
+        raise failures[0][1]
+    pending = []
+    for alias, mapping in sorted(records.items()):
+        owner = mapping.get('parent_connection')
+        if (mapping.get('parent') is not None or not isinstance(owner, dict)
+                or any(owner.get(key) != connection.get(key) for key in ('runtime', 'session', 'codex_home'))):
+            continue
+        _, directory = read_alias_mapping(runner_directory, alias)
+        pending.extend((mapping, request) for request in _execution_requests(mapping, directory))
+    return pending
 
 
 def reply_to_request(alias: str, request: dict, response: dict, cwd: Path) -> dict:

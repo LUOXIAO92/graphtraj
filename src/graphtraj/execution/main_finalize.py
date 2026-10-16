@@ -172,10 +172,14 @@ def check_main_finalize(binding_file: Path, event: dict[str, Any]) -> dict[str, 
         native = adapter.check_main_finalize(binding, context, prompt, created)
         if native is None:  # The owning host stopped while the checker ran.
             return adapter.finalize_response(None, False)
-        if child_binding is None or native.get('session') != child_binding[0]:
-            raise ValueError('The completion result does not belong to the bound child.')
         usage = adapter.finalize_usage(native)
-        write_yaml_durably(child_binding[1] / 'execution.yml', {**native, 'usage': usage.document()})
+        # Only the Adapter's explicit pre-fork decision has no child; every
+        # other result must belong to the one bound child.
+        if not (child_binding is None and native.get('decided_before_fork') is True
+                and 'session' not in native):
+            if child_binding is None or native.get('session') != child_binding[0]:
+                raise ValueError('The completion result does not belong to the bound child.')
+            write_yaml_durably(child_binding[1] / 'execution.yml', {**native, 'usage': usage.document()})
         if native.get('outcome') == 'cancelled':
             return adapter.finalize_response({'outcome': 'cancelled'}, False)
         if native.get('outcome') == 'error':

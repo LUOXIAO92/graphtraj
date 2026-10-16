@@ -6,9 +6,10 @@ connects to the given socket path (codex-rs/cli/src/main.rs:1400-1408 at
 rust-v0.163.0), and here that path is a temporary listener owned by this run.
 
 Phase A connects to the listener from an unsandboxed child (control). Phase B
-runs the proxy under ``codex sandbox macos`` with workspace-write and network
-access disabled. B accepted=false with an "Operation not permitted" stderr
-shows the seatbelt blocks the socket connect; accepted=true refutes that.
+runs the proxy under ``codex sandbox -P :workspace --log-denials``, the formal
+checker's permission profile, with no Unix-socket allowance. B accepted=false
+with a socket denial in stderr shows the seatbelt blocks the connect;
+accepted=true refutes that.
 
 Run with the task venv's Python; the report is JSON on stdout.
 """
@@ -104,10 +105,11 @@ def main() -> None:
         time.sleep(0.5)
         report['phase_a']['accepted'] = listener.accepted
         listener.reset()
+        # codex-cli 0.161.0 `codex sandbox --help`: `-P, --permission-profile`
+        # applies a named profile; `--log-denials` prints macOS sandbox denials
+        # after exit. `:workspace` is the formal checker's profile.
         report['phase_b'] = run([
-            codex, 'sandbox', 'macos',
-            '-c', 'sandbox_mode="workspace-write"',
-            '-c', 'sandbox_workspace_write.network_access=false',
+            codex, 'sandbox', '-P', ':workspace', '--log-denials',
             '--', codex, 'app-server', 'proxy', '--socket-path', path,
         ], 20)
         time.sleep(0.5)

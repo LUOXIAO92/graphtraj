@@ -175,6 +175,16 @@ class _ExecutionState:
     handle: CodexExecution | None = None
 
 
+# Recent turns searched for a submitted host event: notices arrive while the
+# parent works, so an applied one is among its latest turns.
+HOST_EVENT_TURN_WINDOW = 20
+
+
+def host_event_output(event: dict[str, str]) -> str:
+    """The exact tool output a host event is submitted and recorded as."""
+    return json.dumps(event, ensure_ascii=False)
+
+
 class CodexAppServer:
     """Own a stdio service on one asyncio loop; close it explicitly or with async with.
 
@@ -555,7 +565,7 @@ class CodexAppServer:
         """
         result = await self._call('turn/start', {
             'threadId': _native_id(thread_id), 'input': [],
-            'toolOutput': {'name': 'graphtraj', 'output': json.dumps(event, ensure_ascii=False)},
+            'toolOutput': {'name': 'graphtraj', 'output': host_event_output(event)},
         })
         try:
             _native_turn(result.get('turn'))
@@ -712,6 +722,23 @@ class CodexAppServer:
             raise self._protocol_failure('Native thread metadata changed its recorded parent.')
         self._thread_parents[thread_id] = parent
         return parent
+
+    async def host_tool_output_turn(self, thread_id: str, name: str, output: str) -> str | None:
+        """Return only the id of a recent turn whose recorded tool output equals this one.
+
+        An exact comparison inside the notification path: no item content is
+        returned or logged. Only the most recent turns are read, bounded.
+        """
+        response = await self._call('thread/turns/list', {
+            'threadId': _native_id(thread_id), 'limit': HOST_EVENT_TURN_WINDOW,
+            'sortDirection': 'desc', 'itemsView': 'full',
+        })
+        for turn in response.get('data') or []:
+            for item in turn.get('items') or []:
+                if (item.get('type') == 'functionCallOutput' and item.get('name') == name
+                        and item.get('output') == output):
+                    return turn.get('id')
+        return None
 
     async def read_thread(self, thread_id: str) -> dict[str, Any]:
         """Read native identity and current settings without conversation content."""
@@ -974,9 +1001,11 @@ class CodexAppServer:
         request_id = self._sequence
         future = asyncio.get_running_loop().create_future()
         self._pending[request_id] = future
+        written = False
         try:
             async with asyncio.timeout(self._timeout) as deadline:
                 await self._send({'id': request_id, 'method': method, 'params': params})
+                written = True
                 # Loading a Session is native work, not a transport deadline.
                 # Keep writes bounded; caller cancellation/close still wakes
                 # this owner, while ordinary control RPCs retain their limit.
@@ -989,6 +1018,8 @@ class CodexAppServer:
                 f'Codex {method} request {request_id} timed out; close this connection.',
                 terminal_confirmed=False,
             )
+            # The host may already have applied a written request.
+            failure.request_written = written
             self._fail(failure)
             raise failure from error
         except asyncio.CancelledError:
@@ -1001,6 +1032,8 @@ class CodexAppServer:
         finally:
             self._pending.pop(request_id, None)
         if isinstance(response, CodexAdapterError):
+            # The connection failed after this request was written.
+            response.request_written = written
             raise response
         if 'error' in response:
             raise CodexRPCError(method, request_id, response['error'])

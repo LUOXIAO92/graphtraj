@@ -103,7 +103,9 @@ def prompt(message: dict) -> None:
     elif text.startswith('register'):
         # Register one direct helper child, then answer with the tool outcome.
         result(json.dumps(call('swarm', {'tasks': [{'role': 'helper'}]})), text == 'register-error')
-    elif text.startswith('wait'):
+    elif text.startswith('wait') or (
+            os.environ.get('CLAUDE_FIXTURE_HOLD_FILE') and Path(os.environ['CLAUDE_FIXTURE_HOLD_FILE']).exists()
+            and 'Direct child execution results' not in text):
         waiting.append(text)
     else:
         while waiting:

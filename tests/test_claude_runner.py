@@ -204,6 +204,51 @@ def test_child_registration_follows_its_owning_execution(
     assert len(helpers()) == 1
 
 
+def test_stopped_child_is_reported_as_stopped(
+    installed_commands: InstalledCommands,
+    temporary_git_repository: Path,
+    fake_codex: FakeCodex,
+    tmp_path: Path,
+) -> None:
+    """A child interrupted through a recorded stop is not a retryable failure."""
+    root, environment = setup(installed_commands, temporary_git_repository, fake_codex, tmp_path)
+    roles_file = root / '.graphtraj/roles.yml'
+    roles = yaml.safe_load(roles_file.read_text())
+    roles['roles']['helper'] = {'runtime': 'claude', 'model': 'claude-opus-5-5', 'reasoning_effort': 'high'}
+    roles['role_tree'] = {'researcher': {'helper': {}}}
+    roles_file.write_text(yaml.safe_dump(roles))
+    batch = root / 'probe.yml'
+    batch.write_text(yaml.safe_dump({'tasks': [{'task_id': '320', 'role': 'researcher'}]}))
+    launched = command(installed_commands, root, environment, '--swarm-input', str(batch))
+    assert launched.returncode == 0, launched.stdout + launched.stderr
+    alias = yaml.safe_load(launched.stdout)['tasks'][0]['alias']
+    first = settled(installed_commands, root, environment, alias)
+    history = tmp_path / (first['session'].split(':')[-1] + '.json')
+    sessions = root / '.graphtraj/runner/sessions'
+    environment['CLAUDE_FIXTURE_HOLD_FILE'] = str(tmp_path / 'hold')
+    (tmp_path / 'hold').touch()
+    sent = command(installed_commands, root, environment, 'send', alias, '--instruction', 'register',
+                   '--caused-by-event-id', events(root)[-1]['event_id'])
+    assert sent.returncode == 0, sent.stdout + sent.stderr
+    deadline = time.monotonic() + 30
+    while not [path for path in sessions.iterdir() if 'helper' in path.name and (path / 'mapping.yml').exists()]:
+        assert time.monotonic() < deadline, 'the registered child never started'
+        time.sleep(0.1)
+    helper, = [path.name for path in sessions.iterdir() if 'helper' in path.name]
+    while yaml.safe_load(command(installed_commands, root, environment, 'status', helper).stdout)['aliases'][0]['activity'] != 'running':
+        assert time.monotonic() < deadline, 'the registered child never ran'
+        time.sleep(0.1)
+    stopped = command(installed_commands, root, environment, 'interrupt', helper)
+    assert stopped.returncode == 0, stopped.stdout + stopped.stderr
+    while not any('Direct child execution results' in text for text in json.loads(history.read_text())):
+        assert time.monotonic() < deadline + 30, 'the stopped child result never reached the parent'
+        time.sleep(0.1)
+    notice = next(text for text in json.loads(history.read_text()) if 'Direct child execution results' in text)
+    child = yaml.safe_load(notice.split('\n', 1)[1])['tasks'][0]
+    assert child['launch_status'] == 'stopped'
+    assert child['error']['code'] == 'subtree-stopped'
+
+
 @pytest.mark.parametrize('native_idle', [True, False])
 def test_claude_public_interrupt_rechecks_drained_termination(
     installed_commands: InstalledCommands,

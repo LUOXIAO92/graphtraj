@@ -987,6 +987,12 @@ def _execute_agent(
     diagnostic = adapter.current_execution_diagnostic(
         session_directory, trace, stderr_offset, trace_offset
     )
+    if outcome == "interrupted":
+        # A stop recorded for this member or its ancestors explains the
+        # interruption; it is neither a provider failure nor retryable.
+        require_execution_allowed(
+            project.runner_directory, alias, read_alias_mapping(project.runner_directory, alias)[0],
+        )
     if outcome != "completed":
         if _runtime_access_failure(diagnostic, tuple(reports)):
             raise RunnerError(
@@ -1316,7 +1322,7 @@ def _worker_main() -> None:
         result = _deliver_task(project, task, retained, capacity_fd, sys.argv[4] or None)
     except (RunnerError, RuntimeAdapterError) as error:
         result = _failed_task(task, RunnerError(error.code, error.message))
-        if error.code == "EXECUTION_BUDGET_STOPPED":
+        if error.code in {"EXECUTION_BUDGET_STOPPED", "subtree-stopped"}:
             result["launch_status"] = "stopped"
     print(yaml.safe_dump(result, sort_keys=False), end="")
 

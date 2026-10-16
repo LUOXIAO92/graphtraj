@@ -150,6 +150,7 @@ def connection_operation(
     *,
     authenticate: bool = False,
     response_timeout: float = OPERATION_TIMEOUT_SECONDS,
+    await_accepted: bool = False,
 ) -> dict:
     """Exchange one request, bounding its reply wait without changing ownership.
 
@@ -181,9 +182,17 @@ def connection_operation(
                 stream.flush()
                 os.replace(request, request.with_suffix('.json'))
                 response_file = Path(directory) / 'response.json'
+                accepted_file = request.with_suffix('.json')
                 deadline = time.monotonic() + response_timeout
                 while not response_file.is_file():
-                    if time.monotonic() >= deadline:
+                    if await_accepted and not accepted_file.exists():
+                        # The host removes the request when it accepts it. A
+                        # long native operation is then awaited until its reply
+                        # or until the host closes this channel.
+                        if not Path(directory).is_dir():
+                            raise TimeoutError('The Session host closed before replying; '
+                                               'the accepted operation is unconfirmed.')
+                    elif time.monotonic() >= deadline:
                         raise TimeoutError('Session control timed out; delivery is unconfirmed.')
                     time.sleep(0.01)
                 response = json.loads(response_file.read_text())

@@ -815,3 +815,40 @@ def test_host_operation_os_error_keeps_reply_and_logs_traceback(tmp_path, capsys
         'error': {'code': 'operation-failed', 'message': '[Errno 1] Operation not permitted'}}
     error = capsys.readouterr().err
     assert 'PermissionError' in error and 'failing_operation' in error
+
+
+@pytest.mark.parametrize('await_accepted', [True, False])
+def test_accepted_long_operation_awaits_its_reply(tmp_path, await_accepted: bool) -> None:
+    """An accepted operation outlasting the ordinary deadline still returns its reply."""
+    import time
+
+    from graphtraj.execution import runner_connection
+    from graphtraj.execution.runner_models import RunnerError
+
+    def slow(request: dict) -> dict:
+        """Take longer than the caller's ordinary response deadline."""
+        time.sleep(1.0)
+        return {'done': request['value']}
+
+    with runner_connection.worker_connection(tmp_path, slow) as address:
+        if await_accepted:
+            assert runner_connection.connection_operation(
+                address, {'value': 7}, response_timeout=0.3, await_accepted=True) == {'done': 7}
+        else:
+            with pytest.raises(RunnerError, match='timed out'):
+                runner_connection.connection_operation(address, {'value': 7}, response_timeout=0.3)
+            time.sleep(1.0)
+
+
+def test_only_recovery_awaits_acceptance(monkeypatch, tmp_path) -> None:
+    """Ordinary forwarded queries keep the default deadline."""
+    from graphtraj.interfaces import hosted_cli
+
+    calls = []
+    monkeypatch.setenv(hosted_cli.CONNECTION_ENV, str(tmp_path))
+    monkeypatch.setattr(hosted_cli, 'connection_operation',
+                        lambda *args, **kwargs: calls.append(kwargs) or {'document': {}, 'failed': False})
+    for feature in ('approved_recovery', 'alias_status'):
+        hosted_cli.forward_request({'action': 'execute', 'feature': feature, 'arguments': {}}, tmp_path)
+    assert [call['await_accepted'] for call in calls] == [True, False]
+    assert {call['response_timeout'] for call in calls} == {hosted_cli.OPERATION_TIMEOUT_SECONDS}

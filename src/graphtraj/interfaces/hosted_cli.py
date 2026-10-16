@@ -113,8 +113,11 @@ def forward_request(request: Mapping[str, Any], cwd: Path) -> ToolResult | None:
         # they must never extend the client's transport deadline.
         if type(observation) in (int, float) and math.isfinite(observation) and observation >= 0:
             response_timeout += observation
+    # Recovery can include native approval and Session startup, which have no
+    # fixed duration; once the host accepts it, its own reply is awaited.
+    long_operation = request.get('action') == 'execute' and request.get('feature') == 'approved_recovery'
     response = connection_operation(address, {
         'cwd': str(cwd.resolve()),
         'request': request,
-    }, authenticate=True, response_timeout=response_timeout)
+    }, authenticate=True, response_timeout=response_timeout, await_accepted=long_operation)
     return ToolResult(response['document'], failed=response['failed'])

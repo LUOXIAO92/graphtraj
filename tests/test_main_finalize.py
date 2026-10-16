@@ -122,8 +122,10 @@ for line in sys.stdin:
                   'params':{'threadId':params['threadId'],'turnId':'check-turn',
                             'itemId':'checker-command','command':'read protected source',
                             'cwd':str(root)}})
-            reply = json.loads(sys.stdin.readline())
-            (root / 'approval-reply.json').write_text(json.dumps(reply))
+            # The owner, not the checker, resolves this request natively.
+            time.sleep(0.2)
+            send({'method':'serverRequest/resolved',
+                  'params':{'threadId':params['threadId'],'requestId':'checker-approval'}})
         if options.get('tool_request'):
             send({'id':'checker-tool','method':'item/tool/call','params':{
                 'threadId':options.get('tool_caller',params['threadId']),
@@ -455,24 +457,30 @@ def test_checker_observer_does_not_answer_main_approval(
     assert not any(item.get('id') == 'parent-approval' for item in wire)
 
 
-def test_checker_reports_missing_native_approval_interface(host: tuple[Path, Path]) -> None:
-    """Unavailable user approval is an explicit error and never an implicit grant."""
+def test_checker_approval_is_left_to_its_native_owner(host: tuple[Path, Path]) -> None:
+    """The checker neither grants nor refuses; the owner's resolution lets it finish."""
     root, binding = host
     (root / 'options.json').write_text(json.dumps({'approval_request': True}))
     result = stop(binding)
-    assert result['continue'] is False
-    assert 'no bound user approval interface' in result['stopReason']
-    reply = json.loads((root / 'approval-reply.json').read_text())
-    assert 'error' in reply and 'result' not in reply
+    assert 'Completion Check · completed' in result['systemMessage']
+    wire = [json.loads(line) for line in (root / 'wire.jsonl').read_text().splitlines()]
+    assert not any(item.get('id') == 'checker-approval' for item in wire)
     from graphtraj.sessions.protocol import native_record
     from graphtraj.sessions.storage import SessionStore, session_path
 
     with SessionStore(session_path(root / '.graphtraj/state', 'codex:checker'), readonly=True) as archive:
-        assert reply in [native_record(event) for event in archive.page()['events']
-                         if event['type'] != 'session/end-seed']
+        records = [native_record(event) for event in archive.page()['events']
+                   if event['type'] != 'session/end-seed']
+    assert any(record.get('id') == 'checker-approval'
+               and record['params']['threadId'] == 'checker' for record in records)
+    assert any(record.get('method') == 'serverRequest/resolved'
+               and record['params'] == {'threadId': 'checker', 'requestId': 'checker-approval'}
+               for record in records)
     evidence = yaml.safe_load(next(binding.parent.glob('checks/*/execution.yml')).read_text())
-    assert evidence['outcome'] == 'error'
-    assert 'no bound user approval interface' in evidence['error']
+    assert evidence['approval_requests'] == [{
+        'request_id': 'checker-approval', 'method': 'item/commandExecution/requestApproval',
+        'resolved': True,
+    }]
 
 
 def test_only_observed_cache_usage_is_retained(host: tuple[Path, Path]) -> None:

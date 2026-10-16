@@ -149,6 +149,13 @@ def check(
     async def run(resources: ExitStack) -> dict | None:
         """Keep the child owned until terminal; inherited hooks filter its distinct ID."""
         child_id: str | None = None
+        approvals: dict = {}
+
+        def resolve(notice: dict) -> None:
+            """Mark a checker approval its native owner has resolved."""
+            params = notice.get('params', {})
+            if notice.get('method') == 'serverRequest/resolved' and params.get('requestId') in approvals:
+                approvals[params['requestId']]['resolved'] = True
 
         async def handle(request: CodexServerRequest) -> dict:
             """Expose only read-only GraphTraj task summaries to this exact checker."""
@@ -162,11 +169,12 @@ def check(
                 # shutdown cancels this observer without answering on its behalf.
                 await asyncio.Future()
             if request.method.endswith('/requestApproval'):
-                raise RuntimeAdapterError(
-                    'native-approval-unavailable',
-                    'The checker requires native approval, but this hook connection '
-                    'has no bound user approval interface. No approval was granted.',
-                )
+                # The checker's request belongs to the same owner, or its
+                # configured reviewer, as Main's. Resolution or shutdown
+                # cancels this observer; the check limit still bounds it.
+                approvals[request.request_id] = {'request_id': request.request_id,
+                                                 'method': request.method, 'resolved': False}
+                await asyncio.Future()
             if (request.method != 'item/tool/call'
                     or request.params.get('tool') != 'graphtraj'):
                 raise RuntimeAdapterError('authority-denied', 'The checker cannot approve or control work.')
@@ -251,6 +259,7 @@ def check(
                 while True:
                     notice = await client.next_notification()
                     usage.observe(notice)
+                    resolve(notice)
                     params = notice.get('params', {})
                     if params.get('threadId') != binding['session']:
                         continue
@@ -320,6 +329,7 @@ def check(
                 await asyncio.gather(stopped, checked, received, return_exceptions=True)
                 for notice in client.drain_notifications():
                     usage.observe(notice)
+                    resolve(notice)
             try:
                 if (not await client.is_current_turn(binding['session'], context['turn'])
                         and outcome != 'error'):
@@ -335,6 +345,7 @@ def check(
                 failure = 'Completion checker was interrupted.'
             observed_usage = usage.finish(execution.turn_id)
             return {**evidence, 'output': result.get('last_agent_message'),
+                    'approval_requests': list(approvals.values()),
                     'outcome': outcome, 'error': failure, 'turn': execution.turn_id,
                     'usage': observed_usage, 'response_usage': usage.response_evidence(execution.turn_id)}
     with ExitStack() as resources:

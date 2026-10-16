@@ -1,7 +1,7 @@
 """Task325 transport probe: can a network-off Codex seatbelt reach a Unix socket?
 
 Transport-layer evidence only; this is not CLI acceptance. It starts no Codex
-daemon and makes no model call. ``codex app-server proxy --socket-path`` only
+daemon and makes no model call. ``codex app-server proxy --sock`` only
 connects to the given socket path (codex-rs/cli/src/main.rs:1400-1408 at
 rust-v0.163.0), and here that path is a temporary listener owned by this run.
 
@@ -110,7 +110,7 @@ def main() -> None:
         # after exit. `:workspace` is the formal checker's profile.
         report['phase_b'] = run([
             codex, 'sandbox', '-P', ':workspace', '--log-denials',
-            '--', codex, 'app-server', 'proxy', '--socket-path', path,
+            '--', codex, 'app-server', 'proxy', '--sock', path,
         ], 20)
         time.sleep(0.5)
         report['phase_b']['accepted'] = listener.accepted

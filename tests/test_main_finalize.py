@@ -1645,6 +1645,51 @@ def test_fork_with_a_wider_sandbox_never_starts_the_checker(host: tuple[Path, Pa
     assert not any(message['method'] == 'turn/start' for message in wire)
 
 
+MAIN_WORKSPACE = {'sandbox': {'type': 'workspaceWrite', 'writableRoots': [], 'networkAccess': False},
+                  'activePermissionProfile': {'id': ':workspace', 'extends': None}}
+CHECKER_WORKSPACE = {'sandbox': {'type': 'workspaceWrite', 'writableRoots': [], 'networkAccess': True},
+                     'activePermissionProfile': {'id': 'graphtraj_checker', 'extends': ':workspace'}}
+
+
+def test_checker_profile_adds_only_main_control_socket(host: tuple[Path, Path]) -> None:
+    """The fork extends Main's profile with only Main's Codex control socket."""
+    root, binding = host
+    (root / 'options.json').write_text(json.dumps({
+        'configuration': MAIN_WORKSPACE, 'fork_configuration': CHECKER_WORKSPACE,
+    }))
+    assert 'Completion Check · completed' in stop(binding)['systemMessage']
+    wire = [json.loads(line) for line in (root / 'wire.jsonl').read_text().splitlines()]
+    fork = next(message['params'] for message in wire if message['method'] == 'thread/fork')
+    assert fork['permissions'] == 'graphtraj_checker' and 'sandbox' not in fork
+    socket = str(root / 'app-server-control' / 'app-server-control.sock')
+    assert fork['config']['permissions'] == {'graphtraj_checker': {
+        'extends': ':workspace', 'network': {'enabled': True, 'unix_sockets': {socket: 'allow'}},
+    }}
+    evidence = yaml.safe_load(next(binding.parent.glob('checks/*/execution.yml')).read_text())
+    assert evidence['authorized_difference'] == {
+        'permission_profile': {'id': 'graphtraj_checker', 'extends': ':workspace'},
+        'unix_socket': socket, 'network_access': {'main': False, 'checker': True},
+    }
+
+
+@pytest.mark.parametrize('fork', [
+    {**CHECKER_WORKSPACE, 'activePermissionProfile': {'id': ':workspace', 'extends': None}},
+    {**CHECKER_WORKSPACE, 'sandbox': {'type': 'dangerFullAccess'}},
+    {**CHECKER_WORKSPACE, 'sandbox': {'type': 'workspaceWrite', 'writableRoots': ['/'], 'networkAccess': True}},
+])
+def test_checker_profile_must_be_applied_without_other_widening(
+    host: tuple[Path, Path], fork: dict,
+) -> None:
+    """A fork that ignores the socket profile or widens anything else never starts."""
+    root, binding = host
+    (root / 'options.json').write_text(json.dumps({
+        'configuration': MAIN_WORKSPACE, 'fork_configuration': fork,
+    }))
+    result = stop(binding)
+    assert result['continue'] is False and 'Completion Check · error' in result['stopReason']
+    assert 'turn/start' not in wire(root)
+
+
 def test_fork_uses_current_turn_collaboration_settings(host: tuple[Path, Path]) -> None:
     """The checker receives the current mode and instructions, not an old turn's mode."""
     root, binding = host

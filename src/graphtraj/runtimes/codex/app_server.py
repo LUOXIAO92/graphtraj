@@ -29,6 +29,8 @@ from graphtraj.runtimes.codex.session_archive import CodexSessionArchive
 
 
 _DEFAULT_TIMEOUT = object()
+# A fork-only profile extending Main's, adding Main's Codex control socket.
+CHECKER_PERMISSION_PROFILE = 'graphtraj_checker'
 # Reported sandbox policy types and their thread/fork SandboxMode selections.
 _SANDBOX_MODES = {
     'readOnly': 'read-only', 'workspaceWrite': 'workspace-write', 'dangerFullAccess': 'danger-full-access',
@@ -825,7 +827,18 @@ class CodexAppServer:
         # profile or its sandbox mode (never both); the response is checked
         # against Main's full policy below.
         profile = configuration.get('activePermissionProfile')
-        if isinstance(profile, dict) and isinstance(profile.get('id'), str):
+        socket = parent.get('control_socket')
+        if isinstance(profile, dict) and isinstance(profile.get('id'), str) and socket:
+            # Main's own profile plus only its Codex control socket, so the
+            # checker's GraphTraj CLI can verify its caller natively. Codex
+            # applies Unix-socket rules through its managed network proxy,
+            # which blocks every domain this profile does not allow.
+            parameters['permissions'] = CHECKER_PERMISSION_PROFILE
+            parameters['config'] = {'permissions': {CHECKER_PERMISSION_PROFILE: {
+                'extends': profile['id'],
+                'network': {'enabled': True, 'unix_sockets': {socket: 'allow'}},
+            }}}
+        elif isinstance(profile, dict) and isinstance(profile.get('id'), str):
             parameters['permissions'] = profile['id']
         elif 'sandbox' in configuration:
             policy = configuration['sandbox']
@@ -836,7 +849,7 @@ class CodexAppServer:
         # Native fork rebuilds model config. Preserve the checked turn's
         # observed effort instead of project defaults.
         if 'effort' in settings:
-            parameters['config'] = {'model_reasoning_effort': settings['effort']}
+            parameters.setdefault('config', {})['model_reasoning_effort'] = settings['effort']
         response = await self._call('thread/fork', parameters)
         thread = response.get('thread')
         if (not isinstance(thread, dict) or not isinstance(thread.get('id'), str)
@@ -854,7 +867,12 @@ class CodexAppServer:
                 raise self._protocol_failure(f'thread/fork changed Main {key}.')
         # The effective policy decides; a profile name is checked only when
         # Main selected one, since an unnamed policy may be reported by name.
-        if 'sandbox' in configuration and response.get('sandbox') != configuration['sandbox']:
+        # The only authorized difference is network access for the socket rule.
+        ignored = {'networkAccess'} if parameters.get('permissions') == CHECKER_PERMISSION_PROFILE else set()
+        if 'sandbox' in configuration and (
+                not isinstance(response.get('sandbox'), dict)
+                or {k: v for k, v in response['sandbox'].items() if k not in ignored}
+                != {k: v for k, v in configuration['sandbox'].items() if k not in ignored}):
             raise self._protocol_failure('thread/fork changed Main sandbox.')
         if 'permissions' in parameters and (
                 not isinstance(response.get('activePermissionProfile'), dict)

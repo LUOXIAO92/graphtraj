@@ -12,7 +12,9 @@ import time
 from pathlib import Path
 from typing import Any, Awaitable, Callable
 
-from graphtraj.runtimes.codex.app_server import CodexAppServer, CodexServerRequest
+from graphtraj.runtimes.codex.app_server import (
+    CHECKER_PERMISSION_PROFILE, CodexAppServer, CodexServerRequest,
+)
 from graphtraj.runtimes.runtime_adapter import CheckUsage, RuntimeAdapterError
 from graphtraj.workspace.runner_project import runtime_executable
 from graphtraj.runtimes.codex.session_entry import session_source, event_record
@@ -233,6 +235,9 @@ def check(
             # and can differ from actual per-turn model selection.
             parent = {**parent, 'model': context['model'], 'configuration': configuration}
             parent['turn_settings'] = dict(context.get('settings', {}))
+            # The checker may reach only the control socket of Main's own daemon.
+            parent['control_socket'] = str(Path(binding['connection']['codex_home'])
+                                           / 'app-server-control' / 'app-server-control.sock')
             if 'effort' not in parent['turn_settings'] and 'reasoningEffort' in configuration:
                 parent['turn_settings']['effort'] = configuration['reasoningEffort']
             # Register this attempt before requesting its fixed native fork:
@@ -284,6 +289,16 @@ def check(
                 'parent_configuration': {key: configuration[key] for key in child.configuration
                                          if key != 'thread' and key in configuration},
             }
+            profile = child.configuration.get('activePermissionProfile') or {}
+            if profile.get('id') == CHECKER_PERMISSION_PROFILE:
+                # The checker's only authorized difference from Main.
+                evidence['authorized_difference'] = {
+                    'permission_profile': profile, 'unix_socket': parent['control_socket'],
+                    'network_access': {
+                        'main': (configuration.get('sandbox') or {}).get('networkAccess'),
+                        'checker': (child.configuration.get('sandbox') or {}).get('networkAccess'),
+                    },
+                }
 
             # Stop's turn is still in progress, so native lastTurnId is invalid.
             # The fork itself fixes its history boundary. Reject a superseding

@@ -3,6 +3,7 @@
 Only the proxy transport is replaced: the real CodexAppServer._call and host
 event submission run against a daemon that records each turn/start it receives.
 """
+import asyncio
 from pathlib import Path
 
 import pytest
@@ -41,11 +42,18 @@ def install(daemon: Daemon, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> 
             if message['method'] == 'turn/start':
                 output = message['params']['toolOutput']['output']
                 daemon.starts.append(output)
+                reply = {'id': message['id'], 'result': {'turn': {
+                    'id': f'turn-{len(daemon.starts)}', 'status': 'inProgress', 'items': []}}}
                 if daemon.mode == 'ok':
-                    future.set_result({'id': message['id'], 'result': {'turn': {
-                        'id': f'turn-{len(daemon.starts)}', 'status': 'inProgress', 'items': []}}})
-                    return
-                return  # Received by the host, but the reply never arrives.
+                    future.set_result(reply)
+                elif daemon.mode == 'silent':
+                    return  # Alive, but never replies.
+                elif daemon.mode == 'late':
+                    # Replies after the ordinary deadline, on the still-open connection.
+                    asyncio.get_running_loop().call_later(0.5, future.set_result, reply)
+                else:
+                    # Received by the host, then the proxy connection closes.
+                    self._fail(CodexAdapterError('RUNTIME_CONNECTION_FAILED', 'Codex proxy closed.'))
 
     monkeypatch.setattr(app_server, 'CodexAppServer', Transport)
     monkeypatch.setattr(runner_project, 'runtime_executable', lambda name: Path('/usr/bin/true'))
@@ -81,7 +89,7 @@ def records(session: Path) -> list[dict]:
 def test_unacknowledged_notice_is_classified_and_never_lost(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """A written turn/start whose reply is lost is named as such and stays pending.
+    """A written turn/start whose connection then closes is named as such and stays pending.
 
     Codex 0.163 offers no safe native way to tell whether it was applied, so the
     retry submits it again: this records that gap rather than claiming a fix.
@@ -98,6 +106,18 @@ def test_unacknowledged_notice_is_classified_and_never_lost(
     assert set(submissions(daemon, notices).values()) == {2}  # known gap: resubmitted
 
 
+def test_late_reply_on_open_connection_is_awaited(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A reply slower than the ordinary deadline is awaited, so nothing is resubmitted."""
+    monitor, session, notices = stopped_child(tmp_path, monkeypatch)
+    daemon = Daemon('late')
+    install(daemon, tmp_path, monkeypatch)
+    monitor.deliver_parent_notices(session)
+    monitor.deliver_parent_notices(session)
+    assert set(submissions(daemon, notices).values()) == {1}
+    assert monitor.pending_parent_notices() == []
+    assert {record['delivery'] for record in records(session)} == {'received'}
+
+
 def test_failure_before_writing_is_retried_normally(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """A transport failure before turn/start is written keeps its own code and an ordinary retry."""
     monitor, session, notices = stopped_child(tmp_path, monkeypatch)
@@ -110,3 +130,25 @@ def test_failure_before_writing_is_retried_normally(tmp_path: Path, monkeypatch:
     monitor.deliver_parent_notices(session)
     assert set(submissions(daemon, notices).values()) == {1}
     assert monitor.pending_parent_notices() == []
+
+
+def test_cancelling_a_waiting_sender_returns_promptly(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Without a reply deadline, cancellation (stop or interrupt) still wakes the sender."""
+    import time
+
+    daemon = Daemon('silent')
+    install(daemon, tmp_path, monkeypatch)
+
+    async def cancel_while_waiting() -> None:
+        async with app_server.CodexAppServer(cwd=tmp_path, command=('codex', 'app-server', 'proxy')) as client:
+            sending = asyncio.create_task(client.send_host_event('main-thread', {
+                'source': 'graphtraj', 'alias': 'research@x1', 'event': 'completed', 'message': 'done'}))
+            await asyncio.sleep(0.5)  # past the ordinary deadline, still waiting
+            assert not sending.done()
+            sending.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await sending
+
+    started = time.monotonic()
+    asyncio.run(asyncio.wait_for(cancel_while_waiting(), timeout=5))
+    assert time.monotonic() - started < 2 and len(daemon.starts) == 1

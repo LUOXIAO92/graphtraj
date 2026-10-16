@@ -553,10 +553,12 @@ class CodexAppServer:
         user input, Session creation or resume request accompanies this event.
         The reply acknowledges submission, not the parent's processing.
         """
+        # Once written, the host may apply it: await its reply while this
+        # connection lives, so a late reply never causes a resubmission.
         result = await self._call('turn/start', {
             'threadId': _native_id(thread_id), 'input': [],
             'toolOutput': {'name': 'graphtraj', 'output': json.dumps(event, ensure_ascii=False)},
-        })
+        }, wait_for_session=True)
         try:
             _native_turn(result.get('turn'))
         except ValueError as error:

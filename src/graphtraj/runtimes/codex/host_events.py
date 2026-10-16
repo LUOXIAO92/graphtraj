@@ -157,42 +157,9 @@ def current_connection() -> dict | None:
     }
 
 
-# Events written to the host whose application is not yet known. They stay
-# pending with their sender; this process checks the host record before any
-# resubmission. A new process has no such memory and submits normally.
-_UNRESOLVED: set[tuple[str, str, str]] = set()
-
-
-async def _recorded_turn(connection: Mapping[str, Any], event: dict[str, str]) -> str:
-    """Return the turn recording this exact event, or raise while it is unresolved."""
-    from graphtraj.runtimes.codex.app_server import CodexAppServer, host_event_output
-    from graphtraj.workspace.runner_project import runtime_executable
-
-    try:
-        async with CodexAppServer(
-            cwd=Path.cwd(),
-            command=(str(runtime_executable('codex')), 'app-server', 'proxy'),
-            environment={'CODEX_HOME': connection['codex_home']},
-            experimental_api=True,
-        ) as client:
-            turn = await client.host_tool_output_turn(
-                connection['session'], 'graphtraj', host_event_output(event))
-    except RuntimeAdapterError as error:
-        raise RuntimeAdapterError(
-            'delivery-unresolved',
-            'The parent host may have received this event; its record is unreadable now.',
-        ) from error
-    if turn is None:
-        raise RuntimeAdapterError(
-            'delivery-unresolved',
-            'The parent host may still record this event; it is not resubmitted.',
-        )
-    return turn
-
-
 def send_event(connection: Mapping[str, Any], event: dict[str, str]) -> dict:
     """Use a bounded proxy connection to the existing service for this event only."""
-    from graphtraj.runtimes.codex.app_server import CodexAppServer, host_event_output
+    from graphtraj.runtimes.codex.app_server import CodexAppServer
     from graphtraj.workspace.runner_project import discover_project_root, runtime_executable
 
     if (set(event) != {'source', 'alias', 'event', 'message'}
@@ -202,8 +169,6 @@ def send_event(connection: Mapping[str, Any], event: dict[str, str]) -> dict:
     if any(not isinstance(connection.get(key), str) or not connection[key]
            for key in ('session', 'codex_home')):
         raise RuntimeAdapterError('operation-failed', 'Invalid owning Codex connection')
-
-    key = (connection['codex_home'], connection['session'], host_event_output(event))
 
     async def forward(receipts: ExitStack) -> dict:
         """Closing the proxy leaves the daemon and its original thread running."""
@@ -239,21 +204,17 @@ def send_event(connection: Mapping[str, Any], event: dict[str, str]) -> dict:
                     except FileNotFoundError:
                         pass  # The check ended before submission.
             submitted_at = time.time()
-            if key in _UNRESOLVED:
-                # Already written once: only the host's own record decides.
-                result = {'turn': {'id': await _recorded_turn(connection, event)}}
-                _UNRESOLVED.discard(key)
-            else:
-                try:
-                    result = await client.send_host_event(connection['session'], event)
-                except RuntimeAdapterError as error:
-                    if not getattr(error, 'request_written', False):
-                        raise  # Nothing reached the host; ordinary retry applies.
-                    # The host may still apply it later, so absence now is not
-                    # final: never resubmit, only look for its record again.
-                    _UNRESOLVED.add(key)
-                    result = {'turn': {'id': await _recorded_turn(connection, event)}}
-                    _UNRESOLVED.discard(key)
+            try:
+                result = await client.send_host_event(connection['session'], event)
+            except RuntimeAdapterError as error:
+                if getattr(error, 'request_written', False):
+                    # Written, then unacknowledged: the host may already have
+                    # applied it. Codex offers no safe way to tell, so name it.
+                    raise RuntimeAdapterError(
+                        'delivery-unconfirmed',
+                        'The parent host was sent this event; its acknowledgement was lost.',
+                    ) from error
+                raise
             accepted_at = time.time()
             for stream, turn in pending:
                 if result['turn']['id'] != turn:

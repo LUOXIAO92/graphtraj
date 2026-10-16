@@ -182,3 +182,6 @@ for line in sys.stdin:
             prompt(event)
     if started and waiting and isinstance(waiting[0], dict):
         prompt(waiting.pop(0))
+if os.environ.get('CLAUDE_FIXTURE_HOLD_ON_EOF'):
+    # A CLI still inside its turn outlives stdin closure until signalled.
+    time.sleep(60)

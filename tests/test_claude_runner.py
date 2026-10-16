@@ -324,6 +324,9 @@ def test_claude_interrupt_confirms_a_killed_unsettled_runtime(
     environment['CLAUDE_FIXTURE_STOP_DELAY'] = '6'
     if not native_idle:
         environment['CLAUDE_FIXTURE_NO_SETTLE'] = '1'
+    # Like the observed runs (exit 143), the CLI ignores stdin closure and is
+    # stopped by SIGTERM, so the Worker's close outlasts 10 seconds.
+    environment['CLAUDE_FIXTURE_HOLD_ON_EOF'] = '1'
     batch = root / 'probe.yml'
     batch.write_text(yaml.safe_dump({'tasks': [{'task_id': '320', 'role': 'researcher'}]}))
     launched = command(installed_commands, root, environment, '--swarm-input', str(batch))
@@ -333,7 +336,11 @@ def test_claude_interrupt_confirms_a_killed_unsettled_runtime(
     sent = command(installed_commands, root, environment, 'send', alias, '--instruction', 'wait-late-idle',
                    '--caused-by-event-id', events(root)[-1]['event_id'])
     assert sent.returncode == 0, sent.stdout + sent.stderr
-    command(installed_commands, root, environment, 'interrupt', alias)
+    first = command(installed_commands, root, environment, 'interrupt', alias)
+    # The Worker's close outlasts the ordinary 10-second control deadline, yet
+    # the first interrupt receives its confirmed result.
+    assert first.returncode == 0, first.stdout + first.stderr
+    assert yaml.safe_load(first.stdout)['members'][0]['interrupt_status'] == 'interrupted', first.stdout
     # The peer settles too late (or never) and is killed after its stop
     # window: its exit and closed group confirm termination directly, while
     # the retained native observation stays as it was.
@@ -344,7 +351,7 @@ def test_claude_interrupt_confirms_a_killed_unsettled_runtime(
     assert execution['outcome'] == 'interrupted' and execution['terminal_confirmed'] is True
     evidence = yaml.safe_load((directory / f"claude-termination-{status['execution_id']}.yml").read_text())
     assert evidence['process_group_closed'] is True and evidence['pipes_closed'] is True
-    assert evidence['native_idle'] is native_idle
+    assert evidence['native_idle'] is native_idle and evidence['runtime_exit_code'] == -15
     assert not (directory / f"terminal-confirmation-{status['execution_id']}.yml").exists()
     budget_file = root / '.graphtraj/state/tasks/320-claude-probe/execution-budget.yml'
     budget = yaml.safe_load(budget_file.read_text())

@@ -126,13 +126,16 @@ def _answer_request(
         pass  # Caller EOF does not cancel an accepted native operation.
 
 
-def session_operation(mapping: dict, operation: str, **arguments: object) -> dict:
+def session_operation(
+    mapping: dict, operation: str, *, response_timeout: float = OPERATION_TIMEOUT_SECONDS,
+    **arguments: object,
+) -> dict:
     """Ask the owner to control the exact mapped native execution and await its reply."""
     try:
         return connection_operation(mapping['control_directory'], {
             'operation': operation, 'session': mapping['session'],
             'execution_id': mapping['execution_id'], **arguments,
-        })
+        }, response_timeout=response_timeout)
     except (KeyError, TypeError) as error:
         raise RunnerError('operation-failed', 'The mapped Session control identity is invalid.') from error
 

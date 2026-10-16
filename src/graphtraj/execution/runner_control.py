@@ -875,6 +875,12 @@ def _stop_before_runtime(directory: Path, mapping: dict) -> dict:
             'evidence': evidence}
 
 
+# A Worker answers interrupt only after its own close and confirmation, waiting
+# at most 30 seconds for that (claude/execution.py:647, pi/managed_session.py:552).
+# The ordinary control deadline covers the remaining round trip.
+INTERRUPT_RESPONSE_SECONDS = 30 + OPERATION_TIMEOUT_SECONDS
+
+
 def _interrupt_session(
     alias: str, session_directory: Path, mapping: Dict[str, Any]
 ) -> Dict[str, str]:
@@ -889,7 +895,7 @@ def _interrupt_session(
             return _confirm_termination(alias, session_directory, mapping)
         return {"alias": alias, "interrupt_status": "stopped"}
     try:
-        session_operation(mapping, "interrupt")
+        session_operation(mapping, "interrupt", response_timeout=INTERRUPT_RESPONSE_SECONDS)
     except RunnerError:
         # Native completion can precede the Worker's terminal-file drain.
         # Reuse its live terminal acknowledgement as well as durable outcomes;

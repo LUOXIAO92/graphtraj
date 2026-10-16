@@ -227,8 +227,16 @@ def note(text):
     with marks.open('a') as stream:
         stream.write(text + '\\n')
 
-# Like the Worker during a managed execution: SIGTERM does not raise.
-signal.signal(signal.SIGTERM, lambda signum, frame: note('worker-sigterm'))
+from graphtraj.execution.runner_process import OPERATION_TIMEOUT_SECONDS
+
+stopping = threading.Event()
+
+def request_termination(signum, frame):
+    # Like the Worker during a managed execution: SIGTERM does not raise.
+    note('worker-sigterm')
+    stopping.set()
+
+signal.signal(signal.SIGTERM, request_termination)
 runner_project.runtime_executable = lambda name: peer
 close = app_server.CodexAppServer.close
 
@@ -249,12 +257,14 @@ def deliver():
 
 sender = threading.Thread(target=deliver, daemon=True)
 sender.start()
-sender.join(timeout=8)
-note('sender-ended' if not sender.is_alive() else 'sender-stuck')
+stopping.wait()
+# The Worker leaves its loop and joins its delivery thread (runner_worker.py:507-510).
+sender.join(timeout=OPERATION_TIMEOUT_SECONDS)
+note('worker-exit sender-' + ('alive' if sender.is_alive() else 'ended'))
 '''
 
 
-def test_group_sigterm_unblocks_a_waiting_worker_sender(tmp_path: Path, peer: Path) -> None:
+def test_real_worker_stop_with_a_sender_awaiting_a_written_host_event(tmp_path: Path, peer: Path) -> None:
     """The Runner's group stop, on a Worker whose sender awaits a written host event."""
     import os
     import signal
@@ -262,6 +272,7 @@ def test_group_sigterm_unblocks_a_waiting_worker_sender(tmp_path: Path, peer: Pa
     import sys
     import time
 
+    from graphtraj.execution.runner_process import stop_worker
 
     marks, written = tmp_path / 'marks', tmp_path / 'written'
     worker = subprocess.Popen(
@@ -269,23 +280,19 @@ def test_group_sigterm_unblocks_a_waiting_worker_sender(tmp_path: Path, peer: Pa
         env={**os.environ, 'PEER_SILENT_TURN_START': str(written)},
         stderr=subprocess.PIPE, text=True, start_new_session=True)
     pgid = worker.pid
-    escalated = False
+    deadline = time.monotonic() + 10
+    while not written.exists():
+        assert time.monotonic() < deadline and worker.poll() is None, worker.stderr.read()
+        time.sleep(0.05)
+    time.sleep(0.5)  # turn/start written; still awaiting its reply
+    started = time.monotonic()
+    stopped = stop_worker(worker.pid)  # the real Worker stop (runner_process.py:132-148)
+    elapsed = time.monotonic() - started
     try:
-        deadline = time.monotonic() + 10
-        while not written.exists():
-            assert time.monotonic() < deadline and worker.poll() is None, worker.stderr.read()
-            time.sleep(0.05)
-        time.sleep(0.5)  # turn/start written; still awaiting its reply
-        os.killpg(pgid, signal.SIGTERM)  # runner_process.py:138
-        try:
-            worker.wait(timeout=5)
-        except subprocess.TimeoutExpired:
-            escalated = True
-            os.killpg(pgid, signal.SIGKILL)
-            worker.wait(timeout=5)
-    finally:
-        if worker.poll() is None:
-            os.killpg(pgid, signal.SIGKILL)
+        status = worker.wait(timeout=5)  # reap after the stop's own bound, if still pending
+    except subprocess.TimeoutExpired:
+        status = None
+    exited = time.monotonic() - started
     proxy = int(written.read_text())  # the proxy pid, in its own session (app_server.py:272-276)
 
     def gone(check) -> bool:
@@ -300,14 +307,16 @@ def test_group_sigterm_unblocks_a_waiting_worker_sender(tmp_path: Path, peer: Pa
 
     group_gone = gone(lambda: os.killpg(pgid, 0))
     proxy_gone = gone(lambda: os.kill(proxy, 0))
-    if not proxy_gone:
-        os.kill(proxy, signal.SIGKILL)
     lines = marks.read_text().splitlines()
-    print('marks', lines, 'worker-exit', worker.returncode, 'escalated', escalated,
-          'group-gone', group_gone, 'proxy-gone', proxy_gone)
-    # Observed: the group SIGTERM reaches only the Worker, whose handler does not
-    # raise, so its sender stays blocked; the existing SIGKILL escalation ends the
-    # Worker, and the separate-session proxy then exits on its closed stdin.
+    cleanup = not (group_gone and proxy_gone)
+    for pid, check in ((pgid, lambda: os.killpg(pgid, signal.SIGKILL)),
+                       (proxy, lambda: os.kill(proxy, signal.SIGKILL))):
+        try:
+            check()
+        except ProcessLookupError:
+            pass
+    print('marks', lines, 'stop_worker', stopped, 'elapsed', round(elapsed, 2),
+          'worker-status', status, 'worker-exited-after', round(exited, 2),
+          'group-gone', group_gone, 'proxy-gone', proxy_gone, 'cleanup-needed', cleanup)
     assert 'worker-sigterm' in lines and 'received' not in lines
-    assert escalated and worker.returncode == -signal.SIGKILL
-    assert group_gone and proxy_gone
+    assert group_gone and proxy_gone and not cleanup

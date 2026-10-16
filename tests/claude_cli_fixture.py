@@ -41,9 +41,10 @@ Path(os.environ['CLAUDE_FIXTURE_HOME'], 'native-endpoint.json').write_text(
 started = False
 waiting = []
 merging = []
+late = []
 
 
-def result(text: str, error: bool = False, queued: int = 0) -> None:
+def result(text: str, error: bool = False, queued: int = 0, idle: bool = True) -> None:
     """Emit distinct result and quiescence records with native usage."""
     emit({'type': 'assistant', 'session_id': session, 'message': {
         'role': 'assistant', 'content': [{'type': 'text', 'text': text}]}})
@@ -51,7 +52,8 @@ def result(text: str, error: bool = False, queued: int = 0) -> None:
           'is_error': error, 'result': text, 'queued_turn_count': queued, 'usage': {
               'input_tokens': 11, 'cache_read_input_tokens': 7,
               'cache_creation_input_tokens': 2, 'output_tokens': 5}})
-    emit({'type': 'system', 'subtype': 'session_state_changed', 'state': 'idle'})
+    if idle:
+        emit({'type': 'system', 'subtype': 'session_state_changed', 'state': 'idle'})
 
 
 
@@ -82,11 +84,17 @@ def prompt(message: dict) -> None:
     if '--replay-user-messages' in args:
         # As observed: the echo is emitted when input joins the running turn.
         emit({'type': 'user', 'isReplay': True, 'session_id': session, 'message': message['message']})
+    if late:
+        # The earlier turn's idle arrives only after this later input's echo.
+        emit({'type': 'system', 'subtype': 'session_state_changed', 'state': 'idle'})
+        late.clear()
     if merging:
         # Input delivered during this turn joins it and shares its one result.
-        result('|'.join(merging + [text]))
+        if merging[0] == 'merge-late':
+            late.append(text)
+        result('|'.join(merging + [text]), idle=not late)
         merging.clear()
-    elif text == 'merge':
+    elif text in ('merge', 'merge-late'):
         merging.append(text)
     elif text == 'permission':
         emit({'type': 'control_request', 'request_id': 'permission-1', 'request': {
@@ -119,6 +127,7 @@ def prompt(message: dict) -> None:
         waiting.append(text)
     else:
         while waiting:
+            # The rest of the held inputs and this input still await their own turns.
             result(waiting.pop(0), queued=len(waiting) + 1)
         result('|'.join(messages), text == 'provider-error')
 

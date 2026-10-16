@@ -328,6 +328,30 @@ def test_claude_mid_turn_input_shares_its_turn_result(tmp_path: Path, claude_env
         assert completed['last_agent_message'] == 'merge|finish'
 
 
+def test_claude_input_echoed_after_a_result_waits_for_the_next(
+    tmp_path: Path, claude_environment: None,
+) -> None:
+    """Input echoed after a turn's result is not covered by it, even when idle follows."""
+    result_project(tmp_path)
+    trace = tmp_path / 'state/claude.jsonl'
+    with ExitStack() as stack, ThreadPoolExecutor(max_workers=1) as pool:
+        turn, ready, _ = execution(tmp_path, stack, 'merge-late')
+        future = pool.submit(turn.run)
+        assert ready.wait(5)
+        control = {'operation': 'send', 'session': turn.session, 'execution_id': turn.execution_id}
+        turn.operate({**control, 'instruction': 'joined'})
+        deadline = time.monotonic() + 5
+        while not any(json.loads(line).get('type') == 'result' for line in trace.read_text().splitlines()):
+            assert time.monotonic() < deadline, 'the joined turn produced no result'
+            time.sleep(0.02)
+        assert not future.done()
+        # Its echo follows that result; the earlier turn's idle then arrives.
+        turn.operate({**control, 'instruction': 'late'})
+        completed = future.result(timeout=10)
+        assert completed['outcome'] == 'completed'
+        assert completed['last_agent_message'] == 'merge-late|joined|late'
+
+
 def test_claude_startup_failure_and_registration_refusal(tmp_path: Path, claude_environment: None, monkeypatch: pytest.MonkeyPatch) -> None:
     """Reap failed pre-registration processes without creating a false Session."""
     result_project(tmp_path)

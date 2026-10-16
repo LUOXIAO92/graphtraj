@@ -430,7 +430,8 @@ class ClaudeExecution:
                         last = '\n'.join(block.get('text', '') for block in event.get('message', {}).get('content', [])
                                          if block.get('type') == 'text') or last
                     elif kind == 'user' and event.get('isReplay') is True:
-                        # The native echo of input it has taken into a turn.
+                        # Native echo of sent input. In one observed run, input sent
+                        # mid-turn was echoed when it joined that turn, before its result.
                         self.echoes += 1
                         last_echo = source_position
                     elif kind in {'transport_error', 'notification_error'}:

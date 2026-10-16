@@ -1950,3 +1950,52 @@ def test_stale_check_read_failure_is_recorded_with_its_cause(host: tuple[Path, P
     record = yaml.safe_load((directory / 'execution.yml').read_text())
     assert record['outcome'] == 'error' and record['error'].startswith(main_finalize.STALE_CHECK_ERROR)
     assert 'stale thread unavailable' in record['error'] and not pending.exists()
+
+
+KILLED_HOOK = r"""
+import sys
+from pathlib import Path
+from graphtraj.runtimes.codex import finalize
+from graphtraj.runtimes.codex.app_server import CodexAppServer
+from graphtraj.runtimes.codex.stop_hook import main
+
+root, peer = Path(sys.argv[1]), Path(sys.argv[2])
+finalize.proxy = lambda connection, on_request=None: CodexAppServer(
+    cwd=root, command=(sys.executable, str(peer)), experimental_api=True, on_request=on_request)
+main(['--binding', sys.argv[3], '--hook-session', 'shared-native-session'])
+"""
+
+
+def test_killed_real_hook_leaves_a_check_the_next_stop_records(host: tuple[Path, Path]) -> None:
+    """The real Stop hook, killed mid-check, releases its locks; the next Stop records the check."""
+    import os
+    import signal
+    import subprocess
+    import time
+
+    root, binding = host
+    (root / 'options.json').write_text(json.dumps({
+        'hold_check': 60, 'stale_turns': {'checker': [{'id': 'check-turn', 'status': 'completed'}]}}))
+    event = {'hook_event_name': 'Stop', 'session_id': 'shared-native-session', 'turn_id': 'main-turn',
+             'stop_hook_active': False, 'model': 'actual-model'}
+    hook = subprocess.Popen([sys.executable, '-c', KILLED_HOOK, str(root), str(root / 'peer.py'), str(binding)],
+                            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+                            start_new_session=True, env={**os.environ, 'FINALIZE_TEST_ROOT': str(root)})
+    hook.stdin.write(json.dumps(event))
+    hook.stdin.close()
+    deadline = time.monotonic() + 20
+    while not (root / 'checker-running').exists():
+        assert time.monotonic() < deadline and hook.poll() is None, hook.stderr.read()
+        time.sleep(0.05)
+    os.kill(hook.pid, signal.SIGKILL)  # only the hook process
+    hook.wait(timeout=5)
+    checks = list((binding.parent / 'checks').glob('*'))
+    assert len(checks) == 1 and (checks[0] / 'session.yml').exists()
+    assert not (checks[0] / 'execution.yml').exists()
+    assert list(binding.parent.glob('pending-*/turn'))
+    (root / 'options.json').write_text(json.dumps({
+        'stale_turns': {'checker': [{'id': 'check-turn', 'status': 'completed'}]}}))
+    stop(binding)
+    record = yaml.safe_load((checks[0] / 'execution.yml').read_text())
+    assert record == {'session': 'checker', 'outcome': 'error', 'error': main_finalize.STALE_CHECK_ERROR}
+    assert not list(binding.parent.glob('pending-*'))

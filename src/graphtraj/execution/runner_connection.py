@@ -11,6 +11,7 @@ import sys
 import tempfile
 import threading
 import time
+import traceback
 from contextlib import contextmanager
 from contextvars import ContextVar
 from pathlib import Path
@@ -111,6 +112,9 @@ def _answer_request(
     except (RunnerError, RuntimeAdapterError) as error:
         result = {'error': {'code': error.code, 'message': error.message}}
     except (OSError, ValueError, KeyError, TypeError) as error:
+        if isinstance(error, OSError):
+            # The reply keeps its format; the host keeps where the call failed.
+            traceback.print_exc(file=sys.stderr)
         result = {'error': {'code': 'operation-failed', 'message': str(error)}}
     try:
         descriptor = os.open('response.tmp', os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,

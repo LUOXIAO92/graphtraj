@@ -112,7 +112,10 @@ class OperationCommand(click.Command):
                     schema.get("items", {})
                     if parameter.multiple or parameter.nargs == -1 else schema
                 )
-                parameter.type = SchemaType(scalar, parameter.type)
+                # Flags keep their type: Click may derive boolean-flag parsing,
+                # including a --no- secondary option, from it.
+                if not (isinstance(parameter, click.Option) and parameter.is_flag):
+                    parameter.type = SchemaType(scalar, parameter.type)
             elif name:
                 parameter.required = name in required
             if isinstance(parameter, click.Option):

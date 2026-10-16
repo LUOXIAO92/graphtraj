@@ -319,3 +319,25 @@ def test_native_recovery_command_reuses_shared_help_without_raw_tool(
             assert name in result.output
     discovered = gateway.handle_request({'action': 'discover'})
     assert 'apply_approved_recovery' not in {item['feature'] for item in discovered.document['features']}
+
+
+def test_recover_boolean_flag_keeps_its_negative_option(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """--no-resume parses whatever Click derives boolean flags from the option type."""
+    import click
+
+    command = agent_runner.main.commands['recover']
+    resume = next(parameter for parameter in command.get_params(click.Context(command))
+                  if parameter.name == 'resume')
+    assert isinstance(resume.type, click.types.BoolParamType) and resume.secondary_opts == ['--no-resume']
+    sent = []
+
+    def invoke(feature: str, arguments: dict, cwd: Path) -> tools.ToolResult:
+        """Observe the parsed operation without opening Runner resources."""
+        sent.append(arguments)
+        return tools.ToolResult({'recovery_status': 'applied'})
+
+    monkeypatch.setattr(agent_runner, 'invoke_tool', invoke)
+    monkeypatch.setattr(agent_runner, '_budget_notices', nullcontext)
+    result = CliRunner().invoke(agent_runner.main, ['recover', 'member', '--no-resume'])
+    assert result.exit_code == 0, result.output
+    assert sent == [{'alias': 'member', 'resume': False}]

@@ -791,3 +791,27 @@ def test_claude_exact_connection_and_default_home(project: Path, monkeypatch: py
     assert (role.runtime, role.model, role.reasoning_effort) == ('claude', 'claude-opus-5-5', 'high')
     assert role.runtime_home is None  # No implicit CLAUDE_CONFIG_DIR override.
     assert role.connection_revision == saved['revision']
+
+
+def test_host_operation_os_error_keeps_reply_and_logs_traceback(tmp_path, capsys) -> None:
+    """A pathless OSError keeps its reply format, with its traceback on host stderr."""
+    import json
+    import os
+
+    from graphtraj.execution import runner_connection
+
+    (tmp_path / 'request.json').write_text(json.dumps({'operation': 'recover'}))
+
+    def failing_operation(request: dict) -> dict:
+        """Fail like an unnamed system call refused by the sandbox."""
+        raise PermissionError(1, 'Operation not permitted')
+
+    directory = os.open(tmp_path, os.O_RDONLY)
+    try:
+        runner_connection._answer_request(directory, failing_operation, None)
+    finally:
+        os.close(directory)
+    assert json.loads((tmp_path / 'response.json').read_text()) == {
+        'error': {'code': 'operation-failed', 'message': '[Errno 1] Operation not permitted'}}
+    error = capsys.readouterr().err
+    assert 'PermissionError' in error and 'failing_operation' in error

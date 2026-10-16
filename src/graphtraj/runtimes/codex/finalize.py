@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 from contextlib import ExitStack
 import json
+import os
 import shlex
 import sys
 import tempfile
@@ -21,6 +22,16 @@ from graphtraj.runtimes.codex.session_entry import session_source, event_record
 from graphtraj.runtimes.codex.usage import CodexCheckUsage
 
 
+def control_socket(codex_home: str) -> str:
+    """Return the daemon control socket as its resolved target.
+
+    The published socket may be a symlink. The checker's allowance and the
+    proxy's connect then name the same path, since a sandbox rule matched on
+    the literal symlink would not cover the resolved socket, or vice versa.
+    """
+    return os.path.realpath(Path(codex_home) / 'app-server-control' / 'app-server-control.sock')
+
+
 def proxy(
     connection: dict,
     on_request: Callable[[CodexServerRequest], Awaitable[dict]] | None = None,
@@ -30,7 +41,9 @@ def proxy(
            for k in ('session', 'codex_home')):
         raise ValueError('Invalid owning Codex connection.')
     return CodexAppServer(
-        cwd=Path.cwd(), command=(str(runtime_executable('codex')), 'app-server', 'proxy'),
+        cwd=Path.cwd(),
+        command=(str(runtime_executable('codex')), 'app-server', 'proxy',
+                 '--sock', control_socket(connection['codex_home'])),
         environment={'CODEX_HOME': connection['codex_home']}, experimental_api=True,
         on_request=on_request,
         request_handler_timeout=None,
@@ -236,8 +249,7 @@ def check(
             parent = {**parent, 'model': context['model'], 'configuration': configuration}
             parent['turn_settings'] = dict(context.get('settings', {}))
             # Main's own daemon socket, which the checker's CLI must reach.
-            parent['control_socket'] = str(Path(binding['connection']['codex_home'])
-                                           / 'app-server-control' / 'app-server-control.sock')
+            parent['control_socket'] = control_socket(binding['connection']['codex_home'])
             if 'effort' not in parent['turn_settings'] and 'reasoningEffort' in configuration:
                 parent['turn_settings']['effort'] = configuration['reasoningEffort']
             # Register this attempt before requesting its fixed native fork:

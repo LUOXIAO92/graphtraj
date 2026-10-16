@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 from contextlib import contextmanager
 import sys
 from pathlib import Path
@@ -1661,7 +1662,7 @@ def test_checker_profile_enables_managed_network_on_main_profile(host: tuple[Pat
     wire = [json.loads(line) for line in (root / 'wire.jsonl').read_text().splitlines()]
     fork = next(message['params'] for message in wire if message['method'] == 'thread/fork')
     assert fork['permissions'] == 'graphtraj_checker' and 'sandbox' not in fork
-    socket = str(root / 'app-server-control' / 'app-server-control.sock')
+    socket = os.path.realpath(root / 'app-server-control' / 'app-server-control.sock')
     assert fork['config']['permissions'] == {'graphtraj_checker': {
         'extends': ':workspace', 'network': {'enabled': True, 'unix_sockets': {socket: 'allow'}},
     }}
@@ -1670,6 +1671,20 @@ def test_checker_profile_enables_managed_network_on_main_profile(host: tuple[Pat
         'permission_profile': {'id': 'graphtraj_checker', 'extends': ':workspace'},
         'unix_socket': socket, 'network_access': {'main': False, 'checker': True},
     }
+
+
+def test_symlinked_control_socket_is_allowed_and_connected_as_its_target(tmp_path: Path) -> None:
+    """The proxy connects to the same resolved socket the checker is allowed."""
+    target = tmp_path / 'daemon' / 'opaque'
+    target.parent.mkdir()
+    target.touch()
+    published = tmp_path / 'home' / 'app-server-control' / 'app-server-control.sock'
+    published.parent.mkdir(parents=True)
+    published.symlink_to(target)
+    home = str(tmp_path / 'home')
+    assert finalize.control_socket(home) == os.path.realpath(target)
+    server = finalize.proxy({'session': 'main', 'codex_home': home})
+    assert server._command[1:] == ('app-server', 'proxy', '--sock', os.path.realpath(target))
 
 
 @pytest.mark.parametrize('fork', [

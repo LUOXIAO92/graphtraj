@@ -61,6 +61,10 @@ def worker_connection(
         raise RunnerError('authority-denied', 'Windows does not support the authenticated Runner control pipe.')
     stop = threading.Event()
     with tempfile.TemporaryDirectory(prefix='control-', dir=directory) as address:
+        # Held for the host's lifetime; the kernel releases it if the host dies.
+        host_lock = os.open(address, os.O_RDONLY | os.O_DIRECTORY)
+        fcntl.flock(host_lock, fcntl.LOCK_EX)
+
         def serve() -> None:
             """Publish complete responses while native work continues on its own loop."""
             while not stop.is_set():
@@ -87,6 +91,26 @@ def worker_connection(
             deadline = time.monotonic() + OPERATION_TIMEOUT_SECONDS
             while any(Path(address).iterdir()) and time.monotonic() < deadline:
                 time.sleep(0.01)
+            os.close(host_lock)
+
+
+def _host_alive(address: str) -> bool:
+    """Observe the serving host's channel lock without taking it over."""
+    try:
+        descriptor = os.open(address, os.O_RDONLY | os.O_DIRECTORY)
+    except OSError:
+        return False
+    try:
+        fcntl.flock(descriptor, fcntl.LOCK_SH | fcntl.LOCK_NB)
+    except BlockingIOError:
+        return True
+    except OSError:
+        return True  # Unobservable here; the reply or channel removal still ends the wait.
+    else:
+        fcntl.flock(descriptor, fcntl.LOCK_UN)
+        return False
+    finally:
+        os.close(descriptor)
 
 
 def _answer_request(
@@ -189,7 +213,8 @@ def connection_operation(
                         # The host removes the request when it accepts it. A
                         # long native operation is then awaited until its reply
                         # or until the host closes this channel.
-                        if not Path(directory).is_dir():
+                        if (not Path(directory).is_dir()
+                                or time.monotonic() >= deadline and not _host_alive(address)):
                             raise TimeoutError('The Session host closed before replying; '
                                                'the accepted operation is unconfirmed.')
                     elif time.monotonic() >= deadline:

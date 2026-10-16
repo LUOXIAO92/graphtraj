@@ -852,3 +852,33 @@ def test_only_recovery_awaits_acceptance(monkeypatch, tmp_path) -> None:
         hosted_cli.forward_request({'action': 'execute', 'feature': feature, 'arguments': {}}, tmp_path)
     assert [call['await_accepted'] for call in calls] == [True, False]
     assert {call['response_timeout'] for call in calls} == {hosted_cli.OPERATION_TIMEOUT_SECONDS}
+
+
+def test_accepted_wait_ends_when_the_host_is_gone(tmp_path) -> None:
+    """A host that accepted the request and then vanished never leaves the caller waiting."""
+    import threading
+    import time
+
+    from graphtraj.execution import runner_connection
+    from graphtraj.execution.runner_models import RunnerError
+
+    address = tmp_path / 'control-dead'
+    address.mkdir()  # Left behind as by a killed host: no lock is held.
+
+    def accept_and_vanish() -> None:
+        """Take the request as a host would, then never reply."""
+        deadline = time.monotonic() + 5
+        while time.monotonic() < deadline:
+            for request in address.glob('*/request.json'):
+                request.unlink()
+                return
+            time.sleep(0.01)
+
+    taker = threading.Thread(target=accept_and_vanish)
+    taker.start()
+    started = time.monotonic()
+    with pytest.raises(RunnerError, match='host closed before replying'):
+        runner_connection.connection_operation(str(address), {'value': 1}, response_timeout=0.3,
+                                               await_accepted=True)
+    taker.join()
+    assert time.monotonic() - started < 5

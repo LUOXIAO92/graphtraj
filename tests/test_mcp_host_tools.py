@@ -824,8 +824,8 @@ def test_installed_mcp_server_continues_a_stopped_task_with_unchanged_semantics(
             "task_name": "session-alias-control",
             "role":        "coding-team.team-leader",
         }]}, thread_id="thread-main")["result"]
-        assert stopped["isError"] is True
-        assert stopped["structuredContent"]["tasks"][0]["launch_status"] == "stopped"
+        assert stopped["isError"] is False, stopped
+        _await_retained_stop(task_directory)
         _assert_native_budget_stop(protocol, task_directory, "thread-main")
         usage_before = yaml.safe_load((task_directory / "execution-budget.yml").read_text())
         assert usage_before["stopped"] is True
@@ -1332,6 +1332,20 @@ def _native_queue_submissions(protocol: Path) -> list[dict]:
     ]
 
 
+def _await_retained_stop(task_directory: Path, timeout: float = 90) -> None:
+    """Wait until Runner retains a budget stop for the Task.
+
+    A dispatch whose member has a native parent route returns after the
+    member's registration; its stop is then sampled while the member runs.
+    """
+    deadline = time.monotonic() + timeout
+    while not yaml.safe_load(
+        (task_directory / "execution-budget.yml").read_text(encoding="utf-8")
+    )["stopped"]:
+        assert time.monotonic() < deadline, "the dispatched member was never stopped"
+        time.sleep(0.02)
+
+
 def _assert_native_budget_stop(
     protocol: Path,
     task_directory: Path,
@@ -1511,12 +1525,7 @@ def test_installed_mcp_server_returns_a_budget_stop_to_the_request_caller(
         )["result"]
         assert stopped["isError"] is False, stopped
         # The stop is sampled at the leader's final stage, after its children.
-        deadline = time.monotonic() + 90
-        while not yaml.safe_load(
-            (task_directory / "execution-budget.yml").read_text(encoding="utf-8")
-        )["stopped"]:
-            assert time.monotonic() < deadline, "the dispatched member was never stopped"
-            time.sleep(0.02)
+        _await_retained_stop(task_directory)
 
         # Accounting and retention keep the existing shapes and thresholds.
         usage = yaml.safe_load(
@@ -1645,11 +1654,11 @@ def test_installed_mcp_server_returns_each_caller_its_own_stop(
             stopped = server.call(
                 "swarm", {"tasks": [tasks[task_id]]}, thread_id=thread_id
             )["result"]
-            assert stopped["isError"] is True, stopped
-            assert stopped["structuredContent"]["tasks"][0]["launch_status"] == "stopped"
+            assert stopped["isError"] is False, stopped
             task_directory = harness / ".graphtraj/state/tasks" / (
                 task_id + "-" + tasks[task_id]["task_name"]
             )
+            _await_retained_stop(task_directory)
             _assert_native_budget_stop(
                 protocol, task_directory, thread_id,
             )
@@ -1716,12 +1725,7 @@ def test_installed_mcp_swarm_returns_after_registration_and_stops_on_the_native_
             assert process_is_alive(mapping["worker_pid"]), "swarm waited for the Worker to exit"
 
             clock.write_text(str(started + 260), encoding="utf-8")
-            deadline = time.monotonic() + 20
-            while not yaml.safe_load(
-                (task_directory / "execution-budget.yml").read_text(encoding="utf-8")
-            )["stopped"]:
-                assert time.monotonic() < deadline, "the running member was never stopped"
-                time.sleep(0.02)
+            _await_retained_stop(task_directory)
             delivered = _assert_native_budget_stop(protocol, task_directory, "thread-main")
         finally:
             release.touch()
@@ -1872,8 +1876,8 @@ def test_installed_mcp_server_keeps_the_continue_path_on_the_request_caller(
         stopped = server.call(
             "swarm", {"tasks": [task]}, thread_id="thread-main"
         )["result"]
-        assert stopped["isError"] is True, stopped
-        assert stopped["structuredContent"]["tasks"][0]["launch_status"] == "stopped"
+        assert stopped["isError"] is False, stopped
+        _await_retained_stop(task_directory)
         _assert_native_budget_stop(
             protocol, task_directory, "thread-main",
         )

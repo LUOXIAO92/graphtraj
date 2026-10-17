@@ -76,3 +76,17 @@ def test_independent_codex_lifecycle_and_callback_cwd(
     assert all(item['params']['cwd'] == str(cwd) for item in sessions)
     assert sessions[1]['params']['threadId'] == session
     assert not (root / '.graphtraj/state/tasks').exists()
+
+    approved = call({'action': 'resume', 'agent': agent,
+                     'message': 'request:item/commandExecution/requestApproval'})
+    assert not approved.failed, approved.document
+    waiting = call({'action': 'wait', 'agent': agent, 'timeout_seconds': 10})
+    assert waiting.document['result']['pending_requests'] == 1
+    pending = call({'action': 'requests', 'agent': agent})
+    [request] = pending.document['result']['requests']
+    replied = call({'action': 'reply', 'agent': agent, 'request': request,
+                    'response': {'decision': 'accept'}})
+    assert not replied.failed, replied.document
+    done = call({'action': 'wait', 'agent': agent, 'timeout_seconds': 10})
+    assert done.document['result']['last_result']['last_message'] == 'request accepted'
+    assert done.document['result']['state'] == 'standby'

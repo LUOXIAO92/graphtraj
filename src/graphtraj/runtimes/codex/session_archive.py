@@ -246,7 +246,8 @@ class CodexSessionArchive:
                                   locator=f'connection:{position}', seq=store.next_seq,
                                   time=emitted if emitted is not None else 0)
             event['graphtraj']['direction'] = direction
-            event['graphtraj']['receivedAtMs'] = time.time_ns() // 1000000
+            observation = 'receivedAtMs' if direction == 'received' else 'observedAtMs'
+            event['graphtraj'][observation] = time.time_ns() // 1000000
             event['graphtraj']['missing'] = [
                 {'path': 'rawModelStream', 'reason': 'Unknown: native notifications are not a raw model stream.'},
                 {'path': 'logprobs', 'reason': 'Unknown unless explicitly present in the native notification.'},

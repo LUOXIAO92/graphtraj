@@ -91,6 +91,27 @@ def _relocate(event: dict, indices: dict[int, int], session_id: str) -> dict:
     return event
 
 
+def _message_gap(path: str) -> bool:
+    """Treat unclassified missing facts as gaps, except known non-message metadata.
+
+    Missing paths use existing dotted or slash-separated field names. Optional
+    time, usage and probability data do not determine message content, identity
+    or order. Unknown paths stay conservative: their meaning cannot be inferred
+    from a prose reason or silently discarded during reconstruction.
+    """
+    parts = path.replace('/', '.').replace('[', '.').strip('.').split('.')
+    while parts and parts[0] in {'$', 'header', 'event', 'data', 'graphtraj', 'native',
+                                'message', 'source'}:
+        parts.pop(0)
+    metadata = {
+        'time', 'timestamp', 'createdAt', 'completedAt', 'emittedAtMs',
+        'receivedAtMs', 'loggedAt', 'usage', 'logprobs', 'probabilities',
+        'probabilitySemantics', 'score', 'scores', 'model', 'provider', 'tokenizer',
+        'taskIds', 'rawModelStream', 'stream',
+    }
+    return not parts or parts[0] not in metadata
+
+
 class JsonlSessionStore:
     """Read and update one portable JSONL Session with adjacent attachments.
 
@@ -308,6 +329,10 @@ class JsonlSessionStore:
     def messages(self) -> list[dict]:
         """Apply DSH surface operations, retaining the Runtime's message order.
 
+        Header/event missing facts about content, history or correspondence
+        refuse reconstruction, including unclassified paths. Known optional
+        time/usage/probability and stream-detail metadata do not block messages;
+        their missing explanations remain available through header/page reads.
         Unknown required events and opaque-native records refuse reconstruction;
         the caller must finish Runtime interpretation instead of guessing order.
         Native compaction/branch semantics must be mapped to DSH operations by
@@ -316,6 +341,10 @@ class JsonlSessionStore:
         if self._metadata['pending']:
             raise ValueError('Unresolved observations remain; native history is incomplete.')
         validate_session(self.header, self._events, reconstruct=True)
+        for value in [self.header, *self._events]:
+            if any(_message_gap(item['path'])
+                   for item in value.get('graphtraj', {}).get('missing', [])):
+                raise ValueError('Missing native content, history or correspondence; messages are incomplete.')
         surface = []
         for event in self._events:
             if event['type'] not in SURFACE_TYPES:

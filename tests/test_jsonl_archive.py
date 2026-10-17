@@ -370,3 +370,59 @@ def test_same_source_finalization_at_last_checkpoint_and_parallel_pending(tmp_pa
     assert len(store.messages()) == 2
     assert not store.publish([first, second], source='answer-stream', position=0)
     assert len(store.observations()) == 2
+
+
+@pytest.mark.parametrize('missing_path', [
+    'data.content', '/data/content', 'history', 'history_base', 'inheritedPrefix',
+    'messageOrder', 'data.message.id', 'data.message.toolCallId', 'unknownNativeGap',
+])
+def test_messages_refuse_declared_content_history_or_identity_gaps(
+    tmp_path: Path, missing_path: str,
+) -> None:
+    """Readable archives cannot turn declared gaps into apparently complete messages."""
+    events = mapped([NATIVE[0]])
+    if missing_path in {'data.content', '/data/content'}:
+        events[0]['data']['content'] = []
+    events[0]['graphtraj']['missing'] = [
+        {'path': missing_path, 'reason': 'Native message body or history unavailable'}]
+    store = JsonlSessionStore.create(tmp_path / 'session.jsonl', header())
+    assert store.publish(events, source='native', position=0)
+    reopened = JsonlSessionStore(store.path)
+    assert reopened.page()['events'] == events
+    with pytest.raises(ValueError, match='incomplete'):
+        reopened.messages()
+
+
+@pytest.mark.parametrize('missing_path', ['parentSession', 'history', '/inheritedPrefix'])
+def test_messages_refuse_header_history_gaps(tmp_path: Path, missing_path: str) -> None:
+    """An unavailable inherited prefix cannot become an apparently complete root."""
+    metadata = header()
+    metadata['graphtraj'] = {'version': 1, 'projectId': 'fixture', 'agentId': 'fixture',
+                            'taskIds': [], 'missing': [
+                                {'path': missing_path, 'reason': 'Native prefix unavailable'}]}
+    store = JsonlSessionStore.create(tmp_path / 'session.jsonl', metadata)
+    events = mapped([NATIVE[0]])
+    store.publish(events, source='native', position=0)
+    assert store.header == metadata
+    assert store.page()['events'] == events
+    with pytest.raises(ValueError, match='incomplete'):
+        store.messages()
+
+
+def test_missing_optional_metadata_does_not_block_complete_messages(tmp_path: Path) -> None:
+    """Creation times and probability/usage details do not alter native messages."""
+    metadata = header()
+    metadata['graphtraj'] = {'version': 1, 'projectId': 'fixture', 'agentId': 'fixture',
+                            'taskIds': [], 'missing': [
+                                {'path': 'createdAt', 'reason': 'Native creation time unavailable'}]}
+    events = mapped(NATIVE)
+    events[0]['graphtraj']['missing'] = [
+        {'path': path, 'reason': 'Optional native metadata unavailable'}
+        for path in ('time', '/data/message/createdAt', 'logprobs',
+                     'data.usage', 'probabilitySemantics', '/data/stream')]
+    store = JsonlSessionStore.create(tmp_path / 'session.jsonl', metadata)
+    store.publish(events, source='native', position=0)
+    assert [(message['id'], message['content'][0]['text']) for message in store.messages()] == [
+        (record['id'], record['text']) for record in NATIVE]
+    assert store.header == metadata
+    assert store.page()['events'] == events

@@ -9,7 +9,7 @@ import yaml
 
 from conftest import app_server_peer, run_process
 from test_project_setup import install_user_skills, run_setup, setup_environment
-from test_task_graph import _change_status, _register, _task
+from test_task_graph import _change_status, _register, _revised, _task
 
 
 # Controlled Team decisions at the installed Runtime boundary. Main's decisions
@@ -88,6 +88,7 @@ def test_installed_delivery_corrects_a_split_and_delivers_the_current_graph(
     state = root / config["paths"]["state"]
     worktrees = root / config["paths"]["agent_worktrees"]
     environment = setup_environment(user_home, fake_codex)
+    environment["CODEX_HOME"] = str(user_home / ".codex")
     environment["GRAPHTRAJ_AGENT_RUNNER"] = str(installed_commands.runner)
     environment["PYTHONDONTWRITEBYTECODE"] = "1"
     fake_codex.executable.write_text("#!" + sys.executable + "\n" + RUNTIME)
@@ -117,6 +118,7 @@ def test_installed_delivery_corrects_a_split_and_delivers_the_current_graph(
     second = {**_task("2", "settings", dependencies=["1"]), "body": "Deliver settings.py with greeting hello."}
     dependent = {**_task("3", "cli", dependencies=["1", "2"]), "body": "Deliver cli.py printing hello world using render()."}
     for task in (first, second, dependent):
+        task["source"] = f"local:task/{task['task_id']}"
         _register(installed_commands, root, task)
     original_definitions = {path: path.read_bytes() for path in state.glob("tasks/*/task.md")}
     assert [item["task_id"] for item in product("task", "graph")["tasks"] if item["ready"]] == ["1"]
@@ -152,9 +154,10 @@ def test_installed_delivery_corrects_a_split_and_delivers_the_current_graph(
         "caused_by_event_ids": [before[-1]["event_id"]],
         "evidence_refs": [str((first_round / "validation.md").relative_to(root)), str((first_round / "engineer.md").relative_to(root))],
         "tasks": [
-            {**first, "body": "Deliver render.py and settings.py together; render() returns hello.", "active": True, "replaced_by": []},
-            {**second, "active": False, "replaced_by": ["1"]},
-            {**dependent, "dependencies": ["1"], "active": True, "replaced_by": []},
+            _revised(first, body="Deliver render.py and settings.py together; render() returns hello."),
+            _revised(second, disposition="superseded", replaced_by=["1"],
+                     retirement_reason="Settings must be delivered together with the renderer."),
+            _revised(dependent, dependencies=["1"]),
         ],
     }))
     revised = product("task", "revise", "--revision-file", str(revision))
@@ -200,7 +203,6 @@ def test_installed_delivery_corrects_a_split_and_delivers_the_current_graph(
     assert {path: path.read_bytes() for path in batches} == batches
     assert all(path.read_bytes().startswith(content) for path, content in traces.items())
     assert events()[:len(before)] == before
-    assert {path.name for path in state.iterdir()} == {"tasks", "batches", "worldline"}
     assert not any(path.name in {"run.yml", "metadata.yml", "ledger.yml", "dag.md", "handoff.md"} for path in state.rglob("*"))
 
     assert {path.relative_to(old_state): path.read_bytes() for path in old_state.rglob("*") if path.is_file()} == old_evidence

@@ -270,7 +270,7 @@ def test_installed_mcp_server_discovers_tools_and_reads_the_same_graph_as_the_cl
             "replaced_by":  [],
         }
         assert {key: node[key] for key in expected} == expected
-        assert node["schema_version"] == 1 and node["parent_known"] is False
+        assert node["parent_id"] is None and node["disposition"] == "active"
         # The rendered text is the CLI's own YAML for the same document.
         assert call["result"]["content"][0]["text"] == graph.stdout
 
@@ -293,7 +293,7 @@ def test_installed_mcp_server_submits_the_same_graph_operations_as_the_cli(
         "caused_by_event_ids": [],
         "evidence_refs":       ["evidence.md"],
         "tasks":             [
-            {**_task("74", "second-graph"), "active": True, "replaced_by": []}
+            {**_task("74", "second-graph"), "current_definition": "task.md"}
         ],
     }
     change = {
@@ -422,7 +422,7 @@ def test_installed_mcp_server_reports_invalid_input_and_unknown_requests(
         "--task-file",
         str(_write(project / "invalid.yml", invalid)),
     )
-    assert cli.returncode == 1
+    assert cli.returncode == 2
     assert rejected["isError"] is True
     assert "required" in rejected["structuredContent"]["error"]
     assert rejected["content"][0]["text"]

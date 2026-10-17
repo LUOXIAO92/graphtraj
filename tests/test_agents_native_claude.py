@@ -142,6 +142,9 @@ def test_project_root_cwd_preserves_private_state_denials(
     assert str(project) not in filesystem['allowRead']
     assert str(project / '.graphtraj') in filesystem['denyRead']
     assert str(project / '.graphtraj') in filesystem['denyWrite']
+    channel = Path(filesystem['allowWrite'][0])
+    assert not channel.is_relative_to(project / '.graphtraj')
+    assert not channel.exists()
     assert not settings['sandbox']['allowUnsandboxedCommands']
 
     denied, failed = agents(project, project / '.graphtraj/state', 'main-a',

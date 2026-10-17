@@ -10,6 +10,7 @@ import queue
 import signal
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 import uuid
@@ -322,8 +323,17 @@ class ClaudeExecution:
                 provider = 'anthropic'
             collector = StreamCollector(archive, self.execution_id, self.request['model'], provider)
             source_position = 0
+            channel_directory = None
+            if (Path(self.request['harness_root']) / '.graphtraj').resolve().is_relative_to(
+                    Path(self.request['worktree_path']).resolve()):
+                # Root launches deny writes throughout private state, including
+                # the usual CLI directory. Keep only this authenticated channel
+                # in a temporary directory, with its normal scoped grant.
+                channel_directory = Path(resources.enter_context(
+                    tempfile.TemporaryDirectory(prefix='graphtraj-claude-')))
             address = resources.enter_context(cli_connection(
-                Path(self.request['harness_root']), self.directory.name, native_operation_features()))
+                Path(self.request['harness_root']), self.directory.name, native_operation_features(),
+                directory=channel_directory))
             argv, environment = self._prepare(address)
             stderr = resources.enter_context((self.directory / 'stderr.log').open('a', encoding='utf-8'))
             try:

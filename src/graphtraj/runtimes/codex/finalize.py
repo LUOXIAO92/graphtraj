@@ -214,7 +214,7 @@ async def _owned_request_result(binding: dict) -> dict | None:
 
 
 def completion_boundary(binding: dict, context: dict) -> str | None:
-    """Fingerprint native history and current Task facts, never a turn alone.
+    """Fingerprint native history, Task facts and actual execution activity.
 
     Hook/usage telemetry does not change model input. Native response items,
     compaction and turn settings do. Without a readable native history or Task
@@ -222,6 +222,8 @@ def completion_boundary(binding: dict, context: dict) -> str | None:
     """
     from graphtraj.configuration.project_configuration import load_project_configuration
     from graphtraj.graph.task_index import read_index
+    from graphtraj.execution.runner_status import NativeCaller, runtime_caller, status_tree
+    from graphtraj.workspace.runner_project import discover_runner_directory
 
     transcript = context.get('transcript_path')
     if not transcript:
@@ -237,11 +239,24 @@ def completion_boundary(binding: dict, context: dict) -> str | None:
                     digest.update(line.encode())
         project = load_project_configuration(Path(binding['cwd']))
         index = read_index(project.state)
+        with runtime_caller(discover_runner_directory(Path(binding['cwd'])),
+                            NativeCaller(binding['session'], binding['connection'])):
+            status = status_tree(Path(binding['cwd']))
+        if not status.succeeded:
+            return None
+        agents = status.document['agents']
+        if any(agent.get('activity') not in ('running', 'idle') for agent in agents):
+            return None  # An unconfirmed execution cannot justify an old release.
+        activities = [{key: agent[key] for key in (
+            'alias', 'parent', 'children', 'session', 'execution_id',
+            'activity', 'last_outcome', 'retire_status',
+        ) if key in agent} for agent in agents]
         settings = {key: value for key, value in context.get('settings', {}).items()
                     if key != 'check_usage_baseline'}
         digest.update(json.dumps({
-            'context': {**context, 'settings': settings}, 'summary_issue': binding['summary_issue'],
-            'tasks': index,
+            'context': {**{key: value for key, value in context.items() if key != 'continued'},
+                        'settings': settings},
+            'summary_issue': binding['summary_issue'], 'tasks': index, 'agents': activities,
         }, sort_keys=True).encode())
         return digest.hexdigest()
     except (OSError, ValueError, KeyError, TypeError):

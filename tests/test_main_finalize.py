@@ -476,7 +476,8 @@ def test_checker_observer_does_not_answer_main_approval(
 @contextmanager
 def owned_child(root: Path, requests: list, *, outcome: str | None = None,
                 drop: str | None = None, on_query: Callable[[], None] | None = None,
-                alias: str = 'engineer@x1', task_id: str = '237', parent: str | None = None):
+                alias: str = 'engineer@x1', task_id: str = '237', parent: str | None = None,
+                activity: dict | None = None):
     """Run Main's own top-level Runner Session with a live control owner."""
     from graphtraj.execution.runner_connection import worker_connection
 
@@ -485,6 +486,8 @@ def owned_child(root: Path, requests: list, *, outcome: str | None = None,
 
     def operate(request: dict) -> dict:
         """Answer the Runner's own pending-request query."""
+        if request['operation'] == 'status':
+            return activity if activity is not None else {'activity': 'running'}
         assert request['operation'] == 'requests'
         if on_query is not None:
             on_query()
@@ -2162,4 +2165,61 @@ def test_new_native_input_during_check_discards_old_verdict(host: tuple[Path, Pa
     assert evidence['outcome'] == 'cancelled' and evidence['cancellation']
     (root / 'options.json').write_text(json.dumps({'child': 'next-checker'}))
     assert native_hook(root)['systemMessage']
+    assert wire(root).count('thread/fork') == wire(root).count('turn/start') == 2
+
+
+@pytest.mark.parametrize('outcome', ['completed', 'runtime-error'])
+@pytest.mark.parametrize('terminal_record', [False, True])
+def test_execution_activity_invalidates_waiting_without_task_or_input_change(
+    host: tuple[Path, Path], outcome: str, terminal_record: bool,
+) -> None:
+    """A child ending changes reuse validity before any Task event or notification."""
+    from test_generic_members import _register_research_team
+    from graphtraj.graph.task_index import read_index
+
+    root, _ = host
+    configuration = root / '.graphtraj/config.yml'
+    document = yaml.safe_load(configuration.read_text())
+    document['paths']['state'] = 'state'
+    configuration.write_text(yaml.safe_dump(document))
+    _register_research_team(root, multiple=False)
+    rollout(root)
+    transcript = (root / 'rollout.jsonl').read_bytes()
+    index = read_index(root / 'state')
+    activity = {'activity': 'running'}
+    (root / 'options.json').write_text(json.dumps({'output': json.dumps({
+        'status': 'waiting', 'conclusion': 'May end.', 'reason': 'Child running.', 'nodes': ['148'],
+    })}))
+    with owned_child(root, [], alias='research@x1', task_id='148', activity=activity):
+        assert 'waiting' in native_hook(root)['systemMessage']
+        assert native_hook(root) == {}
+        assert wire(root).count('thread/fork') == wire(root).count('turn/start') == 1
+        activity.update(activity='idle', last_outcome=outcome)
+        if terminal_record:
+            (root / '.graphtraj/runner/sessions/research@x1/execution.yml').write_text(
+                yaml.safe_dump({'outcome': outcome}))
+        (root / 'options.json').write_text(json.dumps({'child': 'next-checker', 'output': json.dumps({
+            'status': 'actionable', 'conclusion': 'Continue.', 'reason': 'Handle the ended child.',
+            'nodes': ['148'],
+        })}))
+        assert native_hook(root)['decision'] == 'block'
+    assert (root / 'rollout.jsonl').read_bytes() == transcript
+    assert read_index(root / 'state') == index
+    assert wire(root).count('thread/fork') == wire(root).count('turn/start') == 2
+
+
+def test_continued_flag_reuses_but_new_turn_still_checks(host: tuple[Path, Path]) -> None:
+    """Carrier reentry alone reuses a release; a real later native turn still checks."""
+    root, _ = host
+    rollout(root)
+    assert native_hook(root)['systemMessage']
+    (root / 'options.json').write_text(json.dumps({'child': 'carrier-checker'}))
+    assert native_hook(root, stop_hook_active=True) == {}
+    assert wire(root).count('thread/fork') == wire(root).count('turn/start') == 1
+    with (root / 'rollout.jsonl').open('a') as stream:
+        stream.write(json.dumps({'type': 'turn_context', 'payload': {
+            'turn_id': 'next-main-turn', 'model': 'actual-model', 'effort': 'high',
+        }}) + '\n')
+    (root / 'options.json').write_text(json.dumps({'child': 'next-checker', 'current_turn': 'next-main-turn'}))
+    assert native_hook(root, turn_id='next-main-turn')['systemMessage']
     assert wire(root).count('thread/fork') == wire(root).count('turn/start') == 2

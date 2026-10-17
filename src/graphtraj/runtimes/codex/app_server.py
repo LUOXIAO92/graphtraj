@@ -26,6 +26,7 @@ from graphtraj.runtimes.codex.codex_adapter import (
 from graphtraj.runtimes.runtime_adapter import RuntimeContext, RuntimeExecutionResult
 from graphtraj.runtimes.codex.websocket import CodexWebSocket
 from graphtraj.runtimes.codex.session_archive import CodexSessionArchive
+from graphtraj.runtimes.codex.jsonl_archive import CodexJsonlArchive
 
 
 _DEFAULT_TIMEOUT = object()
@@ -456,7 +457,7 @@ class CodexAppServer:
 
     def retain_native_trace(
         self, session: CodexSession, trace_file: Path,
-        *, archive: CodexSessionArchive | None = None,
+        *, archive: CodexSessionArchive | CodexJsonlArchive | None = None,
     ) -> None:
         """Read one owned Session's native records through the given Trace entry.
 

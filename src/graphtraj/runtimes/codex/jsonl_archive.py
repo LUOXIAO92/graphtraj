@@ -96,6 +96,15 @@ class CodexJsonlArchive:
             self.activation = 0
         self.header: dict | None = None
 
+    def collection_key(self) -> tuple:
+        """Notice policy changes even while the native file itself is unchanged."""
+        try:
+            configuration = (self.archive.root / 'config.yml').stat()
+            revision = (configuration.st_size, configuration.st_mtime_ns)
+        except FileNotFoundError:
+            revision = None
+        return (revision, self.archive.save_normalized_sessions, self.archive.backfill_history)
+
     def collect(self, rollout: Path) -> None:
         """Publish complete records in native order, retaining unsupported history."""
         # Mapping requires the metadata, even when saving is currently off.

@@ -1,5 +1,6 @@
 """Owned rollout records, rather than notification order, drive JSONL messages."""
 
+import asyncio
 import json
 from pathlib import Path
 
@@ -10,6 +11,8 @@ from graphtraj.interfaces.agents import ConfiguredSessionArchive
 from graphtraj.runtimes.codex.jsonl_archive import CodexJsonlArchive
 from graphtraj.sessions.archive import JsonlSessionStore, archive_path
 from graphtraj.sessions.protocol import native_record
+from graphtraj.runtimes.codex.app_server import CodexAppServer
+from test_codex_app_server import context, peer  # noqa: F401
 
 
 def write(path: Path, records: list[dict]) -> None:
@@ -109,3 +112,37 @@ def test_compaction_is_retained_without_claiming_complete_messages(tmp_path: Pat
     assert native_record(store.page()['events'][-1]) == records[-1]
     with pytest.raises(ValueError, match='opaque-native'):
         store.messages()
+
+
+def test_runtime_observes_archive_policy_without_new_native_output(tmp_path: Path, peer: Path) -> None:
+    """A backfill choice wakes collection of the same unchanged native file."""
+    async def exercise() -> None:
+        """Use the Runtime's production trace owner instead of calling the mapper."""
+        root = tmp_path / 'swarm'
+        write_config(root, save_normalized_sessions=True, backfill_history=False)
+        async with CodexAppServer(command=[str(peer)], cwd=tmp_path, environment={
+            'PEER_NATIVE_ROLLOUT': str(tmp_path / 'native'),
+        }) as adapter:
+            session = await adapter.create_session(context(tmp_path / 'worktree', peer))
+            source = session.rollout_path
+            source.parent.mkdir()
+            records = history()
+            records[0]['payload']['id'] = session.thread_id
+            write(source, records)
+            archive = ConfiguredSessionArchive(root)
+            collector = CodexJsonlArchive(archive, 'agent', session.thread_id, source)
+            adapter.retain_native_trace(session, tmp_path / 'trace.jsonl', archive=collector)
+            path = archive_path(root, 'codex:' + session.thread_id)
+            assert JsonlSessionStore(path).pending()
+            write_config(root, backfill_history=True)
+            await asyncio.sleep(0.3)
+            store = JsonlSessionStore(path)
+            assert not store.pending()
+            assert len(store.messages()) == 7
+            before = path.read_bytes()
+            write_config(root, save_normalized_sessions=False)
+            write(source, records + [{'type': 'future_history', 'payload': {'opaque': True}}])
+            await asyncio.sleep(0.3)
+            assert path.read_bytes() == before
+
+    asyncio.run(exercise())

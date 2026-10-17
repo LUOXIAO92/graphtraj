@@ -19,6 +19,7 @@ from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence, Tuple
 import yaml
 
 from graphtraj.runtimes.codex.session_archive import CodexSessionArchive
+from graphtraj.runtimes.codex.jsonl_archive import CodexJsonlArchive
 
 from graphtraj.runtimes.runtime_adapter import (
     NativeReplacement,
@@ -854,7 +855,7 @@ class CodexNativeTrace:
         rollout_path: Path | None,
         codex_home: Path,
         *,
-        archive: CodexSessionArchive | None = None,
+        archive: CodexSessionArchive | CodexJsonlArchive | None = None,
     ) -> None:
         """Record the Trace entry and the native Session it must read."""
 
@@ -863,7 +864,7 @@ class CodexNativeTrace:
         self._codex_home = codex_home
         self._rollout = rollout_path
         self._archive = archive
-        self._collected_file: tuple[int, int, int, int] | None = None
+        self._collected_file: tuple | None = None
 
     def collect(self) -> None:
         """Archive new records and link the Trace when the native file exists."""
@@ -879,6 +880,8 @@ class CodexNativeTrace:
             # A notification can precede creation of the declared rollout.
             return
         signature = (stat.st_dev, stat.st_ino, stat.st_size, stat.st_mtime_ns)
+        if isinstance(self._archive, CodexJsonlArchive):
+            signature += (self._archive.collection_key(),)
         if self._archive is not None and signature != self._collected_file:
             self._archive.collect(self._rollout)
             # Capture the pre-read signature: appends during collection must

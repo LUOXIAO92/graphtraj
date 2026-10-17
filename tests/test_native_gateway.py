@@ -36,8 +36,13 @@ def project(tmp_path: Path) -> Path:
 
 
 @pytest.mark.parametrize('host', ['main', 'managed'])
+@pytest.mark.parametrize('tool_name', ['graphtraj', 'tasks'])
 def test_native_gateway_disclosure_execution_and_correction(
-    project: Path, peer: Path, monkeypatch: pytest.MonkeyPatch, host: str,
+    project: Path,
+    peer: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    host: str,
+    tool_name: str,
 ) -> None:
     """Fresh hosts register one tool and handle all actions on the same turn."""
     root = project
@@ -66,7 +71,7 @@ def test_native_gateway_disclosure_execution_and_correction(
     ]:
         exchanges.append({'method': 'item/tool/call', 'params': {
             'threadId': 'thread-1', 'turnId': 'turn-1', 'callId': 'different-from-rpc-id',
-            'tool': 'graphtraj', 'arguments': arguments,
+            'tool': tool_name, 'arguments': arguments,
         }, 'response': native_result(document, success)})
     protocol = root / 'protocol.jsonl'
     monkeypatch.setenv('PEER_REQUEST_EXCHANGES', json.dumps(exchanges))
@@ -95,10 +100,11 @@ def test_native_gateway_disclosure_execution_and_correction(
     starts = [item for item in messages if item.get('method') == 'thread/start']
     assert len(starts) == 1
     registered = starts[0]['params']['dynamicTools']
-    assert [tool['name'] for tool in registered] == ['graphtraj', 'agents']
+    assert [tool['name'] for tool in registered] == ['graphtraj', 'agents', 'tasks']
     assert {tool['type'] for tool in registered} == {'function'}
     assert registered[0]['inputSchema'] == gateway.INPUT_SCHEMA
     assert registered[1]['inputSchema'] == agent_swarm.INPUT_SCHEMA
+    assert registered[2]['inputSchema'] == gateway.INPUT_SCHEMA
     replies = [item for item in messages if str(item.get('id', '')).startswith('native-request-1')]
     assert [reply['result'] for reply in replies] == [item['response'] for item in exchanges]
     assert [reply['id'] for reply in replies] == [

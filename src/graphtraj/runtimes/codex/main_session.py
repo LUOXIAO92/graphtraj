@@ -81,7 +81,7 @@ async def run_main(
             """Use native issuer identity for Runner calls, forwarding other requests."""
             if (
                 request.method == 'item/tool/call'
-                and request.params.get('tool') in {'graphtraj', 'agents', *NATIVE_RUNNER_TOOLS}
+                and request.params.get('tool') in {'graphtraj', 'tasks', 'agents', *NATIVE_RUNNER_TOOLS}
             ):
                 result = await run_native_operation(adapter, native_session, None, root, request)
                 # Summarize actual callback results without exporting private
@@ -90,7 +90,7 @@ async def run_main(
                            'from_main': request.params.get('threadId') == native_session}
                 arguments = request.params.get('arguments')
                 if request.params['tool'] == 'graphtraj_status' or (
-                    request.params['tool'] == 'graphtraj'
+                    request.params['tool'] in {'graphtraj', 'tasks'}
                     and isinstance(arguments, dict)
                     and arguments.get('action') == 'execute'
                     and arguments.get('feature') == 'alias_status'

@@ -98,7 +98,7 @@ NATIVE_RUNNER_TOOLS = {
 
 
 def native_runner_tools() -> list[dict[str, Any]]:
-    """Project the shared gateway and ``agents`` functions onto the native callback.
+    """Register independent control and the composable task gateway as functions.
 
     ``agents`` is registered as its own function so the model calls Agent
     control directly, with the independent contract's description and schema.
@@ -115,6 +115,10 @@ def native_runner_tools() -> list[dict[str, Any]]:
         'type': 'function', 'name': agents['name'],
         'description': agents['description'],
         'inputSchema': agents['input_schema'],
+    }, {
+        'type': 'function', 'name': 'tasks',
+        'description': 'Discover, describe or execute GraphTraj task and delivery operations.',
+        'inputSchema': INPUT_SCHEMA,
     }]
 
 

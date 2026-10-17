@@ -384,7 +384,7 @@ class CodexManagedExecution:
 
         if (
             request.method == 'item/tool/call'
-            and request.params.get('tool') in {'graphtraj', 'agents', *NATIVE_RUNNER_TOOLS}
+            and request.params.get('tool') in {'graphtraj', 'tasks', 'agents', *NATIVE_RUNNER_TOOLS}
         ):
             return await self._native_runner_request(request)
         if self.approval is not None and request.method.endswith("/requestApproval"):
@@ -663,7 +663,7 @@ async def run_native_operation(
             not isinstance(thread, str) or not thread
             or native_session is None or adapter is None
             or not isinstance(arguments, dict)
-            or name not in {'graphtraj', 'agents', *NATIVE_RUNNER_TOOLS}
+            or name not in {'graphtraj', 'tasks', 'agents', *NATIVE_RUNNER_TOOLS}
         ):
             raise RunnerError('invalid-input', 'Supply only supported tool arguments.')
         current: str | None = thread
@@ -678,7 +678,7 @@ async def run_native_operation(
         # Method-only features have no handler, so disclosing them adds
         # readable guidance without adding executable capability.
         allowed_features = native_operation_features()
-        if name == 'graphtraj':
+        if name in {'graphtraj', 'tasks'}:
             feature = arguments.get('feature')
             action = arguments.get('action')
         elif name == 'agents':
@@ -704,7 +704,7 @@ async def run_native_operation(
             from graphtraj.runtimes.runtime_adapter import recovery_review
 
             with runtime_caller(discover_runner_directory(root), identity), recovery_review(recovery_reviewer):
-                if name == 'graphtraj':
+                if name in {'graphtraj', 'tasks'}:
                     return handle_request(arguments, cwd=root, allowed_features=allowed_features)
                 if name == 'agents':
                     from agent_swarm import Caller

@@ -79,12 +79,16 @@ class AdapterDriver:
         A preset named after the Runtime wins; otherwise exactly one preset
         must use that Runtime.
         """
-        from graphtraj.configuration.project_roles import load_project_roles
+        from graphtraj.configuration.project_roles import ProjectRolesError, load_project_roles, resolve_preset
         from graphtraj.configuration.role_definitions import resolve_child_role
 
         if runtime not in SUPPORTED_RUNTIMES:
             raise AgentsError("unsupported-runtime", f"The Task-free driver does not run {runtime!r} yet.")
-        presets = load_project_roles(self.root).presets
+        try:
+            presets = {name: resolve_preset(preset)
+                       for name, preset in load_project_roles(self.root).presets.items()}
+        except ProjectRolesError as error:
+            raise AgentsError('invalid-config', str(error)) from None
         matches = sorted(name for name, preset in presets.items() if preset.runtime == runtime)
         name    = runtime if runtime in matches else matches[0] if len(matches) == 1 else None
         if name is None:
@@ -104,6 +108,7 @@ class AdapterDriver:
             "role":            name,
             "cwd":             str(self.cwd),
             "adapter_request": prepared.launch_document()["adapter_request"],
+            "connection":      prepared.launch_document().get("connection", {}),
             "evidence":        prepared.evidence_document(),
         }
 

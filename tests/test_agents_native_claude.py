@@ -352,3 +352,64 @@ def test_real_claude_auto_and_native_denial(project: Path, monkeypatch: pytest.M
             call({'action': 'interrupt', 'agent': agent})
             stopped = call({'action': 'wait', 'agent': agent, 'timeout_seconds': 30})
             assert stopped.document['result']['state'] == 'standby', stopped.document
+
+
+@pytest.mark.parametrize('saving', [False, True])
+def test_shared_connection_and_archive_binding_for_claude(
+    project: Path,
+    tmp_path: Path,
+    claude_environment: None,
+    monkeypatch: pytest.MonkeyPatch,
+    saving: bool,
+) -> None:
+    """Compose the extracted shared seam with Claude's native owner and policy changes."""
+    from agent_swarm import Caller, read_config, write_config
+    from graphtraj.configuration import runtime_connections
+    from graphtraj.interfaces.agents import agents_callback, swarm_root
+    from graphtraj.interfaces.local_tool import bind
+    from graphtraj.sessions.archive import JsonlSessionStore, archive_path
+
+    monkeypatch.setattr(runtime_connections, 'connections_file', lambda: tmp_path / 'connections.yml')
+    settings = bind(project, recovery_reviewer=lambda proposal: {'decision': 'accept'})
+    current = settings({'action': 'execute', 'feature': 'runtime_connections', 'arguments': {'action': 'read'}})
+    catalog = {'version': 1, 'runtimes': {'configured': {'runtime': 'claude',
+        'providers': {'anthropic': {'models': {'chosen': {'id': 'claude-opus-5-5',
+            'source': 'manual', 'supported_efforts': ['high']}}}}}}}
+    saved = settings({'action': 'execute', 'feature': 'runtime_connections', 'arguments': {
+        'action': 'save', 'expected_revision': current.document['revision'], 'catalog': catalog}})
+    assert not saved.failed, saved.document
+    role = {'connection': 'configured/anthropic/chosen', 'reasoning_effort': 'high',
+            'claude': {'permission_mode': 'auto'}}
+    roles = project / '.graphtraj/roles.yml'
+    roles.write_text(yaml.safe_dump({'roles': {'worker': role}}))
+    root = swarm_root(project)
+    write_config(root, save_normalized_sessions=saving, backfill_history=True)
+    call = agents_callback(project, Caller('controlled-native-host', 'parent'), project)
+    created = call({'action': 'create', 'runtime': 'claude', 'instruction': 'first'})
+    assert not created.failed, created.document
+    agent = created.document['agent']
+    done = call({'action': 'wait', 'agent': agent, 'timeout_seconds': 20})
+    assert not done.failed and done.document['result']['last_result']['outcome'] == 'completed', done.document
+    path = archive_path(root, 'claude:' + created.document['session'])
+    assert path.exists() is saving
+    if saving:
+        assert len(JsonlSessionStore(path).messages()) == 2
+    before = path.read_bytes() if saving else None
+    assert read_config(root)['save_normalized_sessions'] is saving
+    removed = settings({'action': 'execute', 'feature': 'runtime_connections', 'arguments': {
+        'action': 'save', 'expected_revision': saved.document['revision'], 'catalog': {'version': 1, 'runtimes': {}}}})
+    assert not removed.failed, removed.document
+    write_config(root, save_normalized_sessions=False)
+    resumed = call({'action': 'send', 'agent': agent, 'message': 'second'})
+    assert not resumed.failed and resumed.document['session'] == created.document['session'], resumed.document
+    done = call({'action': 'wait', 'agent': agent, 'timeout_seconds': 20})
+    assert done.document['result']['last_result']['outcome'] == 'completed', done.document
+    assert (path.read_bytes() if saving else None) == before
+    assert path.exists() is saving
+    restored = settings({'action': 'execute', 'feature': 'runtime_connections', 'arguments': {
+        'action': 'save', 'expected_revision': removed.document['revision'], 'catalog': catalog}})
+    assert not restored.failed, restored.document
+    roles.write_text(yaml.safe_dump({'roles': {'first': role, 'second': role}}))
+    ambiguous = call({'action': 'create', 'runtime': 'claude', 'instruction': 'must not launch'})
+    assert ambiguous.failed and ambiguous.document['error']['code'] == 'invalid-config'
+    assert all(name in ambiguous.document['error']['message'] for name in ('first', 'second'))

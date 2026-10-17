@@ -100,6 +100,29 @@ def test_connection_only_role_preserves_configuration_and_archive_policy(
     assert all(name in ambiguous.document['error']['message'] for name in ('first', 'second'))
 
 
+def test_owned_gateway_exposes_agents_without_granting_native_helpers_control(
+    tmp_path: Path, peer: Path,
+) -> None:
+    """The registered gateway feature shares the owned function's caller boundary."""
+    (tmp_path / '.graphtraj').mkdir()
+    (tmp_path / '.graphtraj/config.yml').write_text(default_configuration_content(tmp_path, tmp_path))
+
+    async def exercise() -> None:
+        """Route the same public request with native owner and helper issuers."""
+        async with CodexAppServer(command=[str(peer)], cwd=tmp_path, environment={
+            'PEER_THREAD_PARENTS': json.dumps({'helper': 'owner'}),
+        }) as adapter:
+            for thread, allowed in [('owner', True), ('helper', False)]:
+                response = await run_native_operation(adapter, 'owner', 'agent-owner', tmp_path,
+                    CodexServerRequest(thread, 'item/tool/call', {'threadId': thread, 'tool': 'graphtraj',
+                        'arguments': {'action': 'execute', 'feature': 'agents', 'arguments': {'action': 'status'}}}))
+                assert response['success'] is allowed, response
+                if allowed:
+                    assert json.loads(response['contentItems'][0]['text'])['result']['agents'] == []
+
+    asyncio.run(exercise())
+
+
 def test_independent_codex_lifecycle_and_callback_cwd(
     tmp_path: Path, peer: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:

@@ -131,6 +131,7 @@ class AdapterDriver:
 
                 owner = CodexManagedExecution
                 options['independent'] = True
+                options['archive'] = run.archive
             turn = owner(
                 dict(run.settings["adapter_request"]), run.message, run.directory,
                 lambda session, pid: ready.set(), dict(run.settings["evidence"]),

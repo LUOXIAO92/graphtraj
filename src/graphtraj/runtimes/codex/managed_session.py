@@ -28,6 +28,7 @@ from graphtraj.execution.runner_io import write_yaml_durably
 from graphtraj.runtimes.codex.app_server import CodexAppServer, CodexExecution, CodexServerRequest
 from graphtraj.runtimes.codex.codex_adapter import restore_codex_context
 from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError
+from graphtraj.sessions.archive import SessionArchive
 
 
 def _approval_history_text(value: object) -> object:
@@ -122,6 +123,7 @@ class CodexManagedExecution:
         session_created: Callable[[str, int], None] | None = None,
         *,
         independent: bool = False,
+        archive: SessionArchive | None = None,
     ) -> None:
         """Capture immutable task configuration for one Worker execution."""
         self.context = restore_codex_context(request, context_evidence)
@@ -138,6 +140,7 @@ class CodexManagedExecution:
         self.started = session_started
         self.created = session_created
         self.independent = independent
+        self.archive = archive
         self.parent_notice: Callable[[str, dict], dict] | None = None
         self.expected_session = expected_session
         self.termination_requested = False
@@ -225,6 +228,12 @@ class CodexManagedExecution:
                 if self.created is not None:
                     self.created(session.thread_id, adapter.service_pid)
                 archive = None
+                if self.independent and self.archive is not None:
+                    from graphtraj.runtimes.codex.jsonl_archive import CodexJsonlArchive
+
+                    archive = CodexJsonlArchive(
+                        self.archive, self.directory.name, session.thread_id, session.rollout_path,
+                    )
                 if self.created is not None and not self.independent:
                     configuration = load_project_configuration(root)
                     mapping = yaml.safe_load((self.directory / 'mapping.yml').read_text())

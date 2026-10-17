@@ -375,21 +375,25 @@ def test_archive_is_bound_only_when_enabled(root: Path) -> None:
         driver.release(document['execution'])
 
 
-def test_core_imports_and_runs_without_graphtraj(tmp_path: Path) -> None:
+@pytest.mark.parametrize('configuration', [None, 'existing-user-connection'])
+def test_core_imports_and_runs_without_graphtraj(tmp_path: Path, configuration: str | None) -> None:
     """The control core loads and starts with no GraphTraj module or project."""
     code = (
         'import sys, agent_swarm\n'
         'from agent_swarm import AgentControl, Caller, bind\n'
         'class D:\n'
-        '    def prepare(self, runtime, caller): return {}\n'
+        '    def prepare(self, runtime, caller, *, configuration=None):\n'
+        '        assert configuration == (sys.argv[2] or None)\n'
+        '        return {"selected": configuration}\n'
         '    def start(self, run): run.events.session("s"); run.events.finished("completed")\n'
         'call = bind(AgentControl(sys.argv[1], {"r": D()}), Caller("h", None))\n'
-        'created = call({"action": "create", "runtime": "r", "instruction": "x"}).document\n'
+        'selection = {"configuration": sys.argv[2]} if sys.argv[2] else {}\n'
+        'created = call({"action": "create", "runtime": "r", "instruction": "x", **selection}).document\n'
         'print(created["result"]["state"], created["session"],\n'
         '      sorted(m for m in sys.modules if m.split(".")[0] == "graphtraj"))\n'
     )
     output = subprocess.run(
-        [sys.executable, '-c', code, str(tmp_path / 'root')], check=True, capture_output=True,
+        [sys.executable, '-c', code, str(tmp_path / 'root'), configuration or ''], check=True, capture_output=True,
         text=True, env={**os.environ, 'PYTHONPATH': str(SOURCE)}, cwd=tmp_path,
     ).stdout.split()
     assert output == ['standby', 's', '[]']

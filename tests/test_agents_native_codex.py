@@ -15,9 +15,15 @@ from graphtraj.runtimes.codex.managed_session import run_native_operation
 from test_codex_app_server import peer  # noqa: F401
 
 
-@pytest.mark.parametrize('saving', [False, True])
+@pytest.mark.parametrize('saving,configuration', [
+    (False, None), (True, None), (True, 'astra_coding_team.engineer'),
+])
 def test_connection_only_role_preserves_configuration_and_archive_policy(
-    tmp_path: Path, peer: Path, monkeypatch: pytest.MonkeyPatch, saving: bool,
+    tmp_path: Path,
+    peer: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    saving: bool,
+    configuration: str | None,
 ) -> None:
     """The public agents function resolves connections and binds the chosen archive."""
     from agent_swarm import write_config, read_config
@@ -38,6 +44,14 @@ def test_connection_only_role_preserves_configuration_and_archive_policy(
             }}}
     roles = root / '.graphtraj/roles.yml'
     roles.write_text(yaml.safe_dump({'roles': {'worker': role}}))
+    if configuration is not None:
+        roles.write_text(yaml.safe_dump({'roles': {
+            'astra_coding_team': {'engineer': role},
+            'other_team': {'engineer': {'runtime': 'codex', 'model': 'wrong-model'}},
+            'codex': {'runtime': 'codex', 'model': 'wrong-default'},
+            'claude': {'runtime': 'claude', 'model': 'wrong-runtime'},
+            'unavailable': {'connection': 'missing/provider/model'},
+        }}))
     monkeypatch.setattr(runtime_connections, 'connections_file', lambda: tmp_path / 'connections.yml')
     call_settings = bind(root, recovery_reviewer=lambda proposal: {'decision': 'accept'})
     current = call_settings({'action': 'execute', 'feature': 'runtime_connections',
@@ -59,7 +73,15 @@ def test_connection_only_role_preserves_configuration_and_archive_policy(
     monkeypatch.setenv('PEER_CONFIGURATION_HOME', str(tmp_path / 'observed-home'))
     write_config(swarm_root(root), save_normalized_sessions=saving, backfill_history=True)
     call = agents_callback(root, Caller('controlled-native-host', 'parent'), root)
-    created = call({'action': 'create', 'runtime': 'codex', 'instruction': 'configuration'})
+    selection = {} if configuration is None else {'configuration': configuration}
+    if configuration is not None:
+        for rejected in ('absent.engineer', 'engineer', 'claude', '', {'role': configuration}):
+            result = call({'action': 'create', 'runtime': 'codex', 'instruction': 'must not launch',
+                           'configuration': rejected})
+            assert result.failed, result.document
+            assert result.document['error']['code'] in {'invalid-config', 'invalid-input'}
+        assert call({'action': 'status'}).document['result']['agents'] == []
+    created = call({'action': 'create', 'runtime': 'codex', 'instruction': 'configuration', **selection})
     assert not created.failed, created.document
     done = call({'action': 'wait', 'agent': created.document['agent'], 'timeout_seconds': 10})
     assert not done.failed, done.document

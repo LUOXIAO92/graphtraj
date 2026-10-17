@@ -5,7 +5,9 @@ from __future__ import annotations
 import sysconfig
 from inspect import signature
 from pathlib import Path
-from typing import Any, Collection, Mapping
+from typing import Any, Collection
+
+from agent_swarm.schema import validate as _validate
 
 from graphtraj.interfaces.tools import TOOLS, ToolResult
 
@@ -47,75 +49,6 @@ def _manual_path(reference: str) -> Path:
     """
     path = Path(reference)
     return path if path.is_absolute() else delivered_manuals_root() / path
-
-
-def _validate(value: Any, schema: Mapping[str, Any], path: str) -> None:
-    """Validate the JSON Schema vocabulary used by registered operations.
-
-    Unsupported constraints fail closed rather than silently weakening a newly
-    registered operation. Errors identify one local field, never dump schemas.
-    """
-    supported = {
-        "type", "properties", "required", "additionalProperties", "items",
-        "enum", "const", "minItems", "description", "title", "default",
-        "examples", "$schema", "$comment", "anyOf",
-    }
-    if set(schema) - supported:
-        raise ValueError(f"{path}: unsupported schema constraint")
-
-    if "anyOf" in schema:
-        errors = []
-        for alternative in schema["anyOf"]:
-            try:
-                _validate(value, alternative, path)
-                break
-            except ValueError as error:
-                errors.append(str(error))
-        else:
-            raise ValueError(f"{path}: incompatible definition; " + "; ".join(errors))
-
-    checks = {
-        "object": isinstance(value, dict),
-        "array": isinstance(value, list),
-        "string": isinstance(value, str),
-        "boolean": isinstance(value, bool),
-        "integer": isinstance(value, int) and not isinstance(value, bool),
-        "number": isinstance(value, (int, float)) and not isinstance(value, bool),
-        "null": value is None,
-    }
-    expected = schema.get("type", [])
-    types = [expected] if isinstance(expected, str) else expected
-    if types and not any(checks.get(kind, False) for kind in types):
-        raise ValueError(f"{path}: expected {' or '.join(types)}")
-
-    # JSON booleans are distinct from numbers, unlike Python's True == 1.
-    def equal(choice: Any) -> bool:
-        """Compare the scalar enum/const values used by this registry."""
-        return value == choice and isinstance(value, bool) == isinstance(choice, bool)
-
-    if "const" in schema and not equal(schema["const"]):
-        raise ValueError(f"{path}: expected {schema['const']!r}")
-    if "enum" in schema and not any(equal(choice) for choice in schema["enum"]):
-        raise ValueError(f"{path}: expected one of {schema['enum']!r}")
-
-    if isinstance(value, dict):
-        for name in schema.get("required", []):
-            if name not in value:
-                raise ValueError(f"{path}.{name}: required")
-        properties = schema.get("properties", {})
-        additional = schema.get("additionalProperties", True)
-        for name, item in value.items():
-            if name in properties:
-                _validate(item, properties[name], f"{path}.{name}")
-            elif additional is False:
-                raise ValueError(f"{path}.{name}: unexpected parameter")
-            elif isinstance(additional, dict):
-                _validate(item, additional, f"{path}.{name}")
-    if isinstance(value, list):
-        if len(value) < schema.get("minItems", 0):
-            raise ValueError(f"{path}: expected at least {schema['minItems']} items")
-        for index, item in enumerate(value):
-            _validate(item, schema.get("items", {}), f"{path}[{index}]")
 
 
 def handle_request(

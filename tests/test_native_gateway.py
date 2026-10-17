@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 
+import agent_swarm
 from graphtraj.configuration.project_configuration import default_configuration_content
 from graphtraj.interfaces import gateway, tools
 from graphtraj.runtimes.codex import main_session
@@ -94,9 +95,10 @@ def test_native_gateway_disclosure_execution_and_correction(
     starts = [item for item in messages if item.get('method') == 'thread/start']
     assert len(starts) == 1
     registered = starts[0]['params']['dynamicTools']
-    assert [tool['name'] for tool in registered] == ['graphtraj']
-    assert registered[0]['type'] == 'function'
+    assert [tool['name'] for tool in registered] == ['graphtraj', 'agents']
+    assert {tool['type'] for tool in registered} == {'function'}
     assert registered[0]['inputSchema'] == gateway.INPUT_SCHEMA
+    assert registered[1]['inputSchema'] == agent_swarm.INPUT_SCHEMA
     replies = [item for item in messages if str(item.get('id', '')).startswith('native-request-1')]
     assert [reply['result'] for reply in replies] == [item['response'] for item in exchanges]
     assert [reply['id'] for reply in replies] == [
@@ -257,5 +259,49 @@ def test_native_gateway_discloses_method_guides_without_widening_execution(
                 })
                 assert not success
                 assert document['error']['code'] == 'authority-denied'
+
+    asyncio.run(exercise())
+
+
+@pytest.mark.parametrize('issuer', ['owner', 'helper'])
+def test_native_agents_function_dispatches_with_existing_permissions(
+    project: Path, peer: Path, issuer: str,
+) -> None:
+    """The registered agents function reuses the caller binding and feature checks."""
+    async def exercise() -> None:
+        """Call the production native callback as the owner or its helper thread."""
+        async with CodexAppServer(command=[str(peer)], cwd=project, environment={
+            'PEER_THREAD_PARENTS': '{"helper":"owner"}',
+        }) as adapter:
+            async def call(arguments: dict) -> tuple[dict, bool]:
+                """Send one agents request through the native tool callback."""
+                response = await run_native_operation(adapter, 'owner', 'parent@l1', project,
+                    CodexServerRequest(1, 'item/tool/call', {
+                        'threadId': issuer, 'tool': 'agents', 'arguments': arguments,
+                    }))
+                return json.loads(response['contentItems'][0]['text']), response['success']
+
+            # A helper never had retire or interrupt permission and still has none.
+            for action in ('retire', 'interrupt', 'requests', 'create'):
+                request = {'action': action, 'agent': 'other@l1'}
+                if action == 'create':
+                    request = {'action': 'create', 'runtime': 'codex', 'instruction': 'hello'}
+                document, success = await call(request)
+                if issuer == 'helper':
+                    assert not success
+                    assert document['error']['code'] == 'authority-denied'
+            for field, value in [('caller', 'parent@l1'), ('threadId', 'owner'),
+                                 ('task_id', '1'), ('cwd', str(project))]:
+                document, success = await call({'action': 'status', field: value})
+                assert not success
+                assert document['error']['code'] == 'invalid-input'
+            document, success = await call({'action': 'status'})
+            assert document['action'] == 'status'
+            assert set(document) >= {'agent', 'session', 'execution', 'message', 'result'}
+            if issuer == 'owner':
+                document, success = await call(
+                    {'action': 'create', 'runtime': 'codex', 'instruction': 'hello'})
+                assert not success
+                assert document['error']['code'] == 'not-implemented'
 
     asyncio.run(exercise())

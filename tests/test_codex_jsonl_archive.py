@@ -161,6 +161,36 @@ def test_rollback_restores_history_before_removed_legacy_compaction(tmp_path: Pa
     assert [message['content'][0]['text'] for message in store.messages()] == ['keep']
 
 
+def test_rollback_keeps_persistent_developer_prefix_and_original_annotations(tmp_path: Path) -> None:
+    """Dropping the first turn strips its model/mode fragments without losing evidence."""
+    root = tmp_path / 'swarm'
+    write_config(root, save_normalized_sessions=True, backfill_history=True)
+    source = tmp_path / 'rollout.jsonl'
+    developer = {'type': 'message', 'role': 'developer', 'content': [
+        {'type': 'input_text', 'text': 'persistent'},
+        {'type': 'input_text', 'text': '<model_switch>current</model_switch>'},
+    ], 'internal_chat_message_metadata_passthrough': {
+        'turn_id': 'a', 'content_item_kinds': ['developer.text', 'model_switch'], 'unknown': 9,
+    }}
+    user = {'type': 'message', 'role': 'user', 'content': [{'type': 'input_text', 'text': 'drop'}],
+            'internal_chat_message_metadata_passthrough': {'turn_id': 'a'}}
+    records = history()[:1] + [
+        {'type': 'response_item', 'payload': developer},
+        {'type': 'response_item', 'payload': user},
+        {'type': 'event_msg', 'payload': {'type': 'thread_rolled_back', 'num_turns': 1}},
+    ]
+    write(source, records)
+    collector = CodexJsonlArchive(ConfiguredSessionArchive(root), 'agent', 'native', source)
+    collector.collect(source)
+    store = JsonlSessionStore(archive_path(root, 'codex:native'))
+    assert store.messages()[0]['content'] == [{'type': 'text', 'text': 'persistent'}]
+    assert native_record(store.page()['events'][1])['payload'] == developer
+    # Replaying a later no-op rollback must not duplicate the derived prefix.
+    write(source, records + [{'type': 'event_msg', 'payload': {'type': 'thread_rolled_back', 'num_turns': 0}}])
+    collector.collect(source)
+    assert JsonlSessionStore(store.path).messages() == store.messages()
+
+
 def test_copied_fork_seeds_before_child_messages(tmp_path: Path) -> None:
     """A copied native prefix remains inherited and precedes the child prompt."""
     root = tmp_path / 'swarm'

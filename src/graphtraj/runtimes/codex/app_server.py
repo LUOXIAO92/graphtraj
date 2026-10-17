@@ -1107,6 +1107,10 @@ class CodexAppServer:
             archive = self._fork_archives.get(message['params'].get('threadId'))
             thread_id = message['params'].get('threadId')
             ordered = self._ordered_archives.get(thread_id)
+            if ordered is not None and ('id' in message or message['method'] in {
+                'serverRequest/resolved', 'item/completed', 'turn/completed', 'thread/compacted',
+            }):
+                ordered.transport(message)
             if ordered is not None and message['method'] in {'turn/completed', 'thread/compacted'}:
                 pending = self._ordered_tasks.get(thread_id)
                 if pending is None or pending.done():
@@ -1225,6 +1229,9 @@ class CodexAppServer:
                 archive = self._fork_archives.get(request.params.get('threadId'))
                 if archive is not None:
                     archive.reply(reply)
+                ordered = self._ordered_archives.get(request.params.get('threadId'))
+                if ordered is not None:
+                    ordered.transport(reply, outbound=True)
                 await self._send(reply)
             else:
                 scoped = all(isinstance(value, str) and value for value in key)
@@ -1239,6 +1246,9 @@ class CodexAppServer:
                 archive = self._fork_archives.get(request.params.get('threadId'))
                 if archive is not None:
                     archive.reply(reply)
+                ordered = self._ordered_archives.get(request.params.get('threadId'))
+                if ordered is not None:
+                    ordered.transport(reply, outbound=True)
                 await self._send(reply)
                 if not scoped:
                     self._fail(failure)

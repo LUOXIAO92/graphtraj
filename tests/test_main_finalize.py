@@ -460,11 +460,10 @@ def test_checker_has_no_sibling_control(
     from graphtraj.sessions.protocol import native_record
     from graphtraj.sessions.storage import SessionStore, session_path
 
-    with SessionStore(session_path(root / '.graphtraj/state', 'codex:checker'), readonly=True) as archive:
-        records = [native_record(event) for event in archive.page()['events']
-                   if event['type'] != 'session/end-seed']
-        assert any(record.get('params', {}).get('arguments') == request for record in records)
-        assert reply in records
+    archive = JsonlSessionStore(archive_path(swarm_root(root), 'codex:checker'))
+    records = [native_record(event) for event in archive.page()['events']]
+    assert any(record.get('params', {}).get('arguments') == request for record in records)
+    assert reply in records
 
 
 @pytest.mark.parametrize('resolved', [False, True])
@@ -694,9 +693,8 @@ def test_checker_approval_is_left_to_its_native_owner(host: tuple[Path, Path]) -
     from graphtraj.sessions.protocol import native_record
     from graphtraj.sessions.storage import SessionStore, session_path
 
-    with SessionStore(session_path(root / '.graphtraj/state', 'codex:checker'), readonly=True) as archive:
-        records = [native_record(event) for event in archive.page()['events']
-                   if event['type'] != 'session/end-seed']
+    archive = JsonlSessionStore(archive_path(swarm_root(root), 'codex:checker'))
+    records = [native_record(event) for event in archive.page()['events']]
     assert any(record.get('id') == 'checker-approval'
                and record['params']['threadId'] == 'checker' for record in records)
     assert any(record.get('method') == 'serverRequest/resolved'
@@ -913,16 +911,12 @@ def test_native_start_resume_and_stop_need_no_main_binding_input(host: tuple[Pat
             json.loads(line) for line in (root / 'rollout.jsonl').read_text().splitlines()
         ]
         assert archive.header['graphtraj']['agentId'] == 'main'
-    with SessionStore(session_path(state, 'codex:checker')) as archive:
-        archive.validate()
-        events = archive.page()['events']
-        assert archive.header['parentSession'] == 'codex:main'
-        assert archive.header['graphtraj']['agentId'] != 'main'
-        assert native_record(events[0])['id'] == 'inherited-turn'
-        assert native_record(events[2])['id'] == 'checker'
-        assert events[1]['type'] == 'session/end-seed'
-        assert events[1]['data'] == {'inherited': True}
-        assert any(native_record(event).get('method') == 'item/completed' for event in events[2:])
+    archive = JsonlSessionStore(archive_path(swarm_root(root), 'codex:checker'))
+    events = archive.page()['events']
+    assert archive.header['parentSession'] == 'codex:main'
+    assert archive.header['graphtraj']['agentId'] == 'checker:checker'
+    assert any(native_record(event).get('method') == 'item/completed' for event in events)
+    assert any(native_record(event).get('method') == 'thread/items/list' for event in events)
 
 
 def test_native_session_end_archives_terminal_tail_without_checking(host: tuple[Path, Path]) -> None:

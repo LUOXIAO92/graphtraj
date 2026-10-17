@@ -4,8 +4,20 @@ from copy import deepcopy
 import asyncio
 from typing import Awaitable, Callable
 
-from graphtraj.sessions.archive import SessionArchive
+from graphtraj.sessions.archive import JsonlSessionStore, SessionArchive
 from graphtraj.sessions.protocol import retain_native
+
+
+def _events(store: JsonlSessionStore) -> list[dict]:
+    """Read the retained log so new evidence cannot replace earlier records."""
+    events = []
+    after = -1
+    while True:
+        page = store.page(after)
+        events.extend(page['events'])
+        if not page['has_more']:
+            return events
+        after = page['after']
 
 
 class CodexHistoryArchive:
@@ -50,6 +62,10 @@ class CodexHistoryArchive:
         }
         if thread.get('forkedFromId'):
             header['parentSession'] = 'codex:' + thread['forkedFromId']
+        if type(created) is not int:
+            header['graphtraj']['missing'].append({
+                'path': 'createdAt', 'reason': 'Native thread creation time is unavailable; zero is a placeholder.',
+            })
         archive.map_session(header)
 
     async def collect(self) -> None:
@@ -65,22 +81,38 @@ class CodexHistoryArchive:
             store = self.archive.store(self.id)
             if store is None:
                 return
-            position = 0
-            after = -1
-            while True:
-                page = store.page(after)
-                position += len(page['events'])
-                if not page['has_more']:
-                    break
-                after = page['after']
+            events = _events(store)
+            position = len(events)
+            snapshot = sum(item['type'] == 'graphtraj/native' for item in events)
             event = retain_native('codex', {'collectionError': type(error).__name__,
                 'code': getattr(error, 'code', None), 'message': str(error),
                 'nativeError': getattr(error, 'native_error', None)}, session_id=self.thread['id'],
-                locator=f'ordered-history:{position}', seq=position, time=0)
+                locator=f'ordered-history:{snapshot}', seq=position, time=0)
             event['graphtraj']['missing'] = [{
                 'path': 'history', 'reason': 'Native ordered history request failed; retry required.',
             }]
             store.checkpoint(event, source='ordered-history', position=position + 1)
+
+    def transport(self, message: dict, *, outbound: bool = False) -> None:
+        """Keep native function/permission evidence outside the ordered history.
+
+        These ignorable records are observations of this connection, never model
+        messages or evidence of delivery. Native emission fields remain intact.
+        """
+        store = self.archive.store(self.id)
+        if store is None:
+            return
+        events = _events(store)
+        index = len(events)
+        event = retain_native('codex', message, session_id=self.thread['id'],
+                              locator=f'transport:{index}', seq=index, time=0)
+        event.update(type='codex/transport', ignorable=True, data={})
+        event['graphtraj']['native']['record'] = deepcopy(message)
+        event['graphtraj']['native']['direction'] = 'outbound-attempt' if outbound else 'inbound'
+        event['graphtraj']['missing'] = [{'path': 'time', 'reason':
+            'Transport observation has no item creation time; native emission fields are retained.'}]
+        events.append(event)
+        store.publish(events, source='transport', position=index + 1)
 
     async def _collect(self) -> None:
         """Save a complete ascending native snapshot, keeping pagination order."""
@@ -114,19 +146,13 @@ class CodexHistoryArchive:
                                 if (entry['turnId'], entry['item']['id']) not in self.excluded]
         snapshot = {'method': 'thread/items/list', 'threadId': self.thread['id'], 'pages': pages,
                     'historyExcluded': not self.archive.backfill_history}
-        if snapshot == self.previous:
+        if snapshot == self.previous and not store.pending():
             return
-        events = []
-        after = -1
-        while True:
-            page = store.page(after)
-            events.extend(page['events'])
-            if not page['has_more']:
-                break
-            after = page['after']
+        events = _events(store)
         index = len(events)
+        snapshot_index = sum(item['type'] == 'graphtraj/native' for item in events)
         event = retain_native('codex', snapshot, session_id=self.thread['id'],
-                              locator=f'ordered-history:{index}', seq=index, time=0)
+                              locator=f'ordered-history:{snapshot_index}', seq=index, time=0)
         event['graphtraj']['missing'] = [{
             'path': 'time', 'reason': 'Snapshot has no creation time; item timestamps remain native.',
         }]

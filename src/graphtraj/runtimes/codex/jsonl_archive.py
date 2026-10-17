@@ -7,6 +7,7 @@ required native records, so messages() refuses incomplete reconstruction.
 from copy import deepcopy
 import json
 import re
+from xml.etree import ElementTree
 from pathlib import Path
 from typing import BinaryIO
 
@@ -40,7 +41,12 @@ def _response(record: dict, event: dict, session: str, locator: str) -> dict:
     elif kind in {'function_call_output', 'custom_tool_call_output'}:
         role = 'tool'
         output = item['output']
-        content = [{'type': 'text', 'text': output}] if isinstance(output, str) else _content(output)
+        if isinstance(output, str):
+            content = [{'type': 'text', 'text': output}]
+        elif isinstance(output, list):
+            content = _content(output)
+        else:
+            return event  # Preserve a future output envelope as required native evidence.
         source = {'kind': 'tool', 'callId': item['call_id']}
     elif kind in {'reasoning', 'compaction', 'context_compaction'}:
         role = 'assistant'
@@ -54,6 +60,9 @@ def _response(record: dict, event: dict, session: str, locator: str) -> dict:
         content = [{'type': 'codex/agent_message', 'item': deepcopy(item)}]
     if content is None:
         return event
+    if kind not in {'reasoning', 'compaction', 'context_compaction'} and item.get('encrypted_content') is not None:
+        content.append({'type': 'graphtraj/encrypted', 'value': item['encrypted_content'],
+                        'nativePath': 'payload.encrypted_content'})
     if role == 'assistant':
         source = {'kind': 'model', 'model': '', 'provider': ''}
         event['graphtraj']['missing'].extend([
@@ -162,6 +171,9 @@ _SUMMARY_PREFIX = (
 
 def _item(event: dict) -> dict:
     """Read the native response item, including one nested in a compaction."""
+    native = event.get('graphtraj', {}).get('native', {})
+    if 'modelItem' in native:
+        return deepcopy(native['modelItem'])
     record = native_record(event)
     return record['payload'] if record.get('type') == 'response_item' else record
 
@@ -179,11 +191,36 @@ def _contextual(item: dict) -> bool:
             return True
         elif re.fullmatch(r'<codex_internal_context source="[a-z][a-z0-9_]*">[\s\S]*</codex_internal_context>', text):
             return True
+        elif text.startswith(('Warning: The maximum number of unified exec processes you can keep open is',
+                              'Warning: Your account was flagged for potentially high-risk cyber activity')):
+            return True
+        elif text.startswith('Warning: apply_patch was requested via ') and text.endswith(
+            'Use the apply_patch tool instead of exec_command.'
+        ):
+            return True
+        elif text.startswith('<hook_prompt'):
+            try:
+                fragment = ElementTree.fromstring(text)
+                if fragment.tag == 'hook_prompt' and fragment.get('hook_run_id', '').strip():
+                    return True
+            except ElementTree.ParseError:
+                pass
     return False
 
 
 def _boundary(item: dict) -> bool:
     """Recognize a native instruction boundary rather than every user-role item."""
+    if item.get('role') == 'assistant' and len(item.get('content', [])) == 1:
+        block = item['content'][0]
+        if block.get('type') in {'input_text', 'output_text'}:
+            try:
+                communication = json.loads(block['text'])
+            except (ValueError, TypeError):
+                communication = None
+            if (isinstance(communication, dict)
+                    and all(isinstance(communication.get(key), str) for key in ('author', 'recipient', 'content'))
+                    and type(communication.get('trigger_turn')) is bool):
+                return True
     return item.get('type') == 'agent_message' or (
         item.get('role') == 'user' and not _contextual(item)
         and not any(block.get('text', '').startswith(_SUMMARY_PREFIX + '\n')
@@ -191,7 +228,7 @@ def _boundary(item: dict) -> bool:
     )
 
 
-def _drop_turns(events: list[dict], surface: list[int], count: int) -> list[int]:
+def _drop_turns(events: list[dict], surface: list[int], count: int, cause: dict) -> list[int]:
     """Replay native rollback by instruction boundaries, keeping pre-turn context.
 
     The native acceptance order can remove an earlier assistant output generated
@@ -223,7 +260,47 @@ def _drop_turns(events: list[dict], surface: list[int], count: int) -> list[int]
                     continue
                 kept.append(ref)
             surface = kept
+        passthrough = _item(removed).get('internal_chat_message_metadata_passthrough') or {}
+        turn = passthrough.get('turn_id')
+        if cut == boundaries[0] and turn is not None:
+            kept = []
+            for ref in surface:
+                item = _item(events[ref])
+                passthrough = item.get('internal_chat_message_metadata_passthrough') or {}
+                if item.get('role') == 'developer' and passthrough.get('turn_id') == turn:
+                    indices = [index for index, block in enumerate(item['content'])
+                               if not (block.get('type') == 'input_text' and
+                                       block.get('text', '').strip().startswith(('<model_switch>', '<persistent_mode>')))]
+                    if not indices:
+                        continue
+                    if len(indices) != len(item['content']):
+                        item['content'] = [item['content'][index] for index in indices]
+                        kinds = passthrough.get('content_item_kinds')
+                        if isinstance(kinds, list) and len(kinds) > max(indices):
+                            passthrough['content_item_kinds'] = [kinds[index] for index in indices]
+                        ref = _retained_developer(events, ref, item, cause)
+                kept.append(ref)
+            surface = kept
     return surface
+
+
+def _retained_developer(events: list[dict], ref: int, item: dict, cause: dict) -> int:
+    """Keep the native rollback's surviving developer fragments with provenance."""
+    original = events[ref]
+    native = cause['graphtraj']['native']
+    locator = native['locator'] + '/retained_developer/' + original['graphtraj']['native']['locator']
+    existing = next((event['seq'] for event in events
+                     if event.get('graphtraj', {}).get('native', {}).get('locator') == locator), None)
+    if existing is not None:
+        return existing
+    event = retain_native('codex', native_record(original), session_id=native['sessionId'],
+                          locator=locator, seq=len(events), time=0)
+    event['graphtraj']['missing'] = [{'path': 'time', 'reason': 'Derived retained context has no new creation time.'}]
+    event = _response({'payload': item}, event, native['sessionId'], locator)
+    event['graphtraj']['native'].update(record=native_record(original), modelItem=item,
+                                      derivedFrom=original['graphtraj']['native']['locator'])
+    events.append(event)
+    return event['seq']
 
 
 def _rollback(events: list[dict], event: dict) -> None:
@@ -236,7 +313,8 @@ def _rollback(events: list[dict], event: dict) -> None:
     original = []
     for candidate in [*events, event]:
         native = candidate.get('graphtraj', {}).get('native', {})
-        if '/replacement_history/' in native.get('locator', '') or candidate['type'] == 'graphtraj/history':
+        if ('/replacement_history/' in native.get('locator', '') or 'derivedFrom' in native
+                or candidate['type'] == 'graphtraj/history'):
             continue
         if candidate['type'] != 'graphtraj/native' and 'record' not in native:
             continue
@@ -294,8 +372,9 @@ def _rollback(events: list[dict], event: dict) -> None:
         if record['type'] == 'response_item' and candidate['type'] in SURFACE_TYPES:
             surface.append(candidate['seq'])
         elif record['type'] == 'event_msg' and record['payload'].get('type') == 'thread_rolled_back':
-            surface = _drop_turns(events, surface, record['payload']['num_turns'])
+            surface = _drop_turns(events, surface, record['payload']['num_turns'], candidate)
     _metadata(event, native_record(event))
+    event['seq'] = len(events)
     events.append(event)
     _select(events, surface, event)
 

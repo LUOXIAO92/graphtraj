@@ -47,3 +47,30 @@ def test_owned_fork_reads_ascending_pages_and_retains_projection_limit(
             store.messages()
 
     asyncio.run(exercise())
+
+
+def test_ephemeral_saving_and_backfill_are_effective(tmp_path: Path, peer: Path) -> None:
+    """Collection off writes no body; enabling backfill captures native prefix."""
+    async def exercise() -> None:
+        """Keep one owned child while changing the archive's public configuration."""
+        root = tmp_path / 'swarm'
+        write_config(root, save_normalized_sessions=True, backfill_history=False)
+        pages = tmp_path / 'pages.json'
+        entry = {'turnId': 'parent', 'item': {'type': 'agentMessage', 'id': 'old', 'text': 'prefix'}}
+        pages.write_text(json.dumps([[entry]]))
+        async with CodexAppServer(command=[str(peer)], cwd=tmp_path,
+                                  environment={'PEER_HISTORY_PAGES': str(pages)}) as adapter:
+            child = await adapter.fork_session({'id': 'parent', 'model': 'same', 'modelProvider': 'same'})
+            await adapter.retain_ordered_history(child, ConfiguredSessionArchive(root), 'checker')
+            path = archive_path(root, 'codex:' + child.thread_id)
+            before = path.read_bytes()
+            write_config(root, save_normalized_sessions=False)
+            execution = await adapter.start_execution(child, 'saving off')
+            await adapter.wait(execution)
+            assert path.read_bytes() == before
+            write_config(root, save_normalized_sessions=True, backfill_history=True)
+        store = JsonlSessionStore(path)
+        assert native_record(store.page()['events'][0])['pages'][0]['data'] == []
+        assert native_record(store.page()['events'][-1])['pages'][0]['data'] == [entry]
+
+    asyncio.run(exercise())

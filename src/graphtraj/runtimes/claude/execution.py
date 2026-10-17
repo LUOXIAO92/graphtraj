@@ -65,6 +65,7 @@ class ClaudeExecution:
         self.terminal_confirmed = False
         self.accepting = True
         self.sent = 0
+        self.input_ids: set[str] = set()
         self.results = 0
         self.echoes = 0
         self.native_state: str | None = None
@@ -78,6 +79,7 @@ class ClaudeExecution:
         self.collector = None
         self.sdk_tools_listed = False
         self.sdk_calls: dict[str, tuple[dict, Future]] = {}
+        self.displayed: set[tuple[str, str]] = set()
         self.diagnostics = {'session_id': self.native_id, 'execution_id': self.execution_id,
                             'launch': 'unknown', 'popen_returned': False,
                             'initialize': {'reason': 'unknown'}, 'system_init': {'reason': 'unknown'},
@@ -204,7 +206,9 @@ class ClaudeExecution:
     def _prompt(self, text: str) -> None:
         """Queue a native user message while counting each expected result."""
         message = {'type': 'user', 'session_id': self.native_id,
-                   'message': {'role': 'user', 'content': text}, 'parent_tool_use_id': None}
+                   'message': {'role': 'user', 'content': text}, 'parent_tool_use_id': None,
+                   'uuid': str(uuid.uuid4())}
+        self.input_ids.add(message['uuid'])
         self._send(message)
         self.events.put({**message, 'graphtraj_direction': 'sent'})
         self.sent += 1
@@ -342,7 +346,7 @@ class ClaudeExecution:
             return
         self.session = native['session_id']
         if self.independent and native.get('transcript_path'):
-            self.collector.bind(Path(native['transcript_path']))
+            self.collector.bind(Path(native['transcript_path']), self.input_ids)
         write_yaml_durably(self.directory / 'session.yml', {
             'session': self.session, 'rollout_path': native.get('transcript_path'),
             'runtime_version': self.request['version'], 'source': native.get('source'),
@@ -410,7 +414,8 @@ class ClaudeExecution:
                 from graphtraj.runtimes.claude.jsonl import ClaudeJsonlCollector
 
                 collector = ClaudeJsonlCollector(self.archive, self.native_id, self.directory.name,
-                                                Path(self.request['worktree_path']), self.execution_id, provider=provider)
+                                                Path(self.request['worktree_path']), self.execution_id,
+                                                provider=provider, resumed=self.expected is not None)
             else:
                 archive = resources.enter_context(open_archive(
                     Path(self.request['state_directory']), Path(self.request['harness_root']),
@@ -464,6 +469,9 @@ class ClaudeExecution:
                 initialization = self._control('initialize', **({'sdkMcpServers': ['agents']} if self.independent else {}), hooks={
                     'UserPromptSubmit': [{'matcher': None, 'hookCallbackIds': ['graphtraj_start']}],
                     'SubagentStop': [{'matcher': None, 'hookCallbackIds': ['graphtraj_collect_child']}],
+                    **({'PostToolUse': [{'matcher': 'mcp__agents__agents',
+                                         'hookCallbackIds': ['graphtraj_agents_display']}]}
+                       if self.independent else {}),
                 })
                 startup_deadline = time.monotonic() + 45
                 stop_deadline = None
@@ -507,6 +515,11 @@ class ClaudeExecution:
                         request = event.get('request', {})
                         if request.get('subtype') == 'mcp_message' and self.independent:
                             self._sdk_message(event)
+                        elif (self.independent and request.get('subtype') == 'hook_callback'
+                              and request.get('callback_id') == 'graphtraj_agents_display'):
+                            from graphtraj.runtimes.claude.display import display_response
+
+                            self._reply(event['request_id'], display_response(request['input'], self.displayed))
                         elif request.get('subtype') == 'hook_callback' and request.get('callback_id') == 'graphtraj_start':
                             self._bind(request)
                             self._reply(event['request_id'], {})

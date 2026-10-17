@@ -61,6 +61,8 @@ merging = []
 late = []
 sdk_create_results = []
 sdk_request_arguments = {'action': 'status'}
+sdk_display = False
+sdk_display_reply = None
 
 
 def result(text: str, error: bool = False, queued: int = 0, idle: bool = True) -> None:
@@ -96,14 +98,15 @@ def tool(feature: str, arguments: dict) -> dict:
 
 def prompt(message: dict) -> None:
     """Process fixture input only after Runner releases the startup hook."""
-    global sdk_request_arguments
+    global sdk_request_arguments, sdk_display
     text = message['message']['content']
     messages.append(text)
     history.write_text(json.dumps(messages))
     emit({'type': 'system', 'subtype': 'session_state_changed', 'state': 'running'})
     if '--replay-user-messages' in args:
         # As observed: the echo is emitted when input joins the running turn.
-        emit({'type': 'user', 'isReplay': True, 'session_id': session, 'message': message['message']})
+        emit({'type': 'user', 'isReplay': True, 'session_id': session, 'message': message['message'],
+              'uuid': message.get('uuid') or str(uuid.uuid4())})
     if late:
         # The earlier turn's idle arrives only after this later input's echo.
         emit({'type': 'system', 'subtype': 'session_state_changed', 'state': 'idle'})
@@ -122,10 +125,11 @@ def prompt(message: dict) -> None:
         emit({'type': 'control_request', 'request_id': 'permission-1', 'request': {
             'subtype': 'can_use_tool', 'tool_name': 'Bash', 'input': {'command': 'echo approved'},
             'tool_use_id': 'tool-1'}})
-    elif text in {'sdk-agents-status', 'sdk-agents-create-twice'}:
+    elif text in {'sdk-agents-status', 'sdk-agents-create-twice', 'sdk-agents-display'}:
         assert 'agents' in sdk_servers
-        if text == 'sdk-agents-create-twice':
+        if text in {'sdk-agents-create-twice', 'sdk-agents-display'}:
             sdk_request_arguments = {'action': 'create', 'runtime': 'claude', 'instruction': 'child'}
+        sdk_display = text == 'sdk-agents-display'
         emit({'type': 'control_request', 'request_id': 'sdk-list', 'request': {
             'subtype': 'mcp_message', 'server_name': 'agents',
             'message': {'jsonrpc': '2.0', 'id': 1, 'method': 'tools/list'}}})
@@ -158,7 +162,8 @@ def prompt(message: dict) -> None:
         while waiting:
             # The rest of the held inputs and this input still await their own turns.
             result(waiting.pop(0), queued=len(waiting) + 1)
-        result('|'.join(messages), text == 'provider-error')
+        result(str(Path.cwd()) if text == 'child' and os.environ.get('CLAUDE_FIXTURE_REPORT_CWD')
+               else '|'.join(messages), text == 'provider-error')
 
 
 def startup() -> None:
@@ -232,16 +237,36 @@ for line in sys.stdin:
                     'jsonrpc': '2.0', 'id': 2, 'method': 'tools/call',
                     'params': {'name': 'agents', 'arguments': sdk_request_arguments}}}}
             emit(call_request)
-            if sdk_request_arguments['action'] == 'create':
+            if sdk_request_arguments['action'] == 'create' and not sdk_display:
                 emit({**call_request, 'request_id': 'sdk-call-copy'})
         elif response['request_id'] in {'sdk-call', 'sdk-call-copy'}:
             reply = response['response']['mcp_response']['result']
-            if sdk_request_arguments['action'] == 'create':
+            if sdk_display:
+                sdk_display_reply = reply
+                emit({'type': 'control_request', 'request_id': 'sdk-display', 'request': {
+                    'subtype': 'hook_callback', 'callback_id': 'graphtraj_agents_display', 'input': {
+                        'hook_event_name': 'PostToolUse', 'session_id': session,
+                        'tool_use_id': 'display-' + sdk_request_arguments['action'],
+                        'tool_name': 'mcp__agents__agents', 'tool_input': sdk_request_arguments,
+                        'tool_response': reply}}})
+            elif sdk_request_arguments['action'] == 'create':
                 sdk_create_results.append(reply)
                 if len(sdk_create_results) == 2:
                     result(json.dumps(sdk_create_results))
             else:
                 result(json.dumps(reply))
+        elif response['request_id'] == 'sdk-display':
+            with history.with_suffix('.display.jsonl').open('a') as display:
+                display.write(json.dumps(response['response']) + '\n')
+            if sdk_request_arguments['action'] == 'create':
+                sdk_request_arguments = {'action': 'wait', 'agent': sdk_display_reply['structuredContent']['agent'],
+                                         'timeout_seconds': 20}
+                emit({'type': 'control_request', 'request_id': 'sdk-call', 'request': {
+                    'subtype': 'mcp_message', 'server_name': 'agents', 'message': {
+                        'jsonrpc': '2.0', 'id': 3, 'method': 'tools/call',
+                        'params': {'name': 'agents', 'arguments': sdk_request_arguments}}}})
+            else:
+                result(json.dumps(sdk_display_reply))
     elif event['type'] == 'user':
         # The real CLI may receive the prompt while the startup hook is pending;
         # it must not execute it until the host releases that hook.

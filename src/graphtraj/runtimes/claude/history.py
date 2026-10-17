@@ -16,8 +16,9 @@ def read_records(path: Path, session: str) -> list[dict]:
     records = []
     with path.open('rb') as stream:
         for line in stream:
-            if not line.endswith(b'\n'):
-                break
+            # The SDK accepts a valid final JSON value without a newline. A
+            # torn value raises with its original bytes/text still available
+            # to the collector as an unresolved observation.
             record = json.loads(line)
             if not isinstance(record, dict):
                 raise ValueError('Claude transcript entry must be an object.')
@@ -115,30 +116,56 @@ def conversation(records: list[dict]) -> list[dict]:
     # tool results parented to another block of the same API message. Its sibling
     # tie-break uses native transcript timestamps, never notification clocks.
     responses = {}
+    call_owners = {}
+    positions = {uid: index for index, uid in enumerate(original)}
+
+    def tool_ids(record: dict, kind: str, field: str) -> set[str]:
+        """Read only native tool block identities, never their textual content."""
+        content = record.get('message', {}).get('content', [])
+        return {b[field] for b in content if isinstance(b, dict) and b.get('type') == kind and field in b}
+
+    def same_source(left: dict, right: dict) -> bool:
+        """Match the SDK's parent/child source boundary for result association."""
+        return (bool(left.get('isSidechain')) == bool(right.get('isSidechain'))
+                and left.get('agentId') == right.get('agentId'))
+
     for record in original.values():
         if record['type'] == 'assistant' and record.get('message', {}).get('id'):
             responses.setdefault(record['message']['id'], []).append(record)
+            for call in tool_ids(record, 'tool_use', 'id'):
+                prior = call_owners.get(call)
+                call_owners[call] = (record if call not in call_owners or prior is not None
+                                     and prior['message']['id'] == record['message']['id'] else None)
     last = {r.get('message', {}).get('id'): r['uuid'] for r in chain if r['type'] == 'assistant'}
+    covered = {call for record in chain for call in tool_ids(record, 'tool_result', 'tool_use_id')}
+    outside_results = [r for r in original.values()
+                       if r['type'] == 'user' and r['uuid'] not in seen and r.get('parentUuid')]
     additions = {}
     for api_id, anchor in last.items():
         siblings = responses.get(api_id, [])
+        if not siblings:
+            continue
         ids = {r['uuid'] for r in siblings}
-        calls = {b['id'] for r in siblings for b in r.get('message', {}).get('content', [])
-                 if isinstance(b, dict) and b.get('type') == 'tool_use'}
         extra = [r for r in siblings if r['uuid'] not in seen]
-        results = []
-        for record in original.values():
-            content = record.get('message', {}).get('content', [])
-            if record['type'] != 'user' or record['uuid'] in seen or not isinstance(content, list):
+        results, indirect = [], []
+        for record in outside_results:
+            if record['uuid'] in seen:
                 continue
-            if (bool(record.get('isSidechain')) != bool(siblings[0].get('isSidechain'))
-                    or record.get('agentId') != siblings[0].get('agentId')):
+            calls = tool_ids(record, 'tool_result', 'tool_use_id')
+            if not calls:
                 continue
-            tool_ids = {b.get('tool_use_id') for b in content
-                        if isinstance(b, dict) and b.get('type') == 'tool_result'}
-            if tool_ids and (record.get('parentUuid') in ids
-                             or record.get('sourceToolAssistantUUID') in ids or tool_ids & calls):
+            if record.get('parentUuid') in ids:
                 results.append(record)
+            elif same_source(record, siblings[0]) and (record.get('sourceToolAssistantUUID') in ids
+                    or any(call_owners.get(call) is not None and call_owners[call]['uuid'] in ids for call in calls)):
+                indirect.append(record)
+        used = covered | {call for record in results for call in tool_ids(record, 'tool_result', 'tool_use_id')}
+        for record in sorted(indirect, key=lambda r: positions[r['uuid']]):
+            calls = tool_ids(record, 'tool_result', 'tool_use_id')
+            if any(call not in used and call_owners.get(call) is not None
+                   and call_owners[call]['uuid'] in ids for call in calls):
+                results.append(record)
+                used.update(calls)
         extra.sort(key=lambda r: r.get('timestamp') or '')
         results.sort(key=lambda r: r.get('timestamp') or '')
         additions[anchor] = extra + results
@@ -232,9 +259,12 @@ def conversation(records: list[dict]) -> list[dict]:
             continue
         if record['type'] == 'attachment' and record.get('attachment', {}).get('type') == 'queued_command':
             attachment = record['attachment']
-            if attachment.get('forwardedIntent') is not None:
-                raise ValueError('Native forwarded queued intent needs explicit interpretation.')
-            visible = attachment.get('origin', {}).get('kind') in visible_origins
+            intent = attachment.get('forwardedIntent')
+            if isinstance(intent, dict) and isinstance(intent.get('lineage'), str) and intent['lineage']:
+                # The SDK keeps forwarded intent as an attachment, not another
+                # model user message. The archive still retains the source row.
+                continue
+            visible = (attachment.get('origin') or {}).get('kind') in visible_origins
             delivered_input = overrides.get(index, acknowledged[index] or record['uuid'] in trailing)
             if not delivered_input or attachment.get('isMeta') and not visible:
                 continue
@@ -246,7 +276,7 @@ def conversation(records: list[dict]) -> list[dict]:
                 raise ValueError('Native queued input has no prompt.')
             result.append(deepcopy(record))
         elif record['type'] in {'user', 'assistant'}:
-            if not record.get('isMeta') or record.get('origin', {}).get('kind') in visible_origins:
+            if not record.get('isMeta') or (record.get('origin') or {}).get('kind') in visible_origins:
                 result.append(deepcopy(record))
     return result
 

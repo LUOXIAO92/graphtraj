@@ -63,6 +63,7 @@ class ClaudeJsonlCollector:
         execution: str,
         *,
         provider: str = 'anthropic',
+        resumed: bool | None = None,
     ) -> None:
         """Capture policy without creating files when collection is disabled."""
         self.archive = archive
@@ -72,6 +73,11 @@ class ClaudeJsonlCollector:
         self.cwd = cwd
         self.execution = execution
         self.provider = provider
+        self.resumed = resumed
+        self.cut_known = True
+        self.live_ids: set[str] = set()
+        self.history_count = 0
+        self.before_bind: list[tuple[dict, int, int]] = []
         self.path: Path | None = None
         self.excluded: set[str] = set()
         self.header: dict | None = None
@@ -79,7 +85,7 @@ class ClaudeJsonlCollector:
         self.streams: dict[str, dict] = {}
         self.position = 0
 
-    def bind(self, path: Path) -> None:
+    def bind(self, path: Path, current_inputs: set[str] | None = None) -> None:
         """Bind only the native hook's transcript and establish its history cut."""
         if self.path is not None and self.path != path:
             raise ValueError('Claude changed the associated transcript path.')
@@ -90,8 +96,20 @@ class ClaudeJsonlCollector:
             records = read_records(path, self.session)
         except FileNotFoundError:
             records = []
+            self.cut_known = self.resumed is False
+        except (OSError, ValueError):
+            records = []
+            self.cut_known = False
         if not self.archive.backfill_history:
-            self.excluded = {r['uuid'] for r in records if isinstance(r.get('uuid'), str)}
+            self.history_count = len(records) if self.resumed is not False else 0
+            try:
+                self.excluded = ({r['uuid'] for r in conversation(records)}
+                                 if self.resumed is not False else set())
+            except (ValueError, KeyError, TypeError):
+                self.excluded = {r['uuid'] for r in records if isinstance(r.get('uuid'), str)}
+                self.cut_known = False
+            self.excluded.difference_update(current_inputs or ())
+            self.live_ids.update(r['uuid'] for r in records if r.get('uuid') in (current_inputs or ()))
         destination = archive_path(self.archive.root, self.identity)
         if destination.exists():
             self.header = JsonlSessionStore(destination).header
@@ -113,6 +131,9 @@ class ClaudeJsonlCollector:
                 self.header['parentSession'] = 'claude:' + next(iter(parents))
         self.archive.map_session(self.header)
         self.collect()
+        pending, self.before_bind = self.before_bind, []
+        for record, position, received_at in pending:
+            self.accept(record, position, received_at)
 
     def _store(self) -> JsonlSessionStore | None:
         """Check the policy each time; never retain a store across disablement."""
@@ -133,10 +154,13 @@ class ClaudeJsonlCollector:
             event['ignorable'] = True
         return event
 
-    def accept(self, record: dict, position: int) -> None:
+    def accept(self, record: dict, position: int, received_at_ms: int | None = None) -> None:
         """Checkpoint compact live content; a notification cannot publish order."""
         store = self._store()
+        received_at_ms = received_at_ms if received_at_ms is not None else int(time.time() * 1000)
         if store is None:
+            if self.archive is not None and self.archive.save_normalized_sessions and self.header is None:
+                self.before_bind.append((deepcopy(record), position, received_at_ms))
             return
         if record.get('session_id', self.session) != self.session:
             raise ValueError('Live record belongs to another Claude Session.')
@@ -154,9 +178,10 @@ class ClaudeJsonlCollector:
                 draft = pending or self._event(key, {}, 'assistant/attempt')
                 draft.setdefault('data', {}).update(turn=0, step=0)
                 draft['data'].setdefault('stream', [])
-                draft['graphtraj'].setdefault('receivedAtMs', int(time.time() * 1000))
+                draft['graphtraj'].setdefault('receivedAtMs', received_at_ms)
                 self.streams[key] = draft
             draft = self.streams[key]
+            draft['graphtraj']['lastReceivedAtMs'] = received_at_ms
             delta = event.get('delta', {})
             plain = (event.get('type') == 'content_block_delta'
                     and set(record) <= {'type', 'event', 'session_id', 'parent_tool_use_id', 'uuid'}
@@ -185,7 +210,12 @@ class ClaudeJsonlCollector:
             store.checkpoint(draft, source=self.execution, position=position)
         elif (main and record.get('type') in {'assistant', 'user'} and isinstance(record.get('uuid'), str)
               and record.get('graphtraj_direction') != 'sent'):
+            self.live_ids.add(record['uuid'])
             draft = self._event('message:' + record['uuid'], record)
+            store.checkpoint(draft, source=self.execution, position=position)
+        elif main and record.get('type') == 'stream_event':
+            draft = self._event(f'unidentified-stream:{self.execution}:{position}', record)
+            draft['graphtraj']['missing'] = [{'path': 'correspondence', 'reason': 'Native message_start identity was not received.'}]
             store.checkpoint(draft, source=self.execution, position=position)
         else:
             # Transport/permission/error facts are observations, not messages.
@@ -238,7 +268,9 @@ class ClaudeJsonlCollector:
             records = read_records(self.path, self.session)
             desired = conversation(records)
         except (OSError, ValueError, KeyError, TypeError) as error:
-            gap = self._event('history-gap', {})
+            raw = ({'unparsedTranscriptTail': error.doc} if isinstance(error, json.JSONDecodeError) else
+                   {'unparsedBytes': base64.b64encode(error.object).decode()} if isinstance(error, UnicodeDecodeError) else {})
+            gap = self._event('history-gap', raw)
             gap['graphtraj']['missing'] = [{'path': 'history', 'reason': str(error)}]
             store.checkpoint(gap, source='history-gap', position=store.position('history-gap') + 1)
             return
@@ -254,10 +286,22 @@ class ClaudeJsonlCollector:
         old_ids = [message_id(e['graphtraj']['native']['record']) for e in surface]
         if not self.archive.backfill_history:
             desired = [r for r in desired if r['uuid'] not in self.excluded or message_id(r) in old_ids]
+            if not self.cut_known:
+                desired = [r for r in desired if message_id(r) in self.live_ids or message_id(r) in old_ids]
         ids = [message_id(r) for r in desired]
         events = deepcopy(old)
         locators = {e['graphtraj']['native']['locator'] for e in events}
         same_prefix = ids[:len(old_ids)] == old_ids
+        if not same_prefix and surface and desired and desired[0]['type'] == 'assistant':
+            # DSH requires replacement sources, which assistant messages cannot
+            # carry. Retain the native context without inventing a user message.
+            gap = self._event('history-gap', {'nativeContext': desired})
+            gap['graphtraj']['missing'] = [{
+                'path': 'history',
+                'reason': 'Archive protocol cannot replace context with an assistant-first chain.',
+            }]
+            store.checkpoint(gap, source='history-gap', position=store.position('history-gap') + 1)
+            return
         added = desired[len(old_ids):] if same_prefix else desired
         for index, record in enumerate(added):
             if (store.header['isSeeded'] and not record.get('forkedFrom')
@@ -287,6 +331,9 @@ class ClaudeJsonlCollector:
         # transcript observations. They never enter the DSH message surface.
         for index, record in enumerate(records):
             uid = record.get('uuid')
+            if not self.archive.backfill_history and (index < self.history_count
+                    or not self.cut_known and uid not in self.live_ids):
+                continue
             if uid in {r['uuid'] for r in desired} or uid in self.excluded and not self.archive.backfill_history:
                 continue
             key = 'transcript:' + str(index)
@@ -316,7 +363,7 @@ class ClaudeJsonlCollector:
                 # A context replay has a new DSH event locator; the original
                 # live UUID still resolves to the same native transcript entry.
                 target = [key.removeprefix('message:')]
-            elif key == 'history-gap' and (not self.excluded or self.archive.backfill_history):
+            elif key == 'history-gap' and (self.cut_known and not self.excluded or self.archive.backfill_history):
                 target = ids
             elif key.startswith('live:'):
                 target = []
@@ -325,7 +372,8 @@ class ClaudeJsonlCollector:
                 marker.update(seq=len(events), data={'nativeMessageUuids': target, 'observationResolved': True})
                 events.append(marker)
         store.publish(events, source='transcript', position=store.position('transcript') + 1)
-        if self.excluded and not self.archive.backfill_history and not set(self.excluded) <= set(old_ids):
+        if (not self.archive.backfill_history
+                and (not self.cut_known or self.excluded and not set(self.excluded) <= set(originals))):
             gap = self._event('history-gap', {})
             gap['graphtraj']['missing'] = [{'path': 'history', 'reason': 'History backfill is disabled; native prefix was not collected.'}]
             store.checkpoint(gap, source='history-gap', position=store.position('history-gap') + 1)

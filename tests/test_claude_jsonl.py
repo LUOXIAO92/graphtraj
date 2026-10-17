@@ -98,6 +98,7 @@ def test_native_fork_provenance_is_not_agent_parentage(tmp_path: Path) -> None:
     assert result.header['parentSession'] == 'claude:parent'
     assert result.header['isSeeded']
     assert [m['id'] for m in result.messages()] == ['inherited', 'local']
+    assert result.page()['events'][1]['type'] == 'session/end-seed'
 
 
 def test_history_switch_only_collects_associated_session(tmp_path: Path) -> None:
@@ -179,9 +180,75 @@ def test_interrupted_output_and_missing_parent_are_explicit(tmp_path: Path) -> N
         conversation([message('orphan', 'missing', 'incomplete')])
 
 
+def test_incomplete_native_tail_is_retained_until_native_replay_completes(tmp_path: Path) -> None:
+    """A torn native write remains a gap; its completed value resolves it once."""
+    q, answer = message('q', None, 'question'), message('a', 'q', 'answer', role='assistant')
+    c, path, archive = collector(tmp_path, [q])
+    tail = json.dumps(answer)
+    path.write_text(json.dumps(q) + '\n' + tail[:30])
+    c.collect()
+    pending = store(archive).pending()
+    assert pending[0]['event']['graphtraj']['native']['record']['unparsedTranscriptTail'] == tail[:30]
+    with pytest.raises(ValueError, match='incomplete'):
+        store(archive).messages()
+    path.write_text(json.dumps(q) + '\n' + tail)
+    c.collect()
+    assert [m['id'] for m in store(archive).messages()] == ['q', 'a']
+
+
+def test_jsonl_retains_native_ciphertext_attachments_and_completion(tmp_path: Path) -> None:
+    """Opaque blocks and native fields survive without being presented as plaintext."""
+    q = message('q', None, '')
+    q['message']['content'] = [{'type': 'image', 'source': {'type': 'base64', 'data': 'AP8='}}]
+    a = message('a', 'q', '', role='assistant', completedAt='native-completion', future={'x': [None]})
+    a['message']['content'] = [{'type': 'thinking', 'thinking': 'visible', 'signature': 'signature'},
+                               {'type': 'redacted_thinking', 'data': 'opaque=='},
+                               {'type': 'future-block', 'payload': ['original']}]
+    _, _, archive = collector(tmp_path, [q, a])
+    result = store(archive)
+    first, second = result.messages()
+    assert result.attachment(first['content'][0]['attachment']['sha256']) == b'\0\xff'
+    assert second['content'][0]['signature'] == 'signature'
+    assert second['content'][1]['value'] == 'opaque=='
+    assert second['content'][2] == a['message']['content'][2]
+    assert result.page()['events'][1]['graphtraj']['native']['record'] == a
+
+
+def test_unknown_live_fields_and_tool_input_blocks_are_retained(tmp_path: Path) -> None:
+    """Only known homogeneous fragments compact; semantic/unknown boundaries remain."""
+    c, _, archive = collector(tmp_path, [])
+    c.accept({'type': 'stream_event', 'event': {'type': 'message_start', 'message': {'id': 'api'}}}, 0)
+    for position, partial in enumerate(['{"x":', '1}'], 1):
+        c.accept({'type': 'stream_event', 'event': {'type': 'content_block_delta', 'index': 0,
+                  'delta': {'type': 'input_json_delta', 'partial_json': partial}}}, position)
+    unknown = {'type': 'stream_event', 'future': 'keep', 'event': {'type': 'content_block_delta', 'index': 1,
+               'delta': {'type': 'text_delta', 'text': 'text'}}}
+    c.accept(unknown, 3)
+    draft = store(archive).pending()[0]['event']
+    assert draft['data']['stream'][1]['partialJson'] == '{"x":1}'
+    assert draft['data']['stream'][2]['record'] == unknown
+
+
+def test_prebind_input_and_resume_cut_use_native_input_uuid(tmp_path: Path) -> None:
+    """The current prompt is not mistaken for history if written before its hook."""
+    old, current = message('old', None, 'old'), message('current', 'old', 'current')
+    path = tmp_path / 'native.jsonl'
+    write(path, [old, current])
+    archive = SessionArchive(tmp_path / 'swarm', save_normalized_sessions=True, backfill_history=False)
+    c = ClaudeJsonlCollector(archive, 's', 'agent', tmp_path, 'execution', resumed=True)
+    sent = {'type': 'user', 'uuid': 'current', 'session_id': 's', 'graphtraj_direction': 'sent',
+            'message': current['message']}
+    c.accept(sent, 0)
+    c.bind(path, {'current'})
+    result = store(archive)
+    assert [e['data']['id'] for e in result.page()['events'] if e['type'] == 'user/message'] == ['current']
+    assert any(o['event']['graphtraj']['native']['record'] == sent for o in result.observations())
+    assert any(p['event']['graphtraj']['native']['locator'] == 'history-gap' for p in result.pending())
+
+
 @pytest.mark.skipif(not os.environ.get('CLAUDE_SDK_MODULE'), reason='Explicit pinned official SDK comparison')
 @pytest.mark.parametrize('case', ['chain', 'siblings', 'preserved-messages', 'preserved-segment', 'tools', 'replay',
-                                'queued', 'queued-tail', 'queued-delivery'])
+                                'queued', 'queued-tail', 'queued-delivery', 'queued-forwarded', 'tools-indirect-replay'])
 def test_order_matches_official_sdk_session_store(case: str) -> None:
     """Compare the official public SessionStore API, with no login or home scan."""
     records = [message('q', None, 'q'), message('a', 'q', 'a', role='assistant'),
@@ -189,7 +256,7 @@ def test_order_matches_official_sdk_session_store(case: str) -> None:
     if case == 'siblings':
         records[1]['message']['id'] = records[2]['message']['id'] = 'api'
         records[2]['parentUuid'] = 'q'
-    if case == 'tools':
+    if case.startswith('tools'):
         records[1]['message']['id'] = records[2]['message']['id'] = 'api'
         records[1]['message']['content'] = [{'type': 'tool_use', 'id': 'one', 'name': 'Read', 'input': {}}]
         records[2]['message']['content'] = [{'type': 'tool_use', 'id': 'two', 'name': 'Read', 'input': {}}]
@@ -199,11 +266,16 @@ def test_order_matches_official_sdk_session_store(case: str) -> None:
         first = message('result-one', 'a', 'same')
         first['message']['content'] = [{'type': 'tool_result', 'tool_use_id': 'one', 'content': 'same'}]
         records.extend([second, first, message('end', 'result-two', 'done', role='assistant')])
+        if case == 'tools-indirect-replay':
+            records.insert(-1, {**deepcopy(second), 'uuid': 'duplicate-two', 'parentUuid': 'q',
+                                'sourceToolAssistantUUID': 'b'})
     if case == 'replay':
         records.append(deepcopy(records[1]))
     if case.startswith('queued'):
         attachment = {'type': 'attachment', 'uuid': 'queued', 'parentUuid': 'a', 'sessionId': 's',
                       'attachment': {'type': 'queued_command', 'prompt': 'next', 'source_uuid': 'source'}}
+        if case == 'queued-forwarded':
+            attachment['attachment']['forwardedIntent'] = {'lineage': 'native-lineage', 'source': 'relay'}
         final = records.pop()
         records.append(attachment)
         if case == 'queued-delivery':
@@ -240,3 +312,18 @@ def test_order_matches_official_sdk_session_store(case: str) -> None:
     actual = [(message_id(r), {'role': 'user', 'content': r['attachment']['prompt']}
                if r['type'] == 'attachment' else r['message']) for r in conversation(records)]
     assert actual == [(r['uuid'], r['message']) for r in native]
+
+
+def test_assistant_first_context_change_retains_explicit_protocol_gap(tmp_path: Path) -> None:
+    """An unrepresentable replacement preserves native data without breaking control."""
+    c, path, archive = collector(tmp_path, [message('q', None, 'old')])
+    before = store(archive).page()['events']
+    replacement = message('new', None, 'new context', role='assistant')
+    write(path, [replacement])
+    c.collect()
+    result = store(archive)
+    assert result.page()['events'] == before
+    gap = next(p['event'] for p in result.pending()
+               if p['event']['graphtraj']['native']['locator'] == 'history-gap')
+    assert gap['graphtraj']['native']['record']['nativeContext'] == [replacement]
+    assert gap['graphtraj']['missing'][0]['path'] == 'history'

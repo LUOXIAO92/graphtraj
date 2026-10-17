@@ -99,8 +99,9 @@ def test_native_claude_lifecycle_without_a_task(
     assert not (project / '.graphtraj/state/tasks').exists()
 
 
+@pytest.mark.parametrize('behavior', ['allow', 'deny'])
 def test_native_permission_request_ends_wait_and_takes_one_reply(
-    project: Path, claude_environment: None,
+    project: Path, claude_environment: None, behavior: str,
 ) -> None:
     """A native approval is retained, ends wait, and is answered once."""
     cwd = project / 'scratch'
@@ -116,7 +117,7 @@ def test_native_permission_request_ends_wait_and_takes_one_reply(
     [request] = listed['result']['requests']
 
     replied, failed = agents(project, cwd, 'main-a', action='reply', agent=agent,
-                             request=request, response={'behavior': 'allow'})
+                             request=request, response={'behavior': behavior})
     assert not failed and replied['result']['reply_status'] == 'submitted', replied
     repeated, _ = agents(project, cwd, 'main-a', action='reply', agent=agent,
                          request=request, response={'behavior': 'deny'})
@@ -124,8 +125,9 @@ def test_native_permission_request_ends_wait_and_takes_one_reply(
 
     done, _ = agents(project, cwd, 'main-a', action='wait', agent=agent, timeout_seconds=20)
     assert done['result']['state'] == 'standby'
-    assert json.loads(done['result']['last_result']['last_message']) == {
-        'behavior': 'allow', 'updatedInput': {'command': 'echo approved'}}
+    expected = ({'behavior': 'allow', 'updatedInput': {'command': 'echo approved'}} if behavior == 'allow'
+                else {'behavior': 'deny', 'message': 'Permission denied by parent.'})
+    assert json.loads(done['result']['last_result']['last_message']) == expected
 
 
 def test_project_root_cwd_preserves_private_state_denials(
@@ -216,6 +218,47 @@ def test_sdk_retransmission_creates_one_child_with_real_parent_binding(
     child = first['structuredContent']['agent']
     child_status, failed = agents(project, project, 'main-a', action='wait', agent=child, timeout_seconds=20)
     assert not failed and child_status['result']['parent'] == created['agent']
+
+
+def test_native_display_hook_does_not_send_an_extra_model_prompt(
+    project: Path, tmp_path: Path, claude_environment: None,
+) -> None:
+    """The registered hook returns human-only frames while native memory stays unchanged."""
+    created, failed = agents(project, project, 'main-a', action='create', runtime='claude',
+                             instruction='sdk-agents-display')
+    assert not failed, created
+    done, failed = agents(project, project, 'main-a', action='wait', agent=created['agent'], timeout_seconds=20)
+    assert not failed, done
+    reply = json.loads(done['result']['last_result']['last_message'])
+    assert reply['structuredContent']['result']['last_result']['last_message'] == 'child'
+    history = tmp_path / (created['session'] + '.json')
+    assert json.loads(history.read_text()) == ['sdk-agents-display']
+    displays = [json.loads(line) for line in history.with_suffix('.display.jsonl').read_text().splitlines()]
+    assert len(displays) == 2
+    assert all(set(display) == {'systemMessage'} for display in displays)
+    assert all('child' in display['systemMessage'] for display in displays)
+
+
+def test_resumed_claude_children_keep_the_native_cwd(
+    project: Path, claude_environment: None, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A caller's later working directory cannot relocate the resumed native parent."""
+    first, later = project / 'first', project / 'later'
+    first.mkdir()
+    later.mkdir()
+    monkeypatch.setenv('CLAUDE_FIXTURE_REPORT_CWD', '1')
+    created, failed = agents(project, first, 'main-a', action='create', runtime='claude', instruction='first')
+    assert not failed, created
+    agents(project, first, 'main-a', action='wait', agent=created['agent'], timeout_seconds=20)
+    resumed, failed = agents(project, later, 'main-a', action='send', agent=created['agent'],
+                             message='sdk-agents-create-twice')
+    assert not failed and resumed['session'] == created['session'], resumed
+    done, failed = agents(project, later, 'main-a', action='wait', agent=created['agent'], timeout_seconds=20)
+    assert not failed, done
+    replies = json.loads(done['result']['last_result']['last_message'])
+    child = replies[0]['structuredContent']['agent']
+    done, failed = agents(project, later, 'main-a', action='wait', agent=child, timeout_seconds=20)
+    assert not failed and done['result']['last_result']['last_message'] == str(first), done
 
 
 @pytest.mark.skipif(not os.environ.get('CLAUDE_REAL_TEST_BINARY'), reason='Explicit real SDK registration probe only')

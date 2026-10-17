@@ -17,7 +17,7 @@ from graphtraj.sessions.storage import SessionStore, StreamWriter, session_path
 
 
 def timestamp(record: dict) -> tuple[int, list[dict]]:
-    """Read native ISO time or explicitly identify the local receipt clock."""
+    """Read native ISO time; zero is an explicitly missing protocol placeholder."""
     value = record.get('timestamp')
     if isinstance(value, str):
         try:
@@ -26,8 +26,8 @@ def timestamp(record: dict) -> tuple[int, list[dict]]:
                 return int(parsed.timestamp() * 1000), []
         except ValueError:
             pass
-    return int(time.time() * 1000), [{
-        'path': 'time', 'reason': 'Native timestamp unavailable; local collection receipt time.'}]
+    return 0, [{
+        'path': 'time', 'reason': 'Native timestamp unavailable; zero is a protocol placeholder.'}]
 
 
 def open_archive(
@@ -78,6 +78,7 @@ def native_event(store: SessionStore, record: dict, locator: str) -> dict:
     when, missing = timestamp(record)
     event = retain_native('claude', record, session_id=store.header['graphtraj']['native']['sessionId'],
                           locator=locator, seq=store.next_seq, time=when)
+    event['graphtraj']['receivedAtMs'] = int(time.time() * 1000)
     event['graphtraj']['missing'] = missing + [
         {'path': 'hiddenReasoning', 'reason': 'Only native exposed thinking/signatures are available; no decryption.'},
     ]
@@ -297,13 +298,14 @@ class StreamCollector:
         if plain:
             if self.writer is None:
                 template = {'type': 'assistant/attempt', 'seq': self.store.next_seq,
-                            'time': int(time.time() * 1000),
+                            'time': 0,
                             'data': {'turn': 0, 'step': 0, 'stream': []},
                             'graphtraj': {'version': 1, 'requestedModel': self.requested_model,
+                                          'receivedAtMs': int(time.time() * 1000),
                                           'missing': [
                                     {'path': 'turn/step', 'reason': 'Local collection coordinates, not native turn numbers.'},
                                     {'path': 'requestId/attemptId', 'reason': 'Collection message/execution coordinates; native request identity unavailable.'},
-                                    {'path': 'time', 'reason': 'Local collection receipt time.'}]}}
+                                    {'path': 'time', 'reason': 'Native timestamp unavailable; zero is a protocol placeholder.'}]}}
                 if self.observed_model:
                     template.update(type='assistant/message', surfaceOp='append')
                     template['data']['message'] = self.message(self.observed_model)
@@ -346,7 +348,12 @@ class StreamCollector:
                         content.append({**block, 'type': 'reasoning', 'text': block['thinking']})
                     else:
                         content.append(block)
-                retained['graphtraj']['missing'].extend(self.writer.event['graphtraj']['missing'])
+                retained['graphtraj']['missing'].extend(
+                    item for item in self.writer.event['graphtraj']['missing'] if item['path'] != 'time')
+                retained['graphtraj']['firstReceivedAtMs'] = self.writer.event['graphtraj'].get('receivedAtMs')
+                # Final native time describes the completed record. The first
+                # fragment's observation clock is separate provenance only.
+                self.writer.event['time'] = retained['time']
                 self.writer.event['graphtraj'] = retained['graphtraj']
                 self.writer.event['graphtraj']['native']['record'] = record
                 self.writer.finish(content=content)

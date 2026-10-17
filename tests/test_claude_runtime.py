@@ -259,6 +259,7 @@ def test_claude_public_launch_diagnostics_are_bounded_and_correlated(
     assert diagnostics['system_init']['permissionMode'] == 'default'
     assert diagnostics['initialize']['reason'] == diagnostics['system_init']['reason'] == 'unknown'
     assert {'source': 'stderr', 'category': 'native_auto_unavailable'} in diagnostics['warnings']
+    assert {'source': 'stderr', 'category': 'native_permission_forced_default_by_environment_scrub'} in diagnostics['warnings']
     serialized = json.dumps(diagnostics)
     for private in ('sk-diagnosticsecret', 'private@example.invalid', 'private-unknown-reason',
                     'private-prompt-marker', str(tmp_path), 'mcpServers'):

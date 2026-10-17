@@ -125,3 +125,25 @@ def test_native_permission_request_ends_wait_and_takes_one_reply(
     assert done['result']['state'] == 'standby'
     assert json.loads(done['result']['last_result']['last_message']) == {
         'behavior': 'allow', 'updatedInput': {'command': 'echo approved'}}
+
+
+def test_project_root_cwd_preserves_private_state_denials(
+    project: Path, tmp_path: Path, claude_environment: None,
+) -> None:
+    """A Task-free root launch works without granting its private subtree."""
+    created, failed = agents(project, project, 'main-a', action='create',
+                             runtime='claude', instruction='root consultation')
+    assert not failed, created
+    done, failed = agents(project, project, 'main-a', action='wait',
+                         agent=created['agent'], timeout_seconds=20)
+    assert not failed and done['result']['state'] == 'standby', done
+    settings = json.loads((tmp_path / 'native-permissions.json').read_text())['settings']
+    filesystem = settings['sandbox']['filesystem']
+    assert str(project) not in filesystem['allowRead']
+    assert str(project / '.graphtraj') in filesystem['denyRead']
+    assert str(project / '.graphtraj') in filesystem['denyWrite']
+    assert not settings['sandbox']['allowUnsandboxedCommands']
+
+    denied, failed = agents(project, project / '.graphtraj/state', 'main-a',
+                           action='create', runtime='claude', instruction='invalid cwd')
+    assert failed and denied['error']['code'] == 'RUNTIME_ACCESS_DENIED', denied

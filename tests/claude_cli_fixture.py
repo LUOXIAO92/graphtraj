@@ -21,6 +21,9 @@ if os.environ.get('CLAUDE_FIXTURE_FAIL'):
     raise SystemExit(17)
 if os.environ.get('CLAUDE_FIXTURE_DIAGNOSTICS'):
     print('Warning: auto mode unavailable; token=sk-diagnosticsecret; email=private@example.invalid', file=sys.stderr)
+    print('Permission mode forced to default — CLAUDE_CODE_SUBPROCESS_ENV_SCRUB is set '
+          '(allowed_non_write_users hardening). Declare allowedTools explicitly, or set '
+          'CLAUDE_CODE_SUBPROCESS_ENV_SCRUB=0 to opt out.', file=sys.stderr)
 args = sys.argv
 session = args[args.index('--resume' if '--resume' in args else '--session-id') + 1]
 model = args[args.index('--model') + 1]

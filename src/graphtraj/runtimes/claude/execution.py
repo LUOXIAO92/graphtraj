@@ -142,6 +142,12 @@ class ClaudeExecution:
                         str(worktree / '.agents')]
         if request['worktree_access'] == 'read':
             denied_write.append(str(worktree))
+        # A project-root cwd must not re-allow its private descendants. Linked
+        # Worktrees need only their own exception beneath the denied directory.
+        private = root / '.graphtraj'
+        worktree_read = [str(worktree)] if worktree.is_relative_to(private) else []
+        if private.is_relative_to(worktree):
+            denied_write.append(str(private))
         settings = {
             'permissions': {
                 'blockReadsOutsideWorkingDirectories': True,
@@ -157,7 +163,7 @@ class ClaudeExecution:
                 'autoAllowBashIfSandboxed': False, 'excludedCommands': [],
                 'filesystem': {
                     'denyRead': [str(root / '.graphtraj'), *denied_read],
-                    'allowRead': [str(worktree), address, request['git_common_directory'], *map(str, resources),
+                    'allowRead': [*worktree_read, address, request['git_common_directory'], *map(str, resources),
                                   str(Path(sys.prefix).resolve()), str(Path(__file__).resolve().parents[2])],
                     'allowWrite': [address] + ([request['git_common_directory']]
                                               if request['worktree_access'] == 'write' else []),

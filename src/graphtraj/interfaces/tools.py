@@ -1217,6 +1217,25 @@ register_tool(
 )
 
 
+def run_agents(arguments: Mapping[str, Any], *, cwd: Path | None = None) -> ToolResult:
+    """Run the independent ``agents`` function for the caller already bound here."""
+    from graphtraj.interfaces.agents import run_agents_feature
+
+    return run_agents_feature(arguments, cwd=cwd)
+
+
+def _agents_row() -> tuple[str, str, dict[str, Any]]:
+    """Reuse the independent function's own name, description and schema."""
+    from agent_swarm import tool_descriptor
+
+    descriptor = tool_descriptor()
+    return descriptor["name"], descriptor["description"], descriptor["input_schema"]
+
+
+# No delivered method guide describes agents; its own description is the reference.
+register_tool(*_agents_row(), run_agents)
+
+
 # CLI names and decoding are presentation metadata, not another parameter schema.
 # Unlisted parameters use their Python name and Click's existing scalar/repeated form.
 _CLI = {

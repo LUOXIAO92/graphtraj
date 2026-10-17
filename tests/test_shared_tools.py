@@ -68,7 +68,7 @@ def test_both_transports_consume_shared_schema_and_handler(
     listed = mcp_request('tools/list', {})['tools']
     native = native_runner_tools()
     assert [tool['name'] for tool in listed] == ['graphtraj']
-    assert [tool['name'] for tool in native] == ['graphtraj']
+    assert [tool['name'] for tool in native] == ['graphtraj', 'agents']
     discovered = mcp_request('tools/call', {
         'name': 'graphtraj', 'arguments': {'action': 'discover'},
     })['structuredContent']['features']

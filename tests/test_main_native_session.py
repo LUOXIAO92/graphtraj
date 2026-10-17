@@ -63,7 +63,7 @@ def test_main_start_and_resume_preserve_native_configuration(
         assert selected['extends'] == 'operator'
         assert selected['filesystem'][str(config.parent)] == 'none'
         assert selected['filesystem'][str(config)] == 'read'
-    assert [tool['name'] for tool in start['dynamicTools']] == ['graphtraj']
+    assert [tool['name'] for tool in start['dynamicTools']] == ['graphtraj', 'agents']
     assert 'dynamicTools' not in resume
 
 

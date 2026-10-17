@@ -81,7 +81,7 @@ async def run_main(
             """Use native issuer identity for Runner calls, forwarding other requests."""
             if (
                 request.method == 'item/tool/call'
-                and request.params.get('tool') in {'graphtraj', *NATIVE_RUNNER_TOOLS}
+                and request.params.get('tool') in {'graphtraj', 'agents', *NATIVE_RUNNER_TOOLS}
             ):
                 result = await run_native_operation(adapter, native_session, None, root, request)
                 # Summarize actual callback results without exporting private

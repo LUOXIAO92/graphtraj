@@ -98,13 +98,23 @@ NATIVE_RUNNER_TOOLS = {
 
 
 def native_runner_tools() -> list[dict[str, Any]]:
-    """Project the shared gateway schema onto the native callback transport."""
+    """Project the shared gateway and ``agents`` functions onto the native callback.
+
+    ``agents`` is registered as its own function so the model calls Agent
+    control directly, with the independent contract's description and schema.
+    """
+    from agent_swarm import tool_descriptor
     from graphtraj.interfaces.gateway import INPUT_SCHEMA
 
+    agents = tool_descriptor()
     return [{
         'type': 'function', 'name': 'graphtraj',
         'description': 'Discover, describe or execute one registered feature.',
         'inputSchema': INPUT_SCHEMA,
+    }, {
+        'type': 'function', 'name': agents['name'],
+        'description': agents['description'],
+        'inputSchema': agents['input_schema'],
     }]
 
 

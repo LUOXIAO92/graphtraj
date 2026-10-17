@@ -374,7 +374,7 @@ class CodexManagedExecution:
 
         if (
             request.method == 'item/tool/call'
-            and request.params.get('tool') in {'graphtraj', *NATIVE_RUNNER_TOOLS}
+            and request.params.get('tool') in {'graphtraj', 'agents', *NATIVE_RUNNER_TOOLS}
         ):
             return await self._native_runner_request(request)
         if self.approval is not None and request.method.endswith("/requestApproval"):
@@ -649,7 +649,7 @@ async def run_native_operation(
             not isinstance(thread, str) or not thread
             or native_session is None or adapter is None
             or not isinstance(arguments, dict)
-            or name not in {'graphtraj', *NATIVE_RUNNER_TOOLS}
+            or name not in {'graphtraj', 'agents', *NATIVE_RUNNER_TOOLS}
         ):
             raise RunnerError('invalid-input', 'Supply only supported tool arguments.')
         current: str | None = thread
@@ -667,6 +667,11 @@ async def run_native_operation(
         if name == 'graphtraj':
             feature = arguments.get('feature')
             action = arguments.get('action')
+        elif name == 'agents':
+            from graphtraj.interfaces.agents import ACTION_FEATURES
+
+            # Each action passes the permission check of its existing feature.
+            feature, action = ACTION_FEATURES.get(arguments.get('action')), 'execute'
         else:
             feature, action = NATIVE_RUNNER_TOOLS[name], 'execute'
             tool = TOOLS[feature]
@@ -676,6 +681,8 @@ async def run_native_operation(
             allowed_features = {'alias_status', 'task_graph', *METHOD_FEATURE_NAMES}
             if action == 'execute' and feature not in ('alias_status', 'task_graph'):
                 raise RunnerError('authority-denied', 'Temporary native helpers have read-only Runner access.')
+        if name == 'agents' and feature is not None and feature not in allowed_features:
+            raise RunnerError('authority-denied', 'This caller may not use that agents action.')
         identity = root_alias if thread == native_session else thread
 
         def operate() -> ToolResult:
@@ -685,6 +692,14 @@ async def run_native_operation(
             with runtime_caller(discover_runner_directory(root), identity), recovery_review(recovery_reviewer):
                 if name == 'graphtraj':
                     return handle_request(arguments, cwd=root, allowed_features=allowed_features)
+                if name == 'agents':
+                    from agent_swarm import Caller
+                    from graphtraj.interfaces.agents import agents_callback
+
+                    caller = Caller('codex-dynamic-tools', root_alias if thread == native_session else None,
+                                    session=thread, runtime='codex')
+                    result = agents_callback(root, caller)(arguments)
+                    return ToolResult(result.document, failed=result.failed)
                 return tool.handler(arguments, cwd=root)
 
         response = await asyncio.to_thread(operate)

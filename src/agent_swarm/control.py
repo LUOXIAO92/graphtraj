@@ -206,6 +206,20 @@ class ExecutionEvents:
                 change(record, current)
 
 
+def _reply_key(request: Mapping[str, Any]) -> str:
+    """Identify one native request by its token, else by its native request ID."""
+    return request.get("request_token") or json.dumps(request.get("request_id"))
+
+
+def _unanswered(current: Mapping[str, Any]) -> int:
+    """Count retained native requests of an execution that have no reply yet.
+
+    ponytail: a request the Runtime cancels by itself stays counted until the
+    execution ends; no cancellation fact is reported to the core yet.
+    """
+    return sum(_reply_key(request) not in current["replies"] for request in current["requests"])
+
+
 def _running(record: Mapping[str, Any]) -> dict | None:
     """Return the record's running execution, or ``None`` in standby."""
     executions = record["executions"]
@@ -367,12 +381,18 @@ class AgentControl:
             return self._outcome(record, result={"interrupt": "requested", "scheduled": bool(scheduled)})
 
     def wait(self, agent: str, caller: Caller, timeout_seconds: float) -> Outcome:
-        """Wait at most ``timeout_seconds`` for the Agent to reach standby."""
+        """Wait at most ``timeout_seconds`` for standby or an unanswered request.
+
+        An Agent waiting for a native approval does not reach standby by
+        itself, so a retained unanswered request also ends the wait; the
+        document then carries ``pending_requests``.
+        """
         deadline = time.monotonic() + timeout_seconds
         while True:
             with self._locked(agent) as record:
                 self._require_view(record, caller)
-                if _running(record) is None:
+                current = _running(record)
+                if current is None or _unanswered(current):
                     return self._outcome(record, result={"timed_out": False})
             remaining = deadline - time.monotonic()
             if remaining <= 0:
@@ -399,7 +419,7 @@ class AgentControl:
         with self._locked(agent) as record:
             self._require_control(record, caller)
             current = self._require_execution(record, request.get("execution"))
-            key = request.get("request_token") or json.dumps(request.get("request_id"))
+            key = _reply_key(request)
             if key in current["replies"]:
                 return self._outcome(record, result={**current["replies"][key], "duplicate": True})
             native = {name: value for name, value in request.items() if name != "execution"}
@@ -685,6 +705,8 @@ class AgentControl:
                 document["stopping"] = True
             if current.get("diagnostic"):
                 document["diagnostic"] = current["diagnostic"]
+            if _unanswered(current):
+                document["pending_requests"] = _unanswered(current)
         if last is not None:
             document["last_result"] = {name: last.get(name) for name in (
                 "id", "outcome", "last_message", "error", "terminal_confirmed", "ended_at")}

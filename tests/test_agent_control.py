@@ -11,7 +11,7 @@ from pathlib import Path
 import pytest
 
 import agent_swarm
-from agent_swarm import AgentControl, AgentsError, Caller
+from agent_swarm import AgentControl, AgentsError, Caller, ExecutionEvents
 
 
 SOURCE = Path(__file__).resolve().parents[1] / 'src'
@@ -264,6 +264,14 @@ def test_native_requests_reply_once_and_reject_stale_executions(root: Path) -> N
 
     created, _ = call(control, main, action='create', runtime='scripted', instruction='go')
     agent      = created['agent']
+
+    # The Runtime retains a request: a waiting caller learns of it at once.
+    ExecutionEvents(control, agent, created['execution']).request(
+        {'request_token': 'token-1', 'method': 'native/approve'})
+    waited, _ = call(control, main, action='wait', agent=agent, timeout_seconds=5)
+    assert not waited['result']['timed_out'] and waited['result']['state'] == 'active'
+    assert waited['result']['pending_requests'] == 1
+
     listed, _  = call(control, main, action='requests', agent=agent)
     [request]  = listed['result']['requests']
     assert request['execution'] == created['execution']
@@ -274,6 +282,10 @@ def test_native_requests_reply_once_and_reject_stale_executions(root: Path) -> N
                      response={'behavior': 'deny'})
     assert first['result']['reply_status'] == 'submitted' and second['result']['duplicate']
     assert driver.replies == [('token-1', {'behavior': 'allow'})]
+
+    # An answered request no longer ends a wait.
+    waited, _ = call(control, main, action='wait', agent=agent, timeout_seconds=0.2)
+    assert waited['result']['timed_out'] and 'pending_requests' not in waited['result']
 
     stale, failed = call(control, main, action='requests', agent=agent, execution='old')
     assert failed and stale['error']['code'] == 'stale-execution'

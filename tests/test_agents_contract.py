@@ -124,7 +124,7 @@ def test_gateway_serves_agents_through_the_core(tmp_path: Path, monkeypatch) -> 
     assert schema.document['input_schema'] == agent_swarm.INPUT_SCHEMA
     assert anonymous.failed and anonymous.document['error']['code'] == 'authority-unavailable'
     assert created.failed
-    assert created.document['error']['code'] == 'unsupported-runtime'
+    assert created.document['error']['code'] == 'invalid-config'
     assert forged.failed
 
     # GraphTraj turns archiving on in the tool's own config, not in core.

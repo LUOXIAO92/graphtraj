@@ -308,10 +308,14 @@ def test_real_claude_auto_and_native_denial(project: Path, monkeypatch: pytest.M
     monkeypatch.delenv('CLAUDE_CODE_SUBPROCESS_ENV_SCRUB', raising=False)
     roles = project / '.graphtraj/roles.yml'
     document = yaml.safe_load(roles.read_text())
+    document['roles']['claude']['model'] = 'claude-opus-5-5'
+    document['roles']['claude']['reasoning_effort'] = 'high'
     document['roles']['claude']['claude'] = {'permission_mode': 'auto'}
     roles.write_text(yaml.safe_dump(document))
-    denied = project / '.graphtraj/task332-denied.txt'
+    denied = project / '.graphtraj/state/task332-denied.txt'
+    denied.parent.mkdir(parents=True, exist_ok=True)
     denied.write_text('TASK332-SYNTHETIC-NO-SECRET')
+    assert denied.is_file() and denied.read_text() == 'TASK332-SYNTHETIC-NO-SECRET'
     root = project / '.graphtraj/swarm'
     write_config(root, save_normalized_sessions=True, backfill_history=True)
     archive = SessionArchive(root, save_normalized_sessions=True, backfill_history=True)
@@ -332,10 +336,13 @@ def test_real_claude_auto_and_native_denial(project: Path, monkeypatch: pytest.M
         native = next((r for r in records if r.get('type') == 'system' and r.get('subtype') == 'init'), {})
         print(json.dumps({'project': str(project), 'agent': agent, 'session': created.document['session'],
                           'requested': 'auto', 'observed': native.get('permissionMode'),
+                          'requested_model': 'claude-opus-5-5', 'requested_effort': 'high',
+                          'observed_model': native.get('model'),
                           'state': done.document['result']['state'], 'outcome': outcome.get('outcome'),
                           'error': outcome.get('error')}))
         assert not done.failed and done.document['result']['state'] == 'standby', done.document
         assert native.get('permissionMode') == 'auto', native
+        assert native.get('model') == 'claude-opus-5-5', native
         assert outcome['outcome'] == 'completed', outcome
         transcript = Path(session.header['graphtraj']['native']['locator'])
         entries = [json.loads(line) for line in transcript.read_text().splitlines()]
@@ -346,12 +353,43 @@ def test_real_claude_auto_and_native_denial(project: Path, monkeypatch: pytest.M
         read = next(b for b in calls if b.get('name') == 'Read' and b.get('input', {}).get('file_path') == str(denied))
         assert any(b.get('type') == 'tool_result' and b.get('tool_use_id') == read['id']
                    and b.get('is_error') is True for b in blocks), blocks
+        assert_native_read_denial(records, read)
+        assert denied.is_file() and denied.read_text() == 'TASK332-SYNTHETIC-NO-SECRET'
     finally:
         current = call({'action': 'status', 'agent': agent})
         if current.document['result']['state'] == 'active':
             call({'action': 'interrupt', 'agent': agent})
             stopped = call({'action': 'wait', 'agent': agent, 'timeout_seconds': 30})
             assert stopped.document['result']['state'] == 'standby', stopped.document
+
+
+def assert_native_read_denial(records: list[dict], read: dict) -> None:
+    """Require the official result's authoritative permission booking for this Read."""
+    denials = [denial for record in records if record.get('type') == 'result'
+               for denial in record.get('permission_denials', [])]
+    assert any(denial.get('tool_name') == 'Read'
+               and denial.get('tool_use_id') == read['id']
+               and denial.get('tool_input') == read['input'] for denial in denials), (
+        'No authoritative native permission_denials entry matches the Read call; '
+        'a generic tool_result error is insufficient.', denials,
+    )
+
+
+def test_real_probe_requires_correlated_native_permission_denial() -> None:
+    """File/tool errors and another call's denial cannot pass the real evidence gate."""
+    read = {'id': 'read-one', 'input': {'file_path': '/synthetic/exists'}}
+    denied = {'tool_name': 'Read', 'tool_use_id': 'read-one', 'tool_input': read['input']}
+    assert_native_read_denial([{'type': 'result', 'permission_denials': [denied]}], read)
+    insufficient = [
+        [{'type': 'user', 'message': {'content': [{'type': 'tool_result', 'is_error': True,
+                                                 'tool_use_id': 'read-one', 'content': 'File not found'}]}}],
+        [{'type': 'result', 'permission_denials': [{**denied, 'tool_use_id': 'another'}]}],
+        [{'type': 'result', 'permission_denials': [{**denied, 'tool_input': {'file_path': '/other'}}]}],
+        [{'type': 'result', 'permission_denials': [{**denied, 'tool_name': 'Bash'}]}],
+    ]
+    for records in insufficient:
+        with pytest.raises(AssertionError, match='authoritative native'):
+            assert_native_read_denial(records, read)
 
 
 @pytest.mark.parametrize('saving', [False, True])

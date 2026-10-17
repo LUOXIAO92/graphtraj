@@ -569,3 +569,33 @@ def native_record(event: dict) -> dict:
     native = event.get('graphtraj', {}).get('native', {})
     _require('record' in native, 'native.record unavailable')
     return deepcopy(native['record'])
+
+
+def append_stream_record(stream: list[dict], record: dict, *, cumulative: bool = False) -> dict:
+    """Append a mapped fragment, merging only adjacent matching message/block runs.
+
+    Identity includes request, attempt, message, block index and block type.
+    Unknown fields and semantic records prevent merging. Cumulative runs must
+    extend the same block prefix; timestamps and opaque fields stay intact.
+    This mutates only the supplied stream, never the input record, and returns
+    the detached new fragment (the suffix for cumulative input).
+    """
+    validate_stream([record])
+    record = deepcopy(record)
+    keys = {'type', 'requestId', 'attemptId', 'messageId', 'index', 'blockType', 'text'}
+    plain = record['type'] == 'graphtraj/text-run' and set(record) == keys
+    if cumulative:
+        if record['type'] != 'graphtraj/text-run':
+            raise ValueError('Cumulative input requires a text run.')
+        previous = ''.join(item['text'] for item in stream if item.get('type') == record['type']
+                           and all(item.get(k) == record[k] for k in keys - {'text'}))
+        if not record['text'].startswith(previous):
+            raise ValueError('Cumulative snapshot changed already received text.')
+        record['text'] = record['text'][len(previous):]
+    if plain and stream and set(stream[-1]) == keys and all(
+        stream[-1][key] == record[key] for key in keys - {'text'}
+    ):
+        stream[-1]['text'] += record['text']
+    else:
+        stream.append(record)
+    return record

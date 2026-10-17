@@ -18,7 +18,7 @@ import sqlite3
 from typing import Iterator
 
 from graphtraj.sessions.protocol import (
-    INITIAL_COLLECTION_TYPE, snapshot_event, validate_header, validate_session, validate_stream,
+    INITIAL_COLLECTION_TYPE, append_stream_record, snapshot_event, validate_header, validate_session,
 )
 
 
@@ -393,25 +393,7 @@ class StreamWriter:
         self.store._fresh(self.source, position)
         if position <= self.position:
             return False
-        validate_stream([record])
-        record = deepcopy(record)
-        stream = self.event['data']['stream']
-        keys = {'type', 'requestId', 'attemptId', 'messageId', 'index', 'blockType', 'text'}
-        plain = record['type'] == 'graphtraj/text-run' and set(record) == keys
-        if cumulative:
-            if record['type'] != 'graphtraj/text-run':
-                raise ValueError('Cumulative input requires a text run.')
-            previous = ''.join(item['text'] for item in stream if item.get('type') == record['type']
-                               and all(item.get(k) == record[k] for k in keys - {'text'}))
-            if not record['text'].startswith(previous):
-                raise ValueError('Cumulative snapshot changed already received text.')
-            record['text'] = record['text'][len(previous):]
-        if plain and stream and set(stream[-1]) == keys and all(
-            stream[-1][key] == record[key] for key in keys - {'text'}
-        ):
-            stream[-1]['text'] += record['text']
-        else:
-            stream.append(record)
+        record = append_stream_record(self.event['data']['stream'], record, cumulative=cumulative)
         self.position = position
         self.buffered += len(_json(record).encode())
         if self.buffered >= self.checkpoint_bytes:

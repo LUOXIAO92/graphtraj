@@ -268,6 +268,18 @@ def test_referenced_fork_waits_for_exact_parent_cut(tmp_path: Path) -> None:
     store = JsonlSessionStore(path)
     assert not store.pending()
     assert [message['content'][0]['text'] for message in store.messages()] == ['both', 'child']
+    grandchild_path = tmp_path / 'grandchild.jsonl'
+    first_child_line = child_path.read_bytes().splitlines(keepends=True)[0]
+    write(grandchild_path, [
+        {'type': 'session_meta', 'ordinal': 0, 'payload': {
+            'id': 'grandchild', 'forked_from_id': 'child', 'history_base': {
+                'thread_id': 'child', 'end_byte_offset': len(first_child_line), 'end_ordinal_exclusive': 1,
+            },
+        }},
+    ])
+    CodexJsonlArchive(archive, 'grandchild-agent', 'grandchild', grandchild_path).collect(grandchild_path)
+    grandchild = JsonlSessionStore(archive_path(root, 'codex:grandchild'))
+    assert [message['content'][0]['text'] for message in grandchild.messages()] == ['both']
 
 
 def test_runtime_observes_archive_policy_without_new_native_output(tmp_path: Path, peer: Path) -> None:

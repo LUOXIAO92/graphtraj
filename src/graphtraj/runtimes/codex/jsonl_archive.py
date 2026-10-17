@@ -293,7 +293,8 @@ def _retained_developer(events: list[dict], ref: int, item: dict, cause: dict) -
     native = cause['graphtraj']['native']
     locator = native['locator'] + '/retained_developer/' + original['graphtraj']['native']['locator']
     existing = next((event['seq'] for event in events
-                     if event.get('graphtraj', {}).get('native', {}).get('locator') == locator), None)
+                     if event.get('graphtraj', {}).get('native', {}).get('locator') == locator
+                     and event['graphtraj']['native']['sessionId'] == native['sessionId']), None)
     if existing is not None:
         return existing
     event = retain_native('codex', native_record(original), session_id=native['sessionId'],
@@ -366,9 +367,11 @@ def _rollback(events: list[dict], event: dict) -> None:
                 checkpoint = segment_checkpoint
     surface = []
     if checkpoint is not None:
-        prefix = events[checkpoint]['graphtraj']['native']['locator'] + '/replacement_history/'
+        native = events[checkpoint]['graphtraj']['native']
+        prefix = native['locator'] + '/replacement_history/'
         surface = [candidate['seq'] for candidate in events
                    if candidate['type'] in SURFACE_TYPES
+                   and candidate['graphtraj']['native']['sessionId'] == native['sessionId']
                    and candidate['graphtraj']['native']['locator'].startswith(prefix)]
     for candidate, record in original:
         if checkpoint is not None and candidate['seq'] <= checkpoint:
@@ -508,7 +511,8 @@ class CodexJsonlArchive:
             while not finished:
                 page = parent.page(after)
                 for original in page['events']:
-                    ordinal = original['graphtraj']['native'].get('ordinal')
+                    native = original['graphtraj']['native']
+                    ordinal = native.get('ordinal') if native['sessionId'] == base['thread_id'] else None
                     if ordinal is not None and ordinal >= base['end_ordinal_exclusive']:
                         finished = True
                         break

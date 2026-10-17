@@ -1384,6 +1384,7 @@ def _controlled_budget_server(
     protocol = tmp_path / "mcp-main-protocol.jsonl"
     configured = {
         **environment,
+        "CODEX_HOME":                 str(tmp_path / "codex-home"),
         "FAKE_CODEX_APPEND_LOG":       "1",
         "FAKE_CODEX_CAPTURE_ROLE":     "1",
         "FAKE_CODEX_LIFECYCLE_ACTION": "complete-team-round",

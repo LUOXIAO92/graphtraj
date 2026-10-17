@@ -191,6 +191,29 @@ def test_rollback_keeps_persistent_developer_prefix_and_original_annotations(tmp
     assert JsonlSessionStore(store.path).messages() == store.messages()
 
 
+def test_native_agent_communication_keeps_author_ciphertext_and_rollback_boundary(tmp_path: Path) -> None:
+    """Native peer messages retain their author rather than becoming Main output."""
+    root = tmp_path / 'swarm'
+    write_config(root, save_normalized_sessions=True, backfill_history=True)
+    source = tmp_path / 'rollout.jsonl'
+    communication = {'type': 'inter_agent_communication', 'payload': {
+        'author': 'main/worker', 'recipient': 'main', 'other_recipients': [],
+        'content': '', 'encrypted_content': 'opaque+/=', 'trigger_turn': False, 'unknown': ['kept'],
+    }}
+    records = history()[:2] + [communication]
+    write(source, records)
+    collector = CodexJsonlArchive(ConfiguredSessionArchive(root), 'agent', 'native', source)
+    collector.collect(source)
+    store = JsonlSessionStore(archive_path(root, 'codex:native'))
+    message = store.messages()[-1]
+    assert message['source']['author'] == 'main/worker'
+    assert message['content'][0]['item']['content'][-1]['encrypted_content'] == 'opaque+/='
+    assert native_record(store.page()['events'][-1]) == communication
+    write(source, records + [{'type': 'event_msg', 'payload': {'type': 'thread_rolled_back', 'num_turns': 1}}])
+    collector.collect(source)
+    assert len(JsonlSessionStore(store.path).messages()) == 1
+
+
 def test_copied_fork_seeds_before_child_messages(tmp_path: Path) -> None:
     """A copied native prefix remains inherited and precedes the child prompt."""
     root = tmp_path / 'swarm'

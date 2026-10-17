@@ -1,5 +1,6 @@
 """Authorized reads of project-local Session archives through the shared gateway."""
 from pathlib import Path
+from contextlib import ExitStack
 
 from graphtraj.configuration.project_configuration import load_project_configuration
 from graphtraj.execution.desktop_activity import human_observer
@@ -10,6 +11,7 @@ from graphtraj.execution.runner_status import (
 )
 from graphtraj.runtimes.replacement import caller_runtime
 from graphtraj.sessions.storage import SessionStore, session_path
+from graphtraj.sessions.archive import JsonlSessionStore, archive_path
 from graphtraj.workspace.runner_project import discover_runner_directory
 
 
@@ -35,9 +37,20 @@ def read_session(cwd: Path, session_id: str, after: int = -1, limit: int = 200) 
         raise RunnerError('authority-denied', 'Session reads require a verified own Session or human project binding.')
 
     configuration = load_project_configuration(cwd)
-    with SessionStore(session_path(configuration.state, session_id), readonly=True) as store:
-        # Keep finalized events and the pending draft in the same read snapshot.
-        store.db.execute('BEGIN')
+    from graphtraj.interfaces.agents import swarm_root
+
+    normalized = archive_path(swarm_root(configuration.harness_root), session_id)
+    with ExitStack() as resources:
+        if normalized.is_file():
+            # JSONL loads the body with its metadata; check the verified native
+            # identity before opening a different Agent's conversation.
+            if own is not None and session_id != own['runtime'] + ':' + own['session']:
+                raise RunnerError('authority-denied', 'Agent archive access is limited to its own verified native Session.')
+            store = JsonlSessionStore(normalized)
+        else:
+            # Other Runtime collectors still use the retained SQLite format.
+            store = resources.enter_context(SessionStore(session_path(configuration.state, session_id), readonly=True))
+            store.db.execute('BEGIN')
         header = store.header
         native = header.get('graphtraj', {}).get('native', {})
         if own is not None and (native.get('runtime') != own['runtime']

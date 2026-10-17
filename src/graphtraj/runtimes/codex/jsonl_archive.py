@@ -65,6 +65,9 @@ def _response(record: dict, event: dict, session: str, locator: str) -> dict:
                         'nativePath': 'payload.encrypted_content'})
     if role == 'assistant':
         source = {'kind': 'model', 'model': '', 'provider': ''}
+        if kind == 'agent_message':
+            source.update(author=item.get('author'), recipient=item.get('recipient'),
+                          nativeType='agent_message')
         event['graphtraj']['missing'].extend([
             {'path': 'model', 'reason': 'Response item does not identify the generating model.'},
             {'path': 'provider', 'reason': 'Response item does not identify the generating provider.'},
@@ -319,7 +322,8 @@ def _rollback(events: list[dict], event: dict) -> None:
         if candidate['type'] != 'graphtraj/native' and 'record' not in native:
             continue
         record = native_record(candidate)
-        if record.get('type') in {'session_meta', 'response_item', 'compacted', 'event_msg'}:
+        if record.get('type') in {'session_meta', 'response_item', 'compacted', 'event_msg',
+                                  'inter_agent_communication'}:
             original.append((candidate, record))
     latest = next(((candidate, record) for candidate, record in reversed(original)
                    if record['type'] == 'compacted'), None)
@@ -341,8 +345,8 @@ def _rollback(events: list[dict], event: dict) -> None:
             if kind == 'compacted' and isinstance(payload.get('replacement_history'), list):
                 if segment_checkpoint is None:
                     segment_checkpoint = candidate['seq']
-            elif kind == 'response_item':
-                has_input = has_input or _boundary(payload)
+            elif kind in {'response_item', 'inter_agent_communication'}:
+                has_input = has_input or kind == 'inter_agent_communication' or _boundary(payload)
             elif kind == 'event_msg':
                 subtype = payload.get('type')
                 if subtype == 'thread_rolled_back':
@@ -369,7 +373,7 @@ def _rollback(events: list[dict], event: dict) -> None:
     for candidate, record in original:
         if checkpoint is not None and candidate['seq'] <= checkpoint:
             continue
-        if record['type'] == 'response_item' and candidate['type'] in SURFACE_TYPES:
+        if record['type'] in {'response_item', 'inter_agent_communication'} and candidate['type'] in SURFACE_TYPES:
             surface.append(candidate['seq'])
         elif record['type'] == 'event_msg' and record['payload'].get('type') == 'thread_rolled_back':
             surface = _drop_turns(events, surface, record['payload']['num_turns'], candidate)
@@ -406,6 +410,23 @@ def _append_record(
             _metadata(event, record)  # Codex is_api_message excludes raw system items.
         else:
             event = _response(record, event, session, locator)
+    elif kind == 'inter_agent_communication':
+        communication = record['payload']
+        content = [{'type': 'input_text', 'text': communication['content']}]
+        if communication.get('encrypted_content') is not None:
+            message_type = 'NEW_TASK' if communication['trigger_turn'] else 'MESSAGE'
+            content = [
+                {'type': 'input_text', 'text':
+                    f'Message Type: {message_type}\nTask name: {communication["recipient"]}\n'
+                    f'Sender: {communication["author"]}\nPayload:\n'},
+                {'type': 'encrypted_content', 'encrypted_content': communication['encrypted_content']},
+            ]
+        item = {'type': 'agent_message', 'id': communication.get('id'),
+                'author': communication['author'], 'recipient': communication['recipient'],
+                'content': content, 'internal_chat_message_metadata_passthrough':
+                    communication.get('internal_chat_message_metadata_passthrough')}
+        event = _response({'payload': item}, event, session, locator)
+        event['graphtraj']['native'].update(record=deepcopy(record), modelItem=item)
     elif kind == 'compacted' and _compaction(events, event, store):
         return
     elif kind == 'event_msg' and record.get('payload', {}).get('type') == 'thread_rolled_back':

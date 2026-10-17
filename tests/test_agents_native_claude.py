@@ -5,6 +5,7 @@ Runtime; it proves the native lifecycle wiring, not a real host registration.
 """
 
 import json
+import os
 from pathlib import Path
 
 import pytest
@@ -142,11 +143,111 @@ def test_project_root_cwd_preserves_private_state_denials(
     assert str(project) not in filesystem['allowRead']
     assert str(project / '.graphtraj') in filesystem['denyRead']
     assert str(project / '.graphtraj') in filesystem['denyWrite']
-    channel = Path(filesystem['allowWrite'][0])
-    assert not channel.is_relative_to(project / '.graphtraj')
-    assert not channel.exists()
+    assert all(not Path(path).is_relative_to(project / '.graphtraj') for path in filesystem['allowWrite'])
     assert not settings['sandbox']['allowUnsandboxedCommands']
 
+    (project / '.graphtraj/state').mkdir()
     denied, failed = agents(project, project / '.graphtraj/state', 'main-a',
                            action='create', runtime='claude', instruction='invalid cwd')
     assert failed and denied['error']['code'] == 'RUNTIME_ACCESS_DENIED', denied
+
+
+def test_independent_claude_calls_registered_sdk_function_without_runner_alias(
+    project: Path, claude_environment: None,
+) -> None:
+    """The owned SDK callback binds the child's core identity without a Task alias."""
+    created, failed = agents(project, project, 'main-a', action='create', runtime='claude',
+                             instruction='sdk-agents-status')
+    assert not failed, created
+    done, failed = agents(project, project, 'main-a', action='wait',
+                         agent=created['agent'], timeout_seconds=20)
+    assert not failed and done['result']['state'] == 'standby', done
+    result = json.loads(done['result']['last_result']['last_message'])
+    assert not result['isError'], result
+    assert result['structuredContent']['result']['agents'] == []
+    assert not (project / '.graphtraj/state/sessions').exists()
+    assert not list((project / '.graphtraj/swarm/native').glob('*/trace.jsonl'))
+
+
+def test_driver_honors_archive_binding_and_native_transcript_on_resume(
+    project: Path, claude_environment: None,
+) -> None:
+    """The core Run.archive policy reaches real process transport and JSONL."""
+    from agent_swarm import AgentControl, Caller, bind, write_config
+    from graphtraj.execution.agent_driver import AdapterDriver
+    from graphtraj.sessions.archive import JsonlSessionStore, SessionArchive, archive_path
+
+    root = project / '.graphtraj/swarm'
+    write_config(root, save_normalized_sessions=True, backfill_history=True)
+    archive = SessionArchive(root, save_normalized_sessions=True, backfill_history=True)
+    control = AgentControl(root, {'claude': AdapterDriver(project, project)})
+    call = bind(control, Caller('test-host', 'main'), archive=archive)
+    created = call({'action': 'create', 'runtime': 'claude', 'instruction': 'remember'}).document
+    assert 'error' not in created, created
+    done = call({'action': 'wait', 'agent': created['agent'], 'timeout_seconds': 20})
+    assert not done.failed, done.document
+    path = archive_path(root, 'claude:' + created['session'])
+    first = JsonlSessionStore(path).messages()
+    assert [m['role'] for m in first] == ['user', 'assistant']
+    resumed = call({'action': 'send', 'agent': created['agent'], 'message': 'recall'})
+    assert resumed.document['session'] == created['session']
+    call({'action': 'wait', 'agent': created['agent'], 'timeout_seconds': 20})
+    assert len(JsonlSessionStore(path).messages()) == 4
+    before = path.read_bytes()
+    write_config(root, save_normalized_sessions=False)
+    call({'action': 'send', 'agent': created['agent'], 'message': 'no archive'})
+    call({'action': 'wait', 'agent': created['agent'], 'timeout_seconds': 20})
+    assert path.read_bytes() == before
+    assert not (project / '.graphtraj/state/sessions').exists()
+
+
+def test_sdk_retransmission_creates_one_child_with_real_parent_binding(
+    project: Path, claude_environment: None,
+) -> None:
+    """Duplicate SDK transport requests reuse the receipt rather than launch twice."""
+    created, failed = agents(project, project, 'main-a', action='create', runtime='claude',
+                             instruction='sdk-agents-create-twice')
+    assert not failed, created
+    done, failed = agents(project, project, 'main-a', action='wait', agent=created['agent'], timeout_seconds=20)
+    assert not failed, done
+    first, second = json.loads(done['result']['last_result']['last_message'])
+    assert not first['isError'] and not second['isError']
+    assert first['structuredContent']['agent'] == second['structuredContent']['agent']
+    child = first['structuredContent']['agent']
+    child_status, failed = agents(project, project, 'main-a', action='wait', agent=child, timeout_seconds=20)
+    assert not failed and child_status['result']['parent'] == created['agent']
+
+
+@pytest.mark.skipif(not os.environ.get('CLAUDE_REAL_TEST_BINARY'), reason='Explicit real SDK registration probe only')
+def test_real_claude_sdk_registration(
+    project: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Verify real native registration separately from successful model inference."""
+    from agent_swarm import AgentControl, Caller, bind, write_config
+    from graphtraj.execution.agent_driver import AdapterDriver
+    from graphtraj.sessions.archive import JsonlSessionStore, SessionArchive, archive_path
+
+    binary = Path(os.environ['CLAUDE_REAL_TEST_BINARY'])
+    monkeypatch.setenv('PATH', str(binary.parent) + os.pathsep + os.environ['PATH'])
+    root = project / '.graphtraj/swarm'
+    write_config(root, save_normalized_sessions=True, backfill_history=True)
+    archive = SessionArchive(root, save_normalized_sessions=True, backfill_history=True)
+    call = bind(AgentControl(root, {'claude': AdapterDriver(project, project)}),
+                Caller('native-registration-probe', None, 'task332-probe'), archive=archive)
+    created = call({'action': 'create', 'runtime': 'claude',
+                    'instruction': 'Reply with only TASK332. Do not use any tools.'})
+    assert not created.failed, created.document
+    done = call({'action': 'wait', 'agent': created.document['agent'], 'timeout_seconds': 30})
+    assert not done.failed and done.document['result']['state'] == 'standby', done.document
+    session = JsonlSessionStore(archive_path(root, 'claude:' + created.document['session']))
+    records = [item['event']['graphtraj']['native']['record']
+               for item in [*session.pending(), *session.observations()]]
+    native = next(r for r in records if r.get('type') == 'system' and r.get('subtype') == 'init')
+    assert 'mcp__agents__agents' in native['tools']
+    outcome = done.document['result']['last_result']
+    print(json.dumps({'session': created.document['session'], 'registered_tool': 'mcp__agents__agents',
+                      'permissionMode': native.get('permissionMode'), 'outcome': outcome['outcome'],
+                      'error_code': (outcome.get('error') or {}).get('code')}))
+    # A provider error is retained as such. This probe accepts only registration,
+    # never treats missing login or a model failure as successful inference.
+    assert outcome['outcome'] == 'completed' or (outcome.get('error') or {}).get('code') == 'RUNTIME_PROVIDER_FAILED'

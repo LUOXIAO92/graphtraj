@@ -42,6 +42,8 @@ class ScriptedDriver:
 
     def start(self, run):
         """Bind a Session at once, then work on a thread until released."""
+        if hasattr(self, 'start_gate'):
+            self.start_gate.wait(10)
         session = run.session or 'native-' + run.agent[-6:]
         release = threading.Event()
         with self.lock:
@@ -204,14 +206,30 @@ def test_repeated_controls_never_run_one_session_twice(root: Path) -> None:
     driver.release(created['execution'])
     call(control, main, action='wait', agent=agent, timeout_seconds=5)
 
+    # While the native start is still in progress, repeats are refused or no-ops.
+    driver.start_gate = threading.Event()
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        first = pool.submit(call, control, main, action='send', agent=agent, message='first')
+        while len(json.loads((root / 'control/agents' / f'{agent}.json').read_text())['executions']) < 2:
+            pass
+        starting, failed = call(control, main, action='send', agent=agent, message='early')
+        assert failed and starting['error']['code'] == 'starting'
+        early_stop, failed = call(control, main, action='interrupt', agent=agent)
+        assert failed and early_stop['error']['code'] == 'starting'
+        early_resume, _ = call(control, main, action='resume', agent=agent, message='r')
+        assert early_resume['result']['reason'] == 'already-active'
+        driver.start_gate.set()
+        first_document, _ = first.result(timeout=5)
+
     with ThreadPoolExecutor(max_workers=8) as pool:
         sends = list(pool.map(lambda index: call(control, main, action='send', agent=agent,
                                                  message=f'm{index}'), range(8)))
         resumes = list(pool.map(lambda index: call(control, main, action='resume', agent=agent,
                                                    message='r'), range(4)))
-    executions = {document['execution'] for document, failed in sends + resumes if not failed}
-    assert len(executions) == 1 and len(driver.started) == 2
+    executions = {document['execution'] for document, failed in sends + resumes}
+    assert executions == {first_document['execution']} and len(driver.started) == 2
     assert driver.max_active == 1
+    assert all(document['result']['delivery']['delivery'] == 'submitted' for document, _ in sends)
     assert all(document['result']['reason'] == 'already-active' for document, _ in resumes)
 
     with ThreadPoolExecutor(max_workers=4) as pool:

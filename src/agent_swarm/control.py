@@ -299,7 +299,8 @@ class AgentControl:
             "executions": [],
         }
         with self._locked(agent, record) as current:
-            return self._start(current, "create", instruction, binding)
+            run = self._begin(current, "create", instruction, binding)
+        return self._launch(run)
 
     def send(self, agent: str, message: str, binding: Binding) -> Outcome:
         """Deliver to the running execution, or continue the Session in standby."""
@@ -307,25 +308,36 @@ class AgentControl:
             self._require_control(record, binding.caller)
             current = _running(record)
             if current is None:
-                return self._start(record, "send", message, binding)
+                run = self._begin(record, "send", message, binding)
+            else:
+                return self._deliver(record, current, message)
+        return self._launch(run)
 
-            if current.get("stop_requested_at") is not None:
-                raise AgentsError("stopping", "The Agent is stopping; wait for standby, then send again.")
-            self._require_owner(current)
-            receipt = {"at": _now(), "delivery": "submitted"}
-            try:
-                self._driver(record).deliver(self._run(record, current, message, None), message)
-            except AgentsError as error:
-                receipt.update(delivery="rejected", error={"code": error.code, "message": error.message})
-                current["inputs"].append(receipt)
-                raise
-            except Exception as error:
-                # Whether the Runtime received the input is unknown; it is not resent.
-                receipt.update(delivery="unknown", error={"code": "delivery-unknown", "message": str(error)})
-                current["inputs"].append(receipt)
-                return self._outcome(record, failed=True, result={"delivery": receipt})
+    def _deliver(self, record: dict, current: dict, message: str) -> Outcome:
+        """Send input into the running execution under the held lock.
+
+        A rejection keeps its receipt and is raised; an unknown result keeps
+        its receipt and is never resent.
+        """
+        if current.get("stop_requested_at") is not None:
+            raise AgentsError("stopping", "The Agent is stopping; wait for standby, then send again.")
+        if not current["started"]:
+            raise AgentsError("starting", "The execution is still starting; send again once it runs.")
+        self._require_owner(current)
+
+        receipt = {"at": _now(), "delivery": "submitted"}
+        try:
+            self._driver(record).deliver(self._run(record, current, message, None), message)
+        except AgentsError as error:
+            receipt.update(delivery="rejected", error={"code": error.code, "message": error.message})
             current["inputs"].append(receipt)
-            return self._outcome(record, result={"delivery": receipt})
+            raise
+        except Exception as error:
+            receipt.update(delivery="unknown", error={"code": "delivery-unknown", "message": str(error)})
+            current["inputs"].append(receipt)
+            return self._outcome(record, failed=True, result={"delivery": receipt})
+        current["inputs"].append(receipt)
+        return self._outcome(record, result={"delivery": receipt})
 
     def resume(self, agent: str, binding: Binding, message: str | None = None) -> Outcome:
         """Continue the retained Session; an active Agent keeps its execution."""
@@ -335,7 +347,8 @@ class AgentControl:
                 return self._outcome(record, result={"resumed": False, "reason": "already-active"})
             if message is None:
                 raise AgentsError("invalid-input", "request.message: required to resume a standby Agent")
-            return self._start(record, "resume", message, binding)
+            run = self._begin(record, "resume", message, binding)
+        return self._launch(run)
 
     def interrupt(self, agent: str, caller: Caller) -> Outcome:
         """Request a native stop; the Agent enters standby once it ends."""
@@ -346,6 +359,8 @@ class AgentControl:
                 return self._outcome(record, result={"interrupt": "not-running"})
             if current.get("stop_requested_at") is not None:
                 return self._outcome(record, result={"interrupt": "already-requested"})
+            if not current["started"]:
+                raise AgentsError("starting", "The execution is still starting; interrupt once it runs.")
             self._require_owner(current)
             scheduled = self._driver(record).interrupt(self._run(record, current, "", None))
             current.update(stop_requested_at=_now(), stop_scheduled=bool(scheduled))
@@ -564,6 +579,8 @@ class AgentControl:
             raise AgentsError("not-running", "The Agent is in standby; no native request is pending.")
         if execution is not None and execution != current["id"]:
             raise AgentsError("stale-execution", "The request belongs to an execution that has ended.")
+        if not current["started"]:
+            raise AgentsError("starting", "The execution is still starting.")
         self._require_owner(current)
         return current
 
@@ -593,8 +610,12 @@ class AgentControl:
             events=ExecutionEvents(self, record["agent"], current["id"]),
         )
 
-    def _start(self, record: dict, operation: str, message: str, binding: Binding) -> Outcome:
-        """Start one execution of a standby Agent; the lock is already held."""
+    def _begin(self, record: dict, operation: str, message: str, binding: Binding) -> Run:
+        """Record a new running execution of a standby Agent under the held lock.
+
+        The execution is current, and therefore blocks any second start,
+        before the lock is released and :meth:`_launch` calls the driver.
+        """
         if record["retired_at"] is not None:
             raise AgentsError("retired", "The Agent is retired; its record is kept as history.")
         if record["executions"] and record["session"] is None:
@@ -614,19 +635,32 @@ class AgentControl:
             "inputs":          [],
             "requests":        [],
             "replies":         {},
+            "started":         False,
             "archive":         ("bound" if archive is not None else
                                 "unbound" if read_config(self.root)["save_normalized_sessions"] else "off"),
         }
+        self._driver(record)
         record["executions"].append(current)
+        return self._run(record, current, message, archive)
+
+    def _launch(self, run: Run) -> Outcome:
+        """Call the driver outside the lock, so its own reports can proceed.
+
+        A start failure ends the execution with the driver's native code and
+        message; the Agent stays in standby.
+        """
+        failure = None
         try:
-            self._driver(record).start(self._run(record, current, message, archive))
+            self.drivers[run.runtime].start(run)
         except Exception as error:
-            code, text = ((error.code, error.message) if isinstance(error, AgentsError)
-                          else ("start-failed", str(error)))
-            current.update(state="ended", ended_at=_now(), outcome="failed",
-                           terminal_confirmed=True, error={"code": code, "message": text})
-            return self._outcome(record, failed=True)
-        return self._outcome(record)
+            failure = ({"code": error.code, "message": error.message} if isinstance(error, AgentsError)
+                       else {"code": "start-failed", "message": str(error)})
+        if failure is not None:
+            run.events.finished("failed", error=failure)
+        else:
+            run.events._apply(lambda record, current: current.update(started=True))
+        with self._locked(run.agent) as record:
+            return self._outcome(record, failed=failure is not None)
 
     # -- Documents --------------------------------------------------------
 

@@ -1114,6 +1114,18 @@ def _resume_job(
     return resume_file, dict(runtime_environment)
 
 
+def _has_parent_notice_route(job_file: Path) -> bool:
+    """Return whether the Worker's notices reach its parent without this call.
+
+    A Worker with a recorded parent or captured parent host connection sends
+    budget notices through ``notify_direct_parent``. A Worker without either
+    writes them only to the caller's notice channel, which this call keeps
+    read by waiting for the Worker to exit.
+    """
+    mapping = yaml.safe_load(job_file.read_text(encoding="utf-8"))["mapping"]
+    return isinstance(mapping.get("parent"), str) or mapping.get("parent_connection") is not None
+
+
 def _run_session_worker(
     session_directory: Path,
     job_file: Path,
@@ -1124,11 +1136,14 @@ def _run_session_worker(
     input_delivered: threading.Event | None,
     wait_for_completion: bool = True,
 ) -> tuple[str, str]:
-    """Run a native Worker, retaining any caller notice channel until it exits.
+    """Run a native Worker, retaining a needed caller notice channel until it exits.
 
-    A root Worker still drives its own registered children. Waiting here keeps
-    the original CLI/MCP reader alive through that execution, without waiting
-    for task acceptance, which belongs to the caller after this call returns.
+    A root Worker still drives its own registered children. Without
+    ``wait_for_completion`` the call returns once the Worker's registration is
+    confirmed when no notice channel exists or the Worker's notices have their
+    own parent route. Otherwise waiting keeps the original CLI/MCP channel
+    reader alive through that execution, without waiting for task acceptance,
+    which belongs to the caller after this call returns.
     """
     if not isinstance(runtime_environment, dict):
         raise RunnerError("RUNTIME_WORKER_FAILED", "The Runtime Session could not be started.")
@@ -1167,7 +1182,9 @@ def _run_session_worker(
             assert worker.stdin is not None
             worker.stdin.write(prompt)
             worker.stdin.close()
-            if not wait_for_completion and notice_fd is None:
+            if not wait_for_completion and (
+                notice_fd is None or _has_parent_notice_route(job_file)
+            ):
                 from graphtraj.execution.runner_control import _await_session_resume
 
                 _await_session_resume(worker, session_directory, error, None)

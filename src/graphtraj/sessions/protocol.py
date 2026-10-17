@@ -28,7 +28,7 @@ CORE_TYPES = SURFACE_TYPES | {
     'compaction/summary',
 }
 EXTENSION_TYPES = {'graphtraj/native', 'graphtraj/score', 'graphtraj/logprobs',
-                   'graphtraj/derived'}
+                   'graphtraj/derived', 'graphtraj/history'}
 
 
 def _require(condition: bool, path: str) -> None:
@@ -450,6 +450,12 @@ def validate_event(event: dict) -> None:
     elif kind == 'graphtraj/native':
         _require('record' in data, 'native.record')
         _require('native' in event.get('graphtraj', {}), 'native.provenance')
+    elif kind == 'graphtraj/history':
+        _fields(data, {'eventSeqs': list}, 'history')
+        for ref in data['eventSeqs']:
+            _integer(ref, 'history.eventSeqs')
+            _require(ref < event['seq'], 'history.eventSeqs')
+        _require(len(data['eventSeqs']) == len(set(data['eventSeqs'])), 'history.duplicate')
     elif kind in EXTENSION_TYPES:
         _observation(data, kind, event['seq'])
     if kind in {'assistant/message', 'compaction/summary'} and 'usage' in data:
@@ -485,6 +491,10 @@ def validate_session(header: dict, events: list[dict], *, reconstruct: bool = Fa
 
         if kind == 'session/end-seed' and event['data'].get('inherited') is True:
             inherited.append(seq)
+
+        if kind == 'graphtraj/history':
+            surface = event['data']['eventSeqs'][:]
+            _require(all(events[ref]['type'] in SURFACE_TYPES for ref in surface), 'history.messages')
 
         if kind == 'developer/message':
             additions = any(

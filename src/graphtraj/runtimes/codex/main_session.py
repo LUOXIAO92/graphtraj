@@ -12,7 +12,8 @@ from pathlib import Path
 from typing import Awaitable, Callable
 
 from graphtraj import file_lock
-from graphtraj.runtimes.codex.session_archive import CodexSessionArchive
+from graphtraj.runtimes.codex.jsonl_archive import CodexJsonlArchive
+from graphtraj.interfaces.agents import configured_archive
 from graphtraj.configuration.project_configuration import load_project_configuration
 from graphtraj.execution.runner_models import RunnerError
 from graphtraj.execution.runner_status import caller_alias
@@ -137,8 +138,9 @@ async def run_main(
                 original = json.loads((record / 'session.yml').read_text())['session']
                 session = await adapter.resume_session(context, original)
             native_session = session.thread_id
-            adapter.retain_native_trace(session, record / 'events.jsonl', archive=CodexSessionArchive(
-                configuration.state, str(configuration.harness_root), 'main', session.thread_id,
+            adapter.retain_native_trace(session, record / 'events.jsonl', archive=CodexJsonlArchive(
+                configured_archive(root), 'main', session.thread_id, session.rollout_path,
+                new_session=resume is None,
             ))
             execution = await adapter.start_execution(session, instruction)
             result = await adapter.wait(execution)

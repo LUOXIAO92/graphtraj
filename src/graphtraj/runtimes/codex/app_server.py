@@ -27,6 +27,8 @@ from graphtraj.runtimes.runtime_adapter import RuntimeContext, RuntimeExecutionR
 from graphtraj.runtimes.codex.websocket import CodexWebSocket
 from graphtraj.runtimes.codex.session_archive import CodexSessionArchive
 from graphtraj.runtimes.codex.jsonl_archive import CodexJsonlArchive
+from graphtraj.runtimes.codex.history_archive import CodexHistoryArchive
+from graphtraj.sessions.archive import SessionArchive
 
 
 _DEFAULT_TIMEOUT = object()
@@ -258,6 +260,7 @@ class CodexAppServer:
         # native notices before delivery; persistent Sessions use their rollout.
         self._notifications: asyncio.Queue[dict[str, Any] | CodexAdapterError] = asyncio.Queue()
         self._fork_archives: dict[str, CodexSessionArchive] = {}
+        self._ordered_archives: dict[str, CodexHistoryArchive] = {}
 
     async def __aenter__(self) -> CodexAppServer:
         """Open stdio and perform initialize/initialized before Session operations."""
@@ -317,6 +320,8 @@ class CodexAppServer:
 
     async def _close_connection(self) -> None:
         """Bound EOF shutdown, then terminate only this explicitly owned service group."""
+        for archive in self._ordered_archives.values():
+            await archive.collect()
         self._closed = True
         self._fail(CodexAdapterError('RUNTIME_CONNECTION_CLOSED', 'Codex connection explicitly closed.',
                                     terminal_confirmed=False))
@@ -624,6 +629,9 @@ class CodexAppServer:
             ) from error
         try:
             self._collect_native_trace_once(execution.thread_id)
+            ordered = self._ordered_archives.get(execution.thread_id)
+            if ordered is not None:
+                await ordered.collect()
         except CodexAdapterError as error:
             result = error
         if isinstance(result, CodexAdapterError):
@@ -929,6 +937,17 @@ class CodexAppServer:
             raise CodexAdapterError('RUNTIME_LIFECYCLE_INVALID', 'A new native fork is required.')
         archive.seed_fork(session.inherited_history, history_excluded=session.inherited_history_excluded)
         self._fork_archives[session.thread_id] = archive
+
+    async def retain_ordered_history(
+        self, session: CodexSession, archive: SessionArchive, agent: str,
+    ) -> None:
+        """Capture the owned child's inheritance cut before its first model call."""
+        self._require_session(session)
+        if session.thread_id in self._ordered_archives:
+            raise CodexAdapterError('RUNTIME_LIFECYCLE_INVALID', 'History is already retained.')
+        collector = CodexHistoryArchive(archive, agent, session.inherited_history, self._call)
+        self._ordered_archives[session.thread_id] = collector
+        await collector.collect()
 
     async def is_current_turn(self, session: str, turn: str) -> bool:
         """Check the exact live turn without loading dialogue or execution items."""

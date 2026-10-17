@@ -402,12 +402,12 @@ def check(
             child_id = child.thread_id
             created(child_id)
             from graphtraj.configuration.project_configuration import load_project_configuration
-            from graphtraj.runtimes.codex.session_archive import CodexSessionArchive
+            from graphtraj.interfaces.agents import configured_archive
 
             project = load_project_configuration(Path(binding['cwd']))
-            client.retain_fork_archive(child, CodexSessionArchive(
-                project.state, str(project.harness_root), 'checker:' + child_id, child_id,
-            ))
+            await client.retain_ordered_history(
+                child, configured_archive(project.harness_root), 'checker:' + child_id,
+            )
             usage = CodexCheckUsage(child.rollout_path, child_id,
                                     parent['turn_settings'].get('check_usage_baseline'))
             evidence = {

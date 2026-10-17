@@ -78,6 +78,8 @@ def _relocate(event: dict, indices: dict[int, int], session_id: str) -> dict:
     if 'sourceEventSeqs' in event:
         event['sourceEventSeqs'] = [indices[n] for n in event['sourceEventSeqs']]
     data = event['data']
+    if event['type'] == 'graphtraj/history':
+        data['eventSeqs'] = [indices[n] for n in data['eventSeqs']]
     if event['type'] == 'developer/message' and 'headerSeq' in data:
         data['headerSeq'] = indices[data['headerSeq']]
     if event['type'] == 'compaction/summary':
@@ -347,6 +349,9 @@ class JsonlSessionStore:
                 raise ValueError('Missing native content, history or correspondence; messages are incomplete.')
         surface = []
         for event in self._events:
+            if event['type'] == 'graphtraj/history':
+                surface = [self._events[ref] for ref in event['data']['eventSeqs']]
+                continue
             if event['type'] not in SURFACE_TYPES:
                 continue
             if event['surfaceOp'] == 'append':

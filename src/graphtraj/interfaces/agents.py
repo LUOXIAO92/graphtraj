@@ -81,6 +81,13 @@ class ConfiguredSessionArchive(SessionArchive):
         return super().store(session_id, historical=historical)
 
 
+def configured_archive(root: Path) -> ConfiguredSessionArchive:
+    """Bind GraphTraj to the tool-owned archive choices without overriding users."""
+    directory = swarm_root(root)
+    default_config(directory, save_normalized_sessions=True)
+    return ConfiguredSessionArchive(directory, **read_config(directory))
+
+
 class GraphTrajAgents:
     """Run ``agents`` actions through the core, keeping Task member controls.
 
@@ -180,7 +187,7 @@ def agents_callback(
 ) -> Callable[[Any], AgentsResult]:
     """Return the ``agents`` function bound to GraphTraj and a verified caller."""
     backend = GraphTrajAgents(root, cwd)
-    archive = ConfiguredSessionArchive(swarm_root(root), **read_config(swarm_root(root)))
+    archive = configured_archive(root)
     return bind(backend, caller, archive=archive)
 
 

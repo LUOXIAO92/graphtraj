@@ -19,7 +19,7 @@ from graphtraj.configuration.project_configuration import (
     load_project_configuration,
 )
 from graphtraj.configuration.project_roles import load_project_roles
-from graphtraj.runtimes.codex.session_archive import CodexSessionArchive
+from graphtraj.runtimes.codex.jsonl_archive import CodexJsonlArchive
 from graphtraj.runtimes.codex.approval import approval_route, review_request
 
 from graphtraj.execution.runner_batch import read_session_task
@@ -229,17 +229,17 @@ class CodexManagedExecution:
                     self.created(session.thread_id, adapter.service_pid)
                 archive = None
                 if self.independent and self.archive is not None:
-                    from graphtraj.runtimes.codex.jsonl_archive import CodexJsonlArchive
-
                     archive = CodexJsonlArchive(
                         self.archive, self.directory.name, session.thread_id, session.rollout_path,
+                        new_session=self.expected_session is None,
                     )
                 if self.created is not None and not self.independent:
-                    configuration = load_project_configuration(root)
+                    from graphtraj.interfaces.agents import configured_archive
+
                     mapping = yaml.safe_load((self.directory / 'mapping.yml').read_text())
-                    archive = CodexSessionArchive(
-                        configuration.state, str(configuration.harness_root),
-                        self.directory.name, session.thread_id, (mapping['task_id'],),
+                    archive = CodexJsonlArchive(
+                        configured_archive(root), self.directory.name, session.thread_id, session.rollout_path,
+                        new_session=self.expected_session is None, task_ids=(mapping['task_id'],),
                     )
                 adapter.retain_native_trace(session, self.trace_file, archive=archive)
                 if self.termination_requested:

@@ -202,6 +202,21 @@ for line in incoming():
             'cwd': params['cwd'],
         }
         emit({'method': 'thread/started', 'params': {'thread': result['thread']}})
+    elif method == 'thread/fork':
+        thread_id = f'thread-{len(sessions) + 1}'
+        sessions[thread_id] = params
+        result = {'thread': {'id': thread_id, 'path': None, 'ephemeral': True,
+                            'forkedFromId': params['threadId'], 'createdAt': 17,
+                            'historyMode': 'paginated'},
+                  'model': params['model'], 'modelProvider': params['modelProvider']}
+    elif method == 'thread/items/list':
+        assert params['sortDirection'] == 'asc'
+        pages = json.loads(Path(os.environ['PEER_HISTORY_PAGES']).read_text())
+        if isinstance(pages, dict):
+            emit({'id': message['id'], 'error': pages})
+            continue
+        index = int(params.get('cursor', '0'))
+        result = {'data': pages[index], 'nextCursor': str(index + 1) if index + 1 < len(pages) else None}
     elif method == 'thread/read':
         assert initialized
         assert params['includeTurns'] is False

@@ -99,8 +99,8 @@ def test_save_and_backfill_choices_control_actual_collection(tmp_path: Path) -> 
         JsonlSessionStore(path).messages()
 
 
-def test_compaction_is_retained_without_claiming_complete_messages(tmp_path: Path) -> None:
-    """An unimplemented history replacement cannot silently yield an old prompt."""
+def test_empty_compaction_replaces_messages_without_losing_evidence(tmp_path: Path) -> None:
+    """An empty native replacement clears the surface, retaining the original log."""
     root = tmp_path / 'swarm'
     write_config(root, save_normalized_sessions=True, backfill_history=True)
     source = tmp_path / 'rollout.jsonl'
@@ -109,9 +109,53 @@ def test_compaction_is_retained_without_claiming_complete_messages(tmp_path: Pat
     collector = CodexJsonlArchive(ConfiguredSessionArchive(root), 'agent', 'native', source)
     collector.collect(source)
     store = JsonlSessionStore(archive_path(root, 'codex:native'))
-    assert native_record(store.page()['events'][-1]) == records[-1]
-    with pytest.raises(ValueError, match='opaque-native'):
-        store.messages()
+    assert native_record(store.page()['events'][-2]) == records[-1]
+    assert store.messages() == []
+
+
+def test_compaction_retained_context_and_rollback(tmp_path: Path) -> None:
+    """Replacement order survives retained authorization state and a dropped turn."""
+    root = tmp_path / 'swarm'
+    write_config(root, save_normalized_sessions=True, backfill_history=True)
+    source = tmp_path / 'rollout.jsonl'
+    first = {'type': 'message', 'role': 'user', 'content': [{'type': 'input_text', 'text': 'keep'}]}
+    second = {'type': 'message', 'role': 'user', 'content': [{'type': 'input_text', 'text': 'drop'}]}
+    records = history() + [
+        {'type': 'compacted', 'payload': {'replacement_history': [first],
+                                        'replacement_history_metadata': [{'user_input_order': 1}]}},
+        {'type': 'retained_context', 'payload': {'opaque': 'authorization', 'future': [1, None]}},
+        {'type': 'response_item', 'payload': second, 'metadata': {'user_input_order': 2}},
+        {'type': 'event_msg', 'payload': {'type': 'thread_rolled_back', 'num_turns': 1}},
+    ]
+    write(source, records)
+    collector = CodexJsonlArchive(ConfiguredSessionArchive(root), 'agent', 'native', source)
+    collector.collect(source)
+    collector.collect(source)
+    store = JsonlSessionStore(archive_path(root, 'codex:native'))
+    assert [message['content'][0]['text'] for message in store.messages()] == ['keep']
+    assert any(native_record(event) == records[-3] for event in store.page()['events']
+               if event['type'] != 'graphtraj/history')
+
+
+def test_copied_fork_seeds_before_child_messages(tmp_path: Path) -> None:
+    """A copied native prefix remains inherited and precedes the child prompt."""
+    root = tmp_path / 'swarm'
+    write_config(root, save_normalized_sessions=True, backfill_history=True)
+    source = tmp_path / 'rollout.jsonl'
+    records = history()
+    records[0]['payload']['forked_from_id'] = 'parent'
+    records += [
+        {'type': 'event_msg', 'payload': {'type': 'thread_settings_applied', 'thread_id': 'native'}},
+        {'type': 'response_item', 'payload': {'type': 'message', 'role': 'user',
+                                            'content': [{'type': 'input_text', 'text': 'child'}]}},
+    ]
+    write(source, records)
+    collector = CodexJsonlArchive(ConfiguredSessionArchive(root), 'agent', 'native', source)
+    collector.collect(source)
+    store = JsonlSessionStore(archive_path(root, 'codex:native'))
+    assert store.header['parentSession'] == 'codex:parent'
+    assert len(store.messages()) == 8
+    assert store.messages()[-1]['content'][0]['text'] == 'child'
 
 
 def test_runtime_observes_archive_policy_without_new_native_output(tmp_path: Path, peer: Path) -> None:

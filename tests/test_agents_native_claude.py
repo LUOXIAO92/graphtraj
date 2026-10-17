@@ -294,3 +294,61 @@ def test_real_claude_sdk_registration(
     # A provider error is retained as such. This probe accepts only registration,
     # never treats missing login or a model failure as successful inference.
     assert outcome['outcome'] == 'completed' or (outcome.get('error') or {}).get('code') == 'RUNTIME_PROVIDER_FAILED'
+
+
+@pytest.mark.skipif(not os.environ.get('CLAUDE_REAL_AUTO_TEST'), reason='Explicit real auto and deny probe only')
+def test_real_claude_auto_and_native_denial(project: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Require actual auto, registered function use and a native denied Read in one turn."""
+    from agent_swarm import AgentControl, Caller, bind, write_config
+    from graphtraj.execution.agent_driver import AdapterDriver
+    from graphtraj.sessions.archive import JsonlSessionStore, SessionArchive, archive_path
+
+    binary = Path(os.environ['CLAUDE_REAL_TEST_BINARY'])
+    monkeypatch.setenv('PATH', str(binary.parent) + os.pathsep + os.environ['PATH'])
+    monkeypatch.delenv('CLAUDE_CODE_SUBPROCESS_ENV_SCRUB', raising=False)
+    roles = project / '.graphtraj/roles.yml'
+    document = yaml.safe_load(roles.read_text())
+    document['roles']['claude']['claude'] = {'permission_mode': 'auto'}
+    roles.write_text(yaml.safe_dump(document))
+    denied = project / '.graphtraj/task332-denied.txt'
+    denied.write_text('TASK332-SYNTHETIC-NO-SECRET')
+    root = project / '.graphtraj/swarm'
+    write_config(root, save_normalized_sessions=True, backfill_history=True)
+    archive = SessionArchive(root, save_normalized_sessions=True, backfill_history=True)
+    call = bind(AgentControl(root, {'claude': AdapterDriver(project, project)}),
+                Caller('native-auto-probe', None, 'task332-auto-probe'), archive=archive)
+    created = call({'action': 'create', 'runtime': 'claude', 'instruction':
+        'Call mcp__agents__agents with action status once. Then attempt exactly one Read tool call '
+        f'on {denied}. The file is a synthetic permission-test fixture. '
+        'If denied, do not retry or use another tool to access it. Reply with TASK332-DONE.'})
+    assert not created.failed, created.document
+    agent = created.document['agent']
+    try:
+        done = call({'action': 'wait', 'agent': agent, 'timeout_seconds': 60})
+        outcome = done.document['result'].get('last_result') or {}
+        session = JsonlSessionStore(archive_path(root, 'claude:' + created.document['session']))
+        records = [item['event']['graphtraj']['native']['record']
+                   for item in [*session.pending(), *session.observations()]]
+        native = next((r for r in records if r.get('type') == 'system' and r.get('subtype') == 'init'), {})
+        print(json.dumps({'project': str(project), 'agent': agent, 'session': created.document['session'],
+                          'requested': 'auto', 'observed': native.get('permissionMode'),
+                          'state': done.document['result']['state'], 'outcome': outcome.get('outcome'),
+                          'error': outcome.get('error')}))
+        assert not done.failed and done.document['result']['state'] == 'standby', done.document
+        assert native.get('permissionMode') == 'auto', native
+        assert outcome['outcome'] == 'completed', outcome
+        transcript = Path(session.header['graphtraj']['native']['locator'])
+        entries = [json.loads(line) for line in transcript.read_text().splitlines()]
+        blocks = [block for entry in entries for block in entry.get('message', {}).get('content', [])
+                  if isinstance(block, dict)]
+        calls = [b for b in blocks if b.get('type') == 'tool_use']
+        assert any(b.get('name') == 'mcp__agents__agents' for b in calls), calls
+        read = next(b for b in calls if b.get('name') == 'Read' and b.get('input', {}).get('file_path') == str(denied))
+        assert any(b.get('type') == 'tool_result' and b.get('tool_use_id') == read['id']
+                   and b.get('is_error') is True for b in blocks), blocks
+    finally:
+        current = call({'action': 'status', 'agent': agent})
+        if current.document['result']['state'] == 'active':
+            call({'action': 'interrupt', 'agent': agent})
+            stopped = call({'action': 'wait', 'agent': agent, 'timeout_seconds': 30})
+            assert stopped.document['result']['state'] == 'standby', stopped.document

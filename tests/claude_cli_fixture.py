@@ -43,6 +43,7 @@ permission_mode = args[args.index('--permission-mode') + 1] if '--permission-mod
 Path(os.environ['CLAUDE_FIXTURE_HOME'], 'native-permissions.json').write_text(json.dumps({
     'mode': permission_mode, 'settings': json.loads(args[args.index('--settings') + 1]),
     'restricted': '--restricted' in args,
+    'scrub': os.environ.get('CLAUDE_CODE_SUBPROCESS_ENV_SCRUB'),
     'permission_handler': args[args.index('--permission-prompt-tool') + 1],
 }))
 history = Path(os.environ['CLAUDE_FIXTURE_HOME']) / (session + '.json')

@@ -289,7 +289,20 @@ class ClaudeExecution:
             argv += ['--permission-mode', request['permission_mode']]
         environment = {key: value for key, value in os.environ.items() if not key.startswith('GRAPHTRAJ_')}
         environment.update(CLAUDE_CODE_SDK_READS_SESSION_STATE='1',
-                           CLAUDE_CODE_DISABLE_BACKGROUND_TASKS='1', CLAUDE_CODE_SUBPROCESS_ENV_SCRUB='1')
+                           CLAUDE_CODE_DISABLE_BACKGROUND_TASKS='1')
+        scrub_key = 'CLAUDE_CODE_SUBPROCESS_ENV_SCRUB'
+        scrub_source = 'environment' if scrub_key in environment else 'default'
+        environment.setdefault(scrub_key, '0' if request.get('permission_mode') == 'auto' else '1')
+        # Claude 2.1.299 Ne(value): trim/lowercase, then membership in these
+        # four values. Other strings are false, not invalid configuration.
+        scrub_enabled = environment[scrub_key].strip().lower() in {'1', 'true', 'yes', 'on'}
+        self.diagnostics['subprocess_environment_scrub'] = {
+            'source': scrub_source, 'requested_enabled': scrub_enabled,
+        }
+        if request.get('permission_mode') == 'auto' and scrub_enabled:
+            self._save_diagnostics()
+            raise RuntimeAdapterError('RUNTIME_REQUEST_FAILED',
+                                      'Requested auto conflicts with explicit Claude subprocess scrub.')
         if address:
             environment['GRAPHTRAJ_CLI_CONNECTION'] = address
         if request.get('explicit_runtime_home'):
@@ -439,9 +452,9 @@ class ClaudeExecution:
             address = None if self.independent else resources.enter_context(cli_connection(
                 Path(self.request['harness_root']), self.directory.name, native_operation_features(),
                 directory=channel_directory))
-            argv, environment = self._prepare(address)
             stderr = resources.enter_context((self.directory / 'stderr.log').open('a', encoding='utf-8'))
             try:
+                argv, environment = self._prepare(address)
                 if self.stopping.is_set():
                     raise RuntimeAdapterError('RUNTIME_EXECUTION_INTERRUPTED', 'Claude stopped before process creation.')
                 self.diagnostics['launch'] = launch_projection(argv)
@@ -555,6 +568,10 @@ class ClaudeExecution:
                             observed['native_init'] = event
                             observed['permissions'] = self.permission_evidence()
                             write_yaml_durably(self.directory / 'session.yml', observed)
+                        requested_mode = self.request.get('permission_mode')
+                        if requested_mode is not None and self.permission_evidence()['matches_request'] is not True:
+                            raise RuntimeAdapterError('RUNTIME_REQUEST_FAILED',
+                                                      'Claude did not confirm the requested permission mode.')
                     elif kind == 'system' and event.get('subtype') == 'session_state_changed':
                         self.native_state = event.get('state')
                     elif kind == 'result':

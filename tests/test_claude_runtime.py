@@ -174,9 +174,12 @@ def test_claude_reports_mode_fallback_or_unknown(
     monkeypatch.setenv('CLAUDE_FIXTURE_PERMISSION_MODE', observed)
     with ExitStack() as stack:
         turn, _, _ = execution(tmp_path, stack, 'mode', claude={'permission_mode': 'auto'})
-        result = turn.run()
-    assert result['permissions']['observed'] == observed
-    assert result['permissions']['matches_request'] == (False if observed == 'default' else None)
+        with pytest.raises(RuntimeAdapterError, match='requested permission mode') as failed:
+            turn.run()
+    assert failed.value.terminal_confirmed
+    assert turn.done.is_set() and turn.proc.poll() is not None
+    assert turn.permission_evidence()['observed'] == observed
+    assert turn.permission_evidence()['matches_request'] == (False if observed == 'default' else None)
 
 
 @pytest.mark.parametrize('mode', ['bypassPermissions', 'acceptEdits', None])
@@ -237,12 +240,14 @@ def test_claude_public_launch_diagnostics_are_bounded_and_correlated(
     monkeypatch.setattr(subprocess, 'Popen', observe)
     with ExitStack() as stack:
         turn, _, _ = execution(tmp_path, stack, 'private-prompt-marker', claude={'permission_mode': 'auto'})
-        result = turn.run()
+        with pytest.raises(RuntimeAdapterError, match='requested permission mode') as failed:
+            turn.run()
+        assert failed.value.terminal_confirmed
     with runtime_caller(runner, None):
         document = tools.read_reports({'alias': 'research@x1'}, cwd=tmp_path).document
     diagnostics = document['runtime_diagnostics']
-    assert diagnostics['execution_id'] == result['execution_id']
-    assert diagnostics['session_id'] == result['session_id']
+    assert diagnostics['execution_id'] == turn.execution_id
+    assert diagnostics['session_id'] == turn.session
     assert diagnostics['popen_returned'] is True
     argv = captured[0]
     launch = diagnostics['launch']
@@ -539,3 +544,42 @@ def test_permission_delivery_failure_names_its_receipt(
             turn.run()
     assert caught.value.code == 'RUNTIME_TRANSPORT_FAILED'
     assert '(notification_error; exception=ValueError, delivery=queued)' in caught.value.message
+
+
+@pytest.mark.parametrize(('mode', 'scrub'), [
+    ('auto', None), ('default', None), (None, None),
+    ('auto', '1'), ('auto', ' TRUE '), ('auto', 'yes'), ('auto', 'On'),
+    ('auto', '0'), ('auto', 'false'), ('auto', 'NO'), ('auto', ' off '),
+    ('auto', ''), ('auto', 'unrecognized'), ('default', '0'), ('default', '1'),
+])
+def test_scrub_choice_reaches_native_launch_without_mutating_host(
+    tmp_path: Path,
+    claude_environment: None,
+    monkeypatch: pytest.MonkeyPatch,
+    mode: str | None,
+    scrub: str | None,
+) -> None:
+    """Follow the installed CLI's boolean semantics and reject explicit auto conflicts."""
+    key = 'CLAUDE_CODE_SUBPROCESS_ENV_SCRUB'
+    if scrub is None:
+        monkeypatch.delenv(key, raising=False)
+    else:
+        monkeypatch.setenv(key, scrub)
+    result_project(tmp_path)
+    config = {} if mode is None else {'permission_mode': mode}
+    conflict = mode == 'auto' and scrub is not None and scrub.strip().lower() in {'1', 'true', 'yes', 'on'}
+    with ExitStack() as stack:
+        turn, _, _ = execution(tmp_path, stack, 'mode', claude=config)
+        if conflict:
+            with pytest.raises(RuntimeAdapterError, match='conflicts with explicit') as failed:
+                turn.run()
+            assert failed.value.terminal_confirmed and turn.done.is_set()
+            assert turn.proc is None
+        else:
+            result = turn.run()
+            launch = json.loads((tmp_path / 'native-permissions.json').read_text())
+            assert launch['scrub'] == (scrub if scrub is not None else '0' if mode == 'auto' else '1')
+            assert result['permissions']['requested'] == mode
+            assert launch['settings']['sandbox']['failIfUnavailable']
+            assert not launch['settings']['sandbox']['allowUnsandboxedCommands']
+    assert os.environ.get(key) == scrub

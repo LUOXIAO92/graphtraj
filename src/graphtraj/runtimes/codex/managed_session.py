@@ -120,11 +120,13 @@ class CodexManagedExecution:
         trace_file: Path,
         expected_session: str | None = None,
         session_created: Callable[[str, int], None] | None = None,
+        *,
+        independent: bool = False,
     ) -> None:
         """Capture immutable task configuration for one Worker execution."""
         self.context = restore_codex_context(request, context_evidence)
         request = self.context.launch_document()['adapter_request']
-        if expected_session:
+        if expected_session and not independent:
             refresh_approval_route(request, session_directory)
             self.context = restore_codex_context(request, context_evidence)
         self.approval = request.get("approval")
@@ -135,6 +137,8 @@ class CodexManagedExecution:
         self.trace_file = trace_file
         self.started = session_started
         self.created = session_created
+        self.independent = independent
+        self.parent_notice: Callable[[str, dict], dict] | None = None
         self.expected_session = expected_session
         self.termination_requested = False
         self.execution: CodexExecution | None = None
@@ -163,7 +167,7 @@ class CodexManagedExecution:
         connections = ExitStack()
         # Only a formal Worker has a creation callback that binds its native
         # Session to Runner ownership before the first Agent turn.
-        if self.created is not None:
+        if self.created is not None and not self.independent:
             from graphtraj.interfaces.hosted_cli import CONNECTION_ENV, cli_connection
             from graphtraj.workspace.runner_project import discover_project_root
 
@@ -179,6 +183,7 @@ class CodexManagedExecution:
             self.context = restore_codex_context(request, self.context.evidence_document())
         adapter = CodexAppServer(cwd=Path(self.context.session_document()['adapter_request']['cwd']),
                                  command=self.command, request_timeout=5,
+                                 environment=self.context.runtime_environment(),
                                  on_request=self._request, request_handler_timeout=None,
                                  experimental_api=True)
         self.adapter = adapter
@@ -215,7 +220,7 @@ class CodexManagedExecution:
                 if self.created is not None:
                     self.created(session.thread_id, adapter.service_pid)
                 archive = None
-                if self.created is not None:
+                if self.created is not None and not self.independent:
                     configuration = load_project_configuration(root)
                     mapping = yaml.safe_load((self.directory / 'mapping.yml').read_text())
                     archive = CodexSessionArchive(
@@ -398,6 +403,7 @@ class CodexManagedExecution:
         return await run_native_operation(
             self.adapter, self.native_session, self.directory.name,
             discover_project_root(cwd), request, recovery_reviewer=self._review_recovery_sync,
+            cwd=cwd,
         )
 
     def _review_recovery_sync(self, proposal: dict) -> dict:
@@ -479,9 +485,11 @@ class CodexManagedExecution:
         notice += "\n" + json.dumps({**identity, "params": request.params}, ensure_ascii=False)
         while token in self.requests and not self.requests[token][1].done():
             receipt = await asyncio.to_thread(
+                self.parent_notice, notice, identity,
+            ) if self.parent_notice is not None else await asyncio.to_thread(
                 notify_direct_parent, self.directory, notice, identity,
             )
-            if receipt["delivery"] in {"received", "no-direct-parent"}:
+            if receipt["delivery"] in {"received", "retained", "no-direct-parent"}:
                 return
             # Retry only while the original native request is still pending.
             await asyncio.sleep(1)
@@ -632,6 +640,7 @@ async def run_native_operation(
     request: CodexServerRequest,
     *,
     recovery_reviewer: Callable[[dict], dict] | None = None,
+    cwd: Path | None = None,
 ) -> dict:
     """Route an owned native callback, preserving the Runtime's issuing identity."""
     from graphtraj.execution.runner_models import RunnerError
@@ -698,7 +707,7 @@ async def run_native_operation(
 
                     caller = Caller('codex-dynamic-tools', root_alias if thread == native_session else None,
                                     session=thread, runtime='codex')
-                    result = agents_callback(root, caller)(arguments)
+                    result = agents_callback(root, caller, cwd or root)(arguments)
                     return ToolResult(result.document, failed=result.failed)
                 return tool.handler(arguments, cwd=root)
 

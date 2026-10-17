@@ -102,6 +102,9 @@ class GraphTrajAgents:
         from graphtraj.execution.runner_status import status_tree
 
         agents   = self.control.operate("status", {}, binding)
+        if (binding.caller.agent or '').startswith(AGENT_PREFIX):
+            # A core identity has no legacy Runner alias or Task participation.
+            return agents
         sessions = status_tree(self.root)
         return Outcome({**agents.result, "task_sessions": sessions.document},
                        failed=not sessions.succeeded)

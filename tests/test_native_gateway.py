@@ -300,7 +300,7 @@ def test_native_agents_function_dispatches_with_existing_permissions(
             assert set(document) >= {'agent', 'session', 'execution', 'message', 'result'}
             if issuer == 'owner':
                 document, success = await call(
-                    {'action': 'create', 'runtime': 'codex', 'instruction': 'hello'})
+                    {'action': 'create', 'runtime': 'pi', 'instruction': 'hello'})
                 assert not success
                 assert document['error']['code'] == 'unsupported-runtime'
 

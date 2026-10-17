@@ -28,10 +28,8 @@ from graphtraj.runtimes.runtime_adapter import (
 )
 
 
-# ponytail: only Claude's managed owner is verified to run without a Runner
-# Worker (it reads credentials from this process and needs no per-execution
-# environment). Codex, Pi and DSH drivers belong to Tasks 331-334.
-SUPPORTED_RUNTIMES = frozenset({"claude"})
+# Pi and DSH still require their Runtime-specific independent owners.
+SUPPORTED_RUNTIMES = frozenset({"claude", "codex"})
 
 # Native owners of this process's running executions, by core execution ID.
 _TURNS: dict[str, RuntimeTurn] = {}
@@ -123,11 +121,19 @@ class AdapterDriver:
             run.events.process(runtime_pid=pid)
 
         try:
-            turn = adapter.managed_execution(
+            owner = adapter.managed_execution
+            options = {}
+            if run.runtime == 'codex':
+                from graphtraj.runtimes.codex.managed_session import CodexManagedExecution
+
+                owner = CodexManagedExecution
+                options['independent'] = True
+            turn = owner(
                 dict(run.settings["adapter_request"]), run.message, run.directory,
                 lambda session, pid: ready.set(), dict(run.settings["evidence"]),
                 trace_file=run.directory / "trace.jsonl", expected_session=run.session,
                 session_created=created,
+                **options,
             )
         except RuntimeAdapterError as error:
             raise _native_error(error) from None

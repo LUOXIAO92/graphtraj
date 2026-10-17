@@ -859,17 +859,27 @@ class CodexNativeTrace:
         self._codex_home = codex_home
         self._rollout = rollout_path
         self._archive = archive
+        self._collected_file: tuple[int, int, int, int] | None = None
 
     def collect(self) -> None:
         """Archive new records and link the Trace when the native file exists."""
 
-        if self._rollout is None or not self._rollout.is_file():
+        if self._rollout is None:
             discovered = _find_native_session(self._session, self._codex_home)
             if discovered is None:
                 return
             self._rollout = discovered
-        if self._archive is not None:
+        try:
+            stat = self._rollout.stat()
+        except FileNotFoundError:
+            # A notification can precede creation of the declared rollout.
+            return
+        signature = (stat.st_dev, stat.st_ino, stat.st_size, stat.st_mtime_ns)
+        if self._archive is not None and signature != self._collected_file:
             self._archive.collect(self._rollout)
+            # Capture the pre-read signature: appends during collection must
+            # trigger another pass, including completion of a partial line.
+            self._collected_file = signature
         if _linked_to(self._trace_file, self._rollout):
             return
         if _retains_records(self._trace_file):

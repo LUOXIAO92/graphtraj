@@ -248,6 +248,7 @@ class CodexAppServer:
         self._active: dict[str, str | None] = {}
         self._traces: dict[str, CodexNativeTrace] = {}
         self._trace_tasks: dict[str, asyncio.Task[None]] = {}
+        self._trace_changes: dict[str, asyncio.Event] = {}
         self._failure: CodexAdapterError | None = None
         self._closed = False
         self._opened = False
@@ -500,8 +501,9 @@ class CodexAppServer:
                 'RUNTIME_TRACE_FAILED', 'The native Codex Session Trace could not be retained.',
                 terminal_confirmed=False,
             ) from error
+        self._trace_changes[session.thread_id] = asyncio.Event()
         self._trace_tasks[session.thread_id] = asyncio.create_task(
-            self._collect_native_trace(trace)
+            self._collect_native_trace(trace, self._trace_changes[session.thread_id])
         )
 
     async def start_execution(self, session: CodexSession, prompt: str) -> CodexExecution:
@@ -629,13 +631,21 @@ class CodexAppServer:
             raise result
         return result.copy()
 
-    async def _collect_native_trace(self, trace: CodexNativeTrace) -> None:
-        """Watch for one native rollout without blocking control-message processing."""
+    async def _collect_native_trace(self, trace: CodexNativeTrace, changed: asyncio.Event) -> None:
+        """Collect changed files after notices and retry delayed native writes.
+
+        A notice is a wakeup only, never an ordering source. The bounded file
+        check also covers silent writes and notices received before disk flush.
+        """
 
         try:
             while not self._closed:
                 trace.collect()
-                await asyncio.sleep(0.02)
+                try:
+                    await asyncio.wait_for(changed.wait(), 0.25)
+                except TimeoutError:
+                    pass
+                changed.clear()
         except asyncio.CancelledError:
             raise
         except (OSError, ValueError, sqlite3.Error):
@@ -1073,6 +1083,9 @@ class CodexAppServer:
             if not isinstance(message['method'], str) or not isinstance(message.get('params'), dict):
                 raise ValueError('Invalid native method/params')
             archive = self._fork_archives.get(message['params'].get('threadId'))
+            changed = self._trace_changes.get(message['params'].get('threadId'))
+            if changed is not None:
+                changed.set()
             if archive is not None:
                 archive.notice(message)
             if 'id' in message:

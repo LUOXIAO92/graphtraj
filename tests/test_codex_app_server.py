@@ -200,6 +200,58 @@ def test_terminal_trace_link_failure_keeps_confirmed_execution_status(
     asyncio.run(exercise())
 
 
+def test_trace_collects_delayed_writes_without_reopening_unchanged_archive(
+    tmp_path: Path, peer: Path,
+) -> None:
+    """Silent delayed writes, partial lines and shutdown tails remain collectible."""
+    from graphtraj.runtimes.codex.session_archive import CodexSessionArchive
+    from graphtraj.sessions.protocol import native_record
+    from graphtraj.sessions.storage import SessionStore
+
+    class CountedArchive(CodexSessionArchive):
+        """Count actual archive opens while retaining production collection."""
+
+        calls = 0
+
+        def collect(self, rollout: Path) -> None:
+            """Record a full collection attempt, then collect the native records."""
+            self.calls += 1
+            super().collect(rollout)
+
+    async def exercise() -> None:
+        """Use the public Runtime seam with writes after its initial notice."""
+        archive = CountedArchive(tmp_path / 'state', 'project', 'agent', 'thread-1')
+        async with CodexAppServer(command=[str(peer)], cwd=tmp_path, environment={
+            'PEER_NATIVE_ROLLOUT': str(tmp_path / 'native'),
+        }) as adapter:
+            session = await adapter.create_session(context(tmp_path / 'worktree', peer))
+            adapter.retain_native_trace(session, tmp_path / 'trace.jsonl', archive=archive)
+            rollout = session.rollout_path
+            rollout.parent.mkdir()
+            first = {'type': 'session_meta', 'payload': {'id': session.thread_id}}
+            second = {'type': 'response_item', 'payload': {'type': 'message', 'role': 'user',
+                      'content': [{'type': 'input_text', 'text': 'late'}]}}
+            rollout.write_text(json.dumps(first) + '\n' + json.dumps(second)[:10])
+            await asyncio.sleep(0.35)
+            with SessionStore(archive.path) as store:
+                assert [native_record(event) for event in store.page()['events']] == [first]
+            unchanged = archive.calls
+            await asyncio.sleep(0.55)
+            assert archive.calls == unchanged
+            with rollout.open('a') as stream:
+                stream.write(json.dumps(second)[10:] + '\n')
+            await asyncio.sleep(0.35)
+            with SessionStore(archive.path) as store:
+                assert [native_record(event) for event in store.page()['events']] == [first, second]
+            final = {'type': 'event_msg', 'payload': {'type': 'task_complete'}}
+            with rollout.open('a') as stream:
+                stream.write(json.dumps(final) + '\n')
+        with SessionStore(archive.path) as store:
+            assert [native_record(event) for event in store.page()['events']] == [first, second, final]
+
+    asyncio.run(exercise())
+
+
 def test_active_input_and_interrupt_target_only_the_expected_execution(
     tmp_path: Path, peer: Path,
 ) -> None:

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 from contextlib import ExitStack
 import json
 import os
@@ -134,6 +135,7 @@ def event_context(binding: dict, event: dict) -> dict | None:
         if settings.get('model') != event['model']:
             raise ValueError('The Stop model conflicts with its native turn settings.')
         context['settings'] = settings
+        context['transcript_path'] = event['transcript_path']
     return context
 
 
@@ -145,13 +147,12 @@ def response(result: dict | None, continued: bool) -> dict:
     separate lines without blank separators. A mechanical failure that never
     reached a checker conclusion falls back to fixed English, since the checker
     language is unknown; all four statuses still produce exactly one message.
-    A cancelled execution has no task verdict and only emits visible feedback.
+    A normally cancelled execution has no task verdict and emits no chat entry.
     """
     if result is None:
         return {}
     if result.get('outcome') == 'cancelled':
-        return {'systemMessage': 'Completion Check · cancelled\n'
-                'The Main snapshot is no longer current. No completion decision was returned.'}
+        return {}
     status = result['status']
     conclusions = {
         'completed': 'Main may end this turn: the task is complete.',
@@ -183,7 +184,7 @@ async def _owned_request_result(binding: dict) -> dict | None:
     A pending native request needs Main's reply, and a latest-Round result of
     Main's own root Session needs Main's decision, so no checker is needed.
     Unreadable Runner or result evidence is not proof of neither; the full
-    check decides.
+    check decides. An empty mapping marks this unreadable case and forbids reuse.
     """
     from graphtraj.execution.runner_control import owned_root_requests, owned_root_undecided_results
     from graphtraj.execution.runner_models import RunnerError
@@ -202,7 +203,7 @@ async def _owned_request_result(binding: dict) -> dict | None:
                                   for mapping, submission in owned)
             reason = f'Main must decide this result; no checker ran. {submitted}.'
     except (RunnerError, OSError, ValueError, KeyError, TypeError):
-        return None
+        return {}
     if not owned:
         return None
     return {'outcome': 'completed', 'decided_before_fork': True,
@@ -210,6 +211,63 @@ async def _owned_request_result(binding: dict) -> dict | None:
         'status': 'actionable', 'conclusion': 'Main must continue this turn.', 'reason': reason,
         'nodes': sorted({mapping['task_id'] for mapping, _ in owned}),
     })}
+
+
+def completion_boundary(binding: dict, context: dict) -> str | None:
+    """Fingerprint native history and current Task facts, never a turn alone.
+
+    Hook/usage telemetry does not change model input. Native response items,
+    compaction and turn settings do. Without a readable native history or Task
+    projection, do a fresh check instead of treating missing evidence as equal.
+    """
+    from graphtraj.configuration.project_configuration import load_project_configuration
+    from graphtraj.graph.task_index import read_index
+
+    transcript = context.get('transcript_path')
+    if not transcript:
+        return None
+    try:
+        digest = hashlib.sha256()
+        with Path(transcript).open(encoding='utf-8') as stream:
+            for line in stream:
+                record = json.loads(line)
+                if (record.get('type') in {'response_item', 'compacted', 'turn_context'}
+                        or (record.get('type') == 'event_msg'
+                            and record.get('payload', {}).get('type') == 'user_message')):
+                    digest.update(line.encode())
+        project = load_project_configuration(Path(binding['cwd']))
+        index = read_index(project.state)
+        settings = {key: value for key, value in context.get('settings', {}).items()
+                    if key != 'check_usage_baseline'}
+        digest.update(json.dumps({
+            'context': {**context, 'settings': settings}, 'summary_issue': binding['summary_issue'],
+            'tasks': index,
+        }, sort_keys=True).encode())
+        return digest.hexdigest()
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
+
+
+def previous_result(directory: Path, boundary: str | None) -> dict | None:
+    """Reuse only a validated successful result for exactly this boundary."""
+    import yaml
+    from graphtraj.execution.main_finalize import parse_check_result
+
+    if boundary is None:
+        return None
+    # ponytail: reuse existing execution evidence; index it only if this scan
+    # becomes material for a long-lived Main with many retained checks.
+    for path in directory.glob('checks/*/execution.yml'):
+        native = yaml.safe_load(path.read_text(encoding='utf-8'))
+        if native.get('completion_boundary') != boundary or native.get('outcome') != 'completed':
+            continue
+        try:
+            result = parse_check_result(native['output'])
+        except (ValueError, KeyError, TypeError):
+            continue
+        if result['status'] != 'error':
+            return result
+    return None
 
 
 def check(
@@ -305,13 +363,26 @@ def check(
                     # A concurrent write need not delay cancellation for timing data.
                     return {'turn': context['turn'], 'submitted_at': None, 'accepted_at': None}
 
-            if (gated := await _owned_request_result(binding)) is not None:
+            gated = await _owned_request_result(binding)
+            if gated:
                 # A verdict for a superseded Main turn is never returned.
                 if (not await client.is_current_turn(binding['session'], context['turn'])
                         or receipt() is not None):
                     return {'outcome': 'cancelled', 'decided_before_fork': True,
                             'usage': CheckUsage(0, 0, 0, 0, 0, 0)}
                 return gated
+            boundary = completion_boundary(binding, context) if gated is None else None
+            reused = previous_result(directory, boundary)
+            if reused is not None:
+                if (not await client.is_current_turn(binding['session'], context['turn'])
+                        or receipt() is not None
+                        or completion_boundary(binding, context) != boundary):
+                    return {'outcome': 'cancelled', 'decided_before_fork': True,
+                            'usage': CheckUsage(0, 0, 0, 0, 0, 0)}
+                if reused['status'] in ('completed', 'waiting'):
+                    return None  # Already displayed; no second verdict or wakeup.
+                return {'outcome': 'completed', 'decided_before_fork': True,
+                        'usage': CheckUsage(0, 0, 0, 0, 0, 0), 'output': json.dumps(reused)}
             child = await client.fork_session(parent)
             child_id = child.thread_id
             created(child_id)
@@ -444,6 +515,14 @@ def check(
             if outcome == 'completed' and result.get('outcome') != 'completed':
                 outcome = 'error'
                 failure = 'Completion checker was interrupted.'
+            current_boundary = completion_boundary(binding, context)
+            if boundary is not None and current_boundary == boundary:
+                evidence['completion_boundary'] = boundary
+            elif boundary is not None and current_boundary is not None and outcome != 'error':
+                outcome = 'cancelled'
+                evidence.setdefault('cancellation', {
+                    'reason': 'Native input or Task facts changed during the completion check.',
+                })
             observed_usage = usage.finish(execution.turn_id)
             return {**evidence, 'output': result.get('last_agent_message'),
                     'approval_requests': list(approvals.values()),

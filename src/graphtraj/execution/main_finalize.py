@@ -231,6 +231,15 @@ def check_main_finalize(binding_file: Path, event: dict[str, Any]) -> dict[str, 
     Adapter filters other Sessions and interruptions before any checker starts.
     Every actual child Session is retained with its creation-time parent binding.
     """
+    # A second Stop waits for the first result to be durably recorded before
+    # the Adapter decides whether this is still the same completion boundary.
+    with (binding_file.parent / 'check.lock').open('a+b') as lock:
+        file_lock.flock(lock, file_lock.LOCK_EX)
+        return _check_main_finalize(binding_file, event)
+
+
+def _check_main_finalize(binding_file: Path, event: dict[str, Any]) -> dict[str, Any]:
+    """Check and record one host event while holding its Main's execution lock."""
     binding = yaml.safe_load(binding_file.read_text(encoding='utf-8'))
     adapter = select_runtime_adapter(binding['runtime'])
     context = adapter.finalize_event(binding, event)
@@ -256,7 +265,7 @@ def check_main_finalize(binding_file: Path, event: dict[str, Any]) -> dict[str, 
             child_binding = (child, directory)
 
         native = adapter.check_main_finalize(binding, context, prompt, created)
-        if native is None:  # The owning host stopped while the checker ran.
+        if native is None:  # The host stopped, or an earlier release was already consumed.
             return adapter.finalize_response(None, False)
         usage = adapter.finalize_usage(native)
         # Only the Adapter's explicit pre-fork decision has no child; every

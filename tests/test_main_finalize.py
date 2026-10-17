@@ -39,6 +39,7 @@ import json, os, sys, threading, time
 from pathlib import Path
 root = Path(os.environ['FINALIZE_TEST_ROOT'])
 options = json.loads((root / 'options.json').read_text())
+if options.get('unique_child'): options['child'] = 'checker-' + str(os.getpid())
 interrupted = threading.Event()
 
 def send(message):
@@ -195,6 +196,7 @@ def host(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Path, Path]:
     peer.write_text(PEER)
     (tmp_path / 'options.json').write_text('{}')
     monkeypatch.setenv('FINALIZE_TEST_ROOT', str(tmp_path))
+    monkeypatch.setenv('CODEX_HOME', str(tmp_path))
     monkeypatch.setattr(main_finalize, 'current_host_connection', lambda: {
         'runtime':'codex', 'session':'main', 'codex_home':str(tmp_path),
     })
@@ -342,9 +344,7 @@ def test_stopped_or_changed_main_is_not_continued(host: tuple[Path, Path], optio
     (root / 'options.json').write_text(json.dumps(options))
     result = stop(binding)
     if options.get('interrupt_during_check'):
-        assert set(result) == {'systemMessage'}
-        assert 'cancelled' in result['systemMessage']
-        assert 'unfinished' not in result['systemMessage']
+        assert result == {}
     else:
         assert result == {}
 
@@ -562,7 +562,7 @@ def test_new_input_before_a_pre_fork_verdict_cancels_it(
     with owned_child(root, [{'request_id': 'permission-1', 'method': 'claude/can_use_tool'}],
                      on_query=accept_send):
         result = stop(binding)
-    assert set(result) == {'systemMessage'} and 'cancelled' in result['systemMessage']
+    assert result == {}
     assert 'thread/fork' not in wire(root)
 
 
@@ -646,7 +646,7 @@ def test_new_input_cancels_an_undecided_result_verdict(host: tuple[Path, Path]) 
 
     with owned_child(root, [], alias='research@x1', task_id='148', on_query=accept_send):
         result = stop(binding)
-    assert set(result) == {'systemMessage'} and 'cancelled' in result['systemMessage']
+    assert result == {}
     assert 'thread/fork' not in wire(root)
 
 
@@ -1101,7 +1101,7 @@ def test_native_stop_reports_managed_and_stale_routing(
         result = native_hook(root)
         assert set(result) == {'systemMessage'} and 'member@e1' in result['systemMessage']
     result = native_hook(root, session_id='different-native-session')
-    assert set(result) == {'systemMessage'} and 'Session/turn' in result['systemMessage']
+    assert result == {}
     assert binding.read_bytes() == original
     assert not (binding.parent / 'checks').exists()
 
@@ -1429,9 +1429,7 @@ def test_superseded_fork_retains_cancellation(host: tuple[Path, Path], options: 
     root, binding = host
     (root / 'options.json').write_text(json.dumps(options))
     result = stop(binding)
-    assert set(result) == {'systemMessage'}
-    assert 'cancelled' in result['systemMessage']
-    assert 'All required tasks integrated.' not in result['systemMessage']
+    assert result == {}
     evidence = yaml.safe_load(next(binding.parent.glob('checks/*/execution.yml')).read_text())
     assert evidence['outcome'] == 'cancelled'
     if options.get('supersede_during_fork'):
@@ -1499,8 +1497,7 @@ def test_acknowledged_input_cancels_running_check(
     evidence = yaml.safe_load(next(binding.parent.glob('checks/*/execution.yml')).read_text())
     if delivery == 'same-turn':
         assert isinstance(sends[0], dict)
-        assert set(result) == {'systemMessage'} and 'cancelled' in result['systemMessage']
-        assert 'Old task verdict.' not in result['systemMessage']
+        assert result == {}
         assert evidence['outcome'] == 'cancelled' and evidence['output'] is None
         assert len(interrupts) == 1 and interrupts[0]['params']['threadId'] == 'checker'
         accepted = evidence['cancellation']['accepted_at']
@@ -1588,7 +1585,7 @@ def test_input_before_inference_prevents_checker_start(
     result = stop(binding)
     sender.join(timeout=5)
     assert not sender.is_alive() and len(sends) == 1
-    assert set(result) == {'systemMessage'} and 'cancelled' in result['systemMessage']
+    assert result == {}
     wire = [json.loads(line) for line in (root / 'wire.jsonl').read_text().splitlines()]
     starts = [row['params']['threadId'] for row in wire if row['method'] == 'turn/start']
     assert starts == ['main']
@@ -1766,6 +1763,11 @@ def test_consecutive_native_checks_attribute_all_counters_to_current_checker(
         child = f'checker-{index}'
         if index == 0:
             rollout(root)
+        if index:
+            with (root / 'rollout.jsonl').open('a') as stream:
+                stream.write(json.dumps({'type': 'response_item', 'payload': {
+                    'type': 'message', 'role': 'user', 'content': 'Check the next task.',
+                }}) + '\n')
         if with_baseline:
             with (root / 'rollout.jsonl').open('a') as stream:
                 stream.write(json.dumps(token_record(**dict(zip(fields, history)))) + '\n')
@@ -1999,3 +2001,165 @@ def test_killed_real_hook_leaves_a_check_the_next_stop_records(host: tuple[Path,
     record = yaml.safe_load((checks[0] / 'execution.yml').read_text())
     assert record == {'session': 'checker', 'outcome': 'error', 'error': main_finalize.STALE_CHECK_ERROR}
     assert not list(binding.parent.glob('pending-*'))
+
+
+@pytest.mark.parametrize('status', ['waiting', 'completed', 'actionable'])
+def test_repeated_native_stop_reuses_one_checker(host: tuple[Path, Path], status: str) -> None:
+    """Repeated Stop consumes one real fork/start result, without repeating a release."""
+    root, _ = host
+    rollout(root)
+    (root / 'options.json').write_text(json.dumps({'output': json.dumps({
+        'status': status, 'conclusion': 'Checked.', 'reason': 'Current tasks checked.', 'nodes': ['237'],
+    })}))
+    first = native_hook(root)
+    options = json.loads((root / 'options.json').read_text())
+    (root / 'options.json').write_text(json.dumps({**options, 'child': 'second-checker'}))
+    second = native_hook(root)
+    assert wire(root).count('thread/fork') == 1
+    assert wire(root).count('turn/start') == 1
+    assert first
+    if status == 'actionable':
+        assert second['decision'] == 'block'
+    else:
+        assert second == {}
+
+
+def test_concurrent_stops_share_one_checker(host: tuple[Path, Path]) -> None:
+    """Two independent Stop processes wait for one retained fork/model execution."""
+    import subprocess
+
+    root, binding = host
+    rollout(root)
+    (root / 'options.json').write_text(json.dumps({'hold_check': 0.3, 'unique_child': True}))
+    # Each process uses the production command hook and Adapter, replacing only
+    # the native transport with the same existing wire peer as other tests.
+    command = '''
+import sys
+from pathlib import Path
+from graphtraj.runtimes.codex import finalize
+from graphtraj.runtimes.codex.app_server import CodexAppServer
+from graphtraj.runtimes.codex.stop_hook import main
+root = Path(sys.argv[1])
+finalize.proxy = lambda connection, on_request=None: CodexAppServer(
+    cwd=root, command=(sys.executable, str(root / 'peer.py')),
+    experimental_api=True, on_request=on_request)
+sys.argv = [sys.argv[0], '--binding', sys.argv[2], '--hook-session', 'shared-native-session']
+main()
+'''
+    event = json.dumps({'hook_event_name': 'Stop', 'session_id': 'shared-native-session',
+                       'turn_id': 'main-turn', 'model': 'actual-model', 'stop_hook_active': False,
+                       'transcript_path': str(root / 'rollout.jsonl')})
+    environment = {**os.environ, 'PYTHONPATH': str(Path(main_finalize.__file__).parents[2])}
+    processes = [subprocess.Popen([sys.executable, '-c', command, str(root), str(binding)],
+                                  stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                  text=True, env=environment) for _ in range(2)]
+    for process in processes:
+        process.stdin.write(event)
+        process.stdin.close()
+        process.stdin = None
+    replies = []
+    for process in processes:
+        output, errors = process.communicate(timeout=15)
+        assert process.returncode == 0, errors
+        replies.append(json.loads(output))
+    assert wire(root).count('thread/fork') == 1
+    assert wire(root).count('turn/start') == 1
+    assert sum(bool(reply) for reply in replies) == 1
+
+
+@pytest.mark.parametrize('change', ['input', 'compacted', 'task-result', 'approval'])
+def test_new_facts_invalidate_waiting(host: tuple[Path, Path], change: str) -> None:
+    """Same-turn input, compaction, submitted work and requests cannot hide behind waiting."""
+    root, _ = host
+    rollout(root)
+    (root / 'options.json').write_text(json.dumps({'output': json.dumps({
+        'status': 'waiting', 'conclusion': 'May end.', 'reason': 'Child running.', 'nodes': ['237'],
+    })}))
+    assert 'waiting' in native_hook(root)['systemMessage']
+    (root / 'options.json').write_text(json.dumps({'child': 'next-checker', 'output': json.dumps({
+        'status': 'actionable', 'conclusion': 'Continue.', 'reason': 'New work.', 'nodes': ['237'],
+    })}))
+    if change in ('input', 'compacted'):
+        record = {'type': 'response_item' if change == 'input' else 'compacted',
+                  'payload': {'type': 'message', 'role': 'user', 'content': 'New task input.'}}
+        with (root / 'rollout.jsonl').open('a') as stream:
+            stream.write(json.dumps(record) + '\n')
+        reply = native_hook(root)
+        assert wire(root).count('thread/fork') == 2
+        assert wire(root).count('turn/start') == 2
+    elif change == 'task-result':
+        submitted_result(root)
+        with owned_child(root, [], alias='research@x1', task_id='148'):
+            reply = native_hook(root)
+        assert wire(root).count('thread/fork') == 1
+    else:
+        with owned_child(root, [{'request_id': 'permission-1', 'method': 'claude/can_use_tool'}]):
+            reply = native_hook(root)
+        assert wire(root).count('thread/fork') == 1
+    assert reply['decision'] == 'block'
+
+
+def test_task_state_change_requires_new_checker(host: tuple[Path, Path]) -> None:
+    """Task facts changing without a Main message invalidate a previous release."""
+    root, _ = host
+    rollout(root)
+    assert native_hook(root)['systemMessage']
+    submitted_result(root)
+    (root / 'options.json').write_text(json.dumps({'child': 'next-checker'}))
+    assert native_hook(root)['systemMessage']
+    assert wire(root).count('thread/fork') == 2
+    assert wire(root).count('turn/start') == 2
+
+
+def test_native_cancel_is_silent_and_next_stop_checks(host: tuple[Path, Path]) -> None:
+    """The automatic hook does not replace silent cancellation with skipped chatter."""
+    root, binding = host
+    rollout(root)
+    (root / 'options.json').write_text(json.dumps({'interrupt_during_check': True}))
+    assert native_hook(root) == {}
+    evidence = yaml.safe_load(next(binding.parent.glob('checks/*/execution.yml')).read_text())
+    assert evidence['outcome'] == 'cancelled'
+    (root / 'options.json').write_text(json.dumps({'child': 'next-checker'}))
+    assert native_hook(root)['systemMessage']
+    assert wire(root).count('turn/start') == 2
+
+
+def test_usage_telemetry_does_not_start_another_checker(host: tuple[Path, Path]) -> None:
+    """A usage-only update is not new Main input or a new completion boundary."""
+    root, _ = host
+    rollout(root)
+    assert native_hook(root)['systemMessage']
+    with (root / 'rollout.jsonl').open('a') as stream:
+        stream.write(json.dumps(token_record(input_tokens=100, cached_input_tokens=50,
+                                             output_tokens=20, reasoning_output_tokens=10)) + '\n')
+    assert native_hook(root) == {}
+    assert wire(root).count('thread/fork') == wire(root).count('turn/start') == 1
+
+
+def test_new_native_input_during_check_discards_old_verdict(host: tuple[Path, Path]) -> None:
+    """Accepted same-turn native input cannot return or cache the older waiting verdict."""
+    import threading
+    from conftest import wait_for_file
+
+    root, binding = host
+    rollout(root)
+    (root / 'options.json').write_text(json.dumps({'hold_check': 0.3}))
+
+    def receive_input() -> None:
+        """Append the native input while the checker is already running."""
+        wait_for_file(root / 'checker-running')
+        with (root / 'rollout.jsonl').open('a') as stream:
+            stream.write(json.dumps({'type': 'response_item', 'payload': {
+                'type': 'message', 'role': 'user', 'content': 'Continue with the new task.',
+            }}) + '\n')
+
+    sender = threading.Thread(target=receive_input)
+    sender.start()
+    assert native_hook(root) == {}
+    sender.join(timeout=5)
+    assert not sender.is_alive()
+    evidence = yaml.safe_load(next(binding.parent.glob('checks/*/execution.yml')).read_text())
+    assert evidence['outcome'] == 'cancelled' and evidence['cancellation']
+    (root / 'options.json').write_text(json.dumps({'child': 'next-checker'}))
+    assert native_hook(root)['systemMessage']
+    assert wire(root).count('thread/fork') == wire(root).count('turn/start') == 2

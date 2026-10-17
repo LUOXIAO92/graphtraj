@@ -83,8 +83,7 @@ def native_event(event: dict) -> dict:
     _archive(root, session, event['transcript_path'])
     result = check_main_finalize(binding, event)
     if not result:
-        return skipped('the bound native Session/turn did not match, or its owning turn stopped. '
-                       'No task completion result is available.')
+        return {}  # Normal cancellation or an already-consumed completion result.
     # Only a matching Stop may update an older readable-source association.
     # Optional monitoring failures must not change the checker's decision.
     try:

@@ -873,8 +873,7 @@ def test_installed_mcp_server_continues_a_stopped_task_with_unchanged_semantics(
                         total=10,
                         revision_reason="Main accepted the retained stop diagnosis.",
                     ),
-                    "active":      True,
-                    "replaced_by": [],
+                    "current_definition": "task.md",
                 }
             ],
         })
@@ -1780,8 +1779,7 @@ def test_installed_mcp_server_keeps_the_continue_path_on_the_request_caller(
                             total=10,
                             revision_reason="Main accepted the retained stop diagnosis.",
                         ),
-                        "active":      True,
-                        "replaced_by": [],
+                        "current_definition": "task.md",
                     }
                 ],
             },

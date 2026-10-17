@@ -154,6 +154,29 @@ def test_fork_retains_exact_returned_prefix_without_reading_parent(tmp_path: Pat
         assert store.header['parentSession'] == 'codex:parent'
 
 
+def test_native_time_meanings_survive_fork_and_notifications(tmp_path: Path) -> None:
+    """History uses its own timestamps; server emission never becomes receipt time."""
+    archive = CodexSessionArchive(tmp_path, 'project', 'checker', 'child')
+    thread = {'id': 'child', 'forkedFromId': 'parent', 'createdAt': 200,
+              'turns': [{'id': 'old', 'startedAt': 10, 'items': []},
+                        {'id': 'unknown', 'items': []}]}
+    archive.seed_fork(thread)
+    notice = {'method': 'item/completed', 'emittedAtMs': 42,
+              'params': {'threadId': 'child', 'turnId': 'new',
+                         'item': {'type': 'agentMessage', 'text': 'late'}}}
+    archive.notice(notice)
+    archive.notice({'method': 'unknown', 'params': {'threadId': 'child'}})
+    with SessionStore(archive.path) as store:
+        events = store.page()['events']
+        assert store.header['createdAt'] == 200000
+        assert [event['time'] for event in events] == [10000, 0, 0, 0, 42, 0]
+        assert native_record(events[0]) == thread['turns'][0]
+        assert events[1]['graphtraj']['missing']
+        assert native_record(events[-2]) == notice
+        assert events[-2]['graphtraj']['receivedAtMs'] > 42
+        assert events[-1]['graphtraj']['missing']
+
+
 @pytest.mark.parametrize('interrupt_promotion', [False, True])
 def test_persistent_copied_fork_uses_child_settings_boundary(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, interrupt_promotion: bool,

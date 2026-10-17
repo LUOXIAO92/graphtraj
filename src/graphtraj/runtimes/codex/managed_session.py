@@ -153,6 +153,11 @@ class CodexManagedExecution:
         self.recovery_requests: dict[str, tuple[dict, asyncio.Future[dict]]] = {}
 
     @property
+    def session(self) -> str | None:
+        """Expose the native Session through the shared RuntimeTurn interface."""
+        return self.native_session
+
+    @property
     def execution_id(self) -> str | None:
         """Expose native execution identity without leaking the Codex handle."""
         return self.execution.turn_id if self.execution is not None else None

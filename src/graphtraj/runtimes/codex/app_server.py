@@ -642,7 +642,7 @@ class CodexAppServer:
             while not self._closed:
                 trace.collect()
                 try:
-                    await asyncio.wait_for(changed.wait(), 0.25)
+                    await asyncio.wait_for(changed.wait(), 0.1)
                 except TimeoutError:
                     pass
                 changed.clear()

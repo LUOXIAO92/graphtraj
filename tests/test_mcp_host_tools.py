@@ -811,7 +811,7 @@ def test_installed_mcp_server_continues_a_stopped_task_with_unchanged_semantics(
     _register_ready_task(installed_commands, harness, body=_budget_body(total=1))
     clock = tmp_path / "mcp-continue-clock"
     clock.write_text(str(time.time()), encoding="utf-8")
-    environment, _ = _controlled_budget_server(
+    environment, protocol = _controlled_budget_server(
         installed_commands, fake_codex, harness, environment, tmp_path,
         BUDGET_CLOCK=str(clock), FAKE_CODEX_FINAL_LEADER_CLOCK=str(clock),
         FAKE_CODEX_CAPTURE_STDIN="1",
@@ -826,6 +826,7 @@ def test_installed_mcp_server_continues_a_stopped_task_with_unchanged_semantics(
         }]}, thread_id="thread-main")["result"]
         assert stopped["isError"] is True
         assert stopped["structuredContent"]["tasks"][0]["launch_status"] == "stopped"
+        _assert_native_budget_stop(protocol, task_directory, "thread-main")
         usage_before = yaml.safe_load((task_directory / "execution-budget.yml").read_text())
         assert usage_before["stopped"] is True
         state = yaml.safe_load((task_directory / "task.yml").read_text())
@@ -1331,6 +1332,71 @@ def _native_queue_submissions(protocol: Path) -> list[dict]:
     ]
 
 
+def _assert_native_budget_stop(
+    protocol: Path,
+    task_directory: Path,
+    thread_id: str,
+) -> list[dict]:
+    """Check one retained stop and its receipt on the actual parent's native route."""
+    # The awaited stop can return before the separate parent receipt is retained.
+    deadline = time.monotonic() + 10
+    while True:
+        usage = yaml.safe_load((task_directory / "execution-budget.yml").read_text())
+        if all(notice["delivered"] for notice in usage["parent_notices"]):
+            break
+        assert time.monotonic() < deadline, usage
+        time.sleep(0.02)
+    assert usage["stopped"] is True
+    stops = [notice for notice in usage["parent_notices"]
+             if notice["key"] == "stochastic_stop:2"]
+    assert len(stops) == 1
+    stop = stops[0]
+    assert stop["delivered"] is True
+    assert not stop.get("channel_written", False)
+    event = stop["event"]
+    task_id, task_name = task_directory.name.split("-", 1)
+    sessions = task_directory.parents[2] / "runner" / "sessions"
+    roots = [mapping for file in sessions.glob("*/mapping.yml")
+             if (mapping := yaml.safe_load(file.read_text())).get("task_id") == task_id
+             and mapping.get("parent") is None]
+    assert len(roots) == 1
+    alias = roots[0]["alias"]
+    assert roots[0]["parent_connection"]["session"] == thread_id
+    assert event["task"] == {"task_id": task_id, "task_name": task_name}
+    assert event["threshold"] == {"kind": "stochastic_stop", "limit": 2}
+    triggered_at = datetime.fromisoformat(event["occurred_at"])
+    assert triggered_at.utcoffset() is not None
+    assert event["actual"]["elapsed_minutes"] > 0
+    assert re.search(r"Elapsed time: \d{2}:\d{2}:\d{2}", stop["message"])
+
+    received = []
+    for line in protocol.read_text().splitlines():
+        message = json.loads(line)
+        params = message.get("params", {})
+        if message.get("method") != "turn/start" or "toolOutput" not in params:
+            continue
+        notice = json.loads(params["toolOutput"]["output"])
+        if notice["alias"] == alias and notice["message"] == stop["message"]:
+            assert params["input"] == []
+            assert params["toolOutput"]["name"] == "graphtraj"
+            assert params["threadId"] == thread_id
+            assert notice["source"] == "graphtraj"
+            assert notice["event"] == "execution-budget-exceeded"
+            received.append(message)
+    assert len(received) == 1
+
+    receipts = [json.loads(line) for line in
+                (sessions / alias / "parent-notices.jsonl")
+                .read_text().splitlines()]
+    acknowledged = [receipt for receipt in receipts
+                    if receipt.get("identity", {}).get("key") == stop["key"]
+                    and receipt["delivery"] == "received"]
+    assert len(acknowledged) == 1
+    assert acknowledged[0]["parent_connection"]["session"] == thread_id
+    assert isinstance(acknowledged[0]["at"], (int, float))
+    return received
+
+
 def _controlled_budget_server(
     installed_commands: InstalledCommands,
     fake_codex: FakeCodex,
@@ -1342,10 +1408,10 @@ def _controlled_budget_server(
     """Return a controlled server environment and its Main queue protocol log.
 
     The budget clock and draw are fixed through a ``sitecustomize`` module the
-    server and its Workers inherit. ``MCP_MAIN_CWD`` makes the controlled
-    ``codex`` on that PATH the Main queue sender only for the server's own
-    working directory; every dispatched Runtime keeps the controlled Runtime
-    executable inside its worktree. ``control`` adds the per-check
+    server and its Workers inherit. Explicit app-server proxy calls reach the
+    Main peer even from a Worker directory; ordinary dispatched Runtime calls
+    keep the controlled Runtime executable. ``MCP_MAIN_CWD`` also routes the
+    server's caller-discovery queries to the Main peer. ``control`` adds the per-check
     ``BUDGET_CLOCK``, leader clock and release settings.
     """
 
@@ -1373,7 +1439,7 @@ def _controlled_budget_server(
         "import os, sys\n"
         "target = (\n"
         "    " + repr(str(peer)) + "\n"
-        "    if os.getcwd() == os.environ['MCP_MAIN_CWD']\n"
+        "    if sys.argv[1:3] == ['app-server', 'proxy'] or os.getcwd() == os.environ['MCP_MAIN_CWD']\n"
         "    else " + repr(str(fake_codex.executable)) + "\n"
         ")\n"
         "os.execv(sys.executable, [sys.executable, target, *sys.argv[1:]])\n",
@@ -1406,7 +1472,7 @@ def test_installed_mcp_server_returns_a_budget_stop_to_the_request_caller(
     fake_codex: FakeCodex,
     tmp_path: Path,
 ) -> None:
-    """A stop produced by the MCP dispatch returns with that tool call."""
+    """An awaited MCP dispatch stops and notifies its bound native Main once."""
 
     from test_execution_budgets import _budget_body
     from test_session_alias_control import _register_ready_task
@@ -1449,22 +1515,10 @@ def test_installed_mcp_server_returns_a_budget_stop_to_the_request_caller(
         assert usage["stopped"] is True
         assert len(usage["notifications"]) > 1
 
-        # The awaited call returns the enforced stop itself: identity, both
-        # actual instants with their offsets, separate elapsed duration and the
-        # status guidance. Ordinary reminders carry none of it.
-        delivery = stopped["structuredContent"]["stop_deliveries"][0]
-        assert delivery["stop_id"] == "71034556-830a-5f40-8ec6-80c65b263a52"
-        assert delivery["stop"] == "stochastic_stop:2"
-        assert delivery["task"] == {
-            "task_id": "76", "task_name": "session-alias-control",
-        }
-        triggered_at = datetime.fromisoformat(delivery["triggered_at"])
-        delivered_at = datetime.fromisoformat(delivery["delivered_at"])
-        assert triggered_at.utcoffset() is not None
-        assert delivered_at.utcoffset() is not None
-        assert delivery["elapsed"] != delivery["triggered_at"]
-        assert re.fullmatch(r"\d{2}:\d{2}:\d{2}", delivery["elapsed"])
-        # Nothing is queued into Main's native input for this recovery.
+        # Bound Main receives the stop through its owning native connection.
+        # The separate caller-channel shape remains covered by Adapter tests.
+        delivered = _assert_native_budget_stop(protocol, task_directory, "thread-main")
+        assert "stop_deliveries" not in stopped["structuredContent"]
         assert _native_queue_submissions(protocol) == []
 
         # A repeated delivery of one stop stays deduplicated, and a request
@@ -1473,6 +1527,7 @@ def test_installed_mcp_server_returns_a_budget_stop_to_the_request_caller(
         assert repeated["isError"] is True, repeated
         assert repeated["structuredContent"]["tasks"][0]["launch_status"] == "stopped"
         assert "stop_deliveries" not in repeated["structuredContent"]
+        assert _assert_native_budget_stop(protocol, task_directory, "thread-main") == delivered
         assert _native_queue_submissions(protocol) == []
 
 
@@ -1482,7 +1537,7 @@ def test_installed_runner_returns_a_budget_stop_with_the_awaiting_call(
     fake_codex: FakeCodex,
     tmp_path: Path,
 ) -> None:
-    """The installed CLI returns the enforced stop in the result Main awaits."""
+    """The installed CLI stops and delivers the notice to its owning Main."""
 
     from test_execution_budgets import _budget_body
     from test_session_alias_control import _register_ready_task
@@ -1521,17 +1576,9 @@ def test_installed_runner_returns_a_budget_stop_with_the_awaiting_call(
     assert completed.returncode == 1, completed.stdout + completed.stderr
     document = yaml.safe_load(completed.stdout)
     assert document["tasks"][0]["launch_status"] == "stopped"
-    delivery = document["stop_deliveries"][0]
-    assert delivery["stop_id"] == "71034556-830a-5f40-8ec6-80c65b263a52"
-    assert delivery["stop"] == "stochastic_stop:2"
-    assert delivery["task"] == {
-        "task_id": "76", "task_name": "session-alias-control",
-    }
-    triggered_at = datetime.fromisoformat(delivery["triggered_at"])
-    delivered_at = datetime.fromisoformat(delivery["delivered_at"])
-    assert triggered_at.utcoffset() is not None
-    assert delivered_at.utcoffset() is not None
-    assert re.fullmatch(r"\d{2}:\d{2}:\d{2}", delivery["elapsed"])
+    task_directory = harness / ".graphtraj/state/tasks/76-session-alias-control"
+    _assert_native_budget_stop(protocol, task_directory, "thread-main")
+    assert "stop_deliveries" not in document
     assert _native_queue_submissions(protocol) == []
 
 
@@ -1590,8 +1637,13 @@ def test_installed_mcp_server_returns_each_caller_its_own_stop(
             )["result"]
             assert stopped["isError"] is True, stopped
             assert stopped["structuredContent"]["tasks"][0]["launch_status"] == "stopped"
-            delivery = stopped["structuredContent"]["stop_deliveries"][0]
-            assert delivery["task"]["task_id"] == task_id
+            task_directory = harness / ".graphtraj/state/tasks" / (
+                task_id + "-" + tasks[task_id]["task_name"]
+            )
+            _assert_native_budget_stop(
+                protocol, task_directory, thread_id,
+            )
+            assert "stop_deliveries" not in stopped["structuredContent"]
 
         assert _native_queue_submissions(protocol) == []
 
@@ -1735,8 +1787,10 @@ def test_installed_mcp_server_keeps_the_continue_path_on_the_request_caller(
         )["result"]
         assert stopped["isError"] is True, stopped
         assert stopped["structuredContent"]["tasks"][0]["launch_status"] == "stopped"
-        delivery = stopped["structuredContent"]["stop_deliveries"][0]
-        assert delivery["stop"] == "stochastic_stop:2"
+        _assert_native_budget_stop(
+            protocol, task_directory, "thread-main",
+        )
+        assert "stop_deliveries" not in stopped["structuredContent"]
         assert _native_queue_submissions(protocol) == []
 
         # Main records the continuation decision and revises the retained budget,

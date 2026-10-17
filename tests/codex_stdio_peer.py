@@ -243,7 +243,13 @@ for line in incoming():
         turn_id = f'turn-{sequence}'
         result = {'turn': {'id': turn_id, 'status': 'inProgress', 'items': [], 'error': None}}
         active[thread_id] = turn_id
-        prompt = params['input'][0]['text']
+        if 'toolOutput' in params:
+            assert params['input'] == []
+            assert params['toolOutput']['name'] == 'graphtraj'
+            prompt = params['toolOutput']['output']
+            assert json.loads(prompt)['source'] == 'graphtraj'
+        else:
+            prompt = params['input'][0]['text']
         if (
             os.environ.get('PEER_REJECT_RETRO')
             and len(params['input']) == 2

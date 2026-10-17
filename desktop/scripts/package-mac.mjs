@@ -20,6 +20,7 @@ import fs from 'node:fs';
 import fsp from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { desktopHostManifest } from './desktop-host-manifest.mjs';
 
 const desktop = path.resolve(fileURLToPath(new URL('..', import.meta.url)));
 const licenses = ['THIRD_PARTY_LICENSES.txt', 'licenses'];
@@ -87,6 +88,10 @@ for (const relative of licenses) {
   const target = path.join(resources, name);
   if (!fs.existsSync(target)) throw new Error(`Missing packaged license resource: ${target}`);
 }
+
+// Build the matching backend wheel after packaging so it carries this proof.
+await desktopHostManifest(path.join(appPath, 'Contents', 'MacOS', appName),
+  path.join(resources, 'app'), path.dirname(desktop));
 
 // Zip the bundle itself (not its parent directory) so unpacking restores
 // `GraphTraj.app` directly. `-y` stores symlinks as symlinks and preserves

@@ -261,6 +261,7 @@ class CodexAppServer:
         self._notifications: asyncio.Queue[dict[str, Any] | CodexAdapterError] = asyncio.Queue()
         self._fork_archives: dict[str, CodexSessionArchive] = {}
         self._ordered_archives: dict[str, CodexHistoryArchive] = {}
+        self._ordered_tasks: dict[str, asyncio.Task] = {}
 
     async def __aenter__(self) -> CodexAppServer:
         """Open stdio and perform initialize/initialized before Session operations."""
@@ -320,6 +321,7 @@ class CodexAppServer:
 
     async def _close_connection(self) -> None:
         """Bound EOF shutdown, then terminate only this explicitly owned service group."""
+        await asyncio.gather(*self._ordered_tasks.values(), return_exceptions=True)
         for archive in self._ordered_archives.values():
             await archive.collect()
         self._closed = True
@@ -1103,6 +1105,12 @@ class CodexAppServer:
             if not isinstance(message['method'], str) or not isinstance(message.get('params'), dict):
                 raise ValueError('Invalid native method/params')
             archive = self._fork_archives.get(message['params'].get('threadId'))
+            thread_id = message['params'].get('threadId')
+            ordered = self._ordered_archives.get(thread_id)
+            if ordered is not None and message['method'] in {'turn/completed', 'thread/compacted'}:
+                pending = self._ordered_tasks.get(thread_id)
+                if pending is None or pending.done():
+                    self._ordered_tasks[thread_id] = asyncio.create_task(ordered.collect())
             changed = self._trace_changes.get(message['params'].get('threadId'))
             if changed is not None:
                 changed.set()

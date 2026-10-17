@@ -75,17 +75,6 @@ def _response(record: dict, event: dict, session: str, locator: str) -> dict:
     return event
 
 
-def _surface(events: list[dict]) -> list[int]:
-    """Read the adapter's retained native history selections without sorting."""
-    surface = []
-    for event in events:
-        if event['type'] == 'graphtraj/history':
-            surface = event['data']['eventSeqs'][:]
-        elif event['type'] in SURFACE_TYPES:
-            surface.append(event['seq'])
-    return surface
-
-
 def _select(events: list[dict], selected: list[int], source: dict) -> None:
     """Keep a native replacement/drop as references, retaining original events."""
     native = source['graphtraj']['native']
@@ -193,26 +182,24 @@ def _contextual(item: dict) -> bool:
     return False
 
 
-def _rollback(events: list[dict], event: dict) -> None:
+def _boundary(item: dict) -> bool:
+    """Recognize a native instruction boundary rather than every user-role item."""
+    return item.get('type') == 'agent_message' or (
+        item.get('role') == 'user' and not _contextual(item)
+        and not any(block.get('text', '').startswith(_SUMMARY_PREFIX + '\n')
+                    for block in item.get('content', []))
+    )
+
+
+def _drop_turns(events: list[dict], surface: list[int], count: int) -> list[int]:
     """Replay native rollback by instruction boundaries, keeping pre-turn context.
 
     The native acceptance order can remove an earlier assistant output generated
     for a removed input; it is not a timestamp and is never used for sorting.
     """
-    record = native_record(event)
-    count = record['payload']['num_turns']
     if type(count) is not int or count < 0:
         raise ValueError('Invalid native rollback count.')
-    surface = _surface(events)
-    boundaries = []
-    for index, ref in enumerate(surface):
-        item = _item(events[ref])
-        if item.get('type') == 'agent_message' or (
-            item.get('role') == 'user' and not _contextual(item)
-            and not any(block.get('text', '').startswith(_SUMMARY_PREFIX + '\n')
-                        for block in item.get('content', []))
-        ):
-            boundaries.append(index)
+    boundaries = [index for index, ref in enumerate(surface) if _boundary(_item(events[ref]))]
     if count and boundaries:
         cut = boundaries[max(0, len(boundaries) - count)]
         removed = events[surface[cut]]
@@ -236,7 +223,79 @@ def _rollback(events: list[dict], event: dict) -> None:
                     continue
                 kept.append(ref)
             surface = kept
-    _metadata(event, record)
+    return surface
+
+
+def _rollback(events: list[dict], event: dict) -> None:
+    """Select the surviving compaction before replaying native rollback markers.
+
+    The 0.163 paginated/window checkpoint bounds replay unconditionally. Older
+    checkpoints are selected from surviving reverse turn segments, so a removed
+    turn's compaction cannot erase the earlier user boundary needed by rollback.
+    """
+    original = []
+    for candidate in [*events, event]:
+        native = candidate.get('graphtraj', {}).get('native', {})
+        if '/replacement_history/' in native.get('locator', '') or candidate['type'] == 'graphtraj/history':
+            continue
+        if candidate['type'] != 'graphtraj/native' and 'record' not in native:
+            continue
+        record = native_record(candidate)
+        if record.get('type') in {'session_meta', 'response_item', 'compacted', 'event_msg'}:
+            original.append((candidate, record))
+    latest = next(((candidate, record) for candidate, record in reversed(original)
+                   if record['type'] == 'compacted'), None)
+    paginated = any(record['type'] == 'session_meta' and record['payload'].get('history_mode') == 'paginated'
+                    for _, record in original)
+    checkpoint = None
+    if latest is not None:
+        payload = latest[1]['payload']
+        if (isinstance(payload.get('replacement_history'), list) and payload.get('window_number') is not None
+                and (paginated or payload.get('resume_metadata') is not None)):
+            checkpoint = latest[0]['seq']
+    if checkpoint is None:
+        pending = 0
+        has_input = False
+        segment_checkpoint = None
+        for candidate, record in reversed(original):
+            kind = record['type']
+            payload = record.get('payload', {})
+            if kind == 'compacted' and isinstance(payload.get('replacement_history'), list):
+                if segment_checkpoint is None:
+                    segment_checkpoint = candidate['seq']
+            elif kind == 'response_item':
+                has_input = has_input or _boundary(payload)
+            elif kind == 'event_msg':
+                subtype = payload.get('type')
+                if subtype == 'thread_rolled_back':
+                    pending += payload['num_turns']
+                elif subtype == 'user_message':
+                    has_input = True
+                elif subtype in {'task_started', 'turn_started'}:
+                    if pending == 0 and segment_checkpoint is not None:
+                        checkpoint = segment_checkpoint
+                        break
+                    if pending and has_input:
+                        pending -= 1
+                    has_input = False
+                    segment_checkpoint = None
+        else:
+            if pending == 0:
+                checkpoint = segment_checkpoint
+    surface = []
+    if checkpoint is not None:
+        prefix = events[checkpoint]['graphtraj']['native']['locator'] + '/replacement_history/'
+        surface = [candidate['seq'] for candidate in events
+                   if candidate['type'] in SURFACE_TYPES
+                   and candidate['graphtraj']['native']['locator'].startswith(prefix)]
+    for candidate, record in original:
+        if checkpoint is not None and candidate['seq'] <= checkpoint:
+            continue
+        if record['type'] == 'response_item' and candidate['type'] in SURFACE_TYPES:
+            surface.append(candidate['seq'])
+        elif record['type'] == 'event_msg' and record['payload'].get('type') == 'thread_rolled_back':
+            surface = _drop_turns(events, surface, record['payload']['num_turns'])
+    _metadata(event, native_record(event))
     events.append(event)
     _select(events, surface, event)
 
@@ -261,7 +320,10 @@ def _append_record(
         event['graphtraj']['native']['ordinal'] = record['ordinal']
     kind = record.get('type')
     if kind == 'response_item':
-        if record['payload'].get('role') == 'system':
+        item = record['payload']
+        if (item.get('role') == 'system' or item.get('type') == 'compaction_trigger'
+                or (item.get('type') == 'configuration_update'
+                    and not (record.get('metadata') or {}).get('harness_authored_configuration'))):
             _metadata(event, record)  # Codex is_api_message excludes raw system items.
         else:
             event = _response(record, event, session, locator)
@@ -273,10 +335,8 @@ def _append_record(
     elif kind in {
         'session_meta', 'turn_context', 'retained_context', 'world_state',
         'token_usage_record', 'security_risk_score', 'inter_agent_communication_metadata',
-    } or (kind == 'event_msg' and record.get('payload', {}).get('type') in {
-        'token_count', 'task_started', 'task_complete', 'thread_settings_applied',
-        'user_message', 'agent_message', 'agent_reasoning',
-    }):
+        'realtime_item', 'event_msg',
+    }:
         _metadata(event, record)
     event['graphtraj']['attachments'] = _attachments(store, record)
     events.append(event)

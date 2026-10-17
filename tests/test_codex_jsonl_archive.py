@@ -122,6 +122,7 @@ def test_compaction_retained_context_and_rollback(tmp_path: Path) -> None:
     second = {'type': 'message', 'role': 'user', 'content': [{'type': 'input_text', 'text': 'drop'}]}
     records = history() + [
         {'type': 'compacted', 'payload': {'replacement_history': [first],
+                                        'window_number': 1, 'resume_metadata': {},
                                         'replacement_history_metadata': [{'user_input_order': 1}]}},
         {'type': 'retained_context', 'payload': {'opaque': 'authorization', 'future': [1, None]}},
         {'type': 'response_item', 'payload': second, 'metadata': {'user_input_order': 2}},
@@ -135,6 +136,29 @@ def test_compaction_retained_context_and_rollback(tmp_path: Path) -> None:
     assert [message['content'][0]['text'] for message in store.messages()] == ['keep']
     assert any(native_record(event) == records[-3] for event in store.page()['events']
                if event['type'] != 'graphtraj/history')
+
+
+def test_rollback_restores_history_before_removed_legacy_compaction(tmp_path: Path) -> None:
+    """A compaction belonging to the removed turn cannot delete surviving input."""
+    root = tmp_path / 'swarm'
+    write_config(root, save_normalized_sessions=True, backfill_history=True)
+    source = tmp_path / 'rollout.jsonl'
+    records = history()[:1]
+    for turn, text in [('a', 'keep'), ('b', 'drop')]:
+        records.extend([
+            {'type': 'event_msg', 'payload': {'type': 'task_started', 'turn_id': turn}},
+            {'type': 'response_item', 'payload': {'type': 'message', 'role': 'user',
+                                                'content': [{'type': 'input_text', 'text': text}]}},
+        ])
+    records.extend([
+        {'type': 'compacted', 'payload': {'replacement_history': []}},
+        {'type': 'event_msg', 'payload': {'type': 'task_complete', 'turn_id': 'b'}},
+        {'type': 'event_msg', 'payload': {'type': 'thread_rolled_back', 'num_turns': 1}},
+    ])
+    write(source, records)
+    CodexJsonlArchive(ConfiguredSessionArchive(root), 'agent', 'native', source).collect(source)
+    store = JsonlSessionStore(archive_path(root, 'codex:native'))
+    assert [message['content'][0]['text'] for message in store.messages()] == ['keep']
 
 
 def test_copied_fork_seeds_before_child_messages(tmp_path: Path) -> None:
@@ -156,6 +180,41 @@ def test_copied_fork_seeds_before_child_messages(tmp_path: Path) -> None:
     assert store.header['parentSession'] == 'codex:parent'
     assert len(store.messages()) == 8
     assert store.messages()[-1]['content'][0]['text'] == 'child'
+
+
+def test_referenced_fork_waits_for_exact_parent_cut(tmp_path: Path) -> None:
+    """A late parent archive resolves the prefix without importing its later turn."""
+    root = tmp_path / 'swarm'
+    write_config(root, save_normalized_sessions=True, backfill_history=True)
+    archive = ConfiguredSessionArchive(root)
+    parent_path = tmp_path / 'parent.jsonl'
+    parent_records = history()
+    for ordinal, record in enumerate(parent_records):
+        record['ordinal'] = ordinal
+    write(parent_path, parent_records[:2])
+    cut = parent_path.stat().st_size
+    child_path = tmp_path / 'child.jsonl'
+    child_records = [
+        {'type': 'session_meta', 'ordinal': 0, 'payload': {'id': 'child', 'forked_from_id': 'native',
+            'history_base': {'thread_id': 'native', 'end_byte_offset': cut, 'end_ordinal_exclusive': 2}}},
+        {'type': 'response_item', 'ordinal': 1, 'payload': {'type': 'message', 'role': 'user',
+                                                         'content': [{'type': 'input_text', 'text': 'child'}]}},
+    ]
+    write(child_path, child_records)
+    child = CodexJsonlArchive(archive, 'child-agent', 'child', child_path)
+    child.collect(child_path)
+    path = archive_path(root, 'codex:child')
+    assert JsonlSessionStore(path).pending()
+    with pytest.raises(ValueError, match='incomplete'):
+        JsonlSessionStore(path).messages()
+    before = child.collection_key()
+    write(parent_path, parent_records)
+    CodexJsonlArchive(archive, 'parent-agent', 'native', parent_path).collect(parent_path)
+    assert child.collection_key() != before
+    child.collect(child_path)
+    store = JsonlSessionStore(path)
+    assert not store.pending()
+    assert [message['content'][0]['text'] for message in store.messages()] == ['both', 'child']
 
 
 def test_runtime_observes_archive_policy_without_new_native_output(tmp_path: Path, peer: Path) -> None:

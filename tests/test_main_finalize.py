@@ -22,6 +22,8 @@ from graphtraj.runtimes.codex import finalize
 from graphtraj.runtimes.codex.app_server import CodexAppServer, CodexServerRequest
 from graphtraj.runtimes.codex.stop_hook import main as stop_hook
 from graphtraj.runtimes.runtime_adapter import CheckUsage, finalize_usage, select_runtime_adapter
+from graphtraj.sessions.archive import JsonlSessionStore, archive_path
+from graphtraj.interfaces.agents import swarm_root
 
 
 def test_binding_description_delivers_manual(tmp_path: Path) -> None:
@@ -80,6 +82,13 @@ for line in sys.stdin:
             while not (root / 'delivery-sent').exists(): time.sleep(.01)
         result = {'data':[{'id':options.get('current_turn','main-turn'), 'status':'inProgress'}]}
         if options.get('supersede_after_turn_read'): options['current_turn'] = 'new-main-turn'
+    elif method == 'thread/items/list':
+        result = {'data': [{'turnId':'inherited-turn', 'item':{'type':'agentMessage',
+                   'id':'inherited-answer','text':'inherited context'}}], 'nextCursor': None}
+        context_file = root / 'child-context.json'
+        if context_file.exists() and len(json.loads(context_file.read_text())) > 2:
+            result['data'].append({'turnId':'check-turn', 'item':{'type':'agentMessage',
+                'id':'checker-answer','text':'checker result'}})
     elif method == 'thread/fork':
         if options.get('history_mode') == 'paginated' and not params.get('excludeTurns'):
             send({'id':request['id'],'error':{'code':-32600,'message':'history must be excluded'}})
@@ -1858,16 +1867,17 @@ def test_ephemeral_fork_excluded_history_is_unknown_not_an_empty_seed(
     fork = next(item['params'] for item in wire if item['method'] == 'thread/fork')
     assert fork['excludeTurns'] is True and fork['ephemeral'] is True
     state = root / '.graphtraj/state'
-    with SessionStore(session_path(state, 'codex:checker')) as archive:
-        archive.validate()
-        assert archive.header['isSeeded'] is False
-        assert archive.header['parentSession'] == 'codex:main'
-        assert any(item['path'] == 'inheritedPrefix' and item['reason']
-                   for item in archive.header['graphtraj']['missing'])
-        events = archive.page()['events']
-        assert not any(event['type'] == 'session/end-seed' for event in events)
-        assert native_record(events[0])['turns'] == []
-        assert any(native_record(event).get('method') == 'item/completed' for event in events)
+    archive = JsonlSessionStore(archive_path(swarm_root(root), 'codex:checker'))
+    assert archive.header['isSeeded'] is False
+    assert archive.header['parentSession'] == 'codex:main'
+    assert any(item['path'] == 'history' and item['reason']
+               for item in archive.header['graphtraj']['missing'])
+    events = archive.page()['events']
+    assert not any(event['type'] == 'session/end-seed' for event in events)
+    assert native_record(events[0])['pages'][0]['data'] == []  # backfill is off
+    assert native_record(events[-1])['pages'][0]['data'][0]['item']['id'] == 'checker-answer'
+    with pytest.raises(ValueError, match='opaque-native|incomplete'):
+        archive.messages()
     with SessionStore(session_path(state, 'codex:main')) as archive:
         assert [native_record(event) for event in archive.page()['events']] == [
             json.loads(line) for line in (root / 'rollout.jsonl').read_text().splitlines()

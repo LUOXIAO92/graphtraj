@@ -403,11 +403,17 @@ def check(
             created(child_id)
             from graphtraj.configuration.project_configuration import load_project_configuration
             from graphtraj.interfaces.agents import configured_archive
+            from graphtraj.runtimes.codex.jsonl_archive import CodexJsonlArchive
 
             project = load_project_configuration(Path(binding['cwd']))
-            await client.retain_ordered_history(
-                child, configured_archive(project.harness_root), 'checker:' + child_id,
-            )
+            archive = configured_archive(project.harness_root)
+            if child.rollout_path is not None:
+                trace = directory / 'checks' / hashlib.sha256(child_id.encode()).hexdigest() / 'events.jsonl'
+                client.retain_native_trace(child, trace, archive=CodexJsonlArchive(
+                    archive, 'checker:' + child_id, child_id, child.rollout_path, new_session=True,
+                ))
+            else:
+                await client.retain_ordered_history(child, archive, 'checker:' + child_id)
             usage = CodexCheckUsage(child.rollout_path, child_id,
                                     parent['turn_settings'].get('check_usage_baseline'))
             evidence = {

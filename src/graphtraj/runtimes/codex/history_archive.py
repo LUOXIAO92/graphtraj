@@ -1,6 +1,7 @@
 """Retain ordered ephemeral app-server history without inventing model items."""
 
 from copy import deepcopy
+import asyncio
 from typing import Awaitable, Callable
 
 from graphtraj.sessions.archive import SessionArchive
@@ -30,13 +31,19 @@ class CodexHistoryArchive:
         self.id = 'codex:' + thread['id']
         self.previous: dict | None = None
         self.excluded: set[tuple] | None = None
+        self.lock = asyncio.Lock()
         created = thread.get('createdAt')
         header = {
             'version': 4, 'id': self.id, 'createdAt': created * 1000 if type(created) is int else 0,
             'isSeeded': False, 'graphtraj': {
                 'version': 1, 'projectId': str(archive.root), 'agentId': agent, 'taskIds': [],
                 'native': {'runtime': 'codex', 'sessionId': thread['id'],
-                           'locator': 'thread/items/list', 'thread': deepcopy(thread)},
+                           'locator': 'thread/items/list', 'thread': {
+                               key: deepcopy(thread[key]) for key in (
+                                   'id', 'forkedFromId', 'ephemeral', 'historyMode',
+                                   'source', 'cliVersion', 'createdAt', 'updatedAt',
+                               ) if key in thread
+                           }},
                 'missing': [{'path': 'history', 'reason':
                     'Codex ThreadItem projection does not expose exact model ResponseItems.'}],
             },
@@ -46,6 +53,11 @@ class CodexHistoryArchive:
         archive.map_session(header)
 
     async def collect(self) -> None:
+        """Serialize terminal notices, explicit waits and the close boundary."""
+        async with self.lock:
+            await self._attempt()
+
+    async def _attempt(self) -> None:
         """Retain a collection failure as evidence without changing checker verdicts."""
         try:
             await self._collect()
@@ -62,7 +74,8 @@ class CodexHistoryArchive:
                     break
                 after = page['after']
             event = retain_native('codex', {'collectionError': type(error).__name__,
-                'code': getattr(error, 'code', None)}, session_id=self.thread['id'],
+                'code': getattr(error, 'code', None), 'message': str(error),
+                'nativeError': getattr(error, 'native_error', None)}, session_id=self.thread['id'],
                 locator=f'ordered-history:{position}', seq=position, time=0)
             event['graphtraj']['missing'] = [{
                 'path': 'history', 'reason': 'Native ordered history request failed; retry required.',

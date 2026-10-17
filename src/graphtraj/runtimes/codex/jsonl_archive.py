@@ -140,25 +140,31 @@ class CodexJsonlArchive:
             if store is None:
                 self.activation = rollout.stat().st_size
                 return
-            # Keep records collected on earlier activations even without backfill.
-            existing = set()
+            # The shared writer needs the retained projection, but only unseen
+            # native bytes need parsing unless an excluded prefix is requested.
+            events = []
             after = -1
             while True:
                 page = store.page(after)
-                existing.update(event['graphtraj']['native']['locator'] for event in page['events'])
+                events.extend(page['events'])
                 if not page['has_more']:
                     break
                 after = page['after']
-            events = []
+            position = max(store.position('rollout'), store.position('rollout:history'), 0)
+            if rollout.stat().st_size < position:
+                raise ValueError('Codex rollout was truncated before its committed cursor.')
+            if self.archive.backfill_history and store.pending():
+                events = []
+                position = 0
             excluded = None
-            stream.seek(0)
+            stream.seek(position)
             while True:
                 start = stream.tell()
                 line = stream.readline()
                 if not line.endswith(b'\n'):
                     break
                 locator = f'byte:{start}'
-                if start < self.activation and not self.archive.backfill_history and locator not in existing:
+                if start < self.activation and not self.archive.backfill_history:
                     if excluded is None:
                         excluded = locator
                     continue
@@ -169,6 +175,8 @@ class CodexJsonlArchive:
                 event['graphtraj']['missing'] = [] if instant is not None else [{
                     'path': 'time', 'reason': 'Unknown native time; zero is a placeholder.',
                 }]
+                if instant is not None:
+                    event['graphtraj']['native']['timeField'] = 'timestamp (rollout record)'
                 if record.get('type') == 'response_item':
                     event = _response(record, event, self.session, locator)
                 elif record.get('type') in {'session_meta', 'turn_context'} or (
@@ -179,6 +187,7 @@ class CodexJsonlArchive:
                 ):
                     event['type'] = 'codex/' + record['type']
                     event['ignorable'] = True
+                    event['data'] = {}
                     event['graphtraj']['native']['record'] = deepcopy(record)
                 event['graphtraj']['attachments'] = _attachments(store, record)
                 events.append(event)

@@ -30,6 +30,8 @@ def _response(record: dict, event: dict, session: str, locator: str) -> dict:
     source = {'kind': role}
     content = None
     if kind == 'message' and role in {'user', 'assistant', 'system', 'developer'}:
+        if not isinstance(item.get('content'), list):
+            return event  # A different native content representation remains explicit evidence.
         content = _content(item['content'])
     elif kind in {'function_call', 'custom_tool_call'}:
         argument_field = 'arguments' if kind == 'function_call' else 'input'

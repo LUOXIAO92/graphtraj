@@ -124,9 +124,14 @@ class CodexManagedExecution:
         *,
         independent: bool = False,
         archive: SessionArchive | None = None,
+        connection: dict[str, str] | None = None,
     ) -> None:
         """Capture immutable task configuration for one Worker execution."""
         self.context = restore_codex_context(request, context_evidence)
+        from graphtraj.runtimes.codex.codex_adapter import CodexRuntimeAdapter
+
+        self.connection_environment = (CodexRuntimeAdapter().recovery_environment(connection)
+                                       if connection is not None else {})
         request = self.context.launch_document()['adapter_request']
         if expected_session and not independent:
             refresh_approval_route(request, session_directory)
@@ -191,7 +196,7 @@ class CodexManagedExecution:
             self.context = restore_codex_context(request, self.context.evidence_document())
         adapter = CodexAppServer(cwd=Path(self.context.session_document()['adapter_request']['cwd']),
                                  command=self.command, request_timeout=5,
-                                 environment=self.context.runtime_environment(),
+                                 environment={**self.context.runtime_environment(), **self.connection_environment},
                                  on_request=self._request, request_handler_timeout=None,
                                  experimental_api=True)
         self.adapter = adapter

@@ -321,6 +321,12 @@ for line in incoming():
         elif prompt == 'large-output':
             complete(thread_id, turn_id, 'x' * 100_000)
         elif prompt == 'configuration':
+            if os.environ.get('PEER_CONFIGURATION_HOME'):
+                Path(os.environ['PEER_CONFIGURATION_HOME']).write_text(os.environ.get('CODEX_HOME', ''))
+                rollout = native_rollout(thread_id)
+                if rollout:
+                    write_native_prefix(rollout)
+                    write_native_result(rollout, 'configuration')
             complete(thread_id, turn_id, json.dumps(sessions[thread_id]))
         elif prompt != 'hold':
             rollout = native_rollout(thread_id)

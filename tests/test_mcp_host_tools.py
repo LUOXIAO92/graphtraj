@@ -824,8 +824,8 @@ def test_installed_mcp_server_continues_a_stopped_task_with_unchanged_semantics(
             "task_name": "session-alias-control",
             "role":        "coding-team.team-leader",
         }]}, thread_id="thread-main")["result"]
-        assert stopped["isError"] is True
-        assert stopped["structuredContent"]["tasks"][0]["launch_status"] == "stopped"
+        assert stopped["isError"] is False, stopped
+        _await_retained_stop(task_directory)
         _assert_native_budget_stop(protocol, task_directory, "thread-main")
         usage_before = yaml.safe_load((task_directory / "execution-budget.yml").read_text())
         assert usage_before["stopped"] is True
@@ -1332,6 +1332,20 @@ def _native_queue_submissions(protocol: Path) -> list[dict]:
     ]
 
 
+def _await_retained_stop(task_directory: Path, timeout: float = 90) -> None:
+    """Wait until Runner retains a budget stop for the Task.
+
+    A dispatch whose member has a native parent route returns after the
+    member's registration; its stop is then sampled while the member runs.
+    """
+    deadline = time.monotonic() + timeout
+    while not yaml.safe_load(
+        (task_directory / "execution-budget.yml").read_text(encoding="utf-8")
+    )["stopped"]:
+        assert time.monotonic() < deadline, "the dispatched member was never stopped"
+        time.sleep(0.02)
+
+
 def _assert_native_budget_stop(
     protocol: Path,
     task_directory: Path,
@@ -1472,7 +1486,11 @@ def test_installed_mcp_server_returns_a_budget_stop_to_the_request_caller(
     fake_codex: FakeCodex,
     tmp_path: Path,
 ) -> None:
-    """An awaited MCP dispatch stops and notifies its bound native Main once."""
+    """An MCP dispatch with a native parent route stops and notifies its Main once.
+
+    The dispatch returns after registration; the stop reaches the bound Main
+    through its native route rather than in the returned document.
+    """
 
     from test_execution_budgets import _budget_body
     from test_session_alias_control import _register_ready_task
@@ -1505,8 +1523,9 @@ def test_installed_mcp_server_returns_a_budget_stop_to_the_request_caller(
         stopped = server.call(
             "swarm", {"tasks": [task]}, thread_id="thread-main"
         )["result"]
-        assert stopped["isError"] is True, stopped
-        assert stopped["structuredContent"]["tasks"][0]["launch_status"] == "stopped"
+        assert stopped["isError"] is False, stopped
+        # The stop is sampled at the leader's final stage, after its children.
+        _await_retained_stop(task_directory)
 
         # Accounting and retention keep the existing shapes and thresholds.
         usage = yaml.safe_load(
@@ -1635,16 +1654,88 @@ def test_installed_mcp_server_returns_each_caller_its_own_stop(
             stopped = server.call(
                 "swarm", {"tasks": [tasks[task_id]]}, thread_id=thread_id
             )["result"]
-            assert stopped["isError"] is True, stopped
-            assert stopped["structuredContent"]["tasks"][0]["launch_status"] == "stopped"
+            assert stopped["isError"] is False, stopped
             task_directory = harness / ".graphtraj/state/tasks" / (
                 task_id + "-" + tasks[task_id]["task_name"]
             )
+            _await_retained_stop(task_directory)
             _assert_native_budget_stop(
                 protocol, task_directory, thread_id,
             )
             assert "stop_deliveries" not in stopped["structuredContent"]
 
+        assert _native_queue_submissions(protocol) == []
+
+
+def test_installed_mcp_swarm_returns_after_registration_and_stops_on_the_native_route(
+    installed_commands: InstalledCommands,
+    mcp_executable: Path,
+    temporary_git_repository: Path,
+    fake_codex: FakeCodex,
+    tmp_path: Path,
+) -> None:
+    """A Main with a native parent route gets its swarm result while the member runs.
+
+    The member's later stop still reaches that Main once through the native
+    route, with no further call from it; another Main's call carries nothing.
+    """
+
+    from graphtraj.execution.runner_process import process_is_alive
+    from test_execution_budgets import _budget_body
+    from test_session_alias_control import _register_ready_task
+
+    harness, _, _, environment = configure_harness(
+        installed_commands, temporary_git_repository, fake_codex, tmp_path,
+    )
+    require_no_retro_skill(harness)
+    _register_ready_task(installed_commands, harness, body=_budget_body(total=0.01))
+    started = time.time()
+    clock = tmp_path / "mcp-registration-clock"
+    clock.write_text(str(started), encoding="utf-8")
+    # Absent release file: the controlled Runtime holds its first turn open.
+    release = tmp_path / "mcp-registration-release"
+    mcp_environment, protocol = _controlled_budget_server(
+        installed_commands,
+        fake_codex,
+        harness,
+        environment,
+        tmp_path,
+        BUDGET_CLOCK=str(clock),
+        FAKE_CODEX_CAPTURE_STDIN="1",
+        FAKE_CODEX_RELEASE_FILE=str(release),
+    )
+    task_directory = harness / ".graphtraj/state/tasks/76-session-alias-control"
+    task = {
+        "task_id":   "76",
+        "task_name": "session-alias-control",
+        "role":        "coding-team.team-leader",
+    }
+
+    with _started_mcp(mcp_executable, harness, mcp_environment) as server:
+        try:
+            launched = server.call(
+                "swarm", {"tasks": [task]}, thread_id="thread-main"
+            )["result"]
+            assert launched["isError"] is False, launched
+            alias = launched["structuredContent"]["tasks"][0]["alias"]
+            mapping = yaml.safe_load(
+                (harness / ".graphtraj/runner/sessions" / alias / "mapping.yml").read_text()
+            )
+            assert mapping["parent_connection"]["session"] == "thread-main"
+            assert process_is_alive(mapping["worker_pid"]), "swarm waited for the Worker to exit"
+
+            clock.write_text(str(started + 260), encoding="utf-8")
+            _await_retained_stop(task_directory)
+            delivered = _assert_native_budget_stop(protocol, task_directory, "thread-main")
+        finally:
+            release.touch()
+
+        observed = server.call(
+            "alias_status", {"aliases": [alias]}, thread_id="other-caller"
+        )["result"]
+        assert observed["isError"] is False
+        assert "stop_deliveries" not in observed["structuredContent"]
+        assert _assert_native_budget_stop(protocol, task_directory, "thread-main") == delivered
         assert _native_queue_submissions(protocol) == []
 
 
@@ -1785,8 +1876,8 @@ def test_installed_mcp_server_keeps_the_continue_path_on_the_request_caller(
         stopped = server.call(
             "swarm", {"tasks": [task]}, thread_id="thread-main"
         )["result"]
-        assert stopped["isError"] is True, stopped
-        assert stopped["structuredContent"]["tasks"][0]["launch_status"] == "stopped"
+        assert stopped["isError"] is False, stopped
+        _await_retained_stop(task_directory)
         _assert_native_budget_stop(
             protocol, task_directory, "thread-main",
         )

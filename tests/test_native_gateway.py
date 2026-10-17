@@ -302,6 +302,6 @@ def test_native_agents_function_dispatches_with_existing_permissions(
                 document, success = await call(
                     {'action': 'create', 'runtime': 'codex', 'instruction': 'hello'})
                 assert not success
-                assert document['error']['code'] == 'not-implemented'
+                assert document['error']['code'] == 'unsupported-runtime'
 
     asyncio.run(exercise())

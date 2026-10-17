@@ -1,14 +1,15 @@
-"""GraphTraj's control backend for the independent ``agents`` function.
+"""GraphTraj as a consumer of the independent ``agents`` control core.
 
-The independent ``agent_swarm`` contract validates the model request and owns
-the result shape; this backend maps each action onto GraphTraj's existing
-Session control. Caller identity stays with the existing bindings: the native
-callback scope or the calling process tree resolved by ``caller_alias``.
-Authority, permissions and approval routes are unchanged.
+Ordinary Agents are created and controlled by :class:`agent_swarm.AgentControl`
+over the tool's own data root ``<project>/.graphtraj/swarm``, with GraphTraj's
+:class:`~graphtraj.execution.agent_driver.AdapterDriver` running the native
+Runtime. No Task, Team, Round or Worldline event is needed for any action.
 
-Actions whose existing GraphTraj control still requires a Task, Team or
-Worldline event return an explicit ``not-implemented`` rejection that names
-the missing step, rather than inventing Task context for an ordinary call.
+Task member Sessions created by GraphTraj delivery keep their Runner aliases
+and existing controls for status, interrupt, requests, reply and retire; their
+continuation stays GraphTraj policy (``send_instruction`` with Worldline
+causes). Caller identity stays with the existing bindings: the native callback
+scope or the calling process tree resolved by ``caller_alias``.
 """
 
 from __future__ import annotations
@@ -17,12 +18,14 @@ from pathlib import Path
 from typing import Any, Callable, Mapping
 
 from agent_swarm import (
+    AgentControl,
     AgentsError,
     AgentsResult,
     Binding,
     Caller,
     Outcome,
     bind,
+    default_config,
     unavailable,
 )
 
@@ -30,8 +33,12 @@ from graphtraj.execution.runner_models import RunnerError
 from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError
 
 
-# Existing GraphTraj features whose permission check each action reuses.
-# Actions without control here have no feature and stay not-implemented.
+# Core Agent references; anything else is a Runner alias of a Task member.
+AGENT_PREFIX = "agent-"
+
+# Existing GraphTraj features whose permission check each action reuses at
+# the Codex dynamicTools boundary. Actions without a feature need none there;
+# read-only native helpers are refused them by that boundary.
 ACTION_FEATURES = {
     "status":    "alias_status",
     "interrupt": "interrupt",
@@ -40,56 +47,76 @@ ACTION_FEATURES = {
     "retire":    "retire",
 }
 
-# Concrete missing control steps, reported to the caller as-is.
-MISSING = {
-    "create": "launch without a Task is missing; execution/runner_launch.launch_swarm "
-              "requires a registered Task and configured role.",
-    "send":   "send without Worldline is missing; execution/runner_control.send_instruction "
-              "requires causal Project Worldline event IDs and an active Team.",
-    "resume": "resume without Worldline is missing; execution/runner_control.send_instruction "
-              "requires causal Project Worldline event IDs and an active Team.",
-    "wait":   "a finite per-Agent wait is missing; execution/parent_status only observes "
-              "a root caller's own host.",
+# Task member continuation and waiting remain GraphTraj delivery policy.
+TASK_SESSION_MISSING = {
+    "send":   "Task member Sessions continue through GraphTraj send_instruction with "
+              "Worldline causes; ordinary Agents created by agents accept send directly.",
+    "resume": "Task member Sessions continue through GraphTraj send_instruction with "
+              "Worldline causes; ordinary Agents created by agents accept resume directly.",
+    "wait":   "a finite wait on a Task member alias is not provided; ordinary Agents "
+              "created by agents accept wait directly.",
 }
 
 
-class GraphTrajAgents:
-    """Run ``agents`` actions through GraphTraj's existing Session control.
+def swarm_root(root: Path) -> Path:
+    """Return the ``agents`` tool's data root inside a GraphTraj project."""
+    return root / ".graphtraj" / "swarm"
 
-    ``root`` is the trusted project location supplied by the host. The caller
-    identity is already bound by the surrounding host scope; ``binding`` is
-    carried for the contract and never widens that identity.
+
+class GraphTrajAgents:
+    """Run ``agents`` actions through the core, keeping Task member controls.
+
+    ``root`` is the trusted project location supplied by the host and
+    ``cwd`` the working directory new Agents run in. At first use GraphTraj
+    turns normalized Session archiving on through the tool's public
+    configuration, keeping any explicit choice already made.
     """
 
-    def __init__(self, root: Path) -> None:
-        """Bind the trusted project location chosen by the host."""
-        self.root = root
+    def __init__(self, root: Path, cwd: Path | None = None) -> None:
+        """Bind the project, the core data root and the Adapter driver."""
+        from graphtraj.execution.agent_driver import SUPPORTED_RUNTIMES, AdapterDriver
+
+        self.root    = root
+        driver       = AdapterDriver(root, cwd or root)
+        self.control = AgentControl(swarm_root(root), {name: driver for name in SUPPORTED_RUNTIMES})
+        default_config(swarm_root(root), save_normalized_sessions=True)
 
     def operate(self, action: str, arguments: Mapping[str, Any], binding: Binding) -> Outcome:
         """Perform one validated action, translating GraphTraj rejections."""
-        if action in MISSING:
-            raise unavailable(action, MISSING[action])
+        agent = arguments.get("agent")
         try:
+            if action == "create" or (agent or "").startswith(AGENT_PREFIX):
+                return self.control.operate(action, arguments, binding)
+            if action == "status" and agent is None:
+                return self._hierarchy(binding)
+            if action in TASK_SESSION_MISSING:
+                raise unavailable(action, TASK_SESSION_MISSING[action])
             return self._operate(action, arguments)
         except (RunnerError, RuntimeAdapterError) as error:
             raise AgentsError(error.code, error.message) from None
         except ValueError as error:
             raise AgentsError("invalid-input", str(error)) from None
 
+    def _hierarchy(self, binding: Binding) -> Outcome:
+        """Return the caller's Agents and, separately, its Task member Sessions."""
+        from graphtraj.execution.runner_status import status_tree
+
+        agents   = self.control.operate("status", {}, binding)
+        sessions = status_tree(self.root)
+        return Outcome({**agents.result, "task_sessions": sessions.document},
+                       failed=not sessions.succeeded)
+
     def _operate(self, action: str, arguments: Mapping[str, Any]) -> Outcome:
-        """Dispatch to the existing control function for ``action``."""
+        """Dispatch a Task member alias to its existing control function."""
         from graphtraj.execution.runner_control import (
             interrupt_session,
             pending_requests,
             reply_to_request,
         )
         from graphtraj.execution.runner_retirement import retire_session
-        from graphtraj.execution.runner_status import status_aliases, status_tree
+        from graphtraj.execution.runner_status import status_aliases
 
-        agent = arguments.get("agent")
-        if action == "status" and agent is None:
-            response = status_tree(self.root)
-            return Outcome(response.document, failed=not response.succeeded)
+        agent = arguments["agent"]
 
         # References are read before the action because retirement moves the
         # record; they are returned only when the action itself succeeds.
@@ -125,22 +152,37 @@ class GraphTrajAgents:
         return mapping.get("session"), mapping.get("execution_id")
 
 
-def agents_callback(root: Path, caller: Caller) -> Callable[[Any], AgentsResult]:
+def agents_callback(
+    root: Path,
+    caller: Caller,
+    cwd: Path | None = None,
+) -> Callable[[Any], AgentsResult]:
     """Return the ``agents`` function bound to GraphTraj and a verified caller."""
-    return bind(GraphTrajAgents(root), caller)
+    return bind(GraphTrajAgents(root, cwd), caller)
 
 
 def run_agents_feature(arguments: Mapping[str, Any], *, cwd: Path | None = None) -> Any:
     """Serve ``agents`` as a gateway feature for CLI, MCP and local tool hosts.
 
     The caller is the identity the existing binding already resolves for this
-    call (native callback scope or calling process tree), never an argument.
+    call (native callback scope, calling process tree, or a verified native
+    Main Session), never an argument. A call with no verified identity is
+    refused rather than sharing one anonymous root scope with other callers.
+    New Agents run in the call's working directory.
     """
     from graphtraj.execution.runner_status import caller_alias
     from graphtraj.interfaces.tools import ToolResult
     from graphtraj.workspace.runner_project import discover_project_root, discover_runner_directory
 
-    root   = discover_project_root(cwd or Path.cwd())
-    caller = Caller("graphtraj-gateway", caller_alias(discover_runner_directory(root)))
-    result = agents_callback(root, caller)(dict(arguments))
+    working = cwd or Path.cwd()
+    root    = discover_project_root(working)
+    alias   = caller_alias(discover_runner_directory(root))
+    if alias is None:
+        return ToolResult({"action": arguments.get("action"), "error": {
+            "code":    "authority-unavailable",
+            "message": "agents needs a verified caller: a managed Session or a verified native "
+                       "Main Session. This call has neither.",
+        }}, failed=True)
+    caller = Caller("graphtraj-gateway", str(alias))
+    result = agents_callback(root, caller, working)(dict(arguments))
     return ToolResult(result.document, failed=result.failed)

@@ -1,10 +1,27 @@
-"""Independent ``agents`` tool contract for cross-Runtime child Agents.
+"""Independent ``agents`` tool for cross-Runtime child Agents.
 
-The package depends on no GraphTraj module. GraphTraj imports it in one
-direction and supplies a control backend; it never needs Tasks, Teams,
-Rounds, Worldline, budgets, reports or Worktrees.
+The package depends on no GraphTraj module. :class:`AgentControl` is the
+Task-free control backend over a caller-chosen data root; Runtime drivers
+supply native execution. GraphTraj imports this package in one direction and
+never needs Tasks, Teams, Rounds, Worldline, budgets, reports or Worktrees
+to use it.
 """
 
+from agent_swarm.config import (
+    CONFIG_DEFAULTS,
+    default_config,
+    explicit_choices,
+    read_config,
+    write_config,
+)
+from agent_swarm.control import (
+    ACTIVE,
+    STANDBY,
+    AgentControl,
+    ExecutionEvents,
+    Run,
+    RuntimeDriver,
+)
 from agent_swarm.tool import (
     ACTION_FIELDS,
     INPUT_SCHEMA,
@@ -26,4 +43,6 @@ __all__ = [
     "ACTION_FIELDS", "INPUT_SCHEMA", "TOOL_NAME",
     "AgentsError", "AgentsResult", "Backend", "Binding", "Caller", "Outcome",
     "SessionArchive", "bind", "tool_descriptor", "unavailable", "validate_request",
+    "ACTIVE", "STANDBY", "AgentControl", "ExecutionEvents", "Run", "RuntimeDriver",
+    "CONFIG_DEFAULTS", "default_config", "explicit_choices", "read_config", "write_config",
 ]

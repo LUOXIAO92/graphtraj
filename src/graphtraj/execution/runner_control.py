@@ -353,9 +353,16 @@ def send_instruction(
         raise RunnerError(
             "invalid-input", "instruction must be non-empty plain text."
         )
+    # Recording the causing Worldline events is GraphTraj's continuation
+    # policy for Task member Sessions; ordinary Agents use agents send.
+    if not caused_by_event_ids:
+        raise RunnerError(
+            "invalid-input",
+            "Continuing a Task member Session requires at least one causal Project "
+            "Worldline event ID; ordinary Agents use agents send without one.",
+        )
     if (
-        not caused_by_event_ids
-        or len(caused_by_event_ids) != len(set(caused_by_event_ids))
+        len(caused_by_event_ids) != len(set(caused_by_event_ids))
         or any(not event_id for event_id in caused_by_event_ids)
     ):
         raise RunnerError(

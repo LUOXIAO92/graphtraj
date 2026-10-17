@@ -11,6 +11,7 @@ import pytest
 import agent_swarm
 from agent_swarm import AgentsError, Caller, Outcome
 from graphtraj.configuration.project_configuration import default_configuration_content
+from graphtraj.execution.runner_status import runtime_caller
 from graphtraj.interfaces import gateway
 
 
@@ -100,8 +101,8 @@ def test_valid_requests_carry_host_caller_and_references() -> None:
     assert {entry[2].archive for entry in backend.calls} == {None}
 
 
-def test_gateway_serves_agents_with_explicit_missing_control(tmp_path: Path, monkeypatch) -> None:
-    """CLI/MCP/local hosts reach the same contract; missing control is named."""
+def test_gateway_serves_agents_through_the_core(tmp_path: Path, monkeypatch) -> None:
+    """CLI/MCP/local hosts reach the same core; an undriven Runtime is named."""
     configuration = tmp_path / '.graphtraj/config.yml'
     configuration.parent.mkdir()
     configuration.write_text(default_configuration_content(tmp_path, tmp_path))
@@ -109,15 +110,23 @@ def test_gateway_serves_agents_with_explicit_missing_control(tmp_path: Path, mon
 
     discovered = gateway.handle_request({'action': 'discover', 'query': 'agents'})
     schema     = gateway.handle_request({'action': 'describe', 'feature': 'agents', 'schema': True})
-    created    = gateway.handle_request({'action': 'execute', 'feature': 'agents', 'arguments': {
+    create     = {'action': 'execute', 'feature': 'agents', 'arguments': {
         'action': 'create', 'runtime': 'codex', 'instruction': 'Summarize.',
-    }}, cwd=tmp_path)
+    }}
+    anonymous  = gateway.handle_request(create, cwd=tmp_path)
+    with runtime_caller(tmp_path / '.graphtraj/runner', 'main-a'):
+        created = gateway.handle_request(create, cwd=tmp_path)
     forged     = gateway.handle_request({'action': 'execute', 'feature': 'agents', 'arguments': {
         'action': 'status', 'caller': 'main',
     }}, cwd=tmp_path)
 
     assert 'agents' in {item['feature'] for item in discovered.document['features']}
     assert schema.document['input_schema'] == agent_swarm.INPUT_SCHEMA
+    assert anonymous.failed and anonymous.document['error']['code'] == 'authority-unavailable'
     assert created.failed
-    assert created.document['error']['code'] == 'not-implemented'
+    assert created.document['error']['code'] == 'unsupported-runtime'
     assert forged.failed
+
+    # GraphTraj turns archiving on in the tool's own config, not in core.
+    assert (tmp_path / '.graphtraj/swarm/config.yml').read_text() == 'save_normalized_sessions: true\n'
+    assert 'swarm' not in configuration.read_text()

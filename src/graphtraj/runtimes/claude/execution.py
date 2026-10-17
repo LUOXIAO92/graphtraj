@@ -24,6 +24,9 @@ from graphtraj.runtimes.claude.diagnostics import (
 class ClaudeExecution:
     """Keep native permissions, registration and terminal evidence on one pipe."""
 
+    # Optional (message, details) -> receipt replacing the Runner parent notice.
+    parent_notice = None
+
     def __init__(
         self,
         request: dict,
@@ -270,9 +273,12 @@ class ClaudeExecution:
             """Deliver without blocking the pipe that must still accept interruption."""
             receipt = None
             try:
-                receipt = notify_direct_parent(self.directory, 'Claude requires a native permission reply:\n'
-                                               + json.dumps(details), details)
-                if receipt is not None and receipt.get('delivery') not in {'received', 'no-direct-parent'}:
+                message = 'Claude requires a native permission reply:\n' + json.dumps(details)
+                # A Task-free owner retains the request with its own control
+                # record instead of a Runner parent notice.
+                receipt = (self.parent_notice(message, details) if self.parent_notice is not None
+                           else notify_direct_parent(self.directory, message, details))
+                if receipt is not None and receipt.get('delivery') not in {'received', 'no-direct-parent', 'retained'}:
                     raise ValueError('delivery')
             except Exception as error:
                 delivery = receipt.get('delivery') if isinstance(receipt, dict) else None

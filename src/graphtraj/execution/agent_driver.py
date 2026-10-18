@@ -29,7 +29,7 @@ from graphtraj.runtimes.runtime_adapter import (
 
 
 # Runtime owners with Task-free host bindings.
-SUPPORTED_RUNTIMES = frozenset({"claude", "dsh"})
+SUPPORTED_RUNTIMES = frozenset({"claude", "dsh", "pi"})
 
 # Native owners of this process's running executions, by core execution ID.
 _TURNS: dict[str, RuntimeTurn] = {}
@@ -77,12 +77,23 @@ class AdapterDriver:
         A preset named after the Runtime wins; otherwise exactly one preset
         must use that Runtime.
         """
-        from graphtraj.configuration.project_roles import load_project_roles
+        from graphtraj.configuration.project_roles import (
+            ProjectRolesError, load_project_roles, resolve_preset,
+        )
         from graphtraj.configuration.role_definitions import resolve_child_role
 
         if runtime not in SUPPORTED_RUNTIMES:
             raise AgentsError("unsupported-runtime", f"The Task-free driver does not run {runtime!r} yet.")
         presets = load_project_roles(self.root).presets
+        if runtime == 'pi':
+            try:
+                presets = {
+                    name: resolve_preset(preset)
+                    for name, preset in presets.items()
+                    if preset.runtime == 'pi' or (preset.connection or '').startswith('pi/')
+                }
+            except ProjectRolesError as error:
+                raise AgentsError('invalid-config', str(error)) from None
         matches = sorted(name for name, preset in presets.items() if preset.runtime == runtime)
         name    = runtime if runtime in matches else matches[0] if len(matches) == 1 else None
         if name is None:
@@ -133,6 +144,20 @@ class AdapterDriver:
             from graphtraj.runtimes.dsh.driver import bind_agents
 
             bind_agents(turn, run, self)
+        if run.runtime == 'pi':
+            from agent_swarm import read_config
+            from graphtraj.sessions.archive import SessionArchive
+
+            root = run.directory.parent.parent
+            choices = read_config(root)
+            turn.independent = True
+            turn.archive = run.archive or (SessionArchive(root, **choices)
+                                            if choices['save_normalized_sessions'] else None)
+            if turn.archive is not None:
+                turn.archive.save_normalized_sessions = choices['save_normalized_sessions']
+                turn.archive.backfill_history = choices['backfill_history']
+            turn.agent = run.agent
+            turn.agent_call = getattr(run, 'call', None)
         turn.parent_notice = lambda message, details: (run.events.request(details),
                                                        {"delivery": "retained"})[1]
         with _TURNS_LOCK:

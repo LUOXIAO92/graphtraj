@@ -204,3 +204,83 @@ def test_actual_initial_tool_catalog() -> None:
     assert not entry['parameters']['properties']['arguments'].get('properties')
     print(json.dumps({'actual_initial_tool_names': names, 'project_mcp_entries': 1,
                       'subfunction_schemas_in_initial_tools': False}))
+
+
+@pytest.mark.skipif(not os.environ.get('TASK334_CROSS_ROOT'), reason='Requires fixed Pi combination and final host slot.')
+def test_actual_pi_reply_resumes_standby_dsh() -> None:
+    """Use the existing verified controller caller for one Pi child and its reply."""
+    import time
+    from agent_swarm import AgentControl, Caller, bind
+    from agent_swarm.dsh import DshDriver
+    from graphtraj.execution.agent_driver import AdapterDriver
+
+    root = Path(os.environ['TASK334_CROSS_ROOT'])
+    record = json.loads(next((root / 'control/agents').glob('*.json')).read_text())
+    phases = []
+    handoff = Path('/private/tmp/task334-ui')
+    handoff.mkdir(exist_ok=True)
+
+    def configure(turn, run) -> None:
+        """Hold only service cleanup briefly so the official client can capture it."""
+        started = turn.started
+
+        def ready(session: str, pid: int) -> None:
+            close = turn.service.close
+
+            def capture_then_close() -> None:
+                phase = len(phases) + 1
+                phases.append({'execution': run.execution, 'session': session, 'pid': pid})
+                path = handoff / f'phase-{phase}.json'
+                descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+                with os.fdopen(descriptor, 'w') as stream:
+                    json.dump({'origin': turn.service.origin, 'cookie': turn.service.cookie,
+                               'session': session}, stream)
+                deadline = min(time.time() + 45, 1792292430)
+                while not (handoff / f'phase-{phase}.done').exists() and time.time() < deadline:
+                    time.sleep(.1)
+                path.unlink(missing_ok=True)
+                close()
+            turn.service.close = capture_then_close
+            started(session, pid)
+        turn.started = ready
+
+    driver = DshDriver(root.parent, {}, configure=configure)
+    # The common controller passes its verified Runtime caller to prepare;
+    # no model field or manually constructed Pi caller chooses the parent.
+    pi = AdapterDriver(Path('/Users/luoxiao/workspace/you-are-a-product-architect-delivery'), root.parent)
+    control = AgentControl(root, {'dsh': driver, 'pi': pi})
+    call = bind(control, Caller('official-final-validation', None))
+    resumed = call({'action': 'resume', 'agent': record['agent'], 'message':
+        'Use agents MCP describe create schema=true then execute create exactly once with runtime pi. '
+        'Child instruction: "Use bash to run sleep 30, then reply exactly PI334-REPLY. Do not spawn agents or edit files." '
+        'After create returns, reply exactly WAITING and end your turn immediately. Do not call wait/status. '
+        'When the child reply later arrives, reply ACK PI334-REPLY and the marker I asked you to remember.'})
+    assert not resumed.failed, resumed.document
+    try:
+        deadline = min(time.time() + 180, 1792292430)
+        while time.time() < deadline:
+            state = call({'action': 'status', 'agent': record['agent']}).document['result']
+            if len(phases) >= 2 and state['state'] == 'standby':
+                break
+            time.sleep(.2)
+        assert len(phases) == 2, {'phases': phases, 'state': state}
+        assert state['session'] == record['session']
+        assert 'PI334-REPLY' in state['last_result']['last_message'], state
+        assert 'DSH334-amber' in state['last_result']['last_message'], state
+        trace = root / 'native' / record['agent'] / 'trace.jsonl'
+        rows = [json.loads(line) for line in trace.read_text().splitlines()]
+        replies = [row for row in rows if row.get('type') == 'user/message'
+                   and row['data'].get('source', {}).get('kind') == 'agent-message']
+        assert len(replies) == 1, replies
+        assert replies[0]['data']['source']['senderSessionId']
+        print(json.dumps({'phases': phases, 'native_reply_count': 1, 'standby_reply_processed': True,
+                          'additional_dsh_executions': 2, 'pi_executions': 1}))
+    finally:
+        for path in handoff.glob('phase-*.json'):
+            path.with_suffix('.done').touch()
+        hierarchy = call({'action': 'status'}).document['result']['agents']
+        for node in hierarchy:
+            for target in [*node.get('children', []), node]:
+                if target.get('state') == 'active':
+                    call({'action': 'interrupt', 'agent': target['agent']})
+                    call({'action': 'wait', 'agent': target['agent'], 'timeout_seconds': 20})

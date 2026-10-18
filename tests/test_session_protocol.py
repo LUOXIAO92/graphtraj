@@ -359,3 +359,18 @@ def test_assistant_replacement_requires_current_surface_coverage(fault: str | No
     else:
         validate_session(header(), events, reconstruct=True)
     assert events == original
+
+
+def test_jsonl_messages_consume_assistant_replacement(tmp_path: Path) -> None:
+    """The archive consumer applies the shared validator's replacement contract."""
+    from graphtraj.sessions.archive import JsonlSessionStore
+
+    replacement = event('assistant/message', {
+        'turn': 0, 'step': 0, 'stream': [],
+        'message': {'id': 'replacement', 'role': 'assistant',
+                    'source': {'kind': 'model', 'provider': 'native', 'model': 'native'},
+                    'content': [{'type': 'text', 'text': 'retained context'}]},
+    }, 2, surfaceOp={'op': 'replace', 'startSeq': 0, 'endSeq': 1}, sourceEventSeqs=[0, 1])
+    store = JsonlSessionStore(tmp_path / 'session.jsonl', header=header())
+    store.publish([user('first', 0), user('second', 1), replacement], source='test', position=3)
+    assert JsonlSessionStore(store.path).messages() == [replacement['data']['message']]

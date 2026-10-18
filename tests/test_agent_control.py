@@ -393,3 +393,39 @@ def test_core_imports_and_runs_without_graphtraj(tmp_path: Path) -> None:
         text=True, env={**os.environ, 'PYTHONPATH': str(SOURCE)}, cwd=tmp_path,
     ).stdout.split()
     assert output == ['standby', 's', '[]']
+
+
+def test_native_callback_binds_child_scope_and_expires_with_execution(root: Path) -> None:
+    """A Driver gets only its own child's scope, and an old callback cannot resume authority."""
+    class CapturedDriver(ScriptedDriver):
+        """Retain public Run values handed to the driver for lifecycle assertions."""
+        def start(self, run: agent_swarm.Run) -> None:
+            """Capture the public callback before reporting native readiness."""
+            self.run = run
+            super().start(run)
+
+    driver = CapturedDriver()
+    control = AgentControl(root, {'scripted': driver})
+    parent = agent_swarm.bind(control, Caller('test-host', None, session='main'))
+    first = parent({'action': 'create', 'runtime': 'scripted', 'instruction': 'parent-child'})
+    agent = first.document['agent']
+    old = driver.run.call
+    grandchild = old({'action': 'create', 'runtime': 'scripted', 'instruction': 'nested'})
+    assert not grandchild.failed
+    assert grandchild.document['result']['parent'] == agent
+    # It cannot treat its own caller as a controllable descendant.
+    refused = old({'action': 'interrupt', 'agent': agent})
+    assert refused.failed and refused.document['error']['code'] == 'not-found'
+    parent({'action': 'interrupt', 'agent': grandchild.document['agent']})
+    parent({'action': 'wait', 'agent': grandchild.document['agent'], 'timeout_seconds': 5})
+    parent({'action': 'interrupt', 'agent': agent})
+    parent({'action': 'wait', 'agent': agent, 'timeout_seconds': 5})
+    assert old({'action': 'status'}).document['error']['code'] == 'stale-execution'
+    resumed = parent({'action': 'resume', 'agent': agent, 'message': 'continue'})
+    assert not resumed.failed
+    assert old({'action': 'status'}).document['error']['code'] == 'stale-execution'
+    current = driver.run.call({'action': 'status'})
+    assert not current.failed
+    assert [row['agent'] for row in current.document['result']['agents']] == [grandchild.document['agent']]
+    parent({'action': 'interrupt', 'agent': agent})
+    parent({'action': 'wait', 'agent': agent, 'timeout_seconds': 5})

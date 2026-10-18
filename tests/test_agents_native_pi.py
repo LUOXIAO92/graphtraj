@@ -119,3 +119,35 @@ def test_independent_pi_native_request_and_explicit_reply(tmp_path: Path, pi_env
     assert replied.document['result']['reply_status'] == 'submitted'
     ended = call({'action': 'wait', 'agent': agent, 'timeout_seconds': 10})
     assert ended.document['result']['state'] == 'standby'
+
+
+def test_pi_child_calls_same_control_via_authenticated_mcp(tmp_path: Path, pi_environment: dict) -> None:
+    """A controlled Pi descendant's actual MCP subprocess creates its own child."""
+    import json
+
+    (tmp_path / 'worktrees/research').mkdir(parents=True)
+    _, prepared = context(tmp_path, pi_environment)
+    driver = PiDriver(prepared.launch_document()['adapter_request'])
+    root = tmp_path / 'swarm'
+    control = AgentControl(root, {'pi': driver})
+    call = bind(control, Caller('test-host', 'parent'))
+    created = call({'action': 'create', 'runtime': 'pi', 'instruction': 'agents-mcp'})
+    assert not created.failed, created.document
+    ended = call({'action': 'wait', 'agent': created.document['agent'], 'timeout_seconds': 20})
+    result = ended.document['result']['last_result']
+    assert result['outcome'] == 'completed', result
+    received = json.loads(result['last_message'])
+    assert received['exit'] == 0
+    listed, described, called = received['replies']
+    assert [tool['name'] for tool in listed['result']['tools']] == ['agents']
+    assert set(described['result']['structuredContent']['input_schema']['properties']) == {'agent'}
+    assert not called['result']['isError'], called
+    grandchild = called['result']['structuredContent']['agent']
+    final = call({'action': 'wait', 'agent': grandchild, 'timeout_seconds': 10})
+    assert final.document['result']['parent'] == created.document['agent']
+    assert final.document['result']['last_result']['last_message'] == 'grandchild-memory'
+    assert not list(root.rglob('mapping.yml'))
+    assert not list(root.rglob('control-*'))
+    policy = json.loads((root / 'native' / created.document['agent'] / 'pi-policy.json').read_text())
+    assert str(root.resolve()) in policy['filesystem']['denyRead']
+    assert any('/mcp/control-' in path for path in policy['filesystem']['allowWrite'])

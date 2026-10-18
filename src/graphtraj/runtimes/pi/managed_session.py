@@ -64,6 +64,7 @@ class PiManagedExecution:
         self.archive = None
         self.agent = None
         self.parent_notice = None
+        self.agent_call = None
 
     @property
     def execution_id(self) -> str:
@@ -245,6 +246,8 @@ class PiManagedExecution:
         argv = [request['executable'], '--mode', 'rpc', '--provider', provider,
                 '--model', request['model'], '--session', str(native_trace),
                 '--append-system-prompt', str(instructions)]
+        if self.independent and address is not None:
+            argv += ['--extension', str(Path(__file__).with_name('extension.mjs'))]
         if request.get('reasoning_effort'):
             argv += ['--thinking', request['reasoning_effort']]
         spec = self.directory / 'pi-process.json'
@@ -255,14 +258,17 @@ class PiManagedExecution:
         # Do not forward Runner bookkeeping as model-declared authority. The only
         # child operation address is authenticated by the existing hosted CLI.
         for key in tuple(env):
-            if key.startswith('GRAPHTRAJ_'):
+            if key.startswith(('GRAPHTRAJ_', 'AGENTS_')):
                 del env[key]
         env.update(credential_environment(request.get('api_key_env')))
         env.update({'PATH': str(Path(sys.executable).parent) + os.pathsep + request['sandbox_path'],
                     'PI_CODING_AGENT_DIR': str(agent),
                     'PI_ASB_NO_ALIAS_PROMPT': '1'})
         if address is not None:
-            env.update(GRAPHTRAJ_CLI_CONNECTION=address, GRAPHTRAJ_HARNESS_ROOT=str(root))
+            if self.independent:
+                env.update(AGENTS_CONNECTION=address, AGENTS_PYTHON=sys.executable)
+            else:
+                env.update(GRAPHTRAJ_CLI_CONNECTION=address, GRAPHTRAJ_HARNESS_ROOT=str(root))
         # Pi's native find accepts an existing fd on PATH; do not download it or
         # alter the user's installation to populate the isolated cache.
         fd = source / 'bin/fd'
@@ -289,6 +295,14 @@ class PiManagedExecution:
         with ExitStack() as resources:
             connection = (nullcontext(None) if self.independent else cli_connection(
                 Path(self.request['harness_root']), self.directory.name, native_operation_features()))
+            if self.independent and self.agent_call is not None:
+                from agent_swarm.connection import agents_connection
+                from agent_swarm.process import authenticate_process
+
+                connection = agents_connection(
+                    self.directory / 'mcp', self.agent_call,
+                    lambda pid: authenticate_process(self.proc, pid),
+                )
             address = resources.enter_context(connection)
             argv, env = self._prepare(address)
             stderr = resources.enter_context((self.directory / 'stderr.log').open('a', encoding='utf-8'))

@@ -154,6 +154,7 @@ class AdapterDriver:
                 turn.archive.save_normalized_sessions = choices['save_normalized_sessions']
                 turn.archive.backfill_history = choices['backfill_history']
             turn.agent = run.agent
+            turn.agent_call = getattr(run, 'call', None)
         turn.parent_notice = lambda message, details: (run.events.request(details),
                                                        {"delivery": "retained"})[1]
         with _TURNS_LOCK:

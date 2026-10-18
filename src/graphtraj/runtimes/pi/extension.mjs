@@ -15,7 +15,7 @@ export function registerAgentDisplay(pi, sdk) {
   });
 
   pi.on('tool_result', (event, ctx) => {
-    if (!ctx.hasUI || event.isError || event.details?.server !== 'graphtraj') return;
+    if (!ctx.hasUI || event.isError || !['graphtraj', 'agents'].includes(event.details?.server)) return;
     const tool = event.details.tool;
     const input = tool === 'agents' && event.input.action === 'execute'
         ? {action: event.input.feature, ...event.input.arguments} : undefined;
@@ -152,6 +152,15 @@ export default function graphtraj(pi) {
     if (ctx.hasUI && !displayRegistered) {
       registerAgentDisplay(pi, await loadHostSdk());
       displayRegistered = true;
+    }
+    if (process.env.AGENTS_CONNECTION) {
+      // This is the official MCP client wiring, not a native model tool.
+      // Identity is verified by the owning host's kernel-authenticated pipe.
+      pi.registerMcpServer('agents', {
+        command: process.env.AGENTS_PYTHON, args: ['-m', 'agent_swarm.mcp'],
+        cwd: ctx.cwd, env: {AGENTS_CONNECTION: process.env.AGENTS_CONNECTION}, exposure: 'direct',
+      });
+      return;
     }
     await collectors.get(ctx.sessionManager)?.close();
     collectors.delete(ctx.sessionManager);

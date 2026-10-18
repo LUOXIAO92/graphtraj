@@ -119,6 +119,22 @@ def main() -> None:
         else:
             time.sleep(0.04)
         answer = '|'.join(str(x) for x in history + queued)
+        if text == 'agents-mcp':
+            # A controlled native peer invokes the real independent MCP
+            # subprocess. This proves transport wiring, not model tool use.
+            requests = [
+                {'jsonrpc': '2.0', 'id': 1, 'method': 'tools/list'},
+                {'jsonrpc': '2.0', 'id': 2, 'method': 'tools/call', 'params': {
+                    'name': 'agents', 'arguments': {'action': 'describe', 'feature': 'status', 'schema': True}}},
+                {'jsonrpc': '2.0', 'id': 3, 'method': 'tools/call', 'params': {
+                    'name': 'agents', 'arguments': {'action': 'execute', 'feature': 'create',
+                        'arguments': {'runtime': 'pi', 'instruction': 'grandchild-memory', 'name': 'grandchild'}}}},
+            ]
+            result = subprocess.run([os.environ['AGENTS_PYTHON'], '-m', 'agent_swarm.mcp'],
+                                    input='\n'.join(map(json.dumps, requests))+'\n',
+                                    text=True, capture_output=True, timeout=15)
+            answer = json.dumps({'exit': result.returncode,
+                                 'replies': [json.loads(line) for line in result.stdout.splitlines()]})
         if text == 'cli':
             env = {**os.environ, 'GRAPHTRAJ_CALLER_ALIAS': 'research@x2', 'GRAPHTRAJ_ROLE': 'main'}
             # The restricted Session's own directory is its Worktree, never the

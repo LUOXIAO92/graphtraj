@@ -56,3 +56,32 @@ assert.equal(renderer(entries[0]).message.customType, 'agents Â· agent-parent â†
 '''
     subprocess.run(['node', '--input-type=module', '-e', script, str(module)],
                    check=True, capture_output=True, text=True)
+
+
+def test_independent_pi_extension_uses_only_builtin_mcp_client(tmp_path: Path) -> None:
+    """Independent startup registers progressive MCP without Task entry or native tools."""
+    if shutil.which('node') is None:
+        pytest.skip('Node is required for the shipped Pi extension.')
+    module = Path(__file__).resolve().parents[1] / 'src/graphtraj/runtimes/pi/extension.mjs'
+    module = Path(shutil.copy2(module, tmp_path / module.name))
+    script = '''
+import assert from 'node:assert/strict';
+import { pathToFileURL } from 'node:url';
+const {default: extension} = await import(pathToFileURL(process.argv[1]));
+const handlers = new Map();
+const servers = [];
+const pi = {
+  registerFlag() {},
+  on(name, handler) { handlers.set(name, handler); },
+  registerMcpServer(name, configuration) { servers.push({name, configuration}); },
+};
+process.env.AGENTS_CONNECTION = '/owned/channel';
+process.env.AGENTS_PYTHON = '/owned/python';
+extension(pi);
+await handlers.get('session_start')({reason:'startup'}, {hasUI:false,cwd:'/owned/work'});
+assert.deepEqual(servers, [{name:'agents',configuration:{command:'/owned/python',
+  args:['-m','agent_swarm.mcp'], cwd:'/owned/work',
+  env:{AGENTS_CONNECTION:'/owned/channel'},exposure:'direct'}}]);
+'''
+    subprocess.run(['node', '--input-type=module', '-e', script, str(module)],
+                   check=True, capture_output=True, text=True)

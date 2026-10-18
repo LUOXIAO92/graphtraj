@@ -54,7 +54,7 @@ from typing import Any, Callable, Iterator, Mapping, Protocol
 
 from agent_swarm.config import read_config
 from agent_swarm.locks import exclusive
-from agent_swarm.tool import AgentsError, Binding, Caller, Outcome, SessionArchive
+from agent_swarm.tool import AgentsError, AgentsResult, Binding, Caller, Outcome, SessionArchive, bind
 
 
 ACTIVE  = "active"
@@ -83,6 +83,7 @@ class Run:
     directory: Path
     archive: SessionArchive | None
     events: "ExecutionEvents"
+    call: Callable[[dict], AgentsResult] | None = None
 
 
 class RuntimeDriver(Protocol):
@@ -623,11 +624,29 @@ class AgentControl:
         """Describe one execution of ``record`` for its driver."""
         directory = self.root / "native" / record["agent"]
         directory.mkdir(parents=True, exist_ok=True)
+        agent, execution = record['agent'], current['id']
+
+        def call(request: dict) -> AgentsResult:
+            """Bind this existing execution after the Runtime verifies transport ownership."""
+            try:
+                with self._locked(agent) as owner:
+                    active = _running(owner)
+                    if active is None or active['id'] != execution:
+                        raise AgentsError('stale-execution', 'This native execution no longer owns its callback.')
+                    self._require_owner(active)
+                    caller = Caller('runtime-mcp', agent, session=owner['session'], runtime=owner['runtime'])
+                # Do not hold the caller's record lock over a finite wait or
+                # child launch; native completion must be able to report.
+                return bind(self, caller, archive=archive)(request)
+            except AgentsError as error:
+                return AgentsResult({'error': {'code': error.code, 'message': error.message}}, failed=True)
+
         return Run(
             agent=record["agent"], execution=current["id"], runtime=record["runtime"],
             settings=record["settings"], message=message, session=current["resumed_session"],
             directory=directory, archive=archive,
             events=ExecutionEvents(self, record["agent"], current["id"]),
+            call=call,
         )
 
     def _begin(self, record: dict, operation: str, message: str, binding: Binding) -> Run:

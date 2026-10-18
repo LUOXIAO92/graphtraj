@@ -6,8 +6,9 @@ description: Use GraphTraj to plan task dependencies, coordinate execution and f
 # GraphTraj
 
 GraphTraj connects tasks through the results they need and retains the execution
-history. Use the available `graphtraj` tool to discover the feature matching the
-current need. Describe that feature to obtain its readable guide reference;
+history. Use the `agents` MCP entry for cross-Runtime Agent control and `tasks`
+for GraphTraj task management and delivery. Discover the feature matching the
+current need, then describe it to obtain its readable guide reference;
 read the referenced file when needed. To request parameters, send describe with
 `schema: true`, which returns only that feature's input schema.
 

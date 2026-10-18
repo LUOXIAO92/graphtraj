@@ -188,9 +188,11 @@ they are off by default and do not change filesystem rules.
 `pi.allow_unix_sockets` allows socket binding and connections beneath the listed
 paths on macOS; it grants no file access and adds no permissions when omitted.
 
-For custom hosts, [the local tool binding](src/graphtraj/interfaces/local_tool.py)
-provides a Python callback and the `graphtraj-tool` JSON-lines process interface.
-MCP is optional. CLI or MCP access alone does not connect background events or
+Use the CLI or local stdio MCP entries `agents` and `tasks`. MCP discovers
+features first and returns a selected feature's schema only when requested.
+The `graphtraj-tool` JSON-lines process is an internal host bridge for the
+desktop and event delivery, not another model tool. CLI or MCP access alone
+does not connect background events or
 completion hooks to an existing conversation; those require integration with
 the host that owns the session. See
 [completion checking](manuals/task-delivery/guide.md#main-completion-checking)

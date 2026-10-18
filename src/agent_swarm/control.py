@@ -91,8 +91,8 @@ class RuntimeDriver(Protocol):
     Failures raise :class:`AgentsError` carrying the native code and message.
     """
 
-    def prepare(self, runtime: str, caller: Caller) -> dict:
-        """Return JSON-serializable settings retained for every execution."""
+    def prepare(self, runtime: str, caller: Caller, *, configuration: str | None = None) -> dict:
+        """Resolve an optional driver-owned reference into retained JSON settings."""
 
     def start(self, run: Run) -> None:
         """Begin native work and return without waiting for it to finish."""
@@ -252,7 +252,8 @@ class AgentControl:
         """Perform one validated ``agents`` action for the bound caller."""
         if action == "create":
             return self.create(arguments["runtime"], arguments["instruction"],
-                               binding, name=arguments.get("name"))
+                               binding, name=arguments.get("name"),
+                               configuration=arguments.get("configuration"))
         if action == "status" and "agent" not in arguments:
             return Outcome({"agents": self.hierarchy(binding.caller)})
 
@@ -284,6 +285,7 @@ class AgentControl:
         binding: Binding,
         *,
         name: str | None = None,
+        configuration: str | None = None,
     ) -> Outcome:
         """Register a new Agent under the caller and start its first execution.
 
@@ -294,7 +296,9 @@ class AgentControl:
         if driver is None:
             raise AgentsError("unsupported-runtime", f"No driver is available for Runtime {runtime!r}.")
         caller   = binding.caller
-        settings = driver.prepare(runtime, caller)
+        # Keep the original call shape for drivers whose users select defaults.
+        settings = (driver.prepare(runtime, caller) if configuration is None else
+                    driver.prepare(runtime, caller, configuration=configuration))
         json.dumps(settings)
 
         agent  = "agent-" + uuid.uuid4().hex
@@ -696,6 +700,7 @@ class AgentControl:
             "runtime": record["runtime"],
             "state":   ACTIVE if current is not None else STANDBY,
             "parent":  record["parent"],
+            "creator": dict(record["creator"]),
             "host":    record["host"],
             "session": record["session"],
         }

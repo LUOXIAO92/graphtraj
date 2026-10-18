@@ -172,7 +172,7 @@ class ClaudeRuntimeAdapter:
             reports.append(str(path))
         project = load_project_configuration(harness_root) if configuration_exists(harness_root) else None
         state = project.state if project else harness_root / '.graphtraj/state'
-        if state.resolve().is_relative_to(worktree.resolve()):
+        if worktree.resolve().is_relative_to(state.resolve()):
             raise RuntimeAdapterError('RUNTIME_ACCESS_DENIED', 'Claude needs a Worktree outside private state.')
         resources = _validated_resources(
             resources, harness_root, state,

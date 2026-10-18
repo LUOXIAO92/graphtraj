@@ -73,26 +73,38 @@ class AdapterDriver:
         self.root = Path(root)
         self.cwd  = Path(cwd)
 
-    def prepare(self, runtime: str, caller: Caller) -> dict:
+    def prepare(self, runtime: str, caller: Caller, *, configuration: str | None = None) -> dict:
         """Resolve the Runtime's role preset and freeze its launch settings.
 
-        A preset named after the Runtime wins; otherwise exactly one preset
-        must use that Runtime.
+        An explicit configuration selects an existing preset, not an identity.
+        Otherwise a preset named after the Runtime wins, or exactly one preset
+        must use that Runtime. Only the selected preset's resources are loaded.
         """
-        from graphtraj.configuration.project_roles import load_project_roles
+        from graphtraj.configuration.project_roles import ProjectRolesError, load_project_roles, resolve_preset
         from graphtraj.configuration.role_definitions import resolve_child_role
 
         if runtime not in SUPPORTED_RUNTIMES:
             raise AgentsError("unsupported-runtime", f"The Task-free driver does not run {runtime!r} yet.")
-        presets = load_project_roles(self.root).presets
-        matches = sorted(name for name, preset in presets.items() if preset.runtime == runtime)
-        name    = runtime if runtime in matches else matches[0] if len(matches) == 1 else None
-        if name is None:
-            raise AgentsError("invalid-config", f"Configure one role named {runtime!r} or exactly one "
-                                                f"role using it; found {matches or 'none'}.")
-
         try:
-            role     = resolve_child_role(name, presets[name], self.root)
+            roles = load_project_roles(self.root)
+            if configuration is not None:
+                name = roles.resolve(configuration)
+                preset = resolve_preset(roles.presets[name])
+                if preset.runtime != runtime:
+                    raise AgentsError('invalid-config',
+                                      f"Configuration {configuration!r} uses {preset.runtime!r}, not {runtime!r}.")
+            else:
+                presets = {name: resolve_preset(preset) for name, preset in roles.presets.items()}
+                matches = sorted(name for name, preset in presets.items() if preset.runtime == runtime)
+                name = runtime if runtime in matches else matches[0] if len(matches) == 1 else None
+                if name is None:
+                    raise AgentsError("invalid-config", f"Configure one role named {runtime!r} or exactly one "
+                                                        f"role using it; found {matches or 'none'}.")
+                preset = presets[name]
+        except ProjectRolesError as error:
+            raise AgentsError('invalid-config', str(error)) from None
+        try:
+            role     = resolve_child_role(name, preset, self.root)
             adapter  = select_runtime_adapter(runtime)
             prepared = adapter.preflight_runtime_context(
                 harness_root=self.root, git_common_directory=_git_common_directory(self.cwd),
@@ -104,6 +116,7 @@ class AdapterDriver:
             "role":            name,
             "cwd":             str(self.cwd),
             "adapter_request": prepared.launch_document()["adapter_request"],
+            "connection":      prepared.launch_document().get("connection", {}),
             "evidence":        prepared.evidence_document(),
         }
 
@@ -131,6 +144,15 @@ class AdapterDriver:
             )
         except RuntimeAdapterError as error:
             raise _native_error(error) from None
+        if run.runtime == 'claude':
+            from agent_swarm import AgentControl, bind
+
+            child_driver = AdapterDriver(self.root, Path(run.settings['cwd']))
+            control = AgentControl(self.root / '.graphtraj/swarm',
+                                   {name: child_driver for name in SUPPORTED_RUNTIMES})
+            callback = bind(control, Caller('claude-sdk', run.agent, turn.native_id, 'claude'),
+                            archive=run.archive)
+            turn.configure_independent(archive=run.archive, agents_callback=callback)
         turn.parent_notice = lambda message, details: (run.events.request(details),
                                                        {"delivery": "retained"})[1]
         with _TURNS_LOCK:

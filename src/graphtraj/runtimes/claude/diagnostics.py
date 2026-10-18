@@ -65,6 +65,9 @@ def warning_projection(text: object) -> list[str]:
     if not isinstance(text, str):
         return []
     bounded = redact(text[:4096]).lower()
+    if ('permission mode forced to default' in bounded
+            and 'claude_code_subprocess_env_scrub' in bounded):
+        return ['native_permission_forced_default_by_environment_scrub']
     if not re.search(r'auto[- ]mode|classifier', bounded):
         return []
     labels = []

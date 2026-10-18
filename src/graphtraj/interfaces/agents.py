@@ -26,11 +26,13 @@ from agent_swarm import (
     Outcome,
     bind,
     default_config,
+    read_config,
     unavailable,
 )
 
 from graphtraj.execution.runner_models import RunnerError
 from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError
+from graphtraj.sessions.archive import JsonlSessionStore, SessionArchive
 
 
 # Core Agent references; anything else is a Runner alias of a Task member.
@@ -61,6 +63,24 @@ TASK_SESSION_MISSING = {
 def swarm_root(root: Path) -> Path:
     """Return the ``agents`` tool's data root inside a GraphTraj project."""
     return root / ".graphtraj" / "swarm"
+
+
+class ConfiguredSessionArchive(SessionArchive):
+    """Use the independent tool's current choices for every archive operation."""
+
+    def store(self, session_id: str, *, historical: bool = False) -> JsonlSessionStore | None:
+        """Reload tool-owned settings before acquiring a collection capability."""
+        choices = read_config(self.root)
+        self.save_normalized_sessions = choices['save_normalized_sessions']
+        self.backfill_history = choices['backfill_history']
+        return super().store(session_id, historical=historical)
+
+
+def configured_archive(root: Path) -> ConfiguredSessionArchive:
+    """Bind GraphTraj to the tool-owned archive choices without overriding users."""
+    directory = swarm_root(root)
+    default_config(directory, save_normalized_sessions=True)
+    return ConfiguredSessionArchive(directory, **read_config(directory))
 
 
 class GraphTrajAgents:
@@ -158,7 +178,9 @@ def agents_callback(
     cwd: Path | None = None,
 ) -> Callable[[Any], AgentsResult]:
     """Return the ``agents`` function bound to GraphTraj and a verified caller."""
-    return bind(GraphTrajAgents(root, cwd), caller)
+    backend = GraphTrajAgents(root, cwd)
+    archive = configured_archive(root)
+    return bind(backend, caller, archive=archive)
 
 
 def run_agents_feature(arguments: Mapping[str, Any], *, cwd: Path | None = None) -> Any:

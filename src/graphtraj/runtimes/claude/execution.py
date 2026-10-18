@@ -1,7 +1,8 @@
 """Own Claude Code's official stream-JSON control transport for one invocation."""
 from __future__ import annotations
 
-from contextlib import ExitStack
+from contextlib import ExitStack, nullcontext
+from concurrent.futures import Future
 import copy
 import json
 import os
@@ -10,9 +11,16 @@ import queue
 import signal
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 import uuid
+from typing import Callable
+
+from agent_swarm import AgentsResult
+from agent_swarm.discovery import handle_request as discover_agents
+from agent_swarm.mcp import tool_documents
+from graphtraj.sessions.archive import SessionArchive
 
 from graphtraj.execution.runner_io import write_yaml_durably
 from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError, SessionStarted, record_runtime_process
@@ -59,6 +67,7 @@ class ClaudeExecution:
         self.terminal_confirmed = False
         self.accepting = True
         self.sent = 0
+        self.input_ids: set[str] = set()
         self.results = 0
         self.echoes = 0
         self.native_state: str | None = None
@@ -66,10 +75,92 @@ class ClaudeExecution:
         self.stdout_eof = False
         self.stderr_eof = False
         self.task_released = False
+        self.independent = False
+        self.archive: SessionArchive | None = None
+        self.agents_callback: Callable[[dict], AgentsResult] | None = None
+        self.collector = None
+        self.sdk_tools_listed = False
+        self.sdk_calls: dict[str, tuple[dict, Future]] = {}
+        self.displayed: set[tuple[str, str]] = set()
         self.diagnostics = {'session_id': self.native_id, 'execution_id': self.execution_id,
                             'launch': 'unknown', 'popen_returned': False,
                             'initialize': {'reason': 'unknown'}, 'system_init': {'reason': 'unknown'},
                             'warnings': []}
+
+    def configure_independent(
+        self,
+        *,
+        archive: SessionArchive | None,
+        agents_callback: Callable[[dict], AgentsResult],
+    ) -> None:
+        """Bind the core's archive choice and verified caller before starting."""
+        if self.proc is not None:
+            raise ValueError('Claude execution is already started.')
+        self.independent = True
+        self.archive = archive
+        self.agents_callback = agents_callback
+
+    def _sdk_message(self, event: dict) -> None:
+        """Serve the official SDK's in-process MCP transport on the owned pipe."""
+        request = event['request']
+        if request.get('server_name') != 'agents' or self.agents_callback is None:
+            raise RuntimeAdapterError('RUNTIME_REQUEST_UNHANDLED', 'Unknown SDK MCP server.')
+        message = request.get('message', {})
+
+        def respond() -> None:
+            """Keep long tool calls off the pipe reader so interruption stays live."""
+            try:
+                method = message.get('method')
+                params = message.get('params', {})
+                if method == 'initialize':
+                    result = {'protocolVersion': params.get('protocolVersion', '2025-06-18'),
+                              'capabilities': {'tools': {}}, 'serverInfo': {'name': 'agents', 'version': '1'}}
+                elif method == 'tools/list':
+                    result = {'tools': tool_documents()}
+                    self.sdk_tools_listed = True
+                elif method == 'tools/call' and params.get('name') == 'agents':
+                    if self.session is None or self.stopping.is_set():
+                        raise ValueError('Claude caller is not bound to an active execution.')
+                    value = self._agents_call(message)
+                    result = {'content': [{'type': 'text', 'text': json.dumps(value.document, ensure_ascii=False)}],
+                              'structuredContent': value.document, 'isError': value.failed}
+                elif method in {'ping', 'notifications/initialized', 'notifications/cancelled'}:
+                    result = {}
+                else:
+                    response = {'jsonrpc': '2.0', 'id': message.get('id'),
+                                'error': {'code': -32601, 'message': 'Unsupported MCP method.'}}
+                    self._reply(event['request_id'], {'mcp_response': response})
+                    return
+                response = {'jsonrpc': '2.0', 'id': message.get('id'), 'result': result}
+                self._reply(event['request_id'], {'mcp_response': response} if 'id' in message else {})
+            except Exception as error:
+                if not self.stopping.is_set() and not self.done.is_set():
+                    self.events.put({'type': 'transport_error', 'exception': type(error).__name__})
+
+        threading.Thread(target=respond, daemon=True).start()
+
+    def _agents_call(self, message: dict) -> AgentsResult:
+        """Reuse the exact native tool-call receipt on transport retransmission."""
+        if 'id' not in message:
+            raise ValueError('An SDK tool call needs a JSON-RPC request identity.')
+        key = json.dumps(message['id'])
+        with self.lock:
+            prior = self.sdk_calls.get(key)
+            if prior is None:
+                future = Future()
+                self.sdk_calls[key] = (copy.deepcopy(message), future)
+            else:
+                original, future = prior
+                if original != message:
+                    raise ValueError('SDK request identity was reused with different arguments.')
+        if prior is None:
+            try:
+                future.set_result(discover_agents(message.get('params', {}).get('arguments', {}),
+                                                  self.agents_callback))
+            except BaseException as error:
+                future.set_exception(error)
+                raise
+        return future.result()
 
     @property
     def execution_id(self) -> str:
@@ -116,12 +207,14 @@ class ClaudeExecution:
     def _prompt(self, text: str) -> None:
         """Queue a native user message while counting each expected result."""
         message = {'type': 'user', 'session_id': self.native_id,
-                   'message': {'role': 'user', 'content': text}, 'parent_tool_use_id': None}
+                   'message': {'role': 'user', 'content': text}, 'parent_tool_use_id': None,
+                   'uuid': str(uuid.uuid4())}
+        self.input_ids.add(message['uuid'])
         self._send(message)
         self.events.put({**message, 'graphtraj_direction': 'sent'})
         self.sent += 1
 
-    def _prepare(self, address: str) -> tuple[list[str], dict]:
+    def _prepare(self, address: str | None) -> tuple[list[str], dict]:
         """Use native restricted mode and mandatory sandboxing without bypass flags."""
         request = self.request
         worktree = Path(request['worktree_path']).resolve()
@@ -142,6 +235,12 @@ class ClaudeExecution:
                         str(worktree / '.agents')]
         if request['worktree_access'] == 'read':
             denied_write.append(str(worktree))
+        # A project-root cwd must not re-allow its private descendants. Linked
+        # Worktrees need only their own exception beneath the denied directory.
+        private = root / '.graphtraj'
+        worktree_read = [str(worktree)] if worktree.is_relative_to(private) else []
+        if private.is_relative_to(worktree):
+            denied_write.append(str(private))
         settings = {
             'permissions': {
                 'blockReadsOutsideWorkingDirectories': True,
@@ -157,19 +256,21 @@ class ClaudeExecution:
                 'autoAllowBashIfSandboxed': False, 'excludedCommands': [],
                 'filesystem': {
                     'denyRead': [str(root / '.graphtraj'), *denied_read],
-                    'allowRead': [str(worktree), address, request['git_common_directory'], *map(str, resources),
+                    'allowRead': [*worktree_read, *([address] if address else []), request['git_common_directory'], *map(str, resources),
                                   str(Path(sys.prefix).resolve()), str(Path(__file__).resolve().parents[2])],
-                    'allowWrite': [address] + ([request['git_common_directory']]
+                    'allowWrite': ([address] if address else []) + ([request['git_common_directory']]
                                               if request['worktree_access'] == 'write' else []),
                     'denyWrite': denied_write,
                 },
             },
         }
         # The MCP process uses the same PID-authenticated hosted CLI as native Bash.
-        mcp = {'mcpServers': {'graphtraj': {
-            'command': sys.executable, 'args': ['-m', 'graphtraj.interfaces.mcp'],
+        mcp = {'mcpServers': {'agents': {
+            'command': sys.executable, 'args': ['-m', 'graphtraj.runtimes.claude.mcp'],
             'env': {'GRAPHTRAJ_CLI_CONNECTION': address},
         }}}
+        if self.independent:
+            mcp = {'mcpServers': {}}
         if request.get('permission_mode') is not None:
             settings['permissions']['defaultMode'] = request['permission_mode']
         argv = [request['executable'], '--print', '--verbose', '--input-format', 'stream-json',
@@ -188,8 +289,23 @@ class ClaudeExecution:
         if request.get('permission_mode') is not None:
             argv += ['--permission-mode', request['permission_mode']]
         environment = {key: value for key, value in os.environ.items() if not key.startswith('GRAPHTRAJ_')}
-        environment.update(GRAPHTRAJ_CLI_CONNECTION=address, CLAUDE_CODE_SDK_READS_SESSION_STATE='1',
-                           CLAUDE_CODE_DISABLE_BACKGROUND_TASKS='1', CLAUDE_CODE_SUBPROCESS_ENV_SCRUB='1')
+        environment.update(CLAUDE_CODE_SDK_READS_SESSION_STATE='1',
+                           CLAUDE_CODE_DISABLE_BACKGROUND_TASKS='1')
+        scrub_key = 'CLAUDE_CODE_SUBPROCESS_ENV_SCRUB'
+        scrub_source = 'environment' if scrub_key in environment else 'default'
+        environment.setdefault(scrub_key, '0' if request.get('permission_mode') == 'auto' else '1')
+        # Claude 2.1.299 Ne(value): trim/lowercase, then membership in these
+        # four values. Other strings are false, not invalid configuration.
+        scrub_enabled = environment[scrub_key].strip().lower() in {'1', 'true', 'yes', 'on'}
+        self.diagnostics['subprocess_environment_scrub'] = {
+            'source': scrub_source, 'requested_enabled': scrub_enabled,
+        }
+        if request.get('permission_mode') == 'auto' and scrub_enabled:
+            self._save_diagnostics()
+            raise RuntimeAdapterError('RUNTIME_REQUEST_FAILED',
+                                      'Requested auto conflicts with explicit Claude subprocess scrub.')
+        if address:
+            environment['GRAPHTRAJ_CLI_CONNECTION'] = address
         if request.get('explicit_runtime_home'):
             environment['CLAUDE_CONFIG_DIR'] = str(home)
         if request['reasoning_effort'] is not None:
@@ -212,7 +328,7 @@ class ClaudeExecution:
         """Retain native records unchanged, including unknown fields and failures."""
         assert self.proc is not None
         try:
-            with self.trace.open('a', encoding='utf-8') as trace:
+            with (nullcontext(None) if self.independent else self.trace.open('a', encoding='utf-8')) as trace:
                 for line in self.proc.stdout:
                     try:
                         event = json.loads(line)
@@ -224,7 +340,7 @@ class ClaudeExecution:
                         return
                     # Partial text is compacted in the canonical archive, not copied
                     # to a second permanent per-fragment transport log.
-                    if event.get('type') != 'stream_event':
+                    if trace is not None and event.get('type') != 'stream_event':
                         trace.write(line)
                         trace.flush()
                     if event.get('type') == 'system' and event.get('subtype') == 'session_state_changed':
@@ -243,6 +359,8 @@ class ClaudeExecution:
         if self.session is not None:
             return
         self.session = native['session_id']
+        if self.independent and native.get('transcript_path'):
+            self.collector.bind(Path(native['transcript_path']), self.input_ids)
         write_yaml_durably(self.directory / 'session.yml', {
             'session': self.session, 'rollout_path': native.get('transcript_path'),
             'runtime_version': self.request['version'], 'source': native.get('source'),
@@ -303,24 +421,41 @@ class ClaudeExecution:
             # Runner supplies Task context before the native registration hook;
             # mapping.yml does not exist until that hook has been acknowledged.
             task_id = os.environ.get('GRAPHTRAJ_TASK_ID')
-            archive = resources.enter_context(open_archive(
-                Path(self.request['state_directory']), Path(self.request['harness_root']),
-                self.native_id, self.directory.name, source='managed',
-                task_ids=[task_id] if task_id else []))
-            if archive.pending():
-                from graphtraj.sessions.storage import StreamWriter
-
-                StreamWriter(archive, archive.pending()['source']).finish(content=[], interrupted=True)
             provider = self.request.get('provider', 'native')
             if provider == 'native' and not self.request.get('base_url'):
                 provider = 'anthropic'
-            collector = StreamCollector(archive, self.execution_id, self.request['model'], provider)
+            if self.independent:
+                from graphtraj.runtimes.claude.jsonl import ClaudeJsonlCollector
+
+                collector = ClaudeJsonlCollector(self.archive, self.native_id, self.directory.name,
+                                                Path(self.request['worktree_path']), self.execution_id,
+                                                provider=provider, resumed=self.expected is not None)
+            else:
+                archive = resources.enter_context(open_archive(
+                    Path(self.request['state_directory']), Path(self.request['harness_root']),
+                    self.native_id, self.directory.name, source='managed',
+                    task_ids=[task_id] if task_id else []))
+                if archive.pending():
+                    from graphtraj.sessions.storage import StreamWriter
+
+                    StreamWriter(archive, archive.pending()['source']).finish(content=[], interrupted=True)
+                collector = StreamCollector(archive, self.execution_id, self.request['model'], provider)
+            self.collector = collector
             source_position = 0
-            address = resources.enter_context(cli_connection(
-                Path(self.request['harness_root']), self.directory.name, native_operation_features()))
-            argv, environment = self._prepare(address)
+            channel_directory = None
+            if not self.independent and (Path(self.request['harness_root']) / '.graphtraj').resolve().is_relative_to(
+                    Path(self.request['worktree_path']).resolve()):
+                # Root launches deny writes throughout private state, including
+                # the usual CLI directory. Keep only this authenticated channel
+                # in a temporary directory, with its normal scoped grant.
+                channel_directory = Path(resources.enter_context(
+                    tempfile.TemporaryDirectory(prefix='graphtraj-claude-')))
+            address = None if self.independent else resources.enter_context(cli_connection(
+                Path(self.request['harness_root']), self.directory.name, native_operation_features(),
+                directory=channel_directory))
             stderr = resources.enter_context((self.directory / 'stderr.log').open('a', encoding='utf-8'))
             try:
+                argv, environment = self._prepare(address)
                 if self.stopping.is_set():
                     raise RuntimeAdapterError('RUNTIME_EXECUTION_INTERRUPTED', 'Claude stopped before process creation.')
                 self.diagnostics['launch'] = launch_projection(argv)
@@ -345,9 +480,12 @@ class ClaudeExecution:
                 stderr_reader.start()
                 reader = threading.Thread(target=self._read, daemon=True)
                 reader.start()
-                initialization = self._control('initialize', hooks={
+                initialization = self._control('initialize', **({'sdkMcpServers': ['agents']} if self.independent else {}), hooks={
                     'UserPromptSubmit': [{'matcher': None, 'hookCallbackIds': ['graphtraj_start']}],
                     'SubagentStop': [{'matcher': None, 'hookCallbackIds': ['graphtraj_collect_child']}],
+                    **({'PostToolUse': [{'matcher': 'mcp__agents__agents',
+                                         'hookCallbackIds': ['graphtraj_agents_display']}]}
+                       if self.independent else {}),
                 })
                 startup_deadline = time.monotonic() + 45
                 stop_deadline = None
@@ -389,14 +527,22 @@ class ClaudeExecution:
                                     self._prompt(self.prompt)
                     elif kind == 'control_request':
                         request = event.get('request', {})
-                        if request.get('subtype') == 'hook_callback' and request.get('callback_id') == 'graphtraj_start':
+                        if request.get('subtype') == 'mcp_message' and self.independent:
+                            self._sdk_message(event)
+                        elif (self.independent and request.get('subtype') == 'hook_callback'
+                              and request.get('callback_id') == 'graphtraj_agents_display'):
+                            from graphtraj.runtimes.claude.display import display_response
+
+                            self._reply(event['request_id'], display_response(request['input'], self.displayed))
+                        elif request.get('subtype') == 'hook_callback' and request.get('callback_id') == 'graphtraj_start':
                             self._bind(request)
                             self._reply(event['request_id'], {})
                             self.task_released = True
                         elif request.get('subtype') == 'hook_callback' and request.get('callback_id') == 'graphtraj_collect_child':
                             from graphtraj.runtimes.claude.collection import collect_hook
 
-                            collect_hook(request['input'], Path(self.request['worktree_path']))
+                            if not self.independent:
+                                collect_hook(request['input'], Path(self.request['worktree_path']))
                             self._reply(event['request_id'], {})
                         elif request.get('subtype') == 'can_use_tool':
                             self._permission(event)
@@ -409,6 +555,10 @@ class ClaudeExecution:
                     elif kind == 'system' and event.get('subtype') == 'init':
                         if event.get('session_id') != self.native_id or event.get('model') != self.request['model']:
                             raise RuntimeAdapterError('RUNTIME_REQUEST_FAILED', 'Claude selected a different Session or model.')
+                        if self.independent and (not self.sdk_tools_listed
+                                or 'mcp__agents__agents' not in event.get('tools', [])):
+                            raise RuntimeAdapterError('RUNTIME_REQUEST_FAILED',
+                                                      'Claude did not register the bound agents SDK function.')
                         self.native_init = event
                         with self.lock:
                             self.diagnostics['system_init'] = native_projection(event)
@@ -419,6 +569,10 @@ class ClaudeExecution:
                             observed['native_init'] = event
                             observed['permissions'] = self.permission_evidence()
                             write_yaml_durably(self.directory / 'session.yml', observed)
+                        requested_mode = self.request.get('permission_mode')
+                        if requested_mode is not None and self.permission_evidence()['matches_request'] is not True:
+                            raise RuntimeAdapterError('RUNTIME_REQUEST_FAILED',
+                                                      'Claude did not confirm the requested permission mode.')
                     elif kind == 'system' and event.get('subtype') == 'session_state_changed':
                         self.native_state = event.get('state')
                     elif kind == 'result':
@@ -491,7 +645,7 @@ class ClaudeExecution:
                             if event.get('type') != 'eof':
                                 collector.accept(event, source_position)
                         collector.close()
-                    elif collector.writer:
+                    elif getattr(collector, 'writer', None):
                         collector.writer.checkpoint()
                 except Exception as error:
                     failure = RuntimeAdapterError('RUNTIME_ARCHIVE_FAILED', str(error))

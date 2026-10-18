@@ -2,6 +2,11 @@
 
 from __future__ import annotations
 
+from graphtraj.configuration.project_configuration import (
+    configuration_file as project_configuration_file,
+    core_directory as project_core_directory,
+)
+
 from contextlib import ExitStack, nullcontext
 import copy
 import json
@@ -198,8 +203,8 @@ class PiManagedExecution:
                              str(Path.home() / '.codex'), str(source), request['state_directory']],
                 'allowRead': read,
                 'allowWrite': write,
-                'denyWrite': [str(source), str(root / '.graphtraj/config.yml'),
-                              str(root / '.graphtraj/roles.yml'),
+                'denyWrite': [str(source), str(project_configuration_file(root)),
+                              str(project_core_directory(root) / 'roles.yml'),
                               request['docs_directory'],
                               str(Path(sys.prefix).resolve()), str(Path(__file__).resolve().parents[2]),
                               str(Path(request['git_common_directory']) / 'config'),

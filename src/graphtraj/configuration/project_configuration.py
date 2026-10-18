@@ -60,7 +60,29 @@ class ProjectConfiguration:
 def configuration_file(harness_root: Path) -> Path:
     """Return the fixed configuration file location for one project root."""
 
-    return harness_root / CONFIG_PATH
+    return core_directory(harness_root) / CONFIG_FILE
+
+
+def core_directory(harness_root: Path) -> Path:
+    """Select the migrated layout once, without mixing old and new authorities."""
+    data = harness_root / CONFIG_DIRECTORY
+    return data / 'core' if os.path.lexists(data / 'core' / CONFIG_FILE) else data
+
+
+def runner_directory(harness_root: Path) -> Path:
+    """Locate GraphTraj's Task participation and delivery execution records."""
+    return core_directory(harness_root) / 'runner'
+
+
+def cli_directory(harness_root: Path) -> Path:
+    """Locate ephemeral host communication separately from Task records."""
+    data = harness_root / CONFIG_DIRECTORY
+    return data / 'swarm/live/cli' if core_directory(harness_root) != data else data / 'cli'
+
+
+def runner_project_root(runner: Path) -> Path:
+    """Recover the owning Harness from a selected legacy or core Runner path."""
+    return runner.parents[2] if runner.parent.name == 'core' else runner.parents[1]
 
 
 def default_configuration_content(harness_root: Path, project_root: Path) -> str:

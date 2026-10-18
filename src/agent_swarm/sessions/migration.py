@@ -30,7 +30,18 @@ def import_sqlite(source: Path, root: Path) -> dict:
         drafts = [{'source': row[0], 'event': json.loads(row[1])}
                   for row in connection.execute('SELECT source, value FROM draft')]
         checkpoints = dict(connection.execute('SELECT source, position FROM checkpoints'))
-        store = JsonlSessionStore.create(archive_path(root, header['id']), header)
+        destination = archive_path(root, header['id'])
+        if destination.exists():
+            store = JsonlSessionStore(destination)
+            previous = store.header
+            old_native = header.get('graphtraj', {}).get('native', header.get('native', {}))
+            new_native = previous.get('graphtraj', {}).get('native', previous.get('native', {}))
+            if any(old_native.get(key) != new_native.get(key) for key in ('runtime', 'sessionId', 'agentId')):
+                raise ValueError('Existing JSONL archive belongs to a different native Session.')
+            # The current JSONL header remains authoritative. The exact old
+            # header is retained below with its old observations, not discarded.
+        else:
+            store = JsonlSessionStore.create(destination, header)
         attachments = []
         for digest, content in connection.execute('SELECT digest, content FROM attachments ORDER BY digest'):
             ref = store.put_attachment(content)
@@ -56,6 +67,7 @@ def import_native(
     agent: str,
     project: str,
     child_id: str | None = None,
+    archive: SessionArchive | None = None,
 ) -> dict:
     """Collect one explicitly associated native file through its Runtime mapper.
 
@@ -63,7 +75,7 @@ def import_native(
     supply its associated parent first. Unknown/missing native content remains
     explicit; this entry neither invents order nor searches for another source.
     """
-    archive = SessionArchive(root, save_normalized_sessions=True, backfill_history=True)
+    archive = archive or SessionArchive(root, save_normalized_sessions=True, backfill_history=True)
     if runtime == 'codex':
         from .codex import CodexJsonlArchive
 

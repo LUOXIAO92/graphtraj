@@ -66,7 +66,8 @@ def collect_session(event: dict, cwd: Path) -> dict:
     """
     from graphtraj.configuration.project_configuration import load_project_configuration
     from graphtraj.execution.runner_status import process_caller_alias, read_alias_mapping
-    from graphtraj.runtimes.dsh.collection import collect
+    from agent_swarm.sessions.dsh import DshArchive
+    from graphtraj.interfaces.agents import configured_archive
     from graphtraj.workspace.runner_project import discover_runner_directory
 
     connection = current_connection()
@@ -94,8 +95,18 @@ def collect_session(event: dict, cwd: Path) -> dict:
         caller_identity(runner, connection)
 
     configuration = load_project_configuration(cwd)
-    return collect(
-        configuration.state, header, event['records'],
-        project_id=str(configuration.harness_root), agent_id=agent_id,
-        task_ids=task_ids, source=source,
-    )
+    archive = configured_archive(configuration.harness_root)
+    boundary = event.get('history_boundary', -1)
+    if type(boundary) is not int or boundary < -1:
+        raise ValueError('DSH collection boundary must be a native sequence number.')
+    collector = DshArchive(archive, resumed=boundary >= 0)
+    collector.start({'header': header, 'cursor': boundary}, event['records'])
+    if boundary >= 0 and not archive.backfill_history:
+        for record in event['records']:
+            if record['event']['seq'] > boundary:
+                collector.event(record['event'])
+    # This acknowledges receipt, including the explicit disabled-archive case;
+    # it is not a claim that skipped historical events were normalized.
+    position = max((record['event']['seq'] for record in event['records']), default=-1)
+    return {'session': archive.native_id('dsh', header['id']), 'position': position,
+            'saved': archive.save_normalized_sessions}

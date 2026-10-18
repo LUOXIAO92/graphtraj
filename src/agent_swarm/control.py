@@ -539,9 +539,42 @@ class AgentControl:
 
     def _path(self, agent: str) -> Path:
         """Return the record path; the reference cannot leave the data root."""
-        if not agent.startswith("agent-") or not agent[6:].isalnum():
+        if (not isinstance(agent, str) or not agent or agent in {'.', '..'}
+                or any(character in agent for character in ('/', '\\', '\x00'))):
             raise AgentsError("not-found", f"No Agent {agent!r} exists.")
         return self.root / "control" / "agents" / f"{agent}.json"
+
+    def import_agent(self, record: Mapping[str, Any]) -> dict:
+        """Import one stopped, host-verified identity without launching a Runtime.
+
+        Offline migration supplies the existing identity, true parent, native
+        references and settings. Retired history stays retired. A running
+        execution is refused rather than converted into an idle one. Replays
+        must be identical; this API never replaces an existing control record.
+        """
+        required = {'agent', 'name', 'runtime', 'host', 'parent', 'creator',
+                    'session', 'sessions', 'settings', 'created_at', 'retired_at', 'executions'}
+        if not required <= record.keys():
+            raise AgentsError('invalid-input', 'An imported Agent needs its complete retained identity.')
+        if not isinstance(record['settings'], dict) or not isinstance(record['creator'], dict):
+            raise AgentsError('invalid-input', 'Imported settings and creator must be mappings.')
+        if any(execution.get('state') != 'ended' for execution in record['executions']):
+            raise AgentsError('turn-running', 'Only stopped native executions may be imported.')
+        agent = record['agent']
+        self._path(agent)
+        with exclusive(self.root / 'live' / 'agents' / f'{agent}.lock'):
+            previous = self._load(agent)
+            if previous is not None:
+                if previous != record:
+                    raise AgentsError('invalid-input', 'Imported Agent conflicts with retained control data.')
+                return self._document(previous)
+            path = self._path(agent)
+            path.parent.mkdir(parents=True, exist_ok=True)
+            descriptor, temporary = tempfile.mkstemp(dir=path.parent, prefix='.import-')
+            with os.fdopen(descriptor, 'w', encoding='utf-8') as stream:
+                json.dump(dict(record), stream, ensure_ascii=False, indent=2, sort_keys=True)
+            os.replace(temporary, path)
+        return self._document(record)
 
     def _load(self, agent: str) -> dict | None:
         """Read one record without the lock, or ``None`` when absent."""

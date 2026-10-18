@@ -78,6 +78,7 @@ class ClaudeJsonlCollector:
         provider: str = 'anthropic',
         resumed: bool | None = None,
         child_id: str | None = None,
+        history_count: int | None = None,
     ) -> None:
         """Capture policy without creating files when collection is disabled."""
         self.archive = archive
@@ -92,6 +93,7 @@ class ClaudeJsonlCollector:
         self.cut_known = True
         self.live_ids: set[str] = set()
         self.history_count = 0
+        self.activation_count = history_count
         self.before_bind: list[tuple[dict, int, int]] = []
         self.path: Path | None = None
         self.excluded: set[str] = set()
@@ -116,13 +118,9 @@ class ClaudeJsonlCollector:
             records = []
             self.cut_known = False
         if not self.archive.backfill_history:
-            self.history_count = len(records) if self.resumed is not False else 0
-            try:
-                self.excluded = ({r['uuid'] for r in conversation(records)}
-                                 if self.resumed is not False else set())
-            except (ValueError, KeyError, TypeError):
-                self.excluded = {r['uuid'] for r in records if isinstance(r.get('uuid'), str)}
-                self.cut_known = False
+            self.history_count = (self.activation_count if self.activation_count is not None
+                                  else len(records) if self.resumed is not False else 0)
+            self.excluded = {r['uuid'] for r in records[:self.history_count] if isinstance(r.get('uuid'), str)}
             self.excluded.difference_update(current_inputs or ())
             self.live_ids.update(r['uuid'] for r in records if r.get('uuid') in (current_inputs or ()))
         destination = archive_path(self.archive.root, self.identity)

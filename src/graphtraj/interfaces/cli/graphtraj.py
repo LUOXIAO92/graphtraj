@@ -63,16 +63,23 @@ main.add_command(bind_command)
 @click.option("--preview", is_flag=True, help="List the isolated copy's sources without importing.")
 @click.option("--snapshot", type=click.Path(path_type=Path), help="Capture associated project sources in a new isolated directory.")
 @click.option("--session", "sessions", multiple=True, help="Limit a sample to an inventoried runtime:native-reference (repeatable).")
-def migrate_agents_command(preview: bool, snapshot: Path | None, sessions: tuple[str, ...]) -> None:
+@click.option("--partition", is_flag=True, help="After full import, partition an isolated copy into core/swarm; never activate a live Harness.")
+def migrate_agents_command(preview: bool, snapshot: Path | None, sessions: tuple[str, ...], partition: bool) -> None:
     """Rehearse native Session migration on a retained, isolated project copy."""
     from graphtraj.workspace.agent_migration import migrate_agents
     from graphtraj.workspace.migration_snapshot import snapshot_project
 
     try:
-        if snapshot is not None and (preview or sessions):
+        if snapshot is not None and (preview or sessions or partition):
             raise ValueError('Snapshot capture cannot also select a migration sample or preview.')
+        if partition and (preview or sessions):
+            raise ValueError('Partition requires a full isolated migration, not a preview or sample.')
         result = (snapshot_project(Path.cwd(), snapshot) if snapshot is not None
                   else migrate_agents(Path.cwd(), preview=preview, sessions=sessions))
+        if partition:
+            from graphtraj.workspace.agent_cutover import partition_snapshot
+
+            result['layout'] = partition_snapshot(Path.cwd())
     except (OSError, ValueError, yaml.YAMLError) as error:
         raise click.ClickException(str(error)) from error
     click.echo(yaml.safe_dump(result, sort_keys=False), nl=False)

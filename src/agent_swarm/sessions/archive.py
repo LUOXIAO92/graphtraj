@@ -194,6 +194,17 @@ class JsonlSessionStore:
         """Return the durable replay cursor, or -1 before this source is read."""
         return self._metadata['sources'].get(source, -1)
 
+    def mark_boundary(self, source: str, position: int) -> None:
+        """Retain a native activation cut for callbacks running in new processes.
+
+        This metadata is not an event or a message-order claim. The Runtime
+        mapper uses its native record count/offset to distinguish preexisting
+        history from content created after archiving was enabled.
+        """
+        self._fresh(source, position)
+        with self._update():
+            self._metadata['sources'][source] = position
+
     def _fresh(self, source: str, position: int) -> bool:
         """Check a replay cursor; it is never used to sort messages."""
         if not isinstance(source, str) or not source or type(position) is not int or position < 0:
@@ -462,6 +473,8 @@ class SessionArchive:
         self.save_normalized_sessions = save_normalized_sessions
         self.backfill_history = backfill_history
         self._mapped: dict[str, dict] = {}
+        self._native_headers: dict[tuple, dict[str, dict]] = {}
+        self._native_revision: int | None = None
 
     def native_header(self, runtime: str, native_id: str, *, agent_id: str | None = None) -> dict | None:
         """Resolve a native reference through retained headers, never ID spelling.
@@ -469,18 +482,22 @@ class SessionArchive:
         Only this tool's archive root is inspected. Multiple canonical headers
         claiming the same native reference are an explicit migration conflict.
         """
-        matches = {}
-        for path in (self.root / 'sessions').glob('*/session.jsonl'):
-            with path.open(encoding='utf-8') as stream:
-                metadata = json.loads(next(stream))
-            if metadata.get('archiveVersion') != 1:
-                raise ValueError('Unsupported Session archive version.')
-            header = metadata['header']
-            validate_header(header)
-            native = header.get('graphtraj', {}).get('native', header.get('native', {}))
-            if (native.get('runtime') == runtime and native.get('sessionId') == native_id
-                    and native.get('agentId') == agent_id):
-                matches[header['id']] = header
+        directory = self.root / 'sessions'
+        revision = directory.stat().st_mtime_ns if directory.exists() else 0
+        if revision != self._native_revision:
+            headers = {}
+            for path in directory.glob('*/session.jsonl'):
+                with path.open(encoding='utf-8') as stream:
+                    metadata = json.loads(next(stream))
+                if metadata.get('archiveVersion') != 1:
+                    raise ValueError('Unsupported Session archive version.')
+                header = metadata['header']
+                validate_header(header)
+                native = header.get('graphtraj', {}).get('native', header.get('native', {}))
+                key = (native.get('runtime'), native.get('sessionId'), native.get('agentId'))
+                headers.setdefault(key, {})[header['id']] = header
+            self._native_headers, self._native_revision = headers, revision
+        matches = dict(self._native_headers.get((runtime, native_id, agent_id), {}))
         for header in self._mapped.values():
             native = header.get('graphtraj', {}).get('native', header.get('native', {}))
             if (native.get('runtime') == runtime and native.get('sessionId') == native_id

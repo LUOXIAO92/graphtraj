@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from graphtraj.configuration.project_configuration import runner_project_root
+
 import json
 import os
 import signal
@@ -246,7 +248,7 @@ def run(job_file: Path) -> int:
             # The core records this execution and its Agent before native work.
             runner_directory = session_directory.parent.parent
             task_agent = begin_task_agent(
-                runner_directory.parent.parent, runner_directory, operation, base_mapping, prompt, turn_handle,
+                runner_project_root(runner_directory), runner_directory, operation, base_mapping, prompt, turn_handle,
             )
             previous_sigterm = signal.signal(signal.SIGTERM, request_termination)
             if budget_monitor is not None and monitor_stop is not None:

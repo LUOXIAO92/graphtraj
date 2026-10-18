@@ -218,3 +218,90 @@ def test_snapshot_checks_facts_not_atomic_same_content_rewrites(
         assert result.exit_code == 0, result.output
         manifest = yaml.safe_load((destination / '.graphtraj/migration-snapshot.yml').read_text())
         assert manifest['control_state_unchanged']
+
+
+def test_public_partition_uses_core_paths_and_retains_originals(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Task graph references move once; backup originals and native cwd survive."""
+    from graphtraj.configuration.project_configuration import load_project_configuration
+    from graphtraj.workspace.runner_project import discover_runner_directory
+
+    origin = tmp_path / 'origin'
+    _source(origin, tmp_path / 'native.jsonl')
+    runner = CliRunner()
+    monkeypatch.chdir(origin)
+    snapshot = tmp_path / 'copy'
+    assert runner.invoke(main, ['migrate-agents', '--snapshot', str(snapshot)]).exit_code == 0
+    monkeypatch.chdir(snapshot)
+    original = (snapshot / '.graphtraj/state/tickets/2-child/ticket.md').read_bytes()
+    result = runner.invoke(main, ['migrate-agents', '--partition'])
+    assert result.exit_code == 0, result.output
+    assert load_project_configuration(snapshot).state == snapshot / '.graphtraj/core/state'
+    assert discover_runner_directory(snapshot) == snapshot / '.graphtraj/core/runner'
+    assert not (snapshot / '.graphtraj/config.yml').exists()
+    assert not (snapshot / '.graphtraj/state').exists()
+    backup = snapshot / '.graphtraj/core/backups/before-agent-partition'
+    assert (backup / 'state/tickets/2-child/ticket.md').read_bytes() == original
+    assert (snapshot / '.graphtraj/core/state/tickets/2-child/ticket.md').read_bytes() == original
+    assert yaml.safe_load(result.output)['layout']['production_cutover'] is False
+    again = runner.invoke(main, ['migrate-agents', '--partition'])
+    assert again.exit_code == 0, again.output
+    assert yaml.safe_load(again.output)['layout']['partition'] == 'already-migrated'
+
+
+def test_imported_stopped_and_retired_agents_keep_identity_and_parents(tmp_path: Path) -> None:
+    """Independent import is repeatable and never turns retired history active."""
+    from agent_swarm import AgentControl, Binding, Caller, AgentsError
+
+    control = AgentControl(tmp_path, {})
+    caller = Caller('retained-host', 'actual-parent')
+    record = {'agent': 'old-alias@e1', 'name': 'old name', 'runtime': 'codex',
+              'host': caller.host, 'parent': caller.agent,
+              'creator': {'host': caller.host, 'agent': caller.agent, 'session': None},
+              'session': 'native-ref', 'sessions': ['native-ref'], 'settings': {'cwd': '/original/cwd'},
+              'created_at': None, 'retired_at': None, 'executions': []}
+    first = control.import_agent(record)
+    assert control.import_agent(record) == first
+    assert control.operate('status', {'agent': record['agent']}, Binding(caller)).result['state'] == 'standby'
+    assert first['agent'] == 'old-alias@e1' and first['parent'] == 'actual-parent'
+    retired = {**record, 'agent': 'retired-alias@e1', 'retired_at': 'unknown'}
+    control.import_agent(retired)
+    assert [item['agent'] for item in control.hierarchy(caller)] == ['old-alias@e1']
+    with pytest.raises(AgentsError, match='Only stopped'):
+        control.import_agent({**record, 'agent': 'running', 'executions': [{'state': 'running'}]})
+
+
+def test_legacy_import_preserves_an_already_current_jsonl_header(tmp_path: Path) -> None:
+    """New header metadata is not overwritten by older SQLite provenance."""
+    retained = header()
+    native = session_path(tmp_path / 'old', retained['id'])
+    with SessionStore.create(native, retained):
+        pass
+    current = deepcopy(retained)
+    current['graphtraj']['native']['locator'] = 'verified-new-source'
+    root = tmp_path / 'swarm'
+    JsonlSessionStore.create(archive_path(root, retained['id']), current)
+    import_sqlite(native, root)
+    migrated = JsonlSessionStore(archive_path(root, retained['id']))
+    assert migrated.header == current
+    assert migrated.legacy()['header'] == retained
+
+
+def test_claude_native_hooks_keep_activation_boundary_between_processes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """With backfill off, Stop still captures content created since SessionStart."""
+    from graphtraj.runtimes.claude.collection import collect_jsonl_hook
+    from graphtraj.configuration.project_configuration import default_configuration_content
+
+    (tmp_path / '.graphtraj').mkdir()
+    (tmp_path / '.graphtraj/config.yml').write_text(default_configuration_content(tmp_path, tmp_path))
+    transcript = tmp_path / 'native.jsonl'
+    transcript.write_text('')
+    start = {'hook_event_name': 'SessionStart', 'session_id': 's', 'source': 'startup',
+             'cwd': str(tmp_path), 'transcript_path': str(transcript)}
+    assert collect_jsonl_hook(start, tmp_path)['saved']
+    transcript.write_text(json.dumps(message('new', None, 'created after activation')) + '\n')
+    assert collect_jsonl_hook({**start, 'hook_event_name': 'Stop'}, tmp_path)['saved']
+    store = JsonlSessionStore(archive_path(tmp_path / '.graphtraj/swarm', 'claude:s'))
+    assert [item['content'][0]['text'] for item in store.messages()] == ['created after activation']
+    assert not (tmp_path / '.graphtraj/state/sessions').exists()

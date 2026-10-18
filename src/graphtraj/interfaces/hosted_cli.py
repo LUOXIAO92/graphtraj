@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from graphtraj.configuration.project_configuration import cli_directory
+
 import os
 import math
 from contextlib import contextmanager
@@ -67,7 +69,7 @@ def cli_connection(
     """
     runner = discover_runner_directory(root)
     if directory is None:
-        directory = runner.parent / 'cli'
+        directory = cli_directory(root)
     directory.mkdir(parents=True, exist_ok=True)
 
     def authenticate(pid: int) -> None:

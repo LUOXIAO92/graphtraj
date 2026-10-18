@@ -11,6 +11,8 @@ Worker job. Mappings recorded before this reference keep their existing path.
 
 from __future__ import annotations
 
+from graphtraj.configuration.project_configuration import runner_project_root
+
 from pathlib import Path
 from typing import Any, Mapping
 
@@ -178,7 +180,7 @@ def core_status(runner_directory: Path, mapping: Mapping[str, Any]) -> dict[str,
     parent = mapping.get("parent")
     parent_agent = read_alias_mapping(runner_directory, parent)[0].get("agent") if isinstance(parent, str) else None
     try:
-        outcome = AgentControl(swarm_root(runner_directory.parent.parent), {}).operate(
+        outcome = AgentControl(swarm_root(runner_project_root(runner_directory)), {}).operate(
             "status", {"agent": mapping["agent"]}, Binding(Caller(TASK_HOST, parent_agent)))
     except AgentsError as error:
         return {"agent": mapping["agent"], "agent_error": {"code": error.code, "message": error.message}}

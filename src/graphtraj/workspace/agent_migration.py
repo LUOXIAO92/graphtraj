@@ -12,6 +12,7 @@ import yaml
 
 from agent_swarm import default_config
 from agent_swarm.sessions.migration import import_native, import_sqlite
+from agent_swarm.sessions.archive import SessionArchive
 from graphtraj.sessions.storage import SessionStore
 from graphtraj.configuration.project_configuration import load_project_configuration
 from graphtraj.workspace.migration_snapshot import MANIFEST, source_map
@@ -55,6 +56,7 @@ def migrate_agents(cwd: Path, *, preview: bool = False, sessions: tuple[str, ...
         return report
     imports = [import_sqlite(path, root) for path in archives]
     results = []
+    archive = SessionArchive(root, save_normalized_sessions=True, backfill_history=True)
     for item in _source_order(sources, available):
         if item.get('identity_conflicts'):
             results.append({**item, 'missing': 'Conflicting retained native associations; no history imported.'})
@@ -68,7 +70,7 @@ def migrate_agents(cwd: Path, *, preview: bool = False, sessions: tuple[str, ...
             continue
         try:
             result = import_native(root, item['runtime'], item['session'], source,
-                                   agent=item['agent'], project=manifest['project'], child_id=item.get('native_agent'))
+                                   agent=item['agent'], project=manifest['project'], child_id=item.get('native_agent'), archive=archive)
             results.append({**result, 'source': item['source']})
         except (OSError, ValueError, KeyError, TypeError) as error:
             results.append({**item, 'missing': str(error)})

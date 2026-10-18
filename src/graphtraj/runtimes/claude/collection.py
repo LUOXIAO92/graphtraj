@@ -194,16 +194,8 @@ def finish_transcript_collection(
                                         inherited=inherited)
 
 
-def collect_hook(event: dict, cwd: Path) -> dict:
-    """Collect exactly the transcript identified by an official native hook.
-
-    SubagentStop's transcript_path is the parent's file. Only its separate
-    agent_transcript_path may supply the child. agent_type alone is not a child
-    marker because Claude also supplies it for a top-level --agent invocation.
-    This entry never registers Main, a checker, or a plugin as a control owner.
-    """
-    from graphtraj.configuration.project_configuration import load_project_configuration
-
+def hook_source(event: dict, cwd: Path) -> tuple[str, str, str | None, str]:
+    """Validate the exact native hook association without interpreting its history."""
     kind = event.get('hook_event_name')
     if kind not in {'SessionStart', 'Stop', 'StopFailure', 'SessionEnd', 'SubagentStop'}:
         raise ValueError('Unsupported Claude collection hook.')
@@ -222,6 +214,50 @@ def collect_hook(event: dict, cwd: Path) -> dict:
         raise ValueError('The parent transcript is not the child transcript.')
     if event.get('cwd') and Path(event['cwd']).resolve() != cwd.resolve():
         raise ValueError('Hook working directory differs from collection entry.')
+    return kind, native_id, child, path
+
+
+def collect_jsonl_hook(event: dict, cwd: Path) -> dict:
+    """Collect the native hook's associated transcript into the tool-owned archive."""
+    from agent_swarm.sessions.claude import ClaudeJsonlCollector
+    from agent_swarm.sessions.archive import JsonlSessionStore, archive_path
+    from graphtraj.interfaces.agents import configured_archive
+    from graphtraj.workspace.runner_project import discover_project_root
+
+    kind, native_id, child, path = hook_source(event, cwd)
+    archive = configured_archive(discover_project_root(cwd))
+    retained = archive.native_header('claude', native_id, agent_id=child)
+    history_count = None
+    if retained and kind != 'SessionStart':
+        previous = JsonlSessionStore(archive_path(archive.root, retained['id']))
+        boundary = previous.position('claude-hook-boundary')
+        history_count = boundary if boundary >= 0 else None
+    collector = ClaudeJsonlCollector(archive, native_id, 'claude-native:' + (child or native_id),
+                                    cwd, 'native-hook', child_id=child, history_count=history_count,
+                                    resumed=kind != 'SessionStart' or event.get('source') != 'startup')
+    collector.bind(Path(path))
+    store = archive.store(collector.identity) if collector.header is not None else None
+    if store is not None:
+        if kind == 'SessionStart':
+            store.mark_boundary('claude-hook-boundary', collector.history_count)
+        position = store.position('native-hook') + 1
+        collector.accept(event, position)
+        collector.close()
+    return {'session_id': collector.identity, 'source': 'child' if child else 'native-session',
+            'saved': store is not None}
+
+
+def collect_hook(event: dict, cwd: Path) -> dict:
+    """Collect exactly the transcript identified by an official native hook.
+
+    SubagentStop's transcript_path is the parent's file. Only its separate
+    agent_transcript_path may supply the child. agent_type alone is not a child
+    marker because Claude also supplies it for a top-level --agent invocation.
+    This entry never registers Main, a checker, or a plugin as a control owner.
+    """
+    from graphtraj.configuration.project_configuration import load_project_configuration
+
+    kind, native_id, child, path = hook_source(event, cwd)
     from graphtraj.workspace.runner_project import discover_project_root
 
     configuration = load_project_configuration(discover_project_root(cwd))

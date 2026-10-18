@@ -50,8 +50,13 @@ const broken = await handlers.get('tool.check')(host, {input}, async () => ({dec
 assert.equal(broken.decision, 'deny');
 fail = false;
 const event = {tool: 'mcp__agents__agents', ...input};
-const document = {agent: 'agent-child', result: {last_result: {id: 'execution-one', last_message: 'hello parent'}}};
+const document = {agent: 'agent-child', execution: 'execution-one', result: {last_result: {id: 'execution-one', last_message: 'hello parent'}}};
 const native = {result: [{type: 'text', text: JSON.stringify(document)}]};
+// A resumed plugin has no in-memory display receipts. A new execution's
+// status includes the previous last_result, which is not its new reply.
+const stale = {result: [{type: 'text', text: JSON.stringify({...document, execution: 'execution-two'})}]};
+await handlers.get('tool.call')(host, {...event, feature: 'status', arguments: {}}, async () => stale);
+assert.equal(log.filter(line => line.includes('hello parent')).length, 0);
 const returned = await handlers.get('tool.call')(host, event, async received => {
  assert.equal(received, event);
  const concurrent = await handlers.get('tool.call')(host, event, async () => assert.fail('overlap'));

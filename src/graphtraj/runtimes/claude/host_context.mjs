@@ -22,7 +22,8 @@ function exchangeFrames(session, event, result, seen) {
   const last = document.result?.last_result;
   const incoming = last?.last_message || last?.error?.message;
   const key = JSON.stringify([session, document.agent, last?.id]);
-  if (last?.id && typeof incoming === 'string' && incoming && !seen.has(key)) {
+  if (last?.id && document.execution === last.id
+      && typeof incoming === 'string' && incoming && !seen.has(key)) {
     frames.push(frame(document.agent, session, incoming));
     seen.add(key);
   }

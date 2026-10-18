@@ -54,7 +54,7 @@ from typing import Any, Callable, Iterator, Mapping, Protocol
 
 from agent_swarm.config import read_config
 from agent_swarm.locks import exclusive
-from agent_swarm.tool import AgentsError, Binding, Caller, Outcome, SessionArchive
+from agent_swarm.tool import AgentsError, AgentsResult, Binding, Caller, Outcome, SessionArchive, bind
 
 
 ACTIVE  = "active"
@@ -72,6 +72,9 @@ class Run:
     execution. ``settings`` are the driver's own retained continuation
     settings from :meth:`RuntimeDriver.prepare`. ``archive`` is bound only
     when the tool's ``save_normalized_sessions`` setting is on.
+    ``call`` is the owning core's execution-scoped business callback. Drivers
+    expose it only after authenticating their actual native child process;
+    request JSON cannot choose its caller. It expires with this execution.
     """
 
     agent: str
@@ -83,6 +86,7 @@ class Run:
     directory: Path
     archive: SessionArchive | None
     events: "ExecutionEvents"
+    call: Callable[[dict], AgentsResult] | None = None
 
 
 class RuntimeDriver(Protocol):
@@ -175,6 +179,14 @@ class ExecutionEvents:
         """Retain that a native request now waits for a reply."""
         self._apply(lambda record, current: current["requests"].append(dict(details)))
 
+    def receive_children(self, receiver: Callable[[dict], bool]) -> None:
+        """Bind a host reply receiver to this actual active parent execution."""
+        with self._control._locked(self._agent) as record:
+            current = _running(record)
+            if current is None or current['id'] != self._execution:
+                raise AgentsError('stale-execution', 'The reply receiver belongs to an ended execution.')
+            self._control._receivers[self._agent] = (self._execution, receiver)
+
     def finished(
         self,
         outcome: str,
@@ -188,15 +200,38 @@ class ExecutionEvents:
         ``outcome`` is ``completed``, ``interrupted`` or ``failed``; ``error``
         keeps the native ``code`` and ``message`` unchanged.
         """
-        def apply(record: dict, current: dict) -> None:
-            """Close the current execution with its native result."""
+        with self._control._locked(self._agent) as record:
+            current = _running(record)
+            if current is None or current['id'] != self._execution:
+                return
+            receiver = self._control._receivers.get(record['parent'], (None, self._control.event_receiver))[1]
+            notice = {'parent': record['parent'], 'agent': record['agent'],
+                      'session': current['session'], 'execution': current['id'],
+                      'body': last_message, 'outcome': outcome}
             current.update(
                 state="ended", ended_at=_now(), outcome=outcome,
                 last_message=last_message, terminal_confirmed=terminal_confirmed,
                 error=dict(error) if error else None,
             )
+            notify = receiver is not None and bool(last_message) and record['parent'] is not None
+            if notify:
+                current['notification'] = 'pending'
+            self._control._receivers.pop(self._agent, None)
 
-        self._apply(apply)
+        # Durable completion precedes delivery. No Agent lock spans native I/O,
+        # and repeated finished() cannot invoke the receiver a second time.
+        if notify:
+            try:
+                delivery = 'delivered' if receiver(notice) is True else 'unavailable'
+            except Exception:
+                # Delivery may have happened before the transport failed. Do not
+                # re-inject the body through wait/status or retry automatically.
+                delivery = 'unconfirmed'
+            with self._control._locked(self._agent) as record:
+                for ended in record['executions']:
+                    if ended['id'] == self._execution:
+                        ended['notification'] = delivery
+                        break
 
     def _apply(self, change: Callable[[dict, dict], None]) -> None:
         """Apply ``change`` only while this execution is still the running one."""
@@ -240,11 +275,16 @@ class AgentControl:
         driver is rejected at ``create``.
     """
 
-    def __init__(self, root: Path, drivers: Mapping[str, RuntimeDriver]) -> None:
+    def __init__(
+        self, root: Path, drivers: Mapping[str, RuntimeDriver], *,
+        event_receiver: Callable[[dict], bool] | None = None,
+    ) -> None:
         """Bind the data root and the available Runtime drivers."""
         self.root    = Path(root)
         self.drivers = dict(drivers)
         self._held   = threading.local()
+        self.event_receiver = event_receiver
+        self._receivers: dict[str, tuple[str, Callable[[dict], bool]]] = {}
 
     # -- Backend --------------------------------------------------------
 
@@ -623,11 +663,29 @@ class AgentControl:
         """Describe one execution of ``record`` for its driver."""
         directory = self.root / "native" / record["agent"]
         directory.mkdir(parents=True, exist_ok=True)
+        agent, execution = record['agent'], current['id']
+
+        def call(request: dict) -> AgentsResult:
+            """Bind this existing execution after the Runtime verifies transport ownership."""
+            try:
+                with self._locked(agent) as owner:
+                    active = _running(owner)
+                    if active is None or active['id'] != execution:
+                        raise AgentsError('stale-execution', 'This native execution no longer owns its callback.')
+                    self._require_owner(active)
+                    caller = Caller('runtime-mcp', agent, session=owner['session'], runtime=owner['runtime'])
+                # Do not hold the caller's record lock over a finite wait or
+                # child launch; native completion must be able to report.
+                return bind(self, caller, archive=archive)(request)
+            except AgentsError as error:
+                return AgentsResult({'error': {'code': error.code, 'message': error.message}}, failed=True)
+
         return Run(
             agent=record["agent"], execution=current["id"], runtime=record["runtime"],
             settings=record["settings"], message=message, session=current["resumed_session"],
             directory=directory, archive=archive,
             events=ExecutionEvents(self, record["agent"], current["id"]),
+            call=call,
         )
 
     def _begin(self, record: dict, operation: str, message: str, binding: Binding) -> Run:
@@ -710,6 +768,10 @@ class AgentControl:
         if last is not None:
             document["last_result"] = {name: last.get(name) for name in (
                 "id", "outcome", "last_message", "error", "terminal_confirmed", "ended_at")}
+            if last.get('notification'):
+                document['last_result']['notification'] = last['notification']
+                if last['notification'] != 'unavailable':
+                    document['last_result']['last_message'] = None
         if record["retired_at"] is not None:
             document["retired_at"] = record["retired_at"]
         return document

@@ -53,6 +53,9 @@ class DshDriver:
         turn = DshExecution(dict(run.settings), run.message, run.directory,
                             lambda session, pid: ready.set(), created,
                             run.directory / 'trace.jsonl', run.session)
+        from .binding import bind_run
+
+        bind_run(turn, run)
         turn.parent_notice = lambda message, details: (run.events.request(details), {'delivery': 'retained'})[1]
         if self.configure is not None:
             self.configure(turn, run)

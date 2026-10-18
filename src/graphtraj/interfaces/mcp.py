@@ -2,9 +2,9 @@
 
 The installed ``graphtraj-mcp`` entry point answers the MCP methods a host
 needs to discover and run tools: ``initialize``, ``notifications/initialized``,
-``tools/list``, ``tools/call`` and ``ping``. It exposes one ``graphtraj`` tool
-whose fixed outer schema forwards discover/describe/execute requests to the
-shared gateway, so a host reaches the same operations and documents as the CLI.
+``tools/list``, ``tools/call`` and ``ping``. The ``graphtraj`` tool forwards
+discover/describe/execute requests to the shared gateway. Pi exposes only
+``agents`` and ``tasks`` as progressive entries into that same gateway.
 
 The server speaks newline-delimited JSON-RPC 2.0 over stdin/stdout and uses
 only the standard library, so no MCP SDK dependency is required. It reads the
@@ -13,7 +13,6 @@ Harness Project Root from its own working directory, exactly like the CLI.
 
 from __future__ import annotations
 
-import json
 import os
 import sys
 from contextlib import contextmanager
@@ -21,6 +20,8 @@ from pathlib import Path
 from typing import Any, Iterator, Mapping, TextIO
 
 import yaml
+
+from agent_swarm.mcp import error_response as _error_response, result_response as _result_response
 
 from graphtraj.configuration.project_configuration import ProjectConfigurationError
 from graphtraj.execution.execution_budget import budget_notice_output, caller_notice_fd
@@ -30,8 +31,6 @@ from graphtraj.runtimes.codex.app_server import CodexMainRecovery
 from graphtraj.runtimes.codex.codex_adapter import CodexAdapterError
 
 
-JSONRPC_VERSION = "2.0"
-PROTOCOL_VERSION = "2025-06-18"
 SERVER_INFO      = {"name": "graphtraj", "version": "0.1.0"}
 
 MCP_TOOL_NAME        = "graphtraj"
@@ -41,9 +40,6 @@ MCP_TOOL_DESCRIPTION = (
     "guide reference (schema=true requests only its parameters), and action=execute to run it."
 )
 
-PARSE_ERROR      = -32700
-INVALID_REQUEST  = -32600
-METHOD_NOT_FOUND = -32601
 INVALID_PARAMS   = -32602
 
 def _tool_document() -> dict[str, Any]:
@@ -60,27 +56,15 @@ def _tool_document() -> dict[str, Any]:
     }
 
 
-def _result_response(request_id: Any, result: Mapping[str, Any]) -> dict[str, Any]:
-    return {"jsonrpc": JSONRPC_VERSION, "id": request_id, "result": result}
-
-
-def _error_response(request_id: Any, code: int, message: str) -> dict[str, Any]:
-    return {
-        "jsonrpc": JSONRPC_VERSION,
-        "id":      request_id,
-        "error":   {"code": code, "message": message},
-    }
-
-
-def _initialize_result(params: Mapping[str, Any]) -> dict[str, Any]:
-    """Agree on the host's requested protocol version and advertise tools."""
-
-    requested = params.get("protocolVersion")
-    return {
-        "protocolVersion": requested if isinstance(requested, str) else PROTOCOL_VERSION,
-        "capabilities":    {"tools": {}},
-        "serverInfo":      SERVER_INFO,
-    }
+def _tool_documents() -> list[dict[str, Any]]:
+    """Keep Pi's initial list small without duplicating its model entry."""
+    if os.environ.get('GRAPHTRAJ_NATIVE_RUNTIME') in {'pi', 'dsh'}:
+        return [
+            {'name': name, 'description': f'Discover, describe, or execute {name} features.',
+             'inputSchema': gateway.INPUT_SCHEMA}
+            for name in ('agents', 'tasks')
+        ]
+    return [_tool_document()]
 
 
 @contextmanager
@@ -119,7 +103,7 @@ def _caller_notices(
 def _tool_call_response(
     request_id: Any, params: Mapping[str, Any]
 ) -> dict[str, Any]:
-    """Forward one ``graphtraj`` request and return its MCP tool result.
+    """Forward a registered function request and return its MCP tool result.
 
     The request's outer arguments are the gateway's discover/describe/execute
     envelope. The server's own working directory is the trusted project
@@ -128,7 +112,9 @@ def _tool_call_response(
     """
 
     name = params.get("name")
-    if name != MCP_TOOL_NAME:
+    progressive_entry = os.environ.get('GRAPHTRAJ_NATIVE_RUNTIME') in {'pi', 'dsh'}
+    names = ('agents', 'tasks') if progressive_entry else (MCP_TOOL_NAME,)
+    if name not in names:
         return _error_response(
             request_id, INVALID_PARAMS, "Unknown tool: {0}".format(name)
         )
@@ -138,6 +124,11 @@ def _tool_call_response(
             request_id, INVALID_PARAMS, "Tool arguments must be an object."
         )
     try:
+        # Keep the selected entry's scope before forwarding into the already
+        # authenticated host. The host still owns feature authorization.
+        if progressive_entry and name == 'tasks' and arguments.get('action') != 'discover':
+            if arguments.get('feature') == 'agents':
+                raise ValueError('Feature does not belong to this MCP entry.')
         from graphtraj.runtimes.codex.host_events import calling_session
 
         metadata = params.get('_meta', {})
@@ -147,14 +138,29 @@ def _tool_call_response(
         with calling_session(session), _caller_notices(params) as recovery:
             from graphtraj.interfaces.hosted_cli import forward_request
 
-            result = forward_request(arguments, Path.cwd())
-            if result is None:
-                result = gateway.handle_request(arguments, cwd=Path.cwd())
+            def dispatch(request: dict) -> Any:
+                """Keep the existing host binding and shared business gateway."""
+                result = forward_request(request, Path.cwd())
+                return result if result is not None else gateway.handle_request(request, cwd=Path.cwd())
+
+            if progressive_entry and name == 'agents':
+                from agent_swarm.discovery import handle_request
+
+                result = handle_request(arguments, lambda request: dispatch({
+                    'action': 'execute', 'feature': 'agents', 'arguments': request,
+                }))
+            else:
+                result = dispatch(arguments)
             document = (
                 recovery.attach_stop_deliveries(result.document)
                 if recovery is not None
                 else result.document
             )
+            if progressive_entry and name == 'tasks' and arguments.get('action') == 'discover' and 'features' in document:
+                document = {**document, 'features': [
+                    feature for feature in document['features']
+                    if (feature['feature'] == 'agents') == (name == 'agents')
+                ]}
     except (
         OSError,
         UnicodeError,
@@ -187,49 +193,17 @@ def _tool_call_response(
 
 
 def _respond(message: Mapping[str, Any]) -> dict[str, Any] | None:
-    """Answer one JSON-RPC message, or return None for a notification."""
+    """Use the shared MCP dispatcher with this host's existing caller binding."""
+    from agent_swarm.mcp import respond
 
-    method = message.get("method")
-    if not isinstance(method, str) or "id" not in message:
-        # Responses and host notifications (initialized, cancelled) need no reply.
-        return None
-    request_id = message.get("id")
-    params = message.get("params")
-    if not isinstance(params, dict):
-        params = {}
-    if method == "initialize":
-        return _result_response(request_id, _initialize_result(params))
-    if method == "tools/list":
-        return _result_response(request_id, {"tools": [_tool_document()]})
-    if method == "tools/call":
-        return _tool_call_response(request_id, params)
-    if method == "ping":
-        return _result_response(request_id, {})
-    return _error_response(
-        request_id, METHOD_NOT_FOUND, "Unsupported method: {0}".format(method)
-    )
+    return respond(message, _tool_documents, _tool_call_response, SERVER_INFO)
 
 
 def serve(input_stream: TextIO, output_stream: TextIO) -> None:
-    """Answer newline-delimited JSON-RPC requests until the host closes input."""
+    """Use the same framing as independent MCP, preserving the public host seam."""
+    from agent_swarm.mcp import serve as serve_stdio
 
-    for line in input_stream:
-        if not line.strip():
-            continue
-        try:
-            message = json.loads(line)
-        except json.JSONDecodeError:
-            reply = _error_response(None, PARSE_ERROR, "Parse error")
-        else:
-            reply = (
-                _respond(message)
-                if isinstance(message, dict)
-                else _error_response(None, INVALID_REQUEST, "Invalid request")
-            )
-        if reply is None:
-            continue
-        output_stream.write(json.dumps(reply) + "\n")
-        output_stream.flush()
+    serve_stdio(input_stream, output_stream, _respond)
 
 
 def main() -> None:

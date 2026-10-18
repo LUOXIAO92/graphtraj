@@ -36,6 +36,7 @@ class DshExecution(NativeDshExecution):
         from graphtraj.execution.runner_control import notify_direct_parent
         from graphtraj.interfaces.hosted_cli import cli_connection
         from graphtraj.runtimes.codex.managed_session import native_operation_features
+        from agent_swarm.dsh.binding import session_context
 
         def record_session(session: str, pid: int) -> None:
             """Retain GraphTraj's Session receipt before publishing its binding."""
@@ -47,6 +48,7 @@ class DshExecution(NativeDshExecution):
         self.service_type = DshService
         self.host_connection = lambda channel: cli_connection(
             Path(request['harness_root']), directory.name, native_operation_features(), directory=channel,
+            native_context=lambda: session_context(self),
         )
         self.parent_notice = lambda notice, details: notify_direct_parent(directory, notice, details)
         self.confirm_native = self._confirm_collection

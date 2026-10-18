@@ -252,6 +252,7 @@ def test_agents_control_dsh_without_task_or_archive(
             self.process.poll = lambda: None
             rows = [json.loads(line) for line in self.log.read_text().splitlines()]
             self.header, self.records = rows[0], rows[1:]
+            self.header['cwd'] = str(cwd)
 
         def follow(self, session: str, *, assistant_stream: bool = False) -> dict:
             """Return the native cut before any input for this invocation."""
@@ -307,15 +308,16 @@ def test_agents_control_dsh_without_task_or_archive(
     # The actual stdio entry forwards into the registered host's common handler;
     # it receives no Task identity or authority from model arguments.
     result = subprocess.run(
-        [sys.executable, '-c', 'from graphtraj.interfaces.local_tool import main; main()'],
-        input=json.dumps({'action': 'execute', 'feature': 'agents',
-                          'arguments': {'action': 'status'}}) + '\n',
-        env={**first.environment, 'PYTHONPATH': str(Path(__file__).resolve().parents[1] / 'src')},
+        [sys.executable, '-m', 'agent_swarm.mcp'],
+        input=json.dumps({'jsonrpc': '2.0', 'id': 1, 'method': 'tools/call', 'params': {
+            'name': 'agents', 'arguments': {'action': 'execute', 'feature': 'status', 'arguments': {}}}}) + '\n',
+        env={**first.environment, 'DSH_SESSION_ID': first.session, 'DSH_AGENT_SOURCE': 'main',
+             'PYTHONPATH': str(Path(__file__).resolve().parents[1] / 'src')},
         cwd=tmp_path, capture_output=True, text=True, timeout=10,
     )
     try:
         assert result.returncode == 0, result.stderr
-        assert 'error' not in json.loads(result.stdout), result.stdout
+        assert not json.loads(result.stdout)['result']['isError'], result.stdout
         assert not agents({'action': 'send', 'agent': agent, 'message': 'second message'}).failed
     finally:
         first.release_cancel.set()
@@ -828,7 +830,7 @@ def test_public_json_cli_uses_host_identity_and_report_checks(tmp_path: Path) ->
         tmp_path, 'research@x1', native_operation_features(),
     ) as address:
         result = subprocess.run(
-            [sys.executable, '-c', 'from graphtraj.interfaces.local_tool import main; main()'],
+            [sys.executable, '-m', 'agent_swarm.mcp'],
             cwd=tmp_path, env={**os.environ, CONNECTION_ENV: address,
                               'GRAPHTRAJ_CALLER_ALIAS': 'research@x2',
                               'PYTHONPATH': str(Path(__file__).resolve().parents[1] / 'src')},

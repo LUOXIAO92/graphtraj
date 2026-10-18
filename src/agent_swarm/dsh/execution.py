@@ -6,6 +6,7 @@ import json
 import os
 from pathlib import Path
 import threading
+import sys
 import time
 from typing import Any, Callable
 import uuid
@@ -144,6 +145,7 @@ class DshExecution:
         self.created = created
         self.trace_file = trace_file
         self.session = expected_session
+        self.native_header: dict | None = None
         self.execution_id = uuid.uuid4().hex
         self.lock = threading.RLock()
         self.stopping = threading.Event()
@@ -407,7 +409,16 @@ class DshExecution:
     def run(self) -> dict:
         """Bind, subscribe, prompt and wait; retain ownership through stop confirmation."""
         connections = ExitStack()
+        if self.host_connection is not None:
+            # The selected host interpreter and MCP use the same installed
+            # combination. Explicit caller-supplied launch settings still win.
+            self.request.setdefault('mcp', {
+                'command': str(Path(sys.executable).absolute()),
+                'args': ['-I', '-m', 'agent_swarm.mcp'],
+            })
         environment = self._prepare()
+        for inherited in ('AGENTS_CONNECTION', 'AGENT_SWARM_CONNECTION', 'GRAPHTRAJ_CLI_CONNECTION'):
+            environment.pop(inherited, None)
         if self.host_connection is not None:
             channel = Path(self.request['worktree_path']) / '.scratch'
             environment[self.connection_env] = connections.enter_context(self.host_connection(channel))
@@ -428,6 +439,7 @@ class DshExecution:
             self.created(native, self.service.process.pid)
             snapshot = (self.service.follow(native, assistant_stream=True)
                         if self.archive is not None else self.service.follow(native))
+            self.native_header = snapshot.get('header')
             if self.archive is not None:
                 records = (self.service.history(snapshot)
                            if not self.archive.resumed or self.archive.archive.backfill_history else [])

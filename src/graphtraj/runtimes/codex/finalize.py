@@ -213,12 +213,13 @@ async def _owned_request_result(binding: dict) -> dict | None:
     })}
 
 
-def completion_boundary(binding: dict, context: dict) -> str | None:
-    """Fingerprint native history, Task facts and actual execution activity.
+def completion_boundary(binding: dict, context: dict) -> dict[str, str] | None:
+    """Fingerprint exact context and the facts supporting a waiting conclusion.
 
-    Hook/usage telemetry does not change model input. Native response items,
-    compaction and turn settings do. Without a readable native history or Task
-    projection, do a fresh check instead of treating missing evidence as equal.
+    Exact results remain bound to native history. Waiting can survive a later
+    turn containing only assistant explanation or native compaction: neither is
+    new external input. User/developer input and tool work still invalidate it.
+    Unreadable input or execution evidence never establishes a reusable result.
     """
     from graphtraj.configuration.project_configuration import load_project_configuration
     from graphtraj.graph.task_index import read_index
@@ -230,13 +231,25 @@ def completion_boundary(binding: dict, context: dict) -> str | None:
         return None
     try:
         digest = hashlib.sha256()
+        waiting = hashlib.sha256()
         with Path(transcript).open(encoding='utf-8') as stream:
             for line in stream:
                 record = json.loads(line)
-                if (record.get('type') in {'response_item', 'compacted', 'turn_context'}
+                if (record.get('type') in {'response_item', 'compacted', 'turn_context', 'retained_context'}
                         or (record.get('type') == 'event_msg'
                             and record.get('payload', {}).get('type') == 'user_message')):
                     digest.update(line.encode())
+                payload = record.get('payload', {})
+                if record.get('type') == 'response_item':
+                    if (payload.get('type') != 'reasoning'
+                            and not (payload.get('type') == 'message'
+                                     and payload.get('role') == 'assistant')):
+                        waiting.update(line.encode())
+                elif (record.get('type') == 'retained_context'
+                      or (record.get('type') == 'compacted' and payload.get('replacement_history'))):
+                    waiting.update(line.encode())
+                elif record.get('type') == 'event_msg' and payload.get('type') == 'user_message':
+                    waiting.update(line.encode())
         project = load_project_configuration(Path(binding['cwd']))
         index = read_index(project.state)
         with runtime_caller(discover_runner_directory(Path(binding['cwd'])),
@@ -257,13 +270,27 @@ def completion_boundary(binding: dict, context: dict) -> str | None:
             'context': {**{key: value for key, value in context.items() if key != 'continued'},
                         'settings': settings},
             'summary_issue': binding['summary_issue'], 'tasks': index, 'agents': activities,
+            'user_pause': binding.get('user_pause'),
         }, sort_keys=True).encode())
-        return digest.hexdigest()
+        # File stamps are not task facts. Keep the Worldline revision: recovery
+        # and authorization events need not change the light Task node fields.
+        # Pending submissions/requests are checked separately before any reuse.
+        facts = {key: {field: value for field, value in node.items() if field != 'stamp'}
+                 for key, node in index['tasks'].items()}
+        waiting.update(json.dumps({
+            'model': context['model'],
+            'settings': {key: value for key, value in settings.items()
+                         if key not in ('turn_id', 'timestamp')},
+            'summary_issue': binding['summary_issue'], 'tasks': facts,
+            'deliveries': index['deliveries'], 'revision': index['revision'],
+            'agents': activities, 'user_pause': binding.get('user_pause'),
+        }, sort_keys=True).encode())
+        return {'completion_boundary': digest.hexdigest(), 'waiting_boundary': waiting.hexdigest()}
     except (OSError, ValueError, KeyError, TypeError):
         return None
 
 
-def previous_result(directory: Path, boundary: str | None) -> dict | None:
+def previous_result(directory: Path, boundary: dict[str, str] | None) -> dict | None:
     """Reuse only a validated successful result for exactly this boundary."""
     import yaml
     from graphtraj.execution.main_finalize import parse_check_result
@@ -274,13 +301,14 @@ def previous_result(directory: Path, boundary: str | None) -> dict | None:
     # becomes material for a long-lived Main with many retained checks.
     for path in directory.glob('checks/*/execution.yml'):
         native = yaml.safe_load(path.read_text(encoding='utf-8'))
-        if native.get('completion_boundary') != boundary or native.get('outcome') != 'completed':
+        if native.get('outcome') != 'completed':
             continue
         try:
             result = parse_check_result(native['output'])
         except (ValueError, KeyError, TypeError):
             continue
-        if result['status'] != 'error':
+        field = 'waiting_boundary' if result['status'] == 'waiting' else 'completion_boundary'
+        if result['status'] != 'error' and native.get(field) == boundary[field]:
             return result
     return None
 
@@ -367,7 +395,14 @@ def check(
             (pending / 'turn').write_text(context['turn'] + '\n', encoding='utf-8')
 
             def receipt() -> dict | None:
-                """Read a send appended only after native acceptance of this turn."""
+                """Read accepted input or an explicit owning-Main pause transition."""
+                import yaml
+
+                current = yaml.safe_load((directory / 'session.yml').read_text(encoding='utf-8'))
+                default_pause = {'paused': False, 'revision': 0}
+                if current.get('user_pause', default_pause) != binding.get('user_pause', default_pause):
+                    return {'reason': 'The owning Main changed the explicit user pause state.',
+                            'user_pause': current.get('user_pause')}
                 lines = (pending / 'turn').read_text(encoding='utf-8').splitlines()
                 if len(lines) < 2:
                     return None
@@ -378,6 +413,8 @@ def check(
                     # A concurrent write need not delay cancellation for timing data.
                     return {'turn': context['turn'], 'submitted_at': None, 'accepted_at': None}
 
+            if binding.get('user_pause', {}).get('paused') is True:
+                return None  # Explicit user pause outranks notifications and pending results.
             gated = await _owned_request_result(binding)
             if gated:
                 # A verdict for a superseded Main turn is never returned.
@@ -532,7 +569,7 @@ def check(
                 failure = 'Completion checker was interrupted.'
             current_boundary = completion_boundary(binding, context)
             if boundary is not None and current_boundary == boundary:
-                evidence['completion_boundary'] = boundary
+                evidence.update(boundary)
             elif boundary is not None and current_boundary is not None and outcome != 'error':
                 outcome = 'cancelled'
                 evidence.setdefault('cancellation', {

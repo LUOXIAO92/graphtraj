@@ -64,18 +64,29 @@ main.add_command(bind_command)
 @click.option("--snapshot", type=click.Path(path_type=Path), help="Capture associated project sources in a new isolated directory.")
 @click.option("--session", "sessions", multiple=True, help="Limit a sample to an inventoried runtime:native-reference (repeatable).")
 @click.option("--partition", is_flag=True, help="After full import, partition an isolated copy into core/swarm; never activate a live Harness.")
-def migrate_agents_command(preview: bool, snapshot: Path | None, sessions: tuple[str, ...], partition: bool) -> None:
+@click.option("--verify", is_flag=True, help="Compare imported legacy fields, attachment bytes and captured source hashes without writing.")
+@click.option("--main-session", help="Explicit current Main native identity for metadata inventory; never inferred from timestamps.")
+def migrate_agents_command(
+    preview: bool,
+    snapshot: Path | None,
+    sessions: tuple[str, ...],
+    partition: bool,
+    verify: bool,
+    main_session: str | None,
+) -> None:
     """Rehearse native Session migration on a retained, isolated project copy."""
     from graphtraj.workspace.agent_migration import migrate_agents
     from graphtraj.workspace.migration_snapshot import snapshot_project
 
     try:
-        if snapshot is not None and (preview or sessions or partition):
+        if snapshot is not None and (preview or sessions or partition or verify or main_session):
             raise ValueError('Snapshot capture cannot also select a migration sample or preview.')
         if partition and (preview or sessions):
             raise ValueError('Partition requires a full isolated migration, not a preview or sample.')
+        if verify and (preview or partition or sessions):
+            raise ValueError('Verification is a separate read-only full-copy operation.')
         result = (snapshot_project(Path.cwd(), snapshot) if snapshot is not None
-                  else migrate_agents(Path.cwd(), preview=preview, sessions=sessions))
+                  else migrate_agents(Path.cwd(), preview=preview, sessions=sessions, verify=verify, main_session=main_session))
         if partition:
             from graphtraj.workspace.agent_cutover import partition_snapshot
 

@@ -168,7 +168,8 @@ def test_independent_claude_calls_registered_sdk_function_without_runner_alias(
     assert not result['isError'], result
     assert result['structuredContent']['result']['agents'] == []
     assert not (project / '.graphtraj/state/sessions').exists()
-    assert not list((project / '.graphtraj/swarm/native').glob('*/trace.jsonl'))
+    traces = list((project / '.graphtraj/swarm/native').glob('*/trace.jsonl'))
+    assert traces and all(path.is_symlink() and path.resolve().is_file() for path in traces)
 
 
 def test_driver_honors_archive_binding_and_native_transcript_on_resume(

@@ -79,7 +79,14 @@ class NativePeer:
     def follow(self, session: str, *, assistant_stream: bool = False) -> dict:
         """Observe this exact session before input."""
         self.calls.append(('follow', session))
-        return {'type': 'snapshot'}
+        rows = [json.loads(line) for line in self.log.read_text().splitlines()]
+        self.records = rows[1:]
+        return {'type': 'snapshot', 'header': rows[0], 'cursor': len(self.records) - 1,
+                'hasMore': False, 'records': [{'event': row} for row in self.records]}
+
+    def history(self, snapshot: dict) -> list[dict]:
+        """Return this fixture's complete opening page."""
+        return snapshot['records']
 
     def open_events(self) -> str:
         """Bind the forwarded approval channel before any native work starts."""
@@ -138,21 +145,24 @@ class NativePeer:
                 return kind
             if kind == 'turn/end':
                 self.running = False
-            return {'type': 'event', 'event': {'type': kind, 'data': {
+            event = {'type': kind, 'seq': len(self.records), 'time': 1, 'data': {
+                'turn': 0, 'step': 0, 'stream': [],
                 **self.event_data,
-                'reason': {'kind': self.reason},
-                'message': {'content': [{'type': 'text', 'text': 'Native response'}]},
-            }}}
+                'reason': {'kind': self.reason, 'error': {'message': 'Native failure', 'code': 'TEST'}},
+                'message': {'id': 'answer', 'role': 'assistant',
+                            'source': {'kind': 'model', 'provider': 'controlled', 'model': 'fixture'},
+                            'content': [{'type': 'text', 'text': 'Native response'}]},
+            }}
+            if kind == 'assistant/message':
+                event['surfaceOp'] = 'append'
+            self.records.append(event)
+            with self.log.open('a') as stream:
+                stream.write(json.dumps(event) + '\n')
+            return {'type': 'event', 'event': event}
         return {}
 
     def close(self) -> None:
         """Only this native service is closed."""
-        from graphtraj.runtimes.dsh.collection import collect
-
-        collect(self.archive_root / '.graphtraj/state',
-                {'version': 4, 'id': self.session, 'createdAt': 1, 'isSeeded': False}, [],
-                project_id=str(self.archive_root), agent_id='controlled-member',
-                task_ids=[], source='member')
         self.closed = True
 
 
@@ -201,7 +211,7 @@ def run_turn(
     deadline = time.monotonic() + 3
     while len(bindings) < 2 and time.monotonic() < deadline and thread.is_alive():
         time.sleep(0.005)
-    assert bindings == [('created', expected or 'native-dsh'), ('started', expected or 'native-dsh')]
+    assert bindings == [('created', expected or 'native-dsh'), ('started', expected or 'native-dsh')], outcome
     return turn, thread, outcome
 
 
@@ -527,6 +537,7 @@ def test_prepared_profile_restates_the_standard_preset_persona(
 
     peer[0].frames.extend(['assistant/message', 'turn/end'])
     thread.join(3)
+    assert 'result' in outcome, outcome
     assert outcome['result']['outcome'] == 'completed'
 
 

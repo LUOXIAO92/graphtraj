@@ -11,7 +11,7 @@ import pytest
 import yaml
 
 from agent_swarm.sessions.archive import JsonlSessionStore, SessionArchive, archive_path
-from agent_swarm.sessions.migration import import_native, import_sqlite
+from agent_swarm.sessions.migration import import_native, import_sqlite, verify_sqlite
 from agent_swarm.sessions.protocol import retain_native
 from graphtraj.interfaces.cli.graphtraj import main
 from graphtraj.sessions.storage import SessionStore, session_path
@@ -42,6 +42,7 @@ def test_sqlite_evidence_is_lossless_idempotent_and_not_native_order(tmp_path: P
     assert store.legacy()['events'] == [event]
     assert store.legacy()['checkpoints'] == {'notification': 1}
     assert store.attachment(attachment['sha256']) == b'\x00\xfforiginal'
+    assert verify_sqlite(original, root)['mismatches'] == []
     with pytest.raises(ValueError, match='no verified native history'):
         store.messages()
     assert SessionArchive(root).native_id('codex', 'native-research@x1') == 'canonical'
@@ -114,6 +115,36 @@ def test_public_snapshot_and_migration_never_reopen_original_paths(tmp_path: Pat
     assert result['production_cutover'] is False
     assert result['native_results'][0]['id'] == 'codex:owned'
     assert runner.invoke(main, ['migrate-agents']).exit_code == 0
+    verified = runner.invoke(main, ['migrate-agents', '--verify'])
+    assert verified.exit_code == 0, verified.output
+    assert yaml.safe_load(verified.output)['verification']['matches']
+
+
+def test_public_preview_reports_old_declarations_without_private_schema(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A captured declaration signals possible resume overlap, not live duplication."""
+    origin, source = tmp_path / 'origin', tmp_path / 'native.jsonl'
+    _source(origin, source)
+    rows = source.read_text().splitlines()
+    meta = json.loads(rows[0])
+    meta['payload']['dynamic_tools'] = [
+        {'name': 'agents', 'description': 'private-tool-detail'},
+        {'name': 'graphtraj'}, {'name': 'runtime-native-tool'},
+    ]
+    source.write_text(json.dumps(meta) + '\n' + '\n'.join(rows[1:]) + '\n')
+    monkeypatch.chdir(origin)
+    copy = tmp_path / 'copy'
+    runner = CliRunner()
+    assert runner.invoke(main, ['migrate-agents', '--snapshot', str(copy)]).exit_code == 0
+    monkeypatch.chdir(copy)
+    result = runner.invoke(main, ['migrate-agents', '--preview'])
+    assert result.exit_code == 0, result.output
+    inventory = yaml.safe_load(result.output)['legacy_native_registrations']
+    entry, = inventory['sessions']
+    assert entry['group'] == 'current_members'
+    assert entry['tools'] == ['agents', 'graphtraj']
+    assert entry['duplicate_status'] == 'potential_on_mcp_resume'
+    assert inventory['confirmed_live_duplicates'] == 0
+    assert 'private-tool-detail' not in result.output
 
 
 def test_snapshot_captures_swarm_configuration_and_can_clone(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

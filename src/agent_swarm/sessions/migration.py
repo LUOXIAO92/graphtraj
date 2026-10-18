@@ -9,8 +9,43 @@ from __future__ import annotations
 import json
 from pathlib import Path
 import sqlite3
+import hashlib
 
 from .archive import JsonlSessionStore, SessionArchive, archive_path
+
+
+def verify_sqlite(source: Path, root: Path) -> dict:
+    """Compare retained legacy values and attachment bytes without mutating either side.
+
+    Return only identity, counts and mismatched field names. Ciphertext, unknown
+    fields and pending records participate in equality without entering output.
+    Native message order is deliberately outside this storage comparison.
+    """
+    connection = sqlite3.connect(source.resolve().as_uri() + '?mode=ro', uri=True)
+    try:
+        connection.execute('BEGIN')
+        header = json.loads(connection.execute('SELECT value FROM header').fetchone()[0])
+        store = JsonlSessionStore(archive_path(root, header['id']))
+        legacy = store.legacy() or {}
+        expected = {
+            'header': header,
+            'events': [json.loads(row[0]) for row in connection.execute('SELECT value FROM events ORDER BY seq')],
+            'pending': [{'source': row[0], 'event': json.loads(row[1])}
+                        for row in connection.execute('SELECT source, value FROM draft')],
+            'checkpoints': dict(connection.execute('SELECT source, position FROM checkpoints')),
+        }
+        mismatches = [field for field, value in expected.items() if legacy.get(field) != value]
+        attachments = []
+        for digest, content in connection.execute('SELECT digest, content FROM attachments ORDER BY digest'):
+            attachments.append({'storage': 'session', 'sha256': digest, 'size': len(content)})
+            if hashlib.sha256(content).hexdigest() != digest or store.attachment(digest) != content:
+                mismatches.append('attachment:' + digest)
+        if legacy.get('attachments') != attachments:
+            mismatches.append('attachment-references')
+        return {'id': header['id'], 'events': len(expected['events']),
+                'attachments': len(attachments), 'mismatches': mismatches}
+    finally:
+        connection.close()
 
 
 def import_sqlite(source: Path, root: Path) -> dict:

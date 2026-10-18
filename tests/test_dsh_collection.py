@@ -200,15 +200,14 @@ def test_installed_dsh_append_flush_and_resume(project: Path) -> None:
         store = JsonlSessionStore(archive_path(archive.root, saved['session']))
         assert store.messages() == sample['messages']
         assert [native_record(row) for row in store.page()['events']] == sample['events']
-    with SessionStore(session_path(project / '.graphtraj/state', 'dsh:real-main')) as store:
-        store.validate()
-        assert store.next_seq == 6
-        assert store.page()['events'][2]['data']['content'][0]['text'] == 'native append sentinel'
-    with SessionStore(session_path(project / '.graphtraj/state', 'dsh:real-child')) as store:
-        store.validate()
-        assert store.header['graphtraj']['source'] == 'child'
-        assert store.header['parentSession'] == 'dsh:real-main'
-        assert store.next_seq > 5
+    store = JsonlSessionStore(archive_path(project / '.graphtraj/swarm', 'dsh:real-main'))
+    assert len(store.page()['events']) == 6
+    assert store.page()['events'][2]['data']['content'][0]['text'] == 'native append sentinel'
+    child = JsonlSessionStore(archive_path(project / '.graphtraj/swarm', 'dsh:real-child'))
+    assert child.header['origin'] == 'subagent'
+    assert child.header['parentSession'] == 'dsh:real-main'
+    assert len(child.page()['events']) > 5
+    assert not (project / '.graphtraj/state/sessions').exists()
 
 
 def test_optional_jsonl_uses_native_order_and_backfill_policy(tmp_path: Path) -> None:

@@ -150,6 +150,7 @@ export function startAgentHost(ctx, config) {
         cwd: ctx.cwd, stdio: ['pipe', 'pipe', 'pipe'],
         env: {...process.env, ...sessionEnvironment(ctx, process.env),
           AGENT_SWARM_PI_NODE: process.execPath,
+          AGENT_SWARM_PI_ENTRY: process.argv[1],
           AGENT_SWARM_PI_MODEL: ctx.model?.id || '',
           AGENT_SWARM_PI_PROVIDER: ctx.model?.provider || ''},
       });
@@ -164,6 +165,8 @@ export function startAgentHost(ctx, config) {
     }));
     child.on('error', error => { failure = error; reject(error); });
     child.stdin.on('error', error => { failure = error; });
+    child.stdin.write(JSON.stringify({header: ctx.sessionManager.getHeader(),
+      entries: ctx.sessionManager.getEntries().filter(entry => entry.type === 'custom')}) + '\n');
     child.stdout.on('data', value => {
       output += value;
       if (ready || !output.includes('\n')) return;

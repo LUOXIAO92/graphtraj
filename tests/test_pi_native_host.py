@@ -95,7 +95,8 @@ def test_native_host_command_stops_owned_execution_on_pipe_close(
             yield address
 
     monkeypatch.setattr(host, 'agents_connection', connected)
-    monkeypatch.setattr('sys.stdin', io.StringIO(''))
+    event = {'header': json.loads(Path(connection['session_file']).read_text()), 'entries': []}
+    monkeypatch.setattr('sys.stdin', io.StringIO(json.dumps(event) + '\n'))
     output = io.StringIO()
     monkeypatch.setattr('sys.stdout', output)
     host.main()
@@ -109,18 +110,32 @@ def test_native_host_command_stops_owned_execution_on_pipe_close(
     assert driver.max_active == 1
 
 
-@pytest.mark.parametrize('case', ['native', 'copied-env', 'wrong-script'])
+@pytest.mark.parametrize('case', ['native', 'native-title', 'copied-env', 'wrong-script'])
 def test_native_parent_requires_process_evidence(case: str, monkeypatch: pytest.MonkeyPatch) -> None:
     """Native Session environment does not authorize a shell or another Node program."""
     from graphtraj.runtimes.pi.host import verify_native_parent
 
     monkeypatch.setenv('AGENT_SWARM_PI_NODE', '/selected/node')
+    monkeypatch.setenv('AGENT_SWARM_PI_ENTRY', '/selected/pi')
     actual = Path('/bin/sh' if case == 'copied-env' else '/selected/node')
     script = '/unrelated/app.js' if case == 'wrong-script' else '/selected/pi'
     monkeypatch.setattr('graphtraj.execution.runner_process.process_executable', lambda pid: actual)
-    monkeypatch.setattr('graphtraj.execution.runner_process._process_arguments', lambda pid: [str(actual), script])
-    if case == 'native':
+    monkeypatch.setattr('graphtraj.execution.runner_process._process_arguments',
+                        lambda pid: ['pi'] if case == 'native-title' else [str(actual), script])
+    if case in {'native', 'native-title'}:
         verify_native_parent(Path('/selected/pi'))
     else:
         with pytest.raises(ValueError, match='not owned'):
             verify_native_parent(Path('/selected/pi'))
+
+
+def test_new_native_session_uses_trusted_sdk_header_before_persistence(tmp_path: Path) -> None:
+    """The actual lifecycle callback binds a new Session without manufacturing its file."""
+    connection = {'runtime': 'pi', 'session': 'new-native', 'session_file': str(tmp_path / 'not-yet.jsonl')}
+    event = {'header': {'type': 'session', 'version': 3, 'id': 'new-native', 'cwd': str(tmp_path)}, 'entries': []}
+    call = bind_native_main(AgentControl(tmp_path / 'data', {}), connection, tmp_path, event)
+    assert not call({'action': 'status'}).failed
+    assert not Path(connection['session_file']).exists()
+    event['header']['parentSessionId'] = 'real-parent'
+    with pytest.raises(ValueError):
+        bind_native_main(AgentControl(tmp_path / 'data', {}), connection, tmp_path, event)

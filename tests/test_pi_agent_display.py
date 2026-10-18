@@ -118,7 +118,8 @@ const pi = {registerFlag(){},getFlag(name){return name==='agents-config'?'/expli
  on(name,handler){handlers.set(name,handler);},registerMcpServer(name,config){servers.push({name,config});}};
 extension(pi);
 const ctx = {hasUI:false,cwd:process.argv[3],model:{id:'deepseek-flash',provider:'deepseek'},
- sessionManager:{getSessionId:()=> 'native-main',getSessionFile:()=> '/selected/session.jsonl'}};
+ sessionManager:{getSessionId:()=> 'native-main',getSessionFile:()=> '/selected/session.jsonl',
+ getHeader:()=>({id:'native-main'}),getEntries:()=>[]}};
 await handlers.get('session_start')({reason:'startup'},ctx);
 assert.equal(servers.length,1);
 assert.equal(servers[0].name,'agents');

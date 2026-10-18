@@ -35,27 +35,43 @@ def verify_native_parent(executable: Path) -> None:
     arguments = _process_arguments(parent)
     expected = executable.resolve()
     selected_node = os.environ.get('AGENT_SWARM_PI_NODE')
+    native_entry = os.environ.get('AGENT_SWARM_PI_ENTRY')
     direct = actual is not None and actual.resolve() == expected
+    # Official setupCli sets process.title='pi', replacing kernel argv. Its
+    # trusted extension still has process.argv[1]; constrain that observation
+    # with both the actual kernel Node executable and the native title.
+    titled_entry = (arguments and arguments[0] == 'pi' and native_entry
+                    and Path(native_entry).resolve() == expected)
     node_script = (actual is not None and selected_node
                    and actual.resolve() == Path(selected_node).resolve()
-                   and len(arguments) > 1 and Path(arguments[1]).resolve() == expected)
+                   and (titled_entry or len(arguments) > 1 and Path(arguments[1]).resolve() == expected))
     if parent <= 1 or parent != os.getppid() or not (direct or node_script):
         raise ValueError('The MCP pipe is not owned by the selected native Pi process.')
 
 
-def bind_native_main(control: AgentControl, connection: dict, cwd: Path) -> Callable:
+def bind_native_main(
+    control: AgentControl,
+    connection: dict,
+    cwd: Path,
+    native_event: dict | None = None,
+) -> Callable:
     """Bind the extension's existing native root without writing an identity record.
 
     This is a trusted host API, not a model-callable adoption operation. Like
     nativeEntry, the caller obtains the association from Pi session_start.
-    Never pass model arguments as ``connection``. Always read the selected
-    native file rather than accepting a request-supplied header or entries.
+    Never pass model arguments as ``connection`` or ``native_event``. A new
+    Session is not yet on disk: the trusted extension supplies its SDK header
+    on its private lifecycle pipe, as nativeEntry already does. Rebinding
+    without that callback reads only the selected native file.
     """
     if connection.get('runtime') != 'pi':
         raise ValueError('The owning native Runtime must be Pi.')
     selected = {key: connection[key] for key in ('runtime', 'session', 'session_file')}
+    if native_event is not None:
+        selected.update(native_header=native_event['header'], native_entries=native_event['entries'])
     session = verify_main(selected)
-    header, _ = session_record(Path(selected['session_file']), session)
+    header = (native_event['header'] if native_event is not None else
+              session_record(Path(selected['session_file']), session)[0])
     if Path(header['cwd']).resolve() != cwd.resolve():
         raise ValueError('The Pi native Session cwd does not match this host.')
     return bind(control, Caller('pi-native', None, session=session, runtime='pi'))
@@ -85,7 +101,8 @@ def main() -> None:
     if connection is None:
         raise ValueError('Pi native Session association is unavailable.')
     control = AgentControl(root, {'pi': PiDriver(request)})
-    call = bind_native_main(control, connection, Path.cwd())
+    event = json.loads(sys.stdin.readline())
+    call = bind_native_main(control, connection, Path.cwd(), event)
     parent = os.getppid()
 
     def authenticate(caller_pid: int) -> None:

@@ -142,28 +142,99 @@ function quote(value) {
   return "'" + value.replaceAll("'", "'\\''") + "'";
 }
 
+/** Own the independent core until native shutdown; MCP only connects to it. */
+export function startAgentHost(ctx, config) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(process.env.AGENT_SWARM_PYTHON,
+      ['-I', '-m', 'graphtraj.runtimes.pi.host', '--config', config], {
+        cwd: ctx.cwd, stdio: ['pipe', 'pipe', 'pipe'],
+        env: {...process.env, ...sessionEnvironment(ctx, process.env),
+          AGENT_SWARM_PI_NODE: process.execPath,
+          AGENT_SWARM_PI_ENTRY: process.argv[1],
+          AGENT_SWARM_PI_MODEL: ctx.model?.id || '',
+          AGENT_SWARM_PI_PROVIDER: ctx.model?.provider || ''},
+      });
+    let diagnostic = '', output = '', failure, ready = false;
+    child.stdout.setEncoding('utf8');
+    child.stderr.setEncoding('utf8');
+    child.stderr.on('data', value => { diagnostic = (diagnostic + value).slice(-8192); });
+    const ended = new Promise(done => child.on('close', code => {
+      if (code !== 0 || !ready) failure = new Error(diagnostic || 'Independent Pi host failed.');
+      if (failure) reject(failure);
+      done();
+    }));
+    child.on('error', error => { failure = error; reject(error); });
+    child.stdin.on('error', error => { failure = error; });
+    child.stdin.write(JSON.stringify({header: ctx.sessionManager.getHeader(),
+      entries: ctx.sessionManager.getEntries().filter(entry => entry.type === 'custom')}) + '\n');
+    child.stdout.on('data', value => {
+      output += value;
+      if (ready || !output.includes('\n')) return;
+      try {
+        const {connection} = JSON.parse(output.slice(0, output.indexOf('\n')));
+        if (typeof connection !== 'string' || !connection) throw new Error('No independent host connection.');
+        ready = true;
+        resolve({connection, async close() {
+          child.stdin.end();
+          await ended;
+          if (failure) throw failure;
+        }});
+      } catch (error) { child.stdin.end(); reject(error); }
+    });
+  });
+}
+
 export default function graphtraj(pi) {
   const sessions = new WeakMap();
   const collectors = new WeakMap();
+  const independent = new WeakSet();
+  let agentHost;
   let displayRegistered = false;
   pi.registerFlag('graphtraj-finish-check', { type: 'boolean', default: false,
     description: 'Check Main completion using the current native Session context.' });
+  pi.registerFlag('agents-config', { type: 'string',
+    description: 'Explicit independent agents host configuration with preflighted Pi settings.' });
   pi.on('session_start', async (event, ctx) => {
+    await agentHost?.close();
+    agentHost = undefined;
+    independent.delete(ctx.sessionManager);
+    await collectors.get(ctx.sessionManager)?.close();
+    collectors.delete(ctx.sessionManager);
     if (ctx.hasUI && !displayRegistered) {
       registerAgentDisplay(pi, await loadHostSdk());
       displayRegistered = true;
     }
-    if (process.env.AGENT_SWARM_CONNECTION) {
+    const hasIndependent = Object.hasOwn(process.env, 'AGENT_SWARM_CONNECTION');
+    const hasGraphTraj = Object.hasOwn(process.env, 'GRAPHTRAJ_CLI_CONNECTION');
+    if (hasIndependent && hasGraphTraj) throw new Error('Conflicting existing Agent connections; no identity was adopted.');
+    if (hasIndependent) {
+      if (!process.env.AGENT_SWARM_CONNECTION) throw new Error('The existing Agent connection is empty; no identity was adopted.');
+      independent.add(ctx.sessionManager);
       // This is the official MCP client wiring, not a native model tool.
       // Identity is verified by the owning host's kernel-authenticated pipe.
       pi.registerMcpServer('agents', {
-        command: process.env.AGENT_SWARM_PYTHON, args: ['-m', 'agent_swarm.mcp'],
+        command: process.env.AGENT_SWARM_PYTHON, args: ['-I', '-m', 'agent_swarm.mcp'],
         cwd: ctx.cwd, env: {AGENT_SWARM_CONNECTION: process.env.AGENT_SWARM_CONNECTION}, exposure: 'direct',
       });
       return;
     }
-    await collectors.get(ctx.sessionManager)?.close();
-    collectors.delete(ctx.sessionManager);
+    const agentsConfig = pi.getFlag?.('agents-config');
+    if (agentsConfig) {
+      if (hasGraphTraj || Object.hasOwn(process.env, 'DSH_SESSION_ID') || Object.hasOwn(process.env, 'DSH_AGENT_SOURCE')) {
+        throw new Error('Standalone agents config cannot replace an existing managed Agent context; retain its owning connection.');
+      }
+      if (!process.env.AGENT_SWARM_PYTHON) throw new Error('Independent agents requires its selected Python installation.');
+      independent.add(ctx.sessionManager);
+      agentHost = await startAgentHost(ctx, agentsConfig);
+      try {
+        pi.registerMcpServer('agents', {
+          command: process.env.AGENT_SWARM_PYTHON,
+          args: ['-I', '-m', 'agent_swarm.mcp'], cwd: ctx.cwd,
+          env: {AGENT_SWARM_CONNECTION: agentHost.connection}, exposure: 'direct',
+        });
+      } catch (error) { await agentHost.close(); agentHost = undefined; throw error; }
+      return;
+    }
     const environment = sessionEnvironment(ctx, process.env);
     sessions.set(ctx.sessionManager, environment);
     const result = await nativeEntry(ctx, environment, {
@@ -190,6 +261,8 @@ export default function graphtraj(pi) {
     });
   }
   pi.on('session_shutdown', async (_event, ctx) => {
+    await agentHost?.close();
+    agentHost = undefined;
     await collectors.get(ctx.sessionManager)?.write({type: 'session_shutdown', piNative: {
       entries: ctx.sessionManager.getEntries(), leafId: ctx.sessionManager.getLeafId(),
     }});
@@ -199,6 +272,7 @@ export default function graphtraj(pi) {
   pi.on('tool_call', async (event, ctx) => {
     await collectors.get(ctx.sessionManager)?.write(event);
     if (event.toolName !== 'bash') return;
+    if (independent.has(ctx.sessionManager)) return;
     const environment = sessions.get(ctx.sessionManager);
     if (!environment) return { block: true, reason: 'GraphTraj Session entry is unavailable.' };
     // Preserve the selected bash backend and all native tool/approval handlers.

@@ -212,12 +212,12 @@ def test_actual_pi_reply_resumes_standby_dsh() -> None:
     import time
     from agent_swarm import AgentControl, Caller, bind
     from agent_swarm.dsh import DshDriver
-    from graphtraj.execution.agent_driver import AdapterDriver
+    from graphtraj.runtimes.pi.driver import PiDriver
 
     root = Path(os.environ['TASK334_CROSS_ROOT'])
     record = json.loads(next((root / 'control/agents').glob('*.json')).read_text())
     phases = []
-    handoff = Path('/private/tmp/task334-ui')
+    handoff = Path('/private/tmp/task334-ui-final')
     handoff.mkdir(exist_ok=True)
 
     def configure(turn, run) -> None:
@@ -235,10 +235,11 @@ def test_actual_pi_reply_resumes_standby_dsh() -> None:
                 with os.fdopen(descriptor, 'w') as stream:
                     json.dump({'origin': turn.service.origin, 'cookie': turn.service.cookie,
                                'session': session}, stream)
-                deadline = min(time.time() + 45, 1792292430)
+                (handoff / f'phase-{phase}.origin').write_text(turn.service.origin)
+                print(f'UI phase {phase}: {turn.service.origin}', flush=True)
+                deadline = float(os.environ['TASK334_UI_DEADLINE'])
                 while not (handoff / f'phase-{phase}.done').exists() and time.time() < deadline:
                     time.sleep(.1)
-                path.unlink(missing_ok=True)
                 close()
             turn.service.close = capture_then_close
             started(session, pid)
@@ -247,17 +248,19 @@ def test_actual_pi_reply_resumes_standby_dsh() -> None:
     driver = DshDriver(root.parent, {}, configure=configure)
     # The common controller passes its verified Runtime caller to prepare;
     # no model field or manually constructed Pi caller chooses the parent.
-    pi = AdapterDriver(Path('/Users/luoxiao/workspace/you-are-a-product-architect-delivery'), root.parent)
+    prepared = json.loads(Path('/private/tmp/graphtraj-333-preflight/host-config.json').read_text())['adapter_request']
+    prepared['worktree_path'] = str(root.parent)
+    pi = PiDriver(prepared)
     control = AgentControl(root, {'dsh': driver, 'pi': pi})
     call = bind(control, Caller('official-final-validation', None))
     resumed = call({'action': 'resume', 'agent': record['agent'], 'message':
         'Use agents MCP describe create schema=true then execute create exactly once with runtime pi. '
-        'Child instruction: "Use bash to run sleep 30, then reply exactly PI334-REPLY. Do not spawn agents or edit files." '
+        'Child instruction: "Use bash to run sleep 75, then reply exactly PI334-REPLY. Do not spawn agents or edit files." '
         'After create returns, reply exactly WAITING and end your turn immediately. Do not call wait/status. '
         'When the child reply later arrives, reply ACK PI334-REPLY and the marker I asked you to remember.'})
     assert not resumed.failed, resumed.document
     try:
-        deadline = min(time.time() + 180, 1792292430)
+        deadline = float(os.environ['TASK334_UI_DEADLINE'])
         while time.time() < deadline:
             state = call({'action': 'status', 'agent': record['agent']}).document['result']
             if len(phases) >= 2 and state['state'] == 'standby':

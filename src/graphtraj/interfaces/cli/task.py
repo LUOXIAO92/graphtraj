@@ -91,6 +91,20 @@ def graph_command(schema: bool, view: str, task_id: str | None, details: tuple[s
     click.echo(yaml.safe_dump(view, sort_keys=False), nl=False)
 
 
+@task.command("members", cls=OperationCommand, feature="task_members")
+@click.option("--summary-task-id", default=None)
+def members_command(summary_task_id: str | None) -> None:
+    """List member Agents of current summary Tasks or of one chosen summary."""
+
+    arguments = {} if summary_task_id is None else {"summary_task_id": summary_task_id}
+    try:
+        members = invoke_tool("task_members", arguments).document
+    except (OSError, UnicodeError, ValueError, yaml.YAMLError,
+            ProjectConfigurationError, RunnerError) as error:
+        raise click.ClickException(str(error)) from error
+    click.echo(yaml.safe_dump(members, sort_keys=False), nl=False)
+
+
 @task.command("complete", cls=OperationCommand, feature="task_complete")
 @click.option("--completion-file", required=True,
               type=click.Path(path_type=Path, exists=True, dir_okay=False))

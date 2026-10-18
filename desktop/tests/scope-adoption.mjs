@@ -72,46 +72,68 @@ const shot = async name => { const file = path.join(evidence, name); await page.
  * Visible in the DOM is not inside the window, so the box is checked against the window. */
 const click = async locator => {
   await locator.waitFor({ state: 'visible' });
-  const window = page.viewportSize() ?? await page.evaluate(() => ({ width: innerWidth, height: innerHeight }));
-  let box;
   for (let attempt = 0; ; attempt += 1) {
-    box = await locator.boundingBox();
-    if (box && box.y >= 0 && box.x >= 0 && box.y + box.height <= window.height && box.x + box.width <= window.width) break;
-    if (attempt >= 40) throw new Error(`Control never came fully into the ${window.width}x${window.height} window; last box ${JSON.stringify(box)}`);
-    // Wheel over the visible part of the nearest scrolling container.
-    const area = await locator.evaluate(element => {
-      let node = element.parentElement;
-      while (node && !(node.scrollHeight > node.clientHeight && /auto|scroll/.test(getComputedStyle(node).overflowY))) node = node.parentElement;
-      const rect = (node ?? document.scrollingElement).getBoundingClientRect();
-      const top = Math.max(rect.top, 0), bottom = Math.min(rect.bottom, innerHeight);
-      return { x: Math.max(rect.left, 0) + Math.min(rect.width, innerWidth) / 2, y: (top + bottom) / 2 };
+    // The window intersected with every clipping ancestor (for member rows: .member-tree,
+    // overflow auto), and the nearest scrolling ancestor to turn the wheel over.
+    const place = await locator.evaluate(element => {
+      const box = element.getBoundingClientRect();
+      let clip = { left: 0, top: 0, right: innerWidth, bottom: innerHeight };
+      let scroller = null;
+      for (let node = element.parentElement; node; node = node.parentElement) {
+        const style = getComputedStyle(node);
+        if (style.overflowY !== 'visible' || style.overflowX !== 'visible') {
+          const rect = node.getBoundingClientRect();
+          clip = { left: Math.max(clip.left, rect.left), top: Math.max(clip.top, rect.top),
+            right: Math.min(clip.right, rect.right), bottom: Math.min(clip.bottom, rect.bottom) };
+        }
+        if (!scroller && /auto|scroll/.test(style.overflowY) && node.scrollHeight > node.clientHeight) scroller = node.className;
+      }
+      return { box: { x: box.left, y: box.top, width: box.width, height: box.height }, clip, scroller,
+        inside: box.left >= clip.left && box.top >= clip.top && box.right <= clip.right && box.bottom <= clip.bottom };
     });
-    await page.mouse.move(area.x, area.y);
-    const offset = box.y + box.height / 2 - window.height / 2;
-    await page.mouse.wheel(0, Math.sign(offset) * Math.min(Math.abs(offset), window.height * 0.8));
+    const { box, clip } = place;
+    if (place.inside) {
+      await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+      return;
+    }
+    if (attempt >= 40 || !place.scroller || clip.bottom <= clip.top) {
+      throw new Error(`Control never came fully into view; box ${JSON.stringify(box)}, visible area ${JSON.stringify(clip)}, scroller ${place.scroller}`);
+    }
+    // Real wheel over the centre of the visible area, toward the control.
+    const middle = (clip.top + clip.bottom) / 2;
+    const offset = box.y + box.height / 2 - middle;
+    await page.mouse.move((clip.left + clip.right) / 2, middle);
+    await page.mouse.wheel(0, Math.sign(offset) * Math.max(40, Math.min(Math.abs(offset), (clip.bottom - clip.top) * 0.8)));
     await page.waitForTimeout(150);
   }
-  await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
 };
-/** Focus a select with the mouse and step to the option value with arrow keys only. */
+/** Focus a select with the mouse, then reach the option value with the keyboard.
+ * Options (Activity.tsx:128) are '' -> 'Current summaries' and <id> -> 'History · #<id> <title>'.
+ * On a closed select, repeating an option's first letter cycles through the options starting
+ * with it (host run on 7d45c57 showed type-ahead changes the value). The previous whole-label
+ * type-ahead failed at the space and '·'. Arrow keys remain a fallback if a letter does nothing. */
 const choose = async (locator, value, prefix) => {
   await click(locator);
   await page.keyboard.press('Escape');
-  const values = await locator.evaluate(select => [...select.options].map(option => option.value));
-  const target = values.indexOf(value);
-  assert.ok(target >= 0, `Option ${JSON.stringify(value)} is not offered`);
+  const options = await locator.evaluate(select => [...select.options].map(option => [option.value, option.textContent]));
+  const target = options.findIndex(([option]) => option === value);
+  assert.ok(target >= 0, `Option ${JSON.stringify(value)} is not offered: ${JSON.stringify(options)}`);
+  const letter = options[target][1][0].toLowerCase();
   const current = () => locator.evaluate(select => select.value);
   for (let presses = 0; await current() !== value; presses += 1) {
-    assert.ok(presses < 2 * values.length + 4, `Arrow keys did not reach option ${JSON.stringify(value)}`);
-    const key = values.indexOf(await current()) < target ? 'ArrowDown' : 'ArrowUp';
+    assert.ok(presses < 2 * options.length + 4, `Keyboard did not reach option ${JSON.stringify(value)}; at ${JSON.stringify(await current())}`);
     const before = await current();
+    await page.keyboard.press(letter);
+    await page.waitForTimeout(150);
+    if (await current() !== before) continue;
+    const key = options.findIndex(([option]) => option === before) < target ? 'ArrowDown' : 'ArrowUp';
     await page.keyboard.press(key);
-    await page.waitForTimeout(100);
+    await page.waitForTimeout(150);
     // Where an arrow key opens the popup instead, move inside it and commit with Enter.
     if (await current() === before) {
       await page.keyboard.press(key);
       await page.keyboard.press('Enter');
-      await page.waitForTimeout(100);
+      await page.waitForTimeout(150);
     }
   }
   const text = await locator.evaluate(select => select.selectedOptions[0]?.textContent ?? '');
@@ -119,36 +141,57 @@ const choose = async (locator, value, prefix) => {
   assert.ok(text.startsWith(prefix), `Selected ${JSON.stringify(text)}, expected ${JSON.stringify(prefix)}`);
   return text;
 };
-const rows = () => page.locator('.member-tree-rows > button').allInnerTexts();
-const notice = () => page.locator('.member-tree .native-notice').first().innerText();
-// A scope without members shows the empty state; rows are listed otherwise.
-const listed = () => page.locator('.member-tree-rows > button, .member-tree p[role="status"]:has-text("No members in this scope.")').first().waitFor();
+// Visible member view only (Activity.tsx:126); concealed views of other projects are hidden.
+const tree = () => page.locator('section.member-tree:visible');
+// Each row button (Activity.tsx:132) has title = alias, an indentation of depth * 24px and
+// the text '<avatar letter> <alias> Active|Standby|Retired · history · #<task> · <role> · <runtime>'.
+const rows = () => tree().locator('.member-tree-rows > button').evaluateAll(buttons => buttons.map(button => ({
+  alias: button.title, indent: button.style.marginLeft, text: button.innerText })));
+const row = name => tree().locator(`.member-tree-rows > button[title="${name}"]`);
+// The scope notice is the section's direct <p class="native-notice"> (Activity.tsx:129).
+const notice = () => tree().locator(':scope > p.native-notice');
+const waitNotice = text => notice().filter({ hasText: text }).waitFor();
+// Loaded: a row, or the 'No members in this scope.' status (Activity.tsx:131), never 'Loading members…'.
+const listed = () => tree().locator('.member-tree-rows > button, :scope > p[role="status"]:text-is("No members in this scope.")').first().waitFor();
+const select = () => tree().getByLabel('Member scope', { exact: true });
+// The scope change re-queries on its next render; wait past that render so old rows are not read.
+const settle = () => page.waitForTimeout(3500);
 
 /** Default scope, one historical summary and back; reading must change no member. */
 async function scope() {
-  await page.getByText('Members of current summaries', { exact: false }).waitFor();
+  await waitNotice('Members of current summaries');
+  await settle();
   await listed();
-  facts.currentNotice = await notice();
+  facts.currentNotice = await notice().innerText();
   const current = await rows();
   facts.current = current;
-  assert.ok(current.every(text => !text.includes('Retired')), 'Retired members never appear in the current list');
+  assert.ok(current.every(item => !item.text.includes('Retired')), 'Retired members never appear in the current list');
   step(`current scope: ${facts.currentNotice} · ${current.length} members`);
   await shot('01-members-current.png');
 
-  facts.historySelected = await choose(page.getByLabel('Member scope'), options.summary, `History · #${options.summary} `);
-  await page.getByText('History of one summary', { exact: false }).waitFor();
+  facts.historySelected = await choose(select(), options.summary, `History · #${options.summary} `);
+  await waitNotice('History of one summary');
+  await settle();
   await listed();
-  facts.historyNotice = await notice();
+  facts.historyNotice = await notice().innerText();
   facts.history = await rows();
   step(`history of #${options.summary}: ${facts.history.length} members`);
   await shot('02-members-history.png');
 
-  facts.currentSelected = await choose(page.getByLabel('Member scope'), '', 'Current summaries');
-  await page.getByText('Members of current summaries', { exact: false }).waitFor();
-  await page.waitForTimeout(3500);
+  facts.currentSelected = await choose(select(), '', 'Current summaries');
+  await waitNotice('Members of current summaries');
+  await settle();
   await listed();
-  assert.deepEqual(await rows(), current, 'Switching scope left members, parents and states unchanged');
-  step('returned to current scope; members, parents and states unchanged');
+  const again = await rows();
+  facts.currentAgain = again;
+  // Members, tree position and parents must be identical. A state word may change only through
+  // a live execution of that Agent, which the window cannot tell apart, so it is recorded.
+  const state = text => text.match(/\b(Active|Standby)\b/)?.[1] ?? null;
+  const strip = list => list.map(item => ({ ...item, text: item.text.replace(/\b(Active|Standby)\b/, '<state>') }));
+  assert.deepEqual(strip(again), strip(current), 'Switching scope left members, tree positions and parents unchanged');
+  facts.stateChanges = current.filter((item, index) => state(item.text) !== state(again[index].text))
+    .map((item, index) => ({ alias: item.alias, before: state(item.text), after: state(again[index].text) }));
+  step(`returned to current scope; members, tree and parents unchanged; state changes ${JSON.stringify(facts.stateChanges)}`);
   await shot('03-members-current-again.png');
 }
 
@@ -158,25 +201,35 @@ async function archive() {
   await click(page.getByRole('button', { name: 'Teams & roles', exact: true }));
   const switches = { save_normalized_sessions: 'Save normalized Sessions',
     backfill_history: 'Backfill history of associated Sessions' };
+  const fieldset = page.locator('fieldset.d-archive-settings:visible');
+  await fieldset.waitFor();
+  const checkbox = label => fieldset.getByLabel(label, { exact: true });
+  // The fieldset is disabled while settings load or save (Settings.tsx:237).
+  const enabled = async () => { for (let i = 0; await fieldset.evaluate(node => node.disabled); i += 1) { assert.ok(i < 100, 'Archive settings stayed disabled'); await page.waitForTimeout(100); } };
+  // Settings toast: <div class=toast role=status><Icon svg/>{message}</div> (Settings.tsx:236).
+  const toast = text => page.locator('div.toast[role="status"]:visible', { hasText: text });
   const original = {};
   for (const [name, label] of Object.entries(switches)) {
-    const box = page.getByLabel(label);
+    await enabled();
+    const box = checkbox(label);
     original[name] = await box.isChecked();
     await click(box);
-    await page.getByText('Saved Session archive settings.').waitFor();
-    await page.getByText('Saved Session archive settings.').waitFor({ state: 'hidden', timeout: 8000 });
+    await toast('Saved Session archive settings.').waitFor();
+    await toast('Saved Session archive settings.').waitFor({ state: 'hidden', timeout: 8000 });
   }
   facts.configEdited = await fs.readFile(config, 'utf8');
   for (const name of Object.keys(switches)) assert.ok(facts.configEdited.includes(`${name}: ${!original[name]}`), facts.configEdited);
   await click(page.getByRole('button', { name: 'Reload', exact: true }));
-  await page.getByText('Loaded current configuration.').waitFor();
-  for (const [name, label] of Object.entries(switches)) assert.equal(await page.getByLabel(label).isChecked(), !original[name]);
+  await toast('Loaded current configuration.').waitFor();
+  await enabled();
+  for (const [name, label] of Object.entries(switches)) assert.equal(await checkbox(label).isChecked(), !original[name]);
   step(`saved ${JSON.stringify(facts.configEdited)} in swarm/config.yml and reloaded`);
   await shot('04-settings-archive-edited.png');
-  for (const [name, label] of Object.entries(switches)) {
-    await click(page.getByLabel(label));
-    await page.getByText('Saved Session archive settings.').waitFor();
-    await page.getByText('Saved Session archive settings.').waitFor({ state: 'hidden', timeout: 8000 });
+  for (const [, label] of Object.entries(switches)) {
+    await enabled();
+    await click(checkbox(label));
+    await toast('Saved Session archive settings.').waitFor();
+    await toast('Saved Session archive settings.').waitFor({ state: 'hidden', timeout: 8000 });
   }
   facts.configAfter = await fs.readFile(config, 'utf8');
   for (const name of Object.keys(switches)) assert.ok(facts.configAfter.includes(`${name}: ${original[name]}`), facts.configAfter);
@@ -186,14 +239,27 @@ async function archive() {
 
 /** Only watch the selected member's displayed state; the operator drives the Agent. */
 async function lifecycle() {
-  await page.getByText('Members of current summaries', { exact: false }).waitFor();
-  const member = page.locator('.member-tree-rows > button', { hasText: alias }).first();
-  await click(member);
-  const column = page.locator(`[data-agent-id="${alias}"]`).first();
-  const heading = column.locator('.agent-column-heading');
+  await waitNotice('Members of current summaries');
+  await listed();
+  await click(row(alias));
+  // AgentColumn (Activity.tsx:283-285): <article data-agent-id=alias><header class=agent-column-heading>
+  // <Avatar span/><div><h2 title=alias/><span>Current|Historical · <state></span></div><Status span/></header>
+  // <div class=agent-column-parent><Icon svg/><span>Parent: <alias></span></div>.
+  const column = page.locator(`article[data-agent-id="${alias}"]:visible`);
+  const heading = column.locator(':scope > header.agent-column-heading');
   await heading.waitFor();
-  const ready = { at: new Date().toISOString(), alias: await heading.locator('h2').getAttribute('title'),
-    state: (await heading.locator('span').first().innerText()).split('·').at(-1).trim() };
+  const read = async () => {
+    const shown = await heading.locator('h2').getAttribute('title');
+    const label = (await heading.locator('h2 + span').innerText()).trim();
+    const parentText = (await column.locator(':scope > .agent-column-parent > span').innerText()).trim();
+    const match = label.match(/^(Current|Historical) · (.+)$/);
+    assert.equal(shown, alias, `Column shows ${JSON.stringify(shown)}, not the selected member`);
+    assert.ok(match && ['active', 'standby'].includes(match[2]), `Displayed state must be active or standby, got ${JSON.stringify(label)}`);
+    assert.ok(parentText.startsWith('Parent: '), `Unexpected parent text ${JSON.stringify(parentText)}`);
+    return { alias: shown, state: match[2], label, parent: parentText.slice('Parent: '.length) };
+  };
+  const first = await read();
+  const ready = { at: new Date().toISOString(), alias: first.alias, state: first.state, label: first.label, parent: first.parent };
   facts.ready = ready;
   await fs.writeFile(path.join(evidence, 'ready.json'), JSON.stringify(ready, null, 2));
   console.log(`WATCHER READY ${ready.state}`);
@@ -204,14 +270,12 @@ async function lifecycle() {
   let matched = 0;
   while (matched < wanted.length) {
     if (Date.now() > deadline) throw new Timeout(`Timed out; displayed states ${JSON.stringify(seen.map(item => item.state))}`);
-    const shown = await heading.locator('h2').getAttribute('title');
-    const state = (await heading.locator('span').first().innerText()).split('·').at(-1).trim();
-    const parent = (await column.locator('.agent-column-parent span').innerText()).replace(/^Parent: /, '');
+    const { alias: shown, state, label, parent } = await read();
     if (state !== seen.at(-1)?.state) {
       const at = new Date().toISOString();
       const screenshot = `lifecycle-${at.replace(/[:.]/g, '-')}-${state}.png`;
       await shot(screenshot);
-      seen.push({ at, alias: shown, state, parent, screenshot });
+      seen.push({ at, alias: shown, state, label, parent, screenshot });
       await fs.appendFile(path.join(evidence, 'states.jsonl'), JSON.stringify(seen.at(-1)) + '\n');
       step(`${shown} displayed ${state} · parent ${parent}`);
       if (state === wanted[matched]) matched += 1;
@@ -244,7 +308,8 @@ try {
   facts.launches += 1;
   page = await app.firstWindow();
   page.setDefaultTimeout(20000);
-  const members = page.getByRole('button', { name: 'Members', exact: true });
+  // Header toggle in the visible project caption (main.tsx:87); present in every monitor view.
+  const members = page.locator('header.d-monitor-caption:visible').getByRole('button', { name: 'Members', exact: true });
   if (alias || runScope) await click(members);
   if (alias) {
     // Lifecycle first: the scope part's untried select path must not cost this evidence.
@@ -252,7 +317,7 @@ try {
     if (runScope) {
       try {
         await click(members);
-        await page.getByText('Members of current summaries', { exact: false }).waitFor();
+        await waitNotice('Members of current summaries');
         await scope();
       } catch (error) {
         facts.scopeFailure = String(error);

@@ -324,21 +324,12 @@ def run(job_file: Path) -> int:
             if not terminal_published:
                 write_yaml_durably(session_directory / "execution.yml", terminal)
             if execution_mapping is not None:
-                from graphtraj.execution.runner_control import deliver_parent_event
+                from graphtraj.execution.runner_control import deliver_execution_end
 
                 # A successor may already own mapping.yml. This notice belongs
                 # to the native execution that produced this terminal result.
-                deliver_parent_event(
-                    session_directory,
-                    'Session execution ended:\n' + json.dumps({
-                        'session': execution_mapping['session'],
-                        'execution_id': execution_mapping.get('execution_id'),
-                        **terminal,
-                    }, ensure_ascii=False),
-                    {'type': terminal['outcome'],
-                     'session': execution_mapping['session'],
-                     'execution_id': execution_mapping.get('execution_id')},
-                )
+                deliver_execution_end(session_directory, execution_mapping, terminal,
+                                      parent_input=job.get('parent_input') is not False)
             return 0
     finally:
         if startup_lock is not None:

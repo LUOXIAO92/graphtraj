@@ -173,6 +173,67 @@ def notify_direct_parent(
     return record
 
 
+def deliver_execution_end(
+    session_directory: Path,
+    mapping: Mapping[str, Any],
+    terminal: Mapping[str, Any],
+    *,
+    parent_input: bool,
+) -> Dict[str, Any]:
+    """Tell the direct parent that one execution ended.
+
+    An ordinary receipt, a ``completed`` end of an execution the parent did
+    not start (``parent_input`` false), is kept for display without a parent
+    turn where the parent can see it that way (:func:`receipt_is_display_only`).
+    Every other end is delivered as before.
+    """
+    notice = 'Session execution ended:\n' + json.dumps({
+        'session': mapping['session'], 'execution_id': mapping.get('execution_id'), **terminal,
+    }, ensure_ascii=False)
+    identity = {'type': terminal['outcome'], 'session': mapping['session'],
+                'execution_id': mapping.get('execution_id')}
+    if terminal['outcome'] == 'completed' and not parent_input and receipt_is_display_only(mapping):
+        return retain_parent_receipt(session_directory, notice, identity)
+    return deliver_parent_event(session_directory, notice, identity)
+
+
+def retain_parent_receipt(
+    session_directory: Path, notice: str, identity: Mapping[str, Any],
+) -> Dict[str, Any]:
+    """Keep an ordinary end notice in the existing record without resuming the parent.
+
+    The record has the same message and parent fields as a delivered notice,
+    with ``delivery: retained``. People see it in the Session's records, and a
+    Codex Main host shows it once at its next native hook.
+    """
+    mapping, _ = read_alias_mapping(session_directory.parent.parent, session_directory.name)
+    record: Dict[str, Any] = {
+        "at": time.time(), "identity": dict(identity), "delivery": "retained",
+        "parent": mapping.get("parent") if isinstance(mapping.get("parent"), str) else None,
+        "notice": json.dumps({"source": "graphtraj", "alias": mapping["alias"],
+                              "event": identity["type"], "message": notice}, ensure_ascii=False),
+    }
+    if record["parent"] is None and mapping.get("parent_connection") is not None:
+        record["parent_connection"] = mapping["parent_connection"]
+    try:
+        _append_notice_record(session_directory, record)
+    except OSError:
+        pass
+    return record
+
+
+def receipt_is_display_only(mapping: Mapping[str, Any]) -> bool:
+    """Whether an ordinary receipt to this Session's parent can be kept unsent.
+
+    A Runner member parent sees it in the records and a Codex Main host shows
+    it at its next hook. Other hosts keep their current delivery.
+    """
+    if isinstance(mapping.get("parent"), str):
+        return True
+    connection = mapping.get("parent_connection")
+    return isinstance(connection, Mapping) and connection.get("runtime") == "codex"
+
+
 def _append_notice_record(
     session_directory: Path, record: Mapping[str, Any]
 ) -> None:
@@ -583,8 +644,13 @@ def _send_session(
     reports_only: bool = False,
     system_notice: bool = False,
     retain_notice_channel: bool = False,
+    parent_input: bool = True,
 ) -> Dict[str, str]:
-    """Serialize alias changes so two idle sends cannot create competing owners."""
+    """Serialize alias changes so two idle sends cannot create competing owners.
+
+    ``parent_input`` is false when the input is not the direct parent's own,
+    such as delivered child results; a system notice is never parent input.
+    """
     launch_file = session_directory / "launch.yml"
     if launch_file.is_symlink() or not launch_file.is_file():
         raise _not_resumable()
@@ -620,6 +686,7 @@ def _send_session(
                 system_notice=system_notice,
                 retain_notice_channel=retain_notice_channel,
                 restored_cwd=restored,
+                parent_input=parent_input and not system_notice,
             )
         except BaseException:
             if restored:
@@ -674,6 +741,7 @@ def _send_session_locked(
     retain_notice_channel: bool = False,
     require_budget_permission: bool = False,
     restored_cwd: bool = False,
+    parent_input: bool = True,
 ) -> Dict[str, str]:
     """Deliver input or restore the retained Context under the alias lock.
 
@@ -774,6 +842,8 @@ def _send_session_locked(
             resume["monitor_execution_budget"] = True
         if restored_cwd:
             resume["restored_cwd"] = True
+        # The execution's end is an ordinary receipt unless the parent started it.
+        resume["parent_input"] = parent_input and not system_notice
         write_yaml_durably(
             resume_file,
             resume,

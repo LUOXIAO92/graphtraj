@@ -1,8 +1,10 @@
 """Versioned task results through the public Runner tool operations."""
 
+import json
 import subprocess
 from pathlib import Path
 
+import pytest
 import yaml
 
 from graphtraj.configuration.project_configuration import default_configuration_content
@@ -151,6 +153,43 @@ def test_report_can_notify_the_direct_parent(tmp_path: Path, monkeypatch) -> Non
                         'Submitted report researcher-x1.md for its direct parent to handle; '
                         'read it through session_reports: ' + sent['report'],
                         {'type': 'report-submitted', 'report': sent['report']}, 'Needs a decision')]
+
+
+@pytest.mark.parametrize(('parent', 'runtime', 'outcome', 'parent_input', 'delivered'), [
+    ('research@x2', None, 'completed', False, False),
+    (None, 'codex', 'completed', False, False),
+    ('research@x2', None, 'completed', True, True),
+    (None, 'codex', 'completed', True, True),
+    ('research@x2', None, 'runtime-error', False, True),
+    ('research@x2', None, 'interrupted', False, True),
+    (None, 'pi', 'completed', False, True),
+    (None, 'claude', 'completed', False, True),
+])
+def test_only_ordinary_receipts_are_kept_without_a_parent_turn(
+    tmp_path: Path, monkeypatch, parent, runtime, outcome, parent_input, delivered,
+) -> None:
+    """A completed end the parent did not start is retained; every other end is delivered."""
+    from graphtraj.execution import runner_control
+
+    runner, _, _ = result_project(tmp_path)
+    child = runner / 'sessions/research@x1'
+    mapping = yaml.safe_load((child / 'mapping.yml').read_text())
+    mapping.update(parent=parent, execution_id='e1')
+    if runtime is not None:
+        mapping['parent_connection'] = {'runtime': runtime, 'session': 'main-session'}
+    (child / 'mapping.yml').write_text(yaml.safe_dump(mapping))
+    sent = []
+    monkeypatch.setattr(runner_control, 'notify_direct_parent',
+                        lambda directory, message, identity: sent.append(identity) or {'delivery': 'received'})
+
+    receipt = runner_control.deliver_execution_end(
+        child, mapping, {'outcome': outcome, 'last_agent_message': 'Forwarded.'}, parent_input=parent_input)
+
+    assert bool(sent) is delivered
+    assert receipt['delivery'] == ('received' if delivered else 'retained')
+    if not delivered:
+        record = json.loads((child / 'parent-notices.jsonl').read_text().splitlines()[-1])
+        assert record['delivery'] == 'retained' and 'Forwarded.' in json.loads(record['notice'])['message']
 
 
 def test_submission_rejects_unowned_or_invalid_inputs(tmp_path: Path) -> None:

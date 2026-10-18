@@ -390,7 +390,25 @@ def test_cleaned_task_member_answers_a_follow_up_in_its_native_session(
     )
     assert status.session == session and status.result['state'] == 'standby'
     assert status.result['name'] == alias and status.result['parent'] is None
+    # A follow-up member's new result stays refused; its closed Round stays unchanged.
+    env['FAKE_CODEX_LIFECYCLE_ACTION'] = 'follow-up-report'
+    sent = run_process([str(installed_commands.runner), 'send', alias, '--instruction', 'Record the check.',
+                        '--caused-by-event-id', cause], cwd=root, env=env, timeout=30)
+    assert sent.returncode == 0, sent.stdout + sent.stderr
+    deadline = time.monotonic() + 15
+    while worktree.exists() and time.monotonic() < deadline:
+        time.sleep(0.05)
+    outcome = json.loads(yaml.safe_load(execution.read_text())['last_agent_message'])
+    assert outcome['result'] == 1, outcome
+    assert 'not accepting result submissions' in outcome['result_output']
+    assert 'not accepting result submissions' in outcome['report_output']
+    assert run_process([str(installed_commands.product), 'task', 'graph'],
+                       cwd=root, env=env).stdout == graph_before
+
     # The last core execution is the follow-up's own native result.
+    status = AgentControl(root / '.graphtraj/swarm', {}).operate(
+        'status', {'agent': mapping['agent']}, Binding(Caller('graphtraj-tasks', None)),
+    )
     assert status.result['last_result']['outcome'] == 'completed'
     assert status.result['last_result']['last_message'] == (
         yaml.safe_load(execution.read_text()).get('last_agent_message'))

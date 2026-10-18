@@ -465,6 +465,8 @@ def submit_session_report(name: str, text: str, cwd: Path) -> dict:
     from graphtraj.execution.runner_status import caller_alias
     from graphtraj.execution.runner_status import require_task_authority
 
+    # A follow-up may run in a cleaned Task's continuation cwd, outside any checkout.
+    cwd = discover_project_root(cwd)
     alias = caller_alias(discover_runner_directory(cwd))
     if alias is None:
         raise RunnerError('authority-denied', 'Main has no Team report to submit.')

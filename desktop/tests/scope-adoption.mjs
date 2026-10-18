@@ -5,19 +5,21 @@
  * no GraphTraj state; the only file it changes is the chosen project's swarm/config.yml,
  * through the App's Settings page, and it restores the original values.
  *
- *   node tests/scope-adoption.mjs [--project <root>] [--out <dir>] --summary <task-id>
+ *   node tests/scope-adoption.mjs [--project <root>] [--out <dir>] --user-data-dir <dir> --summary <task-id>
  *     Default current scope, one historical summary and back; edit, reload and restore
  *     both archive switches.
- *   node tests/scope-adoption.mjs --project <root> [--out <dir>] --lifecycle <alias>
- *     Select that member in the current scope with the mouse, then only watch its
- *     displayed state for about 8 minutes while the operator stops and continues it.
+ *   node tests/scope-adoption.mjs --project <root> --out <dir> --user-data-dir <dir> --lifecycle <alias>
+ *     [--timeout-seconds 600]
+ *     Select that member in the current scope with the mouse, then only watch its displayed
+ *     state while the operator stops and continues it. Each change is screenshotted and
+ *     appended to <out>/states.jsonl. Exit 0 after active, standby, active, standby; exit 2
+ *     on timeout with a final screenshot; exit 1 on any other failure.
  *
  * The backend tool is GRAPHTRAJ_TOOL, or graphtraj-tool beside GRAPHTRAJ_PYTHON.
  */
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs/promises';
-import os from 'node:os';
 import path from 'node:path';
 import { parseArgs } from 'node:util';
 import { fileURLToPath } from 'node:url';
@@ -28,10 +30,12 @@ const desktop = fileURLToPath(new URL('..', import.meta.url));
 const { values: options } = parseArgs({ options: {
   project: { type: 'string', default: path.join(desktop, 'dist-package', 'scope-project') },
   out: { type: 'string' }, summary: { type: 'string' }, lifecycle: { type: 'string' },
+  'user-data-dir': { type: 'string' }, 'timeout-seconds': { type: 'string', default: '600' },
 } });
 const project = path.resolve(options.project);
 const alias = options.lifecycle;
 assert.ok(alias || options.summary, 'Give --summary <task-id> or --lifecycle <alias>');
+assert.ok(options['user-data-dir'], 'Give --user-data-dir <dir> for the Electron profile');
 const tool = process.env.GRAPHTRAJ_TOOL
   || (process.env.GRAPHTRAJ_PYTHON && path.join(path.dirname(process.env.GRAPHTRAJ_PYTHON), 'graphtraj-tool'));
 assert.ok(tool, 'Set GRAPHTRAJ_PYTHON (or GRAPHTRAJ_TOOL) to the candidate backend');
@@ -39,7 +43,8 @@ const commit = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: desktop, encodi
 const dirty = execFileSync('git', ['status', '--porcelain', '--', '.'], { cwd: desktop, encoding: 'utf8' }).trim();
 const evidence = path.resolve(options.out || path.join(desktop, 'dist-package', 'adoption-evidence',
   `336-${commit.slice(0, 12)}${alias ? '-lifecycle' : ''}`));
-const profile = alias ? await fs.mkdtemp(path.join(os.tmpdir(), 'graphtraj-336-profile-')) : path.join(evidence, 'profile');
+const profile = path.resolve(options['user-data-dir']);
+const timeout = Number(options['timeout-seconds']) * 1000;
 const config = path.join(project, '.graphtraj', 'swarm', 'config.yml');
 const facts = { commit, dirty: Boolean(dirty), project, mode: alias ? 'lifecycle' : 'scope', summary: options.summary ?? null,
   alias: alias ?? null, tool, electron: electronExecutable, profile, launches: 0, steps: [], screenshots: [], passed: false };
@@ -47,6 +52,8 @@ await fs.mkdir(evidence, { recursive: true });
 
 let app;
 let page;
+let finished = false;
+class Timeout extends Error {}
 const step = text => { facts.steps.push({ at: new Date().toISOString(), text }); console.log(text); };
 const shot = async name => { const file = path.join(evidence, name); await page.screenshot({ path: file }); facts.screenshots.push(file); };
 /** Click the visible centre of a control with the real mouse. */
@@ -132,31 +139,53 @@ async function lifecycle() {
   await page.getByText('Members of current summaries', { exact: false }).waitFor();
   const member = page.locator('.member-tree-rows > button', { hasText: alias }).first();
   await click(member);
-  const heading = page.locator(`[data-agent-id="${alias}"] .agent-column-heading span`).first();
+  const column = page.locator(`[data-agent-id="${alias}"]`).first();
+  const heading = column.locator('.agent-column-heading');
   await heading.waitFor();
   const wanted = ['active', 'standby', 'active', 'standby'];
   const seen = [];
-  const deadline = Date.now() + 8 * 60 * 1000;
+  facts.lifecycle = seen;
+  const deadline = Date.now() + timeout;
   let matched = 0;
   while (matched < wanted.length) {
-    if (Date.now() > deadline) throw new Error(`Timed out; displayed states ${JSON.stringify(seen)}`);
-    const state = (await heading.innerText()).split('·').at(-1).trim();
+    if (Date.now() > deadline) throw new Timeout(`Timed out; displayed states ${JSON.stringify(seen.map(item => item.state))}`);
+    const shown = await heading.locator('h2').getAttribute('title');
+    const state = (await heading.locator('span').first().innerText()).split('·').at(-1).trim();
+    const parent = (await column.locator('.agent-column-parent span').innerText()).replace(/^Parent: /, '');
     if (state !== seen.at(-1)?.state) {
       const at = new Date().toISOString();
-      seen.push({ at, state });
-      step(`${alias} displayed ${state}`);
-      await shot(`lifecycle-${at.replace(/[:.]/g, '-')}-${state}.png`);
+      const screenshot = `lifecycle-${at.replace(/[:.]/g, '-')}-${state}.png`;
+      await shot(screenshot);
+      seen.push({ at, alias: shown, state, parent, screenshot });
+      await fs.appendFile(path.join(evidence, 'states.jsonl'), JSON.stringify(seen.at(-1)) + '\n');
+      step(`${shown} displayed ${state} · parent ${parent}`);
       if (state === wanted[matched]) matched += 1;
     }
     await page.waitForTimeout(500);
   }
-  facts.lifecycle = seen;
 }
+
+/** Record the outcome and always close the owned Electron window. */
+async function finish(error) {
+  if (finished) return;
+  finished = true;
+  if (error) {
+    facts.failure = String(error);
+    if (page) await shot(`failure-${new Date().toISOString().replace(/[:.]/g, '-')}.png`).catch(() => {});
+    process.exitCode = error instanceof Timeout ? 2 : 1;
+  }
+  if (app) await app.close().catch(() => { facts.closeError = 'Owned app close rejected'; });
+  await fs.writeFile(path.join(evidence, 'result.json'), JSON.stringify(facts, null, 2));
+  console.log(JSON.stringify({ phase: 'CLOSED', evidence, passed: facts.passed }));
+}
+for (const signal of ['SIGINT', 'SIGTERM']) process.once(signal, () => void finish(new Error(`Stopped by ${signal}`)).then(() => process.exit(1)));
+// Playwright can report a failed Electron start outside the awaited call.
+process.once('uncaughtException', error => void finish(error).then(() => process.exit(1)));
 
 try {
   app = await electron.launch({ executablePath: electronExecutable, timeout: 20000,
     args: [desktop, `--project=${project}`, `--user-data-dir=${profile}`],
-    env: { ...process.env, GRAPHTRAJ_TOOL: tool, MAC_CHROMIUM_TMPDIR: alias ? os.tmpdir() : evidence } });
+    env: { ...process.env, GRAPHTRAJ_TOOL: tool, MAC_CHROMIUM_TMPDIR: profile } });
   facts.launches += 1;
   page = await app.firstWindow();
   page.setDefaultTimeout(20000);
@@ -164,12 +193,7 @@ try {
   if (alias) await lifecycle();
   else { await scope(); await archive(); }
   facts.passed = true;
+  await finish();
 } catch (error) {
-  facts.failure = String(error);
-  if (page) await shot(`failure-${new Date().toISOString().replace(/[:.]/g, '-')}.png`).catch(() => {});
-  process.exitCode = 1;
-} finally {
-  if (app) await app.close().catch(() => { facts.closeError = 'Owned app close rejected'; });
-  await fs.writeFile(path.join(evidence, 'result.json'), JSON.stringify(facts, null, 2));
-  console.log(JSON.stringify({ phase: 'CLOSED', evidence, passed: facts.passed }));
+  await finish(error);
 }

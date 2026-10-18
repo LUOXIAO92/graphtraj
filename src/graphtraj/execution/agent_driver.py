@@ -28,10 +28,9 @@ from graphtraj.runtimes.runtime_adapter import (
 )
 
 
-# ponytail: only Claude's managed owner is verified to run without a Runner
-# Worker (it reads credentials from this process and needs no per-execution
-# environment). Codex, Pi and DSH drivers belong to Tasks 331-334.
-SUPPORTED_RUNTIMES = frozenset({"claude"})
+# Pi's owner accepts an independent binding; it skips Task mapping and the
+# Runner CLI channel while retaining its native isolation and Session file.
+SUPPORTED_RUNTIMES = frozenset({"claude", "pi"})
 
 # Native owners of this process's running executions, by core execution ID.
 _TURNS: dict[str, RuntimeTurn] = {}
@@ -131,6 +130,19 @@ class AdapterDriver:
             )
         except RuntimeAdapterError as error:
             raise _native_error(error) from None
+        if run.runtime == 'pi':
+            from agent_swarm import read_config
+            from graphtraj.sessions.archive import SessionArchive
+
+            root = run.directory.parent.parent
+            choices = read_config(root)
+            turn.independent = True
+            turn.archive = run.archive or (SessionArchive(root, **choices)
+                                            if choices['save_normalized_sessions'] else None)
+            if turn.archive is not None:
+                turn.archive.save_normalized_sessions = choices['save_normalized_sessions']
+                turn.archive.backfill_history = choices['backfill_history']
+            turn.agent = run.agent
         turn.parent_notice = lambda message, details: (run.events.request(details),
                                                        {"delivery": "retained"})[1]
         with _TURNS_LOCK:

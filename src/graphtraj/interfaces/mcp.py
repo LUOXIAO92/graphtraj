@@ -2,9 +2,9 @@
 
 The installed ``graphtraj-mcp`` entry point answers the MCP methods a host
 needs to discover and run tools: ``initialize``, ``notifications/initialized``,
-``tools/list``, ``tools/call`` and ``ping``. It exposes one ``graphtraj`` tool
-whose fixed outer schema forwards discover/describe/execute requests to the
-shared gateway, so a host reaches the same operations and documents as the CLI.
+``tools/list``, ``tools/call`` and ``ping``. The ``graphtraj`` tool forwards
+discover/describe/execute requests to the shared gateway. Pi's native host
+binding additionally exposes ``agents`` using its shared schema and handler.
 
 The server speaks newline-delimited JSON-RPC 2.0 over stdin/stdout and uses
 only the standard library, so no MCP SDK dependency is required. It reads the
@@ -58,6 +58,18 @@ def _tool_document() -> dict[str, Any]:
         "description": MCP_TOOL_DESCRIPTION,
         "inputSchema": gateway.INPUT_SCHEMA,
     }
+
+
+def _tool_documents() -> list[dict[str, Any]]:
+    """Expose Pi's agents function through the existing host-bound MCP server."""
+    documents = [_tool_document()]
+    if os.environ.get('GRAPHTRAJ_NATIVE_RUNTIME') == 'pi':
+        from agent_swarm import tool_descriptor
+
+        descriptor = tool_descriptor()
+        documents.append({'name': descriptor['name'], 'description': descriptor['description'],
+                          'inputSchema': descriptor['input_schema']})
+    return documents
 
 
 def _result_response(request_id: Any, result: Mapping[str, Any]) -> dict[str, Any]:
@@ -119,7 +131,7 @@ def _caller_notices(
 def _tool_call_response(
     request_id: Any, params: Mapping[str, Any]
 ) -> dict[str, Any]:
-    """Forward one ``graphtraj`` request and return its MCP tool result.
+    """Forward a registered function request and return its MCP tool result.
 
     The request's outer arguments are the gateway's discover/describe/execute
     envelope. The server's own working directory is the trusted project
@@ -128,7 +140,8 @@ def _tool_call_response(
     """
 
     name = params.get("name")
-    if name != MCP_TOOL_NAME:
+    pi_agents = name == 'agents' and os.environ.get('GRAPHTRAJ_NATIVE_RUNTIME') == 'pi'
+    if name != MCP_TOOL_NAME and not pi_agents:
         return _error_response(
             request_id, INVALID_PARAMS, "Unknown tool: {0}".format(name)
         )
@@ -137,6 +150,8 @@ def _tool_call_response(
         return _error_response(
             request_id, INVALID_PARAMS, "Tool arguments must be an object."
         )
+    if pi_agents:
+        arguments = {'action': 'execute', 'feature': 'agents', 'arguments': arguments}
     try:
         from graphtraj.runtimes.codex.host_events import calling_session
 
@@ -200,7 +215,7 @@ def _respond(message: Mapping[str, Any]) -> dict[str, Any] | None:
     if method == "initialize":
         return _result_response(request_id, _initialize_result(params))
     if method == "tools/list":
-        return _result_response(request_id, {"tools": [_tool_document()]})
+        return _result_response(request_id, {"tools": _tool_documents()})
     if method == "tools/call":
         return _tool_call_response(request_id, params)
     if method == "ping":

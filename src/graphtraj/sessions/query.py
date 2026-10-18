@@ -1,5 +1,6 @@
 """Authorized reads of project-local Session archives through the shared gateway."""
 from pathlib import Path
+from contextlib import nullcontext
 
 from graphtraj.configuration.project_configuration import load_project_configuration
 from graphtraj.execution.desktop_activity import human_observer
@@ -35,9 +36,18 @@ def read_session(cwd: Path, session_id: str, after: int = -1, limit: int = 200) 
         raise RunnerError('authority-denied', 'Session reads require a verified own Session or human project binding.')
 
     configuration = load_project_configuration(cwd)
-    with SessionStore(session_path(configuration.state, session_id), readonly=True) as store:
+    pi = session_id.startswith('pi:')
+    if pi:
+        from graphtraj.interfaces.agents import swarm_root
+        from graphtraj.sessions.archive import JsonlSessionStore, archive_path
+
+        context = nullcontext(JsonlSessionStore(archive_path(swarm_root(configuration.harness_root), session_id)))
+    else:
+        context = SessionStore(session_path(configuration.state, session_id), readonly=True)
+    with context as store:
         # Keep finalized events and the pending draft in the same read snapshot.
-        store.db.execute('BEGIN')
+        if not pi:
+            store.db.execute('BEGIN')
         header = store.header
         native = header.get('graphtraj', {}).get('native', {})
         if own is not None and (native.get('runtime') != own['runtime']

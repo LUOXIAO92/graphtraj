@@ -62,8 +62,12 @@ def main() -> None:
 
     def record(message: dict) -> None:
         """Append native message records as a real Session would."""
+        rows = [json.loads(line) for line in session_file.read_text().splitlines()]
+        parent = rows[-1].get('id') if len(rows) > 1 else None
         with session_file.open('a') as stream:
-            stream.write(json.dumps({'type': 'message', 'message': message}) + '\n')
+            stream.write(json.dumps({'type': 'message', 'id': uuid.uuid4().hex,
+                                     'parentId': parent, 'timestamp': int(time.time() * 1000),
+                                     'message': message}) + '\n')
 
     def streamed(text: str) -> dict:
         """Send equal semantic content with controlled real stdout fragmentation."""
@@ -137,8 +141,8 @@ def main() -> None:
             message['errorMessage'] = 'fixture provider rejected request'
         if text.startswith('stream-'):
             message = streamed(text)
-        record(message)
         emit({'type': 'message_end', 'message': message})
+        record(message)
         if text == 'stream-ok':
             emit({'type': 'tool_execution_start', 'toolCallId': 'call-1', 'toolName': 'read', 'args': {'path': '/tmp/result'}})
             tool = {'role': 'toolResult', 'toolCallId': 'call-1', 'toolName': 'read',
@@ -178,6 +182,12 @@ def main() -> None:
 
                     threading.Thread(target=delayed_state, daemon=True).start()
                     continue
+        elif kind == 'get_entries':
+            entries = [json.loads(line) for line in session_file.read_text().splitlines()][1:]
+            response['data'] = {'entries': entries, 'leafId': entries[-1]['id'] if entries else None}
+        elif kind == 'get_messages':
+            entries = [json.loads(line) for line in session_file.read_text().splitlines()][1:]
+            response['data'] = {'messages': [entry['message'] for entry in entries if entry['type'] == 'message']}
         elif kind == 'prompt':
             if active and request.get('streamingBehavior') == 'steer':
                 queued.append(request['message'])

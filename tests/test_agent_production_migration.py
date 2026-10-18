@@ -25,6 +25,10 @@ def project(root: Path) -> tuple[Path, Path]:
     data.mkdir()
     (data / 'config.yml').write_text(default_configuration_content(root, root))
     (data / 'state/tasks').mkdir(parents=True)
+    from graphtraj.graph.task_graph import register_task
+    from test_task_graph import _task
+
+    register_task(data / 'state', root, _task('1', 'fixture'))
     worktree = data / '.agent-worktrees/member'
     subprocess.run(['git', 'worktree', 'add', '-b', 'member', str(worktree)], cwd=root, check=True, capture_output=True)
     (worktree / '.state').symlink_to('../../state')
@@ -45,10 +49,18 @@ def project(root: Path) -> tuple[Path, Path]:
     return worktree, directory
 
 
-def test_public_cutover_and_restore_preserve_identity_and_git_cwd(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+@pytest.mark.parametrize('resume', [False, True])
+def test_public_cutover_and_restore_preserve_identity_and_git_cwd(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, resume: bool,
+) -> None:
     """Directory authority, same native ID, permission settings and Git paths move back."""
     root = tmp_path / 'project'
     worktree, directory = project(root)
+    from graphtraj.sessions.storage import SessionStore, session_path
+    from test_session_storage import header
+
+    with SessionStore.create(session_path(root / '.graphtraj/state', 'canonical-old'), header('canonical-old')) as archive:
+        archive.put_attachment(b'retained legacy attachment')
     original = (directory / 'mapping.yml').read_bytes()
     monkeypatch.chdir(root)
     runner = CliRunner()
@@ -83,15 +95,35 @@ def test_public_cutover_and_restore_preserve_identity_and_git_cwd(tmp_path: Path
             run.events.finished('completed')
 
     control = AgentControl(root / '.graphtraj/swarm', {'codex': Driver()})
-    resumed = control.send('old@member', 'continue', Binding(Caller('graphtraj-tasks', 'original-parent')))
-    assert not resumed.failed
+    if resume:
+        resumed = control.send('old@member', 'continue', Binding(Caller('graphtraj-tasks', 'original-parent')))
+        assert not resumed.failed
     assert str(new_worktree) in subprocess.check_output(['git', 'worktree', 'list', '--porcelain'], text=True)
     restored = runner.invoke(main, ['migrate-agents', '--restore', report['backup'], '--writes-stopped'])
+    if resume:
+        assert restored.exit_code != 0 and 'Post-cutover data changed' in restored.output
+        assert new_worktree.is_dir() and not worktree.exists()
+        return
     assert restored.exit_code == 0, restored.output
     assert worktree.is_dir() and not new_worktree.exists()
     assert (directory / 'mapping.yml').read_bytes() == original
     assert (worktree / '.state').readlink() == Path('../../state')
     assert (Path(report['backup']) / 'after-core').is_dir()
+
+
+def test_cutover_retains_staging_when_current_native_declarations_need_decision(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An old header is retained, never silently accepted as duplicate MCP exposure."""
+    root = tmp_path / 'project'
+    worktree, directory = project(root)
+    (directory / 'native.jsonl').write_text(json.dumps({'type': 'session_meta', 'payload': {
+        'id': 'native-old', 'cwd': str(worktree), 'dynamic_tools': [{'name': 'graphtraj'}]}}) + '\n')
+    monkeypatch.chdir(root)
+    result = CliRunner().invoke(main, ['migrate-agents', '--cutover', str(tmp_path / 'input'), '--writes-stopped'])
+    assert result.exit_code != 0 and 'compatibility decision' in result.output
+    assert worktree.is_dir() and (root / '.graphtraj/config.yml').is_file()
+    assert (tmp_path / 'input-cutover/.graphtraj/core/config.yml').is_file()
 
 
 def test_cutover_refuses_unconfirmed_writer_before_snapshot(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

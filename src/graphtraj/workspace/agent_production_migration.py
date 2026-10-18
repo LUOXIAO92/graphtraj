@@ -44,8 +44,10 @@ def _facts(paths: list[Path]) -> dict:
     result = {}
     for root in paths:
         for path in ([root] if root.is_file() else root.rglob('*')):
+            if root.name == 'swarm' and path.relative_to(root).parts[:1] == ('live',):
+                continue
             if path.is_symlink():
-                result[str(path)] = ('link', os.readlink(path))
+                result[str(path)] = ['link', os.readlink(path)]
             elif path.is_file() and not path.name.endswith('.sqlite3-shm'):
                 with path.open('rb') as stream:
                     result[str(path)] = hashlib.file_digest(stream, 'sha256').hexdigest()
@@ -224,6 +226,8 @@ def cutover_project(
             link.unlink()
             link.symlink_to(os.path.relpath(replacement, link.parent))
         shutil.copy2(staging / 'cutover-config.yml', data / 'core/config.yml')
+        recovery['installed_facts'] = _facts([data / 'core/state', data / 'core/runner', data / 'swarm'])
+        write_yaml_durably(backup / 'migration.yml', recovery)
     except BaseException:
         # Recovery uses the same retained manifest; do not discard failed data.
         for old, new in reversed(list(worktrees.items())):
@@ -247,7 +251,7 @@ def cutover_project(
             'worktrees': worktrees, 'identities': partitioned['agents'],
             'native_missing': [item for item in imported['native_results'] if item.get('missing')],
             'missing_links': imported['missing_links'],
-            'next': 'Use this same installed version. Native host trust and same-ID resume require their normal public entry; no host was started.'}
+            'next': 'Use this same installed version. Native host trust and same-ID resume require their normal public entry; no host was started. Restore is available before new execution/state writes; afterward preserve and reconcile the new history.'}
 
 
 def restore_cutover(root: Path, backup: Path, *, writes_stopped: bool) -> dict:
@@ -261,6 +265,9 @@ def restore_cutover(root: Path, backup: Path, *, writes_stopped: bool) -> dict:
     if record['project'] != str(root) or not (root / '.graphtraj/core/config.yml').is_file():
         raise ValueError('The project does not have the selected installed cutover.')
     _stopped(root)
+    current = _facts([root / '.graphtraj/core/state', root / '.graphtraj/core/runner', root / '.graphtraj/swarm'])
+    if current != record.get('installed_facts'):
+        raise ValueError('Post-cutover data changed. Preserve and reconcile the new history before recovery; nothing was restored.')
     if any(not Path(saved).exists() for saved in record['originals'].values()):
         raise ValueError('Original backup is incomplete; no recovery was applied.')
     if any(Path(old).exists() and Path(old) != root / '.graphtraj/swarm' for old in record['originals']):

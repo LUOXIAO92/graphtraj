@@ -47,12 +47,12 @@ def test_delivered_plugin_native_scopes(tmp_path: Path) -> None:
 
 def test_browser_tool_view_preserves_model_content() -> None:
     """Project outgoing text without replaying calls or duplicating inbound relay."""
-    node = shutil.which('node')
-    if node is None:
-        pytest.skip('Node is required for the browser projection fixture.')
+    node, dsh = shutil.which('node'), shutil.which('dsh')
+    if node is None or dsh is None:
+        pytest.skip('Installed DSH slots and Node are required for the browser projection fixture.')
     root = Path(__file__).resolve().parents[1]
     result = subprocess.run([
         node, str(root / 'tests/fixtures/dsh_client_view.mjs'),
-        str(root / 'src/agent_swarm/dsh/client.mjs'),
+        str(root / 'src/agent_swarm/dsh/client.mjs'), str(Path(dsh).resolve()),
     ], capture_output=True, text=True, timeout=10)
     assert result.returncode == 0, result.stdout + result.stderr

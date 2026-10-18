@@ -8,7 +8,7 @@
   "dsh": {
     "client": {
       "platform": "web",
-      "inject": ["@deepseek-ai/dsh-client-ui-tool", "@deepseek-ai/dsh-client-ui-renderer"]
+      "inject": ["@deepseek-ai/dsh-client-ui-tool", "@deepseek-ai/dsh-client-ui-renderer", "@deepseek-ai/dsh-client-ui-chat"]
     }
   }
 }

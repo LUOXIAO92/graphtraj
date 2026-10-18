@@ -214,6 +214,7 @@ def test_actual_pi_reply_resumes_standby_dsh() -> None:
     from agent_swarm.dsh import DshDriver
     from graphtraj.runtimes.pi.driver import PiDriver
 
+    assert time.time() < float(os.environ['TASK334_UI_DEADLINE']), 'The authorized UI window has ended.'
     root = Path(os.environ['TASK334_CROSS_ROOT'])
     record = json.loads(next((root / 'control/agents').glob('*.json')).read_text())
     phases = []
@@ -287,3 +288,5 @@ def test_actual_pi_reply_resumes_standby_dsh() -> None:
                 if target.get('state') == 'active':
                     call({'action': 'interrupt', 'agent': target['agent']})
                     call({'action': 'wait', 'agent': target['agent'], 'timeout_seconds': 20})
+        for path in handoff.glob('phase-*.json'):
+            path.unlink(missing_ok=True)

@@ -328,7 +328,7 @@ def run(job_file: Path) -> int:
             from graphtraj.execution.runner_control import _remove_restored_cwd
 
             # The continuation-only cwd of a cleaned Task ends with its execution.
-            _remove_restored_cwd(restored_cwd)
+            _remove_restored_cwd(session_directory, restored_cwd)
     return 1
 
 

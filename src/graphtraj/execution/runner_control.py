@@ -533,15 +533,18 @@ def _send_session(
         restored = False
         with execution_start_lock(session_directory.parent.parent):
             require_execution_allowed(session_directory.parent.parent, alias, mapping)
-            if reports_only and not os.path.lexists(str(worktree)) and worktree.is_absolute():
+            absent = not os.path.lexists(str(worktree))
+            if reports_only and worktree.is_absolute() and (absent or (
+                    worktree.is_dir() and not worktree.is_symlink() and not any(worktree.iterdir()))):
                 from graphtraj.teams.team_replacement import completed_task_member
 
                 # Each Runtime resumes its native Session in the recorded cwd
                 # (Claude finds its transcript by it). Cleanup removed that
                 # Worktree, so an empty directory stands at the same path for
-                # this continuation only; the Worker removes it when empty.
+                # these continuations only; the last one to end removes it.
                 if completed_task_member(discover_project(cwd, require_clean_integration=False), mapping):
-                    worktree.mkdir()
+                    if absent:
+                        worktree.mkdir()
                     restored = True
         try:
             return _send_session_locked(
@@ -553,20 +556,41 @@ def _send_session(
             )
         except BaseException:
             if restored:
-                _remove_restored_cwd(worktree)
+                _remove_restored_cwd(session_directory, worktree)
             raise
 
 
-def _remove_restored_cwd(worktree: Path) -> None:
-    """Remove a continuation-only cwd unless the Runtime left content in it.
+def _remove_restored_cwd(session_directory: Path, worktree: Path) -> None:
+    """Remove a continuation-only cwd once no other execution can still use it.
 
-    A remaining directory keeps refusing a reopened launch as a Worktree
-    conflict instead of discarding what the Runtime wrote.
+    Another member mapped to the same path keeps it while it has no terminal
+    record or its send still holds the input lock; that member removes it when
+    it ends. A directory the Runtime left content in also stays, so a reopened
+    launch refuses it as a Worktree conflict instead of discarding the content.
     """
-    try:
-        worktree.rmdir()
-    except OSError:
-        pass
+    runner_directory = session_directory.parent.parent
+    with execution_start_lock(runner_directory):
+        for other in (runner_directory / "sessions").iterdir():
+            if other == session_directory or not (other / "mapping.yml").is_file():
+                continue
+            try:
+                mapping = yaml.safe_load((other / "mapping.yml").read_text(encoding="utf-8"))
+            except (OSError, UnicodeError, yaml.YAMLError):
+                return
+            if not isinstance(mapping, dict) or mapping.get("worktree_path") != str(worktree):
+                continue
+            if not (other / "execution.yml").is_file():
+                return
+            with (other / "launch.yml").open("a+b") as lock:
+                try:
+                    file_lock.flock(lock, file_lock.LOCK_EX | file_lock.LOCK_NB)
+                except BlockingIOError:
+                    return
+                file_lock.flock(lock, file_lock.LOCK_UN)
+        try:
+            worktree.rmdir()
+        except OSError:
+            pass
 
 
 def _send_session_locked(

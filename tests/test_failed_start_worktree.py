@@ -298,13 +298,19 @@ def test_cleaned_task_reopens_with_fresh_member_and_preserved_history(
             assert path.read_bytes() == content, path
 
 
+@pytest.mark.parametrize('other_executing', [False, True])
 def test_cleaned_task_member_answers_a_follow_up_in_its_native_session(
     installed_commands: InstalledCommands,
     temporary_git_repository: Path,
     fake_codex: FakeCodex,
     tmp_path: Path,
+    other_executing: bool,
 ) -> None:
-    """A standby member of a cleaned Task resumes its same native Session."""
+    """A standby member of a cleaned Task resumes its same native Session.
+
+    The continuation-only cwd stays while another member's execution on the
+    same path has not ended; the last continuation removes it.
+    """
     import json
 
     root, worktree, batch, env = _prepare(
@@ -336,6 +342,14 @@ def test_cleaned_task_member_answers_a_follow_up_in_its_native_session(
     execution = sessions / alias / 'execution.yml'
     graph_before = run_process([str(installed_commands.product), 'task', 'graph'], cwd=root, env=env).stdout
 
+    other = sessions / (alias + '_concurrent')
+    if other_executing:
+        # Another member of the same Task whose follow-up has not ended yet.
+        other.mkdir()
+        mapping = yaml.safe_load((sessions / alias / 'mapping.yml').read_text())
+        (other / 'mapping.yml').write_text(yaml.safe_dump({**mapping, 'alias': other.name}))
+        (other / 'launch.yml').write_text('operation: launch\n')
+
     env.pop('FAKE_CODEX_LIFECYCLE_ACTION')
     worldline = run_process([str(installed_commands.product), 'worldline', 'read'], cwd=root, env=env)
     cause = json.loads(worldline.stdout.splitlines()[-1])['event_id']
@@ -344,6 +358,18 @@ def test_cleaned_task_member_answers_a_follow_up_in_its_native_session(
 
     assert sent.returncode == 0, sent.stdout + sent.stderr
     assert yaml.safe_load(sent.stdout)['session'] == session
+    if other_executing:
+        deadline = time.monotonic() + 15
+        while yaml.safe_load(execution.read_text() if execution.is_file() else '{}').get(
+                'execution_id') != yaml.safe_load(sent.stdout)['execution_id'] and time.monotonic() < deadline:
+            time.sleep(0.05)
+        time.sleep(1)
+        assert worktree.is_dir() and not any(worktree.iterdir())
+        # Once the other execution has ended, the next continuation to end removes it.
+        (other / 'execution.yml').write_text('outcome: completed\n')
+        sent = run_process([str(installed_commands.runner), 'send', alias, '--instruction', 'Anything else?',
+                            '--caused-by-event-id', cause], cwd=root, env=env, timeout=30)
+        assert sent.returncode == 0, sent.stdout + sent.stderr
     # The Worker removes the continuation-only cwd after its terminal record,
     # so a later reopen still provisions the Worktree.
     deadline = time.monotonic() + 15

@@ -60,7 +60,11 @@ try {
 
   // Current summaries are the default scope.
   await click(page.getByRole('button', { name: 'Members', exact: true }));
-  await page.locator('.member-tree-rows > button').first().waitFor();
+  // A project without members shows the empty state; rows are listed otherwise.
+  const listed = () => page.locator('.member-tree-rows > button, .member-tree p[role="status"]:has-text("No members in this scope.")').first().waitFor();
+  await page.getByText('Members of current summaries', { exact: false }).waitFor();
+  await listed();
+  facts.currentNotice = await page.locator('.member-tree .native-notice').first().innerText();
   const current = await rows();
   facts.current = current;
   assert.ok(current.every(text => !text.includes('Retired')), 'Retired members never appear in the current list');
@@ -70,7 +74,8 @@ try {
   // One historical summary, then back: reading must leave current members unchanged.
   await choose(page.getByLabel('Member scope'), `History · #${summary}`);
   await page.getByText('History of one summary', { exact: false }).waitFor();
-  await page.waitForTimeout(1500);
+  await listed();
+  facts.historyNotice = await page.locator('.member-tree .native-notice').first().innerText();
   facts.history = await rows();
   step(`history of #${summary} lists ${facts.history.length} members`);
   await shot('02-members-history.png');

@@ -8,9 +8,9 @@ const require = createRequire(nativePackage);
 const { defineTool } = await import(pathToFileURL(require.resolve('@deepseek-ai/dsh-tools')));
 const { agentsTool } = await import(pathToFileURL(modulePath));
 const calls = [];
-const payload = JSON.stringify({ action: 'wait', agent: 'child-1', result: {
+const payload = JSON.stringify({ failed: false, result: { action: 'wait', agent: 'child-1', result: {
   state: 'standby', last_result: { last_message: 'reply body' },
-} });
+} } });
 const execution = { agent: { session: { id: 'parent-1' } } };
 const tool = defineTool(agentsTool(async (request, context) => {
   calls.push({ request, context });

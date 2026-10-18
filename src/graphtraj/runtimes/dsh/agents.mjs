@@ -29,10 +29,12 @@ export function agentsTool(invoke) {
         if (block.type !== 'text') continue;
         try {
           const value = JSON.parse(block.text);
-          const outcome = value.result || {};
+          const document = value.result?.action ? value.result : value;
+          const outcome = document.result || {};
           const last = outcome.last_result?.last_message;
-          bodies.push(last || value.error?.message || outcome.error?.message ||
-            (typeof value.message === 'string' ? value.message : null) ||
+          bodies.push(last || document.error?.message || outcome.error?.message ||
+            (typeof value.error === 'string' ? value.error : null) ||
+            (typeof document.message === 'string' ? document.message : null) ||
             `${args.action}: ${outcome.state || outcome.delivery || 'received'}`);
         } catch { bodies.push(block.text); }
       }

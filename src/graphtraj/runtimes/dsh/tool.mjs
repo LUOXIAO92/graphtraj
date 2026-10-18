@@ -4,12 +4,15 @@ import { pathToFileURL } from 'node:url';
 import { spawn } from 'node:child_process';
 import { installCollection } from './collection.mjs';
 import { agentsTool } from './agents.mjs';
+import { installCommunication } from './communication.mjs';
 
 const require = createRequire(process.env.GRAPHTRAJ_DSH_PACKAGE || process.argv[1]);
 const { defineTool } = await import(pathToFileURL(require.resolve('@deepseek-ai/dsh-tools')));
 const { default: z } = await import(pathToFileURL(require.resolve('@deepseek-ai/schemastery')));
+const { TypertRemoteService, Remote } = await import(pathToFileURL(require.resolve('@deepseek-ai/dsh-typert-protocol')));
+const { createUserMessage } = await import(pathToFileURL(require.resolve('@deepseek-ai/dsh-llm')));
 export const name = 'graphtraj';
-export const inject = ['tools', 'shellEnv', 'sessionQuery'];
+export const inject = ['tools', 'shellEnv', 'sessionQuery', 'agents'];
 export const Config = z.object({ finishCheck: z.boolean().default(false) });
 
 /** Read actual durable source facts from this execution's native Agent. */
@@ -26,6 +29,7 @@ export function sessionEnvironment(agent) {
 }
 
 export function apply(ctx, config = { finishCheck: false }) {
+  installCommunication(ctx, { TypertRemoteService, Remote, createUserMessage });
   ctx.shellEnv.register({
     name: 'graphtraj',
     variables: {

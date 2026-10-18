@@ -54,6 +54,7 @@ def bind_agents(turn: DshExecution, run: Run, driver: AdapterDriver) -> None:
             yield address
 
     turn.host_connection = connection
+    turn.agents_only = True
     if run.archive is not None:
         from graphtraj.runtimes.dsh.collection import DshArchive
 

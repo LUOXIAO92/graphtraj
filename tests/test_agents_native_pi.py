@@ -10,6 +10,39 @@ from graphtraj.sessions.archive import JsonlSessionStore, archive_path
 from test_pi_runtime import context, pi_environment
 
 
+def test_connection_reference_selects_pi_runtime(
+    tmp_path: Path, pi_environment: dict, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Resolve a configured connection before choosing the Pi role preset."""
+    from dataclasses import replace
+    from types import SimpleNamespace
+    from graphtraj.configuration.project_roles import RolePreset
+    from graphtraj.execution.agent_driver import AdapterDriver
+
+    cwd = tmp_path / 'work'
+    cwd.mkdir()
+    reference = RolePreset(runtime='', model='', base_url=None, api_key_env=None,
+                           connection='pi/fixture/deepseek-flash', pi=pi_environment)
+    resolved = replace(reference, runtime='pi', model='deepseek/deepseek-flash',
+                       connection_revision='fixture-revision')
+    monkeypatch.setattr('graphtraj.configuration.project_roles.load_project_roles',
+                        lambda root: SimpleNamespace(presets={
+                            'pi': reference, 'other': replace(reference, connection='claude/unrelated/model'),
+                        }))
+
+    def resolve_selected(preset: RolePreset) -> RolePreset:
+        """An unrelated Runtime's connection must not be read for Pi selection."""
+        assert preset is reference
+        return resolved
+
+    monkeypatch.setattr('graphtraj.configuration.project_roles.resolve_preset', resolve_selected)
+    prepared = AdapterDriver(tmp_path, cwd).prepare('pi', Caller('test-host', 'parent'))
+    assert prepared['role'] == 'pi'
+    assert prepared['adapter_request']['provider'] == 'deepseek'
+    assert prepared['adapter_request']['model'] == 'deepseek-flash'
+    assert prepared['adapter_request']['worktree_path'] == str(cwd)
+
+
 @pytest.mark.parametrize('chunk', [1, 512])
 def test_independent_pi_memory_stop_and_archive(
     tmp_path: Path,
@@ -64,3 +97,25 @@ def test_independent_pi_memory_stop_and_archive(
     records = [event['data']['record'] for event in store.page()['events'] if event['type'] == 'graphtraj/native']
     assert records[0]['message']['content'] == 'memory-sentinel'
     assert records[-1]['message']['role'] == 'toolResult'
+
+
+def test_independent_pi_native_request_and_explicit_reply(tmp_path: Path, pi_environment: dict) -> None:
+    """A native Pi dialog reaches the core without a Task parent notifier."""
+    (tmp_path / 'worktrees/research').mkdir(parents=True)
+    _, prepared = context(tmp_path, pi_environment)
+    driver = PiDriver(prepared.launch_document()['adapter_request'])
+    call = bind(AgentControl(tmp_path / 'swarm', {'pi': driver}), Caller('test-host', 'parent'))
+    created = call({'action': 'create', 'runtime': 'pi', 'instruction': 'dialog'})
+    assert not created.failed, created.document
+    agent = created.document['agent']
+    waiting = call({'action': 'wait', 'agent': agent, 'timeout_seconds': 10})
+    assert waiting.document['result']['pending_requests'] == 1
+    requests = call({'action': 'requests', 'agent': agent})
+    request = requests.document['result']['requests'][0]
+    assert request['method'] == 'pi/confirm'
+    replied = call({'action': 'reply', 'agent': agent, 'request': request,
+                    'response': {'confirmed': False}})
+    assert not replied.failed, replied.document
+    assert replied.document['result']['reply_status'] == 'submitted'
+    ended = call({'action': 'wait', 'agent': agent, 'timeout_seconds': 10})
+    assert ended.document['result']['state'] == 'standby'

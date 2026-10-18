@@ -344,14 +344,14 @@ class PiArchive:
         """Merge assistant deltas; checkpoint semantic boundaries and 64 KiB runs."""
         if not self.archive.save_normalized_sessions:
             return
-        store = self.stream.store if self.stream is not None else self.archive.store(self.key)
         kind = event.get('type')
         message = event.get('message', {})
-        if kind == 'message_update' and self.stream is None:
-            self.receive({'type': 'message_start', 'message': {'role': 'assistant', **message}})
         if kind in {'tool_execution_start', 'tool_execution_update', 'tool_execution_end'} and isinstance(event.get('toolCallId'), str):
             self._tool_event(event)
             return
+        store = self.stream.store if self.stream is not None else self.archive.store(self.key)
+        if kind == 'message_update' and self.stream is None:
+            self.receive({'type': 'message_start', 'message': {'role': 'assistant', **message}})
         if kind == 'message_start' and message.get('role') == 'assistant':
             self.close()
             self.live = True

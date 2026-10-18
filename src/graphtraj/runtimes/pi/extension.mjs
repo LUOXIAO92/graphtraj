@@ -17,8 +17,7 @@ export function registerAgentDisplay(pi, sdk) {
   pi.on('tool_result', (event, ctx) => {
     if (!ctx.hasUI || event.isError || event.details?.server !== 'graphtraj') return;
     const tool = event.details.tool;
-    const input = tool === 'agents' ? event.input :
-      tool === 'graphtraj' && event.input.action === 'execute' && event.input.feature === 'agents'
+    const input = tool === 'agents' && event.input.action === 'execute' && event.input.feature === 'agents'
         ? event.input.arguments : undefined;
     if (!input) return;
     const result = event.structuredContent?.structuredContent;

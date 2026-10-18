@@ -3,8 +3,8 @@
 The installed ``graphtraj-mcp`` entry point answers the MCP methods a host
 needs to discover and run tools: ``initialize``, ``notifications/initialized``,
 ``tools/list``, ``tools/call`` and ``ping``. The ``graphtraj`` tool forwards
-discover/describe/execute requests to the shared gateway. Pi's native host
-binding additionally exposes ``agents`` using its shared schema and handler.
+discover/describe/execute requests to the shared gateway. Pi exposes only
+``agents`` and ``tasks`` as progressive entries into that same gateway.
 
 The server speaks newline-delimited JSON-RPC 2.0 over stdin/stdout and uses
 only the standard library, so no MCP SDK dependency is required. It reads the
@@ -61,15 +61,14 @@ def _tool_document() -> dict[str, Any]:
 
 
 def _tool_documents() -> list[dict[str, Any]]:
-    """Expose Pi's agents function through the existing host-bound MCP server."""
-    documents = [_tool_document()]
+    """Keep Pi's initial list small without duplicating its model entry."""
     if os.environ.get('GRAPHTRAJ_NATIVE_RUNTIME') == 'pi':
-        from agent_swarm import tool_descriptor
-
-        descriptor = tool_descriptor()
-        documents.append({'name': descriptor['name'], 'description': descriptor['description'],
-                          'inputSchema': descriptor['input_schema']})
-    return documents
+        return [
+            {'name': name, 'description': f'Discover, describe, or execute {name} features.',
+             'inputSchema': gateway.INPUT_SCHEMA}
+            for name in ('agents', 'tasks')
+        ]
+    return [_tool_document()]
 
 
 def _result_response(request_id: Any, result: Mapping[str, Any]) -> dict[str, Any]:
@@ -140,8 +139,9 @@ def _tool_call_response(
     """
 
     name = params.get("name")
-    pi_agents = name == 'agents' and os.environ.get('GRAPHTRAJ_NATIVE_RUNTIME') == 'pi'
-    if name != MCP_TOOL_NAME and not pi_agents:
+    pi_entry = os.environ.get('GRAPHTRAJ_NATIVE_RUNTIME') == 'pi'
+    names = ('agents', 'tasks') if pi_entry else (MCP_TOOL_NAME,)
+    if name not in names:
         return _error_response(
             request_id, INVALID_PARAMS, "Unknown tool: {0}".format(name)
         )
@@ -150,9 +150,12 @@ def _tool_call_response(
         return _error_response(
             request_id, INVALID_PARAMS, "Tool arguments must be an object."
         )
-    if pi_agents:
-        arguments = {'action': 'execute', 'feature': 'agents', 'arguments': arguments}
     try:
+        # Keep the selected entry's scope before forwarding into the already
+        # authenticated host. The host still owns feature authorization.
+        if pi_entry and arguments.get('action') != 'discover':
+            if (arguments.get('feature') == 'agents') != (name == 'agents'):
+                raise ValueError('Feature does not belong to this MCP entry.')
         from graphtraj.runtimes.codex.host_events import calling_session
 
         metadata = params.get('_meta', {})
@@ -170,6 +173,11 @@ def _tool_call_response(
                 if recovery is not None
                 else result.document
             )
+            if pi_entry and arguments.get('action') == 'discover' and 'features' in document:
+                document = {**document, 'features': [
+                    feature for feature in document['features']
+                    if (feature['feature'] == 'agents') == (name == 'agents')
+                ]}
     except (
         OSError,
         UnicodeError,

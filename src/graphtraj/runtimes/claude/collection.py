@@ -271,8 +271,8 @@ def collect_hook(event: dict, cwd: Path) -> dict:
             count = 0
             unavailable = {'path': path, 'reason': type(error).__name__ + ': native transcript unavailable.'}
         # Hook records are observations; repeated hooks are not repeated messages.
-        hook_source = 'hooks'
-        position = store.position(hook_source) + 1
+        hook_channel = 'hooks'
+        position = store.position(hook_channel) + 1
         retained = native_event(store, event, f'hook:{position}')
         if unavailable:
             retained['graphtraj']['missing'].append(unavailable)
@@ -280,9 +280,9 @@ def collect_hook(event: dict, cwd: Path) -> dict:
             retained['graphtraj']['missing'].append({
                 'path': 'parentSession', 'reason': 'SessionStart reports fork but supplies no parent identity or inherited cut.'})
         if store.next_seq:
-            store.append(retained, source=hook_source, position=position)
+            store.append(retained, source=hook_channel, position=position)
         else:
-            store.stage_initial_observation(retained, source=hook_source, position=position)
+            store.stage_initial_observation(retained, source=hook_channel, position=position)
             finish_transcript_collection(
                 store, native_id, child=bool(child),
                 terminal=kind in {'Stop', 'StopFailure', 'SessionEnd', 'SubagentStop'})

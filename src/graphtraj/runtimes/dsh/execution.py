@@ -118,6 +118,10 @@ def _deployment_agent_preset(install_root: Path, instructions: str) -> dict | No
 class DshExecution:
     """Keep one Session bound until work and the pending inbox are quiescent."""
 
+    host_connection = None
+    parent_notice = None
+    archive = None
+
     def __init__(
         self,
         request: dict,
@@ -207,6 +211,8 @@ class DshExecution:
             'GRAPHTRAJ_DSH_TOOL': self.request['tool'],
             'GRAPHTRAJ_HARNESS_ROOT': self.request['harness_root'],
         })
+        if self.host_connection is not None:
+            environment['GRAPHTRAJ_DSH_AGENTS_ONLY'] = '1'
         return environment
 
     def _retain_trace(self) -> None:
@@ -359,10 +365,11 @@ class DshExecution:
                 if token not in self.pending:
                     return
             try:
-                receipt = notify_direct_parent(self.directory, notice, details)
+                receipt = (self.parent_notice(notice, details) if self.parent_notice is not None
+                           else notify_direct_parent(self.directory, notice, details))
             except Exception:
                 receipt = None
-            if receipt is not None and receipt.get('delivery') in {'received', 'no-direct-parent'}:
+            if receipt is not None and receipt.get('delivery') in {'received', 'no-direct-parent', 'retained'}:
                 return
             # Retry only while the original native request is still pending.
             time.sleep(1)
@@ -380,10 +387,12 @@ class DshExecution:
         # roots, so this Session's channel lives in its own git-excluded scratch
         # directory instead of the shared location other runtimes keep.
         channel = Path(self.request['worktree_path']) / '.scratch'
-        environment[CONNECTION_ENV] = connections.enter_context(cli_connection(
-            Path(self.request['harness_root']), self.directory.name, native_operation_features(),
-            directory=channel,
-        ))
+        environment[CONNECTION_ENV] = connections.enter_context(
+            self.host_connection(channel) if self.host_connection is not None else cli_connection(
+                Path(self.request['harness_root']), self.directory.name, native_operation_features(),
+                directory=channel,
+            )
+        )
         options = ({'profile_patch': self.directory / 'dsh-home/profiles/web/cordis.patch.yml'}
                    if self.request.get('runtime_home') else {})
         self.service = DshService(
@@ -400,7 +409,11 @@ class DshExecution:
             self.session = native
             write_yaml_durably(self.directory / 'session.yml', {'session': native, 'runtime': 'dsh'})
             self.created(native, self.service.process.pid)
-            self.service.follow(native)
+            snapshot = self.service.follow(native)
+            if self.archive is not None:
+                records = (self.service.history(snapshot)
+                           if not self.archive.resumed or self.archive.archive.backfill_history else [])
+                self.archive.start(snapshot, records)
             self.service.open_events()
             self.service.rpc('session/selectModel', {
                 'sessionId': native, 'provider': self.request['provider'], 'model': self.request['model'],
@@ -432,6 +445,8 @@ class DshExecution:
                 self._approval_frames()
                 if frame.get('type') == 'event':
                     event = frame['event']
+                    if self.archive is not None:
+                        self.archive.event(event)
                     kind = event['type']
                     data = event.get('data', {})
                     if kind == 'assistant/message':
@@ -480,7 +495,12 @@ class DshExecution:
                 self._retain_trace()
                 if self.outcome is not None and not self.trace_file.is_file():
                     raise RuntimeAdapterError('RUNTIME_TRACE_FAILED', 'DSH native Trace was not retained.')
-                if self.outcome is not None:
+                if self.archive is not None and self.trace_file.is_file():
+                    try:
+                        self.archive.finish(self.trace_file)
+                    except (OSError, ValueError, StopIteration) as error:
+                        raise RuntimeAdapterError('RUNTIME_TRACE_FAILED', str(error)) from error
+                if self.outcome is not None and self.host_connection is None:
                     from graphtraj.configuration.project_configuration import load_project_configuration
                     from graphtraj.runtimes.dsh.collection import confirm_collection
 

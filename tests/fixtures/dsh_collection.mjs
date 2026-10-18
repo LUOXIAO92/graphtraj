@@ -78,5 +78,14 @@ await ctx.sessions.flush(child);
 assert.ok(failures.some(message => message.includes('controlled delivery interruption')));
 // Shutdown must drain the final event even without another explicit checkpoint.
 session.append('turn/start', { turn: 1 });
+const finalObservation = await ctx.sessionQuery.observeSession(session.id, { projectionMode: 'none' });
+const finalEvents = [...finalObservation.events];
+finalObservation[Symbol.dispose]();
+const childObservation = await ctx.sessionQuery.observeSession(child.id, { projectionMode: 'none' });
+const childEvents = [...childObservation.events];
+childObservation[Symbol.dispose]();
 await ctx.fiber.dispose();
-console.log(JSON.stringify({ count: original.length, counts, failures }));
+console.log(JSON.stringify({ count: original.length, counts, failures,
+  header: session.header, events: finalEvents, messages: session.deriveMessages(),
+  child: { header: child.header, events: childEvents, messages: child.deriveMessages() },
+}));

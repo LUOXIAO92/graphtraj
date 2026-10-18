@@ -184,6 +184,20 @@ def test_installed_dsh_append_flush_and_resume(project: Path) -> None:
     assert result.returncode == 0, result.stdout + result.stderr
     facts = json.loads(result.stdout.strip().splitlines()[-1])
     assert facts['count'] == 5
+    # Compare Python reconstruction to the installed Runtime's own projection,
+    # including the native fork seed and the event drained during disposal.
+    from graphtraj.runtimes.dsh.collection import collect_jsonl
+    from graphtraj.sessions.archive import SessionArchive, JsonlSessionStore, archive_path
+
+    archive = SessionArchive(project / 'optional', save_normalized_sessions=True, backfill_history=True)
+    for sample in (facts, facts['child']):
+        records = [{'event': item} for item in sample['events']]
+        saved = collect_jsonl(archive, sample['header'], records)
+        replay = collect_jsonl(archive, sample['header'], records, historical=True)
+        assert replay == saved
+        store = JsonlSessionStore(archive_path(archive.root, saved['session']))
+        assert store.messages() == sample['messages']
+        assert [native_record(row) for row in store.page()['events']] == sample['events']
     with SessionStore(session_path(project / '.graphtraj/state', 'dsh:real-main')) as store:
         store.validate()
         assert store.next_seq == 6
@@ -193,3 +207,84 @@ def test_installed_dsh_append_flush_and_resume(project: Path) -> None:
         assert store.header['graphtraj']['source'] == 'child'
         assert store.header['parentSession'] == 'dsh:real-main'
         assert store.next_seq > 5
+
+
+def test_optional_jsonl_uses_native_order_and_backfill_policy(tmp_path: Path) -> None:
+    """Archive only mapped supplied history; native seq wins over timestamps."""
+    from graphtraj.runtimes.dsh.collection import collect_jsonl
+    from graphtraj.sessions.archive import SessionArchive, JsonlSessionStore, archive_path
+
+    header = {'version': 4, 'id': 'optional', 'createdAt': 1, 'isSeeded': False}
+    rows = [event('user/message', index, {
+        'id': str(index), 'role': 'user', 'source': {'kind': 'user'},
+        'content': [{'type': 'text', 'text': 'same text'}],
+    }, surfaceOp='append') for index in range(2)]
+    rows[0]['time'], rows[1]['time'] = 900, 100
+    records = [{'event': row} for row in rows]
+    archive = SessionArchive(tmp_path / 'optional')
+    assert not collect_jsonl(archive, header, records)['saved']
+    assert not archive.root.exists()
+    archive.save_normalized_sessions = True
+    assert not collect_jsonl(archive, header, records, historical=True)['saved']
+    assert not archive.root.exists()
+    saved = collect_jsonl(archive, header, records)
+    store = JsonlSessionStore(archive_path(archive.root, saved['session']))
+    assert [message['id'] for message in store.messages()] == ['0', '1']
+    assert [row['time'] for row in store.page()['events']] == [900, 100]
+    with pytest.raises(ValueError, match='complete native prefix'):
+        collect_jsonl(archive, header, list(reversed(records)))
+    archive.save_normalized_sessions = False
+    assert not collect_jsonl(archive, header, records)['saved']
+    assert JsonlSessionStore(store.path).messages() == store.messages()
+
+
+def test_native_gap_backfill_and_disk_confirmation(tmp_path: Path) -> None:
+    """Retain new content with a gap, then resolve it using the same native log."""
+    from graphtraj.runtimes.dsh.collection import DshArchive
+    from graphtraj.sessions.archive import SessionArchive, JsonlSessionStore, archive_path
+
+    header = {'version': 4, 'id': 'gap', 'createdAt': 1, 'isSeeded': False}
+    old = event('user/message', 0, {
+        'id': 'old', 'role': 'user', 'source': {'kind': 'user'},
+        'content': [{'type': 'text', 'text': 'old memory'}],
+    }, surfaceOp='append')
+    new = event('user/message', 1, {
+        'id': 'new', 'role': 'user', 'source': {'kind': 'user'},
+        'content': [{'type': 'text', 'text': 'new input'}],
+    }, surfaceOp='append')
+    archive = SessionArchive(tmp_path / 'archive', save_normalized_sessions=True)
+    capture = DshArchive(archive, resumed=True)
+    capture.start({'header': header, 'cursor': 0}, [])
+    capture.event(new)
+    store = JsonlSessionStore(archive_path(archive.root, 'dsh:gap'))
+    assert store.page()['events'] == []
+    assert store.pending()[0]['event']['data']['content'][0]['text'] == 'new input'
+    with pytest.raises(ValueError, match='incomplete'):
+        store.messages()
+    trace = tmp_path / 'native.jsonl'
+    trace.write_text('\n'.join(json.dumps(row) for row in [header, old]) + '\n')
+    with pytest.raises(ValueError, match='persisted prefix'):
+        capture.finish(trace)  # A callback is not proof of native disk flush.
+    trace.write_text('\n'.join(json.dumps(row) for row in [header, old, new]) + '\n')
+    capture.finish(trace)
+    archive.backfill_history = True
+    resumed = DshArchive(archive, resumed=True)
+    resumed.start({'header': header, 'cursor': 1}, [{'event': old}, {'event': new}])
+    resumed.finish(trace)
+    store = JsonlSessionStore(store.path)
+    assert not store.pending()
+    assert [message['id'] for message in store.messages()] == ['old', 'new']
+    assert len(store.observations()) == 1
+
+
+def test_installed_dsh_agents_function_and_presentation() -> None:
+    """Use the installed native tool contract; rendering is not model input."""
+    node, dsh = shutil.which('node'), shutil.which('dsh')
+    if node is None or dsh is None:
+        pytest.skip('Installed DSH and Node are required for native API evidence.')
+    root = Path(__file__).resolve().parents[1]
+    result = subprocess.run([
+        node, str(root / 'tests/fixtures/dsh_agents.mjs'), str(Path(dsh).resolve()),
+        str(root / 'src/graphtraj/runtimes/dsh/agents.mjs'),
+    ], capture_output=True, text=True, timeout=10)
+    assert result.returncode == 0, result.stdout + result.stderr

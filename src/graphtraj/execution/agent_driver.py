@@ -28,10 +28,8 @@ from graphtraj.runtimes.runtime_adapter import (
 )
 
 
-# ponytail: only Claude's managed owner is verified to run without a Runner
-# Worker (it reads credentials from this process and needs no per-execution
-# environment). Codex, Pi and DSH drivers belong to Tasks 331-334.
-SUPPORTED_RUNTIMES = frozenset({"claude"})
+# Runtime owners with Task-free host bindings.
+SUPPORTED_RUNTIMES = frozenset({"claude", "dsh"})
 
 # Native owners of this process's running executions, by core execution ID.
 _TURNS: dict[str, RuntimeTurn] = {}
@@ -131,6 +129,10 @@ class AdapterDriver:
             )
         except RuntimeAdapterError as error:
             raise _native_error(error) from None
+        if run.runtime == 'dsh':
+            from graphtraj.runtimes.dsh.driver import bind_agents
+
+            bind_agents(turn, run, self)
         turn.parent_notice = lambda message, details: (run.events.request(details),
                                                        {"delivery": "retained"})[1]
         with _TURNS_LOCK:

@@ -216,6 +216,27 @@ class DshService:
             return {}
         return message.get('value', {})
 
+    def history(self, snapshot: dict) -> list[dict]:
+        """Read the complete native prefix at the opening cut, without activation."""
+        records = list(snapshot['records'])
+        more = snapshot['hasMore']
+        while more:
+            if not records:
+                raise RuntimeAdapterError('RUNTIME_PROTOCOL_ERROR', 'DSH history page made no progress.')
+            first = records[0]['event']['seq']
+            page = self.rpc('session/page', {
+                'address': {'kind': 'session', 'sessionId': snapshot['header']['id']},
+                'throughSeq': snapshot['cursor'], 'beforeSeq': first,
+            })
+            earlier = page['records']
+            if not earlier or earlier[-1]['event']['seq'] >= first:
+                raise RuntimeAdapterError('RUNTIME_PROTOCOL_ERROR', 'DSH history page made no progress.')
+            records = earlier + records
+            more = page['hasMore']
+        if [row['event']['seq'] for row in records] != list(range(snapshot['cursor'] + 1)):
+            raise RuntimeAdapterError('RUNTIME_PROTOCOL_ERROR', 'DSH history is not the complete opening prefix.')
+        return records
+
     def take_events(self) -> list[dict]:
         """Drain queued approval-channel frames without blocking."""
         frames = []

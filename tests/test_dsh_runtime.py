@@ -210,6 +210,115 @@ def turn_identity(turn: Any) -> dict:
     return {'session': turn.session, 'execution_id': turn.execution_id}
 
 
+@pytest.mark.parametrize('archiving', [False, True])
+def test_agents_control_dsh_without_task_or_archive(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, archiving: bool,
+) -> None:
+    """Use the common function and native adapter; no Task or archive is needed.
+
+    The service is controlled, so this is development control/bridge evidence,
+    not proof of an official model invocation or browser rendering.
+    """
+    from agent_swarm import AgentControl, Caller, bind
+    from graphtraj.execution.agent_driver import AdapterDriver
+    from graphtraj.runtimes.dsh import execution
+
+    class Peer(NativePeer):
+        """Retain bridge context and stop without creating a project archive."""
+
+        def __init__(self, executable: str, cwd: Path, environment: dict) -> None:
+            """Expose the controlled service's owned process to authentication."""
+            super().__init__(executable, cwd, environment)
+            self.environment = environment
+            self.process.poll = lambda: None
+            rows = [json.loads(line) for line in self.log.read_text().splitlines()]
+            self.header, self.records = rows[0], rows[1:]
+
+        def follow(self, session: str) -> dict:
+            """Return the native cut before any input for this invocation."""
+            return {'type': 'snapshot', 'header': self.header,
+                    'cursor': len(self.records) - 1, 'hasMore': False,
+                    'records': [{'event': row} for row in self.records]}
+
+        def history(self, snapshot: dict) -> list[dict]:
+            """This controlled native history fits in its opening page."""
+            return snapshot['records']
+
+        def receive(self, timeout: float = 1) -> dict:
+            """Publish native events before the separately delayed disk flush."""
+            frame = super().receive(timeout)
+            if frame.get('type') == 'event':
+                row = frame['event']
+                row.update(seq=len(self.records), time=100 + len(self.records))
+                if row['type'] == 'assistant/message':
+                    row.update(surfaceOp='append', data={'turn': 0, 'step': 0, 'stream': [], 'message': {
+                        'id': 'answer', 'role': 'assistant',
+                        'source': {'kind': 'model', 'provider': 'controlled', 'model': 'peer'},
+                        'content': [{'type': 'text', 'text': 'Native response'}],
+                    }})
+                else:
+                    row['data'] = {'turn': 0, 'reason': {'kind': 'completed'}}
+                self.records.append(row)
+            return frame
+
+        def close(self) -> None:
+            """End only this controlled service."""
+            self.log.write_text(''.join(json.dumps(row) + '\n' for row in [self.header, *self.records]))
+            self.closed = True
+
+    NativePeer.instances = []
+    monkeypatch.setattr(execution, 'DshService', Peer)
+    driver = AdapterDriver(tmp_path, tmp_path)
+    monkeypatch.setattr(driver, 'prepare', lambda runtime, caller: {
+        'adapter_request': request(tmp_path), 'evidence': {},
+    })
+    control = AgentControl(tmp_path / '.graphtraj/swarm', {'dsh': driver})
+    from agent_swarm import write_config
+    from graphtraj.sessions.archive import SessionArchive, JsonlSessionStore, archive_path
+
+    write_config(control.root, save_normalized_sessions=archiving)
+    archive = SessionArchive(control.root, save_normalized_sessions=archiving)
+    agents = bind(control, Caller('test-host', None), archive=archive)
+    created = agents({'action': 'create', 'runtime': 'dsh', 'instruction': 'remember marker'})
+    assert not created.failed, created.document
+    agent = created.document['agent']
+    first = NativePeer.instances[-1]
+    assert first.environment['GRAPHTRAJ_DSH_AGENTS_ONLY'] == '1'
+
+    # The actual stdio entry forwards into the registered host's common handler;
+    # it receives no Task identity or authority from model arguments.
+    result = subprocess.run(
+        [sys.executable, '-c', 'from graphtraj.interfaces.local_tool import main; main()'],
+        input=json.dumps({'action': 'execute', 'feature': 'agents',
+                          'arguments': {'action': 'status'}}) + '\n',
+        env={**first.environment, 'PYTHONPATH': str(Path(__file__).resolve().parents[1] / 'src')},
+        cwd=tmp_path, capture_output=True, text=True, timeout=10,
+    )
+    try:
+        assert result.returncode == 0, result.stderr
+        assert 'error' not in json.loads(result.stdout), result.stdout
+        assert not agents({'action': 'send', 'agent': agent, 'message': 'second message'}).failed
+    finally:
+        first.release_cancel.set()
+        agents({'action': 'interrupt', 'agent': agent})
+    stopped = agents({'action': 'wait', 'agent': agent, 'timeout_seconds': 5})
+    assert stopped.document['result']['state'] == 'standby', stopped.document
+    assert not (tmp_path / '.graphtraj/config.yml').exists()
+    assert not (tmp_path / '.graphtraj/state').exists()
+    assert (tmp_path / '.graphtraj/swarm/sessions').exists() == archiving
+
+    resumed = agents({'action': 'resume', 'agent': agent, 'message': 'recall marker'})
+    assert resumed.document['session'] == created.document['session']
+    second = NativePeer.instances[-1]
+    second.frames.extend(['assistant/message', 'turn/end'])
+    ended = agents({'action': 'wait', 'agent': agent, 'timeout_seconds': 5})
+    assert ended.document['result']['state'] == 'standby'
+    assert ended.document['result']['last_result']['last_message'] == 'Native response', ended.document
+    if archiving:
+        store = JsonlSessionStore(archive_path(control.root, 'dsh:' + resumed.document['session']))
+        assert store.messages()[0]['content'][0]['text'] == 'Native response'
+
+
 def wait_for_request(turn: Any, timeout: float = 3) -> dict:
     """Poll the public requests operation until the native request is published."""
     deadline = time.monotonic() + timeout

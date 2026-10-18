@@ -53,6 +53,7 @@ def cli_connection(
     allowed_features: Collection[str],
     recovery_reviewer: Callable[[dict], dict] | None = None,
     directory: Path | None = None,
+    native_context: Callable[[], dict | None] | None = None,
 ) -> Iterator[str]:
     """Serve one Session using its actual ownership and selected approval route.
 
@@ -75,12 +76,21 @@ def cli_connection(
 
     def operate(document: dict) -> dict:
         """Bind verified identity before entering the same gateway as native tools."""
-        if (not isinstance(document, dict) or set(document) != {'cwd', 'request'}
+        fields = {'cwd', 'request'} | ({'native'} if native_context is not None else set())
+        if (not isinstance(document, dict) or set(document) != fields
                 or not _caller_in_scope(document['cwd'], root, runner, alias)):
             raise RunnerError(
                 'invalid-config',
                 "Agent Runner must be invoked from the Harness Project Root or this Session's Worktree.",
             )
+        if native_context is not None:
+            from agent_swarm.connection import verify_native_context
+            from agent_swarm import AgentsError
+
+            try:
+                verify_native_context(document['native'], native_context())
+            except AgentsError as error:
+                raise RunnerError(error.code, error.message) from error
         with runtime_caller(runner, alias), recovery_review(recovery_reviewer):
             result = handle_request(document['request'], cwd=root, allowed_features=allowed_features)
         return {'document': result.document, 'failed': result.failed}
@@ -98,7 +108,9 @@ def forward_cli(feature: str, arguments: dict, cwd: Path) -> ToolResult | None:
     return forward_request({'action': 'execute', 'feature': feature, 'arguments': arguments}, cwd)
 
 
-def forward_request(request: Mapping[str, Any], cwd: Path) -> ToolResult | None:
+def forward_request(
+    request: Mapping[str, Any], cwd: Path, *, native_context: dict | None = None,
+) -> ToolResult | None:
     """Forward the public discovery/operation envelope over the same bound channel."""
     address = os.environ.get(CONNECTION_ENV)
     if address is None:
@@ -116,8 +128,12 @@ def forward_request(request: Mapping[str, Any], cwd: Path) -> ToolResult | None:
     # Recovery can include native approval and Session startup, which have no
     # fixed duration; once the host accepts it, its own reply is awaited.
     long_operation = request.get('action') == 'execute' and request.get('feature') == 'approved_recovery'
+    from agent_swarm.connection import client_native_context
+
+    native = native_context if native_context is not None else client_native_context()
     response = connection_operation(address, {
         'cwd': str(cwd.resolve()),
         'request': request,
+        **({'native': native} if native is not None else {}),
     }, authenticate=True, response_timeout=response_timeout, await_accepted=long_operation)
     return ToolResult(response['document'], failed=response['failed'])

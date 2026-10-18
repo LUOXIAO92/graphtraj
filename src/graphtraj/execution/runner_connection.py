@@ -3,22 +3,13 @@
 from __future__ import annotations
 
 import json
-import ctypes
 import math
 import os
-import stat
-import sys
-import tempfile
-import threading
-import time
-import traceback
 from contextlib import contextmanager
 from contextvars import ContextVar
 from pathlib import Path
 from typing import Callable, Iterator
 
-if os.name != 'nt':
-    import fcntl
 
 from graphtraj.execution.runner_models import RunnerError
 from graphtraj.execution.runner_process import OPERATION_TIMEOUT_SECONDS
@@ -56,102 +47,23 @@ def worker_connection(
     *,
     authenticate: Callable[[int], None] | None = None,
 ) -> Iterator[str]:
-    """Serve local requests without requiring a listening network/socket permission."""
-    if os.name == 'nt':
-        raise RunnerError('authority-denied', 'Windows does not support the authenticated Runner control pipe.')
-    stop = threading.Event()
-    with tempfile.TemporaryDirectory(prefix='control-', dir=directory) as address:
-        # Held for the host's lifetime; the kernel releases it if the host dies.
-        host_lock = os.open(address, os.O_RDONLY | os.O_DIRECTORY)
-        fcntl.flock(host_lock, fcntl.LOCK_EX)
+    """Keep Runner errors and callbacks over the shared file transport."""
+    from agent_swarm.connection import worker_connection as connection
+    from agent_swarm.tool import AgentsError
 
-        def serve() -> None:
-            """Publish complete responses while native work continues on its own loop."""
-            while not stop.is_set():
-                for entry in Path(address).iterdir():
-                    try:
-                        descriptor = os.open(entry, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
-                    except OSError:
-                        continue
-                    try:
-                        _answer_request(descriptor, operate, authenticate)
-                    finally:
-                        os.close(descriptor)
-                stop.wait(0.01)
-
-        thread = threading.Thread(target=serve, daemon=True)
-        thread.start()
+    def invoke(callback: Callable, value: object) -> object:
+        """Translate existing host failures at the transport boundary."""
         try:
+            return callback(value)
+        except (RunnerError, RuntimeAdapterError) as error:
+            raise AgentsError(error.code, error.message) from error
+
+    try:
+        with connection(directory, lambda request: invoke(operate, request),
+                        authenticate=(lambda pid: invoke(authenticate, pid)) if authenticate else None) as address:
             yield address
-        finally:
-            stop.set()
-            thread.join()
-            # A caller removes its request directory after consuming the reply.
-            # Keep acknowledged results available across fast native completion.
-            deadline = time.monotonic() + OPERATION_TIMEOUT_SECONDS
-            while any(Path(address).iterdir()) and time.monotonic() < deadline:
-                time.sleep(0.01)
-            os.close(host_lock)
-
-
-def _host_alive(address: str) -> bool:
-    """Observe the serving host's channel lock without taking it over."""
-    try:
-        descriptor = os.open(address, os.O_RDONLY | os.O_DIRECTORY)
-    except OSError:
-        return False
-    try:
-        fcntl.flock(descriptor, fcntl.LOCK_SH | fcntl.LOCK_NB)
-    except BlockingIOError:
-        return True
-    except OSError:
-        return True  # Unobservable here; the reply or channel removal still ends the wait.
-    else:
-        fcntl.flock(descriptor, fcntl.LOCK_UN)
-        return False
-    finally:
-        os.close(descriptor)
-
-
-def _answer_request(
-    directory: int,
-    operate: Callable[[dict], dict],
-    authenticate: Callable[[int], None] | None,
-) -> None:
-    """Pin the request directory and never follow caller-controlled file links."""
-    try:
-        descriptor = os.open('request.json', os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=directory)
-    except OSError:
-        return
-    try:
-        with os.fdopen(descriptor) as stream:
-            metadata = os.fstat(stream.fileno())
-            if not stat.S_ISREG(metadata.st_mode) or metadata.st_nlink != 1:
-                raise ValueError('A control request must be a regular file with one link.')
-            if authenticate is not None:
-                authenticate(record_lock_owner(stream.fileno()))
-            request = json.load(stream)
-        os.unlink('request.json', dir_fd=directory)
-        result = operate(request)
-    except (RunnerError, RuntimeAdapterError) as error:
-        result = {'error': {'code': error.code, 'message': error.message}}
-    except (OSError, ValueError, KeyError, TypeError) as error:
-        if isinstance(error, OSError):
-            # The reply keeps its format; the host keeps where the call failed.
-            traceback.print_exc(file=sys.stderr)
-        result = {'error': {'code': 'operation-failed', 'message': str(error)}}
-    try:
-        descriptor = os.open('response.tmp', os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
-                             0o600, dir_fd=directory)
-        with os.fdopen(descriptor, 'w') as stream:
-            json.dump(result, stream)
-        os.replace('response.tmp', 'response.json', src_dir_fd=directory, dst_dir_fd=directory)
-        try:
-            os.unlink('request.json', dir_fd=directory)
-        except FileNotFoundError:
-            pass
-    except OSError:
-        pass  # Caller EOF does not cancel an accepted native operation.
+    except AgentsError as error:
+        raise RunnerError(error.code, error.message) from error
 
 
 def session_operation(
@@ -193,65 +105,22 @@ def connection_operation(
         except RuntimeAdapterError as error:
             raise RunnerError(error.code, error.message) from error
 
-    if os.name == 'nt':
-        raise RunnerError('authority-denied', 'Windows does not support the authenticated Runner control pipe.')
+    from agent_swarm.connection import connection_operation as exchange
+    from agent_swarm.tool import AgentsError
 
     try:
-        with tempfile.TemporaryDirectory(dir=address) as directory:
-            request = Path(directory) / 'request.tmp'
-            with request.open('w') as stream:
-                if authenticate:
-                    fcntl.lockf(stream, fcntl.LOCK_EX | fcntl.LOCK_NB)
-                stream.write(json.dumps(document))
-                stream.flush()
-                os.replace(request, request.with_suffix('.json'))
-                response_file = Path(directory) / 'response.json'
-                accepted_file = request.with_suffix('.json')
-                deadline = time.monotonic() + response_timeout
-                while not response_file.is_file():
-                    if await_accepted and not accepted_file.exists():
-                        # The host removes the request when it accepts it. A
-                        # long native operation is then awaited until its reply
-                        # or until the host closes this channel.
-                        if (not Path(directory).is_dir()
-                                or time.monotonic() >= deadline and not _host_alive(address)):
-                            raise TimeoutError('The Session host closed before replying; '
-                                               'the accepted operation is unconfirmed.')
-                    elif time.monotonic() >= deadline:
-                        raise TimeoutError('Session control timed out; delivery is unconfirmed.')
-                    time.sleep(0.01)
-                response = json.loads(response_file.read_text())
-        if 'error' in response:
-            raise RunnerError(response['error']['code'], response['error']['message'])
-        return response
-    except (OSError, ValueError, KeyError, TypeError) as error:
-        raise RunnerError(
-            'operation-failed', 'The mapped Session owner did not acknowledge the operation: ' + str(error),
-        ) from error
+        return exchange(address, document, authenticate=authenticate,
+                        response_timeout=response_timeout, await_accepted=await_accepted)
+    except AgentsError as error:
+        raise RunnerError(error.code, error.message) from error
 
 
 def record_lock_owner(descriptor: int) -> int:
-    """Read the POSIX write-lock owner from the kernel, failing closed elsewhere.
+    """Preserve the public Runner import for the shared kernel lock proof."""
+    from agent_swarm.connection import record_lock_owner as owner
+    from agent_swarm.tool import AgentsError
 
-    Darwin and Linux use different native ``struct flock`` field orderings.
-    The client holds a whole-file lock until it consumes the host response.
-    """
-    if sys.platform == 'darwin':
-        fields = [('start', ctypes.c_int64), ('length', ctypes.c_int64),
-                  ('pid', ctypes.c_int), ('type', ctypes.c_short), ('whence', ctypes.c_short)]
-    elif sys.platform.startswith('linux'):
-        fields = [('type', ctypes.c_short), ('whence', ctypes.c_short),
-                  ('start', ctypes.c_int64), ('length', ctypes.c_int64), ('pid', ctypes.c_int)]
-    else:
-        raise RunnerError('authority-denied', 'This platform cannot verify CLI request ownership.')
-
-    class FileLock(ctypes.Structure):
-        """Native ABI record used only for F_GETLK, never caller supplied data."""
-        _fields_ = fields
-
-    query = FileLock()
-    query.type = fcntl.F_WRLCK
-    owner = FileLock.from_buffer_copy(fcntl.fcntl(descriptor, fcntl.F_GETLK, bytes(query)))
-    if owner.type != fcntl.F_WRLCK or owner.pid <= 0:
-        raise RunnerError('authority-denied', 'The CLI request has no live kernel-verified owner.')
-    return owner.pid
+    try:
+        return owner(descriptor)
+    except AgentsError as error:
+        raise RunnerError(error.code, error.message) from error

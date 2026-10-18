@@ -8,6 +8,7 @@ import sys
 import shutil
 
 import yaml
+import pytest
 
 from graphtraj.execution.runner_heartbeat import hold_ownership
 from graphtraj.execution.runner_status import runtime_caller
@@ -265,7 +266,8 @@ def test_managed_worker_grants_only_its_channel_and_closes_it(tmp_path: Path, pe
         assert filesystem[address] == 'write'
         assert str(Path(address).parent) not in filesystem
         result = cli(tmp_path, address, 'submit-result', '--commit', commit,
-                     '--result-ref', 'result.md', '--completion', 'Native host adopted')
+                     '--result-ref', 'result.md', '--completion', 'Native host adopted',
+                     GRAPHTRAJ_NATIVE_RUNTIME='codex', CODEX_THREAD_ID=session)
         assert result.returncode == 0, result.stdout + result.stderr
         observed.append(address)
 
@@ -294,3 +296,32 @@ def test_native_submission_errors_identify_wrong_reference_and_git_failure(tmp_p
         assert 'git cat-file -t ' + commit + ':absent.md' in failure.value.message
         assert str(tmp_path / 'worktrees/research') in failure.value.message
         assert 'fatal:' in failure.value.message
+
+
+def test_shared_mcp_command_consumes_bound_graphtraj_dsh_channel(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """The same MCP command preserves the existing Task caller and native Session check."""
+    runner, _, _ = result_project(tmp_path)
+    directory = own_process(runner)
+    monkeypatch.delenv('AGENT_SWARM_CONNECTION', raising=False)
+    expected = {'runtime': 'dsh', 'session': 'owned-dsh-session', 'source': 'main', 'cwd': str(tmp_path)}
+    request = {'jsonrpc': '2.0', 'id': 1, 'method': 'tools/call', 'params': {'name': 'tasks',
+        'arguments': {'action': 'execute', 'feature': 'alias_status', 'arguments': {}}}}
+    with hold_ownership(directory, os.getpid()), cli_connection(
+        tmp_path, 'research@x1', native_operation_features(), native_context=lambda: expected,
+    ) as address:
+        listed = run_cli('agent_swarm.mcp', tmp_path, address,
+                         input_text=json.dumps({'jsonrpc': '2.0', 'id': 0, 'method': 'tools/list'})+'\n',
+                         DSH_SESSION_ID=expected['session'], DSH_AGENT_SOURCE='main')
+        assert [tool['name'] for tool in json.loads(listed.stdout)['result']['tools']] == ['agents', 'tasks']
+        for session, source in ((expected['session'], 'main'), ('other', 'main'), (expected['session'], 'child')):
+            result = run_cli('agent_swarm.mcp', tmp_path, address,
+                             input_text=json.dumps(request)+'\n',
+                             DSH_SESSION_ID=session, DSH_AGENT_SOURCE=source)
+            assert result.returncode == 0, result.stderr
+            response = json.loads(result.stdout)['result']
+            if (session, source) == (expected['session'], 'main'):
+                assert not response['isError'], response
+                assert 'research@x1' in json.dumps(response['structuredContent'])
+            else:
+                assert response['isError']
+                assert 'do not match' in response['content'][0]['text']

@@ -25,8 +25,8 @@ from test_task_graph import _configure, _task, _write
 
 
 # The original gateway remains alongside the two public function names.
-TOOL_NAMES = {"agents", "tasks", "graphtraj"}
-MCP_TOOL_NAME = "graphtraj"
+TOOL_NAMES = {"agents", "tasks"}
+MCP_TOOL_NAME = "tasks"
 
 
 def tool_envelope(feature: str, arguments: dict) -> dict:
@@ -231,7 +231,7 @@ def test_mcp_agents_preserves_verified_main_and_helper_authority(
         """Exercise a full newline-delimited MCP tools/call exchange."""
         output = StringIO()
         serve(StringIO(json.dumps({'jsonrpc': '2.0', 'id': 1, 'method': 'tools/call',
-                                  'params': {'name': 'agents', 'arguments': arguments}}) + '\n'), output)
+                                  'params': {'name': 'agents', 'arguments': {'action': 'execute', 'feature': arguments['action'], 'arguments': {key: value for key, value in arguments.items() if key != 'action'}}}}) + '\n'), output)
         return json.loads(output.getvalue())['result']
 
     assert call({'action': 'status'})['isError'] is False
@@ -266,14 +266,10 @@ def test_installed_mcp_server_discovers_tools_and_reads_the_same_graph_as_the_cl
         listed = server.request("tools/list")["result"]["tools"]
         assert {tool["name"] for tool in listed} == TOOL_NAMES
         descriptors = {tool['name']: tool for tool in listed}
-        descriptor = descriptors['graphtraj']
+        descriptor = descriptors['tasks']
         assert descriptor["description"]
         # Tasks retains the gateway envelope; agents uses its independent contract.
-        from agent_swarm import tool_descriptor
-
-        agents_descriptor = tool_descriptor()
-        agents_descriptor['inputSchema'] = agents_descriptor.pop('input_schema')
-        assert descriptors['agents'] == agents_descriptor
+        assert descriptors['agents']['inputSchema'] == gateway.INPUT_SCHEMA
         assert descriptors['tasks']['inputSchema'] == gateway.INPUT_SCHEMA
         assert descriptor["inputSchema"] == gateway.INPUT_SCHEMA
         assert set(descriptor["inputSchema"]["properties"]) == {
@@ -330,7 +326,7 @@ def test_installed_mcp_server_discovers_tools_and_reads_the_same_graph_as_the_cl
         })
         assert tasks_call['result'] == call['result']
         agents_call = server.request('tools/call', {
-            'name': 'agents', 'arguments': {'action': 'status'},
+            'name': 'agents', 'arguments': {'action': 'execute', 'feature': 'status', 'arguments': {}},
         })
         assert agents_call['result']['isError'] is True
         assert agents_call['result']['structuredContent']['error']['code'] == 'authority-unavailable'

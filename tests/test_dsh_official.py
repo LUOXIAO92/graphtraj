@@ -216,7 +216,8 @@ def test_actual_pi_reply_resumes_standby_dsh() -> None:
 
     assert time.time() < float(os.environ['TASK334_UI_DEADLINE']), 'The authorized UI window has ended.'
     root = Path(os.environ['TASK334_CROSS_ROOT'])
-    record = json.loads(next((root / 'control/agents').glob('*.json')).read_text())
+    agent_id = 'agent-55a851da1900487193f749f3c4c34847'
+    expected_session = 'session-e873e3ae-e177-4a06-9550-e2fdf8eaf5c6'
     phases = []
     handoff = Path('/private/tmp/task334-ui-final')
     handoff.mkdir(exist_ok=True)
@@ -254,7 +255,14 @@ def test_actual_pi_reply_resumes_standby_dsh() -> None:
     pi = PiDriver(prepared)
     control = AgentControl(root, {'dsh': driver, 'pi': pi})
     call = bind(control, Caller('official-final-validation', None))
-    resumed = call({'action': 'resume', 'agent': record['agent'], 'message':
+    status = call({'action': 'status', 'agent': agent_id})
+    record = status.document.get('result', {})
+    if (status.failed or record.get('agent') != agent_id or record.get('runtime') != 'dsh'
+            or record.get('session') != expected_session):
+        error_path = handoff / 'status-error.json'
+        error_path.write_text(json.dumps(status.document, indent=2))
+        pytest.fail(f'The fixed DSH Agent/Session status did not match; retained at {error_path}')
+    resumed = call({'action': 'resume', 'agent': agent_id, 'message':
         'Use agents MCP describe create schema=true then execute create exactly once with runtime pi. '
         'Child instruction: "Use bash to run sleep 180, then reply exactly PI334-REPLY. Do not spawn agents or edit files." '
         'After create returns, reply exactly WAITING and end your turn immediately. Do not call wait/status. '

@@ -479,7 +479,14 @@ def submit_session_report(name: str, text: str, cwd: Path) -> dict:
     if len(paths) != 1:
         raise RunnerError('authority-denied', 'The report is not assigned to this Session.')
     from graphtraj.execution.runner_results import start_result_correction
+    from graphtraj.graph.task_graph import _load_states
 
+    state = load_project_configuration(cwd).state
+    if _load_states(state / 'tasks')[mapping['task_id']][1]['status'] in ACCEPTED_STATUSES:
+        # A finished Task opens no Round; its member, e.g. after a follow-up,
+        # adds its own report beside the retained one in the closed Round.
+        path = next(path for path in _session_report_paths(alias, cwd) if path.name == name)
+        return {'alias': alias, 'report': str(_add_closed_round_report(path, text))}
     start_result_correction(mapping, cwd)
     path = next(path for path in _session_report_paths(alias, cwd) if path.name == name)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -495,6 +502,38 @@ def submit_session_report(name: str, text: str, cwd: Path) -> dict:
         if temporary is not None:
             temporary.unlink(missing_ok=True)
     return {'alias': alias, 'report': str(path)}
+
+
+# Task states after a result was accepted: no new result or Round is recorded.
+ACCEPTED_STATUSES = frozenset({'awaiting-integration', 'integrating', 'integrated'})
+
+
+def _add_closed_round_report(path: Path, text: str) -> Path:
+    """Create a new report beside ``path`` without changing any retained file.
+
+    The assigned name is used when absent, otherwise the first free
+    ``<stem>-<n>.md`` from 2. A closed Round directory stays read-only except
+    for this one exclusive creation; its mode is restored afterwards.
+    """
+    directory = path.parent
+    mode      = directory.stat().st_mode & 0o7777
+    directory.chmod(mode | 0o200)
+    try:
+        number = 1
+        while True:
+            target = path if number == 1 else path.with_stem(f'{path.stem}-{number}')
+            try:
+                with target.open('x', encoding='utf-8') as stream:
+                    stream.write(text)
+                    stream.flush()
+                    os.fsync(stream.fileno())
+                # Like the Round's retained reports, the new one is not rewritten later.
+                target.chmod(0o444)
+                return target
+            except FileExistsError:
+                number += 1
+    finally:
+        directory.chmod(mode)
 
 
 def _execution_identity(alias: str, mapping: Mapping[str, Any]) -> Dict[str, str]:

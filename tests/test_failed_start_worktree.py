@@ -390,7 +390,11 @@ def test_cleaned_task_member_answers_a_follow_up_in_its_native_session(
     )
     assert status.session == session and status.result['state'] == 'standby'
     assert status.result['name'] == alias and status.result['parent'] is None
-    # A follow-up member's new result stays refused; its closed Round stays unchanged.
+    # A follow-up member adds its own report; retained reports and the closed
+    # Round stay unchanged, and a new result stays refused.
+    reports = root / '.graphtraj/state/tasks/268-failed-start/teams/1/rounds'
+    retained = {path: path.read_bytes() for path in reports.rglob('*') if path.is_file()}
+    modes = {path: path.stat().st_mode for path in reports.iterdir()}
     env['FAKE_CODEX_LIFECYCLE_ACTION'] = 'follow-up-report'
     sent = run_process([str(installed_commands.runner), 'send', alias, '--instruction', 'Record the check.',
                         '--caused-by-event-id', cause], cwd=root, env=env, timeout=30)
@@ -401,7 +405,12 @@ def test_cleaned_task_member_answers_a_follow_up_in_its_native_session(
     outcome = json.loads(yaml.safe_load(execution.read_text())['last_agent_message'])
     assert outcome['result'] == 1, outcome
     assert 'not accepting result submissions' in outcome['result_output']
-    assert 'not accepting result submissions' in outcome['report_output']
+    assert outcome['report'] == 0, outcome
+    added = [path for path in reports.rglob('*') if path.is_file() and path not in retained]
+    assert [(path.name, path.read_text()) for path in added] == [
+        (Path(outcome['report_name']).stem + '-2.md', 'Follow-up verified.')]
+    assert all(path.read_bytes() == content for path, content in retained.items())
+    assert {path: path.stat().st_mode for path in reports.iterdir()} == modes
     assert run_process([str(installed_commands.product), 'task', 'graph'],
                        cwd=root, env=env).stdout == graph_before
 

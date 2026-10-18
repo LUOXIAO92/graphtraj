@@ -67,6 +67,9 @@ main.add_command(bind_command)
 @click.option("--verify", is_flag=True, help="Compare imported legacy fields, attachment bytes and captured source hashes without writing.")
 @click.option("--main-session", help="Explicit current Main native identity for metadata inventory; never inferred from timestamps.")
 @click.option("--against", type=click.Path(path_type=Path, exists=True), help="With --verify, compare retained swarm data to an explicit immutable public snapshot.")
+@click.option("--cutover", type=click.Path(path_type=Path), help="Capture to a new external snapshot and install the stopped project's core/swarm layout.")
+@click.option("--restore", type=click.Path(path_type=Path, exists=True), help="Restore this project's retained Agent cutover backup.")
+@click.option("--writes-stopped", is_flag=True, help="Confirm all writers, including Main hooks, remain stopped during cutover or recovery.")
 def migrate_agents_command(
     preview: bool,
     snapshot: Path | None,
@@ -75,12 +78,26 @@ def migrate_agents_command(
     verify: bool,
     main_session: str | None,
     against: Path | None,
+    cutover: Path | None,
+    restore: Path | None,
+    writes_stopped: bool,
 ) -> None:
     """Rehearse native Session migration on a retained, isolated project copy."""
     from graphtraj.workspace.agent_migration import migrate_agents
     from graphtraj.workspace.migration_snapshot import snapshot_project
 
     try:
+        if cutover is not None or restore is not None:
+            from graphtraj.workspace.agent_production_migration import cutover_project, restore_cutover
+
+            if (cutover is not None and restore is not None) or any((preview, snapshot, sessions, partition, verify, against)) or (restore is not None and main_session):
+                raise ValueError('Cutover and recovery are separate full-project operations.')
+            result = (cutover_project(Path.cwd(), cutover, writes_stopped=writes_stopped, main_session=main_session) if cutover is not None
+                      else restore_cutover(Path.cwd(), restore, writes_stopped=writes_stopped))
+            click.echo(yaml.safe_dump(result, sort_keys=False), nl=False)
+            return
+        if writes_stopped:
+            raise ValueError('--writes-stopped applies only to --cutover or --restore.')
         if against is not None and not verify:
             raise ValueError('--against requires the read-only --verify operation.')
         if snapshot is not None and (preview or sessions or partition or verify or main_session):

@@ -26,6 +26,10 @@ PATH_FIELDS = frozenset({
     'report_file', 'report_files', 'evidence_refs', 'result_refs', 'worktree',
     'worktree_path', 'worktree_root', 'control_directory', 'runner_directory',
     'read_paths', 'write_paths', 'deny_read', 'deny_write', 'read', 'write',
+    'cwd', 'codex_home', 'claude_home', 'pi_home', 'dsh_home', 'rollout_path',
+    'session_file', 'session_path', 'transcript_path',
+    'runtime_home', 'agent_dir', 'evidence', 'resources', 'executable',
+    'CODEX_HOME', 'CLAUDE_CONFIG_DIR', 'PI_CODING_AGENT_DIR', 'DSH_HOME',
 })
 
 
@@ -50,7 +54,8 @@ def _partition_moves(root: Path, manifest: dict) -> dict[str, str]:
 def _references(value: object, moves: dict[str, str], field: str = '') -> object:
     """Relocate structural references, never authored prose or native payloads."""
     if isinstance(value, dict):
-        return {key: _references(item, moves, key) for key, item in value.items()}
+        return {(_references(key, moves, 'path') if field == 'filesystem' else key):
+                _references(item, moves, key) for key, item in value.items()}
     if isinstance(value, list):
         return [_references(item, moves, field) for item in value]
     if isinstance(value, str) and field in PATH_FIELDS:

@@ -63,7 +63,7 @@ main.add_command(bind_command)
 @click.option("--preview", is_flag=True, help="List the isolated copy's sources without importing.")
 @click.option("--snapshot", type=click.Path(path_type=Path), help="Capture associated project sources in a new isolated directory.")
 @click.option("--session", "sessions", multiple=True, help="Limit a sample to an inventoried runtime:native-reference (repeatable).")
-@click.option("--partition", is_flag=True, help="After full import, partition an isolated copy into core/swarm; never activate a live Harness.")
+@click.option("--partition", is_flag=True, help="Verify and partition an already imported isolated copy into core/swarm; never activate a live Harness.")
 @click.option("--verify", is_flag=True, help="Compare imported legacy fields, attachment bytes and captured source hashes without writing.")
 @click.option("--main-session", help="Explicit current Main native identity for metadata inventory; never inferred from timestamps.")
 def migrate_agents_command(
@@ -92,10 +92,12 @@ def migrate_agents_command(
             click.echo(yaml.safe_dump(result, sort_keys=False), nl=False)
             return
         result = (snapshot_project(Path.cwd(), snapshot) if snapshot is not None
-                  else migrate_agents(Path.cwd(), preview=preview, sessions=sessions, verify=verify, main_session=main_session))
+                  else migrate_agents(Path.cwd(), preview=preview, sessions=sessions, verify=verify or partition, main_session=main_session))
         if partition:
             from graphtraj.workspace.agent_cutover import partition_snapshot
 
+            if not result['verification']['matches']:
+                raise ValueError('Full archive verification failed; complete the public import before partitioning.')
             result['layout'] = partition_snapshot(Path.cwd())
     except (OSError, ValueError, yaml.YAMLError) as error:
         raise click.ClickException(str(error)) from error

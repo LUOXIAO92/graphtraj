@@ -267,6 +267,7 @@ def test_public_partition_uses_core_paths_and_retains_originals(tmp_path: Path, 
     assert runner.invoke(main, ['migrate-agents', '--snapshot', str(snapshot)]).exit_code == 0
     monkeypatch.chdir(snapshot)
     original = (snapshot / '.graphtraj/state/tickets/2-child/ticket.md').read_bytes()
+    assert runner.invoke(main, ['migrate-agents']).exit_code == 0
     result = runner.invoke(main, ['migrate-agents', '--partition'])
     assert result.exit_code == 0, result.output
     assert load_project_configuration(snapshot).state == snapshot / '.graphtraj/core/state'

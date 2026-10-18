@@ -256,7 +256,8 @@ def test_cleaned_task_reopens_with_fresh_member_and_preserved_history(
         failed = _launch(installed_commands, root, batch, env)
         assert failed.returncode == 1
         assert yaml.safe_load(failed.stdout)['tasks'][0]['error']['code'] == 'worktree-conflict'
-        assert not list(sessions.iterdir())
+        # Only the completed member remains, as a standby Agent.
+        assert list(sessions.iterdir()) == [sessions / old_alias]
     worktree.rmdir()
     if transport == 'cli':
         retried = _launch(installed_commands, root, batch, env)
@@ -282,12 +283,14 @@ def test_cleaned_task_reopens_with_fresh_member_and_preserved_history(
     mapping = yaml.safe_load((sessions / member['alias'] / 'mapping.yml').read_text())
     assert mapping['parent'] is None and mapping['team_generation'] == 1
     team = yaml.safe_load((evidence / 'teams/1/team.yml').read_text())
-    assert team['members']['engineer']['session_ref'] == member['alias']
+    # The completed member keeps its seat as a standby Agent; the fresh one joins.
+    assert team['members']['engineer']['session_ref'] == old_alias
+    assert team['members'][member['alias']]['session_ref'] == member['alias']
     reports = run_process([str(installed_commands.runner), 'reports', member['alias']], cwd=root, env=env)
     correction = yaml.safe_load(reports.stdout)['submissions'][-1]
     assert correction['round'] == 2 and correction['candidate'] != submission['candidate']
     assert team['current_round'] == 2
-    assert not (sessions / old_alias).exists()
+    assert (sessions / old_alias / 'mapping.yml').is_file()
     assert batch.read_bytes() == original_batch
     for path, content in retained.items():
         if path.name != 'team.yml':

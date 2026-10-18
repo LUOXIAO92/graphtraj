@@ -325,6 +325,30 @@ def test_pi_dialog_and_provider_error(tmp_path: Path, pi_environment: dict, monk
             error.run()
 
 
+def test_pi_dialog_notice_is_retried_while_the_dialog_is_pending(
+    tmp_path: Path, pi_environment: dict, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A parent still closing its turn receives the dialog notice on retry."""
+    result_project(tmp_path)
+    receipts = iter([{'delivery': 'not-delivered'}, {'delivery': 'not-delivered'}])
+    attempts = []
+    monkeypatch.setattr('graphtraj.execution.runner_control.notify_direct_parent',
+                        lambda *args: attempts.append(args) or next(receipts, {'delivery': 'received'}))
+    with ExitStack() as stack, ThreadPoolExecutor(max_workers=1) as pool:
+        turn, ready, _ = execution(tmp_path, pi_environment, 'research@x1', 'dialog', stack)
+        future = pool.submit(turn.run)
+        wait_started(turn, ready)
+        deadline = time.monotonic() + 10
+        while len(attempts) < 3 and time.monotonic() < deadline:
+            time.sleep(0.01)
+        assert len(attempts) == 3 and not future.done()
+        pending = turn.operate({'operation': 'requests', 'session': turn.session, 'execution_id': turn.execution_id})['requests'][0]
+        turn.operate({'operation': 'reply', 'session': turn.session, 'execution_id': turn.execution_id,
+                      'request_token': pending['request_token'], 'response': {'cancelled': True}})
+        assert future.result(timeout=5)['outcome'] == 'completed'
+    assert len(attempts) == 3
+
+
 def test_pi_child_cli_preserves_real_caller(tmp_path: Path, pi_environment: dict) -> None:
     """A real child process uses the hosted CLI from its Worktree and cannot forge a sibling identity."""
     result_project(tmp_path)

@@ -13,6 +13,7 @@ import signal
 import subprocess
 import sys
 import threading
+import time
 import uuid
 
 from graphtraj.execution.runner_io import write_yaml_durably
@@ -473,14 +474,26 @@ class PiManagedExecution:
         self.pending[token] = details
 
         def notify() -> None:
-            """Notify through the existing parent execution without granting consent."""
-            try:
-                receipt = notify_direct_parent(self.directory, 'Pi child requires a native reply:\n' + json.dumps(details), details)
-                if receipt is not None and receipt.get('delivery') not in {'received', 'no-direct-parent'}:
-                    raise RuntimeAdapterError('RUNTIME_REQUEST_FAILED', 'Pi dialog notification was not delivered.')
-            except Exception:
-                self.events.put({'type': 'interaction_error', 'error': RuntimeAdapterError(
-                    'RUNTIME_REQUEST_FAILED', 'Pi native dialog could not reach its direct parent.')})
+            """Notify through the existing parent execution without granting consent.
+
+            A parent still closing its settled turn refuses input, so a
+            ``not-delivered`` receipt is retried while the dialog is pending,
+            as Codex, Claude and DSH do. The dialog is never answered here.
+            """
+            message = 'Pi child requires a native reply:\n' + json.dumps(details)
+            while True:
+                with self.lock:
+                    if token not in self.pending or self.stopping.is_set():
+                        return
+                try:
+                    receipt = notify_direct_parent(self.directory, message, details)
+                except Exception:
+                    self.events.put({'type': 'interaction_error', 'error': RuntimeAdapterError(
+                        'RUNTIME_REQUEST_FAILED', 'Pi native dialog could not reach its direct parent.')})
+                    return
+                if receipt is None or receipt.get('delivery') in {'received', 'no-direct-parent'}:
+                    return
+                time.sleep(1)
 
         threading.Thread(target=notify, daemon=True).start()
 

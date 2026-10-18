@@ -169,8 +169,8 @@ def test_child_registration_follows_its_owning_execution(
     def last_tool_result() -> dict:
         """Read the swarm outcome the native peer answered with in its Trace."""
         results = [json.loads(line) for line in trace.read_text().splitlines()
-                   if json.loads(line).get('type') == 'result']
-        return json.loads(results[-1]['result'])
+                   if json.loads(line).get('type') == 'assistant']
+        return json.loads(results[-1]['message']['content'][0]['text'])
 
     failed = send('register-error')
     assert failed['last_outcome'] == 'runtime-error'

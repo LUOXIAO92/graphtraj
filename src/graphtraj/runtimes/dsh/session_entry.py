@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+from copy import deepcopy
 import os
 from pathlib import Path
 
@@ -96,6 +97,18 @@ def collect_session(event: dict, cwd: Path) -> dict:
 
     configuration = load_project_configuration(cwd)
     archive = configured_archive(configuration.harness_root)
+    if archive.native_header('dsh', header['id']) is None:
+        archived = deepcopy(header)
+        archived['id'] = archive.native_id('dsh', header['id'])
+        if header.get('parentSession'):
+            archived['parentSession'] = archive.native_id('dsh', header['parentSession'])
+        archived['graphtraj'] = {
+            'version': 1, 'projectId': str(configuration.harness_root),
+            'agentId': agent_id, 'taskIds': task_ids, 'source': source,
+            'native': {'runtime': 'dsh', 'sessionId': header['id'],
+                       'locator': 'header', 'record': deepcopy(header)},
+        }
+        archive.map_session(archived)
     boundary = event.get('history_boundary', -1)
     if type(boundary) is not int or boundary < -1:
         raise ValueError('DSH collection boundary must be a native sequence number.')

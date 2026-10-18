@@ -98,7 +98,7 @@ for line in sys.stdin:
         if resumed and params['threadId'] != session:
             emit({'id': request['id'], 'error': {'code': -32000, 'message': 'Session mismatch'}})
             continue
-        native = Path(os.environ.get('CODEX_HOME', Path(scenario).parent / 'codex-home')) / 'sessions/fake' / ('rollout-' + session + '.jsonl')
+        native = Path(scenario).parent / 'codex-home/sessions/fake' / ('rollout-' + session + '.jsonl')
         native.parent.mkdir(parents=True, exist_ok=True)
         if not native.exists():
             native.write_text(json.dumps({'type': 'session_meta', 'payload': {'id': session}}) + '\n')

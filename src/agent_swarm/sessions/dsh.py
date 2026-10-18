@@ -40,6 +40,14 @@ def collect_jsonl(
     if store is None:
         return {'session': archived['id'], 'saved': False}
 
+    retained = {}
+    after = -1
+    while True:
+        page = store.page(after=after)
+        retained.update((row['seq'], row) for row in page['events'])
+        if not page['has_more']:
+            break
+        after = page['after']
     events = []
     for seq, record in enumerate(records):
         native = record['event']
@@ -62,7 +70,8 @@ def collect_jsonl(
                     raise ValueError('DSH attachment byte count does not match its reference.')
                 copied[path] = store.put_attachment(content)
             else:
-                copied[path] = {'missing': {'path': path, 'reason': supplied.get(
+                previous = retained.get(seq, {}).get('graphtraj', {}).get('attachments', {}).get(path)
+                copied[path] = previous or {'missing': {'path': path, 'reason': supplied.get(
                     'missing', 'Native attachment bytes were not supplied.')}}
         if copied:
             ext['attachments'] = copied

@@ -142,22 +142,32 @@ class NativePeer:
         if self.frames:
             kind = self.frames.pop(0)
             if isinstance(kind, dict):
-                return kind
-            if kind == 'turn/end':
-                self.running = False
-            event = {'type': kind, 'seq': len(self.records), 'time': 1, 'data': {
-                'turn': 0, 'step': 0, 'stream': [],
-                **self.event_data,
-                'reason': {'kind': self.reason, 'error': {'message': 'Native failure', 'code': 'TEST'}},
-                'message': {'id': 'answer', 'role': 'assistant',
-                            'source': {'kind': 'model', 'provider': 'controlled', 'model': 'fixture'},
-                            'content': [{'type': 'text', 'text': 'Native response'}]},
-            }}
-            if kind == 'assistant/message':
-                event['surfaceOp'] = 'append'
+                if kind.get('type') != 'event':
+                    return kind
+                event = kind['event']
+                if 'seq' in event:
+                    return kind
+                event.setdefault('seq', len(self.records))
+                event.setdefault('time', 1)
+                event['data'].setdefault('turn', 0)
+                event['data'].setdefault('step', 0)
+            else:
+                if kind == 'turn/end':
+                    self.running = False
+                event = {'type': kind, 'seq': len(self.records), 'time': 1, 'data': {
+                    'turn': 0, 'step': 0, 'stream': [], 'callId': 'fixture-call', 'arguments': '{}',
+                    **self.event_data,
+                    'reason': {'kind': self.reason, 'error': {'message': 'Native failure', 'code': 'TEST'}},
+                    'message': {'id': 'answer', 'role': 'assistant',
+                                'source': {'kind': 'model', 'provider': 'controlled', 'model': 'fixture'},
+                                'content': [{'type': 'text', 'text': 'Native response'}]},
+                }}
+                if kind == 'assistant/message':
+                    event['surfaceOp'] = 'append'
             self.records.append(event)
-            with self.log.open('a') as stream:
-                stream.write(json.dumps(event) + '\n')
+            if getattr(self, 'persist_events', True):
+                with self.log.open('a') as stream:
+                    stream.write(json.dumps(event) + '\n')
             return {'type': 'event', 'event': event}
         return {}
 
@@ -274,22 +284,7 @@ def test_agents_control_dsh_without_task_or_archive(
             """This controlled native history fits in its opening page."""
             return snapshot['records']
 
-        def receive(self, timeout: float = 1) -> dict:
-            """Publish native events before the separately delayed disk flush."""
-            frame = super().receive(timeout)
-            if frame.get('type') == 'event':
-                row = frame['event']
-                row.update(seq=len(self.records), time=100 + len(self.records))
-                if row['type'] == 'assistant/message':
-                    row.update(surfaceOp='append', data={'turn': 0, 'step': 0, 'stream': [], 'message': {
-                        'id': 'answer', 'role': 'assistant',
-                        'source': {'kind': 'model', 'provider': 'controlled', 'model': 'peer'},
-                        'content': [{'type': 'text', 'text': 'Native response'}],
-                    }})
-                else:
-                    row['data'] = {'turn': 0, 'reason': {'kind': 'completed'}}
-                self.records.append(row)
-            return frame
+        persist_events = False
 
         def close(self) -> None:
             """End only this controlled service."""
@@ -841,18 +836,19 @@ def test_public_json_cli_uses_host_identity_and_report_checks(tmp_path: Path) ->
         tmp_path, 'research@x1', native_operation_features(),
     ) as address:
         result = subprocess.run(
-            [sys.executable, '-m', 'agent_swarm.mcp'],
+            [sys.executable, '-m', 'graphtraj.interfaces.mcp'],
             cwd=tmp_path, env={**os.environ, CONNECTION_ENV: address,
                               'GRAPHTRAJ_CALLER_ALIAS': 'research@x2',
                               'PYTHONPATH': str(Path(__file__).resolve().parents[1] / 'src')},
-            input=json.dumps({'action': 'execute', 'feature': 'session_reports',
-                              'arguments': {'alias': 'research@x2'}}) + '\n',
+            input=json.dumps({'jsonrpc': '2.0', 'id': 1, 'method': 'tools/call', 'params': {
+                'name': 'tasks', 'arguments': {'action': 'execute', 'feature': 'session_reports',
+                                             'arguments': {'alias': 'research@x2'}}}}) + '\n',
             text=True, capture_output=True, timeout=20,
         )
     assert result.returncode == 0
-    document = json.loads(result.stdout)
-    assert document['failed']
-    assert document.get('error') and 'reports' not in document
+    document = json.loads(result.stdout)['result']
+    assert document['isError']
+    assert document['structuredContent'].get('error') and 'reports' not in document['structuredContent']
 
 
 def test_dsh_own_channel_is_projected_inside_the_session_worktree(

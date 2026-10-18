@@ -14,6 +14,40 @@ from graphtraj.runtimes.codex.app_server import CodexAppServer, CodexServerReque
 from test_codex_app_server import peer  # noqa: F401
 
 
+@pytest.mark.parametrize('tool', ['graphtraj', 'agents', 'graphtraj_submit_report'])
+def test_old_tool_callback_is_unavailable_on_same_session_resume(
+    tmp_path: Path, peer: Path, monkeypatch: pytest.MonkeyPatch, tool: str,
+) -> None:
+    """A controlled stale native callback fails without invoking a new registration.
+
+    This verifies current Adapter wiring, not a real historical Runtime call.
+    """
+    from graphtraj.workspace import runner_project
+
+    root = tmp_path / 'project'
+    (root / '.graphtraj').mkdir(parents=True)
+    (root / '.graphtraj/config.yml').write_text(default_configuration_content(root, root))
+    (root / '.graphtraj/roles.yml').write_text(yaml.safe_dump({
+        'roles': {'codex': {'runtime': 'codex', 'model': 'fixture-model'}},
+    }))
+    monkeypatch.setattr(runner_project, 'runtime_executable', lambda runtime: peer)
+    monkeypatch.setenv('PEER_NATIVE_ROLLOUT', str(tmp_path / 'native'))
+    monkeypatch.setenv('PEER_REQUEST_EXCHANGE', json.dumps({
+        'method': 'item/tool/call', 'params': {'tool': tool, 'arguments': {}},
+        'response_success': False,
+    }))
+    call = agents_callback(root, Caller('controlled-native-host', 'owner'), root)
+    created = call({'action': 'create', 'runtime': 'codex', 'instruction': 'first'}).document
+    assert not call({'action': 'wait', 'agent': created['agent'], 'timeout_seconds': 10}).failed
+    resumed = call({'action': 'resume', 'agent': created['agent'], 'message': 'configured-request'})
+    assert not resumed.failed and resumed.document['session'] == created['session']
+    done = call({'action': 'wait', 'agent': created['agent'], 'timeout_seconds': 10})
+    assert not done.failed, done.document
+    assert done.document['result']['state'] == 'standby'
+    assert done.document['result']['last_result']['outcome'] == 'completed'
+    assert done.document['result']['pending_requests'] == 0
+
+
 @pytest.mark.parametrize('saving,configuration', [
     (False, None), (True, None), (True, 'astra_coding_team.engineer'),
 ])

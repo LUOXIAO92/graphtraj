@@ -384,60 +384,53 @@ def test_archive_is_bound_only_when_enabled(root: Path) -> None:
         driver.release(document['execution'])
 
 
-def test_core_imports_and_runs_without_graphtraj(tmp_path: Path) -> None:
+@pytest.mark.parametrize('configuration', [None, 'existing-user-connection'])
+def test_core_imports_and_runs_without_graphtraj(tmp_path: Path, configuration: str | None) -> None:
     """The control core loads and starts with no GraphTraj module or project."""
     code = (
         'import sys, agent_swarm\n'
         'from agent_swarm import AgentControl, Caller, bind\n'
         'class D:\n'
-        '    def prepare(self, runtime, caller): return {}\n'
+        '    def prepare(self, runtime, caller, *, configuration=None):\n'
+        '        assert configuration == (sys.argv[2] or None)\n'
+        '        return {"selected": configuration}\n'
         '    def start(self, run): run.events.session("s"); run.events.finished("completed")\n'
         'call = bind(AgentControl(sys.argv[1], {"r": D()}), Caller("h", None))\n'
-        'created = call({"action": "create", "runtime": "r", "instruction": "x"}).document\n'
+        'selection = {"configuration": sys.argv[2]} if sys.argv[2] else {}\n'
+        'created = call({"action": "create", "runtime": "r", "instruction": "x", **selection}).document\n'
         'print(created["result"]["state"], created["session"],\n'
         '      sorted(m for m in sys.modules if m.split(".")[0] == "graphtraj"))\n'
     )
     output = subprocess.run(
-        [sys.executable, '-c', code, str(tmp_path / 'root')], check=True, capture_output=True,
+        [sys.executable, '-c', code, str(tmp_path / 'root'), configuration or ''], check=True, capture_output=True,
         text=True, env={**os.environ, 'PYTHONPATH': str(SOURCE)}, cwd=tmp_path,
     ).stdout.split()
     assert output == ['standby', 's', '[]']
 
 
-def test_native_callback_binds_child_scope_and_expires_with_execution(root: Path) -> None:
-    """A Driver gets only its own child's scope, and an old callback cannot resume authority."""
-    class CapturedDriver(ScriptedDriver):
-        """Retain public Run values handed to the driver for lifecycle assertions."""
-        def start(self, run: agent_swarm.Run) -> None:
-            """Capture the public callback before reporting native readiness."""
-            self.run = run
-            super().start(run)
-
-    driver = CapturedDriver()
+def test_public_creator_preserves_external_root_scope(root: Path) -> None:
+    """Expose the stored external source without inventing a parent or changing access."""
+    driver = ScriptedDriver()
     control = AgentControl(root, {'scripted': driver})
-    parent = agent_swarm.bind(control, Caller('test-host', None, session='main'))
-    first = parent({'action': 'create', 'runtime': 'scripted', 'instruction': 'parent-child'})
-    agent = first.document['agent']
-    old = driver.run.call
-    grandchild = old({'action': 'create', 'runtime': 'scripted', 'instruction': 'nested'})
-    assert not grandchild.failed
-    assert grandchild.document['result']['parent'] == agent
-    # It cannot treat its own caller as a controllable descendant.
-    refused = old({'action': 'interrupt', 'agent': agent})
-    assert refused.failed and refused.document['error']['code'] == 'not-found'
-    parent({'action': 'interrupt', 'agent': grandchild.document['agent']})
-    parent({'action': 'wait', 'agent': grandchild.document['agent'], 'timeout_seconds': 5})
-    parent({'action': 'interrupt', 'agent': agent})
-    parent({'action': 'wait', 'agent': agent, 'timeout_seconds': 5})
-    assert old({'action': 'status'}).document['error']['code'] == 'stale-execution'
-    resumed = parent({'action': 'resume', 'agent': agent, 'message': 'continue'})
-    assert not resumed.failed
-    assert old({'action': 'status'}).document['error']['code'] == 'stale-execution'
-    current = driver.run.call({'action': 'status'})
-    assert not current.failed
-    assert [row['agent'] for row in current.document['result']['agents']] == [grandchild.document['agent']]
-    parent({'action': 'interrupt', 'agent': agent})
-    parent({'action': 'wait', 'agent': agent, 'timeout_seconds': 5})
+    parent = Caller('claude-native', None, 'original-native-session', 'claude')
+    created, failed = call(control, parent, action='create', runtime='scripted', instruction='hello')
+    assert not failed
+    try:
+        expected = {'host': 'claude-native', 'agent': None, 'session': 'original-native-session'}
+        assert created['result']['parent'] is None
+        assert created['result']['creator'] == expected
+        created['result']['creator']['session'] = 'not-authority'
+        status, failed = call(control, parent, action='status', agent=created['agent'])
+        assert not failed and status['result']['creator'] == expected
+        hierarchy, failed = call(control, parent, action='status')
+        assert not failed and hierarchy['result']['agents'][0]['creator'] == expected
+        stranger = Caller('claude-native', None, 'different-native-session', 'claude')
+        denied, failed = call(control, stranger, action='status', agent=created['agent'])
+        assert failed and denied['error']['code'] == 'not-found'
+    finally:
+        driver.release(created['execution'])
+        stopped, failed = call(control, parent, action='wait', agent=created['agent'], timeout_seconds=2)
+        assert not failed and stopped['result']['state'] == 'standby'
 
 
 @pytest.mark.parametrize('missing', [None, 'prompt_started', 'native_session_bound',

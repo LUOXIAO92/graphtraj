@@ -1,0 +1,64 @@
+FF                                                                       [100%]
+=================================== FAILURES ===================================
+________ test_pi_shared_driver_preserves_configuration_and_resume[None] ________
+
+tmp_path = PosixPath('/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-903/test_pi_shared_driver_preserve0')
+pi_environment = {'sandbox_python': '/private/tmp/task331-venv/bin/python', 'sandbox_path': '/private/var/folders/lw/y7bpg_wj6jg194hgr0...r/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-903/test_pi_shared_driver_preserve0/user-agent'}
+configuration = None
+
+    @pytest.mark.parametrize('configuration', [None, 'team.worker'])
+    def test_pi_shared_driver_preserves_configuration_and_resume(
+        tmp_path: Path, pi_environment: dict, configuration: str | None,
+    ) -> None:
+        """Selected and default Pi presets coexist with unrelated unavailable connections."""
+        project = tmp_path / 'project'
+        (project / '.graphtraj').mkdir(parents=True)
+        (project / '.graphtraj/config.yml').write_text(default_configuration_content(project, project))
+        (project / '.graphtraj/roles.yml').write_text(yaml.safe_dump({'roles': {
+            'team': {'worker': {'runtime': 'pi', 'model': 'deepseek/deepseek-flash',
+                                'pi': pi_environment}},
+            'unavailable': {'connection': 'missing/provider/model'},
+        }}))
+        write_config(swarm_root(project), save_normalized_sessions=False)
+        call = agents_callback(project, Caller('controlled-host', 'parent'), project)
+        selection = {} if configuration is None else {'configuration': configuration}
+        created = call({'action': 'create', 'runtime': 'pi', 'instruction': 'remember-334', **selection})
+>       assert not created.failed, created.document
+E       AssertionError: {'action': 'create', 'error': {'code': 'RUNTIME_ACCESS_DENIED', 'message': 'Pi needs a Worktree outside private state.'}}
+E       assert not True
+E        +  where True = AgentsResult(document={'action': 'create', 'error': {'code': 'RUNTIME_ACCESS_DENIED', 'message': 'Pi needs a Worktree outside private state.'}}, failed=True).failed
+
+/private/tmp/task334-merge-validation/tests/test_agents_native_pi.py:31: AssertionError
+____ test_pi_shared_driver_preserves_configuration_and_resume[team.worker] _____
+
+tmp_path = PosixPath('/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-903/test_pi_shared_driver_preserve1')
+pi_environment = {'sandbox_python': '/private/tmp/task331-venv/bin/python', 'sandbox_path': '/private/var/folders/lw/y7bpg_wj6jg194hgr0...r/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-903/test_pi_shared_driver_preserve1/user-agent'}
+configuration = 'team.worker'
+
+    @pytest.mark.parametrize('configuration', [None, 'team.worker'])
+    def test_pi_shared_driver_preserves_configuration_and_resume(
+        tmp_path: Path, pi_environment: dict, configuration: str | None,
+    ) -> None:
+        """Selected and default Pi presets coexist with unrelated unavailable connections."""
+        project = tmp_path / 'project'
+        (project / '.graphtraj').mkdir(parents=True)
+        (project / '.graphtraj/config.yml').write_text(default_configuration_content(project, project))
+        (project / '.graphtraj/roles.yml').write_text(yaml.safe_dump({'roles': {
+            'team': {'worker': {'runtime': 'pi', 'model': 'deepseek/deepseek-flash',
+                                'pi': pi_environment}},
+            'unavailable': {'connection': 'missing/provider/model'},
+        }}))
+        write_config(swarm_root(project), save_normalized_sessions=False)
+        call = agents_callback(project, Caller('controlled-host', 'parent'), project)
+        selection = {} if configuration is None else {'configuration': configuration}
+        created = call({'action': 'create', 'runtime': 'pi', 'instruction': 'remember-334', **selection})
+>       assert not created.failed, created.document
+E       AssertionError: {'action': 'create', 'error': {'code': 'RUNTIME_ACCESS_DENIED', 'message': 'Pi needs a Worktree outside private state.'}}
+E       assert not True
+E        +  where True = AgentsResult(document={'action': 'create', 'error': {'code': 'RUNTIME_ACCESS_DENIED', 'message': 'Pi needs a Worktree outside private state.'}}, failed=True).failed
+
+/private/tmp/task334-merge-validation/tests/test_agents_native_pi.py:31: AssertionError
+=========================== short test summary info ============================
+FAILED ../../../../../../../private/tmp/task334-merge-validation/tests/test_agents_native_pi.py::test_pi_shared_driver_preserves_configuration_and_resume[None]
+FAILED ../../../../../../../private/tmp/task334-merge-validation/tests/test_agents_native_pi.py::test_pi_shared_driver_preserves_configuration_and_resume[team.worker]
+2 failed in 0.83s

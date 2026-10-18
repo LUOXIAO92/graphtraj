@@ -1,307 +1,104 @@
-"""Single native entry and caller authorization through the controlled host peer."""
-
+"""Codex-owned stdio MCP discovery, authority and configuration through a peer."""
 import asyncio
 import json
-from dataclasses import replace
 from pathlib import Path
 
 import pytest
+import yaml
 
-import agent_swarm
+from agent_swarm import Caller
 from graphtraj.configuration.project_configuration import default_configuration_content
-from graphtraj.interfaces import gateway, tools
+from graphtraj.interfaces.agents import agents_callback
 from graphtraj.runtimes.codex import main_session
-from graphtraj.runtimes.codex.app_server import CodexAppServer, CodexServerRequest
-from graphtraj.runtimes.codex.codex_adapter import NATIVE_RUNNER_TOOLS
-from graphtraj.runtimes.codex.managed_session import CodexManagedExecution, run_native_operation
-from test_codex_app_server import context, peer
+from graphtraj.runtimes.codex.app_server import CodexServerRequest
+from test_codex_app_server import peer
 
 
-REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
-
-
-def native_result(document: dict, success: bool = True) -> dict:
-    """Encode the expected business result in the native response envelope."""
-    return {'contentItems': [{'type': 'inputText', 'text': json.dumps(document)}],
-            'success': success}
-
-
-@pytest.fixture
-def project(tmp_path: Path) -> Path:
-    """Provide an empty project for real status and graph operations."""
-    configuration = tmp_path / '.graphtraj/config.yml'
-    configuration.parent.mkdir()
-    configuration.write_text(default_configuration_content(tmp_path, tmp_path))
-    return tmp_path
-
-
-@pytest.mark.parametrize('host', ['main', 'managed'])
-def test_native_gateway_disclosure_execution_and_correction(
-    project: Path, peer: Path, monkeypatch: pytest.MonkeyPatch, host: str,
+@pytest.mark.parametrize('host', ['main', 'independent'])
+@pytest.mark.parametrize('issuer', ['thread-1', 'helper'])
+def test_codex_uses_progressive_mcp_with_native_session_authority(
+    tmp_path: Path,
+    peer: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    host: str,
+    issuer: str,
 ) -> None:
-    """Fresh hosts register one tool and handle all actions on the same turn."""
-    root = project
-    manual = root / 'manual.txt'
-    manual.write_text('Fixture status manual', encoding='utf-8')
-    status = replace(tools.TOOLS['alias_status'], manual_ref=str(manual))
-    monkeypatch.setitem(tools.TOOLS, 'alias_status', status)
-    exchanges = []
-    for arguments, document, success in [
-        ({'action': 'discover', 'query': 'alias_status'}, {
-            'features': [{'feature': 'alias_status', 'description': status.description}],
-            'describe': {'action': 'describe', 'feature': '<feature>'},
-        }, True),
-        ({'action': 'describe', 'feature': 'alias_status'}, {
-            'feature': 'alias_status', 'description': status.description,
-            'manual_ref': str(manual),
-        }, True),
-        ({'action': 'describe', 'feature': 'alias_status', 'schema': True}, {
-            'input_schema': status.input_schema,
-        }, True),
-        ({'action': 'execute', 'feature': 'alias_status',
-          'arguments': {'operation_total': 'yes'}}, {
-            'feature': 'alias_status', 'error': 'arguments.operation_total: expected boolean',
-        }, False),
-        ({'action': 'execute', 'feature': 'alias_status', 'arguments': {}}, {'agents': []}, True),
-    ]:
-        exchanges.append({'method': 'item/tool/call', 'params': {
-            'threadId': 'thread-1', 'turnId': 'turn-1', 'callId': 'different-from-rpc-id',
-            'tool': 'graphtraj', 'arguments': arguments,
-        }, 'response': native_result(document, success)})
-    protocol = root / 'protocol.jsonl'
-    monkeypatch.setenv('PEER_REQUEST_EXCHANGES', json.dumps(exchanges))
-    monkeypatch.setenv('PEER_PROTOCOL_LOG', str(protocol))
-    monkeypatch.setenv('PEER_NATIVE_ROLLOUT', str(root / 'native'))
-    if host == 'main':
-        monkeypatch.setattr(main_session, 'runtime_executable', lambda runtime: peer)
+    """A native descendant really starts MCP; only its bound Session can execute.
 
-        async def unexpected(request: CodexServerRequest) -> dict:
-            """Gateway callbacks must not be forwarded as native user requests."""
-            raise AssertionError(request.method)
+    The external Codex peer is controlled. This verifies transport and wiring,
+    not model inference or a CLI/IDE screen.
+    """
+    from graphtraj.workspace import runner_project
 
-        result = asyncio.run(main_session.run_main(root, 'configured-request', None, unexpected))
-    else:
-        resolved = context(root, peer)
-        directory = root / '.graphtraj/runner/sessions/probe@e1'
-        directory.mkdir(parents=True)
-        managed = CodexManagedExecution(
-            resolved.launch_document()['adapter_request'], 'configured-request',
-            directory, lambda session, pid: None, resolved.evidence_document(),
-            directory / 'native.jsonl',
-        )
-        result = managed.run()
-    assert result['last_agent_message'] == 'request accepted'
-    messages = [json.loads(line) for line in protocol.read_text().splitlines()]
-    starts = [item for item in messages if item.get('method') == 'thread/start']
-    assert len(starts) == 1
-    registered = starts[0]['params']['dynamicTools']
-    assert [tool['name'] for tool in registered] == ['graphtraj', 'agents']
-    assert {tool['type'] for tool in registered} == {'function'}
-    assert registered[0]['inputSchema'] == gateway.INPUT_SCHEMA
-    assert registered[1]['inputSchema'] == agent_swarm.INPUT_SCHEMA
-    replies = [item for item in messages if str(item.get('id', '')).startswith('native-request-1')]
-    assert [reply['result'] for reply in replies] == [item['response'] for item in exchanges]
-    assert [reply['id'] for reply in replies] == [
-        'native-request-1' + '-next' * index for index in range(len(exchanges))
-    ]
-    assert not any('dynamicTools' in item.get('params', {}) for item in messages if item not in starts)
-
-
-@pytest.mark.parametrize('issuer', ['outsider', None])
-@pytest.mark.parametrize('action', ['discover', 'describe', 'execute'])
-def test_native_gateway_authenticates_before_disclosure(
-    project: Path, peer: Path, issuer: str | None, action: str,
-) -> None:
-    """Foreign and unknown native callers receive no gateway material."""
-    arguments = {'action': action}
-    if action != 'discover':
-        arguments['feature'] = 'alias_status'
-    if action == 'execute':
-        arguments['arguments'] = {}
-
-    async def exercise() -> dict:
-        """Use real metadata requests before reaching the shared gateway."""
-        async with CodexAppServer(command=[str(peer)], cwd=project, environment={
-            'PEER_THREAD_PARENTS': '{"outsider":null}',
-        }) as adapter:
-            request = CodexServerRequest(1, 'item/tool/call', {
-                'threadId': issuer, 'tool': 'graphtraj', 'arguments': arguments,
-            })
-            return await run_native_operation(adapter, 'owner', 'parent@l1', project, request)
-
-    result = asyncio.run(exercise())
-    assert not result['success']
-    document = json.loads(result['contentItems'][0]['text'])
-    assert document['error']['code'] == ('invalid-input' if issuer is None else 'authority-denied')
-
-
-@pytest.mark.parametrize('issuer', ['owner', 'helper'])
-def test_native_gateway_restricts_features_and_context(
-    project: Path, peer: Path, issuer: str,
-) -> None:
-    """The host allowlist and helper identity cannot be replaced by model fields."""
-    async def exercise() -> None:
-        """Keep one trusted native connection for discovery and rejection checks."""
-        async with CodexAppServer(command=[str(peer)], cwd=project, environment={
-            'PEER_THREAD_PARENTS': '{"helper":"owner"}',
-        }) as adapter:
-            async def call(arguments: dict) -> tuple[dict, bool]:
-                """Send arguments through the production native callback."""
-                response = await run_native_operation(adapter, 'owner', 'parent@l1', project,
-                    CodexServerRequest(1, 'item/tool/call', {
-                        'threadId': issuer, 'tool': 'graphtraj', 'arguments': arguments,
-                    }))
-                return json.loads(response['contentItems'][0]['text']), response['success']
-
-            discovered, success = await call({'action': 'discover'})
-            assert success
-            callable_features = (
-                set(NATIVE_RUNNER_TOOLS.values())
-                | {'parent_status', 'retire', 'replace', 'cleanup',
-                   'approved_recovery', 'role_organization'}
-                if issuer == 'owner' else {'alias_status', 'task_graph'}
-            )
-            assert {entry['feature'] for entry in discovered['features']} == (
-                callable_features | set(tools.METHOD_FEATURE_NAMES)
-            )
-            for feature in ('task_update', 'not_registered'):
-                for action in ('describe', 'execute'):
-                    request = {'action': action, 'feature': feature}
-                    if action == 'execute':
-                        request['arguments'] = {}
-                    assert not (await call(request))[1]
-            for field, value in [('caller', 'parent@l1'), ('threadId', 'owner'),
-                                 ('allowed_features', ['task_update']), ('cwd', str(project))]:
-                assert not (await call({'action': 'discover', field: value}))[1]
-                assert not (await call({'action': 'execute', 'feature': 'alias_status',
-                                       'arguments': {field: value}}))[1]
-            if issuer == 'helper':
-                document, success = await call({'action': 'execute', 'feature': 'submit_report',
-                                               'arguments': {'name': 'engineer.md', 'text': 'forged'}})
-                assert not success
-                assert document['error']['code'] == 'authority-denied'
-                assert not (await call({'action': 'describe', 'feature': 'submit_report'}))[1]
-                assert not (await call({'action': 'execute', 'feature': [], 'arguments': {}}))[1]
-                assert (await call({'action': 'execute', 'feature': 'task_graph', 'arguments': {}}))[1]
-
-    asyncio.run(exercise())
-
-
-def test_formal_child_cannot_use_gateway_as_its_parent(project: Path, peer: Path) -> None:
-    """An authenticated child retains its own alias at the shared control boundary."""
-    import yaml
-
-    directory = project / '.graphtraj/runner/sessions/sibling@e1'
-    directory.mkdir(parents=True)
-    (directory / 'mapping.yml').write_text(yaml.safe_dump({
-        'alias': 'sibling@e1', 'parent': 'parent@l1', 'runtime': 'codex',
-        'session': 'sibling-thread', 'execution_id': 'turn-2', 'task_id': '209',
-        'team_generation': 1, 'role': 'engineer', 'retained_batch_file': 'batch.yml',
-        'worktree_path': str(project), 'trace_file': 'unused',
-        'worker_pid': 1, 'runtime_pid': 1,
+    (tmp_path / '.graphtraj').mkdir()
+    (tmp_path / '.graphtraj/config.yml').write_text(default_configuration_content(tmp_path, tmp_path))
+    (tmp_path / '.graphtraj/roles.yml').write_text(yaml.safe_dump({
+        'roles': {'codex': {'runtime': 'codex', 'model': 'selected-model'}},
     }))
+    monkeypatch.setattr(main_session, 'runtime_executable', lambda runtime: peer)
+    monkeypatch.setattr(runner_project, 'runtime_executable', lambda runtime: peer)
+    monkeypatch.setenv('PYTHONPATH', str(Path(__file__).resolve().parents[1] / 'src'))
+    monkeypatch.setenv('PEER_MCP_ISSUER', issuer)
+    monkeypatch.setenv('PEER_THREAD_PARENTS', json.dumps({'helper': 'thread-1'}))
+    monkeypatch.setenv('PEER_NATIVE_ROLLOUT', str(tmp_path / 'native'))
+    protocol = tmp_path / 'protocol.jsonl'
+    monkeypatch.setenv('PEER_PROTOCOL_LOG', str(protocol))
+    requests = [{'jsonrpc': '2.0', 'id': 1, 'method': 'tools/list'}]
+    for index, arguments in enumerate([
+        {'action': 'discover', 'query': 'status'},
+        {'action': 'describe', 'feature': 'status', 'schema': True},
+        {'action': 'execute', 'feature': 'status', 'arguments': {}},
+    ], 2):
+        requests.append({'jsonrpc': '2.0', 'id': index, 'method': 'tools/call',
+                         'params': {'name': 'agents', 'arguments': arguments}})
+    if host == 'main':
+        directory = tmp_path / '.graphtraj/runner/sessions/child@e1'
+        directory.mkdir(parents=True)
+        (directory / 'mapping.yml').write_text(yaml.safe_dump({
+            'alias': 'child@e1', 'parent': None, 'session': 'private-native-session',
+            'execution_id': 'private-turn', 'worker_pid': 1, 'runtime_pid': 1,
+            'runtime': 'codex', 'task_id': '133', 'team_generation': 2,
+            'role': 'engineer', 'retained_batch_file': 'batch.yml',
+            'worktree_path': str(tmp_path), 'trace_file': 'unused',
+        }))
+        (directory / 'execution.yml').write_text(yaml.safe_dump({
+            'outcome': 'completed', 'terminal_confirmed': True,
+        }))
+        requests.append({'jsonrpc': '2.0', 'id': 5, 'method': 'tools/call',
+                         'params': {'name': 'tasks', 'arguments': {'action': 'execute',
+                         'feature': 'alias_status', 'arguments': {'aliases': ['child@e1']}}}})
+    monkeypatch.setenv('PEER_MCP_REQUESTS', json.dumps(requests))
 
-    async def exercise() -> dict:
-        """Execute a valid native11 operation with a trusted child binding."""
-        async with CodexAppServer(command=[str(peer)], cwd=project) as adapter:
-            return await run_native_operation(adapter, 'child-thread', 'child@e1', project,
-                CodexServerRequest(1, 'item/tool/call', {
-                    'threadId': 'child-thread', 'tool': 'graphtraj', 'arguments': {
-                        'action': 'execute', 'feature': 'send_instruction', 'arguments': {
-                            'alias': 'sibling@e1', 'instruction': 'Impersonate parent.',
-                            'caused_by_event_ids': ['cause'],
-                        },
-                    },
-                }))
+    async def native_request(request: CodexServerRequest) -> dict:
+        """No custom native tool callback is part of this path."""
+        raise AssertionError(request.method)
 
-    response = asyncio.run(exercise())
-    assert not response['success']
-    assert json.loads(response['contentItems'][0]['text'])['error']['code'] == 'authority-denied'
-
-
-def test_native_gateway_discloses_method_guides_without_widening_execution(
-    project: Path, peer: Path, monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """The session and its helpers read method guides while helpers stay read-only."""
-    monkeypatch.setattr(gateway, 'delivered_manuals_root', lambda: REPOSITORY_ROOT)
-    guide = REPOSITORY_ROOT / 'manuals' / 'task-delivery' / 'guide.md'
-
-    async def exercise() -> None:
-        """Reuse the controlled peer for discovery, description and rejection."""
-        async with CodexAppServer(command=[str(peer)], cwd=project, environment={
-            'PEER_THREAD_PARENTS': '{"helper":"owner"}',
-        }) as adapter:
-            async def call(issuer: str, arguments: dict) -> tuple[dict, bool]:
-                """Send one request through the production native callback."""
-                response = await run_native_operation(adapter, 'owner', 'parent@l1', project,
-                    CodexServerRequest(1, 'item/tool/call', {
-                        'threadId': issuer, 'tool': 'graphtraj', 'arguments': arguments,
-                    }))
-                return json.loads(response['contentItems'][0]['text']), response['success']
-
-            discovered, success = await call('owner', {'action': 'discover'})
-            assert success
-            assert set(tools.METHOD_FEATURE_NAMES) <= {
-                entry['feature'] for entry in discovered['features']
-            }
-
-            for issuer in ('owner', 'helper'):
-                described, success = await call(
-                    issuer, {'action': 'describe', 'feature': 'task-delivery'},
-                )
-                assert success
-                assert Path(described['manual_ref']).read_text(encoding='utf-8') == guide.read_text(encoding='utf-8')
-                assert set(described) == {'feature', 'description', 'manual_ref'}
-
-            for feature in ('task_register', 'task-delivery'):
-                document, success = await call('helper', {
-                    'action': 'execute', 'feature': feature, 'arguments': {},
-                })
-                assert not success
-                assert document['error']['code'] == 'authority-denied'
-
-    asyncio.run(exercise())
-
-
-@pytest.mark.parametrize('issuer', ['owner', 'helper'])
-def test_native_agents_function_dispatches_with_existing_permissions(
-    project: Path, peer: Path, issuer: str,
-) -> None:
-    """The registered agents function reuses the caller binding and feature checks."""
-    async def exercise() -> None:
-        """Call the production native callback as the owner or its helper thread."""
-        async with CodexAppServer(command=[str(peer)], cwd=project, environment={
-            'PEER_THREAD_PARENTS': '{"helper":"owner"}',
-        }) as adapter:
-            async def call(arguments: dict) -> tuple[dict, bool]:
-                """Send one agents request through the native tool callback."""
-                response = await run_native_operation(adapter, 'owner', 'parent@l1', project,
-                    CodexServerRequest(1, 'item/tool/call', {
-                        'threadId': issuer, 'tool': 'agents', 'arguments': arguments,
-                    }))
-                return json.loads(response['contentItems'][0]['text']), response['success']
-
-            # A helper never had retire or interrupt permission and still has none.
-            for action in ('retire', 'interrupt', 'requests', 'create'):
-                request = {'action': action, 'agent': 'other@l1'}
-                if action == 'create':
-                    request = {'action': 'create', 'runtime': 'codex', 'instruction': 'hello'}
-                document, success = await call(request)
-                if issuer == 'helper':
-                    assert not success
-                    assert document['error']['code'] == 'authority-denied'
-            for field, value in [('caller', 'parent@l1'), ('threadId', 'owner'),
-                                 ('task_id', '1'), ('cwd', str(project))]:
-                document, success = await call({'action': 'status', field: value})
-                assert not success
-                assert document['error']['code'] == 'invalid-input'
-            document, success = await call({'action': 'status'})
-            assert document['action'] == 'status'
-            assert set(document) >= {'agent', 'session', 'execution', 'message', 'result'}
-            if issuer == 'owner':
-                document, success = await call(
-                    {'action': 'create', 'runtime': 'codex', 'instruction': 'hello'})
-                assert not success
-                assert document['error']['code'] == 'unsupported-runtime'
-
-    asyncio.run(exercise())
+    if host == 'main':
+        result = asyncio.run(main_session.run_main(tmp_path, 'mcp-requests', None, native_request))
+        observed = json.loads(result['last_agent_message'])
+    else:
+        call = agents_callback(tmp_path, Caller('test-host', 'parent'))
+        result = call({'action': 'create', 'runtime': 'codex', 'instruction': 'mcp-requests'})
+        assert not result.failed, result.document
+        done = call({'action': 'wait', 'agent': result.document['agent'], 'timeout_seconds': 10})
+        assert not done.failed, done.document
+        observed = json.loads(done.document['result']['last_result']['last_message'])
+    tools = observed[0]['result']['tools']
+    assert {tool['name'] for tool in tools} == ({'agents', 'tasks'} if host == 'main' else {'agents'})
+    assert all(set(tool['inputSchema']['properties']) == {'action', 'query', 'feature', 'schema', 'arguments'}
+               for tool in tools)
+    if issuer == 'thread-1':
+        assert observed[1]['result']['structuredContent']['features'][0]['feature'] == 'status'
+        assert set(observed[2]['result']['structuredContent']['input_schema']['properties']) == {'agent'}
+        assert observed[3]['result']['isError'] is False
+    else:
+        # The formal gateway may disclose schemas locally; execution still
+        # reaches the owner and must reject another native Session.
+        assert observed[3]['result']['isError'] is True
+    if host == 'main':
+        assert observed[4]['result']['isError'] is False, observed[4]
+        assert ('private-native-session' in json.dumps(observed[4])) is (issuer == 'thread-1')
+    start = next(json.loads(line)['params'] for line in protocol.read_text().splitlines()
+                 if json.loads(line).get('method') == 'thread/start')
+    assert not start.get('dynamicTools')
+    assert 'graphtraj' in start['config']['mcp_servers']

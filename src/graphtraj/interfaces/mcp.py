@@ -2,9 +2,8 @@
 
 The installed ``graphtraj-mcp`` entry point answers the MCP methods a host
 needs to discover and run tools: ``initialize``, ``notifications/initialized``,
-``tools/list``, ``tools/call`` and ``ping``. The ``graphtraj`` tool forwards
-discover/describe/execute requests to the shared gateway. Pi exposes only
-``agents`` and ``tasks`` as progressive entries into that same gateway.
+``tools/list``, ``tools/call`` and ``ping``. Only ``agents`` and ``tasks`` are
+published, with individual feature schemas disclosed on demand.
 
 The server speaks newline-delimited JSON-RPC 2.0 over stdin/stdout and uses
 only the standard library, so no MCP SDK dependency is required. It reads the
@@ -33,38 +32,16 @@ from graphtraj.runtimes.codex.codex_adapter import CodexAdapterError
 
 SERVER_INFO      = {"name": "graphtraj", "version": "0.1.0"}
 
-MCP_TOOL_NAME        = "graphtraj"
-MCP_TOOL_DESCRIPTION = (
-    "Discover, describe, or run a GraphTraj feature. Send "
-    "action=discover to list features, action=describe for one feature's "
-    "guide reference (schema=true requests only its parameters), and action=execute to run it."
-)
-
 INVALID_PARAMS   = -32602
-
-def _tool_document() -> dict[str, Any]:
-    """Render the single ``graphtraj`` entry the host discovers.
-
-    The outer schema is the gateway's fixed request structure, so new features
-    never expand the registered tool list or add another top-level tool.
-    """
-
-    return {
-        "name":        MCP_TOOL_NAME,
-        "description": MCP_TOOL_DESCRIPTION,
-        "inputSchema": gateway.INPUT_SCHEMA,
-    }
 
 
 def _tool_documents() -> list[dict[str, Any]]:
-    """Keep Pi's initial list small without duplicating its model entry."""
-    if os.environ.get('GRAPHTRAJ_NATIVE_RUNTIME') in {'pi', 'dsh'}:
-        return [
-            {'name': name, 'description': f'Discover, describe, or execute {name} features.',
-             'inputSchema': gateway.INPUT_SCHEMA}
-            for name in ('agents', 'tasks')
-        ]
-    return [_tool_document()]
+    """Publish the two lightweight entries on every supported host."""
+    return [
+        {'name': name, 'description': f'Discover, describe, or execute {name} features.',
+         'inputSchema': gateway.INPUT_SCHEMA}
+        for name in ('agents', 'tasks')
+    ]
 
 
 @contextmanager
@@ -80,6 +57,10 @@ def _caller_notices(
     no notice channel.
     """
 
+    if 'GRAPHTRAJ_CLI_CONNECTION' in os.environ:
+        # The authenticated owner already routes its native notices/approvals.
+        yield None
+        return
     descriptor, owned = caller_notice_fd()
     if descriptor is None:
         recovery = CodexMainRecovery.from_request(
@@ -112,9 +93,7 @@ def _tool_call_response(
     """
 
     name = params.get("name")
-    progressive_entry = os.environ.get('GRAPHTRAJ_NATIVE_RUNTIME') in {'pi', 'dsh'}
-    names = ('agents', 'tasks') if progressive_entry else (MCP_TOOL_NAME,)
-    if name not in names:
+    if name not in ('agents', 'tasks'):
         return _error_response(
             request_id, INVALID_PARAMS, "Unknown tool: {0}".format(name)
         )
@@ -126,7 +105,7 @@ def _tool_call_response(
     try:
         # Keep the selected entry's scope before forwarding into the already
         # authenticated host. The host still owns feature authorization.
-        if progressive_entry and name == 'tasks' and arguments.get('action') != 'discover':
+        if name == 'tasks' and arguments.get('action') != 'discover':
             if arguments.get('feature') == 'agents':
                 raise ValueError('Feature does not belong to this MCP entry.')
         from graphtraj.runtimes.codex.host_events import calling_session
@@ -140,10 +119,12 @@ def _tool_call_response(
 
             def dispatch(request: dict) -> Any:
                 """Keep the existing host binding and shared business gateway."""
-                result = forward_request(request, Path.cwd())
+                from agent_swarm.connection import client_native_context
+
+                result = forward_request(request, Path.cwd(), native_context=client_native_context(metadata))
                 return result if result is not None else gateway.handle_request(request, cwd=Path.cwd())
 
-            if progressive_entry and name == 'agents':
+            if name == 'agents':
                 from agent_swarm.discovery import handle_request
 
                 result = handle_request(arguments, lambda request: dispatch({
@@ -151,16 +132,14 @@ def _tool_call_response(
                 }))
             else:
                 result = dispatch(arguments)
+                if arguments.get('action') == 'discover' and not result.failed:
+                    result.document['features'] = [item for item in result.document.get('features', [])
+                                                   if item['feature'] != 'agents']
             document = (
                 recovery.attach_stop_deliveries(result.document)
                 if recovery is not None
                 else result.document
             )
-            if progressive_entry and name == 'tasks' and arguments.get('action') == 'discover' and 'features' in document:
-                document = {**document, 'features': [
-                    feature for feature in document['features']
-                    if (feature['feature'] == 'agents') == (name == 'agents')
-                ]}
     except (
         OSError,
         UnicodeError,

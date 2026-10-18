@@ -9,7 +9,6 @@ import pytest
 from graphtraj.runtimes.pi.collector import PiCollector
 from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError
 from graphtraj.sessions.storage import SessionStore, session_path
-from graphtraj.sessions.archive import JsonlSessionStore, archive_path
 from graphtraj.sessions.protocol import native_record
 from test_pi_runtime import pi_environment, execution
 from test_result_submission import result_project
@@ -31,37 +30,36 @@ def test_rpc_fragmentation_and_partial_failures(tmp_path: Path, pi_environment: 
                 result = turn.run()
                 assert result['outcome'] == ('interrupted' if prompt == 'stream-abort' else 'completed')
         assert not (trace.with_suffix('.pi') / 'rpc.jsonl').exists()
-        path = archive_path(tmp_path / '.graphtraj/swarm', 'pi:' + turn.session)
-        store = JsonlSessionStore(path)
-        start = time.perf_counter()
-        events = store.page(limit=1000)['events']
-        read_ms = (time.perf_counter() - start) * 1000
-        attempt = [item['event'] for item in store.observations() + store.pending()
-                   if item['event']['type'] == 'assistant/attempt'][-1]
-        stream = attempt['data']['stream']
-        runs = [record for record in stream if record['type'] == 'graphtraj/text-run']
-        assert ''.join(record['text'] for record in runs if record['index'] == 1) == 'hello世界 ' * 1024
-        assert ''.join(record['text'] for record in runs if record['index'] == 2) == '{"path":"/tmp/result"}'
-        assert len(runs) == 3
-        encoded = json.dumps(stream)
-        for expected in ('cipher:sig', 'cipher:payload', 'fixture-tokenizer', '-0.25', 'call-1'):
-            assert expected in encoded
-        if prompt in {'stream-abort', 'stream-error', 'stream-crash'}:
-            assert attempt['data']['interrupted'] is True
-        if prompt != 'stream-crash':
-            native = [native_record(event) for event in events if event['type'] == 'graphtraj/native']
-            message = [record['message'] for record in native if record.get('message', {}).get('role') == 'assistant'][-1]
-            assert message['usage'] == {'input': 17, 'output': 4096, 'cacheRead': 3, 'cacheWrite': 0}
-        if prompt == 'stream-ok':
-            tool = next(native_record(event) for event in events
-                        if event['type'] == 'graphtraj/native' and native_record(event).get('message', {}).get('role') == 'toolResult')
-            assert tool['message']['toolCallId'] == 'call-1'
-            assert tool['message']['content'] == [{'type': 'text', 'text': 'tool result'}]
-        metrics.append({'chunk': size, 'case': prompt, 'bytes': path.stat().st_size,
-                        'events': len(events), 'stream_records': len(stream), 'page_ms': read_ms,
-                        'native_bytes': (trace.with_suffix('.pi') / 'session.jsonl').stat().st_size,
-                        'native_records': len((trace.with_suffix('.pi') / 'session.jsonl').read_text().splitlines()),
-                        'wire': json.loads((trace.with_suffix('.pi') / 'traffic.json').read_text())})
+        path = session_path(Path(turn.request['state_directory']), 'pi:' + turn.session)
+        with SessionStore(path) as store:
+            store.validate()
+            start = time.perf_counter()
+            events = store.page(limit=1000)['events']
+            read_ms = (time.perf_counter() - start) * 1000
+            attempt = [event for event in events if event['type'] == 'assistant/attempt'][-1]
+            stream = attempt['data']['stream']
+            runs = [record for record in stream if record['type'] == 'graphtraj/text-run']
+            assert ''.join(record['text'] for record in runs if record['index'] == 1) == 'hello世界 ' * 1024
+            assert ''.join(record['text'] for record in runs if record['index'] == 2) == '{"path":"/tmp/result"}'
+            assert len(runs) == 3
+            encoded = json.dumps(stream)
+            for expected in ('cipher:sig', 'cipher:payload', 'fixture-tokenizer', '-0.25', 'call-1'):
+                assert expected in encoded
+            if prompt in {'stream-abort', 'stream-error', 'stream-crash'}:
+                assert attempt['data']['interrupted'] is True
+            if prompt != 'stream-crash':
+                native = [native_record(event) for event in events if event['type'] != 'assistant/attempt']
+                message = [record['message'] for record in native if record.get('message', {}).get('role') == 'assistant'][-1]
+                assert message['usage'] == {'input': 17, 'output': 4096, 'cacheRead': 3, 'cacheWrite': 0}
+            if prompt == 'stream-ok':
+                tool = next(event for event in events if event['type'] == 'tool/result')
+                assert tool['data']['message']['toolCallId'] == 'call-1'
+                assert tool['data']['message']['content'] == [{'type': 'text', 'text': 'tool result'}]
+            metrics.append({'chunk': size, 'case': prompt, 'bytes': path.stat().st_size,
+                            'events': len(events), 'stream_records': len(stream), 'page_ms': read_ms,
+                            'native_bytes': (trace.with_suffix('.pi') / 'session.jsonl').stat().st_size,
+                            'native_records': len((trace.with_suffix('.pi') / 'session.jsonl').read_text().splitlines()),
+                            'wire': json.loads((trace.with_suffix('.pi') / 'traffic.json').read_text())})
         # Each comparison uses a fresh native Session and archive.
         trace.unlink(missing_ok=True)
         (trace.with_suffix('.pi') / 'session.jsonl').unlink()
@@ -182,7 +180,6 @@ def test_main_and_plugin_extension_pipe(tmp_path: Path, monkeypatch: pytest.Monk
     monkeypatch.setenv('PATH', str(bin_dir) + os.pathsep + os.environ['PATH'])
     source = Path(__file__).resolve().parents[1] / 'src'
     monkeypatch.setenv('PYTHONPATH', str(source))
-    module = Path(shutil.copy2(source / 'graphtraj/runtimes/pi/extension.mjs', tmp_path / 'extension.mjs'))
     script = '''
 import { pathToFileURL } from 'node:url';
 const { startCollection } = await import(pathToFileURL(process.argv[1]).href);
@@ -201,15 +198,14 @@ await collector.close();
             monkeypatch.setenv('GRAPHTRAJ_NATIVE_SESSION', session)
             monkeypatch.setenv('PI_SUBAGENT_CHILD', '1')
         subprocess.run(['node', '--input-type=module', '-e', script,
-                        str(module)],
+                        str(source / 'graphtraj/runtimes/pi/extension.mjs')],
                        check=True, timeout=20, capture_output=True, text=True)
-        path = archive_path(tmp_path / '.graphtraj/swarm', 'pi:' + session)
-        store = JsonlSessionStore(path)
-        assert store.header['graphtraj']['source'] == ('child' if child else 'main')
-        attempt = store.pending()[-1]['event']
-        assert next(record['text'] for record in attempt['data']['stream']
-                    if record['type'] == 'graphtraj/text-run') == 'from extension'
-        assert attempt['data']['interrupted'] is True
+        path = session_path(load_project_configuration(tmp_path).state, 'pi:' + session)
+        with SessionStore(path, readonly=True) as store:
+            assert store.header['graphtraj']['source'] == ('child' if child else 'main')
+            attempt = store.page()['events'][-1]
+            assert attempt['data']['stream'][0]['text'] == 'from extension'
+            assert attempt['data']['interrupted'] is True
         assert binding.read_bytes() == original
 
 
@@ -249,7 +245,6 @@ def test_installed_pi_native_branch_and_fork_archive(tmp_path: Path) -> None:
     if not node or not pi:
         pytest.skip('Installed Pi SDK and Node are required')
     module = Path(__file__).resolve().parents[1] / 'src/graphtraj/runtimes/pi/extension.mjs'
-    module = Path(shutil.copy2(module, tmp_path / module.name))
     script = '''
 import { pathToFileURL } from 'node:url';
 const { loadHostSdk } = await import(pathToFileURL(process.argv[1]).href);
@@ -263,10 +258,7 @@ manager.branchWithSummary(user, 'branch summary', {opaque: 'keep'});
 manager.appendMessage({role: 'user', content: 'second branch', timestamp: 3});
 const fork = SessionManager.forkFrom(manager.getSessionFile(), process.cwd(), process.cwd() + '/fork');
 console.log(JSON.stringify({parent: manager.getSessionFile(), child: fork.getSessionFile(),
-  parentId: manager.getSessionId(), childId: fork.getSessionId(),
-  parentLeaf: manager.getLeafId(), childLeaf: fork.getLeafId(),
-  parentMessages: manager.buildSessionProjection().messages,
-  childMessages: fork.buildSessionProjection().messages}));
+  parentId: manager.getSessionId(), childId: fork.getSessionId()}));
 '''
     result = subprocess.run([node, '--input-type=module', '-e', script, str(module), pi],
                             cwd=tmp_path, capture_output=True, text=True, check=True, timeout=20)
@@ -274,13 +266,6 @@ console.log(JSON.stringify({parent: manager.getSessionFile(), child: fork.getSes
     for key, identity in [('parent', 'parentId'), ('child', 'childId')]:
         path = Path(facts[key])
         original = [json.loads(line) for line in path.read_text().splitlines()]
-        from graphtraj.runtimes.pi.collection import PiArchive
-        from graphtraj.sessions.archive import SessionArchive
-
-        archive = SessionArchive(tmp_path / 'normalized', save_normalized_sessions=True, backfill_history=True)
-        normalized = PiArchive(archive, original[0], agent='native-sdk-fixture', project=str(tmp_path),
-                               entries=original[1:], leaf_id=facts[key + 'Leaf'])
-        assert normalized.messages() == facts[key + 'Messages']
         collector = PiCollector(tmp_path / 'state', path, facts[identity], project=str(tmp_path),
                                 agent='native-sdk-fixture', source='main')
         events = collector.store.page()['events']

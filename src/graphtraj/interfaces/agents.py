@@ -26,11 +26,13 @@ from agent_swarm import (
     Outcome,
     bind,
     default_config,
+    read_config,
     unavailable,
 )
 
 from graphtraj.execution.runner_models import RunnerError
 from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError
+from graphtraj.sessions.archive import JsonlSessionStore, SessionArchive
 
 
 # Core Agent references; anything else is a Runner alias of a Task member.
@@ -61,6 +63,29 @@ TASK_SESSION_MISSING = {
 def swarm_root(root: Path) -> Path:
     """Return the ``agents`` tool's data root inside a GraphTraj project."""
     return root / ".graphtraj" / "swarm"
+
+
+class ConfiguredSessionArchive(SessionArchive):
+    """Use the independent tool's current choices for every archive operation.
+
+    A Runtime receives this through Run.archive when collection is enabled at
+    activation. Disabling saving stops subsequent writes without deleting the
+    archive or changing the Runtime's native Session.
+    """
+
+    def store(self, session_id: str, *, historical: bool = False) -> JsonlSessionStore | None:
+        """Reload tool-owned settings before acquiring a collection capability."""
+        choices = read_config(self.root)
+        self.save_normalized_sessions = choices['save_normalized_sessions']
+        self.backfill_history = choices['backfill_history']
+        return super().store(session_id, historical=historical)
+
+
+def configured_archive(root: Path) -> ConfiguredSessionArchive:
+    """Bind GraphTraj to the tool-owned archive choices without overriding users."""
+    directory = swarm_root(root)
+    default_config(directory, save_normalized_sessions=True)
+    return ConfiguredSessionArchive(directory, **read_config(directory))
 
 
 class GraphTrajAgents:
@@ -102,6 +127,9 @@ class GraphTrajAgents:
         from graphtraj.execution.runner_status import status_tree
 
         agents   = self.control.operate("status", {}, binding)
+        if (binding.caller.agent or '').startswith(AGENT_PREFIX):
+            # A core identity has no legacy Runner alias or Task participation.
+            return agents
         sessions = status_tree(self.root)
         return Outcome({**agents.result, "task_sessions": sessions.document},
                        failed=not sessions.succeeded)
@@ -158,7 +186,9 @@ def agents_callback(
     cwd: Path | None = None,
 ) -> Callable[[Any], AgentsResult]:
     """Return the ``agents`` function bound to GraphTraj and a verified caller."""
-    return bind(GraphTrajAgents(root, cwd), caller)
+    backend = GraphTrajAgents(root, cwd)
+    archive = configured_archive(root)
+    return bind(backend, caller, archive=archive)
 
 
 def run_agents_feature(arguments: Mapping[str, Any], *, cwd: Path | None = None) -> Any:
@@ -170,19 +200,39 @@ def run_agents_feature(arguments: Mapping[str, Any], *, cwd: Path | None = None)
     refused rather than sharing one anonymous root scope with other callers.
     New Agents run in the call's working directory.
     """
-    from graphtraj.execution.runner_status import caller_alias
+    from graphtraj.execution.runner_status import NativeCaller, caller_alias, runtime_caller_is_bound
     from graphtraj.interfaces.tools import ToolResult
     from graphtraj.workspace.runner_project import discover_project_root, discover_runner_directory
 
     working = cwd or Path.cwd()
     root    = discover_project_root(working)
-    alias   = caller_alias(discover_runner_directory(root))
-    if alias is None:
+    runner  = discover_runner_directory(root)
+    alias   = caller_alias(runner)
+    caller  = None
+    if alias is None and not runtime_caller_is_bound():
+        from graphtraj.runtimes.runtime_adapter import current_host_connection
+
+        # caller_alias has already verified the native association. Its None
+        # means Main for a bound external root, but human CLI has no connection.
+        connection = current_host_connection()
+        if connection is not None:
+            caller = Caller('graphtraj-gateway', None, session=connection['session'],
+                            runtime=connection['runtime'])
+    if isinstance(alias, NativeCaller) and alias.connection['runtime'] == 'codex':
+        from graphtraj.runtimes.codex.session_entry import owns_native_root
+
+        if owns_native_root(runner, alias.connection):
+            caller = Caller('graphtraj-gateway', None, session=str(alias), runtime='codex')
+        elif arguments.get('action') != 'status':
+            return ToolResult({'error': {'code': 'authority-denied',
+                                        'message': 'Native helpers have read-only agents access.'}}, failed=True)
+    if alias is None and caller is None:
         return ToolResult({"action": arguments.get("action"), "error": {
             "code":    "authority-unavailable",
             "message": "agents needs a verified caller: a managed Session or a verified native "
                        "Main Session. This call has neither.",
         }}, failed=True)
-    caller = Caller("graphtraj-gateway", str(alias))
+    if caller is None:
+        caller = Caller("graphtraj-gateway", str(alias))
     result = agents_callback(root, caller, working)(dict(arguments))
     return ToolResult(result.document, failed=result.failed)

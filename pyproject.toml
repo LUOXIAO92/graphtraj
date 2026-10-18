@@ -28,6 +28,7 @@ package-dir = {"" = "src"}
 where = ["src"]
 
 [tool.setuptools.package-data]
+agent_swarm = ["dsh/*.mjs", "dsh/package.json"]
 graphtraj = [
     "interfaces/desktop-host.json",
     "runtimes/codex/policy/*",

@@ -1,27 +1,20 @@
-/** Native DSH tool invoking GraphTraj's public, process-authenticated CLI. */
+/** GraphTraj lifecycle/context hooks; Agents MCP belongs to the independent adapter. */
 import { createRequire } from 'node:module';
 import { pathToFileURL } from 'node:url';
 import { spawn } from 'node:child_process';
 import { installCollection } from './collection.mjs';
+import { sessionEnvironment as nativeSessionEnvironment } from '../../../agent_swarm/dsh/plugin.mjs';
 
 const require = createRequire(process.env.GRAPHTRAJ_DSH_PACKAGE || process.argv[1]);
-const { defineTool } = await import(pathToFileURL(require.resolve('@deepseek-ai/dsh-tools')));
 const { default: z } = await import(pathToFileURL(require.resolve('@deepseek-ai/schemastery')));
 export const name = 'graphtraj';
-export const inject = ['tools', 'shellEnv', 'sessionQuery'];
+export const inject = ['tools', 'shellEnv', 'sessionQuery', 'agents'];
 export const Config = z.object({ finishCheck: z.boolean().default(false) });
 
 /** Read actual durable source facts from this execution's native Agent. */
 export function sessionEnvironment(agent) {
-  const header = agent?.session.header;
-  if (!header) return {};
-  const child = header.origin === 'subagent' || (header.delegationDepth || 0) > 0;
-  const main = header.version === 4 && typeof header.id === 'string' &&
-    header.origin === undefined && typeof header.isSeeded === 'boolean';
-  return {
-    DSH_GRAPHTRAJ_SESSION: header.id,
-    DSH_GRAPHTRAJ_SOURCE: child ? 'child' : main ? 'main' : 'unknown',
-  };
+  const native = nativeSessionEnvironment(agent);
+  return { DSH_GRAPHTRAJ_SESSION: native.DSH_SESSION_ID, DSH_GRAPHTRAJ_SOURCE: native.DSH_AGENT_SOURCE };
 }
 
 export function apply(ctx, config = { finishCheck: false }) {
@@ -58,54 +51,18 @@ export function apply(ctx, config = { finishCheck: false }) {
     if (result.error) throw new Error(result.error);
     return result;
   }
-  const collect = installCollection(ctx, entry);
+  const agentsOnly = process.env.GRAPHTRAJ_DSH_AGENTS_ONLY === '1';
+  const collect = agentsOnly ? async () => {} : installCollection(ctx, entry);
   ctx.on('agent/created', async ({ agent, source, signal }) => {
-    if (!process.env.GRAPHTRAJ_ROLE) {
+    if (!agentsOnly && !process.env.GRAPHTRAJ_ROLE) {
       await entry(agent, { event: 'agent/created', source, header: agent.session.header }, signal);
     }
     await collect(agent);
   });
   ctx.on('agent/turn-stopping', async ({ agent, signal }) => {
-    if (!config.finishCheck || process.env.GRAPHTRAJ_ROLE ||
+    if (agentsOnly || !config.finishCheck || process.env.GRAPHTRAJ_ROLE ||
         sessionEnvironment(agent).DSH_GRAPHTRAJ_SOURCE !== 'main' || signal.aborted) return;
     const { check } = await import('./finalize.mjs');
     await check(ctx, agent, signal, entry);
   });
-  ctx.tools.register(defineTool({
-    name: 'graphtraj',
-    description: 'Discover, describe or execute GraphTraj public operations as this Agent. Authority is supplied by the host, never by tool arguments.',
-    parameters: {
-      action: { type: 'string', required: true, enum: ['discover', 'describe', 'execute'] },
-      query: { type: 'string' },
-      feature: { type: 'string' },
-      schema: { type: 'boolean' },
-      arguments: { type: 'json' },
-    },
-    output: {
-      schema: { type: 'string' },
-      render: (_args, value) => [{ type: 'text', text: value }],
-    },
-    async execute(args, execution) {
-      // The executable/root come from the owned service, not model arguments.
-      // Its child PID retains the native Session's Runner ownership ancestry.
-      return await new Promise((resolve, reject) => {
-        const child = spawn(process.env.GRAPHTRAJ_DSH_TOOL || 'graphtraj-tool', [], {
-          cwd: process.env.GRAPHTRAJ_HARNESS_ROOT || execution.agent?.session.header.cwd,
-          env: { ...process.env, ...ctx.shellEnv.collect(execution) },
-          stdio: ['pipe', 'pipe', 'pipe'],
-          signal: execution.signal,
-        });
-        let output = '';
-        child.stdout.setEncoding('utf8');
-        child.stdout.on('data', value => { output += value; });
-        child.stderr.resume();
-        child.on('error', () => reject(new Error('GraphTraj public CLI unavailable')));
-        child.on('close', code => {
-          if (code !== 0) reject(new Error('GraphTraj public CLI failed'));
-          else resolve(output);
-        });
-        child.stdin.end(JSON.stringify(args) + '\n');
-      });
-    },
-  }));
 }

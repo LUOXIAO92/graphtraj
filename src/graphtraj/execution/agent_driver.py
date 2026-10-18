@@ -28,9 +28,8 @@ from graphtraj.runtimes.runtime_adapter import (
 )
 
 
-# Pi's owner accepts an independent binding; it skips Task mapping and the
-# Runner CLI channel while retaining its native isolation and Session file.
-SUPPORTED_RUNTIMES = frozenset({"claude", "pi"})
+# Runtime owners with Task-free host bindings.
+SUPPORTED_RUNTIMES = frozenset({"claude", "codex", "dsh", "pi"})
 
 # Native owners of this process's running executions, by core execution ID.
 _TURNS: dict[str, RuntimeTurn] = {}
@@ -72,11 +71,12 @@ class AdapterDriver:
         self.root = Path(root)
         self.cwd  = Path(cwd)
 
-    def prepare(self, runtime: str, caller: Caller) -> dict:
+    def prepare(self, runtime: str, caller: Caller, *, configuration: str | None = None) -> dict:
         """Resolve the Runtime's role preset and freeze its launch settings.
 
-        A preset named after the Runtime wins; otherwise exactly one preset
-        must use that Runtime.
+        An explicit configuration selects an existing preset, not an identity.
+        Otherwise a preset named after the Runtime wins, or exactly one preset
+        must use that Runtime. Only the selected preset's resources are loaded.
         """
         from graphtraj.configuration.project_roles import (
             ProjectRolesError, load_project_roles, resolve_preset,
@@ -85,24 +85,31 @@ class AdapterDriver:
 
         if runtime not in SUPPORTED_RUNTIMES:
             raise AgentsError("unsupported-runtime", f"The Task-free driver does not run {runtime!r} yet.")
-        presets = load_project_roles(self.root).presets
-        if runtime == 'pi':
-            try:
+        try:
+            roles = load_project_roles(self.root)
+            if configuration is not None:
+                name = roles.resolve(configuration)
+                preset = resolve_preset(roles.presets[name])
+                if preset.runtime != runtime:
+                    raise AgentsError('invalid-config',
+                                      f"Configuration {configuration!r} uses {preset.runtime!r}, not {runtime!r}.")
+            else:
                 presets = {
                     name: resolve_preset(preset)
-                    for name, preset in presets.items()
-                    if preset.runtime == 'pi' or (preset.connection or '').startswith('pi/')
+                    for name, preset in roles.presets.items()
+                    if runtime != 'pi' or preset.runtime == 'pi'
+                    or (preset.connection or '').startswith('pi/')
                 }
-            except ProjectRolesError as error:
-                raise AgentsError('invalid-config', str(error)) from None
-        matches = sorted(name for name, preset in presets.items() if preset.runtime == runtime)
-        name    = runtime if runtime in matches else matches[0] if len(matches) == 1 else None
-        if name is None:
-            raise AgentsError("invalid-config", f"Configure one role named {runtime!r} or exactly one "
-                                                f"role using it; found {matches or 'none'}.")
-
+                matches = sorted(name for name, preset in presets.items() if preset.runtime == runtime)
+                name = runtime if runtime in matches else matches[0] if len(matches) == 1 else None
+                if name is None:
+                    raise AgentsError("invalid-config", f"Configure one role named {runtime!r} or exactly one "
+                                                        f"role using it; found {matches or 'none'}.")
+                preset = presets[name]
+        except ProjectRolesError as error:
+            raise AgentsError('invalid-config', str(error)) from None
         try:
-            role     = resolve_child_role(name, presets[name], self.root)
+            role     = resolve_child_role(name, preset, self.root)
             adapter  = select_runtime_adapter(runtime)
             prepared = adapter.preflight_runtime_context(
                 harness_root=self.root, git_common_directory=_git_common_directory(self.cwd),
@@ -114,6 +121,7 @@ class AdapterDriver:
             "role":            name,
             "cwd":             str(self.cwd),
             "adapter_request": prepared.launch_document()["adapter_request"],
+            "connection":      prepared.launch_document().get("connection", {}),
             "evidence":        prepared.evidence_document(),
         }
 
@@ -133,14 +141,38 @@ class AdapterDriver:
             run.events.process(runtime_pid=pid)
 
         try:
-            turn = adapter.managed_execution(
+            owner = adapter.managed_execution
+            options = {}
+            if run.runtime == 'codex':
+                from graphtraj.runtimes.codex.managed_session import CodexManagedExecution
+
+                owner = CodexManagedExecution
+                options['independent'] = True
+                options['archive'] = run.archive
+                options['connection'] = run.settings.get('connection', {})
+                options['agent_call'] = run.call
+            turn = owner(
                 dict(run.settings["adapter_request"]), run.message, run.directory,
                 lambda session, pid: ready.set(), dict(run.settings["evidence"]),
                 trace_file=run.directory / "trace.jsonl", expected_session=run.session,
                 session_created=created,
+                **options,
             )
         except RuntimeAdapterError as error:
             raise _native_error(error) from None
+        if run.runtime == 'claude':
+            from agent_swarm import AgentControl, bind
+
+            child_driver = AdapterDriver(self.root, Path(run.settings['cwd']))
+            control = AgentControl(self.root / '.graphtraj/swarm',
+                                   {name: child_driver for name in SUPPORTED_RUNTIMES})
+            callback = bind(control, Caller('claude-sdk', run.agent, turn.native_id, 'claude'),
+                            archive=run.archive)
+            turn.configure_independent(archive=run.archive, agents_callback=callback)
+        if run.runtime == 'dsh':
+            from graphtraj.runtimes.dsh.driver import bind_agents
+
+            bind_agents(turn, run, self)
         if run.runtime == 'pi':
             from agent_swarm import read_config
             from graphtraj.sessions.archive import SessionArchive

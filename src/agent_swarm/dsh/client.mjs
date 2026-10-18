@@ -1,0 +1,97 @@
+/** Official browser module/Tool view extension; never submits model input. */
+window.__ModuleLoader__.load({
+  id: 'agents-dsh',
+  factory(require) {
+    const { createElement: h } = require('react');
+
+    function parse(text) {
+      try { return JSON.parse(text); } catch { return undefined; }
+    }
+
+    /** Read the same durable call/result facts as the existing native Tool row. */
+    function communication(block, sessionId) {
+      const request = parse(block.argsRaw || block.call?.argsRaw || '') || {};
+      const args = request.arguments || {};
+      const outbound = args.message || args.instruction;
+      let document;
+      for (const content of block.content || []) {
+        if (content.type === 'text') {
+          const candidate = parse(content.text);
+          if (candidate && typeof candidate === 'object') document = candidate;
+        }
+      }
+      const result = document?.result || {};
+      return {
+        sender: sessionId,
+        recipient: document?.agent || args.agent || args.name || args.runtime || 'Agents',
+        outbound: typeof outbound === 'string' ? outbound : undefined,
+        state: result.state,
+        error: document?.error?.message || result.last_result?.error?.message,
+        operation: request.feature || request.action || 'agents',
+      };
+    }
+
+    function AgentsRow({ block, sessionId, phase, inspect }) {
+      const fact = communication(block, sessionId);
+      const body = (title, text, key) => text ? h('section', {
+        key, style: { border: '1px solid currentColor', borderRadius: 8, padding: '8px 12px', margin: '6px 0' },
+      }, h('div', { style: { fontSize: 12, opacity: 0.7 } }, title),
+      h('div', { style: { whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' } }, text)) : null;
+      return h('div', { 'data-agent-communication': true },
+        body(`${fact.sender} → ${fact.recipient}`, fact.outbound, 'outbound'),
+        // Incoming body belongs to the native relay message, not a second Tool card.
+        body('Agents', fact.error, 'error'),
+        !fact.outbound && !fact.error
+          ? h('div', null, `agents · ${fact.operation} · ${fact.state || phase}`) : null,
+        inspect ? h('button', { type: 'button', onClick: inspect }, 'Details') : null);
+    }
+
+    return {
+      inject: ['slots'],
+      communication,
+      AgentsRow,
+      apply(ctx) {
+        ctx.slots.inject('tool.call.toolview', () => ctx.slots.register({
+          name: 'tool.call.toolview', key: 'mcp__agents__agents',
+        }, AgentsRow));
+        ctx.slots.inject('conversation.chat.node', () => {
+          // The installed Chat package owns the body, disclosure and timestamp.
+          // Its public slot entry lets us add attribution without copying them.
+          let disposeView;
+          const install = () => {
+            if (disposeView) return;
+            const native = ctx.slots.entriesOfSlot('conversation.chat.node')
+              .find(entry => entry.options.key === 'turn-trigger');
+            if (!native) return;
+            const NativeTrigger = native.component;
+
+            function IncomingAgentMessage(props) {
+              const source = props.node.data.source;
+              const original = h(NativeTrigger, props);
+              if (source?.kind !== 'agent-message' || !['communicationId', 'senderSessionId',
+                'senderAgentId', 'recipientAgentId'].every(key =>
+                typeof source[key] === 'string' && source[key].length > 0)) return original;
+              const field = (label, agent, session) => h('div', null,
+                h('dt', { style: { fontSize: 12, opacity: 0.7 } }, label),
+                h('dd', { style: { margin: 0, overflowWrap: 'anywhere' } },
+                  h('div', null, agent), h('div', null, session)));
+              return h('section', { 'data-agent-incoming': source.communicationId },
+                h('dl', { style: { margin: '8px 0', display: 'grid', gap: 8 } },
+                  field('From Agent / Session', source.senderAgentId, source.senderSessionId),
+                  field('To Agent / Session', source.recipientAgentId, props.sessionId)),
+                original);
+            }
+
+            disposeView = ctx.slots.register({ name: 'conversation.chat.node', key: 'turn-trigger',
+              priority: (native.options.priority ?? 0) - 1, locale: native.locale,
+            }, IncomingAgentMessage);
+          };
+          // Slot declaration precedes native entry registration during web boot.
+          const unsubscribe = ctx.slots.subscribe('conversation.chat.node', install);
+          install();
+          return () => { unsubscribe(); disposeView?.(); };
+        });
+      },
+    };
+  },
+});

@@ -5,7 +5,6 @@ from __future__ import annotations
 import asyncio
 import json
 import os
-import re
 from pathlib import Path
 import subprocess
 import tempfile
@@ -79,30 +78,16 @@ def _pi(runtime: dict, cwd: Path) -> list[dict]:
 
         key = credential_environment(runtime['api_key_env'])[runtime['api_key_env']]
         command += ['--api-key', key]
-    # Node may exit before draining a large error to a pipe. A private file
-    # preserves the diagnostic tail without exposing native secrets in logs.
-    with tempfile.TemporaryFile(mode='w+', encoding='utf-8') as errors:
-        completed = subprocess.run(
-            command,
-            input=json.dumps({'id': 'models', 'type': 'get_available_models'}) + '\n',
-            cwd=cwd, env=environment, stdout=subprocess.PIPE, stderr=errors,
-            text=True, timeout=30, check=False,
-        )
-        errors.seek(0)
-        diagnostic_text = errors.read()
-    if completed.returncode:
-        # Never include argv (it may carry an API key) or arbitrary native
-        # diagnostics. Keep the observed exit and output facts for diagnosis.
-        filesystem_error = re.search(r'(?:Error: )?(?:EACCES|EPERM|ENOENT): [^\n]{0,300}', diagnostic_text)
-        diagnostic = (' ' + filesystem_error.group()) if filesystem_error else ''
-        raise ValueError(f'Pi catalog process exited {completed.returncode}; '
-                         f'stdout={len(completed.stdout)} chars, stderr={len(diagnostic_text)} chars.' + diagnostic)
+    completed = subprocess.run(
+        command,
+        input=json.dumps({'id': 'models', 'type': 'get_available_models'}) + '\n',
+        cwd=cwd, env=environment, capture_output=True, text=True, timeout=30, check=True,
+    )
     for line in completed.stdout.splitlines():
         reply = json.loads(line)
         if reply.get('id') == 'models' and reply.get('success'):
             return reply['data']['models']
-    raise ValueError(f'Pi catalog process exited 0 without a successful models response; '
-                     f'stdout={len(completed.stdout)} chars, stderr={len(diagnostic_text)} chars.')
+    raise ValueError('Pi did not return model metadata.')
 
 
 def pi_model_domain(home: str, provider: str, model: str, api_key_env: str | None = None) -> str:
@@ -118,20 +103,16 @@ def pi_model_domain(home: str, provider: str, model: str, api_key_env: str | Non
         with tempfile.TemporaryDirectory(prefix='graphtraj-pi-destination-') as directory:
             models = _pi({'home': home, 'provider': provider, 'model': model,
                           'api_key_env': api_key_env}, Path(directory))
-        selected = next((item for item in models if (item['provider'], item['id']) == (provider, model)), None)
-        if selected is None:
-            raise ValueError('The selected provider/model is absent from the official catalog response.')
+        selected = next(item for item in models if (item['provider'], item['id']) == (provider, model))
         destination = urlsplit(selected['baseUrl'])
         if (destination.scheme not in {'http', 'https'} or not destination.hostname
                 or destination.username or destination.password):
             raise ValueError('Unsupported destination')
         return destination.hostname
-    except Exception as error:
-        detail = (str(error) if type(error) is ValueError else
-                  'Native metadata failure type: ' + type(error).__name__)
+    except Exception:
         raise RuntimeAdapterError(
             'ROLE_CONFIG_UNSUPPORTED',
-            'Pi did not expose a supported native destination for the selected provider/model. ' + detail,
+            'Pi did not expose a supported native destination for the selected provider/model.',
         ) from None
 
 

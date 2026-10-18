@@ -105,35 +105,52 @@ class CodexSessionArchive:
             raise ValueError('Native fork did not identify its Session and parent.')
         now = time.time_ns() // 1000000
         seeded = not history_excluded and isinstance(thread.get('turns'), list)
-        missing = [{'path': 'createdAt', 'reason': 'Archive receipt time; native creation time unknown.'}]
+        created = thread.get('createdAt')
+        created = created * 1000 if type(created) is int and created >= 0 else None
+        missing = [] if created is not None else [
+            {'path': 'createdAt', 'reason': 'Native creation time unknown; zero is a placeholder.'}]
         if not seeded:
             missing.append({'path': 'inheritedPrefix', 'reason': (
                 'Unknown: excludeTurns requested; returned turns do not establish an inherited cut.'
                 if history_excluded else 'Unknown: native fork response omitted history.'
             )})
         header = {
-            'version': 4, 'id': 'codex:' + self.session_id, 'createdAt': now,
+            'version': 4, 'id': 'codex:' + self.session_id,
+            'createdAt': created if created is not None else 0,
             'isSeeded': seeded, 'parentSession': 'codex:' + thread['forkedFromId'],
             'graphtraj': {'version': 1, 'projectId': self.project_id,
                          'agentId': self.agent_id, 'taskIds': list(self.task_ids),
                          'native': {'runtime': 'codex', 'sessionId': self.session_id,
-                                    'locator': 'thread/fork'}, 'missing': missing},
+                                    'locator': 'thread/fork'}, 'missing': missing,
+                         'receivedAtMs': now},
         }
         with SessionStore.create(self.path, header) as store:
             events = []
             if seeded:
                 for index, turn in enumerate(thread['turns']):
+                    started = turn.get('startedAt')
+                    started = started * 1000 if type(started) is int and started >= 0 else None
                     event = retain_native('codex', turn, session_id=self.session_id,
-                                          locator=f'thread/fork/turns/{index}', seq=len(events), time=now)
+                                          locator=f'thread/fork/turns/{index}', seq=len(events),
+                                          time=started if started is not None else 0)
+                    if started is None:
+                        event['graphtraj']['missing'] = [{
+                            'path': 'time', 'reason': 'Native turn start unknown; zero is a placeholder.',
+                        }]
+                    else:
+                        event['graphtraj']['native']['timeField'] = 'startedAt (seconds)'
                     event['graphtraj']['attachments'] = _attachments(store, turn)
                     events.append(event)
-                events.append({'type': 'session/end-seed', 'seq': len(events), 'time': now,
+                events.append({'type': 'session/end-seed', 'seq': len(events), 'time': 0,
                                'data': {'inherited': True}})
             # The response describes the newly created child. Only its returned
             # turns are inherited; the response envelope is a local observation.
             event = retain_native('codex', thread, session_id=self.session_id,
-                                  locator='thread/fork', seq=len(events), time=now)
+                                  locator='thread/fork', seq=len(events), time=0)
+            event['graphtraj']['receivedAtMs'] = now
             event['graphtraj']['missing'] = [{
+                'path': 'time', 'reason': 'Fork response has no native event time; zero is a placeholder.',
+            }, {
                 'path': 'rawModelStream',
                 'reason': 'Unknown: public fork history is not the original model stream.',
             }]
@@ -185,16 +202,17 @@ class CodexSessionArchive:
             event = None
             if pending is None:
                 event = {'type': 'assistant/attempt', 'seq': store.next_seq,
-                         'time': time.time_ns() // 1000000,
+                         'time': 0,
                          'data': {'turn': 0, 'step': 0, 'stream': []},
-                         'graphtraj': {'version': 1, 'direction': 'received', 'native': {
+                         'graphtraj': {'version': 1, 'direction': 'received',
+                                      'receivedAtMs': time.time_ns() // 1000000, 'native': {
                              'runtime': 'codex', 'sessionId': self.session_id,
                              'locator': f"connection:{store.position('connection') + 1}",
                              'deltaTemplate': template}, 'missing': [
                                  {'path': 'turn/step', 'reason': 'Local output grouping; native numeric indices unknown.'},
                                  {'path': 'requestId/attemptId',
                                   'reason': 'Mapping IDs from turn/item; model request and attempt IDs unknown.'},
-                                 {'path': 'time', 'reason': 'Native time unknown; receipt time used.'},
+                                 {'path': 'time', 'reason': 'Native time unknown; zero is a placeholder.'},
                                  {'path': 'rawModelStream', 'reason': 'Unknown: semantic native text, not raw model bytes.'},
                                  {'path': 'logprobs', 'reason': 'Unknown: native text delta supplied no probabilities.'},
                              ]}}
@@ -222,15 +240,24 @@ class CodexSessionArchive:
             if store.pending() is not None:
                 StreamWriter(store, 'connection').finish()
             position = store.position('connection') + 1
+            emitted = message.get('emittedAtMs')
+            emitted = emitted if type(emitted) is int else None
             event = retain_native('codex', message, session_id=self.session_id,
                                   locator=f'connection:{position}', seq=store.next_seq,
-                                  time=time.time_ns() // 1000000)
+                                  time=emitted if emitted is not None else 0)
             event['graphtraj']['direction'] = direction
+            observation = 'receivedAtMs' if direction == 'received' else 'observedAtMs'
+            event['graphtraj'][observation] = time.time_ns() // 1000000
             event['graphtraj']['missing'] = [
-                {'path': 'time', 'reason': 'Native time unknown; receipt time used.'},
                 {'path': 'rawModelStream', 'reason': 'Unknown: native notifications are not a raw model stream.'},
                 {'path': 'logprobs', 'reason': 'Unknown unless explicitly present in the native notification.'},
             ]
+            if emitted is None:
+                event['graphtraj']['missing'].append({
+                    'path': 'time', 'reason': 'Native time unknown; zero is a placeholder.',
+                })
+            else:
+                event['graphtraj']['native']['timeField'] = 'emittedAtMs (server emission)'
             event['graphtraj']['attachments'] = _attachments(store, message)
             store.append_many([event], source='connection', position=position)
 
@@ -309,12 +336,12 @@ class CodexSessionArchive:
         native_time = _timestamp(record.get('timestamp'))
         event = retain_native(
             'codex', record, session_id=self.session_id, locator=f'byte:{start}', seq=seq,
-            time=native_time if native_time is not None else time.time_ns() // 1000000,
+            time=native_time if native_time is not None else 0,
         )
         missing = [{'path': field, 'reason': 'Unknown: native record does not establish this mapping.'}
                    for field in ('rawModelStream', 'rawLogprobs', 'sampledLogprobs')]
         if native_time is None:
-            missing.append({'path': 'time', 'reason': 'Native time unknown; receipt time used.'})
+            missing.append({'path': 'time', 'reason': 'Native time unknown; zero is a placeholder.'})
         event['graphtraj']['missing'] = missing
         event['graphtraj']['attachments'] = _attachments(store, record)
         return event
@@ -470,11 +497,11 @@ class CodexSessionArchive:
                 base = metadata.get('history_base')
                 created = _timestamp(metadata.get('timestamp') or metadata_record.get('timestamp'))
                 missing = [] if created is not None else [{
-                    'path': 'createdAt', 'reason': 'Native creation time unknown; archive receipt time used.',
+                    'path': 'createdAt', 'reason': 'Native creation time unknown; zero is a placeholder.',
                 }]
                 header = {
                     'version': 4, 'id': 'codex:' + self.session_id,
-                    'createdAt': created if created is not None else time.time_ns() // 1000000,
+                    'createdAt': created if created is not None else 0,
                     'isSeeded': bool(parent and base),
                     'graphtraj': {'version': 1, 'projectId': self.project_id,
                                  'agentId': self.agent_id, 'taskIds': list(self.task_ids),

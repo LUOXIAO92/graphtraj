@@ -1,0 +1,9 @@
+{
+  "probe": "original Pi sandbox policy wrapping /usr/bin/true; no Runtime or model",
+  "host_pid": 57815,
+  "policy_sha256": "bb753524d69beb188e9a54269b5a2657bc5d40fac63bac69b266ba54a7503732",
+  "policy_unchanged": true,
+  "returncode": 1,
+  "stdout": "",
+  "stderr": "Error: listen EPERM: operation not permitted 127.0.0.1\n"
+}

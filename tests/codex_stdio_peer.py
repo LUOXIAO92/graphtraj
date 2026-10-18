@@ -3,6 +3,8 @@
 import json
 import os
 import signal
+import subprocess
+import threading
 import sys
 import time
 from pathlib import Path
@@ -192,6 +194,12 @@ for line in incoming():
         thread_id = params.get('threadId', f'thread-{len(sessions) + 1}')
         sessions[thread_id] = params
         rollout = native_rollout(thread_id)
+        if method == 'thread/resume' and rollout and os.environ.get('PEER_RESUME_SETTINGS'):
+            with rollout.open('a') as stream:
+                stream.write(json.dumps({'type': 'event_msg', 'payload': {
+                    'type': 'thread_settings_applied', 'thread_id': thread_id,
+                    'thread_settings': {'model': params.get('model')},
+                }}) + '\n')
         result = {
             'thread': {
                 'id': thread_id,
@@ -202,6 +210,21 @@ for line in incoming():
             'cwd': params['cwd'],
         }
         emit({'method': 'thread/started', 'params': {'thread': result['thread']}})
+    elif method == 'thread/fork':
+        thread_id = f'thread-{len(sessions) + 1}'
+        sessions[thread_id] = params
+        result = {'thread': {'id': thread_id, 'path': None, 'ephemeral': True,
+                            'forkedFromId': params['threadId'], 'createdAt': 17,
+                            'historyMode': 'paginated'},
+                  'model': params['model'], 'modelProvider': params['modelProvider']}
+    elif method == 'thread/items/list':
+        assert params['sortDirection'] == 'asc'
+        pages = json.loads(Path(os.environ['PEER_HISTORY_PAGES']).read_text())
+        if isinstance(pages, dict):
+            emit({'id': message['id'], 'error': pages})
+            continue
+        index = int(params.get('cursor', '0'))
+        result = {'data': pages[index], 'nextCursor': str(index + 1) if index + 1 < len(pages) else None}
     elif method == 'thread/read':
         assert initialized
         assert params['includeTurns'] is False
@@ -305,7 +328,30 @@ for line in incoming():
                              'startedAtMs': 1000, 'command': 'printf approved'}})
         elif prompt == 'large-output':
             complete(thread_id, turn_id, 'x' * 100_000)
+        elif prompt == 'mcp-requests':
+            def run_mcp(thread_id=thread_id, turn_id=turn_id):
+                """Keep the peer available for concurrent native identity reads."""
+                server = sessions[thread_id]['config']['mcp_servers']['graphtraj']
+                requests_to_send = json.loads(os.environ['PEER_MCP_REQUESTS'])
+                for entry in requests_to_send:
+                    if entry['method'] == 'tools/call':
+                        entry['params']['_meta'] = {'threadId': os.environ.get('PEER_MCP_ISSUER', thread_id)}
+                environment = {key: value for key, value in os.environ.items()
+                               if key not in {'AGENT_SWARM_CONNECTION', 'GRAPHTRAJ_CLI_CONNECTION'}}
+                environment.update(server['env'])
+                response = subprocess.run([server['command'], *server['args']], cwd=server['cwd'],
+                                          env=environment, text=True, capture_output=True, timeout=10,
+                                          input=''.join(json.dumps(entry) + '\n' for entry in requests_to_send))
+                assert response.returncode == 0, response.stderr
+                complete(thread_id, turn_id, json.dumps([json.loads(line) for line in response.stdout.splitlines()]))
+            threading.Thread(target=run_mcp, daemon=True).start()
         elif prompt == 'configuration':
+            if os.environ.get('PEER_CONFIGURATION_HOME'):
+                Path(os.environ['PEER_CONFIGURATION_HOME']).write_text(os.environ.get('CODEX_HOME', ''))
+                rollout = native_rollout(thread_id)
+                if rollout:
+                    write_native_prefix(rollout)
+                    write_native_result(rollout, 'configuration')
             complete(thread_id, turn_id, json.dumps(sessions[thread_id]))
         elif prompt != 'hold':
             rollout = native_rollout(thread_id)

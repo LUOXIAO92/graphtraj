@@ -315,3 +315,67 @@ def test_retry_preserves_native_numeric_milliseconds(delay: float) -> None:
         retry['data']['delayMs'] = invalid
         with pytest.raises(ValueError):
             validate_event(retry)
+
+
+@pytest.mark.parametrize('fault', [
+    None, 'append', 'missing', 'empty', 'duplicate', 'future', 'incomplete',
+    'range', 'non-surface', 'shadowed',
+])
+def test_assistant_replacement_requires_current_surface_coverage(fault: str | None) -> None:
+    """Allow assistant replacements without relaxing source or surface checks."""
+    first, second = user('old', 0), user('second', 1)
+    marker = event('turn/start', {'turn': 0}, 2)
+    replacement = event('assistant/message', {
+        'turn': 0, 'step': 0, 'stream': [],
+        'message': {'id': 'native-assistant', 'role': 'assistant',
+                    'source': {'kind': 'model', 'provider': 'native', 'model': 'native'},
+                    'content': [{'type': 'text', 'text': 'new context'}]},
+    }, 3, surfaceOp={'op': 'replace', 'startSeq': 0, 'endSeq': 1},
+        sourceEventSeqs=[0, 1])
+    events = [first, second, marker, replacement]
+    if fault == 'append':
+        replacement['surfaceOp'] = 'append'
+    elif fault == 'missing':
+        del replacement['sourceEventSeqs']
+    elif fault in {'empty', 'duplicate', 'future', 'incomplete'}:
+        replacement['sourceEventSeqs'] = {
+            'empty': [], 'duplicate': [0, 1, 1], 'future': [0, 1, 3],
+            'incomplete': [0],
+        }[fault]
+    elif fault == 'range':
+        replacement['surfaceOp']['endSeq'] = 3
+    elif fault == 'non-surface':
+        replacement['surfaceOp']['endSeq'] = 2
+        replacement['sourceEventSeqs'] = [0, 1, 2]
+    elif fault == 'shadowed':
+        repeated = deepcopy(replacement)
+        repeated['seq'] = 4
+        events.append(repeated)
+
+    original = deepcopy(events)
+    if fault:
+        with pytest.raises(ValueError, match='sourceEventSeqs|surfaceOp'):
+            validate_session(header(), events, reconstruct=True)
+    else:
+        validate_session(header(), events, reconstruct=True)
+    assert events == original
+
+
+def test_jsonl_messages_consume_assistant_replacement(tmp_path: Path) -> None:
+    """The archive consumer applies the shared validator's replacement contract."""
+    from graphtraj.sessions.archive import JsonlSessionStore
+
+    replacement = event('assistant/message', {
+        'turn': 0, 'step': 0, 'stream': [],
+        'message': {'id': 'replacement', 'role': 'assistant',
+                    'source': {'kind': 'model', 'provider': 'native', 'model': 'native'},
+                    'content': [{'type': 'text', 'text': 'retained context'}]},
+    }, 2, surfaceOp={'op': 'replace', 'startSeq': 0, 'endSeq': 1}, sourceEventSeqs=[0, 1])
+    store = JsonlSessionStore.create(tmp_path / 'session.jsonl', header())
+    events = [user('first', 0), user('second', 1), replacement]
+    for item in events:
+        item['graphtraj'] = {'version': 1, 'native': {
+            'runtime': 'codex', 'sessionId': 'test-session', 'locator': f"fixture:{item['seq']}",
+        }}
+    store.publish(events, source='test', position=3)
+    assert JsonlSessionStore(store.path).messages() == [replacement['data']['message']]

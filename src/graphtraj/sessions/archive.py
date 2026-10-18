@@ -78,6 +78,8 @@ def _relocate(event: dict, indices: dict[int, int], session_id: str) -> dict:
     if 'sourceEventSeqs' in event:
         event['sourceEventSeqs'] = [indices[n] for n in event['sourceEventSeqs']]
     data = event['data']
+    if event['type'] == 'graphtraj/history':
+        data['eventSeqs'] = [indices[n] for n in data['eventSeqs']]
     if event['type'] == 'developer/message' and 'headerSeq' in data:
         data['headerSeq'] = indices[data['headerSeq']]
     if event['type'] == 'compaction/summary':
@@ -315,6 +317,36 @@ class JsonlSessionStore:
         """
         return deepcopy(self._metadata['observations'])
 
+    def resolve_observation(
+        self,
+        observation: tuple[str, str, str],
+        final: tuple[str, str, str],
+    ) -> bool:
+        """Link exactly one pending observation to an already published native key.
+
+        The Runtime adapter must supply the native terminal association. This
+        operation neither infers matching content nor changes canonical order.
+        Repeating the same association is a no-op; conflicting links refuse.
+        Original partial content remains collection evidence outside messages.
+        """
+        for key in (observation, final):
+            if len(key) != 3 or not all(isinstance(part, str) and part for part in key):
+                raise ValueError('A native observation and final key are required.')
+        with self._update():
+            for resolved in self._metadata['observations']:
+                if _key(resolved['event']) == observation:
+                    if tuple(resolved['final']) != final:
+                        raise ValueError('Observation already resolves to another native event.')
+                    return False
+            if not any(_key(event) == final for event in self._events):
+                raise ValueError('The final native event has not been published.')
+            for index, pending in enumerate(self._metadata['pending']):
+                if _key(pending['event']) == observation:
+                    self._metadata['observations'].append({**pending, 'final': list(final)})
+                    del self._metadata['pending'][index]
+                    return True
+        return False
+
     def page(self, after: int = -1, limit: int = 200, *, revision: int | None = None) -> dict:
         """Read native-order events; refuse a cursor from a different snapshot."""
         if type(after) is not int or after < -1 or type(limit) is not int or not 1 <= limit <= 1000:
@@ -347,6 +379,9 @@ class JsonlSessionStore:
                 raise ValueError('Missing native content, history or correspondence; messages are incomplete.')
         surface = []
         for event in self._events:
+            if event['type'] == 'graphtraj/history':
+                surface = [self._events[ref] for ref in event['data']['eventSeqs']]
+                continue
             if event['type'] not in SURFACE_TYPES:
                 continue
             if event['surfaceOp'] == 'append':

@@ -1,0 +1,14 @@
+
+==================================== ERRORS ====================================
+________________________ ERROR collecting test session _________________________
+/Users/luoxiao/miniconda3/lib/python3.13/pathlib/_abc.py:482: in is_file
+    return S_ISREG(self.stat(follow_symlinks=follow_symlinks).st_mode)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/Users/luoxiao/miniconda3/lib/python3.13/pathlib/_local.py:515: in stat
+    return os.stat(self, follow_symlinks=follow_symlinks)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   PermissionError: [Errno 1] Operation not permitted: '/Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/.agent-worktrees'
+=========================== short test summary info ============================
+ERROR  - PermissionError: [Errno 1] Operation not permitted: '/Users/luoxiao/...
+!!!!!!!!!!!!!!!!!!!! Interrupted: 1 error during collection !!!!!!!!!!!!!!!!!!!!
+1 error in 0.06s

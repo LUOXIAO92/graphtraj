@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import { pathToFileURL } from 'node:url';
 import { spawn } from 'node:child_process';
+import { globSync, mkdirSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
 
 const [nativePackage, modulePath, python] = process.argv.slice(2);
 const require = createRequire(nativePackage);
@@ -11,10 +13,14 @@ const { Context } = await load('@deepseek-ai/cordis');
 const { SessionStore, buildForkSeed } = await load('@deepseek-ai/dsh-session');
 const { SessionQueryEngine } = await load('@deepseek-ai/dsh-session-query');
 const { createUserMessage } = await load('@deepseek-ai/dsh-llm');
+const { default: JsonlPersistence } = await load('@deepseek-ai/dsh-session-persistence-jsonl');
 const { installCollection } = await import(pathToFileURL(modulePath).href);
 const ctx = new Context();
 await ctx.plugin(SessionStore).await();
 await ctx.plugin(SessionQueryEngine).await();
+const nativeRoot = join(process.cwd(), 'native-durable');
+mkdirSync(nativeRoot);
+await ctx.plugin(JsonlPersistence, { root: nativeRoot, compression: 'none' }).await();
 const failures = [];
 const counts = [];
 let failNext = false;
@@ -43,10 +49,15 @@ async function entry(agent, payload) {
 }
 const collect = installCollection(ctx, entry);
 const session = ctx.sessions.create('real-main', { meta: { cwd: process.cwd() } });
+await ctx.sessionPersistence.create(session.header);
+let callbacks = 0;
+ctx.on('session/event', () => { callbacks += 1; });
 const agent = { session };
 await entry(agent, { event: 'agent/created', source: 'startup', header: session.header });
 // The pre-existing prefix must be captured, even though the listener missed it.
 session.append('turn/start', { turn: 0 });
+assert.equal(callbacks, 1);
+assert.equal(globSync('**/*.jsonl', { cwd: nativeRoot }).length, 0);
 session.append('step/start', { turn: 0, step: 0 });
 await collect(agent);
 session.append('user/message', createUserMessage({
@@ -78,5 +89,19 @@ await ctx.sessions.flush(child);
 assert.ok(failures.some(message => message.includes('controlled delivery interruption')));
 // Shutdown must drain the final event even without another explicit checkpoint.
 session.append('turn/start', { turn: 1 });
+const finalObservation = await ctx.sessionQuery.observeSession(session.id, { projectionMode: 'none' });
+const finalEvents = [...finalObservation.events];
+finalObservation[Symbol.dispose]();
+const childObservation = await ctx.sessionQuery.observeSession(child.id, { projectionMode: 'none' });
+const childEvents = [...childObservation.events];
+childObservation[Symbol.dispose]();
 await ctx.fiber.dispose();
-console.log(JSON.stringify({ count: original.length, counts, failures }));
+const nativeFile = globSync('**/*.jsonl', { cwd: nativeRoot })[0];
+assert.ok(nativeFile);
+const nativeDisk = readFileSync(join(nativeRoot, nativeFile), 'utf8').trim().split('\n').map(JSON.parse);
+assert.deepEqual(nativeDisk.slice(1), finalEvents);
+console.log(JSON.stringify({ count: original.length, counts, failures,
+  callbackBeforeDisk: true, nativeDiskEvents: nativeDisk.slice(1),
+  header: session.header, events: finalEvents, messages: session.deriveMessages(),
+  child: { header: child.header, events: childEvents, messages: child.deriveMessages() },
+}));

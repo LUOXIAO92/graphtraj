@@ -1,11 +1,7 @@
 """Shared definitions execute through both transports without an MCP dependency."""
 
-import asyncio
 import io
 import json
-import os
-import subprocess
-import sys
 from dataclasses import replace
 from pathlib import Path
 from typing import Any, Mapping
@@ -13,16 +9,12 @@ from typing import Any, Mapping
 import pytest
 
 from graphtraj.configuration.project_configuration import default_configuration_content
-from graphtraj.interfaces import gateway, mcp, tools
-from graphtraj.runtimes.codex.app_server import CodexAppServer, CodexServerRequest
-from graphtraj.runtimes.codex.codex_adapter import native_runner_tools
-from graphtraj.runtimes.codex.managed_session import run_native_operation
-from test_codex_app_server import peer
+from graphtraj.interfaces import gateway, mcp, tools, local_tool
 
 
 @pytest.fixture(autouse=True)
 def configure_project(tmp_path: Path) -> None:
-    """Provide the real project binding used by native operation authorization."""
+    """Provide the real project binding used by CLI and MCP operations."""
     configuration = tmp_path / '.graphtraj/config.yml'
     configuration.parent.mkdir()
     configuration.write_text(default_configuration_content(tmp_path, tmp_path))
@@ -37,14 +29,9 @@ def mcp_request(method: str, params: dict) -> dict:
     return json.loads(output.getvalue())['result']
 
 
-def native_request(root: Path, name: str, arguments: dict) -> dict:
-    """Invoke the callback with its bound owning Session identity."""
-    request = CodexServerRequest(1, 'item/tool/call', {
-        'threadId': 'owner', 'tool': name, 'arguments': arguments,
-    })
-    return asyncio.run(run_native_operation(
-        CodexAppServer(cwd=root), 'owner', None, root, request,
-    ))
+def cli_request(root: Path, arguments: dict) -> dict:
+    """Invoke the public JSON CLI bridge with its actual response format."""
+    return local_tool.answer(arguments, cwd=root)
 
 
 @pytest.mark.parametrize('failed', [False, True])
@@ -66,37 +53,35 @@ def test_both_transports_consume_shared_schema_and_handler(
     ))
     monkeypatch.chdir(tmp_path)
     listed = mcp_request('tools/list', {})['tools']
-    native = native_runner_tools()
-    assert [tool['name'] for tool in listed] == ['graphtraj']
-    assert [tool['name'] for tool in native] == ['graphtraj', 'agents']
+    assert [tool['name'] for tool in listed] == ['agents', 'tasks']
     discovered = mcp_request('tools/call', {
-        'name': 'graphtraj', 'arguments': {'action': 'discover'},
+        'name': 'tasks', 'arguments': {'action': 'discover'},
     })['structuredContent']['features']
     assert 'approved_recovery' in {item['feature'] for item in discovered}
-    assert {item['feature'] for item in discovered} == set(tools.TOOLS)
-    assert listed[0]['inputSchema'] == native[0]['inputSchema'] == gateway.INPUT_SCHEMA
+    assert {item['feature'] for item in discovered} == set(tools.TOOLS) - {'agents'}
+    assert listed[0]['inputSchema'] == gateway.INPUT_SCHEMA
     described = mcp_request('tools/call', {
-        'name': 'graphtraj',
+        'name': 'tasks',
         'arguments': {'action': 'describe', 'feature': 'alias_status', 'schema': True},
     })['structuredContent']
-    native_description = native_request(tmp_path, 'graphtraj', {
+    cli_description = cli_request(tmp_path, {
         'action': 'describe', 'feature': 'alias_status', 'schema': True,
     })
     assert described['input_schema'] == schema
-    assert json.loads(native_description['contentItems'][0]['text'])['input_schema'] == schema
+    assert cli_description['result']['input_schema'] == schema
 
     arguments = {'sample': 'shared'}
     result = mcp_request('tools/call', {
-        'name': 'graphtraj',
+        'name': 'tasks',
         'arguments': {'action': 'execute', 'feature': 'alias_status',
                       'arguments': arguments},
     })
-    response = native_request(tmp_path, 'graphtraj', {
+    response = cli_request(tmp_path, {
         'action': 'execute', 'feature': 'alias_status', 'arguments': arguments,
     })
-    assert result['structuredContent'] == json.loads(response['contentItems'][0]['text'])
+    assert result['structuredContent'] == response['result']
     assert result['isError'] is failed
-    assert response['success'] is not failed
+    assert response['failed'] is failed
     assert calls == [arguments, arguments]
 
 
@@ -107,60 +92,17 @@ def test_both_transports_preserve_handler_input_rejection(
     monkeypatch.chdir(tmp_path)
     arguments = {'alias': 'child', 'instruction': 42}
     result = mcp_request('tools/call', {
-        'name': 'graphtraj',
+        'name': 'tasks',
         'arguments': {'action': 'execute', 'feature': 'send_instruction',
                       'arguments': arguments},
     })
-    response = native_request(tmp_path, 'graphtraj', {
+    response = cli_request(tmp_path, {
         'action': 'execute', 'feature': 'send_instruction', 'arguments': arguments,
     })
     assert result['isError'] is True
-    assert response['success'] is False
-    document = json.loads(response['contentItems'][0]['text'])
+    assert response['failed'] is True
+    document = response['result']
     assert result['structuredContent'] == document
     assert document['feature'] == 'send_instruction'
     assert 'instruction' in document['error']
     assert 'instruction' in result['content'][0]['text']
-
-
-def test_main_native_callback_runs_when_mcp_import_is_unavailable(
-    tmp_path: Path, peer: Path,
-) -> None:
-    """A fresh process runs a real native peer callback while MCP imports fail."""
-    exchange = {'method': 'item/tool/call', 'params': {
-        'threadId': 'thread-1', 'tool': 'graphtraj', 'arguments': {
-            'action': 'execute', 'feature': 'alias_status', 'arguments': {}}},
-        'response': {'contentItems': [{'type': 'inputText', 'text': '{"agents": []}'}],
-                     'success': True}}
-    environment = {**os.environ, 'PEER_REQUEST_EXCHANGE': json.dumps(exchange),
-                   'PEER_NATIVE_ROLLOUT': str(tmp_path / 'native')}
-    source = Path(__file__).resolve().parents[1] / 'src'
-    script = '''
-import asyncio
-import importlib.abc
-import sys
-from pathlib import Path
-
-class NoMcp(importlib.abc.MetaPathFinder):
-    def find_spec(self, fullname, path=None, target=None):
-        if fullname == 'graphtraj.interfaces.mcp':
-            raise ModuleNotFoundError('MCP is unavailable')
-
-sys.meta_path.insert(0, NoMcp())
-sys.path.insert(0, sys.argv[1])
-from graphtraj.interfaces import tools
-from graphtraj.runtimes.codex import main_session
-assert Path(tools.__file__).is_relative_to(Path(sys.argv[1]))
-main_session.runtime_executable = lambda runtime: Path(sys.argv[3])
-async def unexpected(request):
-    raise AssertionError(request.method)
-result = asyncio.run(main_session.run_main(Path(sys.argv[2]), 'configured-request', None, unexpected))
-assert result['last_agent_message'] == 'request accepted', result
-assert result['native_operations'] == [{'tool': 'graphtraj', 'success': True,
-                                       'from_main': True, 'aliases': []}], result
-'''
-    completed = subprocess.run(
-        [sys.executable, '-c', script, str(source), str(tmp_path), str(peer)],
-        env=environment, cwd=tmp_path, capture_output=True, text=True, timeout=30,
-    )
-    assert completed.returncode == 0, completed.stdout + completed.stderr

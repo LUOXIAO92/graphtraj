@@ -6,6 +6,7 @@ import asyncio
 import os
 import json
 import re
+import sys
 import uuid
 from concurrent.futures import CancelledError
 from contextlib import ExitStack
@@ -19,7 +20,7 @@ from graphtraj.configuration.project_configuration import (
     load_project_configuration,
 )
 from graphtraj.configuration.project_roles import load_project_roles
-from graphtraj.runtimes.codex.session_archive import CodexSessionArchive
+from graphtraj.runtimes.codex.jsonl_archive import CodexJsonlArchive
 from graphtraj.runtimes.codex.approval import approval_route, review_request
 
 from graphtraj.execution.runner_batch import read_session_task
@@ -28,6 +29,7 @@ from graphtraj.execution.runner_io import write_yaml_durably
 from graphtraj.runtimes.codex.app_server import CodexAppServer, CodexExecution, CodexServerRequest
 from graphtraj.runtimes.codex.codex_adapter import restore_codex_context
 from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError
+from graphtraj.sessions.archive import SessionArchive
 
 
 def _approval_history_text(value: object) -> object:
@@ -120,13 +122,23 @@ class CodexManagedExecution:
         trace_file: Path,
         expected_session: str | None = None,
         session_created: Callable[[str, int], None] | None = None,
+        *,
+        independent: bool = False,
+        archive: SessionArchive | None = None,
+        connection: dict[str, str] | None = None,
+        agent_call: Callable | None = None,
     ) -> None:
         """Capture immutable task configuration for one Worker execution."""
         self.context = restore_codex_context(request, context_evidence)
+        from graphtraj.runtimes.codex.codex_adapter import CodexRuntimeAdapter
+
+        self.connection_environment = (CodexRuntimeAdapter().recovery_environment(connection)
+                                       if connection is not None else {})
         request = self.context.launch_document()['adapter_request']
-        if expected_session:
+        request['session_parameters'].pop('dynamicTools', None)
+        if expected_session and not independent:
             refresh_approval_route(request, session_directory)
-            self.context = restore_codex_context(request, context_evidence)
+        self.context = restore_codex_context(request, context_evidence)
         self.approval = request.get("approval")
         self.approval_items: dict[str, dict] = {}
         self.command = (request['arguments'][0], 'app-server', '--listen', 'stdio://')
@@ -135,6 +147,10 @@ class CodexManagedExecution:
         self.trace_file = trace_file
         self.started = session_started
         self.created = session_created
+        self.independent = independent
+        self.archive = archive
+        self.agent_call = agent_call
+        self.parent_notice: Callable[[str, dict], dict] | None = None
         self.expected_session = expected_session
         self.termination_requested = False
         self.execution: CodexExecution | None = None
@@ -149,6 +165,11 @@ class CodexManagedExecution:
         self.recovery_requests: dict[str, tuple[dict, asyncio.Future[dict]]] = {}
 
     @property
+    def session(self) -> str | None:
+        """Expose the native Session through the shared RuntimeTurn interface."""
+        return self.native_session
+
+    @property
     def execution_id(self) -> str | None:
         """Expose native execution identity without leaking the Codex handle."""
         return self.execution.turn_id if self.execution is not None else None
@@ -161,24 +182,60 @@ class CodexManagedExecution:
         """Retain identity from the Session handle and outcomes from native turns."""
         self.loop = asyncio.get_running_loop()
         connections = ExitStack()
+        request = self.context.launch_document()['adapter_request']
+        cwd = Path(request['worktree_path'])
+        config = request['session_parameters']['config']
+        address = None
+        connection_env = None
+        native_context = lambda: {'runtime': 'codex', 'session': self.native_session, 'cwd': str(cwd)}
         # Only a formal Worker has a creation callback that binds its native
         # Session to Runner ownership before the first Agent turn.
-        if self.created is not None:
+        if self.created is not None and not self.independent:
             from graphtraj.interfaces.hosted_cli import CONNECTION_ENV, cli_connection
             from graphtraj.workspace.runner_project import discover_project_root
 
-            request = self.context.launch_document()['adapter_request']
             root = discover_project_root(Path(request['worktree_path']))
+
+            def authorize(native: dict, _request: dict) -> tuple[str | None, set[str]]:
+                """Own-thread calls need no RPC or event-loop round trip."""
+                from agent_swarm.connection import verify_native_context
+
+                if isinstance(native, dict) and native.get('session') == self.native_session:
+                    verify_native_context(native, native_context())
+                    return self.directory.name, native_operation_features()
+                return asyncio.run_coroutine_threadsafe(authorize_mcp_caller(
+                    self.adapter, self.native_session, self.directory.name, root, cwd, native,
+                ), self.loop).result(timeout=30)
+
             address = connections.enter_context(cli_connection(
                 root, self.directory.name, native_operation_features(), self._review_recovery_sync,
+                native_context=native_context,
+                native_authorizer=authorize,
             ))
-            config = request['session_parameters']['config']
+            connection_env = CONNECTION_ENV
+        elif self.independent and self.agent_call is not None:
+            from agent_swarm.connection import CONNECTION_ENV, agents_connection
+
+            address = connections.enter_context(agents_connection(
+                self.directory / 'mcp', self.agent_call,
+                self._authenticate_mcp, native_context=native_context,
+            ))
+            connection_env = CONNECTION_ENV
+        if address is not None:
             profile = config['permissions'][config['default_permissions']]
             profile['filesystem'][address] = 'write'
-            config.setdefault('shell_environment_policy', {}).setdefault('set', {})[CONNECTION_ENV] = address
+            shell = config.setdefault('shell_environment_policy', {}).setdefault('set', {})
+            shell[connection_env] = address
+            shell['GRAPHTRAJ_NATIVE_RUNTIME'] = 'codex'
+            config.setdefault('mcp_servers', {})['graphtraj'] = {
+                'command': sys.executable, 'args': ['-m', 'agent_swarm.mcp'], 'cwd': str(cwd),
+                'env': {connection_env: address, 'GRAPHTRAJ_NATIVE_RUNTIME': 'codex'},
+            }
             self.context = restore_codex_context(request, self.context.evidence_document())
         adapter = CodexAppServer(cwd=Path(self.context.session_document()['adapter_request']['cwd']),
                                  command=self.command, request_timeout=5,
+                                 environment={**self.context.runtime_environment(), **self.connection_environment,
+                                              'AGENT_SWARM_CONNECTION': None, 'GRAPHTRAJ_CLI_CONNECTION': None},
                                  on_request=self._request, request_handler_timeout=None,
                                  experimental_api=True)
         self.adapter = adapter
@@ -192,6 +249,18 @@ class CodexManagedExecution:
                     raise RuntimeAdapterError(
                         'RUNTIME_EXECUTION_INTERRUPTED', 'Stopped before native Session creation.',
                     )
+                # Resume itself can append settings. Capture the owned source
+                # boundary before that operation, not after its response.
+                resume_source = None
+                retained = self.directory / 'session.yml'
+                if self.expected_session and retained.is_file():
+                    previous = yaml.safe_load(retained.read_text())
+                    if previous.get('session') == self.expected_session and previous.get('rollout_path'):
+                        path = Path(previous['rollout_path'])
+                        try:
+                            resume_source = (path, path.stat().st_size)
+                        except FileNotFoundError:
+                            pass
                 self.startup = asyncio.create_task(
                     adapter.resume_session(self.context, self.expected_session)
                     if self.expected_session else adapter.create_session(self.context)
@@ -215,13 +284,22 @@ class CodexManagedExecution:
                 if self.created is not None:
                     self.created(session.thread_id, adapter.service_pid)
                 archive = None
-                if self.created is not None:
-                    configuration = load_project_configuration(root)
-                    mapping = yaml.safe_load((self.directory / 'mapping.yml').read_text())
-                    archive = CodexSessionArchive(
-                        configuration.state, str(configuration.harness_root),
-                        self.directory.name, session.thread_id, (mapping['task_id'],),
+                if self.independent and self.archive is not None:
+                    archive = CodexJsonlArchive(
+                        self.archive, self.directory.name, session.thread_id, session.rollout_path,
+                        new_session=self.expected_session is None,
                     )
+                if self.created is not None and not self.independent:
+                    from graphtraj.interfaces.agents import configured_archive
+
+                    mapping = yaml.safe_load((self.directory / 'mapping.yml').read_text())
+                    archive = CodexJsonlArchive(
+                        configured_archive(root), self.directory.name, session.thread_id, session.rollout_path,
+                        new_session=self.expected_session is None, task_ids=(mapping['task_id'],),
+                    )
+                if archive is not None and resume_source is not None:
+                    if session.rollout_path == resume_source[0]:
+                        archive.activation = resume_source[1]
                 adapter.retain_native_trace(session, self.trace_file, archive=archive)
                 if self.termination_requested:
                     raise RuntimeAdapterError(
@@ -370,13 +448,14 @@ class CodexManagedExecution:
 
     async def _request(self, request: CodexServerRequest) -> dict:
         """Hold one native callback until an explicit reply or native cancellation."""
-        from graphtraj.runtimes.codex.codex_adapter import NATIVE_RUNNER_TOOLS
-
-        if (
-            request.method == 'item/tool/call'
-            and request.params.get('tool') in {'graphtraj', 'agents', *NATIVE_RUNNER_TOOLS}
+        tool = request.params.get('tool')
+        if request.method == 'item/tool/call' and (
+            tool in {'graphtraj', 'agents', 'tasks'} or isinstance(tool, str) and tool.startswith('graphtraj_')
         ):
-            return await self._native_runner_request(request)
+            # A retained Session may still advertise its old dynamic tool set.
+            # Do not execute it or turn an obsolete tool call into a human prompt.
+            return {'success': False, 'contentItems': [{'type': 'inputText',
+                    'text': 'This project tool registration was removed. Use the agents/tasks MCP entry.'}]}
         if self.approval is not None and request.method.endswith("/requestApproval"):
             return await self._review_approval(request)
         token = uuid.uuid4().hex
@@ -390,15 +469,13 @@ class CodexManagedExecution:
             await asyncio.gather(notification, return_exceptions=True)
             self.requests.pop(token, None)
 
-    async def _native_runner_request(self, request: CodexServerRequest) -> dict:
-        """Use the managed Session's bound identity for native Runner operations."""
-        from graphtraj.workspace.runner_project import discover_project_root
+    def _authenticate_mcp(self, pid: int) -> None:
+        """Reject calls before the native service owns the process connection."""
+        from agent_swarm import AgentsError
 
-        cwd = Path(self.context.session_document()['adapter_request']['cwd'])
-        return await run_native_operation(
-            self.adapter, self.native_session, self.directory.name,
-            discover_project_root(cwd), request, recovery_reviewer=self._review_recovery_sync,
-        )
+        if self.adapter is None:
+            raise AgentsError('authority-denied', 'The Codex service has not started.')
+        self.adapter.authenticate_caller(pid)
 
     def _review_recovery_sync(self, proposal: dict) -> dict:
         """Bridge the tool worker to this existing execution's selected reviewer."""
@@ -479,9 +556,11 @@ class CodexManagedExecution:
         notice += "\n" + json.dumps({**identity, "params": request.params}, ensure_ascii=False)
         while token in self.requests and not self.requests[token][1].done():
             receipt = await asyncio.to_thread(
+                self.parent_notice, notice, identity,
+            ) if self.parent_notice is not None else await asyncio.to_thread(
                 notify_direct_parent, self.directory, notice, identity,
             )
-            if receipt["delivery"] in {"received", "no-direct-parent"}:
+            if receipt["delivery"] in {"received", "retained", "no-direct-parent"}:
                 return
             # Retry only while the original native request is still pending.
             await asyncio.sleep(1)
@@ -624,103 +703,51 @@ class CodexManagedExecution:
         return True
 
 
-async def run_native_operation(
-    adapter: CodexAppServer | None,
+async def authorize_mcp_caller(
+    adapter: CodexAppServer,
     native_session: str | None,
-    root_alias: str | None,
+    alias: str | None,
     root: Path,
-    request: CodexServerRequest,
-    *,
-    recovery_reviewer: Callable[[dict], dict] | None = None,
-) -> dict:
-    """Route an owned native callback, preserving the Runtime's issuing identity."""
+    cwd: Path,
+    native: dict,
+) -> tuple[str | None, set[str]]:
+    """Keep existing native helper/checker summary access on an owned MCP channel.
+
+    Kernel process authentication precedes this check. A real parent chain or
+    the retained finish-check binding is required; fork lineage alone grants
+    nothing. Returned identities use the existing Runner caller scope.
+    """
+    from agent_swarm.connection import verify_native_context
     from graphtraj.execution.runner_models import RunnerError
-    from graphtraj.execution.runner_status import runtime_caller
-    from graphtraj.interfaces.gateway import handle_request
-    from graphtraj.interfaces.tools import METHOD_FEATURE_NAMES, TOOLS, ToolResult
-    from graphtraj.runtimes.codex.codex_adapter import NATIVE_RUNNER_TOOLS
+    from graphtraj.runtimes.codex.session_entry import is_bound_checker, session_source
     from graphtraj.workspace.runner_project import discover_runner_directory
 
-    try:
-        thread = request.params.get('threadId')
-        arguments = request.params.get('arguments')
-        name = request.params.get('tool')
-        if (
-            not isinstance(thread, str) or not thread
-            or native_session is None or adapter is None
-            or not isinstance(arguments, dict)
-            or name not in {'graphtraj', 'agents', *NATIVE_RUNNER_TOOLS}
-        ):
-            raise RunnerError('invalid-input', 'Supply only supported tool arguments.')
-        current: str | None = thread
-        seen: set[str] = set()
-        while current != native_session:
-            if current in seen:
-                raise RunnerError('authority-denied', 'Native parent chain is cyclic.')
-            seen.add(current)
-            current = await adapter.read_thread_parent(current)
-            if current is None:
-                raise RunnerError('authority-denied', 'Native caller is outside this Session subtree.')
-        # Method-only features have no handler, so disclosing them adds
-        # readable guidance without adding executable capability.
-        allowed_features = native_operation_features()
-        if name == 'graphtraj':
-            feature = arguments.get('feature')
-            action = arguments.get('action')
-        elif name == 'agents':
-            from graphtraj.interfaces.agents import ACTION_FEATURES
-
-            # Each action passes the permission check of its existing feature.
-            feature, action = ACTION_FEATURES.get(arguments.get('action')), 'execute'
-        else:
-            feature, action = NATIVE_RUNNER_TOOLS[name], 'execute'
-            tool = TOOLS[feature]
-            if not set(arguments) <= set(tool.input_schema['properties']):
-                raise RunnerError('invalid-input', 'Supply only supported tool arguments.')
-        if thread != native_session:
-            allowed_features = {'alias_status', 'task_graph', *METHOD_FEATURE_NAMES}
-            if action == 'execute' and feature not in ('alias_status', 'task_graph'):
-                raise RunnerError('authority-denied', 'Temporary native helpers have read-only Runner access.')
-        if name == 'agents' and feature is not None and feature not in allowed_features:
-            raise RunnerError('authority-denied', 'This caller may not use that agents action.')
-        identity = root_alias if thread == native_session else thread
-
-        def operate() -> ToolResult:
-            """Reuse public validation/control without process-based authorization."""
-            from graphtraj.runtimes.runtime_adapter import recovery_review
-
-            with runtime_caller(discover_runner_directory(root), identity), recovery_review(recovery_reviewer):
-                if name == 'graphtraj':
-                    return handle_request(arguments, cwd=root, allowed_features=allowed_features)
-                if name == 'agents':
-                    from agent_swarm import Caller
-                    from graphtraj.interfaces.agents import agents_callback
-
-                    caller = Caller('codex-dynamic-tools', root_alias if thread == native_session else None,
-                                    session=thread, runtime='codex')
-                    result = agents_callback(root, caller)(arguments)
-                    return ToolResult(result.document, failed=result.failed)
-                return tool.handler(arguments, cwd=root)
-
-        response = await asyncio.to_thread(operate)
-        document, success = response.document, not response.failed
-    except (RunnerError, RuntimeAdapterError) as error:
-        document, success = {'error': {'code': error.code, 'message': error.message}}, False
-    except ValueError as error:
-        document, success = {'error': {'code': 'invalid-input', 'message': str(error)}}, False
-    except OSError as error:
-        document, success = {'error': {'code': 'operation-failed', 'message': str(error)}}, False
-    return {
-        'contentItems': [{'type': 'inputText', 'text': json.dumps(document)}],
-        'success': success,
-    }
+    thread = native.get('session') if isinstance(native, dict) else None
+    verify_native_context(native, {'runtime': 'codex', 'session': thread, 'cwd': str(cwd)})
+    if native_session is None:
+        raise RunnerError('authority-denied', 'The native Session is not ready.')
+    if thread == native_session:
+        return alias, native_operation_features()
+    current = thread
+    seen = set()
+    while current and current != native_session and current not in seen:
+        seen.add(current)
+        current = await adapter.read_thread_parent(current)
+    if current != native_session:
+        metadata = await adapter.read_thread(thread)
+        if (session_source(metadata) != 'main'
+                or metadata.get('forkedFromId') != native_session
+                or not is_bound_checker(discover_runner_directory(root), adapter.native_connection(thread))):
+            raise RunnerError('authority-denied', 'Caller is outside this native Session subtree.')
+    return thread, {'task_graph', 'alias_status'}
 
 
 def native_operation_features() -> set[str]:
-    """Share the managed host's allowed operations across native tools and CLI."""
+    """Share the managed host's allowed operations across MCP and CLI."""
     from graphtraj.interfaces.tools import METHOD_FEATURE_NAMES
-    from graphtraj.runtimes.codex.codex_adapter import NATIVE_RUNNER_TOOLS
 
-    return (set(NATIVE_RUNNER_TOOLS.values()) | set(METHOD_FEATURE_NAMES)
+    return ({'alias_status', 'swarm', 'send_instruction', 'interrupt', 'pending_requests',
+                'reply_to_request', 'session_reports', 'submit_report', 'submit_result',
+                'decide_result', 'task_graph'} | set(METHOD_FEATURE_NAMES)
             | {'parent_status', 'retire', 'replace', 'cleanup', 'approved_recovery',
-               'role_organization', 'runtime_connections', 'desktop_activity', 'session_read'})
+               'role_organization', 'runtime_connections', 'desktop_activity', 'session_read', 'agents'})

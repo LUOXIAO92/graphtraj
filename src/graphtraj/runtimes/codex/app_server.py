@@ -26,6 +26,9 @@ from graphtraj.runtimes.codex.codex_adapter import (
 from graphtraj.runtimes.runtime_adapter import RuntimeContext, RuntimeExecutionResult
 from graphtraj.runtimes.codex.websocket import CodexWebSocket
 from graphtraj.runtimes.codex.session_archive import CodexSessionArchive
+from graphtraj.runtimes.codex.jsonl_archive import CodexJsonlArchive
+from graphtraj.runtimes.codex.history_archive import CodexHistoryArchive
+from graphtraj.sessions.archive import SessionArchive
 
 
 _DEFAULT_TIMEOUT = object()
@@ -188,7 +191,7 @@ class CodexAppServer:
         *,
         cwd: Path,
         command: Sequence[str] = ("codex", "app-server", "--listen", "stdio://"),
-        environment: Mapping[str, str] | None = None,
+        environment: Mapping[str, str | None] | None = None,
         request_timeout: float = 30,
         on_request: Callable[[CodexServerRequest], Awaitable[Mapping[str, Any] | None]] | None = None,
         request_handler_timeout: float | None | object = _DEFAULT_TIMEOUT,
@@ -210,7 +213,8 @@ class CodexAppServer:
             )
         self._cwd = cwd
         self._command = tuple(command)
-        self._environment = {**os.environ, **(environment or {})}
+        self._environment = {key: value for key, value in {**os.environ, **(environment or {})}.items()
+                             if value is not None}
         self._default_connection = {
             name: os.environ.get(name) for name in ('OPENAI_BASE_URL', 'OPENAI_API_KEY')
         }
@@ -248,6 +252,7 @@ class CodexAppServer:
         self._active: dict[str, str | None] = {}
         self._traces: dict[str, CodexNativeTrace] = {}
         self._trace_tasks: dict[str, asyncio.Task[None]] = {}
+        self._trace_changes: dict[str, asyncio.Event] = {}
         self._failure: CodexAdapterError | None = None
         self._closed = False
         self._opened = False
@@ -256,6 +261,8 @@ class CodexAppServer:
         # native notices before delivery; persistent Sessions use their rollout.
         self._notifications: asyncio.Queue[dict[str, Any] | CodexAdapterError] = asyncio.Queue()
         self._fork_archives: dict[str, CodexSessionArchive] = {}
+        self._ordered_archives: dict[str, CodexHistoryArchive] = {}
+        self._ordered_tasks: dict[str, asyncio.Task] = {}
 
     async def __aenter__(self) -> CodexAppServer:
         """Open stdio and perform initialize/initialized before Session operations."""
@@ -315,6 +322,9 @@ class CodexAppServer:
 
     async def _close_connection(self) -> None:
         """Bound EOF shutdown, then terminate only this explicitly owned service group."""
+        await asyncio.gather(*self._ordered_tasks.values(), return_exceptions=True)
+        for archive in self._ordered_archives.values():
+            await archive.collect()
         self._closed = True
         self._fail(CodexAdapterError('RUNTIME_CONNECTION_CLOSED', 'Codex connection explicitly closed.',
                                     terminal_confirmed=False))
@@ -356,6 +366,20 @@ class CodexAppServer:
         self._require_connection()
         assert self._process is not None
         return self._process.pid
+
+    def authenticate_caller(self, pid: int) -> None:
+        """Require a kernel-observed caller below this still-live service."""
+        from agent_swarm import AgentsError
+        from agent_swarm.process import process_ancestors
+
+        if (self._process is None or self._process.returncode is not None
+                or self._process.pid not in process_ancestors(pid)):
+            raise AgentsError('authority-denied', 'Caller is outside the live Codex service.')
+
+    def native_connection(self, thread_id: str) -> dict:
+        """Return the selected service locator without credentials or inferred parentage."""
+        return {'runtime': 'codex', 'session': thread_id,
+                'codex_home': os.path.abspath(self._environment.get('CODEX_HOME', Path.home() / '.codex'))}
 
     @property
     def stderr_tail(self) -> str:
@@ -455,7 +479,7 @@ class CodexAppServer:
 
     def retain_native_trace(
         self, session: CodexSession, trace_file: Path,
-        *, archive: CodexSessionArchive | None = None,
+        *, archive: CodexSessionArchive | CodexJsonlArchive | None = None,
     ) -> None:
         """Read one owned Session's native records through the given Trace entry.
 
@@ -500,8 +524,9 @@ class CodexAppServer:
                 'RUNTIME_TRACE_FAILED', 'The native Codex Session Trace could not be retained.',
                 terminal_confirmed=False,
             ) from error
+        self._trace_changes[session.thread_id] = asyncio.Event()
         self._trace_tasks[session.thread_id] = asyncio.create_task(
-            self._collect_native_trace(trace)
+            self._collect_native_trace(trace, self._trace_changes[session.thread_id])
         )
 
     async def start_execution(self, session: CodexSession, prompt: str) -> CodexExecution:
@@ -621,6 +646,9 @@ class CodexAppServer:
             ) from error
         try:
             self._collect_native_trace_once(execution.thread_id)
+            ordered = self._ordered_archives.get(execution.thread_id)
+            if ordered is not None:
+                await ordered.collect()
         except CodexAdapterError as error:
             result = error
         if isinstance(result, CodexAdapterError):
@@ -629,13 +657,21 @@ class CodexAppServer:
             raise result
         return result.copy()
 
-    async def _collect_native_trace(self, trace: CodexNativeTrace) -> None:
-        """Watch for one native rollout without blocking control-message processing."""
+    async def _collect_native_trace(self, trace: CodexNativeTrace, changed: asyncio.Event) -> None:
+        """Collect changed files after notices and retry delayed native writes.
+
+        A notice is a wakeup only, never an ordering source. The bounded file
+        check also covers silent writes and notices received before disk flush.
+        """
 
         try:
             while not self._closed:
                 trace.collect()
-                await asyncio.sleep(0.02)
+                try:
+                    await asyncio.wait_for(changed.wait(), 0.1)
+                except TimeoutError:
+                    pass
+                changed.clear()
         except asyncio.CancelledError:
             raise
         except (OSError, ValueError, sqlite3.Error):
@@ -919,6 +955,17 @@ class CodexAppServer:
         archive.seed_fork(session.inherited_history, history_excluded=session.inherited_history_excluded)
         self._fork_archives[session.thread_id] = archive
 
+    async def retain_ordered_history(
+        self, session: CodexSession, archive: SessionArchive, agent: str,
+    ) -> None:
+        """Capture the owned child's inheritance cut before its first model call."""
+        self._require_session(session)
+        if session.thread_id in self._ordered_archives:
+            raise CodexAdapterError('RUNTIME_LIFECYCLE_INVALID', 'History is already retained.')
+        collector = CodexHistoryArchive(archive, agent, session.inherited_history, self._call)
+        self._ordered_archives[session.thread_id] = collector
+        await collector.collect()
+
     async def is_current_turn(self, session: str, turn: str) -> bool:
         """Check the exact live turn without loading dialogue or execution items."""
         thread = await self.read_thread(session)
@@ -1073,6 +1120,19 @@ class CodexAppServer:
             if not isinstance(message['method'], str) or not isinstance(message.get('params'), dict):
                 raise ValueError('Invalid native method/params')
             archive = self._fork_archives.get(message['params'].get('threadId'))
+            thread_id = message['params'].get('threadId')
+            ordered = self._ordered_archives.get(thread_id)
+            if ordered is not None and ('id' in message or message['method'] in {
+                'serverRequest/resolved', 'item/completed', 'turn/completed', 'thread/compacted',
+            }):
+                ordered.transport(message)
+            if ordered is not None and message['method'] in {'turn/completed', 'thread/compacted'}:
+                pending = self._ordered_tasks.get(thread_id)
+                if pending is None or pending.done():
+                    self._ordered_tasks[thread_id] = asyncio.create_task(ordered.collect())
+            changed = self._trace_changes.get(message['params'].get('threadId'))
+            if changed is not None:
+                changed.set()
             if archive is not None:
                 archive.notice(message)
             if 'id' in message:
@@ -1184,6 +1244,9 @@ class CodexAppServer:
                 archive = self._fork_archives.get(request.params.get('threadId'))
                 if archive is not None:
                     archive.reply(reply)
+                ordered = self._ordered_archives.get(request.params.get('threadId'))
+                if ordered is not None:
+                    ordered.transport(reply, outbound=True)
                 await self._send(reply)
             else:
                 scoped = all(isinstance(value, str) and value for value in key)
@@ -1198,6 +1261,9 @@ class CodexAppServer:
                 archive = self._fork_archives.get(request.params.get('threadId'))
                 if archive is not None:
                     archive.reply(reply)
+                ordered = self._ordered_archives.get(request.params.get('threadId'))
+                if ordered is not None:
+                    ordered.transport(reply, outbound=True)
                 await self._send(reply)
                 if not scoped:
                     self._fail(failure)

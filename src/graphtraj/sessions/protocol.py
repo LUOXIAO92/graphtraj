@@ -26,9 +26,16 @@ CORE_TYPES = SURFACE_TYPES | {
     'tool/call', 'request/header', 'request/context', 'session/end-seed',
     'llm/retry', 'llm/retry-started', 'compaction/start', 'compaction/end',
     'compaction/summary',
+    # Installed DSH 0.2.0-rc.2 log-only records. Its SessionSurface admits
+    # only SURFACE_EVENT_TYPES to deriveMessages; these remain in the log
+    # unchanged, including inbox records whose consumed input appears later
+    # as its own user/message. Unknown future types still fail reconstruction.
+    'agent/inbox/spliced', 'approval/policy', 'model/selection',
+    'permission/preset', 'sandbox/mode', 'session/title',
+    'session/title-llm-request', 'session-log-deepseek/delivery-accepted',
 }
 EXTENSION_TYPES = {'graphtraj/native', 'graphtraj/score', 'graphtraj/logprobs',
-                   'graphtraj/derived'}
+                   'graphtraj/derived', 'graphtraj/history'}
 
 
 def _require(condition: bool, path: str) -> None:
@@ -351,7 +358,10 @@ def validate_event(event: dict) -> None:
             _require(0 <= op['startSeq'] <= op['endSeq'] < event['seq'], 'surfaceOp.range')
         if 'sourceEventSeqs' in event:
             refs = event['sourceEventSeqs']
-            _require(kind != 'assistant/message' and type(refs) is list and bool(refs), 'sourceEventSeqs')
+            # Assistant replacements cite the displaced surface just like other
+            # roles; ordinary assistant appends still cannot claim sources.
+            _require(kind != 'assistant/message' or op != 'append', 'sourceEventSeqs')
+            _require(type(refs) is list and bool(refs), 'sourceEventSeqs')
             for ref in refs:
                 _integer(ref, 'sourceEventSeqs')
                 _require(ref < event['seq'], 'sourceEventSeqs')
@@ -450,6 +460,12 @@ def validate_event(event: dict) -> None:
     elif kind == 'graphtraj/native':
         _require('record' in data, 'native.record')
         _require('native' in event.get('graphtraj', {}), 'native.provenance')
+    elif kind == 'graphtraj/history':
+        _fields(data, {'eventSeqs': list}, 'history')
+        for ref in data['eventSeqs']:
+            _integer(ref, 'history.eventSeqs')
+            _require(ref < event['seq'], 'history.eventSeqs')
+        _require(len(data['eventSeqs']) == len(set(data['eventSeqs'])), 'history.duplicate')
     elif kind in EXTENSION_TYPES:
         _observation(data, kind, event['seq'])
     if kind in {'assistant/message', 'compaction/summary'} and 'usage' in data:
@@ -485,6 +501,10 @@ def validate_session(header: dict, events: list[dict], *, reconstruct: bool = Fa
 
         if kind == 'session/end-seed' and event['data'].get('inherited') is True:
             inherited.append(seq)
+
+        if kind == 'graphtraj/history':
+            surface = event['data']['eventSeqs'][:]
+            _require(all(events[ref]['type'] in SURFACE_TYPES for ref in surface), 'history.messages')
 
         if kind == 'developer/message':
             additions = any(

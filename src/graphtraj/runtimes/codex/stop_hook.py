@@ -17,15 +17,15 @@ from graphtraj.runtimes.codex.session_entry import (
 )
 
 
-def native_event(event: dict) -> dict:
-    """Associate native start/resume and handle Stop without Main relay calls."""
+def native_event(event: dict, project_root: Path | None = None) -> dict:
+    """Associate native events with the configured Harness, preserving host identity."""
     from graphtraj.execution.runner_status import process_caller_alias
     from graphtraj.workspace.runner_project import discover_runner_directory, discover_project_root
 
     name = event.get('hook_event_name')
     if name not in {'SessionStart', 'Stop', 'SessionEnd'}:
         return {}
-    root = discover_project_root(Path(event['cwd']))
+    root = discover_project_root(project_root if project_root is not None else Path(event['cwd']))
     runner = discover_runner_directory(root)
 
     def skipped(reason: str) -> dict:
@@ -72,7 +72,7 @@ def native_event(event: dict) -> dict:
         return {}
     if name == 'SessionStart':
         bind_session(connection, root, activity_source=event.get('transcript_path'))
-        _archive(root, session, event['transcript_path'])
+        _archive(root, session, event['transcript_path'], new_session=event.get('source') == 'startup')
         return {'systemMessage': 'GraphTraj Main Session associated.'}
     if not binding.is_file():
         if not owns_native_root(runner, connection):
@@ -97,21 +97,54 @@ def native_event(event: dict) -> dict:
     return result
 
 
-def _archive(root: Path, session: str, transcript: str) -> None:
-    """Archive only after native source and Main ownership checks have passed."""
-    from graphtraj.configuration.project_configuration import load_project_configuration
-    from graphtraj.runtimes.codex.session_archive import CodexSessionArchive
+def _archive(root: Path, session: str, transcript: str, *, new_session: bool = False) -> None:
+    """Collect a verified external Main, retaining policy boundaries across hooks.
 
-    configuration = load_project_configuration(root)
-    CodexSessionArchive(configuration.state, str(configuration.harness_root),
-                        'main', session).collect(Path(transcript))
+    Hooks are separate processes. The binding owns only the native byte boundary
+    and last observed saving choice; conversation bodies live solely in JSONL.
+    Enabling saving takes effect when the next native hook observes the choice.
+    Earlier bytes require explicit backfill, never a receipt-time approximation.
+    """
+    from graphtraj import file_lock
+    from graphtraj.interfaces.agents import configured_archive
+    from graphtraj.runtimes.codex.jsonl_archive import CodexJsonlArchive
+    from graphtraj.execution.runner_io import write_yaml_durably
+
+    directory = session_binding(root, 'codex', session).parent
+    source = Path(transcript)
+    archive = configured_archive(root)
+    boundary = directory / 'archive.yml'
+    with (directory / 'archive.lock').open('a+b') as lock:
+        file_lock.flock(lock, file_lock.LOCK_EX)
+        saved = yaml.safe_load(boundary.read_text()) if boundary.exists() else None
+        size = source.stat().st_size
+        activation = 0 if new_session else size
+        if saved is not None:
+            if saved['session'] != session or saved['rollout'] != str(source):
+                raise ValueError('Native archive boundary no longer matches the bound Session.')
+            if saved['enabled'] and archive.save_normalized_sessions:
+                activation = saved['activation']
+        collector = CodexJsonlArchive(archive, 'main', session, source)
+        collector.activation = activation
+        collector.collect(source)
+        write_yaml_durably(boundary, {
+            'session': session, 'rollout': str(source), 'activation': activation,
+            'enabled': archive.save_normalized_sessions,
+        })
 
 
 @click.command()
 @click.option('--binding', type=click.Path(path_type=Path))
 @click.option('--hook-session')
 @click.option('--configuration', is_flag=True, help='Print adoption material without enabling the hook.')
-def main(binding: Path | None, hook_session: str | None, configuration: bool) -> None:
+@click.option('--project-root', type=click.Path(exists=True, file_okay=False, path_type=Path),
+              help='Select the Harness for an external native Session; identity still comes from the host.')
+def main(
+    binding: Path | None,
+    hook_session: str | None,
+    configuration: bool,
+    project_root: Path | None,
+) -> None:
     """Receive native hook input and write only a valid Codex Stop response.
 
     Other hook events skip before opening Main's private binding. SIGTERM becomes
@@ -133,7 +166,7 @@ def main(binding: Path | None, hook_session: str | None, configuration: bool) ->
         if not isinstance(event, dict):
             raise ValueError('Invalid native lifecycle event.')
         if binding is None:
-            result = native_event(event)
+            result = native_event(event, project_root)
         elif (event.get('hook_event_name') != 'Stop'
                 or event.get('session_id') != hook_session):
             result = {}

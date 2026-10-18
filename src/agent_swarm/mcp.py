@@ -83,7 +83,7 @@ def call(request_id: Any, params: Mapping) -> dict:
     if not isinstance(request, dict):
         return error_response(request_id, -32602, 'Tool arguments must be an object.')
     try:
-        result = call_owner(request)
+        result = call_owner(request, metadata=params.get('_meta'))
         document, failed = result.document, result.failed
     except AgentsError as error:
         document = {'error': {'code': error.code, 'message': error.message}}
@@ -99,7 +99,8 @@ def main() -> None:
         # controller or a fallback after an independent channel fails.
         from graphtraj.interfaces.mcp import main as hosted_main
 
-        if client_native_context() is not None:
+        native = client_native_context()
+        if native is not None and native['runtime'] == 'dsh':
             os.environ['GRAPHTRAJ_NATIVE_RUNTIME'] = 'dsh'
         hosted_main()
         return

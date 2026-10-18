@@ -1,0 +1,28 @@
+........F.................                                               [100%]
+=================================== FAILURES ===================================
+____ test_native_submission_errors_identify_wrong_reference_and_git_failure ____
+
+tmp_path = PosixPath('/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-905/test_native_submission_errors_0')
+
+    def test_native_submission_errors_identify_wrong_reference_and_git_failure(tmp_path: Path) -> None:
+        """Wrong report usage is actionable; a missing committed path retains Git diagnostics."""
+        import pytest
+        from graphtraj.execution.runner_models import RunnerError
+
+        runner, _, commit = result_project(tmp_path)
+        with runtime_caller(runner, 'research@x1'):
+            with pytest.raises(ValueError, match='evidence_refs'):
+                tools.submit_result({'commit': commit, 'result_refs': ['.state/teams/1/rounds/1/researcher-x1.md'],
+                                     'completion': 'Done'}, cwd=tmp_path)
+            with pytest.raises(RunnerError) as failure:
+                tools.submit_result({'commit': commit, 'result_refs': ['absent.md'],
+                                     'completion': 'Done'}, cwd=tmp_path)
+>           assert 'git cat-file -t ' + commit + ':absent.md' in failure.value.message
+E           AssertionError: assert (('git cat-file -t ' + '5066e8905e29c5d46201604042561d6b7682adb0') + ':absent.md') in 'git cat-file in /private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-905/test_native_submission_errors_0/worktrees/research exited 128.'
+E            +  where 'git cat-file in /private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-905/test_native_submission_errors_0/worktrees/research exited 128.' = RunnerError('git cat-file in /private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-905/test_native_submission_errors_0/worktrees/research exited 128.').message
+E            +    where RunnerError('git cat-file in /private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-905/test_native_submission_errors_0/worktrees/research exited 128.') = <ExceptionInfo RunnerError('git cat-file in /private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-905/test_native_submission_errors_0/worktrees/research exited 128.') tblen=5>.value
+
+tests/test_hosted_cli.py:296: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_hosted_cli.py::test_native_submission_errors_identify_wrong_reference_and_git_failure
+1 failed, 25 passed in 7.17s

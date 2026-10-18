@@ -54,6 +54,7 @@ def cli_connection(
     recovery_reviewer: Callable[[dict], dict] | None = None,
     directory: Path | None = None,
     native_context: Callable[[], dict | None] | None = None,
+    native_authorizer: Callable[[dict, dict], tuple[str | None, Collection[str]]] | None = None,
 ) -> Iterator[str]:
     """Serve one Session using its actual ownership and selected approval route.
 
@@ -83,7 +84,10 @@ def cli_connection(
                 'invalid-config',
                 "Agent Runner must be invoked from the Harness Project Root or this Session's Worktree.",
             )
-        if native_context is not None:
+        identity, features = alias, allowed_features
+        if native_authorizer is not None:
+            identity, features = native_authorizer(document.get('native'), document['request'])
+        elif native_context is not None:
             from agent_swarm.connection import verify_native_context
             from agent_swarm import AgentsError
 
@@ -91,8 +95,8 @@ def cli_connection(
                 verify_native_context(document['native'], native_context())
             except AgentsError as error:
                 raise RunnerError(error.code, error.message) from error
-        with runtime_caller(runner, alias), recovery_review(recovery_reviewer):
-            result = handle_request(document['request'], cwd=root, allowed_features=allowed_features)
+        with runtime_caller(runner, identity), recovery_review(recovery_reviewer):
+            result = handle_request(document['request'], cwd=root, allowed_features=features)
         return {'document': result.document, 'failed': result.failed}
 
     with worker_connection(directory, operate, authenticate=authenticate) as address:
@@ -108,7 +112,9 @@ def forward_cli(feature: str, arguments: dict, cwd: Path) -> ToolResult | None:
     return forward_request({'action': 'execute', 'feature': feature, 'arguments': arguments}, cwd)
 
 
-def forward_request(request: Mapping[str, Any], cwd: Path) -> ToolResult | None:
+def forward_request(
+    request: Mapping[str, Any], cwd: Path, *, native_context: dict | None = None,
+) -> ToolResult | None:
     """Forward the public discovery/operation envelope over the same bound channel."""
     address = os.environ.get(CONNECTION_ENV)
     if address is None:
@@ -128,7 +134,7 @@ def forward_request(request: Mapping[str, Any], cwd: Path) -> ToolResult | None:
     long_operation = request.get('action') == 'execute' and request.get('feature') == 'approved_recovery'
     from agent_swarm.connection import client_native_context
 
-    native = client_native_context()
+    native = native_context if native_context is not None else client_native_context()
     response = connection_operation(address, {
         'cwd': str(cwd.resolve()),
         'request': request,

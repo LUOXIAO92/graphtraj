@@ -49,7 +49,7 @@ import threading
 import time
 import uuid
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any, Callable, Iterator, Mapping, Protocol
 
@@ -96,8 +96,8 @@ class RuntimeDriver(Protocol):
     Failures raise :class:`AgentsError` carrying the native code and message.
     """
 
-    def prepare(self, runtime: str, caller: Caller) -> dict:
-        """Return JSON-serializable settings retained for every execution."""
+    def prepare(self, runtime: str, caller: Caller, *, configuration: str | None = None) -> dict:
+        """Resolve an optional driver-owned reference into retained JSON settings."""
 
     def start(self, run: Run) -> None:
         """Begin native work and return without waiting for it to finish."""
@@ -180,6 +180,39 @@ class ExecutionEvents:
         """Retain that a native request now waits for a reply."""
         self._apply(lambda record, current: current["requests"].append(dict(details)))
 
+    def receive_children(self, receiver: Callable[[dict], bool]) -> None:
+        """Bind a host reply receiver to this actual active parent execution."""
+        with self._control._locked(self._agent) as record:
+            current = _running(record)
+            if current is None or current['id'] != self._execution:
+                raise AgentsError('stale-execution', 'The reply receiver belongs to an ended execution.')
+            self._control._receivers[self._agent] = (self._execution, receiver)
+
+    def continue_from_child(self, notice: dict, archive: SessionArchive | None) -> bool:
+        """Resume the retained parent with one trusted native child reply.
+
+        The owning Runtime receiver calls this after its native service has
+        closed. Identity comes from the child's persisted completion, never
+        from a model argument. Launch happens outside both Agent locks.
+        """
+        control = self._control
+        with control._locked(notice['agent']) as child:
+            ended = next((item for item in child['executions']
+                          if item['id'] == notice['execution']), None)
+            if (child['parent'] != self._agent or ended is None
+                    or ended['state'] != 'ended' or ended.get('notification') != 'pending'
+                    or ended['session'] != notice['session']
+                    or ended['last_message'] != notice['body']):
+                return False
+        with control._locked(self._agent) as parent:
+            if (_running(parent) is not None or parent['retired_at'] is not None
+                    or not parent['session']):
+                return False
+            binding = Binding(Caller('runtime-completion', self._agent), archive)
+            run = control._begin(parent, 'receive', '', binding)
+            run = replace(run, settings={**run.settings, 'completion_message': dict(notice)})
+        return not control._launch(run).failed
+
     def finished(
         self,
         outcome: str,
@@ -193,15 +226,39 @@ class ExecutionEvents:
         ``outcome`` is ``completed``, ``interrupted`` or ``failed``; ``error``
         keeps the native ``code`` and ``message`` unchanged.
         """
-        def apply(record: dict, current: dict) -> None:
-            """Close the current execution with its native result."""
+        with self._control._locked(self._agent) as record:
+            current = _running(record)
+            if current is None or current['id'] != self._execution:
+                return
+            receiver = self._control._receivers.get(record['parent'], (None, self._control.event_receiver))[1]
+            notice = {'parent': record['parent'], 'agent': record['agent'],
+                      'session': current['session'], 'execution': current['id'],
+                      'body': last_message, 'outcome': outcome}
             current.update(
                 state="ended", ended_at=_now(), outcome=outcome,
                 last_message=last_message, terminal_confirmed=terminal_confirmed,
                 error=dict(error) if error else None,
             )
+            notify = receiver is not None and bool(last_message) and record['parent'] is not None
+            if notify:
+                current['notification'] = 'pending'
+            # Keep the native receiver while this Agent is in standby so its
+            # children can continue the retained Session after this turn ends.
 
-        self._apply(apply)
+        # Durable completion precedes delivery. No Agent lock spans native I/O,
+        # and repeated finished() cannot invoke the receiver a second time.
+        if notify:
+            try:
+                delivery = 'delivered' if receiver(notice) is True else 'unavailable'
+            except Exception:
+                # Delivery may have happened before the transport failed. Do not
+                # re-inject the body through wait/status or retry automatically.
+                delivery = 'unconfirmed'
+            with self._control._locked(self._agent) as record:
+                for ended in record['executions']:
+                    if ended['id'] == self._execution:
+                        ended['notification'] = delivery
+                        break
 
     def _apply(self, change: Callable[[dict, dict], None]) -> None:
         """Apply ``change`` only while this execution is still the running one."""
@@ -245,11 +302,16 @@ class AgentControl:
         driver is rejected at ``create``.
     """
 
-    def __init__(self, root: Path, drivers: Mapping[str, RuntimeDriver]) -> None:
+    def __init__(
+        self, root: Path, drivers: Mapping[str, RuntimeDriver], *,
+        event_receiver: Callable[[dict], bool] | None = None,
+    ) -> None:
         """Bind the data root and the available Runtime drivers."""
         self.root    = Path(root)
         self.drivers = dict(drivers)
         self._held   = threading.local()
+        self.event_receiver = event_receiver
+        self._receivers: dict[str, tuple[str, Callable[[dict], bool]]] = {}
 
     # -- Backend --------------------------------------------------------
 
@@ -257,7 +319,8 @@ class AgentControl:
         """Perform one validated ``agents`` action for the bound caller."""
         if action == "create":
             return self.create(arguments["runtime"], arguments["instruction"],
-                               binding, name=arguments.get("name"))
+                               binding, name=arguments.get("name"),
+                               configuration=arguments.get("configuration"))
         if action == "status" and "agent" not in arguments:
             return Outcome({"agents": self.hierarchy(binding.caller)})
 
@@ -289,6 +352,7 @@ class AgentControl:
         binding: Binding,
         *,
         name: str | None = None,
+        configuration: str | None = None,
     ) -> Outcome:
         """Register a new Agent under the caller and start its first execution.
 
@@ -299,7 +363,9 @@ class AgentControl:
         if driver is None:
             raise AgentsError("unsupported-runtime", f"No driver is available for Runtime {runtime!r}.")
         caller   = binding.caller
-        settings = driver.prepare(runtime, caller)
+        # Keep the original call shape for drivers whose users select defaults.
+        settings = (driver.prepare(runtime, caller) if configuration is None else
+                    driver.prepare(runtime, caller, configuration=configuration))
         json.dumps(settings)
 
         agent  = "agent-" + uuid.uuid4().hex
@@ -729,6 +795,7 @@ class AgentControl:
             "runtime": record["runtime"],
             "state":   ACTIVE if current is not None else STANDBY,
             "parent":  record["parent"],
+            "creator": dict(record["creator"]),
             "host":    record["host"],
             "session": record["session"],
         }
@@ -746,6 +813,10 @@ class AgentControl:
             runtime_exit = last.get("process", {}).get("runtime_exit")
             if runtime_exit is not None:
                 document["last_result"]["runtime_exit"] = deepcopy(runtime_exit)
+            if last.get('notification'):
+                document['last_result']['notification'] = last['notification']
+                if last['notification'] != 'unavailable':
+                    document['last_result']['last_message'] = None
         if record["retired_at"] is not None:
             document["retired_at"] = record["retired_at"]
         return document

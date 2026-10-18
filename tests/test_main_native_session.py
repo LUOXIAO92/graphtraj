@@ -41,16 +41,16 @@ def test_main_start_and_resume_preserve_native_configuration(
 
     asyncio.run(exercise())
     from graphtraj.sessions.protocol import native_record
-    from graphtraj.sessions.storage import SessionStore, session_path
+    from graphtraj.sessions.archive import JsonlSessionStore, archive_path
+    from graphtraj.interfaces.agents import swarm_root
 
-    with SessionStore(session_path(tmp_path / '.graphtraj/state', 'codex:thread-1')) as archive:
-        archive.validate()
-        saved = [native_record(event) for event in archive.page()['events']]
-        source = next((tmp_path / 'native').glob('*.jsonl'))
-        assert saved == [json.loads(line) for line in source.read_text().splitlines()]
-        assert archive.header['graphtraj']['agentId'] == 'main'
-        source.unlink()
-        assert [native_record(event) for event in archive.page()['events']] == saved
+    archive = JsonlSessionStore(archive_path(swarm_root(tmp_path), 'codex:thread-1'))
+    saved = [native_record(event) for event in archive.page()['events']]
+    source = next((tmp_path / 'native').glob('*.jsonl'))
+    assert saved == [json.loads(line) for line in source.read_text().splitlines()]
+    assert archive.header['graphtraj']['agentId'] == 'main'
+    source.unlink()
+    assert [native_record(event) for event in archive.page()['events']] == saved
     requests = [json.loads(line) for line in protocol.read_text().splitlines()]
     start = next(item['params'] for item in requests if item.get('method') == 'thread/start')
     resume = next(item['params'] for item in requests if item.get('method') == 'thread/resume')
@@ -63,106 +63,9 @@ def test_main_start_and_resume_preserve_native_configuration(
         assert selected['extends'] == 'operator'
         assert selected['filesystem'][str(config.parent)] == 'none'
         assert selected['filesystem'][str(config)] == 'read'
-    assert [tool['name'] for tool in start['dynamicTools']] == ['graphtraj', 'agents']
+    assert not start.get('dynamicTools')
+    assert 'graphtraj' in start['config']['mcp_servers']
     assert 'dynamicTools' not in resume
-
-
-@pytest.mark.parametrize('issuer', ['thread-1', 'helper'])
-def test_main_summarizes_actual_native_status_callback(
-    tmp_path: Path, peer: Path, monkeypatch: pytest.MonkeyPatch, issuer: str,
-) -> None:
-    """Retain issuer classification and field presence without private identities."""
-    import yaml
-
-    config = tmp_path / '.graphtraj/config.yml'
-    directory = config.parent / 'runner/sessions/child@e1'
-    directory.mkdir(parents=True)
-    config.write_text(default_configuration_content(tmp_path, tmp_path))
-    mapping = {'alias': 'child@e1', 'parent': None, 'session': 'private-session',
-               'execution_id': 'private-turn', 'worker_pid': 1, 'runtime_pid': 1,
-               'runtime': 'codex', 'task_id': '133', 'team_generation': 2,
-               'role': 'engineer', 'retained_batch_file': 'batch.yml',
-               'worktree_path': str(tmp_path), 'trace_file': 'unused'}
-    (directory / 'mapping.yml').write_text(yaml.safe_dump(mapping))
-    (directory / 'execution.yml').write_text(yaml.safe_dump({
-        'outcome': 'completed', 'terminal_confirmed': True}))
-    entry = {'alias': 'child@e1'}
-    if issuer == 'thread-1':
-        entry.update(session='private-session', execution_id='private-turn')
-    entry.update(activity='idle', last_outcome='completed')
-    exchange = {'method': 'item/tool/call', 'params': {
-        'threadId': issuer, 'tool': 'graphtraj', 'arguments': {
-            'action': 'execute', 'feature': 'alias_status', 'arguments': {'aliases': ['child@e1']}}},
-        'response': {'contentItems': [{'type': 'inputText', 'text': json.dumps({'aliases': [entry]})}],
-                     'success': True}}
-    monkeypatch.setattr(main_session, 'runtime_executable', lambda runtime: peer)
-    monkeypatch.setenv('PEER_REQUEST_EXCHANGE', json.dumps(exchange))
-    monkeypatch.setenv('PEER_PROTOCOL_LOG', str(tmp_path / 'protocol.jsonl'))
-    monkeypatch.setenv('PEER_THREAD_PARENTS', '{"helper":"thread-1"}')
-    monkeypatch.setenv('PEER_NATIVE_ROLLOUT', str(tmp_path / 'native'))
-
-    async def native_request(request: CodexServerRequest) -> dict:
-        """All requests in this scenario must use the native operation handler."""
-        raise AssertionError(request.method)
-
-    result = asyncio.run(main_session.run_main(tmp_path, 'configured-request', None, native_request))
-    assert result['last_agent_message'] == 'request accepted'
-    assert result['native_operations'] == [{
-        'tool': 'graphtraj', 'success': True, 'from_main': issuer == 'thread-1',
-        'aliases': [{'alias': 'child@e1', 'has_session': issuer == 'thread-1',
-                     'has_execution_id': issuer == 'thread-1'}]}]
-    assert 'private-session' not in json.dumps(result['native_operations'])
-
-
-def test_main_empty_status_start_resume_and_invalid_formal_record(
-    tmp_path: Path, peer: Path, monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """Main records do not pollute status; malformed formal records still fail."""
-    from graphtraj.interfaces.tools import read_alias_status
-
-    config = tmp_path / '.graphtraj/config.yml'
-    config.parent.mkdir()
-    config.write_text(default_configuration_content(tmp_path, tmp_path))
-    exchange = {'method': 'item/tool/call', 'params': {
-        'threadId': 'thread-1', 'tool': 'graphtraj', 'arguments': {
-            'action': 'execute', 'feature': 'alias_status', 'arguments': {}}},
-        'response': {'contentItems': [{'type': 'inputText', 'text': json.dumps({'agents': []})}],
-                     'success': True}}
-    monkeypatch.setattr(main_session, 'runtime_executable', lambda runtime: peer)
-    monkeypatch.setenv('PEER_REQUEST_EXCHANGE', json.dumps(exchange))
-    monkeypatch.setenv('PEER_NATIVE_ROLLOUT', str(tmp_path / 'native'))
-
-    async def native_request(request: CodexServerRequest) -> dict:
-        """Status must be handled by the real callback, not an external reply."""
-        raise AssertionError(request.method)
-
-    async def exercise() -> None:
-        """Observe empty status during both turns of the same Main Session."""
-        first = await main_session.run_main(tmp_path, 'configured-request', None, native_request)
-        second = await main_session.run_main(
-            tmp_path, 'configured-request', first['record'], native_request,
-        )
-        assert first['session'] == second['session']
-        assert first['record'] == second['record']
-        for result in (first, second):
-            assert result['last_agent_message'] == 'request accepted'
-            assert result['native_operations'] == [{
-                'tool': 'graphtraj', 'success': True, 'from_main': True, 'aliases': [],
-            }]
-
-    asyncio.run(exercise())
-    clean = read_alias_status({}, cwd=tmp_path)
-    assert not clean.failed
-    assert clean.document == {'agents': []}
-
-    # Do not fix Main by suppressing unreadable or malformed formal records.
-    broken = config.parent / 'runner/sessions/broken@e1'
-    broken.mkdir(parents=True)
-    (broken / 'mapping.yml').write_text('{}\n')
-    invalid = read_alias_status({}, cwd=tmp_path)
-    assert invalid.failed
-    assert invalid.document['agents'][0]['alias'] == 'broken@e1'
-    assert invalid.document['agents'][0]['error']['code'] == 'operation-failed'
 
 
 @pytest.mark.parametrize('method, response', [

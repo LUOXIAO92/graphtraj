@@ -28,7 +28,7 @@ OPERATION_TIMEOUT_SECONDS = 10.0
 CONNECTION_ENV = 'AGENT_SWARM_CONNECTION'
 
 
-def call_owner(request: dict) -> AgentsResult:
+def call_owner(request: dict, *, metadata: dict | None = None) -> AgentsResult:
     """Call the independent host bound to this process, without Task fallback.
 
     The environment locates the channel; its owner verifies the kernel PID
@@ -40,7 +40,7 @@ def call_owner(request: dict) -> AgentsResult:
     address = os.environ.get(CONNECTION_ENV)
     if not address:
         raise AgentsError('authority-denied', 'The owning Agent connection is unavailable.')
-    native = client_native_context()
+    native = client_native_context(metadata)
     document = {'request': request, 'native': native} if native is not None else request
     result = connection_operation(address, document, authenticate=True, await_accepted=True)
     return AgentsResult(result['document'], failed=result['failed'])
@@ -265,8 +265,15 @@ def agents_connection(
         yield address
 
 
-def client_native_context() -> dict | None:
-    """Capture the DSH client's assertions; the owning host must verify them."""
+def client_native_context(metadata: dict | None = None) -> dict | None:
+    """Capture native client assertions; the owning host must verify them."""
+    runtime = os.environ.get('GRAPHTRAJ_NATIVE_RUNTIME')
+    if (runtime == 'codex' or runtime not in {'pi', 'dsh'}
+            and 'DSH_SESSION_ID' not in os.environ and 'DSH_AGENT_SOURCE' not in os.environ
+            and isinstance(metadata, dict) and 'threadId' in metadata):
+        session = metadata.get('threadId') if isinstance(metadata, dict) else None
+        return {'runtime': 'codex', 'session': session or os.environ.get('CODEX_THREAD_ID'),
+                'cwd': str(Path.cwd())}
     if 'DSH_SESSION_ID' not in os.environ and 'DSH_AGENT_SOURCE' not in os.environ:
         return None
     return {'runtime': 'dsh', 'session': os.environ.get('DSH_SESSION_ID'),
@@ -275,6 +282,12 @@ def client_native_context() -> dict | None:
 
 def verify_native_context(actual: object, expected: object) -> None:
     """Require exact native facts from the already-authenticated host's Session."""
+    if isinstance(expected, dict) and expected.get('runtime') == 'codex':
+        if (set(expected) != {'runtime', 'session', 'cwd'} or actual != expected
+                or not isinstance(expected['session'], str) or not expected['session']
+                or not isinstance(expected['cwd'], str) or not Path(expected['cwd']).is_absolute()):
+            raise AgentsError('authority-denied', 'Native Codex Session/cwd do not match this bound caller.')
+        return
     if (not isinstance(expected, dict) or set(expected) != {'runtime', 'session', 'source', 'cwd'}
             or expected['runtime'] != 'dsh' or expected['source'] not in {'main', 'child'}
             or not isinstance(expected['session'], str) or not expected['session']

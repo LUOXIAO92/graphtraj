@@ -266,7 +266,8 @@ def test_managed_worker_grants_only_its_channel_and_closes_it(tmp_path: Path, pe
         assert filesystem[address] == 'write'
         assert str(Path(address).parent) not in filesystem
         result = cli(tmp_path, address, 'submit-result', '--commit', commit,
-                     '--result-ref', 'result.md', '--completion', 'Native host adopted')
+                     '--result-ref', 'result.md', '--completion', 'Native host adopted',
+                     GRAPHTRAJ_NATIVE_RUNTIME='codex', CODEX_THREAD_ID=session)
         assert result.returncode == 0, result.stdout + result.stderr
         observed.append(address)
 

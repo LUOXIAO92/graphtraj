@@ -22,6 +22,8 @@ from graphtraj.runtimes.codex import finalize
 from graphtraj.runtimes.codex.app_server import CodexAppServer, CodexServerRequest
 from graphtraj.runtimes.codex.stop_hook import main as stop_hook
 from graphtraj.runtimes.runtime_adapter import CheckUsage, finalize_usage, select_runtime_adapter
+from graphtraj.sessions.archive import JsonlSessionStore, archive_path
+from graphtraj.interfaces.agents import swarm_root
 
 
 def test_binding_description_delivers_manual(tmp_path: Path) -> None:
@@ -80,6 +82,13 @@ for line in sys.stdin:
             while not (root / 'delivery-sent').exists(): time.sleep(.01)
         result = {'data':[{'id':options.get('current_turn','main-turn'), 'status':'inProgress'}]}
         if options.get('supersede_after_turn_read'): options['current_turn'] = 'new-main-turn'
+    elif method == 'thread/items/list':
+        result = {'data': [{'turnId':'inherited-turn', 'item':{'type':'agentMessage',
+                   'id':'inherited-answer','text':'inherited context'}}], 'nextCursor': None}
+        context_file = root / 'child-context.json'
+        if context_file.exists() and len(json.loads(context_file.read_text())) > 2:
+            result['data'].append({'turnId':'check-turn', 'item':{'type':'agentMessage',
+                'id':'checker-answer','text':'checker result'}})
     elif method == 'thread/fork':
         if options.get('history_mode') == 'paginated' and not params.get('excludeTurns'):
             send({'id':request['id'],'error':{'code':-32600,'message':'history must be excluded'}})
@@ -437,11 +446,11 @@ def test_other_adapter_uses_opaque_host_event(
     }
 
 
-@pytest.mark.parametrize('feature,allowed', [('task_graph', True), ('send_instruction', False)])
-def test_checker_has_no_sibling_control(
+@pytest.mark.parametrize('feature,allowed', [('task_graph', False), ('send_instruction', False)])
+def test_checker_rejects_retired_native_tools(
     host: tuple[Path, Path], feature: str, allowed: bool,
 ) -> None:
-    """The actual bound fork can read the graph but cannot become its parent."""
+    """Retired native registrations cannot bypass the CLI/MCP checker boundary."""
     root, binding = host
     request = {'action': 'execute', 'feature': feature, 'arguments': {}}
     (root / 'options.json').write_text(json.dumps({'tool_request': request}))
@@ -449,13 +458,11 @@ def test_checker_has_no_sibling_control(
     reply = json.loads((root / 'tool-reply.json').read_text())
     assert reply['result']['success'] is allowed
     from graphtraj.sessions.protocol import native_record
-    from graphtraj.sessions.storage import SessionStore, session_path
 
-    with SessionStore(session_path(root / '.graphtraj/state', 'codex:checker'), readonly=True) as archive:
-        records = [native_record(event) for event in archive.page()['events']
-                   if event['type'] != 'session/end-seed']
-        assert any(record.get('params', {}).get('arguments') == request for record in records)
-        assert reply in records
+    archive = JsonlSessionStore(archive_path(swarm_root(root), 'codex:checker'))
+    records = [native_record(event) for event in archive.page()['events']]
+    assert any(record.get('params', {}).get('arguments') == request for record in records)
+    assert reply in records
 
 
 @pytest.mark.parametrize('resolved', [False, True])
@@ -683,11 +690,9 @@ def test_checker_approval_is_left_to_its_native_owner(host: tuple[Path, Path]) -
     wire = [json.loads(line) for line in (root / 'wire.jsonl').read_text().splitlines()]
     assert not any(item.get('id') == 'checker-approval' for item in wire)
     from graphtraj.sessions.protocol import native_record
-    from graphtraj.sessions.storage import SessionStore, session_path
 
-    with SessionStore(session_path(root / '.graphtraj/state', 'codex:checker'), readonly=True) as archive:
-        records = [native_record(event) for event in archive.page()['events']
-                   if event['type'] != 'session/end-seed']
+    archive = JsonlSessionStore(archive_path(swarm_root(root), 'codex:checker'))
+    records = [native_record(event) for event in archive.page()['events']]
     assert any(record.get('id') == 'checker-approval'
                and record['params']['threadId'] == 'checker' for record in records)
     assert any(record.get('method') == 'serverRequest/resolved'
@@ -895,31 +900,52 @@ def test_native_start_resume_and_stop_need_no_main_binding_input(host: tuple[Pat
     assert forks[0]['config']['model_reasoning_effort'] == 'high'
     assert [r['params']['threadId'] for r in wire if r['method'] == 'turn/start'] == ['checker']
     from graphtraj.sessions.protocol import native_record
-    from graphtraj.sessions.storage import SessionStore, session_path
 
     state = root / '.graphtraj/state'
-    with SessionStore(session_path(state, 'codex:main')) as archive:
-        archive.validate()
-        assert [native_record(event) for event in archive.page()['events']] == [
-            json.loads(line) for line in (root / 'rollout.jsonl').read_text().splitlines()
-        ]
-        assert archive.header['graphtraj']['agentId'] == 'main'
-    with SessionStore(session_path(state, 'codex:checker')) as archive:
-        archive.validate()
-        events = archive.page()['events']
-        assert archive.header['parentSession'] == 'codex:main'
-        assert archive.header['graphtraj']['agentId'] != 'main'
-        assert native_record(events[0])['id'] == 'inherited-turn'
-        assert native_record(events[2])['id'] == 'checker'
-        assert events[1]['type'] == 'session/end-seed'
-        assert events[1]['data'] == {'inherited': True}
-        assert any(native_record(event).get('method') == 'item/completed' for event in events[2:])
+    archive = JsonlSessionStore(archive_path(swarm_root(root), 'codex:main'))
+    assert [native_record(event) for event in archive.page()['events']] == [
+        json.loads(line) for line in (root / 'rollout.jsonl').read_text().splitlines()
+    ]
+    assert archive.header['graphtraj']['agentId'] == 'main'
+    archive = JsonlSessionStore(archive_path(swarm_root(root), 'codex:checker'))
+    events = archive.page()['events']
+    assert archive.header['parentSession'] == 'codex:main'
+    assert archive.header['graphtraj']['agentId'] == 'checker:checker'
+    assert any(native_record(event).get('method') == 'item/completed' for event in events)
+    assert any(native_record(event).get('method') == 'thread/items/list' for event in events)
+
+
+def test_native_start_selects_harness_for_external_cwd(
+    host: tuple[Path, Path], tmp_path_factory: pytest.TempPathFactory,
+) -> None:
+    """A trusted hook selects the Harness without substituting native identity."""
+    root, binding = host
+    binding.unlink()
+    rollout(root)
+    outside = tmp_path_factory.mktemp('external-client')
+    event = {'hook_event_name': 'SessionStart', 'source': 'resume',
+             'cwd': str(outside), 'session_id': 'shared-native-session',
+             'transcript_path': str(root / 'rollout.jsonl')}
+    runner = CliRunner()
+    reply = runner.invoke(stop_hook, [], input=json.dumps(event))
+    assert 'associated' not in json.loads(reply.output).get('systemMessage', '')
+    assert not binding.exists()
+    reply = runner.invoke(stop_hook, ['--project-root', str(root)], input=json.dumps(event))
+    assert reply.exit_code == 0, reply.output
+    assert json.loads(reply.output)['systemMessage'] == 'GraphTraj Main Session associated.'
+    saved = yaml.safe_load(binding.read_text())
+    assert saved['session'] == 'main'
+    assert saved['cwd'] == str(root)
+    binding.unlink()
+    event['session_id'] = 'wrong-native-session'
+    reply = runner.invoke(stop_hook, ['--project-root', str(root)], input=json.dumps(event))
+    assert json.loads(reply.output)['continue'] is False
+    assert not binding.exists()
 
 
 def test_native_session_end_archives_terminal_tail_without_checking(host: tuple[Path, Path]) -> None:
     """The native shutdown flush exposes records written after the Stop hook."""
     from graphtraj.sessions.protocol import native_record
-    from graphtraj.sessions.storage import SessionStore, session_path
 
     root, _ = host
     rollout(root)
@@ -930,18 +956,46 @@ def test_native_session_end_archives_terminal_tail_without_checking(host: tuple[
     before = (root / 'wire.jsonl').read_bytes()
     assert native_hook(root, 'SessionEnd') == {}
     assert (root / 'wire.jsonl').read_bytes() == before
-    with SessionStore(session_path(root / '.graphtraj/state', 'codex:main')) as store:
-        assert native_record(store.page()['events'][-1]) == terminal
+    store = JsonlSessionStore(archive_path(swarm_root(root), 'codex:main'))
+    assert native_record(store.page()['events'][-1]) == terminal
+
+
+def test_external_hook_remembers_saving_boundary_across_invocations(host: tuple[Path, Path]) -> None:
+    """A later hook cannot silently backfill the time when collection was off."""
+    from agent_swarm import write_config
+
+    root, _ = host
+    rollout(root)
+    write_config(swarm_root(root), save_normalized_sessions=False, backfill_history=False)
+    assert native_hook(root, 'SessionStart', source='startup')['systemMessage']
+    path = archive_path(swarm_root(root), 'codex:main')
+    assert not path.exists()
+    write_config(swarm_root(root), save_normalized_sessions=True)
+    assert native_hook(root, 'SessionEnd') == {}
+    assert JsonlSessionStore(path).pending()
+    item = {'type': 'response_item', 'payload': {'type': 'message', 'role': 'user',
+                                               'content': [{'type': 'input_text', 'text': 'new'}]}}
+    with (root / 'rollout.jsonl').open('a') as stream:
+        stream.write(json.dumps(item) + '\n')
+    assert native_hook(root, 'SessionEnd') == {}
+    assert len(JsonlSessionStore(path).page()['events']) == 1
+    write_config(swarm_root(root), backfill_history=True)
+    assert native_hook(root, 'SessionEnd') == {}
+    store = JsonlSessionStore(path)
+    assert not store.pending()
+    assert store.messages()[0]['content'][0]['text'] == 'new'
 
 
 def test_native_copied_fork_keeps_own_first_header(host: tuple[Path, Path]) -> None:
     """An inherited Main header cannot replace the current fork's native identity."""
     from graphtraj.execution.main_finalize import session_binding
     from graphtraj.sessions.protocol import native_record
-    from graphtraj.sessions.storage import SessionStore, session_path
 
     root, binding = host
     original = binding.read_bytes()
+    from agent_swarm import write_config
+
+    write_config(swarm_root(root), save_normalized_sessions=True, backfill_history=True)
     (root / 'options.json').write_text(json.dumps({'read_id_from_request': True}))
     records = [
         {'type': 'session_meta', 'payload': {'id': 'fork', 'source': 'cli', 'forked_from_id': 'main'}},
@@ -954,11 +1008,10 @@ def test_native_copied_fork_keeps_own_first_header(host: tuple[Path, Path]) -> N
     assert native_hook(root, 'SessionStart', source='fork')['systemMessage']
     assert binding.read_bytes() == original
     assert session_binding(root, 'codex', 'fork').is_file()
-    with SessionStore(session_path(root / '.graphtraj/state', 'codex:fork')) as store:
-        store.validate()
-        assert store.header['parentSession'] == 'codex:main'
-        assert store.page()['events'][2]['type'] == 'session/end-seed'
-        assert native_record(store.page()['events'][3]) == records[0]
+    store = JsonlSessionStore(archive_path(swarm_root(root), 'codex:fork'))
+    assert store.header['parentSession'] == 'codex:main'
+    assert store.page()['events'][2]['type'] == 'session/end-seed'
+    assert native_record(store.page()['events'][3]) == records[0]
 
 
 @pytest.mark.parametrize('source', [
@@ -1845,7 +1898,6 @@ def test_ephemeral_fork_excluded_history_is_unknown_not_an_empty_seed(
 ) -> None:
     """A valid checker can run without claiming the excluded inherited prefix."""
     from graphtraj.sessions.protocol import native_record
-    from graphtraj.sessions.storage import SessionStore, session_path
 
     root, binding = host
     binding.unlink()
@@ -1858,20 +1910,21 @@ def test_ephemeral_fork_excluded_history_is_unknown_not_an_empty_seed(
     fork = next(item['params'] for item in wire if item['method'] == 'thread/fork')
     assert fork['excludeTurns'] is True and fork['ephemeral'] is True
     state = root / '.graphtraj/state'
-    with SessionStore(session_path(state, 'codex:checker')) as archive:
-        archive.validate()
-        assert archive.header['isSeeded'] is False
-        assert archive.header['parentSession'] == 'codex:main'
-        assert any(item['path'] == 'inheritedPrefix' and item['reason']
-                   for item in archive.header['graphtraj']['missing'])
-        events = archive.page()['events']
-        assert not any(event['type'] == 'session/end-seed' for event in events)
-        assert native_record(events[0])['turns'] == []
-        assert any(native_record(event).get('method') == 'item/completed' for event in events)
-    with SessionStore(session_path(state, 'codex:main')) as archive:
-        assert [native_record(event) for event in archive.page()['events']] == [
-            json.loads(line) for line in (root / 'rollout.jsonl').read_text().splitlines()
-        ]
+    archive = JsonlSessionStore(archive_path(swarm_root(root), 'codex:checker'))
+    assert archive.header['isSeeded'] is False
+    assert archive.header['parentSession'] == 'codex:main'
+    assert any(item['path'] == 'history' and item['reason']
+               for item in archive.header['graphtraj']['missing'])
+    events = archive.page()['events']
+    assert not any(event['type'] == 'session/end-seed' for event in events)
+    assert native_record(events[0])['pages'][0]['data'] == []  # backfill is off
+    assert native_record(events[-1])['pages'][0]['data'][0]['item']['id'] == 'checker-answer'
+    with pytest.raises(ValueError, match='opaque-native|incomplete'):
+        archive.messages()
+    archive = JsonlSessionStore(archive_path(swarm_root(root), 'codex:main'))
+    assert [native_record(event) for event in archive.page()['events']] == [
+        json.loads(line) for line in (root / 'rollout.jsonl').read_text().splitlines()
+    ]
 
 
 
@@ -2085,6 +2138,8 @@ def test_new_facts_invalidate_waiting(host: tuple[Path, Path], change: str) -> N
     if change in ('input', 'compacted'):
         record = {'type': 'response_item' if change == 'input' else 'compacted',
                   'payload': {'type': 'message', 'role': 'user', 'content': 'New task input.'}}
+        if change == 'compacted':
+            record['payload'] = {'message': 'New context.', 'replacement_history': [record['payload']]}
         with (root / 'rollout.jsonl').open('a') as stream:
             stream.write(json.dumps(record) + '\n')
         reply = native_hook(root)
@@ -2223,3 +2278,140 @@ def test_continued_flag_reuses_but_new_turn_still_checks(host: tuple[Path, Path]
     (root / 'options.json').write_text(json.dumps({'child': 'next-checker', 'current_turn': 'next-main-turn'}))
     assert native_hook(root, turn_id='next-main-turn')['systemMessage']
     assert wire(root).count('thread/fork') == wire(root).count('turn/start') == 2
+
+
+def next_waiting_turn(root: Path, turn: str, *records: dict) -> None:
+    """Advance the peer's actual native turn, appending only supplied native input."""
+    with (root / 'rollout.jsonl').open('a') as stream:
+        for record in records:
+            stream.write(json.dumps(record) + '\n')
+        stream.write(json.dumps({'type': 'turn_context', 'payload': {
+            'turn_id': turn, 'model': 'actual-model', 'effort': 'high',
+        }}) + '\n')
+    (root / 'options.json').write_text(json.dumps({
+        'child': 'checker-' + turn, 'current_turn': turn, 'output': json.dumps({
+            'status': 'waiting', 'conclusion': 'May wait.', 'reason': 'Waiting for authorized work.',
+            'nodes': [],
+        }),
+    }))
+
+
+def test_waiting_survives_explanation_turns_and_compaction(host: tuple[Path, Path]) -> None:
+    """New assistant prose and turn carriers alone do not buy another waiting check."""
+    root, _ = host
+    rollout(root)
+    next_waiting_turn(root, 'first')
+    assert 'waiting' in native_hook(root, turn_id='first')['systemMessage']
+    releases = []
+    for turn in ('explanation', 'compaction'):
+        record = ({'type': 'response_item', 'payload': {'type': 'message', 'role': 'assistant',
+                   'content': [{'type': 'output_text', 'text': 'The same work is still waiting.'}]}}
+                  if turn == 'explanation' else {'type': 'compacted', 'payload': {'message': 'Summary.'}})
+        next_waiting_turn(root, turn, record)
+        releases.append(native_hook(root, turn_id=turn))
+    assert wire(root).count('thread/fork') == wire(root).count('turn/start') == 1
+    assert releases == [{}, {}]
+
+
+@pytest.mark.parametrize('kind', ['user', 'tool'])
+def test_waiting_new_input_still_checks(host: tuple[Path, Path], kind: str) -> None:
+    """Real user input and tool results invalidate waiting across native turns."""
+    root, _ = host
+    rollout(root)
+    next_waiting_turn(root, 'first')
+    assert native_hook(root, turn_id='first')['systemMessage']
+    payload = ({'type': 'message', 'role': 'user', 'content': [{'type': 'input_text', 'text': 'Resume work.'}]}
+               if kind == 'user' else {'type': 'function_call_output', 'call_id': 'new-result',
+                                       'output': 'A new actionable result.'})
+    next_waiting_turn(root, 'next', {'type': 'response_item', 'payload': payload})
+    assert native_hook(root, turn_id='next')['systemMessage']
+    assert wire(root).count('thread/fork') == wire(root).count('turn/start') == 2
+
+
+def set_user_pause(root: Path, paused: bool) -> dict:
+    """Record the owning Main's explicit user instruction through its public operation."""
+    reply = bind(root)({'action': 'execute', 'feature': 'bind_main_finalize', 'arguments': {
+        'summary_issue': 'https://tracker.test/goal/236', 'paused': paused,
+    }})
+    assert not reply.failed, reply.document
+    return reply.document
+
+
+def test_explicit_pause_survives_explanation_notifications_and_resume(host: tuple[Path, Path]) -> None:
+    """A recorded user pause needs no model and only explicit resume clears it."""
+    root, _ = host
+    rollout(root)
+    set_user_pause(root, True)
+    native_hook(root, 'SessionStart', source='resume')
+    for turn in ('explain-one', 'explain-two', 'compacted'):
+        next_waiting_turn(root, turn, {'type': 'response_item', 'payload': {
+            'type': 'message', 'role': 'user', 'content': [{'type': 'input_text', 'text': 'Explain the issue.'}],
+        }}, {'type': 'compacted', 'payload': {'message': 'Summary.', 'replacement_history': []}})
+        assert native_hook(root, turn_id=turn) == {}
+    submitted_result(root)
+    with owned_child(root, [{'request_id': 'native-approval', 'method': 'claude/can_use_tool'}],
+                     alias='research@x1', task_id='148'):
+        assert native_hook(root, turn_id='compacted') == {}
+        assert wire(root).count('thread/fork') == wire(root).count('turn/start') == 0
+        set_user_pause(root, False)
+        assert native_hook(root, turn_id='compacted')['decision'] == 'block'
+    assert wire(root).count('thread/fork') == wire(root).count('turn/start') == 0
+
+
+def test_pause_resume_invalidates_prior_waiting(host: tuple[Path, Path]) -> None:
+    """An explicit resume rechecks even if all earlier waiting inputs still match."""
+    root, _ = host
+    rollout(root)
+    next_waiting_turn(root, 'waiting')
+    assert native_hook(root, turn_id='waiting')['systemMessage']
+    set_user_pause(root, True)
+    assert native_hook(root, turn_id='waiting') == {}
+    set_user_pause(root, False)
+    (root / 'options.json').write_text(json.dumps({'child': 'resumed-checker', 'current_turn': 'waiting'}))
+    assert native_hook(root, turn_id='waiting')['systemMessage']
+    assert wire(root).count('thread/fork') == wire(root).count('turn/start') == 2
+
+
+def test_pause_during_check_cancels_without_continuation(host: tuple[Path, Path]) -> None:
+    """The public pause operation can invalidate an already-running checker."""
+    import threading
+    from conftest import wait_for_file
+
+    root, binding = host
+    rollout(root)
+    (root / 'options.json').write_text(json.dumps({'hold_check': 2, 'output': json.dumps({
+        'status': 'actionable', 'conclusion': 'Continue.', 'reason': 'Old authorization.', 'nodes': ['237'],
+    })}))
+    changes = []
+
+    def pause() -> None:
+        """Receive the owning Main's new explicit pause while the model is active."""
+        wait_for_file(root / 'checker-running')
+        changes.append(set_user_pause(root, True))
+
+    writer = threading.Thread(target=pause)
+    writer.start()
+    assert native_hook(root) == {}
+    writer.join(timeout=5)
+    assert not writer.is_alive() and len(changes) == 1
+    evidence = yaml.safe_load(next(binding.parent.glob('checks/*/execution.yml')).read_text())
+    assert evidence['outcome'] == 'cancelled' and evidence['cancellation']['user_pause']['paused']
+    assert wire(root).count('turn/interrupt') == 1
+    assert native_hook(root) == {}
+    assert wire(root).count('thread/fork') == wire(root).count('turn/start') == 1
+
+
+def test_user_pause_cli_and_managed_authority(host: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch) -> None:
+    """The existing CLI records pause, retains it by default, and denies managed callers."""
+    root, _ = host
+    monkeypatch.chdir(root)
+    for option, expected in [('--paused', True), (None, True), ('--no-paused', False)]:
+        args = ['bind-finalize', '--summary-issue', 'https://tracker.test/goal/236']
+        if option is not None:
+            args.append(option)
+        reply = CliRunner().invoke(cli, args)
+        assert reply.exit_code == 0, reply.output
+        assert json.loads(reply.output)['user_pause']['paused'] is expected
+    monkeypatch.setattr(main_finalize, 'caller_alias', lambda directory: 'managed@e1')
+    with pytest.raises(RunnerError, match='Only the owning Main'):
+        set_user_pause(root, True)

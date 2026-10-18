@@ -229,6 +229,30 @@ def test_public_query_authority_and_independent_archive(tmp_path: Path, monkeypa
     assert bind(tmp_path, desktop_observer=True)(forbidden).failed
 
 
+def test_public_query_reads_jsonl_with_existing_native_authority(tmp_path: Path) -> None:
+    """The same gateway reads the new archive without granting sibling access."""
+    from graphtraj.execution.runner_models import RunnerError
+    from graphtraj.execution.runner_status import runtime_caller
+    from graphtraj.interfaces.gateway import handle_request
+    from graphtraj.interfaces.agents import swarm_root
+    from graphtraj.sessions.archive import SessionArchive
+    from test_result_submission import result_project
+
+    runner, _, _ = result_project(tmp_path)
+    identity = 'codex:native-research@x1'
+    archive = SessionArchive(swarm_root(tmp_path), save_normalized_sessions=True)
+    archive.map_session(header(identity))
+    archive.collect(identity, [retain_native('codex', {'ciphertext': 'opaque'},
+        session_id='native-research@x1', locator='byte:0', seq=0, time=1)], source='rollout', position=1)
+    request = {'action': 'execute', 'feature': 'session_read', 'arguments': {'session_id': identity}}
+    with runtime_caller(runner, 'research@x1'):
+        result = handle_request(request, cwd=tmp_path)
+        assert result.document['header']['id'] == identity
+        assert result.document['events'][0]['data']['record']['ciphertext'] == 'opaque'
+    with runtime_caller(runner, 'research@x2'), pytest.raises(RunnerError, match='own verified'):
+        handle_request(request, cwd=tmp_path)
+
+
 def test_fragment_size_equivalence_and_measurements(tmp_path: Path) -> None:
     """Long output retains equal text, semantic boundaries, usage and probabilities."""
     output = 'abcdefghij界🙂' * 2000

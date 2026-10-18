@@ -397,3 +397,28 @@ def test_core_imports_and_runs_without_graphtraj(tmp_path: Path, configuration: 
         text=True, env={**os.environ, 'PYTHONPATH': str(SOURCE)}, cwd=tmp_path,
     ).stdout.split()
     assert output == ['standby', 's', '[]']
+
+
+def test_public_creator_preserves_external_root_scope(root: Path) -> None:
+    """Expose the stored external source without inventing a parent or changing access."""
+    driver = ScriptedDriver()
+    control = AgentControl(root, {'scripted': driver})
+    parent = Caller('claude-native', None, 'original-native-session', 'claude')
+    created, failed = call(control, parent, action='create', runtime='scripted', instruction='hello')
+    assert not failed
+    try:
+        expected = {'host': 'claude-native', 'agent': None, 'session': 'original-native-session'}
+        assert created['result']['parent'] is None
+        assert created['result']['creator'] == expected
+        created['result']['creator']['session'] = 'not-authority'
+        status, failed = call(control, parent, action='status', agent=created['agent'])
+        assert not failed and status['result']['creator'] == expected
+        hierarchy, failed = call(control, parent, action='status')
+        assert not failed and hierarchy['result']['agents'][0]['creator'] == expected
+        stranger = Caller('claude-native', None, 'different-native-session', 'claude')
+        denied, failed = call(control, stranger, action='status', agent=created['agent'])
+        assert failed and denied['error']['code'] == 'not-found'
+    finally:
+        driver.release(created['execution'])
+        stopped, failed = call(control, parent, action='wait', agent=created['agent'], timeout_seconds=2)
+        assert not failed and stopped['result']['state'] == 'standby'

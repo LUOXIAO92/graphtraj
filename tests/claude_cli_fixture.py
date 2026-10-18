@@ -6,10 +6,22 @@ import subprocess
 import sys
 import time
 import uuid
+from datetime import datetime, timezone
 
 
 def emit(value: dict) -> None:
     """Send one native protocol record."""
+    global parent_uuid
+    if value.get('type') in {'user', 'assistant'}:
+        value.setdefault('uuid', str(uuid.uuid4()))
+        value.setdefault('timestamp', datetime.now(timezone.utc).isoformat())
+        if value['type'] == 'assistant':
+            value['message'].setdefault('id', 'api-' + value['uuid'])
+            value['message'].setdefault('model', model)
+        native = {**value, 'sessionId': session, 'parentUuid': parent_uuid}
+        with transcript.open('a') as stream:
+            stream.write(json.dumps(native) + '\n')
+        parent_uuid = value['uuid']
     print(json.dumps(value), flush=True)
 
 
@@ -21,16 +33,24 @@ if os.environ.get('CLAUDE_FIXTURE_FAIL'):
     raise SystemExit(17)
 if os.environ.get('CLAUDE_FIXTURE_DIAGNOSTICS'):
     print('Warning: auto mode unavailable; token=sk-diagnosticsecret; email=private@example.invalid', file=sys.stderr)
+    print('Permission mode forced to default — CLAUDE_CODE_SUBPROCESS_ENV_SCRUB is set '
+          '(allowed_non_write_users hardening). Declare allowedTools explicitly, or set '
+          'CLAUDE_CODE_SUBPROCESS_ENV_SCRUB=0 to opt out.', file=sys.stderr)
 args = sys.argv
 session = args[args.index('--resume' if '--resume' in args else '--session-id') + 1]
 model = args[args.index('--model') + 1]
 permission_mode = args[args.index('--permission-mode') + 1] if '--permission-mode' in args else None
 Path(os.environ['CLAUDE_FIXTURE_HOME'], 'native-permissions.json').write_text(json.dumps({
+    'model': model,
+    'effort': args[args.index('--effort') + 1] if '--effort' in args else None,
     'mode': permission_mode, 'settings': json.loads(args[args.index('--settings') + 1]),
     'restricted': '--restricted' in args,
+    'scrub': os.environ.get('CLAUDE_CODE_SUBPROCESS_ENV_SCRUB'),
     'permission_handler': args[args.index('--permission-prompt-tool') + 1],
 }))
 history = Path(os.environ['CLAUDE_FIXTURE_HOME']) / (session + '.json')
+transcript = history.with_suffix('.jsonl')
+parent_uuid = json.loads(transcript.read_text().splitlines()[-1])['uuid'] if transcript.exists() else None
 Path(os.environ['CLAUDE_FIXTURE_HOME'], 'native-selection.json').write_text(json.dumps({
     'model': model, 'effort': args[args.index('--effort') + 1] if '--effort' in args else None,
     'environment_effort': os.environ.get('CLAUDE_CODE_EFFORT_LEVEL'),
@@ -42,6 +62,10 @@ started = False
 waiting = []
 merging = []
 late = []
+sdk_create_results = []
+sdk_request_arguments = {'action': 'execute', 'feature': 'status', 'arguments': {}}
+sdk_display = False
+sdk_display_reply = None
 
 
 def result(text: str, error: bool = False, queued: int = 0, idle: bool = True) -> None:
@@ -59,9 +83,9 @@ def result(text: str, error: bool = False, queued: int = 0, idle: bool = True) -
 
 def call(feature: str, arguments: dict) -> dict:
     """Call an actual public tool through the owned stdio MCP subprocess."""
-    command = json.loads(args[args.index('--mcp-config') + 1])['mcpServers']['graphtraj']
+    command = json.loads(args[args.index('--mcp-config') + 1])['mcpServers']['agents']
     query = {'jsonrpc': '2.0', 'id': 1, 'method': 'tools/call', 'params': {
-        'name': 'graphtraj', 'arguments': {'action': 'execute', 'feature': feature, 'arguments': arguments}}}
+        'name': 'tasks', 'arguments': {'action': 'execute', 'feature': feature, 'arguments': arguments}}}
     response = subprocess.run([command['command'], *command['args']], input=json.dumps(query) + '\n',
                               text=True, capture_output=True, env={**os.environ, **command['env']})
     return json.loads(response.stdout)['result']
@@ -77,13 +101,15 @@ def tool(feature: str, arguments: dict) -> dict:
 
 def prompt(message: dict) -> None:
     """Process fixture input only after Runner releases the startup hook."""
+    global sdk_request_arguments, sdk_display
     text = message['message']['content']
     messages.append(text)
     history.write_text(json.dumps(messages))
     emit({'type': 'system', 'subtype': 'session_state_changed', 'state': 'running'})
     if '--replay-user-messages' in args:
         # As observed: the echo is emitted when input joins the running turn.
-        emit({'type': 'user', 'isReplay': True, 'session_id': session, 'message': message['message']})
+        emit({'type': 'user', 'isReplay': True, 'session_id': session, 'message': message['message'],
+              'uuid': message.get('uuid') or str(uuid.uuid4())})
     if late:
         # The earlier turn's idle arrives only after this later input's echo.
         emit({'type': 'system', 'subtype': 'session_state_changed', 'state': 'idle'})
@@ -102,10 +128,19 @@ def prompt(message: dict) -> None:
         emit({'type': 'control_request', 'request_id': 'permission-1', 'request': {
             'subtype': 'can_use_tool', 'tool_name': 'Bash', 'input': {'command': 'echo approved'},
             'tool_use_id': 'tool-1'}})
+    elif text in {'sdk-agents-status', 'sdk-agents-create-twice', 'sdk-agents-display'}:
+        assert 'agents' in sdk_servers
+        if text in {'sdk-agents-create-twice', 'sdk-agents-display'}:
+            sdk_request_arguments = {'action': 'execute', 'feature': 'create',
+                                     'arguments': {'runtime': 'claude', 'instruction': 'child'}}
+        sdk_display = text == 'sdk-agents-display'
+        emit({'type': 'control_request', 'request_id': 'sdk-list', 'request': {
+            'subtype': 'mcp_message', 'server_name': 'agents',
+            'message': {'jsonrpc': '2.0', 'id': 1, 'method': 'tools/list'}}})
     elif text == 'mcp':
-        command = json.loads(args[args.index('--mcp-config') + 1])['mcpServers']['graphtraj']
+        command = json.loads(args[args.index('--mcp-config') + 1])['mcpServers']['agents']
         query = {'jsonrpc': '2.0', 'id': 1, 'method': 'tools/call', 'params': {
-            'name': 'graphtraj', 'arguments': {'action': 'execute', 'feature': 'alias_status', 'arguments': {}}}}
+            'name': 'tasks', 'arguments': {'action': 'execute', 'feature': 'alias_status', 'arguments': {}}}}
         response = subprocess.run([command['command'], *command['args']], input=json.dumps(query) + '\n',
                                   text=True, capture_output=True, env={**os.environ, **command['env']})
         result(response.stdout or response.stderr)
@@ -131,7 +166,16 @@ def prompt(message: dict) -> None:
         while waiting:
             # The rest of the held inputs and this input still await their own turns.
             result(waiting.pop(0), queued=len(waiting) + 1)
-        result('|'.join(messages), text == 'provider-error')
+        result(str(Path.cwd()) if text == 'child' and os.environ.get('CLAUDE_FIXTURE_REPORT_CWD')
+               else '|'.join(messages), text == 'provider-error')
+
+
+def startup() -> None:
+    """Attest the native Session after completing any SDK tool handshake."""
+    emit({'type': 'control_request', 'request_id': 'startup', 'request': {
+        'subtype': 'hook_callback', 'callback_id': 'graphtraj_start', 'input': {
+            'hook_event_name': 'UserPromptSubmit', 'session_id': session,
+            'source': 'resume' if '--resume' in args else 'startup', 'transcript_path': str(transcript)}}})
 
 
 for line in sys.stdin:
@@ -145,10 +189,14 @@ for line in sys.stdin:
         emit({'type': 'control_response', 'response': {'subtype': 'success',
               'request_id': event['request_id'], 'response': initialized}})
         if request['subtype'] == 'initialize':
-            emit({'type': 'control_request', 'request_id': 'startup', 'request': {
-                'subtype': 'hook_callback', 'callback_id': 'graphtraj_start', 'input': {
-                    'hook_event_name': 'UserPromptSubmit', 'session_id': session,
-                    'source': 'resume' if '--resume' in args else 'startup', 'transcript_path': str(history)}}})
+            sdk_servers = request.get('sdkMcpServers', [])
+            if sdk_servers:
+                emit({'type': 'control_request', 'request_id': 'sdk-initialize', 'request': {
+                    'subtype': 'mcp_message', 'server_name': 'agents', 'message': {
+                        'jsonrpc': '2.0', 'id': 10, 'method': 'initialize',
+                        'params': {'protocolVersion': '2025-06-18'}}}})
+            else:
+                startup()
         elif request['subtype'] == 'interrupt':
             if os.environ.get('CLAUDE_FIXTURE_ESCAPED_PIPE'):
                 # A tool child outside the owned group keeps stdout open until
@@ -166,15 +214,63 @@ for line in sys.stdin:
             result('interrupted')
     elif event['type'] == 'control_response':
         response = event['response']
-        if response['request_id'] == 'startup':
+        if response['request_id'] == 'sdk-initialize':
+            assert response['response']['mcp_response']['result']['protocolVersion'] == '2025-06-18'
+            emit({'type': 'control_request', 'request_id': 'sdk-initial-tools', 'request': {
+                'subtype': 'mcp_message', 'server_name': 'agents',
+                'message': {'jsonrpc': '2.0', 'id': 11, 'method': 'tools/list'}}})
+        elif response['request_id'] == 'sdk-initial-tools':
+            assert response['response']['mcp_response']['result']['tools'][0]['name'] == 'agents'
+            startup()
+        elif response['request_id'] == 'startup':
             started = True
             init = {'type': 'system', 'subtype': 'init', 'session_id': session, 'model': model}
+            if sdk_servers:
+                init['tools'] = ['mcp__agents__agents']
             observed_mode = os.environ.get('CLAUDE_FIXTURE_PERMISSION_MODE', permission_mode)
             if observed_mode is not None:
                 init['permissionMode'] = observed_mode
             emit(init)
         elif response['request_id'] == 'permission-1':
             result(json.dumps(response['response']))
+        elif response['request_id'] == 'sdk-list':
+            tools = response['response']['mcp_response']['result']['tools']
+            assert [tool['name'] for tool in tools] == ['agents']
+            call_request = {'type': 'control_request', 'request_id': 'sdk-call', 'request': {
+                'subtype': 'mcp_message', 'server_name': 'agents', 'message': {
+                    'jsonrpc': '2.0', 'id': 2, 'method': 'tools/call',
+                    'params': {'name': 'agents', 'arguments': sdk_request_arguments}}}}
+            emit(call_request)
+            if sdk_request_arguments['feature'] == 'create' and not sdk_display:
+                emit({**call_request, 'request_id': 'sdk-call-copy'})
+        elif response['request_id'] in {'sdk-call', 'sdk-call-copy'}:
+            reply = response['response']['mcp_response']['result']
+            if sdk_display:
+                sdk_display_reply = reply
+                emit({'type': 'control_request', 'request_id': 'sdk-display', 'request': {
+                    'subtype': 'hook_callback', 'callback_id': 'graphtraj_agents_display', 'input': {
+                        'hook_event_name': 'PostToolUse', 'session_id': session,
+                        'tool_use_id': 'display-' + sdk_request_arguments['feature'],
+                        'tool_name': 'mcp__agents__agents', 'tool_input': sdk_request_arguments,
+                        'tool_response': reply}}})
+            elif sdk_request_arguments['feature'] == 'create':
+                sdk_create_results.append(reply)
+                if len(sdk_create_results) == 2:
+                    result(json.dumps(sdk_create_results))
+            else:
+                result(json.dumps(reply))
+        elif response['request_id'] == 'sdk-display':
+            with history.with_suffix('.display.jsonl').open('a') as display:
+                display.write(json.dumps(response['response']) + '\n')
+            if sdk_request_arguments['feature'] == 'create':
+                sdk_request_arguments = {'action': 'execute', 'feature': 'wait',
+                    'arguments': {'agent': sdk_display_reply['structuredContent']['agent'], 'timeout_seconds': 20}}
+                emit({'type': 'control_request', 'request_id': 'sdk-call', 'request': {
+                    'subtype': 'mcp_message', 'server_name': 'agents', 'message': {
+                        'jsonrpc': '2.0', 'id': 3, 'method': 'tools/call',
+                        'params': {'name': 'agents', 'arguments': sdk_request_arguments}}}})
+            else:
+                result(json.dumps(sdk_display_reply))
     elif event['type'] == 'user':
         # The real CLI may receive the prompt while the startup hook is pending;
         # it must not execute it until the host releases that hook.

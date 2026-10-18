@@ -166,6 +166,30 @@ def test_received_stream_checkpoint_replay_and_atomic_boundary(tmp_path: Path) -
         store.validate()
 
 
+@pytest.mark.parametrize('native_time,expected', [('2026-01-01T00:00:00Z', 1767225600000), (None, 0)])
+def test_final_native_time_is_not_first_fragment_receipt(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, native_time: str | None, expected: int,
+) -> None:
+    """Final time and unknown completion fields survive; missing time stays unknown."""
+    monkeypatch.setattr('graphtraj.runtimes.claude.collection.time.time', lambda: 1900000000)
+    with open_archive(tmp_path / 'state', tmp_path, 'timing', 'managed', source='managed') as store:
+        collector = StreamCollector(store, 'execution', 'model', 'anthropic')
+        collector.accept({'type': 'stream_event', 'event': {
+            'type': 'content_block_delta', 'index': 0,
+            'delta': {'type': 'text_delta', 'text': 'answer'}}}, 1)
+        monkeypatch.setattr('graphtraj.runtimes.claude.collection.time.time', lambda: 1900000010)
+        final = {'type': 'assistant', 'timestamp': native_time, 'completedAt': 'native-completion',
+                 'message': {'model': 'model', 'content': [{'type': 'text', 'text': 'answer'}]}}
+        collector.accept(final, 2)
+        [event] = store.page()['events']
+        assert event['time'] == expected
+        assert event['graphtraj']['firstReceivedAtMs'] == 1900000000000
+        assert event['graphtraj']['receivedAtMs'] == 1900000010000
+        assert event['graphtraj']['native']['record'] == final
+        assert any(m['path'] == 'time' for m in event['graphtraj']['missing']) == (native_time is None)
+        store.validate()
+
+
 def test_attachment_bytes_and_child_query_scope(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """A parent native ID is provenance, not authorization to read a native child."""
     import yaml

@@ -153,6 +153,15 @@ class AdapterDriver:
             )
         except RuntimeAdapterError as error:
             raise _native_error(error) from None
+        if run.runtime == 'claude':
+            from agent_swarm import AgentControl, bind
+
+            child_driver = AdapterDriver(self.root, Path(run.settings['cwd']))
+            control = AgentControl(self.root / '.graphtraj/swarm',
+                                   {name: child_driver for name in SUPPORTED_RUNTIMES})
+            callback = bind(control, Caller('claude-sdk', run.agent, turn.native_id, 'claude'),
+                            archive=run.archive)
+            turn.configure_independent(archive=run.archive, agents_callback=callback)
         turn.parent_notice = lambda message, details: (run.events.request(details),
                                                        {"delivery": "retained"})[1]
         with _TURNS_LOCK:

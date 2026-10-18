@@ -722,6 +722,7 @@ class AgentControl:
             "runtime": record["runtime"],
             "state":   ACTIVE if current is not None else STANDBY,
             "parent":  record["parent"],
+            "creator": dict(record["creator"]),
             "host":    record["host"],
             "session": record["session"],
         }

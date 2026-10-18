@@ -351,7 +351,10 @@ def validate_event(event: dict) -> None:
             _require(0 <= op['startSeq'] <= op['endSeq'] < event['seq'], 'surfaceOp.range')
         if 'sourceEventSeqs' in event:
             refs = event['sourceEventSeqs']
-            _require(kind != 'assistant/message' and type(refs) is list and bool(refs), 'sourceEventSeqs')
+            # Assistant replacements cite the displaced surface just like other
+            # roles; ordinary assistant appends still cannot claim sources.
+            _require(kind != 'assistant/message' or op != 'append', 'sourceEventSeqs')
+            _require(type(refs) is list and bool(refs), 'sourceEventSeqs')
             for ref in refs:
                 _integer(ref, 'sourceEventSeqs')
                 _require(ref < event['seq'], 'sourceEventSeqs')

@@ -188,3 +188,19 @@ def test_continue_actual_interrupted_session() -> None:
             call({'action': 'wait', 'agent': record['agent'], 'timeout_seconds': 30})
         with pytest.raises(ProcessLookupError):
             os.kill(pid, 0)
+
+
+@pytest.mark.skipif(not os.environ.get('TASK334_DSH_TRACE'), reason='Requires one explicitly retained native trace.')
+def test_actual_initial_tool_catalog() -> None:
+    """Inspect the complete tools sent in the actual first model request."""
+    rows = [json.loads(line) for line in Path(os.environ['TASK334_DSH_TRACE']).read_text().splitlines()]
+    tools = next(row['data']['header']['tools'] for row in rows if row.get('type') == 'request/header')
+    names = [item['name'] for item in tools]
+    assert len(names) == len(set(names))
+    assert [name for name in names if name.startswith('mcp__')] == ['mcp__agents__agents']
+    assert 'agents' not in names and 'graphtraj' not in names
+    entry = next(item for item in tools if item['name'] == 'mcp__agents__agents')
+    assert set(entry['parameters']['properties']) <= {'action', 'query', 'feature', 'schema', 'arguments'}
+    assert not entry['parameters']['properties']['arguments'].get('properties')
+    print(json.dumps({'actual_initial_tool_names': names, 'project_mcp_entries': 1,
+                      'subfunction_schemas_in_initial_tools': False}))

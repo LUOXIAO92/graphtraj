@@ -24,6 +24,10 @@ def bind_run(turn: DshExecution, run: Run) -> None:
     """Use the existing core identity; no Task preparation or second controller."""
     if run.call is None:
         raise ValueError('The DSH execution needs its owning Agents callback.')
+    if 'completion_message' in run.settings:
+        # GraphTraj nests native settings in adapter_request; the independent
+        # Driver passes them directly. Both receive the same verified notice.
+        turn.request['completion_message'] = run.settings['completion_message']
 
     @contextmanager
     def connection(directory: Path) -> Iterator[str]:

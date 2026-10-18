@@ -4,6 +4,8 @@ import json
 import os
 from pathlib import Path
 import sys
+import shutil
+import subprocess
 
 import pytest
 
@@ -51,3 +53,24 @@ def test_installed_dsh_model_mcp_and_same_session(tmp_path: Path) -> None:
         if state.document.get('result', {}).get('state') == 'active':
             call({'action': 'interrupt', 'agent': agent})
             call({'action': 'wait', 'agent': agent, 'timeout_seconds': 30})
+
+
+@pytest.mark.skipif(not os.environ.get('TASK334_DSH_TRACE'), reason='Requires one explicitly retained native trace.')
+def test_retained_official_trace_messages(tmp_path: Path) -> None:
+    """Compare the actual native projection and JSONL archive without more turns."""
+    from graphtraj.runtimes.dsh.collection import collect_jsonl
+    from graphtraj.sessions.archive import SessionArchive
+
+    trace = Path(os.environ['TASK334_DSH_TRACE'])
+    header, *events = [json.loads(line) for line in trace.read_text().splitlines()]
+    archive = SessionArchive(tmp_path / 'archive', save_normalized_sessions=True)
+    collect_jsonl(archive, header, [{'event': row} for row in events])
+    store = archive.store('dsh:' + header['id'])
+    native = subprocess.run([
+        shutil.which('node'), str(Path(__file__).parent / 'fixtures/dsh_compare_trace.mjs'),
+        str(Path(shutil.which('dsh')).resolve()), str(trace),
+    ], capture_output=True, text=True, check=True, timeout=10)
+    assert store.messages() == json.loads(native.stdout)
+    assert [row['graphtraj']['native']['record'] for row in store.page(limit=1000)['events']] == events
+    print(json.dumps({'native_session': header['id'], 'events': len(events),
+                      'messages': len(store.messages()), 'native_projection_equal': True}))

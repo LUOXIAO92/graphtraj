@@ -26,6 +26,13 @@ CORE_TYPES = SURFACE_TYPES | {
     'tool/call', 'request/header', 'request/context', 'session/end-seed',
     'llm/retry', 'llm/retry-started', 'compaction/start', 'compaction/end',
     'compaction/summary',
+    # Installed DSH 0.2.0-rc.2 log-only records. Its SessionSurface admits
+    # only SURFACE_EVENT_TYPES to deriveMessages; these remain in the log
+    # unchanged, including inbox records whose consumed input appears later
+    # as its own user/message. Unknown future types still fail reconstruction.
+    'agent/inbox/spliced', 'approval/policy', 'model/selection',
+    'permission/preset', 'sandbox/mode', 'session/title',
+    'session/title-llm-request', 'session-log-deepseek/delivery-accepted',
 }
 EXTENSION_TYPES = {'graphtraj/native', 'graphtraj/score', 'graphtraj/logprobs',
                    'graphtraj/derived'}

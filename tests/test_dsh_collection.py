@@ -183,7 +183,23 @@ def test_installed_dsh_append_flush_and_resume(project: Path) -> None:
     ], cwd=project, env=environment, capture_output=True, text=True, timeout=30)
     assert result.returncode == 0, result.stdout + result.stderr
     facts = json.loads(result.stdout.strip().splitlines()[-1])
+    assert facts['callbackBeforeDisk']
+    assert facts['nativeDiskEvents'] == facts['events']
     assert facts['count'] == 5
+    # Compare Python reconstruction to the installed Runtime's own projection,
+    # including the native fork seed and the event drained during disposal.
+    from graphtraj.runtimes.dsh.collection import collect_jsonl
+    from graphtraj.sessions.archive import SessionArchive, JsonlSessionStore, archive_path
+
+    archive = SessionArchive(project / 'optional', save_normalized_sessions=True, backfill_history=True)
+    for sample in (facts, facts['child']):
+        records = [{'event': item} for item in sample['events']]
+        saved = collect_jsonl(archive, sample['header'], records)
+        replay = collect_jsonl(archive, sample['header'], records, historical=True)
+        assert replay == saved
+        store = JsonlSessionStore(archive_path(archive.root, saved['session']))
+        assert store.messages() == sample['messages']
+        assert [native_record(row) for row in store.page()['events']] == sample['events']
     with SessionStore(session_path(project / '.graphtraj/state', 'dsh:real-main')) as store:
         store.validate()
         assert store.next_seq == 6
@@ -193,3 +209,154 @@ def test_installed_dsh_append_flush_and_resume(project: Path) -> None:
         assert store.header['graphtraj']['source'] == 'child'
         assert store.header['parentSession'] == 'dsh:real-main'
         assert store.next_seq > 5
+
+
+def test_optional_jsonl_uses_native_order_and_backfill_policy(tmp_path: Path) -> None:
+    """Archive only mapped supplied history; native seq wins over timestamps."""
+    from graphtraj.runtimes.dsh.collection import collect_jsonl
+    from graphtraj.sessions.archive import SessionArchive, JsonlSessionStore, archive_path
+
+    header = {'version': 4, 'id': 'optional', 'createdAt': 1, 'isSeeded': False}
+    rows = [event('user/message', index, {
+        'id': str(index), 'role': 'user', 'source': {'kind': 'user'},
+        'content': [{'type': 'text', 'text': 'same text'}],
+    }, surfaceOp='append') for index in range(2)]
+    rows[0]['time'], rows[1]['time'] = 900, 100
+    records = [{'event': row} for row in rows]
+    archive = SessionArchive(tmp_path / 'optional')
+    assert not collect_jsonl(archive, header, records)['saved']
+    assert not archive.root.exists()
+    archive.save_normalized_sessions = True
+    assert not collect_jsonl(archive, header, records, historical=True)['saved']
+    assert not archive.root.exists()
+    saved = collect_jsonl(archive, header, records)
+    store = JsonlSessionStore(archive_path(archive.root, saved['session']))
+    assert [message['id'] for message in store.messages()] == ['0', '1']
+    assert [row['time'] for row in store.page()['events']] == [900, 100]
+    with pytest.raises(ValueError, match='complete native prefix'):
+        collect_jsonl(archive, header, list(reversed(records)))
+    archive.save_normalized_sessions = False
+    assert not collect_jsonl(archive, header, records)['saved']
+    assert JsonlSessionStore(store.path).messages() == store.messages()
+
+
+def test_native_gap_backfill_and_disk_confirmation(tmp_path: Path) -> None:
+    """Retain new content with a gap, then resolve it using the same native log."""
+    from graphtraj.runtimes.dsh.collection import DshArchive
+    from graphtraj.sessions.archive import SessionArchive, JsonlSessionStore, archive_path
+
+    header = {'version': 4, 'id': 'gap', 'createdAt': 1, 'isSeeded': False}
+    old = event('user/message', 0, {
+        'id': 'old', 'role': 'user', 'source': {'kind': 'user'},
+        'content': [{'type': 'text', 'text': 'old memory'}],
+    }, surfaceOp='append')
+    new = event('user/message', 1, {
+        'id': 'new', 'role': 'user', 'source': {'kind': 'user'},
+        'content': [{'type': 'text', 'text': 'new input'}],
+    }, surfaceOp='append')
+    archive = SessionArchive(tmp_path / 'archive', save_normalized_sessions=True)
+    capture = DshArchive(archive, resumed=True)
+    capture.start({'header': header, 'cursor': 0}, [])
+    capture.event(new)
+    store = JsonlSessionStore(archive_path(archive.root, 'dsh:gap'))
+    assert store.page()['events'] == []
+    assert store.pending()[0]['event']['data']['content'][0]['text'] == 'new input'
+    with pytest.raises(ValueError, match='incomplete'):
+        store.messages()
+    trace = tmp_path / 'native.jsonl'
+    trace.write_text('\n'.join(json.dumps(row) for row in [header, old]) + '\n')
+    with pytest.raises(ValueError, match='persisted prefix'):
+        capture.finish(trace)  # A callback is not proof of native disk flush.
+    trace.write_text('\n'.join(json.dumps(row) for row in [header, old, new]) + '\n')
+    capture.finish(trace)
+    archive.backfill_history = True
+    resumed = DshArchive(archive, resumed=True)
+    resumed.start({'header': header, 'cursor': 1}, [{'event': old}, {'event': new}])
+    resumed.finish(trace)
+    store = JsonlSessionStore(store.path)
+    assert not store.pending()
+    assert [message['id'] for message in store.messages()] == ['old', 'new']
+    assert len(store.observations()) == 1
+
+
+@pytest.mark.parametrize('end_before_event', [False, True])
+def test_live_frames_resolve_only_native_terminal_seq(tmp_path: Path, end_before_event: bool) -> None:
+    """Live/final arrival variations retain native order and one final message."""
+    from graphtraj.runtimes.dsh.collection import DshArchive
+    from graphtraj.sessions.archive import SessionArchive, JsonlSessionStore, archive_path
+
+    header = {'version': 4, 'id': 'live', 'createdAt': 1, 'isSeeded': False}
+    archive = SessionArchive(tmp_path / 'archive', save_normalized_sessions=True)
+    capture = DshArchive(archive, resumed=False)
+    capture.start({'header': header, 'cursor': -1}, [], execution_id='execution')
+    capture.frame({'type': 'start', 'attemptId': 'live:0', 'revision': 1,
+                   'startedAfterSeq': -1, 'turn': 0, 'step': 0})
+    chunk = {'type': 'chunk', 'attemptId': 'live:0', 'revision': 2, 'index': 0,
+             'time': 90, 'chunk': {'type': 'text-delta', 'index': 0, 'text': 'body'}}
+    capture.frame(chunk)
+    capture.frame(chunk)
+    path = archive_path(archive.root, 'dsh:live')
+    partial = JsonlSessionStore(path).pending()[0]['event']
+    assert partial['data']['stream'][0]['texts'] == ['body']
+    final = event('assistant/message', 0, {'turn': 0, 'step': 0, 'stream': partial['data']['stream'],
+        'message': {'id': 'answer', 'role': 'assistant',
+                    'source': {'kind': 'model', 'provider': 'deepseek', 'model': 'native'},
+                    'content': [{'type': 'text', 'text': 'body'}]}}, surfaceOp='append')
+    end = {'type': 'end', 'attemptId': 'live:0', 'revision': 3, 'index': 1,
+           'outcome': {'kind': 'committed', 'eventType': 'assistant/message', 'seq': 0}}
+    if end_before_event:
+        capture.frame(end)
+        assert len(JsonlSessionStore(path).pending()) == 1
+        capture.event(final)
+    else:
+        capture.event(final)
+        assert len(JsonlSessionStore(path).pending()) == 1
+        capture.frame(end)
+    store = JsonlSessionStore(path)
+    assert not store.pending()
+    assert store.messages() == [final['data']['message']]
+    assert native_record(store.page()['events'][0]) == final
+    observation = store.observations()[0]
+    assert observation['event']['data']['stream'] == partial['data']['stream']
+    assert observation['final'] == ['dsh', 'live', 'event/0']
+    before = path.read_bytes()
+    assert not store.resolve_observation(('dsh', 'live', 'live/execution/live:0'), ('dsh', 'live', 'event/0'))
+    assert path.read_bytes() == before
+    with pytest.raises(ValueError, match='another native event'):
+        store.resolve_observation(('dsh', 'live', 'live/execution/live:0'), ('dsh', 'live', 'event/1'))
+
+
+def test_terminal_observation_survives_gap_and_later_backfill(tmp_path: Path) -> None:
+    """A saved end(seq) survives interruption before final publication."""
+    from graphtraj.runtimes.dsh.collection import DshArchive
+    from graphtraj.sessions.archive import SessionArchive, JsonlSessionStore, archive_path
+
+    header = {'version': 4, 'id': 'resume-live', 'createdAt': 1, 'isSeeded': False}
+    first = event('turn/start', 0, {'turn': 0})
+    final = event('assistant/attempt', 1, {'turn': 0, 'step': 0, 'stream': []})
+    archive = SessionArchive(tmp_path / 'archive', save_normalized_sessions=True)
+    capture = DshArchive(archive, resumed=True)
+    capture.start({'header': header, 'cursor': 0}, [], execution_id='old-execution')
+    capture.frame({'type': 'start', 'attemptId': 'attempt', 'revision': 1,
+                   'startedAfterSeq': 0, 'turn': 0, 'step': 0})
+    capture.frame({'type': 'end', 'attemptId': 'attempt', 'revision': 2, 'index': 0,
+                   'outcome': {'kind': 'committed', 'eventType': 'assistant/attempt', 'seq': 1}})
+    capture.event(final)
+    path = archive_path(archive.root, 'dsh:resume-live')
+    assert len(JsonlSessionStore(path).pending()) == 2
+    archive.backfill_history = True
+    restored = DshArchive(archive, resumed=True)
+    restored.start({'header': header, 'cursor': 1}, [{'event': first}, {'event': final}], execution_id='new-execution')
+    store = JsonlSessionStore(path)
+    assert not store.pending()
+    assert len(store.observations()) == 2
+    assert [native_record(row) for row in store.page()['events']] == [first, final]
+    # Another abandoned observation remains separate, even with identical text.
+    restored.frame({'type': 'start', 'attemptId': 'attempt', 'revision': 1,
+                    'startedAfterSeq': 1, 'turn': 1, 'step': 0})
+    restored.frame({'type': 'end', 'attemptId': 'attempt', 'revision': 2, 'index': 0,
+                    'outcome': {'kind': 'abandoned'}})
+    store = JsonlSessionStore(path)
+    assert len(store.pending()) == 1
+    assert store.pending()[0]['event']['graphtraj']['native']['locator'] == 'live/new-execution/attempt'
+    assert len(store.observations()) == 2

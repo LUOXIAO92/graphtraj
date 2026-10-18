@@ -1,0 +1,29 @@
+{
+  "entries": [
+    {
+      "id": "agents-dsh",
+      "rev": "aa268464902e",
+      "url": "/plugins/",
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-tool",
+        "@deepseek-ai/dsh-client-ui-renderer",
+        "@deepseek-ai/dsh-client-ui-chat"
+      ],
+      "immediately": null
+    }
+  ],
+  "incomingContainers": 0,
+  "outgoingContainers": 7,
+  "errors": [
+    "DSH turn-trigger renderer is not available"
+  ],
+  "responses": [
+    {
+      "path": "/plugins/",
+      "status": 200,
+      "IncomingAgentMessage": true,
+      "FromLabel": true
+    }
+  ],
+  "plugin_ui": "New Session\n⌥\n⌘\nN\nPlugins\nWorkspaces\nUngrouped\nTest MCP status and sleep delay\n52min\nSettings\nPlugins\nInstall, enable, and configure plugins\nAdd plugin\nOfficial\n4\nAgent Teams\nExperimental\nEnable team collaboration, team tools, the member roster, and the shared task board.\nAuto Authorization Review\nExperimental\nAdd an Auto review permission mode that uses the model to assess authorization before each tool call.\nAutomation tasks\nExperimental\nRun tasks in your sessions at a set time or on a repeating schedule.\nVoice input\nExperimental\nTranscribe recordings locally with SenseVoice; first use requires installing dependencies"
+}

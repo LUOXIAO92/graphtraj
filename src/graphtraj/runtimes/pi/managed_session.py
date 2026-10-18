@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from contextlib import ExitStack
+from contextlib import ExitStack, nullcontext
 import copy
 import json
 import os
@@ -60,6 +60,11 @@ class PiManagedExecution:
         self.prompt_started = False
         self.stderr_reader: threading.Thread | None = None
         self.startup_terminal_confirmed = False
+        self.independent = False
+        self.archive = None
+        self.agent = None
+        self.parent_notice = None
+        self.agent_call = None
 
     @property
     def execution_id(self) -> str:
@@ -133,7 +138,7 @@ class PiManagedExecution:
                 target.put({'success': False, 'error': 'transport closed'})
             self.events.put({'type': 'transport_error'})
 
-    def _prepare(self, address: str) -> tuple[list[str], dict]:
+    def _prepare(self, address: str | None) -> tuple[list[str], dict]:
         """Project native asb fields and preserve user resources through references."""
         request = self.request
         from graphtraj.runtimes.runtime_adapter import credential_environment
@@ -147,10 +152,13 @@ class PiManagedExecution:
         source = Path(request['agent_dir'])
         agent = native / 'agent'
         agent.mkdir(exist_ok=True)
-        read = [str(worktree), str(native), address, request['docs_directory'],
+        read = [str(worktree), str(native), request['docs_directory'],
                 str(Path(sys.prefix).resolve()), str(Path(sys.base_prefix).resolve()),
                 str(Path(__file__).resolve().parents[2]), *request['resources']]
-        write = [str(native), address]
+        write = [str(native)]
+        if address is not None:
+            read.append(address)
+            write.append(address)
         override = bool(request.get('base_url') or request.get('api_key_env'))
         if override:
             # Retained executions may contain links created by older versions.
@@ -198,6 +206,23 @@ class PiManagedExecution:
                               *(str(p.resolve()) for p in resources if p.exists())],
             },
         }
+        if self.independent:
+            # AgentControl places this owner at <root>/native/<agent>. The
+            # caller's cwd may contain that root under any name, not .graphtraj.
+            private = self.directory.parent.parent.resolve()
+            policy['filesystem']['denyRead'].append(str(private))
+            # srt applies write denials after grants: denying the whole root
+            # also denies this child's trace and MCP channel. Default-deny
+            # writes already protect the root when no broader grant covers it.
+            # The selected srt also grants these native log/scratch directories
+            # by default. Never place protected control records inside them.
+            default_write = ('/tmp/claude', '/private/tmp/claude',
+                             str(Path.home() / '.npm/_logs'), str(Path.home() / '.claude/debug'))
+            if any(private.is_relative_to(Path(path).resolve()) for path in (*write, *default_write)):
+                raise RuntimeAdapterError(
+                    'ROLE_CONFIG_UNSUPPORTED',
+                    'Pi independent data root overlaps a writable grant; '
+                    'retain a separate data root or a read-only worktree.')
         if request.get('base_url'):
             from urllib.parse import urlsplit
 
@@ -232,6 +257,8 @@ class PiManagedExecution:
         argv = [request['executable'], '--mode', 'rpc', '--provider', provider,
                 '--model', request['model'], '--session', str(native_trace),
                 '--append-system-prompt', str(instructions)]
+        if self.independent and address is not None:
+            argv += ['--extension', str(Path(__file__).with_name('extension.mjs'))]
         if request.get('reasoning_effort'):
             argv += ['--thinking', request['reasoning_effort']]
         spec = self.directory / 'pi-process.json'
@@ -242,13 +269,18 @@ class PiManagedExecution:
         # Do not forward Runner bookkeeping as model-declared authority. The only
         # child operation address is authenticated by the existing hosted CLI.
         for key in tuple(env):
-            if key.startswith('GRAPHTRAJ_'):
+            if (key.startswith(('GRAPHTRAJ_', 'AGENT_SWARM_', 'AGENTS_'))
+                    or key in {'DSH_SESSION_ID', 'DSH_AGENT_SOURCE'}):
                 del env[key]
         env.update(credential_environment(request.get('api_key_env')))
         env.update({'PATH': str(Path(sys.executable).parent) + os.pathsep + request['sandbox_path'],
                     'PI_CODING_AGENT_DIR': str(agent),
-                    'GRAPHTRAJ_CLI_CONNECTION': address, 'GRAPHTRAJ_HARNESS_ROOT': str(root),
                     'PI_ASB_NO_ALIAS_PROMPT': '1'})
+        if address is not None:
+            if self.independent:
+                env.update(AGENT_SWARM_CONNECTION=address, AGENT_SWARM_PYTHON=sys.executable)
+            else:
+                env.update(GRAPHTRAJ_CLI_CONNECTION=address, GRAPHTRAJ_HARNESS_ROOT=str(root))
         # Pi's native find accepts an existing fd on PATH; do not download it or
         # alter the user's installation to populate the isolated cache.
         fd = source / 'bin/fd'
@@ -267,14 +299,25 @@ class PiManagedExecution:
 
     def run(self) -> dict:
         """Bind real Pi identity before task input, then observe native settlement."""
-        from graphtraj.interfaces.hosted_cli import cli_connection
-        from graphtraj.runtimes.codex.managed_session import native_operation_features
-
         reader = None
         collector = None
         with ExitStack() as resources:
-            address = resources.enter_context(cli_connection(
-                Path(self.request['harness_root']), self.directory.name, native_operation_features()))
+            connection = nullcontext(None)
+            if not self.independent:
+                from graphtraj.interfaces.hosted_cli import cli_connection
+                from graphtraj.runtimes.codex.managed_session import native_operation_features
+
+                connection = cli_connection(
+                    Path(self.request['harness_root']), self.directory.name, native_operation_features())
+            if self.independent and self.agent_call is not None:
+                from agent_swarm.connection import agents_connection
+                from agent_swarm.process import authenticate_process
+
+                connection = agents_connection(
+                    self.directory / 'mcp', self.agent_call,
+                    lambda pid: authenticate_process(self.proc, pid),
+                )
+            address = resources.enter_context(connection)
             argv, env = self._prepare(address)
             stderr = resources.enter_context((self.directory / 'stderr.log').open('a', encoding='utf-8'))
             stderr_offset = stderr.tell()
@@ -314,16 +357,37 @@ class PiManagedExecution:
                 })
                 self.created(self.session, self.proc.pid)
                 self.bound = True
-                from graphtraj.runtimes.pi.collector import PiCollector
+                from graphtraj.runtimes.pi.collection import PiArchive
                 import yaml
 
-                mapping = yaml.safe_load((self.directory / 'mapping.yml').read_text())
-                collector = PiCollector(
-                    Path(self.request['state_directory']), self.native_trace, self.session,
-                    project=self.request['harness_root'], agent=mapping.get('alias', self.directory.name),
-                    source='member', tasks=[mapping['task_id']] if mapping.get('task_id') else [],
-                    execution=self.execution_id,
-                )
+                archive = self.archive
+                agent = self.agent
+                tasks = []
+                if self.independent:
+                    source = 'child'
+                else:
+                    from agent_swarm import default_config
+                    from graphtraj.interfaces.agents import swarm_root
+                    from graphtraj.sessions.archive import SessionArchive
+
+                    mapping_file = self.directory / 'mapping.yml'
+                    mapping = yaml.safe_load(mapping_file.read_text()) if mapping_file.is_file() else {}
+                    agent = mapping.get('alias', self.session)
+                    tasks = [mapping['task_id']] if mapping.get('task_id') else []
+                    source = 'member' if mapping else None
+                    root = swarm_root(Path(self.request['harness_root']))
+                    archive = SessionArchive(root, **default_config(root, save_normalized_sessions=True))
+                if archive is not None:
+                    native = self._rpc('get_entries')
+                    header = {'id': self.session, 'type': 'session'}
+                    if self.native_trace.is_file():
+                        with self.native_trace.open() as stream:
+                            header = json.loads(stream.readline())
+                    collector = PiArchive(
+                        archive, header, agent=agent, project=self.request['harness_root'],
+                        entries=native['entries'], leaf_id=native['leafId'], source=source, tasks=tasks,
+                        attachment_root=Path(self.request['worktree_path']),
+                    )
                 with self.lock:
                     if self.stopping.is_set():
                         return self._result('interrupted', None)
@@ -341,8 +405,16 @@ class PiManagedExecution:
                     event = self.events.get()
                     self._retain_trace()
                     kind = event.get('type')
-                    if kind not in {'transport_error', 'interaction_error'}:
+                    if collector is not None and kind not in {'transport_error', 'interaction_error'}:
                         collector.receive(event)
+                        if kind in {'turn_end', 'agent_settled'}:
+                            native = self._rpc('get_entries')
+                            header = None
+                            if self.native_trace.is_file():
+                                with self.native_trace.open() as stream:
+                                    header = json.loads(stream.readline())
+                            collector.sync(native['entries'], native['leafId'], header=header,
+                                           settled=kind == 'agent_settled')
                     if kind == 'transport_error':
                         raise RuntimeAdapterError('RUNTIME_TRANSPORT_FAILED', 'Pi closed before confirmed settlement.')
                     if kind == 'interaction_error':
@@ -405,10 +477,7 @@ class PiManagedExecution:
                         native_idle and self.proc is not None and self.proc.poll() is not None
                     )
                     if self.proc is not None:
-                        record_runtime_process(self.proc.pid, {
-                            'terminal_confirmed': self.startup_terminal_confirmed,
-                            'runtime_exit_code': self.proc.poll(),
-                        })
+                        record_runtime_process(self.proc.pid, self.process_exit_evidence(native_idle))
                     if self.stderr_reader is not None:
                         self.stderr_reader.join(timeout=5)
                     if reader is not None:
@@ -420,6 +489,38 @@ class PiManagedExecution:
                             self._retain_trace()
                     finally:
                         self.done.set()
+
+    def process_exit_evidence(self, native_idle: bool) -> dict:
+        """Report only facts observed while this owner still holds its Popen.
+
+        A reaped launcher and an absent owned process group do not prove that
+        detached native tools stopped. Keep native confirmation separate; an
+        unavailable group observation is unknown, never a successful stop.
+        """
+        if self.proc is None:
+            return {'terminal_confirmed': False, 'wrapper_exited': False,
+                    'native_idle_confirmed': bool(native_idle), 'owned_process_group_exited': None}
+        code = self.proc.poll()
+        group_exited = None
+        if code is not None:
+            try:
+                os.killpg(self.proc.pid, 0)
+            except ProcessLookupError:
+                group_exited = True
+            except OSError:
+                pass
+            else:
+                group_exited = False
+        return {
+            'terminal_confirmed': bool(native_idle and code is not None),
+            'runtime_exit_code': code,
+            'wrapper_exited': code is not None,
+            'owned_process_group_exited': group_exited,
+            'native_idle_confirmed': bool(native_idle),
+            'native_session_bound': self.bound,
+            'prompt_started': self.prompt_started,
+            'runtime_execution_id': self.execution_id,
+        }
 
     def _shutdown_failure(self, cause: BaseException | None, stderr_offset: int) -> RuntimeAdapterError:
         """Expose this launch's cause through Runner without certifying native stop."""
@@ -459,8 +560,6 @@ class PiManagedExecution:
 
     def _interaction(self, event: dict) -> None:
         """Retain information and route actual native dialogs to the direct parent."""
-        from graphtraj.execution.runner_control import notify_direct_parent
-
         method = event.get('method')
         if method in INFORMATION:
             return
@@ -475,8 +574,14 @@ class PiManagedExecution:
         def notify() -> None:
             """Notify through the existing parent execution without granting consent."""
             try:
-                receipt = notify_direct_parent(self.directory, 'Pi child requires a native reply:\n' + json.dumps(details), details)
-                if receipt is not None and receipt.get('delivery') not in {'received', 'no-direct-parent'}:
+                message = 'Pi child requires a native reply:\n' + json.dumps(details)
+                if self.parent_notice is not None:
+                    receipt = self.parent_notice(message, details)
+                else:
+                    from graphtraj.execution.runner_control import notify_direct_parent
+
+                    receipt = notify_direct_parent(self.directory, message, details)
+                if receipt is not None and receipt.get('delivery') not in {'received', 'retained', 'no-direct-parent'}:
                     raise RuntimeAdapterError('RUNTIME_REQUEST_FAILED', 'Pi dialog notification was not delivered.')
             except Exception:
                 self.events.put({'type': 'interaction_error', 'error': RuntimeAdapterError(

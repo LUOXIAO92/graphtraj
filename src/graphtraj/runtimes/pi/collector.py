@@ -7,7 +7,6 @@ transport tail. Native messages subsequently supply the durable final content.
 from __future__ import annotations
 
 from copy import deepcopy
-from datetime import datetime
 from hashlib import sha256
 import json
 import os
@@ -18,19 +17,15 @@ import uuid
 
 from graphtraj.sessions.protocol import retain_native
 from graphtraj.sessions.storage import SessionStore, StreamWriter, session_path
+from graphtraj.runtimes.pi.projection import native_time
 
 
 def timestamp(record: dict) -> tuple[int, list[dict]]:
-    """Use native epoch milliseconds or ISO time, explicitly marking receipt time."""
-    value = record.get('timestamp')
-    if type(value) is int:
+    """Retain native time; zero is an explicitly marked unknown placeholder."""
+    value = native_time(record)
+    if value is not None:
         return value, []
-    if isinstance(value, str):
-        try:
-            return int(datetime.fromisoformat(value.replace('Z', '+00:00')).timestamp() * 1000), []
-        except ValueError:
-            pass
-    return int(time.time() * 1000), [{'path': 'timestamp', 'reason': 'Native time unavailable; receipt time used.'}]
+    return 0, [{'path': 'timestamp', 'reason': 'Native time unavailable; zero is an unknown placeholder.'}]
 
 
 def has_probabilities(value: object) -> bool:
@@ -473,11 +468,24 @@ def collect_stdio() -> None:
     elif source != 'child':
         raise ValueError('Unknown Pi collection source.')
     configuration = load_project_configuration(cwd)
-    collector = PiCollector(configuration.state, Path(connection['session_file']), connection['session'],
-                            project=str(configuration.harness_root), agent='pi:' + connection['session'], source=source, header=header)
+    from agent_swarm import default_config
+    from graphtraj.interfaces.agents import swarm_root
+    from graphtraj.runtimes.pi.collection import PiArchive
+    from graphtraj.sessions.archive import SessionArchive
+
+    root = swarm_root(configuration.harness_root)
+    archive = SessionArchive(root, **default_config(root, save_normalized_sessions=True))
+    collector = PiArchive(archive, header, project=str(configuration.harness_root),
+                          agent='pi:' + connection['session'], source=source,
+                          entries=entries, leaf_id=initial.get('leafId'), attachment_root=cwd)
     print(json.dumps({'ready': True}), flush=True)
     try:
         for line in sys.stdin:
-            collector.receive(json.loads(line))
+            event = json.loads(line)
+            native = event.pop('piNative', None)
+            collector.receive(event)
+            if native is not None:
+                collector.sync(native['entries'], native['leafId'],
+                               settled=event.get('type') in {'agent_end', 'session_shutdown'})
     finally:
         collector.close()

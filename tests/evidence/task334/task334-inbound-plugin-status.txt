@@ -1,0 +1,27 @@
+New Session
+⌥
+⌘
+N
+Plugins
+Workspaces
+Ungrouped
+Test MCP status and sleep delay
+52min
+Settings
+Plugins
+Install, enable, and configure plugins
+Add plugin
+Official
+4
+Agent Teams
+Experimental
+Enable team collaboration, team tools, the member roster, and the shared task board.
+Auto Authorization Review
+Experimental
+Add an Auto review permission mode that uses the model to assess authorization before each tool call.
+Automation tasks
+Experimental
+Run tasks in your sessions at a set time or on a repeating schedule.
+Voice input
+Experimental
+Transcribe recordings locally with SenseVoice; first use requires installing dependencies

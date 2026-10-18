@@ -76,7 +76,7 @@ class NativePeer:
     def start(self) -> None:
         """The fixture service is ready without invoking a model."""
 
-    def follow(self, session: str) -> dict:
+    def follow(self, session: str, *, assistant_stream: bool = False) -> dict:
         """Observe this exact session before input."""
         self.calls.append(('follow', session))
         return {'type': 'snapshot'}
@@ -114,7 +114,7 @@ class NativePeer:
         if method == 'session/create':
             return {'sessionId': body.get('sessionId', self.session)}
         if method == 'session/projections':
-            return {'values': {'inbox': self.inbox}}
+            return {'asOfSeq': len(getattr(self, 'records', [])) - 1, 'values': {'inbox': self.inbox}}
         if method == 'session/list':
             if self.cancelled.is_set() and self.release_cancel.is_set():
                 self.running = False
@@ -210,6 +210,136 @@ def turn_identity(turn: Any) -> dict:
     return {'session': turn.session, 'execution_id': turn.execution_id}
 
 
+def test_reply_fact_uses_native_relay_once(tmp_path: Path, peer: list) -> None:
+    """Pass one host-owned communication fact through the active Session binding."""
+    turn, thread, outcome = run_turn(tmp_path)
+    message = {'id': 'child-execution', 'sessionId': turn.session, 'senderSessionId': 'native-child',
+               'sender': 'child-agent', 'recipient': 'parent-agent', 'body': 'actual reply'}
+    try:
+        assert turn.operate({'operation': 'receive', **turn_identity(turn), 'message': message}) == {'accepted': True}
+        assert [row for row in peer[0].calls if row[0] == 'agentMessages/receive'] == [
+            ('agentMessages/receive', message),
+        ]
+        with pytest.raises(RuntimeAdapterError, match='another native Session'):
+            turn.operate({'operation': 'receive', **turn_identity(turn),
+                          'message': {**message, 'sessionId': 'unrelated'}})
+    finally:
+        peer[0].frames.append('turn/end')
+        thread.join(3)
+    assert outcome['result']['outcome'] == 'completed'
+
+
+@pytest.mark.parametrize('archiving', [False, True])
+def test_agents_control_dsh_without_task_or_archive(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, archiving: bool,
+) -> None:
+    """Use the common function and native adapter; no Task or archive is needed.
+
+    The service is controlled, so this is development control/bridge evidence,
+    not proof of an official model invocation or browser rendering.
+    """
+    from agent_swarm import AgentControl, Caller, bind
+    from graphtraj.execution.agent_driver import AdapterDriver
+    from graphtraj.runtimes.dsh import execution
+
+    class Peer(NativePeer):
+        """Retain bridge context and stop without creating a project archive."""
+
+        def __init__(self, executable: str, cwd: Path, environment: dict) -> None:
+            """Expose the controlled service's owned process to authentication."""
+            super().__init__(executable, cwd, environment)
+            self.environment = environment
+            self.process.poll = lambda: None
+            rows = [json.loads(line) for line in self.log.read_text().splitlines()]
+            self.header, self.records = rows[0], rows[1:]
+            self.header['cwd'] = str(cwd)
+
+        def follow(self, session: str, *, assistant_stream: bool = False) -> dict:
+            """Return the native cut before any input for this invocation."""
+            return {'type': 'snapshot', 'header': self.header,
+                    'cursor': len(self.records) - 1, 'hasMore': False,
+                    'records': [{'event': row} for row in self.records]}
+
+        def history(self, snapshot: dict) -> list[dict]:
+            """This controlled native history fits in its opening page."""
+            return snapshot['records']
+
+        def receive(self, timeout: float = 1) -> dict:
+            """Publish native events before the separately delayed disk flush."""
+            frame = super().receive(timeout)
+            if frame.get('type') == 'event':
+                row = frame['event']
+                row.update(seq=len(self.records), time=100 + len(self.records))
+                if row['type'] == 'assistant/message':
+                    row.update(surfaceOp='append', data={'turn': 0, 'step': 0, 'stream': [], 'message': {
+                        'id': 'answer', 'role': 'assistant',
+                        'source': {'kind': 'model', 'provider': 'controlled', 'model': 'peer'},
+                        'content': [{'type': 'text', 'text': 'Native response'}],
+                    }})
+                else:
+                    row['data'] = {'turn': 0, 'reason': {'kind': 'completed'}}
+                self.records.append(row)
+            return frame
+
+        def close(self) -> None:
+            """End only this controlled service."""
+            self.log.write_text(''.join(json.dumps(row) + '\n' for row in [self.header, *self.records]))
+            self.closed = True
+
+    NativePeer.instances = []
+    monkeypatch.setattr(execution, 'DshService', Peer)
+    driver = AdapterDriver(tmp_path, tmp_path)
+    monkeypatch.setattr(driver, 'prepare', lambda runtime, caller: {
+        'adapter_request': request(tmp_path), 'evidence': {},
+    })
+    control = AgentControl(tmp_path / '.graphtraj/swarm', {'dsh': driver})
+    from agent_swarm import write_config
+    from graphtraj.sessions.archive import SessionArchive, JsonlSessionStore, archive_path
+
+    write_config(control.root, save_normalized_sessions=archiving)
+    archive = SessionArchive(control.root, save_normalized_sessions=archiving)
+    agents = bind(control, Caller('test-host', None), archive=archive)
+    created = agents({'action': 'create', 'runtime': 'dsh', 'instruction': 'remember marker'})
+    assert not created.failed, created.document
+    agent = created.document['agent']
+    first = NativePeer.instances[-1]
+    assert first.environment['GRAPHTRAJ_DSH_AGENTS_ONLY'] == '1'
+
+    # The actual stdio entry forwards into the registered host's common handler;
+    # it receives no Task identity or authority from model arguments.
+    result = subprocess.run(
+        [sys.executable, '-m', 'agent_swarm.mcp'],
+        input=json.dumps({'jsonrpc': '2.0', 'id': 1, 'method': 'tools/call', 'params': {
+            'name': 'agents', 'arguments': {'action': 'execute', 'feature': 'status', 'arguments': {}}}}) + '\n',
+        env={**first.environment, 'DSH_SESSION_ID': first.session, 'DSH_AGENT_SOURCE': 'main',
+             'PYTHONPATH': str(Path(__file__).resolve().parents[1] / 'src')},
+        cwd=tmp_path, capture_output=True, text=True, timeout=10,
+    )
+    try:
+        assert result.returncode == 0, result.stderr
+        assert not json.loads(result.stdout)['result']['isError'], result.stdout
+        assert not agents({'action': 'send', 'agent': agent, 'message': 'second message'}).failed
+    finally:
+        first.release_cancel.set()
+        agents({'action': 'interrupt', 'agent': agent})
+    stopped = agents({'action': 'wait', 'agent': agent, 'timeout_seconds': 5})
+    assert stopped.document['result']['state'] == 'standby', stopped.document
+    assert not (tmp_path / '.graphtraj/config.yml').exists()
+    assert not (tmp_path / '.graphtraj/state').exists()
+    assert (tmp_path / '.graphtraj/swarm/sessions').exists() == archiving
+
+    resumed = agents({'action': 'resume', 'agent': agent, 'message': 'recall marker'})
+    assert resumed.document['session'] == created.document['session']
+    second = NativePeer.instances[-1]
+    second.frames.extend(['assistant/message', 'turn/end'])
+    ended = agents({'action': 'wait', 'agent': agent, 'timeout_seconds': 5})
+    assert ended.document['result']['state'] == 'standby'
+    assert ended.document['result']['last_result']['last_message'] == 'Native response', ended.document
+    if archiving:
+        store = JsonlSessionStore(archive_path(control.root, 'dsh:' + resumed.document['session']))
+        assert store.messages()[0]['content'][0]['text'] == 'Native response'
+
+
 def wait_for_request(turn: Any, timeout: float = 3) -> dict:
     """Poll the public requests operation until the native request is published."""
     deadline = time.monotonic() + timeout
@@ -240,6 +370,94 @@ def notices(monkeypatch: pytest.MonkeyPatch) -> list:
 
 class TaggedLoader(yaml.SafeLoader):
     """Read DSH `!!js` expressions back as their exact source text."""
+
+
+def test_stop_drains_cursorless_terminal_before_native_flush(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A cancel receipt cannot close before queued final/live frames are collected."""
+    from concurrent.futures import ThreadPoolExecutor
+    from agent_swarm.dsh.execution import DshExecution
+    from graphtraj.runtimes.dsh.collection import DshArchive
+    from graphtraj.sessions.archive import SessionArchive, JsonlSessionStore, archive_path
+
+    class StreamingPeer(NativePeer):
+        """Separate native event commitment, transport delivery and disk flush."""
+
+        def __init__(self, executable: str, cwd: Path, environment: dict) -> None:
+            """Keep native in-memory commitment separate from its disk log."""
+            super().__init__(executable, cwd, environment)
+            self.header = json.loads(self.log.read_text().splitlines()[0])
+            self.records = []
+
+        def follow(self, session: str, *, assistant_stream: bool = False) -> dict:
+            """Expose the real follow option and an empty native opening cut."""
+            assert assistant_stream
+            return {'header': self.header, 'cursor': -1, 'records': [],
+                    'assistantStream': {'revision': 0}}
+
+        def history(self, snapshot: dict) -> list:
+            """This new Session has no historical prefix."""
+            return []
+
+        def append(self, kind: str, data: dict) -> None:
+            """Commit the native log before scheduling its transport notification."""
+            row = {'seq': len(self.records), 'time': 100, 'type': kind, 'data': data}
+            self.records.append(row)
+            self.frames.append({'type': 'event', 'event': row})
+
+        def rpc(self, method: str, body: dict | None = None) -> dict:
+            """Queue final frames at cancellation, before the caller receives them."""
+            result = super().rpc(method, body)
+            if method == 'session/prompt':
+                self.append('turn/start', {'turn': 0})
+                self.frames.extend([
+                    {'type': 'assistant-stream', 'frame': {'type': 'start', 'attemptId': 'a',
+                        'revision': 1, 'turn': 0, 'step': 0, 'startedAfterSeq': 0}},
+                    {'type': 'assistant-stream', 'frame': {'type': 'chunk', 'attemptId': 'a',
+                        'revision': 2, 'index': 0, 'time': 99,
+                        'chunk': {'type': 'text-delta', 'index': 0, 'text': 'interrupted text'}}},
+                ])
+            if method == 'session/cancel':
+                self.running = False
+                self.append('assistant/attempt', {'turn': 0, 'step': 0, 'stream': [
+                    {'type': 'text-chunks', 'index': 0, 'time0': 99, 'dt': [], 'texts': ['interrupted text']},
+                ]})
+                self.frames.append({'type': 'assistant-stream', 'frame': {
+                    'type': 'end', 'attemptId': 'a', 'revision': 3, 'index': 1,
+                    'outcome': {'kind': 'committed', 'eventType': 'assistant/attempt', 'seq': 1},
+                }})
+                self.append('turn/end', {'turn': 0, 'reason': {'kind': 'completed'}})
+            return result
+
+        def close(self) -> None:
+            """Flush only after the stopped follow cut has been consumed."""
+            assert not self.frames  # The native stopped cut was drained first.
+            self.log.write_text(''.join(json.dumps(row) + '\n' for row in [self.header, *self.records]))
+            self.closed = True
+
+    monkeypatch.setenv('DSH_TEST_KEY', 'controlled-peer-key')
+    turn = DshExecution(request(tmp_path), 'begin', tmp_path, lambda *args: None,
+                        lambda *args: None, tmp_path / 'trace.jsonl', None)
+    turn.service_type = StreamingPeer
+    archive = SessionArchive(tmp_path / 'archive', save_normalized_sessions=True)
+    turn.archive = DshArchive(archive, resumed=False)
+    path = archive_path(archive.root, 'dsh:native-dsh')
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        future = pool.submit(turn.run)
+        deadline = time.monotonic() + 5
+        while time.monotonic() < deadline:
+            if path.exists() and any(item['event']['data']['stream'] for item in JsonlSessionStore(path).pending()):
+                break
+            time.sleep(0.005)
+        else:
+            turn.terminate()
+            raise AssertionError('Live partial was not checkpointed before cancellation.')
+        turn.terminate()
+        assert future.result(timeout=5)['outcome'] == 'interrupted'
+    store = JsonlSessionStore(path)
+    assert not store.pending()
+    assert len(store.observations()) == 1
+    assert store.observations()[0]['final'] == ['dsh', 'native-dsh', 'event/1']
+    assert store.page()['events'][1]['data']['stream'][0]['texts'] == ['interrupted text']
 
 
 TaggedLoader.add_constructor(
@@ -612,7 +830,7 @@ def test_public_json_cli_uses_host_identity_and_report_checks(tmp_path: Path) ->
         tmp_path, 'research@x1', native_operation_features(),
     ) as address:
         result = subprocess.run(
-            [sys.executable, '-c', 'from graphtraj.interfaces.local_tool import main; main()'],
+            [sys.executable, '-m', 'agent_swarm.mcp'],
             cwd=tmp_path, env={**os.environ, CONNECTION_ENV: address,
                               'GRAPHTRAJ_CALLER_ALIAS': 'research@x2',
                               'PYTHONPATH': str(Path(__file__).resolve().parents[1] / 'src')},
@@ -679,6 +897,7 @@ def test_native_remote_envelopes_and_authentication_failure(
     monkeypatch.setattr(urllib.request, 'build_opener', lambda *args: Remote())
     assert service.rpc('session/list', {}) == {'accepted': True}
     assert service.rpc('session/create', {}) == {'accepted': True}
+    assert service.rpc('agentMessages/receive', {}) == {'accepted': True}
     fail = True
     with pytest.raises(RuntimeAdapterError) as rejected:
         service.rpc('session/list', {})

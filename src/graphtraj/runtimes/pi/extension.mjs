@@ -3,6 +3,50 @@ import { spawn } from 'node:child_process';
 import { existsSync, readFileSync, realpathSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+/** Render the same successful MCP communication facts without model injection. */
+export function registerAgentDisplay(pi, sdk) {
+  const customType = 'graphtraj:agent-communication';
+  pi.registerEntryRenderer(customType, entry => {
+    const { sender, recipient, body } = entry.data;
+    return new sdk.CustomMessageComponent({
+      role: 'custom', customType: `agents · ${sender} → ${recipient}`,
+      content: body, display: true, timestamp: 0,
+    });
+  });
+
+  pi.on('tool_result', (event, ctx) => {
+    if (!ctx.hasUI || event.isError || !['graphtraj', 'agents'].includes(event.details?.server)) return;
+    const tool = event.details.tool;
+    const input = tool === 'agents' && event.input.action === 'execute'
+        ? {action: event.input.feature, ...event.input.arguments} : undefined;
+    if (!input) return;
+    const result = event.structuredContent?.structuredContent;
+    if (!result || result.error || !result.agent) return;
+    const record = result.result || {};
+    const caller = record.parent || ctx.sessionManager.getSessionId();
+    const child = record.name || result.agent;
+
+    // ponytail: scan native display entries; index only if measured history
+    // size warrants it. Persisted fact IDs also deduplicate after reload.
+    const displayed = new Set(ctx.sessionManager.getEntries()
+      .filter(entry => entry.type === 'custom' && entry.customType === customType)
+      .map(entry => entry.data.fact));
+    const append = (fact, sender, recipient, body, execution = result.execution) => {
+      if (typeof body !== 'string' || !body || displayed.has(fact)) return;
+      pi.appendEntry(customType, { fact, sender, recipient, body, agent: result.agent,
+        session: result.session, execution, source: 'agents' });
+      displayed.add(fact);
+    };
+    if (['create', 'send', 'resume'].includes(input.action) && record.resumed !== false) {
+      append(`send:${event.toolCallId}`, caller, child, input.instruction ?? input.message);
+    }
+    const reply = record.last_result;
+    if (reply?.id) append(`reply:${result.agent}:${reply.id}`, child, caller, reply.last_message, reply.id);
+    // appendEntry is Pi's display/state-only path. Do not return a modified
+    // tool result or use sendMessage: either would change the model input.
+  });
+}
+
 
 /** Resolve the import-only public SDK export of the actual owning Pi CLI. */
 export async function loadHostSdk(executable = process.argv[1]) {
@@ -74,7 +118,7 @@ export function startCollection(ctx, environment) {
     child.on('error', error => { failure = error; reject(error); });
     child.stdin.on('error', error => { failure = error; });
     child.stdin.write(JSON.stringify({header: ctx.sessionManager?.getHeader(),
-      entries: ctx.sessionManager?.getEntries().filter(entry => entry.type === 'custom')}) + '\n');
+      entries: ctx.sessionManager?.getEntries(), leafId: ctx.sessionManager?.getLeafId?.()}) + '\n');
     child.stdout.once('data', () => {
       ready = true;
       resolve({
@@ -98,14 +142,99 @@ function quote(value) {
   return "'" + value.replaceAll("'", "'\\''") + "'";
 }
 
+/** Own the independent core until native shutdown; MCP only connects to it. */
+export function startAgentHost(ctx, config) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(process.env.AGENT_SWARM_PYTHON,
+      ['-I', '-m', 'graphtraj.runtimes.pi.host', '--config', config], {
+        cwd: ctx.cwd, stdio: ['pipe', 'pipe', 'pipe'],
+        env: {...process.env, ...sessionEnvironment(ctx, process.env),
+          AGENT_SWARM_PI_NODE: process.execPath,
+          AGENT_SWARM_PI_ENTRY: process.argv[1],
+          AGENT_SWARM_PI_MODEL: ctx.model?.id || '',
+          AGENT_SWARM_PI_PROVIDER: ctx.model?.provider || ''},
+      });
+    let diagnostic = '', output = '', failure, ready = false;
+    child.stdout.setEncoding('utf8');
+    child.stderr.setEncoding('utf8');
+    child.stderr.on('data', value => { diagnostic = (diagnostic + value).slice(-8192); });
+    const ended = new Promise(done => child.on('close', code => {
+      if (code !== 0 || !ready) failure = new Error(diagnostic || 'Independent Pi host failed.');
+      if (failure) reject(failure);
+      done();
+    }));
+    child.on('error', error => { failure = error; reject(error); });
+    child.stdin.on('error', error => { failure = error; });
+    child.stdin.write(JSON.stringify({header: ctx.sessionManager.getHeader(),
+      entries: ctx.sessionManager.getEntries().filter(entry => entry.type === 'custom')}) + '\n');
+    child.stdout.on('data', value => {
+      output += value;
+      if (ready || !output.includes('\n')) return;
+      try {
+        const {connection} = JSON.parse(output.slice(0, output.indexOf('\n')));
+        if (typeof connection !== 'string' || !connection) throw new Error('No independent host connection.');
+        ready = true;
+        resolve({connection, async close() {
+          child.stdin.end();
+          await ended;
+          if (failure) throw failure;
+        }});
+      } catch (error) { child.stdin.end(); reject(error); }
+    });
+  });
+}
+
 export default function graphtraj(pi) {
   const sessions = new WeakMap();
   const collectors = new WeakMap();
+  const independent = new WeakSet();
+  let agentHost;
+  let displayRegistered = false;
   pi.registerFlag('graphtraj-finish-check', { type: 'boolean', default: false,
     description: 'Check Main completion using the current native Session context.' });
+  pi.registerFlag('agents-config', { type: 'string',
+    description: 'Explicit independent agents host configuration with preflighted Pi settings.' });
   pi.on('session_start', async (event, ctx) => {
+    await agentHost?.close();
+    agentHost = undefined;
+    independent.delete(ctx.sessionManager);
     await collectors.get(ctx.sessionManager)?.close();
     collectors.delete(ctx.sessionManager);
+    if (ctx.hasUI && !displayRegistered) {
+      registerAgentDisplay(pi, await loadHostSdk());
+      displayRegistered = true;
+    }
+    const hasIndependent = Object.hasOwn(process.env, 'AGENT_SWARM_CONNECTION');
+    const hasGraphTraj = Object.hasOwn(process.env, 'GRAPHTRAJ_CLI_CONNECTION');
+    if (hasIndependent && hasGraphTraj) throw new Error('Conflicting existing Agent connections; no identity was adopted.');
+    if (hasIndependent) {
+      if (!process.env.AGENT_SWARM_CONNECTION) throw new Error('The existing Agent connection is empty; no identity was adopted.');
+      independent.add(ctx.sessionManager);
+      // This is the official MCP client wiring, not a native model tool.
+      // Identity is verified by the owning host's kernel-authenticated pipe.
+      pi.registerMcpServer('agents', {
+        command: process.env.AGENT_SWARM_PYTHON, args: ['-I', '-m', 'agent_swarm.mcp'],
+        cwd: ctx.cwd, env: {AGENT_SWARM_CONNECTION: process.env.AGENT_SWARM_CONNECTION}, exposure: 'direct',
+      });
+      return;
+    }
+    const agentsConfig = pi.getFlag?.('agents-config');
+    if (agentsConfig) {
+      if (hasGraphTraj || Object.hasOwn(process.env, 'DSH_SESSION_ID') || Object.hasOwn(process.env, 'DSH_AGENT_SOURCE')) {
+        throw new Error('Standalone agents config cannot replace an existing managed Agent context; retain its owning connection.');
+      }
+      if (!process.env.AGENT_SWARM_PYTHON) throw new Error('Independent agents requires its selected Python installation.');
+      independent.add(ctx.sessionManager);
+      agentHost = await startAgentHost(ctx, agentsConfig);
+      try {
+        pi.registerMcpServer('agents', {
+          command: process.env.AGENT_SWARM_PYTHON,
+          args: ['-I', '-m', 'agent_swarm.mcp'], cwd: ctx.cwd,
+          env: {AGENT_SWARM_CONNECTION: agentHost.connection}, exposure: 'direct',
+        });
+      } catch (error) { await agentHost.close(); agentHost = undefined; throw error; }
+      return;
+    }
     const environment = sessionEnvironment(ctx, process.env);
     sessions.set(ctx.sessionManager, environment);
     const result = await nativeEntry(ctx, environment, {
@@ -126,16 +255,24 @@ export default function graphtraj(pi) {
     'message_end', 'tool_execution_start', 'tool_execution_update', 'tool_execution_end',
     'turn_end', 'agent_end', 'session_tree', 'session_compact']) {
     pi.on(kind, async (event, ctx) => {
-      await collectors.get(ctx.sessionManager)?.write(event);
+      const piNative = ['turn_end', 'agent_end', 'session_tree', 'session_compact'].includes(kind)
+        ? {entries: ctx.sessionManager.getEntries(), leafId: ctx.sessionManager.getLeafId()} : undefined;
+      await collectors.get(ctx.sessionManager)?.write(piNative ? {...event, piNative} : event);
     });
   }
   pi.on('session_shutdown', async (_event, ctx) => {
+    await agentHost?.close();
+    agentHost = undefined;
+    await collectors.get(ctx.sessionManager)?.write({type: 'session_shutdown', piNative: {
+      entries: ctx.sessionManager.getEntries(), leafId: ctx.sessionManager.getLeafId(),
+    }});
     await collectors.get(ctx.sessionManager)?.close();
     collectors.delete(ctx.sessionManager);
   });
   pi.on('tool_call', async (event, ctx) => {
     await collectors.get(ctx.sessionManager)?.write(event);
     if (event.toolName !== 'bash') return;
+    if (independent.has(ctx.sessionManager)) return;
     const environment = sessions.get(ctx.sessionManager);
     if (!environment) return { block: true, reason: 'GraphTraj Session entry is unavailable.' };
     // Preserve the selected bash backend and all native tool/approval handlers.

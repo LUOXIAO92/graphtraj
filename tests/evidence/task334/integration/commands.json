@@ -1,0 +1,115 @@
+[
+  {
+    "cwd": "/private/tmp/task334-merge-validation",
+    "argv": [
+      "/private/tmp/task331-venv/bin/python",
+      "-m",
+      "pytest",
+      "-c",
+      "pyproject.toml",
+      "--rootdir=.",
+      "--confcutdir=.",
+      "-p",
+      "no:cacheprovider",
+      "-q",
+      "tests/test_agents_mcp_bridge.py",
+      "tests/test_agent_completion.py",
+      "tests/test_agents_native_codex.py",
+      "tests/test_agents_native_claude.py::test_shared_connection_and_archive_binding_for_claude",
+      "tests/test_claude_mcp.py",
+      "tests/test_hosted_cli.py::test_shared_mcp_command_consumes_bound_graphtraj_dsh_channel",
+      "tests/test_dsh_runtime.py::test_agents_control_dsh_without_task_or_archive",
+      "tests/test_dsh_collection.py::test_optional_jsonl_uses_native_order_and_backfill_policy",
+      "tests/test_dsh_collection.py::test_native_gap_backfill_and_disk_confirmation",
+      "tests/test_dsh_collection.py::test_live_frames_resolve_only_native_terminal_seq",
+      "tests/test_dsh_collection.py::test_terminal_observation_survives_gap_and_later_backfill",
+      "tests/test_session_protocol.py::test_assistant_replacement_requires_current_surface_coverage",
+      "tests/test_session_protocol.py::test_jsonl_messages_consume_assistant_replacement",
+      "tests/test_codex_jsonl_archive.py",
+      "tests/test_claude_jsonl.py"
+    ],
+    "log": "focused-checks.txt",
+    "result": "66 passed, 12 skipped",
+    "exit_code": 0
+  },
+  {
+    "cwd": "/private/tmp/task334-merge-validation",
+    "argv": [
+      "/private/tmp/task331-venv/bin/python",
+      "-m",
+      "pytest",
+      "-c",
+      "pyproject.toml",
+      "--rootdir=.",
+      "--confcutdir=.",
+      "-p",
+      "no:cacheprovider",
+      "-q",
+      "tests/test_hosted_cli.py",
+      "tests/test_agents_cli.py",
+      "tests/test_agent_control.py",
+      "tests/test_mcp_host_tools.py::test_mcp_agents_preserves_verified_main_and_helper_authority"
+    ],
+    "log": "host-control-checks.txt",
+    "result": "25 passed, 1 baseline failure",
+    "exit_code": 1
+  },
+  {
+    "cwd": "/private/tmp/task334-merge-validation",
+    "argv": [
+      "/private/tmp/task331-venv/bin/python",
+      "-m",
+      "pytest",
+      "-c",
+      "pyproject.toml",
+      "--rootdir=.",
+      "--confcutdir=.",
+      "-p",
+      "no:cacheprovider",
+      "-q",
+      "tests/test_agents_native_pi.py"
+    ],
+    "log": "pi-combination-checks.txt",
+    "result": "2 passed",
+    "exit_code": 0
+  },
+  {
+    "cwd": "/private/tmp/task334-merge-validation",
+    "argv": [
+      "/private/tmp/task331-venv/bin/python",
+      "-m",
+      "pytest",
+      "-c",
+      "pyproject.toml",
+      "--rootdir=.",
+      "--confcutdir=.",
+      "-p",
+      "no:cacheprovider",
+      "-q",
+      "tests/test_agents_mcp_bridge.py::test_codex_metadata_uses_the_shared_owner_connection"
+    ],
+    "log": "codex-metadata-check.txt",
+    "result": "1 passed",
+    "exit_code": 0
+  },
+  {
+    "cwd": "/private/tmp/task334-dev-baseline",
+    "source_commit": "8ec86c366b07d84638078450f63ea6da87af5e93",
+    "argv": [
+      "/private/tmp/task331-venv/bin/python",
+      "-m",
+      "pytest",
+      "-c",
+      "pyproject.toml",
+      "--rootdir=.",
+      "--confcutdir=.",
+      "-p",
+      "no:cacheprovider",
+      "-q",
+      "tests/test_hosted_cli.py::test_native_submission_errors_identify_wrong_reference_and_git_failure"
+    ],
+    "log": "dev-baseline-failure.txt",
+    "result": "1 failed: same assertion as merged source",
+    "exit_code": 1
+  }
+]

@@ -1,0 +1,14 @@
+{
+  "name": "agents-dsh",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "plugin.mjs",
+  "exports": { ".": "./plugin.mjs", "./client": "./client.mjs" },
+  "dsh": {
+    "client": {
+      "platform": "web",
+      "inject": ["@deepseek-ai/dsh-client-ui-tool", "@deepseek-ai/dsh-client-ui-renderer", "@deepseek-ai/dsh-client-ui-chat"]
+    }
+  }
+}

@@ -115,3 +115,37 @@ def test_dsh_native_assertions_constrain_the_existing_bound_caller(tmp_path: Pat
         finally:
             child.stdin.close()
             child.wait(timeout=10)
+
+
+def test_codex_metadata_uses_the_shared_owner_connection(tmp_path: Path) -> None:
+    """Request metadata constrains the bound caller even with a different env locator."""
+    calls = []
+    child = None
+    expected = {'runtime': 'codex', 'session': 'verified-codex-session', 'cwd': str(tmp_path)}
+
+    def call(request: dict) -> AgentsResult:
+        """Record requests that passed both process and native Session verification."""
+        calls.append(request)
+        return AgentsResult({'result': {'bound_agent': 'actual-child'}})
+
+    with agents_connection(tmp_path / 'channel', call, lambda pid: authenticate_process(child, pid),
+                           native_context=lambda: expected) as address:
+        env = {**os.environ, 'AGENT_SWARM_CONNECTION': address,
+               'GRAPHTRAJ_NATIVE_RUNTIME': 'codex', 'CODEX_THREAD_ID': 'other-session',
+               'PYTHONPATH': str(Path(__file__).resolve().parents[1] / 'src')}
+        for name in ('GRAPHTRAJ_CLI_CONNECTION', 'DSH_SESSION_ID', 'DSH_AGENT_SOURCE'):
+            env.pop(name, None)
+        child = subprocess.Popen([sys.executable, '-m', 'agent_swarm.mcp'], env=env, cwd=tmp_path,
+                                 stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        try:
+            for session in (expected['session'], 'forged-session'):
+                result = exchange(child, {'jsonrpc': '2.0', 'id': 1, 'method': 'tools/call',
+                    'params': {'name': 'agents', '_meta': {'threadId': session},
+                               'arguments': {'action': 'execute', 'feature': 'status', 'arguments': {}}}})['result']
+                assert result['isError'] is (session != expected['session'])
+                if result['isError']:
+                    assert result['structuredContent']['error']['code'] == 'authority-denied'
+            assert calls == [{'action': 'status'}]
+        finally:
+            child.stdin.close()
+            child.wait(timeout=10)

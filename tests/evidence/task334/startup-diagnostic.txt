@@ -1,0 +1,26 @@
+DSH exited before authentication (pid=26109, exit=1).
+dsh: startup failed: 2 required plugins did not activate
+
+Failed plugins (1):
+webserver (required)
+Package: @deepseek-ai/dsh-host-webserver
+Error: listen EPERM: operation not permitted 127.0.0.1
+at Server.setupListenHandle [as _listen2] (node:net:2145:21)
+at listenInCluster (node:net:2224:12)
+at node:net:2448:7
+at process.processTicksAndRejections (node:internal/process/task_queues:90:21)
+
+Plugins waiting for services (10):
+Plugin                 Missing services
+connection (required)  webRuntime
+settings               configEditor
+session-log-download   connection
+open-in-app            webServer, connection
+directory-picker       webServer
+session-controller     fileUploads
+web-runtime            webServer
+client-hmr             webServer
+file-upload            connection
+ui-deliverables        connection, sessionController
+
+Full diagnostics: /private/tmp/task334-final-cd527de/test_actual_client_interrupt_a0/agents/native/agent-55a851da1900487193f749f3c4c34847/dsh-home/logs/startup-2026-10-18T10-24-14.490Z-c2444c76-1892-4b61-9376-a1e7029df1d9.log

@@ -202,7 +202,8 @@ def test_snapshot_captures_swarm_configuration_and_can_clone(tmp_path: Path, mon
     assert checked.exit_code == 0, checked.output
     verification = yaml.safe_load(checked.output)['verification']
     assert not verification['matches']
-    assert verification['retained_swarm']['mismatches'] == ['sessions/retained/session.jsonl:native-records-or-order']
+    reference = archive_path(target / '.graphtraj/swarm', 'retained').relative_to(target / '.graphtraj/swarm')
+    assert verification['retained_swarm']['mismatches'] == [reference.as_posix() + ':native-records-or-order']
 
 
 def test_archive_collectors_work_with_no_graphtraj_package(tmp_path: Path) -> None:

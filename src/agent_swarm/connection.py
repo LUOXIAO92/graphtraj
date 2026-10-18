@@ -25,6 +25,25 @@ if os.name != 'nt':
     import fcntl
 
 OPERATION_TIMEOUT_SECONDS = 10.0
+CONNECTION_ENV = 'AGENT_SWARM_CONNECTION'
+
+
+def call_owner(request: dict) -> AgentsResult:
+    """Call the independent host bound to this process, without Task fallback.
+
+    The environment locates the channel; its owner verifies the kernel PID
+    and any native Session assertions before invoking the existing callback.
+    Missing or conflicting connections never create a caller or controller.
+    """
+    if CONNECTION_ENV in os.environ and 'GRAPHTRAJ_CLI_CONNECTION' in os.environ:
+        raise AgentsError('authority-denied', 'Both independent and GraphTraj connections are present.')
+    address = os.environ.get(CONNECTION_ENV)
+    if not address:
+        raise AgentsError('authority-denied', 'The owning Agent connection is unavailable.')
+    native = client_native_context()
+    document = {'request': request, 'native': native} if native is not None else request
+    result = connection_operation(address, document, authenticate=True, await_accepted=True)
+    return AgentsResult(result['document'], failed=result['failed'])
 
 
 @contextmanager

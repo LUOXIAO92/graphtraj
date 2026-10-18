@@ -6,11 +6,10 @@ import os
 import sys
 from typing import Any, Callable, Mapping, TextIO
 
-from agent_swarm.connection import client_native_context, connection_operation
+from agent_swarm.connection import CONNECTION_ENV, call_owner, client_native_context
 from agent_swarm.discovery import INPUT_SCHEMA
 from agent_swarm.tool import AgentsError
 
-CONNECTION_ENV = 'AGENT_SWARM_CONNECTION'
 PROTOCOL_VERSION = '2025-06-18'
 
 
@@ -84,15 +83,8 @@ def call(request_id: Any, params: Mapping) -> dict:
     if not isinstance(request, dict):
         return error_response(request_id, -32602, 'Tool arguments must be an object.')
     try:
-        address = os.environ.get(CONNECTION_ENV)
-        if CONNECTION_ENV in os.environ and 'GRAPHTRAJ_CLI_CONNECTION' in os.environ:
-            raise AgentsError('authority-denied', 'Both independent and GraphTraj connections are present.')
-        if not address:
-            raise AgentsError('authority-denied', 'The owning Agent connection is unavailable.')
-        native = client_native_context()
-        document = {'request': request, 'native': native} if native is not None else request
-        result = connection_operation(address, document, authenticate=True, await_accepted=True)
-        document, failed = result['document'], result['failed']
+        result = call_owner(request)
+        document, failed = result.document, result.failed
     except AgentsError as error:
         document = {'error': {'code': error.code, 'message': error.message}}
         failed = True

@@ -1285,14 +1285,19 @@ def bind_main_finalize(arguments: Mapping[str, Any], *, cwd: Path | None = None)
     """Bind the root caller's actual host without accepting model identity fields."""
     from graphtraj.execution.main_finalize import bind_main_finalize as bind
 
-    return ToolResult(bind(_string_argument(arguments, 'summary_issue'), cwd or Path.cwd()))
+    return ToolResult(bind(_string_argument(arguments, 'summary_issue'), cwd or Path.cwd(),
+                           paused=arguments.get('paused')))
 
 
 register_tool(
     'bind_main_finalize',
     'Bind Main completion checking to the current host and return its hook configuration.',
-    {'type': 'object', 'properties': {'summary_issue': {'type': 'string'}},
-     'required': ['summary_issue'], 'additionalProperties': False},
+    {'type': 'object', 'properties': {
+        'summary_issue': {'type': 'string'},
+        'paused': {'type': 'boolean', 'description':
+                   'Record an explicit user pause or resume of implementation; omit to retain it. '
+                   'Only the owning Main may change it. Notifications never resume paused work.'},
+     }, 'required': ['summary_issue'], 'additionalProperties': False},
     bind_main_finalize,
     manual_ref="manuals/task-delivery/guide.md",
 )

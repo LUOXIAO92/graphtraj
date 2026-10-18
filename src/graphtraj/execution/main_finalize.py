@@ -22,7 +22,7 @@ from graphtraj.runtimes.runtime_adapter import current_host_connection, select_r
 from graphtraj.workspace.runner_project import discover_runner_directory, discover_project_root
 
 
-def bind_main_finalize(summary_issue: str, cwd: Path) -> dict[str, Any]:
+def bind_main_finalize(summary_issue: str, cwd: Path, paused: bool | None = None) -> dict[str, Any]:
     """Capture the actual root caller; return hook material for host adoption.
 
     No identity, model or connection is accepted from operation arguments.
@@ -36,7 +36,9 @@ def bind_main_finalize(summary_issue: str, cwd: Path) -> dict[str, Any]:
     connection = current_host_connection()
     if connection is None:
         raise RunnerError('unsupported-operation', 'The current native Main host is unavailable.')
-    return bind_session(connection, cwd, summary_issue)
+    if paused is not None and connection['runtime'] != 'codex':
+        raise RunnerError('unsupported-operation', 'Explicit user pause is supported by the Codex Stop hook.')
+    return bind_session(connection, cwd, summary_issue, paused=paused)
 
 
 def bind_session(
@@ -44,6 +46,7 @@ def bind_session(
     cwd: Path,
     summary_issue: str = '',
     activity_source: str | None = None,
+    paused: bool | None = None,
 ) -> dict[str, Any]:
     """Associate an Adapter-observed external Session using existing Main storage.
 
@@ -79,24 +82,34 @@ def bind_session(
     }
     directory.mkdir(parents=True, exist_ok=True)
     path = directory / 'session.yml'
-    if path.exists():
-        previous = yaml.safe_load(path.read_text())
-        if any(previous.get(key) != binding[key]
-               for key in ('runtime', 'session', 'cwd')):
-            raise RunnerError('authority-denied', 'This Main already has a different Session binding.')
-    else:
-        previous = {}
-    if not summary_issue:
-        binding['summary_issue'] = previous.get('summary_issue', '')
-    # Retain the source supplied by native entry without changing caller identity.
-    source = activity_source or connection.get('session_file')
-    activity = dict(previous.get('activity', {}))
-    if source:
-        activity['trace_file'] = str(Path(source).resolve())
-    if activity:
-        binding['activity'] = activity
-    write_yaml_durably(path, binding)
-    return {'binding': str(path), 'session': session,
+    with (directory / 'binding.lock').open('a+b') as lock:
+        file_lock.flock(lock, file_lock.LOCK_EX)
+        if path.exists():
+            previous = yaml.safe_load(path.read_text())
+            if any(previous.get(key) != binding[key]
+                   for key in ('runtime', 'session', 'cwd')):
+                raise RunnerError('authority-denied', 'This Main already has a different Session binding.')
+        else:
+            previous = {}
+        if not summary_issue:
+            binding['summary_issue'] = previous.get('summary_issue', '')
+        # Native rebinding and notifications retain the user's explicit pause.
+        pause = dict(previous.get('user_pause', {'paused': False, 'revision': 0}))
+        if paused is not None:
+            if type(paused) is not bool:
+                raise ValueError('The user pause must be a boolean.')
+            if pause['paused'] != paused:
+                pause = {'paused': paused, 'revision': pause['revision'] + 1}
+        binding['user_pause'] = pause
+        # Retain the source supplied by native entry without changing caller identity.
+        source = activity_source or connection.get('session_file')
+        activity = dict(previous.get('activity', {}))
+        if source:
+            activity['trace_file'] = str(Path(source).resolve())
+        if activity:
+            binding['activity'] = activity
+        write_yaml_durably(path, binding)
+    return {'binding': str(path), 'session': session, 'user_pause': pause,
             'hook': adapter.finalize_hook(path, binding)}
 
 

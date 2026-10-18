@@ -446,11 +446,11 @@ def test_other_adapter_uses_opaque_host_event(
     }
 
 
-@pytest.mark.parametrize('feature,allowed', [('task_graph', True), ('send_instruction', False)])
-def test_checker_has_no_sibling_control(
+@pytest.mark.parametrize('feature,allowed', [('task_graph', False), ('send_instruction', False)])
+def test_checker_rejects_retired_native_tools(
     host: tuple[Path, Path], feature: str, allowed: bool,
 ) -> None:
-    """The actual bound fork can read the graph but cannot become its parent."""
+    """Retired native registrations cannot bypass the CLI/MCP checker boundary."""
     root, binding = host
     request = {'action': 'execute', 'feature': feature, 'arguments': {}}
     (root / 'options.json').write_text(json.dumps({'tool_request': request}))

@@ -198,6 +198,9 @@ class CodexManagedExecution:
             address = connections.enter_context(cli_connection(
                 root, self.directory.name, native_operation_features(), self._review_recovery_sync,
                 native_context=native_context,
+                native_authorizer=lambda native, request: asyncio.run_coroutine_threadsafe(
+                    authorize_mcp_caller(self.adapter, self.native_session, self.directory.name,
+                                         root, cwd, native), self.loop).result(timeout=30),
             ))
             connection_env = CONNECTION_ENV
         elif self.independent and self.agent_call is not None:
@@ -673,6 +676,45 @@ class CodexManagedExecution:
                 pass
         self.loop.call_soon_threadsafe(lambda: asyncio.create_task(interrupt()))
         return True
+
+
+async def authorize_mcp_caller(
+    adapter: CodexAppServer,
+    native_session: str | None,
+    alias: str | None,
+    root: Path,
+    cwd: Path,
+    native: dict,
+) -> tuple[str | None, set[str]]:
+    """Keep existing native helper/checker summary access on an owned MCP channel.
+
+    Kernel process authentication precedes this check. A real parent chain or
+    the retained finish-check binding is required; fork lineage alone grants
+    nothing. Returned identities use the existing Runner caller scope.
+    """
+    from agent_swarm.connection import verify_native_context
+    from graphtraj.execution.runner_models import RunnerError
+    from graphtraj.runtimes.codex.session_entry import is_bound_checker, session_source
+    from graphtraj.workspace.runner_project import discover_runner_directory
+
+    thread = native.get('session') if isinstance(native, dict) else None
+    verify_native_context(native, {'runtime': 'codex', 'session': thread, 'cwd': str(cwd)})
+    if native_session is None:
+        raise RunnerError('authority-denied', 'The native Session is not ready.')
+    if thread == native_session:
+        return alias, native_operation_features()
+    current = thread
+    seen = set()
+    while current and current != native_session and current not in seen:
+        seen.add(current)
+        current = await adapter.read_thread_parent(current)
+    if current != native_session:
+        metadata = await adapter.read_thread(thread)
+        if (session_source(metadata) != 'main'
+                or metadata.get('forkedFromId') != native_session
+                or not is_bound_checker(discover_runner_directory(root), adapter.native_connection(thread))):
+            raise RunnerError('authority-denied', 'Caller is outside this native Session subtree.')
+    return thread, {'task_graph', 'alias_status'}
 
 
 def native_operation_features() -> set[str]:

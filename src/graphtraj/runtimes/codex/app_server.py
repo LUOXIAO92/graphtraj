@@ -376,6 +376,11 @@ class CodexAppServer:
                 or self._process.pid not in process_ancestors(pid)):
             raise AgentsError('authority-denied', 'Caller is outside the live Codex service.')
 
+    def native_connection(self, thread_id: str) -> dict:
+        """Return the selected service locator without credentials or inferred parentage."""
+        return {'runtime': 'codex', 'session': thread_id,
+                'codex_home': os.path.abspath(self._environment.get('CODEX_HOME', Path.home() / '.codex'))}
+
     @property
     def stderr_tail(self) -> str:
         """Return the last 16 KiB of service diagnostics, including startup errors."""

@@ -39,6 +39,7 @@ def test_codex_uses_progressive_mcp_with_native_session_authority(
     monkeypatch.setattr(runner_project, 'runtime_executable', lambda runtime: peer)
     monkeypatch.setenv('PYTHONPATH', str(Path(__file__).resolve().parents[1] / 'src'))
     monkeypatch.setenv('PEER_MCP_ISSUER', issuer)
+    monkeypatch.setenv('PEER_THREAD_PARENTS', json.dumps({'helper': 'thread-1'}))
     monkeypatch.setenv('PEER_NATIVE_ROLLOUT', str(tmp_path / 'native'))
     protocol = tmp_path / 'protocol.jsonl'
     monkeypatch.setenv('PEER_PROTOCOL_LOG', str(protocol))
@@ -50,6 +51,22 @@ def test_codex_uses_progressive_mcp_with_native_session_authority(
     ], 2):
         requests.append({'jsonrpc': '2.0', 'id': index, 'method': 'tools/call',
                          'params': {'name': 'agents', 'arguments': arguments}})
+    if host == 'main':
+        directory = tmp_path / '.graphtraj/runner/sessions/child@e1'
+        directory.mkdir(parents=True)
+        (directory / 'mapping.yml').write_text(yaml.safe_dump({
+            'alias': 'child@e1', 'parent': None, 'session': 'private-native-session',
+            'execution_id': 'private-turn', 'worker_pid': 1, 'runtime_pid': 1,
+            'runtime': 'codex', 'task_id': '133', 'team_generation': 2,
+            'role': 'engineer', 'retained_batch_file': 'batch.yml',
+            'worktree_path': str(tmp_path), 'trace_file': 'unused',
+        }))
+        (directory / 'execution.yml').write_text(yaml.safe_dump({
+            'outcome': 'completed', 'terminal_confirmed': True,
+        }))
+        requests.append({'jsonrpc': '2.0', 'id': 5, 'method': 'tools/call',
+                         'params': {'name': 'tasks', 'arguments': {'action': 'execute',
+                         'feature': 'alias_status', 'arguments': {'aliases': ['child@e1']}}}})
     monkeypatch.setenv('PEER_MCP_REQUESTS', json.dumps(requests))
 
     async def native_request(request: CodexServerRequest) -> dict:
@@ -78,6 +95,9 @@ def test_codex_uses_progressive_mcp_with_native_session_authority(
         # The formal gateway may disclose schemas locally; execution still
         # reaches the owner and must reject another native Session.
         assert observed[3]['result']['isError'] is True
+    if host == 'main':
+        assert observed[4]['result']['isError'] is False, observed[4]
+        assert ('private-native-session' in json.dumps(observed[4])) is (issuer == 'thread-1')
     start = next(json.loads(line)['params'] for line in protocol.read_text().splitlines()
                  if json.loads(line).get('method') == 'thread/start')
     assert not start.get('dynamicTools')

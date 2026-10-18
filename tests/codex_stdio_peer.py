@@ -4,6 +4,7 @@ import json
 import os
 import signal
 import subprocess
+import threading
 import sys
 import time
 from pathlib import Path
@@ -322,19 +323,22 @@ for line in incoming():
         elif prompt == 'large-output':
             complete(thread_id, turn_id, 'x' * 100_000)
         elif prompt == 'mcp-requests':
-            server = sessions[thread_id]['config']['mcp_servers']['graphtraj']
-            requests_to_send = json.loads(os.environ['PEER_MCP_REQUESTS'])
-            for entry in requests_to_send:
-                if entry['method'] == 'tools/call':
-                    entry['params']['_meta'] = {'threadId': os.environ.get('PEER_MCP_ISSUER', thread_id)}
-            environment = {key: value for key, value in os.environ.items()
-                           if key not in {'AGENT_SWARM_CONNECTION', 'GRAPHTRAJ_CLI_CONNECTION'}}
-            environment.update(server['env'])
-            response = subprocess.run([server['command'], *server['args']], cwd=server['cwd'],
-                                      env=environment, text=True, capture_output=True, timeout=10,
-                                      input=''.join(json.dumps(entry) + '\n' for entry in requests_to_send))
-            assert response.returncode == 0, response.stderr
-            complete(thread_id, turn_id, json.dumps([json.loads(line) for line in response.stdout.splitlines()]))
+            def run_mcp(thread_id=thread_id, turn_id=turn_id):
+                """Keep the peer available for concurrent native identity reads."""
+                server = sessions[thread_id]['config']['mcp_servers']['graphtraj']
+                requests_to_send = json.loads(os.environ['PEER_MCP_REQUESTS'])
+                for entry in requests_to_send:
+                    if entry['method'] == 'tools/call':
+                        entry['params']['_meta'] = {'threadId': os.environ.get('PEER_MCP_ISSUER', thread_id)}
+                environment = {key: value for key, value in os.environ.items()
+                               if key not in {'AGENT_SWARM_CONNECTION', 'GRAPHTRAJ_CLI_CONNECTION'}}
+                environment.update(server['env'])
+                response = subprocess.run([server['command'], *server['args']], cwd=server['cwd'],
+                                          env=environment, text=True, capture_output=True, timeout=10,
+                                          input=''.join(json.dumps(entry) + '\n' for entry in requests_to_send))
+                assert response.returncode == 0, response.stderr
+                complete(thread_id, turn_id, json.dumps([json.loads(line) for line in response.stdout.splitlines()]))
+            threading.Thread(target=run_mcp, daemon=True).start()
         elif prompt == 'configuration':
             if os.environ.get('PEER_CONFIGURATION_HOME'):
                 Path(os.environ['PEER_CONFIGURATION_HOME']).write_text(os.environ.get('CODEX_HOME', ''))

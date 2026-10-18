@@ -332,11 +332,7 @@ def check(
                 approvals[params['requestId']]['resolved'] = True
 
         async def handle(request: CodexServerRequest) -> dict:
-            """Expose only read-only GraphTraj task summaries to this exact checker."""
-            from graphtraj.interfaces.gateway import handle_request
-            from graphtraj.execution.runner_status import runtime_caller
-            from graphtraj.workspace.runner_project import discover_runner_directory
-
+            """Leave native approvals with Main; project queries now use CLI/MCP."""
             if child_id is None or request.params.get('threadId') != child_id:
                 # Subscribing to Main can replay its pending native requests.
                 # Its UI owns the response; serverRequest/resolved or connection
@@ -349,19 +345,10 @@ def check(
                 approvals[request.request_id] = {'request_id': request.request_id,
                                                  'method': request.method, 'resolved': False}
                 await asyncio.Future()
-            if (request.method != 'item/tool/call'
-                    or request.params.get('tool') != 'graphtraj'):
-                raise RuntimeAdapterError('authority-denied', 'The checker cannot approve or control work.')
-
-            def call() -> dict:
-                """Keep the fork's caller identity separate from the root Main."""
-                root = Path(binding['cwd'])
-                with runtime_caller(discover_runner_directory(root), child_id):
-                    result = handle_request(request.params.get('arguments', {}), cwd=root,
-                                            allowed_features={'task_graph', 'alias_status'})
-                return {'contentItems': [{'type': 'inputText', 'text': json.dumps(result.document)}],
-                        'success': not result.failed}
-            return await asyncio.to_thread(call)
+            if request.method == 'item/tool/call':
+                return {'success': False, 'contentItems': [{'type': 'inputText',
+                        'text': 'Project native tools were removed; use the tasks MCP entry or CLI.'}]}
+            raise RuntimeAdapterError('authority-denied', 'The checker cannot approve or control work.')
 
         async with proxy(binding['connection'], handle) as client:
             parent = await client.read_thread(binding['session'])

@@ -81,26 +81,29 @@ async def run_main(
         async with CodexAppServer(cwd=root, command=command, on_request=native_request,
                                   request_handler_timeout=None, experimental_api=True) as adapter:
             from agent_swarm import Caller
-            from agent_swarm.connection import verify_native_context
             from graphtraj.execution.runner_connection import worker_connection
             from graphtraj.execution.runner_status import runtime_caller
             from graphtraj.interfaces.agents import agents_callback
             from graphtraj.interfaces.gateway import handle_request
+            from graphtraj.runtimes.codex.managed_session import authorize_mcp_caller
+
+            loop = asyncio.get_running_loop()
 
             def operate(document: dict) -> dict:
                 """Bind only this native Main's authenticated stdio MCP requests."""
                 if set(document) != {'cwd', 'request', 'native'} or document['cwd'] != str(root):
                     raise RunnerError('authority-denied', 'The request is outside this Main host.')
-                verify_native_context(document['native'], {
-                    'runtime': 'codex', 'session': native_session, 'cwd': str(root),
-                })
+                identity, features = asyncio.run_coroutine_threadsafe(authorize_mcp_caller(
+                    adapter, native_session, None, root, root, document['native'],
+                ), loop).result(timeout=30)
                 request = document['request']
-                with runtime_caller(runner, None):
-                    if request.get('action') == 'execute' and request.get('feature') == 'agents':
+                with runtime_caller(runner, identity):
+                    if (identity is None and request.get('action') == 'execute'
+                            and request.get('feature') == 'agents'):
                         result = agents_callback(root, Caller('runtime-mcp', None,
                                                  session=native_session, runtime='codex'))(request['arguments'])
                     else:
-                        result = handle_request(request, cwd=root)
+                        result = handle_request(request, cwd=root, allowed_features=features)
                 operations.append({'feature': request.get('feature'), 'success': not result.failed})
                 return {'document': result.document, 'failed': result.failed}
 

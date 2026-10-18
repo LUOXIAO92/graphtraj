@@ -15,6 +15,7 @@ import time
 import urllib.error
 import urllib.request
 import uuid
+from collections import deque
 
 from websockets.sync.client import connect
 
@@ -63,6 +64,9 @@ class DshService:
     def start(self) -> None:
         """Launch an owned Web backend and exchange its single-use launch token."""
         urls: queue.Queue[str | None] = queue.Queue()
+        diagnostics: deque[str] = deque(maxlen=40)
+        secrets = [value for key, value in self.environment.items()
+                   if value and re.search(r'KEY|TOKEN|SECRET|PASSWORD|COOKIE|AUTH', key, re.I)]
         try:
             argv = [self.executable, 'web']
             if self.profile_patch is not None:
@@ -85,13 +89,25 @@ class DshService:
                 match = re.search(r'https?://(?:127\.0\.0\.1|localhost):\d+/[^\s]*token=[^\s]+', clean)
                 if match:
                     urls.put(match.group())
+                    continue
+                # Keep failures useful without retaining launch links or any
+                # inherited credential values. Output is bounded before storage.
+                for secret in secrets:
+                    clean = clean.replace(secret, '[redacted]')
+                clean = re.sub(r'(?:https?|wss?)://\S+', '[url redacted]', clean)
+                clean = re.sub(r'(?i)((?:authorization|cookie|token|api[_-]?key|password)\s*[:=]\s*)\S+',
+                               r'\1[redacted]', clean)
+                diagnostics.append(clean.strip()[:500])
             urls.put(None)
 
         threading.Thread(target=drain, daemon=True).start()
         try:
             launch = urls.get(timeout=45)
             if launch is None:
-                raise self.error_type('RUNTIME_START_FAILED', 'DSH exited before authentication.')
+                summary = '\n'.join(diagnostics)
+                raise self.error_type('RUNTIME_START_FAILED',
+                    f'DSH exited before authentication (pid={self.process.pid}, '
+                    f'exit={self.process.poll()}).\n{summary}')
             parsed = urllib.parse.urlsplit(launch)
             self.origin = f'{parsed.scheme}://{parsed.netloc}'
             jar = http.cookiejar.CookieJar()

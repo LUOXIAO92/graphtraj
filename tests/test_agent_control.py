@@ -299,6 +299,9 @@ def test_failed_start_keeps_the_native_reason(root: Path) -> None:
 
         def start(self, run):
             """Raise the Runtime's own rejection."""
+            run.events.process(runtime_exit={
+                'runtime_exit_code': 1, 'wrapper_exited': True,
+                'owned_process_group_exited': None, 'terminal_confirmed': False})
             raise AgentsError('RUNTIME_EXECUTABLE_INVALID', 'Runtime is unavailable.')
 
     control = AgentControl(root, {'scripted': Failing()})
@@ -307,6 +310,12 @@ def test_failed_start_keeps_the_native_reason(root: Path) -> None:
     assert failed and created['result']['state'] == 'standby'
     assert created['result']['last_result']['error'] == {
         'code': 'RUNTIME_EXECUTABLE_INVALID', 'message': 'Runtime is unavailable.'}
+    exit_facts = created['result']['last_result']['runtime_exit']
+    assert exit_facts == {'runtime_exit_code': 1, 'wrapper_exited': True,
+                          'owned_process_group_exited': None, 'terminal_confirmed': False}
+    exit_facts['runtime_exit_code'] = 0
+    status, _ = call(control, Caller('test-host', None), action='status', agent=created['agent'])
+    assert status['result']['last_result']['runtime_exit']['runtime_exit_code'] == 1
     retry, failed = call(control, Caller('test-host', None), action='send',
                          agent=created['agent'], message='again')
     assert failed and retry['error']['code'] == 'no-session'
@@ -422,3 +431,47 @@ def test_public_creator_preserves_external_root_scope(root: Path) -> None:
         driver.release(created['execution'])
         stopped, failed = call(control, parent, action='wait', agent=created['agent'], timeout_seconds=2)
         assert not failed and stopped['result']['state'] == 'standby'
+
+
+@pytest.mark.parametrize('missing', [None, 'prompt_started', 'native_session_bound',
+                                   'wrapper_exited', 'owned_process_group_exited'])
+def test_same_agent_retries_only_proven_unbound_start(root: Path, missing: str | None) -> None:
+    """Retained startup facts permit a retry without rewriting the old failure."""
+    facts = {'prompt_started': False, 'native_session_bound': False,
+             'wrapper_exited': True, 'owned_process_group_exited': True,
+             'terminal_confirmed': False, 'runtime_exit_code': 1}
+    if missing:
+        facts.pop(missing)
+
+    class StartupFailure(ScriptedDriver):
+        """Fail once before binding, then use the ordinary controlled Runtime."""
+        attempted = False
+
+        def start(self, run):
+            """Supply owned exit evidence for the failed initial execution."""
+            if not self.attempted:
+                self.attempted = True
+                run.events.process(runtime_exit=facts)
+                run.events.finished('failed', terminal_confirmed=False)
+                raise AgentsError('startup-failed', 'controlled startup failure')
+            super().start(run)
+
+    driver = StartupFailure()
+    control = AgentControl(root, {'scripted': driver})
+    caller = Caller('test-host', None)
+    first, failed = call(control, caller, action='create', runtime='scripted', instruction='first')
+    assert failed
+    previous = first['result']['last_result']
+    retried, failed = call(control, caller, action='resume', agent=first['agent'], message='retry')
+    if missing:
+        assert failed and retried['error']['code'] == 'no-session'
+        assert not driver.started
+        return
+    assert not failed
+    assert retried['agent'] == first['agent']
+    assert retried['execution'] != first['execution']
+    assert retried['session'] is not None
+    assert retried['result']['last_result'] == previous
+    assert previous['terminal_confirmed'] is False
+    driver.release(retried['execution'])
+    call(control, caller, action='wait', agent=first['agent'], timeout_seconds=5)

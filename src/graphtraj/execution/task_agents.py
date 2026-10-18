@@ -164,3 +164,23 @@ def begin_task_agent(
         raise RuntimeAdapterError("RUNTIME_WORKER_FAILED", "The core did not start the member execution.",
                                   terminal_confirmed=True)
     return agent
+
+
+def core_status(runner_directory: Path, mapping: Mapping[str, Any]) -> dict[str, Any]:
+    """Read a member's Agent through the core's public status.
+
+    Returns the ``agent`` reference, its ``state`` (``active`` or ``standby``)
+    and its ``last_result``; the Runner's own activity fields are unchanged.
+    """
+    from graphtraj.execution.runner_status import read_alias_mapping
+    from graphtraj.interfaces.agents import swarm_root
+
+    parent = mapping.get("parent")
+    parent_agent = read_alias_mapping(runner_directory, parent)[0].get("agent") if isinstance(parent, str) else None
+    try:
+        outcome = AgentControl(swarm_root(runner_directory.parent.parent), {}).operate(
+            "status", {"agent": mapping["agent"]}, Binding(Caller(TASK_HOST, parent_agent)))
+    except AgentsError as error:
+        return {"agent": mapping["agent"], "agent_error": {"code": error.code, "message": error.message}}
+    return {"agent": mapping["agent"], "state": outcome.result["state"],
+            **({"last_result": outcome.result["last_result"]} if "last_result" in outcome.result else {})}

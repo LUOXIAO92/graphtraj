@@ -412,3 +412,8 @@ def test_cleaned_task_member_answers_a_follow_up_in_its_native_session(
     assert status.result['last_result']['outcome'] == 'completed'
     assert status.result['last_result']['last_message'] == (
         yaml.safe_load(execution.read_text()).get('last_agent_message'))
+    # The member's public status carries the core's Agent and two-state view.
+    observed = run_process([str(installed_commands.runner), 'status', alias], cwd=root, env=env)
+    assert observed.returncode == 0, observed.stdout + observed.stderr
+    member = yaml.safe_load(observed.stdout)['aliases'][0]
+    assert member['agent'] == mapping['agent'] and member['state'] == 'standby', member

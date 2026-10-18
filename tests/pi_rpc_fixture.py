@@ -46,6 +46,8 @@ def main() -> None:
     if not records and not os.environ.get('PI_FIXTURE_UNESTABLISHED'):
         session_file.write_text(json.dumps({'type': 'session', 'id': session, 'version': 3}) + '\n')
     output_lock = threading.Lock()
+    entries_lock = threading.Lock()
+    entries = records[1:]
     traffic = {'bytes': 0, 'records': 0}
     active = False
     queued = []
@@ -62,8 +64,12 @@ def main() -> None:
 
     def record(message: dict) -> None:
         """Append native message records as a real Session would."""
-        with session_file.open('a') as stream:
-            stream.write(json.dumps({'type': 'message', 'message': message}) + '\n')
+        with entries_lock:
+            entry = {'type': 'message', 'id': uuid.uuid4().hex,
+                     'parentId': entries[-1]['id'] if entries else None, 'message': message}
+            with session_file.open('a') as stream:
+                stream.write(json.dumps(entry) + '\n')
+            entries.append(entry)
 
     def streamed(text: str) -> dict:
         """Send equal semantic content with controlled real stdout fragmentation."""
@@ -178,6 +184,10 @@ def main() -> None:
 
                     threading.Thread(target=delayed_state, daemon=True).start()
                     continue
+        elif kind == 'get_entries':
+            with entries_lock:
+                response['data'] = {'entries': list(entries),
+                                    'leafId': entries[-1]['id'] if entries else None}
         elif kind == 'prompt':
             if active and request.get('streamingBehavior') == 'steer':
                 queued.append(request['message'])

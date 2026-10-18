@@ -66,6 +66,7 @@ main.add_command(bind_command)
 @click.option("--partition", is_flag=True, help="Verify and partition an already imported isolated copy into core/swarm; never activate a live Harness.")
 @click.option("--verify", is_flag=True, help="Compare imported legacy fields, attachment bytes and captured source hashes without writing.")
 @click.option("--main-session", help="Explicit current Main native identity for metadata inventory; never inferred from timestamps.")
+@click.option("--against", type=click.Path(path_type=Path, exists=True), help="With --verify, compare retained swarm data to an explicit immutable public snapshot.")
 def migrate_agents_command(
     preview: bool,
     snapshot: Path | None,
@@ -73,12 +74,15 @@ def migrate_agents_command(
     partition: bool,
     verify: bool,
     main_session: str | None,
+    against: Path | None,
 ) -> None:
     """Rehearse native Session migration on a retained, isolated project copy."""
     from graphtraj.workspace.agent_migration import migrate_agents
     from graphtraj.workspace.migration_snapshot import snapshot_project
 
     try:
+        if against is not None and not verify:
+            raise ValueError('--against requires the read-only --verify operation.')
         if snapshot is not None and (preview or sessions or partition or verify or main_session):
             raise ValueError('Snapshot capture cannot also select a migration sample or preview.')
         if partition and (preview or sessions):
@@ -92,7 +96,8 @@ def migrate_agents_command(
             click.echo(yaml.safe_dump(result, sort_keys=False), nl=False)
             return
         result = (snapshot_project(Path.cwd(), snapshot) if snapshot is not None
-                  else migrate_agents(Path.cwd(), preview=preview, sessions=sessions, verify=verify or partition, main_session=main_session))
+                  else migrate_agents(Path.cwd(), preview=preview, sessions=sessions, verify=verify or partition,
+                                      main_session=main_session, against=against))
         if partition:
             from graphtraj.workspace.agent_cutover import partition_snapshot
 

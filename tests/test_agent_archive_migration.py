@@ -157,6 +157,10 @@ def test_snapshot_captures_swarm_configuration_and_can_clone(tmp_path: Path, mon
     control.write_text(json.dumps({'agent': 'agent-old', 'runtime': 'dsh', 'session': None,
                                    'parent': 'agent-parent', 'retired_at': 'original-time'}))
     (swarm / 'config.yml').write_text('save_normalized_sessions: false\nbackfill_history: true\n')
+    retained = JsonlSessionStore.create(archive_path(swarm, 'retained'), header('retained'))
+    retained.publish([retain_native('codex', {'ciphertext': 'opaque'},
+        session_id='native-research@x1', locator='native/0', seq=0, time=1)], source='native', position=0)
+    retained.put_attachment(b'original attachment')
     (swarm / 'live').mkdir()
     (swarm / 'live/channel').write_text('do not activate')
     roles = origin / '.graphtraj/roles.yml'
@@ -179,9 +183,15 @@ def test_snapshot_captures_swarm_configuration_and_can_clone(tmp_path: Path, mon
     assert clone.exit_code == 0, clone.output
     assert (snapshot / '.graphtraj/migration-snapshot.yml').read_bytes() == before
     assert (target / '.graphtraj/swarm/config.yml').read_bytes() == (swarm / 'config.yml').read_bytes()
+    monkeypatch.chdir(target)
     migrated = runner.invoke(main, ['migrate-agents'])
     assert migrated.exit_code == 0, migrated.output
     assert (snapshot / '.graphtraj/swarm/config.yml').read_bytes() == (swarm / 'config.yml').read_bytes()
+    checked = runner.invoke(main, ['migrate-agents', '--verify', '--against', str(snapshot)])
+    assert checked.exit_code == 0, checked.output
+    comparison = yaml.safe_load(checked.output)['verification']['retained_swarm']
+    assert comparison['matches'], comparison
+    assert (comparison['controls'], comparison['jsonl_archives'], comparison['attachments']) == (1, 1, 1)
 
 
 def test_archive_collectors_work_with_no_graphtraj_package(tmp_path: Path) -> None:

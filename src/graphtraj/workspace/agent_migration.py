@@ -14,7 +14,7 @@ import yaml
 
 from agent_swarm import default_config
 from agent_swarm.sessions.migration import import_native, import_sqlite, verify_sqlite
-from agent_swarm.sessions.archive import SessionArchive
+from agent_swarm.sessions.archive import SessionArchive, JsonlSessionStore
 from graphtraj.sessions.storage import SessionStore
 from graphtraj.configuration.project_configuration import load_project_configuration
 from graphtraj.workspace.migration_snapshot import MANIFEST, source_map
@@ -134,6 +134,7 @@ def migrate_agents(
     sessions: tuple[str, ...] = (),
     verify: bool = False,
     main_session: str | None = None,
+    against: Path | None = None,
 ) -> dict:
     """Convert only an isolated public snapshot, with repeatable native imports.
 
@@ -168,6 +169,7 @@ def migrate_agents(
     report = {'snapshot': str(cwd), 'original_project': manifest['project'],
               'archive_root': str(root), 'sqlite_archives': len(archives),
               'sources': sources, 'missing_links': manifest.get('missing_links', []),
+              'git_worktree_consistency': manifest.get('git_worktrees_unchanged'),
               'legacy_native_registrations': _legacy_registrations(cwd, manifest, sources, available, main_session),
               'production_cutover': False}
     if preview:
@@ -192,10 +194,11 @@ def migrate_agents(
         from graphtraj.workspace.agent_cutover import verify_partition
 
         layout = verify_partition(cwd, manifest)
+        swarm = _verify_retained_swarm(cwd, against, manifest) if against else None
         return {**report, 'sqlite_archives': len(archives), 'verification': {'sqlite': checks, 'native_files': files,
-                'layout': layout,
+                'layout': layout, 'retained_swarm': swarm,
                 'matches': (all(not check['mismatches'] for check in checks) and all(f['matches'] for f in files)
-                            and (layout is None or layout['matches'])),
+                            and (layout is None or layout['matches']) and (swarm is None or swarm['matches'])),
                 'scope': 'Exact legacy values and attachment bytes; captured native file hashes. Native history gaps and live tails are not repaired by this check.'}}
     imports = [import_sqlite(path, root) for path in archives]
     results = []
@@ -220,3 +223,61 @@ def migrate_agents(
     default_config(root, save_normalized_sessions=True)
     return {**report, 'imports': imports, 'native_results': results,
             'notice': 'Archive rehearsal only. Original state, identities and native sources are unchanged.'}
+
+
+def _verify_retained_swarm(root: Path, original: Path, manifest: dict) -> dict:
+    """Compare copied tool-owned identities, native resources and existing JSONL.
+
+    The explicit immutable input is another public snapshot of this project.
+    Existing native event records and their relative order must survive; new
+    native prefixes may have been added. No transcript is returned to callers.
+    """
+    if original.resolve() == root.resolve():
+        raise ValueError('Comparison requires a distinct retained input snapshot.')
+    original_manifest = yaml.safe_load((original / MANIFEST).read_text(encoding='utf-8'))
+    if original_manifest.get('project') != manifest['project']:
+        raise ValueError('The comparison input belongs to another project.')
+    source = original / '.graphtraj/swarm'
+    mismatches = []
+    counts = {'files': 0, 'jsonl_archives': 0, 'native_events': 0, 'attachments': 0, 'controls': 0}
+    for path in source.rglob('*'):
+        if path.is_symlink() or not path.is_file():
+            continue
+        relative = path.relative_to(source)
+        target = root / '.graphtraj/swarm' / relative
+        if not target.is_file() or target.is_symlink():
+            mismatches.append(relative.as_posix())
+            continue
+        if relative.parts[0] == 'sessions' and path.name == 'session.jsonl':
+            before, after = JsonlSessionStore(path), JsonlSessionStore(target)
+            counts['jsonl_archives'] += 1
+            if before.header != after.header:
+                mismatches.append(relative.as_posix() + ':header')
+            old_events, new_events = [], []
+            for store, records in ((before, old_events), (after, new_events)):
+                cursor = -1
+                while True:
+                    page = store.page(after=cursor)
+                    records.extend(event['graphtraj']['native'] for event in page['events'])
+                    if not page['has_more']:
+                        break
+                    cursor = page['after']
+            old_keys = {(item['runtime'], item['sessionId'], item['locator']) for item in old_events}
+            selected = [item for item in new_events
+                        if (item['runtime'], item['sessionId'], item['locator']) in old_keys]
+            counts['native_events'] += len(old_events)
+            if selected != old_events:
+                mismatches.append(relative.as_posix() + ':native-records-or-order')
+            continue
+        # Normalized metadata can grow during native collection. Its originals
+        # remain in the immutable input; archive identity/events are checked above.
+        if relative.parts[0] == 'sessions' and path.name != 'session.jsonl' and 'attachments' not in relative.parts:
+            continue
+        counts['files'] += 1
+        counts['attachments'] += 'attachments' in relative.parts
+        counts['controls'] += relative.parts[:2] == ('control', 'agents')
+        with path.open('rb') as before, target.open('rb') as after:
+            if hashlib.file_digest(before, 'sha256').digest() != hashlib.file_digest(after, 'sha256').digest():
+                mismatches.append(relative.as_posix())
+    return {**counts, 'matches': not mismatches, 'mismatches': mismatches,
+            'input': str(original), 'scope': 'Existing headers/native records/order and unchanged configuration/control/native-resource/attachment bytes; evolving normalized metadata remains backed up in the input.'}

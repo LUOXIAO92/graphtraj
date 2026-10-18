@@ -125,12 +125,27 @@ def test_pi_config_dependency_and_host_limits(tmp_path: Path, pi_environment: di
         context(tmp_path, pi_environment)
 
 
-def test_pi_startup_failure_preserves_diagnostics(tmp_path: Path, pi_environment: dict, monkeypatch: pytest.MonkeyPatch) -> None:
+@pytest.mark.parametrize('group_observation_denied', [False, True])
+def test_pi_startup_failure_preserves_diagnostics(
+    tmp_path: Path,
+    pi_environment: dict,
+    monkeypatch: pytest.MonkeyPatch,
+    group_observation_denied: bool,
+) -> None:
     """A pre-binding native exit retains its cause without claiming cleanup or exposing credentials."""
     result_project(tmp_path)
     monkeypatch.setenv('PI_FIXTURE_STARTUP_FAILURE', '1')
     monkeypatch.setenv('DEEPSEEK_API_KEY', 'fixture-private-key')
+    from graphtraj.runtimes.runtime_adapter import runtime_process_owner
+    observations = []
+    if group_observation_denied:
+        def denied(group: int, signal: int) -> None:
+            """Simulate only denied OS group observation for an already exited peer."""
+            assert signal == 0
+            raise PermissionError('controlled group observation refusal')
+        monkeypatch.setattr('graphtraj.runtimes.pi.managed_session.os.killpg', denied)
     with ExitStack() as stack:
+        stack.enter_context(runtime_process_owner(lambda pid, outcome=None: observations.append(outcome)))
         turn, ready, _ = execution(tmp_path, pi_environment, 'research@x1', 'unused', stack)
         (turn.directory / 'stderr.log').write_text('old execution stderr must stay private\n')
         with pytest.raises(RuntimeAdapterError) as caught:
@@ -144,6 +159,15 @@ def test_pi_startup_failure_preserves_diagnostics(tmp_path: Path, pi_environment
     assert 'fixture-token' not in message
     assert 'old execution stderr' not in message
     assert not ready.is_set()
+    evidence = next(item for item in reversed(observations) if item is not None)
+    assert evidence['runtime_exit_code'] == 71
+    assert evidence['wrapper_exited'] is True
+    assert evidence['owned_process_group_exited'] is (None if group_observation_denied else True)
+    assert evidence['native_idle_confirmed'] is False
+    assert evidence['terminal_confirmed'] is False
+    assert evidence['native_session_bound'] is False
+    assert evidence['prompt_started'] is False
+    assert evidence['runtime_execution_id'] == turn.execution_id
 
 
 @pytest.mark.parametrize('field', ['allow_mach_lookup', 'allow_mach_register'])

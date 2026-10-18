@@ -466,10 +466,7 @@ class PiManagedExecution:
                         native_idle and self.proc is not None and self.proc.poll() is not None
                     )
                     if self.proc is not None:
-                        record_runtime_process(self.proc.pid, {
-                            'terminal_confirmed': self.startup_terminal_confirmed,
-                            'runtime_exit_code': self.proc.poll(),
-                        })
+                        record_runtime_process(self.proc.pid, self.process_exit_evidence(native_idle))
                     if self.stderr_reader is not None:
                         self.stderr_reader.join(timeout=5)
                     if reader is not None:
@@ -481,6 +478,38 @@ class PiManagedExecution:
                             self._retain_trace()
                     finally:
                         self.done.set()
+
+    def process_exit_evidence(self, native_idle: bool) -> dict:
+        """Report only facts observed while this owner still holds its Popen.
+
+        A reaped launcher and an absent owned process group do not prove that
+        detached native tools stopped. Keep native confirmation separate; an
+        unavailable group observation is unknown, never a successful stop.
+        """
+        if self.proc is None:
+            return {'terminal_confirmed': False, 'wrapper_exited': False,
+                    'native_idle_confirmed': bool(native_idle), 'owned_process_group_exited': None}
+        code = self.proc.poll()
+        group_exited = None
+        if code is not None:
+            try:
+                os.killpg(self.proc.pid, 0)
+            except ProcessLookupError:
+                group_exited = True
+            except OSError:
+                pass
+            else:
+                group_exited = False
+        return {
+            'terminal_confirmed': bool(native_idle and code is not None),
+            'runtime_exit_code': code,
+            'wrapper_exited': code is not None,
+            'owned_process_group_exited': group_exited,
+            'native_idle_confirmed': bool(native_idle),
+            'native_session_bound': self.bound,
+            'prompt_started': self.prompt_started,
+            'runtime_execution_id': self.execution_id,
+        }
 
     def _shutdown_failure(self, cause: BaseException | None, stderr_offset: int) -> RuntimeAdapterError:
         """Expose this launch's cause through Runner without certifying native stop."""

@@ -204,7 +204,11 @@ export default function graphtraj(pi) {
       registerAgentDisplay(pi, await loadHostSdk());
       displayRegistered = true;
     }
-    if (process.env.AGENT_SWARM_CONNECTION) {
+    const hasIndependent = Object.hasOwn(process.env, 'AGENT_SWARM_CONNECTION');
+    const hasGraphTraj = Object.hasOwn(process.env, 'GRAPHTRAJ_CLI_CONNECTION');
+    if (hasIndependent && hasGraphTraj) throw new Error('Conflicting existing Agent connections; no identity was adopted.');
+    if (hasIndependent) {
+      if (!process.env.AGENT_SWARM_CONNECTION) throw new Error('The existing Agent connection is empty; no identity was adopted.');
       independent.add(ctx.sessionManager);
       // This is the official MCP client wiring, not a native model tool.
       // Identity is verified by the owning host's kernel-authenticated pipe.
@@ -216,6 +220,9 @@ export default function graphtraj(pi) {
     }
     const agentsConfig = pi.getFlag?.('agents-config');
     if (agentsConfig) {
+      if (hasGraphTraj || Object.hasOwn(process.env, 'DSH_SESSION_ID') || Object.hasOwn(process.env, 'DSH_AGENT_SOURCE')) {
+        throw new Error('Standalone agents config cannot replace an existing managed Agent context; retain its owning connection.');
+      }
       if (!process.env.AGENT_SWARM_PYTHON) throw new Error('Independent agents requires its selected Python installation.');
       independent.add(ctx.sessionManager);
       agentHost = await startAgentHost(ctx, agentsConfig);

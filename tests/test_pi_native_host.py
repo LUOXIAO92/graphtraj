@@ -139,3 +139,18 @@ def test_new_native_session_uses_trusted_sdk_header_before_persistence(tmp_path:
     event['header']['parentSessionId'] = 'real-parent'
     with pytest.raises(ValueError):
         bind_native_main(AgentControl(tmp_path / 'data', {}), connection, tmp_path, event)
+
+
+@pytest.mark.parametrize('marker', ['GRAPHTRAJ_CLI_CONNECTION', 'AGENT_SWARM_CONNECTION',
+                                   'DSH_SESSION_ID', 'DSH_AGENT_SOURCE'])
+def test_native_host_rejects_bound_context_before_config(
+    marker: str, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Even empty origin markers cannot become an external Main implicitly."""
+    from graphtraj.runtimes.pi.host import main
+    for name in ('GRAPHTRAJ_CLI_CONNECTION', 'AGENT_SWARM_CONNECTION', 'DSH_SESSION_ID', 'DSH_AGENT_SOURCE'):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv(marker, '')
+    monkeypatch.setattr('sys.argv', ['host', '--config', '/must-not-be-read.json'])
+    with pytest.raises(ValueError):
+        main()

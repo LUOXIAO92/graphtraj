@@ -77,6 +77,7 @@ const pi = {
   registerMcpServer(name, configuration) { servers.push({name, configuration}); },
 };
 process.env.AGENT_SWARM_CONNECTION = '/owned/channel';
+delete process.env.GRAPHTRAJ_CLI_CONNECTION;
 process.env.AGENT_SWARM_PYTHON = '/owned/python';
 extension(pi);
 const ctx = {hasUI:false,cwd:'/owned/work',sessionManager:{}};
@@ -113,6 +114,9 @@ import { pathToFileURL } from 'node:url';
 const {default: extension} = await import(pathToFileURL(process.argv[1]));
 const handlers = new Map(), servers = [];
 delete process.env.AGENT_SWARM_CONNECTION;
+delete process.env.GRAPHTRAJ_CLI_CONNECTION;
+delete process.env.DSH_SESSION_ID;
+delete process.env.DSH_AGENT_SOURCE;
 process.env.AGENT_SWARM_PYTHON = process.argv[2];
 const pi = {registerFlag(){},getFlag(name){return name==='agents-config'?'/explicit/config.json':false;},
  on(name,handler){handlers.set(name,handler);},registerMcpServer(name,config){servers.push({name,config});}};
@@ -134,4 +138,32 @@ ctx.sessionManager.getLeafId = ()=>null;
 await handlers.get('session_shutdown')({},ctx);
 '''
     subprocess.run(['node', '--input-type=module', '-e', script, str(module), str(peer), str(tmp_path)],
+                   check=True, capture_output=True, text=True, timeout=10)
+
+
+def test_extension_does_not_promote_bound_context(tmp_path: Path) -> None:
+    """Controlled contexts retain foreign/empty binding instead of starting a root owner."""
+    if shutil.which('node') is None:
+        pytest.skip('Node is required for the shipped Pi extension.')
+    source = Path(__file__).resolve().parents[1] / 'src/graphtraj/runtimes/pi/extension.mjs'
+    module = Path(shutil.copy2(source, tmp_path / source.name))
+    script = '''
+import assert from 'node:assert/strict';
+import {pathToFileURL} from 'node:url';
+const {default: extension}=await import(pathToFileURL(process.argv[1]));
+const keys=['GRAPHTRAJ_CLI_CONNECTION','AGENT_SWARM_CONNECTION','DSH_SESSION_ID','DSH_AGENT_SOURCE'];
+for (const key of keys) {
+ for(const name of keys) delete process.env[name];
+ process.env[key]='';
+ const handlers=new Map(), servers=[];
+ const pi={registerFlag(){},getFlag(){return '/must-not-read.json';},
+ on(name,handler){handlers.set(name,handler);},registerMcpServer(...args){servers.push(args);}};
+ extension(pi);
+ await assert.rejects(handlers.get('session_start')({reason:'startup'},
+   {hasUI:false,cwd:'/controlled',sessionManager:{}}));
+ assert.equal(servers.length,0);
+ assert.equal(Object.hasOwn(process.env,key),true);
+}
+'''
+    subprocess.run(['node', '--input-type=module', '-e', script, str(module)],
                    check=True, capture_output=True, text=True, timeout=10)

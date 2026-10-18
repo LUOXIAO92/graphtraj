@@ -101,6 +101,26 @@ def test_researchers_submit_distinct_retained_results_without_coding_reports(tmp
     assert not (team.parent / 'rounds/1/engineer.md').exists()
 
 
+def test_repeated_unchanged_submission_is_recorded_once(tmp_path: Path) -> None:
+    """A retry after an unconfirmed reply returns the recorded submission."""
+    from graphtraj.graph.delivery_worldline import read_worldline
+
+    runner, _, commit = result_project(tmp_path)
+    with runtime_caller(runner, 'research@x1'):
+        report = tools.submit_report({'name': 'researcher-x1.md', 'text': 'Evidence'}, cwd=tmp_path).document['report']
+        arguments = {'commit': commit, 'result_refs': ['result.md'], 'evidence_refs': [report],
+                     'completion': 'Research complete', 'unresolved': []}
+        first = tools.submit_result(arguments, cwd=tmp_path).document
+        repeated = tools.submit_result(arguments, cwd=tmp_path).document
+        changed = tools.submit_result({**arguments, 'completion': 'Revised'}, cwd=tmp_path).document
+
+    assert repeated == first
+    assert changed['event_id'] != first['event_id']
+    submitted = [event['event_id'] for event in read_worldline(tmp_path / 'state', tmp_path)
+                 if event['event'] == 'result-submitted']
+    assert submitted == [first['event_id'], changed['event_id']]
+
+
 def test_submission_rejects_unowned_or_invalid_inputs(tmp_path: Path) -> None:
     """Role claims, foreign reports and absent/obsolete membership grant nothing."""
     import pytest

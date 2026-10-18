@@ -152,8 +152,18 @@ def submit_session_result(
     directory, _ = _load_states(configuration.state / 'tasks')[mapping['task_id']]
     team = read_team(directory / 'teams' / str(mapping['team_generation']) / 'team.yml')
     ordinal = team['current_round']
-    predecessors = [event['event_id'] for event in read_worldline(configuration.state, configuration.harness_root)
-                    if event.get('task_id') == mapping['task_id']]
+    events = read_worldline(configuration.state, configuration.harness_root)
+    predecessors = [event['event_id'] for event in events if event.get('task_id') == mapping['task_id']]
+    # Repeating an unchanged submission in the same Round, as a caller does
+    # after an unconfirmed reply, returns the recorded one without another.
+    previous = next((event for event in reversed(events) if event['event'] == 'result-submitted'
+                     and event.get('alias') == alias and event['round'] == ordinal), None)
+    if (previous is not None
+            and (previous['candidate'], previous['result_refs'], previous['completion'], previous['unresolved'])
+            == (commit, list(result_refs), completion, list(unresolved))
+            and [(configuration.harness_root / reference).read_bytes() for reference in previous['evidence_refs']]
+            == [content for _, content in snapshots]):
+        return previous
     event = {
         'event': 'result-submitted', 'task_id': mapping['task_id'],
         'alias': alias, 'session': mapping['session'], 'role': mapping['role'],

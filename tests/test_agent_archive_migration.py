@@ -299,6 +299,39 @@ def test_public_partition_uses_core_paths_and_retains_originals(tmp_path: Path, 
     assert yaml.safe_load(verified.output)['verification']['matches']
 
 
+def test_partition_preserves_current_and_historical_member_queries(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The public member scopes and actual parents survive the core relocation."""
+    from test_desktop_activity import members, message, prepare
+
+    origin = tmp_path / 'origin'
+    origin.mkdir()
+    _, directory, trace = prepare(origin, 'codex', [message('fixture')], parent='research@x2')
+    mapping = yaml.safe_load((directory / 'mapping.yml').read_text())
+    (directory / 'mapping.yml').unlink()
+    (directory / 'session.yml').write_text(yaml.safe_dump({'retirement': {'mapping': mapping}}))
+    directory.rename(trace.parent / 'runner')
+    current = members(origin)
+    history = members(origin, summary_task_id='148')
+    assert 'research@x1' not in {item['alias'] for item in current['members']}
+    retired = next(item for item in history['members'] if item['alias'] == 'research@x1')
+    assert retired['retired'] and retired['state'] is None
+    assert retired['parent'] == 'research@x2'
+
+    runner = CliRunner()
+    monkeypatch.chdir(origin)
+    snapshot = tmp_path / 'copy'
+    result = runner.invoke(main, ['migrate-agents', '--snapshot', str(snapshot)])
+    assert result.exit_code == 0, result.output
+    monkeypatch.chdir(snapshot)
+    for arguments in (['migrate-agents'], ['migrate-agents', '--partition']):
+        result = runner.invoke(main, arguments)
+        assert result.exit_code == 0, result.output
+    assert members(snapshot) == current
+    assert members(snapshot, summary_task_id='148') == history
+
+
 def test_imported_stopped_and_retired_agents_keep_identity_and_parents(tmp_path: Path) -> None:
     """Independent import is repeatable and never turns retired history active."""
     from agent_swarm import AgentControl, Binding, Caller, AgentsError

@@ -95,7 +95,7 @@ class DshService:
                 for secret in secrets:
                     clean = clean.replace(secret, '[redacted]')
                 clean = re.sub(r'(?:https?|wss?)://\S+', '[url redacted]', clean)
-                clean = re.sub(r'(?i)((?:authorization|cookie|token|api[_-]?key|password)\s*[:=]\s*)\S+',
+                clean = re.sub(r'(?i)((?:authorization|cookie|token|api[_-]?key|password)\s*[:=]\s*).*',
                                r'\1[redacted]', clean)
                 diagnostics.append(clean.strip()[:500])
             urls.put(None)

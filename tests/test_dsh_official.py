@@ -256,7 +256,7 @@ def test_actual_pi_reply_resumes_standby_dsh() -> None:
     call = bind(control, Caller('official-final-validation', None))
     resumed = call({'action': 'resume', 'agent': record['agent'], 'message':
         'Use agents MCP describe create schema=true then execute create exactly once with runtime pi. '
-        'Child instruction: "Use bash to run sleep 75, then reply exactly PI334-REPLY. Do not spawn agents or edit files." '
+        'Child instruction: "Use bash to run sleep 180, then reply exactly PI334-REPLY. Do not spawn agents or edit files." '
         'After create returns, reply exactly WAITING and end your turn immediately. Do not call wait/status. '
         'When the child reply later arrives, reply ACK PI334-REPLY and the marker I asked you to remember.'})
     assert not resumed.failed, resumed.document

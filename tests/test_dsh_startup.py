@@ -15,7 +15,7 @@ def test_failed_startup_retains_reason_and_redacts_credentials(tmp_path: Path) -
     program.write_text(f'#!{sys.executable}\nimport os\n'
                        'print("Error: missing package example-module")\n'
                        'print(os.environ["TEST_API_KEY"])\n'
-                       'print("Authorization: Bearer-secret")\n'
+                       'print("Authorization: Bearer sensitive-token")\n'
                        'print("https://example.invalid/?token=hidden")\n'
                        'raise SystemExit(7)\n')
     program.chmod(0o755)
@@ -26,7 +26,7 @@ def test_failed_startup_retains_reason_and_redacts_credentials(tmp_path: Path) -
         assert 'missing package example-module' in failure.value.message
         assert 'pid=' in failure.value.message
         assert all(secret not in failure.value.message for secret in (
-            'never-retain-me', 'Bearer-secret', 'example.invalid', 'hidden'))
+            'never-retain-me', 'sensitive-token', 'example.invalid', 'hidden'))
     finally:
         service.close()
     assert service.process.poll() == 7

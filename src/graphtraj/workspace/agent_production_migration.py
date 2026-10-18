@@ -140,6 +140,9 @@ def cutover_project(
                 if path == configuration.project_root:
                     raise ValueError('The Source Repository must remain outside the worktree directory being moved.')
                 worktrees[str(path)] = str(data / 'core/worktrees' / path.relative_to(configuration.agent_worktrees))
+    for path in configuration.agent_worktrees.glob('*'):
+        if path.is_dir() and not any(Path(old).is_relative_to(path) for old in worktrees):
+            raise ValueError(f'An unregistered worktree directory needs native reconciliation before cutover: {path}')
     snapshot_project(root, snapshot)
     manifest = yaml.safe_load((snapshot / MANIFEST).read_text())
     staging = snapshot.with_name(snapshot.name + '-cutover')
@@ -161,6 +164,7 @@ def cutover_project(
     moves = {str(staging / '.graphtraj/core'): str(data / 'core'),
              str(staging / '.graphtraj/swarm'): str(data / 'swarm'),
              str(configuration.state): str(data / 'core/state'), str(runner): str(data / 'core/runner'),
+             str(configuration.agent_worktrees): str(data / 'core/worktrees'),
              **worktrees}
     _rewrite_records(staged_core / 'state', moves)
     _rewrite_records(staged_core / 'runner', moves)

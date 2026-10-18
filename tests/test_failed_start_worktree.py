@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import shutil
 import sys
+import time
 from pathlib import Path
 
 import pytest
@@ -295,3 +296,61 @@ def test_cleaned_task_reopens_with_fresh_member_and_preserved_history(
     for path, content in retained.items():
         if path.name != 'team.yml':
             assert path.read_bytes() == content, path
+
+
+def test_cleaned_task_member_answers_a_follow_up_in_its_native_session(
+    installed_commands: InstalledCommands,
+    temporary_git_repository: Path,
+    fake_codex: FakeCodex,
+    tmp_path: Path,
+) -> None:
+    """A standby member of a cleaned Task resumes its same native Session."""
+    import json
+
+    root, worktree, batch, env = _prepare(
+        installed_commands, temporary_git_repository, fake_codex, tmp_path,
+    )
+    env.update(FAKE_CODEX_LIFECYCLE_ACTION='complete-team-round',
+               GRAPHTRAJ_AGENT_RUNNER=str(installed_commands.runner))
+    launched = _launch(installed_commands, root, batch, env)
+    assert launched.returncode == 0, launched.stdout + launched.stderr
+    alias = yaml.safe_load(launched.stdout)['tasks'][0]['alias']
+    sessions = root / '.graphtraj/runner/sessions'
+    wait_for_file(sessions / alias / 'execution.yml')
+    reports = run_process([str(installed_commands.runner), 'reports', alias], cwd=root, env=env)
+    submission = yaml.safe_load(reports.stdout)['submissions'][-1]
+    accepted = run_process([
+        str(installed_commands.runner), 'decide-result', '--submission-id', submission['event_id'],
+        '--commit', submission['candidate'], '--decision', 'accepted', '--reason', 'Fixture delivered',
+        '--evidence-ref', submission['evidence_refs'][0],
+    ], cwd=root, env=env)
+    assert accepted.returncode == 0, accepted.stdout + accepted.stderr
+    integrated = run_process([
+        str(installed_commands.product), 'task', 'integrate', '--task-id', '268',
+        '--', sys.executable, '-c', 'pass',
+    ], cwd=root, env=env, timeout=30)
+    assert integrated.returncode == 0, integrated.stdout + integrated.stderr
+    assert _cleanup(installed_commands, root, env).returncode == 0
+    assert not worktree.exists()
+    session = yaml.safe_load((sessions / alias / 'mapping.yml').read_text())['session']
+    execution = sessions / alias / 'execution.yml'
+    graph_before = run_process([str(installed_commands.product), 'task', 'graph'], cwd=root, env=env).stdout
+
+    env.pop('FAKE_CODEX_LIFECYCLE_ACTION')
+    worldline = run_process([str(installed_commands.product), 'worldline', 'read'], cwd=root, env=env)
+    cause = json.loads(worldline.stdout.splitlines()[-1])['event_id']
+    sent = run_process([str(installed_commands.runner), 'send', alias, '--instruction', 'What did you deliver?',
+                        '--caused-by-event-id', cause], cwd=root, env=env, timeout=30)
+
+    assert sent.returncode == 0, sent.stdout + sent.stderr
+    assert yaml.safe_load(sent.stdout)['session'] == session
+    # The Worker removes the continuation-only cwd after its terminal record,
+    # so a later reopen still provisions the Worktree.
+    deadline = time.monotonic() + 15
+    while worktree.exists() and time.monotonic() < deadline:
+        time.sleep(0.05)
+    assert not worktree.exists()
+    assert yaml.safe_load(execution.read_text())['outcome'] == 'completed'
+    assert yaml.safe_load((sessions / alias / 'mapping.yml').read_text())['session'] == session
+    assert run_process([str(installed_commands.product), 'task', 'graph'],
+                       cwd=root, env=env).stdout == graph_before

@@ -60,6 +60,7 @@ def run(job_file: Path) -> int:
     budget_stopped = threading.Event()
     startup_lock = None
     execution_mapping: dict[str, object] | None = None
+    restored_cwd: Path | None = None
 
     def request_termination(signum: int, frame: object) -> None:
         """Pass Worker/budget termination to the owned native execution."""
@@ -79,6 +80,8 @@ def run(job_file: Path) -> int:
             base_mapping = job["mapping"]
             if not isinstance(base_mapping, dict):
                 raise ValueError("session mapping is not a mapping")
+            if operation == "resume" and job.get("restored_cwd") is True:
+                restored_cwd = Path(base_mapping["worktree_path"])
             # The Session's own record owns the Agent Entity and its direct
             # parent, so a launch input or request that disagrees is refused
             # before this Worker starts any Runtime or changes the record.
@@ -321,6 +324,11 @@ def run(job_file: Path) -> int:
             startup_lock.close()
         if previous_sigterm is not None:
             signal.signal(signal.SIGTERM, previous_sigterm)
+        if restored_cwd is not None:
+            from graphtraj.execution.runner_control import _remove_restored_cwd
+
+            # The continuation-only cwd of a cleaned Task ends with its execution.
+            _remove_restored_cwd(restored_cwd)
     return 1
 
 

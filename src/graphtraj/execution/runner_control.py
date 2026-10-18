@@ -373,12 +373,13 @@ def send_instruction(
     require_direct_authority(runner_directory, alias, mapping)
     if is_session_mapping(mapping):
         _require_project_events(cwd, caused_by_event_ids)
-        from graphtraj.teams.team_replacement import require_active_session
+        from graphtraj.teams.team_replacement import completed_task_member, require_active_session
 
-        require_active_session(
-            discover_project(cwd, require_clean_integration=False), alias,
-            reports_only=reports_only,
-        )
+        project = discover_project(cwd, require_clean_integration=False)
+        # A finished Task's standby member answers follow-ups without
+        # reopening Task work, budget or its accepted result.
+        reports_only = reports_only or completed_task_member(project, mapping)
+        require_active_session(project, alias, reports_only=reports_only)
         return _send_session(
             alias,
             instruction,
@@ -528,14 +529,44 @@ def _send_session(
                 "operation-failed", "The parent Session input lock is busy; retry this notice.",
             ) from error
         mapping, _ = read_alias_mapping(session_directory.parent.parent, alias)
+        worktree = Path(mapping["worktree_path"])
+        restored = False
         with execution_start_lock(session_directory.parent.parent):
             require_execution_allowed(session_directory.parent.parent, alias, mapping)
-        return _send_session_locked(
-            alias, instruction, session_directory, mapping, caused_by_event_ids, cwd,
-            capacity_fd=capacity_fd, reports_only=reports_only,
-            system_notice=system_notice,
-            retain_notice_channel=retain_notice_channel,
-        )
+            if reports_only and not os.path.lexists(str(worktree)) and worktree.is_absolute():
+                from graphtraj.teams.team_replacement import completed_task_member
+
+                # Each Runtime resumes its native Session in the recorded cwd
+                # (Claude finds its transcript by it). Cleanup removed that
+                # Worktree, so an empty directory stands at the same path for
+                # this continuation only; the Worker removes it when empty.
+                if completed_task_member(discover_project(cwd, require_clean_integration=False), mapping):
+                    worktree.mkdir()
+                    restored = True
+        try:
+            return _send_session_locked(
+                alias, instruction, session_directory, mapping, caused_by_event_ids, cwd,
+                capacity_fd=capacity_fd, reports_only=reports_only,
+                system_notice=system_notice,
+                retain_notice_channel=retain_notice_channel,
+                restored_cwd=restored,
+            )
+        except BaseException:
+            if restored:
+                _remove_restored_cwd(worktree)
+            raise
+
+
+def _remove_restored_cwd(worktree: Path) -> None:
+    """Remove a continuation-only cwd unless the Runtime left content in it.
+
+    A remaining directory keeps refusing a reopened launch as a Worktree
+    conflict instead of discarding what the Runtime wrote.
+    """
+    try:
+        worktree.rmdir()
+    except OSError:
+        pass
 
 
 def _send_session_locked(
@@ -551,6 +582,7 @@ def _send_session_locked(
     system_notice: bool = False,
     retain_notice_channel: bool = False,
     require_budget_permission: bool = False,
+    restored_cwd: bool = False,
 ) -> Dict[str, str]:
     """Deliver input or restore the retained Context under the alias lock.
 
@@ -649,6 +681,8 @@ def _send_session_locked(
         }
         if monitor is not None:
             resume["monitor_execution_budget"] = True
+        if restored_cwd:
+            resume["restored_cwd"] = True
         write_yaml_durably(
             resume_file,
             resume,

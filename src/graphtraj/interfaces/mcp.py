@@ -83,15 +83,6 @@ def _error_response(request_id: Any, code: int, message: str) -> dict[str, Any]:
     }
 
 
-def _initialize_result(params: Mapping[str, Any]) -> dict[str, Any]:
-    """Agree on the host's requested protocol version and advertise tools."""
-
-    requested = params.get("protocolVersion")
-    return {
-        "protocolVersion": requested if isinstance(requested, str) else PROTOCOL_VERSION,
-        "capabilities":    {"tools": {}},
-        "serverInfo":      SERVER_INFO,
-    }
 
 
 @contextmanager
@@ -153,8 +144,8 @@ def _tool_call_response(
     try:
         # Keep the selected entry's scope before forwarding into the already
         # authenticated host. The host still owns feature authorization.
-        if pi_entry and arguments.get('action') != 'discover':
-            if (arguments.get('feature') == 'agents') != (name == 'agents'):
+        if pi_entry and name == 'tasks' and arguments.get('action') != 'discover':
+            if arguments.get('feature') == 'agents':
                 raise ValueError('Feature does not belong to this MCP entry.')
         from graphtraj.runtimes.codex.host_events import calling_session
 
@@ -165,15 +156,25 @@ def _tool_call_response(
         with calling_session(session), _caller_notices(params) as recovery:
             from graphtraj.interfaces.hosted_cli import forward_request
 
-            result = forward_request(arguments, Path.cwd())
-            if result is None:
-                result = gateway.handle_request(arguments, cwd=Path.cwd())
+            def dispatch(request: dict) -> Any:
+                """Keep the existing host binding and shared business gateway."""
+                result = forward_request(request, Path.cwd())
+                return result if result is not None else gateway.handle_request(request, cwd=Path.cwd())
+
+            if pi_entry and name == 'agents':
+                from agent_swarm.discovery import handle_request
+
+                result = handle_request(arguments, lambda request: dispatch({
+                    'action': 'execute', 'feature': 'agents', 'arguments': request,
+                }))
+            else:
+                result = dispatch(arguments)
             document = (
                 recovery.attach_stop_deliveries(result.document)
                 if recovery is not None
                 else result.document
             )
-            if pi_entry and arguments.get('action') == 'discover' and 'features' in document:
+            if pi_entry and name == 'tasks' and arguments.get('action') == 'discover' and 'features' in document:
                 document = {**document, 'features': [
                     feature for feature in document['features']
                     if (feature['feature'] == 'agents') == (name == 'agents')
@@ -210,49 +211,17 @@ def _tool_call_response(
 
 
 def _respond(message: Mapping[str, Any]) -> dict[str, Any] | None:
-    """Answer one JSON-RPC message, or return None for a notification."""
+    """Use the shared MCP dispatcher with this host's existing caller binding."""
+    from agent_swarm.mcp import respond
 
-    method = message.get("method")
-    if not isinstance(method, str) or "id" not in message:
-        # Responses and host notifications (initialized, cancelled) need no reply.
-        return None
-    request_id = message.get("id")
-    params = message.get("params")
-    if not isinstance(params, dict):
-        params = {}
-    if method == "initialize":
-        return _result_response(request_id, _initialize_result(params))
-    if method == "tools/list":
-        return _result_response(request_id, {"tools": _tool_documents()})
-    if method == "tools/call":
-        return _tool_call_response(request_id, params)
-    if method == "ping":
-        return _result_response(request_id, {})
-    return _error_response(
-        request_id, METHOD_NOT_FOUND, "Unsupported method: {0}".format(method)
-    )
+    return respond(message, _tool_documents, _tool_call_response, SERVER_INFO)
 
 
 def serve(input_stream: TextIO, output_stream: TextIO) -> None:
-    """Answer newline-delimited JSON-RPC requests until the host closes input."""
+    """Use the same framing as independent MCP, preserving the public host seam."""
+    from agent_swarm.mcp import serve as serve_stdio
 
-    for line in input_stream:
-        if not line.strip():
-            continue
-        try:
-            message = json.loads(line)
-        except json.JSONDecodeError:
-            reply = _error_response(None, PARSE_ERROR, "Parse error")
-        else:
-            reply = (
-                _respond(message)
-                if isinstance(message, dict)
-                else _error_response(None, INVALID_REQUEST, "Invalid request")
-            )
-        if reply is None:
-            continue
-        output_stream.write(json.dumps(reply) + "\n")
-        output_stream.flush()
+    serve_stdio(input_stream, output_stream, _respond)
 
 
 def main() -> None:

@@ -152,14 +152,29 @@ class PiArchive:
         old_by_id = {event['data']['record']['id']: event for event in old if event['type'] == 'graphtraj/native'}
         pending = store.pending()
         claims = {}
+        assistant_drafts = {}
+        resolved = {tuple(item['final']) for item in store.observations()}
+        resolved_ids = {identity for identity, event in old_by_id.items()
+                        if ('pi', self.session, event['graphtraj']['native']['locator']) in resolved}
         for draft in pending:
             observation = draft['event'].get('piObservation', {})
-            boundary = set(observation['knownEntries'])
+            boundary = set(observation['knownEntries']) | resolved_ids
             matches = [entry['id'] for entry in entries if entry['id'] not in boundary
                        and entry.get('type') == 'message'
                        and self._matches(observation, draft['event']['data']['stream'], entry['message'])]
-            if len(matches) == 1:
+            if 'toolCallId' not in observation:
+                assistant_drafts.setdefault(draft['source'], []).append((draft, set(matches)))
+            elif len(matches) == 1:
                 claims.setdefault(matches[0], []).append(draft)
+
+        for drafts in assistant_drafts.values():
+            # Pi serializes assistant message_start/end on one RPC stream.
+            # Its message ordinal constrains correspondence, never canonical
+            # ordering. Tool completion notification order is deliberately absent.
+            drafts.sort(key=lambda item: item[0]['event']['piObservation'].get(
+                'messageOrdinal', item[0]['position']))
+            for identity, draft in self._ordered_matches(drafts, entries):
+                claims.setdefault(identity, []).append(draft)
 
         events = []
         for entry in entries:
@@ -210,6 +225,27 @@ class PiArchive:
         # A late message_end can resolve a draft without a newly appended entry.
         position = max(store.position('native') + 1, len(entries))
         store.publish(events, source='native', position=position)
+
+    @staticmethod
+    def _ordered_matches(drafts: list[tuple[dict, set[str]]], entries: list[dict]) -> list[tuple[str, dict]]:
+        """Resolve only a unique order-preserving assignment to native entries.
+
+        Count possible assignments up to two. Equal bodies/timestamps do not
+        collapse messages; a complete RPC sequence can disambiguate them using
+        native entry order. Extra indistinguishable entries remain ambiguous.
+        """
+        counts = [1] + [0] * len(drafts)
+        paths = [()] + [None] * len(drafts)
+        for entry in entries:
+            for index in range(len(drafts) - 1, -1, -1):
+                if entry['id'] not in drafts[index][1] or not counts[index]:
+                    continue
+                count = counts[index + 1] + counts[index]
+                paths[index + 1] = ((*paths[index], entry['id']) if count == 1 else None)
+                counts[index + 1] = min(2, count)
+        if counts[-1] != 1:
+            return []
+        return [(identity, draft) for identity, (draft, _) in zip(paths[-1], drafts)]
 
     def _attachments(self, event: dict, store: JsonlSessionStore) -> None:
         """Copy only files inside the host-authorized cwd, never private state."""
@@ -365,6 +401,7 @@ class PiArchive:
                                    'missing': [{'path': 'nativeEntry',
                                                 'reason': 'RPC has not supplied a persisted entry identity.'}]},
                      'piObservation': {'knownEntries': self._known_entries(),
+                                       'messageOrdinal': self.position,
                                        'messageStart': deepcopy(message),
                                        'startFields': {key: deepcopy(value) for key, value in event.items()
                                                        if key not in {'type', 'message'}}}}

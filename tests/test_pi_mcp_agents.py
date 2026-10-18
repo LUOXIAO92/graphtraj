@@ -4,7 +4,7 @@ import json
 
 import pytest
 
-from agent_swarm import tool_descriptor
+from agent_swarm.discovery import feature_schema
 from graphtraj.interfaces import mcp
 from graphtraj.interfaces.tools import ToolResult
 
@@ -24,7 +24,7 @@ def test_pi_mcp_registers_core_schema_and_forwards_bound_call(monkeypatch: pytes
     mcp.serve(io.StringIO('\n'.join(json.dumps(request) for request in [
         {'jsonrpc': '2.0', 'id': 1, 'method': 'tools/list'},
         {'jsonrpc': '2.0', 'id': 2, 'method': 'tools/call',
-         'params': {'name': 'agents', 'arguments': {'action': 'execute', 'feature': 'agents', 'arguments': {'action': 'status'}}}},
+         'params': {'name': 'agents', 'arguments': {'action': 'execute', 'feature': 'status', 'arguments': {}}}},
     ])), output)
     listed, called = [json.loads(line) for line in output.getvalue().splitlines()]
     descriptor = next(tool for tool in listed['result']['tools'] if tool['name'] == 'agents')
@@ -43,10 +43,10 @@ def test_pi_mcp_progressive_discovery_schema_and_entry_scope(monkeypatch: pytest
     calls = [
         ('agents', {'action': 'discover'}),
         ('tasks', {'action': 'discover'}),
-        ('agents', {'action': 'describe', 'feature': 'agents', 'schema': True}),
+        ('agents', {'action': 'describe', 'feature': 'send', 'schema': True}),
         ('tasks', {'action': 'describe', 'feature': 'agents', 'schema': True}),
         ('graphtraj', {'action': 'discover'}),
-        ('agents', {'action': 'execute', 'feature': 'agents', 'arguments': {'unknown': True}}),
+        ('agents', {'action': 'execute', 'feature': 'send', 'arguments': {'agent': 'target', 'message': 'hi', 'runtime': 'pi'}}),
     ]
     output = io.StringIO()
     mcp.serve(io.StringIO('\n'.join(json.dumps({
@@ -56,9 +56,27 @@ def test_pi_mcp_progressive_discovery_schema_and_entry_scope(monkeypatch: pytest
     discovered, tasks, described, wrong, old, invalid = [
         json.loads(line) for line in output.getvalue().splitlines()
     ]
-    assert [item['feature'] for item in discovered['result']['structuredContent']['features']] == ['agents']
+    assert [item['feature'] for item in discovered['result']['structuredContent']['features']] == ['create', 'send', 'status', 'wait', 'interrupt', 'resume', 'requests', 'reply', 'retire']
     assert all(item['feature'] != 'agents' for item in tasks['result']['structuredContent']['features'])
-    assert described['result']['structuredContent']['input_schema'] == tool_descriptor()['input_schema']
+    assert described['result']['structuredContent']['input_schema'] == feature_schema('send')
     assert wrong['result']['isError']
     assert old['error']['code'] == -32602
     assert invalid['result']['isError']
+
+
+def test_pi_describe_never_returns_aggregate_actions(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Selected status/schema contains no create arguments or hidden caller identity."""
+    monkeypatch.setenv('GRAPHTRAJ_NATIVE_RUNTIME', 'pi')
+    monkeypatch.delenv('GRAPHTRAJ_CLI_CONNECTION', raising=False)
+    for selected in ('create', 'send', 'status', 'wait', 'interrupt', 'resume', 'requests', 'reply', 'retire'):
+        output = io.StringIO()
+        mcp.serve(io.StringIO(json.dumps({'jsonrpc': '2.0', 'id': 1, 'method': 'tools/call',
+            'params': {'name': 'agents', 'arguments': {'action': 'describe', 'feature': selected}}})), output)
+        result = json.loads(output.getvalue())['result']['structuredContent']
+        assert result['input_schema'] == feature_schema(selected)
+        assert 'action' not in result['input_schema']['properties']
+        assert result['feature'] == selected
+    output = io.StringIO()
+    mcp.serve(io.StringIO(json.dumps({'jsonrpc': '2.0', 'id': 1, 'method': 'tools/call',
+        'params': {'name': 'agents', 'arguments': {'action': 'describe', 'feature': 'agents', 'schema': True}}})), output)
+    assert json.loads(output.getvalue())['result']['isError']

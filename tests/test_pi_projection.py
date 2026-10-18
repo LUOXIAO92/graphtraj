@@ -245,3 +245,46 @@ def test_public_session_read_uses_pi_jsonl_with_existing_authority(
     assert result.document['events'][0]['data']['record'] == native
     with runtime_caller(runner, 'research@x2'), pytest.raises(RunnerError, match='own verified'):
         handle_request(request, cwd=tmp_path)
+
+
+def test_identical_rpc_finals_link_in_native_message_sequence(tmp_path: Path) -> None:
+    """Equal bodies and clocks need two distinct entry identities, not deduplication."""
+    archive = SessionArchive(tmp_path, save_normalized_sessions=True, backfill_history=True)
+    first = message('a', None, 'assistant', 'same')
+    second = message('b', 'a', 'assistant', 'same')
+    collector = PiArchive(archive, {'id': 'identical', 'type': 'session', 'timestamp': 0},
+                          agent='agent', project=str(tmp_path), entries=[], leaf_id=None)
+    collector.receive({'type': 'message_start', 'message': {**first['message'], 'content': []}})
+    collector.receive({'type': 'message_end', 'message': first['message']})
+    collector.sync([first, second], 'b')
+    assert len(archive.store(collector.key).pending()) == 1
+    collector.receive({'type': 'message_start', 'message': {**second['message'], 'content': []}})
+    collector.receive({'type': 'message_end', 'message': second['message']})
+    collector.sync([first, second], 'b', settled=True)
+    assert collector.messages() == [first['message'], second['message']]
+    store = archive.store(collector.key)
+    assert not store.pending()
+    assert len({tuple(item['final']) for item in store.observations()}) == 2
+    assert [event['data']['record']['id'] for event in store.page()['events']
+            if event['type'] == 'graphtraj/native'] == ['a', 'b']
+    reopened = PiArchive(archive, {'id': 'identical', 'type': 'session', 'timestamp': 0},
+                         agent='agent', project=str(tmp_path), entries=[first, second], leaf_id='b')
+    assert reopened.messages() == collector.messages()
+
+
+def test_extra_identical_native_message_remains_explicitly_ambiguous(tmp_path: Path) -> None:
+    """A missing RPC message cannot authorize guessing which native entry it was."""
+    archive = SessionArchive(tmp_path, save_normalized_sessions=True, backfill_history=True)
+    native = [message('a', None, 'assistant', 'same'), message('b', 'a', 'assistant', 'same'),
+              message('c', 'b', 'assistant', 'same')]
+    collector = PiArchive(archive, {'id': 'missing-rpc', 'type': 'session', 'timestamp': 0},
+                          agent='agent', project=str(tmp_path), entries=[], leaf_id=None)
+    for entry in native[:2]:
+        collector.receive({'type': 'message_start', 'message': {**entry['message'], 'content': []}})
+        collector.receive({'type': 'message_end', 'message': entry['message']})
+    collector.sync(native, 'c', settled=True)
+    assert len(archive.store(collector.key).pending()) == 2
+    assert sum(event['type'] == 'graphtraj/native'
+               for event in archive.store(collector.key).page()['events']) == 3
+    with pytest.raises(ValueError, match='unambiguous'):
+        collector.messages()

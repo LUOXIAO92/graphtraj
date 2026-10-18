@@ -31,7 +31,7 @@ const input = {action: 'create', instruction: 'full outbound\\nsecond line'};
 const result = {agent: 'agent-child', session: 'native-child', execution: 'exec', result: {
   parent: 'agent-parent', name: 'Pi child', last_result: {id: 'exec', last_message: 'full reply\\nnext line'},
 }};
-const event = {details: {server: 'graphtraj', tool: 'agents'}, input: {action: 'execute', feature: 'agents', arguments: input},
+const event = {details: {server: 'graphtraj', tool: 'agents'}, input: {action: 'execute', feature: input.action, arguments: {instruction: input.instruction}},
   toolCallId: 'call', structuredContent: {structuredContent: result},
 };
 const original = JSON.stringify(event);
@@ -45,11 +45,11 @@ assert.equal(JSON.stringify(event), original);
 registerAgentDisplay(pi, sdk);
 handler(event, ctx);
 assert.equal(entries.length, 2);
-handler({...event, toolCallId: 'second-call', input: {action: 'execute', feature: 'agents', arguments: {action: 'wait'}}}, ctx);
+handler({...event, toolCallId: 'second-call', input: {action: 'execute', feature: 'wait', arguments: {}}}, ctx);
 assert.equal(entries.length, 2);
 handler({...event, isError: true}, ctx);
 assert.equal(entries.length, 2);
-handler({...event, toolCallId: 'not-delivered', input: {action: 'execute', feature: 'agents', arguments: {action: 'resume', message: 'not sent'}},
+handler({...event, toolCallId: 'not-delivered', input: {action: 'execute', feature: 'resume', arguments: {message: 'not sent'}},
   structuredContent: {structuredContent: {...result, result: {...result.result, resumed: false}}}}, ctx);
 assert.equal(entries.length, 2);
 assert.equal(renderer(entries[0]).message.customType, 'agents · agent-parent → Pi child');

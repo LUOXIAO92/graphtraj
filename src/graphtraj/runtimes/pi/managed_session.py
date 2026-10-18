@@ -342,10 +342,11 @@ class PiManagedExecution:
                     from graphtraj.interfaces.agents import swarm_root
                     from graphtraj.sessions.archive import SessionArchive
 
-                    mapping = yaml.safe_load((self.directory / 'mapping.yml').read_text())
-                    agent = mapping.get('alias', self.directory.name)
+                    mapping_file = self.directory / 'mapping.yml'
+                    mapping = yaml.safe_load(mapping_file.read_text()) if mapping_file.is_file() else {}
+                    agent = mapping.get('alias', self.session)
                     tasks = [mapping['task_id']] if mapping.get('task_id') else []
-                    source = 'member'
+                    source = 'member' if mapping else None
                     root = swarm_root(Path(self.request['harness_root']))
                     archive = SessionArchive(root, **default_config(root, save_normalized_sessions=True))
                 if archive is not None:

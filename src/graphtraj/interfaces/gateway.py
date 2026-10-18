@@ -12,21 +12,7 @@ from agent_swarm.schema import validate as _validate
 from graphtraj.interfaces.tools import TOOLS, ToolResult
 
 
-INPUT_SCHEMA: dict[str, Any] = {
-    "type": "object",
-    "properties": {
-        "action": {"type": "string", "enum": ["discover", "describe", "execute"]},
-        "query": {"type": "string"},
-        "feature": {"type": "string"},
-        "schema": {
-            "type": "boolean", "default": False,
-            "description": "For describe only: return the selected input schema instead of guide references.",
-        },
-        "arguments": {"type": "object"},
-    },
-    "required": ["action"],
-    "additionalProperties": False,
-}
+from agent_swarm.discovery import INPUT_SCHEMA, validate_envelope
 
 
 def delivered_manuals_root() -> Path:
@@ -74,19 +60,7 @@ def handle_request(
     exceptions remain host-owned.
     """
     try:
-        _validate(request, INPUT_SCHEMA, "request")
-        action = request["action"]
-        fields = {"action", "query"} if action == "discover" else {"action", "feature"}
-        if action == "execute":
-            fields.add("arguments")
-        if action == "describe":
-            fields.add("schema")
-        for name in request.keys() - fields:
-            raise ValueError(f"request.{name}: not valid for {action}")
-        if action != "discover" and "feature" not in request:
-            raise ValueError("request.feature: required")
-        if action == "execute" and "arguments" not in request:
-            raise ValueError("request.arguments: required")
+        action = validate_envelope(request)
     except ValueError as error:
         return ToolResult({"error": str(error)}, failed=True)
 

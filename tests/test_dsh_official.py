@@ -262,7 +262,28 @@ def test_actual_pi_reply_resumes_standby_dsh() -> None:
         error_path = handoff / 'status-error.json'
         error_path.write_text(json.dumps(status.document, indent=2))
         pytest.fail(f'The fixed DSH Agent/Session status did not match; retained at {error_path}')
+
+    def pi_children() -> list[dict]:
+        """Read only the fixed parent's direct Pi children through public status."""
+        visible = call({'action': 'status'})
+        assert not visible.failed, visible.document
+        return [child for node in visible.document['result']['agents']
+                if node['agent'] == agent_id for child in node.get('children', [])
+                if child.get('parent') == agent_id and child.get('runtime') == 'pi']
+
+    def execution_ids(child: dict) -> set[str]:
+        """Include both active and last-ended IDs without relying on event time."""
+        return {value for value in (child.get('execution'), child.get('last_result', {}).get('id'))
+                if value is not None}
+
+    baseline_ids = {value for child in pi_children() for value in execution_ids(child)}
+    (handoff / 'child-execution-baseline.json').write_text(json.dumps(sorted(baseline_ids)))
     resumed = call({'action': 'resume', 'agent': agent_id, 'message':
+        'Current host facts: this authorized Main test host differs from the earlier engineering '
+        'execution context. Evidence /private/tmp/task334-main-host-preflight.json records the unchanged '
+        'Pi sandbox policy wrapping /usr/bin/true, returncode=0, policy_unchanged=true, model_requests=0. '
+        'This proves only the sandbox preflight, not complete Pi startup or model success. '
+        'Keep the sandbox and all history. One create attempt on this current host is now authorized. '
         'Use agents MCP describe create schema=true then execute create exactly once with runtime pi. '
         'Child instruction: "Use bash to run sleep 180, then reply exactly PI334-REPLY. Do not spawn agents or edit files." '
         'After create returns, reply exactly WAITING and end your turn immediately. Do not call wait/status. '
@@ -272,27 +293,43 @@ def test_actual_pi_reply_resumes_standby_dsh() -> None:
         deadline = float(os.environ['TASK334_UI_DEADLINE'])
         while time.time() < deadline:
             state = call({'action': 'status', 'agent': record['agent']}).document['result']
+            children = [child for child in pi_children() if execution_ids(child) - baseline_ids]
+            new_ids = {value for child in children for value in execution_ids(child)} - baseline_ids
+            assert len(new_ids) <= 1, {'unexpected_new_child_executions': sorted(new_ids)}
             if len(phases) >= 2 and state['state'] == 'standby':
                 break
             if len(phases) == 1 and state['state'] == 'standby':
-                tree = call({'action': 'status'}).document['result']['agents']
-                children = [child for node in tree for child in node.get('children', [])]
-                if children and all(child.get('session') is None and
-                                    child.get('last_result', {}).get('outcome') == 'failed'
-                                    for child in children):
-                    raise AssertionError({'unbound_child_startup_failure': children})
+                assert children, {'no_new_child_execution': state, 'baseline_ids': sorted(baseline_ids)}
+                failed = [child for child in children
+                          if child.get('last_result', {}).get('id') in new_ids
+                          and child['last_result'].get('outcome') == 'failed']
+                assert not failed, {'current_child_execution_failed': failed}
             time.sleep(.2)
         assert len(phases) == 2, {'phases': phases, 'state': state}
+        assert len(children) == 1 and len(new_ids) == 1, children
+        child = children[0]
+        child_result = child.get('last_result', {})
+        assert child_result.get('id') in new_ids and child_result.get('outcome') == 'completed', child
+        assert child.get('session'), child
+        assert phases[0]['execution'] == resumed.document['execution'], phases
+        assert phases[1]['execution'] == state['last_result']['id'] != phases[0]['execution'], phases
+        assert all(phase['session'] == expected_session for phase in phases), phases
         assert state['session'] == record['session']
         assert 'PI334-REPLY' in state['last_result']['last_message'], state
         assert 'DSH334-amber' in state['last_result']['last_message'], state
         trace = root / 'native' / record['agent'] / 'trace.jsonl'
         rows = [json.loads(line) for line in trace.read_text().splitlines()]
         replies = [row for row in rows if row.get('type') == 'user/message'
-                   and row['data'].get('source', {}).get('kind') == 'agent-message']
+                   and row['data'].get('source', {}).get('kind') == 'agent-message'
+                   and row['data']['source'].get('communicationId') == child_result['id']]
         assert len(replies) == 1, replies
-        assert replies[0]['data']['source']['senderSessionId']
+        source = replies[0]['data']['source']
+        assert source.get('senderSessionId') == child['session'], source
+        assert source.get('senderAgentId') == child['agent'], source
+        assert source.get('recipientAgentId') == agent_id, source
         print(json.dumps({'phases': phases, 'native_reply_count': 1, 'standby_reply_processed': True,
+                          'child_agent': child['agent'], 'child_session': child['session'],
+                          'child_execution': child_result['id'], 'baseline_ids': sorted(baseline_ids),
                           'additional_dsh_executions': 2, 'pi_executions': 1}))
     finally:
         for path in handoff.glob('phase-*.json'):

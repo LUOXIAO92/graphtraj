@@ -178,3 +178,43 @@ assert not any(name == 'graphtraj' or name.startswith('graphtraj.') for name in 
     result = subprocess.run([sys.executable, '-I', '-S', '-c', program, str(tmp_path)],
                             cwd=tmp_path, capture_output=True, text=True, check=False)
     assert result.returncode == 0, result.stderr
+
+
+@pytest.mark.parametrize('changed', [False, True])
+def test_snapshot_checks_facts_not_atomic_same_content_rewrites(
+    changed: bool, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A real binding change refuses; an identical native rebind permits a copy."""
+    origin = tmp_path / 'origin'
+    _source(origin, tmp_path / 'native.jsonl')
+    mapping = origin / '.graphtraj/runner/sessions/member/mapping.yml'
+    copy_file = shutil.copy2
+    rewritten = False
+
+    def concurrent_rebind(source: Path, destination: Path, **options: object) -> str:
+        """Model an atomic native binding publication during the ordinary copy."""
+        nonlocal rewritten
+        result = copy_file(source, destination, **options)
+        if not rewritten:
+            rewritten = True
+            content = mapping.read_text()
+            if changed:
+                content = content.replace('session: owned', 'session: another')
+            temporary = mapping.with_suffix('.new')
+            temporary.write_text(content)
+            temporary.replace(mapping)
+        return result
+
+    monkeypatch.setattr(shutil, 'copy2', concurrent_rebind)
+    monkeypatch.chdir(origin)
+    destination = tmp_path / 'copy'
+    result = CliRunner().invoke(main, ['migrate-agents', '--snapshot', str(destination)])
+    assert rewritten
+    if changed:
+        assert result.exit_code != 0
+        assert 'mapping.yml' in result.output
+        assert not destination.exists()
+    else:
+        assert result.exit_code == 0, result.output
+        manifest = yaml.safe_load((destination / '.graphtraj/migration-snapshot.yml').read_text())
+        assert manifest['control_state_unchanged']

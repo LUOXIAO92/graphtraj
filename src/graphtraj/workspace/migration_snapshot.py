@@ -183,7 +183,7 @@ def install_links(
     return gaps
 
 
-def task_signatures(state: Path) -> dict[str, tuple[int, int, int]]:
+def task_signatures(state: Path) -> dict[str, str]:
     """Identify graph facts before/after copying without following report links."""
     paths = list((state / 'tickets').glob('*/ticket.yml'))
     paths += list((state / 'tickets').glob('*/ticket.md'))
@@ -193,11 +193,11 @@ def task_signatures(state: Path) -> dict[str, tuple[int, int, int]]:
     paths += list((state / 'tasks').glob('*/task.md'))
     paths += list((state / 'tasks').glob('*/definitions/*.md'))
     paths += list((state / 'tasks').glob('*/teams/*/team.yml'))
-    return {str(path): (value.st_ino, value.st_size, value.st_mtime_ns)
-            for path in paths if not path.is_symlink() for value in [path.stat()]}
+    return {str(path): hashlib.sha256(path.read_bytes()).hexdigest()
+            for path in paths if not path.is_symlink()}
 
 
-def _control_signatures(project: Path) -> dict[str, tuple[int, int, int]]:
+def _control_signatures(project: Path) -> dict[str, str]:
     """Observe durable identity/config changes, excluding active heartbeats/channels."""
     data = project / '.graphtraj'
     paths = [data / 'config.yml', data / 'roles.yml', data / 'swarm/config.yml']
@@ -205,8 +205,15 @@ def _control_signatures(project: Path) -> dict[str, tuple[int, int, int]]:
     paths += list((data / 'runner').glob('sessions/*/session.yml'))
     paths += list((data / 'runner').glob('main-sessions/*/session.yml'))
     paths += list((data / 'swarm/control').rglob('*.json'))
-    return {str(path): (value.st_ino, value.st_size, value.st_mtime_ns)
-            for path in paths if path.is_file() and not path.is_symlink() for value in [path.stat()]}
+    # Native Main rebinding atomically rewrites even an unchanged binding.
+    # Inode/mtime changes do not mean its retained facts changed.
+    return {str(path): hashlib.sha256(path.read_bytes()).hexdigest()
+            for path in paths if path.is_file() and not path.is_symlink()}
+
+
+def _changed_records(before: dict[str, str], after: dict[str, str]) -> list[str]:
+    """Name changed records without disclosing their bodies or credentials."""
+    return sorted(path for path in before.keys() | after.keys() if before.get(path) != after.get(path))
 
 
 def _clone_snapshot(project: Path, destination: Path) -> dict:
@@ -253,8 +260,9 @@ def snapshot_project(cwd: Path, destination: Path) -> dict:
         runner = data / 'migration-runner'
         state_links = copy_records(configuration.state, state)
         runner_links = copy_records(project / '.graphtraj/runner', runner)
-        if task_signatures(configuration.state) != task_facts:
-            raise ValueError('Task state changed during snapshot; retry in a quiet capture window.')
+        changed = _changed_records(task_facts, task_signatures(configuration.state))
+        if changed:
+            raise ValueError('Task facts changed during snapshot: ' + ', '.join(changed[:20]))
         roots = {str(configuration.state): state, str(project / '.graphtraj/runner'): runner}
         local = source_map(destination, manifest)
         worktree_links = []
@@ -294,8 +302,11 @@ def snapshot_project(cwd: Path, destination: Path) -> dict:
         if git.returncode:
             manifest['git_missing'] = 'Source Repository Git worktree metadata is unavailable.'
         manifest['configuration_captured'] = [path.name for path in inputs.iterdir()]
-        if task_signatures(configuration.state) != task_facts or _control_signatures(project) != control_facts:
-            raise ValueError('Task or durable Agent/configuration records changed during snapshot; retry in a quiet capture window.')
+        changed = (_changed_records(task_facts, task_signatures(configuration.state))
+                   + _changed_records(control_facts, _control_signatures(project)))
+        if changed:
+            raise ValueError('Task or durable Agent/configuration facts changed during snapshot: '
+                             + ', '.join(changed[:20]) + f' ({len(changed)} changed records).')
         manifest['control_state_unchanged'] = True
         # No active Runner, roles, connections, credentials or source checkout is
         # installed. This copy supports offline migration and Task graph queries.

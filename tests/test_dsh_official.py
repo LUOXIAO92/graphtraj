@@ -74,3 +74,84 @@ def test_retained_official_trace_messages(tmp_path: Path) -> None:
     assert [row['graphtraj']['native']['record'] for row in store.page(limit=1000)['events']] == events
     print(json.dumps({'native_session': header['id'], 'events': len(events),
                       'messages': len(store.messages()), 'native_projection_equal': True}))
+
+
+@pytest.mark.skipif(os.environ.get('TASK334_FINAL_DSH') != '1', reason='Requires final assigned host slot.')
+def test_actual_client_interrupt_and_memory(tmp_path: Path) -> None:
+    """Capture the official browser and interrupt one real tool before resuming."""
+    import time
+    from playwright.sync_api import sync_playwright
+    from agent_swarm import AgentControl, Caller, bind
+    from agent_swarm.dsh import DshDriver
+
+    driver = DshDriver(tmp_path, {
+        'model': 'deepseek-flash', 'reasoning_effort': None, 'sandbox': 'workspace-write',
+        'base_url': 'https://api.deepseek.com/anthropic', 'api_key_env': 'DEEPSEEK_API_KEY',
+        'mcp': {'command': sys.executable, 'args': ['-I', '-m', 'agent_swarm.mcp']},
+    })
+    control = AgentControl(tmp_path / 'agents', {'dsh': driver})
+    call = bind(control, Caller('official-final-validation', None))
+    created = call({'action': 'create', 'runtime': 'dsh', 'instruction':
+        'Remember marker DSH334-amber. Use agents MCP execute status with empty arguments once. '
+        'Then use bash to execute sleep 45. This harmless wait is an authorized interruption test. '
+        'Do not ask questions, create agents, or change files. After the wait reply with the marker.'})
+    assert not created.failed, created.document
+    agent, session = created.document['agent'], created.document['session']
+    pids = []
+    try:
+        turn = driver.turns[created.document['execution']]
+        pids.append(turn.service.process.pid)
+        deadline = time.monotonic() + 45
+        while time.monotonic() < deadline:
+            with turn.lock:
+                sleeping = any(item['tool'] == 'bash' and 'sleep 45' in str(item['arguments'])
+                               for item in turn.tool_calls.values())
+            if sleeping:
+                break
+            assert not turn.finished.is_set(), 'Native execution ended before the interruption target.'
+            time.sleep(.05)
+        assert sleeping, 'No native active bash call observed.'
+        with sync_playwright() as playwright:
+            browser = playwright.chromium.launch(executable_path=str(Path.home() /
+                'Library/Caches/ms-playwright/chromium_headless_shell-1243/chrome-headless-shell-mac-arm64/chrome-headless-shell'))
+            try:
+                context = browser.new_context(viewport={'width': 1440, 'height': 1000})
+                context.add_cookies([{'name': item.split('=', 1)[0], 'value': item.split('=', 1)[1],
+                                     'url': turn.service.origin} for item in turn.service.cookie.split('; ')])
+                page = context.new_page()
+                page.goto(turn.service.origin, wait_until='networkidle', timeout=20000)
+                page.screenshot(path=str(tmp_path / 'official-client.png'), full_page=True)
+                (tmp_path / 'official-client.txt').write_text(page.locator('body').inner_text())
+            finally:
+                browser.close()
+        stopped = call({'action': 'interrupt', 'agent': agent})
+        assert not stopped.failed, stopped.document
+        ended = call({'action': 'wait', 'agent': agent, 'timeout_seconds': 30})
+        assert ended.document['result']['last_result']['outcome'] == 'interrupted', ended.document
+        resumed = call({'action': 'resume', 'agent': agent, 'message':
+                        'The interruption test is finished. What marker did I ask you to remember? Reply only with it. Do not call tools.'})
+        assert not resumed.failed and resumed.document['session'] == session, resumed.document
+        pids.append(driver.turns[resumed.document['execution']].service.process.pid)
+        recalled = call({'action': 'wait', 'agent': agent, 'timeout_seconds': 60})
+        assert 'DSH334-amber' in recalled.document['result']['last_result']['last_message'], recalled.document
+        trace = tmp_path / 'agents/native' / agent / 'trace.jsonl'
+        rows = [json.loads(line) for line in trace.read_text().splitlines()]
+        tools = next(row['data']['header']['tools'] for row in rows if row.get('type') == 'request/header')
+        (tmp_path / 'initial-tools.json').write_text(json.dumps(tools, indent=2))
+        names = [item['name'] for item in tools]
+        assert len(names) == len(set(names))
+        assert [name for name in names if name.startswith('mcp__')] == ['mcp__agents__agents']
+        assert 'agents' not in names and 'graphtraj' not in names
+        entry = next(item for item in tools if item['name'] == 'mcp__agents__agents')
+        assert set(entry['parameters']['properties']) <= {'action', 'query', 'feature', 'schema', 'arguments'}
+        print(json.dumps({'agent': agent, 'session': session, 'dsh_executions': 2,
+                          'pi_executions': 0, 'runtime_pids': pids, 'initial_tools': names,
+                          'active_interrupt': True, 'same_session_memory': True, 'evidence': str(tmp_path)}))
+    finally:
+        state = call({'action': 'status', 'agent': agent}).document['result']
+        if state['state'] == 'active':
+            call({'action': 'interrupt', 'agent': agent})
+            call({'action': 'wait', 'agent': agent, 'timeout_seconds': 30})
+        for pid in pids:
+            with pytest.raises(ProcessLookupError):
+                os.kill(pid, 0)

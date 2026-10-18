@@ -48,7 +48,7 @@ import threading
 import time
 import uuid
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any, Callable, Iterator, Mapping, Protocol
 
@@ -187,6 +187,31 @@ class ExecutionEvents:
                 raise AgentsError('stale-execution', 'The reply receiver belongs to an ended execution.')
             self._control._receivers[self._agent] = (self._execution, receiver)
 
+    def continue_from_child(self, notice: dict, archive: SessionArchive | None) -> bool:
+        """Resume the retained parent with one trusted native child reply.
+
+        The owning Runtime receiver calls this after its native service has
+        closed. Identity comes from the child's persisted completion, never
+        from a model argument. Launch happens outside both Agent locks.
+        """
+        control = self._control
+        with control._locked(notice['agent']) as child:
+            ended = next((item for item in child['executions']
+                          if item['id'] == notice['execution']), None)
+            if (child['parent'] != self._agent or ended is None
+                    or ended['state'] != 'ended' or ended.get('notification') != 'pending'
+                    or ended['session'] != notice['session']
+                    or ended['last_message'] != notice['body']):
+                return False
+        with control._locked(self._agent) as parent:
+            if (_running(parent) is not None or parent['retired_at'] is not None
+                    or not parent['session']):
+                return False
+            binding = Binding(Caller('runtime-completion', self._agent), archive)
+            run = control._begin(parent, 'receive', '', binding)
+            run = replace(run, settings={**run.settings, 'completion_message': dict(notice)})
+        return not control._launch(run).failed
+
     def finished(
         self,
         outcome: str,
@@ -216,7 +241,8 @@ class ExecutionEvents:
             notify = receiver is not None and bool(last_message) and record['parent'] is not None
             if notify:
                 current['notification'] = 'pending'
-            self._control._receivers.pop(self._agent, None)
+            # Keep the native receiver while this Agent is in standby so its
+            # children can continue the retained Session after this turn ends.
 
         # Durable completion precedes delivery. No Agent lock spans native I/O,
         # and repeated finished() cannot invoke the receiver a second time.

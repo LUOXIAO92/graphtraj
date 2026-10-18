@@ -66,3 +66,30 @@ def test_completion_once_outside_lock_and_no_duplicate_body(tmp_path: Path, deli
     assert status['last_result']['notification'] == ('delivered' if delivered else 'unavailable')
     assert status['last_result']['last_message'] == (None if delivered else 'actual body')
     assert child_run.call({'action': 'status'}).failed
+
+
+def test_standby_parent_continues_once_with_real_child_notice(tmp_path: Path) -> None:
+    """An ended parent keeps its receiver and resumes its original Session."""
+    driver = Driver()
+    control = AgentControl(tmp_path, {'controlled': driver})
+    root = bind(control, Caller('test', None))
+    parent = root({'action': 'create', 'runtime': 'controlled', 'instruction': 'parent'}).document
+    original = driver.runs[parent['agent']]
+    original.events.receive_children(lambda event: original.events.continue_from_child(event, None))
+    child = original.call({'action': 'create', 'runtime': 'controlled', 'instruction': 'child'}).document
+    child_run = driver.runs[child['agent']]
+    original.events.finished('completed', last_message='waiting')
+    child_run.events.finished('completed', last_message='native child reply')
+    resumed = driver.runs[parent['agent']]
+    assert resumed.execution != original.execution
+    assert resumed.session == parent['session']
+    assert resumed.message == ''
+    assert resumed.settings['completion_message'] == {
+        'parent': parent['agent'], 'agent': child['agent'], 'session': child['session'],
+        'execution': child['execution'], 'body': 'native child reply', 'outcome': 'completed',
+    }
+    child_run.events.finished('completed', last_message='duplicate')
+    assert driver.runs[parent['agent']] is resumed
+    status = resumed.call({'action': 'status', 'agent': child['agent']}).document['result']
+    assert status['last_result']['notification'] == 'delivered'
+    assert status['last_result']['last_message'] is None

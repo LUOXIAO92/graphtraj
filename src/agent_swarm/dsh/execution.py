@@ -456,9 +456,17 @@ class DshExecution:
                 if any(self._projections()['inbox'].values()):
                     self.stopping.set()
                     self.unsupported = 'DSH recovered with pending input; stopped it before continuation.'
-                self.started(native, self.service.process.pid)
                 if not self.stopping.is_set():
-                    self._input(self.prompt, 'queue', self.execution_id)
+                    notice = self.request.get('completion_message')
+                    if notice is not None:
+                        self.service.rpc('agentMessages/receive', {
+                            'id': notice['execution'], 'sessionId': native,
+                            'senderSessionId': notice['session'], 'sender': notice['agent'],
+                            'recipient': notice['parent'], 'body': notice['body'],
+                        })
+                    else:
+                        self._input(self.prompt, 'queue', self.execution_id)
+                self.started(native, self.service.process.pid)
             stopping_since = None
             while True:
                 if self.stopping.is_set():

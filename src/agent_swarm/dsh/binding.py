@@ -36,12 +36,14 @@ def bind_run(turn: DshExecution, run: Run) -> None:
             yield address
 
     def receive(event: dict) -> bool:
-        """Deliver one actual child completion to this still-active parent."""
+        """Deliver once, or continue the same native Session from standby."""
         if event['parent'] != run.agent or not event['session']:
             return False
         with turn.lock:
-            if not turn.active or turn.stopping.is_set() or turn.finished.is_set():
-                return False
+            active = turn.active and not turn.stopping.is_set() and not turn.finished.is_set()
+        if not active:
+            return run.events.continue_from_child(event, run.archive)
+        with turn.lock:
             result = turn.operate({
                 'operation': 'receive', 'session': turn.session, 'execution_id': turn.execution_id,
                 'message': {'id': event['execution'], 'sessionId': turn.session,

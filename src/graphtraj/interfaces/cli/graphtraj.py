@@ -85,6 +85,12 @@ def migrate_agents_command(
             raise ValueError('Partition requires a full isolated migration, not a preview or sample.')
         if verify and (preview or partition or sessions):
             raise ValueError('Verification is a separate read-only full-copy operation.')
+        if partition and (Path.cwd() / '.graphtraj/core/config.yml').is_file():
+            from graphtraj.workspace.agent_cutover import partition_snapshot
+
+            result = {'layout': partition_snapshot(Path.cwd())}
+            click.echo(yaml.safe_dump(result, sort_keys=False), nl=False)
+            return
         result = (snapshot_project(Path.cwd(), snapshot) if snapshot is not None
                   else migrate_agents(Path.cwd(), preview=preview, sessions=sessions, verify=verify, main_session=main_session))
         if partition:

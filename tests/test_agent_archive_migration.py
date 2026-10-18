@@ -258,6 +258,9 @@ def test_public_partition_uses_core_paths_and_retains_originals(tmp_path: Path, 
 
     origin = tmp_path / 'origin'
     _source(origin, tmp_path / 'native.jsonl')
+    native_config = origin / '.graphtraj/runner/sessions/member/dsh-home/cordis.patch.yml'
+    native_config.parent.mkdir()
+    native_config.write_text('disabled: !!js process.platform === "win32"\n')
     runner = CliRunner()
     monkeypatch.chdir(origin)
     snapshot = tmp_path / 'copy'
@@ -272,6 +275,9 @@ def test_public_partition_uses_core_paths_and_retains_originals(tmp_path: Path, 
     assert not (snapshot / '.graphtraj/state').exists()
     backup = snapshot / '.graphtraj/core/backups/before-agent-partition'
     assert (backup / 'state/tickets/2-child/ticket.md').read_bytes() == original
+    backup_trace = backup / 'state/tickets/2-child/teams/1/traces/member/events.jsonl'
+    assert backup_trace.read_bytes() == (tmp_path / 'native.jsonl').read_bytes()
+    assert (snapshot / '.graphtraj/core/runner/sessions/member/dsh-home/cordis.patch.yml').read_bytes() == native_config.read_bytes()
     assert (snapshot / '.graphtraj/core/state/tickets/2-child/ticket.md').read_bytes() == original
     assert yaml.safe_load(result.output)['layout']['production_cutover'] is False
     again = runner.invoke(main, ['migrate-agents', '--partition'])

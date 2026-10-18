@@ -836,19 +836,18 @@ def test_public_json_cli_uses_host_identity_and_report_checks(tmp_path: Path) ->
         tmp_path, 'research@x1', native_operation_features(),
     ) as address:
         result = subprocess.run(
-            [sys.executable, '-m', 'graphtraj.interfaces.mcp'],
+            [sys.executable, '-c', 'from graphtraj.interfaces.local_tool import main; main()'],
             cwd=tmp_path, env={**os.environ, CONNECTION_ENV: address,
                               'GRAPHTRAJ_CALLER_ALIAS': 'research@x2',
                               'PYTHONPATH': str(Path(__file__).resolve().parents[1] / 'src')},
-            input=json.dumps({'jsonrpc': '2.0', 'id': 1, 'method': 'tools/call', 'params': {
-                'name': 'tasks', 'arguments': {'action': 'execute', 'feature': 'session_reports',
-                                             'arguments': {'alias': 'research@x2'}}}}) + '\n',
+            input=json.dumps({'action': 'execute', 'feature': 'session_reports',
+                              'arguments': {'alias': 'research@x2'}}) + '\n',
             text=True, capture_output=True, timeout=20,
         )
     assert result.returncode == 0
-    document = json.loads(result.stdout)['result']
-    assert document['isError']
-    assert document['structuredContent'].get('error') and 'reports' not in document['structuredContent']
+    document = json.loads(result.stdout)
+    assert document['failed']
+    assert document.get('error') and 'reports' not in document
 
 
 def test_dsh_own_channel_is_projected_inside_the_session_worktree(

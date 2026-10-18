@@ -15,7 +15,8 @@ import yaml
 from agent_swarm import AgentControl, AgentsError
 from graphtraj.configuration.project_configuration import configuration_file, load_project_configuration
 from graphtraj.execution.runner_io import write_yaml_durably
-from graphtraj.workspace.migration_snapshot import MANIFEST, copy_records, install_links
+from graphtraj.execution.runner_transport import RUNTIME_DIAGNOSTIC_FILES
+from graphtraj.workspace.migration_snapshot import MANIFEST, copy_records, install_links, source_map
 
 
 PATH_FIELDS = frozenset({
@@ -43,7 +44,11 @@ def _references(value: object, moves: dict[str, str], field: str = '') -> object
 def _rewrite_records(directory: Path, moves: dict[str, str]) -> None:
     """Rewrite only GraphTraj metadata; original records remain in the backup."""
     for path in directory.rglob('*.yml'):
-        if path.is_symlink():
+        if path.is_symlink() or not (
+            path.name in RUNTIME_DIAGNOSTIC_FILES
+            or path.name in {'task.yml', 'team.yml', 'task-backups.yml', 'child-registration.yml'}
+            or path.parent.name == 'batches'
+        ):
             continue
         document = yaml.safe_load(path.read_text(encoding='utf-8'))
         rewritten = _references(document, moves)
@@ -136,12 +141,14 @@ def partition_snapshot(root: Path) -> dict:
         raise ValueError('Ownership partition currently requires an isolated public snapshot.')
     data = root / '.graphtraj'
     core = data / 'core'
+    manifest = yaml.safe_load(manifest_path.read_text(encoding='utf-8'))
     if (core / 'config.yml').is_file():
-        return {'partition': 'already-migrated', 'core': str(core), 'production_cutover': False}
+        gaps = _backup_links(root, manifest)
+        return {'partition': 'already-migrated', 'core': str(core),
+                'missing_links': gaps, 'production_cutover': False}
     if core.exists():
         raise ValueError('Incomplete core destination exists; preserve it for diagnosis.')
     configuration = load_project_configuration(root)
-    manifest = yaml.safe_load(manifest_path.read_text(encoding='utf-8'))
     state, runner = configuration.state, data / 'migration-runner'
     original_config = configuration_file(root)
     document = yaml.safe_load(original_config.read_text(encoding='utf-8'))
@@ -158,6 +165,7 @@ def partition_snapshot(root: Path) -> dict:
     backup.mkdir(parents=True)
     committed = False
     added_controls = []
+    state_links, runner_links = [], []
     try:
         state_links = copy_records(state, core / 'state')
         runner_links = copy_records(runner, core / 'runner')
@@ -190,6 +198,7 @@ def partition_snapshot(root: Path) -> dict:
         if runner.exists():
             runner.rename(backup / 'runner')
         original_config.rename(backup / 'config.yml')
+        gaps += _backup_links(root, manifest)
         for path in (staged_agents / 'control/agents').glob('*.json'):
             target = data / 'swarm/control/agents' / path.name
             if not target.exists():
@@ -211,4 +220,21 @@ def partition_snapshot(root: Path) -> dict:
             for name, destination in [('state', state), ('runner', runner), ('config.yml', original_config)]:
                 if (backup / name).exists() and not destination.exists():
                     (backup / name).rename(destination)
+            for directory, entries in ((state, state_links), (runner, runner_links)):
+                for entry in entries:
+                    path = directory / entry['path']
+                    path.unlink(missing_ok=True)
+                    path.symlink_to(entry['target'])
             shutil.rmtree(core)
+
+
+def _backup_links(root: Path, manifest: dict) -> list[dict]:
+    """Keep moved backup links readable from the captured inputs, including replay."""
+    backup = root / '.graphtraj/core/backups/before-agent-partition'
+    roots = {manifest['state_source']: backup / 'state',
+             manifest['runner_source']: backup / 'runner'}
+    captured = source_map(root, manifest)
+    gaps = []
+    for name in ('state', 'runner'):
+        gaps += install_links(backup / name, manifest.get('links', {}).get(name, []), roots, captured)
+    return gaps

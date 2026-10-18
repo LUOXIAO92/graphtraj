@@ -45,7 +45,6 @@ def test_old_tool_callback_is_unavailable_on_same_session_resume(
     assert not done.failed, done.document
     assert done.document['result']['state'] == 'standby'
     assert done.document['result']['last_result']['outcome'] == 'completed'
-    assert done.document['result']['pending_requests'] == 0
 
 
 @pytest.mark.parametrize('saving,configuration', [

@@ -372,5 +372,10 @@ def test_jsonl_messages_consume_assistant_replacement(tmp_path: Path) -> None:
                     'content': [{'type': 'text', 'text': 'retained context'}]},
     }, 2, surfaceOp={'op': 'replace', 'startSeq': 0, 'endSeq': 1}, sourceEventSeqs=[0, 1])
     store = JsonlSessionStore.create(tmp_path / 'session.jsonl', header())
-    store.publish([user('first', 0), user('second', 1), replacement], source='test', position=3)
+    events = [user('first', 0), user('second', 1), replacement]
+    for item in events:
+        item['graphtraj'] = {'version': 1, 'native': {
+            'runtime': 'codex', 'sessionId': 'test-session', 'locator': f"fixture:{item['seq']}",
+        }}
+    store.publish(events, source='test', position=3)
     assert JsonlSessionStore(store.path).messages() == [replacement['data']['message']]

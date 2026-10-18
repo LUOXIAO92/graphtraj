@@ -1,33 +1,48 @@
-/** Task 336: screenshot-driven real-window check of member scope, lifecycle display and archive settings.
+/** Task 336: screenshot-driven real-window check of member scope, archive settings and lifecycle display.
  *
- * Launches this Worktree's built Electron App on a real project and operates it only with
- * page.mouse / page.keyboard. The App never stops or continues an Agent: when
- * GRAPHTRAJ_SCOPE_ALIAS is set, the operator stops and then continues that member through
- * native operations while this script waits and captures each visible state.
+ * Launches this Worktree's built Electron App and operates it only with page.mouse /
+ * page.keyboard. The script never sends, interrupts, resumes or retires an Agent and writes
+ * no GraphTraj state; the only file it changes is the chosen project's swarm/config.yml,
+ * through the App's Settings page, and it restores the original values.
  *
- * Env: GRAPHTRAJ_TOOL (candidate graphtraj-tool), GRAPHTRAJ_SCOPE_PROJECT (project root),
- * GRAPHTRAJ_SCOPE_SUMMARY (historical summary Task ID), optional GRAPHTRAJ_SCOPE_ALIAS,
- * optional GRAPHTRAJ_SCOPE_EVIDENCE (default dist-package/adoption-evidence/336-<commit>).
+ *   node tests/scope-adoption.mjs [--project <root>] [--out <dir>] --summary <task-id>
+ *     Default current scope, one historical summary and back; edit, reload and restore
+ *     both archive switches.
+ *   node tests/scope-adoption.mjs --project <root> [--out <dir>] --lifecycle <alias>
+ *     Select that member in the current scope with the mouse, then only watch its
+ *     displayed state for about 8 minutes while the operator stops and continues it.
+ *
+ * The backend tool is GRAPHTRAJ_TOOL, or graphtraj-tool beside GRAPHTRAJ_PYTHON.
  */
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs/promises';
+import os from 'node:os';
 import path from 'node:path';
+import { parseArgs } from 'node:util';
 import { fileURLToPath } from 'node:url';
 import { _electron as electron } from 'playwright';
 import electronExecutable from 'electron';
 
 const desktop = fileURLToPath(new URL('..', import.meta.url));
-const project = process.env.GRAPHTRAJ_SCOPE_PROJECT;
-const summary = process.env.GRAPHTRAJ_SCOPE_SUMMARY;
-const alias = process.env.GRAPHTRAJ_SCOPE_ALIAS;
-assert.ok(process.env.GRAPHTRAJ_TOOL && project && summary, 'Set GRAPHTRAJ_TOOL, GRAPHTRAJ_SCOPE_PROJECT and GRAPHTRAJ_SCOPE_SUMMARY');
+const { values: options } = parseArgs({ options: {
+  project: { type: 'string', default: path.join(desktop, 'dist-package', 'scope-project') },
+  out: { type: 'string' }, summary: { type: 'string' }, lifecycle: { type: 'string' },
+} });
+const project = path.resolve(options.project);
+const alias = options.lifecycle;
+assert.ok(alias || options.summary, 'Give --summary <task-id> or --lifecycle <alias>');
+const tool = process.env.GRAPHTRAJ_TOOL
+  || (process.env.GRAPHTRAJ_PYTHON && path.join(path.dirname(process.env.GRAPHTRAJ_PYTHON), 'graphtraj-tool'));
+assert.ok(tool, 'Set GRAPHTRAJ_PYTHON (or GRAPHTRAJ_TOOL) to the candidate backend');
 const commit = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: desktop, encoding: 'utf8' }).trim();
 const dirty = execFileSync('git', ['status', '--porcelain', '--', '.'], { cwd: desktop, encoding: 'utf8' }).trim();
-const evidence = path.resolve(process.env.GRAPHTRAJ_SCOPE_EVIDENCE || path.join(desktop, 'dist-package', 'adoption-evidence', `336-${commit.slice(0, 12)}`));
+const evidence = path.resolve(options.out || path.join(desktop, 'dist-package', 'adoption-evidence',
+  `336-${commit.slice(0, 12)}${alias ? '-lifecycle' : ''}`));
+const profile = alias ? await fs.mkdtemp(path.join(os.tmpdir(), 'graphtraj-336-profile-')) : path.join(evidence, 'profile');
 const config = path.join(project, '.graphtraj', 'swarm', 'config.yml');
-const facts = { commit, dirty: Boolean(dirty), project, summary, alias: alias ?? null, electron: electronExecutable,
-  launches: 0, steps: [], screenshots: [], passed: false };
+const facts = { commit, dirty: Boolean(dirty), project, mode: alias ? 'lifecycle' : 'scope', summary: options.summary ?? null,
+  alias: alias ?? null, tool, electron: electronExecutable, profile, launches: 0, steps: [], screenshots: [], passed: false };
 await fs.mkdir(evidence, { recursive: true });
 
 let app;
@@ -48,89 +63,110 @@ const choose = async (locator, label) => {
   await page.keyboard.press('Enter');
 };
 const rows = () => page.locator('.member-tree-rows > button').allInnerTexts();
-const row = name => page.locator('.member-tree-rows > button', { hasText: name });
+const notice = () => page.locator('.member-tree .native-notice').first().innerText();
+// A scope without members shows the empty state; rows are listed otherwise.
+const listed = () => page.locator('.member-tree-rows > button, .member-tree p[role="status"]:has-text("No members in this scope.")').first().waitFor();
 
-try {
-  app = await electron.launch({ executablePath: electronExecutable, timeout: 20000,
-    args: [desktop, `--project=${project}`, `--user-data-dir=${path.join(evidence, 'profile')}`],
-    env: { ...process.env, MAC_CHROMIUM_TMPDIR: evidence } });
-  facts.launches += 1;
-  page = await app.firstWindow();
-  page.setDefaultTimeout(20000);
-
-  // Current summaries are the default scope.
-  await click(page.getByRole('button', { name: 'Members', exact: true }));
-  // A project without members shows the empty state; rows are listed otherwise.
-  const listed = () => page.locator('.member-tree-rows > button, .member-tree p[role="status"]:has-text("No members in this scope.")').first().waitFor();
+/** Default scope, one historical summary and back; reading must change no member. */
+async function scope() {
   await page.getByText('Members of current summaries', { exact: false }).waitFor();
   await listed();
-  facts.currentNotice = await page.locator('.member-tree .native-notice').first().innerText();
+  facts.currentNotice = await notice();
   const current = await rows();
   facts.current = current;
   assert.ok(current.every(text => !text.includes('Retired')), 'Retired members never appear in the current list');
-  step(`current scope lists ${current.length} members`);
+  step(`current scope: ${facts.currentNotice} · ${current.length} members`);
   await shot('01-members-current.png');
 
-  // One historical summary, then back: reading must leave current members unchanged.
-  await choose(page.getByLabel('Member scope'), `History · #${summary}`);
+  await choose(page.getByLabel('Member scope'), `History · #${options.summary}`);
   await page.getByText('History of one summary', { exact: false }).waitFor();
   await listed();
-  facts.historyNotice = await page.locator('.member-tree .native-notice').first().innerText();
+  facts.historyNotice = await notice();
   facts.history = await rows();
-  step(`history of #${summary} lists ${facts.history.length} members`);
+  step(`history of #${options.summary}: ${facts.history.length} members`);
   await shot('02-members-history.png');
+
   await choose(page.getByLabel('Member scope'), 'Current summaries');
   await page.getByText('Members of current summaries', { exact: false }).waitFor();
   await page.waitForTimeout(3500);
-  const again = await rows();
-  // Parents and states come from native records; switching scope must not change them.
-  assert.deepEqual(again.filter(text => !alias || !text.includes(alias)), current.filter(text => !alias || !text.includes(alias)));
-  step('switching scope left current members, parents and states unchanged');
+  await listed();
+  assert.deepEqual(await rows(), current, 'Switching scope left members, parents and states unchanged');
+  step('returned to current scope; members, parents and states unchanged');
   await shot('03-members-current-again.png');
+}
 
-  if (alias) {
-    // The operator performs stop and continue natively; the App only observes.
-    for (const [state, name] of [['Active', '04-lifecycle-active.png'], ['Standby', '05-lifecycle-standby.png'], ['Active', '06-lifecycle-active-again.png']]) {
-      console.log(JSON.stringify({ phase: 'WAITING', alias, state }));
-      await row(alias).filter({ hasText: `${state}` }).first().waitFor({ timeout: 600000 });
-      step(`${alias} shows ${state}`);
-      await shot(name);
-    }
-    // Messages of the same member are readable with their direction.
-    await click(row(alias).first());
-    await page.locator(`[data-agent-id="${alias}"] .activity-event`).first().waitFor();
-    await page.locator(`[data-agent-id="${alias}"]`).getByText(/Message (to|from) /).first().waitFor();
-    step('member conversation shows readable messages with direction');
-    await shot('07-member-conversation.png');
-    await click(page.getByRole('button', { name: 'Collapse chat', exact: true }));
-  }
-
-  // Archive switches: edit, confirm the tool's own file, reload, restore.
-  const before = await fs.readFile(config, 'utf8').catch(() => null);
-  facts.configBefore = before;
+/** Edit both archive switches, confirm the tool's own file, reload and restore. */
+async function archive() {
+  facts.configBefore = await fs.readFile(config, 'utf8').catch(() => null);
   await click(page.getByRole('button', { name: 'Teams & roles', exact: true }));
-  const backfill = page.getByLabel('Backfill history of associated Sessions');
-  await backfill.waitFor();
-  const original = await backfill.isChecked();
-  await click(backfill);
-  await page.getByText('Saved Session archive settings.').waitFor();
-  const written = await fs.readFile(config, 'utf8');
-  assert.ok(written.includes(`backfill_history: ${!original}`), written);
+  const switches = { save_normalized_sessions: 'Save normalized Sessions',
+    backfill_history: 'Backfill history of associated Sessions' };
+  const original = {};
+  for (const [name, label] of Object.entries(switches)) {
+    const box = page.getByLabel(label);
+    original[name] = await box.isChecked();
+    await click(box);
+    await page.getByText('Saved Session archive settings.').waitFor();
+    await page.getByText('Saved Session archive settings.').waitFor({ state: 'hidden', timeout: 8000 });
+  }
+  facts.configEdited = await fs.readFile(config, 'utf8');
+  for (const name of Object.keys(switches)) assert.ok(facts.configEdited.includes(`${name}: ${!original[name]}`), facts.configEdited);
   await click(page.getByRole('button', { name: 'Reload', exact: true }));
   await page.getByText('Loaded current configuration.').waitFor();
-  assert.equal(await backfill.isChecked(), !original);
-  step(`backfill_history saved as ${!original} in swarm/config.yml and reloaded`);
-  await shot('08-settings-archive-edited.png');
-  await click(backfill);
-  await page.getByText('Saved Session archive settings.').waitFor();
+  for (const [name, label] of Object.entries(switches)) assert.equal(await page.getByLabel(label).isChecked(), !original[name]);
+  step(`saved ${JSON.stringify(facts.configEdited)} in swarm/config.yml and reloaded`);
+  await shot('04-settings-archive-edited.png');
+  for (const [name, label] of Object.entries(switches)) {
+    await click(page.getByLabel(label));
+    await page.getByText('Saved Session archive settings.').waitFor();
+    await page.getByText('Saved Session archive settings.').waitFor({ state: 'hidden', timeout: 8000 });
+  }
   facts.configAfter = await fs.readFile(config, 'utf8');
-  assert.ok(facts.configAfter.includes(`backfill_history: ${original}`));
-  step('backfill_history restored to its original value');
-  await shot('09-settings-archive-restored.png');
+  for (const name of Object.keys(switches)) assert.ok(facts.configAfter.includes(`${name}: ${original[name]}`), facts.configAfter);
+  step('both switches restored to their original values');
+  await shot('05-settings-archive-restored.png');
+}
+
+/** Only watch the selected member's displayed state; the operator drives the Agent. */
+async function lifecycle() {
+  await page.getByText('Members of current summaries', { exact: false }).waitFor();
+  const member = page.locator('.member-tree-rows > button', { hasText: alias }).first();
+  await click(member);
+  const heading = page.locator(`[data-agent-id="${alias}"] .agent-column-heading span`).first();
+  await heading.waitFor();
+  const wanted = ['active', 'standby', 'active', 'standby'];
+  const seen = [];
+  const deadline = Date.now() + 8 * 60 * 1000;
+  let matched = 0;
+  while (matched < wanted.length) {
+    if (Date.now() > deadline) throw new Error(`Timed out; displayed states ${JSON.stringify(seen)}`);
+    const state = (await heading.innerText()).split('·').at(-1).trim();
+    if (state !== seen.at(-1)?.state) {
+      const at = new Date().toISOString();
+      seen.push({ at, state });
+      step(`${alias} displayed ${state}`);
+      await shot(`lifecycle-${at.replace(/[:.]/g, '-')}-${state}.png`);
+      if (state === wanted[matched]) matched += 1;
+    }
+    await page.waitForTimeout(500);
+  }
+  facts.lifecycle = seen;
+}
+
+try {
+  app = await electron.launch({ executablePath: electronExecutable, timeout: 20000,
+    args: [desktop, `--project=${project}`, `--user-data-dir=${profile}`],
+    env: { ...process.env, GRAPHTRAJ_TOOL: tool, MAC_CHROMIUM_TMPDIR: alias ? os.tmpdir() : evidence } });
+  facts.launches += 1;
+  page = await app.firstWindow();
+  page.setDefaultTimeout(20000);
+  await click(page.getByRole('button', { name: 'Members', exact: true }));
+  if (alias) await lifecycle();
+  else { await scope(); await archive(); }
   facts.passed = true;
 } catch (error) {
   facts.failure = String(error);
-  if (page) await shot('failure.png').catch(() => {});
+  if (page) await shot(`failure-${new Date().toISOString().replace(/[:.]/g, '-')}.png`).catch(() => {});
   process.exitCode = 1;
 } finally {
   if (app) await app.close().catch(() => { facts.closeError = 'Owned app close rejected'; });

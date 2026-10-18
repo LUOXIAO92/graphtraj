@@ -2,6 +2,7 @@
 from pathlib import Path
 import shutil
 import subprocess
+import sys
 
 import pytest
 
@@ -78,10 +79,58 @@ const pi = {
 process.env.AGENT_SWARM_CONNECTION = '/owned/channel';
 process.env.AGENT_SWARM_PYTHON = '/owned/python';
 extension(pi);
-await handlers.get('session_start')({reason:'startup'}, {hasUI:false,cwd:'/owned/work'});
+const ctx = {hasUI:false,cwd:'/owned/work',sessionManager:{}};
+await handlers.get('session_start')({reason:'startup'}, ctx);
 assert.deepEqual(servers, [{name:'agents',configuration:{command:'/owned/python',
-  args:['-m','agent_swarm.mcp'], cwd:'/owned/work',
+  args:['-I','-m','agent_swarm.mcp'], cwd:'/owned/work',
   env:{AGENT_SWARM_CONNECTION:'/owned/channel'},exposure:'direct'}}]);
+const bash = {toolName:'bash',input:{command:'pwd'}};
+assert.equal(await handlers.get('tool_call')(bash,ctx),undefined);
+assert.equal(bash.input.command,'pwd');
 '''
     subprocess.run(['node', '--input-type=module', '-e', script, str(module)],
                    check=True, capture_output=True, text=True)
+
+
+def test_native_main_extension_registers_independent_host(tmp_path: Path) -> None:
+    """Explicit host settings use native facts and preserve built-in tool behavior."""
+    if shutil.which('node') is None:
+        pytest.skip('Node is required for the shipped Pi extension.')
+    source = Path(__file__).resolve().parents[1] / 'src/graphtraj/runtimes/pi/extension.mjs'
+    module = Path(shutil.copy2(source, tmp_path / source.name))
+    peer = tmp_path / 'controlled-host'
+    peer.write_text(f'#!{sys.executable}\n' + '''import json, os, sys
+assert os.environ['GRAPHTRAJ_NATIVE_SESSION'] == 'native-main'
+assert os.environ['AGENT_SWARM_PI_MODEL'] == 'deepseek-flash'
+assert sys.argv[1:] == ['-I', '-m', 'graphtraj.runtimes.pi.host', '--config', '/explicit/config.json']
+print(json.dumps({'connection':'/controlled/native-main'}), flush=True)
+sys.stdin.read()
+''')
+    peer.chmod(0o755)
+    script = '''
+import assert from 'node:assert/strict';
+import { pathToFileURL } from 'node:url';
+const {default: extension} = await import(pathToFileURL(process.argv[1]));
+const handlers = new Map(), servers = [];
+delete process.env.AGENT_SWARM_CONNECTION;
+process.env.AGENT_SWARM_PYTHON = process.argv[2];
+const pi = {registerFlag(){},getFlag(name){return name==='agents-config'?'/explicit/config.json':false;},
+ on(name,handler){handlers.set(name,handler);},registerMcpServer(name,config){servers.push({name,config});}};
+extension(pi);
+const ctx = {hasUI:false,cwd:process.argv[3],model:{id:'deepseek-flash',provider:'deepseek'},
+ sessionManager:{getSessionId:()=> 'native-main',getSessionFile:()=> '/selected/session.jsonl'}};
+await handlers.get('session_start')({reason:'startup'},ctx);
+assert.equal(servers.length,1);
+assert.equal(servers[0].name,'agents');
+assert.deepEqual(servers[0].config.args,['-I','-m','agent_swarm.mcp']);
+assert.equal(servers[0].config.command,process.argv[2]);
+assert.equal(servers[0].config.env.AGENT_SWARM_CONNECTION,'/controlled/native-main');
+const bash = {toolName:'bash',input:{command:'pwd'}};
+assert.equal(await handlers.get('tool_call')(bash,ctx),undefined);
+assert.equal(bash.input.command,'pwd');
+ctx.sessionManager.getEntries = ()=>[];
+ctx.sessionManager.getLeafId = ()=>null;
+await handlers.get('session_shutdown')({},ctx);
+'''
+    subprocess.run(['node', '--input-type=module', '-e', script, str(module), str(peer), str(tmp_path)],
+                   check=True, capture_output=True, text=True, timeout=10)

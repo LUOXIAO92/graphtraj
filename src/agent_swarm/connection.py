@@ -19,7 +19,7 @@ import traceback
 from contextlib import contextmanager
 from typing import Callable, Iterator
 
-from agent_swarm.tool import AgentsError
+from agent_swarm.tool import AgentsError, AgentsResult
 
 if os.name != 'nt':
     import fcntl
@@ -216,17 +216,49 @@ def record_lock_owner(descriptor: int) -> int:
 @contextmanager
 def agents_connection(
     directory: Path,
-    call: Callable,
+    call: Callable[[dict], AgentsResult],
     authenticate: Callable[[int], None],
+    *,
+    native_context: Callable[[], dict | None] | None = None,
 ) -> Iterator[str]:
-    """Serve progressive Agent requests for one already-bound, verified caller."""
+    """Serve one bound caller, optionally checking host-owned native Session facts.
+
+    Native facts only constrain the existing binding. They never select an
+    Agent or substitute for kernel-PID authentication. The host obtains its
+    expected context from the actual native Session, not child environment.
+    """
     from agent_swarm.discovery import handle_request
 
     def operate(request: dict) -> dict:
         """Reuse shared discovery and the host's existing business callback."""
+        if native_context is not None:
+            if not isinstance(request, dict) or set(request) != {'request', 'native'}:
+                raise AgentsError('authority-denied', 'The native Session context is required.')
+            verify_native_context(request['native'], native_context())
+            request = request['request']
+        elif isinstance(request, dict) and 'native' in request:
+            raise AgentsError('authority-denied', 'This channel has no matching native Session binding.')
         result = handle_request(request, call)
         return {'document': result.document, 'failed': result.failed}
 
     directory.mkdir(parents=True, exist_ok=True)
     with worker_connection(directory, operate, authenticate=authenticate) as address:
         yield address
+
+
+def client_native_context() -> dict | None:
+    """Capture the DSH client's assertions; the owning host must verify them."""
+    if 'DSH_SESSION_ID' not in os.environ and 'DSH_AGENT_SOURCE' not in os.environ:
+        return None
+    return {'runtime': 'dsh', 'session': os.environ.get('DSH_SESSION_ID'),
+            'source': os.environ.get('DSH_AGENT_SOURCE'), 'cwd': str(Path.cwd())}
+
+
+def verify_native_context(actual: object, expected: object) -> None:
+    """Require exact native facts from the already-authenticated host's Session."""
+    if (not isinstance(expected, dict) or set(expected) != {'runtime', 'session', 'source', 'cwd'}
+            or expected['runtime'] != 'dsh' or expected['source'] not in {'main', 'child'}
+            or not isinstance(expected['session'], str) or not expected['session']
+            or not isinstance(expected['cwd'], str) or not Path(expected['cwd']).is_absolute()
+            or actual != expected):
+        raise AgentsError('authority-denied', 'Native Session/source/cwd do not match this bound caller.')

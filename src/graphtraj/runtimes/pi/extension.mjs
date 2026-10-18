@@ -153,12 +153,12 @@ export default function graphtraj(pi) {
       registerAgentDisplay(pi, await loadHostSdk());
       displayRegistered = true;
     }
-    if (process.env.AGENTS_CONNECTION) {
+    if (process.env.AGENT_SWARM_CONNECTION) {
       // This is the official MCP client wiring, not a native model tool.
       // Identity is verified by the owning host's kernel-authenticated pipe.
       pi.registerMcpServer('agents', {
-        command: process.env.AGENTS_PYTHON, args: ['-m', 'agent_swarm.mcp'],
-        cwd: ctx.cwd, env: {AGENTS_CONNECTION: process.env.AGENTS_CONNECTION}, exposure: 'direct',
+        command: process.env.AGENT_SWARM_PYTHON, args: ['-m', 'agent_swarm.mcp'],
+        cwd: ctx.cwd, env: {AGENT_SWARM_CONNECTION: process.env.AGENT_SWARM_CONNECTION}, exposure: 'direct',
       });
       return;
     }

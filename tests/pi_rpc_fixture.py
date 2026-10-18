@@ -130,7 +130,7 @@ def main() -> None:
                     'name': 'agents', 'arguments': {'action': 'execute', 'feature': 'create',
                         'arguments': {'runtime': 'pi', 'instruction': 'grandchild-memory', 'name': 'grandchild'}}}},
             ]
-            result = subprocess.run([os.environ['AGENTS_PYTHON'], '-m', 'agent_swarm.mcp'],
+            result = subprocess.run([os.environ['AGENT_SWARM_PYTHON'], '-m', 'agent_swarm.mcp'],
                                     input='\n'.join(map(json.dumps, requests))+'\n',
                                     text=True, capture_output=True, timeout=15)
             answer = json.dumps({'exit': result.returncode,

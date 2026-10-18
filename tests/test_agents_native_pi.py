@@ -121,10 +121,14 @@ def test_independent_pi_native_request_and_explicit_reply(tmp_path: Path, pi_env
     assert ended.document['result']['state'] == 'standby'
 
 
-def test_pi_child_calls_same_control_via_authenticated_mcp(tmp_path: Path, pi_environment: dict) -> None:
+def test_pi_child_calls_same_control_via_authenticated_mcp(
+    tmp_path: Path, pi_environment: dict, monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """A controlled Pi descendant's actual MCP subprocess creates its own child."""
     import json
 
+    monkeypatch.setenv('DSH_SESSION_ID', 'native-dsh-parent')
+    monkeypatch.setenv('DSH_AGENT_SOURCE', 'child')
     (tmp_path / 'worktrees/research').mkdir(parents=True)
     _, prepared = context(tmp_path, pi_environment)
     driver = PiDriver(prepared.launch_document()['adapter_request'])

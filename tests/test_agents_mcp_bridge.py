@@ -32,8 +32,9 @@ def test_mcp_bridge_verifies_process_and_projects_selected_schema(tmp_path: Path
         return AgentsResult({'action': request['action'], 'result': {'seen': 'bound-agent'}})
 
     with agents_connection(tmp_path, call, lambda pid: authenticate_process(child, pid)) as address:
-        env = {**os.environ, 'AGENTS_CONNECTION': address,
+        env = {**os.environ, 'AGENT_SWARM_CONNECTION': address,
                'PYTHONPATH': str(Path(__file__).resolve().parents[1] / 'src')}
+        env.pop('GRAPHTRAJ_CLI_CONNECTION', None)
         child = subprocess.Popen([sys.executable, '-m', 'agent_swarm.mcp'], env=env,
                                  stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                  text=True)
@@ -69,3 +70,48 @@ def test_mcp_bridge_verifies_process_and_projects_selected_schema(tmp_path: Path
         with pytest.raises(AgentsError, match='live native process'):
             authenticate_process(child, child.pid)
     assert not Path(address).exists()
+
+
+@pytest.mark.parametrize('case', ['match', 'wrong-session', 'child', 'unknown', 'wrong-cwd', 'both-connections', 'empty-independent'])
+def test_dsh_native_assertions_constrain_the_existing_bound_caller(tmp_path: Path, case: str) -> None:
+    """Native environment never chooses identity or bypasses the owned-process check."""
+    calls = []
+    child = None
+    expected = {'runtime': 'dsh', 'session': 'verified-native-session', 'source': 'main',
+                'cwd': str(tmp_path)}
+
+    def call(request: dict) -> AgentsResult:
+        """Native source main still reaches this already-bound child identity."""
+        calls.append(request)
+        return AgentsResult({'result': {'bound_agent': 'actual-child'}})
+
+    with agents_connection(tmp_path / 'channel', call, lambda pid: authenticate_process(child, pid),
+                           native_context=lambda: expected) as address:
+        env = {**os.environ, 'AGENT_SWARM_CONNECTION': address,
+               'DSH_SESSION_ID': expected['session'], 'DSH_AGENT_SOURCE': expected['source'],
+               'PYTHONPATH': str(Path(__file__).resolve().parents[1] / 'src')}
+        env.pop('GRAPHTRAJ_CLI_CONNECTION', None)
+        if case == 'wrong-session':
+            env['DSH_SESSION_ID'] = 'another-session'
+        if case in {'child', 'unknown'}:
+            env['DSH_AGENT_SOURCE'] = case
+        if case in {'both-connections', 'empty-independent'}:
+            env['GRAPHTRAJ_CLI_CONNECTION'] = '/unrelated-parent-channel'
+            if case == 'empty-independent':
+                env['AGENT_SWARM_CONNECTION'] = ''
+        child = subprocess.Popen([sys.executable, '-m', 'agent_swarm.mcp'], env=env,
+                                 cwd=tmp_path.parent if case == 'wrong-cwd' else tmp_path,
+                                 stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        try:
+            result = exchange(child, {'jsonrpc': '2.0', 'id': 1, 'method': 'tools/call',
+                'params': {'name': 'agents', 'arguments': {'action': 'execute', 'feature': 'status', 'arguments': {}}}})['result']
+            if case == 'match':
+                assert result['structuredContent']['result']['bound_agent'] == 'actual-child'
+                assert calls == [{'action': 'status'}]
+            else:
+                assert result['isError']
+                assert result['structuredContent']['error']['code'] == 'authority-denied'
+                assert calls == []
+        finally:
+            child.stdin.close()
+            child.wait(timeout=10)

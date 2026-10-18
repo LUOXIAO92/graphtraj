@@ -58,7 +58,7 @@ def _tool_document() -> dict[str, Any]:
 
 def _tool_documents() -> list[dict[str, Any]]:
     """Keep Pi's initial list small without duplicating its model entry."""
-    if os.environ.get('GRAPHTRAJ_NATIVE_RUNTIME') == 'pi':
+    if os.environ.get('GRAPHTRAJ_NATIVE_RUNTIME') in {'pi', 'dsh'}:
         return [
             {'name': name, 'description': f'Discover, describe, or execute {name} features.',
              'inputSchema': gateway.INPUT_SCHEMA}
@@ -112,8 +112,8 @@ def _tool_call_response(
     """
 
     name = params.get("name")
-    pi_entry = os.environ.get('GRAPHTRAJ_NATIVE_RUNTIME') == 'pi'
-    names = ('agents', 'tasks') if pi_entry else (MCP_TOOL_NAME,)
+    progressive_entry = os.environ.get('GRAPHTRAJ_NATIVE_RUNTIME') in {'pi', 'dsh'}
+    names = ('agents', 'tasks') if progressive_entry else (MCP_TOOL_NAME,)
     if name not in names:
         return _error_response(
             request_id, INVALID_PARAMS, "Unknown tool: {0}".format(name)
@@ -126,7 +126,7 @@ def _tool_call_response(
     try:
         # Keep the selected entry's scope before forwarding into the already
         # authenticated host. The host still owns feature authorization.
-        if pi_entry and name == 'tasks' and arguments.get('action') != 'discover':
+        if progressive_entry and name == 'tasks' and arguments.get('action') != 'discover':
             if arguments.get('feature') == 'agents':
                 raise ValueError('Feature does not belong to this MCP entry.')
         from graphtraj.runtimes.codex.host_events import calling_session
@@ -143,7 +143,7 @@ def _tool_call_response(
                 result = forward_request(request, Path.cwd())
                 return result if result is not None else gateway.handle_request(request, cwd=Path.cwd())
 
-            if pi_entry and name == 'agents':
+            if progressive_entry and name == 'agents':
                 from agent_swarm.discovery import handle_request
 
                 result = handle_request(arguments, lambda request: dispatch({
@@ -156,7 +156,7 @@ def _tool_call_response(
                 if recovery is not None
                 else result.document
             )
-            if pi_entry and name == 'tasks' and arguments.get('action') == 'discover' and 'features' in document:
+            if progressive_entry and name == 'tasks' and arguments.get('action') == 'discover' and 'features' in document:
                 document = {**document, 'features': [
                     feature for feature in document['features']
                     if (feature['feature'] == 'agents') == (name == 'agents')

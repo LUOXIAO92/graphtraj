@@ -4,6 +4,7 @@ from __future__ import annotations
 import ctypes
 from pathlib import Path
 import sys
+import subprocess
 
 # A control request walks from its own process to the top of the tree. The
 # limit only keeps a damaged or cyclic parent chain from looping forever.
@@ -107,7 +108,7 @@ def _linux_parent(pid: int) -> int:
 
 
 
-def authenticate_process(process: object, caller_pid: int) -> None:
+def authenticate_process(process: subprocess.Popen | None, caller_pid: int) -> None:
     """Require a kernel-identified caller below the host's still-live child.
 
     ``process`` is the owning host's Popen handle, never request JSON. Keeping

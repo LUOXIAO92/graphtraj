@@ -258,7 +258,8 @@ class PiManagedExecution:
         # Do not forward Runner bookkeeping as model-declared authority. The only
         # child operation address is authenticated by the existing hosted CLI.
         for key in tuple(env):
-            if key.startswith(('GRAPHTRAJ_', 'AGENTS_')):
+            if (key.startswith(('GRAPHTRAJ_', 'AGENT_SWARM_', 'AGENTS_'))
+                    or key in {'DSH_SESSION_ID', 'DSH_AGENT_SOURCE'}):
                 del env[key]
         env.update(credential_environment(request.get('api_key_env')))
         env.update({'PATH': str(Path(sys.executable).parent) + os.pathsep + request['sandbox_path'],
@@ -266,7 +267,7 @@ class PiManagedExecution:
                     'PI_ASB_NO_ALIAS_PROMPT': '1'})
         if address is not None:
             if self.independent:
-                env.update(AGENTS_CONNECTION=address, AGENTS_PYTHON=sys.executable)
+                env.update(AGENT_SWARM_CONNECTION=address, AGENT_SWARM_PYTHON=sys.executable)
             else:
                 env.update(GRAPHTRAJ_CLI_CONNECTION=address, GRAPHTRAJ_HARNESS_ROOT=str(root))
         # Pi's native find accepts an existing fd on PATH; do not download it or

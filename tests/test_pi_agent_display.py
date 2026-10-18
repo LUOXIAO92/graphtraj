@@ -75,13 +75,13 @@ const pi = {
   on(name, handler) { handlers.set(name, handler); },
   registerMcpServer(name, configuration) { servers.push({name, configuration}); },
 };
-process.env.AGENTS_CONNECTION = '/owned/channel';
-process.env.AGENTS_PYTHON = '/owned/python';
+process.env.AGENT_SWARM_CONNECTION = '/owned/channel';
+process.env.AGENT_SWARM_PYTHON = '/owned/python';
 extension(pi);
 await handlers.get('session_start')({reason:'startup'}, {hasUI:false,cwd:'/owned/work'});
 assert.deepEqual(servers, [{name:'agents',configuration:{command:'/owned/python',
   args:['-m','agent_swarm.mcp'], cwd:'/owned/work',
-  env:{AGENTS_CONNECTION:'/owned/channel'},exposure:'direct'}}]);
+  env:{AGENT_SWARM_CONNECTION:'/owned/channel'},exposure:'direct'}}]);
 '''
     subprocess.run(['node', '--input-type=module', '-e', script, str(module)],
                    check=True, capture_output=True, text=True)

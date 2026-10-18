@@ -30,7 +30,7 @@ await handlers.get('session.start')(host, {}, async () => 'started');
 assert.equal(registrations[0].name, 'agents-context');
 assert.deepEqual(await handlers.get('command.run')(host), {});
 assert.ok(log.at(-1).includes('MCP agents registered'));
-const input = {action: 'execute', feature: 'send', arguments: {agent: 'agent-child', message: 'hello child'}};
+const input = {action: 'execute', feature: 'send', arguments: {agent: 'agent-child', message: 'hello child\nsecond line'}};
 for (session of ['first', 'after-clear', 'resumed']) {
  for (const decision of ['allow', 'ask', 'deny']) {
   const native = {decision, reason: 'native reason', ceiling: 'ask'};
@@ -59,8 +59,13 @@ const returned = await handlers.get('tool.call')(host, event, async received => 
  return native;
 });
 assert.equal(returned, native);
-assert.ok(log.at(-2).includes('resumed → agent-child\n│ hello child'));
-assert.ok(log.at(-1).includes('agent-child → resumed\n│ hello parent'));
+assert.ok(log.some(line => line.includes('resumed → agent-child')));
+assert.ok(log.some(line => line.includes('agent-child → resumed')));
+assert.ok(log.includes('│ hello child'));
+assert.ok(log.includes('│ second line'));
+assert.equal(event.arguments.message, 'hello child\nsecond line');
+assert.ok(log.includes('│ hello parent'));
+assert.ok(log.every(line => !line.includes('\n') && !line.includes('\r')));
 assert.deepEqual(contexts.at(-1), {operation: 'end'});
 const replies = log.filter(line => line.includes('│ hello parent')).length;
 await handlers.get('tool.call')(host, {...event, feature: 'status', arguments: {}}, async () => native);

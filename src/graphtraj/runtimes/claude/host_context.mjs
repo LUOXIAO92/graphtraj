@@ -52,8 +52,9 @@ export function register(on) {
   on('command.run', {command: 'agents-context'}, async ($) => {
     const session = await $.session.id();
     const tools = await $.tool.list();
-    $.ui.log(`agents · current Session ${session}\n` +
-      (tools.some((tool) => tool.name === 'mcp__agents__agents') ? 'MCP agents registered' : 'MCP agents missing'));
+    await $.ui.log(`agents · current Session ${session}`);
+    await $.ui.log(tools.some((tool) => tool.name === 'mcp__agents__agents')
+      ? 'MCP agents registered' : 'MCP agents missing');
     return {};
   });
 
@@ -67,7 +68,11 @@ export function register(on) {
       const result = await next(event);
       const session = await $.session.id();
       const request = event.action === 'execute' ? {action: event.feature, ...event.arguments} : event;
-      for (const frame of exchangeFrames(session, request, result, displayed)) $.ui.log(frame);
+      // Native ui.log is a single-line surface: embedded newlines become
+      // replacement glyphs. Keep the same readable body, one native row each.
+      for (const frame of exchangeFrames(session, request, result, displayed)) {
+        for (const line of frame.split(/\r?\n/)) await $.ui.log(line);
+      }
       return result;
     } catch (error) {
       return {deny: String(error)};

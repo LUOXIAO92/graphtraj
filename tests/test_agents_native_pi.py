@@ -151,3 +151,48 @@ def test_pi_child_calls_same_control_via_authenticated_mcp(tmp_path: Path, pi_en
     policy = json.loads((root / 'native' / created.document['agent'] / 'pi-policy.json').read_text())
     assert str(root.resolve()) in policy['filesystem']['denyRead']
     assert any('/mcp/control-' in path for path in policy['filesystem']['allowWrite'])
+
+
+def test_pi_control_and_native_dialog_do_not_import_task_host(tmp_path: Path, pi_environment: dict) -> None:
+    """Prepared independent Pi execution works when Task host modules are unavailable."""
+    import json
+    import os
+    import subprocess
+    import sys
+
+    (tmp_path / 'worktrees/research').mkdir(parents=True)
+    _, prepared = context(tmp_path, pi_environment)
+    request = tmp_path / 'prepared.json'
+    request.write_text(json.dumps(prepared.launch_document()['adapter_request']))
+    script = '''
+import sys, json, importlib.abc
+from pathlib import Path
+class NoTaskHost(importlib.abc.MetaPathFinder):
+    def find_spec(self, fullname, path=None, target=None):
+        forbidden = ('graphtraj.interfaces', 'graphtraj.configuration', 'graphtraj.workspace',
+                     'graphtraj.execution.runner_control', 'graphtraj.execution.runner_status',
+                     'graphtraj.runtimes.codex')
+        if fullname.startswith(forbidden):
+            raise ImportError('Task host is unavailable: ' + fullname)
+sys.meta_path.insert(0, NoTaskHost())
+from agent_swarm import AgentControl, Caller, bind, write_config
+from graphtraj.runtimes.pi.driver import PiDriver
+request = json.loads(Path(sys.argv[1]).read_text())
+root = Path(sys.argv[2])
+write_config(root, save_normalized_sessions=True, backfill_history=True)
+call = bind(AgentControl(root, {'pi': PiDriver(request)}), Caller('independent-test', 'parent'))
+created = call({'action':'create','runtime':'pi','instruction':'dialog'})
+assert not created.failed, created.document
+agent = created.document['agent']
+waiting = call({'action':'wait','agent':agent,'timeout_seconds':10})
+assert waiting.document['result']['pending_requests'] == 1, waiting.document
+request = call({'action':'requests','agent':agent}).document['result']['requests'][0]
+assert not call({'action':'reply','agent':agent,'request':request,'response':{'confirmed':False}}).failed
+ended = call({'action':'wait','agent':agent,'timeout_seconds':10})
+assert ended.document['result']['last_result']['outcome'] == 'completed', ended.document
+assert not list(root.rglob('mapping.yml'))
+print('independent Pi control/dialog/archive without Task-host modules')
+'''
+    result = subprocess.run([sys.executable, '-c', script, str(request), str(tmp_path / 'isolated-swarm')],
+                            env=dict(os.environ), capture_output=True, text=True, timeout=20)
+    assert result.returncode == 0, result.stderr + result.stdout

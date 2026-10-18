@@ -287,14 +287,16 @@ class PiManagedExecution:
 
     def run(self) -> dict:
         """Bind real Pi identity before task input, then observe native settlement."""
-        from graphtraj.interfaces.hosted_cli import cli_connection
-        from graphtraj.runtimes.codex.managed_session import native_operation_features
-
         reader = None
         collector = None
         with ExitStack() as resources:
-            connection = (nullcontext(None) if self.independent else cli_connection(
-                Path(self.request['harness_root']), self.directory.name, native_operation_features()))
+            connection = nullcontext(None)
+            if not self.independent:
+                from graphtraj.interfaces.hosted_cli import cli_connection
+                from graphtraj.runtimes.codex.managed_session import native_operation_features
+
+                connection = cli_connection(
+                    Path(self.request['harness_root']), self.directory.name, native_operation_features())
             if self.independent and self.agent_call is not None:
                 from agent_swarm.connection import agents_connection
                 from agent_swarm.process import authenticate_process
@@ -517,8 +519,6 @@ class PiManagedExecution:
 
     def _interaction(self, event: dict) -> None:
         """Retain information and route actual native dialogs to the direct parent."""
-        from graphtraj.execution.runner_control import notify_direct_parent
-
         method = event.get('method')
         if method in INFORMATION:
             return
@@ -534,8 +534,12 @@ class PiManagedExecution:
             """Notify through the existing parent execution without granting consent."""
             try:
                 message = 'Pi child requires a native reply:\n' + json.dumps(details)
-                receipt = (self.parent_notice(message, details) if self.parent_notice is not None else
-                           notify_direct_parent(self.directory, message, details))
+                if self.parent_notice is not None:
+                    receipt = self.parent_notice(message, details)
+                else:
+                    from graphtraj.execution.runner_control import notify_direct_parent
+
+                    receipt = notify_direct_parent(self.directory, message, details)
                 if receipt is not None and receipt.get('delivery') not in {'received', 'retained', 'no-direct-parent'}:
                     raise RuntimeAdapterError('RUNTIME_REQUEST_FAILED', 'Pi dialog notification was not delivered.')
             except Exception:

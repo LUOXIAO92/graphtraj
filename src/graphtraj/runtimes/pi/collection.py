@@ -302,7 +302,10 @@ class PiArchive:
             final = content[index].get('thinking' if kind == 'reasoning' else 'text')
             if not isinstance(final, str) or not final.startswith(text):
                 return False
-        return bool(runs)
+        # An abort before the first text token still has native attempt fields.
+        # sync requires a unique native assignment; matching timestamps alone
+        # never collapse two candidate entries.
+        return True
 
     def _snapshot(self, message: dict, slot: str) -> None:
         """Keep intermediate unknown fields while omitting cumulative text."""
@@ -388,7 +391,9 @@ class PiArchive:
         store = self.stream.store if self.stream is not None else self.archive.store(self.key)
         if kind == 'message_update' and self.stream is None:
             self.receive({'type': 'message_start', 'message': {'role': 'assistant', **message}})
-        if kind == 'message_start' and message.get('role') == 'assistant':
+        if message.get('role') == 'assistant' and (
+            kind == 'message_start' or kind == 'message_end' and self.stream is None
+        ):
             self.close()
             self.live = True
             self.position += 1
@@ -411,9 +416,18 @@ class PiArchive:
             self.stream = ArchiveStream(store, self.source, draft)
             self.snapshots = {key: value for key, value in self.snapshots.items() if key.startswith('tool')}
             self.buffered = 0
-            self.stream.feed({'type': 'pi/message-start'}, self.position)
+            if kind == 'message_end':
+                # Attaching mid-turn can first expose the final RPC event.
+                # Retain that evidence without claiming a native start existed.
+                draft['piObservation'].pop('messageStart')
+                draft['piObservation'].pop('startFields')
+                draft['piObservation']['missingStart'] = True
+                self.stream.event['piObservation'] = draft['piObservation']
+            self.stream.feed({'type': 'pi/message-start' if kind == 'message_start'
+                              else 'pi/message-start-missing'}, self.position)
             self.stream.checkpoint()
-            return
+            if kind == 'message_start':
+                return
         if self.stream is None:
             return
         self.position += 1

@@ -11,12 +11,14 @@ import re
 import shutil
 import subprocess
 import sys
-from typing import Any, Mapping
+from typing import TYPE_CHECKING, Any, Mapping
 
 import yaml
 
-from graphtraj.configuration.role_definitions import ResolvedChildRole
 from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError, SessionStarted, finalize_usage, credential_environment
+
+if TYPE_CHECKING:
+    from graphtraj.configuration.role_definitions import ResolvedChildRole
 
 
 def unsupported(*args: object, **kwargs: object) -> Any:

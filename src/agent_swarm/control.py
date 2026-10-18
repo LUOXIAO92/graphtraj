@@ -72,6 +72,9 @@ class Run:
     execution. ``settings`` are the driver's own retained continuation
     settings from :meth:`RuntimeDriver.prepare`. ``archive`` is bound only
     when the tool's ``save_normalized_sessions`` setting is on.
+    ``call`` is the owning core's execution-scoped business callback. Drivers
+    expose it only after authenticating their actual native child process;
+    request JSON cannot choose its caller. It expires with this execution.
     """
 
     agent: str

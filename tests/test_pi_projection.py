@@ -288,3 +288,36 @@ def test_extra_identical_native_message_remains_explicitly_ambiguous(tmp_path: P
                for event in archive.store(collector.key).page()['events']) == 3
     with pytest.raises(ValueError, match='unambiguous'):
         collector.messages()
+
+
+def test_message_end_without_start_retains_rpc_fields_and_native_identity(tmp_path: Path) -> None:
+    """Mid-turn collection retains the first seen final event without inventing its start."""
+    archive = SessionArchive(tmp_path, save_normalized_sessions=True, backfill_history=True)
+    collector = PiArchive(archive, {'id': 'late-attach', 'type': 'session', 'timestamp': 0},
+                          agent='agent', project=str(tmp_path), entries=[], leaf_id=None)
+    final = message('a', None, 'assistant', 'complete body')
+    collector.receive({'type': 'message_end', 'message': final['message'],
+                       'opaqueEnd': {'ciphertext': 'end-only'}})
+    collector.sync([final], 'a', settled=True)
+    assert collector.messages() == [final['message']]
+    [observation] = archive.store(collector.key).observations()
+    evidence = observation['event']['piObservation']
+    assert evidence['missingStart'] is True
+    assert 'messageStart' not in evidence
+    assert evidence['endFields'] == {'opaqueEnd': {'ciphertext': 'end-only'}}
+    assert not archive.store(collector.key).pending()
+
+
+def test_abort_before_first_delta_links_native_empty_attempt(tmp_path: Path) -> None:
+    """Zero generated text does not strand a known aborted native attempt."""
+    archive = SessionArchive(tmp_path, save_normalized_sessions=True, backfill_history=True)
+    collector = PiArchive(archive, {'id': 'empty-abort', 'type': 'session', 'timestamp': 0},
+                          agent='agent', project=str(tmp_path), entries=[], leaf_id=None)
+    final = message('a', None, 'assistant', '')
+    final['message']['content'] = []
+    final['message']['stopReason'] = 'aborted'
+    collector.receive({'type': 'message_start', 'message': final['message']})
+    collector.close()
+    collector.sync([final], 'a', settled=True)
+    assert collector.messages() == [final['message']]
+    assert len(archive.store(collector.key).observations()) == 1

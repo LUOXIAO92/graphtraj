@@ -325,3 +325,19 @@ def test_shared_mcp_command_consumes_bound_graphtraj_dsh_channel(tmp_path: Path,
             else:
                 assert response['isError']
                 assert 'do not match' in response['content'][0]['text']
+
+
+def test_managed_channel_discovers_and_describes_task_members(tmp_path: Path) -> None:
+    """Every managed Agent channel's allowlist exposes the read-only task_members feature."""
+    from graphtraj.interfaces.gateway import handle_request
+
+    allowed = native_operation_features()
+    found = handle_request({'action': 'discover', 'query': 'members'}, cwd=tmp_path, allowed_features=allowed)
+    assert 'task_members' in [item['feature'] for item in found.document['features']]
+    described = handle_request({'action': 'describe', 'feature': 'task_members', 'schema': True},
+                               cwd=tmp_path, allowed_features=allowed)
+    assert not described.failed
+    assert described.document['input_schema'] == tools.TOOLS['task_members'].input_schema
+    report = handle_request({'action': 'describe', 'feature': 'submit_report', 'schema': True},
+                            cwd=tmp_path, allowed_features=allowed)
+    assert 'notify_parent' in report.document['input_schema']['properties']

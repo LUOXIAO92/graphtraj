@@ -750,6 +750,6 @@ def native_operation_features() -> set[str]:
 
     return ({'alias_status', 'swarm', 'send_instruction', 'interrupt', 'pending_requests',
                 'reply_to_request', 'session_reports', 'submit_report', 'submit_result',
-                'decide_result', 'task_graph'} | set(METHOD_FEATURE_NAMES)
+                'decide_result', 'task_graph', 'task_members'} | set(METHOD_FEATURE_NAMES)
             | {'parent_status', 'retire', 'replace', 'cleanup', 'approved_recovery',
                'role_organization', 'runtime_connections', 'desktop_activity', 'session_read', 'agents'})

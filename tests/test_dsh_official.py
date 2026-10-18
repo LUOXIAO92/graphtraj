@@ -155,3 +155,36 @@ def test_actual_client_interrupt_and_memory(tmp_path: Path) -> None:
         for pid in pids:
             with pytest.raises(ProcessLookupError):
                 os.kill(pid, 0)
+
+
+@pytest.mark.skipif(not os.environ.get('TASK334_INTERRUPTED_ROOT'), reason='Requires retained interrupted official Session.')
+def test_continue_actual_interrupted_session() -> None:
+    """Resume the interrupted execution through public control, without repeating it."""
+    from agent_swarm import AgentControl, Caller, bind
+    from agent_swarm.dsh import DshDriver
+
+    root = Path(os.environ['TASK334_INTERRUPTED_ROOT'])
+    # Read only the explicitly assigned validation Agent's own retained record.
+    record = json.loads(next((root / 'control/agents').glob('*.json')).read_text())
+    assert record['executions'][-1]['outcome'] == 'interrupted'
+    driver = DshDriver(root.parent, {})  # Resume uses retained settings, not a new prepare.
+    call = bind(AgentControl(root, {'dsh': driver}), Caller('official-final-validation', None))
+    resumed = call({'action': 'resume', 'agent': record['agent'], 'message':
+        'The interruption test is finished. What marker did I ask you to remember? Reply only with it. Do not call tools.'})
+    assert not resumed.failed and resumed.document['session'] == record['session'], resumed.document
+    pid = driver.turns[resumed.document['execution']].service.process.pid
+    try:
+        done = call({'action': 'wait', 'agent': record['agent'], 'timeout_seconds': 60})
+        result = done.document['result']
+        assert result['state'] == 'standby' and result['last_result']['outcome'] == 'completed', done.document
+        assert 'DSH334-amber' in result['last_result']['last_message'], done.document
+        print(json.dumps({'agent': record['agent'], 'session': record['session'],
+                          'execution': resumed.document['execution'], 'runtime_pid': pid,
+                          'active_interrupt_then_memory': True, 'additional_dsh_executions': 1}))
+    finally:
+        state = call({'action': 'status', 'agent': record['agent']}).document['result']
+        if state['state'] == 'active':
+            call({'action': 'interrupt', 'agent': record['agent']})
+            call({'action': 'wait', 'agent': record['agent'], 'timeout_seconds': 30})
+        with pytest.raises(ProcessLookupError):
+            os.kill(pid, 0)

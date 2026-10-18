@@ -29,7 +29,7 @@ def test_connection_only_role_preserves_configuration_and_archive_policy(
     from graphtraj.configuration import runtime_connections
     from graphtraj.interfaces.agents import swarm_root
     from graphtraj.interfaces.local_tool import bind
-    from graphtraj.sessions.archive import JsonlSessionStore, archive_path
+    from agent_swarm.sessions.archive import JsonlSessionStore, archive_path
     from graphtraj.workspace import runner_project
 
     root = tmp_path / 'project'
@@ -191,8 +191,8 @@ def test_resume_settings_are_live_without_history_backfill(
     """Resume-generated settings must not become an excluded historical prefix."""
     from agent_swarm import write_config
     from graphtraj.interfaces.agents import swarm_root
-    from graphtraj.sessions.archive import JsonlSessionStore, archive_path
-    from graphtraj.sessions.protocol import native_record
+    from agent_swarm.sessions.archive import JsonlSessionStore, archive_path
+    from agent_swarm.sessions.protocol import native_record
     from graphtraj.workspace import runner_project
 
     root = tmp_path / 'project'

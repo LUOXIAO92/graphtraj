@@ -358,7 +358,7 @@ class PiManagedExecution:
                 })
                 self.created(self.session, self.proc.pid)
                 self.bound = True
-                from graphtraj.runtimes.pi.collection import PiArchive
+                from agent_swarm.sessions.pi import PiArchive
                 import yaml
 
                 archive = self.archive
@@ -369,7 +369,7 @@ class PiManagedExecution:
                 else:
                     from agent_swarm import default_config
                     from graphtraj.interfaces.agents import swarm_root
-                    from graphtraj.sessions.archive import SessionArchive
+                    from agent_swarm.sessions.archive import SessionArchive
 
                     mapping_file = self.directory / 'mapping.yml'
                     mapping = yaml.safe_load(mapping_file.read_text()) if mapping_file.is_file() else {}

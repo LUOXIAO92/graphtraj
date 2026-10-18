@@ -20,7 +20,7 @@ from graphtraj.configuration.project_configuration import (
     load_project_configuration,
 )
 from graphtraj.configuration.project_roles import load_project_roles
-from graphtraj.runtimes.codex.jsonl_archive import CodexJsonlArchive
+from agent_swarm.sessions.codex import CodexJsonlArchive
 from graphtraj.runtimes.codex.approval import approval_route, review_request
 
 from graphtraj.execution.runner_batch import read_session_task
@@ -29,7 +29,7 @@ from graphtraj.execution.runner_io import write_yaml_durably
 from graphtraj.runtimes.codex.app_server import CodexAppServer, CodexExecution, CodexServerRequest
 from graphtraj.runtimes.codex.codex_adapter import restore_codex_context
 from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError
-from graphtraj.sessions.archive import SessionArchive
+from agent_swarm.sessions.archive import SessionArchive
 
 
 def _approval_history_text(value: object) -> object:

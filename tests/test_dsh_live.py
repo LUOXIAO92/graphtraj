@@ -10,8 +10,8 @@ import sys
 
 import pytest
 
-from graphtraj.runtimes.dsh.live import DshLiveFrames
-from graphtraj.sessions.protocol import snapshot_event
+from agent_swarm.sessions.dsh_live import DshLiveFrames
+from agent_swarm.sessions.protocol import snapshot_event
 
 
 def test_interrupted_stream_replay_and_native_final_link() -> None:

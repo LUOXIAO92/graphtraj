@@ -12,22 +12,11 @@ import json
 from pathlib import Path
 import time
 
-from graphtraj.sessions.protocol import retain_native
+from agent_swarm.sessions.protocol import retain_native
 from graphtraj.sessions.storage import SessionStore, StreamWriter, session_path
 
 
-def timestamp(record: dict) -> tuple[int, list[dict]]:
-    """Read native ISO time; zero is an explicitly missing protocol placeholder."""
-    value = record.get('timestamp')
-    if isinstance(value, str):
-        try:
-            parsed = datetime.fromisoformat(value.replace('Z', '+00:00'))
-            if parsed.tzinfo is not None:
-                return int(parsed.timestamp() * 1000), []
-        except ValueError:
-            pass
-    return 0, [{
-        'path': 'time', 'reason': 'Native timestamp unavailable; zero is a protocol placeholder.'}]
+from agent_swarm.sessions.claude import timestamp
 
 
 def open_archive(

@@ -19,7 +19,7 @@ from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence, Tuple
 import yaml
 
 from graphtraj.runtimes.codex.session_archive import CodexSessionArchive
-from graphtraj.runtimes.codex.jsonl_archive import CodexJsonlArchive
+from agent_swarm.sessions.codex import CodexJsonlArchive
 
 from graphtraj.runtimes.runtime_adapter import (
     NativeReplacement,

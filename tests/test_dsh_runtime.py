@@ -294,7 +294,7 @@ def test_agents_control_dsh_without_task_or_archive(
     })
     control = AgentControl(tmp_path / '.graphtraj/swarm', {'dsh': driver})
     from agent_swarm import write_config
-    from graphtraj.sessions.archive import SessionArchive, JsonlSessionStore, archive_path
+    from agent_swarm.sessions.archive import SessionArchive, JsonlSessionStore, archive_path
 
     write_config(control.root, save_normalized_sessions=archiving)
     archive = SessionArchive(control.root, save_normalized_sessions=archiving)
@@ -376,8 +376,8 @@ def test_stop_drains_cursorless_terminal_before_native_flush(tmp_path: Path, mon
     """A cancel receipt cannot close before queued final/live frames are collected."""
     from concurrent.futures import ThreadPoolExecutor
     from agent_swarm.dsh.execution import DshExecution
-    from graphtraj.runtimes.dsh.collection import DshArchive
-    from graphtraj.sessions.archive import SessionArchive, JsonlSessionStore, archive_path
+    from agent_swarm.sessions.dsh import DshArchive
+    from agent_swarm.sessions.archive import SessionArchive, JsonlSessionStore, archive_path
 
     class StreamingPeer(NativePeer):
         """Separate native event commitment, transport delivery and disk flush."""

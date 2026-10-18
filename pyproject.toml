@@ -28,14 +28,13 @@ package-dir = {"" = "src"}
 where = ["src"]
 
 [tool.setuptools.package-data]
-agent_swarm = ["dsh/*.mjs", "dsh/package.json"]
+agent_swarm = ["dsh/*.mjs", "dsh/package.json", "sessions/DSH-LICENSE"]
 graphtraj = [
     "interfaces/desktop-host.json",
     "runtimes/codex/policy/*",
     "runtimes/dsh/*.mjs",
     "runtimes/pi/*.mjs",
     "prompts/*.md",
-    "sessions/DSH-LICENSE",
 ]
 
 # Method guides are delivered data, not importable package resources and not

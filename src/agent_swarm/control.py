@@ -742,7 +742,11 @@ class AgentControl:
                                                 "safe startup retry evidence is unavailable.")
 
         # Archiving follows the tool's own setting; an unbound archive is reported.
-        archive = binding.archive if read_config(self.root)["save_normalized_sessions"] else None
+        from agent_swarm.sessions.archive import ConfiguredSessionArchive
+
+        archive = None
+        if read_config(self.root)["save_normalized_sessions"]:
+            archive = binding.archive or ConfiguredSessionArchive(self.root, **read_config(self.root))
         current = {
             "id":              uuid.uuid4().hex,
             "operation":       operation,

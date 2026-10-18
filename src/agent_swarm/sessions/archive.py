@@ -18,6 +18,8 @@ from pathlib import Path
 import tempfile
 from typing import Iterator
 
+from agent_swarm.config import read_config
+
 from .protocol import SURFACE_TYPES, snapshot_event, validate_header, validate_session
 
 
@@ -317,6 +319,23 @@ class JsonlSessionStore:
         """
         return deepcopy(self._metadata['observations'])
 
+    def retain_legacy(self, records: dict) -> None:
+        """Retain an exact old archive export without asserting its message order.
+
+        Old notification-derived events are evidence, never a native projection.
+        The migration reader supplies the original header, events, draft and
+        checkpoints; attachment bytes use the ordinary attachment interface.
+        """
+        with self._update():
+            previous = self._metadata.get('legacy')
+            if previous is not None and previous != records:
+                raise ValueError('Legacy archive changed after its retained import.')
+            self._metadata['legacy'] = deepcopy(records)
+
+    def legacy(self) -> dict | None:
+        """Read retained old evidence separately from native-ordered events."""
+        return deepcopy(self._metadata.get('legacy'))
+
     def resolve_observation(
         self,
         observation: tuple[str, str, str],
@@ -372,6 +391,8 @@ class JsonlSessionStore:
         """
         if self._metadata['pending']:
             raise ValueError('Unresolved observations remain; native history is incomplete.')
+        if self._metadata.get('legacy') and not self._events:
+            raise ValueError('Legacy observations have no verified native history.')
         validate_session(self.header, self._events, reconstruct=True)
         for value in [self.header, *self._events]:
             if any(_message_gap(item['path'])
@@ -442,6 +463,38 @@ class SessionArchive:
         self.backfill_history = backfill_history
         self._mapped: dict[str, dict] = {}
 
+    def native_header(self, runtime: str, native_id: str, *, agent_id: str | None = None) -> dict | None:
+        """Resolve a native reference through retained headers, never ID spelling.
+
+        Only this tool's archive root is inspected. Multiple canonical headers
+        claiming the same native reference are an explicit migration conflict.
+        """
+        matches = {}
+        for path in (self.root / 'sessions').glob('*/session.jsonl'):
+            with path.open(encoding='utf-8') as stream:
+                metadata = json.loads(next(stream))
+            if metadata.get('archiveVersion') != 1:
+                raise ValueError('Unsupported Session archive version.')
+            header = metadata['header']
+            validate_header(header)
+            native = header.get('graphtraj', {}).get('native', header.get('native', {}))
+            if (native.get('runtime') == runtime and native.get('sessionId') == native_id
+                    and native.get('agentId') == agent_id):
+                matches[header['id']] = header
+        for header in self._mapped.values():
+            native = header.get('graphtraj', {}).get('native', header.get('native', {}))
+            if (native.get('runtime') == runtime and native.get('sessionId') == native_id
+                    and native.get('agentId') == agent_id):
+                matches[header['id']] = header
+        if len(matches) > 1:
+            raise ValueError('Native Session maps to multiple canonical archive IDs.')
+        return deepcopy(next(iter(matches.values()))) if matches else None
+
+    def native_id(self, runtime: str, native_id: str, *, agent_id: str | None = None) -> str:
+        """Return the retained archive ID, or the default ID for a new archive."""
+        header = self.native_header(runtime, native_id, agent_id=agent_id)
+        return header['id'] if header else runtime + ':' + native_id + (':agent:' + agent_id if agent_id else '')
+
     def map_session(self, header: dict) -> None:
         """Register an already verified mapping supplied by the owning host.
 
@@ -492,6 +545,22 @@ class SessionArchive:
         """Save current partial content only while normalized saving is enabled."""
         store = self.store(session_id)
         return False if store is None else store.checkpoint(event, source=source, position=position)
+
+
+class ConfiguredSessionArchive(SessionArchive):
+    """Use the independent tool's current choices for every archive operation.
+
+    A Runtime receives this through Run.archive when collection is enabled at
+    activation. Disabling saving stops subsequent writes without deleting the
+    archive or changing the Runtime's native Session.
+    """
+
+    def store(self, session_id: str, *, historical: bool = False) -> JsonlSessionStore | None:
+        """Reload tool-owned settings before acquiring a collection capability."""
+        choices = read_config(self.root)
+        self.save_normalized_sessions = choices['save_normalized_sessions']
+        self.backfill_history = choices['backfill_history']
+        return super().store(session_id, historical=historical)
 
 
 class ArchiveStream:

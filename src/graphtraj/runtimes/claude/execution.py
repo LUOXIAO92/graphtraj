@@ -20,7 +20,7 @@ from typing import Callable
 from agent_swarm import AgentsResult
 from agent_swarm.discovery import handle_request as discover_agents
 from agent_swarm.mcp import tool_documents
-from graphtraj.sessions.archive import SessionArchive
+from agent_swarm.sessions.archive import SessionArchive
 
 from graphtraj.execution.runner_io import write_yaml_durably
 from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError, SessionStarted, record_runtime_process
@@ -435,7 +435,7 @@ class ClaudeExecution:
             if provider == 'native' and not self.request.get('base_url'):
                 provider = 'anthropic'
             if self.independent:
-                from graphtraj.runtimes.claude.jsonl import ClaudeJsonlCollector
+                from agent_swarm.sessions.claude import ClaudeJsonlCollector
 
                 collector = ClaudeJsonlCollector(self.archive, self.native_id, self.directory.name,
                                                 Path(self.request['worktree_path']), self.execution_id,

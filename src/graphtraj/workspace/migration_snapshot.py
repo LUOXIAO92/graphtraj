@@ -10,6 +10,7 @@ import json
 import os
 import shutil
 import stat
+import subprocess
 from pathlib import Path
 
 import yaml
@@ -188,8 +189,41 @@ def task_signatures(state: Path) -> dict[str, tuple[int, int, int]]:
     paths += list((state / 'tickets').glob('*/ticket.md'))
     paths += list((state / 'tickets').glob('*/definitions/*.md'))
     paths += list((state / 'worldline').glob('*.jsonl'))
+    paths += list((state / 'tasks').glob('*/task.yml'))
+    paths += list((state / 'tasks').glob('*/task.md'))
+    paths += list((state / 'tasks').glob('*/definitions/*.md'))
+    paths += list((state / 'tasks').glob('*/teams/*/team.yml'))
     return {str(path): (value.st_ino, value.st_size, value.st_mtime_ns)
             for path in paths if not path.is_symlink() for value in [path.stat()]}
+
+
+def _control_signatures(project: Path) -> dict[str, tuple[int, int, int]]:
+    """Observe durable identity/config changes, excluding active heartbeats/channels."""
+    data = project / '.graphtraj'
+    paths = [data / 'config.yml', data / 'roles.yml', data / 'swarm/config.yml']
+    paths += list((data / 'runner').glob('sessions/*/mapping.yml'))
+    paths += list((data / 'runner').glob('sessions/*/session.yml'))
+    paths += list((data / 'runner').glob('main-sessions/*/session.yml'))
+    paths += list((data / 'swarm/control').rglob('*.json'))
+    return {str(path): (value.st_ino, value.st_size, value.st_mtime_ns)
+            for path in paths if path.is_file() and not path.is_symlink() for value in [path.stat()]}
+
+
+def _clone_snapshot(project: Path, destination: Path) -> dict:
+    """Create a writable rehearsal from a retained copy without original reads."""
+    destination.mkdir(mode=0o700, parents=True)
+    try:
+        links = copy_records(project / '.graphtraj', destination / '.graphtraj')
+        gaps = install_links(destination / '.graphtraj', links, {str(project): destination}, {})
+        manifest = yaml.safe_load((destination / MANIFEST).read_text(encoding='utf-8'))
+        # Validate every captured-source reference against the new local root.
+        source_map(destination, manifest)
+        return {'snapshot': str(destination), 'source_snapshot': str(project),
+                'project': manifest['project'], 'missing_links': gaps,
+                'notice': 'Isolated copy of retained snapshot; no original paths read or Runtime activated.'}
+    except BaseException:
+        shutil.rmtree(destination)
+        raise
 
 
 def snapshot_project(cwd: Path, destination: Path) -> dict:
@@ -200,9 +234,10 @@ def snapshot_project(cwd: Path, destination: Path) -> dict:
     if destination.exists() or destination.is_symlink() or destination.is_relative_to(project):
         raise ValueError('Snapshot destination must be new and outside the source Harness.')
     if (project / MANIFEST).exists():
-        raise ValueError('This is already an offline snapshot; use its retained sources in place.')
+        return _clone_snapshot(project, destination)
     sources = session_sources(configuration.state, project / '.graphtraj/runner', project)
     task_facts = task_signatures(configuration.state)
+    control_facts = _control_signatures(project)
     destination.mkdir(mode=0o700, parents=True)
     data = destination / '.graphtraj'
     data.mkdir()
@@ -232,6 +267,36 @@ def snapshot_project(cwd: Path, destination: Path) -> dict:
         manifest['links'] = {'state': state_links, 'runner': runner_links}
         manifest['missing_links'] = (install_links(state, state_links, roots, local)
                                      + install_links(runner, runner_links, roots, local))
+        # Preserve tool-owned persistent data; never copy live communication
+        # channels into a runnable location. Runtime homes are not enumerated.
+        swarm = project / '.graphtraj/swarm'
+        swarm_links = []
+        for name in ('control', 'native', 'sessions'):
+            if (swarm / name).is_dir():
+                copied_links = copy_records(swarm / name, data / 'swarm' / name)
+                swarm_links.extend({'path': name + '/' + link['path'], **{
+                    key: value for key, value in link.items() if key != 'path'}} for link in copied_links)
+        if (swarm / 'config.yml').is_file():
+            (data / 'swarm').mkdir(exist_ok=True)
+            shutil.copy2(swarm / 'config.yml', data / 'swarm/config.yml')
+        roots[str(swarm)] = data / 'swarm'
+        manifest['missing_links'] += install_links(data / 'swarm', swarm_links, roots, local)
+        manifest['swarm_captured'] = swarm.is_dir()
+        inputs = data / 'migration-input'
+        inputs.mkdir()
+        for name in ('config.yml', 'roles.yml'):
+            original = project / '.graphtraj' / name
+            if original.is_file():
+                shutil.copy2(original, inputs / name)
+        git = subprocess.run(['git', '-C', str(configuration.project_root), 'worktree', 'list', '--porcelain'],
+                             capture_output=True, text=True, check=False)
+        manifest['git_worktrees'] = (git.stdout if git.returncode == 0 else None)
+        if git.returncode:
+            manifest['git_missing'] = 'Source Repository Git worktree metadata is unavailable.'
+        manifest['configuration_captured'] = [path.name for path in inputs.iterdir()]
+        if task_signatures(configuration.state) != task_facts or _control_signatures(project) != control_facts:
+            raise ValueError('Task or durable Agent/configuration records changed during snapshot; retry in a quiet capture window.')
+        manifest['control_state_unchanged'] = True
         # No active Runner, roles, connections, credentials or source checkout is
         # installed. This copy supports offline migration and Task graph queries.
         config = {'version': 1, 'paths': {'project_root': '.', 'docs': 'docs',

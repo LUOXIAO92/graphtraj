@@ -11,7 +11,7 @@ from graphtraj.execution.runner_status import (
 )
 from graphtraj.runtimes.replacement import caller_runtime
 from graphtraj.sessions.storage import SessionStore, session_path
-from graphtraj.sessions.archive import JsonlSessionStore, archive_path
+from agent_swarm.sessions.archive import JsonlSessionStore, archive_path
 from graphtraj.workspace.runner_project import discover_runner_directory
 
 

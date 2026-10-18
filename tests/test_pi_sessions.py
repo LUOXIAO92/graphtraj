@@ -9,7 +9,7 @@ import pytest
 from graphtraj.runtimes.pi.collector import PiCollector
 from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError
 from graphtraj.sessions.storage import SessionStore, session_path
-from graphtraj.sessions.protocol import native_record
+from agent_swarm.sessions.protocol import native_record
 from test_pi_runtime import pi_environment, execution
 from test_result_submission import result_project
 

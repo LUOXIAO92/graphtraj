@@ -10,11 +10,15 @@ const { Context } = await load('@deepseek-ai/cordis');
 const { SessionStore } = await load('@deepseek-ai/dsh-session');
 const { SessionQueryEngine } = await load('@deepseek-ai/dsh-session-query');
 const { TypertRemoteService, Remote, remoteMethods } = await load('@deepseek-ai/dsh-typert-protocol');
+const { TypertRegistry } = await load('@deepseek-ai/dsh-typert-registry');
+const { TypertGatewayService } = await load('@deepseek-ai/dsh-api-gateway');
 const { createUserMessage, AssistantStreamAccumulator } = await load('@deepseek-ai/dsh-llm');
 const { installCommunication } = await import(pathToFileURL(modulePath));
 const ctx = new Context();
 await ctx.plugin(SessionStore).await();
 await ctx.plugin(SessionQueryEngine).await();
+await ctx.plugin(TypertRegistry).await();
+await ctx.plugin(TypertGatewayService, {}).await();
 const session = ctx.sessions.create('receiver', { meta: { cwd: process.cwd() } });
 const inbox = { nextTurn: [], nextStep: [] };
 let deliveries = 0;
@@ -29,17 +33,18 @@ await installCommunication(ctx, { TypertRemoteService, Remote, createUserMessage
 assert.equal(remoteMethods(ctx.agentMessages)[0].method, 'receive');
 const fact = { id: 'execution-result-1', sessionId: session.id,
   senderSessionId: 'actual-child-session', sender: 'child-agent', recipient: 'parent-agent', body: 'reply body' };
-await Promise.all([ctx.agentMessages.receive(fact), ctx.agentMessages.receive(fact)]);
+const receive = request => ctx.typertGateway.invoke({ namespace: 'agentMessages', method: 'receive', args: { request } });
+await Promise.all([receive(fact), receive(fact)]);
 assert.equal(deliveries, 1);
 const message = inbox.nextStep.shift();
 session.append('user/message', message, { surfaceOp: 'append' });
-await ctx.agentMessages.receive(fact);
+await receive(fact);
 assert.equal(deliveries, 1);
 assert.deepEqual(session.deriveMessages()[0].content, [{ type: 'text', text: 'reply body' }]);
 assert.equal(message.source.form, 'relay');
 assert.equal(message.source.senderSessionId, fact.senderSessionId);
 assert.equal(message.source.recipientAgentId, fact.recipient);
-await assert.rejects(ctx.agentMessages.receive({ ...fact, sessionId: 'unmapped' }));
+await assert.rejects(receive({ ...fact, sessionId: 'unmapped' }));
 await ctx.fiber.dispose();
 const chunks = [
   { time: 100, chunk: { type: 'text-delta', index: 0, text: 'one' } },

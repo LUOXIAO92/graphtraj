@@ -41,6 +41,7 @@ second channel.
 
 from __future__ import annotations
 
+from copy import deepcopy
 import json
 import os
 import tempfile
@@ -732,6 +733,9 @@ class AgentControl:
         if last is not None:
             document["last_result"] = {name: last.get(name) for name in (
                 "id", "outcome", "last_message", "error", "terminal_confirmed", "ended_at")}
+            runtime_exit = last.get("process", {}).get("runtime_exit")
+            if runtime_exit is not None:
+                document["last_result"]["runtime_exit"] = deepcopy(runtime_exit)
         if record["retired_at"] is not None:
             document["retired_at"] = record["retired_at"]
         return document

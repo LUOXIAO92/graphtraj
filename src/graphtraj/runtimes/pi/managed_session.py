@@ -209,9 +209,20 @@ class PiManagedExecution:
         if self.independent:
             # AgentControl places this owner at <root>/native/<agent>. The
             # caller's cwd may contain that root under any name, not .graphtraj.
-            private = str(self.directory.parent.parent.resolve())
-            policy['filesystem']['denyRead'].append(private)
-            policy['filesystem']['denyWrite'].append(private)
+            private = self.directory.parent.parent.resolve()
+            policy['filesystem']['denyRead'].append(str(private))
+            # srt applies write denials after grants: denying the whole root
+            # also denies this child's trace and MCP channel. Default-deny
+            # writes already protect the root when no broader grant covers it.
+            # The selected srt also grants these native log/scratch directories
+            # by default. Never place protected control records inside them.
+            default_write = ('/tmp/claude', '/private/tmp/claude',
+                             str(Path.home() / '.npm/_logs'), str(Path.home() / '.claude/debug'))
+            if any(private.is_relative_to(Path(path).resolve()) for path in (*write, *default_write)):
+                raise RuntimeAdapterError(
+                    'ROLE_CONFIG_UNSUPPORTED',
+                    'Pi independent data root overlaps a writable grant; '
+                    'retain a separate data root or a read-only worktree.')
         if request.get('base_url'):
             from urllib.parse import urlsplit
 

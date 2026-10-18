@@ -360,3 +360,39 @@ def test_pi_child_cli_preserves_real_caller(tmp_path: Path, pi_environment: dict
     assert receipt['authorized_exit'] == 0, receipt
     assert receipt['refused_exit'] == 1
     assert yaml.safe_load(receipt['refused'])['error']['code'] == 'authority-denied'
+
+
+@pytest.mark.parametrize('overlap', ['none', 'worktree', 'native-scratch'])
+def test_independent_pi_trace_write_grant(
+    tmp_path: Path, pi_environment: dict, monkeypatch: pytest.MonkeyPatch, overlap: str,
+) -> None:
+    """Public Pi control grants its trace, not a whole control root or sibling."""
+    from agent_swarm import AgentControl, Caller, bind
+    from graphtraj.runtimes.pi.driver import PiDriver
+
+    result_project(tmp_path)
+    captured = tmp_path / 'independent-policy.json'
+    monkeypatch.setenv('PI_FIXTURE_POLICY', str(captured))
+    _, prepared = context(tmp_path, pi_environment, worktree_access='write')
+    request = prepared.launch_document()['adapter_request']
+    root = (Path(request['worktree_path']) if overlap == 'worktree' else tmp_path) / 'independent-data'
+    if overlap == 'native-scratch':
+        monkeypatch.setattr(Path, 'home', classmethod(lambda cls: tmp_path))
+        root = tmp_path / '.npm/_logs/independent-data'
+    call = bind(AgentControl(root, {'pi': PiDriver(request)}), Caller('test-host', None))
+    created = call({'action': 'create', 'runtime': 'pi', 'instruction': 'policy'})
+    if overlap != 'none':
+        assert created.failed
+        assert created.document['result']['last_result']['error']['code'] == 'ROLE_CONFIG_UNSUPPORTED'
+        assert not captured.exists()
+        return
+    assert not created.failed, created.document
+    waited = call({'action': 'wait', 'agent': created.document['agent'], 'timeout_seconds': 5})
+    assert not waited.failed
+    policy = json.loads(captured.read_text())['filesystem']
+    trace = root / 'native' / created.document['agent'] / 'trace.pi'
+    lock = trace / 'agent' / 'trust.json.lock'
+    assert any(lock.is_relative_to(Path(path)) for path in policy['allowWrite'])
+    assert not any(lock.is_relative_to(Path(path)) for path in policy['denyWrite'])
+    for protected in (root / 'control' / 'agents', root / 'native' / 'another-agent', root / 'config.yml'):
+        assert not any(protected.is_relative_to(Path(path)) for path in policy['allowWrite'])

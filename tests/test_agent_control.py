@@ -299,6 +299,9 @@ def test_failed_start_keeps_the_native_reason(root: Path) -> None:
 
         def start(self, run):
             """Raise the Runtime's own rejection."""
+            run.events.process(runtime_exit={
+                'runtime_exit_code': 1, 'wrapper_exited': True,
+                'owned_process_group_exited': None, 'terminal_confirmed': False})
             raise AgentsError('RUNTIME_EXECUTABLE_INVALID', 'Runtime is unavailable.')
 
     control = AgentControl(root, {'scripted': Failing()})
@@ -307,6 +310,12 @@ def test_failed_start_keeps_the_native_reason(root: Path) -> None:
     assert failed and created['result']['state'] == 'standby'
     assert created['result']['last_result']['error'] == {
         'code': 'RUNTIME_EXECUTABLE_INVALID', 'message': 'Runtime is unavailable.'}
+    exit_facts = created['result']['last_result']['runtime_exit']
+    assert exit_facts == {'runtime_exit_code': 1, 'wrapper_exited': True,
+                          'owned_process_group_exited': None, 'terminal_confirmed': False}
+    exit_facts['runtime_exit_code'] = 0
+    status, _ = call(control, Caller('test-host', None), action='status', agent=created['agent'])
+    assert status['result']['last_result']['runtime_exit']['runtime_exit_code'] == 1
     retry, failed = call(control, Caller('test-host', None), action='send',
                          agent=created['agent'], message='again')
     assert failed and retry['error']['code'] == 'no-session'

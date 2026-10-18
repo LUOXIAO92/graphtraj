@@ -253,6 +253,33 @@ def test_public_query_reads_jsonl_with_existing_native_authority(tmp_path: Path)
         handle_request(request, cwd=tmp_path)
 
 
+def test_public_query_pages_migrated_evidence_without_claiming_native_order(tmp_path: Path) -> None:
+    """Old evidence respects the selected page size and keeps its own cursor."""
+    from agent_swarm.sessions.migration import import_sqlite
+    from graphtraj.execution.runner_status import runtime_caller
+    from graphtraj.interfaces.gateway import handle_request
+    from graphtraj.interfaces.agents import swarm_root
+    from test_result_submission import result_project
+
+    runner, _, _ = result_project(tmp_path)
+    source = session_path(tmp_path / 'state', 'canonical')
+    with SessionStore.create(source, header()) as store:
+        for seq in range(3):
+            store.append({'type': 'unknown/encrypted', 'seq': seq, 'time': 1,
+                          'data': {'ciphertext': str(seq)}}, source='old-notification', position=seq)
+    import_sqlite(source, swarm_root(tmp_path))
+    request = {'action': 'execute', 'feature': 'session_read',
+               'arguments': {'session_id': 'canonical', 'limit': 1}}
+    with runtime_caller(runner, 'research@x1'):
+        first = handle_request(request, cwd=tmp_path).document
+        assert first['events'] == []
+        assert [event['seq'] for event in first['legacy']['events']] == [0]
+        assert first['legacy']['has_more'] and not first['legacy']['native_order_verified']
+        request['arguments']['after'] = first['legacy']['after']
+        second = handle_request(request, cwd=tmp_path).document
+        assert [event['seq'] for event in second['legacy']['events']] == [1]
+
+
 def test_fragment_size_equivalence_and_measurements(tmp_path: Path) -> None:
     """Long output retains equal text, semantic boundaries, usage and probabilities."""
     output = 'abcdefghij界🙂' * 2000

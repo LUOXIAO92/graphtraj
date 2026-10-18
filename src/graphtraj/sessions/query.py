@@ -52,7 +52,7 @@ def read_session(cwd: Path, session_id: str, after: int = -1, limit: int = 200) 
         else:
             if (configuration.harness_root / '.graphtraj/core/config.yml').exists():
                 raise ValueError('Canonical JSONL Session is unavailable; legacy backups are not a query fallback.')
-            # Other Runtime collectors still use the retained SQLite format.
+            # Unmigrated history remains readable before the explicit partition.
             store = resources.enter_context(SessionStore(session_path(configuration.state, session_id), readonly=True))
             store.db.execute('BEGIN')
         header = store.header
@@ -63,5 +63,12 @@ def read_session(cwd: Path, session_id: str, after: int = -1, limit: int = 200) 
             raise RunnerError('authority-denied', 'Agent archive access is limited to its own verified native Session.')
         if header['id'] != session_id:
             raise ValueError('Session archive identity does not match its location.')
-        return {'header': header, **store.page(after, limit), 'pending': store.pending(),
-                **({'legacy': store.legacy()} if isinstance(store, JsonlSessionStore) and store.legacy() else {})}
+        page = store.page(after, limit)
+        legacy = store.legacy() if isinstance(store, JsonlSessionStore) else None
+        if legacy:
+            retained = [event for event in legacy['events'] if event['seq'] > after]
+            legacy.update(events=retained[:limit], has_more=len(retained) > limit,
+                          after=retained[min(len(retained), limit) - 1]['seq'] if retained else after,
+                          native_order_verified=False)
+        return {'header': header, **page, 'pending': store.pending(),
+                **({'legacy': legacy} if legacy else {})}

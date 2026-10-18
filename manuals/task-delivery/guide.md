@@ -59,6 +59,21 @@ Use assigned report destinations. No role-specific filename or prose format is a
 universal submission or acceptance condition. Session completion alone does not
 accept or finish a Task.
 
+When an assigned report needs the direct parent's action, use `submit_report`
+with `notify_parent: true` (CLI `--notify-parent`). This includes an acceptance
+handoff or a blocker discovered while handling a child event. The default is
+`false`: saving a report alone does not wake the parent. The notice names the
+report and its path, without copying its body; check the returned delivery
+receipt. The parent reads it through `session_reports`. Formal result submission
+and permission requests keep their existing operations.
+
+An ordinary `completed` notice from an execution the direct parent did not
+start is retained without resuming a Runner parent. For a Codex external Main,
+it is displayed once at the next normal hook rather than starting a model turn.
+Parent-initiated execution completions, formal results, errors, interruptions,
+permission/dialog requests, budget events and explicit report notifications
+keep their immediate delivery paths.
+
 Task notices identify their existing Agent alias and carry the recorded event
 and message, with `source: graphtraj`. They do not need duplicate Task or
 Session identity fields. A mapped Agent notifies its actual direct parent; root

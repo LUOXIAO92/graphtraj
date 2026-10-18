@@ -15,6 +15,12 @@ back into the Task graph. Mappings live in ``<state>/task-backups.yml``::
     last_error:   {at, message} | null
     last_published_at: <UTC time> | null
 
+A Task with local children also publishes integrated / required child counts
+and a dependency DAG of its children. After publishing, the Issue is attached
+as a real Sub-issue to its mapped parent, and its mapped children to it;
+endpoints are resolved only through mappings, unmapped ones are reported as
+pending and a child already under another parent is reported, never moved.
+
 Remote requests use the installed ``gh api`` command, so its existing login or
 the standard ``GH_TOKEN`` / ``GITHUB_TOKEN`` variables supply credentials and
 this module never handles a token.
@@ -104,7 +110,9 @@ def backup_task(
     if _REPOSITORY.fullmatch(repository) is None or _HOST.fullmatch(host) is None:
         raise ValueError("repository must be owner/name and host a GitHub host name")
     # Unregistered Tasks raise the same ValueError from the graph query.
-    task = read_graph(state, "full", details=[task_id])["details"][task_id]
+    graph   = read_graph(state, "full", details=[task_id])
+    task    = graph["details"][task_id]
+    records = {record["task_id"]: record for record in graph["tasks"]}
 
     descriptor = os.open(str(state / ".task-backups.lock"), os.O_RDWR | os.O_CREAT, 0o600)
     file_lock.flock(descriptor, file_lock.LOCK_EX)
@@ -124,9 +132,10 @@ def backup_task(
             # Persist the creation intent first so a retry looks for this marker
             # instead of creating a second Issue.
             _save(state, backups)
-        desired = _render(task, mapping["marker"])
+        desired = _render(task, mapping["marker"], records)
         try:
             outcome, conflict = _publish(mapping, desired, retry, confirm_remote)
+            hierarchy = [] if conflict is not None else _link(backups, mapping, records)
         except RemoteError as error:
             mapping["last_error"] = {"at": _now(), "message": str(error)}
             _save(state, backups)
@@ -137,7 +146,7 @@ def backup_task(
             return {"outcome": "conflict", **conflict, "backup": mapping}, True
         mapping.update(last_error=None, last_published_at=_now())
         _save(state, backups)
-        return {"outcome": outcome, "backup": mapping}, False
+        return {"outcome": outcome, "hierarchy": hierarchy, "backup": mapping}, False
     finally:
         file_lock.flock(descriptor, file_lock.LOCK_UN)
         os.close(descriptor)
@@ -200,6 +209,52 @@ def _publish(
     return outcome, None
 
 
+def _link(
+    backups: list[dict[str, Any]],
+    mapping: dict[str, Any],
+    records: dict[str, dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Attach the mapped Issue to its mapped parent and its mapped children as Sub-issues.
+
+    Remote Issues are resolved only through mappings of the same host and
+    repository. A child already under another parent is reported, never moved;
+    an unmapped endpoint is reported as pending.
+    """
+    def mapped(key: str | None) -> dict[str, Any] | None:
+        return next((item["issue"] for item in backups if item["issue"] is not None and (
+            item["task_id"], item["host"], item["repository"]) == (
+            key, mapping["host"], mapping["repository"])), None)
+
+    task_id = mapping["task_id"]
+    pairs   = [(records[task_id]["parent_id"], task_id)] if records[task_id]["parent_id"] else []
+    pairs  += [(task_id, child) for child in records[task_id]["children"] if mapped(child)]
+    host, base = mapping["host"], "repos/{0}/issues".format(mapping["repository"])
+    report  = []
+    for parent_id, child_id in pairs:
+        parent, child = mapped(parent_id), mapped(child_id)
+        entry = {"parent": parent_id, "child": child_id}
+        report.append(entry)
+        if parent is None:
+            entry["outcome"] = "pending"
+            continue
+        try:
+            current = gh_api(host, "GET", "{0}/{1}/parent".format(base, child["number"]))["number"]
+        except RemoteError as error:
+            if "HTTP 404" not in str(error):
+                raise
+            current = None
+        if current is None:
+            gh_api(host, "POST", "{0}/{1}/sub_issues".format(base, parent["number"]),
+                   {"sub_issue_id": child["id"]})
+            entry["outcome"] = "linked"
+        elif current == parent["number"]:
+            entry["outcome"] = "unchanged"
+        else:
+            entry.update(outcome="other-parent", expected_parent_issue=parent["number"],
+                         remote_parent_issue=current)
+    return report
+
+
 def _find_created(mapping: dict[str, Any]) -> dict[str, Any] | None:
     """Find the Issue an interrupted attempt created, by its unique body marker only."""
     # ponytail: one page of 100 recent Issues; page further if a repository
@@ -214,7 +269,9 @@ def _find_created(mapping: dict[str, Any]) -> dict[str, Any] | None:
     return None
 
 
-def _render(task: dict[str, Any], marker: str) -> dict[str, str]:
+def _render(
+    task: dict[str, Any], marker: str, records: dict[str, dict[str, Any]],
+) -> dict[str, str]:
     """Build the remote copy from explicit Task definition and state fields only."""
     body = "\n".join([
         _marker_line({"marker": marker, "task_id": task["task_id"]}),
@@ -226,6 +283,7 @@ def _render(task: dict[str, Any], marker: str) -> dict[str, str]:
         "- Parent: {0}".format(task["parent_id"] or "none"),
         "- Dependencies: {0}".format(", ".join(task["dependencies"]) or "none"),
         "- Replaced by: {0}".format(", ".join(task["replaced_by"]) or "none"),
+        *_progress(records, records[task["task_id"]]["children"]),
         "",
         "---",
         "",
@@ -233,6 +291,39 @@ def _render(task: dict[str, Any], marker: str) -> dict[str, str]:
     ])
     closed = task["status"] == "integrated" or not task["active"]
     return {"title": task["title"], "body": body, "state": "closed" if closed else "open"}
+
+
+_MARKS = {"integrated": "✅", "pending": "⏳", "ready": "⏳", "blocked": "⛔", "escalated": "⛔"}
+
+
+def _progress(records: dict[str, dict[str, Any]], children: list[str]) -> list[str]:
+    """Render a summary's child progress and dependency DAG from local state only."""
+    if not children:
+        return []
+    # Required children are the active ones; superseded or cancelled children
+    # are shown but not counted, and their replacements are counted instead.
+    required   = [key for key in children if records[key]["disposition"] == "active"]
+    integrated = [key for key in required if records[key]["status"] == "integrated"]
+    lines = ["", "## Progress", "",
+             "Integrated required children: {0} / {1}".format(len(integrated), len(required)),
+             "", "```mermaid", "flowchart LR"]
+    # External prerequisites appear as context nodes; they are not counted.
+    inputs = [source for key in children for source in records[key]["dependencies"]
+              if source not in children]
+    for key in dict.fromkeys([*inputs, *children]):
+        record = records[key]
+        state  = record["status"] if record["disposition"] == "active" else record["disposition"]
+        mark   = _MARKS.get(state, "🔄") if record["disposition"] == "active" else "➖"
+        lines.append('  T{0}["{1} {0} {2}<br/>{3}"]'.format(
+            key, mark, record["title"].replace('"', "#quot;"), state))
+    lines += ["  T{0} --> T{1}".format(source, key)
+              for key in children for source in records[key]["dependencies"]]
+    return lines + [
+        "```", "",
+        "Legend: ✅ integrated · 🔄 in progress (implementing, reviewing, reworking or "
+        "integrating) · ⏳ pending or ready · ⛔ blocked or escalated · ➖ not required "
+        "(superseded or cancelled). An arrow points from a dependency to the Task that needs it.",
+    ]
 
 
 def _marker_line(mapping: dict[str, Any]) -> str:

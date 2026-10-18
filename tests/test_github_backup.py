@@ -11,6 +11,7 @@ import pytest
 import yaml
 from click.testing import CliRunner
 
+from graphtraj.graph.github_backup import _progress
 from graphtraj.interfaces import gateway
 from graphtraj.interfaces.cli import graphtraj
 
@@ -41,6 +42,17 @@ if state["mode"] == "offline":
 url    = urlsplit(target)
 parts  = url.path.split("/")
 issues = state["issues"]
+if len(parts) == 6:
+    # Sub-issue endpoints: GET .../{child}/parent and POST .../{parent}/sub_issues.
+    parents = state.setdefault("parents", {})
+    if method == "POST":
+        child = next(issue for issue in issues if issue["id"] == payload["sub_issue_id"])
+        assert str(child["number"]) not in parents, "GitHub rejects a second parent"
+        parents[str(child["number"])] = int(parts[4])
+        finish(next(issue for issue in issues if issue["number"] == int(parts[4])))
+    if parts[4] not in parents:
+        finish("gh: Not Found (HTTP 404)", 1)
+    finish(next(issue for issue in issues if issue["number"] == parents[parts[4]]))
 if method == "POST":
     number = max([issue["number"] for issue in issues] + [0]) + 1
     issue  = {"number": number, "id": 9000 + number, "node_id": "I_%d" % number,
@@ -260,3 +272,113 @@ def test_backup_publishes_only_task_fields_without_credentials_or_sessions(
     assert payloads[0]["body"].endswith("---\n\nDeliver the backup.\n")
     # gh itself still receives the standard credential variable.
     assert requests[0]["environment"]["GITHUB_TOKEN"] == "token-value-never-published"
+
+
+def _register_summary() -> None:
+    """Register local summary 1 with children 2 and 3, where 3 depends on 2."""
+    _operate("task_register", _task(task_id="1", task_name="summary", title="Summary"))
+    _operate("task_register", _task(task_id="2", task_name="first", title="First", parent_id="1"))
+    _operate("task_register", _task(task_id="3", task_name="second", title="Second",
+                                    parent_id="1", dependencies=["2"]))
+
+
+def _backup_task(task_id: str, *options: str) -> dict[str, Any]:
+    """Back up one local Task to owner/repo and require success."""
+    result = CliRunner().invoke(graphtraj.main, [
+        "task", "backup", "--task-id", task_id, "--repository", "owner/repo", *options])
+    assert result.exit_code == 0, result.output
+    return yaml.safe_load(result.output)
+
+
+def _sub_issue_writes(remote: Path) -> list[dict[str, Any]]:
+    """Return the fake remote's Sub-issue creation requests."""
+    return [request for request in json.loads(remote.read_text())["requests"]
+            if request["target"].endswith("/sub_issues")]
+
+
+def test_sub_issues_follow_mappings_not_local_ids_and_repeat_without_writes(
+    project: Path, remote: Path,
+) -> None:
+    """Local 1/2/3 map to remote #44/#43/#45; repeated backups neither duplicate nor move."""
+    _register_summary()
+
+    child = _backup_task("2")
+    assert child["hierarchy"] == [{"parent": "1", "child": "2", "outcome": "pending"}]
+    summary = _backup_task("1")
+    # Only the mapped child is linked; unmapped Task 3 gets no Issue.
+    assert summary["hierarchy"] == [{"parent": "1", "child": "2", "outcome": "linked"}]
+    assert len(_issues(remote)) == 44
+    later = _backup_task("3")
+    assert later["hierarchy"] == [{"parent": "1", "child": "3", "outcome": "linked"}]
+
+    numbers = {task_id: _backup_task(task_id)["backup"]["issue"]["number"] for task_id in "123"}
+    assert numbers == {"1": 44, "2": 43, "3": 45}
+    assert json.loads(remote.read_text())["parents"] == {"43": 44, "45": 44}
+    assert [request["payload"] for request in _sub_issue_writes(remote)] == [
+        {"sub_issue_id": 9043}, {"sub_issue_id": 9045}]
+    again = _backup_task("1")
+    assert (again["outcome"], [entry["outcome"] for entry in again["hierarchy"]]) == (
+        "unchanged", ["unchanged", "unchanged"])
+    assert len(_sub_issue_writes(remote)) == 2 and len(_issues(remote)) == 45
+
+    # The summary body follows local progress: cancelling 3 leaves one required child.
+    body = _issues(remote)[44]["body"]
+    assert "Integrated required children: 0 / 2" in body and "  T2 --> T3" in body
+    assert "Legend:" in body and "#43" not in body
+    _operate("task_revise", {
+        "product_preserving": True, "caused_by_event_ids": [], "evidence_refs": ["README.md"],
+        "tasks": [{**_task(task_id="3", task_name="second", title="Second", parent_id="1",
+                           dependencies=["2"], disposition="cancelled",
+                           retirement_reason="Not needed."),
+                   "current_definition": next(task for task in _operate("task_graph", {})["tasks"]
+                                              if task["task_id"] == "3")["current_definition"]}],
+    })
+    assert _backup_task("1")["outcome"] == "updated"
+    body = _issues(remote)[44]["body"]
+    assert "Integrated required children: 0 / 1" in body
+    assert 'T3["➖ 3 Second<br/>cancelled"]' in body
+
+
+def test_other_remote_parent_is_reported_and_never_moved_or_imported(
+    project: Path, remote: Path,
+) -> None:
+    """A child already under external #1 keeps that parent; local records stay unchanged."""
+    _register_summary()
+    _backup_task("2")
+    document = json.loads(remote.read_text())
+    document["parents"] = {"43": 1}
+    remote.write_text(json.dumps(document))
+
+    summary = _backup_task("1")
+    assert summary["hierarchy"] == [{
+        "parent": "1", "child": "2", "outcome": "other-parent",
+        "expected_parent_issue": 44, "remote_parent_issue": 1,
+    }]
+    assert _backup_task("2")["hierarchy"][0]["outcome"] == "other-parent"
+    assert json.loads(remote.read_text())["parents"] == {"43": 1}
+    assert _sub_issue_writes(remote) == []
+    local = {task["task_id"]: task for task in _operate("task_graph", {})["tasks"]}
+    assert (local["2"]["parent_id"], local["2"]["status"]) == ("1", "pending")
+
+
+def test_progress_counts_only_active_children_and_marks_each_state() -> None:
+    """Completed children count even when a current view would fold them; inputs are context only."""
+    def record(title: str, status: str, disposition: str = "active",
+               dependencies: tuple[str, ...] = ()) -> dict[str, Any]:
+        return {"title": title, "status": status, "disposition": disposition,
+                "dependencies": list(dependencies)}
+
+    records = {
+        "5": record("done", "integrated"), "6": record("old", "implementing", "superseded"),
+        "7": record('new "x"', "reviewing", dependencies=("5", "99")), "8": record("wait", "ready"),
+        "99": record("base", "integrated"),
+    }
+    lines = _progress(records, ["5", "6", "7", "8"])
+    assert "Integrated required children: 1 / 3" in lines
+    assert lines[lines.index("flowchart LR") + 1:lines.index("```", lines.index("flowchart LR"))] == [
+        '  T99["✅ 99 base<br/>integrated"]',
+        '  T5["✅ 5 done<br/>integrated"]', '  T6["➖ 6 old<br/>superseded"]',
+        '  T7["🔄 7 new #quot;x#quot;<br/>reviewing"]', '  T8["⏳ 8 wait<br/>ready"]',
+        "  T5 --> T7", "  T99 --> T7",
+    ]
+    assert _progress(records, []) == []

@@ -915,6 +915,34 @@ def test_native_start_resume_and_stop_need_no_main_binding_input(host: tuple[Pat
     assert any(native_record(event).get('method') == 'thread/items/list' for event in events)
 
 
+def test_native_start_selects_harness_for_external_cwd(
+    host: tuple[Path, Path], tmp_path_factory: pytest.TempPathFactory,
+) -> None:
+    """A trusted hook selects the Harness without substituting native identity."""
+    root, binding = host
+    binding.unlink()
+    rollout(root)
+    outside = tmp_path_factory.mktemp('external-client')
+    event = {'hook_event_name': 'SessionStart', 'source': 'resume',
+             'cwd': str(outside), 'session_id': 'shared-native-session',
+             'transcript_path': str(root / 'rollout.jsonl')}
+    runner = CliRunner()
+    reply = runner.invoke(stop_hook, [], input=json.dumps(event))
+    assert 'associated' not in json.loads(reply.output).get('systemMessage', '')
+    assert not binding.exists()
+    reply = runner.invoke(stop_hook, ['--project-root', str(root)], input=json.dumps(event))
+    assert reply.exit_code == 0, reply.output
+    assert json.loads(reply.output)['systemMessage'] == 'GraphTraj Main Session associated.'
+    saved = yaml.safe_load(binding.read_text())
+    assert saved['session'] == 'main'
+    assert saved['cwd'] == str(root)
+    binding.unlink()
+    event['session_id'] = 'wrong-native-session'
+    reply = runner.invoke(stop_hook, ['--project-root', str(root)], input=json.dumps(event))
+    assert json.loads(reply.output)['continue'] is False
+    assert not binding.exists()
+
+
 def test_native_session_end_archives_terminal_tail_without_checking(host: tuple[Path, Path]) -> None:
     """The native shutdown flush exposes records written after the Stop hook."""
     from graphtraj.sessions.protocol import native_record

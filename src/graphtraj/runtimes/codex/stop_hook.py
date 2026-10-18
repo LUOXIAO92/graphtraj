@@ -17,15 +17,15 @@ from graphtraj.runtimes.codex.session_entry import (
 )
 
 
-def native_event(event: dict) -> dict:
-    """Associate native start/resume and handle Stop without Main relay calls."""
+def native_event(event: dict, project_root: Path | None = None) -> dict:
+    """Associate native events with the configured Harness, preserving host identity."""
     from graphtraj.execution.runner_status import process_caller_alias
     from graphtraj.workspace.runner_project import discover_runner_directory, discover_project_root
 
     name = event.get('hook_event_name')
     if name not in {'SessionStart', 'Stop', 'SessionEnd'}:
         return {}
-    root = discover_project_root(Path(event['cwd']))
+    root = discover_project_root(project_root if project_root is not None else Path(event['cwd']))
     runner = discover_runner_directory(root)
 
     def skipped(reason: str) -> dict:
@@ -137,7 +137,14 @@ def _archive(root: Path, session: str, transcript: str, *, new_session: bool = F
 @click.option('--binding', type=click.Path(path_type=Path))
 @click.option('--hook-session')
 @click.option('--configuration', is_flag=True, help='Print adoption material without enabling the hook.')
-def main(binding: Path | None, hook_session: str | None, configuration: bool) -> None:
+@click.option('--project-root', type=click.Path(exists=True, file_okay=False, path_type=Path),
+              help='Select the Harness for an external native Session; identity still comes from the host.')
+def main(
+    binding: Path | None,
+    hook_session: str | None,
+    configuration: bool,
+    project_root: Path | None,
+) -> None:
     """Receive native hook input and write only a valid Codex Stop response.
 
     Other hook events skip before opening Main's private binding. SIGTERM becomes
@@ -159,7 +166,7 @@ def main(binding: Path | None, hook_session: str | None, configuration: bool) ->
         if not isinstance(event, dict):
             raise ValueError('Invalid native lifecycle event.')
         if binding is None:
-            result = native_event(event)
+            result = native_event(event, project_root)
         elif (event.get('hook_event_name') != 'Stop'
                 or event.get('session_id') != hook_session):
             result = {}

@@ -1,12 +1,12 @@
-"""Independent local GraphTraj tool binding and a thin structured stdio bridge.
+"""Trusted host binding and the ``graphtraj-tool`` structured stdio bridge.
 
-A host registers one ``graphtraj`` custom tool from :func:`tool_descriptor` and
-binds :func:`bind` to its own launch context: the working directory and, when
-chosen, the feature names it exposes. A host that needs a process boundary
-starts the ``graphtraj-tool`` command instead and exchanges newline-delimited
-JSON over stdin/stdout. Both paths forward the model-supplied request object to
-the shared gateway, so descriptions, schemas and behavior stay single-sourced
-and no MCP server or protocol is involved.
+This is not a model tool: models reach GraphTraj only through the CLI and the
+progressive ``agents``/``tasks`` MCP entries. An owning host (for example the
+desktop window, or a host that receives child events) binds :func:`bind` to its
+own launch context: the working directory and, when chosen, the feature names
+it allows. A host that needs a process boundary starts ``graphtraj-tool`` and
+exchanges newline-delimited JSON over stdin/stdout. Both paths forward the
+request object to the same gateway the CLI and MCP use.
 
 Trusted context never travels in the request or on the wire. Identity comes
 from the host launch boundary the same way it does for the CLI and the MCP
@@ -32,26 +32,10 @@ from graphtraj.interfaces import gateway
 from graphtraj.interfaces.tools import ToolResult
 
 
-TOOL_NAME = "graphtraj"
-
 TOOL_DESCRIPTION = (
-    "Discover, describe and execute GraphTraj operations for the project in the "
-    "host's working directory. Send action discover, describe or execute with "
-    "the request fields the shared tool schema defines."
+    "Serve GraphTraj discover, describe and execute requests for the owning "
+    "host's working directory as newline-delimited JSON."
 )
-
-
-def tool_descriptor() -> dict[str, Any]:
-    """Return the single custom-tool descriptor a local host registers.
-
-    The descriptor reuses ``gateway.INPUT_SCHEMA`` by reference, so a change to
-    the shared request schema changes every host that registers this tool.
-    """
-    return {
-        "name":         TOOL_NAME,
-        "description":  TOOL_DESCRIPTION,
-        "input_schema": gateway.INPUT_SCHEMA,
-    }
 
 
 def bind(

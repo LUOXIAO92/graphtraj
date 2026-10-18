@@ -31,7 +31,7 @@ def request(
 ) -> dict:
     """Provide nonsecret native launch inputs to the public Runtime contract."""
     return {
-        'executable': 'dsh', 'package': package, 'tool': 'graphtraj-tool',
+        'executable': 'dsh', 'package': package, 'tool': 'graphtraj-session',
         'worktree_path': str(tmp_path), 'harness_root': str(tmp_path),
         'provider': 'deepseek-official', 'model': 'deepseek-flash',
         'reasoning_effort': 'low', 'api_key_env': 'DSH_TEST_KEY',
@@ -1051,7 +1051,7 @@ def test_dsh_role_projection_keeps_secrets_out_of_launch(
     (package / 'lib').mkdir(parents=True)
     (package / 'package.json').write_text('{"version":"0.2.0-rc.2"}')
     monkeypatch.setattr(shutil, 'which', lambda name: str(package / 'lib' / 'bin.js')
-                        if name == 'dsh' else '/installed/graphtraj-tool')
+                        if name == 'dsh' else '/installed/graphtraj-session')
     monkeypatch.setenv('DSH_TEST_KEY', 'never-persist-this-secret')
     role = ResolvedChildRole('author', 'Task responsibility', RolePreset(
         runtime='dsh', model='deepseek-official/deepseek-flash', base_url=None,

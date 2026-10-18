@@ -28,7 +28,7 @@ export function apply(ctx, config = { finishCheck: false }) {
   });
   async function entry(agent, event, signal) {
     // The native callback owns these facts; no model tool parameter selects them.
-    const executable = process.env.GRAPHTRAJ_DSH_TOOL?.replace(/graphtraj-tool$/, 'graphtraj-session') || 'graphtraj-session';
+    const executable = process.env.GRAPHTRAJ_DSH_TOOL || 'graphtraj-session';
     const result = await new Promise((resolve, reject) => {
       const child = spawn(executable, ['dsh'], {
         cwd: agent.session.header.cwd,

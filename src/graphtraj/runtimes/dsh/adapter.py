@@ -77,7 +77,7 @@ class DshRuntimeAdapter:
         if effort not in {None, 'off', 'low', 'high', 'max'}:
             raise RuntimeAdapterError('ROLE_CONFIG_UNSUPPORTED', 'Unsupported DSH reasoning effort.')
         executable = shutil.which('dsh')
-        tool = shutil.which('graphtraj-tool')
+        tool = shutil.which('graphtraj-session')
         if not executable or not tool:
             raise RuntimeAdapterError('RUNTIME_UNAVAILABLE', 'Install DSH and GraphTraj public CLI first.')
         package = Path(executable).resolve().parent.parent / 'package.json'

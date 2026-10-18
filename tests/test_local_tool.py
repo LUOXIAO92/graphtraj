@@ -66,15 +66,10 @@ def project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     return tmp_path
 
 
-def test_descriptor_registers_one_tool_over_the_shared_schema() -> None:
-    """A host registers one graphtraj tool and no private schema copy."""
-    descriptor = local_tool.tool_descriptor()
-    assert descriptor["name"] == "graphtraj"
-    assert descriptor["description"] == local_tool.TOOL_DESCRIPTION
-    assert descriptor["input_schema"] is gateway.INPUT_SCHEMA
-    assert set(descriptor["input_schema"]["properties"]) == {
-        "action", "query", "feature", "arguments", "schema",
-    }
+def test_host_binding_publishes_no_model_tool() -> None:
+    """Models use CLI and agents/tasks MCP only; this binding has no tool descriptor."""
+    assert not hasattr(local_tool, "tool_descriptor")
+    assert not hasattr(local_tool, "TOOL_NAME")
 
 
 def test_python_binding_discovers_describes_reads_and_writes(project: Path) -> None:

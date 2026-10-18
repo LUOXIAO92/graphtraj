@@ -662,8 +662,18 @@ class AgentControl:
         if record["retired_at"] is not None:
             raise AgentsError("retired", "The Agent is retired; its record is kept as history.")
         if record["executions"] and record["session"] is None:
-            raise AgentsError("no-session", "No native Session was established to continue; "
-                                            "create a new Agent instead.")
+            last = record["executions"][-1]
+            evidence = last.get("process", {}).get("runtime_exit") or {}
+            # Retry only a proven pre-prompt startup failure. Keep the original
+            # execution and its terminal uncertainty; this is not reconciliation.
+            retryable = (last["state"] == "ended" and last.get("outcome") == "failed"
+                         and evidence.get("prompt_started") is False
+                         and evidence.get("native_session_bound") is False
+                         and evidence.get("wrapper_exited") is True
+                         and evidence.get("owned_process_group_exited") is True)
+            if not retryable:
+                raise AgentsError("no-session", "No native Session was established; "
+                                                "safe startup retry evidence is unavailable.")
 
         # Archiving follows the tool's own setting; an unbound archive is reported.
         archive = binding.archive if read_config(self.root)["save_normalized_sessions"] else None

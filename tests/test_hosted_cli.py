@@ -309,12 +309,12 @@ def test_shared_mcp_command_consumes_bound_graphtraj_dsh_channel(tmp_path: Path,
     with hold_ownership(directory, os.getpid()), cli_connection(
         tmp_path, 'research@x1', native_operation_features(), native_context=lambda: expected,
     ) as address:
-        listed = run_cli('agent_swarm.mcp', tmp_path, address,
+        listed = run_cli('graphtraj.interfaces.mcp', tmp_path, address,
                          input_text=json.dumps({'jsonrpc': '2.0', 'id': 0, 'method': 'tools/list'})+'\n',
                          DSH_SESSION_ID=expected['session'], DSH_AGENT_SOURCE='main')
         assert [tool['name'] for tool in json.loads(listed.stdout)['result']['tools']] == ['agents', 'tasks']
         for session, source in ((expected['session'], 'main'), ('other', 'main'), (expected['session'], 'child')):
-            result = run_cli('agent_swarm.mcp', tmp_path, address,
+            result = run_cli('graphtraj.interfaces.mcp', tmp_path, address,
                              input_text=json.dumps(request)+'\n',
                              DSH_SESSION_ID=session, DSH_AGENT_SOURCE=source)
             assert result.returncode == 0, result.stderr

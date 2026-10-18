@@ -2,11 +2,10 @@
 from __future__ import annotations
 
 import json
-import os
 import sys
 from typing import Any, Callable, Mapping, TextIO
 
-from agent_swarm.connection import CONNECTION_ENV, call_owner, client_native_context
+from agent_swarm.connection import call_owner
 from agent_swarm.discovery import INPUT_SCHEMA
 from agent_swarm.tool import AgentsError
 
@@ -93,17 +92,7 @@ def call(request_id: Any, params: Mapping) -> dict:
 
 
 def main() -> None:
-    """Run one stdio MCP entry for the one host connection actually supplied."""
-    if CONNECTION_ENV not in os.environ and 'GRAPHTRAJ_CLI_CONNECTION' in os.environ:
-        # This is the existing authenticated Task host, not an independent
-        # controller or a fallback after an independent channel fails.
-        from graphtraj.interfaces.mcp import main as hosted_main
-
-        native = client_native_context()
-        if native is not None and native['runtime'] == 'dsh':
-            os.environ['GRAPHTRAJ_NATIVE_RUNTIME'] = 'dsh'
-        hosted_main()
-        return
+    """Run one stdio MCP entry over the owning Runtime's authenticated channel."""
     serve(sys.stdin, sys.stdout, lambda message: respond(
         message, tool_documents, call, {'name': 'agents', 'version': '0.1.0'}))
 

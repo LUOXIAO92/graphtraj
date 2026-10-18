@@ -187,7 +187,14 @@ def serve(input_stream: TextIO, output_stream: TextIO) -> None:
 
 def main() -> None:
     """Run the MCP stdio server installed as the ``graphtraj-mcp`` command."""
+    from agent_swarm.connection import client_native_context
 
+    if 'GRAPHTRAJ_CLI_CONNECTION' in os.environ:
+        # A DSH host names its native Session only through its own environment;
+        # the hosted CLI binding checks that Session against this channel.
+        native = client_native_context()
+        if native is not None and native['runtime'] == 'dsh':
+            os.environ['GRAPHTRAJ_NATIVE_RUNTIME'] = 'dsh'
     serve(sys.stdin, sys.stdout)
 
 

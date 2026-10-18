@@ -82,7 +82,7 @@ def migrate_agents_command(
     restore: Path | None,
     writes_stopped: bool,
 ) -> None:
-    """Rehearse native Session migration on a retained, isolated project copy."""
+    """Capture, verify, cut over or recover retained Agent and Session data."""
     from graphtraj.workspace.agent_migration import migrate_agents
     from graphtraj.workspace.migration_snapshot import snapshot_project
 

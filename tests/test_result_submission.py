@@ -146,7 +146,10 @@ def test_report_can_notify_the_direct_parent(tmp_path: Path, monkeypatch) -> Non
         sent = tools.submit_report({'name': 'researcher-x1.md', 'text': 'Needs a decision',
                                     'notify_parent': True}, cwd=tmp_path).document
     assert sent['delivery'] == 'received' and sent['parent'] == 'research@x2'
-    assert notices == [('research@x1', 'Report submitted: ' + sent['report'] + '\nNeeds a decision',
+    # The notice names the report; its text stays in the saved report only.
+    assert notices == [('research@x1',
+                        'Submitted report researcher-x1.md for its direct parent to handle; '
+                        'read it through session_reports: ' + sent['report'],
                         {'type': 'report-submitted', 'report': sent['report']}, 'Needs a decision')]
 
 

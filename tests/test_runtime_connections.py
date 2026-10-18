@@ -849,9 +849,10 @@ def test_only_long_operations_await_acceptance(monkeypatch, tmp_path) -> None:
     monkeypatch.setattr(hosted_cli, 'connection_operation',
                         lambda *args, **kwargs: calls.append(kwargs) or {'document': {}, 'failed': False})
     for feature, arguments in (('approved_recovery', {}), ('submit_result', {}), ('alias_status', {}),
-                               ('submit_report', {'notify_parent': True}), ('submit_report', {})):
+                               ('submit_report', {'notify_parent': True}), ('submit_report', {}),
+                               ('send_instruction', {})):
         hosted_cli.forward_request({'action': 'execute', 'feature': feature, 'arguments': arguments}, tmp_path)
-    assert [call['await_accepted'] for call in calls] == [True, True, False, True, False]
+    assert [call['await_accepted'] for call in calls] == [True, True, False, True, False, True]
     assert {call['response_timeout'] for call in calls} == {hosted_cli.OPERATION_TIMEOUT_SECONDS}
 
 

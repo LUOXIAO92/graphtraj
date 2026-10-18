@@ -1069,12 +1069,13 @@ def submit_report(arguments: Mapping[str, Any], *, cwd: Path | None = None) -> T
 
 
 register_tool('submit_report', 'Write your own assigned report by filename (for example report.md). '
-              'Set notify_parent to also send it to your direct parent, continuing its turn.',
+              'Set notify_parent to also notify your direct parent, continuing its turn.',
               {'type': 'object', 'properties': {
                   'name': {'type': 'string'}, 'text': {'type': 'string'},
                   'notify_parent': {'type': 'boolean', 'default': False,
-                                    'description': 'Send the written report to your direct parent; '
-                                                   'the result carries the delivery receipt.'},
+                                    'description': 'Notify your direct parent of the written report, '
+                                                   'which it reads through session_reports; the result '
+                                                   'carries the delivery receipt.'},
               }, 'required': ['name', 'text'], 'additionalProperties': False}, submit_report,
               manual_ref='manuals/task-delivery/guide.md')
 

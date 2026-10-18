@@ -480,7 +480,7 @@ def decide_result(
 @main.command("submit-report", cls=OperationCommand, feature="submit_report")
 @click.option("--name")
 @click.option("--text")
-@click.option("--notify-parent", is_flag=True, help="Also send the report to the direct parent.")
+@click.option("--notify-parent", is_flag=True, help="Also notify the direct parent of the report.")
 def submit_report(name: str, text: str, notify_parent: bool) -> None:
     """Submit the calling Session's assigned report through the shared operation."""
     arguments = {"name": name, "text": text, **({"notify_parent": True} if notify_parent else {})}

@@ -17,6 +17,7 @@ from pathlib import Path
 from graphtraj.sessions.protocol import validate_header, snapshot_event
 from graphtraj.sessions.storage import SessionStore, session_path
 from graphtraj.sessions.archive import SessionArchive
+from graphtraj.runtimes.dsh.live import DshLiveFrames
 
 
 UPSTREAM = 'd743267388641bc76f17c45ce8b4c231aed1d32c'
@@ -100,12 +101,15 @@ class DshArchive:
         self.resumed = resumed
         self.header: dict | None = None
         self.boundary = -1
+        self.observed_cursor = -1
         self.records: dict[int, dict] = {}
+        self.live: DshLiveFrames | None = None
 
-    def start(self, snapshot: dict, records: list[dict]) -> None:
+    def start(self, snapshot: dict, records: list[dict], *, execution_id: str | None = None) -> None:
         """Capture the native opening cut, never a receipt-time boundary."""
         self.header = snapshot['header']
         self.boundary = snapshot['cursor']
+        self.observed_cursor = self.boundary
         collect_jsonl(self.archive, self.header, [])
         store = self.archive.store('dsh:' + self.header['id'])
         if store is not None:
@@ -122,11 +126,57 @@ class DshArchive:
             for record in records:
                 self.records[record['event']['seq']] = record
             self._save()
+        if execution_id is not None:
+            session = 'dsh:' + self.header['id']
+            self.live = DshLiveFrames(
+                self.header['id'], execution_id,
+                lambda event, revision: self.archive.checkpoint(
+                    session, event, source=f'dsh/assistant-stream/{execution_id}', position=revision,
+                ),
+                lambda observation, final: self._resolve_pending(),
+            )
+            self.live.baseline(snapshot.get('assistantStream', {'revision': 0}))
+        self._resolve_pending()
+
+    def frame(self, frame: dict) -> None:
+        """Persist cursorless native chunks separately from formal Session events."""
+        if self.live is None:
+            raise ValueError('DSH live collection needs its owning execution identity.')
+        self.live.accept(frame)
+
+    def _resolve_pending(self) -> None:
+        """Resolve only native committed end(seq) facts whose final prefix exists.
+
+        The end frame is retained in the pending observation before linking,
+        so interruption between these commits is recoverable during backfill.
+        No message text, receipt time or guessed next sequence participates.
+        """
+        if self.header is None:
+            return
+        store = self.archive.store('dsh:' + self.header['id'])
+        if store is None:
+            return
+        for pending in store.pending():
+            native = pending['event'].get('graphtraj', {}).get('native', {})
+            outcome = native.get('record', {}).get('outcome', {})
+            if (native.get('runtime') != 'dsh' or native.get('sessionId') != self.header['id']
+                    or not native.get('locator', '').startswith('live/')
+                    or outcome.get('kind') != 'committed'):
+                continue
+            seq = outcome['seq']
+            if store.position(SOURCE) >= seq:
+                if self.records[seq]['event']['type'] != outcome['eventType']:
+                    raise ValueError('DSH terminal frame does not match its native final event type.')
+                store.resolve_observation(
+                    ('dsh', self.header['id'], native['locator']),
+                    ('dsh', self.header['id'], f'event/{seq}'),
+                )
 
     def event(self, native: dict) -> None:
         """Retain formal events by native seq; live presentation frames stay out."""
         if self.header is None:
             raise ValueError('DSH archive needs its native opening snapshot.')
+        self.observed_cursor = max(self.observed_cursor, native['seq'])
         if native['seq'] <= self.boundary:
             return
         self.records[native['seq']] = {'event': native}
@@ -140,6 +190,7 @@ class DshArchive:
         positions = sorted(self.records)
         if positions == list(range(positions[-1] + 1)):
             collect_jsonl(self.archive, self.header, [self.records[n] for n in positions])
+            self._resolve_pending()
             return
         session = 'dsh:' + self.header['id']
         for seq in positions:

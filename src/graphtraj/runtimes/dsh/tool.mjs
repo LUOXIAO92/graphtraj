@@ -1,35 +1,23 @@
-/** Native DSH tool invoking GraphTraj's public, process-authenticated CLI. */
+/** GraphTraj lifecycle/context hooks; Agents MCP belongs to the independent adapter. */
 import { createRequire } from 'node:module';
 import { pathToFileURL } from 'node:url';
 import { spawn } from 'node:child_process';
 import { installCollection } from './collection.mjs';
-import { agentsTool } from './agents.mjs';
-import { installCommunication } from './communication.mjs';
+import { sessionEnvironment as nativeSessionEnvironment } from '../../../agent_swarm/dsh/plugin.mjs';
 
 const require = createRequire(process.env.GRAPHTRAJ_DSH_PACKAGE || process.argv[1]);
-const { defineTool } = await import(pathToFileURL(require.resolve('@deepseek-ai/dsh-tools')));
 const { default: z } = await import(pathToFileURL(require.resolve('@deepseek-ai/schemastery')));
-const { TypertRemoteService, Remote } = await import(pathToFileURL(require.resolve('@deepseek-ai/dsh-typert-protocol')));
-const { createUserMessage } = await import(pathToFileURL(require.resolve('@deepseek-ai/dsh-llm')));
 export const name = 'graphtraj';
 export const inject = ['tools', 'shellEnv', 'sessionQuery', 'agents'];
 export const Config = z.object({ finishCheck: z.boolean().default(false) });
 
 /** Read actual durable source facts from this execution's native Agent. */
 export function sessionEnvironment(agent) {
-  const header = agent?.session.header;
-  if (!header) return {};
-  const child = header.origin === 'subagent' || (header.delegationDepth || 0) > 0;
-  const main = header.version === 4 && typeof header.id === 'string' &&
-    header.origin === undefined && typeof header.isSeeded === 'boolean';
-  return {
-    DSH_GRAPHTRAJ_SESSION: header.id,
-    DSH_GRAPHTRAJ_SOURCE: child ? 'child' : main ? 'main' : 'unknown',
-  };
+  const native = nativeSessionEnvironment(agent);
+  return { DSH_GRAPHTRAJ_SESSION: native.DSH_SESSION_ID, DSH_GRAPHTRAJ_SOURCE: native.DSH_AGENT_SOURCE };
 }
 
 export function apply(ctx, config = { finishCheck: false }) {
-  installCommunication(ctx, { TypertRemoteService, Remote, createUserMessage });
   ctx.shellEnv.register({
     name: 'graphtraj',
     variables: {
@@ -77,45 +65,4 @@ export function apply(ctx, config = { finishCheck: false }) {
     const { check } = await import('./finalize.mjs');
     await check(ctx, agent, signal, entry);
   });
-  async function invoke(args, execution) {
-    // The child process retains the host's existing authenticated CLI channel.
-    return await new Promise((resolve, reject) => {
-      const child = spawn(process.env.GRAPHTRAJ_DSH_TOOL || 'graphtraj-tool', [], {
-        cwd: process.env.GRAPHTRAJ_HARNESS_ROOT || execution.agent?.session.header.cwd,
-        env: { ...process.env, ...ctx.shellEnv.collect(execution) },
-        stdio: ['pipe', 'pipe', 'pipe'], signal: execution.signal,
-      });
-      let output = '';
-      child.stdout.setEncoding('utf8');
-      child.stdout.on('data', value => { output += value; });
-      child.stderr.resume();
-      child.on('error', () => reject(new Error('GraphTraj public CLI unavailable')));
-      child.on('close', code => {
-        if (code !== 0) reject(new Error('GraphTraj public CLI failed'));
-        else resolve(output);
-      });
-      child.stdin.end(JSON.stringify(args) + '\n');
-    });
-  }
-  if (!agentsOnly) ctx.tools.register(defineTool({
-    name: 'graphtraj',
-    description: 'Discover, describe or execute GraphTraj public operations as this Agent. Authority is supplied by the host, never by tool arguments.',
-    parameters: {
-      action: { type: 'string', required: true, enum: ['discover', 'describe', 'execute'] },
-      query: { type: 'string' },
-      feature: { type: 'string' },
-      schema: { type: 'boolean' },
-      arguments: { type: 'json' },
-    },
-    output: {
-      schema: { type: 'string' },
-      render: (_args, value) => [{ type: 'text', text: value }],
-    },
-    async execute(args, execution) {
-      // The executable/root come from the owned service, not model arguments.
-      // Its child PID retains the native Session's Runner ownership ancestry.
-      return invoke(args, execution);
-    },
-  }));
-  ctx.tools.register(defineTool(agentsTool(invoke)));
 }

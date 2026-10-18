@@ -76,7 +76,7 @@ class NativePeer:
     def start(self) -> None:
         """The fixture service is ready without invoking a model."""
 
-    def follow(self, session: str) -> dict:
+    def follow(self, session: str, *, assistant_stream: bool = False) -> dict:
         """Observe this exact session before input."""
         self.calls.append(('follow', session))
         return {'type': 'snapshot'}
@@ -114,7 +114,7 @@ class NativePeer:
         if method == 'session/create':
             return {'sessionId': body.get('sessionId', self.session)}
         if method == 'session/projections':
-            return {'values': {'inbox': self.inbox}}
+            return {'asOfSeq': len(getattr(self, 'records', [])) - 1, 'values': {'inbox': self.inbox}}
         if method == 'session/list':
             if self.cancelled.is_set() and self.release_cancel.is_set():
                 self.running = False
@@ -210,6 +210,25 @@ def turn_identity(turn: Any) -> dict:
     return {'session': turn.session, 'execution_id': turn.execution_id}
 
 
+def test_reply_fact_uses_native_relay_once(tmp_path: Path, peer: list) -> None:
+    """Pass one host-owned communication fact through the active Session binding."""
+    turn, thread, outcome = run_turn(tmp_path)
+    message = {'id': 'child-execution', 'sessionId': turn.session, 'senderSessionId': 'native-child',
+               'sender': 'child-agent', 'recipient': 'parent-agent', 'body': 'actual reply'}
+    try:
+        assert turn.operate({'operation': 'receive', **turn_identity(turn), 'message': message}) == {'accepted': True}
+        assert [row for row in peer[0].calls if row[0] == 'agentMessages/receive'] == [
+            ('agentMessages/receive', message),
+        ]
+        with pytest.raises(RuntimeAdapterError, match='another native Session'):
+            turn.operate({'operation': 'receive', **turn_identity(turn),
+                          'message': {**message, 'sessionId': 'unrelated'}})
+    finally:
+        peer[0].frames.append('turn/end')
+        thread.join(3)
+    assert outcome['result']['outcome'] == 'completed'
+
+
 @pytest.mark.parametrize('archiving', [False, True])
 def test_agents_control_dsh_without_task_or_archive(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, archiving: bool,
@@ -234,7 +253,7 @@ def test_agents_control_dsh_without_task_or_archive(
             rows = [json.loads(line) for line in self.log.read_text().splitlines()]
             self.header, self.records = rows[0], rows[1:]
 
-        def follow(self, session: str) -> dict:
+        def follow(self, session: str, *, assistant_stream: bool = False) -> dict:
             """Return the native cut before any input for this invocation."""
             return {'type': 'snapshot', 'header': self.header,
                     'cursor': len(self.records) - 1, 'hasMore': False,
@@ -349,6 +368,94 @@ def notices(monkeypatch: pytest.MonkeyPatch) -> list:
 
 class TaggedLoader(yaml.SafeLoader):
     """Read DSH `!!js` expressions back as their exact source text."""
+
+
+def test_stop_drains_cursorless_terminal_before_native_flush(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A cancel receipt cannot close before queued final/live frames are collected."""
+    from concurrent.futures import ThreadPoolExecutor
+    from agent_swarm.dsh.execution import DshExecution
+    from graphtraj.runtimes.dsh.collection import DshArchive
+    from graphtraj.sessions.archive import SessionArchive, JsonlSessionStore, archive_path
+
+    class StreamingPeer(NativePeer):
+        """Separate native event commitment, transport delivery and disk flush."""
+
+        def __init__(self, executable: str, cwd: Path, environment: dict) -> None:
+            """Keep native in-memory commitment separate from its disk log."""
+            super().__init__(executable, cwd, environment)
+            self.header = json.loads(self.log.read_text().splitlines()[0])
+            self.records = []
+
+        def follow(self, session: str, *, assistant_stream: bool = False) -> dict:
+            """Expose the real follow option and an empty native opening cut."""
+            assert assistant_stream
+            return {'header': self.header, 'cursor': -1, 'records': [],
+                    'assistantStream': {'revision': 0}}
+
+        def history(self, snapshot: dict) -> list:
+            """This new Session has no historical prefix."""
+            return []
+
+        def append(self, kind: str, data: dict) -> None:
+            """Commit the native log before scheduling its transport notification."""
+            row = {'seq': len(self.records), 'time': 100, 'type': kind, 'data': data}
+            self.records.append(row)
+            self.frames.append({'type': 'event', 'event': row})
+
+        def rpc(self, method: str, body: dict | None = None) -> dict:
+            """Queue final frames at cancellation, before the caller receives them."""
+            result = super().rpc(method, body)
+            if method == 'session/prompt':
+                self.append('turn/start', {'turn': 0})
+                self.frames.extend([
+                    {'type': 'assistant-stream', 'frame': {'type': 'start', 'attemptId': 'a',
+                        'revision': 1, 'turn': 0, 'step': 0, 'startedAfterSeq': 0}},
+                    {'type': 'assistant-stream', 'frame': {'type': 'chunk', 'attemptId': 'a',
+                        'revision': 2, 'index': 0, 'time': 99,
+                        'chunk': {'type': 'text-delta', 'index': 0, 'text': 'interrupted text'}}},
+                ])
+            if method == 'session/cancel':
+                self.running = False
+                self.append('assistant/attempt', {'turn': 0, 'step': 0, 'stream': [
+                    {'type': 'text-chunks', 'index': 0, 'time0': 99, 'dt': [], 'texts': ['interrupted text']},
+                ]})
+                self.frames.append({'type': 'assistant-stream', 'frame': {
+                    'type': 'end', 'attemptId': 'a', 'revision': 3, 'index': 1,
+                    'outcome': {'kind': 'committed', 'eventType': 'assistant/attempt', 'seq': 1},
+                }})
+                self.append('turn/end', {'turn': 0, 'reason': {'kind': 'completed'}})
+            return result
+
+        def close(self) -> None:
+            """Flush only after the stopped follow cut has been consumed."""
+            assert not self.frames  # The native stopped cut was drained first.
+            self.log.write_text(''.join(json.dumps(row) + '\n' for row in [self.header, *self.records]))
+            self.closed = True
+
+    monkeypatch.setenv('DSH_TEST_KEY', 'controlled-peer-key')
+    turn = DshExecution(request(tmp_path), 'begin', tmp_path, lambda *args: None,
+                        lambda *args: None, tmp_path / 'trace.jsonl', None)
+    turn.service_type = StreamingPeer
+    archive = SessionArchive(tmp_path / 'archive', save_normalized_sessions=True)
+    turn.archive = DshArchive(archive, resumed=False)
+    path = archive_path(archive.root, 'dsh:native-dsh')
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        future = pool.submit(turn.run)
+        deadline = time.monotonic() + 5
+        while time.monotonic() < deadline:
+            if path.exists() and any(item['event']['data']['stream'] for item in JsonlSessionStore(path).pending()):
+                break
+            time.sleep(0.005)
+        else:
+            turn.terminate()
+            raise AssertionError('Live partial was not checkpointed before cancellation.')
+        turn.terminate()
+        assert future.result(timeout=5)['outcome'] == 'interrupted'
+    store = JsonlSessionStore(path)
+    assert not store.pending()
+    assert len(store.observations()) == 1
+    assert store.observations()[0]['final'] == ['dsh', 'native-dsh', 'event/1']
+    assert store.page()['events'][1]['data']['stream'][0]['texts'] == ['interrupted text']
 
 
 TaggedLoader.add_constructor(
@@ -788,6 +895,7 @@ def test_native_remote_envelopes_and_authentication_failure(
     monkeypatch.setattr(urllib.request, 'build_opener', lambda *args: Remote())
     assert service.rpc('session/list', {}) == {'accepted': True}
     assert service.rpc('session/create', {}) == {'accepted': True}
+    assert service.rpc('agentMessages/receive', {}) == {'accepted': True}
     fail = True
     with pytest.raises(RuntimeAdapterError) as rejected:
         service.rpc('session/list', {})

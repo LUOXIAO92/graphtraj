@@ -277,14 +277,84 @@ def test_native_gap_backfill_and_disk_confirmation(tmp_path: Path) -> None:
     assert len(store.observations()) == 1
 
 
-def test_installed_dsh_agents_function_and_presentation() -> None:
-    """Use the installed native tool contract; rendering is not model input."""
-    node, dsh = shutil.which('node'), shutil.which('dsh')
-    if node is None or dsh is None:
-        pytest.skip('Installed DSH and Node are required for native API evidence.')
-    root = Path(__file__).resolve().parents[1]
-    result = subprocess.run([
-        node, str(root / 'tests/fixtures/dsh_agents.mjs'), str(Path(dsh).resolve()),
-        str(root / 'src/graphtraj/runtimes/dsh/agents.mjs'),
-    ], capture_output=True, text=True, timeout=10)
-    assert result.returncode == 0, result.stdout + result.stderr
+@pytest.mark.parametrize('end_before_event', [False, True])
+def test_live_frames_resolve_only_native_terminal_seq(tmp_path: Path, end_before_event: bool) -> None:
+    """Live/final arrival variations retain native order and one final message."""
+    from graphtraj.runtimes.dsh.collection import DshArchive
+    from graphtraj.sessions.archive import SessionArchive, JsonlSessionStore, archive_path
+
+    header = {'version': 4, 'id': 'live', 'createdAt': 1, 'isSeeded': False}
+    archive = SessionArchive(tmp_path / 'archive', save_normalized_sessions=True)
+    capture = DshArchive(archive, resumed=False)
+    capture.start({'header': header, 'cursor': -1}, [], execution_id='execution')
+    capture.frame({'type': 'start', 'attemptId': 'live:0', 'revision': 1,
+                   'startedAfterSeq': -1, 'turn': 0, 'step': 0})
+    chunk = {'type': 'chunk', 'attemptId': 'live:0', 'revision': 2, 'index': 0,
+             'time': 90, 'chunk': {'type': 'text-delta', 'index': 0, 'text': 'body'}}
+    capture.frame(chunk)
+    capture.frame(chunk)
+    path = archive_path(archive.root, 'dsh:live')
+    partial = JsonlSessionStore(path).pending()[0]['event']
+    assert partial['data']['stream'][0]['texts'] == ['body']
+    final = event('assistant/message', 0, {'turn': 0, 'step': 0, 'stream': partial['data']['stream'],
+        'message': {'id': 'answer', 'role': 'assistant',
+                    'source': {'kind': 'model', 'provider': 'deepseek', 'model': 'native'},
+                    'content': [{'type': 'text', 'text': 'body'}]}}, surfaceOp='append')
+    end = {'type': 'end', 'attemptId': 'live:0', 'revision': 3, 'index': 1,
+           'outcome': {'kind': 'committed', 'eventType': 'assistant/message', 'seq': 0}}
+    if end_before_event:
+        capture.frame(end)
+        assert len(JsonlSessionStore(path).pending()) == 1
+        capture.event(final)
+    else:
+        capture.event(final)
+        assert len(JsonlSessionStore(path).pending()) == 1
+        capture.frame(end)
+    store = JsonlSessionStore(path)
+    assert not store.pending()
+    assert store.messages() == [final['data']['message']]
+    assert native_record(store.page()['events'][0]) == final
+    observation = store.observations()[0]
+    assert observation['event']['data']['stream'] == partial['data']['stream']
+    assert observation['final'] == ['dsh', 'live', 'event/0']
+    before = path.read_bytes()
+    assert not store.resolve_observation(('dsh', 'live', 'live/execution/live:0'), ('dsh', 'live', 'event/0'))
+    assert path.read_bytes() == before
+    with pytest.raises(ValueError, match='another native event'):
+        store.resolve_observation(('dsh', 'live', 'live/execution/live:0'), ('dsh', 'live', 'event/1'))
+
+
+def test_terminal_observation_survives_gap_and_later_backfill(tmp_path: Path) -> None:
+    """A saved end(seq) survives interruption before final publication."""
+    from graphtraj.runtimes.dsh.collection import DshArchive
+    from graphtraj.sessions.archive import SessionArchive, JsonlSessionStore, archive_path
+
+    header = {'version': 4, 'id': 'resume-live', 'createdAt': 1, 'isSeeded': False}
+    first = event('turn/start', 0, {'turn': 0})
+    final = event('assistant/attempt', 1, {'turn': 0, 'step': 0, 'stream': []})
+    archive = SessionArchive(tmp_path / 'archive', save_normalized_sessions=True)
+    capture = DshArchive(archive, resumed=True)
+    capture.start({'header': header, 'cursor': 0}, [], execution_id='old-execution')
+    capture.frame({'type': 'start', 'attemptId': 'attempt', 'revision': 1,
+                   'startedAfterSeq': 0, 'turn': 0, 'step': 0})
+    capture.frame({'type': 'end', 'attemptId': 'attempt', 'revision': 2, 'index': 0,
+                   'outcome': {'kind': 'committed', 'eventType': 'assistant/attempt', 'seq': 1}})
+    capture.event(final)
+    path = archive_path(archive.root, 'dsh:resume-live')
+    assert len(JsonlSessionStore(path).pending()) == 2
+    archive.backfill_history = True
+    restored = DshArchive(archive, resumed=True)
+    restored.start({'header': header, 'cursor': 1}, [{'event': first}, {'event': final}], execution_id='new-execution')
+    store = JsonlSessionStore(path)
+    assert not store.pending()
+    assert len(store.observations()) == 2
+    assert [native_record(row) for row in store.page()['events']] == [first, final]
+    # Another abandoned observation remains separate, even with identical text.
+    restored.frame({'type': 'start', 'attemptId': 'attempt', 'revision': 1,
+                    'startedAfterSeq': 1, 'turn': 1, 'step': 0})
+    restored.frame({'type': 'end', 'attemptId': 'attempt', 'revision': 2, 'index': 0,
+                    'outcome': {'kind': 'abandoned'}})
+    store = JsonlSessionStore(path)
+    assert len(store.pending()) == 1
+    assert store.pending()[0]['event']['graphtraj']['native']['locator'] == 'live/new-execution/attempt'
+    assert len(store.observations()) == 2

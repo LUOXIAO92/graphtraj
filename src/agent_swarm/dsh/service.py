@@ -184,7 +184,7 @@ class DshService:
             raise self.error_type('RUNTIME_PROTOCOL_ERROR', 'DSH approval channel did not open correctly.')
         raise self.error_type('RUNTIME_CONNECTION_FAILED', 'DSH approval channel did not become ready.')
 
-    def follow(self, session: str) -> dict:
+    def follow(self, session: str, *, assistant_stream: bool = False) -> dict:
         """Subscribe before prompt and return the native opening snapshot."""
         try:
             self.socket = connect(
@@ -193,7 +193,8 @@ class DshService:
                 proxy=None, open_timeout=15, max_size=32 * 1024 * 1024,
             )
             self._open_stream('session', 'session/follow', {
-                'request': {'address': {'kind': 'session', 'sessionId': session}},
+                'request': {'address': {'kind': 'session', 'sessionId': session},
+                            **({'assistantStream': True} if assistant_stream else {})},
             })
             deadline = time.monotonic() + 20
             while time.monotonic() < deadline:

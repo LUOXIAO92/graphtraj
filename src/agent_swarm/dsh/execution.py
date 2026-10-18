@@ -200,6 +200,10 @@ class DshExecution:
         ]
         if self.request.get('plugin'):
             patches.append({'insert': [{'id': 'agents', 'name': self.request['plugin']}]})
+        if self.request.get('mcp'):
+            mcp = self.request['mcp']
+            patches.append({'insert': [{'id': 'agents-mcp', 'name': str(Path(__file__).with_name('plugin.mjs')),
+                                        'config': {'mcpCommand': mcp['command'], 'mcpArgs': mcp.get('args', [])}}]})
         if self.request.get('connection'):
             # Native selectModel otherwise saves the selection to the shared
             # profile. This service must keep it scoped to its own Session.
@@ -212,6 +216,7 @@ class DshExecution:
         (profile / 'cordis.patch.yml').write_text(_dump_profile_patches(patches), encoding='utf-8')
         environment = {**os.environ, **credentials}
         environment.update({
+            'DSH_AGENT_PACKAGE': self.request['package'],
             'DSH_HOME': self.request.get('runtime_home') or str(home), 'DSH_PERMISSION_MODE': mode, 'NO_COLOR': '1',
         })
         return environment
@@ -291,6 +296,30 @@ class DshExecution:
             'sessionId': self.session, 'requestId': request_id or uuid.uuid4().hex,
             'mode': mode, 'content': [{'type': 'text', 'text': prompt}],
         })
+
+    def _drain_archive(self) -> None:
+        """Drain the native stopped cut and its terminal stream before disconnect.
+
+        Quiescence and follow use different connections. A successful cancel
+        response does not prove buffered cursorless terminal frames were read.
+        The native projection cursor bounds formal history; an open assistant
+        attempt additionally needs its own terminal marker.
+        """
+        if self.archive is None:
+            return
+        cut = self.service.rpc('session/projections', {'sessionId': self.session}).get('asOfSeq')
+        if type(cut) is not int:
+            raise self.error_type('RUNTIME_PROTOCOL_ERROR', 'DSH stopped projection cursor is unavailable.')
+        deadline = time.monotonic() + 20
+        while (self.archive.observed_cursor < cut
+               or self.archive.live is not None and self.archive.live.attempt is not None):
+            if time.monotonic() >= deadline:
+                raise self.error_type('RUNTIME_TRACE_FAILED', 'DSH stopped follow did not reach its native terminal cut.')
+            frame = self.service.receive()
+            if frame.get('type') == 'event':
+                self.archive.event(frame['event'])
+            elif frame.get('type') == 'assistant-stream':
+                self.archive.frame(frame['frame'])
 
     def _approval_frames(self) -> None:
         """Expose native approval requests to the parent; never decide them here."""
@@ -397,11 +426,12 @@ class DshExecution:
                 raise self.error_type('RUNTIME_SESSION_NOT_RESUMABLE', 'DSH returned another Session.')
             self.session = native
             self.created(native, self.service.process.pid)
-            snapshot = self.service.follow(native)
+            snapshot = (self.service.follow(native, assistant_stream=True)
+                        if self.archive is not None else self.service.follow(native))
             if self.archive is not None:
                 records = (self.service.history(snapshot)
                            if not self.archive.resumed or self.archive.archive.backfill_history else [])
-                self.archive.start(snapshot, records)
+                self.archive.start(snapshot, records, execution_id=self.execution_id)
             self.service.open_events()
             self.service.rpc('session/selectModel', {
                 'sessionId': native, 'provider': self.request['provider'], 'model': self.request['model'],
@@ -424,6 +454,7 @@ class DshExecution:
                         stopping_since = time.monotonic()
                         self._cancel()
                     if self._settled():
+                        self._drain_archive()
                         self.outcome = 'interrupted'
                         break
                     if time.monotonic() - stopping_since > 20:
@@ -431,6 +462,8 @@ class DshExecution:
                 frame = self.service.receive()
                 self._retain_trace()
                 self._approval_frames()
+                if frame.get('type') == 'assistant-stream' and self.archive is not None:
+                    self.archive.frame(frame['frame'])
                 if frame.get('type') == 'event':
                     event = frame['event']
                     if self.archive is not None:
@@ -529,6 +562,15 @@ class DshExecution:
                 self._input(request['instruction'], 'steer')
                 self.end = None
                 return {}
+            if operation == 'receive' and self.active and not self.stopping.is_set():
+                # Only the host completion receiver supplies this communication
+                # fact. The native relay renders it and admits its body once.
+                message = request.get('message')
+                if not isinstance(message, dict) or message.get('sessionId') != self.session:
+                    raise self.error_type('invalid-input', 'The Agent reply targets another native Session.')
+                result = self.service.rpc('agentMessages/receive', message)
+                self.end = None
+                return result
             raise self.error_type('operation-unavailable', 'DSH operation unavailable for this execution.')
 
     def terminate(self) -> bool:

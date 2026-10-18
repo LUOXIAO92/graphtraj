@@ -68,7 +68,7 @@ def test_installed_native_relay_without_duplicate_model_content() -> None:
     root = Path(__file__).resolve().parents[1]
     result = subprocess.run([
         node, str(root / 'tests/fixtures/dsh_communication.mjs'), str(Path(dsh).resolve()),
-        str(root / 'src/graphtraj/runtimes/dsh/communication.mjs'),
+        str(root / 'src/agent_swarm/dsh/communication.mjs'),
     ], capture_output=True, text=True, timeout=10)
     assert result.returncode == 0, result.stdout + result.stderr
     native = json.loads(result.stdout.strip().splitlines()[-1])

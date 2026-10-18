@@ -46,7 +46,7 @@ def bind_agents(turn: DshExecution, run: Run, driver: AdapterDriver) -> None:
             request = document.get('request', {})
             if request.get('action') != 'execute' or request.get('feature') != 'agents':
                 raise RuntimeAdapterError('operation-unavailable', 'This DSH host exposes only agents.')
-            caller = Caller('dsh-native-tool', run.agent, turn.session, 'dsh')
+            caller = Caller('dsh-mcp', run.agent, turn.session, 'dsh')
             result = bind(control, caller, archive=run.archive)(request.get('arguments'))
             return {'document': result.document, 'failed': result.failed}
 

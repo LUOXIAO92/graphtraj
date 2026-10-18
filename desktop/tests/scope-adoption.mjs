@@ -12,9 +12,10 @@
  *     project's swarm/config.yml. both (default): scope, then archive.
  *   node tests/scope-adoption.mjs --project <root> --out <dir> --user-data-dir <dir> --lifecycle <alias>
  *     [--part scope --summary <task-id>] [--timeout-seconds 600]
- *     Optionally run the scope part first in the same window. Then select that member in the
- *     current scope with the mouse and only watch its displayed state while the operator stops
- *     and continues it. When watching starts it prints 'WATCHER READY <state>' and writes
+ *     Select that member in the current scope with the mouse and only watch its displayed
+ *     state while the operator stops and continues it. With --part scope, the scope part runs
+ *     afterwards in the same window, so its failure (facts.scopeFailure, exit 1) keeps the
+ *     lifecycle evidence. When watching starts it prints 'WATCHER READY <state>' and writes
  *     <out>/ready.json. Each change is screenshotted and appended to <out>/states.jsonl.
  *     Exit 0 after active, standby, active, standby; exit 2 on timeout with a final
  *     screenshot; exit 1 on any other failure.
@@ -243,10 +244,26 @@ try {
   facts.launches += 1;
   page = await app.firstWindow();
   page.setDefaultTimeout(20000);
-  if (alias || runScope) await click(page.getByRole('button', { name: 'Members', exact: true }));
-  if (runScope) await scope();
-  if (alias) await lifecycle();
-  else if (part !== 'scope') await archive();
+  const members = page.getByRole('button', { name: 'Members', exact: true });
+  if (alias || runScope) await click(members);
+  if (alias) {
+    // Lifecycle first: the scope part's untried select path must not cost this evidence.
+    await lifecycle();
+    if (runScope) {
+      try {
+        await click(members);
+        await page.getByText('Members of current summaries', { exact: false }).waitFor();
+        await scope();
+      } catch (error) {
+        facts.scopeFailure = String(error);
+        await shot(`scope-failure-${new Date().toISOString().replace(/[:.]/g, '-')}.png`).catch(() => {});
+        throw error;
+      }
+    }
+  } else {
+    if (runScope) await scope();
+    if (part !== 'scope') await archive();
+  }
   facts.passed = true;
   await finish();
 } catch (error) {

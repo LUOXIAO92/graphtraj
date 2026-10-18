@@ -840,7 +840,7 @@ def test_accepted_long_operation_awaits_its_reply(tmp_path, await_accepted: bool
             time.sleep(1.0)
 
 
-def test_only_recovery_awaits_acceptance(monkeypatch, tmp_path) -> None:
+def test_only_long_operations_await_acceptance(monkeypatch, tmp_path) -> None:
     """Ordinary forwarded queries keep the default deadline."""
     from graphtraj.interfaces import hosted_cli
 
@@ -848,9 +848,11 @@ def test_only_recovery_awaits_acceptance(monkeypatch, tmp_path) -> None:
     monkeypatch.setenv(hosted_cli.CONNECTION_ENV, str(tmp_path))
     monkeypatch.setattr(hosted_cli, 'connection_operation',
                         lambda *args, **kwargs: calls.append(kwargs) or {'document': {}, 'failed': False})
-    for feature in ('approved_recovery', 'alias_status'):
-        hosted_cli.forward_request({'action': 'execute', 'feature': feature, 'arguments': {}}, tmp_path)
-    assert [call['await_accepted'] for call in calls] == [True, False]
+    for feature, arguments in (('approved_recovery', {}), ('submit_result', {}), ('alias_status', {}),
+                               ('submit_report', {'notify_parent': True}), ('submit_report', {}),
+                               ('send_instruction', {})):
+        hosted_cli.forward_request({'action': 'execute', 'feature': feature, 'arguments': arguments}, tmp_path)
+    assert [call['await_accepted'] for call in calls] == [True, True, False, True, False, True]
     assert {call['response_timeout'] for call in calls} == {hosted_cli.OPERATION_TIMEOUT_SECONDS}
 
 

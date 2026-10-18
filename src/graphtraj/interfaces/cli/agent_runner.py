@@ -480,9 +480,11 @@ def decide_result(
 @main.command("submit-report", cls=OperationCommand, feature="submit_report")
 @click.option("--name")
 @click.option("--text")
-def submit_report(name: str, text: str) -> None:
+@click.option("--notify-parent", is_flag=True, help="Also notify the direct parent of the report.")
+def submit_report(name: str, text: str, notify_parent: bool) -> None:
     """Submit the calling Session's assigned report through the shared operation."""
+    arguments = {"name": name, "text": text, **({"notify_parent": True} if notify_parent else {})}
     try:
-        _emit_result(invoke_tool("submit_report", {"name": name, "text": text}, cwd=Path.cwd()).document)
+        _emit_result(invoke_tool("submit_report", arguments, cwd=Path.cwd()).document)
     except (RunnerError, ValueError, OSError) as error:
         _fail(error if isinstance(error, RunnerError) else RunnerError("RESULT_INVALID", str(error)))

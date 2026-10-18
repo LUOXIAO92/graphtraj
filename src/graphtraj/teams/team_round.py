@@ -51,6 +51,7 @@ from graphtraj.workspace.runner_project import (
     discover_project_root,
     preflight_worktree,
     provision_worktree,
+    registered_worktrees,
     run_git,
 )
 from graphtraj.execution.runner_status import (
@@ -444,12 +445,14 @@ def _deliver_task(
         team = None
         if generation is not None:
             team = yaml.safe_load((evidence / "teams" / str(generation) / "team.yml").read_text())
-        # Cleanup retires members, not their Team or result history. An explicit
-        # reopening may prepare resources for fresh members of that same Team.
+        # Cleanup removes the Task Worktree but keeps its members as standby
+        # Agents and its Team and result history. An explicit reopening may
+        # prepare resources again for fresh members of that same Team.
         reopened = False
         if (parent_alias is None and team is not None and team["status"] == "active"
                 and state["status"] == "reworking"
-                and all(member["session_ref"] is None for member in team["members"].values())):
+                and not any(record.get("worktree") == str(project.harness_root / state["worktree"])
+                            for record in registered_worktrees(project.repository))):
             from graphtraj.graph.delivery_state import current_result_rework_cause
 
             cause = current_result_rework_cause(
@@ -555,7 +558,7 @@ def _run_registered_children(
             _send_session(
                 alias, "Direct child execution results:\n" + yaml.safe_dump(children.document),
                 directory, mapping, (), project.harness_root, capacity_fd=capacity_fd,
-                retain_notice_channel=True,
+                retain_notice_channel=True, parent_input=False,
             )
             # Input acknowledgement is not completion. Retain the Driver until
             # the parent consumes results and finishes any further registration.

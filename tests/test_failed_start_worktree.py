@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import shutil
 import sys
+import time
 from pathlib import Path
 
 import pytest
@@ -256,7 +257,8 @@ def test_cleaned_task_reopens_with_fresh_member_and_preserved_history(
         failed = _launch(installed_commands, root, batch, env)
         assert failed.returncode == 1
         assert yaml.safe_load(failed.stdout)['tasks'][0]['error']['code'] == 'worktree-conflict'
-        assert not list(sessions.iterdir())
+        # Only the completed member remains, as a standby Agent.
+        assert list(sessions.iterdir()) == [sessions / old_alias]
     worktree.rmdir()
     if transport == 'cli':
         retried = _launch(installed_commands, root, batch, env)
@@ -282,13 +284,145 @@ def test_cleaned_task_reopens_with_fresh_member_and_preserved_history(
     mapping = yaml.safe_load((sessions / member['alias'] / 'mapping.yml').read_text())
     assert mapping['parent'] is None and mapping['team_generation'] == 1
     team = yaml.safe_load((evidence / 'teams/1/team.yml').read_text())
-    assert team['members']['engineer']['session_ref'] == member['alias']
+    # The completed member keeps its seat as a standby Agent; the fresh one joins.
+    assert team['members']['engineer']['session_ref'] == old_alias
+    assert team['members'][member['alias']]['session_ref'] == member['alias']
     reports = run_process([str(installed_commands.runner), 'reports', member['alias']], cwd=root, env=env)
     correction = yaml.safe_load(reports.stdout)['submissions'][-1]
     assert correction['round'] == 2 and correction['candidate'] != submission['candidate']
     assert team['current_round'] == 2
-    assert not (sessions / old_alias).exists()
+    assert (sessions / old_alias / 'mapping.yml').is_file()
     assert batch.read_bytes() == original_batch
     for path, content in retained.items():
         if path.name != 'team.yml':
             assert path.read_bytes() == content, path
+
+
+@pytest.mark.parametrize('other_executing', [False, True])
+def test_cleaned_task_member_answers_a_follow_up_in_its_native_session(
+    installed_commands: InstalledCommands,
+    temporary_git_repository: Path,
+    fake_codex: FakeCodex,
+    tmp_path: Path,
+    other_executing: bool,
+) -> None:
+    """A standby member of a cleaned Task resumes its same native Session.
+
+    The continuation-only cwd stays while another member's execution on the
+    same path has not ended; the last continuation removes it.
+    """
+    import json
+
+    root, worktree, batch, env = _prepare(
+        installed_commands, temporary_git_repository, fake_codex, tmp_path,
+    )
+    env.update(FAKE_CODEX_LIFECYCLE_ACTION='complete-team-round',
+               GRAPHTRAJ_AGENT_RUNNER=str(installed_commands.runner))
+    launched = _launch(installed_commands, root, batch, env)
+    assert launched.returncode == 0, launched.stdout + launched.stderr
+    alias = yaml.safe_load(launched.stdout)['tasks'][0]['alias']
+    sessions = root / '.graphtraj/runner/sessions'
+    wait_for_file(sessions / alias / 'execution.yml')
+    reports = run_process([str(installed_commands.runner), 'reports', alias], cwd=root, env=env)
+    submission = yaml.safe_load(reports.stdout)['submissions'][-1]
+    accepted = run_process([
+        str(installed_commands.runner), 'decide-result', '--submission-id', submission['event_id'],
+        '--commit', submission['candidate'], '--decision', 'accepted', '--reason', 'Fixture delivered',
+        '--evidence-ref', submission['evidence_refs'][0],
+    ], cwd=root, env=env)
+    assert accepted.returncode == 0, accepted.stdout + accepted.stderr
+    integrated = run_process([
+        str(installed_commands.product), 'task', 'integrate', '--task-id', '268',
+        '--', sys.executable, '-c', 'pass',
+    ], cwd=root, env=env, timeout=30)
+    assert integrated.returncode == 0, integrated.stdout + integrated.stderr
+    assert _cleanup(installed_commands, root, env).returncode == 0
+    assert not worktree.exists()
+    session = yaml.safe_load((sessions / alias / 'mapping.yml').read_text())['session']
+    execution = sessions / alias / 'execution.yml'
+    graph_before = run_process([str(installed_commands.product), 'task', 'graph'], cwd=root, env=env).stdout
+
+    other = sessions / (alias + '_concurrent')
+    if other_executing:
+        # Another member of the same Task whose follow-up has not ended yet.
+        other.mkdir()
+        mapping = yaml.safe_load((sessions / alias / 'mapping.yml').read_text())
+        (other / 'mapping.yml').write_text(yaml.safe_dump({**mapping, 'alias': other.name}))
+        (other / 'launch.yml').write_text('operation: launch\n')
+
+    env.pop('FAKE_CODEX_LIFECYCLE_ACTION')
+    worldline = run_process([str(installed_commands.product), 'worldline', 'read'], cwd=root, env=env)
+    cause = json.loads(worldline.stdout.splitlines()[-1])['event_id']
+    sent = run_process([str(installed_commands.runner), 'send', alias, '--instruction', 'What did you deliver?',
+                        '--caused-by-event-id', cause], cwd=root, env=env, timeout=30)
+
+    assert sent.returncode == 0, sent.stdout + sent.stderr
+    assert yaml.safe_load(sent.stdout)['session'] == session
+    if other_executing:
+        deadline = time.monotonic() + 15
+        while yaml.safe_load(execution.read_text() if execution.is_file() else '{}').get(
+                'execution_id') != yaml.safe_load(sent.stdout)['execution_id'] and time.monotonic() < deadline:
+            time.sleep(0.05)
+        time.sleep(1)
+        assert worktree.is_dir() and not any(worktree.iterdir())
+        # Once the other execution has ended, the next continuation to end removes it.
+        (other / 'execution.yml').write_text('outcome: completed\n')
+        sent = run_process([str(installed_commands.runner), 'send', alias, '--instruction', 'Anything else?',
+                            '--caused-by-event-id', cause], cwd=root, env=env, timeout=30)
+        assert sent.returncode == 0, sent.stdout + sent.stderr
+    # The Worker removes the continuation-only cwd after its terminal record,
+    # so a later reopen still provisions the Worktree.
+    deadline = time.monotonic() + 15
+    while worktree.exists() and time.monotonic() < deadline:
+        time.sleep(0.05)
+    assert not worktree.exists()
+    assert yaml.safe_load(execution.read_text())['outcome'] == 'completed'
+    mapping = yaml.safe_load((sessions / alias / 'mapping.yml').read_text())
+    assert mapping['session'] == session
+    assert run_process([str(installed_commands.product), 'task', 'graph'],
+                       cwd=root, env=env).stdout == graph_before
+
+    # The dispatch and every continuation are executions of one core Agent.
+    from agent_swarm import AgentControl, Binding, Caller
+
+    status = AgentControl(root / '.graphtraj/swarm', {}).operate(
+        'status', {'agent': mapping['agent']}, Binding(Caller('graphtraj-tasks', None)),
+    )
+    assert status.session == session and status.result['state'] == 'standby'
+    assert status.result['name'] == alias and status.result['parent'] is None
+    # A follow-up member adds its own report; retained reports and the closed
+    # Round stay unchanged, and a new result stays refused.
+    reports = root / '.graphtraj/state/tasks/268-failed-start/teams/1/rounds'
+    retained = {path: path.read_bytes() for path in reports.rglob('*') if path.is_file()}
+    modes = {path: path.stat().st_mode for path in reports.iterdir()}
+    env['FAKE_CODEX_LIFECYCLE_ACTION'] = 'follow-up-report'
+    sent = run_process([str(installed_commands.runner), 'send', alias, '--instruction', 'Record the check.',
+                        '--caused-by-event-id', cause], cwd=root, env=env, timeout=30)
+    assert sent.returncode == 0, sent.stdout + sent.stderr
+    deadline = time.monotonic() + 15
+    while worktree.exists() and time.monotonic() < deadline:
+        time.sleep(0.05)
+    outcome = json.loads(yaml.safe_load(execution.read_text())['last_agent_message'])
+    assert outcome['result'] == 1, outcome
+    assert 'not accepting result submissions' in outcome['result_output']
+    assert outcome['report'] == 0, outcome
+    added = [path for path in reports.rglob('*') if path.is_file() and path not in retained]
+    assert [(path.name, path.read_text()) for path in added] == [
+        (Path(outcome['report_name']).stem + '-2.md', 'Follow-up verified.')]
+    assert all(path.read_bytes() == content for path, content in retained.items())
+    assert {path: path.stat().st_mode for path in reports.iterdir()} == modes
+    assert run_process([str(installed_commands.product), 'task', 'graph'],
+                       cwd=root, env=env).stdout == graph_before
+
+    # The last core execution is the follow-up's own native result.
+    status = AgentControl(root / '.graphtraj/swarm', {}).operate(
+        'status', {'agent': mapping['agent']}, Binding(Caller('graphtraj-tasks', None)),
+    )
+    assert status.result['last_result']['outcome'] == 'completed'
+    assert status.result['last_result']['last_message'] == (
+        yaml.safe_load(execution.read_text()).get('last_agent_message'))
+    # The member's public status carries the core's Agent and two-state view.
+    observed = run_process([str(installed_commands.runner), 'status', alias], cwd=root, env=env)
+    assert observed.returncode == 0, observed.stdout + observed.stderr
+    member = yaml.safe_load(observed.stdout)['aliases'][0]
+    assert member['agent'] == mapping['agent'] and member['state'] == 'standby', member

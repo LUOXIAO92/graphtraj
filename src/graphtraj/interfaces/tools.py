@@ -677,6 +677,27 @@ register_tool(
     manual_ref="manuals/task-breakdown/guide.md",
     examples=({},),
 )
+def read_task_members(arguments: Mapping[str, Any], *, cwd: Path | None = None) -> ToolResult:
+    """List member Agents of current summary Tasks or of one chosen summary."""
+    from graphtraj.execution.desktop_activity import task_members
+
+    return ToolResult(task_members(cwd or Path.cwd(), arguments.get("summary_task_id")))
+
+
+register_tool(
+    "task_members",
+    "List the Agents participating in the current unfinished summary Tasks and their "
+    "recursive child Tasks, with actual Agent parents and active/standby state. Supply "
+    "summary_task_id to read one summary's members, including completed and retired "
+    "history. Reading changes no identity or state. Equivalent to `graphtraj task members`.",
+    {"type": "object", "properties": {
+        "summary_task_id": {"type": "string",
+                            "description": "Summary Task to read instead of the current ones."},
+    }, "additionalProperties": False},
+    read_task_members,
+    manual_ref="manuals/task-delivery/guide.md",
+    examples=({}, {"summary_task_id": "1"}),
+)
 register_tool(
     "task_register",
     "Register one accepted Task definition with its dependencies. Equivalent to "
@@ -1043,12 +1064,19 @@ register_tool('session_reports', "Read your or your direct child's reports and r
 def submit_report(arguments: Mapping[str, Any], *, cwd: Path | None = None) -> ToolResult:
     """Submit the current Session's assigned report through the shared operation."""
     return ToolResult(submit_session_report(_string_argument(arguments, 'name'),
-                                           _string_argument(arguments, 'text'), cwd or Path.cwd()))
+                                           _string_argument(arguments, 'text'), cwd or Path.cwd(),
+                                           notify_parent=_boolean_argument(arguments, 'notify_parent')))
 
 
-register_tool('submit_report', 'Write your own assigned report by filename (for example report.md).',
-              {'type': 'object', 'properties': {'name': {'type': 'string'}, 'text': {'type': 'string'}},
-               'required': ['name', 'text'], 'additionalProperties': False}, submit_report,
+register_tool('submit_report', 'Write your own assigned report by filename (for example report.md). '
+              'Set notify_parent to also notify your direct parent, continuing its turn.',
+              {'type': 'object', 'properties': {
+                  'name': {'type': 'string'}, 'text': {'type': 'string'},
+                  'notify_parent': {'type': 'boolean', 'default': False,
+                                    'description': 'Notify your direct parent of the written report, '
+                                                   'which it reads through session_reports; the result '
+                                                   'carries the delivery receipt.'},
+              }, 'required': ['name', 'text'], 'additionalProperties': False}, submit_report,
               manual_ref='manuals/task-delivery/guide.md')
 
 
@@ -1240,6 +1268,7 @@ register_tool(*_agents_row(), run_agents)
 # Unlisted parameters use their Python name and Click's existing scalar/repeated form.
 _CLI = {
     "task_graph": (("graphtraj", "task", "graph"), {}),
+    "task_members": (("graphtraj", "task", "members"), {}),
     "task_register": (("graphtraj", "task", "register"), {"task_file": ("", "yaml")}),
     "task_revise": (("graphtraj", "task", "revise"), {"revision_file": ("", "yaml")}),
     "task_complete": (("graphtraj", "task", "complete"), {"completion_file": ("", "yaml")}),

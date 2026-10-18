@@ -69,17 +69,7 @@ def observe(
         states = _load_states(configuration.state / 'tasks')
         if task_id not in states:
             raise ValueError('Choose a registered Task.')
-        directory, task = states[task_id]
-        aliases = set()
-        current = set()
-        for team_path in (directory / 'teams').glob('*/team.yml'):
-            team = read_team(team_path)
-            members = {member['session_ref'] for member in team['members'].values() if member['session_ref']}
-            aliases.update(members)
-            if team['team_ordinal'] == task['active_team_ordinal'] and team['status'] == 'active':
-                current.update(members)
-        aliases.update(path.name for path in (directory / 'teams').glob('*/traces/*')
-                       if (path / 'runner/session.yml').is_file())
+        aliases, current = _task_aliases(*states[task_id])
     agents = []
     mappings = {}
     for member in sorted(aliases):
@@ -117,6 +107,100 @@ def observe(
         return {**response, 'events': [], 'availability': 'unavailable', 'cursor': cursor}
     mapping = mappings[alias]
     return {**response, **read_page(configuration.harness_root, mapping, alias, task_id, cursor)}
+
+
+def _task_aliases(directory: Path, task: dict) -> tuple[set[str], set[str]]:
+    """Return every recorded member alias of one Task and those of its active Team.
+
+    Seats name members; retained Trace records add members that left a seat.
+    """
+    aliases = set()
+    current = set()
+    for team_path in (directory / 'teams').glob('*/team.yml'):
+        team = read_team(team_path)
+        members = {member['session_ref'] for member in team['members'].values() if member['session_ref']}
+        aliases.update(members)
+        if team['team_ordinal'] == task['active_team_ordinal'] and team['status'] == 'active':
+            current.update(members)
+    aliases.update(path.name for path in (directory / 'teams').glob('*/traces/*')
+                   if (path / 'runner/session.yml').is_file())
+    return aliases, current
+
+
+def task_members(cwd: Path, summary_task_id: str | None = None) -> dict:
+    """List the member Agents of current summary Tasks or of one chosen summary.
+
+    By default the scope is every unfinished summary Task (an active Task with
+    children, or a top-level one, that is not integrated) and its recursive
+    child Tasks; retired members are omitted. ``summary_task_id`` selects one
+    Task and its recursive children regardless of completion and also lists
+    retired members as history. Reading changes no identity or state.
+
+    Returns
+    -------
+    ``scope`` names the selected summary Task IDs. Each ``members`` entry has
+    ``alias``, ``task_id``, ``team``, ``role``, ``runtime``, the actual Agent
+    ``parent``, ``state`` (``active`` or ``standby``; ``None`` once retired),
+    ``last_outcome``, ``historical`` and ``retired``. An activity other than
+    running or idle is kept as the ``diagnostic`` of that two-state view.
+    """
+    from graphtraj.graph.task_index import read_index
+
+    configuration = load_project_configuration(cwd)
+    runner        = discover_runner_directory(cwd)
+    records       = read_index(configuration.state)['tasks']
+    children: dict[str, list[str]] = {key: [] for key in records}
+    for key, record in records.items():
+        if record['parent_id'] is not None:
+            children[record['parent_id']].append(key)
+
+    if summary_task_id is None:
+        roots = [key for key, record in records.items()
+                 if record['active'] and record['status'] != 'integrated'
+                 and (children[key] or record['parent_id'] is None)]
+    elif summary_task_id in records:
+        roots = [summary_task_id]
+    else:
+        raise ValueError('Choose a registered Task.')
+
+    # Recursive child Tasks share their summary's member view.
+    scope   = set()
+    pending = list(roots)
+    while pending:
+        key = pending.pop()
+        if key not in scope:
+            scope.add(key)
+            pending.extend(children[key])
+
+    states  = _load_states(configuration.state / 'tasks') if scope else {}
+    members = []
+    for task_id in sorted(scope, key=int):
+        aliases, current = _task_aliases(*states[task_id])
+        for member in sorted(aliases):
+            try:
+                mapping, session_directory = read_alias_mapping(runner, member)
+            except RunnerError:
+                continue
+            if mapping['task_id'] != task_id:
+                continue
+            retired = not (session_directory / 'mapping.yml').is_file()
+            if retired and summary_task_id is None:
+                continue
+            entry = {'alias': member, 'task_id': task_id, 'team': mapping['team_generation'],
+                     'role': mapping['role'], 'runtime': mapping['runtime'],
+                     'parent': mapping['parent'], 'state': None, 'last_outcome': None,
+                     'historical': retired or member not in current, 'retired': retired}
+            if not retired:
+                status = _status_session(mapping, session_directory, member, respond_to_abnormal=False)
+                activity = status.get('activity')
+                # An owner holding its execution without answering is still active.
+                entry['state'] = 'active' if activity in {'running', 'unreachable'} else 'standby'
+                entry['last_outcome'] = status.get('last_outcome')
+                if activity not in {'running', 'idle'}:
+                    entry['diagnostic'] = activity
+            members.append(entry)
+    return {'scope': sorted(roots, key=int), 'explicit': summary_task_id is not None,
+            'members': members}
 
 
 # The project inventory is shared by bounded pages, not rediscovered per Agent.

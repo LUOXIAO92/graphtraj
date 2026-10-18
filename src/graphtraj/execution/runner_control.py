@@ -173,6 +173,67 @@ def notify_direct_parent(
     return record
 
 
+def deliver_execution_end(
+    session_directory: Path,
+    mapping: Mapping[str, Any],
+    terminal: Mapping[str, Any],
+    *,
+    parent_input: bool,
+) -> Dict[str, Any]:
+    """Tell the direct parent that one execution ended.
+
+    An ordinary receipt, a ``completed`` end of an execution the parent did
+    not start (``parent_input`` false), is kept for display without a parent
+    turn where the parent can see it that way (:func:`receipt_is_display_only`).
+    Every other end is delivered as before.
+    """
+    notice = 'Session execution ended:\n' + json.dumps({
+        'session': mapping['session'], 'execution_id': mapping.get('execution_id'), **terminal,
+    }, ensure_ascii=False)
+    identity = {'type': terminal['outcome'], 'session': mapping['session'],
+                'execution_id': mapping.get('execution_id')}
+    if terminal['outcome'] == 'completed' and not parent_input and receipt_is_display_only(mapping):
+        return retain_parent_receipt(session_directory, notice, identity)
+    return deliver_parent_event(session_directory, notice, identity)
+
+
+def retain_parent_receipt(
+    session_directory: Path, notice: str, identity: Mapping[str, Any],
+) -> Dict[str, Any]:
+    """Keep an ordinary end notice in the existing record without resuming the parent.
+
+    The record has the same message and parent fields as a delivered notice,
+    with ``delivery: retained``. People see it in the Session's records, and a
+    Codex Main host shows it once at its next native hook.
+    """
+    mapping, _ = read_alias_mapping(session_directory.parent.parent, session_directory.name)
+    record: Dict[str, Any] = {
+        "at": time.time(), "identity": dict(identity), "delivery": "retained",
+        "parent": mapping.get("parent") if isinstance(mapping.get("parent"), str) else None,
+        "notice": json.dumps({"source": "graphtraj", "alias": mapping["alias"],
+                              "event": identity["type"], "message": notice}, ensure_ascii=False),
+    }
+    if record["parent"] is None and mapping.get("parent_connection") is not None:
+        record["parent_connection"] = mapping["parent_connection"]
+    try:
+        _append_notice_record(session_directory, record)
+    except OSError:
+        pass
+    return record
+
+
+def receipt_is_display_only(mapping: Mapping[str, Any]) -> bool:
+    """Whether an ordinary receipt to this Session's parent can be kept unsent.
+
+    A Runner member parent sees it in the records and a Codex Main host shows
+    it at its next hook. Other hosts keep their current delivery.
+    """
+    if isinstance(mapping.get("parent"), str):
+        return True
+    connection = mapping.get("parent_connection")
+    return isinstance(connection, Mapping) and connection.get("runtime") == "codex"
+
+
 def _append_notice_record(
     session_directory: Path, record: Mapping[str, Any]
 ) -> None:
@@ -373,12 +434,13 @@ def send_instruction(
     require_direct_authority(runner_directory, alias, mapping)
     if is_session_mapping(mapping):
         _require_project_events(cwd, caused_by_event_ids)
-        from graphtraj.teams.team_replacement import require_active_session
+        from graphtraj.teams.team_replacement import completed_task_member, require_active_session
 
-        require_active_session(
-            discover_project(cwd, require_clean_integration=False), alias,
-            reports_only=reports_only,
-        )
+        project = discover_project(cwd, require_clean_integration=False)
+        # A finished Task's standby member answers follow-ups without
+        # reopening Task work, budget or its accepted result.
+        reports_only = reports_only or completed_task_member(project, mapping)
+        require_active_session(project, alias, reports_only=reports_only)
         return _send_session(
             alias,
             instruction,
@@ -459,11 +521,21 @@ def read_session_reports(alias: str, cwd: Path) -> dict:
     return result
 
 
-def submit_session_report(name: str, text: str, cwd: Path) -> dict:
-    """Write the issuing formal Session's own assigned report, never another's."""
+def submit_session_report(name: str, text: str, cwd: Path, *, notify_parent: bool = False) -> dict:
+    """Write the issuing formal Session's own assigned report, never another's.
+
+    With ``notify_parent`` a notice naming the written report and its path is
+    then sent to the direct parent through the same child-to-parent notice
+    path as completion and request notices, continuing the parent's turn; the
+    parent reads the text through session_reports. The result's
+    ``delivery`` is that notice's actual receipt, such as ``received`` or
+    ``no-direct-parent``; without a direct parent only the report is written.
+    """
     from graphtraj.execution.runner_status import caller_alias
     from graphtraj.execution.runner_status import require_task_authority
 
+    # A follow-up may run in a cleaned Task's continuation cwd, outside any checkout.
+    cwd = discover_project_root(cwd)
     alias = caller_alias(discover_runner_directory(cwd))
     if alias is None:
         raise RunnerError('authority-denied', 'Main has no Team report to submit.')
@@ -476,7 +548,15 @@ def submit_session_report(name: str, text: str, cwd: Path) -> dict:
     if len(paths) != 1:
         raise RunnerError('authority-denied', 'The report is not assigned to this Session.')
     from graphtraj.execution.runner_results import start_result_correction
+    from graphtraj.graph.task_graph import _load_states
 
+    state = load_project_configuration(cwd).state
+    if _load_states(state / 'tasks')[mapping['task_id']][1]['status'] in ACCEPTED_STATUSES:
+        # A finished Task opens no Round; its member, e.g. after a follow-up,
+        # adds its own report beside the retained one in the closed Round.
+        path = next(path for path in _session_report_paths(alias, cwd) if path.name == name)
+        written = _add_closed_round_report(path, text)
+        return _reported(runner / 'sessions' / alias, alias, written, notify_parent)
     start_result_correction(mapping, cwd)
     path = next(path for path in _session_report_paths(alias, cwd) if path.name == name)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -491,7 +571,56 @@ def submit_session_report(name: str, text: str, cwd: Path) -> dict:
     finally:
         if temporary is not None:
             temporary.unlink(missing_ok=True)
-    return {'alias': alias, 'report': str(path)}
+    return _reported(runner / 'sessions' / alias, alias, path, notify_parent)
+
+
+def _reported(session_directory: Path, alias: str, path: Path, notify: bool) -> dict:
+    """Return the written report, first notifying the direct parent when requested."""
+    result = {'alias': alias, 'report': str(path)}
+    if notify:
+        # The notice names the report; the parent reads its text through session_reports.
+        receipt = deliver_parent_event(
+            session_directory,
+            'Submitted report {0} for its direct parent to handle; read it through '
+            'session_reports: {1}'.format(path.name, path),
+            {'type': 'report-submitted', 'report': str(path)},
+        )
+        result['delivery'] = receipt['delivery']
+        if receipt.get('parent') is not None:
+            result['parent'] = receipt['parent']
+    return result
+
+
+# Task states after a result was accepted: no new result or Round is recorded.
+ACCEPTED_STATUSES = frozenset({'awaiting-integration', 'integrating', 'integrated'})
+
+
+def _add_closed_round_report(path: Path, text: str) -> Path:
+    """Create a new report beside ``path`` without changing any retained file.
+
+    The assigned name is used when absent, otherwise the first free
+    ``<stem>-<n>.md`` from 2. A closed Round directory stays read-only except
+    for this one exclusive creation; its mode is restored afterwards.
+    """
+    directory = path.parent
+    mode      = directory.stat().st_mode & 0o7777
+    directory.chmod(mode | 0o200)
+    try:
+        number = 1
+        while True:
+            target = path if number == 1 else path.with_stem(f'{path.stem}-{number}')
+            try:
+                with target.open('x', encoding='utf-8') as stream:
+                    stream.write(text)
+                    stream.flush()
+                    os.fsync(stream.fileno())
+                # Like the Round's retained reports, the new one is not rewritten later.
+                target.chmod(0o444)
+                return target
+            except FileExistsError:
+                number += 1
+    finally:
+        directory.chmod(mode)
 
 
 def _execution_identity(alias: str, mapping: Mapping[str, Any]) -> Dict[str, str]:
@@ -515,8 +644,13 @@ def _send_session(
     reports_only: bool = False,
     system_notice: bool = False,
     retain_notice_channel: bool = False,
+    parent_input: bool = True,
 ) -> Dict[str, str]:
-    """Serialize alias changes so two idle sends cannot create competing owners."""
+    """Serialize alias changes so two idle sends cannot create competing owners.
+
+    ``parent_input`` is false when the input is not the direct parent's own,
+    such as delivered child results; a system notice is never parent input.
+    """
     launch_file = session_directory / "launch.yml"
     if launch_file.is_symlink() or not launch_file.is_file():
         raise _not_resumable()
@@ -528,14 +662,69 @@ def _send_session(
                 "operation-failed", "The parent Session input lock is busy; retry this notice.",
             ) from error
         mapping, _ = read_alias_mapping(session_directory.parent.parent, alias)
+        worktree = Path(mapping["worktree_path"])
+        restored = False
         with execution_start_lock(session_directory.parent.parent):
             require_execution_allowed(session_directory.parent.parent, alias, mapping)
-        return _send_session_locked(
-            alias, instruction, session_directory, mapping, caused_by_event_ids, cwd,
-            capacity_fd=capacity_fd, reports_only=reports_only,
-            system_notice=system_notice,
-            retain_notice_channel=retain_notice_channel,
-        )
+            absent = not os.path.lexists(str(worktree))
+            if reports_only and worktree.is_absolute() and (absent or (
+                    worktree.is_dir() and not worktree.is_symlink() and not any(worktree.iterdir()))):
+                from graphtraj.teams.team_replacement import completed_task_member
+
+                # Each Runtime resumes its native Session in the recorded cwd
+                # (Claude finds its transcript by it). Cleanup removed that
+                # Worktree, so an empty directory stands at the same path for
+                # these continuations only; the last one to end removes it.
+                if completed_task_member(discover_project(cwd, require_clean_integration=False), mapping):
+                    if absent:
+                        worktree.mkdir()
+                    restored = True
+        try:
+            return _send_session_locked(
+                alias, instruction, session_directory, mapping, caused_by_event_ids, cwd,
+                capacity_fd=capacity_fd, reports_only=reports_only,
+                system_notice=system_notice,
+                retain_notice_channel=retain_notice_channel,
+                restored_cwd=restored,
+                parent_input=parent_input and not system_notice,
+            )
+        except BaseException:
+            if restored:
+                _remove_restored_cwd(session_directory, worktree)
+            raise
+
+
+def _remove_restored_cwd(session_directory: Path, worktree: Path) -> None:
+    """Remove a continuation-only cwd once no other execution can still use it.
+
+    Another member mapped to the same path keeps it while it has no terminal
+    record or its send still holds the input lock; that member removes it when
+    it ends. A directory the Runtime left content in also stays, so a reopened
+    launch refuses it as a Worktree conflict instead of discarding the content.
+    """
+    runner_directory = session_directory.parent.parent
+    with execution_start_lock(runner_directory):
+        for other in (runner_directory / "sessions").iterdir():
+            if other == session_directory or not (other / "mapping.yml").is_file():
+                continue
+            try:
+                mapping = yaml.safe_load((other / "mapping.yml").read_text(encoding="utf-8"))
+            except (OSError, UnicodeError, yaml.YAMLError):
+                return
+            if not isinstance(mapping, dict) or mapping.get("worktree_path") != str(worktree):
+                continue
+            if not (other / "execution.yml").is_file():
+                return
+            with (other / "launch.yml").open("a+b") as lock:
+                try:
+                    file_lock.flock(lock, file_lock.LOCK_EX | file_lock.LOCK_NB)
+                except BlockingIOError:
+                    return
+                file_lock.flock(lock, file_lock.LOCK_UN)
+        try:
+            worktree.rmdir()
+        except OSError:
+            pass
 
 
 def _send_session_locked(
@@ -551,6 +740,8 @@ def _send_session_locked(
     system_notice: bool = False,
     retain_notice_channel: bool = False,
     require_budget_permission: bool = False,
+    restored_cwd: bool = False,
+    parent_input: bool = True,
 ) -> Dict[str, str]:
     """Deliver input or restore the retained Context under the alias lock.
 
@@ -649,6 +840,10 @@ def _send_session_locked(
         }
         if monitor is not None:
             resume["monitor_execution_budget"] = True
+        if restored_cwd:
+            resume["restored_cwd"] = True
+        # The execution's end is an ordinary receipt unless the parent started it.
+        resume["parent_input"] = parent_input and not system_notice
         write_yaml_durably(
             resume_file,
             resume,

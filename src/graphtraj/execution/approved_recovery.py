@@ -7,6 +7,7 @@ import hashlib
 import json
 import math
 import os
+import time
 from pathlib import Path
 from typing import Any
 
@@ -82,7 +83,8 @@ def approved_recovery(arguments: dict, cwd: Path) -> dict:
         'authority': [event for event in events if event['event_id'] in causes],
     }
     _confirm_unconfirmed_target(project.runner_directory, alias)
-    require_stopped_subtree(project.runner_directory, alias)
+    if _changes_execution(request):
+        require_stopped_subtree(project.runner_directory, alias)
     if minutes:
         decision = review_proposal(proposal, cwd, project.runner_directory)
         if decision != {'decision': 'accept'}:
@@ -92,6 +94,15 @@ def approved_recovery(arguments: dict, cwd: Path) -> dict:
                 message += ' Reviewer reason: ' + rationale
             raise RunnerError('recovery-denied', message)
     return _apply_recovery(proposal, cwd)
+
+
+def _changes_execution(request: dict) -> bool:
+    """Whether a recovery resumes the Session or reactivates its Task.
+
+    Only these need the target subtree stopped. A budget increment without
+    either keeps running work, its stop facts and its original clock.
+    """
+    return request['resume'] or request.get('restore_active', False)
 
 
 def review_proposal(proposal: dict, cwd: Path, runner_directory: Path) -> dict:
@@ -264,7 +275,8 @@ def _apply_recovery(proposal: dict, cwd: Path) -> dict:
                     differences = _differences(proposal['before'], current)
                     if differences:
                         return {'recovery_status': 'stale', 'applied': False, 'differences': differences}
-                    require_stopped_subtree(project.runner_directory, alias)
+                    if _changes_execution(request):
+                        require_stopped_subtree(project.runner_directory, alias)
                     original = {key: path.read_bytes() if path.exists() else None
                                 for key, path in paths.items() if key != 'round'}
                     original_mode = paths['round'].stat().st_mode & 0o777
@@ -294,6 +306,12 @@ def _apply_recovery(proposal: dict, cwd: Path) -> dict:
                                         from graphtraj.graph.task_protocol import execution_record
 
                                         value = execution_record(value)
+                                    elif key == 'budget':
+                                        from graphtraj.execution.execution_budget import start_approved_window
+
+                                        # The increment counts as execution time from now,
+                                        # not from when the budget ran out.
+                                        value = start_approved_window(proposal['before']['budget'], value, time.time())
                                     write_yaml_durably(paths[key], value)
                             if original_mode != proposal['after']['round_mode']:
                                 paths['round'].chmod(proposal['after']['round_mode'])

@@ -14,7 +14,7 @@ from graphtraj.execution.runner_control import _require_project_events, _session
 from graphtraj.execution.runner_connection import current_parent_connection, parent_connection
 from graphtraj.execution.runner_models import Project, RunnerError
 from graphtraj.execution.runner_retirement import retire_session
-from graphtraj.workspace.runner_project import discover_project, run_git
+from graphtraj.workspace.runner_project import discover_project, registered_worktrees, run_git
 from graphtraj.execution.runner_status import (
     read_alias_mapping,
     require_stopped_subtree,
@@ -37,6 +37,10 @@ def require_active_session(
     if record_file.is_file() and yaml.safe_load(record_file.read_text()).get("retirement"):
         raise RunnerError("session-retired", "This Session has retired from its task.")
     directory, task = _load_states(project.state_directory / "tasks")[mapping["task_id"]]
+    if reports_only and completed_task_member(project, mapping):
+        # A standby member of a finished Task may answer follow-up questions;
+        # report-only continuation reopens no Task work, budget or result.
+        return None
     if (Path(mapping["worktree_path"]) == project.integration_worktree
             and task["status"] != "resolving-integration" and not reports_only):
         raise RunnerError("authority-denied", "Integration Worktree work requires an active conflict assignment.")
@@ -54,6 +58,20 @@ def require_active_session(
     if seats and all(member["session_ref"] not in {None, alias} for member in seats):
         raise RunnerError("seat-replaced", "This Session no longer occupies its Team seat.")
     return team
+
+
+def completed_task_member(project: Project, mapping: dict) -> bool:
+    """Return whether a member's Task is integrated and its Worktree cleaned up.
+
+    Such a member stays a standby Agent: cleanup removed only the Task's
+    disposable resources, not its Session or its recorded native cwd.
+    """
+    _, task = _load_states(project.state_directory / "tasks")[mapping["task_id"]]
+    worktree = project.harness_root / task["worktree"]
+    return (task["status"] == "integrated"
+            and Path(mapping["worktree_path"]) == worktree
+            and not any(record.get("worktree") == str(worktree)
+                        for record in registered_worktrees(project.repository)))
 
 
 def replace_session(

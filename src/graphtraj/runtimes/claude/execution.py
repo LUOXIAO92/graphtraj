@@ -388,20 +388,30 @@ class ClaudeExecution:
             self.pending[token] = details
 
         def notify() -> None:
-            """Deliver without blocking the pipe that must still accept interruption."""
-            receipt = None
-            try:
-                message = 'Claude requires a native permission reply:\n' + json.dumps(details)
-                # A Task-free owner retains the request with its own control
-                # record instead of a Runner parent notice.
-                receipt = (self.parent_notice(message, details) if self.parent_notice is not None
-                           else notify_direct_parent(self.directory, message, details))
-                if receipt is not None and receipt.get('delivery') not in {'received', 'no-direct-parent', 'retained'}:
-                    raise ValueError('delivery')
-            except Exception as error:
-                delivery = receipt.get('delivery') if isinstance(receipt, dict) else None
-                self.events.put({'type': 'notification_error', 'exception': type(error).__name__,
-                                 'delivery': delivery if isinstance(delivery, str) else None})
+            """Deliver without blocking the pipe that must still accept interruption.
+
+            A parent whose turn just settled refuses input until its terminal
+            record lets the next execution resume it, so ``not-delivered`` is
+            retried while this request is still pending, as Codex and DSH do.
+            The request stays pending and is never answered here.
+            """
+            message = 'Claude requires a native permission reply:\n' + json.dumps(details)
+            while True:
+                with self.lock:
+                    if token not in self.pending or self.stopping.is_set():
+                        return
+                try:
+                    # A Task-free owner retains the request with its own control
+                    # record instead of a Runner parent notice.
+                    receipt = (self.parent_notice(message, details) if self.parent_notice is not None
+                               else notify_direct_parent(self.directory, message, details))
+                except Exception as error:
+                    self.events.put({'type': 'notification_error', 'exception': type(error).__name__,
+                                     'delivery': None})
+                    return
+                if receipt is None or receipt.get('delivery') in {'received', 'no-direct-parent', 'retained'}:
+                    return
+                time.sleep(1)
 
         threading.Thread(target=notify, daemon=True).start()
 

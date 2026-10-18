@@ -72,6 +72,9 @@ def session_submissions(mapping: Mapping[str, Any], cwd: Path) -> list[dict[str,
             and event.get('session') == mapping.get('session')]
 
 
+# Task states in which a member's result or a new Round may be recorded.
+RESULT_STATUSES = frozenset({'implementing', 'reviewing', 'reworking', 'resolving-integration'})
+
 def submit_session_result(
     commit: str,
     result_refs: tuple[str, ...],
@@ -97,6 +100,8 @@ def submit_session_result(
         raise RunnerError('authority-denied', 'A task result requires its own Session.')
     mapping, _ = read_alias_mapping(runner, alias)
     require_task_authority(configuration.state, runner, mapping['task_id'], alias, 'submit')
+    if _load_states(configuration.state / 'tasks')[mapping['task_id']][1]['status'] not in RESULT_STATUSES:
+        raise ValueError('This task is not accepting result submissions.')
     if not isinstance(commit, str) or not re.fullmatch(r'[0-9a-f]{40}', commit):
         raise ValueError('A result requires a full Git commit.')
     if not isinstance(completion, str) or not completion.strip():
@@ -152,8 +157,18 @@ def submit_session_result(
     directory, _ = _load_states(configuration.state / 'tasks')[mapping['task_id']]
     team = read_team(directory / 'teams' / str(mapping['team_generation']) / 'team.yml')
     ordinal = team['current_round']
-    predecessors = [event['event_id'] for event in read_worldline(configuration.state, configuration.harness_root)
-                    if event.get('task_id') == mapping['task_id']]
+    events = read_worldline(configuration.state, configuration.harness_root)
+    predecessors = [event['event_id'] for event in events if event.get('task_id') == mapping['task_id']]
+    # Repeating an unchanged submission in the same Round, as a caller does
+    # after an unconfirmed reply, returns the recorded one without another.
+    previous = next((event for event in reversed(events) if event['event'] == 'result-submitted'
+                     and event.get('alias') == alias and event['round'] == ordinal), None)
+    if (previous is not None
+            and (previous['candidate'], previous['result_refs'], previous['completion'], previous['unresolved'])
+            == (commit, list(result_refs), completion, list(unresolved))
+            and [(configuration.harness_root / reference).read_bytes() for reference in previous['evidence_refs']]
+            == [content for _, content in snapshots]):
+        return previous
     event = {
         'event': 'result-submitted', 'task_id': mapping['task_id'],
         'alias': alias, 'session': mapping['session'], 'role': mapping['role'],
@@ -212,7 +227,7 @@ def start_result_correction(mapping: Mapping[str, Any], cwd: Path) -> None:
     require_task_authority(configuration.state, discover_runner_directory(cwd),
                            mapping['task_id'], mapping['alias'], 'submit')
     directory, task = _load_states(configuration.state / 'tasks')[mapping['task_id']]
-    if task['status'] not in {'implementing', 'reviewing', 'reworking', 'resolving-integration'}:
+    if task['status'] not in RESULT_STATUSES:
         raise ValueError('This task is not accepting result submissions.')
     team = read_team(directory / 'teams' / str(mapping['team_generation']) / 'team.yml')
     rejection = current_result_rework_cause(read_worldline(configuration.state, cwd), task, team)

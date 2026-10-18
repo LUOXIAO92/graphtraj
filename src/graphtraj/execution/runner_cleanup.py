@@ -16,7 +16,6 @@ import yaml
 
 from graphtraj.execution.runner_batch import valid_task_id
 from graphtraj.execution.runner_heartbeat import execution_start_lock
-from graphtraj.execution.runner_retirement import retire_session
 from graphtraj.execution.runner_status import read_alias_mapping, require_stopped_subtree
 from graphtraj.execution.runner_models import CleanupResponse, Project, RunnerError
 from graphtraj.workspace.runner_project import (
@@ -158,20 +157,17 @@ def _cleanup(target: CleanupTarget) -> CleanupResponse:
         expected_ref,
     )
     worktree_exists = os.path.lexists(str(target.worktree))
+    # Task completion does not retire its members: their stopped mappings stay
+    # as standby Agents. Only unstarted allocations are disposable resources.
+    unstarted = [directory for directory in mappings
+                 if not (directory / "mapping.yml").is_file()]
     if not branch_exists and not worktree_exists and not path_records and not branch_records:
-        if any((directory / "mapping.yml").is_file() for directory in mappings):
-            return _refused(
-                target,
-                "cleanup-ownership-mismatch",
-                "The live Runner mappings outlast their canonical Task resources.",
-                {"mappings": [path.name for path in mappings]},
-            )
         return _already_cleaned(target)
     # Integration retains the exact accepted branch even after its Worktree and
     # mappings have been removed. Absence alone never authorizes ref deletion.
     branch_only = (
         branch_exists and not worktree_exists and not path_records
-        and not branch_records and not mappings and target.candidate is not None
+        and not branch_records and not unstarted and target.candidate is not None
         and run_git(target.project.repository, "rev-parse", expected_ref) == target.candidate
     )
     if not branch_only and (
@@ -222,19 +218,15 @@ def _cleanup(target: CleanupTarget) -> CleanupResponse:
 
     completed_actions: list[str] = []
     try:
-        for directory in mappings:
-            if (directory / "mapping.yml").is_file():
-                retire_session(directory.name, target.project.harness_root)
-                completed_actions.append("retired:" + directory.name)
-            else:
-                trace = next(target.task_directory.glob("teams/*/traces/" + directory.name))
-                directory.rename(trace / "runner")
-        if not branch_only:
-            completed_actions.append("members-retired")
-        # A shared Worktree user can start between the initial check and retirement.
+        for directory in unstarted:
+            trace = next(target.task_directory.glob("teams/*/traces/" + directory.name))
+            directory.rename(trace / "runner")
+        # A shared Worktree user can start between the initial check and removal.
         # Hold the same lock as every execution startup through resource deletion.
         with execution_start_lock(target.project.runner_directory):
             remaining, errors, busy = _task_mappings(target)
+            remaining = [directory for directory in remaining
+                         if not (directory / "mapping.yml").is_file()]
             if errors or busy or (branch_only and remaining):
                 return _refused(target, "worktree-busy", "The Worktree is still in use.",
                                 {"aliases": busy, "mapping_mismatches": errors,
@@ -254,8 +246,6 @@ def _cleanup(target: CleanupTarget) -> CleanupResponse:
                 if os.path.lexists(str(target.worktree)):
                     raise OSError("Task Worktree path still exists")
                 completed_actions.append("worktree-removed")
-                # Original Session and result records remain retained.
-                completed_actions.append("mappings-removed")
             _delete_branch_if_dev_unchanged(target, task_commit)
         completed_actions.append("branch-removed")
     except (OSError, RunnerError, shutil.Error) as error:
@@ -272,7 +262,9 @@ def _cleanup(target: CleanupTarget) -> CleanupResponse:
             "cleanup_status": "cleaned",
             "worktree_path": str(target.worktree),
             "branch": target.branch,
-            "aliases_removed": [mapping.name for mapping in mappings],
+            "aliases_removed": [directory.name for directory in unstarted],
+            "standby_aliases": [directory.name for directory in mappings
+                                if directory not in unstarted],
             "evidence": {
                 "integration_branch": target.project.integration_branch,
                 "integration_commit": target.project.dev_commit,

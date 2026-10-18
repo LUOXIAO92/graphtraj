@@ -70,3 +70,27 @@ def test_unrelated_and_cancelled_operations_add_no_chat_entry(tmp_path: Path, ki
         source['tool_response']['structuredContent']['result']['last_result']['last_message'] = None
     assert invoke(source, tmp_path) == {}
     assert not list(tmp_path.iterdir())
+
+
+def test_retained_ordinary_receipt_is_shown_once_at_the_next_hook(tmp_path: Path) -> None:
+    """A completed child end the Main did not start is shown, never sent as a turn."""
+    from graphtraj.execution.runner_control import retain_parent_receipt
+    from test_result_submission import result_project
+
+    runner, _, _ = result_project(tmp_path)
+    child = runner / 'sessions/research@x1'
+    import yaml
+
+    mapping = yaml.safe_load((child / 'mapping.yml').read_text())
+    connection = {'runtime': 'codex', 'session': 'main-session', 'codex_home': str(tmp_path)}
+    (child / 'mapping.yml').write_text(yaml.safe_dump({**mapping, 'parent_connection': connection}))
+    retain_parent_receipt(child, 'Session execution ended:\n{"outcome": "completed"}',
+                          {'type': 'completed', 'session': 'native-research@x1', 'execution_id': 'e1'})
+    stop = {'hook_event_name': 'Stop', 'session_id': 'main-session', 'cwd': str(tmp_path)}
+
+    shown = invoke(stop, tmp_path / 'display')
+    assert set(shown) == {'systemMessage'}
+    assert 'research@x1 → Codex session main-session' in shown['systemMessage']
+    assert 'Session execution ended' in shown['systemMessage']
+    assert invoke(stop, tmp_path / 'display') == {}
+    assert invoke({**stop, 'session_id': 'other-main'}, tmp_path / 'display') == {}

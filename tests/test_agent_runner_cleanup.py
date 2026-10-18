@@ -420,7 +420,8 @@ def test_installed_cleanup_uses_only_task_identity_and_preserves_trajectory(
         ["git", "show-ref", "--verify", "--quiet", "refs/heads/" + task.branch],
         cwd=task.repository,
     ).returncode == 1
-    assert all(not (path / "mapping.yml").exists() for path in mappings)
+    # Task completion keeps its stopped members as standby Agents.
+    assert all((path / "mapping.yml").exists() for path in mappings)
     _assert_durable_contents(task, durable_before)
     for path, expected in archives.items():
         with SessionStore(path, readonly=True) as archive:
@@ -459,19 +460,17 @@ def test_installed_cleanup_retries_reference_failure(
         document = yaml.safe_load(failed.stdout)
         assert failed.returncode == 1, failed.stdout + failed.stderr
         assert document["error"]["code"] == "cleanup-failed"
-        assert document["evidence"]["completed_actions"][-3:] == [
-            "members-retired", "worktree-removed", "mappings-removed",
-        ]
+        assert document["evidence"]["completed_actions"] == ["worktree-removed"]
         assert "exited 128" in document["evidence"]["cause"]["message"]
         assert "lock file already exists" in document["evidence"]["cause"]["message"]
         assert not task.worktree.exists()
-        assert not _task_mappings(task)
+        assert all((path / "mapping.yml").exists() for path in _task_mappings(task))
         assert run_process(["git", "rev-parse", task.branch], cwd=task.repository).stdout.strip() == commit
         remaining_sessions = sorted(path.name for path in sessions.iterdir())
-        retired_before = {path: path.read_bytes() for path in task.task_directory.rglob("session.yml")}
+        retired_before = {path: path.read_bytes() for path in sessions.rglob("session.yml")}
         assert retired_before
 
-        # Retry while the real fault persists, without inventing more retirement.
+        # Retry while the real fault persists, without retiring any member.
         retry_failed = yaml.safe_load(_cleanup(task).stdout)
         assert retry_failed["error"]["code"] == "cleanup-failed"
         assert retry_failed["evidence"]["completed_actions"] == []
@@ -532,7 +531,7 @@ def test_installed_cleanup_allows_missing_worldline_evidence(
     document = yaml.safe_load(result.stdout)
     assert document["cleanup_status"] == "cleaned"
     assert not task.worktree.exists()
-    assert all(not (path / "mapping.yml").exists() for path in mappings)
+    assert all((path / "mapping.yml").exists() for path in mappings)
     read_after_cleanup = run_process(
         [str(task.commands.product), "worldline", "read"],
         cwd=task.root,
@@ -600,7 +599,8 @@ def test_installed_cleanup_removes_historical_preflight_allocation_after_integra
         cwd=task.repository,
     ).returncode == 1
     assert all(not session.exists() for session in failed_sessions)
-    assert all(not (mapping / "mapping.yml").exists() for mapping in mappings)
+    assert all((mapping / "mapping.yml").exists() for mapping in mappings
+               if mapping not in failed_sessions)
     assert trace.read_bytes() == b""
     _assert_durable_contents(task, durable_before)
 

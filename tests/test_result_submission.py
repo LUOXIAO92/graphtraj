@@ -1,8 +1,10 @@
 """Versioned task results through the public Runner tool operations."""
 
+import json
 import subprocess
 from pathlib import Path
 
+import pytest
 import yaml
 
 from graphtraj.configuration.project_configuration import default_configuration_content
@@ -99,6 +101,95 @@ def test_researchers_submit_distinct_retained_results_without_coding_reports(tmp
         assert (tmp_path / submission['evidence_refs'][0]).read_text() == note
     assert submissions[0]['evidence_refs'] != submissions[1]['evidence_refs']
     assert not (team.parent / 'rounds/1/engineer.md').exists()
+
+
+def test_repeated_unchanged_submission_is_recorded_once(tmp_path: Path) -> None:
+    """A retry after an unconfirmed reply returns the recorded submission."""
+    from graphtraj.graph.delivery_worldline import read_worldline
+
+    runner, _, commit = result_project(tmp_path)
+    with runtime_caller(runner, 'research@x1'):
+        report = tools.submit_report({'name': 'researcher-x1.md', 'text': 'Evidence'}, cwd=tmp_path).document['report']
+        arguments = {'commit': commit, 'result_refs': ['result.md'], 'evidence_refs': [report],
+                     'completion': 'Research complete', 'unresolved': []}
+        first = tools.submit_result(arguments, cwd=tmp_path).document
+        repeated = tools.submit_result(arguments, cwd=tmp_path).document
+        changed = tools.submit_result({**arguments, 'completion': 'Revised'}, cwd=tmp_path).document
+
+    assert repeated == first
+    assert changed['event_id'] != first['event_id']
+    submitted = [event['event_id'] for event in read_worldline(tmp_path / 'state', tmp_path)
+                 if event['event'] == 'result-submitted']
+    assert submitted == [first['event_id'], changed['event_id']]
+
+
+def test_report_can_notify_the_direct_parent(tmp_path: Path, monkeypatch) -> None:
+    """A notified report is written first, then sent through the parent notice path."""
+    from graphtraj.execution import runner_control
+
+    runner, _, _ = result_project(tmp_path)
+    with runtime_caller(runner, 'research@x1'):
+        plain = tools.submit_report({'name': 'researcher-x1.md', 'text': 'Only written'}, cwd=tmp_path).document
+        alone = tools.submit_report({'name': 'researcher-x1.md', 'text': 'No parent',
+                                     'notify_parent': True}, cwd=tmp_path).document
+    assert 'delivery' not in plain
+    assert alone['delivery'] == 'no-direct-parent'
+    assert Path(alone['report']).read_text() == 'No parent'
+
+    notices = []
+
+    def notify(directory: Path, message: str, identity: dict) -> dict:
+        """Observe the existing child-to-parent notice and its receipt."""
+        notices.append((directory.name, message, identity, Path(identity['report']).read_text()))
+        return {'delivery': 'received', 'parent': 'research@x2'}
+
+    monkeypatch.setattr(runner_control, 'notify_direct_parent', notify)
+    with runtime_caller(runner, 'research@x1'):
+        sent = tools.submit_report({'name': 'researcher-x1.md', 'text': 'Needs a decision',
+                                    'notify_parent': True}, cwd=tmp_path).document
+    assert sent['delivery'] == 'received' and sent['parent'] == 'research@x2'
+    # The notice names the report; its text stays in the saved report only.
+    assert notices == [('research@x1',
+                        'Submitted report researcher-x1.md for its direct parent to handle; '
+                        'read it through session_reports: ' + sent['report'],
+                        {'type': 'report-submitted', 'report': sent['report']}, 'Needs a decision')]
+
+
+@pytest.mark.parametrize(('parent', 'runtime', 'outcome', 'parent_input', 'delivered'), [
+    ('research@x2', None, 'completed', False, False),
+    (None, 'codex', 'completed', False, False),
+    ('research@x2', None, 'completed', True, True),
+    (None, 'codex', 'completed', True, True),
+    ('research@x2', None, 'runtime-error', False, True),
+    ('research@x2', None, 'interrupted', False, True),
+    (None, 'pi', 'completed', False, True),
+    (None, 'claude', 'completed', False, True),
+])
+def test_only_ordinary_receipts_are_kept_without_a_parent_turn(
+    tmp_path: Path, monkeypatch, parent, runtime, outcome, parent_input, delivered,
+) -> None:
+    """A completed end the parent did not start is retained; every other end is delivered."""
+    from graphtraj.execution import runner_control
+
+    runner, _, _ = result_project(tmp_path)
+    child = runner / 'sessions/research@x1'
+    mapping = yaml.safe_load((child / 'mapping.yml').read_text())
+    mapping.update(parent=parent, execution_id='e1')
+    if runtime is not None:
+        mapping['parent_connection'] = {'runtime': runtime, 'session': 'main-session'}
+    (child / 'mapping.yml').write_text(yaml.safe_dump(mapping))
+    sent = []
+    monkeypatch.setattr(runner_control, 'notify_direct_parent',
+                        lambda directory, message, identity: sent.append(identity) or {'delivery': 'received'})
+
+    receipt = runner_control.deliver_execution_end(
+        child, mapping, {'outcome': outcome, 'last_agent_message': 'Forwarded.'}, parent_input=parent_input)
+
+    assert bool(sent) is delivered
+    assert receipt['delivery'] == ('received' if delivered else 'retained')
+    if not delivered:
+        record = json.loads((child / 'parent-notices.jsonl').read_text().splitlines()[-1])
+        assert record['delivery'] == 'retained' and 'Forwarded.' in json.loads(record['notice'])['message']
 
 
 def test_submission_rejects_unowned_or_invalid_inputs(tmp_path: Path) -> None:

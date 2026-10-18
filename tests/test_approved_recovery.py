@@ -481,6 +481,41 @@ def test_approved_increment_changes_stop_threshold_without_resetting_clock(
     assert after['stopping_checks'] > before['stopping_checks']
 
 
+def test_approved_increment_after_waiting_counts_only_execution_time(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Minutes approved after a long wait are not consumed by that wait."""
+    from test_task_budget_control import monitor_at, sample_stop
+    from graphtraj.execution import execution_budget as budgets
+
+    monitor = monitor_at(tmp_path / 'budget')
+    monitor.record_session('researcher', 'researcher')
+    sample_stop(monitor, monkeypatch)
+    path = monitor.task_directory / 'execution-budget.yml'
+    stopped = yaml.safe_load(path.read_text())
+    approved_at = stopped['started_at'] + 80 * 60
+    # The Task waited 60 minutes after its stop before 10 minutes were approved.
+    granted = budgets.start_approved_window(
+        stopped, {**stopped, 'approved_minutes': 10, 'stopped': False}, approved_at)
+    path.write_text(yaml.safe_dump(granted))
+    monkeypatch.setattr(budgets.random, 'random', lambda: .999)
+
+    monkeypatch.setattr(budgets.time, 'time', lambda: approved_at + 9 * 60)
+    assert monitor.check('researcher', 'resume') is False
+    monkeypatch.setattr(budgets.time, 'time', lambda: approved_at + 40 * 60)
+    assert monitor.check('researcher', 'later') is True
+    after = yaml.safe_load(path.read_text())
+    assert after['started_at'] == stopped['started_at']
+    assert after['approved_minutes'] == 10
+    assert after['approved_window_started_at'] == approved_at
+    assert after['stopping_checks'] > stopped['stopping_checks']
+    # An increment approved before the budget runs out extends the running count.
+    early = {**stopped, 'stopped': False}
+    assert budgets.start_approved_window(
+        early, {**early, 'approved_minutes': 5}, stopped['started_at'] + 60,
+    ) == {**early, 'approved_minutes': 5}
+
+
 def test_recovery_reactivates_original_team_without_fabricating_new_round(target: tuple, monkeypatch: pytest.MonkeyPatch) -> None:
     """Administrative retirement can be corrected while its facts remain retained."""
     from graphtraj.graph.delivery_state import apply_delivery_state_request, read_team
@@ -1203,6 +1238,34 @@ def unconfirmed(root: Path, mapping: dict) -> Path:
     outcome = yaml.safe_load(execution.read_text())
     execution.write_text(yaml.safe_dump({**outcome, 'terminal_confirmed': False}))
     return directory
+
+
+def test_budget_only_recovery_does_not_require_stopping_the_subtree(
+    target: tuple, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Adding minutes without resume neither stops nor replaces running work.
+
+    The target's execution has no terminal record, as while it still works.
+    Resuming it still requires the stopped subtree.
+    """
+    root, task, mapping, arguments = target
+    execution = root / '.graphtraj/runner/sessions' / mapping['alias'] / 'execution.yml'
+    execution.unlink()
+    budget_path = task / 'execution-budget.yml'
+    before = yaml.safe_load(budget_path.read_text())
+    request = {**arguments, 'additional_minutes': 5, 'restore_active': False, 'resume': False}
+    call = local_tool.bind(root, recovery_reviewer=lambda proposal: {'decision': 'accept'})
+
+    result = call({'action': 'execute', 'feature': 'approved_recovery', 'arguments': request}).document
+
+    assert result['recovery_status'] == 'applied', result
+    assert yaml.safe_load(budget_path.read_text()) == {
+        **before, 'approved_minutes': before.get('approved_minutes', 0) + 5,
+    }
+    assert not execution.exists()
+    with pytest.raises(RunnerError, match='stopped before replacement'):
+        call({'action': 'execute', 'feature': 'approved_recovery',
+              'arguments': {**request, 'resume': True, 'additional_minutes': 1}})
 
 
 def test_recovery_first_confirms_an_unconfirmed_target(target: tuple, monkeypatch: pytest.MonkeyPatch) -> None:

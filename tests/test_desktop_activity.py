@@ -652,3 +652,110 @@ def test_activity_adoption_member_aliases(tmp_path: Path, alias: str, available:
     else:
         assert member['state'] == 'unavailable'
         assert result['availability'] == 'unavailable' and result['events'] == []
+
+
+def members(root: Path, **arguments: object) -> dict:
+    """Read Task members through the shared public gateway."""
+    result = handle_request({'action': 'execute', 'feature': 'task_members',
+                             'arguments': arguments}, cwd=root)
+    assert not result.failed, result.document
+    return result.document
+
+
+def test_task_members_default_to_current_summaries_and_keep_history_explicit(tmp_path: Path) -> None:
+    """Completed or retired members leave the default view; explicit history keeps them."""
+    _, directory, trace = prepare(tmp_path, 'codex', [message('work')], parent='research@x2')
+
+    current = members(tmp_path)
+    assert current['scope'] == ['148'] and not current['explicit']
+    assert {member['alias']: (member['state'], member['parent'], member['historical'])
+            for member in current['members']} == {
+        'research@x1': ('standby', 'research@x2', False),
+        'research@x2': ('standby', None, False),
+        'research@x3': ('standby', None, False),
+    }
+
+    # Retirement removes the member from the default list, never from history.
+    mapping = yaml.safe_load((directory / 'mapping.yml').read_text())
+    (directory / 'mapping.yml').unlink()
+    (directory / 'session.yml').write_text(yaml.safe_dump({'retirement': {'mapping': mapping}}))
+    directory.rename(trace.parent / 'runner')
+    assert [member['alias'] for member in members(tmp_path)['members']] == ['research@x2', 'research@x3']
+    history = members(tmp_path, summary_task_id='148')
+    retired = next(member for member in history['members'] if member['alias'] == 'research@x1')
+    assert retired['retired'] and retired['historical'] and retired['state'] is None
+
+
+
+def test_task_members_hide_completed_summaries_until_selected(tmp_path: Path) -> None:
+    """A completed Task's standby members are history, readable by explicit selection."""
+    prepare(tmp_path, 'codex', [message('work')])
+    task_file = tmp_path / 'state/tasks/148-research/task.yml'
+    task = yaml.safe_load(task_file.read_text())
+    task_file.write_text(yaml.safe_dump({**task, 'status': 'integrated'}))
+
+    assert members(tmp_path) == {'scope': [], 'explicit': False, 'members': []}
+    history = members(tmp_path, summary_task_id='148')
+    assert history['scope'] == ['148'] and history['explicit']
+    assert [(member['alias'], member['state']) for member in history['members']] == [
+        ('research@x1', 'standby'), ('research@x2', 'standby'), ('research@x3', 'standby'),
+    ]
+    assert yaml.safe_load(task_file.read_text())['status'] == 'integrated'
+
+
+def _summary_chain(root: Path, *, completed: bool) -> None:
+    """Register summary 200 -> child 201 -> grandchild 202 with one member on 202."""
+    from graphtraj.execution.runner_results import assign_session_reports
+    from graphtraj.graph.delivery_state import apply_delivery_state_request
+    from graphtraj.graph.delivery_worldline import read_worldline
+    from graphtraj.graph.task_graph import register_task, update_task_state
+    from test_result_submission import result_project
+    from test_task_graph import _task
+
+    runner, _, _ = result_project(root)
+    state = root / 'state'
+    for task_id, name, parent in (('200', 'summary', None), ('201', 'child', '200'),
+                                  ('202', 'grandchild', '201')):
+        register_task(state, root, {**_task(task_id, name), 'parent_id': parent})
+    event = update_task_state(state, root, {
+        'task_id': '202', 'status': 'ready', 'active_team_ordinal': None, 'worktree': None,
+        'branch': None, 'current_candidate': None, 'caused_by_event_ids': [],
+        'evidence_refs': ['evidence.md'],
+    })
+    request = {'phase': 'start', 'task_id': '202', 'caused_by_event_ids': [event['event_id']],
+               'evidence_refs': ['evidence.md'], 'worktree': 'worktrees/research',
+               'branch': 'agent/202-grandchild',
+               'members': {'first': {'role': 'researcher', 'session_ref': 'research@x4'}}}
+    apply_delivery_state_request(state, root, request, request)
+    directory = runner / 'sessions/research@x4'
+    directory.mkdir()
+    (directory / 'mapping.yml').write_text(yaml.safe_dump({
+        'alias': 'research@x4', 'runtime': 'codex', 'session': 'native-x4', 'task_id': '202',
+        'team_generation': 1, 'role': 'researcher', 'parent': 'research@x1',
+        'retained_batch_file': 'batch.yml', 'worktree_path': str(root / 'worktrees/research'),
+        'trace_file': 'events.jsonl', 'worker_pid': 1, 'runtime_pid': 1,
+        'report_files': [str(path) for path in assign_session_reports('researcher', 'research@x4', 1, 1)],
+    }))
+    for alias in ('research@x1', 'research@x2', 'research@x3', 'research@x4'):
+        (runner / 'sessions' / alias / 'execution.yml').write_text('outcome: completed\n')
+    assert read_worldline(state, root)
+    if completed:
+        for task_file in (state / 'tasks').glob('*/task.yml'):
+            task = yaml.safe_load(task_file.read_text())
+            task_file.write_text(yaml.safe_dump({**task, 'status': 'integrated'}))
+
+
+def test_task_members_cover_recursive_children_of_current_summaries(tmp_path: Path) -> None:
+    """Grandchild members of an unfinished summary are current; a finished one is history."""
+    _summary_chain(tmp_path / 'open', completed=False)
+    current = members(tmp_path / 'open')
+    assert '200' in current['scope']
+    grandchild = next(member for member in current['members'] if member['alias'] == 'research@x4')
+    assert grandchild == {**grandchild, 'task_id': '202', 'parent': 'research@x1',
+                          'state': 'standby', 'retired': False}
+
+    _summary_chain(tmp_path / 'done', completed=True)
+    assert members(tmp_path / 'done')['members'] == []
+    history = members(tmp_path / 'done', summary_task_id='200')
+    assert history['scope'] == ['200']
+    assert [member['alias'] for member in history['members']] == ['research@x4']

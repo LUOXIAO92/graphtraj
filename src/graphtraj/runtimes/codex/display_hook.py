@@ -19,25 +19,76 @@ from graphtraj.execution.runner_io import write_yaml_durably
 
 
 def display(event: dict, state_directory: Path) -> dict:
-    """Return only new communication as systemMessage; never return model feedback."""
+    """Return only new communication as systemMessage; never return model feedback.
+
+    Besides the agents call itself, any PostToolUse or Stop shows the Session's
+    retained ordinary receipts once: completed child executions that this
+    Codex Main did not start, kept without a model turn.
+    """
+    session = event.get('session_id')
+    if event.get('hook_event_name') not in {'PostToolUse', 'Stop'} or not isinstance(session, str) or not session:
+        return {}
+    facts = _agents_facts(event, session) + _receipt_facts(event, session)
+    if not facts:
+        return {}
+    return _show(facts, session, state_directory)
+
+
+def _receipt_facts(event: dict, session: str) -> list[tuple[str, str, str, str]]:
+    """Read retained ordinary receipts addressed to this Codex Session's host."""
+    from graphtraj.execution.runner_models import RunnerError
+    from graphtraj.workspace.runner_project import discover_runner_directory
+
+    # The native event names the Main's own working directory; without it there is no project.
+    cwd = event.get('cwd')
+    if not isinstance(cwd, str) or not cwd:
+        return []
+    try:
+        runner = discover_runner_directory(Path(cwd))
+        paths = sorted((runner / 'sessions').glob('*/parent-notices.jsonl'))
+    except (RunnerError, OSError, ValueError):
+        return []
+    facts = []
+    for path in paths:
+        try:
+            lines = path.read_text(encoding='utf-8').splitlines()
+        except OSError:
+            continue
+        for line in lines:
+            try:
+                record = json.loads(line)
+                notice = json.loads(record['notice'])
+            except (ValueError, KeyError, TypeError):
+                continue
+            connection = record.get('parent_connection')
+            if (record.get('delivery') != 'retained' or not isinstance(connection, dict)
+                    or connection.get('session') != session):
+                continue
+            identity = record.get('identity', {})
+            facts.append((f"receipt:{notice.get('alias')}:{identity.get('execution_id')}",
+                          str(notice.get('alias')), f'Codex session {session}', str(notice.get('message'))))
+    return facts
+
+
+def _agents_facts(event: dict, session: str) -> list[tuple[str, str, str, str]]:
+    """Return the request and reply facts of one successful agents call."""
     if (event.get('hook_event_name') != 'PostToolUse'
             or event.get('tool_name') not in {'mcp__graphtraj__agents', 'mcp__agents__agents'}):
-        return {}
+        return []
     request = event.get('tool_input', {})
     response = event.get('tool_response', {})
     if (not isinstance(request, dict) or request.get('action') != 'execute'
             or not isinstance(response, dict) or response.get('isError')):
-        return {}
+        return []
     document = response.get('structuredContent', {})
     if not isinstance(document, dict) or document.get('error'):
-        return {}
+        return []
     record = document.get('result', {})
     agent = document.get('agent')
-    session = event.get('session_id')
     call_id = event.get('tool_use_id')
     if (not isinstance(record, dict)
             or not all(isinstance(value, str) and value for value in (agent, session, call_id))):
-        return {}
+        return []
     caller = f'Codex session {session}'
     child = f"{record.get('name') or agent} [{agent}]"
     facts = []
@@ -53,9 +104,11 @@ def display(event: dict, state_directory: Path) -> dict:
         body = reply.get('last_message')
         if isinstance(body, str) and body:
             facts.append((f"reply:{agent}:{reply['id']}", child, caller, body))
-    if not facts:
-        return {}
+    return facts
 
+
+def _show(facts: list[tuple[str, str, str, str]], session: str, state_directory: Path) -> dict:
+    """Render facts not yet shown in this Session, once each."""
     # Native Session scope prevents another Session's matching IDs suppressing
     # its own display. This cache is optional UI state, not control authority.
     path = state_directory / (hashlib.sha256(session.encode()).hexdigest() + '.yml')

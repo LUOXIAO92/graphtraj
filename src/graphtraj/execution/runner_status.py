@@ -752,6 +752,11 @@ def _status_alias(
     if caller != alias and not is_direct_owner(caller, mapping):
         return _status_summary(mapping, session_directory, alias)
     status = _status_session(mapping, session_directory, alias)
+    if "agent" in mapping:
+        from graphtraj.execution.task_agents import core_status
+
+        # The core's record of this member: its Agent and two-state view.
+        status.update(core_status(runner_directory, mapping))
     if operation_total:
         status["operation_total"] = _operation_total(mapping)
     if baseline is not None and candidate is not None:

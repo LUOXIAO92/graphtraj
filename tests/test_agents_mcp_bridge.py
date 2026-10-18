@@ -149,3 +149,32 @@ def test_codex_metadata_uses_the_shared_owner_connection(tmp_path: Path) -> None
         finally:
             child.stdin.close()
             child.wait(timeout=10)
+
+
+def test_independent_tool_runs_with_graphtraj_imports_blocked(tmp_path: Path) -> None:
+    """agents never imports GraphTraj, even when a GraphTraj host variable is present."""
+    probe = tmp_path / 'probe.py'
+    probe.write_text('''
+import importlib, io, json, pkgutil, sys
+
+class Block:
+    """Refuse every GraphTraj import for this process."""
+    def find_spec(self, name, path=None, target=None):
+        if name == 'graphtraj' or name.startswith('graphtraj.'):
+            raise ImportError('GraphTraj import blocked: ' + name)
+
+sys.meta_path.insert(0, Block())
+import agent_swarm
+for module in pkgutil.iter_modules(agent_swarm.__path__):
+    importlib.import_module('agent_swarm.' + module.name)
+from agent_swarm import mcp
+sys.stdin = io.StringIO(json.dumps({'jsonrpc': '2.0', 'id': 1, 'method': 'tools/list'}) + '\\n')
+mcp.main()
+''')
+    env = {**os.environ, 'PYTHONPATH': str(Path(__file__).resolve().parents[1] / 'src'),
+           'GRAPHTRAJ_CLI_CONNECTION': str(tmp_path / 'absent-host')}
+    env.pop('AGENT_SWARM_CONNECTION', None)
+    result = subprocess.run([sys.executable, str(probe)], env=env, text=True,
+                            capture_output=True, timeout=30)
+    assert result.returncode == 0, result.stderr
+    assert [tool['name'] for tool in json.loads(result.stdout)['result']['tools']] == ['agents']

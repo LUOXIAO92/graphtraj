@@ -227,8 +227,10 @@ class CodexManagedExecution:
             shell = config.setdefault('shell_environment_policy', {}).setdefault('set', {})
             shell[connection_env] = address
             shell['GRAPHTRAJ_NATIVE_RUNTIME'] = 'codex'
+            # A Task host serves agents and tasks itself; an independent one only agents.
+            entry = 'graphtraj.interfaces.mcp' if connection_env != 'AGENT_SWARM_CONNECTION' else 'agent_swarm.mcp'
             config.setdefault('mcp_servers', {})['graphtraj'] = {
-                'command': sys.executable, 'args': ['-m', 'agent_swarm.mcp'], 'cwd': str(cwd),
+                'command': sys.executable, 'args': ['-m', entry], 'cwd': str(cwd),
                 'env': {connection_env: address, 'GRAPHTRAJ_NATIVE_RUNTIME': 'codex'},
             }
             self.context = restore_codex_context(request, self.context.evidence_document())

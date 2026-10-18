@@ -530,20 +530,41 @@ def test_transport_failure_names_only_its_kind(tmp_path: Path, claude_environmen
     assert 'secret-token' not in caught.value.message and 'not json' not in caught.value.message
 
 
-def test_permission_delivery_failure_names_its_receipt(
+def test_permission_notice_is_retried_while_the_request_is_pending(
     tmp_path: Path, claude_environment: None, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """An unaccepted parent notice is classified by its delivery state."""
+    """A parent still closing its settled turn receives the notice on retry.
+
+    The undelivered attempts neither end the execution nor answer the request;
+    only the parent's explicit reply releases it.
+    """
     from graphtraj.execution import runner_control
 
     result_project(tmp_path)
-    monkeypatch.setattr(runner_control, 'notify_direct_parent', lambda *args: {'delivery': 'queued'})
-    with ExitStack() as stack:
-        turn, _, _ = execution(tmp_path, stack, 'permission')
-        with pytest.raises(RuntimeAdapterError) as caught:
-            turn.run()
-    assert caught.value.code == 'RUNTIME_TRANSPORT_FAILED'
-    assert '(notification_error; exception=ValueError, delivery=queued)' in caught.value.message
+    receipts = iter([{'delivery': 'not-delivered'}, {'delivery': 'not-delivered'}])
+    attempts = []
+    received = threading.Event()
+
+    def notify(*args: object) -> dict:
+        """Refuse twice, as a closing parent execution does, then receive."""
+        attempts.append(args)
+        receipt = next(receipts, {'delivery': 'received'})
+        if receipt['delivery'] == 'received':
+            received.set()
+        return receipt
+
+    monkeypatch.setattr(runner_control, 'notify_direct_parent', notify)
+    with ExitStack() as stack, ThreadPoolExecutor(max_workers=1) as pool:
+        turn, ready, _ = execution(tmp_path, stack, 'permission')
+        future = pool.submit(turn.run)
+        assert ready.wait(5) and received.wait(10)
+        assert len(attempts) == 3 and not future.done()
+        control = {'session': turn.session, 'execution_id': turn.execution_id}
+        pending = turn.operate({**control, 'operation': 'requests'})['requests'][0]
+        turn.operate({**control, 'operation': 'reply', 'request_token': pending['request_token'],
+                      'response': {'behavior': 'deny', 'message': 'Denied by parent'}})
+        assert json.loads(future.result(timeout=10)['last_agent_message'])['behavior'] == 'deny'
+    assert len(attempts) == 3
 
 
 @pytest.mark.parametrize(('mode', 'scrub'), [

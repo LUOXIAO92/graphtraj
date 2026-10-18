@@ -266,6 +266,13 @@ def test_actual_pi_reply_resumes_standby_dsh() -> None:
             state = call({'action': 'status', 'agent': record['agent']}).document['result']
             if len(phases) >= 2 and state['state'] == 'standby':
                 break
+            if len(phases) == 1 and state['state'] == 'standby':
+                tree = call({'action': 'status'}).document['result']['agents']
+                children = [child for node in tree for child in node.get('children', [])]
+                if children and all(child.get('session') is None and
+                                    child.get('last_result', {}).get('outcome') == 'failed'
+                                    for child in children):
+                    raise AssertionError({'unbound_child_startup_failure': children})
             time.sleep(.2)
         assert len(phases) == 2, {'phases': phases, 'state': state}
         assert state['session'] == record['session']

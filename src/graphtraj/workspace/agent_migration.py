@@ -15,6 +15,7 @@ import yaml
 from agent_swarm import default_config
 from agent_swarm.sessions.migration import import_native, import_sqlite, verify_sqlite
 from agent_swarm.sessions.archive import SessionArchive, JsonlSessionStore
+from agent_swarm.sessions.protocol import native_record
 from graphtraj.sessions.storage import SessionStore
 from graphtraj.configuration.project_configuration import load_project_configuration
 from graphtraj.workspace.migration_snapshot import MANIFEST, source_map
@@ -258,13 +259,15 @@ def _verify_retained_swarm(root: Path, original: Path, manifest: dict) -> dict:
                 cursor = -1
                 while True:
                     page = store.page(after=cursor)
-                    records.extend(event['graphtraj']['native'] for event in page['events'])
+                    records.extend({'native': event['graphtraj']['native'], 'record': native_record(event)}
+                                   for event in page['events'])
                     if not page['has_more']:
                         break
                     cursor = page['after']
-            old_keys = {(item['runtime'], item['sessionId'], item['locator']) for item in old_events}
+            old_keys = {(item['native']['runtime'], item['native']['sessionId'], item['native']['locator'])
+                        for item in old_events}
             selected = [item for item in new_events
-                        if (item['runtime'], item['sessionId'], item['locator']) in old_keys]
+                        if (item['native']['runtime'], item['native']['sessionId'], item['native']['locator']) in old_keys]
             counts['native_events'] += len(old_events)
             if selected != old_events:
                 mismatches.append(relative.as_posix() + ':native-records-or-order')

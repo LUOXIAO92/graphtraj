@@ -193,6 +193,17 @@ def test_snapshot_captures_swarm_configuration_and_can_clone(tmp_path: Path, mon
     assert comparison['matches'], comparison
     assert (comparison['controls'], comparison['jsonl_archives'], comparison['attachments']) == (1, 1, 1)
 
+    # Identical provenance cannot conceal changed opaque native payload bytes.
+    changed = JsonlSessionStore.create(archive_path(tmp_path / 'different', 'retained'), header('retained'))
+    changed.publish([retain_native('codex', {'ciphertext': 'changed'},
+        session_id='native-research@x1', locator='native/0', seq=0, time=1)], source='native', position=0)
+    shutil.copyfile(changed.path, archive_path(target / '.graphtraj/swarm', 'retained'))
+    checked = runner.invoke(main, ['migrate-agents', '--verify', '--against', str(snapshot)])
+    assert checked.exit_code == 0, checked.output
+    verification = yaml.safe_load(checked.output)['verification']
+    assert not verification['matches']
+    assert verification['retained_swarm']['mismatches'] == ['sessions/retained/session.jsonl:native-records-or-order']
+
 
 def test_archive_collectors_work_with_no_graphtraj_package(tmp_path: Path) -> None:
     """Isolated Python loads and enables all collectors from the independent package."""

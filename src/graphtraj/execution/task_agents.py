@@ -53,8 +53,9 @@ class WorkerDriver:
         self._operate(operation="send", instruction=message)
 
     def interrupt(self, run: Run) -> bool:
-        """Request the native stop; the turn keeps ownership until it ends."""
-        return self.turn.terminate()
+        """Stop the native turn with the owner's own termination confirmation."""
+        self._operate(operation="interrupt")
+        return True
 
     def requests(self, run: Run) -> list[dict]:
         """Return the native requests still pending."""
@@ -94,8 +95,9 @@ class TaskAgent:
     def operate(self, request: Mapping[str, Any]) -> dict:
         """Serve a Runner control request through the core.
 
-        Input, requests and replies are the core's own actions. A stop is
-        recorded by the core and then confirmed by the native owner, as before.
+        Input and stops are the core's actions; the core's stop runs the
+        owner's confirmed native interruption. Native requests and replies keep
+        the owner's exact one-time semantics and go to the turn directly.
         """
         operation = request.get("operation")
         agent     = self.run.agent
@@ -107,13 +109,11 @@ class TaskAgent:
                     raise AgentsError("operation-failed", "The member execution has ended.")
                 self.control.send(agent, request["instruction"], self.binding)
                 return {}
-            if operation == "requests":
-                return {"requests": self.control.requests(agent, self.binding.caller).result["requests"]}
-            if operation == "reply":
-                return self.control.reply(agent, self.binding.caller, {"request_token": request.get("request_token")},
-                                          request.get("response")).result
             if operation == "interrupt":
-                self.control.interrupt(agent, self.binding.caller)
+                stopped = self.control.interrupt(agent, self.binding.caller).result["interrupt"]
+                if stopped == "requested":
+                    return {}
+                # A repeated stop, or one after the end, keeps the owner's confirmation.
         except AgentsError as error:
             raise RuntimeAdapterError(error.code, error.message) from None
         return self.driver.turn.operate(dict(request))

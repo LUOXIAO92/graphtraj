@@ -266,6 +266,11 @@ def run(job_file: Path) -> int:
                     terminal = _terminal_turn(result)
                     if budget_stopped.is_set() and terminal["outcome"] == "interrupted":
                         terminal["budget_stopped"] = True
+                    # The core ends the execution before the terminal record lets
+                    # a continuation start the next one.
+                    if task_agent is not None:
+                        task_agent.finished(terminal)
+                        agent_reported = True
                     write_yaml_durably(session_directory / "execution.yml", terminal)
                     terminal_published = True
             finally:
@@ -313,11 +318,11 @@ def run(job_file: Path) -> int:
                 )
         if terminal is not None:
             # Reply cleanup may have allowed a successor to take ownership.
-            if not terminal_published:
-                write_yaml_durably(session_directory / "execution.yml", terminal)
-            if task_agent is not None:
+            if task_agent is not None and not agent_reported:
                 task_agent.finished(terminal)
                 agent_reported = True
+            if not terminal_published:
+                write_yaml_durably(session_directory / "execution.yml", terminal)
             if execution_mapping is not None:
                 from graphtraj.execution.runner_control import deliver_parent_event
 

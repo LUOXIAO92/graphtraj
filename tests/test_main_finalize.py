@@ -2085,6 +2085,8 @@ def test_new_facts_invalidate_waiting(host: tuple[Path, Path], change: str) -> N
     if change in ('input', 'compacted'):
         record = {'type': 'response_item' if change == 'input' else 'compacted',
                   'payload': {'type': 'message', 'role': 'user', 'content': 'New task input.'}}
+        if change == 'compacted':
+            record['payload'] = {'message': 'New context.', 'replacement_history': [record['payload']]}
         with (root / 'rollout.jsonl').open('a') as stream:
             stream.write(json.dumps(record) + '\n')
         reply = native_hook(root)
@@ -2223,3 +2225,140 @@ def test_continued_flag_reuses_but_new_turn_still_checks(host: tuple[Path, Path]
     (root / 'options.json').write_text(json.dumps({'child': 'next-checker', 'current_turn': 'next-main-turn'}))
     assert native_hook(root, turn_id='next-main-turn')['systemMessage']
     assert wire(root).count('thread/fork') == wire(root).count('turn/start') == 2
+
+
+def next_waiting_turn(root: Path, turn: str, *records: dict) -> None:
+    """Advance the peer's actual native turn, appending only supplied native input."""
+    with (root / 'rollout.jsonl').open('a') as stream:
+        for record in records:
+            stream.write(json.dumps(record) + '\n')
+        stream.write(json.dumps({'type': 'turn_context', 'payload': {
+            'turn_id': turn, 'model': 'actual-model', 'effort': 'high',
+        }}) + '\n')
+    (root / 'options.json').write_text(json.dumps({
+        'child': 'checker-' + turn, 'current_turn': turn, 'output': json.dumps({
+            'status': 'waiting', 'conclusion': 'May wait.', 'reason': 'Waiting for authorized work.',
+            'nodes': [],
+        }),
+    }))
+
+
+def test_waiting_survives_explanation_turns_and_compaction(host: tuple[Path, Path]) -> None:
+    """New assistant prose and turn carriers alone do not buy another waiting check."""
+    root, _ = host
+    rollout(root)
+    next_waiting_turn(root, 'first')
+    assert 'waiting' in native_hook(root, turn_id='first')['systemMessage']
+    releases = []
+    for turn in ('explanation', 'compaction'):
+        record = ({'type': 'response_item', 'payload': {'type': 'message', 'role': 'assistant',
+                   'content': [{'type': 'output_text', 'text': 'The same work is still waiting.'}]}}
+                  if turn == 'explanation' else {'type': 'compacted', 'payload': {'message': 'Summary.'}})
+        next_waiting_turn(root, turn, record)
+        releases.append(native_hook(root, turn_id=turn))
+    assert wire(root).count('thread/fork') == wire(root).count('turn/start') == 1
+    assert releases == [{}, {}]
+
+
+@pytest.mark.parametrize('kind', ['user', 'tool'])
+def test_waiting_new_input_still_checks(host: tuple[Path, Path], kind: str) -> None:
+    """Real user input and tool results invalidate waiting across native turns."""
+    root, _ = host
+    rollout(root)
+    next_waiting_turn(root, 'first')
+    assert native_hook(root, turn_id='first')['systemMessage']
+    payload = ({'type': 'message', 'role': 'user', 'content': [{'type': 'input_text', 'text': 'Resume work.'}]}
+               if kind == 'user' else {'type': 'function_call_output', 'call_id': 'new-result',
+                                       'output': 'A new actionable result.'})
+    next_waiting_turn(root, 'next', {'type': 'response_item', 'payload': payload})
+    assert native_hook(root, turn_id='next')['systemMessage']
+    assert wire(root).count('thread/fork') == wire(root).count('turn/start') == 2
+
+
+def set_user_pause(root: Path, paused: bool) -> dict:
+    """Record the owning Main's explicit user instruction through its public operation."""
+    reply = bind(root)({'action': 'execute', 'feature': 'bind_main_finalize', 'arguments': {
+        'summary_issue': 'https://tracker.test/goal/236', 'paused': paused,
+    }})
+    assert not reply.failed, reply.document
+    return reply.document
+
+
+def test_explicit_pause_survives_explanation_notifications_and_resume(host: tuple[Path, Path]) -> None:
+    """A recorded user pause needs no model and only explicit resume clears it."""
+    root, _ = host
+    rollout(root)
+    set_user_pause(root, True)
+    native_hook(root, 'SessionStart', source='resume')
+    for turn in ('explain-one', 'explain-two', 'compacted'):
+        next_waiting_turn(root, turn, {'type': 'response_item', 'payload': {
+            'type': 'message', 'role': 'user', 'content': [{'type': 'input_text', 'text': 'Explain the issue.'}],
+        }}, {'type': 'compacted', 'payload': {'message': 'Summary.', 'replacement_history': []}})
+        assert native_hook(root, turn_id=turn) == {}
+    submitted_result(root)
+    with owned_child(root, [{'request_id': 'native-approval', 'method': 'claude/can_use_tool'}],
+                     alias='research@x1', task_id='148'):
+        assert native_hook(root, turn_id='compacted') == {}
+        assert wire(root).count('thread/fork') == wire(root).count('turn/start') == 0
+        set_user_pause(root, False)
+        assert native_hook(root, turn_id='compacted')['decision'] == 'block'
+    assert wire(root).count('thread/fork') == wire(root).count('turn/start') == 0
+
+
+def test_pause_resume_invalidates_prior_waiting(host: tuple[Path, Path]) -> None:
+    """An explicit resume rechecks even if all earlier waiting inputs still match."""
+    root, _ = host
+    rollout(root)
+    next_waiting_turn(root, 'waiting')
+    assert native_hook(root, turn_id='waiting')['systemMessage']
+    set_user_pause(root, True)
+    assert native_hook(root, turn_id='waiting') == {}
+    set_user_pause(root, False)
+    (root / 'options.json').write_text(json.dumps({'child': 'resumed-checker', 'current_turn': 'waiting'}))
+    assert native_hook(root, turn_id='waiting')['systemMessage']
+    assert wire(root).count('thread/fork') == wire(root).count('turn/start') == 2
+
+
+def test_pause_during_check_cancels_without_continuation(host: tuple[Path, Path]) -> None:
+    """The public pause operation can invalidate an already-running checker."""
+    import threading
+    from conftest import wait_for_file
+
+    root, binding = host
+    rollout(root)
+    (root / 'options.json').write_text(json.dumps({'hold_check': 2, 'output': json.dumps({
+        'status': 'actionable', 'conclusion': 'Continue.', 'reason': 'Old authorization.', 'nodes': ['237'],
+    })}))
+    changes = []
+
+    def pause() -> None:
+        """Receive the owning Main's new explicit pause while the model is active."""
+        wait_for_file(root / 'checker-running')
+        changes.append(set_user_pause(root, True))
+
+    writer = threading.Thread(target=pause)
+    writer.start()
+    assert native_hook(root) == {}
+    writer.join(timeout=5)
+    assert not writer.is_alive() and len(changes) == 1
+    evidence = yaml.safe_load(next(binding.parent.glob('checks/*/execution.yml')).read_text())
+    assert evidence['outcome'] == 'cancelled' and evidence['cancellation']['user_pause']['paused']
+    assert wire(root).count('turn/interrupt') == 1
+    assert native_hook(root) == {}
+    assert wire(root).count('thread/fork') == wire(root).count('turn/start') == 1
+
+
+def test_user_pause_cli_and_managed_authority(host: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch) -> None:
+    """The existing CLI records pause, retains it by default, and denies managed callers."""
+    root, _ = host
+    monkeypatch.chdir(root)
+    for option, expected in [('--paused', True), (None, True), ('--no-paused', False)]:
+        args = ['bind-finalize', '--summary-issue', 'https://tracker.test/goal/236']
+        if option is not None:
+            args.append(option)
+        reply = CliRunner().invoke(cli, args)
+        assert reply.exit_code == 0, reply.output
+        assert json.loads(reply.output)['user_pause']['paused'] is expected
+    monkeypatch.setattr(main_finalize, 'caller_alias', lambda directory: 'managed@e1')
+    with pytest.raises(RunnerError, match='Only the owning Main'):
+        set_user_pause(root, True)

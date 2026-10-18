@@ -41,6 +41,8 @@ session = args[args.index('--resume' if '--resume' in args else '--session-id') 
 model = args[args.index('--model') + 1]
 permission_mode = args[args.index('--permission-mode') + 1] if '--permission-mode' in args else None
 Path(os.environ['CLAUDE_FIXTURE_HOME'], 'native-permissions.json').write_text(json.dumps({
+    'model': model,
+    'effort': args[args.index('--effort') + 1] if '--effort' in args else None,
     'mode': permission_mode, 'settings': json.loads(args[args.index('--settings') + 1]),
     'restricted': '--restricted' in args,
     'scrub': os.environ.get('CLAUDE_CODE_SUBPROCESS_ENV_SCRUB'),

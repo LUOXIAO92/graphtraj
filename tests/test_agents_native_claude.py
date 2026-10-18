@@ -392,13 +392,15 @@ def test_real_probe_requires_correlated_native_permission_denial() -> None:
             assert_native_read_denial(records, read)
 
 
-@pytest.mark.parametrize('saving', [False, True])
+@pytest.mark.parametrize(('saving', 'configuration'), [(False, None), (True, None),
+                                                       (True, 'astra_coding_team.engineer')])
 def test_shared_connection_and_archive_binding_for_claude(
     project: Path,
     tmp_path: Path,
     claude_environment: None,
     monkeypatch: pytest.MonkeyPatch,
     saving: bool,
+    configuration: str | None,
 ) -> None:
     """Compose the extracted shared seam with Claude's native owner and policy changes."""
     from agent_swarm import Caller, read_config, write_config
@@ -420,14 +422,31 @@ def test_shared_connection_and_archive_binding_for_claude(
             'claude': {'permission_mode': 'auto'}}
     roles = project / '.graphtraj/roles.yml'
     roles.write_text(yaml.safe_dump({'roles': {'worker': role}}))
+    if configuration is not None:
+        roles.write_text(yaml.safe_dump({'roles': {
+            'astra_coding_team': {'engineer': role},
+            'other_team': {'engineer': {'runtime': 'claude', 'model': 'wrong-model'}},
+            'claude': {'runtime': 'claude', 'model': 'wrong-default'},
+            'codex': {'runtime': 'codex', 'model': 'wrong-runtime'},
+            'unavailable': {'connection': 'missing/provider/model'},
+        }}))
     root = swarm_root(project)
     write_config(root, save_normalized_sessions=saving, backfill_history=True)
     call = agents_callback(project, Caller('controlled-native-host', 'parent'), project)
-    created = call({'action': 'create', 'runtime': 'claude', 'instruction': 'first'})
+    if configuration is not None:
+        for rejected in ('absent.engineer', 'engineer', 'codex', '', {'role': configuration}):
+            result = call({'action': 'create', 'runtime': 'claude', 'instruction': 'must not launch',
+                           'configuration': rejected})
+            assert result.failed and result.document['error']['code'] in {'invalid-config', 'invalid-input'}
+    selection = {} if configuration is None else {'configuration': configuration}
+    created = call({'action': 'create', 'runtime': 'claude', 'instruction': 'first', **selection})
     assert not created.failed, created.document
     agent = created.document['agent']
     done = call({'action': 'wait', 'agent': agent, 'timeout_seconds': 20})
     assert not done.failed and done.document['result']['last_result']['outcome'] == 'completed', done.document
+    launch = json.loads((tmp_path / 'native-permissions.json').read_text())
+    assert launch['model'] == 'claude-opus-5-5' and launch['effort'] == 'high'
+    assert launch['mode'] == 'auto' and launch['scrub'] == '0'
     path = archive_path(root, 'claude:' + created.document['session'])
     assert path.exists() is saving
     if saving:

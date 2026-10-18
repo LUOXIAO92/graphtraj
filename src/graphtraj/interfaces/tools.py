@@ -1064,12 +1064,18 @@ register_tool('session_reports', "Read your or your direct child's reports and r
 def submit_report(arguments: Mapping[str, Any], *, cwd: Path | None = None) -> ToolResult:
     """Submit the current Session's assigned report through the shared operation."""
     return ToolResult(submit_session_report(_string_argument(arguments, 'name'),
-                                           _string_argument(arguments, 'text'), cwd or Path.cwd()))
+                                           _string_argument(arguments, 'text'), cwd or Path.cwd(),
+                                           notify_parent=_boolean_argument(arguments, 'notify_parent')))
 
 
-register_tool('submit_report', 'Write your own assigned report by filename (for example report.md).',
-              {'type': 'object', 'properties': {'name': {'type': 'string'}, 'text': {'type': 'string'}},
-               'required': ['name', 'text'], 'additionalProperties': False}, submit_report,
+register_tool('submit_report', 'Write your own assigned report by filename (for example report.md). '
+              'Set notify_parent to also send it to your direct parent, continuing its turn.',
+              {'type': 'object', 'properties': {
+                  'name': {'type': 'string'}, 'text': {'type': 'string'},
+                  'notify_parent': {'type': 'boolean', 'default': False,
+                                    'description': 'Send the written report to your direct parent; '
+                                                   'the result carries the delivery receipt.'},
+              }, 'required': ['name', 'text'], 'additionalProperties': False}, submit_report,
               manual_ref='manuals/task-delivery/guide.md')
 
 

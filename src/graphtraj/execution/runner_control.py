@@ -460,8 +460,15 @@ def read_session_reports(alias: str, cwd: Path) -> dict:
     return result
 
 
-def submit_session_report(name: str, text: str, cwd: Path) -> dict:
-    """Write the issuing formal Session's own assigned report, never another's."""
+def submit_session_report(name: str, text: str, cwd: Path, *, notify_parent: bool = False) -> dict:
+    """Write the issuing formal Session's own assigned report, never another's.
+
+    With ``notify_parent`` the written report, its text and path, is then sent
+    to the direct parent through the same child-to-parent notice path as
+    completion and request notices, continuing the parent's turn. The result's
+    ``delivery`` is that notice's actual receipt, such as ``received`` or
+    ``no-direct-parent``; without a direct parent only the report is written.
+    """
     from graphtraj.execution.runner_status import caller_alias
     from graphtraj.execution.runner_status import require_task_authority
 
@@ -486,7 +493,8 @@ def submit_session_report(name: str, text: str, cwd: Path) -> dict:
         # A finished Task opens no Round; its member, e.g. after a follow-up,
         # adds its own report beside the retained one in the closed Round.
         path = next(path for path in _session_report_paths(alias, cwd) if path.name == name)
-        return {'alias': alias, 'report': str(_add_closed_round_report(path, text))}
+        written = _add_closed_round_report(path, text)
+        return _reported(runner / 'sessions' / alias, alias, written, text, notify_parent)
     start_result_correction(mapping, cwd)
     path = next(path for path in _session_report_paths(alias, cwd) if path.name == name)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -501,7 +509,21 @@ def submit_session_report(name: str, text: str, cwd: Path) -> dict:
     finally:
         if temporary is not None:
             temporary.unlink(missing_ok=True)
-    return {'alias': alias, 'report': str(path)}
+    return _reported(runner / 'sessions' / alias, alias, path, text, notify_parent)
+
+
+def _reported(session_directory: Path, alias: str, path: Path, text: str, notify: bool) -> dict:
+    """Return the written report, first notifying the direct parent when requested."""
+    result = {'alias': alias, 'report': str(path)}
+    if notify:
+        receipt = deliver_parent_event(
+            session_directory, 'Report submitted: ' + str(path) + '\n' + text,
+            {'type': 'report-submitted', 'report': str(path)},
+        )
+        result['delivery'] = receipt['delivery']
+        if receipt.get('parent') is not None:
+            result['parent'] = receipt['parent']
+    return result
 
 
 # Task states after a result was accepted: no new result or Round is recorded.

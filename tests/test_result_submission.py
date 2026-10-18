@@ -121,6 +121,35 @@ def test_repeated_unchanged_submission_is_recorded_once(tmp_path: Path) -> None:
     assert submitted == [first['event_id'], changed['event_id']]
 
 
+def test_report_can_notify_the_direct_parent(tmp_path: Path, monkeypatch) -> None:
+    """A notified report is written first, then sent through the parent notice path."""
+    from graphtraj.execution import runner_control
+
+    runner, _, _ = result_project(tmp_path)
+    with runtime_caller(runner, 'research@x1'):
+        plain = tools.submit_report({'name': 'researcher-x1.md', 'text': 'Only written'}, cwd=tmp_path).document
+        alone = tools.submit_report({'name': 'researcher-x1.md', 'text': 'No parent',
+                                     'notify_parent': True}, cwd=tmp_path).document
+    assert 'delivery' not in plain
+    assert alone['delivery'] == 'no-direct-parent'
+    assert Path(alone['report']).read_text() == 'No parent'
+
+    notices = []
+
+    def notify(directory: Path, message: str, identity: dict) -> dict:
+        """Observe the existing child-to-parent notice and its receipt."""
+        notices.append((directory.name, message, identity, Path(identity['report']).read_text()))
+        return {'delivery': 'received', 'parent': 'research@x2'}
+
+    monkeypatch.setattr(runner_control, 'notify_direct_parent', notify)
+    with runtime_caller(runner, 'research@x1'):
+        sent = tools.submit_report({'name': 'researcher-x1.md', 'text': 'Needs a decision',
+                                    'notify_parent': True}, cwd=tmp_path).document
+    assert sent['delivery'] == 'received' and sent['parent'] == 'research@x2'
+    assert notices == [('research@x1', 'Report submitted: ' + sent['report'] + '\nNeeds a decision',
+                        {'type': 'report-submitted', 'report': sent['report']}, 'Needs a decision')]
+
+
 def test_submission_rejects_unowned_or_invalid_inputs(tmp_path: Path) -> None:
     """Role claims, foreign reports and absent/obsolete membership grant nothing."""
     import pytest

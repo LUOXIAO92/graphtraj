@@ -17,7 +17,9 @@ import time
 import uuid
 from typing import Callable
 
-from agent_swarm import AgentsResult, tool_descriptor
+from agent_swarm import AgentsResult
+from agent_swarm.discovery import handle_request as discover_agents
+from agent_swarm.mcp import tool_documents
 from graphtraj.sessions.archive import SessionArchive
 
 from graphtraj.execution.runner_io import write_yaml_durably
@@ -114,9 +116,7 @@ class ClaudeExecution:
                     result = {'protocolVersion': params.get('protocolVersion', '2025-06-18'),
                               'capabilities': {'tools': {}}, 'serverInfo': {'name': 'agents', 'version': '1'}}
                 elif method == 'tools/list':
-                    descriptor = tool_descriptor()
-                    result = {'tools': [{'name': descriptor['name'], 'description': descriptor['description'],
-                                         'inputSchema': descriptor['input_schema']}]}
+                    result = {'tools': tool_documents()}
                     self.sdk_tools_listed = True
                 elif method == 'tools/call' and params.get('name') == 'agents':
                     if self.session is None or self.stopping.is_set():
@@ -155,7 +155,8 @@ class ClaudeExecution:
                     raise ValueError('SDK request identity was reused with different arguments.')
         if prior is None:
             try:
-                future.set_result(self.agents_callback(message.get('params', {}).get('arguments', {})))
+                future.set_result(discover_agents(message.get('params', {}).get('arguments', {}),
+                                                  self.agents_callback))
             except BaseException as error:
                 future.set_exception(error)
                 raise
@@ -264,8 +265,8 @@ class ClaudeExecution:
             },
         }
         # The MCP process uses the same PID-authenticated hosted CLI as native Bash.
-        mcp = {'mcpServers': {'graphtraj': {
-            'command': sys.executable, 'args': ['-m', 'graphtraj.interfaces.mcp'],
+        mcp = {'mcpServers': {'agents': {
+            'command': sys.executable, 'args': ['-m', 'graphtraj.runtimes.claude.mcp'],
             'env': {'GRAPHTRAJ_CLI_CONNECTION': address},
         }}}
         if self.independent:

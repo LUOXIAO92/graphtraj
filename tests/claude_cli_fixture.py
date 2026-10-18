@@ -63,7 +63,7 @@ waiting = []
 merging = []
 late = []
 sdk_create_results = []
-sdk_request_arguments = {'action': 'status'}
+sdk_request_arguments = {'action': 'execute', 'feature': 'status', 'arguments': {}}
 sdk_display = False
 sdk_display_reply = None
 
@@ -83,9 +83,9 @@ def result(text: str, error: bool = False, queued: int = 0, idle: bool = True) -
 
 def call(feature: str, arguments: dict) -> dict:
     """Call an actual public tool through the owned stdio MCP subprocess."""
-    command = json.loads(args[args.index('--mcp-config') + 1])['mcpServers']['graphtraj']
+    command = json.loads(args[args.index('--mcp-config') + 1])['mcpServers']['agents']
     query = {'jsonrpc': '2.0', 'id': 1, 'method': 'tools/call', 'params': {
-        'name': 'graphtraj', 'arguments': {'action': 'execute', 'feature': feature, 'arguments': arguments}}}
+        'name': 'tasks', 'arguments': {'action': 'execute', 'feature': feature, 'arguments': arguments}}}
     response = subprocess.run([command['command'], *command['args']], input=json.dumps(query) + '\n',
                               text=True, capture_output=True, env={**os.environ, **command['env']})
     return json.loads(response.stdout)['result']
@@ -131,15 +131,16 @@ def prompt(message: dict) -> None:
     elif text in {'sdk-agents-status', 'sdk-agents-create-twice', 'sdk-agents-display'}:
         assert 'agents' in sdk_servers
         if text in {'sdk-agents-create-twice', 'sdk-agents-display'}:
-            sdk_request_arguments = {'action': 'create', 'runtime': 'claude', 'instruction': 'child'}
+            sdk_request_arguments = {'action': 'execute', 'feature': 'create',
+                                     'arguments': {'runtime': 'claude', 'instruction': 'child'}}
         sdk_display = text == 'sdk-agents-display'
         emit({'type': 'control_request', 'request_id': 'sdk-list', 'request': {
             'subtype': 'mcp_message', 'server_name': 'agents',
             'message': {'jsonrpc': '2.0', 'id': 1, 'method': 'tools/list'}}})
     elif text == 'mcp':
-        command = json.loads(args[args.index('--mcp-config') + 1])['mcpServers']['graphtraj']
+        command = json.loads(args[args.index('--mcp-config') + 1])['mcpServers']['agents']
         query = {'jsonrpc': '2.0', 'id': 1, 'method': 'tools/call', 'params': {
-            'name': 'graphtraj', 'arguments': {'action': 'execute', 'feature': 'alias_status', 'arguments': {}}}}
+            'name': 'tasks', 'arguments': {'action': 'execute', 'feature': 'alias_status', 'arguments': {}}}}
         response = subprocess.run([command['command'], *command['args']], input=json.dumps(query) + '\n',
                                   text=True, capture_output=True, env={**os.environ, **command['env']})
         result(response.stdout or response.stderr)
@@ -240,7 +241,7 @@ for line in sys.stdin:
                     'jsonrpc': '2.0', 'id': 2, 'method': 'tools/call',
                     'params': {'name': 'agents', 'arguments': sdk_request_arguments}}}}
             emit(call_request)
-            if sdk_request_arguments['action'] == 'create' and not sdk_display:
+            if sdk_request_arguments['feature'] == 'create' and not sdk_display:
                 emit({**call_request, 'request_id': 'sdk-call-copy'})
         elif response['request_id'] in {'sdk-call', 'sdk-call-copy'}:
             reply = response['response']['mcp_response']['result']
@@ -249,10 +250,10 @@ for line in sys.stdin:
                 emit({'type': 'control_request', 'request_id': 'sdk-display', 'request': {
                     'subtype': 'hook_callback', 'callback_id': 'graphtraj_agents_display', 'input': {
                         'hook_event_name': 'PostToolUse', 'session_id': session,
-                        'tool_use_id': 'display-' + sdk_request_arguments['action'],
+                        'tool_use_id': 'display-' + sdk_request_arguments['feature'],
                         'tool_name': 'mcp__agents__agents', 'tool_input': sdk_request_arguments,
                         'tool_response': reply}}})
-            elif sdk_request_arguments['action'] == 'create':
+            elif sdk_request_arguments['feature'] == 'create':
                 sdk_create_results.append(reply)
                 if len(sdk_create_results) == 2:
                     result(json.dumps(sdk_create_results))
@@ -261,9 +262,9 @@ for line in sys.stdin:
         elif response['request_id'] == 'sdk-display':
             with history.with_suffix('.display.jsonl').open('a') as display:
                 display.write(json.dumps(response['response']) + '\n')
-            if sdk_request_arguments['action'] == 'create':
-                sdk_request_arguments = {'action': 'wait', 'agent': sdk_display_reply['structuredContent']['agent'],
-                                         'timeout_seconds': 20}
+            if sdk_request_arguments['feature'] == 'create':
+                sdk_request_arguments = {'action': 'execute', 'feature': 'wait',
+                    'arguments': {'agent': sdk_display_reply['structuredContent']['agent'], 'timeout_seconds': 20}}
                 emit({'type': 'control_request', 'request_id': 'sdk-call', 'request': {
                     'subtype': 'mcp_message', 'server_name': 'agents', 'message': {
                         'jsonrpc': '2.0', 'id': 3, 'method': 'tools/call',

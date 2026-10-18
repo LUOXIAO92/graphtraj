@@ -39,6 +39,8 @@ def display_response(event: dict, seen: set[tuple[str, str]] | None = None) -> d
         return {}
     seen = seen if seen is not None else set()
     frames = []
+    if request.get('action') == 'execute':
+        request = {'action': request.get('feature'), **request.get('arguments', {})}
     action = request.get('action')
     outgoing = request.get('instruction') if action == 'create' else request.get('message')
     key = ('sent', str(event.get('tool_use_id')))

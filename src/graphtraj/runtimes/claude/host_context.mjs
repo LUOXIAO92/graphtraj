@@ -1,7 +1,7 @@
 /** Native context and human-only observation for the external agents entry.
  *
- * This module does not grant Python gateway authority. It makes the live host
- * facts reviewable while preserving Claude's entire tool/permission chain.
+ * This module associates the current native call with its MCP owner while
+ * preserving Claude's entire tool/permission chain.
  * It never caches session.start as identity across clear/resume/branch.
  */
 function exchangeFrames(session, event, result, seen) {
@@ -30,46 +30,73 @@ function exchangeFrames(session, event, result, seen) {
     : value.slice(0, 9800) + '\n… Display truncated; full text remains in the tool input/result.');
 }
 
+async function context($, document) {
+  const python = await $.env.get('GRAPHTRAJ_CLAUDE_HOST_PYTHON');
+  const config = await $.env.get('GRAPHTRAJ_CLAUDE_HOST_CONFIG');
+  if (!python || !config) throw new Error('Native agents host configuration is missing.');
+  const result = await $.process.run([python, '-m', 'graphtraj.runtimes.claude.host',
+    'context', '--config', config], {stdin: JSON.stringify(document)});
+  if (result.exitCode !== 0) throw new Error('Native agents association failed: ' + result.stderr);
+  return JSON.parse(result.stdout);
+}
+
 export function register(on) {
   const displayed = new Set();
+  let busy = false;
   on('session.start', async ($, event, next) => {
-    await $.command.register({
-      name: 'agents-context',
-      description: 'Show current native Session and agents registration without a model turn',
-      immediate: true,
-    });
+    await $.command.register({name: 'agents-context',
+      description: 'Show current native Session and agents registration without a model turn', immediate: true});
     return next(event);
   });
 
-  on('command.run', { command: 'agents-context' }, async ($) => {
+  on('command.run', {command: 'agents-context'}, async ($) => {
     const session = await $.session.id();
-    const cwd = await $.session.cwd();
     const tools = await $.tool.list();
-    const registered = tools.some((tool) => tool.name === 'mcp__agents__agents');
-    $.ui.log(JSON.stringify({ event: 'agents-context', session, cwd, registered }));
-    // Command text would enter model history. ui.log is explicitly human-only.
+    $.ui.log(`agents · current Session ${session}\n` +
+      (tools.some((tool) => tool.name === 'mcp__agents__agents') ? 'MCP agents registered' : 'MCP agents missing'));
     return {};
   });
 
-  on('tool.call', { tool: 'mcp__agents__agents' }, async ($, event, next) => {
-    const session = await $.session.id();
-    const cwd = await $.session.cwd();
-    // next runs native permissions and the MCP function. No direct process,
-    // alternate tool call, or allow/ask/deny interpretation replaces it.
-    const result = await next(event);
-    $.ui.log(JSON.stringify({ event: 'agents-call', session, cwd,
-      action: event.action, denied: Boolean(result.deny), failed: result.isError === true }));
-    for (const frame of exchangeFrames(session, event, result, displayed)) $.ui.log(frame);
-    return result;
-  });
+  on('tool.call', {tool: 'mcp__agents__agents'}, async ($, event, next) => {
+    // No association may overlap another native permission chain. A refused
+    // concurrent call never clears or consumes the first call's context.
+    if (busy) return {deny: 'Another agents call is pending; wait for its result.'};
+    busy = true;
+    try {
+      await context($, {operation: 'end'});
+      const result = await next(event);
+      const session = await $.session.id();
+      const request = event.action === 'execute' ? {action: event.feature, ...event.arguments} : event;
+      for (const frame of exchangeFrames(session, request, result, displayed)) $.ui.log(frame);
+      return result;
+    } catch (error) {
+      return {deny: String(error)};
+    } finally {
+      try { await context($, {operation: 'end'}); }
+      catch (error) { $.ui.log('agents context cleanup failed: ' + String(error)); }
+      busy = false;
+    }
+  }).catch(async ($, event, next) => next.called ? next(event)
+    : {deny: 'The native agents context hook failed; no call was authorized.'});
 
-  on('tool.check', { tool: 'mcp__agents__agents' }, async ($, event, next) => {
+  on('tool.check', {tool: 'mcp__agents__agents'}, async ($, event, next) => {
     const result = await next(event);
-    const session = await $.session.id();
-    // agentId and ceiling are host fields on tool.check in 2.1.299. Retain
-    // their absence rather than inventing a source or deciding an ask.
-    $.ui.log(JSON.stringify({ event: 'agents-check', session,
-      agentId: event.agentId, ceiling: event.ceiling, decision: result.decision }));
-    return result;
+    if (result.decision === 'deny') return result;
+    // agentId is an official host field, never a model argument. Native
+    // subagents must use an actual child binding, not inherit Main authority.
+    if (event.agentId) return {decision: 'deny', reason: 'This MCP owner is bound to the Main conversation.'};
+    try {
+      await context($, {operation: 'prepare', session: await $.session.id(),
+        cwd: await $.session.cwd(), agent: event.agentId ?? null, request: event.input});
+      return result; // Preserve allow/ask and the original reason/ceiling.
+    } catch (error) {
+      return {decision: 'deny', reason: String(error)};
+    }
+  }).catch(async () => ({decision: 'deny', reason: 'Current native agents association is unavailable.'}));
+
+  on('session.end', async ($, event, next) => {
+    try { await context($, {operation: 'end'}); }
+    catch (error) { $.ui.log('agents context cleanup failed: ' + String(error)); }
+    return next(event);
   });
 }

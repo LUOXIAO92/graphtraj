@@ -4,7 +4,34 @@
  * facts reviewable while preserving Claude's entire tool/permission chain.
  * It never caches session.start as identity across clear/resume/branch.
  */
+function exchangeFrames(session, event, result, seen) {
+  if (result.deny || result.isError) return [];
+  const content = result.result ?? result.text;
+  const text = typeof content === 'string' ? content : Array.isArray(content)
+    ? content.filter((block) => block.type === 'text').map((block) => block.text).join('\n') : '';
+  let document;
+  try { document = JSON.parse(text); } catch { return []; }
+  if (!document || document.error || typeof document.agent !== 'string') return [];
+  const frames = [];
+  const frame = (from, to, body) => `┌ agents · ${from} → ${to}\n${body.split('\n').map((line) => '│ ' + line).join('\n')}\n└`;
+  const outgoing = event.action === 'create' ? event.instruction : event.message;
+  if (['create', 'send', 'resume'].includes(event.action) && typeof outgoing === 'string'
+      && document.result?.resumed !== false) {
+    frames.push(frame(session, document.agent, outgoing));
+  }
+  const last = document.result?.last_result;
+  const incoming = last?.last_message || last?.error?.message;
+  const key = JSON.stringify([session, document.agent, last?.id]);
+  if (last?.id && typeof incoming === 'string' && incoming && !seen.has(key)) {
+    frames.push(frame(document.agent, session, incoming));
+    seen.add(key);
+  }
+  return frames.map((value) => value.length <= 10000 ? value
+    : value.slice(0, 9800) + '\n… Display truncated; full text remains in the tool input/result.');
+}
+
 export function register(on) {
+  const displayed = new Set();
   on('session.start', async ($, event, next) => {
     await $.command.register({
       name: 'agents-context',
@@ -32,6 +59,7 @@ export function register(on) {
     const result = await next(event);
     $.ui.log(JSON.stringify({ event: 'agents-call', session, cwd,
       action: event.action, denied: Boolean(result.deny), failed: result.isError === true }));
+    for (const frame of exchangeFrames(session, event, result, displayed)) $.ui.log(frame);
     return result;
   });
 

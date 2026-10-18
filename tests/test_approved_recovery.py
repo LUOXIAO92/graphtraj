@@ -1205,6 +1205,34 @@ def unconfirmed(root: Path, mapping: dict) -> Path:
     return directory
 
 
+def test_budget_only_recovery_does_not_require_stopping_the_subtree(
+    target: tuple, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Adding minutes without resume neither stops nor replaces running work.
+
+    The target's execution has no terminal record, as while it still works.
+    Resuming it still requires the stopped subtree.
+    """
+    root, task, mapping, arguments = target
+    execution = root / '.graphtraj/runner/sessions' / mapping['alias'] / 'execution.yml'
+    execution.unlink()
+    budget_path = task / 'execution-budget.yml'
+    before = yaml.safe_load(budget_path.read_text())
+    request = {**arguments, 'additional_minutes': 5, 'restore_active': False, 'resume': False}
+    call = local_tool.bind(root, recovery_reviewer=lambda proposal: {'decision': 'accept'})
+
+    result = call({'action': 'execute', 'feature': 'approved_recovery', 'arguments': request}).document
+
+    assert result['recovery_status'] == 'applied', result
+    assert yaml.safe_load(budget_path.read_text()) == {
+        **before, 'approved_minutes': before.get('approved_minutes', 0) + 5,
+    }
+    assert not execution.exists()
+    with pytest.raises(RunnerError, match='stopped before replacement'):
+        call({'action': 'execute', 'feature': 'approved_recovery',
+              'arguments': {**request, 'resume': True, 'additional_minutes': 1}})
+
+
 def test_recovery_first_confirms_an_unconfirmed_target(target: tuple, monkeypatch: pytest.MonkeyPatch) -> None:
     """Recovery runs the interrupt's own confirmation before its stop gate."""
     root, _, mapping, arguments = target

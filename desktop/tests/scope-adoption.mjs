@@ -5,9 +5,11 @@
  * no GraphTraj state; the only file it changes is the chosen project's swarm/config.yml,
  * through the App's Settings page, and it restores the original values.
  *
- *   node tests/scope-adoption.mjs [--project <root>] [--out <dir>] --user-data-dir <dir> --summary <task-id>
- *     Default current scope, one historical summary and back; edit, reload and restore
- *     both archive switches.
+ *   node tests/scope-adoption.mjs [--project <root>] [--out <dir>] --user-data-dir <dir> [--part scope|archive|both]
+ *     [--summary <task-id>]
+ *     scope (needs --summary): default current scope, one historical summary and back; read-only,
+ *     Settings is never opened. archive: edit, reload and restore both archive switches of that
+ *     project's swarm/config.yml. both (default): scope, then archive.
  *   node tests/scope-adoption.mjs --project <root> --out <dir> --user-data-dir <dir> --lifecycle <alias>
  *     [--timeout-seconds 600]
  *     Select that member in the current scope with the mouse, then only watch its displayed
@@ -31,10 +33,13 @@ const { values: options } = parseArgs({ options: {
   project: { type: 'string', default: path.join(desktop, 'dist-package', 'scope-project') },
   out: { type: 'string' }, summary: { type: 'string' }, lifecycle: { type: 'string' },
   'user-data-dir': { type: 'string' }, 'timeout-seconds': { type: 'string', default: '600' },
+  part: { type: 'string', default: 'both' },
 } });
 const project = path.resolve(options.project);
 const alias = options.lifecycle;
-assert.ok(alias || options.summary, 'Give --summary <task-id> or --lifecycle <alias>');
+const part = options.part;
+assert.ok(['scope', 'archive', 'both'].includes(part), 'Give --part scope, archive or both');
+assert.ok(alias || part === 'archive' || options.summary, 'Give --summary <task-id>, --part archive or --lifecycle <alias>');
 assert.ok(options['user-data-dir'], 'Give --user-data-dir <dir> for the Electron profile');
 const tool = process.env.GRAPHTRAJ_TOOL
   || (process.env.GRAPHTRAJ_PYTHON && path.join(path.dirname(process.env.GRAPHTRAJ_PYTHON), 'graphtraj-tool'));
@@ -46,7 +51,7 @@ const evidence = path.resolve(options.out || path.join(desktop, 'dist-package', 
 const profile = path.resolve(options['user-data-dir']);
 const timeout = Number(options['timeout-seconds']) * 1000;
 const config = path.join(project, '.graphtraj', 'swarm', 'config.yml');
-const facts = { commit, dirty: Boolean(dirty), project, mode: alias ? 'lifecycle' : 'scope', summary: options.summary ?? null,
+const facts = { commit, dirty: Boolean(dirty), project, mode: alias ? 'lifecycle' : part, summary: options.summary ?? null,
   alias: alias ?? null, tool, electron: electronExecutable, profile, launches: 0, steps: [], screenshots: [], passed: false };
 await fs.mkdir(evidence, { recursive: true });
 
@@ -189,9 +194,12 @@ try {
   facts.launches += 1;
   page = await app.firstWindow();
   page.setDefaultTimeout(20000);
-  await click(page.getByRole('button', { name: 'Members', exact: true }));
+  if (alias || part !== 'archive') await click(page.getByRole('button', { name: 'Members', exact: true }));
   if (alias) await lifecycle();
-  else { await scope(); await archive(); }
+  else {
+    if (part !== 'archive') await scope();
+    if (part !== 'scope') await archive();
+  }
   facts.passed = true;
   await finish();
 } catch (error) {

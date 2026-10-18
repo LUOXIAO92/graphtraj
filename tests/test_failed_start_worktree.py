@@ -377,6 +377,20 @@ def test_cleaned_task_member_answers_a_follow_up_in_its_native_session(
         time.sleep(0.05)
     assert not worktree.exists()
     assert yaml.safe_load(execution.read_text())['outcome'] == 'completed'
-    assert yaml.safe_load((sessions / alias / 'mapping.yml').read_text())['session'] == session
+    mapping = yaml.safe_load((sessions / alias / 'mapping.yml').read_text())
+    assert mapping['session'] == session
     assert run_process([str(installed_commands.product), 'task', 'graph'],
                        cwd=root, env=env).stdout == graph_before
+
+    # The dispatch and every continuation are executions of one core Agent.
+    from agent_swarm import AgentControl, Binding, Caller
+
+    status = AgentControl(root / '.graphtraj/swarm', {}).operate(
+        'status', {'agent': mapping['agent']}, Binding(Caller('graphtraj-tasks', None)),
+    )
+    assert status.session == session and status.result['state'] == 'standby'
+    assert status.result['name'] == alias and status.result['parent'] is None
+    # The last core execution is the follow-up's own native result.
+    assert status.result['last_result']['outcome'] == 'completed'
+    assert status.result['last_result']['last_message'] == (
+        yaml.safe_load(execution.read_text()).get('last_agent_message'))

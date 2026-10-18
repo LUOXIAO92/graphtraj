@@ -61,6 +61,8 @@ def run(job_file: Path) -> int:
     startup_lock = None
     execution_mapping: dict[str, object] | None = None
     restored_cwd: Path | None = None
+    task_agent = None
+    agent_reported = False
 
     def request_termination(signum: int, frame: object) -> None:
         """Pass Worker/budget termination to the owned native execution."""
@@ -162,6 +164,7 @@ def run(job_file: Path) -> int:
                        if key not in {"execution_id", "last_outcome"}},
                     "session": session, "worker_pid": os.getpid(),
                     "runtime_pid": runtime_pid, "control_directory": control_directory,
+                    **_agent_reference(task_agent, session, runtime_pid),
                 }
                 write_yaml_durably(session_directory / "mapping.yml", mapping)
                 execution_mapping = mapping
@@ -217,6 +220,7 @@ def run(job_file: Path) -> int:
                     "runtime_pid": runtime_pid,
                     "execution_id": turn_handle.execution_id,
                     "control_directory": control_directory,
+                    **_agent_reference(task_agent, session, runtime_pid),
                 }
                 if previous_outcome is not None:
                     mapping["last_outcome"] = previous_outcome
@@ -237,6 +241,13 @@ def run(job_file: Path) -> int:
                 trace_file=Path(base_mapping["trace_file"]),
                 session_created=record_created,
             )
+            from graphtraj.execution.task_agents import begin_task_agent
+
+            # The core records this execution and its Agent before native work.
+            runner_directory = session_directory.parent.parent
+            task_agent = begin_task_agent(
+                runner_directory.parent.parent, runner_directory, operation, base_mapping, prompt, turn_handle,
+            )
             previous_sigterm = signal.signal(signal.SIGTERM, request_termination)
             if budget_monitor is not None and monitor_stop is not None:
                 monitor_thread = threading.Thread(
@@ -247,7 +258,9 @@ def run(job_file: Path) -> int:
                 )
                 monitor_thread.start()
             try:
-                with worker_connection(session_directory, turn_handle.operate) as control_directory:
+                with worker_connection(
+                    session_directory, task_agent.operate if task_agent is not None else turn_handle.operate,
+                ) as control_directory:
                     with runtime_process_owner(record_process):
                         result = turn_handle.run()
                     terminal = _terminal_turn(result)
@@ -302,6 +315,9 @@ def run(job_file: Path) -> int:
             # Reply cleanup may have allowed a successor to take ownership.
             if not terminal_published:
                 write_yaml_durably(session_directory / "execution.yml", terminal)
+            if task_agent is not None:
+                task_agent.finished(terminal)
+                agent_reported = True
             if execution_mapping is not None:
                 from graphtraj.execution.runner_control import deliver_parent_event
 
@@ -324,12 +340,29 @@ def run(job_file: Path) -> int:
             startup_lock.close()
         if previous_sigterm is not None:
             signal.signal(signal.SIGTERM, previous_sigterm)
+        if task_agent is not None and not agent_reported:
+            # A start that failed before any terminal record still ends the core execution.
+            task_agent.finished({"outcome": "runtime-error", "terminal_confirmed": False,
+                                 "error": {"code": "RUNTIME_WORKER_FAILED",
+                                           "message": "The member execution did not start."}})
         if restored_cwd is not None:
             from graphtraj.execution.runner_control import _remove_restored_cwd
 
             # The continuation-only cwd of a cleaned Task ends with its execution.
             _remove_restored_cwd(session_directory, restored_cwd)
     return 1
+
+
+def _agent_reference(task_agent: object, session: str, runtime_pid: int) -> dict[str, str]:
+    """Report the native Session to the core and return the mapping's Agent reference.
+
+    A mapping recorded before core Agents keeps its existing path and gains none.
+    """
+    if task_agent is None:
+        return {}
+    task_agent.run.events.session(session)
+    task_agent.run.events.process(runtime_pid=runtime_pid)
+    return {"agent": task_agent.run.agent}
 
 
 def _register_created_member(

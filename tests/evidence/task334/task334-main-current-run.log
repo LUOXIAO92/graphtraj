@@ -1,0 +1,5 @@
+UI phase 1: http://127.0.0.1:51082
+UI phase 2: http://127.0.0.1:51267
+{"phases": [{"execution": "01eb130a03e341b8876daa292ca84581", "session": "session-e873e3ae-e177-4a06-9550-e2fdf8eaf5c6", "pid": 74598}, {"execution": "2ebca3699803488b81d66db13e9b0e18", "session": "session-e873e3ae-e177-4a06-9550-e2fdf8eaf5c6", "pid": 78155}], "native_reply_count": 1, "standby_reply_processed": true, "child_agent": "agent-f54f3e3866984f689ab41133aa173e08", "child_session": "01a14ed1-fb6f-75e7-9a49-8c6e6de6e570", "child_execution": "8f40dea0e92e4b8f8b5c19af46a22cb7", "baseline_ids": ["1e1d601d82fc4b998f9843ca28f33f22"], "additional_dsh_executions": 2, "pi_executions": 1}
+.
+1 passed in 327.02s (0:05:27)

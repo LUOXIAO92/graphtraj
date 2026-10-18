@@ -292,16 +292,6 @@ class ClaudeJsonlCollector:
         events = deepcopy(old)
         locators = {e['graphtraj']['native']['locator'] for e in events}
         same_prefix = ids[:len(old_ids)] == old_ids
-        if not same_prefix and surface and desired and desired[0]['type'] == 'assistant':
-            # DSH requires replacement sources, which assistant messages cannot
-            # carry. Retain the native context without inventing a user message.
-            gap = self._event('history-gap', {'nativeContext': desired})
-            gap['graphtraj']['missing'] = [{
-                'path': 'history',
-                'reason': 'Archive protocol cannot replace context with an assistant-first chain.',
-            }]
-            store.checkpoint(gap, source='history-gap', position=store.position('history-gap') + 1)
-            return
         added = desired[len(old_ids):] if same_prefix else desired
         for index, record in enumerate(added):
             if (store.header['isSeeded'] and not record.get('forkedFrom')

@@ -248,11 +248,15 @@ def test_prebind_input_and_resume_cut_use_native_input_uuid(tmp_path: Path) -> N
 
 @pytest.mark.skipif(not os.environ.get('CLAUDE_SDK_MODULE'), reason='Explicit pinned official SDK comparison')
 @pytest.mark.parametrize('case', ['chain', 'siblings', 'preserved-messages', 'preserved-segment', 'tools', 'replay',
-                                'queued', 'queued-tail', 'queued-delivery', 'queued-forwarded', 'tools-indirect-replay'])
+                                'queued', 'queued-tail', 'queued-delivery', 'queued-forwarded', 'tools-indirect-replay',
+                                'assistant-first'])
 def test_order_matches_official_sdk_session_store(case: str) -> None:
     """Compare the official public SessionStore API, with no login or home scan."""
     records = [message('q', None, 'q'), message('a', 'q', 'a', role='assistant'),
                message('b', 'a', 'b', role='assistant')]
+    if case == 'assistant-first':
+        records = [message('q', None, 'old'),
+                   message('new', None, 'new context', role='assistant')]
     if case == 'siblings':
         records[1]['message']['id'] = records[2]['message']['id'] = 'api'
         records[2]['parentUuid'] = 'q'
@@ -314,16 +318,40 @@ def test_order_matches_official_sdk_session_store(case: str) -> None:
     assert actual == [(r['uuid'], r['message']) for r in native]
 
 
-def test_assistant_first_context_change_retains_explicit_protocol_gap(tmp_path: Path) -> None:
-    """An unrepresentable replacement preserves native data without breaking control."""
-    c, path, archive = collector(tmp_path, [message('q', None, 'old')])
+@pytest.mark.parametrize('retained_gap', [False, True])
+def test_assistant_first_context_change_replaces_surface_preserving_history(
+    tmp_path: Path, retained_gap: bool,
+) -> None:
+    """An independent assistant root replaces context without a synthetic user."""
+    original = message('q', None, 'old')
+    c, path, archive = collector(tmp_path, [original])
     before = store(archive).page()['events']
-    replacement = message('new', None, 'new context', role='assistant')
-    write(path, [replacement])
+    replacement = message('new', None, 'new context', role='assistant',
+                          completedAt='native-completion', unknown={'retain': True})
+    write(path, [original, replacement])
+    if retained_gap:
+        # A prior collector checkpoint remains an observation, never rewritten
+        # as a successful original collection after upgrading the validator.
+        gap = {'type': 'claude/observation', 'seq': 0, 'time': 0,
+               'data': {}, 'ignorable': True, 'graphtraj': {
+                   'version': 1, 'native': {
+                       'runtime': 'claude', 'sessionId': 's', 'locator': 'history-gap',
+                       'record': {'nativeContext': [replacement]}},
+                   'missing': [{'path': 'history', 'reason':
+                       'Archive protocol cannot replace context with an assistant-first chain.'}]}}
+        store(archive).checkpoint(gap, source='history-gap', position=0)
     c.collect()
     result = store(archive)
-    assert result.page()['events'] == before
-    gap = next(p['event'] for p in result.pending()
-               if p['event']['graphtraj']['native']['locator'] == 'history-gap')
-    assert gap['graphtraj']['native']['record']['nativeContext'] == [replacement]
-    assert gap['graphtraj']['missing'][0]['path'] == 'history'
+    events = result.page()['events']
+    assert events[:len(before)] == before
+    assert result.pending() == []
+    assert [(m['id'], m['role'], m['content']) for m in result.messages()] == [
+        ('new', 'assistant', replacement['message']['content'])]
+    published = next(e for e in events if e['type'] == 'assistant/message')
+    assert published['graphtraj']['native']['record'] == replacement
+    assert published['surfaceOp'] == {'op': 'replace', 'startSeq': 0, 'endSeq': 0}
+    assert published['sourceEventSeqs'] == [0]
+    if retained_gap:
+        assert any(o['event'] == gap for o in result.observations())
+    c.collect()
+    assert store(archive).page()['events'] == events

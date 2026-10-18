@@ -1,7 +1,7 @@
 import { nativeCommand } from './native.ts';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { createInterface } from 'node:readline';
-import type { Connections, ConnectionsRequest, Settings, SettingsDraft } from './types';
+import type { ArchiveChoices, Connections, ConnectionsRequest, Settings, SettingsDraft } from './types';
 
 /** Own the restricted native settings pipe for direct human saves. */
 export class SettingsClient {
@@ -10,6 +10,11 @@ export class SettingsClient {
 
   request(root: string, draft?: SettingsDraft): Promise<Settings> {
     return this.exchange<Settings>(root, draft ? { action: 'save', ...draft } : { action: 'read' });
+  }
+
+  /** Write the agents tool's own archive switches; GraphTraj keeps no copy. */
+  archive(root: string, choices: ArchiveChoices): Promise<{ archive: ArchiveChoices }> {
+    return this.exchange(root, { action: 'archive', choices });
   }
 
   connections(root: string, request: ConnectionsRequest): Promise<Connections> {

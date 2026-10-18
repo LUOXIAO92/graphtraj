@@ -14,5 +14,7 @@ const api: DesktopAPI = {
   connections: (id, request) => ipcRenderer.invoke('connections:request', id, request),
   settings: id => ipcRenderer.invoke('settings:read', id),
   saveSettings: (id, draft) => ipcRenderer.invoke('settings:save', id, draft),
+  saveArchive: (id, choices) => ipcRenderer.invoke('settings:archive', id, choices),
+  members: (projectId, summaryTaskId) => ipcRenderer.invoke('projects:members', { projectId, ...(summaryTaskId ? { summary_task_id: summaryTaskId } : {}) }),
 };
 contextBridge.exposeInMainWorld('graphtraj', api);

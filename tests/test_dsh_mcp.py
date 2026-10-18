@@ -40,7 +40,9 @@ def test_delivered_plugin_native_scopes(tmp_path: Path) -> None:
         'GRAPHTRAJ_HARNESS_ROOT': str(tmp_path), 'PYTHONPATH': str(root / 'src'),
     }, capture_output=True, text=True, timeout=20)
     assert result.returncode == 0, result.stdout + result.stderr
-    assert json.loads(result.stdout)['childSourcePreserved']
+    evidence = json.loads(result.stdout.strip().splitlines()[-1])
+    assert evidence['childSourcePreserved']
+    assert evidence['browserEntry'] == 'agents-dsh'
 
 
 def test_browser_tool_view_preserves_model_content() -> None:

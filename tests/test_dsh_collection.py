@@ -183,6 +183,8 @@ def test_installed_dsh_append_flush_and_resume(project: Path) -> None:
     ], cwd=project, env=environment, capture_output=True, text=True, timeout=30)
     assert result.returncode == 0, result.stdout + result.stderr
     facts = json.loads(result.stdout.strip().splitlines()[-1])
+    assert facts['callbackBeforeDisk']
+    assert facts['nativeDiskEvents'] == facts['events']
     assert facts['count'] == 5
     # Compare Python reconstruction to the installed Runtime's own projection,
     # including the native fork seed and the event drained during disposal.

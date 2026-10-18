@@ -45,7 +45,8 @@ def test_delivered_plugin_native_scopes(tmp_path: Path) -> None:
     assert evidence['browserEntry'] == 'agents-dsh'
 
 
-def test_browser_tool_view_preserves_model_content() -> None:
+@pytest.mark.parametrize("registration_order", ["ready", "delayed"])
+def test_browser_tool_view_preserves_model_content(registration_order: str) -> None:
     """Project outgoing text without replaying calls or duplicating inbound relay."""
     node, dsh = shutil.which('node'), shutil.which('dsh')
     if node is None or dsh is None:
@@ -54,5 +55,6 @@ def test_browser_tool_view_preserves_model_content() -> None:
     result = subprocess.run([
         node, str(root / 'tests/fixtures/dsh_client_view.mjs'),
         str(root / 'src/agent_swarm/dsh/client.mjs'), str(Path(dsh).resolve()),
+        registration_order,
     ], capture_output=True, text=True, timeout=10)
     assert result.returncode == 0, result.stdout + result.stderr

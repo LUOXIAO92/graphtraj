@@ -23,12 +23,19 @@ slots.register({ name: 'root', children: {
   'conversation.chat.node': { kind: 'keyed', scope: 'session' },
 } }, () => null);
 function NativeTrigger(props) { return props.node.data.content; }
-slots.register({ name: 'conversation.chat.node', key: 'turn-trigger', locale: 'chat' }, NativeTrigger);
+const registerNative = () => slots.register({ name: 'conversation.chat.node', key: 'turn-trigger', locale: 'chat' }, NativeTrigger);
+const delayedNative = process.argv[4] === 'delayed';
+if (!delayedNative) registerNative();
 views.apply({ slots: {
   inject(name, callback) { callback(); },
   entriesOfSlot: name => slots.entriesOfSlot(name),
+  subscribe: (name, callback) => slots.subscribe(name, callback),
   register: (options, component) => slots.register(options, component),
 } });
+if (delayedNative) {
+  registerNative();
+  await new Promise(resolve => queueMicrotask(resolve));
+}
 const registered = slots.entriesOfSlot('tool.call.toolview')[0];
 assert.equal(registered.options.key, 'mcp__agents__agents');
 const block = { kind: 'tool-result', call: { argsRaw: JSON.stringify({

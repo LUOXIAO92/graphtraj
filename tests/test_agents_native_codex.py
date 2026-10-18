@@ -11,7 +11,6 @@ from agent_swarm import Caller
 from graphtraj.configuration.project_configuration import default_configuration_content
 from graphtraj.interfaces.agents import agents_callback
 from graphtraj.runtimes.codex.app_server import CodexAppServer, CodexServerRequest
-from graphtraj.runtimes.codex.managed_session import run_native_operation
 from test_codex_app_server import peer  # noqa: F401
 
 
@@ -122,29 +121,6 @@ def test_connection_only_role_preserves_configuration_and_archive_policy(
     assert all(name in ambiguous.document['error']['message'] for name in ('first', 'second'))
 
 
-def test_owned_gateway_exposes_agents_without_granting_native_helpers_control(
-    tmp_path: Path, peer: Path,
-) -> None:
-    """The registered gateway feature shares the owned function's caller boundary."""
-    (tmp_path / '.graphtraj').mkdir()
-    (tmp_path / '.graphtraj/config.yml').write_text(default_configuration_content(tmp_path, tmp_path))
-
-    async def exercise() -> None:
-        """Route the same public request with native owner and helper issuers."""
-        async with CodexAppServer(command=[str(peer)], cwd=tmp_path, environment={
-            'PEER_THREAD_PARENTS': json.dumps({'helper': 'owner'}),
-        }) as adapter:
-            for thread, allowed in [('owner', True), ('helper', False)]:
-                response = await run_native_operation(adapter, 'owner', 'agent-owner', tmp_path,
-                    CodexServerRequest(thread, 'item/tool/call', {'threadId': thread, 'tool': 'graphtraj',
-                        'arguments': {'action': 'execute', 'feature': 'agents', 'arguments': {'action': 'status'}}}))
-                assert response['success'] is allowed, response
-                if allowed:
-                    assert json.loads(response['contentItems'][0]['text'])['result']['agents'] == []
-
-    asyncio.run(exercise())
-
-
 def test_independent_codex_lifecycle_and_callback_cwd(
     tmp_path: Path, peer: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -165,21 +141,8 @@ def test_independent_codex_lifecycle_and_callback_cwd(
     monkeypatch.setenv('PEER_PROTOCOL_LOG', str(protocol))
     monkeypatch.setenv('PEER_NATIVE_ROLLOUT', str(tmp_path / 'native'))
 
-    async def create() -> dict:
-        """Use the actual dynamic callback with a separate host working directory."""
-        async with CodexAppServer(command=[str(peer)], cwd=cwd) as adapter:
-            response = await run_native_operation(
-                adapter, 'owner', 'agent-owner', root,
-                CodexServerRequest(1, 'item/tool/call', {
-                    'threadId': 'owner', 'tool': 'agents',
-                    'arguments': {'action': 'create', 'runtime': 'codex', 'instruction': 'hold'},
-                }), cwd=cwd,
-            )
-            assert response['success'], response
-            return json.loads(response['contentItems'][0]['text'])
-
-    created = asyncio.run(create())
-    call = agents_callback(root, Caller('codex-dynamic-tools', 'agent-owner'), cwd)
+    call = agents_callback(root, Caller('controlled-native-host', 'agent-owner'), cwd)
+    created = call({'action': 'create', 'runtime': 'codex', 'instruction': 'hold'}).document
     agent, session = created['agent'], created['session']
     assert session and created['result']['state'] == 'active'
 

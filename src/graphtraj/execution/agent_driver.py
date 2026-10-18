@@ -143,6 +143,7 @@ class AdapterDriver:
                 options['independent'] = True
                 options['archive'] = run.archive
                 options['connection'] = run.settings.get('connection', {})
+                options['agent_call'] = run.call
             turn = owner(
                 dict(run.settings["adapter_request"]), run.message, run.directory,
                 lambda session, pid: ready.set(), dict(run.settings["evidence"]),

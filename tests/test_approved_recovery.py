@@ -804,50 +804,6 @@ def test_recovery_rejects_public_bypasses(target: tuple, monkeypatch: pytest.Mon
     assert (task / 'execution-budget.yml').read_bytes() == before
 
 
-@pytest.mark.parametrize('issuer', ['owner', 'helper', 'outsider'])
-def test_native_gateway_recovery_keeps_real_caller_boundary(
-    target: tuple, monkeypatch: pytest.MonkeyPatch, issuer: str,
-) -> None:
-    """The native gateway exposes recovery only to its actual owning caller."""
-    import asyncio
-    from graphtraj.runtimes.codex.app_server import CodexServerRequest
-    from graphtraj.runtimes.codex.managed_session import run_native_operation
-
-    root, task, _, arguments = target
-    before = (task / 'execution-budget.yml').read_bytes()
-    reviewed = []
-
-    class ParentLookup:
-        """Supply controlled native ancestry, leaving business authorization real."""
-
-        async def read_thread_parent(self, thread: str) -> str | None:
-            """Only the helper belongs to this owner."""
-            return 'owner' if thread == 'helper' else None
-
-    def review(proposal: dict) -> dict:
-        """Observe the same gated recovery through its bound native host."""
-        reviewed.append(proposal)
-        return {'decision': 'accept'}
-
-    request = CodexServerRequest('native-recovery', 'item/tool/call', {
-        'threadId': issuer, 'turnId': 'turn', 'tool': 'graphtraj',
-        'arguments': {'action': 'execute', 'feature': 'approved_recovery',
-                      'arguments': {**arguments, 'resume': False}},
-    })
-    result = asyncio.run(run_native_operation(ParentLookup(), 'owner', None, root, request,
-                                             recovery_reviewer=review))
-    document = json.loads(result['contentItems'][0]['text'])
-    if issuer == 'owner':
-        assert result['success'], document
-        assert document['recovery_status'] == 'applied'
-        assert len(reviewed) == 1
-    else:
-        assert not result['success']
-        assert document['error']['code'] == 'authority-denied'
-        assert not reviewed
-        assert (task / 'execution-budget.yml').read_bytes() == before
-
-
 @pytest.mark.parametrize('decision', ['accept', 'decline'])
 def test_managed_user_recovery_waits_for_existing_reply_channel(
     target: tuple, peer: Path, monkeypatch: pytest.MonkeyPatch, decision: str,

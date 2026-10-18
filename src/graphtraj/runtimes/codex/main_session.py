@@ -6,6 +6,8 @@ import asyncio
 import copy
 import json
 import re
+import sys
+from contextlib import ExitStack
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
@@ -19,12 +21,9 @@ from graphtraj.execution.runner_models import RunnerError
 from graphtraj.execution.runner_status import caller_alias
 from graphtraj.runtimes.codex.codex_adapter import (
     CODEX_PERMISSION_REQUEST_FEATURES,
-    NATIVE_RUNNER_TOOLS,
-    native_runner_tools,
 )
 from graphtraj.runtimes.codex.access import private_filesystem
 from graphtraj.runtimes.codex.app_server import CodexAppServer, CodexServerRequest
-from graphtraj.runtimes.codex.managed_session import run_native_operation
 from graphtraj.workspace.runner_project import discover_runner_directory, runtime_executable
 
 
@@ -70,7 +69,7 @@ async def run_main(
     if resume is None:
         record.mkdir(parents=True, exist_ok=False)
     # Same-Session continuation cannot create a second active Main driver.
-    with (record / 'launch.yml').open('a+b') as ownership:
+    with (record / 'launch.yml').open('a+b') as ownership, ExitStack() as connections:
         try:
             file_lock.flock(ownership, file_lock.LOCK_EX | file_lock.LOCK_NB)
         except BlockingIOError as error:
@@ -78,41 +77,41 @@ async def run_main(
         native_session: str | None = None
         operations: list[dict] = []
 
-        async def handle(request: CodexServerRequest) -> dict:
-            """Use native issuer identity for Runner calls, forwarding other requests."""
-            if (
-                request.method == 'item/tool/call'
-                and request.params.get('tool') in {'graphtraj', 'tasks', 'agents', *NATIVE_RUNNER_TOOLS}
-            ):
-                result = await run_native_operation(adapter, native_session, None, root, request)
-                # Summarize actual callback results without exporting private
-                # helper IDs, conversations or report contents to a caller.
-                summary = {'tool': request.params['tool'], 'success': result['success'],
-                           'from_main': request.params.get('threadId') == native_session}
-                arguments = request.params.get('arguments')
-                if request.params['tool'] == 'graphtraj_status' or (
-                    request.params['tool'] in {'graphtraj', 'tasks'}
-                    and isinstance(arguments, dict)
-                    and arguments.get('action') == 'execute'
-                    and arguments.get('feature') == 'alias_status'
-                ):
-                    document = json.loads(result['contentItems'][0]['text'])
-                    summary['aliases'] = [
-                        {'alias': item.get('alias'), 'has_session': 'session' in item,
-                         'has_execution_id': 'execution_id' in item}
-                        for item in document.get('aliases', [])
-                    ]
-                operations.append(summary)
-                return result
-            return await native_request(request)
-
         command = (str(runtime_executable('codex')), 'app-server', '--listen', 'stdio://')
-        async with CodexAppServer(cwd=root, command=command, on_request=handle,
+        async with CodexAppServer(cwd=root, command=command, on_request=native_request,
                                   request_handler_timeout=None, experimental_api=True) as adapter:
+            from agent_swarm import Caller
+            from agent_swarm.connection import verify_native_context
+            from graphtraj.execution.runner_connection import worker_connection
+            from graphtraj.execution.runner_status import runtime_caller
+            from graphtraj.interfaces.agents import agents_callback
+            from graphtraj.interfaces.gateway import handle_request
+
+            def operate(document: dict) -> dict:
+                """Bind only this native Main's authenticated stdio MCP requests."""
+                if set(document) != {'cwd', 'request', 'native'} or document['cwd'] != str(root):
+                    raise RunnerError('authority-denied', 'The request is outside this Main host.')
+                verify_native_context(document['native'], {
+                    'runtime': 'codex', 'session': native_session, 'cwd': str(root),
+                })
+                request = document['request']
+                with runtime_caller(runner, None):
+                    if request.get('action') == 'execute' and request.get('feature') == 'agents':
+                        result = agents_callback(root, Caller('runtime-mcp', None,
+                                                 session=native_session, runtime='codex'))(request['arguments'])
+                    else:
+                        result = handle_request(request, cwd=root)
+                operations.append({'feature': request.get('feature'), 'success': not result.failed})
+                return {'document': result.document, 'failed': result.failed}
+
+            address = connections.enter_context(worker_connection(
+                record, operate, authenticate=adapter.authenticate_caller,
+            ))
             effective = await adapter.read_configuration(root)
             permissions = copy.deepcopy(effective.get('permissions') or {})
             profile = 'graphtraj_main_' + uuid.uuid4().hex
             filesystem = private_filesystem(root / '.codex')
+            filesystem[address] = 'write'
             filesystem[':workspace_roots'] = {'.': 'read'}
             filesystem[str(configuration.docs)] = 'write'
             filesystem[str(root / 'CONTEXT.md')] = 'write'
@@ -124,11 +123,18 @@ async def run_main(
                 'filesystem': filesystem,
             }
             context = _MainContext({
-                'cwd': str(root), 'dynamicTools': native_runner_tools(),
+                'cwd': str(root),
                 'permissions': profile,
                 'config': {
                     'permissions': permissions, 'default_permissions': profile,
                     'features': dict(CODEX_PERMISSION_REQUEST_FEATURES),
+                    'mcp_servers': {'graphtraj': {
+                        'command': sys.executable, 'args': ['-m', 'graphtraj.interfaces.mcp'],
+                        'cwd': str(root), 'env': {'GRAPHTRAJ_CLI_CONNECTION': address,
+                                                'GRAPHTRAJ_NATIVE_RUNTIME': 'codex'},
+                    }},
+                    'shell_environment_policy': {'set': {'GRAPHTRAJ_CLI_CONNECTION': address,
+                                                        'GRAPHTRAJ_NATIVE_RUNTIME': 'codex'}},
                 },
             })
             if resume is None:

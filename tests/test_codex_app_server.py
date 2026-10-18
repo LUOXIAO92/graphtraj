@@ -1307,10 +1307,9 @@ def test_parent_projection_keeps_control_files_private(
             request['arguments'][index] = 'permissions=' + _toml_value(permissions)
     request['session_parameters']['config']['permissions'] = permissions
     if toolset != 'gateway':
-        from graphtraj.runtimes.codex.codex_adapter import NATIVE_RUNNER_TOOLS
 
         request['session_parameters']['dynamicTools'] = (
-            [{'name': name} for name in NATIVE_RUNNER_TOOLS] if toolset == 'native11' else []
+            [{'name': 'graphtraj_status'}] if toolset == 'native11' else []
         )
     resumed = refresh_codex_report_paths(
         request,
@@ -1319,11 +1318,9 @@ def test_parent_projection_keeps_control_files_private(
         role=role, session_directory=sessions / leader_alias,
     )
     filesystem = _native_filesystem(resumed)
-    assert (filesystem.get(str(sessions / child_alias)) == 'write') is (toolset == 'none')
-    assert filesystem[str(root / 'evidence/teams/1/rounds/1/leader.md')] == (
-        'write' if toolset == 'none' else 'read'
-    )
-    assert resumed['session_parameters']['dynamicTools'] == request['session_parameters']['dynamicTools']
+    assert filesystem.get(str(sessions / child_alias)) != 'write'
+    assert filesystem[str(root / 'evidence/teams/1/rounds/1/leader.md')] == 'read'
+    assert resumed['session_parameters'].get('dynamicTools') == request['session_parameters'].get('dynamicTools')
     assert filesystem[':workspace_roots']['README.md'] == 'read'
     assert filesystem[str(root / '.graphtraj')] == 'none'
     assert filesystem.get(str(worldline_lock)) != 'write'

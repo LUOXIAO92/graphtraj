@@ -191,7 +191,7 @@ class CodexAppServer:
         *,
         cwd: Path,
         command: Sequence[str] = ("codex", "app-server", "--listen", "stdio://"),
-        environment: Mapping[str, str] | None = None,
+        environment: Mapping[str, str | None] | None = None,
         request_timeout: float = 30,
         on_request: Callable[[CodexServerRequest], Awaitable[Mapping[str, Any] | None]] | None = None,
         request_handler_timeout: float | None | object = _DEFAULT_TIMEOUT,
@@ -213,7 +213,8 @@ class CodexAppServer:
             )
         self._cwd = cwd
         self._command = tuple(command)
-        self._environment = {**os.environ, **(environment or {})}
+        self._environment = {key: value for key, value in {**os.environ, **(environment or {})}.items()
+                             if value is not None}
         self._default_connection = {
             name: os.environ.get(name) for name in ('OPENAI_BASE_URL', 'OPENAI_API_KEY')
         }
@@ -365,6 +366,15 @@ class CodexAppServer:
         self._require_connection()
         assert self._process is not None
         return self._process.pid
+
+    def authenticate_caller(self, pid: int) -> None:
+        """Require a kernel-observed caller below this still-live service."""
+        from agent_swarm import AgentsError
+        from agent_swarm.process import process_ancestors
+
+        if (self._process is None or self._process.returncode is not None
+                or self._process.pid not in process_ancestors(pid)):
+            raise AgentsError('authority-denied', 'Caller is outside the live Codex service.')
 
     @property
     def stderr_tail(self) -> str:

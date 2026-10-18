@@ -81,48 +81,6 @@ CODEX_PERMISSION_REQUEST_FEATURES: Mapping[str, Any] = {
 }
 
 
-# Captured tool names remain callable by existing Sessions. New Sessions expose
-# these same operations through the gateway, without adding mutation privileges.
-NATIVE_RUNNER_TOOLS = {
-    'graphtraj_status': 'alias_status',
-    'graphtraj_swarm': 'swarm',
-    'graphtraj_send': 'send_instruction',
-    'graphtraj_interrupt': 'interrupt',
-    'graphtraj_requests': 'pending_requests',
-    'graphtraj_reply': 'reply_to_request',
-    'graphtraj_reports': 'session_reports',
-    'graphtraj_submit_report': 'submit_report',
-    'graphtraj_submit_result': 'submit_result',
-    'graphtraj_decide_result': 'decide_result',
-    'graphtraj_task_graph': 'task_graph',
-}
-
-
-def native_runner_tools() -> list[dict[str, Any]]:
-    """Register independent control and the composable task gateway as functions.
-
-    ``agents`` is registered as its own function so the model calls Agent
-    control directly, with the independent contract's description and schema.
-    """
-    from agent_swarm import tool_descriptor
-    from graphtraj.interfaces.gateway import INPUT_SCHEMA
-
-    agents = tool_descriptor()
-    return [{
-        'type': 'function', 'name': 'graphtraj',
-        'description': 'Discover, describe or execute one registered feature.',
-        'inputSchema': INPUT_SCHEMA,
-    }, {
-        'type': 'function', 'name': agents['name'],
-        'description': agents['description'],
-        'inputSchema': agents['input_schema'],
-    }, {
-        'type': 'function', 'name': 'tasks',
-        'description': 'Discover, describe or execute GraphTraj task and delivery operations.',
-        'inputSchema': INPUT_SCHEMA,
-    }]
-
-
 class CodexAdapterError(RuntimeAdapterError):
     """A selected Codex role cannot be launched safely."""
 
@@ -217,7 +175,6 @@ class _CodexRole:
         session_parameters = {
             "cwd": str(worktree),
             "model": model,
-            "dynamicTools": native_runner_tools(),
             "developerInstructions": developer_instructions,
             "config": {
                 key: value for key, value in overrides
@@ -1535,23 +1492,10 @@ def refresh_codex_report_paths(
             path, evidence, report_files
         ):
             del filesystem[path]
-    native_tools = {
-        tool.get('name') for tool in request.get('session_parameters', {}).get('dynamicTools', [])
-        if isinstance(tool, dict)
-    }
+    # CLI/MCP calls go through the authenticated owner, including report writes.
+    # Removing dynamic tools must not grant the child direct state mutation.
     for path in native_report_paths:
-        filesystem[str(path)] = (
-            "read" if native_tools & {'graphtraj', 'graphtraj_submit_report'} else "write"
-        )
-    if (
-        session_directory is not None
-        and not native_tools & {'graphtraj', 'graphtraj_swarm'}
-    ):
-        # Continuing one direct child writes its Session directory, which
-        # exists only after this Session started. Every other Session path is
-        # already granted by the durable launch request.
-        for path in _direct_child_session_directories(session_directory):
-            filesystem[str(path)] = "write"
+        filesystem[str(path)] = 'read'
     refreshed[profile_index + 1] = "default_permissions={0}".format(
         _toml_value(default_permissions)
     )

@@ -66,12 +66,19 @@ class NativeCalls:
         return handle_request(request, self.make_call(native['session'], self.cwd))
 
 
-def native_parent(executable: Path) -> int:
+def native_parent(executable: Path, *, stage: str = 'serve') -> int:
     """Verify the actual native parent, not an environment assertion or PID flag."""
     parent = os.getppid()
     actual = process_executable(parent)
-    if parent <= 1 or actual is None or actual.resolve() != executable.resolve():
-        raise AgentsError('authority-denied', 'This host must be launched directly by the selected Claude CLI.')
+    expected = executable.resolve()
+    if parent <= 1 or actual is None or actual.resolve() != expected:
+        # Keep only process/path facts, never argv, environment or credentials.
+        facts = {'stage': stage, 'parent_pid': parent,
+                 'observed_executable': str(actual) if actual is not None else None,
+                 'expected_executable': str(expected)}
+        raise AgentsError('authority-denied',
+                          'This host must be launched directly by the selected Claude CLI. '
+                          + json.dumps(facts, sort_keys=True))
     return parent
 
 
@@ -88,13 +95,18 @@ def main() -> None:
                                           for key in ('root', 'cwd', 'claude', 'channel_file'))
     if not all(path.is_absolute() for path in (root, cwd, executable, channel_file)):
         raise ValueError('Native host configuration paths must be absolute.')
-    parent = native_parent(executable)
     if options.operation == 'context':
         endpoint = json.loads(channel_file.read_text())
+        # The owner already verified its CLI at startup. A launcher symlink
+        # may move during an update while that same native process is alive.
+        # Use its pinned executable, never whichever version is selected now.
+        parent = native_parent(Path(endpoint['executable']), stage='context')
         if endpoint['parent'] != parent:
             raise AgentsError('authority-denied', 'The context belongs to another native host.')
         print(json.dumps(connection_operation(endpoint['address'], json.load(sys.stdin), authenticate=True)))
         return
+    executable = executable.resolve()
+    parent = native_parent(executable)
     if 'AGENT_SWARM_CONNECTION' in os.environ or 'GRAPHTRAJ_CLI_CONNECTION' in os.environ:
         raise AgentsError('authority-denied', 'A bound child must use its existing owner, not adopt Main.')
     if Path.cwd().resolve() != cwd.resolve():
@@ -115,7 +127,7 @@ def main() -> None:
         """Require a live direct child of this same verified Claude process."""
         chain = process_ancestors(pid)
         if (os.getppid() != parent or len(chain) < 2 or chain[1] != parent
-                or process_executable(parent) != executable.resolve()):
+                or process_executable(parent) != executable):
             raise AgentsError('authority-denied', 'The context sender is not owned by this native Claude host.')
 
     directory = channel_file.parent
@@ -125,7 +137,7 @@ def main() -> None:
             # Exclusive creation prevents a second MCP owner replacing a live
             # association. A retained stale file requires explicit host cleanup.
             with channel_file.open('x') as stream:
-                json.dump({'parent': parent, 'address': address}, stream)
+                json.dump({'parent': parent, 'executable': str(executable), 'address': address}, stream)
             try:
                 serve(sys.stdin, sys.stdout, cwd, native_call=calls.call)
             finally:

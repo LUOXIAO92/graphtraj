@@ -62,3 +62,51 @@ def test_native_host_does_not_trust_session_environment(tmp_path: Path, monkeypa
     monkeypatch.setenv('CLAUDE_CODE_SESSION_ID', str(uuid4()))
     with pytest.raises(AgentsError, match='directly'):
         native_parent(tmp_path / 'not-claude')
+
+
+def test_context_uses_owner_executable_when_launcher_updates(tmp_path: Path, monkeypatch, capsys) -> None:
+    """The public context entry keeps the same native parent after a symlink update."""
+    import os
+    from graphtraj.runtimes.claude import host
+
+    original, updated = tmp_path / '2.1.299', tmp_path / '2.1.302'
+    original.touch()
+    updated.touch()
+    launcher = tmp_path / 'claude'
+    launcher.symlink_to(original)
+    endpoint = tmp_path / 'endpoint.json'
+    config = tmp_path / 'host.json'
+    config.write_text(json.dumps({'root': str(tmp_path), 'cwd': str(tmp_path),
+                                 'claude': str(launcher), 'channel_file': str(endpoint)}))
+    monkeypatch.setattr(host, 'process_executable', lambda pid: original)
+    parent = host.native_parent(launcher)
+    endpoint.write_text(json.dumps({'parent': parent, 'executable': str(launcher.resolve()),
+                                    'address': 'owned-channel'}))
+    launcher.unlink()
+    launcher.symlink_to(updated)
+    # This is exactly the old per-helper comparison: it rejects the still-live
+    # original process when the installer changes the launcher's target.
+    with pytest.raises(AgentsError, match='expected_executable.*2.1.302'):
+        host.native_parent(launcher, stage='context')
+    received = []
+
+    def exchange(address: str, document: dict, *, authenticate: bool) -> dict:
+        """Observe the authenticated existing transport, not a replacement identity."""
+        received.append((address, document, authenticate))
+        return {'ended': True}
+
+    monkeypatch.setattr(host, 'connection_operation', exchange)
+    monkeypatch.setattr('sys.argv', ['host', 'context', '--config', str(config)])
+    monkeypatch.setattr('sys.stdin', StringIO('{"operation":"end"}'))
+    host.main()
+    assert json.loads(capsys.readouterr().out) == {'ended': True}
+    assert received == [('owned-channel', {'operation': 'end'}, True)]
+    assert parent == os.getppid()
+
+    # An unrelated direct parent still fails, even though the launcher now
+    # selects its executable. No arbitrary ancestor or new version is allowed.
+    monkeypatch.setattr(host, 'process_executable', lambda pid: updated)
+    monkeypatch.setattr('sys.stdin', StringIO('{"operation":"end"}'))
+    with pytest.raises(AgentsError, match='observed_executable.*2.1.302'):
+        host.main()
+    assert len(received) == 1

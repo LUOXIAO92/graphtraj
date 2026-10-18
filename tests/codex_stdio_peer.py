@@ -194,6 +194,12 @@ for line in incoming():
         thread_id = params.get('threadId', f'thread-{len(sessions) + 1}')
         sessions[thread_id] = params
         rollout = native_rollout(thread_id)
+        if method == 'thread/resume' and rollout and os.environ.get('PEER_RESUME_SETTINGS'):
+            with rollout.open('a') as stream:
+                stream.write(json.dumps({'type': 'event_msg', 'payload': {
+                    'type': 'thread_settings_applied', 'thread_id': thread_id,
+                    'thread_settings': {'model': params.get('model')},
+                }}) + '\n')
         result = {
             'thread': {
                 'id': thread_id,

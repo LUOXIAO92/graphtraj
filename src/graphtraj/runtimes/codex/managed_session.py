@@ -249,6 +249,18 @@ class CodexManagedExecution:
                     raise RuntimeAdapterError(
                         'RUNTIME_EXECUTION_INTERRUPTED', 'Stopped before native Session creation.',
                     )
+                # Resume itself can append settings. Capture the owned source
+                # boundary before that operation, not after its response.
+                resume_source = None
+                retained = self.directory / 'session.yml'
+                if self.expected_session and retained.is_file():
+                    previous = yaml.safe_load(retained.read_text())
+                    if previous.get('session') == self.expected_session and previous.get('rollout_path'):
+                        path = Path(previous['rollout_path'])
+                        try:
+                            resume_source = (path, path.stat().st_size)
+                        except FileNotFoundError:
+                            pass
                 self.startup = asyncio.create_task(
                     adapter.resume_session(self.context, self.expected_session)
                     if self.expected_session else adapter.create_session(self.context)
@@ -285,6 +297,9 @@ class CodexManagedExecution:
                         configured_archive(root), self.directory.name, session.thread_id, session.rollout_path,
                         new_session=self.expected_session is None, task_ids=(mapping['task_id'],),
                     )
+                if archive is not None and resume_source is not None:
+                    if session.rollout_path == resume_source[0]:
+                        archive.activation = resume_source[1]
                 adapter.retain_native_trace(session, self.trace_file, archive=archive)
                 if self.termination_requested:
                     raise RuntimeAdapterError(

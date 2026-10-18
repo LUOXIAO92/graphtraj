@@ -183,3 +183,37 @@ def test_independent_codex_lifecycle_and_callback_cwd(
     done = call({'action': 'wait', 'agent': agent, 'timeout_seconds': 10})
     assert done.document['result']['last_result']['last_message'] == 'request accepted'
     assert done.document['result']['state'] == 'standby'
+
+
+def test_resume_settings_are_live_without_history_backfill(
+    tmp_path: Path, peer: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Resume-generated settings must not become an excluded historical prefix."""
+    from agent_swarm import write_config
+    from graphtraj.interfaces.agents import swarm_root
+    from graphtraj.sessions.archive import JsonlSessionStore, archive_path
+    from graphtraj.sessions.protocol import native_record
+    from graphtraj.workspace import runner_project
+
+    root = tmp_path / 'project'
+    (root / '.graphtraj').mkdir(parents=True)
+    (root / '.graphtraj/config.yml').write_text(default_configuration_content(root, root))
+    (root / '.graphtraj/roles.yml').write_text(yaml.safe_dump({
+        'roles': {'codex': {'runtime': 'codex', 'model': 'fixture-model'}},
+    }))
+    monkeypatch.setattr(runner_project, 'runtime_executable', lambda runtime: peer)
+    monkeypatch.setenv('PEER_NATIVE_ROLLOUT', str(tmp_path / 'native'))
+    monkeypatch.setenv('PEER_RESUME_SETTINGS', '1')
+    write_config(swarm_root(root), save_normalized_sessions=True, backfill_history=False)
+    call = agents_callback(root, Caller('controlled-native-host', 'owner'), root)
+    created = call({'action': 'create', 'runtime': 'codex', 'instruction': 'first'}).document
+    agent = created['agent']
+    assert not call({'action': 'wait', 'agent': agent, 'timeout_seconds': 10}).failed
+    assert not call({'action': 'resume', 'agent': agent, 'message': 'second'}).failed
+    assert not call({'action': 'wait', 'agent': agent, 'timeout_seconds': 10}).failed
+    store = JsonlSessionStore(archive_path(swarm_root(root), 'codex:' + created['session']))
+    records = [native_record(event) for event in store.page()['events']]
+    settings = [r for r in records if r.get('payload', {}).get('type') == 'thread_settings_applied']
+    assert len(settings) == 1
+    assert settings[0]['payload']['thread_settings']['model'] == 'fixture-model'
+    assert not store.pending()

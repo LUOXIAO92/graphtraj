@@ -195,12 +195,22 @@ class CodexManagedExecution:
             from graphtraj.workspace.runner_project import discover_project_root
 
             root = discover_project_root(Path(request['worktree_path']))
+
+            def authorize(native: dict, _request: dict) -> tuple[str | None, set[str]]:
+                """Own-thread calls need no RPC or event-loop round trip."""
+                from agent_swarm.connection import verify_native_context
+
+                if isinstance(native, dict) and native.get('session') == self.native_session:
+                    verify_native_context(native, native_context())
+                    return self.directory.name, native_operation_features()
+                return asyncio.run_coroutine_threadsafe(authorize_mcp_caller(
+                    self.adapter, self.native_session, self.directory.name, root, cwd, native,
+                ), self.loop).result(timeout=30)
+
             address = connections.enter_context(cli_connection(
                 root, self.directory.name, native_operation_features(), self._review_recovery_sync,
                 native_context=native_context,
-                native_authorizer=lambda native, request: asyncio.run_coroutine_threadsafe(
-                    authorize_mcp_caller(self.adapter, self.native_session, self.directory.name,
-                                         root, cwd, native), self.loop).result(timeout=30),
+                native_authorizer=authorize,
             ))
             connection_env = CONNECTION_ENV
         elif self.independent and self.agent_call is not None:

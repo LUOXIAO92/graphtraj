@@ -11,11 +11,13 @@
  *     Settings is never opened. archive: edit, reload and restore both archive switches of that
  *     project's swarm/config.yml. both (default): scope, then archive.
  *   node tests/scope-adoption.mjs --project <root> --out <dir> --user-data-dir <dir> --lifecycle <alias>
- *     [--timeout-seconds 600]
- *     Select that member in the current scope with the mouse, then only watch its displayed
- *     state while the operator stops and continues it. Each change is screenshotted and
- *     appended to <out>/states.jsonl. Exit 0 after active, standby, active, standby; exit 2
- *     on timeout with a final screenshot; exit 1 on any other failure.
+ *     [--part scope --summary <task-id>] [--timeout-seconds 600]
+ *     Optionally run the scope part first in the same window. Then select that member in the
+ *     current scope with the mouse and only watch its displayed state while the operator stops
+ *     and continues it. When watching starts it prints 'WATCHER READY <state>' and writes
+ *     <out>/ready.json. Each change is screenshotted and appended to <out>/states.jsonl.
+ *     Exit 0 after active, standby, active, standby; exit 2 on timeout with a final
+ *     screenshot; exit 1 on any other failure.
  *
  * The backend tool is GRAPHTRAJ_TOOL, or graphtraj-tool beside GRAPHTRAJ_PYTHON.
  */
@@ -40,6 +42,10 @@ const alias = options.lifecycle;
 const part = options.part;
 assert.ok(['scope', 'archive', 'both'].includes(part), 'Give --part scope, archive or both');
 assert.ok(alias || part === 'archive' || options.summary, 'Give --summary <task-id>, --part archive or --lifecycle <alias>');
+assert.ok(!alias || part === 'scope' || (part === 'both' && !options.summary), 'Combine --lifecycle only with --part scope --summary <task-id>');
+assert.ok(part !== 'scope' || options.summary, 'Give --summary <task-id> with --part scope');
+// With --lifecycle, the scope part runs first only when it is asked for explicitly.
+const runScope = alias ? part === 'scope' : part !== 'archive';
 assert.ok(options['user-data-dir'], 'Give --user-data-dir <dir> for the Electron profile');
 const tool = process.env.GRAPHTRAJ_TOOL
   || (process.env.GRAPHTRAJ_PYTHON && path.join(path.dirname(process.env.GRAPHTRAJ_PYTHON), 'graphtraj-tool'));
@@ -51,7 +57,7 @@ const evidence = path.resolve(options.out || path.join(desktop, 'dist-package', 
 const profile = path.resolve(options['user-data-dir']);
 const timeout = Number(options['timeout-seconds']) * 1000;
 const config = path.join(project, '.graphtraj', 'swarm', 'config.yml');
-const facts = { commit, dirty: Boolean(dirty), project, mode: alias ? 'lifecycle' : part, summary: options.summary ?? null,
+const facts = { commit, dirty: Boolean(dirty), project, mode: alias ? (runScope ? 'scope+lifecycle' : 'lifecycle') : part, summary: options.summary ?? null,
   alias: alias ?? null, tool, electron: electronExecutable, profile, launches: 0, steps: [], screenshots: [], passed: false };
 await fs.mkdir(evidence, { recursive: true });
 
@@ -61,18 +67,56 @@ let finished = false;
 class Timeout extends Error {}
 const step = text => { facts.steps.push({ at: new Date().toISOString(), text }); console.log(text); };
 const shot = async name => { const file = path.join(evidence, name); await page.screenshot({ path: file }); facts.screenshots.push(file); };
-/** Click the visible centre of a control with the real mouse. */
+/** Bring a control fully into the window with the real mouse wheel, then click its centre.
+ * Visible in the DOM is not inside the window, so the box is checked against the window. */
 const click = async locator => {
   await locator.waitFor({ state: 'visible' });
-  const box = await locator.boundingBox();
+  const window = page.viewportSize() ?? await page.evaluate(() => ({ width: innerWidth, height: innerHeight }));
+  let box;
+  for (let attempt = 0; ; attempt += 1) {
+    box = await locator.boundingBox();
+    if (box && box.y >= 0 && box.x >= 0 && box.y + box.height <= window.height && box.x + box.width <= window.width) break;
+    if (attempt >= 40) throw new Error(`Control never came fully into the ${window.width}x${window.height} window; last box ${JSON.stringify(box)}`);
+    // Wheel over the visible part of the nearest scrolling container.
+    const area = await locator.evaluate(element => {
+      let node = element.parentElement;
+      while (node && !(node.scrollHeight > node.clientHeight && /auto|scroll/.test(getComputedStyle(node).overflowY))) node = node.parentElement;
+      const rect = (node ?? document.scrollingElement).getBoundingClientRect();
+      const top = Math.max(rect.top, 0), bottom = Math.min(rect.bottom, innerHeight);
+      return { x: Math.max(rect.left, 0) + Math.min(rect.width, innerWidth) / 2, y: (top + bottom) / 2 };
+    });
+    await page.mouse.move(area.x, area.y);
+    const offset = box.y + box.height / 2 - window.height / 2;
+    await page.mouse.wheel(0, Math.sign(offset) * Math.min(Math.abs(offset), window.height * 0.8));
+    await page.waitForTimeout(150);
+  }
   await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
 };
-/** Choose a select option with mouse focus and keyboard type-ahead only. */
-const choose = async (locator, label) => {
+/** Focus a select with the mouse and step to the option value with arrow keys only. */
+const choose = async (locator, value, prefix) => {
   await click(locator);
   await page.keyboard.press('Escape');
-  await page.keyboard.type(label);
-  await page.keyboard.press('Enter');
+  const values = await locator.evaluate(select => [...select.options].map(option => option.value));
+  const target = values.indexOf(value);
+  assert.ok(target >= 0, `Option ${JSON.stringify(value)} is not offered`);
+  const current = () => locator.evaluate(select => select.value);
+  for (let presses = 0; await current() !== value; presses += 1) {
+    assert.ok(presses < 2 * values.length + 4, `Arrow keys did not reach option ${JSON.stringify(value)}`);
+    const key = values.indexOf(await current()) < target ? 'ArrowDown' : 'ArrowUp';
+    const before = await current();
+    await page.keyboard.press(key);
+    await page.waitForTimeout(100);
+    // Where an arrow key opens the popup instead, move inside it and commit with Enter.
+    if (await current() === before) {
+      await page.keyboard.press(key);
+      await page.keyboard.press('Enter');
+      await page.waitForTimeout(100);
+    }
+  }
+  const text = await locator.evaluate(select => select.selectedOptions[0]?.textContent ?? '');
+  assert.equal(await current(), value);
+  assert.ok(text.startsWith(prefix), `Selected ${JSON.stringify(text)}, expected ${JSON.stringify(prefix)}`);
+  return text;
 };
 const rows = () => page.locator('.member-tree-rows > button').allInnerTexts();
 const notice = () => page.locator('.member-tree .native-notice').first().innerText();
@@ -90,7 +134,7 @@ async function scope() {
   step(`current scope: ${facts.currentNotice} · ${current.length} members`);
   await shot('01-members-current.png');
 
-  await choose(page.getByLabel('Member scope'), `History · #${options.summary}`);
+  facts.historySelected = await choose(page.getByLabel('Member scope'), options.summary, `History · #${options.summary} `);
   await page.getByText('History of one summary', { exact: false }).waitFor();
   await listed();
   facts.historyNotice = await notice();
@@ -98,7 +142,7 @@ async function scope() {
   step(`history of #${options.summary}: ${facts.history.length} members`);
   await shot('02-members-history.png');
 
-  await choose(page.getByLabel('Member scope'), 'Current summaries');
+  facts.currentSelected = await choose(page.getByLabel('Member scope'), '', 'Current summaries');
   await page.getByText('Members of current summaries', { exact: false }).waitFor();
   await page.waitForTimeout(3500);
   await listed();
@@ -147,6 +191,11 @@ async function lifecycle() {
   const column = page.locator(`[data-agent-id="${alias}"]`).first();
   const heading = column.locator('.agent-column-heading');
   await heading.waitFor();
+  const ready = { at: new Date().toISOString(), alias: await heading.locator('h2').getAttribute('title'),
+    state: (await heading.locator('span').first().innerText()).split('·').at(-1).trim() };
+  facts.ready = ready;
+  await fs.writeFile(path.join(evidence, 'ready.json'), JSON.stringify(ready, null, 2));
+  console.log(`WATCHER READY ${ready.state}`);
   const wanted = ['active', 'standby', 'active', 'standby'];
   const seen = [];
   facts.lifecycle = seen;
@@ -194,12 +243,10 @@ try {
   facts.launches += 1;
   page = await app.firstWindow();
   page.setDefaultTimeout(20000);
-  if (alias || part !== 'archive') await click(page.getByRole('button', { name: 'Members', exact: true }));
+  if (alias || runScope) await click(page.getByRole('button', { name: 'Members', exact: true }));
+  if (runScope) await scope();
   if (alias) await lifecycle();
-  else {
-    if (part !== 'archive') await scope();
-    if (part !== 'scope') await archive();
-  }
+  else if (part !== 'scope') await archive();
   facts.passed = true;
   await finish();
 } catch (error) {

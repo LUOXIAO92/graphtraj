@@ -7,6 +7,7 @@ import hashlib
 import json
 import math
 import os
+import time
 from pathlib import Path
 from typing import Any
 
@@ -305,6 +306,12 @@ def _apply_recovery(proposal: dict, cwd: Path) -> dict:
                                         from graphtraj.graph.task_protocol import execution_record
 
                                         value = execution_record(value)
+                                    elif key == 'budget':
+                                        from graphtraj.execution.execution_budget import start_approved_window
+
+                                        # The increment counts as execution time from now,
+                                        # not from when the budget ran out.
+                                        value = start_approved_window(proposal['before']['budget'], value, time.time())
                                     write_yaml_durably(paths[key], value)
                             if original_mode != proposal['after']['round_mode']:
                                 paths['round'].chmod(proposal['after']['round_mode'])

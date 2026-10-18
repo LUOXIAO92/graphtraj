@@ -513,11 +513,12 @@ def _read_usage(
         state["parent_notices"] = state.pop("leader_notices")
     if (
         not isinstance(state, dict)
-        or set(state) - {"approved_minutes"} != {
+        or set(state) - {"approved_minutes", "approved_window_started_at"} != {
             "started_at", "budget", "sessions", "corrections", "notifications",
             "allowance_minutes", "stopping_checks", "stopped", "parent_notices",
         }
         or not _nonnegative_number(state.get("approved_minutes", 0))
+        or not _nonnegative_number(state.get("approved_window_started_at", 0))
         or not _nonnegative_number(state["started_at"])
         or not isinstance(state["budget"], dict)
         or not isinstance(state["sessions"], dict)
@@ -562,6 +563,7 @@ def _new_notices(
     definition = budget.definition["execution_budget"]
     observed_at = time.time()
     elapsed = max(0.0, (observed_at - state["started_at"]) / 60)
+    counted = _counted_minutes(state, definition, observed_at)
     actual = {
         "elapsed_minutes": elapsed,
         "sessions": dict(state["sessions"]),
@@ -572,7 +574,7 @@ def _new_notices(
     estimated = definition["estimated_minutes"]["total"] + state.get("approved_minutes", 0)
     allowance = state["allowance_minutes"]
     seen = set(state["notifications"])
-    if elapsed >= estimated:
+    if counted >= estimated:
         exceeded.append(
             (
                 "elapsed_minutes",
@@ -582,7 +584,7 @@ def _new_notices(
                 ),
             )
         )
-    if elapsed >= estimated + allowance:
+    if counted >= estimated + allowance:
         exceeded.append(
             (
                 "additional_allowance",
@@ -592,7 +594,7 @@ def _new_notices(
                 ),
             )
         )
-        due = int((elapsed - estimated - allowance) // STOPPING_INTERVAL_MINUTES)
+        due = int((counted - estimated - allowance) // STOPPING_INTERVAL_MINUTES)
         while not state["stopped"] and state["stopping_checks"] < due:
             state["stopping_checks"] += 1
             checked_at = state["stopping_checks"] * STOPPING_INTERVAL_MINUTES
@@ -631,6 +633,41 @@ def _new_notices(
             )
             notices.append(notice)
     return notices
+
+
+def _counted_minutes(state: dict[str, Any], definition: dict[str, Any], now: float) -> float:
+    """Return the minutes counted against the budget at ``now``.
+
+    Wall time since ``started_at`` counts until an approved increment arrives
+    after the budget and allowance ran out. From ``approved_window_started_at``
+    the count resumes at that exhausted threshold, so waiting for approval is
+    not execution time; the historical clock itself is unchanged::
+
+        counted = total + allowance + (now - approved_window_started_at) / 60
+    """
+    window = state.get("approved_window_started_at")
+    if window is None:
+        return max(0.0, (now - state["started_at"]) / 60)
+    return (definition["estimated_minutes"]["total"] + state["allowance_minutes"]
+            + max(0.0, (now - window) / 60))
+
+
+def start_approved_window(before: dict[str, Any], after: dict[str, Any], now: float) -> dict[str, Any]:
+    """Return ``after`` with its approved increment counted as execution time from ``now``.
+
+    ``before`` is the accounting the increment was approved against. When it
+    had already exhausted its budget, allowance and earlier approvals, the
+    window start is placed so the count resumes at that threshold now;
+    otherwise the increment simply extends the running count.
+    """
+    previous = before.get("approved_minutes", 0)
+    if after.get("approved_minutes", 0) <= previous or "allowance_minutes" not in before:
+        return after
+    definition = before["budget"]["execution_budget"]
+    threshold = definition["estimated_minutes"]["total"] + before["allowance_minutes"] + previous
+    if _counted_minutes(before, definition, now) <= threshold:
+        return after
+    return {**after, "approved_window_started_at": now - previous * 60}
 
 
 def _event_instant(seconds: float) -> str:

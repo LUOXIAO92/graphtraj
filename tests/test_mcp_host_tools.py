@@ -24,8 +24,8 @@ from runner_fixtures import configure_harness
 from test_task_graph import _configure, _task, _write
 
 
-# The MCP surface exposes exactly one tool; features are reached through it.
-TOOL_NAMES = {"graphtraj"}
+# The original gateway remains alongside the two public function names.
+TOOL_NAMES = {"agents", "tasks", "graphtraj"}
 MCP_TOOL_NAME = "graphtraj"
 
 
@@ -198,6 +198,52 @@ def _stable_event(document: dict) -> dict:
     }
 
 
+def test_mcp_agents_preserves_verified_main_and_helper_authority(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The stdio function uses native verification, never a caller argument.
+
+    Native metadata verification is controlled here; this is not real-host
+    evidence. The MCP parser, gateway and independent control stay real.
+    """
+    from io import StringIO
+    from graphtraj.interfaces.mcp import serve
+    from graphtraj.runtimes import runtime_adapter
+    from graphtraj.runtimes.codex import session_entry
+    from graphtraj.execution.runner_models import RunnerError
+
+    _configure(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    connection = {'runtime': 'codex', 'session': 'verified-main', 'codex_home': str(tmp_path)}
+    monkeypatch.setattr(runtime_adapter, 'current_host_connection', lambda: connection)
+    monkeypatch.setattr(session_entry, 'routed_connection', lambda runner, value: value)
+
+    def verify(runner: Path, value: dict) -> str | None:
+        """Represent the existing native verifier's distinct source outcomes."""
+        if value['session'] == 'stale':
+            raise RunnerError('authority-denied', 'Stale native source.')
+        return None if value['session'] == 'verified-main' else value['session']
+
+    monkeypatch.setattr(session_entry, 'caller_identity', verify)
+    monkeypatch.setattr(session_entry, 'owns_native_root', lambda runner, value: False)
+
+    def call(arguments: dict) -> dict:
+        """Exercise a full newline-delimited MCP tools/call exchange."""
+        output = StringIO()
+        serve(StringIO(json.dumps({'jsonrpc': '2.0', 'id': 1, 'method': 'tools/call',
+                                  'params': {'name': 'agents', 'arguments': arguments}}) + '\n'), output)
+        return json.loads(output.getvalue())['result']
+
+    assert call({'action': 'status'})['isError'] is False
+    forged = call({'action': 'status', 'caller': 'another-main'})
+    assert forged['isError'] is True
+    connection['session'] = 'native-helper'
+    denied = call({'action': 'create', 'runtime': 'codex', 'instruction': 'must not launch'})
+    assert denied['structuredContent']['error']['code'] == 'authority-denied'
+    connection['session'] = 'stale'
+    assert call({'action': 'status'})['isError'] is True
+
+
 def test_installed_mcp_server_discovers_tools_and_reads_the_same_graph_as_the_cli(
     installed_commands: InstalledCommands, mcp_executable: Path, tmp_path: Path
 ) -> None:
@@ -219,10 +265,16 @@ def test_installed_mcp_server_discovers_tools_and_reads_the_same_graph_as_the_cl
     with _started_mcp(mcp_executable, project) as server:
         listed = server.request("tools/list")["result"]["tools"]
         assert {tool["name"] for tool in listed} == TOOL_NAMES
-        descriptor, = listed
+        descriptors = {tool['name']: tool for tool in listed}
+        descriptor = descriptors['graphtraj']
         assert descriptor["description"]
-        # The one registered schema is the fixed outer envelope, not a union of
-        # the selected feature's schemas and not a second flat tool list.
+        # Tasks retains the gateway envelope; agents uses its independent contract.
+        from agent_swarm import tool_descriptor
+
+        agents_descriptor = tool_descriptor()
+        agents_descriptor['inputSchema'] = agents_descriptor.pop('input_schema')
+        assert descriptors['agents'] == agents_descriptor
+        assert descriptors['tasks']['inputSchema'] == gateway.INPUT_SCHEMA
         assert descriptor["inputSchema"] == gateway.INPUT_SCHEMA
         assert set(descriptor["inputSchema"]["properties"]) == {
             "action", "query", "feature", "arguments", "schema",
@@ -273,6 +325,15 @@ def test_installed_mcp_server_discovers_tools_and_reads_the_same_graph_as_the_cl
         assert node["parent_id"] is None and node["disposition"] == "active"
         # The rendered text is the CLI's own YAML for the same document.
         assert call["result"]["content"][0]["text"] == graph.stdout
+        tasks_call = server.request('tools/call', {
+            'name': 'tasks', 'arguments': tool_envelope('task_graph', {}),
+        })
+        assert tasks_call['result'] == call['result']
+        agents_call = server.request('tools/call', {
+            'name': 'agents', 'arguments': {'action': 'status'},
+        })
+        assert agents_call['result']['isError'] is True
+        assert agents_call['result']['structuredContent']['error']['code'] == 'authority-unavailable'
 
 
 def test_installed_mcp_server_submits_the_same_graph_operations_as_the_cli(

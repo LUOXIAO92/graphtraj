@@ -2,9 +2,9 @@
 
 The installed ``graphtraj-mcp`` entry point answers the MCP methods a host
 needs to discover and run tools: ``initialize``, ``notifications/initialized``,
-``tools/list``, ``tools/call`` and ``ping``. It exposes one ``graphtraj`` tool
-whose fixed outer schema forwards discover/describe/execute requests to the
-shared gateway, so a host reaches the same operations and documents as the CLI.
+``tools/list``, ``tools/call`` and ``ping``. It exposes ``agents`` and ``tasks``;
+the original ``graphtraj`` gateway remains available to existing consumers.
+All three use the same verified caller and operation paths as native hosts.
 
 The server speaks newline-delimited JSON-RPC 2.0 over stdin/stdout and uses
 only the standard library, so no MCP SDK dependency is required. It reads the
@@ -46,15 +46,11 @@ INVALID_REQUEST  = -32600
 METHOD_NOT_FOUND = -32601
 INVALID_PARAMS   = -32602
 
-def _tool_document() -> dict[str, Any]:
-    """Render the single ``graphtraj`` entry the host discovers.
-
-    The outer schema is the gateway's fixed request structure, so new features
-    never expand the registered tool list or add another top-level tool.
-    """
+def _tool_document(name: str = MCP_TOOL_NAME) -> dict[str, Any]:
+    """Describe a task gateway, preserving the original compatibility name."""
 
     return {
-        "name":        MCP_TOOL_NAME,
+        "name":        name,
         "description": MCP_TOOL_DESCRIPTION,
         "inputSchema": gateway.INPUT_SCHEMA,
     }
@@ -119,7 +115,7 @@ def _caller_notices(
 def _tool_call_response(
     request_id: Any, params: Mapping[str, Any]
 ) -> dict[str, Any]:
-    """Forward one ``graphtraj`` request and return its MCP tool result.
+    """Forward one registered function and return its MCP tool result.
 
     The request's outer arguments are the gateway's discover/describe/execute
     envelope. The server's own working directory is the trusted project
@@ -128,7 +124,7 @@ def _tool_call_response(
     """
 
     name = params.get("name")
-    if name != MCP_TOOL_NAME:
+    if name not in {MCP_TOOL_NAME, 'tasks', 'agents'}:
         return _error_response(
             request_id, INVALID_PARAMS, "Unknown tool: {0}".format(name)
         )
@@ -137,6 +133,8 @@ def _tool_call_response(
         return _error_response(
             request_id, INVALID_PARAMS, "Tool arguments must be an object."
         )
+    if name == 'agents':
+        arguments = {'action': 'execute', 'feature': 'agents', 'arguments': arguments}
     try:
         from graphtraj.runtimes.codex.host_events import calling_session
 
@@ -200,7 +198,13 @@ def _respond(message: Mapping[str, Any]) -> dict[str, Any] | None:
     if method == "initialize":
         return _result_response(request_id, _initialize_result(params))
     if method == "tools/list":
-        return _result_response(request_id, {"tools": [_tool_document()]})
+        from agent_swarm import tool_descriptor
+
+        agents = tool_descriptor()
+        agents['inputSchema'] = agents.pop('input_schema')
+        return _result_response(request_id, {"tools": [
+            agents, _tool_document('tasks'), _tool_document(),
+        ]})
     if method == "tools/call":
         return _tool_call_response(request_id, params)
     if method == "ping":

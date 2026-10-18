@@ -7,6 +7,7 @@ the backup; this operation never edits a live Harness or activates a Runtime.
 from __future__ import annotations
 
 import json
+import hashlib
 from pathlib import Path
 import shutil
 
@@ -28,6 +29,24 @@ PATH_FIELDS = frozenset({
 })
 
 
+def _owned_metadata(path: Path) -> bool:
+    """Identify GraphTraj records, excluding authored and Runtime configuration."""
+    return (path.name in RUNTIME_DIAGNOSTIC_FILES
+            or path.name in {'task.yml', 'team.yml', 'task-backups.yml', 'child-registration.yml'}
+            or path.parent.name == 'batches')
+
+
+def _partition_moves(root: Path, manifest: dict) -> dict[str, str]:
+    """Describe only the state and Runner paths this offline partition relocates."""
+    data, core = root / '.graphtraj', root / '.graphtraj/core'
+    return {manifest['state_source']: str(core / 'state'),
+            manifest['runner_source']: str(core / 'runner'),
+            str(data / 'state'): str(core / 'state'),
+            str(data / 'migration-runner'): str(core / 'runner'),
+            '.graphtraj/state': '.graphtraj/core/state',
+            '.graphtraj/runner': '.graphtraj/core/runner'}
+
+
 def _references(value: object, moves: dict[str, str], field: str = '') -> object:
     """Relocate structural references, never authored prose or native payloads."""
     if isinstance(value, dict):
@@ -44,11 +63,7 @@ def _references(value: object, moves: dict[str, str], field: str = '') -> object
 def _rewrite_records(directory: Path, moves: dict[str, str]) -> None:
     """Rewrite only GraphTraj metadata; original records remain in the backup."""
     for path in directory.rglob('*.yml'):
-        if path.is_symlink() or not (
-            path.name in RUNTIME_DIAGNOSTIC_FILES
-            or path.name in {'task.yml', 'team.yml', 'task-backups.yml', 'child-registration.yml'}
-            or path.parent.name == 'batches'
-        ):
+        if path.is_symlink() or not _owned_metadata(path):
             continue
         document = yaml.safe_load(path.read_text(encoding='utf-8'))
         rewritten = _references(document, moves)
@@ -152,14 +167,7 @@ def partition_snapshot(root: Path) -> dict:
     state, runner = configuration.state, data / 'migration-runner'
     original_config = configuration_file(root)
     document = yaml.safe_load(original_config.read_text(encoding='utf-8'))
-    original_state = manifest['state_source']
-    original_runner = manifest['runner_source']
-    moves = {
-        original_state: str(core / 'state'), original_runner: str(core / 'runner'),
-        str(state): str(core / 'state'), str(runner): str(core / 'runner'),
-        '.graphtraj/state': '.graphtraj/core/state',
-        '.graphtraj/runner': '.graphtraj/core/runner',
-    }
+    moves = _partition_moves(root, manifest)
     core.mkdir()
     backup = core / 'backups' / 'before-agent-partition'
     backup.mkdir(parents=True)
@@ -238,3 +246,71 @@ def _backup_links(root: Path, manifest: dict) -> list[dict]:
     for name in ('state', 'runner'):
         gaps += install_links(backup / name, manifest.get('links', {}).get(name, []), roots, captured)
     return gaps
+
+
+def verify_partition(root: Path, manifest: dict) -> dict | None:
+    """Compare relocated metadata and untouched files against the retained backup.
+
+    Only structural paths and imported Agent references may differ. Authored
+    text, Runtime configuration and unknown fields compare without disclosure.
+    This is a copy-integrity check, not proof of live native continuation.
+    """
+    core = root / '.graphtraj/core'
+    if not (core / 'config.yml').is_file():
+        return None
+    backup = core / 'backups/before-agent-partition'
+    moves = _partition_moves(root, manifest)
+    mismatches, missing_links = [], []
+    files = links = 0
+    for name in ('state', 'runner'):
+        for original in (backup / name).rglob('*'):
+            relative = original.relative_to(backup / name)
+            if name == 'state' and relative.parts[0] == 'sessions':
+                continue  # Separately verified as legacy JSONL evidence.
+            target = core / name / relative
+            reference = name + '/' + relative.as_posix()
+            if original.is_symlink():
+                links += 1
+                expected = original.resolve()
+                for old_name in ('state', 'runner'):
+                    if expected.is_relative_to(backup / old_name):
+                        expected = core / old_name / expected.relative_to(backup / old_name)
+                        break
+                if not target.is_symlink() or target.resolve() != expected:
+                    mismatches.append(reference)
+                elif not target.exists():
+                    missing_links.append(reference)
+                continue
+            if not original.is_file():
+                continue
+            files += 1
+            if not target.is_file() or target.is_symlink():
+                mismatches.append(reference)
+                continue
+            if original.suffix == '.yml' and _owned_metadata(original):
+                expected = _references(yaml.safe_load(original.read_text(encoding='utf-8')), moves)
+                actual = yaml.safe_load(target.read_text(encoding='utf-8'))
+                if isinstance(expected, dict) and isinstance(actual, dict):
+                    old_mapping = expected.get('retirement', {}).get('mapping', expected)
+                    new_mapping = actual.get('retirement', {}).get('mapping', actual)
+                    alias = old_mapping.get('alias')
+                    if alias and not old_mapping.get('agent') and new_mapping.get('agent') == alias:
+                        # The import's new reference must point to its exact retained identity.
+                        controls = root / '.graphtraj/swarm/control/agents'
+                        record_path = controls / (alias + '.json')
+                        if record_path.resolve().is_relative_to(controls.resolve()) and record_path.is_file():
+                            record = json.loads(record_path.read_text(encoding='utf-8'))
+                            if record.get('agent') == alias and record.get('session') == old_mapping.get('session'):
+                                old_mapping['agent'] = alias
+                matches = expected == actual
+            elif name == 'state' and original.parent.name == 'worldline' and original.suffix == '.jsonl':
+                expected = [_references(json.loads(line), moves) for line in original.read_text(encoding='utf-8').splitlines()]
+                actual = [json.loads(line) for line in target.read_text(encoding='utf-8').splitlines()]
+                matches = expected == actual
+            else:
+                with original.open('rb') as before, target.open('rb') as after:
+                    matches = hashlib.file_digest(before, 'sha256').digest() == hashlib.file_digest(after, 'sha256').digest()
+            if not matches:
+                mismatches.append(reference)
+    return {'files': files, 'links': links, 'matches': not mismatches,
+            'mismatches': mismatches, 'missing_links': missing_links}

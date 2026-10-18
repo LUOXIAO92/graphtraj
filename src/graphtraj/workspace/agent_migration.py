@@ -189,8 +189,13 @@ def migrate_agents(
             with path.open('rb') as stream:
                 digest = hashlib.file_digest(stream, 'sha256').hexdigest()
             files.append({'reference': item['stored'], 'matches': digest == item['sha256']})
+        from graphtraj.workspace.agent_cutover import verify_partition
+
+        layout = verify_partition(cwd, manifest)
         return {**report, 'sqlite_archives': len(archives), 'verification': {'sqlite': checks, 'native_files': files,
-                'matches': all(not check['mismatches'] for check in checks) and all(f['matches'] for f in files),
+                'layout': layout,
+                'matches': (all(not check['mismatches'] for check in checks) and all(f['matches'] for f in files)
+                            and (layout is None or layout['matches'])),
                 'scope': 'Exact legacy values and attachment bytes; captured native file hashes. Native history gaps and live tails are not repaired by this check.'}}
     imports = [import_sqlite(path, root) for path in archives]
     results = []

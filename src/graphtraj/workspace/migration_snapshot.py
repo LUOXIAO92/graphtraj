@@ -250,6 +250,8 @@ def snapshot_project(cwd: Path, destination: Path) -> dict:
         raise ValueError('Snapshot destination must be new and outside the source Harness.')
     if (project / MANIFEST).exists():
         return _clone_snapshot(project, destination)
+    git_before = subprocess.run(['git', '-C', str(configuration.project_root), 'worktree', 'list', '--porcelain'],
+                                capture_output=True, text=True, check=False)
     sources = session_sources(configuration.state, runner_directory(project), project)
     task_facts = task_signatures(configuration.state)
     control_facts = _control_signatures(project)
@@ -263,7 +265,8 @@ def snapshot_project(cwd: Path, destination: Path) -> dict:
                 item['stored'] = '.graphtraj/migration-sources/' + item['stored']
         manifest = {'version': 1, 'project': str(project), 'sources': sources, **captured,
                     'state_source': str(configuration.state),
-                    'runner_source': str(runner_directory(project)), 'task_state_unchanged': True}
+                    'runner_source': str(runner_directory(project)), 'task_state_unchanged': True,
+                    'native_tails': 'Captured independently; concurrent JSONL archives may include later native records.'}
         state = data / 'state'
         runner = data / 'migration-runner'
         state_links = copy_records(configuration.state, state)
@@ -306,7 +309,10 @@ def snapshot_project(cwd: Path, destination: Path) -> dict:
                 shutil.copy2(original, inputs / name)
         git = subprocess.run(['git', '-C', str(configuration.project_root), 'worktree', 'list', '--porcelain'],
                              capture_output=True, text=True, check=False)
+        if (git.returncode, git.stdout) != (git_before.returncode, git_before.stdout):
+            raise ValueError('Git worktree metadata changed during snapshot; retry between commits or worktree changes.')
         manifest['git_worktrees'] = (git.stdout if git.returncode == 0 else None)
+        manifest['git_worktrees_unchanged'] = git.returncode == 0
         if git.returncode:
             manifest['git_missing'] = 'Source Repository Git worktree metadata is unavailable.'
         manifest['configuration_captured'] = [path.name for path in inputs.iterdir()]

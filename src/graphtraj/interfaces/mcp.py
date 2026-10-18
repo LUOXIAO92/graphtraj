@@ -13,7 +13,6 @@ Harness Project Root from its own working directory, exactly like the CLI.
 
 from __future__ import annotations
 
-import json
 import os
 import sys
 from contextlib import contextmanager
@@ -21,6 +20,8 @@ from pathlib import Path
 from typing import Any, Iterator, Mapping, TextIO
 
 import yaml
+
+from agent_swarm.mcp import error_response as _error_response, result_response as _result_response
 
 from graphtraj.configuration.project_configuration import ProjectConfigurationError
 from graphtraj.execution.execution_budget import budget_notice_output, caller_notice_fd
@@ -30,8 +31,6 @@ from graphtraj.runtimes.codex.app_server import CodexMainRecovery
 from graphtraj.runtimes.codex.codex_adapter import CodexAdapterError
 
 
-JSONRPC_VERSION = "2.0"
-PROTOCOL_VERSION = "2025-06-18"
 SERVER_INFO      = {"name": "graphtraj", "version": "0.1.0"}
 
 MCP_TOOL_NAME        = "graphtraj"
@@ -41,9 +40,6 @@ MCP_TOOL_DESCRIPTION = (
     "guide reference (schema=true requests only its parameters), and action=execute to run it."
 )
 
-PARSE_ERROR      = -32700
-INVALID_REQUEST  = -32600
-METHOD_NOT_FOUND = -32601
 INVALID_PARAMS   = -32602
 
 def _tool_document() -> dict[str, Any]:
@@ -69,20 +65,6 @@ def _tool_documents() -> list[dict[str, Any]]:
             for name in ('agents', 'tasks')
         ]
     return [_tool_document()]
-
-
-def _result_response(request_id: Any, result: Mapping[str, Any]) -> dict[str, Any]:
-    return {"jsonrpc": JSONRPC_VERSION, "id": request_id, "result": result}
-
-
-def _error_response(request_id: Any, code: int, message: str) -> dict[str, Any]:
-    return {
-        "jsonrpc": JSONRPC_VERSION,
-        "id":      request_id,
-        "error":   {"code": code, "message": message},
-    }
-
-
 
 
 @contextmanager

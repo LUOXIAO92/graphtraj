@@ -138,9 +138,9 @@ def migrate_agents(
 ) -> dict:
     """Convert only an isolated public snapshot, with repeatable native imports.
 
-    Production cutover is deliberately refused until the complete stopped
-    control/configuration/Worktree transition can be applied atomically. This
-    operation establishes archive evidence without changing active identities.
+    Production cutover is not implemented here. It still needs the stopped
+    control/configuration/Worktree transition and retained recovery inputs.
+    This operation establishes archive evidence without changing active identities.
     """
     configuration = load_project_configuration(cwd)
     manifest_path = cwd / MANIFEST

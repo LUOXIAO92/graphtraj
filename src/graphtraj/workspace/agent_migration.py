@@ -35,8 +35,9 @@ def _legacy_registrations(
     Main ownership identifies retained root owners, not the current GUI tab.
     """
     result = []
-    roots = {manifest['runner_source']: root / '.graphtraj/migration-runner',
-             manifest['state_source']: root / '.graphtraj/state',
+    backup = root / '.graphtraj/core/backups/before-agent-partition'
+    roots = {manifest['runner_source']: backup / 'runner' if backup.is_dir() else root / '.graphtraj/migration-runner',
+             manifest['state_source']: backup / 'state' if backup.is_dir() else root / '.graphtraj/state',
              manifest['project'] + '/.graphtraj/swarm': root / '.graphtraj/swarm'}
     seen = set()
     for item in sources:
@@ -188,7 +189,7 @@ def migrate_agents(
             with path.open('rb') as stream:
                 digest = hashlib.file_digest(stream, 'sha256').hexdigest()
             files.append({'reference': item['stored'], 'matches': digest == item['sha256']})
-        return {**report, 'verification': {'sqlite': checks, 'native_files': files,
+        return {**report, 'sqlite_archives': len(archives), 'verification': {'sqlite': checks, 'native_files': files,
                 'matches': all(not check['mismatches'] for check in checks) and all(f['matches'] for f in files),
                 'scope': 'Exact legacy values and attachment bytes; captured native file hashes. Native history gaps and live tails are not repaired by this check.'}}
     imports = [import_sqlite(path, root) for path in archives]

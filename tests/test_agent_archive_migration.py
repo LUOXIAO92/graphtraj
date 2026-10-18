@@ -277,6 +277,9 @@ def test_public_partition_uses_core_paths_and_retains_originals(tmp_path: Path, 
     again = runner.invoke(main, ['migrate-agents', '--partition'])
     assert again.exit_code == 0, again.output
     assert yaml.safe_load(again.output)['layout']['partition'] == 'already-migrated'
+    verified = runner.invoke(main, ['migrate-agents', '--verify'])
+    assert verified.exit_code == 0, verified.output
+    assert yaml.safe_load(verified.output)['verification']['matches']
 
 
 def test_imported_stopped_and_retired_agents_keep_identity_and_parents(tmp_path: Path) -> None:

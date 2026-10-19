@@ -21,23 +21,32 @@ from graphtraj.workspace.agent_migration import migrate_agents
 from graphtraj.workspace.migration_snapshot import MANIFEST, snapshot_project
 
 
-def _stopped(root: Path) -> None:
+def _stopped(root: Path) -> list[dict]:
     """Refuse a live or unconfirmed member; Main's stopped writes are operator-owned."""
+    from graphtraj.execution.runner_status import is_session_mapping
+
     runner = runner_directory(root)
+    unavailable = []
     for path in runner.glob('sessions/*/mapping.yml'):
         mapping = yaml.safe_load(path.read_text())
         terminal_path = path.parent / 'execution.yml'
         terminal = yaml.safe_load(terminal_path.read_text()) if terminal_path.is_file() else {}
+        held = ownership_is_held(path.parent, mapping.get('worker_pid', 0))
+        if not terminal and not held and not mapping.get('execution_id') and not is_session_mapping(mapping):
+            unavailable.append({'alias': mapping.get('alias', path.parent.name),
+                                'missing': 'Historical binding has no current execution schema; activity and continuation are not inferred.'})
+            continue
         if (not terminal or terminal.get('outcome') not in {'completed', 'interrupted', 'runtime-error'}
                 or terminal.get('terminal_confirmed') is False
                 or (mapping.get('execution_id') and terminal.get('execution_id') != mapping['execution_id'])
-                or ownership_is_held(path.parent, mapping.get('worker_pid', 0))):
+                or held):
             raise ValueError(f"Stop and confirm the retained execution before cutover: {mapping.get('alias', path.parent.name)}")
     for path in (root / '.graphtraj/swarm/control/agents').glob('*.json'):
         record = json.loads(path.read_text())
         if any(item.get('state') != 'ended' or item.get('terminal_confirmed') is False
                for item in record.get('executions', [])):
             raise ValueError(f"Stop and confirm the Agent before cutover: {record['agent']}")
+    return unavailable
 
 
 def _facts(paths: list[Path]) -> dict:
@@ -185,7 +194,7 @@ def cutover_project(
     configuration = load_project_configuration(root)
     data = root / '.graphtraj'
     runner = runner_directory(root)
-    _stopped(root)
+    control_missing = _stopped(root)
     old_paths = [configuration.state, runner, data / 'swarm', data / 'config.yml', data / 'roles.yml', data / 'cli']
     before = _facts(old_paths)
     git_before = _git(configuration.project_root, 'worktree', 'list', '--porcelain')
@@ -211,8 +220,6 @@ def cutover_project(
     if not verified['verification']['matches']:
         raise ValueError('Migration verification failed; retained input and staging were not installed.')
     partitioned = partition_snapshot(staging)
-    if partitioned['agents']['missing']:
-        raise ValueError('Some stopped identities lack continuation settings; retained staging was not installed.')
     staged_core = staging / '.graphtraj/core'
     staged_swarm = staging / '.graphtraj/swarm'
     native_moves, native_missing = _native_resources(staging, root, manifest)
@@ -310,6 +317,7 @@ def cutover_project(
             shutil.copy2(staging / 'cutover-config.yml', staged_core / 'config.yml')
     return {'cutover': 'installed', 'backup': str(backup), 'snapshot': str(snapshot),
             'worktrees': worktrees, 'identities': partitioned['agents'],
+            'control_missing': control_missing,
             'native_missing': [item for item in imported['native_results'] if item.get('missing')],
             'native_resource_missing': native_missing,
             'missing_links': imported['missing_links'],

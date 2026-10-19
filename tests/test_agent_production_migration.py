@@ -36,7 +36,8 @@ def project(root: Path) -> tuple[Path, Path]:
     directory.mkdir(parents=True)
     mapping = {'alias': 'old@member', 'runtime': 'codex', 'session': 'native-old',
                'parent': 'original-parent', 'worker_pid': 0, 'worktree_path': str(worktree),
-               'task_id': '1', 'team_generation': 1, 'role': 'engineer', 'trace_file': str(directory / 'native.jsonl')}
+               'task_id': '1', 'team_generation': 1, 'role': 'engineer', 'trace_file': str(directory / 'native.jsonl'),
+               'runtime_pid': 0, 'retained_batch_file': 'retained-batch.yml'}
     (directory / 'mapping.yml').write_text(yaml.safe_dump(mapping))
     (directory / 'session.yml').write_text(yaml.safe_dump({'session': 'native-old', 'rollout_path': str(directory / 'native.jsonl')}))
     permissions = {'member': {'filesystem': {str(worktree): 'write', str(data / 'state'): 'read'}}}
@@ -140,6 +141,25 @@ def test_cutover_refuses_unconfirmed_writer_before_snapshot(tmp_path: Path, monk
     assert result.exit_code != 0 and 'Stop and confirm' in result.output
     assert not (tmp_path / 'input').exists()
     assert (root / '.graphtraj/config.yml').is_file()
+
+
+def test_historical_unknown_binding_is_retained_without_fake_activity_or_retirement(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A lookup-incompatible historical binding is a gap, not a new cleanup requirement."""
+    root = tmp_path / 'project'
+    project(root)
+    old = root / '.graphtraj/runner/sessions/old-history/mapping.yml'
+    old.parent.mkdir()
+    old.write_text('alias: old-history\ntask_id: "218"\nsession: retained-native\n')
+    before = old.read_bytes()
+    monkeypatch.chdir(root)
+    result = CliRunner().invoke(main, ['migrate-agents', '--cutover', str(tmp_path / 'input'), '--writes-stopped'])
+    assert result.exit_code == 0, result.output
+    report = yaml.safe_load(result.output)
+    assert report['control_missing'][0]['alias'] == 'old-history'
+    assert (root / '.graphtraj/core/runner/sessions/old-history/mapping.yml').read_bytes() == before
+    assert not (root / '.graphtraj/swarm/control/agents/old-history.json').exists()
 
 
 @pytest.mark.parametrize('runtime', ['pi', 'dsh'])

@@ -424,8 +424,12 @@ def require_replacement_authority(
     return result
 
 
-def require_stopped_subtree(runner_directory: Path, alias: str) -> None:
-    """Require terminal execution for the target and every recorded descendant."""
+def require_stopped_subtree(runner_directory: Path, alias: str, *, operation: str = "replacement") -> None:
+    """Require terminal execution for the target and every recorded descendant.
+
+    ``operation`` names the refused action; the refusal names the member that
+    is still running.
+    """
     # The target must always be an established, valid Session. Other allocated
     # directories may precede launch or retain a confirmed startup failure.
     mappings = {alias: read_alias_mapping(runner_directory, alias)}
@@ -460,7 +464,7 @@ def require_stopped_subtree(runner_directory: Path, alias: str) -> None:
         if _status_session(mapping, directory, current, respond_to_abnormal=False)["activity"] != "idle":
             raise RunnerError(
                 "replacement-not-stopped",
-                "The target and all descendants must be stopped before replacement.",
+                f"The target and all descendants must be stopped before {operation}; {current} is not idle.",
             )
         pending.extend(
             name for name, (child, _) in mappings.items()

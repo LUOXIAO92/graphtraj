@@ -105,6 +105,12 @@ class GraphTrajAgents:
         """Perform one validated action, translating GraphTraj rejections."""
         agent = arguments.get("agent")
         try:
+            member = self._member_alias(agent)
+            if member is not None:
+                # A Task member's core reference uses its existing Session controls.
+                outcome = self._operate(action, {**arguments, "agent": member})
+                return Outcome(outcome.result, agent=agent, session=outcome.session,
+                               execution=outcome.execution, failed=outcome.failed)
             if action == "create" or (agent or "").startswith(AGENT_PREFIX):
                 return self.control.operate(action, arguments, binding)
             if action == "status" and agent is None:
@@ -115,21 +121,49 @@ class GraphTrajAgents:
         except ValueError as error:
             raise AgentsError("invalid-input", str(error)) from None
 
-    def _hierarchy(self, binding: Binding) -> Outcome:
-        """Return the caller's own Agents and, for a member, its member subtree.
+    def _member_alias(self, agent: str | None) -> str | None:
+        """Return the Runner alias a Task member's core Agent record retains.
 
-        Only the caller's real hierarchy is listed: a Task member caller adds
-        the Sessions recorded under it, each with its own error if one cannot
-        be judged. Main and other callers without a Runner alias get no
-        project-wide scan; current Task membership is ``tasks`` task_members.
+        The Worker records each Task member under the ``graphtraj-tasks`` host
+        with its alias as the only driver setting; any other reference is not
+        a Task member.
+        """
+        import json
+
+        from graphtraj.execution.task_agents import TASK_HOST
+
+        if not (agent or "").startswith(AGENT_PREFIX) or "/" in agent:
+            return None
+        record = swarm_root(self.root) / "control" / "agents" / f"{agent}.json"
+        try:
+            document = json.loads(record.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return None
+        alias = document.get("settings", {}).get("alias") if isinstance(document, dict) else None
+        return alias if document.get("host") == TASK_HOST and isinstance(alias, str) else None
+
+    def _hierarchy(self, binding: Binding) -> Outcome:
+        """Return the caller's own Agents and its real Task member hierarchy.
+
+        A Task member caller adds the Sessions recorded under it. A native
+        Main adds the top-level Sessions it dispatched, as recorded by their
+        ``parent_connection``, with their subtrees. Each in-scope node keeps
+        its own error. Unrelated history is never scanned into this view;
+        current Task membership is ``tasks`` task_members.
         """
         from graphtraj.execution.runner_status import status_tree
 
         agents = self.control.operate("status", {}, binding)
-        caller = binding.caller.agent
-        if caller is None or caller.startswith(AGENT_PREFIX):
+        caller = binding.caller
+        if (caller.agent or "").startswith(AGENT_PREFIX):
             return agents
-        sessions = status_tree(self.root)
+        if caller.agent is None:
+            if caller.session is None or caller.runtime is None:
+                return agents
+            sessions = status_tree(self.root, owner_connection={
+                "runtime": caller.runtime, "session": caller.session})
+        else:
+            sessions = status_tree(self.root)
         return Outcome({**agents.result, "task_sessions": sessions.document},
                        failed=not sessions.succeeded)
 

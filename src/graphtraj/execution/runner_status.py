@@ -573,6 +573,7 @@ def status_tree(
     operation_total: bool = False,
     baseline: str | None = None,
     candidate: str | None = None,
+    owner_connection: Mapping[str, Any] | None = None,
 ) -> StatusResponse:
     """Return the visible Agent status tree from the Runner's own records.
 
@@ -593,6 +594,12 @@ def status_tree(
     that node's own error and leaves the remaining tree intact. A record with
     no known parent appears at the top level for Main and the user and stays
     out of a Session caller's tree, which the recorded relation defines.
+
+    ``owner_connection`` narrows a caller without a live Session to the
+    top-level Sessions whose recorded ``parent_connection`` is that native
+    Main (same Runtime and Session), not retired, with their subtrees. Records
+    that do not name that Main, cannot be read or are retired stay out of this
+    view and remain readable by explicit alias.
     """
     _require_git_pair(baseline, candidate)
     runner_directory = discover_runner_directory(cwd)
@@ -611,8 +618,15 @@ def status_tree(
         parent = mapping.get("parent")
         if isinstance(parent, str):
             children.setdefault(parent, []).append(alias)
+    def owned(mapping: Mapping[str, Any]) -> bool:
+        """Return whether a top-level record names ``owner_connection`` as its Main."""
+        recorded = mapping.get("parent_connection")
+        return isinstance(recorded, dict) and all(
+            recorded.get(key) == owner_connection.get(key) for key in ("runtime", "session"))
+
     roots = (
-        [alias for alias, mapping in records.items() if mapping.get("parent") is None]
+        [alias for alias, mapping in records.items() if mapping.get("parent") is None
+         and (owner_connection is None or owned(mapping))]
         if caller is None
         else [caller] if caller in records else [
             alias for alias, mapping in records.items() if is_direct_owner(caller, mapping)
@@ -648,11 +662,14 @@ def status_tree(
         except RunnerError as error:
             node["error"] = error.as_document()
             errors.append(error)
+        if owner_connection is not None and node.get("retire_status") == "retired":
+            # Retired members appear only through an explicit historical query.
+            continue
         nodes.append(node)
         pending.extend(
             (child, alias) for child in reversed(sorted(children.get(alias, ())))
         )
-    if caller is None:
+    if caller is None and owner_connection is None:
         for alias, error in failures:
             if read_retired_legacy_hosted_mapping(runner_directory, alias) is not None:
                 # A retired withdrawn hosted record is not a broken active

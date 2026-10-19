@@ -36,6 +36,13 @@ from graphtraj.runtimes.claude.diagnostics import (
 )
 
 
+# Parent states a notice retry cannot change; the request stays retained.
+LASTING_PARENT_REFUSALS = frozenset({
+    'subtree-stopped', 'session-retired', 'execution-budget-stopped',
+    'EXECUTION_BUDGET_STOPPED', 'team-not-active', 'authority-denied',
+})
+
+
 class ClaudeExecution:
     """Keep native permissions, registration and terminal evidence on one pipe."""
 
@@ -211,12 +218,17 @@ class ClaudeExecution:
             'subtype': 'success', 'request_id': identity, 'response': response,
         }})
 
-    def _prompt(self, text: str) -> None:
-        """Queue a native user message while counting each expected result."""
+    def _user_message(self, text: str) -> dict:
+        """Build one native user message and remember its input identity."""
         message = {'type': 'user', 'session_id': self.native_id,
                    'message': {'role': 'user', 'content': text}, 'parent_tool_use_id': None,
                    'uuid': str(uuid.uuid4())}
         self.input_ids.add(message['uuid'])
+        return message
+
+    def _prompt(self, text: str) -> None:
+        """Queue a native user message while counting each expected result."""
+        message = self._user_message(text)
         self._send(message)
         self.events.put({**message, 'graphtraj_direction': 'sent'})
         self.sent += 1
@@ -230,10 +242,12 @@ class ClaudeExecution:
         resources = [p.resolve() for p in (worktree / 'docs', worktree / 'CONTEXT.md',
                                            worktree / 'AGENTS.md', worktree / '.agents') if p.exists()]
         resources.extend(Path(path).resolve() for path in request['resources'])
-        denied_read = [request['state_directory'], str(project_runner_directory(root)),
-                       str(project_cli_directory(root)),
+        # Project development records stay readable for diagnosis across
+        # Agents; control channels, Runtime homes and credentials stay denied.
+        records = [request['state_directory'], str(project_runner_directory(root))]
+        denied_read = [str(project_cli_directory(root)),
                        str(root / '.codex'), str(Path.home() / '.codex'), str(home)]
-        denied_write = [*map(str, resources), request['docs_directory'], str(home),
+        denied_write = [*records, *map(str, resources), request['docs_directory'], str(home),
                         str(project_configuration_file(root)), str(project_core_directory(root) / 'roles.yml'),
                         str(Path(request['git_common_directory']) / 'config'),
                         str(Path(request['git_common_directory']) / 'hooks'),
@@ -251,7 +265,7 @@ class ClaudeExecution:
         settings = {
             'permissions': {
                 'blockReadsOutsideWorkingDirectories': True,
-                'allow': [rule for p in resources for rule in (f'Read(/{p})', f'Read(/{p}/**)')],
+                'allow': [rule for p in (*resources, *records) for rule in (f'Read(/{p})', f'Read(/{p}/**)')],
                 'deny': [rule for p in denied_read for rule in (f'Read(/{p})', f'Read(/{p}/**)')]
                         + [rule for p in denied_write for rule in (f'Edit(/{p})', f'Edit(/{p}/**)')]
                         + (['Edit', 'Write', 'NotebookEdit'] if request['worktree_access'] == 'read' else []),
@@ -267,7 +281,8 @@ class ClaudeExecution:
                 'autoAllowBashIfSandboxed': True, 'excludedCommands': [],
                 'filesystem': {
                     'denyRead': [str(root / '.graphtraj'), *denied_read],
-                    'allowRead': [*worktree_read, *([address] if address else []), request['git_common_directory'], *map(str, resources),
+                    'allowRead': [*worktree_read, *records, *([address] if address else []),
+                                  request['git_common_directory'], *map(str, resources),
                                   str(Path(sys.prefix).resolve()), str(Path(__file__).resolve().parents[2])],
                     'allowWrite': ([address] if address else []) + ([request['git_common_directory']]
                                               if request['worktree_access'] == 'write' else []),
@@ -426,6 +441,11 @@ class ClaudeExecution:
                                      'delivery': None})
                     return
                 if receipt is None or receipt.get('delivery') in {'received', 'no-direct-parent', 'retained'}:
+                    return
+                # A stopped, retired or budget-stopped parent cannot be woken by
+                # retrying. The request stays pending for pending_requests, and
+                # its not-delivered record names why; only brief contention retries.
+                if receipt.get('error', {}).get('code') in LASTING_PARENT_REFUSALS:
                     return
                 time.sleep(1)
 
@@ -818,16 +838,34 @@ class ClaudeExecution:
                     response.setdefault('updatedInput', details['params']['input'])
                 else:
                     response.setdefault('message', 'Permission denied by parent.')
-                self._reply(details['request_id'], response)
                 del self.pending[request['request_token']]
-                return {'request_id': details['request_id'], 'reply_status': 'submitted'}
-            if operation == 'send':
+            elif operation == 'send':
                 if not self.accepting or self.stopping.is_set() or self.session is None:
                     raise RuntimeAdapterError('operation-failed', 'Claude is not accepting input.')
-                self._prompt(request['instruction'])
-                return {}
-            if operation != 'interrupt':
+                message = self._user_message(request['instruction'])
+                self.sent += 1
+            elif operation != 'interrupt':
                 raise RuntimeAdapterError('invalid-input', 'Unknown Claude operation.')
+
+        # A pipe write can block while Claude waits for a hook reply from the
+        # reader loop, which itself needs this lock. Write outside the lock.
+        if operation == 'reply':
+            try:
+                self._reply(details['request_id'], response)
+            except RuntimeAdapterError:
+                with self.lock:
+                    self.pending[request['request_token']] = details
+                raise
+            return {'request_id': details['request_id'], 'reply_status': 'submitted'}
+        if operation == 'send':
+            try:
+                self._send(message)
+            except RuntimeAdapterError:
+                with self.lock:
+                    self.sent -= 1
+                raise
+            self.events.put({**message, 'graphtraj_direction': 'sent'})
+            return {}
         self.terminate()
         if not self.done.wait(timeout=30) or not self.terminal_confirmed:
             raise RuntimeAdapterError('operation-failed', 'Claude interruption is not yet confirmed.', terminal_confirmed=False)

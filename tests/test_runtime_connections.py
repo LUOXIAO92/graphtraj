@@ -852,7 +852,7 @@ def test_only_long_operations_await_acceptance(monkeypatch, tmp_path) -> None:
                                ('submit_report', {'notify_parent': True}), ('submit_report', {}),
                                ('agents', {'action': 'send'}), ('agents', {'action': 'status'})):
         hosted_cli.forward_request({'action': 'execute', 'feature': feature, 'arguments': arguments}, tmp_path)
-    assert [call['await_accepted'] for call in calls] == [True, True, False, True, False, True, False]
+    assert [call['await_accepted'] for call in calls] == [True, True, False, True, True, True, False]
     assert {call['response_timeout'] for call in calls} == {hosted_cli.OPERATION_TIMEOUT_SECONDS}
 
 

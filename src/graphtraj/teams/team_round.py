@@ -556,7 +556,7 @@ def _run_registered_children(
             batch, retained = _registered_batch(registration, worktree)
             children = _run_batch_workers(project, batch, retained, alias, capacity_fd)
             _send_session(
-                alias, "Direct child execution results:\n" + yaml.safe_dump(children.document),
+                alias, "Direct child execution results:\n" + yaml.safe_dump(children.document, allow_unicode=True),
                 directory, mapping, (), project.harness_root, capacity_fd=capacity_fd,
                 retain_notice_channel=True, parent_input=False,
             )
@@ -1344,7 +1344,7 @@ def _worker_main() -> None:
         result = _failed_task(task, RunnerError(error.code, error.message))
         if error.code in {"EXECUTION_BUDGET_STOPPED", "subtree-stopped"}:
             result["launch_status"] = "stopped"
-    print(yaml.safe_dump(result, sort_keys=False), end="")
+    print(yaml.safe_dump(result, sort_keys=False, allow_unicode=True), end="")
 
 
 if __name__ == "__main__":

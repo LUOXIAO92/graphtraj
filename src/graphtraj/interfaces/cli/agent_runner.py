@@ -133,7 +133,7 @@ def main_session(instruction_file: Path, resume: str | None) -> None:
             """Forward the existing native request and await its exact response."""
             async with replies:
                 click.echo(json.dumps({'id': request.request_id, 'method': request.method,
-                                       'params': request.params}), err=True)
+                                       'params': request.params}, ensure_ascii=False), err=True)
                 line = await asyncio.to_thread(sys.stdin.readline)
                 response = json.loads(line)
                 if (

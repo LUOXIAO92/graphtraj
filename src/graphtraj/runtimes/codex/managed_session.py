@@ -373,7 +373,7 @@ class CodexManagedExecution:
                         self.approval_items[item['id']] = item
                 if notification['method'] == 'error':
                     with (self.directory / 'stderr.log').open('a', encoding='utf-8') as stream:
-                        stream.write(json.dumps(notification) + '\n')
+                        stream.write(json.dumps(notification, ensure_ascii=False) + '\n')
         except RuntimeAdapterError:
             return
 

@@ -83,7 +83,7 @@ def approved_recovery(arguments: dict, cwd: Path) -> dict:
         'authority': [event for event in events if event['event_id'] in causes],
     }
     _confirm_unconfirmed_target(project.runner_directory, alias)
-    if _changes_execution(request):
+    if _changes_execution(request) or before['mapping'] != after['mapping']:
         require_stopped_subtree(project.runner_directory, alias)
     if minutes:
         decision = review_proposal(proposal, cwd, project.runner_directory)
@@ -163,6 +163,15 @@ def _repair_snapshot(project: Any, before: dict, request: dict) -> dict:
         after['stop']['resumed'] = True
     if not after['task']['active'] or after['team']['status'] != 'active':
         raise RunnerError('team-not-active', 'This recovery needs restore_active to repair administrative state.')
+    if before['mapping'].get('parent') is None and caller_alias(project.runner_directory) is None:
+        from graphtraj.execution.runner_connection import current_parent_connection
+
+        # An authenticated Main's recovery retains the Agent and native Session,
+        # but returns its notices to that Main's actual host. The event keeps
+        # the former connection; no model argument can choose a recipient.
+        host = current_parent_connection() or runtime_adapter.current_host_connection()
+        if host is not None:
+            after['mapping']['parent_connection'] = host
     return after
 
 
@@ -199,7 +208,7 @@ def _snapshot(
     team = read_team(team_path)
     if not administrative and alias not in {member['session_ref'] for member in team['members'].values()}:
         raise RunnerError('seat-replaced', 'Recovery requires the original current Team member.')
-    paths = {'task': directory / 'task.yml', 'team': team_path,
+    paths = {'task': directory / 'task.yml', 'team': team_path, 'mapping': session / 'mapping.yml',
              'budget': directory / 'execution-budget.yml', 'stop': session / 'stop.yml',
              'round': team_path.parent / 'rounds' / str(team['current_round'])}
     events = (_read_shards(project.state_directory)[1] if worldline_locked
@@ -275,7 +284,7 @@ def _apply_recovery(proposal: dict, cwd: Path) -> dict:
                     differences = _differences(proposal['before'], current)
                     if differences:
                         return {'recovery_status': 'stale', 'applied': False, 'differences': differences}
-                    if _changes_execution(request):
+                    if _changes_execution(request) or proposal['before']['mapping'] != proposal['after']['mapping']:
                         require_stopped_subtree(project.runner_directory, alias)
                     original = {key: path.read_bytes() if path.exists() else None
                                 for key, path in paths.items() if key != 'round'}
@@ -312,6 +321,10 @@ def _apply_recovery(proposal: dict, cwd: Path) -> dict:
                                         # The increment counts as execution time from now,
                                         # not from when the budget ran out.
                                         value = start_approved_window(proposal['before']['budget'], value, time.time())
+                                        # The applied clock can differ from the reviewed
+                                        # increment after waiting. Retry must compare the
+                                        # clock we actually wrote, not the earlier proposal.
+                                        recorded['applied_budget'] = value
                                     write_yaml_durably(paths[key], value)
                             if original_mode != proposal['after']['round_mode']:
                                 paths['round'].chmod(proposal['after']['round_mode'])
@@ -345,7 +358,30 @@ def _resume(project: Any, applied: dict) -> dict:
               'recovery_event_id': applied['event_id'],
               'changes': _differences(applied['proposal']['before'], applied['proposal']['after'])}
     if not applied['proposal']['request'].get('resume', True):
-        return {**result, 'recovery_status': 'applied'}
+        result['recovery_status'] = 'applied'
+        before = applied['proposal']['before']['mapping']
+        after = applied['proposal']['after']['mapping']
+        if before.get('parent_connection') != after.get('parent_connection'):
+            # Re-deliver an already written report after host recovery without
+            # waking its author or granting more execution time. A successful
+            # receipt prevents replay on a repeated recovery request.
+            from graphtraj.execution.runner_control import _reported
+
+            _, directory = read_alias_mapping(project.runner_directory, applied['alias'])
+            notices = directory / 'parent-notices.jsonl'
+            if notices.is_file():
+                for line in reversed(notices.read_text(encoding='utf-8').splitlines()):
+                    receipt = json.loads(line)
+                    identity = receipt.get('identity', {})
+                    if identity.get('type') != 'report-submitted':
+                        continue
+                    if (receipt.get('delivery') == 'not-delivered'
+                            and receipt.get('error', {}).get('code') != 'delivery-unconfirmed'):
+                        result['report_notification'] = _reported(
+                            directory, applied['alias'], Path(identity['report']), True,
+                        )
+                    break
+        return result
     try:
         _, directory = read_alias_mapping(project.runner_directory, applied['alias'])
         with (directory / 'launch.yml').open('rb') as lock:
@@ -369,6 +405,8 @@ def _resume_locked(project: Any, applied: dict, directory: Path) -> dict:
         return {**result, 'recovery_status': 'resumed', 'resumption': prior['resumption']}
     current, _ = _snapshot(project, alias)
     expected = {**proposal['after'], 'latest_task_event': applied['event_id']}
+    if 'applied_budget' in applied:
+        expected['budget'] = applied['applied_budget']
     differences = _differences(expected, current)
     # Native startup replaces transport and clears the terminal summary before
     # turn admission. These changes do not alter Session ownership or authority.

@@ -49,6 +49,45 @@ def test_report_reader_rejects_a_redirected_report(
     assert denied.value.code == 'authority-denied'
 
 
+def test_failed_report_delivery_remains_visible_only_to_its_owner(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Retained native delivery errors are readable without sending another notice."""
+    runner, _, _ = result_project(tmp_path)
+    mapping_path = runner / 'sessions/research@x1/mapping.yml'
+    mapping = yaml.safe_load(mapping_path.read_text())
+    mapping['parent_connection'] = {
+        'runtime': 'codex', 'session': 'original-main', 'codex_home': '/private/native-home',
+    }
+    mapping_path.write_text(yaml.safe_dump(mapping))
+    calls = []
+
+    def refuse(address: dict, document: dict, **kwargs: object) -> None:
+        """Return the original transport error at the native host boundary."""
+        calls.append(document)
+        raise RunnerError('RUNTIME_REQUEST_INVALID', 'Owning host is not loaded')
+
+    monkeypatch.setattr(runner_control, 'connection_operation', refuse)
+    monkeypatch.setattr(runner_control, 'OPERATION_TIMEOUT_SECONDS', 0)
+    with runtime_caller(runner, 'research@x1'):
+        submitted = runner_control.submit_session_report(
+            'researcher-x1.md', 'Preserved findings', tmp_path, notify_parent=True,
+        )
+    assert submitted['delivery'] == 'not-delivered'
+    assert submitted['delivery_error']['code'] == 'RUNTIME_REQUEST_INVALID'
+    with runtime_caller(runner, None):
+        observed = runner_control.read_session_reports('research@x1', tmp_path)
+    receipt = observed['report_notification']
+    assert receipt['delivery'] == 'not-delivered'
+    assert receipt['error'] == submitted['delivery_error']
+    assert receipt['parent_connection'] == {'runtime': 'codex', 'session': 'original-main'}
+    assert observed['reports'][0]['text'] == 'Preserved findings'
+    assert len(calls) == 1
+    with runtime_caller(runner, 'research@x2'):
+        with pytest.raises(RunnerError, match='direct parent'):
+            runner_control.read_session_reports('research@x1', tmp_path)
+
+
 def test_direct_parent_reads_terminal_message_without_report_files(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:

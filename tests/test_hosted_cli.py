@@ -109,6 +109,9 @@ def test_cli_host_accepts_the_session_worktree_and_refuses_other_directories(tmp
         graph = product_cli(worktree, address, 'task', 'graph')
         assert graph.returncode == 0, graph.stdout + graph.stderr
         assert [item['task_id'] for item in yaml.safe_load(graph.stdout)['tasks']] == ['148']
+        worldline = product_cli(worktree, address, 'worldline', 'read')
+        assert worldline.returncode == 0, worldline.stdout + worldline.stderr
+        assert any(json.loads(line)['event'] for line in worldline.stdout.splitlines())
         assert cli(nested, address, 'reports', 'research@x1').returncode == 0
         refused = cli(foreign, address, 'reports', 'research@x1')
         assert refused.returncode == 1
@@ -313,6 +316,18 @@ def test_shared_mcp_command_consumes_bound_graphtraj_dsh_channel(tmp_path: Path,
                          input_text=json.dumps({'jsonrpc': '2.0', 'id': 0, 'method': 'tools/list'})+'\n',
                          DSH_SESSION_ID=expected['session'], DSH_AGENT_SOURCE='main')
         assert [tool['name'] for tool in json.loads(listed.stdout)['result']['tools']] == ['agents', 'tasks']
+        discovery = run_cli('graphtraj.interfaces.mcp', tmp_path, address,
+                            input_text=json.dumps({**request, 'params': {'name': 'tasks',
+                                'arguments': {'action': 'discover'}}})+'\n',
+                            DSH_SESSION_ID=expected['session'], DSH_AGENT_SOURCE='main')
+        service = json.loads(discovery.stdout)['result']['structuredContent']['service']
+        import hashlib
+
+        for component in ('mcp', 'host'):
+            assert service[component]['executable'] == sys.executable
+            assert service[component]['sha256'] == hashlib.sha256(
+                Path(service[component]['module']).read_bytes()).hexdigest()
+        assert service['mcp']['module'] != service['host']['module']
         for session, source in ((expected['session'], 'main'), ('other', 'main'), (expected['session'], 'child')):
             result = run_cli('graphtraj.interfaces.mcp', tmp_path, address,
                              input_text=json.dumps(request)+'\n',

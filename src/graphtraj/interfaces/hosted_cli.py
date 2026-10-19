@@ -6,6 +6,8 @@ from graphtraj.configuration.project_configuration import cli_directory
 
 import os
 import math
+import sys
+import hashlib
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Callable, Collection, Iterator, Mapping
@@ -21,6 +23,8 @@ from graphtraj.workspace.runner_project import discover_runner_directory
 
 
 CONNECTION_ENV = 'GRAPHTRAJ_CLI_CONNECTION'
+_SERVICE = {'executable': sys.executable, 'module': __file__,
+            'sha256': hashlib.sha256(Path(__file__).read_bytes()).hexdigest()}
 
 
 def _caller_in_scope(document_cwd: Any, root: Path, runner: Path, alias: str) -> bool:
@@ -99,6 +103,8 @@ def cli_connection(
                 raise RunnerError(error.code, error.message) from error
         with runtime_caller(runner, identity), recovery_review(recovery_reviewer):
             result = handle_request(document['request'], cwd=root, allowed_features=features)
+        if document['request'].get('action') == 'discover' and not result.failed:
+            result.document['service'] = {'host': _SERVICE}
         return {'document': result.document, 'failed': result.failed}
 
     with worker_connection(directory, operate, authenticate=authenticate) as address:

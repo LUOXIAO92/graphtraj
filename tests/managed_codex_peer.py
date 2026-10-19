@@ -21,6 +21,12 @@ def ask(kind: str = 'approval') -> None:
     if 'MANAGED_APPROVAL_REQUEST_ID' in os.environ and kind == 'approval':
         request_id = json.loads(os.environ['MANAGED_APPROVAL_REQUEST_ID'])
     pending[request_id] = kind
+    if 'MANAGED_MCP_REQUEST' in os.environ:
+        pending[request_id] = 'mcp'
+        emit({'id': request_id, 'method': 'mcpServer/elicitation/request',
+              'params': {'threadId': session, 'turnId': execution,
+                         **json.loads(os.environ['MANAGED_MCP_REQUEST'])}})
+        return
     emit({'id': request_id, 'method': (
         'item/commandExecution/requestApproval' if kind == 'approval'
         else 'item/permissions/requestApproval' if kind == 'permissions'

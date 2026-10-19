@@ -208,7 +208,7 @@ def test_managed_archive_is_readable_after_native_shutdown(managed_project: Mana
     """Public Runner start/resume collect into one independent, authorized archive."""
     from graphtraj.execution.runner_status import runtime_caller
     from graphtraj.interfaces.gateway import handle_request
-    from graphtraj.sessions.protocol import native_record
+    from agent_swarm.sessions.protocol import native_record
     from graphtraj.workspace.runner_project import discover_runner_directory
 
     root, cause, call, _ = managed_project

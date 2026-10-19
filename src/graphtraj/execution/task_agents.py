@@ -11,7 +11,10 @@ Worker job. Mappings recorded before this reference keep their existing path.
 
 from __future__ import annotations
 
+from graphtraj.configuration.project_configuration import runner_project_root
+
 from pathlib import Path
+import hashlib
 from typing import Any, Mapping
 
 from agent_swarm import AgentControl, AgentsError, Binding, Caller, Run
@@ -129,6 +132,26 @@ class TaskAgent:
         )
 
 
+def native_directory(root: Path, alias: str, runtime: str) -> Path:
+    """Locate host-owned native files in the tool's data root, independent of Traces."""
+    from graphtraj.interfaces.agents import swarm_root
+
+    return swarm_root(root) / 'native' / ('task-' + hashlib.sha256(alias.encode()).hexdigest()) / runtime
+
+
+def _parent_agent(runner: Path, mapping: Mapping[str, Any]) -> str | None:
+    """Resolve a real parent binding, retaining an imported legacy parent's alias."""
+    from graphtraj.execution.runner_status import read_alias_mapping
+
+    parent = mapping.get('parent')
+    if not isinstance(parent, str):
+        return None
+    retained = read_alias_mapping(runner, parent)[0]
+    # Imported identities deliberately keep their original aliases. A legacy
+    # Main may have no core Agent record; its real parent reference still holds.
+    return retained.get('agent') or (parent if mapping.get('agent') == mapping.get('alias') else None)
+
+
 def begin_task_agent(
     root: Path,
     runner_directory: Path,
@@ -143,12 +166,7 @@ def begin_task_agent(
     continues the Agent the mapping already references. A mapping recorded
     before this reference returns ``None`` and keeps its existing path.
     """
-    from graphtraj.execution.runner_status import read_alias_mapping
-
-    parent = mapping.get("parent")
-    parent_agent = None
-    if isinstance(parent, str):
-        parent_agent = read_alias_mapping(runner_directory, parent)[0].get("agent")
+    parent_agent = _parent_agent(runner_directory, mapping)
     if operation == "resume" and not mapping.get("agent"):
         return None
     caller = Caller(TASK_HOST, parent_agent)
@@ -172,13 +190,11 @@ def core_status(runner_directory: Path, mapping: Mapping[str, Any]) -> dict[str,
     Returns the ``agent`` reference, its ``state`` (``active`` or ``standby``)
     and its ``last_result``; the Runner's own activity fields are unchanged.
     """
-    from graphtraj.execution.runner_status import read_alias_mapping
     from graphtraj.interfaces.agents import swarm_root
 
-    parent = mapping.get("parent")
-    parent_agent = read_alias_mapping(runner_directory, parent)[0].get("agent") if isinstance(parent, str) else None
+    parent_agent = _parent_agent(runner_directory, mapping)
     try:
-        outcome = AgentControl(swarm_root(runner_directory.parent.parent), {}).operate(
+        outcome = AgentControl(swarm_root(runner_project_root(runner_directory)), {}).operate(
             "status", {"agent": mapping["agent"]}, Binding(Caller(TASK_HOST, parent_agent)))
     except AgentsError as error:
         return {"agent": mapping["agent"], "agent_error": {"code": error.code, "message": error.message}}

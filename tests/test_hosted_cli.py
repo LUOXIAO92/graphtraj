@@ -322,11 +322,14 @@ def test_shared_mcp_command_consumes_bound_graphtraj_dsh_channel(tmp_path: Path,
                             DSH_SESSION_ID=expected['session'], DSH_AGENT_SOURCE='main')
         service = json.loads(discovery.stdout)['result']['structuredContent']['service']
         import hashlib
+        from graphtraj.configuration import project_configuration
 
         for component in ('mcp', 'host'):
             assert service[component]['executable'] == sys.executable
             assert service[component]['sha256'] == hashlib.sha256(
                 Path(service[component]['module']).read_bytes()).hexdigest()
+            assert service[component]['configuration_sha256'] == hashlib.sha256(
+                Path(project_configuration.__file__).read_bytes()).hexdigest()
         assert service['mcp']['module'] != service['host']['module']
         for session, source in ((expected['session'], 'main'), ('other', 'main'), (expected['session'], 'child')):
             result = run_cli('graphtraj.interfaces.mcp', tmp_path, address,
@@ -356,3 +359,35 @@ def test_managed_channel_discovers_and_describes_task_members(tmp_path: Path) ->
     report = handle_request({'action': 'describe', 'feature': 'submit_report', 'schema': True},
                             cwd=tmp_path, allowed_features=allowed)
     assert 'notify_parent' in report.document['input_schema']['properties']
+
+
+def test_cli_host_returns_a_slow_write_receipt_instead_of_a_timeout(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A report the host persists after the ordinary deadline still returns its receipt once."""
+    import time
+    from dataclasses import replace
+
+    runner, _, _ = result_project(tmp_path)
+    directory = own_process(runner)
+    original = tools.TOOLS['submit_report']
+    calls = []
+
+    def slow(arguments: dict, *, cwd: Path | None = None) -> tools.ToolResult:
+        """Persist the report only after the ordinary ten-second control deadline."""
+        calls.append(arguments)
+        time.sleep(10.5)
+        return original.handler(arguments, cwd=cwd)
+
+    monkeypatch.setitem(tools.TOOLS, 'submit_report', replace(original, handler=slow))
+    with hold_ownership(directory, os.getpid()), cli_connection(
+        tmp_path, 'research@x1', native_operation_features(),
+    ) as address:
+        result = run_cli('graphtraj.interfaces.cli.agent_runner', tmp_path, address,
+                         'submit-report', '--name', 'researcher-x1.md', '--text', 'Slow evidence',
+                         process_timeout=30)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert len(calls) == 1
+    receipt = yaml.safe_load(result.stdout)
+    assert Path(receipt['report']).read_text() == 'Slow evidence'
+    assert 'did not acknowledge' not in result.stdout + result.stderr

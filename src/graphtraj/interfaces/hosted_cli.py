@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from graphtraj.configuration.project_configuration import cli_directory
+from graphtraj.configuration import project_configuration
+
 import os
 import math
 import sys
@@ -22,7 +25,8 @@ from graphtraj.workspace.runner_project import discover_runner_directory
 
 CONNECTION_ENV = 'GRAPHTRAJ_CLI_CONNECTION'
 _SERVICE = {'executable': sys.executable, 'module': __file__,
-            'sha256': hashlib.sha256(Path(__file__).read_bytes()).hexdigest()}
+            'sha256': hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
+            'configuration_sha256': hashlib.sha256(Path(project_configuration.__file__).read_bytes()).hexdigest()}
 
 
 def _caller_in_scope(document_cwd: Any, root: Path, runner: Path, alias: str) -> bool:
@@ -71,7 +75,7 @@ def cli_connection(
     """
     runner = discover_runner_directory(root)
     if directory is None:
-        directory = runner.parent / 'cli'
+        directory = cli_directory(root)
     directory.mkdir(parents=True, exist_ok=True)
 
     def authenticate(pid: int) -> None:
@@ -135,17 +139,16 @@ def forward_request(
         # they must never extend the client's transport deadline.
         if type(observation) in (int, float) and math.isfinite(observation) and observation >= 0:
             response_timeout += observation
-    # Recovery and a continuation can include Session startup, and a result
-    # or notified report reaches the direct parent; none has a fixed duration,
-    # so once the host accepts one its own reply is awaited.
+    # Recovery and a continuation can include Session startup, and a result,
+    # decision or report is persisted and may reach another Session; none has
+    # a fixed duration. Once the host accepts one, its own reply is awaited so
+    # the receipt reports the write instead of an unconfirmed timeout.
     long_operation = (request.get('action') == 'execute'
-                      and (request.get('feature') in {'approved_recovery', 'submit_result'}
+                      and (request.get('feature') in {'approved_recovery', 'submit_result', 'decide_result',
+                                                      'submit_report'}
                            or request.get('feature') == 'agents'
                            and isinstance(request.get('arguments'), Mapping)
-                           and request['arguments'].get('action') in {'send', 'resume', 'wait'}
-                           or request.get('feature') == 'submit_report'
-                           and isinstance(request.get('arguments'), Mapping)
-                           and request['arguments'].get('notify_parent') is True))
+                           and request['arguments'].get('action') in {'send', 'resume', 'wait'}))
     from agent_swarm.connection import client_native_context
 
     native = native_context if native_context is not None else client_native_context()

@@ -124,9 +124,9 @@ def main(runtime: str, collect: bool = False) -> None:
         if not isinstance(event, dict):
             raise ValueError('A native event object is required.')
         if runtime == 'claude':
-            from graphtraj.runtimes.claude.collection import collect_hook
+            from graphtraj.runtimes.claude.collection import collect_jsonl_hook
 
-            collect_hook(event, Path.cwd())
+            collect_jsonl_hook(event, Path.cwd())
             # Claude command hooks accept their own output schema, not the
             # collector's internal result metadata. Successful collection is silent.
             result = {}

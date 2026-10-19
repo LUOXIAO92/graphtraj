@@ -17,6 +17,6 @@ def bind_agents(turn: DshExecution, run: Run, driver: AdapterDriver) -> None:
     bind_run(turn, run)
     turn.agents_only = True
     if run.archive is not None:
-        from graphtraj.runtimes.dsh.collection import DshArchive
+        from agent_swarm.sessions.dsh import DshArchive
 
         turn.archive = DshArchive(run.archive, resumed=run.session is not None)

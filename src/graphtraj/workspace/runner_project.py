@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from graphtraj.configuration.project_configuration import runner_directory as project_runner_directory
+
 import os
 import shutil
 import subprocess
@@ -349,7 +351,7 @@ def discover_project(
         harness_root=configuration.harness_root,
         repository=repository,
         common_directory=common,
-        runner_directory=configuration.harness_root / ".graphtraj" / "runner",
+        runner_directory=project_runner_directory(configuration.harness_root),
         worktree_root=configuration.agent_worktrees,
         state_directory=_resolve_path(
             configuration.state,
@@ -369,7 +371,7 @@ def discover_project(
 def discover_runner_directory(cwd: Path) -> Path:
     """Locate Runner-owned transport state from the Harness Project Root."""
     configuration = _load_graphtraj_configuration(cwd)
-    return configuration.harness_root / ".graphtraj" / "runner"
+    return project_runner_directory(configuration.harness_root)
 
 
 def discover_project_root(cwd: Path) -> Path:

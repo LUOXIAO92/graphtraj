@@ -51,7 +51,11 @@ class DshExecution(NativeDshExecution):
             native_context=lambda: session_context(self),
         )
         self.parent_notice = lambda notice, details: notify_direct_parent(directory, notice, details)
-        self.confirm_native = self._confirm_collection
+        from agent_swarm.sessions.dsh import DshArchive
+        from graphtraj.interfaces.agents import configured_archive
+
+        self.archive = DshArchive(configured_archive(Path(request['harness_root'])),
+                                  resumed=expected_session is not None)
 
     def _prepare(self) -> dict[str, str]:
         """Add GraphTraj's native plugin environment to the generic profile."""
@@ -61,19 +65,7 @@ class DshExecution(NativeDshExecution):
             'GRAPHTRAJ_DSH_TOOL': self.request['tool'],
             'GRAPHTRAJ_HARNESS_ROOT': self.request['harness_root'],
         })
-        if self.agents_only:
-            environment['GRAPHTRAJ_DSH_AGENTS_ONLY'] = '1'
+        # This execution owns JSONL collection; the plugin must not collect a
+        # second SQLite body for the same native Session.
+        environment['GRAPHTRAJ_DSH_AGENTS_ONLY'] = '1'
         return environment
-
-    def _confirm_collection(self, turn: NativeDshExecution) -> None:
-        """Confirm only a GraphTraj-managed archive, after native shutdown."""
-        if self.agents_only:
-            return
-        from graphtraj.configuration.project_configuration import load_project_configuration
-        from graphtraj.runtimes.dsh.collection import confirm_collection
-
-        configuration = load_project_configuration(Path(self.request['harness_root']))
-        try:
-            confirm_collection(configuration.state, self.session, self.trace_file)
-        except (OSError, ValueError, StopIteration) as error:
-            raise RuntimeAdapterError('RUNTIME_TRACE_FAILED', str(error)) from error

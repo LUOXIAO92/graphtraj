@@ -339,7 +339,6 @@ def test_claude_input_echoed_after_a_result_waits_for_the_next(
 ) -> None:
     """Input echoed after a turn's result is not covered by it, even when idle follows."""
     result_project(tmp_path)
-    trace = tmp_path / 'state/claude.jsonl'
     with ExitStack() as stack, ThreadPoolExecutor(max_workers=1) as pool:
         turn, ready, _ = execution(tmp_path, stack, 'merge-late')
         future = pool.submit(turn.run)
@@ -347,13 +346,20 @@ def test_claude_input_echoed_after_a_result_waits_for_the_next(
         control = {'operation': 'send', 'session': turn.session, 'execution_id': turn.execution_id}
         turn.operate({**control, 'instruction': 'joined'})
         deadline = time.monotonic() + 5
-        while not any(json.loads(line).get('type') == 'result' for line in trace.read_text().splitlines()):
-            assert time.monotonic() < deadline, 'the joined turn produced no result'
+        # The native Trace contains messages, not transport completion records.
+        while turn.results < 1:
+            if time.monotonic() >= deadline:
+                turn.terminate()
+                pytest.fail('the joined turn produced no result')
             time.sleep(0.02)
         assert not future.done()
         # Its echo follows that result; the earlier turn's idle then arrives.
         turn.operate({**control, 'instruction': 'late'})
-        completed = future.result(timeout=10)
+        try:
+            completed = future.result(timeout=10)
+        finally:
+            if not future.done():
+                turn.terminate()
         assert completed['outcome'] == 'completed'
         assert completed['last_agent_message'] == 'merge-late|joined|late'
 

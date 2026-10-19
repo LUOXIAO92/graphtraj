@@ -70,8 +70,10 @@ sdk_display_reply = None
 
 def result(text: str, error: bool = False, queued: int = 0, idle: bool = True) -> None:
     """Emit distinct result and quiescence records with native usage."""
+    usage = {'input_tokens': 11, 'cache_read_input_tokens': 7,
+             'cache_creation_input_tokens': 2, 'output_tokens': 5}
     emit({'type': 'assistant', 'session_id': session, 'message': {
-        'role': 'assistant', 'content': [{'type': 'text', 'text': text}]}})
+        'role': 'assistant', 'content': [{'type': 'text', 'text': text}], 'usage': usage}})
     emit({'type': 'result', 'session_id': session, 'uuid': str(uuid.uuid4()),
           'is_error': error, 'result': text, 'queued_turn_count': queued, 'usage': {
               'input_tokens': 11, 'cache_read_input_tokens': 7,
@@ -170,8 +172,36 @@ def prompt(message: dict) -> None:
                else '|'.join(messages), text == 'provider-error')
 
 
+def hold_start_lock() -> None:
+    """Let another process hold the project startup lock across the startup hook."""
+    lock = os.environ.get('CLAUDE_FIXTURE_START_LOCK')
+    if not lock:
+        return
+    ready = Path(lock + '.held')
+    subprocess.Popen([sys.executable, '-c', (
+        'import fcntl,sys,time\n'
+        'stream = open(sys.argv[1], "a+b")\n'
+        'fcntl.flock(stream, fcntl.LOCK_EX)\n'
+        'open(sys.argv[1] + ".held", "w").close()\n'
+        'time.sleep(float(sys.argv[2]))\n'), lock, os.environ['CLAUDE_FIXTURE_START_LOCK_SECONDS']],
+        start_new_session=True)
+    deadline = time.monotonic() + 10
+    while not ready.exists() and time.monotonic() < deadline:
+        time.sleep(0.01)
+
+
 def startup() -> None:
     """Attest the native Session after completing any SDK tool handshake."""
+    global hook_sent
+    hold_start_lock()
+    gate = os.environ.get('CLAUDE_FIXTURE_HOOK_GATE')
+    if gate:
+        # Let the test publish a stop after process start but before the hook.
+        Path(gate + '.waiting').touch()
+        deadline = time.monotonic() + 60
+        while not Path(gate).exists() and time.monotonic() < deadline:
+            time.sleep(0.01)
+    hook_sent = time.monotonic()
     emit({'type': 'control_request', 'request_id': 'startup', 'request': {
         'subtype': 'hook_callback', 'callback_id': 'graphtraj_start', 'input': {
             'hook_event_name': 'UserPromptSubmit', 'session_id': session,
@@ -224,6 +254,9 @@ for line in sys.stdin:
             startup()
         elif response['request_id'] == 'startup':
             started = True
+            if os.environ.get('CLAUDE_FIXTURE_HOOK_LOG'):
+                with open(os.environ['CLAUDE_FIXTURE_HOOK_LOG'], 'a') as log:
+                    log.write(f'{time.monotonic() - hook_sent}\n')
             init = {'type': 'system', 'subtype': 'init', 'session_id': session, 'model': model}
             if sdk_servers:
                 init['tools'] = ['mcp__agents__agents']

@@ -2,6 +2,11 @@
 
 from __future__ import annotations
 
+from graphtraj.configuration.project_configuration import (
+    configuration_file as project_configuration_file,
+    core_directory as project_core_directory,
+)
+
 import os
 import sys
 from pathlib import Path
@@ -35,6 +40,6 @@ def private_filesystem(runtime_store: Path, runtime_home: str | None = None) -> 
         filesystem[str(configuration.docs)] = 'read'
     # Public configuration is readable, but an Agent cannot change its own
     # control or launch policy through a native file tool.
-    for path in (root / '.graphtraj/config.yml', root / '.graphtraj/roles.yml'):
+    for path in (project_configuration_file(root), project_core_directory(root) / 'roles.yml'):
         filesystem[str(path)] = 'read'
     return filesystem

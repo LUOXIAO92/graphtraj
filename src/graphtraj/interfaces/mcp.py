@@ -24,6 +24,7 @@ import yaml
 from agent_swarm.mcp import error_response as _error_response, result_response as _result_response
 
 from graphtraj.configuration.project_configuration import ProjectConfigurationError
+from graphtraj.configuration import project_configuration
 from graphtraj.execution.execution_budget import budget_notice_output, caller_notice_fd
 from graphtraj.execution.runner_models import RunnerError
 from graphtraj.interfaces import gateway
@@ -33,7 +34,8 @@ from graphtraj.runtimes.codex.codex_adapter import CodexAdapterError
 
 SERVER_INFO      = {"name": "graphtraj", "version": "0.1.0"}
 _SERVICE = {'executable': sys.executable, 'module': __file__,
-            'sha256': hashlib.sha256(Path(__file__).read_bytes()).hexdigest()}
+            'sha256': hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
+            'configuration_sha256': hashlib.sha256(Path(project_configuration.__file__).read_bytes()).hexdigest()}
 
 INVALID_PARAMS   = -32602
 

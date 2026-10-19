@@ -16,6 +16,7 @@ from graphtraj.interfaces.cli.worldline import worldline
 from graphtraj.interfaces.cli.project_setup import setup, doctor
 from graphtraj.interfaces.cli.task import delivery_state, task
 from graphtraj.interfaces.cli.finalize import bind_command
+from graphtraj.interfaces.cli.mcp_adoption import refresh_mcp_command
 
 
 @click.group(cls=OperationGroup)
@@ -57,6 +58,74 @@ main.add_command(delivery_state)
 main.add_command(roles)
 
 main.add_command(bind_command)
+main.add_command(refresh_mcp_command)
+
+
+@main.command("migrate-agents")
+@click.option("--preview", is_flag=True, help="List the isolated copy's sources without importing.")
+@click.option("--snapshot", type=click.Path(path_type=Path), help="Capture associated project sources in a new isolated directory.")
+@click.option("--session", "sessions", multiple=True, help="Limit a sample to an inventoried runtime:native-reference (repeatable).")
+@click.option("--partition", is_flag=True, help="Verify and partition an already imported isolated copy into core/swarm; never activate a live Harness.")
+@click.option("--verify", is_flag=True, help="Compare imported legacy fields, attachment bytes and captured source hashes without writing.")
+@click.option("--main-session", help="Explicit current Main native identity for metadata inventory; never inferred from timestamps.")
+@click.option("--against", type=click.Path(path_type=Path, exists=True), help="With --verify, compare retained swarm data to an explicit immutable public snapshot.")
+@click.option("--cutover", type=click.Path(path_type=Path), help="Capture to a new external snapshot and install the stopped project's core/swarm layout.")
+@click.option("--restore", type=click.Path(path_type=Path, exists=True), help="Restore this project's retained Agent cutover backup.")
+@click.option("--writes-stopped", is_flag=True, help="Confirm all writers, including Main hooks, remain stopped during cutover or recovery.")
+def migrate_agents_command(
+    preview: bool,
+    snapshot: Path | None,
+    sessions: tuple[str, ...],
+    partition: bool,
+    verify: bool,
+    main_session: str | None,
+    against: Path | None,
+    cutover: Path | None,
+    restore: Path | None,
+    writes_stopped: bool,
+) -> None:
+    """Capture, verify, cut over or recover retained Agent and Session data."""
+    from graphtraj.workspace.agent_migration import migrate_agents
+    from graphtraj.workspace.migration_snapshot import snapshot_project
+
+    try:
+        if cutover is not None or restore is not None:
+            from graphtraj.workspace.agent_production_migration import cutover_project, restore_cutover
+
+            if (cutover is not None and restore is not None) or any((preview, snapshot, sessions, partition, verify, against)) or (restore is not None and main_session):
+                raise ValueError('Cutover and recovery are separate full-project operations.')
+            result = (cutover_project(Path.cwd(), cutover, writes_stopped=writes_stopped, main_session=main_session) if cutover is not None
+                      else restore_cutover(Path.cwd(), restore, writes_stopped=writes_stopped))
+            click.echo(yaml.safe_dump(result, sort_keys=False), nl=False)
+            return
+        if writes_stopped:
+            raise ValueError('--writes-stopped applies only to --cutover or --restore.')
+        if against is not None and not verify:
+            raise ValueError('--against requires the read-only --verify operation.')
+        if snapshot is not None and (preview or sessions or partition or verify or main_session):
+            raise ValueError('Snapshot capture cannot also select a migration sample or preview.')
+        if partition and (preview or sessions):
+            raise ValueError('Partition requires a full isolated migration, not a preview or sample.')
+        if verify and (preview or partition or sessions):
+            raise ValueError('Verification is a separate read-only full-copy operation.')
+        if partition and (Path.cwd() / '.graphtraj/core/config.yml').is_file():
+            from graphtraj.workspace.agent_cutover import partition_snapshot
+
+            result = {'layout': partition_snapshot(Path.cwd())}
+            click.echo(yaml.safe_dump(result, sort_keys=False), nl=False)
+            return
+        result = (snapshot_project(Path.cwd(), snapshot) if snapshot is not None
+                  else migrate_agents(Path.cwd(), preview=preview, sessions=sessions, verify=verify or partition,
+                                      main_session=main_session, against=against))
+        if partition:
+            from graphtraj.workspace.agent_cutover import partition_snapshot
+
+            if not result['verification']['matches']:
+                raise ValueError('Full archive verification failed; complete the public import before partitioning.')
+            result['layout'] = partition_snapshot(Path.cwd())
+    except (OSError, ValueError, yaml.YAMLError) as error:
+        raise click.ClickException(str(error)) from error
+    click.echo(yaml.safe_dump(result, sort_keys=False), nl=False)
 
 
 @main.command("migrate-tickets")

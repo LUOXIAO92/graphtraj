@@ -7,9 +7,10 @@ is not failed work; normal tool, watchdog and approval waits are not failures.
 
 Keep one existing execution. Send changed instructions through its live channel;
 after an actual failure ends execution, use the supported public continuation
-operation with the causal event. Public `agent-runner status` supplies summaries;
-`reports` exposes only directly owned reports. Apply the project's shared polling
-limit. A send acknowledgement is not completion. Never wake a second Driver to
+operation with the causal event. MCP `alias_status` supplies summaries;
+`session_reports` exposes only directly owned reports. Follow the delivery
+guide's MCP-first rule; CLI examples below are fallback syntax only. Apply the
+project's shared polling limit. A send acknowledgement is not completion. Never wake a second Driver to
 collect status or fill a missing report.
 
 Preserve the candidate, author-attributed reports, original inputs, Session and
@@ -31,7 +32,7 @@ reset project-specific validation limits or expand the task's budget.
 
 ## Recover with the selected reviewer
 
-Use `agent-runner recover <alias>` or the shared `approved_recovery` operation
+Use MCP `approved_recovery`
 to perform one concrete repair and continuation of the original Session. Supply
 the reason, continuation instruction, allowed and forbidden scope, and actual
 causal event IDs. Include `additional_minutes` only for the time increment
@@ -147,7 +148,7 @@ candidate and unchanged validation through the public integration entry as
 specified in [command inputs](command-inputs.md).
 
 Where execution permission still admits the Session,
-`agent-runner send <alias> --reports-only` can collect retained reports using an
+MCP `send_instruction` with `reports_only: true` can collect retained reports using an
 explicit instruction and causal event. It grants no implementation window and
 does not bypass a manual subtree stop. Use the selected Runtime's actual notification channel and report a delivery failure through the caller.
 
@@ -155,9 +156,9 @@ does not bypass a manual subtree stop. Use the selected Runtime's actual notific
 
 When authorized recovery work leaves the committed artifact unchanged, the
 original executing Session can write its new verification evidence and use
-`submit-result` with the same commit. Its actual parent accepts that new
-submission ID with `decide-result`, then the accepted result can be integrated
-through `graphtraj task integrate`. The original submission and acceptance
+MCP `submit_result` with the same commit. Its actual parent accepts that new
+submission ID with MCP `decide_result`, then the accepted result can be integrated
+through MCP `task_integrate`. The original submission and acceptance
 remain historical facts. Do not decide the old submission a second time or
 manufacture an empty commit, a rejection or another Round to change the state.
 A new submission describes completed recovery work; it does not waive its

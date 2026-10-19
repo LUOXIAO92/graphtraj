@@ -10,6 +10,16 @@ import pytest
 from conftest import InstalledCommands
 
 
+def test_source_inspection_requires_observe_only() -> None:
+    """A source-only administrative request cannot accidentally reload the host."""
+    from click.testing import CliRunner
+    from graphtraj.interfaces.cli.graphtraj import main
+
+    result = CliRunner().invoke(main, ['refresh-mcp', '--socket', '/not-opened',
+        '--main-session', 'current-main', '--server-source'])
+    assert result.exit_code == 2 and '--server-source requires --observe-only' in result.output
+
+
 @pytest.mark.parametrize('observe_only', [False, True])
 @pytest.mark.parametrize('response_mode', ['structured', 'text', 'tool-error', 'unknown-wrapper', 'rpc-error'])
 def test_installed_proxy_uses_websocket_for_public_refresh(
@@ -22,6 +32,7 @@ def test_installed_proxy_uses_websocket_for_public_refresh(
     if shutil.which('codex') is None:
         pytest.skip('Installed Codex proxy required for the real transport boundary')
     requests = []
+    inspect_source = observe_only and response_mode == 'structured'
 
     async def handle(connection) -> None:
         """Serve only the public metadata and MCP methods in the fixed operation."""
@@ -50,6 +61,16 @@ def test_installed_proxy_uses_websocket_for_public_refresh(
                                   'detail': 'toolsAndAuthOnly'}
                 result = {'data': [{'name': 'graphtraj', 'tools': {'agents': {}, 'tasks': {}},
                                     'runtimeStatus': 'connected'}], 'nextCursor': None}
+            elif method == 'config/read':
+                assert params == {'cwd': str(tmp_path), 'includeLayers': False}
+                result = {'config': {'unrelated': 'DO-NOT-DISCLOSE', 'mcp_servers': {
+                    'graphtraj': {'command': '/selected/python', 'args': ['-m', 'graphtraj.interfaces.mcp',
+                        '--token', 'secret-credential'], 'cwd': str(tmp_path), 'enabled': True,
+                        'env': {'GRAPHTRAJ_CLI_CONNECTION': 'DO-NOT-DISCLOSE'}},
+                    'unrelated-server': {'command': 'DO-NOT-DISCLOSE'}}},
+                    'origins': {'mcp_servers.graphtraj.command': {'name': {'type': 'user', 'file': '/selected/config.toml'},
+                                                              'version': 'selected-revision'},
+                                'unrelated': {'private': 'DO-NOT-DISCLOSE'}}}
             elif method == 'mcpServer/tool/call':
                 assert params == {'threadId': 'current-main', 'server': 'graphtraj', 'tool': 'tasks',
                                   'arguments': {'action': 'discover'}, '_meta': {'threadId': 'current-main'}}
@@ -83,6 +104,8 @@ def test_installed_proxy_uses_websocket_for_public_refresh(
                            '--socket', str(socket), '--main-session', 'current-main']
                 if observe_only:
                     command.append('--observe-only')
+                if inspect_source:
+                    command.append('--server-source')
                 process = await asyncio.create_subprocess_exec(*command, cwd=tmp_path, env=environment,
                     stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
                 try:
@@ -115,12 +138,19 @@ def test_installed_proxy_uses_websocket_for_public_refresh(
                 assert report['reload_requested'] is not observe_only
                 assert 'adopted' not in report and 'features' not in report
                 assert report['servers'][0]['tools'] == ['agents', 'tasks']
+                if inspect_source:
+                    selected = report['configured_server']
+                    assert selected['command'] == '/selected/python'
+                    assert selected['args'] == ['-m', 'graphtraj.interfaces.mcp', '--token', '[redacted]']
+                    assert selected['environment_keys'] == ['GRAPHTRAJ_CLI_CONNECTION']
+                    assert list(selected['origins']) == ['mcp_servers.graphtraj.command']
+                    assert 'unrelated-server' not in output.decode()
 
     asyncio.run(check())
     assert [item['method'] for item in requests] == [
         'initialize', 'initialized', 'thread/read',
         *([] if observe_only else ['config/mcpServer/reload']),
-        'mcpServerStatus/list', 'mcpServer/tool/call',
+        'mcpServerStatus/list', *(['config/read'] if inspect_source else []), 'mcpServer/tool/call',
     ]
 
 

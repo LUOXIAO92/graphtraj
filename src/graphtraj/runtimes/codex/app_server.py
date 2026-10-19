@@ -831,13 +831,22 @@ class CodexAppServer:
             raise self._protocol_failure('thread/read returned a different native Session.')
         return thread
 
-    async def refresh_mcp(self, thread_id: str, server: str, *, observe_only: bool = False) -> dict[str, Any]:
+    async def refresh_mcp(
+        self,
+        thread_id: str,
+        server: str,
+        *,
+        observe_only: bool = False,
+        server_source: bool = False,
+    ) -> dict[str, Any]:
         """Request native MCP refresh and observe one loaded thread without resuming it.
 
         A reload acknowledgement means queued refresh, not adopted code. Return
         the actual discovery stamp for the operator's comparison; never start a
         turn, change configuration, or accept a native approval on their behalf.
         """
+        if server_source and not observe_only:
+            raise CodexAdapterError('RUNTIME_REQUEST_INVALID', 'Server source inspection requires observe-only.')
         thread = await self.read_thread(thread_id)
         if thread.get('status', {}).get('type') not in {'active', 'idle'}:
             raise CodexAdapterError('RUNTIME_REQUEST_INVALID', 'The selected Main is not loaded.')
@@ -851,6 +860,31 @@ class CodexAppServer:
             'threadId': thread_id, 'serverName': server, 'detail': 'toolsAndAuthOnly',
         })
         from graphtraj.runtimes.activity import redact
+
+        source = {}
+        if server_source:
+            if not isinstance(thread.get('cwd'), str) or not thread['cwd']:
+                raise CodexAdapterError('RUNTIME_REQUEST_INVALID', 'Native Main cwd is unavailable for scoped config/read.')
+            configuration = await self._call('config/read', {'cwd': thread['cwd'], 'includeLayers': False})
+            selected = configuration.get('config', {}).get('mcp_servers', {}).get(server)
+            source = {'server': server, 'scope': 'Effective disk configuration at Main cwd; not proof of the loaded process command.',
+                      'configured': isinstance(selected, dict)}
+            if isinstance(selected, dict):
+                source.update({key: redact(selected[key]) for key in ('command', 'cwd', 'enabled')
+                               if key in selected and isinstance(selected[key], (str, bool))})
+                arguments = selected.get('args', [])
+                if isinstance(arguments, list):
+                    source['args'] = [redact({str(arguments[index - 1]) if index else 'argument': argument})[
+                        str(arguments[index - 1]) if index else 'argument']
+                        for index, argument in enumerate(arguments) if isinstance(argument, str)]
+                environment = selected.get('env')
+                source['environment_keys'] = sorted(environment) if isinstance(environment, dict) else []
+            prefix = 'mcp_servers.' + server
+            source['origins'] = {key: redact(value) for key, value in configuration.get('origins', {}).items()
+                                 if key == prefix or key.startswith(prefix + '.')}
+            # The public response may contain unrelated settings. Never retain,
+            # serialize or inspect them beyond selecting this server's item.
+            del configuration, selected
 
         try:
             discovery = await self._call('mcpServer/tool/call', {
@@ -869,7 +903,9 @@ class CodexAppServer:
         return {'main_session': thread_id, 'cwd': thread.get('cwd'),
                 'activity': thread['status']['type'], 'reload_requested': not observe_only,
                 **evidence,
-                'servers': [{key: redact(item[key]) for key in ('name', 'runtimeStatus', 'authStatus', 'toolsError') if key in item}
+                **({'configured_server': source} if server_source else {}),
+                'servers': [{key: redact(item[key]) for key in ('name', 'runtimeStatus', 'authStatus', 'toolsError',
+                                                               'serverInfo', 'pluginId', 'httpOrigin') if key in item}
                             | {'tools': sorted(item.get('tools', {}))}
                             for item in inventory.get('data', []) if item.get('name') == server],
                 'note': 'Compare actual source stamps. Reload ACK alone is not refresh completion or cutover.'}

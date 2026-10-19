@@ -16,18 +16,28 @@ from graphtraj.runtimes.codex.codex_adapter import CodexAdapterError
 @click.option('--main-session', required=True)
 @click.option('--server', default='graphtraj', show_default=True)
 @click.option('--observe-only', is_flag=True, help='Read current service evidence without requesting another reload.')
-def refresh_mcp_command(socket_path: Path, main_session: str, server: str, observe_only: bool) -> None:
+@click.option('--server-source', is_flag=True, help='With --observe-only, project only this server from public config/read; omit environment values.')
+def refresh_mcp_command(
+    socket_path: Path,
+    main_session: str,
+    server: str,
+    observe_only: bool,
+    server_source: bool,
+) -> None:
     """Reload MCP via the current Codex host; never create or resume a Session.
 
     Supply the already verified current host socket and Main identity. The
     existing adapter performs HTTP Upgrade and WebSocket framing over pipes;
     raw JSON lines sent to a PTY are not this native transport.
     """
+    if server_source and not observe_only:
+        raise click.UsageError('--server-source requires --observe-only.')
+
     async def execute() -> dict:
         """Close only this command's proxy connection after its bounded RPCs."""
         async with CodexAppServer(command=('codex', 'app-server', 'proxy', '--sock', str(socket_path)),
                                   cwd=Path.cwd(), experimental_api=True) as host:
-            return await host.refresh_mcp(main_session, server, observe_only=observe_only)
+            return await host.refresh_mcp(main_session, server, observe_only=observe_only, server_source=server_source)
 
     try:
         result = asyncio.run(execute())

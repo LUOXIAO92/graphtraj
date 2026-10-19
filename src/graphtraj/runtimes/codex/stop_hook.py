@@ -161,8 +161,13 @@ def main(
 
         click.echo(json.dumps(hook(Path(), {}), ensure_ascii=False))
         return
+    event = None
     try:
-        event = json.load(sys.stdin)
+        raw = sys.stdin.read()
+        try:
+            event = json.loads(raw)
+        except json.JSONDecodeError as error:
+            raise ValueError(f'Codex hook stdin ({len(raw)} characters) is not a lifecycle event JSON: {error}') from None
         if not isinstance(event, dict):
             raise ValueError('Invalid native lifecycle event.')
         if binding is None:
@@ -182,6 +187,16 @@ def main(
         raise SystemExit(130)
     except Exception as error:
         from graphtraj.runtimes.codex.finalize import response
+
+        name = event.get('hook_event_name') if isinstance(event, dict) else None
+        if name in {'SessionStart', 'SessionEnd'}:
+            # Association is not a completion check. Codex stops the pending
+            # user turn on continue=false, so report it without consuming input;
+            # the next Stop still checks or reports its own association failure.
+            click.echo(json.dumps({'systemMessage': f'GraphTraj {name} '
+                                   f"({event.get('source') or 'unknown source'}) failed: {error}"},
+                                  ensure_ascii=False))
+            return
         from graphtraj.runtimes.runtime_adapter import CheckUsage
 
         result = response({'status': 'error', 'reason': f'Completion hook failed: {error}',

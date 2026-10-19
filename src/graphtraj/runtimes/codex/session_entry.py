@@ -8,6 +8,18 @@ from pathlib import Path
 from typing import Any
 
 
+def rollout_record(line: str | bytes, path: Path, offset: int) -> dict:
+    """Parse one native rollout line, naming its file and byte offset on failure."""
+    try:
+        record = json.loads(line)
+    except json.JSONDecodeError as error:
+        raise ValueError(f'Codex rollout {path} has no valid JSON record at byte {offset} '
+                         f'({len(line)} bytes read): {error}') from error
+    if not isinstance(record, dict):
+        raise ValueError(f'Codex rollout {path} has a non-object record at byte {offset}.')
+    return record
+
+
 def session_record(path: Path, turn: str | None = None) -> tuple[dict, dict]:
     """Read identity and the requested turn settings from a native rollout.
 
@@ -17,9 +29,15 @@ def session_record(path: Path, turn: str | None = None) -> tuple[dict, dict]:
     metadata: dict[str, Any] = {}
     context: dict[str, Any] = {}
     current_turn = None
-    with path.open(encoding='utf-8') as stream:
-        for line in stream:
-            record = json.loads(line)
+    with path.open('rb') as stream:
+        while True:
+            offset = stream.tell()
+            line = stream.readline()
+            if not line.endswith(b'\n'):
+                # Codex may still be appending its final record; only complete
+                # lines are native records, as in the archive collector.
+                break
+            record = rollout_record(line, path, offset)
             payload = record.get('payload', {})
             if record.get('type') == 'session_meta' and not metadata:
                 # Copied forks retain ancestral metadata after their own first

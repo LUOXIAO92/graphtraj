@@ -621,3 +621,26 @@ def test_real_claude_archive_public_query(
     assert any(e.get('data', {}).get('record', {}).get('type') == 'result' for e in data['events'])
     print('REAL_CLAUDE_321_QUERY=' + json.dumps(data, ensure_ascii=False))
     assert terminal['last_outcome'] == 'completed', terminal
+
+
+@pytest.mark.xfail(strict=True, reason='Open Task 346 failure 4: the Worker takes the project-wide '
+                   'execution-start lock inside the UserPromptSubmit hook reply.')
+def test_startup_hook_reply_does_not_wait_for_another_startup(
+    installed_commands: InstalledCommands,
+    temporary_git_repository: Path,
+    fake_codex: FakeCodex,
+    tmp_path: Path,
+) -> None:
+    """Another process holding the project startup lock must not delay the hook reply."""
+    root, environment = setup(installed_commands, temporary_git_repository, fake_codex, tmp_path)
+    log = tmp_path / 'hook-replies.log'
+    environment.update(CLAUDE_FIXTURE_START_LOCK=str(root / '.graphtraj/runner/execution-start.lock'),
+                       CLAUDE_FIXTURE_START_LOCK_SECONDS='4', CLAUDE_FIXTURE_HOOK_LOG=str(log))
+    batch = root / 'probe.yml'
+    batch.write_text(yaml.safe_dump({'tasks': [{'task_id': '320', 'role': 'researcher'}]}))
+    result = command(installed_commands, root, environment, '--swarm-input', str(batch))
+    assert result.returncode == 0, result.stdout + result.stderr
+    alias = yaml.safe_load(result.stdout)['tasks'][0]['alias']
+    assert settled(installed_commands, root, environment, alias)['last_outcome'] == 'completed'
+    assert Path(str(root / '.graphtraj/runner/execution-start.lock') + '.held').exists()
+    assert float(log.read_text().split()[0]) < 2

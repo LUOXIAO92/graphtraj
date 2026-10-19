@@ -5,7 +5,7 @@ import type { DesktopAPI, Observation, Preferences, Project, Task } from '../ele
 import type { Activity } from '../electron/activity';
 import { taskChildren, taskFocus, taskRelations, taskStatus } from './monitor-graph';
 import { TaskCanvas, type TaskCanvasHandle } from './TaskCanvas';
-import { ActivityView, MemberPills } from './Activity';
+import { ActivityView, MemberPills, MemberTree } from './Activity';
 import { SettingsView } from './Settings';
 import { ConnectionsView } from './Connections';
 import { UsageView } from './UsageDashboard';
@@ -32,6 +32,7 @@ function GraphView({ project, active, sidebarButton }: { project: Project; activ
   const [status, setStatus] = useState('all');
   const [expanded, setExpanded] = useState(false);
   const [mainExpanded, setMainExpanded] = useState(false);
+  const [membersExpanded, setMembersExpanded] = useState(false);
   const [focusAgent, setFocusAgent] = useState<string | null>(null);
   const [activity, setActivity] = useState<Activity | null>(null);
   const [activityError, setActivityError] = useState('');
@@ -57,7 +58,7 @@ function GraphView({ project, active, sidebarButton }: { project: Project; activ
   const nativeGraph = observation?.graph ?? { tasks: [] };
   const children = taskChildren(nativeGraph);
   const groups = (tasks ?? []).filter(task => children.get(task.task_id)?.length);
-  const graphActive = active && !mainExpanded && !(expanded && selected);
+  const graphActive = active && !mainExpanded && !membersExpanded && !(expanded && selected);
   function fitGraph(): void { canvas.current?.fit(); }
   const visible = new Set((tasks ?? []).filter(task => status === 'all' || (status === 'inactive' ? !task.active : taskStatus(task) === status)).map(task => task.task_id));
   const matches = (tasks ?? []).filter(task => visible.has(task.task_id) && `${task.task_id} ${task.title} ${task.task_name}`.toLowerCase().includes(query.toLowerCase()));
@@ -82,11 +83,11 @@ function GraphView({ project, active, sidebarButton }: { project: Project; activ
   function read(alias?: string): void { setFocusAgent(alias ?? null); setExpanded(true); }
   const members = activity?.agents ?? [];
   return <>
-    <header className="d-monitor-caption"><div>{sidebarButton}<span className="project-avatar">{projectName(project).slice(0, 2)}</span><strong title={project.root}>{projectName(project)}</strong><span>{mainExpanded ? 'Main conversations' : expanded ? 'Agent conversations' : 'Task graph'}</span></div>
-      <Button variant="ghost" aria-pressed={mainExpanded} onPress={() => setMainExpanded(true)}>Main sessions</Button><span role="status">{error ? 'Offline / query error' : loading ? 'Refreshing…' : 'Connected'} · {observation ? new Date(observation.updatedAt).toLocaleTimeString() : 'No graph received'}</span></header>
+    <header className="d-monitor-caption"><div>{sidebarButton}<span className="project-avatar">{projectName(project).slice(0, 2)}</span><strong title={project.root}>{projectName(project)}</strong><span>{mainExpanded ? 'Main conversations' : membersExpanded ? 'Agent members' : expanded ? 'Agent conversations' : 'Task graph'}</span></div>
+      <Button variant="ghost" aria-pressed={membersExpanded} onPress={() => setMembersExpanded(true)}>Members</Button><Button variant="ghost" aria-pressed={mainExpanded} onPress={() => setMainExpanded(true)}>Main sessions</Button><span role="status">{error ? 'Offline / query error' : loading ? 'Refreshing…' : 'Connected'} · {observation ? new Date(observation.updatedAt).toLocaleTimeString() : 'No graph received'}</span></header>
     {error && <div className="native-notice error" role="alert">{error}<p>{observation ? 'Showing the last successful graph. Retrying automatically.' : 'Check the directory and native GraphTraj installation.'}</p><Button variant="ghost" onPress={() => setRetry(value => value + 1)}>Refresh now</Button></div>}
     <div className="d-monitor-content"><div className="d-monitor-views">
-      <div className={`d-monitor-view ${mainExpanded || expanded && detail ? 'concealed' : ''}`} aria-hidden={mainExpanded || expanded && !!detail} inert={mainExpanded || expanded && !!detail}>
+      <div className={`d-monitor-view ${mainExpanded || membersExpanded || expanded && detail ? 'concealed' : ''}`} aria-hidden={mainExpanded || membersExpanded || expanded && !!detail} inert={mainExpanded || membersExpanded || expanded && !!detail}>
         <section className={`d-map-workspace ${detail ? 'has-shelf' : ''}`}>
           <div className="d-floating-tools"><div className="new-graph-controls"><label><Icon name="search" size={15}/><input type="search" aria-label="Search tasks" placeholder="Find task or number" value={query} onChange={event => setQuery(event.target.value)} onKeyDown={event => { if (event.key === 'Enter' && matches[0]) locate(matches[0]); }}/></label>
             <select aria-label="Task status" value={status} onChange={event => setStatus(event.target.value)}><option value="all">All statuses</option><option value="inactive">Replaced / inactive</option>{[...new Set(tasks?.map(task => taskStatus(task)))].sort().map(value => <option key={value}>{value}</option>)}</select></div>
@@ -105,7 +106,8 @@ function GraphView({ project, active, sidebarButton }: { project: Project; activ
             : null}
         </section>
       </div>
-      {detail && <div className={`d-monitor-view ${expanded && !mainExpanded ? '' : 'concealed'}`} aria-hidden={!expanded || mainExpanded} inert={!expanded || mainExpanded}><section className="new-reader d-reader" aria-label="Expanded agent conversations"><header className="d-reading-head"><Button variant="ghost" aria-label="Collapse chat" onPress={() => setExpanded(false)}><Icon name="left" size={16}/>Back to task graph</Button><span>#{detail.task_id}</span><h1>{detail.title}</h1><Status value={taskStatus(detail)}/></header><div className="d-reading-index"><span>JUMP TO AGENT</span><MemberPills agents={members} onRead={setFocusAgent} focus={focusAgent}/></div><ActivityView key={`${projectId}:${detail.task_id}`} projectId={projectId} taskId={detail.task_id} active={active && !mainExpanded} expanded={expanded} focusAgent={focusAgent} onActivity={setActivity} onError={setActivityError} refreshKey={activityRetry}/></section></div>}
+      {detail && <div className={`d-monitor-view ${expanded && !mainExpanded && !membersExpanded ? '' : 'concealed'}`} aria-hidden={!expanded || mainExpanded || membersExpanded} inert={!expanded || mainExpanded || membersExpanded}><section className="new-reader d-reader" aria-label="Expanded agent conversations"><header className="d-reading-head"><Button variant="ghost" aria-label="Collapse chat" onPress={() => setExpanded(false)}><Icon name="left" size={16}/>Back to task graph</Button><span>#{detail.task_id}</span><h1>{detail.title}</h1><Status value={taskStatus(detail)}/></header><div className="d-reading-index"><span>JUMP TO AGENT</span><MemberPills agents={members} onRead={setFocusAgent} focus={focusAgent}/></div><ActivityView key={`${projectId}:${detail.task_id}`} projectId={projectId} taskId={detail.task_id} active={active && !mainExpanded && !membersExpanded} expanded={expanded} focusAgent={focusAgent} onActivity={setActivity} onError={setActivityError} refreshKey={activityRetry}/></section></div>}
+      <div className={`d-monitor-view ${membersExpanded && !mainExpanded ? '' : 'concealed'}`} aria-hidden={!membersExpanded || mainExpanded} inert={!membersExpanded || mainExpanded}><section className="new-reader d-reader" aria-label="Agent members"><header className="d-reading-head"><Button variant="ghost" aria-label="Collapse members" onPress={() => setMembersExpanded(false)}><Icon name="left" size={16}/>{expanded && detail ? 'Back to agent conversations' : 'Back to task graph'}</Button><h1>Agent members</h1></header><MemberTree projectId={projectId} summaries={groups} active={active && membersExpanded && !mainExpanded} onRead={member => { select(member.task_id); setFocusAgent(member.alias); setExpanded(true); setMembersExpanded(false); }}/></section></div>
       <div className={`d-monitor-view ${mainExpanded ? '' : 'concealed'}`} aria-hidden={!mainExpanded} inert={!mainExpanded}><section className="new-reader d-reader" aria-label="Main conversations"><header className="d-reading-head"><Button variant="ghost" aria-label="Collapse Main chat" onPress={() => setMainExpanded(false)}><Icon name="left" size={16}/>{expanded && detail ? 'Back to agent conversations' : 'Back to task graph'}</Button><h1>Main sessions</h1></header><ActivityView projectId={projectId} active={active && mainExpanded}/></section></div>
     </div></div>
   </>;

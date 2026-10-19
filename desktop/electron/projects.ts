@@ -1,7 +1,7 @@
 import { UsageHistory } from './history.ts';
 import type { UsageObservation } from './types';
 import { nativeCommand } from './native.ts';
-import { ActivityReader, type ActivityRequest, type Activity, type Agent, type ActivityEvent } from './activity.ts';
+import { ActivityReader, type ActivityRequest, type Activity, type Agent, type ActivityEvent, type Members } from './activity.ts';
 import { execFile, type ChildProcess } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { access, mkdir, readFile, realpath, rename, stat, writeFile } from 'node:fs/promises';
@@ -218,6 +218,16 @@ export class Projects {
     const page = await this.activityReader.read(project.root, request);
     if (page.events?.some(event => event.kind === 'usage')) await this.history.receive(project.id, page.events);
     return page;
+  }
+
+  /** Query member scope only; switching it never stops, retires or reparents an Agent. */
+  async members(value: unknown): Promise<Members> {
+    if (!value || typeof value !== 'object') throw new Error('Choose a project.');
+    const { projectId, summary_task_id } = value as Record<string, unknown>;
+    const project = this.project(projectId);
+    if (summary_task_id !== undefined && typeof summary_task_id !== 'string') throw new Error('Invalid summary selection.');
+    if (await realpath(project.root) !== project.root) throw new Error('Project directory changed. Add it again.');
+    return this.activityReader.members(project.root, summary_task_id);
   }
 
   /** Return saved results first; independent project refreshes never delay this read. */

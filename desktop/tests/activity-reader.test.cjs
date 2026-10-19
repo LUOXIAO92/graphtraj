@@ -86,3 +86,32 @@ test('a genuinely stalled active poll still times out and rejects queued callers
   assert.match(queued.reason.message,/disconnected/);
   assert.equal(killed,1);
 });
+
+test('member scope queries share the observer and request only task_members', async t => {
+  const child = Object.assign(new EventEmitter(), {
+    stdin: new PassThrough(), stdout: new PassThrough(), stderr: new PassThrough(), kill() {},
+  });
+  const launches = [];
+  t.mock.method(childProcess, 'spawn', (_command, args) => { launches.push(args); return child; });
+  syncBuiltinESMExports();
+  t.after(() => { t.mock.restoreAll(); syncBuiltinESMExports(); });
+  const reader = new ActivityReader('graphtraj-tool');
+  t.after(() => reader.close());
+  const sent = [];
+  child.stdin.on('data', chunk => sent.push(...String(chunk).trim().split('\n').map(line => JSON.parse(line))));
+  const reply = members => child.stdout.write(JSON.stringify({ failed: false, result: { scope: ['1'], explicit: false, members } }) + '\n');
+  const current = reader.members('/controlled-project');
+  await new Promise(resolve => setImmediate(resolve));
+  reply([{ alias: 'leader', parent: null, state: 'standby' }]);
+  assert.equal((await current).members[0].state, 'standby');
+  const history = reader.members('/controlled-project', '7');
+  await new Promise(resolve => setImmediate(resolve));
+  reply([]);
+  await history;
+  assert.equal(launches.length, 1);
+  assert.ok(launches[0].includes('desktop_activity,task_members'));
+  assert.deepEqual(sent, [
+    { action: 'execute', feature: 'task_members', arguments: {} },
+    { action: 'execute', feature: 'task_members', arguments: { summary_task_id: '7' } },
+  ]);
+});

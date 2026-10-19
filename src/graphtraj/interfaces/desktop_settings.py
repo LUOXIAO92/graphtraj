@@ -97,8 +97,18 @@ def settings_request(request: dict, cwd: Path) -> dict:
         arguments = {key: value for key, value in request.items() if key != "scope"}
         _validate(arguments, TOOLS['runtime_connections'].input_schema, 'arguments')
         return _manage_connections(arguments, cwd=root, review=False)
-    if not isinstance(request, dict) or request.get("action") not in {"read", "preview", "save"}:
-        raise ValueError("Choose read, preview or save settings.")
+    if not isinstance(request, dict) or request.get("action") not in {"read", "preview", "save", "archive"}:
+        raise ValueError("Choose read, preview, save or archive settings.")
+    if request["action"] == "archive":
+        # The agents tool owns these switches in its own config.yml; no copy is kept here.
+        from agent_swarm import write_config
+        from graphtraj.interfaces.agents import archive_choices, swarm_root
+
+        choices = request.get("choices", {})
+        if set(request) - {"action", "choices"} or not isinstance(choices, dict):
+            raise ValueError("Archive settings take only a choices mapping.")
+        # Saving records GraphTraj's default together with the edited choice.
+        return {"archive": write_config(swarm_root(root), **{**archive_choices(root), **choices})}
     allowed = {"action"} if request["action"] == "read" else {
         "action", "revision", "edits", "renames", "add_edges", "remove_edges", "remove_presets", "role_tree",
     }
@@ -107,8 +117,11 @@ def settings_request(request: dict, cwd: Path) -> dict:
     current = organize_child_roles({}, cwd=root)
     before = _entries(current)
     if request["action"] == "read":
+        from graphtraj.interfaces.agents import archive_choices
+
         return {"revision": current["revision"], "roles": before,
-                "edges": current["edges"], "role_tree": current["role_tree"], "effect": EFFECT}
+                "edges": current["edges"], "role_tree": current["role_tree"], "effect": EFFECT,
+                "archive": archive_choices(root)}
     if request.get("revision") != current["revision"]:
         raise RunnerError(
             "configuration-conflict",

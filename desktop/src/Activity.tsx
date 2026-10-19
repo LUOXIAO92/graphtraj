@@ -1,11 +1,19 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Button } from '@heroui/react';
 import Markdown from 'react-markdown';
-import type { Activity, ActivityEvent, Agent } from '../electron/activity';
+import type { Activity, ActivityEvent, Agent, Member, Members } from '../electron/activity';
 import { ToolContent } from './ToolContent';
 import { Avatar, Icon, Status } from './ui';
 
 const readable = (value: unknown) => typeof value === 'string' ? value : JSON.stringify(value, null, 2);
+
+/** Show only active or standby for a member; retirement stays a history label. */
+export const visibleState = (state?: string | null) => state === 'retired' ? 'retired'
+  : state === 'running' || state === 'unreachable' || state === 'active' ? 'active' : 'standby';
+
+/** Name the direction of a recorded message by the Agent whose Session holds it. */
+const messageTitle = (event: ActivityEvent) => event.kind !== 'message' || !event.agent ? event.role || event.kind
+  : event.role === 'user' ? `Message to ${event.agent}` : event.role === 'assistant' ? `Message from ${event.agent}` : event.role || event.kind;
 
 export function EventCard({ event }: { event: ActivityEvent }) {
   const [copied, setCopied] = useState('');
@@ -16,7 +24,7 @@ export function EventCard({ event }: { event: ActivityEvent }) {
   const rawResult = event.kind === 'tool' && event.result !== undefined ? readable(event.result) : '';
   const copyContent = [content, details, error].filter(Boolean).join('\n\n');
   const title = event.kind === 'tool' ? `Tool · ${event.name || 'Name not recorded'}`
-    : event.role === 'reasoning' ? 'Reasoning' : event.kind === 'work' ? 'Execution event' : event.role || event.kind;
+    : event.role === 'reasoning' ? 'Reasoning' : event.kind === 'work' ? 'Execution event' : messageTitle(event);
   const time = event.time === null ? 'Time not recorded' : new Date(event.time).toLocaleString();
   const copy = <button aria-label="Copy record" onClick={() => {
     void window.graphtraj.copyText(copyContent).then(() => setCopied('Copied'), () => setCopied('Copy unavailable'));
@@ -86,6 +94,44 @@ export function ActivityRecords({ events, pageStart, agent }: { events: Activity
 /** Show only members returned by the native activity projection. */
 export function MemberPills({ agents, onRead, focus }: { agents: Agent[]; onRead: (alias: string) => void; focus?: string | null }) {
   return <div className="member-pills">{agents.map(agent => <button key={agent.alias} title={agent.alias} className={`${agent.historical ? 'history' : ''} ${focus === agent.alias ? 'selected' : ''}`} onClick={() => onRead(agent.alias)}><Avatar name={agent.alias} small/><span><strong>{agent.alias}</strong><small>{agent.kind === 'main' ? 'Associated Main' : agent.historical ? 'Historical' : 'Current'} · {agent.runtime || 'Runtime unknown'}</small></span><Icon name="right" size={13}/></button>)}</div>;
+}
+
+/** Current summary members by default, or one chosen summary's history, as the real parent tree.
+ * Changing the scope only re-queries; it never stops, retires or reparents an Agent. */
+export function MemberTree({ projectId, summaries, active, onRead }: {
+  projectId: string; summaries: { task_id: string; title: string }[]; active: boolean; onRead: (member: Member) => void;
+}) {
+  const [scope, setScope] = useState('');
+  const [result, setResult] = useState<Members | null>(null);
+  const [error, setError] = useState('');
+  useEffect(() => {
+    if (!active) return;
+    let alive = true;
+    let timer: ReturnType<typeof setTimeout>;
+    async function refresh() {
+      try { const next = await window.graphtraj.members(projectId, scope || undefined); if (alive) { setResult(next); setError(''); } }
+      catch (failure) { if (alive) setError(`Could not read members: ${String(failure)}. Retrying automatically.`); }
+      finally { if (alive) timer = setTimeout(refresh, 3000); }
+    }
+    setResult(null); void refresh();
+    return () => { alive = false; clearTimeout(timer); };
+  }, [projectId, scope, active]);
+  const members = result?.members ?? [];
+  const aliases = new Set(members.map(member => member.alias));
+  const rows: [Member, number][] = [];
+  const visit = (parent: string | null, depth: number) => members
+    .filter(member => parent === null ? !member.parent || !aliases.has(member.parent) : member.parent === parent)
+    .forEach(member => { rows.push([member, depth]); if (depth < 32) visit(member.alias, depth + 1); });
+  visit(null, 0);
+  return <section className="member-tree" aria-label="Agent members">
+    <label className="native-field"><span>Member scope</span><select aria-label="Member scope" value={scope} onChange={event => setScope(event.target.value)}>
+      <option value="">Current summaries</option>{summaries.map(task => <option key={task.task_id} value={task.task_id}>History · #{task.task_id} {task.title}</option>)}</select></label>
+    <p className="native-notice">{scope ? 'History of one summary, including completed and retired members.' : `Members of current summaries ${result?.scope.map(id => `#${id}`).join(', ') || ''} and their child tasks.`} Changing scope does not stop, retire or reparent any Agent.</p>
+    {error && <div className="native-notice error" role="alert">{error}</div>}
+    {!members.length && !error && <p role="status">{result ? 'No members in this scope.' : 'Loading members…'}</p>}
+    <div className="member-pills member-tree-rows">{rows.map(([member, depth]) => <button key={member.alias} title={member.alias} className={member.historical ? 'history' : ''} style={{ marginLeft: depth * 24 }} onClick={() => onRead(member)}>
+      <Avatar name={member.alias} small/><span><strong>{member.alias}</strong><small>{member.retired ? 'Retired · history' : `${member.state === 'active' ? 'Active' : 'Standby'}${member.historical ? ' · history' : ''}`} · #{member.task_id} · {member.role} · {member.runtime}{depth === 0 && member.parent ? ` · Parent: ${member.parent}` : ''}{member.diagnostic ? ` · ${member.diagnostic}` : ''}</small></span><Icon name="right" size={13}/></button>)}</div>
+  </section>;
 }
 
 /** Keep each actual member in its own independently scrolling column. */
@@ -235,7 +281,7 @@ function AgentColumn({ projectId, taskId, agent, active }: {
   }
 
   return <article className={`agent-chat-column agent-column ${agent.historical ? 'historical-column' : ''}`} data-agent-id={agent.alias} aria-label={agent.alias}>
-    <header className="agent-column-heading"><Avatar name={agent.alias}/><div><h2 title={agent.alias}>{agent.kind === 'main' ? 'Main' : agent.alias}</h2><span>{agent.kind === 'main' ? 'Associated Main' : agent.historical ? 'Historical' : 'Current'} · {agent.state}</span></div><Status value={agent.state}/></header>
+    <header className="agent-column-heading"><Avatar name={agent.alias}/><div><h2 title={agent.alias}>{agent.kind === 'main' ? 'Main' : agent.alias}</h2><span title={agent.state}>{agent.kind === 'main' ? 'Associated Main' : agent.historical ? 'Historical' : 'Current'} · {agent.kind === 'main' ? agent.state : visibleState(agent.state)}</span></div><Status value={agent.kind === 'main' ? agent.state : visibleState(agent.state)}/></header>
     <div className="agent-column-parent"><Icon name="branch" size={13}/><span title={agent.parent ?? undefined}>{agent.kind === 'main' ? `Session: ${agent.session}` : `Parent: ${agent.parent ?? 'Not recorded / root'}`}</span></div>
     <div className="conversation-panel"><div className="agent-metadata"><span><Icon name="terminal" size={14}/>{agent.runtime || 'Runtime unknown'}</span><span>{agent.model || 'Model not recorded'}</span></div>
       {error && <div className="native-notice error" role="alert">{error} <Button variant="ghost" onPress={() => setRetry(value => value + 1)}>Retry now</Button></div>}

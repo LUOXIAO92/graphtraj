@@ -29,6 +29,13 @@ export type Activity = {
   availability?: string; reason?: string;
 };
 export type ActivityRequest = { task_id?: string; alias?: string; cursor?: string };
+/** One member of the native task_members query; state is null once retired. */
+export type Member = {
+  alias: string; task_id: string; team: number; role: string; runtime: string; parent: string | null;
+  state: 'active' | 'standby' | null; last_outcome: string | null; historical: boolean; retired: boolean; diagnostic?: string;
+};
+export type Members = { scope: string[]; explicit: boolean; members: Member[] };
+type Pending = { feature: string; request: Record<string, unknown>; resolve: (value: never) => void; reject: (error: Error) => void };
 
 /** Keep only failure code/reason, applying native credential and diagnostic redaction. */
 function activityFailure(reply: { error?: unknown; result?: { error?: unknown } }): Error {
@@ -58,7 +65,7 @@ function activityFailure(reply: { error?: unknown; result?: { error?: unknown } 
 export class ActivityReader {
   private processes = new Map<string, {
     child: ChildProcessWithoutNullStreams;
-    queue: { request: ActivityRequest; resolve: (value: Activity) => void; reject: (error: Error) => void }[];
+    queue: Pending[];
     active: boolean;
     timer?: ReturnType<typeof setTimeout>;
   }>();
@@ -86,12 +93,21 @@ export class ActivityReader {
     return saved;
   }
 
-  async read(root: string, request: ActivityRequest): Promise<Activity> {
+  read(root: string, request: ActivityRequest): Promise<Activity> {
+    return this.execute<Activity>(root, 'desktop_activity', request);
+  }
+
+  /** Read current summary members, or one chosen summary's history; never changes them. */
+  members(root: string, summaryTaskId?: string): Promise<Members> {
+    return this.execute<Members>(root, 'task_members', summaryTaskId ? { summary_task_id: summaryTaskId } : {});
+  }
+
+  private async execute<T>(root: string, feature: string, request: Record<string, unknown>): Promise<T> {
     const key = await (this.cursorKey ??= this.key(this.cursorDirectory));
     let observer = this.processes.get(root);
     if (!observer) {
       const command = nativeCommand(this.executable);
-      const child = spawn(command.executable, [...command.args, '--desktop-observer', '--allowed-features', 'desktop_activity'], {
+      const child = spawn(command.executable, [...command.args, '--desktop-observer', '--allowed-features', 'desktop_activity,task_members'], {
         cwd: root, windowsHide: true, stdio: 'pipe',
         env: { ...process.env, GRAPHTRAJ_DESKTOP_CURSOR_KEY: key },
       });
@@ -115,14 +131,14 @@ export class ActivityReader {
         try {
           const reply = JSON.parse(line);
           if (reply.failed) pending.reject(activityFailure(reply));
-          else pending.resolve(reply.result);
+          else pending.resolve(reply.result as never);
         } catch { pending.reject(new Error('Native activity query failed [unknown]: Invalid response.')); }
         this.send(root);
       });
     }
     const connection = observer;
-    return new Promise((resolve, reject) => {
-      connection.queue.push({ request, resolve, reject });
+    return new Promise<T>((resolve, reject) => {
+      connection.queue.push({ feature, request, resolve: resolve as (value: never) => void, reject });
       this.send(root);
     });
   }
@@ -138,7 +154,7 @@ export class ActivityReader {
       for (const pending of connection.queue.splice(0)) pending.reject(new Error('Native activity observer disconnected.'));
       connection.child.kill();
     }, 15000);
-    connection.child.stdin.write(JSON.stringify({ action: 'execute', feature: 'desktop_activity',
+    connection.child.stdin.write(JSON.stringify({ action: 'execute', feature: connection.queue[0].feature,
       arguments: connection.queue[0].request }) + '\n');
   }
 

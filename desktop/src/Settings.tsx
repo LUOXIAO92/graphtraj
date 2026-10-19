@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Button, Description, Input, Label, TextField } from '@heroui/react';
-import type { Connections, RoleFields, RoleTree, Settings } from '../electron/types';
+import type { ArchiveChoices, Connections, RoleFields, RoleTree, Settings } from '../electron/types';
 import { branchRoles, treeEdges, moveNode, removeNodes, fieldLabels as labels, ownRole, roleChanges, roleName, runtimeLabel } from './settings-draft';
 import { Dialog, Field, Icon } from './ui';
 import { TeamGraph } from './TeamGraph';
@@ -108,6 +108,16 @@ export function SettingsView({ projectId, active = true, onModels }: { projectId
     catch (error) { setError(String(error)); }
     finally { setBusy(false); }
   }
+  /** Save one agents-tool switch immediately; role drafts are unaffected. */
+  async function saveArchive(choices: Partial<ArchiveChoices>): Promise<void> {
+    setBusy(true); setError(''); setMessage('');
+    try {
+      const { archive } = await window.graphtraj.saveArchive(projectId, choices);
+      setSaved(current => current && { ...current, archive }); setMessage('Saved Session archive settings.');
+    } catch (error) { setError(String(error)); }
+    finally { setBusy(false); }
+  }
+
   async function save(): Promise<void> {
     if (!saved) return;
     setBusy(true); setError(''); setMessage('');
@@ -224,6 +234,10 @@ export function SettingsView({ projectId, active = true, onModels }: { projectId
   return <section className="d-team-editor" aria-label="Project settings"><header className="d-config-heading"><div><h1>Teams &amp; roles</h1><p>Configure this project’s organization. Running agents are unchanged.</p></div><span className="memory-badge"><Icon name="shield" size={15}/>Project configuration</span></header>
     {error && !adding && !deleting && <div className="native-notice error" role="alert">{error}<p>Your unsaved changes are retained.</p></div>}
     {busy && <p className="native-notice" role="status">Loading or saving settings…</p>}{message && <div className="toast" role="status"><Icon name="check"/>{message}</div>}
+    {saved?.archive && <fieldset className="d-archive-settings" disabled={busy}><legend>Session archive · agents tool (.graphtraj/swarm/config.yml)</legend>
+      {([['save_normalized_sessions', 'Save normalized Sessions'], ['backfill_history', 'Backfill history of associated Sessions']] as const).map(([name, label]) =>
+        <label key={name}><input type="checkbox" checked={saved.archive![name]} onChange={event => void saveArchive({ [name]: event.target.checked })}/><span>{label}</span></label>)}
+      <small>Saved immediately. Turning saving off keeps saved history and never affects native Sessions, messages, stopping or continuing.</small></fieldset>}
     <nav className="d-team-tabs" aria-label="Project teams">{teams.map(name => <button key={name} aria-current={team === name ? 'true' : undefined} onClick={() => { setError(''); setTeam(name); setSelected(Object.keys(roles).find(ref => group(ref) === name) ?? ''); }}><Icon name="branch" size={15}/><span>{ownRole(teamRenames, name) ?? (name || 'Ungrouped roles')}</span><small>{Object.keys(roles).filter(ref => group(ref) === name).length}</small></button>)}<Button variant="ghost" isDisabled={busy || !saved} onPress={() => { setError(''); setAdding('team'); setTeamName(''); }}><Icon name="plus" size={15}/>Add team</Button>{teamRoles.length > 0 && <Button variant="ghost" className="d-delete-team" isDisabled={busy} onPress={() => setDeleting('team')}><Icon name="trash" size={15}/>Delete team</Button>}</nav>
     {!teams.length ? <div className="d-empty-configuration"><Icon name="branch" size={30}/><h2>{busy ? 'Loading teams…' : 'No teams configured'}</h2><p>Add a team and start with one root agent. Build its organization one child at a time.</p><Button variant="primary" isDisabled={busy || !saved} onPress={() => setAdding('team')}>Add first team</Button></div> : <div className="d-team-editor-body"><div className="d-org-workspace"><header><div><label>Team name<input aria-label="Team name" disabled={busy || !team} value={ownRole(teamRenames, team) ?? (team || 'Ungrouped roles')} onChange={event => {
       const value = event.target.value; setTeamRenames(current => ({ ...current, [team]: value }));

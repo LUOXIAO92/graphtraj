@@ -1,5 +1,5 @@
 import type { Call } from './usage';
-import type { Activity, ActivityRequest } from './activity';
+import type { Activity, ActivityRequest, Members } from './activity';
 export type Delivery = {
   event_id: string; event: string; task_id: string; candidate: string | null;
   dev_commit: string | null; reason: string | null;
@@ -29,7 +29,10 @@ export type RoleFields = Partial<Record<'runtime' | 'model' | 'base_url' | 'api_
 export type RoleTree = { [reference: string]: RoleTree };
 export type Settings = {
   revision: string; roles: Record<string, RoleFields>; edges: [string, string][]; role_tree: RoleTree; effect: string; applied?: boolean;
+  archive?: ArchiveChoices;
 };
+/** The agents tool's switches in <project>/.graphtraj/swarm/config.yml. */
+export type ArchiveChoices = { save_normalized_sessions: boolean; backfill_history: boolean };
 export type SettingsDraft = {
   role_tree?: RoleTree; remove_presets?: string[];
   revision: string; edits: Record<string, RoleFields>; renames: Record<string, string>;
@@ -61,4 +64,6 @@ export type DesktopAPI = {
   graph: (id: string) => Promise<Observation>;
   settings: (id: string) => Promise<Settings>;
   saveSettings: (id: string, draft: SettingsDraft) => Promise<Settings>;
+  saveArchive: (id: string, choices: Partial<ArchiveChoices>) => Promise<{ archive: ArchiveChoices }>;
+  members: (projectId: string, summaryTaskId?: string) => Promise<Members>;
 };

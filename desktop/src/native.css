@@ -47,3 +47,10 @@
 .d-map-workspace { overflow: auto; }
 .d-map-surface { flex-basis: 200px; flex-shrink: 0; min-height: 200px; }
 .d-task-shelf { max-height: 35vh; overflow: auto; }
+.member-tree { display: flex; flex-direction: column; gap: 10px; padding: 16px 20px; overflow: auto; min-height: 0; }
+.member-tree .native-field { max-width: 420px; }
+.member-tree-rows { flex-direction: column; flex-wrap: nowrap; align-items: flex-start; }
+.d-archive-settings { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 18px; margin: 0 0 10px; padding: 8px 12px; border: 1px solid var(--border-ui); border-radius: 6px; font-size: 12px; }
+.d-archive-settings legend { font-weight: 600; padding: 0 4px; }
+.d-archive-settings label { display: flex; align-items: center; gap: 6px; }
+.d-archive-settings small { flex-basis: 100%; color: var(--muted); }

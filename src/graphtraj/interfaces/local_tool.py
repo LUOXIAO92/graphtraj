@@ -68,7 +68,7 @@ def bind(
 
             token = human_observer.set(True)
             try:
-                allowed = tuple(name for name in ('desktop_activity', 'session_read')
+                allowed = tuple(name for name in ('desktop_activity', 'session_read', 'task_members')
                                 if allowed_features is None or name in allowed_features)
                 return gateway.handle_request(request, cwd=cwd, allowed_features=allowed)
             finally:

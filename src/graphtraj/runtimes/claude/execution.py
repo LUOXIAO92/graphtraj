@@ -244,12 +244,14 @@ class ClaudeExecution:
         settings = {
             'permissions': {
                 'blockReadsOutsideWorkingDirectories': True,
+                'allow': [rule for p in resources for rule in (f'Read(/{p})', f'Read(/{p}/**)')],
                 'deny': [rule for p in denied_read for rule in (f'Read(/{p})', f'Read(/{p}/**)')]
                         + [rule for p in denied_write for rule in (f'Edit(/{p})', f'Edit(/{p}/**)')]
                         + (['Edit', 'Write', 'NotebookEdit'] if request['worktree_access'] == 'read' else []),
-                # Native additional working directories are writable sandbox
-                # roots. Read-only resources belong solely in allowRead below.
-                'additionalDirectories': [],
+                # Native Read/Grep/Glob and Bash path checks read only working
+                # directories, so configured read-only resources are added here.
+                # Their Edit deny rules and sandbox denyWrite keep them unwritable.
+                'additionalDirectories': [str(path) for path in resources if path.is_dir()],
             },
             'sandbox': {
                 'enabled': True, 'failIfUnavailable': True, 'allowUnsandboxedCommands': False,

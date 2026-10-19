@@ -403,24 +403,20 @@ def send_instruction(
     *,
     reports_only: bool = False,
 ) -> Dict[str, str]:
-    """Steer an active execution or continue an idle mapped Session.
+    """Continue a Task member Session under GraphTraj's causal recording policy.
 
-    ``reports_only`` selects report collection: the Session is resumed to
-    return evidence it already holds, so it starts no new work and samples no
-    stopping check. The default keeps a continuation under budget control.
+    GraphTraj delivery requires the causing Project Worldline events before it
+    calls the same continuation ``agents send`` uses, then records them with
+    the follow-up. ``reports_only`` selects report collection: the Session is
+    resumed to return evidence it already holds, so it starts no new work and
+    samples no stopping check.
     """
 
-    if not instruction.strip():
-        raise RunnerError(
-            "invalid-input", "instruction must be non-empty plain text."
-        )
-    # Recording the causing Worldline events is GraphTraj's continuation
-    # policy for Task member Sessions; ordinary Agents use agents send.
     if not caused_by_event_ids:
         raise RunnerError(
             "invalid-input",
-            "Continuing a Task member Session requires at least one causal Project "
-            "Worldline event ID; ordinary Agents use agents send without one.",
+            "GraphTraj delivery continuation requires at least one causal Project "
+            "Worldline event ID; plain messages use agents send without one.",
         )
     if (
         len(caused_by_event_ids) != len(set(caused_by_event_ids))
@@ -429,11 +425,33 @@ def send_instruction(
         raise RunnerError(
             "invalid-input", "causal Project Worldline event IDs must be unique."
         )
+    _require_project_events(cwd, caused_by_event_ids)
+    return continue_member(alias, instruction, cwd, caused_by_event_ids, reports_only=reports_only)
+
+
+def continue_member(
+    alias: str,
+    instruction: str,
+    cwd: Path,
+    caused_by_event_ids: tuple[str, ...] = (),
+    *,
+    reports_only: bool = False,
+) -> Dict[str, str]:
+    """Steer an active execution or continue an idle mapped Session.
+
+    This is the one native continuation for Task member Sessions; ``agents``
+    calls it with no causes. The recorded direct parent alone may continue
+    it, in the same native Session.
+    """
+
+    if not instruction.strip():
+        raise RunnerError(
+            "invalid-input", "instruction must be non-empty plain text."
+        )
     runner_directory = discover_runner_directory(cwd)
     mapping, session_directory = read_alias_mapping(runner_directory, alias)
     require_direct_authority(runner_directory, alias, mapping)
     if is_session_mapping(mapping):
-        _require_project_events(cwd, caused_by_event_ids)
         from graphtraj.teams.team_replacement import completed_task_member, require_active_session
 
         project = discover_project(cwd, require_clean_integration=False)

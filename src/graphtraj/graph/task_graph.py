@@ -920,7 +920,7 @@ def _write_yaml(path: Path, value: dict[str, Any]) -> None:
     """Write execution facts without duplicating a v2 immutable definition."""
     temporary = path.with_name(".{0}.tmp".format(path.name))
     stored = protocol.execution_record(value) if path.name == "task.yml" else value
-    temporary.write_text(yaml.safe_dump(stored, sort_keys=False), encoding="utf-8")
+    temporary.write_text(yaml.safe_dump(stored, sort_keys=False, allow_unicode=True), encoding="utf-8")
     os.replace(temporary, path)
 
 

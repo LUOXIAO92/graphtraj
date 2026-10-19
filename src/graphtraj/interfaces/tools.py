@@ -12,15 +12,10 @@ from graphtraj.configuration.project_configuration import (
 )
 from graphtraj.configuration.project_diagnosis import diagnose_project
 from graphtraj.execution.runner_control import (
-    interrupt_session,
-    pending_requests,
-    reply_to_request,
     read_session_reports,
     submit_session_report,
-    send_instruction,
 )
 from graphtraj.execution.runner_launch import launch_swarm, launch_swarm_file
-from graphtraj.execution.runner_status import status_aliases, status_tree
 from graphtraj.graph.delivery_state import apply_delivery_state_request
 from graphtraj.graph.delivery_worldline import (
     append_project_worldline_event,
@@ -74,18 +69,6 @@ _SWARM_SCHEMA = {
     "required":             ["tasks"],
     "additionalProperties": False,
 }
-_SEND_SCHEMA = {
-    "type": "object",
-    "properties": {
-        "alias":               {"type": "string"},
-        "instruction":         {"type": "string"},
-        "caused_by_event_ids": {"type": "array", "items": {"type": "string"}},
-        "reports_only":        {"type": "boolean", "default": False,
-                                "description": "Collect existing reports without sampling the Task budget."},
-    },
-    "required":             ["alias", "instruction"],
-    "additionalProperties": False,
-}
 _CONTINUE_SCHEMA = {
     "type": "object",
     "properties": {
@@ -95,26 +78,6 @@ _CONTINUE_SCHEMA = {
                                 "description": "Restore budget permission without executing old Sessions."},
     },
     "required":             ["task_id", "caused_by_event_ids"],
-    "additionalProperties": False,
-}
-_REQUESTS_SCHEMA = {
-    "type": "object",
-    "properties": {
-        "alias":        {"type": "string"},
-        "execution_id": {"type": ["string", "null"],
-                         "description": "Reject a mapping that has moved to another execution."},
-    },
-    "required":             ["alias"],
-    "additionalProperties": False,
-}
-_REPLY_SCHEMA = {
-    "type": "object",
-    "properties": {
-        "alias":    {"type": "string"},
-        "request":  {"type": "object"},
-        "response": {"type": "object", "description": "Explicit native response as a JSON object."},
-    },
-    "required":             ["alias", "request", "response"],
     "additionalProperties": False,
 }
 _PROJECT_SETUP_SCHEMA = {
@@ -418,37 +381,6 @@ def integrate_current_task(
     return ToolResult(result, failed=failed)
 
 
-def read_alias_status(
-    arguments: Mapping[str, Any], *, cwd: Path | None = None,
-) -> ToolResult:
-    """Report the requested Session aliases, or the visible Session tree."""
-
-    aliases = arguments.get("aliases")
-    operation_total = bool(arguments.get("operation_total", False))
-    baseline = arguments.get("baseline")
-    candidate = arguments.get("candidate")
-    if aliases is None:
-        response = status_tree(
-            cwd or Path.cwd(),
-            operation_total=operation_total,
-            baseline=baseline,
-            candidate=candidate,
-        )
-    else:
-        if not isinstance(aliases, list) or not all(
-            isinstance(alias, str) for alias in aliases
-        ):
-            raise ValueError("aliases must be a list of Session alias strings")
-        response = status_aliases(
-            aliases,
-            cwd or Path.cwd(),
-            operation_total=operation_total,
-            baseline=baseline,
-            candidate=candidate,
-        )
-    return ToolResult(response.document, failed=not response.succeeded)
-
-
 def read_parent_status(arguments: Mapping[str, Any], *, cwd: Path | None = None) -> ToolResult:
     """Observe only the caller root's recorded Runtime host parent."""
     from graphtraj.execution.parent_status import parent_status
@@ -536,37 +468,6 @@ def launch_swarm_tool(
     return ToolResult(response.document, failed=not response.succeeded)
 
 
-def send_session_instruction(
-    arguments: Mapping[str, Any], *, cwd: Path | None = None,
-) -> ToolResult:
-    """Steer an active execution or continue an idle mapped Session.
-
-    ``reports_only`` resumes the Session to return evidence it already holds
-    without sampling the Task budget, so a report collection cannot repeat a
-    sampled stop or deliver another stop instruction.
-    """
-
-    return ToolResult(
-        send_instruction(
-            _string_argument(arguments, "alias"),
-            _string_argument(arguments, "instruction"),
-            cwd or Path.cwd(),
-            _string_list_argument(arguments, "caused_by_event_ids"),
-            reports_only=_boolean_argument(arguments, "reports_only"),
-        )
-    )
-
-
-def interrupt_session_execution(
-    arguments: Mapping[str, Any], *, cwd: Path | None = None,
-) -> ToolResult:
-    """Stop a descendant subtree and return each member confirmation."""
-
-    return ToolResult(
-        interrupt_session(_string_argument(arguments, "alias"), cwd or Path.cwd())
-    )
-
-
 def continue_task_execution(
     arguments: Mapping[str, Any], *, cwd: Path | None = None,
 ) -> ToolResult:
@@ -580,36 +481,6 @@ def continue_task_execution(
             _string_list_argument(arguments, "caused_by_event_ids"),
             cwd or Path.cwd(),
             budget_only=_boolean_argument(arguments, "budget_only"),
-        )
-    )
-
-
-def read_pending_requests(
-    arguments: Mapping[str, Any], *, cwd: Path | None = None,
-) -> ToolResult:
-    """Query the mapped execution's native requests without consuming them."""
-
-    return ToolResult(
-        pending_requests(
-            _string_argument(arguments, "alias"),
-            cwd or Path.cwd(),
-            execution_id=_optional_string_argument(arguments, "execution_id"),
-        )
-    )
-
-
-def answer_pending_request(
-    arguments: Mapping[str, Any], *, cwd: Path | None = None,
-) -> ToolResult:
-    """Submit an explicit reply to one request returned by the query path."""
-
-    request = arguments.get("request")
-    response = arguments.get("response")
-    if not isinstance(request, dict) or not isinstance(response, dict):
-        raise ValueError("request and response must be JSON objects")
-    return ToolResult(
-        reply_to_request(
-            _string_argument(arguments, "alias"), request, response, cwd or Path.cwd()
         )
     )
 
@@ -824,25 +695,7 @@ register_tool(
     integrate_current_task,
     manual_ref="manuals/task-delivery/guide.md",
 )
-register_tool(
-    "alias_status",
-    "Read the explicitly supplied Session aliases, including their Runtime "
-    "activity and last outcome, or omit `aliases` for the Session tree this "
-    "caller may see. Equivalent to `agent-runner status`.",
-    {
-        "type": "object",
-        "properties": {
-            "aliases":         {"type": "array", "items": {"type": "string"}},
-            "operation_total": {"type": "boolean", "default": False,
-                                "description": "Report native tool requests once by native identifier."},
-            "baseline":        {"type": ["string", "null"]},
-            "candidate":       {"type": ["string", "null"]},
-        },
-        "additionalProperties": False,
-    },
-    read_alias_status,
-    manual_ref="manuals/task-delivery/guide.md",
-)
+
 register_tool(
     "swarm",
     "Activate the roles this swarm input selects and return each Agent's alias, "
@@ -852,28 +705,8 @@ register_tool(
     launch_swarm_tool,
     manual_ref="manuals/task-delivery/guide.md",
 )
-register_tool(
-    "send_instruction",
-    "Steer an active execution or continue an idle mapped Session using unique "
-    "causal Project Worldline event IDs. Equivalent to `agent-runner send`.",
-    _SEND_SCHEMA,
-    send_session_instruction,
-    manual_ref="manuals/task-delivery/guide.md",
-    examples=(
-        {
-            "alias":       "<returned-agent-alias>",
-            "instruction": "Preserve the completed summary and include the source links.",
-        },
-    ),
-)
-register_tool(
-    "interrupt",
-    "Stop a descendant subtree and prevent further work while preserving its "
-    "Sessions. Returns each member confirmation. Equivalent to `agent-runner interrupt`.",
-    _ALIAS_SCHEMA,
-    interrupt_session_execution,
-    manual_ref="manuals/task-delivery/guide.md",
-)
+
+
 register_tool(
     "continue",
     "Restore a sampled stopped task budget and resume original roots by default; "
@@ -890,26 +723,8 @@ register_tool(
         },
     ),
 )
-register_tool(
-    "pending_requests",
-    "Query the mapped execution's pending native approval or user-input requests, "
-    "including the identity required to reply. Equivalent to `agent-runner "
-    "requests`.",
-    _REQUESTS_SCHEMA,
-    read_pending_requests,
-    manual_ref="manuals/task-delivery/guide.md",
-    examples=(
-        {"alias": "<returned-agent-alias>"},
-    ),
-)
-register_tool(
-    "reply_to_request",
-    "Return the explicit native reply for one request document obtained from "
-    "`pending_requests`. Equivalent to `agent-runner reply`.",
-    _REPLY_SCHEMA,
-    answer_pending_request,
-    manual_ref="manuals/task-delivery/guide.md",
-)
+
+
 
 
 def recover_execution(arguments: Mapping[str, Any], *, cwd: Path | None = None) -> ToolResult:
@@ -1140,6 +955,30 @@ register_tool('decide_result',
               manual_ref='manuals/task-delivery/guide.md')
 
 
+def retain_evidence(arguments: Mapping[str, Any], *, cwd: Path | None = None) -> ToolResult:
+    """Retain untracked Worktree files for an existing submission as its owner."""
+    from graphtraj.execution.runner_results import retain_submission_evidence
+
+    if set(arguments) - {'submission_id', 'evidence_refs'}:
+        raise ValueError('Unknown retained evidence fields.')
+    return ToolResult(retain_submission_evidence(
+        _string_argument(arguments, 'submission_id'),
+        _string_list_argument(arguments, 'evidence_refs'), cwd or Path.cwd(),
+    ))
+
+
+register_tool('retain_evidence',
+              'Retain untracked files still only in the submitting member\'s Worktree for an existing '
+              'result submission, without another submission or decision. Only the member\'s direct '
+              'owner may call it; session_reports then lists the retained copies.',
+              {'type': 'object', 'properties': {
+                  'submission_id': {'type': 'string'},
+                  'evidence_refs': {'type': 'array', 'minItems': 1, 'items': {'type': 'string'},
+                                    'description': 'Paths relative to the submitting member\'s Worktree.'},
+              }, 'required': ['submission_id', 'evidence_refs'], 'additionalProperties': False},
+              retain_evidence, manual_ref='manuals/task-delivery/guide.md')
+
+
 
 def replace_session_execution(
     arguments: Mapping[str, Any], *, cwd: Path | None = None,
@@ -1154,13 +993,6 @@ def replace_session_execution(
         cwd or Path.cwd(),
     )
     return ToolResult(result, failed="error" in result)
-
-
-def retire_session_execution(arguments: Mapping[str, Any], *, cwd: Path | None = None) -> ToolResult:
-    """Retire a stopped subtree's target, preserving its Session and Worktree."""
-    from graphtraj.execution.runner_retirement import retire_session
-
-    return ToolResult(retire_session(_string_argument(arguments, "alias"), cwd or Path.cwd()))
 
 
 def cleanup_task_execution(
@@ -1195,14 +1027,6 @@ def run_codex_main(
     ))
 
 
-register_tool(
-    "retire",
-    "Retire one member after its entire subtree stops; preserve Sessions, evidence and Worktree.",
-    {"type": "object", "properties": {"alias": {"type": "string"}},
-     "required": ["alias"], "additionalProperties": False},
-    retire_session_execution,
-    manual_ref="manuals/task-delivery/guide.md",
-)
 register_tool(
     "replace",
     "Replace one stopped actual member while preserving its Team and evidence. "
@@ -1287,22 +1111,15 @@ _CLI = {
         "request_file": ("request", "yaml"), "facts_file": ("facts", "yaml"),
     }),
     "task_integrate": (("graphtraj", "task", "integrate"), {"role": ("role", "yaml-value")}),
-    "alias_status": (("agent-runner", "status"), {}),
     "parent_status": (("agent-runner", "parent-status"), {}),
     "swarm": (("agent-runner", "--swarm-input"), {"swarm_input": ("", "yaml")}),
-    "send_instruction": (("agent-runner", "send"), _CAUSED_BY),
-    "interrupt": (("agent-runner", "interrupt"), {}),
     "approved_recovery": (("agent-runner", "recover"), _CAUSED_BY),
     "continue": (("agent-runner", "continue"), _CAUSED_BY),
-    "pending_requests": (("agent-runner", "requests"), {}),
-    "reply_to_request": (("agent-runner", "reply"), {
-        "request_file": ("request", "yaml"), "response": ("response", "json"),
-    }),
     "session_reports": (("agent-runner", "reports"), {}),
     "submit_report": (("agent-runner", "submit-report"), {}),
     "submit_result": (("agent-runner", "submit-result"), {}),
     "decide_result": (("agent-runner", "decide-result"), {}),
-    "retire": (("agent-runner", "retire"), {}),
+    "retain_evidence": (("agent-runner", "retain-evidence"), {}),
     "replace": (("agent-runner", "replace"), _CAUSED_BY),
     "runtime_connections": (("graphtraj", "connections"), {"catalog_file": ("catalog", "yaml")}),
     "role_organization": (("graphtraj", "roles", "organize"), {"change_file": ("change", "yaml")}),

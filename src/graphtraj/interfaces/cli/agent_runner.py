@@ -185,74 +185,6 @@ def parent_status(timeout_seconds: float, include_hooks: bool) -> None:
         raise SystemExit(1)
 
 
-@main.command(cls=OperationCommand, feature="alias_status")
-@click.argument("aliases", nargs=-1, required=False)
-@click.option(
-    "--operation-total",
-    is_flag=True
-)
-@click.option("--baseline")
-@click.option("--candidate")
-def status(
-    aliases: tuple[str, ...],
-    operation_total: bool,
-    baseline: str | None,
-    candidate: str | None,
-) -> None:
-    """Inspect the supplied Session aliases, or the visible Session tree."""
-    try:
-        arguments = {"operation_total": operation_total, "baseline": baseline, "candidate": candidate}
-        if aliases:
-            arguments["aliases"] = list(aliases)
-        response = invoke_tool("alias_status", arguments, cwd=Path.cwd().resolve())
-    except RunnerError as error:
-        _fail(error)
-    if 'diagnostic' in response.document:
-        response.document['diagnostic']['entry'] = 'cli'
-    _emit_result(response.document)
-    if response.failed:
-        for entry in response.document.get("aliases", response.document.get("agents", [])):
-            if "error" in entry:
-                click.echo(entry["error"]["message"], err=True)
-        raise click.exceptions.Exit(1)
-
-
-@main.command(cls=OperationCommand, feature="pending_requests")
-@click.argument("alias")
-@click.option("--execution-id")
-def requests(alias: str, execution_id: str | None) -> None:
-    """Query pending native requests without consuming them."""
-    try:
-        response = invoke_tool("pending_requests",
-            {"alias": alias, "execution_id": execution_id}, cwd=Path.cwd().resolve(),
-        ).document
-    except RunnerError as error:
-        _fail(error, alias=alias)
-    _emit_result(response)
-
-
-@main.command(cls=OperationCommand, feature="reply_to_request")
-@click.argument("alias")
-@click.option("--request-file", type=click.Path(path_type=Path))
-@click.option("--response")
-def reply(alias: str, request_file: Path, response: str) -> None:
-    """Return an explicit reply to the original native request."""
-    try:
-        request = yaml.safe_load(request_file.read_text(encoding="utf-8"))
-        native_response = json.loads(response)
-    except (OSError, ValueError, yaml.YAMLError) as error:
-        _fail(RunnerError("invalid-input", str(error)), alias=alias)
-    try:
-        result = invoke_tool("reply_to_request",
-            {"alias": alias, "request": request, "response": native_response},
-            cwd=Path.cwd().resolve(),
-        ).document
-    except (RunnerError, ValueError) as error:
-        _fail(error if isinstance(error, RunnerError) else RunnerError("invalid-input", str(error)),
-              alias=alias)
-    _emit_result(result)
-
-
 def _json_string_list(
     context: click.Context, parameter: click.Parameter, value: str | None,
 ) -> list[str] | None:
@@ -285,56 +217,6 @@ def _event_ids(listed: list[str] | None, legacy: tuple[str, ...]) -> list[str] |
     if listed is None and not legacy:
         return None
     return list(legacy) + (listed or [])
-
-
-@main.command(cls=OperationCommand, feature="send_instruction")
-@click.argument("alias")
-@click.option("--instruction")
-@_caused_by_event_ids
-@click.option(
-    "--reports-only",
-    is_flag=True
-)
-def send(
-    alias: str,
-    instruction: str,
-    caused_by_event_ids: list[str] | None,
-    legacy_caused_by_event_ids: tuple[str, ...],
-    reports_only: bool,
-) -> None:
-    """Resume one Session using causal Project Worldline event IDs."""
-    try:
-        response = invoke_tool("send_instruction",
-            {"alias": alias, "instruction": instruction,
-             "caused_by_event_ids": _event_ids(caused_by_event_ids, legacy_caused_by_event_ids) or [],
-             "reports_only": reports_only},
-            cwd=Path.cwd().resolve(),
-        ).document
-    except RunnerError as error:
-        _fail(error, alias=alias)
-    _emit_result(response)
-
-
-@main.command(cls=OperationCommand, feature="interrupt")
-@click.argument("alias")
-def interrupt(alias: str) -> None:
-    """Stop a descendant subtree and prevent further work, retaining Sessions."""
-    try:
-        response = invoke_tool("interrupt", {"alias": alias}, cwd=Path.cwd().resolve()).document
-    except RunnerError as error:
-        _fail(error, alias=alias)
-    _emit_result(response)
-
-
-@main.command(cls=OperationCommand, feature="retire")
-@click.argument("alias")
-def retire(alias: str) -> None:
-    """Retire a stopped member while preserving its Session and evidence."""
-    try:
-        response = invoke_tool("retire", {"alias": alias}, cwd=Path.cwd().resolve())
-    except (RunnerError, OSError, ValueError, yaml.YAMLError) as error:
-        _fail(error if isinstance(error, RunnerError) else RunnerError("operation-failed", str(error)), alias=alias)
-    _emit_result(response.document)
 
 
 @main.command(cls=OperationCommand, feature="replace")
@@ -513,6 +395,19 @@ def decide_result(
         _emit_result(invoke_tool("decide_result",
             {"submission_id": submission_id, "commit": commit, "decision": decision,
              "reason": reason, "evidence_refs": list(evidence_refs)}, cwd=Path.cwd(),
+        ).document)
+    except (RunnerError, ValueError, OSError) as error:
+        _fail(error if isinstance(error, RunnerError) else RunnerError('RESULT_INVALID', str(error)))
+
+
+@main.command('retain-evidence', cls=OperationCommand, feature="retain_evidence")
+@click.option('--submission-id')
+@click.option('--evidence-ref', 'evidence_refs', multiple=True)
+def retain_evidence(submission_id: str, evidence_refs: tuple[str, ...]) -> None:
+    """Retain untracked Worktree files for an existing submission as its direct owner."""
+    try:
+        _emit_result(invoke_tool("retain_evidence",
+            {"submission_id": submission_id, "evidence_refs": list(evidence_refs)}, cwd=Path.cwd(),
         ).document)
     except (RunnerError, ValueError, OSError) as error:
         _fail(error if isinstance(error, RunnerError) else RunnerError('RESULT_INVALID', str(error)))

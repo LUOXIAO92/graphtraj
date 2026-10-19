@@ -64,10 +64,10 @@ def task_report_paths(mapping: Mapping[str, Any], cwd: Path) -> tuple[Path, ...]
 
 
 def session_submissions(mapping: Mapping[str, Any], cwd: Path) -> list[dict[str, Any]]:
-    """Read retained submissions for this exact Session, including prior Rounds."""
+    """Read retained submissions and later retained evidence for this exact Session."""
     configuration = load_project_configuration(discover_project_root(cwd))
     return [event for event in read_worldline(configuration.state, configuration.harness_root)
-            if event['event'] == 'result-submitted'
+            if event['event'] in {'result-submitted', 'evidence-retained'}
             and event.get('alias') == mapping.get('alias')
             and event.get('session') == mapping.get('session')]
 
@@ -278,3 +278,87 @@ def decide_session_result(
         "caused_by_event_ids": [submission_id], "evidence_refs": list(evidence_refs),
     }
     return apply_delivery_state_request(configuration.state, configuration.harness_root, request, request)
+
+
+def retain_submission_evidence(
+    submission_id: str,
+    evidence_refs: tuple[str, ...],
+    cwd: Path,
+) -> dict[str, Any]:
+    """Retain untracked Worktree files for an existing result submission.
+
+    The submitting Session's direct owner names files that are still only in
+    that Session's Worktree. Their current bytes are copied beside the
+    submission's Trace under the Worldline lock and recorded as one
+    ``evidence-retained`` event caused by the submission, so later Worktree
+    cleanup cannot lose them. The submission, its decision and the Task state
+    are unchanged; repeating the same files with the same bytes returns the
+    recorded event.
+    """
+    from graphtraj.execution.runner_status import require_direct_authority
+
+    configuration = load_project_configuration(discover_project_root(cwd))
+    events        = read_worldline(configuration.state, configuration.harness_root)
+    submission    = next((event for event in events if event['event_id'] == submission_id
+                          and event['event'] == 'result-submitted'), None)
+    if submission is None:
+        raise ValueError('Unknown result submission')
+    if not evidence_refs or len(set(evidence_refs)) != len(evidence_refs):
+        raise ValueError('Retained evidence requires distinct Worktree files.')
+
+    runner = discover_runner_directory(configuration.harness_root)
+    alias  = submission['alias']
+    mapping, _ = read_alias_mapping(runner, alias)
+    require_direct_authority(runner, alias, mapping)
+    if mapping.get('session') != submission['session']:
+        raise RunnerError('authority-denied', 'The submission belongs to another Session.')
+
+    worktree  = Path(mapping['worktree_path']).resolve()
+    snapshots = []
+    for reference in evidence_refs:
+        path = Path(reference)
+        if (not isinstance(reference, str) or path.is_absolute() or '..' in path.parts
+                or not path.parts or path.parts[0] == '.git'):
+            raise ValueError('Retained evidence must name Worktree-relative files.')
+        resolved = (worktree / path).resolve()
+        if not resolved.is_relative_to(worktree) or not resolved.is_file():
+            raise ValueError(f'Retained evidence does not exist in the Worktree: {reference}')
+        snapshots.append((reference, path.name, resolved.read_bytes()))
+
+    # The same files with the same bytes were already retained.
+    for event in events:
+        if (event['event'] == 'evidence-retained' and event['caused_by_event_ids'] == [submission_id]
+                and event.get('sources') == list(evidence_refs)
+                and [(configuration.harness_root / item).read_bytes() for item in event['evidence_refs']]
+                == [content for _, _, content in snapshots]):
+            return event
+
+    directory, _ = _load_states(configuration.state / 'tasks')[submission['task_id']]
+    event = {
+        'event': 'evidence-retained', 'task_id': submission['task_id'],
+        'alias': alias, 'session': submission['session'], 'submission_id': submission_id,
+        'sources': list(evidence_refs),
+        'caused_by_event_ids': [submission_id], 'evidence_refs': [],
+    }
+
+    def retain(recorded: dict[str, Any]) -> Callable[[], None]:
+        """Write the copies under the Worldline lock, removed if the append fails."""
+        retained = (directory / 'teams' / str(submission['team_ordinal']) / 'traces'
+                    / alias / recorded['event_id'])
+        retained.mkdir(parents=True)
+        try:
+            for index, (_, name, content) in enumerate(snapshots):
+                path = retained / f'{index}-{name}'
+                with path.open('xb') as stream:
+                    stream.write(content)
+                    stream.flush()
+                    os.fsync(stream.fileno())
+                recorded['evidence_refs'].append(path.relative_to(configuration.harness_root).as_posix())
+            _sync_directory(retained)
+            _sync_directory(retained.parent)
+        except Exception:
+            shutil.rmtree(retained)
+            raise
+        return lambda: shutil.rmtree(retained)
+
+    return append_project_worldline_event(configuration.state, configuration.harness_root, event, retain)

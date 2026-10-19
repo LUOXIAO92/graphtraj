@@ -409,10 +409,10 @@ def test_claude_configuration_is_exact_and_approval_fails_closed(tmp_path: Path,
         context(tmp_path, model='opus')
 
 
-def test_read_resources_do_not_become_native_working_directories(
+def test_read_resources_are_native_readable_and_not_writable(
     tmp_path: Path, claude_environment: None,
 ) -> None:
-    """Deliver read grants without promoting them to writable native workspaces."""
+    """Let native file tools read configured resources while every write stays denied."""
     result_project(tmp_path)
     resources = [tmp_path / 'authorized/bin', tmp_path / 'authorized/lib']
     for path in resources:
@@ -423,11 +423,14 @@ def test_read_resources_do_not_become_native_working_directories(
         turn.run()
     launch = json.loads((tmp_path / 'native-permissions.json').read_text())
     settings = launch['settings']
-    assert settings['permissions']['additionalDirectories'] == []
     filesystem = settings['sandbox']['filesystem']
     for path in resources:
+        assert str(path.resolve()) in settings['permissions']['additionalDirectories']
+        assert f'Read(/{path.resolve()}/**)' in settings['permissions']['allow']
+        assert f'Edit(/{path.resolve()}/**)' in settings['permissions']['deny']
         assert str(path.resolve()) in filesystem['allowRead']
         assert str(path.resolve()) in filesystem['denyWrite']
+        assert str(path.resolve()) not in filesystem['allowWrite']
         assert str(path.resolve()) not in filesystem['allowWrite']
 
 

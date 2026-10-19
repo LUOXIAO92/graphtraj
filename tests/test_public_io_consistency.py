@@ -60,7 +60,7 @@ def test_cli_rejects_a_malformed_event_list(received: list[dict], value: str, me
 
 def test_help_shows_only_the_list_form() -> None:
     """Help documents the JSON array; the repeated singular flag stays hidden."""
-    for command in ('continue', 'send', 'recover', 'replace'):
+    for command in ('continue', 'recover', 'replace'):
         output = CliRunner().invoke(main, [command, '--help']).output
         assert '--caused-by-event-ids JSON' in output
         assert '--caused-by-event-id ' not in output and '--caused-by-event-id:' not in output

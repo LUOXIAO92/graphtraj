@@ -139,7 +139,10 @@ def forward_request(
     # or notified report reaches the direct parent; none has a fixed duration,
     # so once the host accepts one its own reply is awaited.
     long_operation = (request.get('action') == 'execute'
-                      and (request.get('feature') in {'approved_recovery', 'submit_result', 'send_instruction'}
+                      and (request.get('feature') in {'approved_recovery', 'submit_result'}
+                           or request.get('feature') == 'agents'
+                           and isinstance(request.get('arguments'), Mapping)
+                           and request['arguments'].get('action') in {'send', 'resume', 'wait'}
                            or request.get('feature') == 'submit_report'
                            and isinstance(request.get('arguments'), Mapping)
                            and request['arguments'].get('notify_parent') is True))

@@ -773,6 +773,41 @@ class CodexAppServer:
             raise self._protocol_failure('thread/read returned a different native Session.')
         return thread
 
+    async def refresh_mcp(self, thread_id: str, server: str, *, observe_only: bool = False) -> dict[str, Any]:
+        """Request native MCP refresh and observe one loaded thread without resuming it.
+
+        A reload acknowledgement means queued refresh, not adopted code. Return
+        the actual discovery stamp for the operator's comparison; never start a
+        turn, change configuration, or accept a native approval on their behalf.
+        """
+        thread = await self.read_thread(thread_id)
+        if thread.get('status', {}).get('type') not in {'active', 'idle'}:
+            raise CodexAdapterError('RUNTIME_REQUEST_INVALID', 'The selected Main is not loaded.')
+        from .session_entry import session_source
+
+        if session_source(thread) != 'main':
+            raise CodexAdapterError('RUNTIME_REQUEST_INVALID', 'The selected Session is not a native Main.')
+        if not observe_only:
+            await self._call('config/mcpServer/reload', None)
+        inventory = await self._call('mcpServerStatus/list', {
+            'threadId': thread_id, 'serverName': server, 'detail': 'toolsAndAuthOnly',
+        })
+        discovery = await self._call('mcpServer/tool/call', {
+            'threadId': thread_id, 'server': server, 'tool': 'tasks',
+            'arguments': {'action': 'discover'}, '_meta': {'threadId': thread_id},
+        })
+        document = discovery.get('structuredContent')
+        if discovery.get('isError') or not isinstance(document, dict) or not isinstance(document.get('service'), dict):
+            raise CodexAdapterError('RUNTIME_REQUEST_INVALID',
+                'MCP discovery did not return serving-source evidence; reload may still be queued. No adoption is certified.')
+        return {'main_session': thread_id, 'cwd': thread.get('cwd'),
+                'activity': thread['status']['type'], 'reload_requested': not observe_only,
+                'service': document['service'],
+                'servers': [{key: item[key] for key in ('name', 'runtimeStatus', 'authStatus', 'toolsError') if key in item}
+                            | {'tools': sorted(item.get('tools', {}))}
+                            for item in inventory.get('data', []) if item.get('name') == server],
+                'note': 'Compare actual source stamps. Reload ACK alone is not refresh completion or cutover.'}
+
     async def inspect_thread_reference(self, reference: str) -> dict[str, Any]:
         """Report metadata returned for a declared storage reference, without asserting identity.
 
@@ -1027,7 +1062,7 @@ class CodexAppServer:
         return error
 
     async def _call(
-        self, method: str, params: dict[str, Any], *, wait_for_session: bool = False,
+        self, method: str, params: dict[str, Any] | None, *, wait_for_session: bool = False,
     ) -> dict[str, Any]:
         """Correlate a client request while the reader consumes interleaved events."""
         self._require_connection()

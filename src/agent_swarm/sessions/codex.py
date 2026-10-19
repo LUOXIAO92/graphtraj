@@ -16,6 +16,26 @@ from agent_swarm.sessions.protocol import SURFACE_TYPES, native_record, retain_n
 from .codex_values import _attachments, _timestamp
 
 
+class NativeInputError(ValueError):
+    """Native hook input or rollout bytes that could not be read or parsed.
+
+    Only this failure class names a missing input rather than an identity
+    decision; identity and association refusals remain ordinary errors.
+    """
+
+
+def rollout_record(line: str | bytes, path: Path, offset: int) -> dict:
+    """Parse one native rollout line, naming its file and byte offset on failure."""
+    try:
+        record = json.loads(line)
+    except json.JSONDecodeError as error:
+        raise NativeInputError(f'Codex rollout {path} has no valid JSON record at byte {offset} '
+                               f'({len(line)} bytes read): {error}') from error
+    if not isinstance(record, dict):
+        raise NativeInputError(f'Codex rollout {path} has a non-object record at byte {offset}.')
+    return record
+
+
 def _content(blocks: list[dict]) -> list[dict]:
     """Map native text blocks and retain all other content without guessing."""
     return [{**block, 'type': 'text'} if block.get('type') in {'input_text', 'output_text'}
@@ -537,7 +557,7 @@ class CodexJsonlArchive:
                 line = stream.readline()
                 if not line.endswith(b'\n'):
                     return None
-                record = json.loads(line)
+                record = rollout_record(line, Path(stream.name), start)
                 payload = record.get('payload', {})
                 if (record.get('type') == 'event_msg' and payload.get('type') == 'thread_settings_applied'
                         and payload.get('thread_id') == self.session):
@@ -550,7 +570,7 @@ class CodexJsonlArchive:
                                                   'locator': 'fork/end-seed'},
                        }})
         if base is None:
-            _append_record(events, json.loads(first), self.session, 'byte:0', store)
+            _append_record(events, rollout_record(first, Path(stream.name), 0), self.session, 'byte:0', store)
         return events, position
 
     def collect(self, rollout: Path) -> None:
@@ -561,7 +581,7 @@ class CodexJsonlArchive:
             first = stream.readline()
             if not first.endswith(b'\n'):
                 return
-            metadata_record = json.loads(first)
+            metadata_record = rollout_record(first, rollout, 0)
             metadata = metadata_record.get('payload', {})
             if metadata_record.get('type') != 'session_meta' or metadata.get('id') != self.session:
                 raise ValueError('Codex rollout does not match the owned Session.')
@@ -612,13 +632,21 @@ class CodexJsonlArchive:
                         'path': 'inheritedPrefix', 'reason': 'Native inherited prefix is not yet collected.',
                     }]
                     store.checkpoint(gap, source='fork-prefix', position=rollout.stat().st_size)
-                    stream.seek(max(len(first), self.activation, store.position('fork-records')))
+                    start = max(len(first), store.position('fork-records'))
+                    if self.activation > start:
+                        # The activation is a file size observed while Codex may
+                        # be appending; the record it splits is earlier history.
+                        stream.seek(self.activation - 1)
+                        if stream.read(1) != b'\n':
+                            stream.readline()
+                    else:
+                        stream.seek(start)
                     while True:
                         start = stream.tell()
                         line = stream.readline()
                         if not line.endswith(b'\n'):
                             break
-                        observed = retain_native('codex', json.loads(line), session_id=self.session,
+                        observed = retain_native('codex', rollout_record(line, rollout, start), session_id=self.session,
                             locator=f'byte:{start}', seq=0, time=0)
                         store.checkpoint(observed, source='fork-records', position=stream.tell())
                     return
@@ -635,7 +663,7 @@ class CodexJsonlArchive:
                     if excluded is None:
                         excluded = locator
                     continue
-                record = json.loads(line)
+                record = rollout_record(line, rollout, start)
                 _append_record(events, record, self.session, locator, store)
             if excluded is not None:
                 # Keep an unresolved observation, not a fabricated native event.

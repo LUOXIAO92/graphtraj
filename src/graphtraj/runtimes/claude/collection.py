@@ -12,22 +12,11 @@ import json
 from pathlib import Path
 import time
 
-from graphtraj.sessions.protocol import retain_native
+from agent_swarm.sessions.protocol import retain_native
 from graphtraj.sessions.storage import SessionStore, StreamWriter, session_path
 
 
-def timestamp(record: dict) -> tuple[int, list[dict]]:
-    """Read native ISO time; zero is an explicitly missing protocol placeholder."""
-    value = record.get('timestamp')
-    if isinstance(value, str):
-        try:
-            parsed = datetime.fromisoformat(value.replace('Z', '+00:00'))
-            if parsed.tzinfo is not None:
-                return int(parsed.timestamp() * 1000), []
-        except ValueError:
-            pass
-    return 0, [{
-        'path': 'time', 'reason': 'Native timestamp unavailable; zero is a protocol placeholder.'}]
+from agent_swarm.sessions.claude import timestamp
 
 
 def open_archive(
@@ -205,16 +194,8 @@ def finish_transcript_collection(
                                         inherited=inherited)
 
 
-def collect_hook(event: dict, cwd: Path) -> dict:
-    """Collect exactly the transcript identified by an official native hook.
-
-    SubagentStop's transcript_path is the parent's file. Only its separate
-    agent_transcript_path may supply the child. agent_type alone is not a child
-    marker because Claude also supplies it for a top-level --agent invocation.
-    This entry never registers Main, a checker, or a plugin as a control owner.
-    """
-    from graphtraj.configuration.project_configuration import load_project_configuration
-
+def hook_source(event: dict, cwd: Path) -> tuple[str, str, str | None, str]:
+    """Validate the exact native hook association without interpreting its history."""
     kind = event.get('hook_event_name')
     if kind not in {'SessionStart', 'Stop', 'StopFailure', 'SessionEnd', 'SubagentStop'}:
         raise ValueError('Unsupported Claude collection hook.')
@@ -233,6 +214,50 @@ def collect_hook(event: dict, cwd: Path) -> dict:
         raise ValueError('The parent transcript is not the child transcript.')
     if event.get('cwd') and Path(event['cwd']).resolve() != cwd.resolve():
         raise ValueError('Hook working directory differs from collection entry.')
+    return kind, native_id, child, path
+
+
+def collect_jsonl_hook(event: dict, cwd: Path) -> dict:
+    """Collect the native hook's associated transcript into the tool-owned archive."""
+    from agent_swarm.sessions.claude import ClaudeJsonlCollector
+    from agent_swarm.sessions.archive import JsonlSessionStore, archive_path
+    from graphtraj.interfaces.agents import configured_archive
+    from graphtraj.workspace.runner_project import discover_project_root
+
+    kind, native_id, child, path = hook_source(event, cwd)
+    archive = configured_archive(discover_project_root(cwd))
+    retained = archive.native_header('claude', native_id, agent_id=child)
+    history_count = None
+    if retained and kind != 'SessionStart':
+        previous = JsonlSessionStore(archive_path(archive.root, retained['id']))
+        boundary = previous.position('claude-hook-boundary')
+        history_count = boundary if boundary >= 0 else None
+    collector = ClaudeJsonlCollector(archive, native_id, 'claude-native:' + (child or native_id),
+                                    cwd, 'native-hook', child_id=child, history_count=history_count,
+                                    resumed=kind != 'SessionStart' or event.get('source') != 'startup')
+    collector.bind(Path(path))
+    store = archive.store(collector.identity) if collector.header is not None else None
+    if store is not None:
+        if kind == 'SessionStart':
+            store.mark_boundary('claude-hook-boundary', collector.history_count)
+        position = store.position('native-hook') + 1
+        collector.accept(event, position)
+        collector.close()
+    return {'session_id': collector.identity, 'source': 'child' if child else 'native-session',
+            'saved': store is not None}
+
+
+def collect_hook(event: dict, cwd: Path) -> dict:
+    """Collect exactly the transcript identified by an official native hook.
+
+    SubagentStop's transcript_path is the parent's file. Only its separate
+    agent_transcript_path may supply the child. agent_type alone is not a child
+    marker because Claude also supplies it for a top-level --agent invocation.
+    This entry never registers Main, a checker, or a plugin as a control owner.
+    """
+    from graphtraj.configuration.project_configuration import load_project_configuration
+
+    kind, native_id, child, path = hook_source(event, cwd)
     from graphtraj.workspace.runner_project import discover_project_root
 
     configuration = load_project_configuration(discover_project_root(cwd))
@@ -246,8 +271,8 @@ def collect_hook(event: dict, cwd: Path) -> dict:
             count = 0
             unavailable = {'path': path, 'reason': type(error).__name__ + ': native transcript unavailable.'}
         # Hook records are observations; repeated hooks are not repeated messages.
-        hook_source = 'hooks'
-        position = store.position(hook_source) + 1
+        hook_channel = 'hooks'
+        position = store.position(hook_channel) + 1
         retained = native_event(store, event, f'hook:{position}')
         if unavailable:
             retained['graphtraj']['missing'].append(unavailable)
@@ -255,9 +280,9 @@ def collect_hook(event: dict, cwd: Path) -> dict:
             retained['graphtraj']['missing'].append({
                 'path': 'parentSession', 'reason': 'SessionStart reports fork but supplies no parent identity or inherited cut.'})
         if store.next_seq:
-            store.append(retained, source=hook_source, position=position)
+            store.append(retained, source=hook_channel, position=position)
         else:
-            store.stage_initial_observation(retained, source=hook_source, position=position)
+            store.stage_initial_observation(retained, source=hook_channel, position=position)
             finish_transcript_collection(
                 store, native_id, child=bool(child),
                 terminal=kind in {'Stop', 'StopFailure', 'SessionEnd', 'SubagentStop'})

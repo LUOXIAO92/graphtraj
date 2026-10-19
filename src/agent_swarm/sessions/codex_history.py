@@ -4,8 +4,8 @@ from copy import deepcopy
 import asyncio
 from typing import Awaitable, Callable
 
-from graphtraj.sessions.archive import JsonlSessionStore, SessionArchive
-from graphtraj.sessions.protocol import retain_native
+from agent_swarm.sessions.archive import JsonlSessionStore, SessionArchive
+from agent_swarm.sessions.protocol import retain_native
 
 
 def _events(store: JsonlSessionStore) -> list[dict]:
@@ -40,7 +40,7 @@ class CodexHistoryArchive:
         self.archive = archive
         self.thread = deepcopy(thread)
         self.call = call
-        self.id = 'codex:' + thread['id']
+        self.id = archive.native_id('codex', thread['id'])
         self.previous: dict | None = None
         self.excluded: set[tuple] | None = None
         self.lock = asyncio.Lock()
@@ -61,11 +61,12 @@ class CodexHistoryArchive:
             },
         }
         if thread.get('forkedFromId'):
-            header['parentSession'] = 'codex:' + thread['forkedFromId']
+            header['parentSession'] = archive.native_id('codex', thread['forkedFromId'])
         if type(created) is not int:
             header['graphtraj']['missing'].append({
                 'path': 'createdAt', 'reason': 'Native thread creation time is unavailable; zero is a placeholder.',
             })
+        header = archive.native_header('codex', thread['id']) or header
         archive.map_session(header)
 
     async def collect(self) -> None:

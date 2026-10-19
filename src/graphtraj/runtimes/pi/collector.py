@@ -15,9 +15,9 @@ import sys
 import time
 import uuid
 
-from graphtraj.sessions.protocol import retain_native
+from agent_swarm.sessions.protocol import retain_native
 from graphtraj.sessions.storage import SessionStore, StreamWriter, session_path
-from graphtraj.runtimes.pi.projection import native_time
+from agent_swarm.sessions.pi_projection import native_time
 
 
 def timestamp(record: dict) -> tuple[int, list[dict]]:
@@ -470,8 +470,8 @@ def collect_stdio() -> None:
     configuration = load_project_configuration(cwd)
     from agent_swarm import default_config
     from graphtraj.interfaces.agents import swarm_root
-    from graphtraj.runtimes.pi.collection import PiArchive
-    from graphtraj.sessions.archive import SessionArchive
+    from agent_swarm.sessions.pi import PiArchive
+    from agent_swarm.sessions.archive import SessionArchive
 
     root = swarm_root(configuration.harness_root)
     archive = SessionArchive(root, **default_config(root, save_normalized_sessions=True))

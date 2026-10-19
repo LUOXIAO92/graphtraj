@@ -70,8 +70,10 @@ sdk_display_reply = None
 
 def result(text: str, error: bool = False, queued: int = 0, idle: bool = True) -> None:
     """Emit distinct result and quiescence records with native usage."""
+    usage = {'input_tokens': 11, 'cache_read_input_tokens': 7,
+             'cache_creation_input_tokens': 2, 'output_tokens': 5}
     emit({'type': 'assistant', 'session_id': session, 'message': {
-        'role': 'assistant', 'content': [{'type': 'text', 'text': text}]}})
+        'role': 'assistant', 'content': [{'type': 'text', 'text': text}], 'usage': usage}})
     emit({'type': 'result', 'session_id': session, 'uuid': str(uuid.uuid4()),
           'is_error': error, 'result': text, 'queued_turn_count': queued, 'usage': {
               'input_tokens': 11, 'cache_read_input_tokens': 7,

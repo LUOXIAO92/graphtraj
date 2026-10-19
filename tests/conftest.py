@@ -151,7 +151,7 @@ def fake_codex(tmp_path: Path) -> FakeCodex:
         "    print(json.dumps(event, sort_keys=True), flush=True)\n"
         "    if event.get('type') == 'thread.started':\n"
         "        session = event['thread_id']\n"
-        "        native_rollout = Path(os.environ.get('CODEX_HOME', Path.home() / '.codex')) / 'sessions/fake' / ('rollout-' + session + '.jsonl')\n"
+        "        native_rollout = Path(__file__).parent / 'codex-home/sessions/fake' / ('rollout-' + session + '.jsonl')\n"
         "        native_rollout.parent.mkdir(parents=True, exist_ok=True)\n"
         "        if not native_rollout.exists():\n"
         "            native_rollout.write_text(json.dumps({'timestamp': 'fake-native-start', 'type': 'session_meta', 'payload': {'id': session}}) + '\\n')\n"
@@ -522,6 +522,7 @@ def _build_wheel(build_root: Path) -> Path:
             "--no-deps",
             "-w",
             str(wheelhouse),
+            str(source / 'packages/agent-swarm'),
             str(source),
         ],
         cwd=source,
@@ -555,6 +556,7 @@ def _install_commands(environment: Path, wheel: Path) -> InstalledCommands:
             "install",
             "--disable-pip-version-check",
             "--no-deps",
+            str(next(wheel.parent.glob('agent_swarm-*.whl'))),
             str(wheel),
         ],
         cwd=wheel.parent,

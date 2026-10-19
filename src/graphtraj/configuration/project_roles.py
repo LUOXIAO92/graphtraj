@@ -184,7 +184,9 @@ class _UniqueKeyLoader(yaml.SafeLoader):
 
 def roles_file(harness_root: Path) -> Path:
     """Return the fixed reusable role configuration location."""
-    return harness_root / ROLES_PATH
+    from graphtraj.configuration.project_configuration import core_directory
+
+    return core_directory(harness_root) / 'roles.yml'
 
 
 def roles_exist(harness_root: Path) -> bool:

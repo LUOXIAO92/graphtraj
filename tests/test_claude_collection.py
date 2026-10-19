@@ -231,9 +231,12 @@ def test_claude_command_hook_output(tmp_path: Path, monkeypatch: pytest.MonkeyPa
              'transcript_path': str(tmp_path / 'not-created-yet.jsonl'), 'cwd': str(tmp_path)}
     result = CliRunner().invoke(main, ['claude'], input=json.dumps(event))
     assert result.exit_code == 0 and json.loads(result.output) == {}
-    with SessionStore(session_path(tmp_path / 'state', 'claude:new')) as store:
-        assert store.page()['events'] == []
-        assert store.pending()['event']['data']['observations'][0]['event']['data']['record'] == event
+    from agent_swarm.sessions.archive import JsonlSessionStore, archive_path
+
+    store = JsonlSessionStore(archive_path(tmp_path / '.graphtraj/swarm', 'claude:new'))
+    assert store.page()['events'] == []
+    assert any(item['event']['graphtraj']['native'].get('record') == event
+               for item in store.pending() + store.observations())
     invalid = CliRunner().invoke(main, ['claude'], input=json.dumps({**event, 'session_id': ''}))
     assert invalid.exit_code == 1
 

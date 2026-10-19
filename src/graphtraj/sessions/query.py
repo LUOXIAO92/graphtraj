@@ -11,7 +11,7 @@ from graphtraj.execution.runner_status import (
 )
 from graphtraj.runtimes.replacement import caller_runtime
 from graphtraj.sessions.storage import SessionStore, session_path
-from graphtraj.sessions.archive import JsonlSessionStore, archive_path
+from agent_swarm.sessions.archive import JsonlSessionStore, SessionArchive, archive_path
 from graphtraj.workspace.runner_project import discover_runner_directory
 
 
@@ -44,19 +44,31 @@ def read_session(cwd: Path, session_id: str, after: int = -1, limit: int = 200) 
         if normalized.is_file():
             # JSONL loads the body with its metadata; check the verified native
             # identity before opening a different Agent's conversation.
-            if own is not None and session_id != own['runtime'] + ':' + own['session']:
+            if own is not None and session_id != SessionArchive(swarm_root(configuration.harness_root)).native_id(
+                own['runtime'], own['session'],
+            ):
                 raise RunnerError('authority-denied', 'Agent archive access is limited to its own verified native Session.')
             store = JsonlSessionStore(normalized)
         else:
-            # Other Runtime collectors still use the retained SQLite format.
+            if (configuration.harness_root / '.graphtraj/core/config.yml').exists():
+                raise ValueError('Canonical JSONL Session is unavailable; legacy backups are not a query fallback.')
+            # Unmigrated history remains readable before the explicit partition.
             store = resources.enter_context(SessionStore(session_path(configuration.state, session_id), readonly=True))
             store.db.execute('BEGIN')
         header = store.header
-        native = header.get('graphtraj', {}).get('native', {})
+        native = header.get('graphtraj', {}).get('native', header.get('native', {}))
         if own is not None and (native.get('runtime') != own['runtime']
                                 or native.get('sessionId') != own['session']
                                 or native.get('agentId') is not None):
             raise RunnerError('authority-denied', 'Agent archive access is limited to its own verified native Session.')
         if header['id'] != session_id:
             raise ValueError('Session archive identity does not match its location.')
-        return {'header': header, **store.page(after, limit), 'pending': store.pending()}
+        page = store.page(after, limit)
+        legacy = store.legacy() if isinstance(store, JsonlSessionStore) else None
+        if legacy:
+            retained = [event for event in legacy['events'] if event['seq'] > after]
+            legacy.update(events=retained[:limit], has_more=len(retained) > limit,
+                          after=retained[min(len(retained), limit) - 1]['seq'] if retained else after,
+                          native_order_verified=False)
+        return {'header': header, **page, 'pending': store.pending(),
+                **({'legacy': legacy} if legacy else {})}

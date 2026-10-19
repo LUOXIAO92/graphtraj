@@ -17,7 +17,7 @@ from pathlib import Path
 import sqlite3
 from typing import Iterator
 
-from graphtraj.sessions.protocol import (
+from agent_swarm.sessions.protocol import (
     INITIAL_COLLECTION_TYPE, append_stream_record, snapshot_event, validate_header, validate_session,
 )
 

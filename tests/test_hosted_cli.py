@@ -322,11 +322,14 @@ def test_shared_mcp_command_consumes_bound_graphtraj_dsh_channel(tmp_path: Path,
                             DSH_SESSION_ID=expected['session'], DSH_AGENT_SOURCE='main')
         service = json.loads(discovery.stdout)['result']['structuredContent']['service']
         import hashlib
+        from graphtraj.configuration import project_configuration
 
         for component in ('mcp', 'host'):
             assert service[component]['executable'] == sys.executable
             assert service[component]['sha256'] == hashlib.sha256(
                 Path(service[component]['module']).read_bytes()).hexdigest()
+            assert service[component]['configuration_sha256'] == hashlib.sha256(
+                Path(project_configuration.__file__).read_bytes()).hexdigest()
         assert service['mcp']['module'] != service['host']['module']
         for session, source in ((expected['session'], 'main'), ('other', 'main'), (expected['session'], 'child')):
             result = run_cli('graphtraj.interfaces.mcp', tmp_path, address,

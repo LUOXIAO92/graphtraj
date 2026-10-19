@@ -385,6 +385,74 @@ def test_recovery_after_expired_budget_resumes_and_retries_without_new_minutes(
     assert yaml.safe_load(path.read_text()) == after
 
 
+def test_administrative_recovery_routes_reports_to_the_actual_current_host(
+    accepted_task: tuple, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The current host receives reports without a new Session or budget grant."""
+    root, _, state, _ = accepted_task
+    runner = root / '.graphtraj/runner'
+    mappings = [(path, yaml.safe_load(path.read_text()))
+                for path in (runner / 'sessions').glob('*/mapping.yml')]
+    path, original = next(pair for pair in mappings if pair[1]['parent'] is None)
+    original['parent_connection'] = {'runtime': 'codex', 'session': 'old-main',
+                                     'codex_home': '/old-native-home'}
+    path.write_text(yaml.safe_dump(original))
+    budget = (state / 'tasks/83-integration/execution-budget.yml').read_bytes()
+    from graphtraj.execution import runner_control
+
+    def unavailable_host(*args: object, **kwargs: object) -> None:
+        """Retain the real failure path for the old host's missing thread."""
+        raise RunnerError('RUNTIME_RPC_ERROR', 'thread not found: old-main')
+
+    with monkeypatch.context() as patch:
+        patch.setattr(runner_control, 'connection_operation', unavailable_host)
+        patch.setattr(runner_control, 'OPERATION_TIMEOUT_SECONDS', 0)
+        with runtime_caller(runner, original['alias']):
+            failed = local_tool.bind(root)({'action': 'execute', 'feature': 'submit_report',
+                'arguments': {'name': Path(original['report_files'][0]).name,
+                              'text': 'Retained result', 'notify_parent': True}}).document
+        assert failed['delivery'] == 'not-delivered'
+    request = {
+        'alias': original['alias'], 'reason': 'Current Main resumes delivery ownership.',
+        'instruction': 'Repair report delivery only.', 'allowed_scope': 'Delivery',
+        'forbidden_scope': 'No task work or time grant', 'restore_active': True,
+        'resume': False, 'additional_minutes': 0,
+        'caused_by_event_ids': [read_worldline(state, root)[-1]['event_id']],
+    }
+    received = []
+    with local_tool.bind(root, event_receiver=received.append) as host:
+        result = host({'action': 'execute', 'feature': 'approved_recovery',
+                       'arguments': request}).document
+        assert result['recovery_status'] == 'applied'
+        assert result['report_notification']['delivery'] == 'received'
+        assert len(received) == 1
+        retry = host({'action': 'execute', 'feature': 'approved_recovery', 'arguments': {
+            'alias': original['alias'], 'retry_event_id': result['recovery_event_id'],
+        }}).document
+        assert retry['recovery_status'] == 'applied'
+        assert len(received) == 1
+        changed = yaml.safe_load(path.read_text())
+        assert changed == {**original, 'parent_connection': host.address}
+        assert (state / 'tasks/83-integration/execution-budget.yml').read_bytes() == budget
+        proposal = applied_proposal(root, result)
+        assert proposal['before']['mapping'] == original
+        assert proposal['after']['mapping'] == changed
+        with runtime_caller(runner, original['alias']):
+            report = host({'action': 'execute', 'feature': 'submit_report', 'arguments': {
+                'name': Path(original['report_files'][0]).name, 'text': 'Retained result',
+                'notify_parent': True,
+            }}).document
+        assert report['delivery'] == 'received'
+        assert len(received) == 2 and received[0]['event'] == 'report-submitted'
+        # A member cannot redirect itself to a different host's receiver.
+        with local_tool.bind(root, event_receiver=lambda event: pytest.fail('Wrong host')) as other:
+            with runtime_caller(runner, original['alias']):
+                other({'action': 'execute', 'feature': 'approved_recovery', 'arguments': {
+                    **request, 'reason': 'Member administrative retry',
+                }})
+        assert yaml.safe_load(path.read_text()) == changed
+
+
 @pytest.mark.parametrize('mode', ['denied', 'failed'])
 def test_native_refusal_and_failure_leave_state_untouched(
     target: tuple, monkeypatch: pytest.MonkeyPatch, mode: str,

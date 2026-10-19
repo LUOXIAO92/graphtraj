@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import os
 import sys
+import hashlib
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Iterator, Mapping, TextIO
@@ -31,6 +32,8 @@ from graphtraj.runtimes.codex.codex_adapter import CodexAdapterError
 
 
 SERVER_INFO      = {"name": "graphtraj", "version": "0.1.0"}
+_SERVICE = {'executable': sys.executable, 'module': __file__,
+            'sha256': hashlib.sha256(Path(__file__).read_bytes()).hexdigest()}
 
 INVALID_PARAMS   = -32602
 
@@ -135,6 +138,9 @@ def _tool_call_response(
                 if arguments.get('action') == 'discover' and not result.failed:
                     result.document['features'] = [item for item in result.document.get('features', [])
                                                    if item['feature'] != 'agents']
+                    # Capture in the serving process, not from a caller's CLI
+                    # installation. A forwarded host supplies its own stamp.
+                    result.document.setdefault('service', {})['mcp'] = _SERVICE
             document = (
                 recovery.attach_stop_deliveries(result.document)
                 if recovery is not None

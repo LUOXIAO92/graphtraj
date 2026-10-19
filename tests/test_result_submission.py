@@ -366,3 +366,39 @@ def test_untracked_evidence_is_retained_before_worktree_cleanup(tmp_path: Path) 
     attachment.unlink()
     retained = tmp_path / submission['evidence_refs'][0]
     assert retained.read_bytes() == '桌面证据 \\u4e2d\n'.encode()
+
+
+def test_owner_retains_untracked_evidence_for_an_existing_submission(tmp_path: Path) -> None:
+    """Retention copies bytes once, adds no submission or decision, and is listed."""
+    from graphtraj.execution.runner_control import read_session_reports
+    from graphtraj.graph.delivery_worldline import read_worldline
+
+    runner, _, commit = result_project(tmp_path)
+    with runtime_caller(runner, 'research@x1'):
+        submission = tools.submit_result({
+            'commit': commit, 'result_refs': ['result.md'], 'evidence_refs': [],
+            'completion': 'Done', 'unresolved': [],
+        }, cwd=tmp_path).document
+    attachment = tmp_path / 'worktrees/research/evidence/截图-2.txt'
+    attachment.parent.mkdir()
+    attachment.write_bytes('桌面证据\n'.encode())
+    from graphtraj.configuration.project_configuration import load_project_configuration
+
+    state  = load_project_configuration(tmp_path).state
+    before = [event['event'] for event in read_worldline(state, tmp_path)]
+
+    arguments = {'submission_id': submission['event_id'], 'evidence_refs': ['evidence/截图-2.txt']}
+    retained  = tools.retain_evidence(arguments, cwd=tmp_path).document
+    assert retained['event'] == 'evidence-retained'
+    assert retained['caused_by_event_ids'] == [submission['event_id']]
+    assert tools.retain_evidence(arguments, cwd=tmp_path).document == retained
+    after = [event['event'] for event in read_worldline(state, tmp_path)]
+    assert after == [*before, 'evidence-retained']
+
+    attachment.unlink()
+    copy, = retained['evidence_refs']
+    assert (tmp_path / copy).read_bytes() == '桌面证据\n'.encode()
+    listed = read_session_reports('research@x1', tmp_path)['submissions']
+    assert [event['event_id'] for event in listed] == [submission['event_id'], retained['event_id']]
+    with pytest.raises(ValueError, match='Unknown result submission'):
+        tools.retain_evidence({**arguments, 'submission_id': 'absent'}, cwd=tmp_path)

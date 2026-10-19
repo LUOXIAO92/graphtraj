@@ -185,6 +185,7 @@ def test_cutover_moves_owned_native_files_and_preserves_external_references(
         content = b'{"type":"session","id":"native-old","version":3}\n'
         (native / 'session.jsonl').write_bytes(content)
         (native / 'settings.json').symlink_to(external)
+        Path(mapping['trace_file']).symlink_to(native / 'session.jsonl')
         relative = Path('session.jsonl')
     else:
         native = directory / 'dsh-native'
@@ -193,12 +194,15 @@ def test_cutover_moves_owned_native_files_and_preserves_external_references(
         (native / 'native-old.jsonl').write_bytes(content)
         (directory / 'dsh-home').mkdir()
         (directory / 'dsh-home/settings.json').symlink_to(external)
+        Path(mapping['trace_file']).symlink_to(native / 'native-old.jsonl')
         relative = Path('dsh-native/native-old.jsonl')
     monkeypatch.chdir(root)
     result = CliRunner().invoke(main, ['migrate-agents', '--cutover', str(tmp_path / 'input'), '--writes-stopped'])
     assert result.exit_code == 0, result.output
     destination = native_directory(root, mapping['alias'], runtime)
     assert (destination / relative).read_bytes() == content
+    trace = root / '.graphtraj/core/runner/sessions/old@member/native.jsonl'
+    assert trace.is_symlink() and trace.resolve() == destination / relative
     link = destination / ('settings.json' if runtime == 'pi' else 'dsh-home/settings.json')
     assert link.is_symlink() and link.resolve() == external
     assert external.read_text() == '{"keep":"original-user-setting"}'

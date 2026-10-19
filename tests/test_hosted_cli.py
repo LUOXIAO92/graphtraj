@@ -356,3 +356,35 @@ def test_managed_channel_discovers_and_describes_task_members(tmp_path: Path) ->
     report = handle_request({'action': 'describe', 'feature': 'submit_report', 'schema': True},
                             cwd=tmp_path, allowed_features=allowed)
     assert 'notify_parent' in report.document['input_schema']['properties']
+
+
+def test_cli_host_returns_a_slow_write_receipt_instead_of_a_timeout(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A report the host persists after the ordinary deadline still returns its receipt once."""
+    import time
+    from dataclasses import replace
+
+    runner, _, _ = result_project(tmp_path)
+    directory = own_process(runner)
+    original = tools.TOOLS['submit_report']
+    calls = []
+
+    def slow(arguments: dict, *, cwd: Path | None = None) -> tools.ToolResult:
+        """Persist the report only after the ordinary ten-second control deadline."""
+        calls.append(arguments)
+        time.sleep(10.5)
+        return original.handler(arguments, cwd=cwd)
+
+    monkeypatch.setitem(tools.TOOLS, 'submit_report', replace(original, handler=slow))
+    with hold_ownership(directory, os.getpid()), cli_connection(
+        tmp_path, 'research@x1', native_operation_features(),
+    ) as address:
+        result = run_cli('graphtraj.interfaces.cli.agent_runner', tmp_path, address,
+                         'submit-report', '--name', 'researcher-x1.md', '--text', 'Slow evidence',
+                         process_timeout=30)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert len(calls) == 1
+    receipt = yaml.safe_load(result.stdout)
+    assert Path(receipt['report']).read_text() == 'Slow evidence'
+    assert 'did not acknowledge' not in result.stdout + result.stderr

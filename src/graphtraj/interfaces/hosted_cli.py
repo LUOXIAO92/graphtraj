@@ -135,14 +135,13 @@ def forward_request(
         # they must never extend the client's transport deadline.
         if type(observation) in (int, float) and math.isfinite(observation) and observation >= 0:
             response_timeout += observation
-    # Recovery and a continuation can include Session startup, and a result
-    # or notified report reaches the direct parent; none has a fixed duration,
-    # so once the host accepts one its own reply is awaited.
+    # Recovery and a continuation can include Session startup, and a result,
+    # decision or report is persisted and may reach another Session; none has
+    # a fixed duration. Once the host accepts one, its own reply is awaited so
+    # the receipt reports the write instead of an unconfirmed timeout.
     long_operation = (request.get('action') == 'execute'
-                      and (request.get('feature') in {'approved_recovery', 'submit_result', 'send_instruction'}
-                           or request.get('feature') == 'submit_report'
-                           and isinstance(request.get('arguments'), Mapping)
-                           and request['arguments'].get('notify_parent') is True))
+                      and request.get('feature') in {'approved_recovery', 'submit_result', 'decide_result',
+                                                     'submit_report', 'send_instruction'})
     from agent_swarm.connection import client_native_context
 
     native = native_context if native_context is not None else client_native_context()

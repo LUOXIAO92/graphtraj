@@ -1438,3 +1438,115 @@ def test_failed_confirmation_still_refuses_recovery(target: tuple, monkeypatch: 
         invoke(root, {**arguments, 'additional_minutes': 0, 'restore_active': False})
     assert refused.value.code == 'termination-unconfirmed' and not sent
     assert not (directory / f"terminal-confirmation-{mapping['execution_id']}.yml").exists()
+
+
+@pytest.fixture
+def accepted_target(accepted_task: tuple, monkeypatch: pytest.MonkeyPatch) -> tuple:
+    """Use the accepted, not yet integrated Task and its original root Session."""
+    root, _, state, _ = accepted_task
+    mappings = [yaml.safe_load(path.read_text())
+                for path in (root / '.graphtraj/runner/sessions').glob('*/mapping.yml')]
+    mapping = next(item for item in mappings if item['parent'] is None)
+    arguments = {
+        'alias': mapping['alias'], 'reason': 'Authorized continuation after waiting.',
+        'instruction': 'Validate the retained candidate only.',
+        'allowed_scope': 'Validation', 'forbidden_scope': 'No implementation',
+        'additional_minutes': 7, 'restore_active': True,
+        'caused_by_event_ids': [read_worldline(state, root)[-1]['event_id']],
+    }
+    monkeypatch.setattr(recovery, 'caller_runtime', lambda: 'codex')
+    monkeypatch.delenv('CODEX_ESCALATE_SOCKET', raising=False)
+    return root, state / 'tasks/83-integration', mapping, arguments
+
+
+def test_retry_continues_after_a_later_approved_budget_increment(
+    accepted_target: tuple, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A later applied increment does not make an earlier applied recovery stale."""
+    root, task, mapping, arguments = accepted_target
+    adapter = NativeApproval(root, 'automatic')
+    monkeypatch.setattr(recovery.runtime_adapter, 'select_runtime_adapter', lambda runtime: adapter)
+    sent = []
+
+    def resume(*args: object, **kwargs: object) -> dict:
+        """Fail once at transport, then acknowledge the original native Session."""
+        sent.append(args[1])
+        if len(sent) == 1:
+            raise RunnerError('native-unavailable', 'controlled transport failure')
+        return {'alias': args[0], 'session': mapping['session'], 'send_status': 'sent'}
+
+    monkeypatch.setattr(recovery, '_send_session_locked', resume)
+    result = invoke(root, arguments)
+    assert result['recovery_status'] == 'resume-failed'
+    budget_path = task / 'execution-budget.yml'
+    started_at = yaml.safe_load(budget_path.read_text())['started_at']
+    administrative = invoke(root, {**arguments, 'additional_minutes': 90, 'resume': False,
+                                   'restore_active': False})
+    assert administrative['recovery_status'] == 'applied'
+    retry = {'alias': mapping['alias'], 'retry_event_id': result['recovery_event_id']}
+    assert invoke(root, retry)['recovery_status'] == 'resumed'
+    assert invoke(root, retry)['recovery_status'] == 'resumed'
+    budget = yaml.safe_load(budget_path.read_text())
+    assert budget['approved_minutes'] == 97
+    assert budget['started_at'] == started_at
+    assert len(sent) == 2
+    assert len(adapter.proposals) == 2
+
+
+def test_approved_increment_lifts_budget_stop_but_keeps_session_stop(
+    accepted_target: tuple, installed_commands: InstalledCommands, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """New minutes admit new members; the stopped original Session stays refused."""
+    root, task, mapping, arguments = accepted_target
+    adapter = NativeApproval(root, 'automatic')
+    monkeypatch.setattr(recovery.runtime_adapter, 'select_runtime_adapter', lambda runtime: adapter)
+    interrupted = run_process([str(installed_commands.runner), 'interrupt', mapping['alias']], cwd=root)
+    assert interrupted.returncode == 0, interrupted.stderr
+    stop_path = root / '.graphtraj/runner/sessions' / mapping['alias'] / 'stop.yml'
+    stop = stop_path.read_bytes()
+    budget_path = task / 'execution-budget.yml'
+    budget = yaml.safe_load(budget_path.read_text())
+    budget.update(stopped=True, stopping_checks=3, notifications=['stochastic_stop:3'])
+    budget_path.write_text(yaml.safe_dump(budget))
+    result = invoke(root, {**arguments, 'additional_minutes': 90, 'resume': False})
+    assert result['recovery_status'] == 'applied'
+    after = yaml.safe_load(budget_path.read_text())
+    assert after['stopped'] is False
+    assert after['approved_minutes'] == 90
+    assert after['started_at'] == budget['started_at']
+    assert stop_path.read_bytes() == stop
+    retry = invoke(root, {'alias': mapping['alias'], 'retry_event_id': result['recovery_event_id']})
+    assert yaml.safe_load(budget_path.read_text())['approved_minutes'] == 90
+    assert retry['recovery_status'] == 'applied'
+    monkeypatch.chdir(root)
+    refused = CliRunner().invoke(main, ['send', mapping['alias'], '--instruction', 'Continue old work.',
+                                        '--caused-by-event-id', result['recovery_event_id']])
+    assert refused.exit_code != 0
+    assert 'subtree-stopped' in refused.output
+
+
+def test_budget_only_continue_is_not_blocked_by_a_stopped_old_root(
+    accepted_target: tuple, installed_commands: InstalledCommands, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A sampled stop can be lifted for a new swarm while the old root stays stopped."""
+    root, task, mapping, arguments = accepted_target
+    adapter = NativeApproval(root, 'automatic')
+    monkeypatch.setattr(recovery.runtime_adapter, 'select_runtime_adapter', lambda runtime: adapter)
+    result = invoke(root, {**arguments, 'additional_minutes': 0, 'resume': False})
+    assert result['recovery_status'] == 'applied'
+    interrupted = run_process([str(installed_commands.runner), 'interrupt', mapping['alias']], cwd=root)
+    assert interrupted.returncode == 0, interrupted.stderr
+    budget_path = task / 'execution-budget.yml'
+    budget = yaml.safe_load(budget_path.read_text())
+    budget.update(stopped=True, stopping_checks=3, notifications=['stochastic_stop:3'])
+    budget_path.write_text(yaml.safe_dump(budget))
+    monkeypatch.chdir(root)
+    continued = CliRunner().invoke(main, ['continue', '--task-id', '83', '--budget-only',
+                                         '--caused-by-event-id', result['recovery_event_id']])
+    assert continued.exit_code == 0, continued.output
+    assert yaml.safe_load(continued.output)['tasks'] == []
+    assert yaml.safe_load(budget_path.read_text()) == {**budget, 'stopped': False}
+    refused = CliRunner().invoke(main, ['send', mapping['alias'], '--instruction', 'Continue old work.',
+                                        '--caused-by-event-id', result['recovery_event_id']])
+    assert refused.exit_code != 0
+    assert 'subtree-stopped' in refused.output

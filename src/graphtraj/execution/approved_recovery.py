@@ -84,7 +84,7 @@ def approved_recovery(arguments: dict, cwd: Path) -> dict:
     }
     _confirm_unconfirmed_target(project.runner_directory, alias)
     if _changes_execution(request) or before['mapping'] != after['mapping']:
-        require_stopped_subtree(project.runner_directory, alias)
+        require_stopped_subtree(project.runner_directory, alias, operation='recovery')
     if minutes:
         decision = review_proposal(proposal, cwd, project.runner_directory)
         if decision != {'decision': 'accept'}:
@@ -285,7 +285,7 @@ def _apply_recovery(proposal: dict, cwd: Path) -> dict:
                     if differences:
                         return {'recovery_status': 'stale', 'applied': False, 'differences': differences}
                     if _changes_execution(request) or proposal['before']['mapping'] != proposal['after']['mapping']:
-                        require_stopped_subtree(project.runner_directory, alias)
+                        require_stopped_subtree(project.runner_directory, alias, operation='recovery')
                     original = {key: path.read_bytes() if path.exists() else None
                                 for key, path in paths.items() if key != 'round'}
                     original_mode = paths['round'].stat().st_mode & 0o777

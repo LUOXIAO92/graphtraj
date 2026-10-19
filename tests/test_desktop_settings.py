@@ -491,3 +491,19 @@ def test_manual_efforts_survive_native_refresh_and_role_save(
     assert read(project)['roles']['analyst']['reasoning_effort'] == 'high'
     assert load_project_roles(project).preset('analyst').reasoning_effort == 'high'
     assert call(project, draft(project, reasoning_effort='medium'))[-1]['failed']
+
+
+def test_archive_switches_use_the_agents_tool_config(project: Path) -> None:
+    """Desktop reads and writes the agents tool's own config.yml, keeping GraphTraj's default."""
+    config = project / ".graphtraj" / "swarm" / "config.yml"
+    assert read(project)["archive"] == {"save_normalized_sessions": True, "backfill_history": False}
+
+    reply = call(project, {"action": "archive", "choices": {"backfill_history": True}})[-1]
+    assert reply["result"]["archive"] == {"save_normalized_sessions": True, "backfill_history": True}
+    reply = call(project, {"action": "archive", "choices": {"save_normalized_sessions": False}})[-1]
+    assert reply["result"]["archive"] == {"save_normalized_sessions": False, "backfill_history": True}
+    assert config.read_text() == "save_normalized_sessions: false\nbackfill_history: true\n"
+    assert read(project)["archive"]["save_normalized_sessions"] is False
+
+    refused = call(project, {"action": "archive", "choices": {"backfill_history": "yes"}})[-1]
+    assert refused["failed"] and refused["error_kind"] == "validation"

@@ -759,3 +759,17 @@ def test_task_members_cover_recursive_children_of_current_summaries(tmp_path: Pa
     history = members(tmp_path / 'done', summary_task_id='200')
     assert history['scope'] == ['200']
     assert [member['alias'] for member in history['members']] == ['research@x4']
+
+
+def test_desktop_observer_reads_task_members_without_changing_them(tmp_path: Path) -> None:
+    """The human observer lists current members; repeated scope reads change nothing."""
+    _, directory, _ = prepare(tmp_path, 'codex', [message('work')], parent='research@x2')
+    before = (directory / 'mapping.yml').read_text()
+
+    observer = bind(tmp_path, desktop_observer=True)
+    for arguments in ({}, {'summary_task_id': '148'}, {}):
+        result = observer({'action': 'execute', 'feature': 'task_members', 'arguments': arguments})
+        assert not result.failed, result.document
+        assert {member['alias']: member['parent'] for member in result.document['members']}[
+            'research@x1'] == 'research@x2'
+    assert (directory / 'mapping.yml').read_text() == before

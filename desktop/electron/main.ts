@@ -4,7 +4,7 @@ import { homedir } from 'node:os';
 import { pathToFileURL } from 'node:url';
 import { GraphReader, Projects } from './projects';
 import { SettingsClient } from './settings';
-import type { ConnectionsRequest, SettingsDraft } from './types';
+import type { ArchiveChoices, ConnectionsRequest, SettingsDraft } from './types';
 
 app.setName('GraphTraj');
 // The standard Chromium switch also isolates Electron preferences for desktop checks.
@@ -70,12 +70,20 @@ else {
       'projects:usage': id => projects.usage(id),
       'projects:graph': id => projects.graph(id),
       'projects:activity': value => projects.activity(value),
+      'projects:members': value => projects.members(value),
       'connections:request': async (id, request) => {
         if (!request || typeof request !== 'object' || Object.keys(request).some(key =>
           !['action', 'catalog', 'expected_revision', 'runtime'].includes(key))) throw new Error('Invalid connections request.');
         return settings.connections(id === null ? homedir() : await projects.settingsRoot(id), request as ConnectionsRequest);
       },
       'settings:read': async id => settings.request(await projects.settingsRoot(id)),
+      'settings:archive': async (id, choices) => {
+        if (!choices || typeof choices !== 'object' || Object.entries(choices).some(([key, value]) =>
+          !['save_normalized_sessions', 'backfill_history'].includes(key) || typeof value !== 'boolean')) {
+          throw new Error('Invalid archive settings.');
+        }
+        return settings.archive(await projects.settingsRoot(id), choices as ArchiveChoices);
+      },
       'settings:save': async (id, draft) => {
         if (!draft || typeof draft !== 'object' || Object.keys(draft).some(key =>
           !['revision', 'edits', 'renames', 'add_edges', 'remove_edges', 'remove_presets', 'role_tree'].includes(key))) {
@@ -91,7 +99,7 @@ else {
             event.senderFrame.url !== pathToFileURL(page).href) {
           throw new Error('Desktop request from an untrusted frame.');
         }
-        if (channel === 'projects:list' || channel === 'activity:copy' || channel === 'projects:activity' || channel === 'projects:graph' || channel === 'projects:usage') return handler(id);
+        if (channel === 'projects:list' || channel === 'activity:copy' || channel === 'projects:activity' || channel === 'projects:members' || channel === 'projects:graph' || channel === 'projects:usage') return handler(id);
         // Serialize preference changes, including the native folder dialog.
         const next = writes.then(() => handler(id, draft));
         writes = next.catch(() => undefined);

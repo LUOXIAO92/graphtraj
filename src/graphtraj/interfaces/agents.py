@@ -26,6 +26,7 @@ from agent_swarm import (
     Outcome,
     bind,
     default_config,
+    explicit_choices,
     read_config,
     unavailable,
 )
@@ -65,10 +66,20 @@ def swarm_root(root: Path) -> Path:
     return root / ".graphtraj" / "swarm"
 
 
+# GraphTraj turns saving on only where the user has made no explicit choice.
+ARCHIVE_DEFAULTS = {"save_normalized_sessions": True}
+
+
+def archive_choices(root: Path) -> dict[str, bool]:
+    """Return the effective tool-owned archive choices without writing them."""
+    return {**read_config(swarm_root(root)), **ARCHIVE_DEFAULTS,
+            **explicit_choices(swarm_root(root))}
+
+
 def configured_archive(root: Path) -> ConfiguredSessionArchive:
     """Bind GraphTraj to the tool-owned archive choices without overriding users."""
     directory = swarm_root(root)
-    default_config(directory, save_normalized_sessions=True)
+    default_config(directory, **ARCHIVE_DEFAULTS)
     return ConfiguredSessionArchive(directory, **read_config(directory))
 
 

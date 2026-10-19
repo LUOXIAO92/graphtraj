@@ -1040,6 +1040,22 @@ def test_unknown_source_and_stale_event_leave_main_unchanged(host: tuple[Path, P
     assert binding.read_bytes() == original
 
 
+@pytest.mark.parametrize('source', ['startup', 'compact'])
+def test_unreadable_start_input_is_visible_without_stopping_the_turn(host: tuple[Path, Path], source: str) -> None:
+    """Unreadable rollout bytes at SessionStart name their source; Stop still stops on them."""
+    root, binding = host
+    original = binding.read_bytes()
+    (root / 'rollout.jsonl').write_text('not json\n')
+    result = native_hook(root, 'SessionStart', source=source)
+    assert set(result) == {'systemMessage'}
+    assert f'SessionStart ({source}) input failed: Codex rollout' in result['systemMessage']
+    assert 'at byte 0' in result['systemMessage']
+    (root / 'rollout.jsonl').unlink()
+    assert 'cannot be read' in native_hook(root, 'SessionStart', source=source)['systemMessage']
+    assert native_hook(root)['continue'] is False
+    assert binding.read_bytes() == original
+
+
 def test_native_checker_and_changed_turn_do_not_recurse(host: tuple[Path, Path]) -> None:
     """Creation-time checker ownership wins even when Codex fork source is root."""
     root, binding = host

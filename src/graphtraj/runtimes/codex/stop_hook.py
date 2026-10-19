@@ -13,7 +13,7 @@ import yaml
 
 from graphtraj.execution.main_finalize import bind_session, check_main_finalize, session_binding
 from graphtraj.runtimes.codex.session_entry import (
-    event_record, session_source, is_bound_checker, owns_native_root,
+    NativeInputError, event_record, session_source, is_bound_checker, owns_native_root,
 )
 
 
@@ -167,7 +167,7 @@ def main(
         try:
             event = json.loads(raw)
         except json.JSONDecodeError as error:
-            raise ValueError(f'Codex hook stdin ({len(raw)} characters) is not a lifecycle event JSON: {error}') from None
+            raise NativeInputError(f'Codex hook stdin ({len(raw)} characters) is not a lifecycle event JSON: {error}') from None
         if not isinstance(event, dict):
             raise ValueError('Invalid native lifecycle event.')
         if binding is None:
@@ -189,12 +189,13 @@ def main(
         from graphtraj.runtimes.codex.finalize import response
 
         name = event.get('hook_event_name') if isinstance(event, dict) else None
-        if name in {'SessionStart', 'SessionEnd'}:
-            # Association is not a completion check. Codex stops the pending
-            # user turn on continue=false, so report it without consuming input;
-            # the next Stop still checks or reports its own association failure.
-            click.echo(json.dumps({'systemMessage': f'GraphTraj {name} '
-                                   f"({event.get('source') or 'unknown source'}) failed: {error}"},
+        if isinstance(error, NativeInputError) and name in {'SessionStart', 'SessionEnd'}:
+            # Unreadable input is not a completion verdict. Codex stops the
+            # pending user turn on continue=false, so report it without
+            # consuming input. Identity refusals and an event whose kind is
+            # unknown still stop; the next Stop checks or reports its own failure.
+            label = f"{name} ({event.get('source') or 'unknown source'})"
+            click.echo(json.dumps({'systemMessage': f'GraphTraj {label} input failed: {error}'},
                                   ensure_ascii=False))
             return
         from graphtraj.runtimes.runtime_adapter import CheckUsage

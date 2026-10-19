@@ -24,19 +24,6 @@ def test_empty_stdin_names_hook_stdin_and_keeps_stop_error() -> None:
     assert 'Completion Check · error' in result['stopReason']
 
 
-@pytest.mark.parametrize('source', ['startup', 'compact'])
-def test_session_start_failure_reports_without_stopping_the_turn(tmp_path: Path, source: str) -> None:
-    """SessionStart association errors stay visible but do not consume the pending user input."""
-    reply = CliRunner().invoke(stop_hook, ['--project-root', str(tmp_path)], input=json.dumps({
-        'hook_event_name': 'SessionStart', 'source': source, 'session_id': 's', 'cwd': str(tmp_path),
-        'transcript_path': str(tmp_path / 'missing.jsonl'),
-    }))
-    assert reply.exit_code == 0, reply.output
-    result = json.loads(reply.output)
-    assert set(result) == {'systemMessage'}
-    assert result['systemMessage'].startswith(f'GraphTraj SessionStart ({source}) failed:')
-
-
 def test_rollout_parse_failure_names_file_and_offset(tmp_path: Path) -> None:
     """An invalid native record identifies the rollout and byte offset; a growing tail is ignored."""
     rollout = tmp_path / 'rollout.jsonl'

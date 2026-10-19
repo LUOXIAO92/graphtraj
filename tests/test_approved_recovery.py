@@ -1508,6 +1508,7 @@ def test_retry_continues_after_a_later_approved_budget_increment(
 
 def test_approved_increment_lifts_budget_stop_but_keeps_session_stop(
     accepted_target: tuple, installed_commands: InstalledCommands, monkeypatch: pytest.MonkeyPatch,
+    fake_codex: FakeCodex,
 ) -> None:
     """New minutes admit new members; the stopped original Session stays refused."""
     root, task, mapping, arguments = accepted_target
@@ -1521,10 +1522,29 @@ def test_approved_increment_lifts_budget_stop_but_keeps_session_stop(
     budget = yaml.safe_load(budget_path.read_text())
     budget.update(stopped=True, stopping_checks=3, notifications=['stochastic_stop:3'])
     budget_path.write_text(yaml.safe_dump(budget))
+    batch = root / 'new-member.yml'
+    batch.write_text(yaml.safe_dump({'tasks': [{
+        'task_id': '83', 'role': 'coding-team.team-leader', 'instruction': 'Inspect retained evidence only.',
+    }]}))
+    environment = dict(os.environ, FAKE_CODEX_LOG=str(fake_codex.log_file),
+                       FAKE_CODEX_EVENTS=json.dumps([
+                           {'type': 'thread.started', 'thread_id': 'new-member-session'},
+                           {'type': 'turn.started'}, {'type': 'turn.completed'},
+                       ]))
+    environment['HOME'] = str(root / 'operator-home')
+    environment['PATH'] = str(fake_codex.executable.parent) + os.pathsep + environment['PATH']
+    refused = run_process([str(installed_commands.runner), '--swarm-input', str(batch)],
+                          cwd=root, env=environment, timeout=30)
+    assert refused.returncode != 0
+    assert 'EXECUTION_BUDGET_STOPPED' in refused.stdout + refused.stderr
     result = invoke(root, {**arguments, 'additional_minutes': 90, 'resume': False})
     assert result['recovery_status'] == 'applied'
     after = yaml.safe_load(budget_path.read_text())
     assert after['stopped'] is False
+    launched = run_process([str(installed_commands.runner), '--swarm-input', str(batch)],
+                           cwd=root, env=environment, timeout=30)
+    assert launched.returncode == 0, launched.stdout + launched.stderr
+    assert yaml.safe_load(launched.stdout)['tasks'][0]['alias'] != mapping['alias']
     assert after['approved_minutes'] == 90
     assert after['started_at'] == budget['started_at']
     assert stop_path.read_bytes() == stop

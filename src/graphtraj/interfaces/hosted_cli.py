@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from graphtraj.configuration.project_configuration import cli_directory
+from graphtraj.configuration import project_configuration
 
 import os
 import math
@@ -24,7 +25,8 @@ from graphtraj.workspace.runner_project import discover_runner_directory
 
 CONNECTION_ENV = 'GRAPHTRAJ_CLI_CONNECTION'
 _SERVICE = {'executable': sys.executable, 'module': __file__,
-            'sha256': hashlib.sha256(Path(__file__).read_bytes()).hexdigest()}
+            'sha256': hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
+            'configuration_sha256': hashlib.sha256(Path(project_configuration.__file__).read_bytes()).hexdigest()}
 
 
 def _caller_in_scope(document_cwd: Any, root: Path, runner: Path, alias: str) -> bool:

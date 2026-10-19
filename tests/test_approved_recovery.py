@@ -57,7 +57,9 @@ def invoke(root: Path, arguments: dict) -> dict:
 
 def applied_proposal(root: Path, result: dict) -> dict:
     """Read the retained evidence identified by the compact recovery result."""
-    return next(event['proposal'] for event in read_worldline(root / '.graphtraj/state', root)
+    from graphtraj.configuration.project_configuration import load_project_configuration
+
+    return next(event['proposal'] for event in read_worldline(load_project_configuration(root).state, root)
                 if event['event_id'] == result['recovery_event_id'])
 
 
@@ -385,12 +387,23 @@ def test_recovery_after_expired_budget_resumes_and_retries_without_new_minutes(
     assert yaml.safe_load(path.read_text()) == after
 
 
+@pytest.mark.parametrize('cutover', [False, True])
 def test_administrative_recovery_routes_reports_to_the_actual_current_host(
     accepted_task: tuple, monkeypatch: pytest.MonkeyPatch, fake_codex: FakeCodex,
+    cutover: bool,
 ) -> None:
     """The current host receives reports without a new Session or budget grant."""
     root, _, state, _ = accepted_task
     runner = root / '.graphtraj/runner'
+    if cutover:
+        from graphtraj.interfaces.cli.graphtraj import main as graphtraj
+
+        monkeypatch.chdir(root)
+        migrated = CliRunner().invoke(graphtraj, ['migrate-agents', '--cutover',
+            str(root.parent / (root.name + '-snapshot')), '--writes-stopped'])
+        assert migrated.exit_code == 0, migrated.output
+        state = root / '.graphtraj/core/state'
+        runner = root / '.graphtraj/core/runner'
     mappings = [(path, yaml.safe_load(path.read_text()))
                 for path in (runner / 'sessions').glob('*/mapping.yml')]
     path, original = next(pair for pair in mappings if pair[1]['parent'] is None)

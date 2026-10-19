@@ -111,19 +111,23 @@ def test_public_cutover_and_restore_preserve_identity_and_git_cwd(
     assert (Path(report['backup']) / 'after-core').is_dir()
 
 
-def test_cutover_retains_staging_when_current_native_declarations_need_decision(
+def test_cutover_preserves_accepted_legacy_codex_declarations(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """An old header is retained, never silently accepted as duplicate MCP exposure."""
+    """The accepted exception preserves native memory and reports the old names."""
     root = tmp_path / 'project'
     worktree, directory = project(root)
     (directory / 'native.jsonl').write_text(json.dumps({'type': 'session_meta', 'payload': {
         'id': 'native-old', 'cwd': str(worktree), 'dynamic_tools': [{'name': 'graphtraj'}]}}) + '\n')
+    before = (directory / 'native.jsonl').read_bytes()
     monkeypatch.chdir(root)
     result = CliRunner().invoke(main, ['migrate-agents', '--cutover', str(tmp_path / 'input'), '--writes-stopped'])
-    assert result.exit_code != 0 and 'compatibility decision' in result.output
-    assert worktree.is_dir() and (root / '.graphtraj/config.yml').is_file()
-    assert (tmp_path / 'input-cutover/.graphtraj/core/config.yml').is_file()
+    assert result.exit_code == 0, result.output
+    report = yaml.safe_load(result.output)
+    declarations = report['legacy_native_registrations']['sessions']
+    assert declarations[0]['tools'] == ['graphtraj']
+    assert declarations[0]['session'] == 'native-old'
+    assert (root / '.graphtraj/core/runner/sessions/old@member/native.jsonl').read_bytes() == before
 
 
 def test_cutover_refuses_unconfirmed_writer_before_snapshot(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

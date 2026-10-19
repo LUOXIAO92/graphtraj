@@ -156,9 +156,6 @@ def cutover_project(
     partitioned = partition_snapshot(staging)
     if partitioned['agents']['missing']:
         raise ValueError('Some stopped identities lack continuation settings; retained staging was not installed.')
-    if any(item['tools'] and item['group'] in {'current_members', 'current_main'}
-           for item in imported['legacy_native_registrations']['sessions']):
-        raise ValueError('Retained current Sessions declare old product tools. The compatibility decision must be implemented before installation; staging is retained.')
     staged_core = staging / '.graphtraj/core'
     staged_swarm = staging / '.graphtraj/swarm'
     moves = {str(staging / '.graphtraj/core'): str(data / 'core'),
@@ -255,6 +252,8 @@ def cutover_project(
             'worktrees': worktrees, 'identities': partitioned['agents'],
             'native_missing': [item for item in imported['native_results'] if item.get('missing')],
             'missing_links': imported['missing_links'],
+            'legacy_native_registrations': imported['legacy_native_registrations'],
+            'legacy_codex_policy': 'Retained declarations remain visible; old calls fail and direct callers to MCP. Native history is unchanged and old business callbacks are not restored.',
             'next': 'Use this same installed version. Native host trust and same-ID resume require their normal public entry; no host was started. Restore is available before new execution/state writes; afterward preserve and reconcile the new history.'}
 
 

@@ -475,6 +475,28 @@ def read_session_reports(alias: str, cwd: Path) -> dict:
     reports = [{'path': str(path), 'text': path.read_text(encoding='utf-8')}
                for path in paths if path.is_file()]
     result = {'alias': alias, 'reports': reports}
+    notices = directory / 'parent-notices.jsonl'
+    if notices.is_file():
+        from graphtraj.runtimes.activity import redact
+
+        # Project the retained receipt, not another send. Only the direct
+        # owner reaches this report query; no private Session body is exposed.
+        for line in reversed(notices.read_text(encoding='utf-8').splitlines()):
+            receipt = json.loads(line)
+            if receipt.get('identity', {}).get('type') != 'report-submitted':
+                continue
+            summary = {key: receipt[key] for key in (
+                'at', 'delivery', 'parent', 'parent_session', 'parent_execution_id',
+            ) if key in receipt}
+            connection = receipt.get('parent_connection')
+            if isinstance(connection, dict):
+                summary['parent_connection'] = {key: connection[key] for key in
+                                                ('runtime', 'session') if key in connection}
+            if isinstance(receipt.get('error'), dict):
+                summary['error'] = {key: redact(str(receipt['error'][key])) for key in
+                                    ('code', 'message') if key in receipt['error']}
+            result['report_notification'] = summary
+            break
     if mapping.get('runtime') == 'claude' and mapping.get('execution_id'):
         diagnostic_path = directory / f"claude-diagnostics-{mapping['execution_id']}.yml"
         if diagnostic_path.is_file() and not diagnostic_path.is_symlink():
@@ -586,6 +608,11 @@ def _reported(session_directory: Path, alias: str, path: Path, notify: bool) -> 
             {'type': 'report-submitted', 'report': str(path)},
         )
         result['delivery'] = receipt['delivery']
+        if isinstance(receipt.get('error'), dict):
+            from graphtraj.runtimes.activity import redact
+
+            result['delivery_error'] = {key: redact(str(receipt['error'][key])) for key in
+                                       ('code', 'message') if key in receipt['error']}
         if receipt.get('parent') is not None:
             result['parent'] = receipt['parent']
     return result

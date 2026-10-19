@@ -140,7 +140,7 @@ def prompt(message: dict) -> None:
     elif text == 'mcp':
         command = json.loads(args[args.index('--mcp-config') + 1])['mcpServers']['agents']
         query = {'jsonrpc': '2.0', 'id': 1, 'method': 'tools/call', 'params': {
-            'name': 'tasks', 'arguments': {'action': 'execute', 'feature': 'alias_status', 'arguments': {}}}}
+            'name': 'tasks', 'arguments': {'action': 'execute', 'feature': 'session_reports', 'arguments': {'alias': 'research@x1'}}}}
         response = subprocess.run([command['command'], *command['args']], input=json.dumps(query) + '\n',
                                   text=True, capture_output=True, env={**os.environ, **command['env']})
         result(response.stdout or response.stderr)

@@ -48,8 +48,8 @@ def test_both_transports_consume_shared_schema_and_handler(
 
     schema = {'type': 'object', 'properties': {'sample': {'type': 'string'}},
               'required': ['sample'], 'additionalProperties': False}
-    monkeypatch.setitem(tools.TOOLS, 'alias_status', replace(
-        tools.TOOLS['alias_status'], input_schema=schema, handler=handler,
+    monkeypatch.setitem(tools.TOOLS, 'task_graph', replace(
+        tools.TOOLS['task_graph'], input_schema=schema, handler=handler,
     ))
     monkeypatch.chdir(tmp_path)
     listed = mcp_request('tools/list', {})['tools']
@@ -62,10 +62,10 @@ def test_both_transports_consume_shared_schema_and_handler(
     assert listed[0]['inputSchema'] == gateway.INPUT_SCHEMA
     described = mcp_request('tools/call', {
         'name': 'tasks',
-        'arguments': {'action': 'describe', 'feature': 'alias_status', 'schema': True},
+        'arguments': {'action': 'describe', 'feature': 'task_graph', 'schema': True},
     })['structuredContent']
     cli_description = cli_request(tmp_path, {
-        'action': 'describe', 'feature': 'alias_status', 'schema': True,
+        'action': 'describe', 'feature': 'task_graph', 'schema': True,
     })
     assert described['input_schema'] == schema
     assert cli_description['result']['input_schema'] == schema
@@ -73,11 +73,11 @@ def test_both_transports_consume_shared_schema_and_handler(
     arguments = {'sample': 'shared'}
     result = mcp_request('tools/call', {
         'name': 'tasks',
-        'arguments': {'action': 'execute', 'feature': 'alias_status',
+        'arguments': {'action': 'execute', 'feature': 'task_graph',
                       'arguments': arguments},
     })
     response = cli_request(tmp_path, {
-        'action': 'execute', 'feature': 'alias_status', 'arguments': arguments,
+        'action': 'execute', 'feature': 'task_graph', 'arguments': arguments,
     })
     assert result['structuredContent'] == response['result']
     assert result['isError'] is failed
@@ -90,19 +90,19 @@ def test_both_transports_preserve_handler_input_rejection(
 ) -> None:
     """Both transports preserve the shared gateway's argument rejection."""
     monkeypatch.chdir(tmp_path)
-    arguments = {'alias': 'child', 'instruction': 42}
+    arguments = {'summary_task_id': 42}
     result = mcp_request('tools/call', {
         'name': 'tasks',
-        'arguments': {'action': 'execute', 'feature': 'send_instruction',
+        'arguments': {'action': 'execute', 'feature': 'task_members',
                       'arguments': arguments},
     })
     response = cli_request(tmp_path, {
-        'action': 'execute', 'feature': 'send_instruction', 'arguments': arguments,
+        'action': 'execute', 'feature': 'task_members', 'arguments': arguments,
     })
     assert result['isError'] is True
     assert response['failed'] is True
     document = response['result']
     assert result['structuredContent'] == document
-    assert document['feature'] == 'send_instruction'
-    assert 'instruction' in document['error']
-    assert 'instruction' in result['content'][0]['text']
+    assert document['feature'] == 'task_members'
+    assert 'summary_task_id' in document['error']
+    assert 'summary_task_id' in result['content'][0]['text']

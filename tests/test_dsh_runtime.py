@@ -192,6 +192,7 @@ def peer(monkeypatch: pytest.MonkeyPatch) -> list:
 def run_turn(
     tmp_path: Path, *, expected: str | None = None, trace_file: Path | None = None,
     instructions: str = 'Assigned responsibility', package: str | None = None,
+    native_directory: Path | None = None,
 ) -> tuple:
     """Run the public RuntimeTurn asynchronously so controls overlap active work."""
     from graphtraj.configuration.project_configuration import default_configuration_content
@@ -200,8 +201,11 @@ def run_turn(
     config.parent.mkdir(exist_ok=True)
     config.write_text(default_configuration_content(tmp_path, tmp_path))
     bindings = []
+    settings = request(tmp_path, instructions, package or '/installed/dsh/package.json')
+    if native_directory is not None:
+        settings['native_directory'] = str(native_directory)
     turn = select_runtime_adapter('dsh').managed_execution(
-        request(tmp_path, instructions, package or '/installed/dsh/package.json'),
+        settings,
         'Original instruction', tmp_path,
         lambda session, pid: bindings.append(('started', session)), {},
         trace_file=trace_file or tmp_path / 'trace.jsonl', expected_session=expected,
@@ -808,6 +812,34 @@ def test_native_trace_survives_control_directory_retirement(tmp_path: Path, peer
     content = trace.read_bytes()
     control.rename(tmp_path / 'retired')
     assert trace.read_bytes() == content
+
+
+def test_native_resources_resume_from_tool_directory(tmp_path: Path, peer: list) -> None:
+    """The same native ID and history are used after relocating owned resources."""
+    control = tmp_path / 'control'
+    control.mkdir()
+    trace = tmp_path / 'traces/events.jsonl'
+    turn, thread, outcome = run_turn(control, trace_file=trace)
+    peer[0].frames.append('turn/end')
+    thread.join(3)
+    assert outcome['result']['outcome'] == 'completed'
+    original = peer[0].log.read_bytes()
+    native = tmp_path / 'swarm/native/dsh'
+    native.mkdir(parents=True)
+    (trace.parent / 'dsh-native').rename(native / 'dsh-native')
+    (control / 'dsh-home').rename(native / 'dsh-home')
+    # The public cutover separately verifies this owned Trace-link relocation.
+    trace.unlink()
+    trace.symlink_to(native / 'dsh-native' / peer[0].log.relative_to(trace.parent / 'dsh-native'))
+    resumed, thread, outcome = run_turn(control, trace_file=trace, expected=turn.session,
+                                       native_directory=native)
+    assert peer[1].log.is_relative_to(native)
+    assert peer[1].log.read_bytes().startswith(original)
+    peer[1].frames.append('turn/end')
+    thread.join(3)
+    assert 'result' in outcome, outcome
+    assert outcome['result']['outcome'] == 'completed'
+    assert resumed.session == turn.session
 
 
 def test_completion_requires_the_final_native_prefix(tmp_path: Path, peer: list) -> None:

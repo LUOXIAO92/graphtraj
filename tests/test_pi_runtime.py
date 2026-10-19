@@ -71,6 +71,7 @@ def execution(
     prompt: str,
     stack: ExitStack,
     expected: str | None = None,
+    native_directory: Path | None = None,
     **role_fields,
 ):
     """Bind fixture ownership using actual process IDs before native task work."""
@@ -83,7 +84,7 @@ def execution(
 
     def created(session: str, pid: int) -> None:
         """Check pre-prompt order and provide real ownership to hosted CLI tests."""
-        native = trace.with_suffix('.pi') / 'session.jsonl'
+        native = (native_directory or trace.with_suffix('.pi')) / 'session.jsonl'
         if not expected:
             assert len(native.read_text().splitlines()) == 1
         mapping = yaml.safe_load((directory / 'mapping.yml').read_text())
@@ -95,7 +96,10 @@ def execution(
         ready.set()
 
     stack.enter_context(hold_ownership(directory, os.getpid()))
-    turn = adapter.managed_execution(prepared.launch_document()['adapter_request'], prompt, directory,
+    request = prepared.launch_document()['adapter_request']
+    if native_directory is not None:
+        request['native_directory'] = str(native_directory)
+    turn = adapter.managed_execution(request, prompt, directory,
                                     started, prepared.evidence_document(), trace_file=trace,
                                     expected_session=expected, session_created=created)
     return turn, ready, trace
@@ -233,7 +237,8 @@ def test_pi_private_stderr_is_not_inherited(tmp_path: Path, pi_environment: dict
         assert turn.run()['outcome'] == 'completed'
 
 
-def test_pi_continuation_and_native_trace(tmp_path: Path, pi_environment: dict) -> None:
+@pytest.mark.parametrize('relocate', [False, True])
+def test_pi_continuation_and_native_trace(tmp_path: Path, pi_environment: dict, relocate: bool) -> None:
     """Same native Session and original context survive a new Worker invocation."""
     result_project(tmp_path)
     with ExitStack() as stack:
@@ -242,8 +247,14 @@ def test_pi_continuation_and_native_trace(tmp_path: Path, pi_environment: dict) 
     assert first['outcome'] == 'completed'
     assert 'remember-247' in first['last_agent_message']
     assert json.loads(trace.read_text().splitlines()[0])['id'] == first['session_id']
+    native_directory = None
+    if relocate:
+        native_directory = tmp_path / '.graphtraj/swarm/native/retained-pi'
+        native_directory.parent.mkdir(parents=True)
+        trace.with_suffix('.pi').rename(native_directory)
     with ExitStack() as stack:
-        resumed, _, _ = execution(tmp_path, pi_environment, 'research@x1', 'continue', stack, first['session_id'])
+        resumed, _, _ = execution(tmp_path, pi_environment, 'research@x1', 'continue', stack,
+                                  first['session_id'], native_directory=native_directory)
         second = resumed.run()
     assert second['session_id'] == first['session_id']
     assert 'remember-247' in second['last_agent_message']

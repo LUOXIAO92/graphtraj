@@ -206,7 +206,7 @@ await collector.close();
             assert store.header['graphtraj']['source'] == ('child' if child else 'main')
             attempt = next(item['event'] for item in store.pending()
                            if item['event']['type'] == 'assistant/attempt')
-            assert attempt['data']['stream'][0]['text'] == 'from extension'
+            assert ''.join(item.get('text', '') for item in attempt['data']['stream']) == 'from extension'
             assert attempt['data']['interrupted'] is True
         assert binding.read_bytes() == original
 

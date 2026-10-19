@@ -335,6 +335,56 @@ def test_approved_integrated_repair_retains_history_and_retries_once(
     assert yaml.safe_load((task / 'execution-budget.yml').read_text()) == after
 
 
+def test_recovery_after_expired_budget_resumes_and_retries_without_new_minutes(
+    accepted_task: tuple, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The applied approval window admits continuation and preserves retry accounting."""
+    root, _, state, _ = accepted_task
+    task = state / 'tasks/83-integration'
+    mappings = [yaml.safe_load(path.read_text())
+                for path in (root / '.graphtraj/runner/sessions').glob('*/mapping.yml')]
+    mapping = next(item for item in mappings if item['parent'] is None)
+    arguments = {
+        'alias': mapping['alias'], 'reason': 'Authorized continuation after waiting.',
+        'instruction': 'Validate the retained candidate only.',
+        'allowed_scope': 'Validation', 'forbidden_scope': 'No implementation',
+        'additional_minutes': 7, 'restore_active': True,
+        'caused_by_event_ids': [read_worldline(state, root)[-1]['event_id']],
+    }
+    monkeypatch.setattr(recovery, 'caller_runtime', lambda: 'codex')
+    path = task / 'execution-budget.yml'
+    before = yaml.safe_load(path.read_text())
+    before['started_at'] = recovery.time.time() - 86400
+    before['allowance_minutes'] = 0
+    path.write_text(yaml.safe_dump(before))
+    adapter = NativeApproval(root, 'automatic')
+    monkeypatch.setattr(recovery.runtime_adapter, 'select_runtime_adapter', lambda runtime: adapter)
+    sent = []
+
+    def resume(*args: object, **kwargs: object) -> dict:
+        """Fail once at transport, then acknowledge the original native Session."""
+        sent.append(args[1])
+        if len(sent) == 1:
+            raise RunnerError('native-unavailable', 'controlled transport failure')
+        assert args[3]['session'] == mapping['session']
+        return {'alias': args[0], 'session': mapping['session'], 'send_status': 'sent'}
+
+    monkeypatch.setattr(recovery, '_send_session_locked', resume)
+    result = invoke(root, arguments)
+    assert result['recovery_status'] == 'resume-failed'
+    assert result['error']['code'] == 'native-unavailable'
+    after = yaml.safe_load(path.read_text())
+    assert after['approved_window_started_at'] > before['started_at']
+    assert after['started_at'] == before['started_at']
+    assert after['approved_minutes'] == 7
+    retry = {'alias': arguments['alias'], 'retry_event_id': result['recovery_event_id']}
+    assert invoke(root, retry)['recovery_status'] == 'resumed'
+    assert invoke(root, retry)['recovery_status'] == 'resumed'
+    assert len(sent) == 2
+    assert len(adapter.proposals) == 1
+    assert yaml.safe_load(path.read_text()) == after
+
+
 @pytest.mark.parametrize('mode', ['denied', 'failed'])
 def test_native_refusal_and_failure_leave_state_untouched(
     target: tuple, monkeypatch: pytest.MonkeyPatch, mode: str,

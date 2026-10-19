@@ -161,6 +161,76 @@ def test_model_decision_reaches_only_native_request(
     assert 'test-key' not in json.dumps(reply)
 
 
+@pytest.mark.parametrize('decision', ['accept', 'decline', 'error'])
+def test_mcp_tool_approval_uses_selected_reviewer(
+    tmp_path: Path,
+    peer: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    decision: str,
+) -> None:
+    """Native MCP tool decisions use configured review, without persistent trust."""
+    request, directory = managed(tmp_path, peer, monkeypatch)
+    params = {
+        'serverName': 'graphtraj', 'mode': 'form',
+        '_meta': {'codex_approval_kind': 'mcp_tool_call', 'persist': ['session', 'always'],
+                  'tool_params': {'action': 'discover'}},
+        'message': 'Allow the graphtraj MCP server to run tool "tasks"?',
+        'requestedSchema': {'type': 'object', 'properties': {}},
+    }
+    monkeypatch.setenv('MANAGED_MCP_REQUEST', json.dumps(params))
+    calls = []
+    completion_stub(monkeypatch, decision, calls)
+    worker = CodexManagedExecution(request, 'request: inspect task status', directory,
+                                  lambda *_: None, {}, directory / 'events.jsonl')
+    result = worker.run()
+    reply = json.loads(next((tmp_path / 'native').glob('*.replies.jsonl')).read_text())
+    assert len(calls) == 1
+    reviewed = json.loads(calls[0][1]['messages'][1]['content'])
+    assert reviewed['method'] == 'mcpServer/elicitation/request'
+    assert reviewed['request']['_meta'] == params['_meta']
+    assert reviewed['authorization'] == 'request: inspect task status'
+    assert reviewed['permissions']
+    if decision == 'error':
+        assert result['outcome'] == 'runtime-error'
+        assert reply['error']['code'] == -32603
+    else:
+        assert result['outcome'] == 'completed'
+        assert reply == {'id': 'approval', 'result': {'action': decision}}
+
+
+def test_mcp_input_elicitation_still_requires_native_input(
+    tmp_path: Path, peer: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A server's form is not a tool approval and cannot be filled by a reviewer."""
+    request, directory = managed(tmp_path, peer, monkeypatch)
+    monkeypatch.setenv('MANAGED_MCP_REQUEST', json.dumps({
+        'serverName': 'example', 'mode': 'form', 'message': 'Choose a color',
+        'requestedSchema': {'type': 'object', 'properties': {'color': {'type': 'string'}}},
+    }))
+    calls, notices = [], []
+    completion_stub(monkeypatch, 'accept', calls)
+
+    async def reply_input(
+        worker: CodexManagedExecution, native: CodexServerRequest, token: str,
+    ) -> None:
+        """Answer the actual pending native input through its public reply seam."""
+        notices.append(native.method)
+        while worker.execution is None or worker.result is None:
+            await asyncio.sleep(0.001)
+        await asyncio.to_thread(worker.operate, {
+            'operation': 'reply', 'session': native.params['threadId'],
+            'execution_id': native.params['turnId'], 'request_token': token,
+            'response': {'action': 'cancel'},
+        })
+
+    monkeypatch.setattr(CodexManagedExecution, '_notify_direct_parent', reply_input)
+    result = CodexManagedExecution(request, 'request: inspect only', directory,
+                                  lambda *_: None, {}, directory / 'events.jsonl').run()
+    assert result['outcome'] == 'completed'
+    assert notices == ['mcpServer/elicitation/request']
+    assert calls == []
+
+
 @pytest.mark.parametrize('status', [400, 401, 429, 503])
 def test_http_error_status_reaches_native_reply_without_provider_contents(
     tmp_path: Path,

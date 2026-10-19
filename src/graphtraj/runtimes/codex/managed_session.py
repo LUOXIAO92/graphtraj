@@ -458,7 +458,13 @@ class CodexManagedExecution:
             # Do not execute it or turn an obsolete tool call into a human prompt.
             return {'success': False, 'contentItems': [{'type': 'inputText',
                     'text': 'This project tool registration was removed. Use the agents/tasks MCP entry.'}]}
-        if self.approval is not None and request.method.endswith("/requestApproval"):
+        mcp_approval = (
+            request.method == 'mcpServer/elicitation/request'
+            and request.params.get('mode') == 'form'
+            and isinstance(request.params.get('_meta'), dict)
+            and request.params['_meta'].get('codex_approval_kind') == 'mcp_tool_call'
+        )
+        if self.approval is not None and (request.method.endswith("/requestApproval") or mcp_approval):
             return await self._review_approval(request)
         token = uuid.uuid4().hex
         response = asyncio.get_running_loop().create_future()
@@ -572,6 +578,7 @@ class CodexManagedExecution:
         if request.method not in {
             'item/commandExecution/requestApproval', 'item/fileChange/requestApproval',
             'item/permissions/requestApproval',
+            'mcpServer/elicitation/request',
         }:
             raise RuntimeAdapterError('RUNTIME_REQUEST_UNHANDLED', 'Unsupported automatic approval request.')
         available = request.params.get('availableDecisions')
@@ -603,6 +610,10 @@ class CodexManagedExecution:
                 terminal_confirmed=False,
             )
         result = await review_request(self.approval, context)
+        if request.method == 'mcpServer/elicitation/request':
+            # Review the exact native tool call, without granting persistent
+            # server trust or answering ordinary server input elicitations.
+            return {'action': result['decision']}
         if request.method == 'item/permissions/requestApproval':
             # Return only the exact requested profile; omitted scope uses Codex's
             # native default (turn). A denial grants nothing, only after review.
@@ -750,6 +761,6 @@ def native_operation_features() -> set[str]:
 
     return ({'alias_status', 'swarm', 'send_instruction', 'interrupt', 'pending_requests',
                 'reply_to_request', 'session_reports', 'submit_report', 'submit_result',
-                'decide_result', 'task_graph', 'task_members'} | set(METHOD_FEATURE_NAMES)
+                'decide_result', 'task_graph', 'task_members', 'worldline_read'} | set(METHOD_FEATURE_NAMES)
             | {'parent_status', 'retire', 'replace', 'cleanup', 'approved_recovery',
                'role_organization', 'runtime_connections', 'desktop_activity', 'session_read', 'agents'})

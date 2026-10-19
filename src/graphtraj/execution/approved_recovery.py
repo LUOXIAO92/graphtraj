@@ -312,6 +312,10 @@ def _apply_recovery(proposal: dict, cwd: Path) -> dict:
                                         # The increment counts as execution time from now,
                                         # not from when the budget ran out.
                                         value = start_approved_window(proposal['before']['budget'], value, time.time())
+                                        # The applied clock can differ from the reviewed
+                                        # increment after waiting. Retry must compare the
+                                        # clock we actually wrote, not the earlier proposal.
+                                        recorded['applied_budget'] = value
                                     write_yaml_durably(paths[key], value)
                             if original_mode != proposal['after']['round_mode']:
                                 paths['round'].chmod(proposal['after']['round_mode'])
@@ -369,6 +373,8 @@ def _resume_locked(project: Any, applied: dict, directory: Path) -> dict:
         return {**result, 'recovery_status': 'resumed', 'resumption': prior['resumption']}
     current, _ = _snapshot(project, alias)
     expected = {**proposal['after'], 'latest_task_event': applied['event_id']}
+    if 'applied_budget' in applied:
+        expected['budget'] = applied['applied_budget']
     differences = _differences(expected, current)
     # Native startup replaces transport and clears the terminal summary before
     # turn admission. These changes do not alter Session ownership or authority.

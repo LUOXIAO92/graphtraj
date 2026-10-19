@@ -57,6 +57,8 @@ def test_public_cutover_and_restore_preserve_identity_and_git_cwd(
     """Directory authority, same native ID, permission settings and Git paths move back."""
     root = tmp_path / 'project'
     worktree, directory = project(root)
+    evidence = b'\x00retained untracked delivery evidence\xff'
+    (worktree / 'untracked-evidence.bin').write_bytes(evidence)
     from graphtraj.sessions.storage import SessionStore, session_path
     from test_session_storage import header
 
@@ -70,6 +72,7 @@ def test_public_cutover_and_restore_preserve_identity_and_git_cwd(
     report = yaml.safe_load(result.output)
     new_worktree = root / '.graphtraj/core/worktrees/member'
     assert new_worktree.is_dir() and not worktree.exists()
+    assert (new_worktree / 'untracked-evidence.bin').read_bytes() == evidence
     assert (new_worktree / '.state').resolve() == root / '.graphtraj/core/state'
     assert not (root / '.graphtraj/config.yml').exists()
     mapping = yaml.safe_load((root / '.graphtraj/core/runner/sessions/old@member/mapping.yml').read_text())
@@ -107,6 +110,7 @@ def test_public_cutover_and_restore_preserve_identity_and_git_cwd(
         return
     assert restored.exit_code == 0, restored.output
     assert worktree.is_dir() and not new_worktree.exists()
+    assert (worktree / 'untracked-evidence.bin').read_bytes() == evidence
     assert (directory / 'mapping.yml').read_bytes() == original
     assert (worktree / '.state').readlink() == Path('../../state')
     assert (Path(report['backup']) / 'after-core').is_dir()

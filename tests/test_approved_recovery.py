@@ -386,7 +386,7 @@ def test_recovery_after_expired_budget_resumes_and_retries_without_new_minutes(
 
 
 def test_administrative_recovery_routes_reports_to_the_actual_current_host(
-    accepted_task: tuple, monkeypatch: pytest.MonkeyPatch,
+    accepted_task: tuple, monkeypatch: pytest.MonkeyPatch, fake_codex: FakeCodex,
 ) -> None:
     """The current host receives reports without a new Session or budget grant."""
     root, _, state, _ = accepted_task
@@ -394,6 +394,7 @@ def test_administrative_recovery_routes_reports_to_the_actual_current_host(
     mappings = [(path, yaml.safe_load(path.read_text()))
                 for path in (runner / 'sessions').glob('*/mapping.yml')]
     path, original = next(pair for pair in mappings if pair[1]['parent'] is None)
+    launch_before = (path.parent / 'launch.yml').read_bytes()
     original['parent_connection'] = {'runtime': 'codex', 'session': 'old-main',
                                      'codex_home': '/old-native-home'}
     path.write_text(yaml.safe_dump(original))
@@ -451,6 +452,22 @@ def test_administrative_recovery_routes_reports_to_the_actual_current_host(
                     **request, 'reason': 'Member administrative retry',
                 }})
         assert yaml.safe_load(path.read_text()) == changed
+        # Administrative success must also admit the next real Worker/native
+        # continuation, rather than rejecting the retained original launch.
+        monkeypatch.setenv('PATH', str(fake_codex.executable.parent) + os.pathsep + os.environ['PATH'])
+        monkeypatch.setenv('FAKE_CODEX_LOG', str(fake_codex.log_file))
+        continued = host({'action': 'execute', 'feature': 'send_instruction', 'arguments': {
+            'alias': original['alias'], 'instruction': 'Return the retained validation result.',
+            'caused_by_event_ids': [read_worldline(state, root)[-1]['event_id']],
+        }}).document
+        assert continued['send_status'] == 'sent'
+        assert continued['session'] == original['session']
+        assert continued['execution_id'] != original['execution_id']
+        wait_for_file(path.parent / 'execution.yml')
+        terminal = yaml.safe_load((path.parent / 'execution.yml').read_text())
+        assert terminal['outcome'] == 'completed'
+        assert (path.parent / 'launch.yml').read_bytes() == launch_before
+        assert yaml.safe_load(path.read_text())['parent_connection'] == host.address
 
 
 @pytest.mark.parametrize('mode', ['denied', 'failed'])

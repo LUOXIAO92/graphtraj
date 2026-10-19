@@ -1311,6 +1311,10 @@ def _read_session_resume_request(
         or any(
             launch["mapping"].get(field) != mapping.get(field)
             for field in SESSION_IMMUTABLE_MAPPING_FIELDS
+            # Root host recovery updates the authoritative current mapping;
+            # its original launch remains history. Worker admission still
+            # compares the new job against that current binding in full.
+            if field != 'parent_connection' or mapping.get('parent') is not None
         )
     ):
         raise _invalid_mapping()

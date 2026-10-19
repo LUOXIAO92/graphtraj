@@ -389,7 +389,12 @@ def _register_created_member(
     ):
         raise ValueError("Member registration requires the owning Runner creation job")
     job = yaml.safe_load(job_file.read_text())
-    if job.get("operation") != "launch" or conflicting_binding_field(job["mapping"], mapping):
+    launch_binding = job["mapping"]
+    if not created and mapping.get('parent') is None:
+        # Recovery may change only the root's delivery host. Admission has
+        # already checked this execution against the current durable mapping.
+        launch_binding = {**launch_binding, 'parent_connection': mapping.get('parent_connection')}
+    if job.get("operation") != "launch" or conflicting_binding_field(launch_binding, mapping):
         raise ValueError("Member registration conflicts with the trusted launch binding")
     assignment = job["member_registration"]
     if not isinstance(assignment, dict) or set(assignment) != {"member", "replaces"}:

@@ -11,8 +11,10 @@ from conftest import InstalledCommands
 
 
 @pytest.mark.parametrize('observe_only', [False, True])
+@pytest.mark.parametrize('response_mode', ['structured', 'text', 'tool-error', 'unknown-wrapper', 'rpc-error'])
 def test_installed_proxy_uses_websocket_for_public_refresh(
     tmp_path: Path, observe_only: bool, installed_commands: InstalledCommands,
+    response_mode: str,
 ) -> None:
     """The real proxy carries Upgrade and framed RPCs, without a real host or model."""
     from websockets.asyncio.server import unix_serve
@@ -52,7 +54,22 @@ def test_installed_proxy_uses_websocket_for_public_refresh(
                 assert params == {'threadId': 'current-main', 'server': 'graphtraj', 'tool': 'tasks',
                                   'arguments': {'action': 'discover'}, '_meta': {'threadId': 'current-main'}}
                 result = {'content': [], 'structuredContent': {
-                    'service': {'mcp': {'sha256': 'still-old-code'}}, 'features': [{'private': 'omit'}]}}
+                    'service': {'mcp': {'sha256': 'still-old-code', 'token': 'DO-NOT-DISCLOSE'}},
+                    'features': [{'private': 'DO-NOT-DISCLOSE'}]}}
+                if response_mode == 'text':
+                    import yaml
+
+                    result = {'content': [{'type': 'text', 'text': yaml.safe_dump(result['structuredContent'])}]}
+                elif response_mode == 'tool-error':
+                    result = {'content': [{'type': 'text', 'text': 'Native discovery refused; Bearer secret-credential'}],
+                              'isError': True}
+                elif response_mode == 'unknown-wrapper':
+                    result = {'content': [], 'structuredContent': {'result': result['structuredContent']}}
+                elif response_mode == 'rpc-error':
+                    await connection.send(json.dumps({'id': request['id'], 'error': {
+                        'code': -32603, 'message': 'Native transport failed; Bearer secret-credential',
+                        'data': {'private_body': 'DO-NOT-DISCLOSE'}}}))
+                    continue
             await connection.send(json.dumps({'id': request['id'], 'result': result}))
 
     async def check() -> None:
@@ -74,12 +91,27 @@ def test_installed_proxy_uses_websocket_for_public_refresh(
                     if process.returncode is None:
                         process.terminate()
                         await process.wait()
-                assert process.returncode == 0, error.decode()
+                success = response_mode in {'structured', 'text'}
+                assert process.returncode == (0 if success else 1), error.decode()
                 import yaml
 
                 report = yaml.safe_load(output)
                 assert report['main_session'] == 'current-main'
-                assert report['service']['mcp']['sha256'] == 'still-old-code'
+                assert report['evidence_available'] is success
+                if success:
+                    assert report['service']['mcp']['sha256'] == 'still-old-code'
+                    assert report['discovery']['service_source'] == ('structuredContent' if response_mode == 'structured' else 'content[0].text')
+                elif response_mode == 'tool-error':
+                    assert report['discovery']['isError'] is True
+                    assert 'Native discovery refused' in str(report['discovery']['errors'])
+                elif response_mode == 'unknown-wrapper':
+                    assert report['discovery']['structured_fields'] == ['result']
+                    assert report['discovery']['structured_children']['result'] == ['features', 'service']
+                else:
+                    assert 'Native transport failed' in report['discovery']['rpc_error']['message']
+                    assert report['discovery']['rpc_error']['code'] == -32603
+                assert 'DO-NOT-DISCLOSE' not in output.decode()
+                assert 'secret-credential' not in output.decode()
                 assert report['reload_requested'] is not observe_only
                 assert 'adopted' not in report and 'features' not in report
                 assert report['servers'][0]['tools'] == ['agents', 'tasks']

@@ -34,3 +34,6 @@ def refresh_mcp_command(socket_path: Path, main_session: str, server: str, obser
     except (OSError, ValueError, CodexAdapterError) as error:
         raise click.ClickException(str(error)) from error
     click.echo(yaml.safe_dump(result, sort_keys=False), nl=False)
+    if not result['evidence_available']:
+        click.echo('MCP serving-source evidence unavailable; inspect the bounded diagnostic output.', err=True)
+        raise click.exceptions.Exit(1)

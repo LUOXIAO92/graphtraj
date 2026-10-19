@@ -32,6 +32,64 @@ from agent_swarm.sessions.archive import SessionArchive
 
 
 _DEFAULT_TIMEOUT = object()
+
+
+def _mcp_discovery_evidence(response: dict[str, Any]) -> dict[str, Any]:
+    """Project MCP response shape and bounded errors without disclosing tool bodies.
+
+    The native schema makes structuredContent optional. GraphTraj also emits
+    its document as YAML text; accept that documented representation without
+    guessing additional wrappers. Unknown structures remain diagnostic facts.
+    """
+    import hashlib
+    import yaml
+    from graphtraj.runtimes.activity import redact
+
+    diagnostic = {'response_fields': {key: type(value).__name__ for key, value in response.items()},
+                  'isError': response.get('isError'), 'content': [], 'errors': []}
+    documents = []
+    structured = response.get('structuredContent')
+    if isinstance(structured, dict):
+        diagnostic['structured_fields'] = sorted(structured)
+        diagnostic['structured_children'] = {key: sorted(value) for key, value in structured.items()
+                                             if isinstance(value, dict)}
+        documents.append(('structuredContent', structured))
+    content = response.get('content')
+    for index, block in enumerate(content if isinstance(content, list) else []):
+        if not isinstance(block, dict):
+            diagnostic['content'].append({'type': type(block).__name__})
+            continue
+        item = {'type': block.get('type')}
+        text = block.get('text')
+        if block.get('type') == 'text' and isinstance(text, str):
+            item.update(bytes=len(text.encode()), sha256=hashlib.sha256(text.encode()).hexdigest())
+            try:
+                parsed = yaml.safe_load(text) if len(text) <= 1024 * 1024 else None
+            except yaml.YAMLError:
+                parsed = None
+            if isinstance(parsed, dict):
+                item['document_fields'] = sorted(str(key) for key in parsed)
+                item['document_children'] = {str(key): sorted(str(child) for child in value)
+                                             for key, value in parsed.items() if isinstance(value, dict)}
+                documents.append((f'content[{index}].text', parsed))
+            elif response.get('isError') is True:
+                diagnostic['errors'].append(redact(text)[:1000])
+        diagnostic['content'].append(item)
+    service = {}
+    for source, document in documents:
+        for key in ('error', 'error_kind', 'code'):
+            if isinstance(document.get(key), (str, int)):
+                diagnostic['errors'].append({key: redact(str(document[key]))[:1000]})
+        if not service and isinstance(document.get('service'), dict):
+            service = {name: {key: redact(value) for key, value in fields.items()
+                             if key in {'module', 'executable', 'sha256', 'configuration_sha256'} and isinstance(value, str)}
+                       for name, fields in document['service'].items()
+                       if name in {'mcp', 'host'} and isinstance(fields, dict)}
+            diagnostic['service_source'] = source
+    available = bool(service.get('mcp', {}).get('sha256')) and not response.get('isError') and not diagnostic['errors']
+    return {'service': service, 'evidence_available': available, 'discovery': diagnostic}
+
+
 # A fork-only profile extending Main's with Codex managed network enabled.
 CHECKER_PERMISSION_PROFILE = 'graphtraj_checker'
 # Reported sandbox policy types and their thread/fork SandboxMode selections.
@@ -792,18 +850,26 @@ class CodexAppServer:
         inventory = await self._call('mcpServerStatus/list', {
             'threadId': thread_id, 'serverName': server, 'detail': 'toolsAndAuthOnly',
         })
-        discovery = await self._call('mcpServer/tool/call', {
-            'threadId': thread_id, 'server': server, 'tool': 'tasks',
-            'arguments': {'action': 'discover'}, '_meta': {'threadId': thread_id},
-        })
-        document = discovery.get('structuredContent')
-        if discovery.get('isError') or not isinstance(document, dict) or not isinstance(document.get('service'), dict):
-            raise CodexAdapterError('RUNTIME_REQUEST_INVALID',
-                'MCP discovery did not return serving-source evidence; reload may still be queued. No adoption is certified.')
+        from graphtraj.runtimes.activity import redact
+
+        try:
+            discovery = await self._call('mcpServer/tool/call', {
+                'threadId': thread_id, 'server': server, 'tool': 'tasks',
+                'arguments': {'action': 'discover'}, '_meta': {'threadId': thread_id},
+            })
+            evidence = _mcp_discovery_evidence(discovery)
+        except CodexAdapterError as error:
+            native = ({'method': error.method, 'request_id': error.request_id,
+                       'code': error.native_error['code'],
+                       'message': redact(error.native_error['message'])[:1000]}
+                      if isinstance(error, CodexRPCError)
+                      else {'code': error.code, 'message': redact(str(error))[:1000]})
+            evidence = {'evidence_available': False, 'service': {},
+                        'discovery': {'rpc_error': native}}
         return {'main_session': thread_id, 'cwd': thread.get('cwd'),
                 'activity': thread['status']['type'], 'reload_requested': not observe_only,
-                'service': document['service'],
-                'servers': [{key: item[key] for key in ('name', 'runtimeStatus', 'authStatus', 'toolsError') if key in item}
+                **evidence,
+                'servers': [{key: redact(item[key]) for key in ('name', 'runtimeStatus', 'authStatus', 'toolsError') if key in item}
                             | {'tools': sorted(item.get('tools', {}))}
                             for item in inventory.get('data', []) if item.get('name') == server],
                 'note': 'Compare actual source stamps. Reload ACK alone is not refresh completion or cutover.'}

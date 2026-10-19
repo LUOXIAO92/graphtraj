@@ -2,7 +2,9 @@
 
 Use MCP `agents` / `tasks`, following the delivery guide. Describe the selected
 feature with `schema: true`, then execute with structured arguments. The
-installed schema determines fields and which entry owns the operation. Read
+installed schema determines supported fields. Agent communication and execution
+belong to `agents`; Task policy, participation and delivery belong to `tasks`.
+An installed duplicate control route is a defect, not an ownership rule. Read
 current Task state before updates. CLI examples below apply only when that
 MCP entry is unavailable or failing; use block-style YAML for fallback files.
 
@@ -10,10 +12,13 @@ MCP entry is unavailable or failing; use block-style YAML for fallback files.
 | --- | --- |
 | Register / inspect / revise Tasks | `task_register` / `task_graph` / `task_revise` |
 | Record readiness / complete a non-file Task | `task_update` / `task_complete` |
-| Dispatch / steer / observe members | `swarm` / `send_instruction` / `alias_status` |
+| Dispatch Task participation | `tasks`: `swarm` |
+| Communicate / observe Agent hierarchy | `agents`: `send` / `status` |
+| Wait / interrupt / resume / retire Agents | Discover the needed `agents` feature |
+| Handle native Agent permission requests | `agents`: `requests` / `reply` |
 | Deliver / read reports | `submit_report` / `session_reports` |
 | Submit / decide a result | `submit_result` / `decide_result` |
-| Recover / continue | `approved_recovery` / `continue` |
+| Repair Task authorization / accounting | Discover the needed `tasks` recovery feature; Agent execution remains in `agents` |
 | Integrate / clean up | `task_integrate` / `cleanup` |
 
 Discover migration and host-maintenance capabilities when needed. An absent MCP

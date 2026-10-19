@@ -7,7 +7,9 @@ is not failed work; normal tool, watchdog and approval waits are not failures.
 
 Keep one existing execution. Send changed instructions through its live channel;
 after an actual failure ends execution, use the supported public continuation
-operation with the causal event. MCP `alias_status` supplies summaries;
+operation with the causal event. MCP `agents` supplies Agent status and control;
+`tasks` supplies Task participation and delivery state. An installed legacy
+Task control route is a defect, not a second supported Agent interface.
 `session_reports` exposes only directly owned reports. Follow the delivery
 guide's MCP-first rule; CLI examples below are fallback syntax only. Apply the
 project's shared polling limit. A send acknowledgement is not completion. Never wake a second Driver to
@@ -148,8 +150,9 @@ candidate and unchanged validation through the public integration entry as
 specified in [command inputs](command-inputs.md).
 
 Where execution permission still admits the Session,
-MCP `send_instruction` with `reports_only: true` can collect retained reports using an
-explicit instruction and causal event. It grants no implementation window and
+Read retained reports through the public report operation without waking the
+Agent. If a new message is necessary, use `agents` within existing authority.
+Report collection grants no implementation window and
 does not bypass a manual subtree stop. Use the selected Runtime's actual notification channel and report a delivery failure through the caller.
 
 ## Return an accepted artifact to integration after recovery

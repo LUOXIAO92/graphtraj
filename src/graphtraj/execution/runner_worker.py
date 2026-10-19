@@ -236,6 +236,13 @@ def run(job_file: Path) -> int:
                 write_heartbeat(session_directory, heartbeat)
                 startup_lock.close()
 
+            if runtime in {'pi', 'dsh'}:
+                from graphtraj.configuration.project_configuration import core_directory
+                from graphtraj.execution.task_agents import native_directory
+
+                root = Path(request['harness_root'])
+                if core_directory(root) != root / '.graphtraj':
+                    request = {**request, 'native_directory': str(native_directory(root, base_mapping['alias'], runtime))}
             turn_handle = adapter.managed_execution(
                 request, prompt, session_directory, record_session,
                 job.get("context_evidence", {}),

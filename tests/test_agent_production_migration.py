@@ -142,6 +142,89 @@ def test_cutover_refuses_unconfirmed_writer_before_snapshot(tmp_path: Path, monk
     assert (root / '.graphtraj/config.yml').is_file()
 
 
+@pytest.mark.parametrize('runtime', ['pi', 'dsh'])
+def test_cutover_moves_owned_native_files_and_preserves_external_references(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, runtime: str,
+) -> None:
+    """Native continuation bytes leave core; uncaptured user settings remain links."""
+    from graphtraj.execution.task_agents import native_directory
+
+    root = tmp_path / 'project'
+    _, directory = project(root)
+    mapping = yaml.safe_load((directory / 'mapping.yml').read_text())
+    mapping['runtime'] = runtime
+    (directory / 'mapping.yml').write_text(yaml.safe_dump(mapping))
+    launch = yaml.safe_load((directory / 'launch.yml').read_text())
+    launch.update(runtime=runtime, mapping=mapping)
+    (directory / 'launch.yml').write_text(yaml.safe_dump(launch))
+    external = tmp_path / 'native-user-settings.json'
+    external.write_text('{"keep":"original-user-setting"}')
+    if runtime == 'pi':
+        native = Path(mapping['trace_file']).with_suffix('.pi')
+        native.mkdir()
+        content = b'{"type":"session","id":"native-old","version":3}\n'
+        (native / 'session.jsonl').write_bytes(content)
+        (native / 'settings.json').symlink_to(external)
+        relative = Path('session.jsonl')
+    else:
+        native = directory / 'dsh-native'
+        native.mkdir()
+        content = b'{"version":4,"id":"native-old","createdAt":1,"isSeeded":false}\n'
+        (native / 'native-old.jsonl').write_bytes(content)
+        (directory / 'dsh-home').mkdir()
+        (directory / 'dsh-home/settings.json').symlink_to(external)
+        relative = Path('dsh-native/native-old.jsonl')
+    monkeypatch.chdir(root)
+    result = CliRunner().invoke(main, ['migrate-agents', '--cutover', str(tmp_path / 'input'), '--writes-stopped'])
+    assert result.exit_code == 0, result.output
+    destination = native_directory(root, mapping['alias'], runtime)
+    assert (destination / relative).read_bytes() == content
+    link = destination / ('settings.json' if runtime == 'pi' else 'dsh-home/settings.json')
+    assert link.is_symlink() and link.resolve() == external
+    assert external.read_text() == '{"keep":"original-user-setting"}'
+    record = json.loads((root / '.graphtraj/swarm/control/agents/old@member.json').read_text())
+    assert record['settings']['adapter_request']['native_directory'] == str(destination)
+    assert yaml.safe_load(result.output)['missing_links']  # Reference retained, bytes not captured.
+
+
+def test_stopped_settings_update_keeps_identity_and_checks_host(tmp_path: Path) -> None:
+    """Migration consumes the independent tool's public API, including its ownership checks."""
+    from agent_swarm import AgentControl, Caller, AgentsError, Binding
+
+    control = AgentControl(tmp_path, {})
+    owner = Caller('original-host', 'parent')
+    record = {'agent': 'retained', 'name': 'retained', 'runtime': 'codex', 'host': owner.host,
+              'parent': owner.agent, 'creator': {'host': owner.host, 'agent': owner.agent, 'session': None},
+              'session': 'original-native', 'sessions': ['original-native'], 'settings': {'cwd': '/before'},
+              'created_at': None, 'retired_at': None, 'executions': []}
+    control.import_agent(record)
+    with pytest.raises(AgentsError, match='owning host'):
+        control.configure_stopped('retained', {'cwd': '/wrong'}, Caller('foreign-host', 'parent'))
+    control.configure_stopped('retained', {'cwd': '/after'}, owner)
+    status = control.operate('status', {'agent': 'retained'}, Binding(owner)).result
+    assert status['session'] == 'original-native' and status['state'] == 'standby'
+
+
+def test_imported_task_control_uses_the_retained_parent_binding(tmp_path: Path) -> None:
+    """The Worker consumer can observe an imported child of a legacy parent."""
+    from agent_swarm import AgentControl
+    from graphtraj.execution.task_agents import core_status
+    from test_result_submission import result_project
+
+    runner, _, _ = result_project(tmp_path)
+    path = runner / 'sessions/research@x1/mapping.yml'
+    mapping = yaml.safe_load(path.read_text())
+    mapping.update(parent='research@x2', agent='research@x1')
+    path.write_text(yaml.safe_dump(mapping))
+    control = AgentControl(tmp_path / '.graphtraj/swarm', {})
+    control.import_agent({'agent': mapping['agent'], 'name': mapping['alias'], 'runtime': 'codex',
+        'host': 'graphtraj-tasks', 'parent': mapping['parent'],
+        'creator': {'host': 'graphtraj-tasks', 'agent': mapping['parent'], 'session': None},
+        'session': mapping['session'], 'sessions': [mapping['session']], 'settings': {},
+        'created_at': None, 'retired_at': None, 'executions': []})
+    assert core_status(runner, mapping) == {'agent': mapping['agent'], 'state': 'standby'}
+
+
 def test_git_move_refusal_restores_original_directories(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Git's own locked-worktree refusal leaves original identity and paths usable."""
     root = tmp_path / 'project'

@@ -152,8 +152,8 @@ class PiManagedExecution:
         credential_environment(request.get('api_key_env'))
         worktree = Path(request['worktree_path']).resolve()
         root = Path(request['harness_root']).resolve()
-        # This directory belongs to retained Trace evidence, not disposable Worker state.
-        native = self.trace.with_suffix('.pi')
+        # Migrated hosts retain native files separately from Task Trace views.
+        native = Path(request['native_directory']) if request.get('native_directory') else self.trace.with_suffix('.pi')
         native.mkdir(parents=True, exist_ok=True)
         source = Path(request['agent_dir'])
         agent = native / 'agent'

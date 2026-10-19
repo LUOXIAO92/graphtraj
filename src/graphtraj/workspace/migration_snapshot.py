@@ -299,6 +299,7 @@ def snapshot_project(cwd: Path, destination: Path) -> dict:
             (data / 'swarm').mkdir(exist_ok=True)
             shutil.copy2(swarm / 'config.yml', data / 'swarm/config.yml')
         roots[str(swarm)] = data / 'swarm'
+        manifest['links']['swarm'] = swarm_links
         manifest['missing_links'] += install_links(data / 'swarm', swarm_links, roots, local)
         manifest['swarm_captured'] = swarm.is_dir()
         inputs = data / 'migration-input'

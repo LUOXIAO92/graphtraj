@@ -576,6 +576,24 @@ class AgentControl:
             os.replace(temporary, path)
         return self._document(record)
 
+    def configure_stopped(self, agent: str, settings: Mapping[str, Any], caller: Caller) -> dict:
+        """Replace host-owned continuation settings while retaining identity and memory.
+
+        Migration may relocate a stopped Agent's resources, including retained
+        retired history. The verified owning host and original parent must
+        match; a live or unconfirmed execution cannot be reconfigured.
+        """
+        if not isinstance(settings, Mapping):
+            raise AgentsError('invalid-input', 'Continuation settings must be a mapping.')
+        with self._locked(agent) as record:
+            if record['host'] != caller.host or record['parent'] != caller.agent:
+                raise AgentsError('not-found', 'Only the owning host and parent can configure this Agent.')
+            if any(item.get('state') != 'ended' or item.get('terminal_confirmed') is False
+                   for item in record['executions']):
+                raise AgentsError('turn-running', 'Only confirmed stopped Agents may be configured.')
+            record['settings'] = deepcopy(dict(settings))
+            return self._document(record)
+
     def _load(self, agent: str) -> dict | None:
         """Read one record without the lock, or ``None`` when absent."""
         try:

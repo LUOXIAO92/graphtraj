@@ -12,12 +12,13 @@ from uuid import uuid4
 
 import yaml
 
+from agent_swarm import AgentControl, Caller
 from graphtraj.configuration.project_configuration import load_project_configuration, runner_directory
 from graphtraj.execution.runner_heartbeat import ownership_is_held
 from graphtraj.execution.runner_io import write_yaml_durably
 from graphtraj.workspace.agent_cutover import _references, _rewrite_records, partition_snapshot
 from graphtraj.workspace.agent_migration import migrate_agents
-from graphtraj.workspace.migration_snapshot import MANIFEST, install_links, snapshot_project
+from graphtraj.workspace.migration_snapshot import MANIFEST, snapshot_project
 
 
 def _stopped(root: Path) -> None:
@@ -110,6 +111,62 @@ def _move_worktrees(source: Path, moves: dict[str, str]) -> list[tuple[str, str]
     return completed
 
 
+def _native_resources(staging: Path, root: Path, manifest: dict) -> tuple[dict[str, str], list[dict]]:
+    """Move only project-owned Pi/DSH native resources out of Task evidence.
+
+    Global Runtime homes remain references. Their files are never opened here.
+    Missing historical native resources stay explicit rather than reconstructed.
+    """
+    from graphtraj.execution.task_agents import native_directory
+
+    core = staging / '.graphtraj/core'
+    records = list((core / 'runner').glob('sessions/*/mapping.yml'))
+    records += list((core / 'state').glob('tasks/*/teams/*/traces/*/runner/session.yml'))
+    moves, missing = {}, []
+    for path in records:
+        value = yaml.safe_load(path.read_text())
+        mapping = value.get('retirement', {}).get('mapping', value)
+        runtime, alias = mapping.get('runtime'), mapping.get('alias')
+        if runtime not in {'pi', 'dsh'} or not alias:
+            continue
+        trace = Path(mapping['trace_file'])
+        destination = native_directory(staging, alias, runtime)
+        final = native_directory(root, alias, runtime)
+        resources = ([(trace.with_suffix('.pi'), destination, final)] if runtime == 'pi' else [
+            (path.parent / 'dsh-home', destination / 'dsh-home', final / 'dsh-home'),
+            (trace.parent / 'dsh-native', destination / 'dsh-native', final / 'dsh-native')])
+        for source, target, installed in resources:
+            # Native material outside the captured project is not discovered.
+            owner = next((name for name in ('state', 'runner') if source.is_relative_to(core / name)), None)
+            if owner is None:
+                missing.append({'agent': alias, 'path': str(source), 'missing': 'Native resource is outside retained project material.'})
+                continue
+            original = Path(manifest[owner + '_source']) / source.relative_to(core / owner)
+            moves[str(source)] = str(installed)
+            moves[str(original)] = str(installed)
+            if not source.exists():
+                missing.append({'agent': alias, 'path': str(original), 'missing': 'Retained native resource is unavailable.'})
+                continue
+            target.parent.mkdir(parents=True, exist_ok=True)
+            if target.exists():
+                raise ValueError('Native migration destination already contains material; preserve it for comparison.')
+            source.rename(target)
+    return moves, missing
+
+
+def _restore_native_references(root: Path, manifest: dict, moves: dict[str, str]) -> None:
+    """Retain original reference targets without following or copying external data."""
+    origins = {'state': Path(manifest['state_source']), 'runner': Path(manifest['runner_source']),
+               'swarm': root / '.graphtraj/swarm'}
+    for name, original in origins.items():
+        for entry in manifest.get('links', {}).get(name, []):
+            link = Path(_references(str(original / entry['path']), moves, 'path'))
+            target = Path(_references(entry['resolved'], moves, 'path'))
+            link.parent.mkdir(parents=True, exist_ok=True)
+            link.unlink(missing_ok=True)
+            link.symlink_to(os.path.relpath(target, link.parent))
+
+
 def cutover_project(
     root: Path, snapshot: Path, *, writes_stopped: bool, main_session: str | None = None,
 ) -> dict:
@@ -158,11 +215,12 @@ def cutover_project(
         raise ValueError('Some stopped identities lack continuation settings; retained staging was not installed.')
     staged_core = staging / '.graphtraj/core'
     staged_swarm = staging / '.graphtraj/swarm'
+    native_moves, native_missing = _native_resources(staging, root, manifest)
     moves = {str(staging / '.graphtraj/core'): str(data / 'core'),
              str(staging / '.graphtraj/swarm'): str(data / 'swarm'),
              str(configuration.state): str(data / 'core/state'), str(runner): str(data / 'core/runner'),
              str(configuration.agent_worktrees): str(data / 'core/worktrees'),
-             **worktrees}
+             **worktrees, **native_moves}
     _rewrite_records(staged_core / 'state', moves)
     _rewrite_records(staged_core / 'runner', moves)
     for directory in (staged_core / 'runner', staged_core / 'state'):
@@ -170,10 +228,17 @@ def cutover_project(
             if not path.is_symlink():
                 write_yaml_durably(path, _launch_arguments(yaml.safe_load(path.read_text()), moves))
     # Runtime cwd and launch paths are owned settings, not native transcript edits.
+    control = AgentControl(staged_swarm, {})
     for path in (staged_swarm / 'control/agents').glob('*.json'):
         record = json.loads(path.read_text())
-        record['settings'] = _launch_arguments(_references(record['settings'], moves), moves)
-        path.write_text(json.dumps(record, ensure_ascii=False, indent=2, sort_keys=True))
+        settings = _launch_arguments(_references(record['settings'], moves), moves)
+        if (record['runtime'] in {'pi', 'dsh'} and record['host'] == 'graphtraj-tasks'
+                and isinstance(settings.get('adapter_request'), dict)):
+            from graphtraj.execution.task_agents import native_directory
+
+            settings['adapter_request']['native_directory'] = str(native_directory(
+                root, settings.get('alias', record['name']), record['runtime']))
+        control.configure_stopped(record['agent'], settings, Caller(record['host'], record['parent']))
     original_config = yaml.safe_load((data / 'config.yml').read_text())
     original_config['paths']['state'] = '.graphtraj/core/state'
     original_config['paths']['agent_worktrees'] = '.graphtraj/core/worktrees'
@@ -212,12 +277,7 @@ def cutover_project(
         shutil.copytree(staged_core, data / 'core', symlinks=True)
         installed.append(data / 'swarm')
         shutil.copytree(staged_swarm, data / 'swarm', symlinks=True)
-        roots = {str(configuration.state): data / 'core/state', str(runner): data / 'core/runner',
-                 str(data): data}
-        captured = {path: Path(_references(path, moves, 'path')) for item in manifest['files']
-                    if item.get('stored') for path in item['paths']}
-        for name in ('state', 'runner'):
-            install_links(data / 'core' / name, manifest.get('links', {}).get(name, []), roots, captured)
+        _restore_native_references(root, manifest, moves)
         _move_worktrees(configuration.project_root, worktrees)
         for path, target in link_targets.items():
             link = Path(path)
@@ -251,6 +311,7 @@ def cutover_project(
     return {'cutover': 'installed', 'backup': str(backup), 'snapshot': str(snapshot),
             'worktrees': worktrees, 'identities': partitioned['agents'],
             'native_missing': [item for item in imported['native_results'] if item.get('missing')],
+            'native_resource_missing': native_missing,
             'missing_links': imported['missing_links'],
             'legacy_native_registrations': imported['legacy_native_registrations'],
             'legacy_codex_policy': 'Retained declarations remain visible; old calls fail and direct callers to MCP. Native history is unchanged and old business callbacks are not restored.',

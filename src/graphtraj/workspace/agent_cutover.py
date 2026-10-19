@@ -28,7 +28,7 @@ PATH_FIELDS = frozenset({
     'read_paths', 'write_paths', 'deny_read', 'deny_write', 'read', 'write',
     'cwd', 'codex_home', 'claude_home', 'pi_home', 'dsh_home', 'rollout_path',
     'session_file', 'session_path', 'transcript_path',
-    'runtime_home', 'agent_dir', 'evidence', 'resources', 'executable',
+    'runtime_home', 'agent_dir', 'evidence', 'resources', 'executable', 'native_directory',
     'CODEX_HOME', 'CLAUDE_CONFIG_DIR', 'PI_CODING_AGENT_DIR', 'DSH_HOME',
 })
 

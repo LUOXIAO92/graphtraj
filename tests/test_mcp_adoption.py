@@ -4,14 +4,16 @@ import json
 import os
 from pathlib import Path
 import shutil
-import sys
 import tempfile
 
 import pytest
+from conftest import InstalledCommands
 
 
 @pytest.mark.parametrize('observe_only', [False, True])
-def test_installed_proxy_uses_websocket_for_public_refresh(tmp_path: Path, observe_only: bool) -> None:
+def test_installed_proxy_uses_websocket_for_public_refresh(
+    tmp_path: Path, observe_only: bool, installed_commands: InstalledCommands,
+) -> None:
     """The real proxy carries Upgrade and framed RPCs, without a real host or model."""
     from websockets.asyncio.server import unix_serve
 
@@ -57,10 +59,10 @@ def test_installed_proxy_uses_websocket_for_public_refresh(tmp_path: Path, obser
         """Keep the short Unix socket private; no production socket is discovered."""
         with tempfile.TemporaryDirectory(prefix='g337-proxy-', dir='/private/tmp') as temporary:
             socket = Path(temporary) / 'control.sock'
-            environment = {**os.environ, 'CODEX_HOME': str(Path(temporary) / 'empty-home'),
-                           'PYTHONPATH': str(Path(__file__).resolve().parents[1] / 'src')}
+            environment = {**os.environ, 'CODEX_HOME': str(Path(temporary) / 'empty-home')}
+            environment.pop('PYTHONPATH', None)
             async with unix_serve(handle, str(socket)):
-                command = [sys.executable, '-c', 'from graphtraj.interfaces.cli.graphtraj import main; main()', 'refresh-mcp',
+                command = [str(installed_commands.product), 'refresh-mcp',
                            '--socket', str(socket), '--main-session', 'current-main']
                 if observe_only:
                     command.append('--observe-only')

@@ -54,7 +54,7 @@ A retained retired alias can request a positive Task budget increment with
 `--no-resume` and without `--restore-active`. The same reviewer and caller
 authority checks apply. Approval changes only the retained budget; it neither
 restarts Sessions nor reverses retirement. Main can then separately use
-`continue --task-id <id> --budget-only --caused-by-event-id <recovery_event_id>`
+`continue --task-id <id> --budget-only --caused-by-event-ids '["<recovery_event_id>"]'`
 and ordinary swarm dispatch with explicit first instructions for a new member.
 Original accounting, stops and identities remain retained.
 
@@ -123,7 +123,7 @@ For a sampled stop that needs no additional administrative or time repair, the
 existing narrow continuation after actual authorization remains:
 
 ```text
-agent-runner continue --task-id <id> --caused-by-event-id <authorization-or-decision-event>
+agent-runner continue --task-id <id> --caused-by-event-ids '["<authorization-or-decision-event>"]'
 ```
 
 The default resumes existing roots with a generic continuation message. A revised

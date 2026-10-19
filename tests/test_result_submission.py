@@ -345,3 +345,24 @@ def test_new_role_aliases_get_distinct_named_reports(tmp_path: Path) -> None:
     assert reports[0].name == 'researcher.md'
     assert reports[1].name == 'researcher-researcher_2.md'
     assert [path.read_text() for path in reports] == ['researcher', 'researcher_2']
+
+
+def test_untracked_evidence_is_retained_before_worktree_cleanup(tmp_path: Path) -> None:
+    """A named untracked attachment survives removal of its Worktree copy."""
+    runner, _, commit = result_project(tmp_path)
+    attachment = tmp_path / 'worktrees/research/evidence/截图-1.txt'
+    attachment.parent.mkdir()
+    attachment.write_bytes('桌面证据 \\u4e2d\n'.encode())
+    with runtime_caller(runner, 'research@x1'):
+        submission = tools.submit_result({
+            'commit': commit, 'result_refs': ['result.md'],
+            'evidence_refs': ['evidence/截图-1.txt'], 'completion': 'Done', 'unresolved': [],
+        }, cwd=tmp_path).document
+        with pytest.raises(ValueError, match='existing Worktree files'):
+            tools.submit_result({
+                'commit': commit, 'result_refs': ['result.md'],
+                'evidence_refs': ['evidence/absent.txt'], 'completion': 'Done', 'unresolved': [],
+            }, cwd=tmp_path)
+    attachment.unlink()
+    retained = tmp_path / submission['evidence_refs'][0]
+    assert retained.read_bytes() == '桌面证据 \\u4e2d\n'.encode()

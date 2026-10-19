@@ -1266,6 +1266,10 @@ register_tool(*_agents_row(), run_agents)
 
 # CLI names and decoding are presentation metadata, not another parameter schema.
 # Unlisted parameters use their Python name and Click's existing scalar/repeated form.
+# The JSON list is the CLI form; the hidden repeated singular flag stays
+# accepted for existing callers but is not documented.
+_CAUSED_BY = {"caused_by_event_ids": ("caused_by_event_ids", "json"),
+              "legacy_caused_by_event_ids": ("caused_by_event_ids", "value")}
 _CLI = {
     "task_graph": (("graphtraj", "task", "graph"), {}),
     "task_members": (("graphtraj", "task", "members"), {}),
@@ -1286,10 +1290,10 @@ _CLI = {
     "alias_status": (("agent-runner", "status"), {}),
     "parent_status": (("agent-runner", "parent-status"), {}),
     "swarm": (("agent-runner", "--swarm-input"), {"swarm_input": ("", "yaml")}),
-    "send_instruction": (("agent-runner", "send"), {"caused_by_event_id": ("caused_by_event_ids", "value")}),
+    "send_instruction": (("agent-runner", "send"), _CAUSED_BY),
     "interrupt": (("agent-runner", "interrupt"), {}),
-    "approved_recovery": (("agent-runner", "recover"), {"caused_by_event_id": ("caused_by_event_ids", "value")}),
-    "continue": (("agent-runner", "continue"), {"caused_by_event_id": ("caused_by_event_ids", "value")}),
+    "approved_recovery": (("agent-runner", "recover"), _CAUSED_BY),
+    "continue": (("agent-runner", "continue"), _CAUSED_BY),
     "pending_requests": (("agent-runner", "requests"), {}),
     "reply_to_request": (("agent-runner", "reply"), {
         "request_file": ("request", "yaml"), "response": ("response", "json"),
@@ -1299,7 +1303,7 @@ _CLI = {
     "submit_result": (("agent-runner", "submit-result"), {}),
     "decide_result": (("agent-runner", "decide-result"), {}),
     "retire": (("agent-runner", "retire"), {}),
-    "replace": (("agent-runner", "replace"), {"caused_by_event_id": ("caused_by_event_ids", "value")}),
+    "replace": (("agent-runner", "replace"), _CAUSED_BY),
     "runtime_connections": (("graphtraj", "connections"), {"catalog_file": ("catalog", "yaml")}),
     "role_organization": (("graphtraj", "roles", "organize"), {"change_file": ("change", "yaml")}),
     "cleanup": (("agent-runner", "cleanup"), {}),

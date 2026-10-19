@@ -472,8 +472,14 @@ def read_session_reports(alias: str, cwd: Path) -> dict:
     mapping, directory = read_alias_mapping(runner, alias)
     require_direct_authority(runner, alias, mapping)
     paths = _session_report_paths(alias, cwd)
+    # A follow-up report beside a closed Round's retained one is <stem>-<n>.md.
+    listed = []
+    for path in paths:
+        follow_ups = [item for item in path.parent.glob(f'{path.stem}-*.md')
+                      if item.stem[len(path.stem) + 1:].isdigit()]
+        listed += [path, *sorted(follow_ups, key=lambda item: int(item.stem[len(path.stem) + 1:]))]
     reports = [{'path': str(path), 'text': path.read_text(encoding='utf-8')}
-               for path in paths if path.is_file()]
+               for path in listed if path.is_file()]
     result = {'alias': alias, 'reports': reports}
     notices = directory / 'parent-notices.jsonl'
     if notices.is_file():

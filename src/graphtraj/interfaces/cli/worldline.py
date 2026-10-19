@@ -36,7 +36,7 @@ def append_command(
         ProjectConfigurationError,
     ) as error:
         raise click.ClickException(str(error)) from error
-    click.echo(yaml.safe_dump(recorded, sort_keys=False), nl=False)
+    click.echo(yaml.safe_dump(recorded, sort_keys=False, allow_unicode=True), nl=False)
 
 
 @worldline.command("read", cls=OperationCommand, feature="worldline_read")
@@ -71,4 +71,4 @@ def render_command() -> None:
         ProjectConfigurationError,
     ) as error:
         raise click.ClickException(str(error)) from error
-    click.echo(yaml.safe_dump({"trajectory": events}, sort_keys=False), nl=False)
+    click.echo(yaml.safe_dump({"trajectory": events}, sort_keys=False, allow_unicode=True), nl=False)

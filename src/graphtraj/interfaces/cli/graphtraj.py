@@ -46,7 +46,7 @@ def organize_command(change_file: Path | None) -> None:
         result = invoke_tool("role_organization", arguments).document
     except (OSError, UnicodeError, ValueError, yaml.YAMLError, RunnerError) as error:
         raise click.ClickException(str(error)) from error
-    click.echo(yaml.safe_dump(result, sort_keys=False), nl=False)
+    click.echo(yaml.safe_dump(result, sort_keys=False, allow_unicode=True), nl=False)
 
 
 main.add_command(setup)
@@ -82,7 +82,7 @@ def migrate_tickets_command(preview: bool, restore: Path | None, snapshot: Path 
                       else migrate_project(Path.cwd(), preview=preview))
     except (OSError, ValueError, yaml.YAMLError) as error:
         raise click.ClickException(str(error)) from error
-    click.echo(yaml.safe_dump(result, sort_keys=False), nl=False)
+    click.echo(yaml.safe_dump(result, sort_keys=False, allow_unicode=True), nl=False)
 
 
 @main.command("connections", cls=OperationCommand, feature="runtime_connections")
@@ -108,7 +108,7 @@ def connections_command(
         result = invoke_tool("runtime_connections", arguments).document
     except (OSError, ValueError, yaml.YAMLError, RunnerError) as error:
         raise click.ClickException(str(error)) from error
-    click.echo(yaml.safe_dump(result, sort_keys=False), nl=False)
+    click.echo(yaml.safe_dump(result, sort_keys=False, allow_unicode=True), nl=False)
 
 
 @main.command("migration-prefix")
@@ -139,7 +139,7 @@ def migration_prefix_command(
             result = inspect_prefix(Path.cwd(), session, expect_prefix, capture=capture, diagnose=diagnose)
     except (OSError, ValueError, yaml.YAMLError, RunnerError) as error:
         raise click.ClickException(str(error)) from error
-    click.echo(yaml.safe_dump(result, sort_keys=False), nl=False)
+    click.echo(yaml.safe_dump(result, sort_keys=False, allow_unicode=True), nl=False)
     if chain and not result['complete']:
         raise click.exceptions.Exit(1)
 
@@ -156,7 +156,7 @@ def migration_mappings_command(source: Path, evidence_ref: str, preview: bool) -
         result = adopt_mappings(Path.cwd(), source, evidence_ref, preview=preview)
     except (OSError, ValueError, yaml.YAMLError) as error:
         raise click.ClickException(str(error)) from error
-    click.echo(yaml.safe_dump(result, sort_keys=False), nl=False)
+    click.echo(yaml.safe_dump(result, sort_keys=False, allow_unicode=True), nl=False)
 
 
 @main.command("migration-prefix-adopt")
@@ -170,7 +170,7 @@ def migration_prefix_adopt_command(session: str, manifest: Path) -> None:
         result = adopt_prefix_chain(Path.cwd(), session, manifest)
     except (OSError, ValueError, yaml.YAMLError) as error:
         raise click.ClickException(str(error)) from error
-    click.echo(yaml.safe_dump(result, sort_keys=False), nl=False)
+    click.echo(yaml.safe_dump(result, sort_keys=False, allow_unicode=True), nl=False)
 
 
 @main.command("migration-prefix-next")
@@ -184,7 +184,7 @@ def migration_prefix_next_command(session: str, manifest: Path) -> None:
         result = diagnose_next_prefix(Path.cwd(), session, manifest)
     except (OSError, ValueError, yaml.YAMLError, RunnerError) as error:
         raise click.ClickException(str(error)) from error
-    click.echo(yaml.safe_dump(result, sort_keys=False), nl=False)
+    click.echo(yaml.safe_dump(result, sort_keys=False, allow_unicode=True), nl=False)
 
 
 @main.command("migration-prefix-continue")
@@ -202,6 +202,6 @@ def migration_prefix_continue_command(session: str, manifest: Path, capture: Pat
         result = capture_prefix_chain(Path.cwd(), session, expected, capture, retained=manifest)
     except (OSError, ValueError, KeyError, TypeError, yaml.YAMLError, RunnerError) as error:
         raise click.ClickException(str(error)) from error
-    click.echo(yaml.safe_dump(result, sort_keys=False), nl=False)
+    click.echo(yaml.safe_dump(result, sort_keys=False, allow_unicode=True), nl=False)
     if not result['complete']:
         raise click.exceptions.Exit(1)

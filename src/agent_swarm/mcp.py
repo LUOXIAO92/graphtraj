@@ -87,7 +87,7 @@ def call(request_id: Any, params: Mapping) -> dict:
     except AgentsError as error:
         document = {'error': {'code': error.code, 'message': error.message}}
         failed = True
-    return result_response(request_id, {'content': [{'type': 'text', 'text': json.dumps(document)}],
+    return result_response(request_id, {'content': [{'type': 'text', 'text': json.dumps(document, ensure_ascii=False)}],
                                          'structuredContent': document, 'isError': failed})
 
 

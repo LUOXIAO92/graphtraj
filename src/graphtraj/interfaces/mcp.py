@@ -169,7 +169,7 @@ def _tool_call_response(
         {
             # The text is the CLI's YAML rendering of the same document.
             "content":           [
-                {"type": "text", "text": yaml.safe_dump(document, sort_keys=False)}
+                {"type": "text", "text": yaml.safe_dump(document, sort_keys=False, allow_unicode=True)}
             ],
             "structuredContent": document,
             "isError":           result.failed,

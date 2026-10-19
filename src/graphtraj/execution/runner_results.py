@@ -149,9 +149,16 @@ def submit_session_result(
             content = resolved.read_bytes()
         else:
             relative = resolved.relative_to(worktree.resolve()).as_posix()
-            committed_file(relative)
-            # Git supplies the submitted bytes, independent of later Worktree writes.
-            content = subprocess.check_output(['git', 'show', f'{commit}:{relative}'], cwd=worktree)
+            if run_git(worktree, 'ls-tree', '--name-only', commit, '--', relative):
+                committed_file(relative)
+                # Git supplies the submitted bytes, independent of later Worktree writes.
+                content = subprocess.check_output(['git', 'show', f'{commit}:{relative}'], cwd=worktree)
+            elif resolved.is_file() and Path(relative).parts[0] != '.git':
+                # An untracked attachment is retained now by its current bytes,
+                # so a later Worktree cleanup cannot lose named evidence.
+                content = resolved.read_bytes()
+            else:
+                raise ValueError('Evidence references must name existing Worktree files.')
         snapshots.append((path.name, content))
     start_result_correction(mapping, cwd)
     directory, _ = _load_states(configuration.state / 'tasks')[mapping['task_id']]

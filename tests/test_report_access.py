@@ -287,3 +287,16 @@ def test_installed_send_recovers_historical_reports(
     reports = run_process([str(installed_commands.runner), 'reports', task['alias']], cwd=root, env=env)
     assert reports.returncode == 0, reports.stdout + reports.stderr
     assert yaml.safe_load(reports.stdout)['reports'] == [{'path': str(own), 'text': 'Retained evidence'}]
+
+
+def test_parent_reads_follow_up_reports_beside_the_assignment(tmp_path: Path) -> None:
+    """A newly added <stem>-<n>.md report is read in order; other siblings are not."""
+    runner, team, _ = result_project(tmp_path)
+    rounds = team.parent / 'rounds/1'
+    rounds.mkdir(parents=True, exist_ok=True)
+    for name, text in [('researcher-x1.md', 'first'), ('researcher-x1-10.md', 'tenth'),
+                       ('researcher-x1-2.md', '第二份'), ('researcher-x1-private.md', 'other')]:
+        (rounds / name).write_text(text)
+    with runtime_caller(runner, None):
+        reports = runner_control.read_session_reports('research@x1', tmp_path)['reports']
+    assert [report['text'] for report in reports] == ['first', '第二份', 'tenth']

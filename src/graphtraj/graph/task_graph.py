@@ -206,7 +206,10 @@ def revise_tasks(
                     and revised_budget is not None
                     and revised_budget.revision_reason is None
                 ):
-                    raise ValueError("a revised execution budget requires its reason")
+                    raise ValueError(
+                        "a revised execution budget requires its reason: set "
+                        "execution_budget.revision_reason in the revised body front matter"
+                    )
                 meaningful = meaningful or (
                     (directory / old["current_definition"]).read_text(
                         encoding="utf-8"

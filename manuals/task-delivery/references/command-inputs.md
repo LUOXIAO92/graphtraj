@@ -93,6 +93,19 @@ Execute MCP `task_revise` with:
 - `reopen_task_ids`: explicitly include completed tasks and affected ancestors
   that must reopen when required work or relationships change.
 - Optional `dry_run: true` (or CLI `--dry-run`) validates without writing.
+- A changed `execution_budget` states its reason as
+  `execution_budget.revision_reason` in that task's `body` front matter;
+  without it the revision is rejected:
+
+  ```yaml
+  ---
+  execution_budget:
+    estimated_minutes:
+      total: 105
+    revision_reason: 45 minutes moved to Task 343 by the recorded decision.
+    # remaining existing budget fields unchanged
+  ---
+  ```
 
 Include definitions whose relationships change and evidence for parentage,
 retirement and scope changes. A stale definition fails instead of overwriting
@@ -166,10 +179,11 @@ Use MCP `approved_recovery` with the original Session alias, exact repair
 reason, permitted work and continuation instruction. CLI fallback:
 
 ```text
-agent-runner recover <alias> --reason <reason> --instruction <continuation> --allowed-scope <allowed-work> --forbidden-scope <excluded-work> --caused-by-event-id <actual-authority-event> [--additional-minutes <increment>] [--restore-active] [--no-resume]
+agent-runner recover <alias> --reason <reason> --instruction <continuation> --allowed-scope <allowed-work> --forbidden-scope <excluded-work> --caused-by-event-ids '["<actual-authority-event>"]' [--additional-minutes <increment>] [--restore-active] [--no-resume]
 ```
 
-Repeat `--caused-by-event-id` for additional actual causal references. The
+`--caused-by-event-ids` takes one JSON array of strings, such as
+`'["event-a", "event-b"]'`, for all actual causal references. The
 shared `approved_recovery` operation uses `alias`, `reason`, `instruction`,
 `allowed_scope`, `forbidden_scope`, `caused_by_event_ids`, optional
 `additional_minutes`, `restore_active` and `resume` with the same semantics.

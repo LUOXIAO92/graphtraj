@@ -102,7 +102,7 @@ def _emit_result(document: dict) -> None:
     """
     if _MAIN_RECOVERY is not None and isinstance(document, dict):
         document = _MAIN_RECOVERY.attach_stop_deliveries(document)
-    click.echo(yaml.safe_dump(document, sort_keys=False), nl=False)
+    click.echo(yaml.safe_dump(document, sort_keys=False, allow_unicode=True), nl=False)
 
 
 def _fail(error: RunnerError, **identity: str) -> NoReturn:
@@ -253,13 +253,44 @@ def reply(alias: str, request_file: Path, response: str) -> None:
     _emit_result(result)
 
 
+def _json_string_list(
+    context: click.Context, parameter: click.Parameter, value: str | None,
+) -> list[str] | None:
+    """Decode one JSON array of strings, such as '["a", "b"]'."""
+    if value is None:
+        return None
+    try:
+        decoded = json.loads(value)
+    except ValueError as error:
+        raise click.BadParameter(f"invalid JSON ({error}); expected '[\"a\", \"b\"]'") from error
+    if not isinstance(decoded, list) or not all(isinstance(item, str) for item in decoded):
+        raise click.BadParameter("must be a JSON array of strings, such as '[\"a\", \"b\"]'")
+    return decoded
+
+
+def _caused_by_event_ids(function):
+    """Accept the JSON list form; the repeated singular flag stays hidden."""
+    function = click.option(
+        "--caused-by-event-id", "legacy_caused_by_event_ids", multiple=True, hidden=True,
+    )(function)
+    return click.option(
+        "--caused-by-event-ids", callback=_json_string_list, metavar="JSON",
+        help='Causal Project Worldline event IDs as a JSON array of strings, '
+             'for example \'["event-a", "event-b"]\'.',
+    )(function)
+
+
+def _event_ids(listed: list[str] | None, legacy: tuple[str, ...]) -> list[str] | None:
+    """Join both CLI forms into the one shared list, or None when neither is given."""
+    if listed is None and not legacy:
+        return None
+    return list(legacy) + (listed or [])
+
+
 @main.command(cls=OperationCommand, feature="send_instruction")
 @click.argument("alias")
 @click.option("--instruction")
-@click.option(
-    "--caused-by-event-id",
-    multiple=True,
-)
+@_caused_by_event_ids
 @click.option(
     "--reports-only",
     is_flag=True
@@ -267,14 +298,16 @@ def reply(alias: str, request_file: Path, response: str) -> None:
 def send(
     alias: str,
     instruction: str,
-    caused_by_event_id: tuple[str, ...],
+    caused_by_event_ids: list[str] | None,
+    legacy_caused_by_event_ids: tuple[str, ...],
     reports_only: bool,
 ) -> None:
     """Resume one Session using causal Project Worldline event IDs."""
     try:
         response = invoke_tool("send_instruction",
             {"alias": alias, "instruction": instruction,
-             "caused_by_event_ids": list(caused_by_event_id), "reports_only": reports_only},
+             "caused_by_event_ids": _event_ids(caused_by_event_ids, legacy_caused_by_event_ids) or [],
+             "reports_only": reports_only},
             cwd=Path.cwd().resolve(),
         ).document
     except RunnerError as error:
@@ -310,8 +343,11 @@ def retire(alias: str) -> None:
     "--actor",
     type=click.Choice(["main", "user"])
 )
-@click.option("--caused-by-event-id", multiple=True)
-def replace(alias: str, actor: str | None, caused_by_event_id: tuple[str, ...]) -> None:
+@_caused_by_event_ids
+def replace(
+    alias: str, actor: str | None, caused_by_event_ids: list[str] | None,
+    legacy_caused_by_event_ids: tuple[str, ...],
+) -> None:
     """Replace one stopped actual member while preserving its Team and evidence.
 
     The recorded direct parent or native user approval authorizes replacement.
@@ -319,7 +355,8 @@ def replace(alias: str, actor: str | None, caused_by_event_id: tuple[str, ...]) 
     """
     try:
         response = invoke_tool("replace",
-            {"alias": alias, "actor": actor, "caused_by_event_ids": list(caused_by_event_id)},
+            {"alias": alias, "actor": actor,
+             "caused_by_event_ids": _event_ids(caused_by_event_ids, legacy_caused_by_event_ids) or []},
             cwd=Path.cwd().resolve(),
         ).document
     except (RunnerError, OSError, ValueError, yaml.YAMLError) as error:
@@ -337,7 +374,7 @@ def replace(alias: str, actor: str | None, caused_by_event_id: tuple[str, ...]) 
 @click.option("--instruction")
 @click.option("--allowed-scope")
 @click.option("--forbidden-scope")
-@click.option("--caused-by-event-id", multiple=True)
+@_caused_by_event_ids
 @click.option("--additional-minutes", type=float)
 @click.option("--restore-active", is_flag=True, default=None)
 @click.option("--resume/--no-resume", default=None)
@@ -348,7 +385,8 @@ def recover(
     instruction: str | None,
     allowed_scope: str | None,
     forbidden_scope: str | None,
-    caused_by_event_id: tuple[str, ...],
+    caused_by_event_ids: list[str] | None,
+    legacy_caused_by_event_ids: tuple[str, ...],
     additional_minutes: float | None,
     restore_active: bool | None,
     resume: bool | None,
@@ -361,8 +399,9 @@ def recover(
         'additional_minutes': additional_minutes, 'restore_active': restore_active, 'resume': resume,
         'retry_event_id': retry_event_id,
     }.items() if value is not None}
-    if caused_by_event_id:
-        arguments['caused_by_event_ids'] = list(caused_by_event_id)
+    events = _event_ids(caused_by_event_ids, legacy_caused_by_event_ids)
+    if events is not None:
+        arguments['caused_by_event_ids'] = events
     try:
         result = invoke_tool('approved_recovery', arguments, cwd=Path.cwd().resolve())
     except (RunnerError, OSError, ValueError, yaml.YAMLError) as error:
@@ -374,17 +413,19 @@ def recover(
 
 @main.command("continue", cls=OperationCommand, feature="continue")
 @click.option("--task-id")
-@click.option("--caused-by-event-id", multiple=True)
+@_caused_by_event_ids
 @click.option(
     "--budget-only", is_flag=True
 )
 def continue_task(
-    task_id: str, caused_by_event_id: tuple[str, ...], budget_only: bool,
+    task_id: str, caused_by_event_ids: list[str] | None,
+    legacy_caused_by_event_ids: tuple[str, ...], budget_only: bool,
 ) -> None:
     """Restore an authorized task budget and, by default, resume original roots."""
     try:
         response = invoke_tool("continue",
-            {"task_id": task_id, "caused_by_event_ids": list(caused_by_event_id),
+            {"task_id": task_id,
+             "caused_by_event_ids": _event_ids(caused_by_event_ids, legacy_caused_by_event_ids) or [],
              "budget_only": budget_only}, cwd=Path.cwd().resolve(),
         ).document
     except RunnerError as error:

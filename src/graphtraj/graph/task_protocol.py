@@ -50,6 +50,11 @@ def definition_schema(*, revision: bool = False) -> dict:
     properties = dict(TASK_PROPERTIES)
     if revision:
         properties["current_definition"] = {"type": ["string", "null"]}
+        properties["body"] = {
+            "type": "string",
+            "description": "Complete Task body. A changed execution budget states its reason "
+                           "in the body front matter as execution_budget.revision_reason.",
+        }
     return object_schema(properties)
 
 

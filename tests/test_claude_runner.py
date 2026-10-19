@@ -623,8 +623,6 @@ def test_real_claude_archive_public_query(
     assert terminal['last_outcome'] == 'completed', terminal
 
 
-@pytest.mark.xfail(strict=True, reason='Open Task 346 failure 4: the Worker takes the project-wide '
-                   'execution-start lock inside the UserPromptSubmit hook reply.')
 def test_startup_hook_reply_does_not_wait_for_another_startup(
     installed_commands: InstalledCommands,
     temporary_git_repository: Path,
@@ -644,3 +642,37 @@ def test_startup_hook_reply_does_not_wait_for_another_startup(
     assert settled(installed_commands, root, environment, alias)['last_outcome'] == 'completed'
     assert Path(str(root / '.graphtraj/runner/execution-start.lock') + '.held').exists()
     assert float(log.read_text().split()[0]) < 2
+
+
+def test_stop_published_during_startup_refuses_the_first_turn(
+    installed_commands: InstalledCommands,
+    temporary_git_repository: Path,
+    fake_codex: FakeCodex,
+    tmp_path: Path,
+) -> None:
+    """A public interrupt between process start and the startup hook still stops the turn."""
+    root, environment = setup(installed_commands, temporary_git_repository, fake_codex, tmp_path)
+    gate = tmp_path / 'hook-gate'
+    log = tmp_path / 'hook-replies.log'
+    environment.update(CLAUDE_FIXTURE_HOOK_GATE=str(gate), CLAUDE_FIXTURE_HOOK_LOG=str(log))
+    batch = root / 'probe.yml'
+    batch.write_text(yaml.safe_dump({'tasks': [{'task_id': '320', 'role': 'researcher'}]}))
+    launch = subprocess.Popen([str(installed_commands.runner), '--swarm-input', str(batch)], cwd=root,
+                              env=environment, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    deadline = time.monotonic() + 30
+    while not Path(str(gate) + '.waiting').exists():
+        assert time.monotonic() < deadline and launch.poll() is None
+        time.sleep(0.05)
+    alias = next(path.name for path in (root / '.graphtraj/runner/sessions').iterdir() if path.is_dir())
+    stopping = subprocess.Popen([str(installed_commands.runner), 'interrupt', alias], cwd=root,
+                                env=environment, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    # The interrupt publishes its stop before addressing the execution; the
+    # held hook is then released so this execution reaches Session binding.
+    time.sleep(1)
+    gate.touch()
+    stdout, stderr = stopping.communicate(timeout=60)
+    launched, launch_error = launch.communicate(timeout=60)
+    assert stopping.returncode == 0, stdout + stderr
+    assert launch.returncode != 0
+    assert 'subtree-stopped' in launched + launch_error
+    assert not log.exists()

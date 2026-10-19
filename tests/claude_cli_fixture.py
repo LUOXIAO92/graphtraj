@@ -194,6 +194,13 @@ def startup() -> None:
     """Attest the native Session after completing any SDK tool handshake."""
     global hook_sent
     hold_start_lock()
+    gate = os.environ.get('CLAUDE_FIXTURE_HOOK_GATE')
+    if gate:
+        # Let the test publish a stop after process start but before the hook.
+        Path(gate + '.waiting').touch()
+        deadline = time.monotonic() + 60
+        while not Path(gate).exists() and time.monotonic() < deadline:
+            time.sleep(0.01)
     hook_sent = time.monotonic()
     emit({'type': 'control_request', 'request_id': 'startup', 'request': {
         'subtype': 'hook_callback', 'callback_id': 'graphtraj_start', 'input': {

@@ -159,7 +159,7 @@ def test_claude_permission_mode_configuration_and_resume(
         sandbox = launch['settings']['sandbox']
         assert sandbox['enabled'] and sandbox['failIfUnavailable']
         assert sandbox['allowUnsandboxedCommands'] is False
-        assert sandbox['autoAllowBashIfSandboxed'] is False
+        assert sandbox['autoAllowBashIfSandboxed'] is True
         assert sandbox['filesystem']['denyRead'] and sandbox['filesystem']['denyWrite']
         assert result['permissions']['requested'] == mode
         assert result['permissions']['observed'] == (mode or 'unknown')
@@ -270,8 +270,11 @@ def test_claude_public_launch_diagnostics_are_bounded_and_correlated(
                     'private-prompt-marker', str(tmp_path), 'mcpServers'):
         assert private not in serialized
     assert len(serialized) < 4096
-    with runtime_caller(runner, 'research@x2'), pytest.raises(RunnerError):
-        tools.read_reports({'alias': 'research@x1'}, cwd=tmp_path)
+    # A non-direct project member reads the report projection without private material.
+    with runtime_caller(runner, 'research@x2'):
+        read = json.dumps(tools.read_reports({'alias': 'research@x1'}, cwd=tmp_path).document)
+    for private in ('sk-diagnosticsecret', 'private@example.invalid', 'private-prompt-marker', 'mcpServers'):
+        assert private not in read
 
 
 def test_claude_permission_reply_and_error(tmp_path: Path, claude_environment: None, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -432,6 +435,7 @@ def test_read_resources_are_native_readable_and_not_writable(
     filesystem = settings['sandbox']['filesystem']
     for path in resources:
         assert str(path.resolve()) in settings['permissions']['additionalDirectories']
+        assert str(path.resolve()) in launch['add_dirs'] and launch['restricted']
         assert f'Read(/{path.resolve()}/**)' in settings['permissions']['allow']
         assert f'Edit(/{path.resolve()}/**)' in settings['permissions']['deny']
         assert str(path.resolve()) in filesystem['allowRead']

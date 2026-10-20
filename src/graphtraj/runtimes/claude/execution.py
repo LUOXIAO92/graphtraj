@@ -262,7 +262,9 @@ class ClaudeExecution:
             },
             'sandbox': {
                 'enabled': True, 'failIfUnavailable': True, 'allowUnsandboxedCommands': False,
-                'autoAllowBashIfSandboxed': False, 'excludedCommands': [],
+                # Every Bash command runs sandboxed with no unsandboxed retry,
+                # so ordinary development needs no per-use parent approval.
+                'autoAllowBashIfSandboxed': True, 'excludedCommands': [],
                 'filesystem': {
                     'denyRead': [str(root / '.graphtraj'), *denied_read],
                     'allowRead': [*worktree_read, *([address] if address else []), request['git_common_directory'], *map(str, resources),
@@ -289,6 +291,9 @@ class ClaudeExecution:
                 '--replay-user-messages',
                 '--permission-prompt-tool', 'stdio',
                 '--restricted', '--strict-mcp-config',
+                # Restricted mode confines file tools to cwd; native --add-dir
+                # admits the declared read-only directories, still Edit-denied.
+                *[item for path in resources if path.is_dir() for item in ('--add-dir', str(path))],
                 '--mcp-config', json.dumps(mcp), '--settings', json.dumps(settings),
                 '--tools', 'Bash,Read,Write,Edit,Glob,Grep', '--model', request['model'],
                 '--append-system-prompt', request['instructions'],

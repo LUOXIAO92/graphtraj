@@ -88,6 +88,43 @@ def test_failed_report_delivery_remains_visible_only_to_its_owner(
             runner_control.read_session_reports('research@x1', tmp_path)
 
 
+def test_stopped_member_of_a_blocked_task_submits_its_collected_report(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A blocked Task accepts no result, yet a report collection still delivers its report."""
+    runner, team, _ = result_project(tmp_path)
+    task_file = team.parents[2] / 'task.yml'
+    record = yaml.safe_load(task_file.read_text())
+    record['status'] = 'blocked'
+    task_file.write_text(yaml.safe_dump(record))
+    task = task_file.read_bytes()
+    directory = runner / 'sessions/research@x1'
+    (directory / 'stop.yml').write_text('alias: research@x1\n')
+    mapping = yaml.safe_load((directory / 'mapping.yml').read_text())
+    mapping['parent_connection'] = {'runtime': 'codex', 'session': 'original-main'}
+    (directory / 'mapping.yml').write_text(yaml.safe_dump(mapping))
+    retained = team.parent / 'rounds/1/researcher-x1.md'
+    retained.parent.mkdir(parents=True, exist_ok=True)
+    retained.write_text('Retained report')
+    rounds = sorted(path.name for path in retained.parent.parent.iterdir())
+    notices = []
+    monkeypatch.setattr(runner_control, 'connection_operation',
+                        lambda address, document, **kwargs: notices.append(document))
+    with runtime_caller(runner, 'research@x1'):
+        submitted = runner_control.submit_session_report(
+            'researcher-x1.md', 'Collected findings', tmp_path, notify_parent=True,
+        )
+    written = Path(submitted['report'])
+    assert written == retained.with_name('researcher-x1-2.md')
+    assert written.read_text() == 'Collected findings'
+    assert retained.read_text() == 'Retained report'
+    assert submitted['delivery'] == 'received' and len(notices) == 1
+    # No status change, Round or lifted stop follows the report.
+    assert task_file.read_bytes() == task
+    assert sorted(path.name for path in retained.parent.parent.iterdir()) == rounds
+    assert (directory / 'stop.yml').read_text() == 'alias: research@x1\n'
+
+
 def test_direct_parent_reads_terminal_message_without_report_files(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:

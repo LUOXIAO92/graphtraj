@@ -387,3 +387,27 @@ def test_cli_host_returns_a_slow_write_receipt_instead_of_a_timeout(
     receipt = yaml.safe_load(result.stdout)
     assert Path(receipt['report']).read_text() == 'Slow evidence'
     assert 'did not acknowledge' not in result.stdout + result.stderr
+
+
+def test_agents_cli_uses_the_bound_task_channel(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """The independent agents CLI reaches a member's host through the MCP agents dispatch."""
+    from agent_swarm.connection import CONNECTION_ENV as AGENTS_CONNECTION
+
+    runner, _, _ = result_project(tmp_path)
+    directory = own_process(runner)
+    monkeypatch.delenv(AGENTS_CONNECTION, raising=False)
+    status = json.dumps({'action': 'execute', 'feature': 'status', 'arguments': {}})
+    with cli_connection(tmp_path, 'research@x1', native_operation_features()) as address:
+        refused = run_cli('agent_swarm.cli', tmp_path, address, status)
+        assert refused.returncode == 1  # the channel locates, it never authorizes
+        assert json.loads(refused.stdout)['error']['code'] == 'authority-denied'
+    with hold_ownership(directory, os.getpid()), cli_connection(
+        tmp_path, 'research@x1', native_operation_features(),
+    ) as address:
+        found = run_cli('agent_swarm.cli', tmp_path, address, json.dumps({'action': 'discover'}))
+        assert found.returncode == 0 and 'status' in found.stdout
+        result = run_cli('agent_swarm.cli', tmp_path, address, status)
+        assert result.returncode == 0, result.stdout + result.stderr
+        assert 'research@x1' in result.stdout
+        both = run_cli('agent_swarm.cli', tmp_path, address, status, **{AGENTS_CONNECTION: address})
+        assert json.loads(both.stdout)['error']['code'] == 'authority-denied'

@@ -132,9 +132,11 @@ def _tool_call_response(
             if name == 'agents':
                 from agent_swarm.discovery import handle_request
 
-                result = handle_request(arguments, lambda request: dispatch({
-                    'action': 'execute', 'feature': 'agents', 'arguments': request,
-                }))
+                from agent_swarm.connection import client_native_context
+                from graphtraj.interfaces.hosted_cli import agents_dispatch
+
+                result = handle_request(arguments, lambda request: agents_dispatch(
+                    request, Path.cwd(), native_context=client_native_context(metadata)))
             else:
                 result = dispatch(arguments)
                 if arguments.get('action') == 'discover' and not result.failed:

@@ -22,6 +22,9 @@ graphtraj-tool = "graphtraj.interfaces.local_tool:main"
 graphtraj-session = "graphtraj.runtimes.native_entry:main"
 agent-runner = "graphtraj.interfaces.cli.agent_runner:main"
 
+[project.entry-points."agent_swarm.hosts"]
+graphtraj = "graphtraj.interfaces.hosted_cli:agents_host"
+
 [tool.setuptools]
 package-dir = {"" = "src"}
 

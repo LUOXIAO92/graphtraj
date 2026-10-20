@@ -69,12 +69,18 @@ def test_independent_entry_controls_same_core(tmp_path: Path, surface: str) -> N
 
 
 def test_cli_does_not_adopt_graphtraj_owner(tmp_path: Path) -> None:
-    """An inherited Task channel cannot supply an independent caller implicitly."""
+    """An inherited Task channel goes only to its own host, never to an independent caller."""
     env = {**os.environ, 'GRAPHTRAJ_CLI_CONNECTION': '/unrelated/task/owner',
            'PYTHONPATH': str(Path(__file__).resolve().parents[1] / 'src')}
     env.pop('AGENT_SWARM_CONNECTION', None)
-    result = subprocess.run([sys.executable, '-m', 'agent_swarm.cli',
-                             '{"action":"execute","feature":"status","arguments":{}}'],
+    request = '{"action":"execute","feature":"status","arguments":{}}'
+    result = subprocess.run([sys.executable, '-m', 'agent_swarm.cli', request],
+                            cwd=tmp_path, env=env, capture_output=True, text=True, timeout=10)
+    assert result.returncode == 1
+    assert json.loads(result.stdout)['error']['code'] == 'operation-failed'
+    # Outside GraphTraj, with no channel at all, the independent owner is still required.
+    env.pop('GRAPHTRAJ_CLI_CONNECTION')
+    result = subprocess.run([sys.executable, '-m', 'agent_swarm.cli', request],
                             cwd=tmp_path, env=env, capture_output=True, text=True, timeout=10)
     assert result.returncode == 1
     assert json.loads(result.stdout)['error']['code'] == 'authority-denied'

@@ -34,3 +34,5 @@ def refresh_mcp_command(socket_path: Path, main_session: str, server: str, obser
     except (OSError, ValueError, CodexAdapterError) as error:
         raise click.ClickException(str(error)) from error
     click.echo(yaml.safe_dump(result, sort_keys=False), nl=False)
+    if result.get('service') is None:
+        raise click.ClickException('MCP discovery returned no serving-source evidence; no adoption is certified.')

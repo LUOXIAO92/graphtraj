@@ -124,3 +124,39 @@ def test_installed_proxy_does_not_convert_json_lines_to_websocket(tmp_path: Path
                     await process.communicate()
 
     asyncio.run(check())
+
+
+@pytest.mark.parametrize('discovery', [
+    {'isError': True, 'content': [{'type': 'text', 'text': 'tasks: unknown action discover'}]},
+    {'content': [], 'structuredContent': {'features': []}},
+])
+def test_refresh_without_serving_source_returns_the_native_evidence(discovery: dict) -> None:
+    """A discovery without a service stamp is reported with its native cause, never certified."""
+    from graphtraj.runtimes.codex.app_server import CodexAppServer
+
+    host = CodexAppServer.__new__(CodexAppServer)
+    calls = []
+
+    async def read_thread(thread_id: str) -> dict:
+        """Return a loaded native Main."""
+        return {'id': thread_id, 'cwd': '/project', 'source': 'appServer', 'status': {'type': 'idle'}}
+
+    async def call(method: str, params: object) -> dict:
+        """Answer the fixed public methods."""
+        calls.append(method)
+        if method == 'mcpServerStatus/list':
+            return {'data': [{'name': 'graphtraj', 'runtimeStatus': 'connected', 'toolsError': 'stale schema',
+                              'tools': {'tasks': {}}}]}
+        return discovery if method == 'mcpServer/tool/call' else {}
+
+    host.read_thread, host._call = read_thread, call
+    report = asyncio.run(host.refresh_mcp('current-main', 'graphtraj'))
+    assert calls == ['config/mcpServer/reload', 'mcpServerStatus/list', 'mcpServer/tool/call']
+    assert report['service'] is None and report['adoption_certified'] is False
+    assert report['servers'] == [{'name': 'graphtraj', 'runtimeStatus': 'connected',
+                                  'toolsError': 'stale schema', 'tools': ['tasks']}]
+    assert report['discovery']['isError'] is discovery.get('isError')
+    if discovery.get('isError'):
+        assert report['discovery']['content'] == ['tasks: unknown action discover']
+    else:
+        assert report['discovery']['structured_fields'] == ['features']

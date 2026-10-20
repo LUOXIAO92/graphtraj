@@ -711,7 +711,9 @@ def _status_tree(
     nodes: list[Dict[str, Any]] = []
     errors: list[RunnerError] = []
     seen: set[str] = set()
-    pending = [(alias, None) for alias in reversed(roots)]
+    # A view root keeps its real recorded parent; trimming the view above it
+    # does not rewrite the control relation.
+    pending = [(alias, records.get(alias, {}).get("parent")) for alias in reversed(roots)]
     while pending:
         alias, parent = pending.pop()
         # A recorded parent cycle is cut once the walk revisits an alias.

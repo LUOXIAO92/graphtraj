@@ -227,11 +227,13 @@ def _task_members(cwd: Path, summary_task_id: str | None = None) -> dict:
     ``last_outcome``, ``historical`` and ``retired``. An activity other than
     running or idle is kept as the ``diagnostic`` of that two-state view.
     """
-    from graphtraj.graph.task_index import read_index
+    from graphtraj.graph.task_graph import _load_state
+    from graphtraj.graph.task_index import read_index, task_directory
 
     configuration = load_project_configuration(cwd)
     runner        = discover_runner_directory(cwd)
-    records       = read_index(configuration.state)['tasks']
+    index         = read_index(configuration.state)
+    records       = index['tasks']
     children: dict[str, list[str]] = {key: [] for key in records}
     for key, record in records.items():
         if record['parent_id'] is not None:
@@ -255,7 +257,9 @@ def _task_members(cwd: Path, summary_task_id: str | None = None) -> dict:
             scope.add(key)
             pending.extend(children[key])
 
-    states  = _load_states(configuration.state / 'tasks') if scope else {}
+    # Only the Tasks in scope are read; the index already names their directories.
+    states  = {key: (directory, _load_state(directory / 'task.yml')[1])
+               for key in scope for directory in (task_directory(configuration.state, index, key),)}
     order   = registration_order(configuration.state) if scope else {}
     members = []
     for task_id in sorted(scope, key=int):

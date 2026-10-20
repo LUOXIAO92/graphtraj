@@ -287,3 +287,67 @@ def test_installed_send_recovers_historical_reports(
     reports = run_process([str(installed_commands.runner), 'reports', task['alias']], cwd=root, env=env)
     assert reports.returncode == 0, reports.stdout + reports.stderr
     assert yaml.safe_load(reports.stdout)['reports'] == [{'path': str(own), 'text': 'Retained evidence'}]
+
+
+def test_installed_report_collection_reaches_a_stopped_member(
+    installed_commands: InstalledCommands,
+    temporary_git_repository: Path,
+    fake_codex: FakeCodex,
+    tmp_path: Path,
+) -> None:
+    """After a stop only a report collection resumes; the stop itself stays in force."""
+    import json
+    from conftest import run_process
+    from runner_fixtures import configure_harness
+    from test_generic_role_execution import wait_for_idle
+    from test_task_graph import _register, _change_status, _task
+
+    root, _, _, env = configure_harness(
+        installed_commands, temporary_git_repository, fake_codex, tmp_path,
+    )
+    (root / '.graphtraj/roles.yml').write_text(yaml.safe_dump({
+        'roles': {'researcher': {'runtime': 'codex', 'model': 'selected-model'}},
+        'role_tree': {'researcher': {}},
+    }))
+    _register(installed_commands, root, _task('166', 'stopped-reports'))
+    _change_status(installed_commands, root, '166', 'ready')
+    batch = root / 'batch.yml'
+    batch.write_text('tasks:\n  - role: researcher\n    task_id: "166"\n')
+    result = run_process([str(installed_commands.runner), '--swarm-input', str(batch)],
+                         cwd=root, env=env, timeout=30)
+    assert result.returncode == 0, result.stdout + result.stderr
+    task = yaml.safe_load(result.stdout)['tasks'][0]
+    wait_for_idle(installed_commands, root, env, task['alias'])
+    stopped = run_process([str(installed_commands.runner), 'interrupt', task['alias']],
+                          cwd=root, env=env, timeout=30)
+    assert stopped.returncode == 0, stopped.stdout + stopped.stderr
+    directory = root / '.graphtraj/runner/sessions' / task['alias']
+    stop = (directory / 'stop.yml').read_bytes()
+    budget_file = root / '.graphtraj/state/tasks/166-stopped-reports/execution-budget.yml'
+    budget = budget_file.read_bytes() if budget_file.exists() else None
+    events = [json.loads(line) for shard in (root / '.graphtraj/state/worldline').glob('*.jsonl')
+              for line in shard.read_text().splitlines()]
+
+    def send(*extra: str):
+        """Send one instruction to the stopped member through the installed Runner."""
+        return run_process([str(installed_commands.runner), 'send', task['alias'],
+                            '--instruction', 'Return retained findings.', *extra,
+                            '--caused-by-event-id', events[-1]['event_id']], cwd=root, env=env, timeout=20)
+
+    # Ordinary work stays refused in the stopped subtree.
+    refused = send()
+    assert refused.returncode != 0
+    assert 'subtree-stopped' in refused.stdout + refused.stderr
+
+    collected = send('--reports-only')
+    assert collected.returncode == 0, collected.stdout + collected.stderr
+    status = wait_for_idle(installed_commands, root, env, task['alias'])
+    assert status['session'] == task['session']
+    assert status['execution_id'] != task['execution_id']
+    job = yaml.safe_load((directory / 'resume.yml').read_text())
+    assert job['reports_only'] is True and job['drive_children'] is False
+    assert 'monitor_execution_budget' not in job
+    # The stop is not lifted and the budget is not reset.
+    assert (directory / 'stop.yml').read_bytes() == stop
+    assert (budget_file.read_bytes() if budget_file.exists() else None) == budget
+    assert 'subtree-stopped' in send().stdout + send().stderr

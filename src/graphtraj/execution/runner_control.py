@@ -692,7 +692,9 @@ def _send_session(
         worktree = Path(mapping["worktree_path"])
         restored = False
         with execution_start_lock(session_directory.parent.parent):
-            require_execution_allowed(session_directory.parent.parent, alias, mapping)
+            require_execution_allowed(
+                session_directory.parent.parent, alias, mapping, reports_only=reports_only,
+            )
             absent = not os.path.lexists(str(worktree))
             if reports_only and worktree.is_absolute() and (absent or (
                     worktree.is_dir() and not worktree.is_symlink() and not any(worktree.iterdir()))):
@@ -854,6 +856,7 @@ def _send_session_locked(
         resume = {
             "operation": "resume",
             "drive_children": not (reports_only or stopped),
+            "reports_only": reports_only,
             "runtime": mapping["runtime"],
             "adapter_request": request,
             "context_evidence": context_evidence,
@@ -1131,10 +1134,44 @@ def _interrupt_session(
         # Native completion can precede the Worker's terminal-file drain.
         # Reuse its live terminal acknowledgement as well as durable outcomes;
         # lost contact or a stale heartbeat still cannot establish stopping.
-        if owning_execution(alias, session_directory, mapping) is not None:
+        owning = owning_execution(alias, session_directory, mapping)
+        if owning is None:
+            return {"alias": alias, "interrupt_status": "stopped"}
+        if owning["activity"] != "abnormal":
             raise
-        return {"alias": alias, "interrupt_status": "stopped"}
+        # The owner released its lock without a terminal record. Retain that
+        # exit as an unconfirmed outcome; only the Runtime's own termination
+        # confirmation, retained separately, can then establish stopping.
+        _record_owner_exit(alias, session_directory, mapping)
+        return _interrupt_session(alias, session_directory, mapping)
     return {"alias": alias, "interrupt_status": "interrupted"}
+
+
+def _record_owner_exit(alias: str, directory: Path, mapping: dict) -> None:
+    """Retain an exited owner's missing end as an unconfirmed runtime error.
+
+    Written under the startup lock only while the same execution is mapped,
+    its owner lock is released and no terminal record exists. A record that
+    an abnormal response already wrote is kept. No native terminal event is
+    implied: ``terminal_confirmed`` stays false.
+    """
+    runner = directory.parent.parent
+    execution_file = directory / "execution.yml"
+    with execution_start_lock(runner):
+        current, _ = read_alias_mapping(runner, alias)
+        if current != mapping or ownership_is_held(directory, mapping["worker_pid"]):
+            raise RunnerError("termination-unconfirmed",
+                              "The execution changed while its owner exit was being recorded.")
+        if os.path.lexists(str(execution_file)):
+            return
+        write_yaml_durably(execution_file, {
+            "outcome": "runtime-error",
+            "session_id": mapping["session"],
+            "execution_id": mapping["execution_id"],
+            "terminal_confirmed": False,
+            "error": {"code": "owner-exited",
+                      "message": "The process owning this execution exited before reporting its end."},
+        })
 
 
 def _confirm_termination(alias: str, directory: Path, mapping: dict) -> dict:

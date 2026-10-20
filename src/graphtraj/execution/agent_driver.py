@@ -175,7 +175,7 @@ class AdapterDriver:
             bind_agents(turn, run, self)
         if run.runtime == 'pi':
             from agent_swarm import read_config
-            from graphtraj.sessions.archive import SessionArchive
+            from agent_swarm.sessions.archive import SessionArchive
 
             root = run.directory.parent.parent
             choices = read_config(root)

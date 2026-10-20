@@ -162,7 +162,9 @@ class DshExecution:
         self.tool_calls: dict[str, dict] = {}
         # Runner retires/moves its control directory. Keep native Session data
         # with the durable Trace so retirement cannot break the retained link.
-        self.logs = trace_file.parent / 'dsh-native'
+        self.native_directory = Path(request['native_directory']) if request.get('native_directory') else directory
+        self.logs = (self.native_directory / 'dsh-native' if request.get('native_directory')
+                     else trace_file.parent / 'dsh-native')
 
     def _prepare(self) -> dict[str, str]:
         """Compose an isolated native profile, retaining defaults outside this Agent."""
@@ -172,7 +174,7 @@ class DshExecution:
                            else credential_environment(key))
         except DshError as error:
             raise self.error_type(error.code, error.message) from None
-        home = self.directory / 'dsh-home'
+        home = self.native_directory / 'dsh-home'
         profile = home / 'profiles' / 'web'
         profile.mkdir(parents=True, exist_ok=True)
         # DSH public profile manifest: use installed official bundles, no installs.
@@ -422,7 +424,7 @@ class DshExecution:
         if self.host_connection is not None:
             channel = Path(self.request['worktree_path']) / '.scratch'
             environment[self.connection_env] = connections.enter_context(self.host_connection(channel))
-        options = ({'profile_patch': self.directory / 'dsh-home/profiles/web/cordis.patch.yml'}
+        options = ({'profile_patch': self.native_directory / 'dsh-home/profiles/web/cordis.patch.yml'}
                    if self.request.get('runtime_home') else {})
         self.service = self.service_type(
             self.request['executable'], Path(self.request['worktree_path']), environment, **options,

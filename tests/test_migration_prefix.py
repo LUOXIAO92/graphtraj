@@ -284,7 +284,7 @@ def test_chain_follows_only_owned_declared_segments_and_stops_cycles(tmp_path: P
     # evidence is reused. Recovery publishes the logical cut, not the storage cut.
     from graphtraj.sessions.storage import SessionStore, session_path
     from graphtraj.runtimes.codex.session_archive import CodexSessionArchive
-    from graphtraj.sessions.protocol import native_record
+    from agent_swarm.sessions.protocol import native_record
     import shutil
 
     migrated = CliRunner().invoke(main, ['migrate-tickets'])

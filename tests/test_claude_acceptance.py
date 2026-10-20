@@ -19,8 +19,8 @@ from agent_swarm import AgentControl, Caller, bind, write_config
 from graphtraj.configuration.project_configuration import default_configuration_content
 from graphtraj.execution.agent_driver import AdapterDriver
 from graphtraj.interfaces.agents import configured_archive
-from graphtraj.runtimes.claude.history import conversation, message_id
-from graphtraj.sessions.archive import JsonlSessionStore, archive_path
+from agent_swarm.sessions.claude_history import conversation, message_id
+from agent_swarm.sessions.archive import JsonlSessionStore, archive_path
 
 
 @pytest.mark.skipif(not os.environ.get('CLAUDE_REAL_LIFECYCLE'), reason='Requires the assigned real Runtime slot')

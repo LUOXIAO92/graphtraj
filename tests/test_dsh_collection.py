@@ -14,8 +14,9 @@ import pytest
 from graphtraj.configuration.project_configuration import default_configuration_content
 from graphtraj.execution.main_finalize import session_binding
 from graphtraj.runtimes.native_entry import main
-from graphtraj.sessions.protocol import native_record
-from graphtraj.sessions.storage import SessionStore, session_path
+from agent_swarm.sessions.protocol import native_record
+from agent_swarm.sessions.archive import JsonlSessionStore, archive_path
+from agent_swarm.sessions.protocol import validate_session
 
 
 @pytest.fixture
@@ -87,32 +88,32 @@ def test_native_log_usage_resume_and_portable_attachments(
     ]
     attached = {'$/data/file': {'base64': base64.b64encode(b'abc').decode()},
                 '$/data/lost': {'missing': 'AttachmentError: object no longer available'}}
-    assert collect(header, rows, attached) == {'session': 'dsh:main', 'position': 5}
+    assert collect(header, rows, attached) == {'session': 'dsh:main', 'position': 5, 'saved': True}
     # A new native lifecycle replays from zero; already durable records are skipped.
     bind(monkeypatch, header)
     assert collect(header, rows, attached)['position'] == 5
-    source = session_path(project / '.graphtraj/state', 'dsh:main')
-    exported = project / 'standalone.sqlite3'
-    with SessionStore(source) as store:
-        store.validate()
-        stored = store.page()['events']
-        assert [native_record(row) for row in stored] == rows
-        assert [row['type'] for row in stored if 'surfaceOp' in row] == ['tool/result', 'assistant/message']
-        assert stored[1]['graphtraj']['usage'] == usage
-        assert stored[4]['graphtraj']['usage'] == {**usage, 'inputTokens': 17}
-        assert stored[4]['graphtraj']['usageSource'] == 'data/usage'
-        # Exactly one usage snapshot per attempt; stream and final are not summed.
-        assert sum(row.get('graphtraj', {}).get('usage', {}).get('inputTokens', 0) for row in stored) == 30
-        refs = stored[5]['graphtraj']['attachments']
-        assert refs['$/data/lost']['missing']['reason'].startswith('AttachmentError:')
-        store.export(exported)
+    source = archive_path(project / '.graphtraj/swarm', 'dsh:main')
+    exported = project / 'standalone' / 'session.jsonl'
+    store = JsonlSessionStore(source)
+    validate_session(store.header, store.page()['events'])
+    stored = store.page()['events']
+    assert [native_record(row) for row in stored] == rows
+    assert [row['type'] for row in stored if 'surfaceOp' in row] == ['tool/result', 'assistant/message']
+    assert stored[1]['graphtraj']['usage'] == usage
+    assert stored[4]['graphtraj']['usage'] == {**usage, 'inputTokens': 17}
+    assert stored[4]['graphtraj']['usageSource'] == 'data/usage'
+    # Exactly one usage snapshot per attempt; stream and final are not summed.
+    assert sum(row.get('graphtraj', {}).get('usage', {}).get('inputTokens', 0) for row in stored) == 30
+    refs = stored[5]['graphtraj']['attachments']
+    assert refs['$/data/lost']['missing']['reason'].startswith('AttachmentError:')
+    shutil.copytree(source.parent, exported.parent)
     source.unlink()
-    with SessionStore(exported, readonly=True) as store:
-        assert store.attachment(refs['$/data/file']['sha256']) == b'abc'
-        assert native_record(store.page()['events'][4])['data']['message'] == message
+    store = JsonlSessionStore(exported)
+    assert store.attachment(refs['$/data/file']['sha256']) == b'abc'
+    assert native_record(store.page()['events'][4])['data']['message'] == message
 
 
-def test_checkpoint_replays_uncommitted_input_and_rejects_gaps(
+def test_checkpoint_replays_uncommitted_input_and_retains_gaps(
     project: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """A failed event leaves its cursor untouched; restart replays that event."""
@@ -122,11 +123,17 @@ def test_checkpoint_replays_uncommitted_input_and_rejects_gaps(
     next_event = event('extension/file', 1, {'attachment': {'attachmentId': 'a', 'bytes': 3}})
     assert collect(header, [first])['position'] == 0
     assert 'error' in collect(header, [next_event], {'$/data/attachment': {'base64': 'not valid!'}})
-    assert 'error' in collect(header, [event('turn/end', 2, {'turn': 0, 'reason': {'kind': 'completed'}})])
-    with SessionStore(session_path(project / '.graphtraj/state', 'dsh:replay')) as store:
-        assert store.next_seq == 1
-        assert store.position('dsh/session/event/v4') == 0
+    final = event('turn/end', 2, {'turn': 0, 'reason': {'kind': 'completed'}})
+    assert collect(header, [final])['position'] == 2
+    store = JsonlSessionStore(archive_path(project / '.graphtraj/swarm', 'dsh:replay'))
+    assert len(store.page()['events']) == 1
+    assert store.position('dsh/session/event/v4') == 0
+    assert store.pending()
+    with pytest.raises(ValueError, match='incomplete'):
+        store.messages()
     assert collect(header, [first, next_event])['position'] == 1
+    assert collect(header, [first, next_event, final])['position'] == 2
+    assert not JsonlSessionStore(store.path).pending()
     future = {**header, 'version': 5}
     assert 'error' in collect(future, [])
 
@@ -146,11 +153,11 @@ def test_main_native_child_and_managed_member_sources(
     bind(monkeypatch, child)
     assert collect(child, [event('session/end-seed', 0, {'inherited': True})])['position'] == 0
     assert session_binding(project, 'dsh', 'main').read_bytes() == binding
-    with SessionStore(session_path(project / '.graphtraj/state', 'dsh:child')) as store:
-        store.validate()
-        assert store.header['parentSession'] == 'dsh:main'
-        assert store.header['graphtraj']['source'] == 'child'
-        assert store.header['graphtraj']['agentId'] != 'dsh:main'
+    store = JsonlSessionStore(archive_path(project / '.graphtraj/swarm', 'dsh:child'))
+    validate_session(store.header, store.page()['events'])
+    assert store.header['parentSession'] == 'dsh:main'
+    assert store.header['graphtraj']['source'] == 'child'
+    assert store.header['graphtraj']['agentId'] != 'dsh:main'
 
     member = {**main_header, 'id': 'member'}
     monkeypatch.setenv('GRAPHTRAJ_ROLE', 'engineer')
@@ -162,10 +169,10 @@ def test_main_native_child_and_managed_member_sources(
     monkeypatch.setattr(runner_status, 'read_alias_mapping', lambda *args: (
         {'runtime': 'dsh', 'session': 'member', 'task_id': '315'}, project))
     assert collect(member, [])['position'] == -1
-    with SessionStore(session_path(project / '.graphtraj/state', 'dsh:member')) as store:
-        assert store.header['graphtraj']['source'] == 'member'
-        assert store.header['graphtraj']['agentId'] == 'owned-member'
-        assert store.header['graphtraj']['taskIds'] == ['315']
+    store = JsonlSessionStore(archive_path(project / '.graphtraj/swarm', 'dsh:member'))
+    assert store.header['graphtraj']['source'] == 'member'
+    assert store.header['graphtraj']['agentId'] == 'owned-member'
+    assert store.header['graphtraj']['taskIds'] == ['315']
     assert 'error' in collect(main_header, [])
 
 
@@ -188,8 +195,8 @@ def test_installed_dsh_append_flush_and_resume(project: Path) -> None:
     assert facts['count'] == 5
     # Compare Python reconstruction to the installed Runtime's own projection,
     # including the native fork seed and the event drained during disposal.
-    from graphtraj.runtimes.dsh.collection import collect_jsonl
-    from graphtraj.sessions.archive import SessionArchive, JsonlSessionStore, archive_path
+    from agent_swarm.sessions.dsh import collect_jsonl
+    from agent_swarm.sessions.archive import SessionArchive, JsonlSessionStore, archive_path
 
     archive = SessionArchive(project / 'optional', save_normalized_sessions=True, backfill_history=True)
     for sample in (facts, facts['child']):
@@ -200,21 +207,20 @@ def test_installed_dsh_append_flush_and_resume(project: Path) -> None:
         store = JsonlSessionStore(archive_path(archive.root, saved['session']))
         assert store.messages() == sample['messages']
         assert [native_record(row) for row in store.page()['events']] == sample['events']
-    with SessionStore(session_path(project / '.graphtraj/state', 'dsh:real-main')) as store:
-        store.validate()
-        assert store.next_seq == 6
-        assert store.page()['events'][2]['data']['content'][0]['text'] == 'native append sentinel'
-    with SessionStore(session_path(project / '.graphtraj/state', 'dsh:real-child')) as store:
-        store.validate()
-        assert store.header['graphtraj']['source'] == 'child'
-        assert store.header['parentSession'] == 'dsh:real-main'
-        assert store.next_seq > 5
+    store = JsonlSessionStore(archive_path(project / '.graphtraj/swarm', 'dsh:real-main'))
+    assert len(store.page()['events']) == 6
+    assert store.page()['events'][2]['data']['content'][0]['text'] == 'native append sentinel'
+    child = JsonlSessionStore(archive_path(project / '.graphtraj/swarm', 'dsh:real-child'))
+    assert child.header['origin'] == 'subagent'
+    assert child.header['parentSession'] == 'dsh:real-main'
+    assert len(child.page()['events']) > 5
+    assert not (project / '.graphtraj/state/sessions').exists()
 
 
 def test_optional_jsonl_uses_native_order_and_backfill_policy(tmp_path: Path) -> None:
     """Archive only mapped supplied history; native seq wins over timestamps."""
-    from graphtraj.runtimes.dsh.collection import collect_jsonl
-    from graphtraj.sessions.archive import SessionArchive, JsonlSessionStore, archive_path
+    from agent_swarm.sessions.dsh import collect_jsonl
+    from agent_swarm.sessions.archive import SessionArchive, JsonlSessionStore, archive_path
 
     header = {'version': 4, 'id': 'optional', 'createdAt': 1, 'isSeeded': False}
     rows = [event('user/message', index, {
@@ -242,8 +248,8 @@ def test_optional_jsonl_uses_native_order_and_backfill_policy(tmp_path: Path) ->
 
 def test_native_gap_backfill_and_disk_confirmation(tmp_path: Path) -> None:
     """Retain new content with a gap, then resolve it using the same native log."""
-    from graphtraj.runtimes.dsh.collection import DshArchive
-    from graphtraj.sessions.archive import SessionArchive, JsonlSessionStore, archive_path
+    from agent_swarm.sessions.dsh import DshArchive
+    from agent_swarm.sessions.archive import SessionArchive, JsonlSessionStore, archive_path
 
     header = {'version': 4, 'id': 'gap', 'createdAt': 1, 'isSeeded': False}
     old = event('user/message', 0, {
@@ -282,8 +288,8 @@ def test_native_gap_backfill_and_disk_confirmation(tmp_path: Path) -> None:
 @pytest.mark.parametrize('end_before_event', [False, True])
 def test_live_frames_resolve_only_native_terminal_seq(tmp_path: Path, end_before_event: bool) -> None:
     """Live/final arrival variations retain native order and one final message."""
-    from graphtraj.runtimes.dsh.collection import DshArchive
-    from graphtraj.sessions.archive import SessionArchive, JsonlSessionStore, archive_path
+    from agent_swarm.sessions.dsh import DshArchive
+    from agent_swarm.sessions.archive import SessionArchive, JsonlSessionStore, archive_path
 
     header = {'version': 4, 'id': 'live', 'createdAt': 1, 'isSeeded': False}
     archive = SessionArchive(tmp_path / 'archive', save_normalized_sessions=True)
@@ -328,8 +334,8 @@ def test_live_frames_resolve_only_native_terminal_seq(tmp_path: Path, end_before
 
 def test_terminal_observation_survives_gap_and_later_backfill(tmp_path: Path) -> None:
     """A saved end(seq) survives interruption before final publication."""
-    from graphtraj.runtimes.dsh.collection import DshArchive
-    from graphtraj.sessions.archive import SessionArchive, JsonlSessionStore, archive_path
+    from agent_swarm.sessions.dsh import DshArchive
+    from agent_swarm.sessions.archive import SessionArchive, JsonlSessionStore, archive_path
 
     header = {'version': 4, 'id': 'resume-live', 'createdAt': 1, 'isSeeded': False}
     first = event('turn/start', 0, {'turn': 0})

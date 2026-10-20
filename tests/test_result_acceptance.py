@@ -7,7 +7,7 @@ import pytest
 
 from graphtraj.execution.runner_status import runtime_caller
 from graphtraj.interfaces import mcp, tools
-from test_shared_tools import native_request
+from test_shared_tools import cli_request
 from test_result_submission import result_project
 
 
@@ -191,12 +191,12 @@ def test_cli_accepts_code_as_actual_parent_and_mcp_exposes_same_operation(tmp_pa
     output = io.StringIO()
     mcp.serve(io.StringIO(json.dumps({
         'jsonrpc': '2.0', 'id': 1, 'method': 'tools/call',
-        'params': {'name': 'graphtraj', 'arguments': {
+        'params': {'name': 'tasks', 'arguments': {
             'action': 'describe', 'feature': 'decide_result', 'schema': True}},
     }) + '\n'), output)
     descriptor = json.loads(output.getvalue())['result']['structuredContent']
-    native = native_request(tmp_path, 'graphtraj', {'action': 'describe', 'feature': 'decide_result', 'schema': True})
-    assert descriptor['input_schema'] == json.loads(native['contentItems'][0]['text'])['input_schema']
+    cli = cli_request(tmp_path, {'action': 'describe', 'feature': 'decide_result', 'schema': True})
+    assert descriptor['input_schema'] == cli['result']['input_schema']
 
 
 def test_changed_worktree_and_closed_submission_cannot_be_accepted_again(tmp_path: Path) -> None:

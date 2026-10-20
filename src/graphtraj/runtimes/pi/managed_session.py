@@ -2,6 +2,11 @@
 
 from __future__ import annotations
 
+from graphtraj.configuration.project_configuration import (
+    configuration_file as project_configuration_file,
+    core_directory as project_core_directory,
+)
+
 from contextlib import ExitStack, nullcontext
 import copy
 import json
@@ -147,8 +152,8 @@ class PiManagedExecution:
         credential_environment(request.get('api_key_env'))
         worktree = Path(request['worktree_path']).resolve()
         root = Path(request['harness_root']).resolve()
-        # This directory belongs to retained Trace evidence, not disposable Worker state.
-        native = self.trace.with_suffix('.pi')
+        # Migrated hosts retain native files separately from Task Trace views.
+        native = Path(request['native_directory']) if request.get('native_directory') else self.trace.with_suffix('.pi')
         native.mkdir(parents=True, exist_ok=True)
         source = Path(request['agent_dir'])
         agent = native / 'agent'
@@ -198,8 +203,8 @@ class PiManagedExecution:
                              str(Path.home() / '.codex'), str(source), request['state_directory']],
                 'allowRead': read,
                 'allowWrite': write,
-                'denyWrite': [str(source), str(root / '.graphtraj/config.yml'),
-                              str(root / '.graphtraj/roles.yml'),
+                'denyWrite': [str(source), str(project_configuration_file(root)),
+                              str(project_core_directory(root) / 'roles.yml'),
                               request['docs_directory'],
                               str(Path(sys.prefix).resolve()), str(Path(__file__).resolve().parents[2]),
                               str(Path(request['git_common_directory']) / 'config'),
@@ -358,7 +363,7 @@ class PiManagedExecution:
                 })
                 self.created(self.session, self.proc.pid)
                 self.bound = True
-                from graphtraj.runtimes.pi.collection import PiArchive
+                from agent_swarm.sessions.pi import PiArchive
                 import yaml
 
                 archive = self.archive
@@ -369,7 +374,7 @@ class PiManagedExecution:
                 else:
                     from agent_swarm import default_config
                     from graphtraj.interfaces.agents import swarm_root
-                    from graphtraj.sessions.archive import SessionArchive
+                    from agent_swarm.sessions.archive import SessionArchive
 
                     mapping_file = self.directory / 'mapping.yml'
                     mapping = yaml.safe_load(mapping_file.read_text()) if mapping_file.is_file() else {}

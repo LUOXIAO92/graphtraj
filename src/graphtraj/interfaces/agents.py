@@ -33,7 +33,7 @@ from agent_swarm import (
 
 from graphtraj.execution.runner_models import RunnerError
 from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError
-from graphtraj.sessions.archive import JsonlSessionStore, SessionArchive
+from agent_swarm.sessions.archive import ConfiguredSessionArchive
 
 
 # Core Agent references; anything else is a Runner alias of a Task member.
@@ -64,22 +64,6 @@ TASK_SESSION_MISSING = {
 def swarm_root(root: Path) -> Path:
     """Return the ``agents`` tool's data root inside a GraphTraj project."""
     return root / ".graphtraj" / "swarm"
-
-
-class ConfiguredSessionArchive(SessionArchive):
-    """Use the independent tool's current choices for every archive operation.
-
-    A Runtime receives this through Run.archive when collection is enabled at
-    activation. Disabling saving stops subsequent writes without deleting the
-    archive or changing the Runtime's native Session.
-    """
-
-    def store(self, session_id: str, *, historical: bool = False) -> JsonlSessionStore | None:
-        """Reload tool-owned settings before acquiring a collection capability."""
-        choices = read_config(self.root)
-        self.save_normalized_sessions = choices['save_normalized_sessions']
-        self.backfill_history = choices['backfill_history']
-        return super().store(session_id, historical=historical)
 
 
 # GraphTraj turns saving on only where the user has made no explicit choice.

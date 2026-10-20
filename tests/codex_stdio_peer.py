@@ -158,7 +158,10 @@ for line in incoming():
             if not os.environ.get('PEER_CONTINUE_AFTER_REJECTION'):
                 complete(thread_id, turn_id, 'request rejected')
             continue
-        assert message['result'] == (exchange['response'] if exchange else {'decision': 'accept'})
+        if exchange and 'response_success' in exchange:
+            assert message['result']['success'] is exchange['response_success']
+        else:
+            assert message['result'] == (exchange['response'] if exchange else {'decision': 'accept'})
         following = next(exchanges, None)
         if following is not None:
             exchange = following

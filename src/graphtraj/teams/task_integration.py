@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from graphtraj.configuration.project_configuration import runner_directory as project_runner_directory
+
 import subprocess
 from pathlib import Path
 from typing import TextIO
@@ -70,7 +72,7 @@ def _integrate(
         and event.get("candidate") == candidate
         and event.get("team_ordinal") == record["active_team_ordinal"]
     )), None)
-    runner = root / ".graphtraj/runner"
+    runner = project_runner_directory(root)
     caller = caller_alias(runner)
     if caller is not None:
         submission = next((event for event in events if acceptance is not None

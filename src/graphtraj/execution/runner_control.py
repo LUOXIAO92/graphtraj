@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from graphtraj.configuration.project_configuration import runner_project_root
+
 import hashlib
 import json
 import os
@@ -144,7 +146,7 @@ def notify_direct_parent(
             )
             receipt = _send_session(
                 parent, message, parent_directory, parent_mapping, (),
-                runner_directory.parent.parent,
+                runner_project_root(runner_directory),
                 capacity_fd=int(capacity) if capacity is not None else None,
                 system_notice=True,
                 retain_notice_channel=mapping.get("worker_pid") == os.getpid(),
@@ -1028,7 +1030,7 @@ def _interrupt_allocation(runner: Path, alias: str) -> dict:
             raise _invalid_mapping()
         from graphtraj.graph.task_graph import _load_states
 
-        configuration = load_project_configuration(runner.parent.parent)
+        configuration = load_project_configuration(runner_project_root(runner))
         task_directory, task = _load_states(configuration.state / "tasks")[mapping["task_id"]]
         trace = task_directory / "teams" / str(mapping["team_generation"]) / "traces" / alias / "events.jsonl"
         worktree = configuration.agent_worktrees / (mapping["task_id"] + "-" + task["task_name"])
@@ -1265,7 +1267,7 @@ def respond_to_abnormal_session(
         try:
             # A public control entry locates the Runner from a working
             # directory; this Session's own record names that project.
-            stopped = interrupt_session(alias, runner_directory.parent.parent)
+            stopped = interrupt_session(alias, runner_project_root(runner_directory))
         except RunnerError as error:
             stopped = {
                 "alias": alias, "interrupt_status": "unconfirmed",

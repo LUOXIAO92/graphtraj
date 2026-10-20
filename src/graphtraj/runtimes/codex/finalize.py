@@ -427,7 +427,7 @@ def check(
             created(child_id)
             from graphtraj.configuration.project_configuration import load_project_configuration
             from graphtraj.interfaces.agents import configured_archive
-            from graphtraj.runtimes.codex.jsonl_archive import CodexJsonlArchive
+            from agent_swarm.sessions.codex import CodexJsonlArchive
 
             project = load_project_configuration(Path(binding['cwd']))
             archive = configured_archive(project.harness_root)

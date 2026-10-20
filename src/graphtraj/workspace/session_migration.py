@@ -26,6 +26,14 @@ def session_sources(state: Path, runner: Path, project: Path) -> list[dict]:
     from graphtraj.execution.runner_status import is_legacy_hosted_mapping, is_session_mapping
 
     records = {path: yaml.safe_load(path.read_text(encoding='utf-8')) or {} for path in sorted(paths)}
+    archives = {}
+    for archive_file in sorted((state / 'sessions').glob('*/session.sqlite3')):
+        with SessionStore(archive_file, readonly=True) as archive_store:
+            native = archive_store.header.get('graphtraj', {}).get('native', {})
+            key = (native.get('runtime'), native.get('sessionId'), native.get('agentId'))
+            if key in archives:
+                raise ValueError('Native Session maps to multiple canonical archive IDs.')
+            archives[key] = archive_file
     sources = {}
     aliases = set()
     for path, retained in records.items():
@@ -75,7 +83,7 @@ def session_sources(state: Path, runner: Path, project: Path) -> list[dict]:
                                  'hosted': record.get('hosted'), 'purpose': record.get('purpose'),
                                  'legacy_hosted': is_legacy_hosted_mapping(identity_record),
                                  'current_mapping': is_session_mapping(identity_record)}]
-        archived = session_path(state, runtime + ':' + session)
+        archived = archives.get((runtime, session, None), session_path(state, runtime + ':' + session))
         if archived.exists():
             with SessionStore(archived, readonly=True) as store:
                 owner = store.header['graphtraj']
@@ -139,6 +147,33 @@ def session_sources(state: Path, runner: Path, project: Path) -> list[dict]:
             if conflicts:
                 item['identity_conflicts'] = list(dict.fromkeys(conflicts))
         sources[identity] = item
+    # Tool-created Agents need no Task association. Inspect only their retained
+    # explicit native bindings, never a Runtime's global Session directory.
+    swarm = project / '.graphtraj/swarm'
+    for control in sorted((swarm / 'control/agents').glob('*.json')):
+        record = json.loads(control.read_text(encoding='utf-8'))
+        runtime, session = record['runtime'], record.get('session')
+        if not session or (runtime, session) in sources:
+            continue
+        directory = swarm / 'native' / record['agent']
+        binding = directory / 'session.yml'
+        native = yaml.safe_load(binding.read_text(encoding='utf-8')) if binding.is_file() else {}
+        source = native.get('rollout_path') or native.get('session_file')
+        if not source and runtime == 'dsh' and (directory / 'trace.jsonl').is_file():
+            source = str(directory / 'trace.jsonl')
+        item = {'runtime': runtime, 'session': session, 'agent': record['agent'],
+                'task_ids': [], 'kind': 'child', 'association': str(control), 'source': source,
+                'parent': record.get('parent'), 'retired_at': record.get('retired_at')}
+        if source:
+            try:
+                path = Path(source)
+                item.update(resolved_source=str(path.resolve(strict=True)), bytes=path.stat().st_size)
+            except OSError as error:
+                item['missing'] = type(error).__name__ + ': associated source unavailable.'
+        else:
+            item['missing'] = 'Tool Agent has no retained native transcript path; normalized archive is copied unchanged.'
+        sources[(runtime, session)] = item
+
     # Team membership without a surviving binding is a gap, not an invented ID.
     for team_path in sorted(tasks.glob('*/teams/*/team.yml')):
         team = yaml.safe_load(team_path.read_text(encoding='utf-8')) or {}
@@ -164,7 +199,7 @@ def session_sources(state: Path, runner: Path, project: Path) -> list[dict]:
                 'agent': owner['agentId'], 'task_ids': owner['taskIds'], 'kind': owner.get('source', 'archive'),
                 'archive': str(path), 'archived_events': store.next_seq,
                 'pending': store.pending() is not None, 'archive_only': True,
-                'association': str(path)}
+                'association': str(path), 'native_agent': owner['native'].get('agentId')}
             source = owner['native'].get('sourcePath')
             if source:
                 item.update(source=source, archive_only=False)

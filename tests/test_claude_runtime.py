@@ -412,6 +412,26 @@ def test_claude_mid_turn_input_shares_its_turn_result(tmp_path: Path, claude_env
         assert completed['last_agent_message'] == 'merge|finish'
 
 
+def test_claude_input_absorbed_mid_turn_settles_without_its_own_result(
+    tmp_path: Path, claude_environment: None,
+) -> None:
+    """Input the CLI absorbs into a running turn, without echo or queued count, still settles."""
+    result_project(tmp_path)
+    with ExitStack() as stack, ThreadPoolExecutor(max_workers=1) as pool:
+        turn, ready, _ = execution(tmp_path, stack, 'absorb')
+        future = pool.submit(turn.run)
+        assert ready.wait(5)
+        turn.operate({'operation': 'send', 'session': turn.session, 'execution_id': turn.execution_id,
+                      'instruction': 'joined'})
+        try:
+            completed = future.result(timeout=10)
+        finally:
+            if not future.done():
+                turn.terminate()
+        assert completed['outcome'] == 'completed'
+        assert completed['last_agent_message'] == 'absorb|joined'
+
+
 def test_claude_input_echoed_after_a_result_waits_for_the_next(
     tmp_path: Path, claude_environment: None,
 ) -> None:

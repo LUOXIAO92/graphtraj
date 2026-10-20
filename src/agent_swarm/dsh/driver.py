@@ -60,7 +60,9 @@ class DshDriver:
         if self.configure is not None:
             self.configure(turn, run)
         if run.archive is not None and turn.archive is None:
-            raise AgentsError('archive-unavailable', 'Bind the DSH collector for the supplied archive.')
+            from agent_swarm.sessions.dsh import DshArchive
+
+            turn.archive = DshArchive(run.archive, resumed=run.session is not None)
         with self.lock:
             self.turns[run.execution] = turn
 

@@ -57,7 +57,7 @@ export function apply(ctx, config = { finishCheck: false }) {
     if (!agentsOnly && !process.env.GRAPHTRAJ_ROLE) {
       await entry(agent, { event: 'agent/created', source, header: agent.session.header }, signal);
     }
-    await collect(agent);
+    await collect(agent, source);
   });
   ctx.on('agent/turn-stopping', async ({ agent, signal }) => {
     if (agentsOnly || !config.finishCheck || process.env.GRAPHTRAJ_ROLE ||

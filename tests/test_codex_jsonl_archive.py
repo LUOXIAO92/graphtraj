@@ -8,9 +8,9 @@ import pytest
 
 from agent_swarm import write_config
 from graphtraj.interfaces.agents import ConfiguredSessionArchive
-from graphtraj.runtimes.codex.jsonl_archive import CodexJsonlArchive
-from graphtraj.sessions.archive import JsonlSessionStore, archive_path
-from graphtraj.sessions.protocol import native_record
+from agent_swarm.sessions.codex import CodexJsonlArchive
+from agent_swarm.sessions.archive import JsonlSessionStore, archive_path
+from agent_swarm.sessions.protocol import native_record
 from graphtraj.runtimes.codex.app_server import CodexAppServer
 from test_codex_app_server import context, peer  # noqa: F401
 

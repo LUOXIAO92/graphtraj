@@ -11,10 +11,29 @@ from xml.etree import ElementTree
 from pathlib import Path
 from typing import BinaryIO
 
-from graphtraj.sessions.archive import JsonlSessionStore, SessionArchive, archive_path
-from graphtraj.sessions.protocol import SURFACE_TYPES, native_record, retain_native
-from graphtraj.runtimes.codex.session_archive import _attachments, _timestamp
-from graphtraj.runtimes.codex.session_entry import rollout_record
+from agent_swarm.sessions.archive import JsonlSessionStore, SessionArchive, archive_path
+from agent_swarm.sessions.protocol import SURFACE_TYPES, native_record, retain_native
+from .codex_values import _attachments, _timestamp
+
+
+class NativeInputError(ValueError):
+    """Native hook input or rollout bytes that could not be read or parsed.
+
+    Only this failure class names a missing input rather than an identity
+    decision; identity and association refusals remain ordinary errors.
+    """
+
+
+def rollout_record(line: str | bytes, path: Path, offset: int) -> dict:
+    """Parse one native rollout line, naming its file and byte offset on failure."""
+    try:
+        record = json.loads(line)
+    except json.JSONDecodeError as error:
+        raise NativeInputError(f'Codex rollout {path} has no valid JSON record at byte {offset} '
+                               f'({len(line)} bytes read): {error}') from error
+    if not isinstance(record, dict):
+        raise NativeInputError(f'Codex rollout {path} has a non-object record at byte {offset}.')
+    return record
 
 
 def _content(blocks: list[dict]) -> list[dict]:
@@ -470,7 +489,7 @@ class CodexJsonlArchive:
         self.archive = archive
         self.agent = agent
         self.session = session
-        self.id = 'codex:' + session
+        self.id = archive.native_id('codex', session)
         self.task_ids = task_ids
         self.parent_archive: Path | None = None
         try:
@@ -502,7 +521,7 @@ class CodexJsonlArchive:
         events = []
         position = 0
         if isinstance(base, dict):
-            self.parent_archive = archive_path(self.archive.root, 'codex:' + base['thread_id'])
+            self.parent_archive = archive_path(self.archive.root, self.archive.native_id('codex', base['thread_id']))
             if not self.parent_archive.is_file():
                 return None
             parent = JsonlSessionStore(self.parent_archive)
@@ -580,7 +599,9 @@ class CodexJsonlArchive:
                     },
                 }
                 if metadata.get('forked_from_id'):
-                    self.header['parentSession'] = 'codex:' + metadata['forked_from_id']
+                    self.header['parentSession'] = self.archive.native_id('codex', metadata['forked_from_id'])
+                self.header = self.archive.native_header('codex', self.session) or self.header
+                self.id = self.header['id']
                 self.archive.map_session(self.header)
             store = self.archive.store(self.id)
             if store is None:

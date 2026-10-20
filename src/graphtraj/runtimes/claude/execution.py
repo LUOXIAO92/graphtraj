@@ -1,7 +1,14 @@
 """Own Claude Code's official stream-JSON control transport for one invocation."""
 from __future__ import annotations
 
-from contextlib import ExitStack, nullcontext
+from graphtraj.configuration.project_configuration import (
+    cli_directory as project_cli_directory,
+    configuration_file as project_configuration_file,
+    core_directory as project_core_directory,
+    runner_directory as project_runner_directory,
+)
+
+from contextlib import ExitStack
 from concurrent.futures import Future
 import copy
 import json
@@ -20,7 +27,7 @@ from typing import Callable
 from agent_swarm import AgentsResult
 from agent_swarm.discovery import handle_request as discover_agents
 from agent_swarm.mcp import tool_documents
-from graphtraj.sessions.archive import SessionArchive
+from agent_swarm.sessions.archive import SessionArchive
 
 from graphtraj.execution.runner_io import write_yaml_durably
 from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError, SessionStarted, record_runtime_process
@@ -223,11 +230,11 @@ class ClaudeExecution:
         resources = [p.resolve() for p in (worktree / 'docs', worktree / 'CONTEXT.md',
                                            worktree / 'AGENTS.md', worktree / '.agents') if p.exists()]
         resources.extend(Path(path).resolve() for path in request['resources'])
-        denied_read = [request['state_directory'], str(root / '.graphtraj/runner'),
-                       str(root / '.graphtraj/cli'),
+        denied_read = [request['state_directory'], str(project_runner_directory(root)),
+                       str(project_cli_directory(root)),
                        str(root / '.codex'), str(Path.home() / '.codex'), str(home)]
         denied_write = [*map(str, resources), request['docs_directory'], str(home),
-                        str(root / '.graphtraj/config.yml'), str(root / '.graphtraj/roles.yml'),
+                        str(project_configuration_file(root)), str(project_core_directory(root) / 'roles.yml'),
                         str(Path(request['git_common_directory']) / 'config'),
                         str(Path(request['git_common_directory']) / 'hooks'),
                         str(worktree / '.claude'), str(worktree / '.state'),
@@ -328,25 +335,19 @@ class ClaudeExecution:
         """Retain native records unchanged, including unknown fields and failures."""
         assert self.proc is not None
         try:
-            with (nullcontext(None) if self.independent else self.trace.open('a', encoding='utf-8')) as trace:
-                for line in self.proc.stdout:
-                    try:
-                        event = json.loads(line)
-                        if not isinstance(event, dict):
-                            raise ValueError('object')
-                    except ValueError as error:
-                        # Only the failure class is kept, never the native line.
-                        self.events.put({'type': 'transport_error', 'exception': type(error).__name__})
-                        return
-                    # Partial text is compacted in the canonical archive, not copied
-                    # to a second permanent per-fragment transport log.
-                    if trace is not None and event.get('type') != 'stream_event':
-                        trace.write(line)
-                        trace.flush()
-                    if event.get('type') == 'system' and event.get('subtype') == 'session_state_changed':
-                        self.drained_native_state = event.get('state')
-                    self.events.put(event)
-                self.stdout_eof = True
+            for line in self.proc.stdout:
+                try:
+                    event = json.loads(line)
+                    if not isinstance(event, dict):
+                        raise ValueError('object')
+                except ValueError as error:
+                    # Only the failure class is kept, never the native line.
+                    self.events.put({'type': 'transport_error', 'exception': type(error).__name__})
+                    return
+                if event.get('type') == 'system' and event.get('subtype') == 'session_state_changed':
+                    self.drained_native_state = event.get('state')
+                self.events.put(event)
+            self.stdout_eof = True
         finally:
             self.events.put({'type': 'eof'})
 
@@ -359,8 +360,16 @@ class ClaudeExecution:
         if self.session is not None:
             return
         self.session = native['session_id']
-        if self.independent and native.get('transcript_path'):
+        if native.get('transcript_path'):
             self.collector.bind(Path(native['transcript_path']), self.input_ids)
+            # Keep the native file as the Trace reference, never a third
+            # transport body. Nonempty older transport evidence stays untouched.
+            transcript = Path(native['transcript_path'])
+            self.trace.parent.mkdir(parents=True, exist_ok=True)
+            if not self.trace.is_symlink() and (not self.trace.exists() or self.trace.stat().st_size == 0):
+                self.trace.unlink(missing_ok=True)
+                self.trace.symlink_to(transcript)
+
         write_yaml_durably(self.directory / 'session.yml', {
             'session': self.session, 'rollout_path': native.get('transcript_path'),
             'runtime_version': self.request['version'], 'source': native.get('source'),
@@ -420,7 +429,6 @@ class ClaudeExecution:
         from graphtraj.interfaces.hosted_cli import cli_connection
         from graphtraj.runtimes.codex.managed_session import native_operation_features
         from graphtraj.runtimes.activity import redact
-        from graphtraj.runtimes.claude.collection import open_archive, StreamCollector
 
         last = None
         result_error = None
@@ -434,22 +442,14 @@ class ClaudeExecution:
             provider = self.request.get('provider', 'native')
             if provider == 'native' and not self.request.get('base_url'):
                 provider = 'anthropic'
-            if self.independent:
-                from graphtraj.runtimes.claude.jsonl import ClaudeJsonlCollector
+            from agent_swarm.sessions.claude import ClaudeJsonlCollector
+            if not self.independent:
+                from graphtraj.interfaces.agents import configured_archive
 
-                collector = ClaudeJsonlCollector(self.archive, self.native_id, self.directory.name,
-                                                Path(self.request['worktree_path']), self.execution_id,
-                                                provider=provider, resumed=self.expected is not None)
-            else:
-                archive = resources.enter_context(open_archive(
-                    Path(self.request['state_directory']), Path(self.request['harness_root']),
-                    self.native_id, self.directory.name, source='managed',
-                    task_ids=[task_id] if task_id else []))
-                if archive.pending():
-                    from graphtraj.sessions.storage import StreamWriter
-
-                    StreamWriter(archive, archive.pending()['source']).finish(content=[], interrupted=True)
-                collector = StreamCollector(archive, self.execution_id, self.request['model'], provider)
+                self.archive = configured_archive(Path(self.request['harness_root']))
+            collector = ClaudeJsonlCollector(self.archive, self.native_id, self.directory.name,
+                                            Path(self.request['worktree_path']), self.execution_id,
+                                            provider=provider, resumed=self.expected is not None)
             self.collector = collector
             source_position = 0
             channel_directory = None
@@ -549,10 +549,10 @@ class ClaudeExecution:
                             self._reply(event['request_id'], {})
                             self.task_released = True
                         elif request.get('subtype') == 'hook_callback' and request.get('callback_id') == 'graphtraj_collect_child':
-                            from graphtraj.runtimes.claude.collection import collect_hook
+                            from graphtraj.runtimes.claude.collection import collect_jsonl_hook
 
                             if not self.independent:
-                                collect_hook(request['input'], Path(self.request['worktree_path']))
+                                collect_jsonl_hook(request['input'], Path(self.request['worktree_path']))
                             self._reply(event['request_id'], {})
                         elif request.get('subtype') == 'can_use_tool':
                             self._permission(event)

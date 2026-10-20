@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from graphtraj.sessions.protocol import (
+from agent_swarm.sessions.protocol import (
     native_record, retain_native, snapshot_event, validate_content, validate_event,
     validate_header, validate_session, validate_stream,
 )
@@ -363,7 +363,7 @@ def test_assistant_replacement_requires_current_surface_coverage(fault: str | No
 
 def test_jsonl_messages_consume_assistant_replacement(tmp_path: Path) -> None:
     """The archive consumer applies the shared validator's replacement contract."""
-    from graphtraj.sessions.archive import JsonlSessionStore
+    from agent_swarm.sessions.archive import JsonlSessionStore
 
     replacement = event('assistant/message', {
         'turn': 0, 'step': 0, 'stream': [],

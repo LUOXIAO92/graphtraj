@@ -7,25 +7,7 @@ import asyncio
 from pathlib import Path
 from typing import Any
 
-
-class NativeInputError(ValueError):
-    """Native hook input or rollout bytes that could not be read or parsed.
-
-    Only this failure class names a missing input rather than an identity
-    decision; identity and association refusals remain ordinary errors.
-    """
-
-
-def rollout_record(line: str | bytes, path: Path, offset: int) -> dict:
-    """Parse one native rollout line, naming its file and byte offset on failure."""
-    try:
-        record = json.loads(line)
-    except json.JSONDecodeError as error:
-        raise NativeInputError(f'Codex rollout {path} has no valid JSON record at byte {offset} '
-                         f'({len(line)} bytes read): {error}') from error
-    if not isinstance(record, dict):
-        raise NativeInputError(f'Codex rollout {path} has a non-object record at byte {offset}.')
-    return record
+from agent_swarm.sessions.codex import NativeInputError, rollout_record
 
 
 def session_record(path: Path, turn: str | None = None) -> tuple[dict, dict]:

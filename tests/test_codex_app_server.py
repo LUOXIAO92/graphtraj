@@ -205,7 +205,7 @@ def test_trace_collects_delayed_writes_without_reopening_unchanged_archive(
 ) -> None:
     """Silent delayed writes, partial lines and shutdown tails remain collectible."""
     from graphtraj.runtimes.codex.session_archive import CodexSessionArchive
-    from graphtraj.sessions.protocol import native_record
+    from agent_swarm.sessions.protocol import native_record
     from graphtraj.sessions.storage import SessionStore
 
     class CountedArchive(CodexSessionArchive):

@@ -2,6 +2,11 @@
 
 from __future__ import annotations
 
+from graphtraj.configuration.project_configuration import (
+    cli_directory as project_cli_directory,
+    runner_directory as project_runner_directory,
+)
+
 import copy
 from dataclasses import dataclass
 import json
@@ -181,7 +186,7 @@ class PiRuntimeAdapter:
         agent_dir = Path(agent_path).resolve()
         project = load_project_configuration(harness_root) if configuration_exists(harness_root) else None
         state = project.state if project else harness_root / '.graphtraj/state'
-        protected = (state, harness_root / '.graphtraj/runner', harness_root / '.graphtraj/cli',
+        protected = (state, project_runner_directory(harness_root), project_cli_directory(harness_root),
                      harness_root / '.codex', Path.home() / '.codex', agent_dir / 'sessions')
         for resource in resources:
             path = Path(resource).resolve()

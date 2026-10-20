@@ -87,7 +87,7 @@ def test_built_wheel_carries_only_the_commands_and_runtime_policy(
         line.split(" = ")[0]
         for line in entry_points.splitlines()
         if " = " in line
-    } == {"graphtraj", "agent-runner", "graphtraj-mcp", "graphtraj-tool"}
+    } == {"graphtraj", "agent-runner", "graphtraj-mcp", "graphtraj-tool", "graphtraj-session"}
 
 
 def test_installed_commands_come_from_the_built_wheel(

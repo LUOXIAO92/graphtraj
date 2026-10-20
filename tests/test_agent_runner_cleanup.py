@@ -399,14 +399,14 @@ def test_installed_cleanup_uses_only_task_identity_and_preserves_trajectory(
     durable_before = _durable_contents(task)
     mappings = _task_mappings(task)
     assert mappings
-    from graphtraj.sessions.storage import SessionStore, session_path
+    from agent_swarm.sessions.archive import JsonlSessionStore, SessionArchive, archive_path
 
     archives = {}
     for directory in mappings:
         mapping = yaml.safe_load((directory / 'mapping.yml').read_text())
-        path = session_path(task.state, 'codex:' + mapping['session'])
-        with SessionStore(path, readonly=True) as archive:
-            archives[path] = archive.page()
+        root = task.root / '.graphtraj/swarm'
+        path = archive_path(root, SessionArchive(root).native_id('codex', mapping['session']))
+        archives[path] = JsonlSessionStore(path).page()
 
     cleaned = _cleanup(task)
 
@@ -424,8 +424,7 @@ def test_installed_cleanup_uses_only_task_identity_and_preserves_trajectory(
     assert all((path / "mapping.yml").exists() for path in mappings)
     _assert_durable_contents(task, durable_before)
     for path, expected in archives.items():
-        with SessionStore(path, readonly=True) as archive:
-            assert archive.page() == expected
+        assert JsonlSessionStore(path).page() == expected
     assert historical_marker.read_text(encoding="utf-8") == "historical evidence\n"
 
     repeated = _cleanup(task)

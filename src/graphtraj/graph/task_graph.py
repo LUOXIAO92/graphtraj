@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from graphtraj.configuration.project_configuration import runner_directory as project_runner_directory
+
 import os
 import re
 import shutil
@@ -254,7 +256,7 @@ def revise_tasks(
                 from graphtraj.execution.runner_status import caller_alias, require_task_authority
                 from graphtraj.graph.delivery_worldline import read_worldline
 
-                runner = harness_root / ".graphtraj/runner"
+                runner = project_runner_directory(harness_root)
                 if caller_alias(runner) is not None:
                     submissions = [event for event in read_worldline(state, harness_root)
                                    if event["event"] == "result-submitted"
@@ -637,7 +639,7 @@ def complete_task(state: Path, harness_root: Path, request: dict[str, Any]) -> d
     _validate_string_list(request, "caused_by_event_ids", allow_empty=True)
     if not request["reason"].strip():
         raise ValueError("Completion requires the task's own acceptance reason")
-    if caller_alias(harness_root / ".graphtraj/runner") is not None:
+    if caller_alias(project_runner_directory(harness_root)) is not None:
         raise ValueError("Completion without a Team requires the owning top-level caller")
     tasks = state / "tasks"
     if not tasks.is_dir():

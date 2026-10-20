@@ -8,10 +8,10 @@ from click.testing import CliRunner
 
 from agent_swarm import write_config
 from graphtraj.interfaces.agents import ConfiguredSessionArchive
-from graphtraj.runtimes.codex.jsonl_archive import CodexJsonlArchive
+from agent_swarm.sessions.codex import CodexJsonlArchive, NativeInputError
 from graphtraj.runtimes.codex.session_entry import session_record
 from graphtraj.runtimes.codex.stop_hook import main as stop_hook
-from graphtraj.sessions.archive import JsonlSessionStore, archive_path
+from agent_swarm.sessions.archive import JsonlSessionStore, archive_path
 
 
 def test_empty_stdin_names_hook_stdin_and_keeps_stop_error() -> None:
@@ -54,3 +54,25 @@ def test_fork_activation_inside_a_record_starts_at_next_line(tmp_path: Path) -> 
     collector.collect(rollout)
     store = JsonlSessionStore(archive_path(root, 'codex:fork'))
     assert store.position('fork-records') == rollout.stat().st_size
+
+
+@pytest.mark.xfail(strict=True, raises=NativeInputError,
+                   reason='Open Task 345 work: the rollout cursor is not bound to its physical rollout file.')
+def test_cursor_from_one_physical_rollout_is_not_read_in_another(tmp_path: Path) -> None:
+    """A second physical rollout of the same Session is never read from the first file's byte cursor."""
+    root = tmp_path / 'swarm'
+    write_config(root, save_normalized_sessions=True, backfill_history=False)
+    meta = {'type': 'session_meta', 'payload': {'id': 's', 'source': 'cli'}}
+
+    def user(text: str) -> dict:
+        return {'type': 'response_item', 'payload': {'type': 'message', 'role': 'user',
+                                                     'content': [{'type': 'input_text', 'text': text}]}}
+
+    first, second = tmp_path / 'A.jsonl', tmp_path / 'B.jsonl'
+    first.write_text(''.join(json.dumps(record) + '\n' for record in [meta, user('first')]))
+    second.write_text(''.join(json.dumps(record) + '\n' for record in [
+        meta, {'type': 'compacted', 'payload': {'message': 'summary ' * 30}}, user('after')]))
+    for rollout in (first, second):
+        collector = CodexJsonlArchive(ConfiguredSessionArchive(root), 'main', 's', rollout)
+        collector.activation = 0
+        collector.collect(rollout)

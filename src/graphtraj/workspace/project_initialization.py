@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from graphtraj.configuration.project_configuration import runner_directory as project_runner_directory
+
 import os
 import stat
 from dataclasses import dataclass
@@ -261,7 +263,7 @@ class ProjectSetupPlan:
 
     @property
     def runner_store(self) -> Path:
-        return self.harness_root / ".graphtraj" / "runner"
+        return project_runner_directory(self.harness_root)
 
     def preflight(self) -> ProjectSetupPreview:
         """Check every setup target before setup mutates the project."""

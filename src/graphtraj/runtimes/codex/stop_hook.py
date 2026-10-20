@@ -107,7 +107,7 @@ def _archive(root: Path, session: str, transcript: str, *, new_session: bool = F
     """
     from graphtraj import file_lock
     from graphtraj.interfaces.agents import configured_archive
-    from graphtraj.runtimes.codex.jsonl_archive import CodexJsonlArchive
+    from agent_swarm.sessions.codex import CodexJsonlArchive
     from graphtraj.execution.runner_io import write_yaml_durably
 
     directory = session_binding(root, 'codex', session).parent

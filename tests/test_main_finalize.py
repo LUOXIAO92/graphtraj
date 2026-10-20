@@ -22,7 +22,7 @@ from graphtraj.runtimes.codex import finalize
 from graphtraj.runtimes.codex.app_server import CodexAppServer, CodexServerRequest
 from graphtraj.runtimes.codex.stop_hook import main as stop_hook
 from graphtraj.runtimes.runtime_adapter import CheckUsage, finalize_usage, select_runtime_adapter
-from graphtraj.sessions.archive import JsonlSessionStore, archive_path
+from agent_swarm.sessions.archive import JsonlSessionStore, archive_path
 from graphtraj.interfaces.agents import swarm_root
 
 
@@ -457,7 +457,7 @@ def test_checker_rejects_retired_native_tools(
     assert stop(binding)['systemMessage']
     reply = json.loads((root / 'tool-reply.json').read_text())
     assert reply['result']['success'] is allowed
-    from graphtraj.sessions.protocol import native_record
+    from agent_swarm.sessions.protocol import native_record
 
     archive = JsonlSessionStore(archive_path(swarm_root(root), 'codex:checker'))
     records = [native_record(event) for event in archive.page()['events']]
@@ -689,7 +689,7 @@ def test_checker_approval_is_left_to_its_native_owner(host: tuple[Path, Path]) -
     assert 'Completion Check · completed' in result['systemMessage']
     wire = [json.loads(line) for line in (root / 'wire.jsonl').read_text().splitlines()]
     assert not any(item.get('id') == 'checker-approval' for item in wire)
-    from graphtraj.sessions.protocol import native_record
+    from agent_swarm.sessions.protocol import native_record
 
     archive = JsonlSessionStore(archive_path(swarm_root(root), 'codex:checker'))
     records = [native_record(event) for event in archive.page()['events']]
@@ -899,7 +899,7 @@ def test_native_start_resume_and_stop_need_no_main_binding_input(host: tuple[Pat
     assert len(forks) == 1
     assert forks[0]['config']['model_reasoning_effort'] == 'high'
     assert [r['params']['threadId'] for r in wire if r['method'] == 'turn/start'] == ['checker']
-    from graphtraj.sessions.protocol import native_record
+    from agent_swarm.sessions.protocol import native_record
 
     state = root / '.graphtraj/state'
     archive = JsonlSessionStore(archive_path(swarm_root(root), 'codex:main'))
@@ -945,7 +945,7 @@ def test_native_start_selects_harness_for_external_cwd(
 
 def test_native_session_end_archives_terminal_tail_without_checking(host: tuple[Path, Path]) -> None:
     """The native shutdown flush exposes records written after the Stop hook."""
-    from graphtraj.sessions.protocol import native_record
+    from agent_swarm.sessions.protocol import native_record
 
     root, _ = host
     rollout(root)
@@ -989,7 +989,7 @@ def test_external_hook_remembers_saving_boundary_across_invocations(host: tuple[
 def test_native_copied_fork_keeps_own_first_header(host: tuple[Path, Path]) -> None:
     """An inherited Main header cannot replace the current fork's native identity."""
     from graphtraj.execution.main_finalize import session_binding
-    from graphtraj.sessions.protocol import native_record
+    from agent_swarm.sessions.protocol import native_record
 
     root, binding = host
     original = binding.read_bytes()
@@ -1913,7 +1913,7 @@ def test_ephemeral_fork_excluded_history_is_unknown_not_an_empty_seed(
     host: tuple[Path, Path], history_mode: str | None,
 ) -> None:
     """A valid checker can run without claiming the excluded inherited prefix."""
-    from graphtraj.sessions.protocol import native_record
+    from agent_swarm.sessions.protocol import native_record
 
     root, binding = host
     binding.unlink()

@@ -422,13 +422,20 @@ def require_stopped_subtree(runner_directory: Path, alias: str) -> None:
 
 
 def require_execution_allowed(
-    runner_directory: Path, alias: str, mapping: Mapping[str, Any],
+    runner_directory: Path,
+    alias: str,
+    mapping: Mapping[str, Any],
+    *,
+    reports_only: bool = False,
 ) -> None:
     """Reject work in a stopped subtree, including a not-yet-created child.
 
     The caller holds the execution startup lock until input is delivered or
     the new native execution is recorded. A stop stays bound to the old
     entity; replacing it never clears its descendants' prohibition.
+    ``reports_only`` admits a report collection into a stopped subtree: it
+    drives no children, samples no budget and has read-only Worktree access.
+    A retired subtree is still refused.
     """
     current: str | None = alias
     seen: set[str] = set()
@@ -438,7 +445,8 @@ def require_execution_allowed(
         if record_file.is_file() and yaml.safe_load(record_file.read_text()).get("retirement"):
             raise RunnerError("session-retired", f"{alias} belongs to retired subtree {current}.")
         stop_file = session_record_directory(runner_directory, current) / "stop.yml"
-        if stop_file.exists() and yaml.safe_load(stop_file.read_text()).get("resumed") is not True:
+        if (not reports_only and stop_file.exists()
+                and yaml.safe_load(stop_file.read_text()).get("resumed") is not True):
             raise RunnerError(
                 "subtree-stopped", f"{alias} belongs to stopped subtree {current}.",
             )

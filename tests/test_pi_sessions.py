@@ -1,5 +1,5 @@
 """Pi unified archives through real controlled RPC and native extension pipes."""
-from contextlib import ExitStack
+from contextlib import ExitStack, nullcontext
 import json
 from pathlib import Path
 import time
@@ -9,7 +9,8 @@ import pytest
 from graphtraj.runtimes.pi.collector import PiCollector
 from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError
 from graphtraj.sessions.storage import SessionStore, session_path
-from graphtraj.sessions.protocol import native_record
+from agent_swarm.sessions.archive import JsonlSessionStore, archive_path
+from agent_swarm.sessions.protocol import native_record
 from test_pi_runtime import pi_environment, execution
 from test_result_submission import result_project
 
@@ -30,13 +31,13 @@ def test_rpc_fragmentation_and_partial_failures(tmp_path: Path, pi_environment: 
                 result = turn.run()
                 assert result['outcome'] == ('interrupted' if prompt == 'stream-abort' else 'completed')
         assert not (trace.with_suffix('.pi') / 'rpc.jsonl').exists()
-        path = session_path(Path(turn.request['state_directory']), 'pi:' + turn.session)
-        with SessionStore(path) as store:
-            store.validate()
+        path = archive_path(tmp_path / '.graphtraj/swarm', 'pi:' + turn.session)
+        with nullcontext(JsonlSessionStore(path)) as store:
             start = time.perf_counter()
             events = store.page(limit=1000)['events']
             read_ms = (time.perf_counter() - start) * 1000
-            attempt = [event for event in events if event['type'] == 'assistant/attempt'][-1]
+            observations = [item['event'] for item in store.observations() + store.pending()]
+            attempt = [event for event in observations if event['type'] == 'assistant/attempt'][-1]
             stream = attempt['data']['stream']
             runs = [record for record in stream if record['type'] == 'graphtraj/text-run']
             assert ''.join(record['text'] for record in runs if record['index'] == 1) == 'hello世界 ' * 1024
@@ -48,13 +49,13 @@ def test_rpc_fragmentation_and_partial_failures(tmp_path: Path, pi_environment: 
             if prompt in {'stream-abort', 'stream-error', 'stream-crash'}:
                 assert attempt['data']['interrupted'] is True
             if prompt != 'stream-crash':
-                native = [native_record(event) for event in events if event['type'] != 'assistant/attempt']
+                native = [native_record(event) for event in events if event['type'] == 'graphtraj/native']
                 message = [record['message'] for record in native if record.get('message', {}).get('role') == 'assistant'][-1]
                 assert message['usage'] == {'input': 17, 'output': 4096, 'cacheRead': 3, 'cacheWrite': 0}
             if prompt == 'stream-ok':
-                tool = next(event for event in events if event['type'] == 'tool/result')
-                assert tool['data']['message']['toolCallId'] == 'call-1'
-                assert tool['data']['message']['content'] == [{'type': 'text', 'text': 'tool result'}]
+                tool = next(record['message'] for record in native if record.get('message', {}).get('role') == 'toolResult')
+                assert tool['toolCallId'] == 'call-1'
+                assert tool['content'] == [{'type': 'text', 'text': 'tool result'}]
             metrics.append({'chunk': size, 'case': prompt, 'bytes': path.stat().st_size,
                             'events': len(events), 'stream_records': len(stream), 'page_ms': read_ms,
                             'native_bytes': (trace.with_suffix('.pi') / 'session.jsonl').stat().st_size,
@@ -200,11 +201,12 @@ await collector.close();
         subprocess.run(['node', '--input-type=module', '-e', script,
                         str(source / 'graphtraj/runtimes/pi/extension.mjs')],
                        check=True, timeout=20, capture_output=True, text=True)
-        path = session_path(load_project_configuration(tmp_path).state, 'pi:' + session)
-        with SessionStore(path, readonly=True) as store:
+        path = archive_path(tmp_path / '.graphtraj/swarm', 'pi:' + session)
+        with nullcontext(JsonlSessionStore(path)) as store:
             assert store.header['graphtraj']['source'] == ('child' if child else 'main')
-            attempt = store.page()['events'][-1]
-            assert attempt['data']['stream'][0]['text'] == 'from extension'
+            attempt = next(item['event'] for item in store.pending()
+                           if item['event']['type'] == 'assistant/attempt')
+            assert ''.join(item.get('text', '') for item in attempt['data']['stream']) == 'from extension'
             assert attempt['data']['interrupted'] is True
         assert binding.read_bytes() == original
 

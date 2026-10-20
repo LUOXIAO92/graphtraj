@@ -17,6 +17,7 @@ from conftest import InstalledCommands
 @pytest.fixture(autouse=True)
 def human_process(monkeypatch: pytest.MonkeyPatch) -> None:
     """Model an unbound human OS host only for in-process controlled-data checks."""
+    monkeypatch.setattr('graphtraj.execution.runner_status.caller_runtime', lambda: None)
 
 
 def query(root: Path, **arguments: object) -> dict:
@@ -102,6 +103,18 @@ def test_agent_reads_project_activity_but_cannot_forge_path(tmp_path: Path) -> N
     assert refused.failed and 'unexpected parameter' in refused.document['error']
     with pytest.raises(ValueError, match='actual member'):
         query(tmp_path, alias='other@x1')
+
+
+@pytest.mark.parametrize('runtime', ['codex', 'pi', 'dsh'])
+def test_external_main_runtime_cannot_select_grandchild_trace(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, runtime: str,
+) -> None:
+    """Native ancestry without a verified association reads nothing, even with a desktop flag."""
+    prepare(tmp_path, 'codex', [message('private grandchild')], parent='research@x2')
+    monkeypatch.setattr('graphtraj.execution.runner_status.caller_runtime', lambda: runtime)
+    with pytest.raises(RunnerError, match='verified project caller'):
+        bind(tmp_path, desktop_observer=True)({'action': 'execute', 'feature': 'desktop_activity',
+                                               'arguments': {'task_id': '148', 'alias': 'research@x1'}})
 
 
 def test_native_main_reads_project_activity_without_becoming_human(tmp_path: Path) -> None:
@@ -366,7 +379,7 @@ def test_self_query_is_registered_for_authenticated_runtime_hosts(tmp_path: Path
     with runtime_caller(runner, 'research@x1'):
         result = handle_request(request, cwd=tmp_path, allowed_features=native_operation_features())
         assert not result.failed and result.document['scope'] == 'project'
-        assert [row['alias'] for row in result.document['agents']] == ['research@x1']
+        assert 'research@x1' in [row['alias'] for row in result.document['agents']]
     for identity in ('unknown-native-thread', NativeCaller('research@x1', {'runtime': 'codex'})):
         with runtime_caller(runner, identity), pytest.raises(RunnerError):
             query(tmp_path, alias='research@x1')

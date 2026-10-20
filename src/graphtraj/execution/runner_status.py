@@ -14,12 +14,13 @@ import yaml
 
 from graphtraj.workspace.git_repository import GitRepositoryError, SourceRepository
 from graphtraj.execution.runner_models import RunnerError, StatusResponse
-from graphtraj.execution.runner_connection import session_operation
+from graphtraj.execution.runner_connection import current_parent_connection, session_operation
 from graphtraj.execution.runner_heartbeat import ownership_is_held, read_heartbeat
 from graphtraj.execution.runner_process import process_ancestors
 from graphtraj.execution.runner_transport import valid_terminal_launch_failure
 from graphtraj.runtimes import runtime_adapter
 from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError
+from graphtraj.runtimes.replacement import caller_runtime
 from graphtraj.workspace.runner_project import discover_project_root, discover_runner_directory
 
 
@@ -304,6 +305,12 @@ def require_project_reader(runner_directory: Path) -> str | None:
     identity is not a project caller.
     """
     caller = caller_alias(runner_directory)
+    if caller is None and _runtime_caller.get() is None and runtime_adapter.current_host_connection() is None:
+        # None is Main verified by its native association, Main bound on the
+        # Runtime callback or its host receiver, or the user's own process.
+        # Native ancestry without that verified association is not a caller.
+        if current_parent_connection() is None and caller_runtime() is not None:
+            raise RunnerError('authority-denied', 'Project reads require a verified project caller.')
     if isinstance(caller, NativeCaller):
         connection = caller.connection
         if not connection.get('runtime') or connection.get('session') != str(caller):

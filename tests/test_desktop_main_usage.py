@@ -71,6 +71,7 @@ def test_native_main_two_projects_reopen_and_attribution(
 ) -> None:
     """Actual entry carrier plus controlled native peer establishes readable scoped Main."""
     root, binding = host
+    monkeypatch.setattr('graphtraj.execution.runner_status.caller_runtime', lambda: None)
     second = root / 'second'
     second.mkdir()
     config = second / '.graphtraj/config.yml'
@@ -141,6 +142,7 @@ def test_copied_main_keeps_canonical_identity_in_activity(
 ) -> None:
     """Inherited metadata cannot make the verified Main's own output disappear."""
     root, _ = host
+    monkeypatch.setattr('graphtraj.execution.runner_status.caller_runtime', lambda: None)
     rows = [
         {'type': 'session_meta', 'payload': {'id': 'main', 'source': 'cli', 'forked_from_id': 'ancestor'}},
         {'type': 'session_meta', 'payload': {'id': 'ancestor', 'source': 'cli'}},
@@ -156,6 +158,7 @@ def test_copied_main_keeps_canonical_identity_in_activity(
 
 def test_member_cursor_reconnect_rotation_truncation_and_counts(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """The same dataset gives bounded hot/reopen reads and replay after physical replacement."""
+    monkeypatch.setattr('graphtraj.execution.runner_status.caller_runtime', lambda: None)
     _, _, trace = prepare(tmp_path, 'codex', [turn(tmp_path, 'one')] + [count(i * 100) for i in range(1, 601)])
     alias = 'research@x1'
     started = time.perf_counter()
@@ -226,6 +229,7 @@ def test_pi_native_entry_exposes_owned_main_and_excludes_plugin_children(tmp_pat
     for name in ('GRAPHTRAJ_NATIVE_RUNTIME', 'GRAPHTRAJ_NATIVE_SESSION', 'GRAPHTRAJ_NATIVE_SESSION_FILE', 'PI_SUBAGENT_CHILD'):
         monkeypatch.delenv(name, raising=False)
     monkeypatch.setattr(replacement, 'caller_runtime', lambda: None)
+    monkeypatch.setattr('graphtraj.execution.runner_status.caller_runtime', lambda: None)
     listing = project_query(tmp_path)
     assert [agent['alias'] for agent in listing['agents']] == ['Main:pi:pi-main']
     page = project_query(tmp_path, alias='Main:pi:pi-main')

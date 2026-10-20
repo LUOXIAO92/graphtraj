@@ -13,6 +13,7 @@ def test_native_usage_fragments_and_replay_replace_one_api_call(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Real usage aggregation counts two API IDs once, including across page replay."""
+    monkeypatch.setattr('graphtraj.execution.runner_status.caller_runtime', lambda: None)
 
     def response(identity: str | None, output: int, uuid: str) -> dict:
         """Keep the native record UUID distinct from the provider response ID."""

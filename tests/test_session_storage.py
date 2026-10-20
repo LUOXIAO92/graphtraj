@@ -222,6 +222,7 @@ def test_public_query_authority_and_independent_archive(tmp_path: Path, monkeypa
             assert handle_request(request, cwd=tmp_path).document['header']['id'] == 'canonical'
     with runtime_caller(runner, 'native-helper-thread'), pytest.raises(RunnerError, match='verified project caller'):
         handle_request(request, cwd=tmp_path)
+    monkeypatch.setattr('graphtraj.execution.runner_status.caller_runtime', lambda: None)
     result = bind(tmp_path, desktop_observer=True)(request)
     assert not result.failed and result.document['header']['id'] == 'canonical'
     forbidden = deepcopy(request)

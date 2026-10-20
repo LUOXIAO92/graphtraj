@@ -11,6 +11,7 @@ import time
 import pytest
 import yaml
 
+from graphtraj.configuration.project_configuration import cli_directory
 from graphtraj.configuration.project_roles import parse_inline_role
 from graphtraj.configuration.role_definitions import resolve_child_role
 from graphtraj.execution.runner_heartbeat import hold_ownership
@@ -516,6 +517,16 @@ def test_read_resources_are_native_readable_and_not_writable(
         assert str(path.resolve()) in filesystem['denyWrite']
         assert str(path.resolve()) not in filesystem['allowWrite']
         assert str(path.resolve()) not in filesystem['allowWrite']
+    # Project development records stay readable for diagnosis but unwritable;
+    # the CLI control channel stays unreadable.
+    for path in (tmp_path / 'state', tmp_path / '.graphtraj/runner'):
+        assert f'Read(/{path.resolve()}/**)' in settings['permissions']['allow']
+        assert f'Edit(/{path.resolve()}/**)' in settings['permissions']['deny']
+        assert str(path.resolve()) in filesystem['allowRead']
+        assert str(path.resolve()) in filesystem['denyWrite']
+    channel = cli_directory(tmp_path.resolve())
+    assert f'Read(/{channel}/**)' in settings['permissions']['deny']
+    assert str(channel) in filesystem['denyRead']
 
 
 def test_claude_resource_grants_and_read_only_recovery(tmp_path: Path, claude_environment: None) -> None:

@@ -840,6 +840,45 @@ def test_accepted_long_operation_awaits_its_reply(tmp_path, await_accepted: bool
             time.sleep(1.0)
 
 
+def test_slow_operation_does_not_delay_a_concurrent_request(tmp_path) -> None:
+    """Each request is answered once on its own context; a slow one blocks no other."""
+    import contextvars
+    import threading
+    import time
+
+    from graphtraj.execution import runner_connection
+
+    caller: contextvars.ContextVar = contextvars.ContextVar('caller', default=None)
+    release = threading.Event()
+    calls: list = []
+
+    def operate(request: dict) -> dict:
+        """Bind a caller like runtime_caller; the slow request waits for release."""
+        assert caller.get() is None
+        caller.set(request['caller'])
+        calls.append(request['caller'])
+        if request['caller'] == 'slow':
+            release.wait(10)
+        return {'caller': caller.get()}
+
+    with runner_connection.worker_connection(tmp_path, operate) as address:
+        replies: dict = {}
+        slow = threading.Thread(target=lambda: replies.update(slow=runner_connection.connection_operation(
+            address, {'caller': 'slow'}, await_accepted=True)))
+        slow.start()
+        while 'slow' not in calls:
+            time.sleep(0.01)
+        started = time.monotonic()
+        assert runner_connection.connection_operation(address, {'caller': 'cheap'}) == {'caller': 'cheap'}
+        assert time.monotonic() - started < 1.0
+        assert 'slow' not in replies
+        release.set()
+        slow.join()
+    # Shutdown waited for the accepted slow reply; each request ran exactly once.
+    assert replies == {'slow': {'caller': 'slow'}}
+    assert sorted(calls) == ['cheap', 'slow']
+
+
 def test_only_long_operations_await_acceptance(monkeypatch, tmp_path) -> None:
     """Ordinary forwarded queries keep the default deadline."""
     from graphtraj.interfaces import hosted_cli

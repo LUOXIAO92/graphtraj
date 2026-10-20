@@ -265,7 +265,7 @@ def test_installed_send_recovers_historical_reports(
               for line in shard.read_text().splitlines()]
     sent = run_process([str(installed_commands.runner), 'send', task['alias'],
                         '--instruction', 'Return retained findings.', '--reports-only',
-                        '--caused-by-event-id', events[-1]['event_id']], cwd=root, env=env, timeout=20)
+                        '--caused-by-event-ids', json.dumps([events[-1]['event_id']])], cwd=root, env=env, timeout=20)
     assert sent.returncode == 0, sent.stdout + sent.stderr
     status = wait_for_idle(installed_commands, root, env, task['alias'])
     assert status['session'] == task['session']
@@ -300,3 +300,97 @@ def test_parent_reads_follow_up_reports_beside_the_assignment(tmp_path: Path) ->
     with runtime_caller(runner, None):
         reports = runner_control.read_session_reports('research@x1', tmp_path)['reports']
     assert [report['text'] for report in reports] == ['first', '第二份', 'tenth']
+
+
+def test_installed_report_collection_reaches_a_stopped_member(
+    installed_commands: InstalledCommands,
+    temporary_git_repository: Path,
+    fake_codex: FakeCodex,
+    tmp_path: Path,
+) -> None:
+    """After a stop only a report collection resumes; the stop itself stays in force."""
+    import json
+    from conftest import run_process
+    from runner_fixtures import configure_harness
+    from test_generic_role_execution import wait_for_idle
+    from test_task_graph import _register, _change_status, _task
+
+    root, _, _, env = configure_harness(
+        installed_commands, temporary_git_repository, fake_codex, tmp_path,
+    )
+    (root / '.graphtraj/roles.yml').write_text(yaml.safe_dump({
+        'roles': {'researcher': {'runtime': 'codex', 'model': 'selected-model'}},
+        'role_tree': {'researcher': {}},
+    }))
+    _register(installed_commands, root, _task('166', 'stopped-reports'))
+    _change_status(installed_commands, root, '166', 'ready')
+    batch = root / 'batch.yml'
+    batch.write_text('tasks:\n  - role: researcher\n    task_id: "166"\n')
+    result = run_process([str(installed_commands.runner), '--swarm-input', str(batch)],
+                         cwd=root, env=env, timeout=30)
+    assert result.returncode == 0, result.stdout + result.stderr
+    task = yaml.safe_load(result.stdout)['tasks'][0]
+    wait_for_idle(installed_commands, root, env, task['alias'])
+    stopped = run_process([str(installed_commands.runner), 'interrupt', task['alias']],
+                          cwd=root, env=env, timeout=30)
+    assert stopped.returncode == 0, stopped.stdout + stopped.stderr
+    directory = root / '.graphtraj/runner/sessions' / task['alias']
+    stop = (directory / 'stop.yml').read_bytes()
+    budget_file = root / '.graphtraj/state/tasks/166-stopped-reports/execution-budget.yml'
+    budget = budget_file.read_bytes() if budget_file.exists() else None
+    events = [json.loads(line) for shard in (root / '.graphtraj/state/worldline').glob('*.jsonl')
+              for line in shard.read_text().splitlines()]
+
+    def send(*extra: str):
+        """Send one instruction to the stopped member through the installed Runner."""
+        return run_process([str(installed_commands.runner), 'send', task['alias'],
+                            '--instruction', 'Return retained findings.', *extra,
+                            '--caused-by-event-ids', json.dumps([events[-1]['event_id']])], cwd=root, env=env, timeout=20)
+
+    # Ordinary work stays refused in the stopped subtree.
+    refused = send()
+    assert refused.returncode != 0
+    assert 'subtree-stopped' in refused.stdout + refused.stderr
+
+    collected = send('--reports-only')
+    assert collected.returncode == 0, collected.stdout + collected.stderr
+    status = wait_for_idle(installed_commands, root, env, task['alias'])
+    assert status['session'] == task['session']
+    assert status['execution_id'] != task['execution_id']
+    job = yaml.safe_load((directory / 'resume.yml').read_text())
+    assert job['reports_only'] is True and job['drive_children'] is False
+    assert 'monitor_execution_budget' not in job
+    # The stop is not lifted and the budget is not reset.
+    assert (directory / 'stop.yml').read_bytes() == stop
+    assert (budget_file.read_bytes() if budget_file.exists() else None) == budget
+    assert 'subtree-stopped' in send().stdout + send().stderr
+
+
+@pytest.mark.parametrize(('reports_only', 'collection', 'admitted'), [
+    (True, True, True), (True, False, False), (True, None, False), (False, True, False),
+])
+def test_follow_up_reaches_only_a_running_report_collection(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    reports_only: bool, collection: bool | None, admitted: bool,
+) -> None:
+    """A retried report collection steers the running one; ordinary input stays refused."""
+    directory = tmp_path / 'runner' / 'sessions' / 'member'
+    directory.mkdir(parents=True)
+    (directory / 'stop.yml').write_text('alias: member\n')
+    if collection is not None:
+        (directory / 'resume.yml').write_text(yaml.safe_dump({'reports_only': collection}))
+    mapping = {'parent': None, 'session': 's', 'execution_id': 'e'}
+    sent = []
+    monkeypatch.setattr(runner_control, 'owning_execution', lambda *_: {'activity': 'running'})
+    monkeypatch.setattr(runner_control, 'session_operation', lambda *args, **kwargs: sent.append(kwargs))
+    send = lambda: runner_control._send_session_locked(  # noqa: E731
+        'member', 'Report retained findings.', directory, mapping, (), tmp_path, reports_only=reports_only)
+    if admitted:
+        assert send()['send_status'] == 'sent'
+        assert sent == [{'instruction': 'Report retained findings.'}]
+    else:
+        with pytest.raises(RunnerError, match='stopped subtree'):
+            send()
+        assert sent == []
+    # The stop record is never lifted.
+    assert (directory / 'stop.yml').read_text() == 'alias: member\n'

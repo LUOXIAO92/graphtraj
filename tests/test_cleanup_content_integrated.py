@@ -72,3 +72,35 @@ def test_a_conflicting_head_is_refused(tmp_path: Path) -> None:
 def test_a_candidate_outside_dev_is_refused(tmp_path: Path) -> None:
     case = history(tmp_path)
     assert _content_integrated(target(case, candidate=case.head), case.head) is None
+
+
+def test_cleanup_removes_a_content_integrated_worktree_but_still_refuses_a_dirty_one(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    """The ownership and dirty checks run first; the accepted head is recorded in the result."""
+    from graphtraj.execution import runner_cleanup
+
+    case = history(tmp_path)
+    git(case.repository, 'checkout', '-q', 'dev')
+    worktree = tmp_path / 'worktree'
+    git(case.repository, 'worktree', 'add', '-q', str(worktree), 'task')
+    runner = tmp_path / 'runner'
+    runner.mkdir()
+    monkeypatch.setattr(runner_cleanup, '_task_mappings', lambda *args: ([], [], []))
+    task = SimpleNamespace(
+        status='integrated', task_id='336', branch='task', worktree=worktree, candidate=case.candidate,
+        project=SimpleNamespace(repository=case.repository, dev_commit=case.dev,
+                                integration_branch='dev', runner_directory=runner))
+
+    (worktree / 'untracked.txt').write_text('dirty\n')
+    refused = runner_cleanup._cleanup(task)
+    assert refused.document['error']['code'] == 'cleanup-dirty'
+    (worktree / 'untracked.txt').unlink()
+
+    cleaned = runner_cleanup._cleanup(task)
+    assert cleaned.succeeded, cleaned.document
+    assert cleaned.document['evidence']['content_integrated'] == {
+        'branch_head': case.head, 'tree': git(case.repository, 'rev-parse', 'dev^{tree}')}
+    assert not worktree.exists()
+    assert subprocess.run(['git', 'show-ref', '--verify', '--quiet', 'refs/heads/task'],
+                          cwd=case.repository).returncode == 1

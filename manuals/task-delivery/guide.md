@@ -101,6 +101,9 @@ reach the same Main and be handled there.
 The authorized parent or task-authorized caller assesses the submitted version
 against the task's criteria, reusing valid evidence. Use MCP `decide_result` to record
 the exact submission/version, accepted or rejected decision, reason and evidence.
+Acceptance advances the Task's formal result. Use it only when the submitted
+result meets the complete Task definition; record partial development readiness
+in a report instead.
 Use actual caller identity; a role label is not permission. Return concrete missing
 behavior or evidence for correction and preserve the earlier decision. Read
 [command inputs](references/command-inputs.md) for current operations.

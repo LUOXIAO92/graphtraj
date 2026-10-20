@@ -611,12 +611,13 @@ def submit_session_report(name: str, text: str, cwd: Path, *, notify_parent: boo
     paths = [path for path in _session_report_paths(alias, cwd) if path.name == name]
     if len(paths) != 1:
         raise RunnerError('authority-denied', 'The report is not assigned to this Session.')
-    from graphtraj.execution.runner_results import start_result_correction
+    from graphtraj.execution.runner_results import RESULT_STATUSES, start_result_correction
     from graphtraj.graph.task_graph import _load_states
 
     state = load_project_configuration(cwd).state
-    if _load_states(state / 'tasks')[mapping['task_id']][1]['status'] in ACCEPTED_STATUSES:
-        # A finished Task opens no Round; its member, e.g. after a follow-up,
+    if _load_states(state / 'tasks')[mapping['task_id']][1]['status'] not in RESULT_STATUSES:
+        # A Task not accepting results, e.g. finished or blocked, opens no Round;
+        # its member, e.g. after a follow-up or a stopped report collection,
         # adds its own report beside the retained one in the closed Round.
         path = next(path for path in _session_report_paths(alias, cwd) if path.name == name)
         written = _add_closed_round_report(path, text)
@@ -658,10 +659,6 @@ def _reported(session_directory: Path, alias: str, path: Path, notify: bool) -> 
         if receipt.get('parent') is not None:
             result['parent'] = receipt['parent']
     return result
-
-
-# Task states after a result was accepted: no new result or Round is recorded.
-ACCEPTED_STATUSES = frozenset({'awaiting-integration', 'integrating', 'integrated'})
 
 
 def _add_closed_round_report(path: Path, text: str) -> Path:

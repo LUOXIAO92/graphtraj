@@ -574,7 +574,10 @@ def _new_notices(
     estimated = definition["estimated_minutes"]["total"] + state.get("approved_minutes", 0)
     allowance = state["allowance_minutes"]
     seen = set(state["notifications"])
-    if counted >= estimated:
+    # An approved window resumes the count at the exhausted allowance, so its
+    # planned end is the full increment later, not ``allowance`` minutes early.
+    planned_end = estimated + (allowance if "approved_window_started_at" in state else 0)
+    if counted >= planned_end:
         exceeded.append(
             (
                 "elapsed_minutes",

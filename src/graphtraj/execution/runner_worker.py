@@ -121,10 +121,14 @@ def run(job_file: Path) -> int:
                 raise ValueError("follow-up causes are invalid")
             adapter = select_runtime_adapter(runtime)
 
+            # A report collection resumed into a stopped subtree keeps its
+            # admission; it drives no children and samples no budget.
+            reports_only = operation == "resume" and job.get("reports_only") is True
             startup_lock = execution_start_lock(session_directory.parent.parent)
             try:
                 require_execution_allowed(
                     session_directory.parent.parent, base_mapping["alias"], base_mapping,
+                    reports_only=reports_only,
                 )
             except RunnerError as error:
                 raise RuntimeAdapterError(error.code, error.message, terminal_confirmed=True) from error
@@ -152,7 +156,8 @@ def run(job_file: Path) -> int:
                 startup_lock.close()
                 startup_lock = execution_start_lock(session_directory.parent.parent)
                 try:
-                    require_execution_allowed(session_directory.parent.parent, base_mapping["alias"], base_mapping)
+                    require_execution_allowed(session_directory.parent.parent, base_mapping["alias"], base_mapping,
+                                              reports_only=reports_only)
                 except RunnerError as error:
                     raise RuntimeAdapterError(error.code, error.message) from error
                 if operation == "resume" and session != expected_session:

@@ -569,12 +569,13 @@ def submit_session_report(name: str, text: str, cwd: Path, *, notify_parent: boo
     paths = [path for path in _session_report_paths(alias, cwd) if path.name == name]
     if len(paths) != 1:
         raise RunnerError('authority-denied', 'The report is not assigned to this Session.')
-    from graphtraj.execution.runner_results import start_result_correction
+    from graphtraj.execution.runner_results import RESULT_STATUSES, start_result_correction
     from graphtraj.graph.task_graph import _load_states
 
     state = load_project_configuration(cwd).state
-    if _load_states(state / 'tasks')[mapping['task_id']][1]['status'] in ACCEPTED_STATUSES:
-        # A finished Task opens no Round; its member, e.g. after a follow-up,
+    if _load_states(state / 'tasks')[mapping['task_id']][1]['status'] not in RESULT_STATUSES:
+        # A Task not accepting results, e.g. finished or blocked, opens no Round;
+        # its member, e.g. after a follow-up or a stopped report collection,
         # adds its own report beside the retained one in the closed Round.
         path = next(path for path in _session_report_paths(alias, cwd) if path.name == name)
         written = _add_closed_round_report(path, text)
@@ -616,10 +617,6 @@ def _reported(session_directory: Path, alias: str, path: Path, notify: bool) -> 
         if receipt.get('parent') is not None:
             result['parent'] = receipt['parent']
     return result
-
-
-# Task states after a result was accepted: no new result or Round is recorded.
-ACCEPTED_STATUSES = frozenset({'awaiting-integration', 'integrating', 'integrated'})
 
 
 def _add_closed_round_report(path: Path, text: str) -> Path:
@@ -692,7 +689,9 @@ def _send_session(
         worktree = Path(mapping["worktree_path"])
         restored = False
         with execution_start_lock(session_directory.parent.parent):
-            require_execution_allowed(session_directory.parent.parent, alias, mapping)
+            require_execution_allowed(
+                session_directory.parent.parent, alias, mapping, reports_only=reports_only,
+            )
             absent = not os.path.lexists(str(worktree))
             if reports_only and worktree.is_absolute() and (absent or (
                     worktree.is_dir() and not worktree.is_symlink() and not any(worktree.iterdir()))):
@@ -786,7 +785,13 @@ def _send_session_locked(
             if owning["activity"] != "running":
                 raise session_occupied(alias, owning)
             with execution_start_lock(session_directory.parent.parent):
-                require_execution_allowed(session_directory.parent.parent, alias, mapping)
+                # A reports-only follow-up, such as a retry after a client
+                # timeout, may steer a running report collection, never
+                # ordinary work. The last resume record names that execution.
+                require_execution_allowed(
+                    session_directory.parent.parent, alias, mapping,
+                    reports_only=reports_only and _running_reports_only(session_directory),
+                )
                 session_operation(mapping, "send", instruction=instruction)
             from graphtraj.execution.runner_worker import _append_follow_up
 
@@ -854,6 +859,7 @@ def _send_session_locked(
         resume = {
             "operation": "resume",
             "drive_children": not (reports_only or stopped),
+            "reports_only": reports_only,
             "runtime": mapping["runtime"],
             "adapter_request": request,
             "context_evidence": context_evidence,
@@ -1131,10 +1137,58 @@ def _interrupt_session(
         # Native completion can precede the Worker's terminal-file drain.
         # Reuse its live terminal acknowledgement as well as durable outcomes;
         # lost contact or a stale heartbeat still cannot establish stopping.
-        if owning_execution(alias, session_directory, mapping) is not None:
+        owning = owning_execution(alias, session_directory, mapping)
+        if owning is None:
+            return {"alias": alias, "interrupt_status": "stopped"}
+        if owning["activity"] != "abnormal":
             raise
-        return {"alias": alias, "interrupt_status": "stopped"}
+        # The owner released its lock without a terminal record. Retain that
+        # exit as an unconfirmed outcome; only the Runtime's own termination
+        # confirmation, retained separately, can then establish stopping.
+        _record_owner_exit(alias, session_directory, mapping)
+        return _interrupt_session(alias, session_directory, mapping)
     return {"alias": alias, "interrupt_status": "interrupted"}
+
+
+def _running_reports_only(directory: Path) -> bool:
+    """Return whether the running execution was started as a report collection.
+
+    Only a resume starts a later execution, and each one rewrites resume.yml
+    under the alias lock, so that record names the running one. A first
+    launch has none; an unreadable record admits nothing.
+    """
+    try:
+        resume = yaml.safe_load((directory / "resume.yml").read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, yaml.YAMLError):
+        return False
+    return isinstance(resume, dict) and resume.get("reports_only") is True
+
+
+def _record_owner_exit(alias: str, directory: Path, mapping: dict) -> None:
+    """Retain an exited owner's missing end as an unconfirmed runtime error.
+
+    Written under the startup lock only while the same execution is mapped,
+    its owner lock is released and no terminal record exists. A record that
+    an abnormal response already wrote is kept. No native terminal event is
+    implied: ``terminal_confirmed`` stays false.
+    """
+    runner = directory.parent.parent
+    execution_file = directory / "execution.yml"
+    with execution_start_lock(runner):
+        current, _ = read_alias_mapping(runner, alias)
+        if current != mapping or ownership_is_held(directory, mapping["worker_pid"]):
+            raise RunnerError("termination-unconfirmed",
+                              "The execution changed while its owner exit was being recorded.")
+        if os.path.lexists(str(execution_file)):
+            return
+        write_yaml_durably(execution_file, {
+            "outcome": "runtime-error",
+            "session_id": mapping["session"],
+            "execution_id": mapping["execution_id"],
+            "terminal_confirmed": False,
+            "error": {"code": "owner-exited",
+                      "message": "The process owning this execution exited before reporting its end."},
+        })
 
 
 def _confirm_termination(alias: str, directory: Path, mapping: dict) -> dict:

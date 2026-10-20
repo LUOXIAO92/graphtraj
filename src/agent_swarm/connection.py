@@ -5,6 +5,7 @@ The host supplies the business callback and kernel-PID authentication rule.
 """
 from __future__ import annotations
 
+import contextvars
 import ctypes
 import json
 import math
@@ -62,18 +63,35 @@ def worker_connection(
         host_lock = os.open(address, os.O_RDONLY | os.O_DIRECTORY)
         fcntl.flock(host_lock, fcntl.LOCK_EX)
 
+        accepted: dict[str, threading.Thread] = {}
+
+        def answer(name: str, descriptor: int) -> None:
+            """Answer one request in its own empty context, then release its slot."""
+            try:
+                _answer_request(descriptor, operate, authenticate)
+            finally:
+                os.close(descriptor)
+                del accepted[name]
+
         def serve() -> None:
-            """Publish complete responses while native work continues on its own loop."""
+            """Answer each request on its own thread so a slow one cannot block others."""
             while not stop.is_set():
                 for entry in Path(address).iterdir():
+                    if entry.name in accepted:
+                        continue
                     try:
                         descriptor = os.open(entry, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
                     except OSError:
                         continue
                     try:
-                        _answer_request(descriptor, operate, authenticate)
-                    finally:
-                        os.close(descriptor)
+                        os.stat('request.json', dir_fd=descriptor, follow_symlinks=False)
+                    except OSError:
+                        os.close(descriptor)  # Not yet sent, or already answered.
+                        continue
+                    # A fresh Context keeps caller identity ContextVars per request.
+                    accepted[entry.name] = worker = threading.Thread(
+                        target=contextvars.Context().run, args=(answer, entry.name, descriptor), daemon=True)
+                    worker.start()
                 stop.wait(0.01)
 
         thread = threading.Thread(target=serve, daemon=True)
@@ -83,6 +101,9 @@ def worker_connection(
         finally:
             stop.set()
             thread.join()
+            # Every request already taken finishes and publishes its reply.
+            for running in list(accepted.values()):
+                running.join()
             # A caller removes its request directory after consuming the reply.
             # Keep acknowledged results available across fast native completion.
             deadline = time.monotonic() + OPERATION_TIMEOUT_SECONDS

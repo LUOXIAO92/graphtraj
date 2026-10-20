@@ -337,7 +337,7 @@ def owned_root_undecided_results(harness_root: Path, connection: Mapping[str, An
     -------
     Each owned Session mapping with its undecided ``result-submitted`` event.
     """
-    from graphtraj.graph.delivery_state import read_team
+    from graphtraj.graph.delivery_state import RESULT_DECISION_EVENTS, read_team
     from graphtraj.graph.delivery_worldline import read_worldline
     from graphtraj.graph.task_graph import _load_states
 
@@ -346,7 +346,7 @@ def owned_root_undecided_results(harness_root: Path, connection: Mapping[str, An
         return []
     configuration = load_project_configuration(harness_root)
     events = read_worldline(configuration.state, configuration.harness_root)
-    decided = {event['submission_id'] for event in events if 'submission_id' in event}
+    decided = {event['submission_id'] for event in events if event['event'] in RESULT_DECISION_EVENTS}
     tasks = _load_states(configuration.state / 'tasks')
     undecided = []
     for alias, mapping in roots:

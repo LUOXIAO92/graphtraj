@@ -293,6 +293,31 @@ def test_main_and_members_read_linked_project_sessions_without_secrets(tmp_path:
         handle_request({**request, 'arguments': {'session_id': 'codex:other-project-thread'}}, cwd=tmp_path)
 
 
+def test_member_reads_an_unmigrated_codex_session_by_its_bare_native_id(tmp_path: Path) -> None:
+    """A bare native ID selects its runtime-prefixed archive; redaction and authority stay."""
+    from graphtraj.execution.runner_models import RunnerError
+    from graphtraj.execution.runner_status import runtime_caller
+    from graphtraj.interfaces.gateway import handle_request
+    from test_result_submission import result_project
+
+    runner, _, _ = result_project(tmp_path)
+    thread = '01a15203-d14d-7bf3-8900-6a3a3b5e1031'
+    with SessionStore.create(session_path(tmp_path / 'state', 'codex:' + thread),
+                             header('codex:' + thread)) as store:
+        store.append({'type': 'unknown/encrypted', 'seq': 0, 'time': 1, 'data': {
+            'text': 'Main progress', 'api_key': 'private-api-key'}}, source='native', position=0)
+    request = {'action': 'execute', 'feature': 'session_read', 'arguments': {'session_id': thread}}
+    with runtime_caller(runner, 'research@x1'):
+        bare = handle_request(request, cwd=tmp_path).document
+        prefixed = handle_request({**request, 'arguments': {'session_id': 'codex:' + thread}},
+                                  cwd=tmp_path).document
+    assert bare == prefixed and bare['header']['id'] == 'codex:' + thread
+    assert bare['events'][0]['data']['text'] == 'Main progress'
+    assert 'private-api-key' not in json.dumps(bare)
+    with runtime_caller(runner, 'native-helper-thread'), pytest.raises(RunnerError, match='verified project caller'):
+        handle_request(request, cwd=tmp_path)
+
+
 def test_public_query_pages_migrated_evidence_without_claiming_native_order(tmp_path: Path) -> None:
     """Old evidence respects the selected page size and keeps its own cursor."""
     from agent_swarm.sessions.migration import import_sqlite

@@ -47,8 +47,14 @@ def read_session(cwd: Path, session_id: str, after: int = -1, limit: int = 200) 
         else:
             if (configuration.harness_root / '.graphtraj/core/config.yml').exists():
                 raise ValueError('Canonical JSONL Session is unavailable; legacy backups are not a query fallback.')
-            # Unmigrated history remains readable before the explicit partition.
-            store = resources.enter_context(SessionStore(session_path(configuration.state, session_id), readonly=True))
+            # Unmigrated history remains readable before the explicit partition;
+            # a bare native ID selects its one runtime-prefixed canonical archive.
+            if not session_path(configuration.state, session_id).exists():
+                prefixed = [runtime + ':' + session_id for runtime in ('codex', 'claude', 'pi', 'dsh')
+                            if session_path(configuration.state, runtime + ':' + session_id).exists()]
+                if len(prefixed) == 1:
+                    session_id = prefixed[0]
+            store =resources.enter_context(SessionStore(session_path(configuration.state, session_id), readonly=True))
             store.db.execute('BEGIN')
         header = store.header
         if header['id'] != session_id:

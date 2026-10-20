@@ -8,7 +8,7 @@ from pathlib import Path
 
 import yaml
 
-from conftest import app_server_peer, FakeCodex, InstalledCommands, run_process, wait_for_file
+from conftest import runner_operation, app_server_peer, FakeCodex, InstalledCommands, run_process, wait_for_file
 from runner_fixtures import configure_harness
 
 
@@ -90,7 +90,7 @@ def test_installed_alias_control_resumes_and_interrupts_one_team_session(
         tmp_path,
     )
     send_help = run_process(
-        [str(installed_commands.runner), "send", "--help"],
+        runner_operation(installed_commands, "send", "--help"),
         cwd=harness_root,
         env=environment,
     )
@@ -195,7 +195,7 @@ def test_installed_alias_control_resumes_and_interrupts_one_team_session(
     assert resumed_document["session"] == session
     assert resumed_document["send_status"] == "sent"
     running = run_process(
-        [str(installed_commands.runner), "status", alias],
+        runner_operation(installed_commands, "status", alias),
         cwd=harness_root,
         env=environment,
     )
@@ -241,8 +241,8 @@ def test_installed_alias_control_resumes_and_interrupts_one_team_session(
     wait_for_file(policy_log)
     peer_before = peer_mapping_file.read_text()
     denied = run_process(
-        [str(installed_commands.runner), "send", peer_alias,
-         "--instruction", "Inspect the candidate.", "--caused-by-event-id", cause],
+        runner_operation(installed_commands, "send", peer_alias,
+         "--instruction", "Inspect the candidate.", "--caused-by-event-id", cause),
         cwd=harness_root, env=environment,
     )
     assert denied.returncode == 1
@@ -256,7 +256,7 @@ def test_installed_alias_control_resumes_and_interrupts_one_team_session(
     assert yaml.safe_load(denied_batch.stdout)["error"]["code"] == "insufficient-capacity"
 
     interrupted = run_process(
-        [str(installed_commands.runner), "interrupt", alias],
+        runner_operation(installed_commands, "interrupt", alias),
         cwd=harness_root,
         env=environment,
         timeout=10,
@@ -273,8 +273,8 @@ def test_installed_alias_control_resumes_and_interrupts_one_team_session(
     }
     wait_for_file(mapping_file.parent / "execution.yml")
     retry = run_process(
-        [str(installed_commands.runner), "send", peer_alias,
-         "--instruction", "Inspect the candidate.", "--caused-by-event-id", cause],
+        runner_operation(installed_commands, "send", peer_alias,
+         "--instruction", "Inspect the candidate.", "--caused-by-event-id", cause),
         cwd=harness_root, env=environment,
     )
     # Releasing capacity does not make Main this descendant's direct parent.
@@ -282,7 +282,7 @@ def test_installed_alias_control_resumes_and_interrupts_one_team_session(
     assert yaml.safe_load(retry.stdout)["error"]["code"] == "authority-denied"
     assert peer_mapping_file.read_text() == peer_before
     idle = run_process(
-        [str(installed_commands.runner), "status", alias],
+        runner_operation(installed_commands, "status", alias),
         cwd=harness_root,
         env=environment,
     )
@@ -627,7 +627,7 @@ def test_installed_status_accepts_configured_entity_names_and_retains_history(
     retained_record = (retained / "mapping.yml").read_bytes()
 
     located = run_process(
-        [str(installed_commands.runner), "status", current_alias, retained_alias],
+        runner_operation(installed_commands, "status", current_alias, retained_alias),
         cwd=harness_root,
         env=environment,
     )
@@ -645,7 +645,7 @@ def test_installed_status_accepts_configured_entity_names_and_retains_history(
         "76-session_alias_control-handover0-engineer@first@second",
     ):
         refused = run_process(
-            [str(installed_commands.runner), "status", refused_alias],
+            runner_operation(installed_commands, "status", refused_alias),
             cwd=harness_root,
             env=environment,
         )

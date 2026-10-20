@@ -10,7 +10,7 @@ import time
 import pytest
 import yaml
 
-from conftest import FakeCodex, InstalledCommands, run_process
+from conftest import runner_operation, FakeCodex, InstalledCommands, run_process
 from runner_fixtures import configure_harness
 from test_task_recovery import installed_commands, events
 from test_task_budget_control import BODY
@@ -725,7 +725,7 @@ def test_stop_published_during_startup_refuses_the_first_turn(
         assert time.monotonic() < deadline and launch.poll() is None
         time.sleep(0.05)
     alias = next(path.name for path in (root / '.graphtraj/runner/sessions').iterdir() if path.is_dir())
-    stopping = subprocess.Popen([str(installed_commands.runner), 'interrupt', alias], cwd=root,
+    stopping = subprocess.Popen(runner_operation(installed_commands, 'interrupt', alias), cwd=root,
                                 env=environment, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
     # The interrupt publishes its stop before addressing the execution; the
     # held hook is then released so this execution reaches Session binding.

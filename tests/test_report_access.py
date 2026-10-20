@@ -9,7 +9,7 @@ from graphtraj.configuration.project_configuration import default_configuration_
 from graphtraj.execution import runner_control
 from graphtraj.execution.runner_models import RunnerError
 from graphtraj.execution.runner_status import runtime_caller
-from conftest import FakeCodex, InstalledCommands
+from conftest import runner_operation, FakeCodex, InstalledCommands
 from test_result_submission import result_project
 
 
@@ -303,9 +303,9 @@ def test_installed_send_recovers_historical_reports(
     trace = (directory / 'events.jsonl').read_bytes()
     events = [json.loads(line) for shard in (root / '.graphtraj/state/worldline').glob('*.jsonl')
               for line in shard.read_text().splitlines()]
-    sent = run_process([str(installed_commands.runner), 'send', task['alias'],
+    sent = run_process(runner_operation(installed_commands, 'send', task['alias'],
                         '--instruction', 'Return retained findings.', '--reports-only',
-                        '--caused-by-event-ids', json.dumps([events[-1]['event_id']])], cwd=root, env=env, timeout=20)
+                        '--caused-by-event-ids', json.dumps([events[-1]['event_id']])), cwd=root, env=env, timeout=20)
     assert sent.returncode == 0, sent.stdout + sent.stderr
     status = wait_for_idle(installed_commands, root, env, task['alias'])
     assert status['session'] == task['session']
@@ -371,7 +371,7 @@ def test_installed_report_collection_reaches_a_stopped_member(
     assert result.returncode == 0, result.stdout + result.stderr
     task = yaml.safe_load(result.stdout)['tasks'][0]
     wait_for_idle(installed_commands, root, env, task['alias'])
-    stopped = run_process([str(installed_commands.runner), 'interrupt', task['alias']],
+    stopped = run_process(runner_operation(installed_commands, 'interrupt', task['alias']),
                           cwd=root, env=env, timeout=30)
     assert stopped.returncode == 0, stopped.stdout + stopped.stderr
     directory = root / '.graphtraj/runner/sessions' / task['alias']
@@ -383,9 +383,9 @@ def test_installed_report_collection_reaches_a_stopped_member(
 
     def send(*extra: str):
         """Send one instruction to the stopped member through the installed Runner."""
-        return run_process([str(installed_commands.runner), 'send', task['alias'],
+        return run_process(runner_operation(installed_commands, 'send', task['alias'],
                             '--instruction', 'Return retained findings.', *extra,
-                            '--caused-by-event-ids', json.dumps([events[-1]['event_id']])], cwd=root, env=env, timeout=20)
+                            '--caused-by-event-ids', json.dumps([events[-1]['event_id']])), cwd=root, env=env, timeout=20)
 
     # Ordinary work stays refused in the stopped subtree.
     refused = send()

@@ -197,7 +197,7 @@ def test_mcp_delivers_the_configured_stop_text_to_the_request_caller(
 
     monkeypatch.setitem(tools.TOOLS, "probe", tools.Tool("probe", "probe", {}, handler))
     response = mcp._tool_call_response(1, {
-        "name": "graphtraj",
+        "name": "tasks",
         "arguments": {"action": "execute", "feature": "probe", "arguments": {}},
         "_meta": {"threadId": "existing-caller"},
     })

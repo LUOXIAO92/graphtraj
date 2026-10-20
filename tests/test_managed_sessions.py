@@ -63,6 +63,14 @@ try:
         result = {'alias': alias, 'session': read_alias_mapping(runner, alias)[0]['session']}
     elif operation == 'status':
         result = status_aliases(arguments, root, operation_total=True).document
+    elif operation == 'tree':
+        # The alias-free status tree the agents host builds for its callers.
+        from graphtraj.execution.runner_status import status_tree
+        response = status_tree(root)
+        result = response.document
+        if not response.succeeded:
+            print(json.dumps(result))
+            sys.exit(1)
     elif operation == 'send':
         result = send_instruction(arguments[0], arguments[1], root, tuple(arguments[2]))
     elif operation == 'agents':

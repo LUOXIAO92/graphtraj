@@ -11,7 +11,7 @@ import pytest
 import yaml
 from click.testing import CliRunner
 
-from conftest import FakeCodex, InstalledCommands, run_process, wait_for_file
+from conftest import runner_operation, FakeCodex, InstalledCommands, run_process, wait_for_file
 from graphtraj.execution import approved_recovery as recovery
 from graphtraj.execution.runner_models import RunnerError
 from graphtraj.execution.runner_status import runtime_caller
@@ -606,7 +606,7 @@ def test_native_approved_command_reaches_original_session_with_exact_scope(
         script = script.replace(str(original_peer), str(peer))
     fake_codex.executable.write_text(script)
     # The public stop and budget stop are separate restrictions, both retained.
-    stopped = run_process([str(installed_commands.runner), 'interrupt', mapping['alias']], cwd=root)
+    stopped = run_process(runner_operation(installed_commands, 'interrupt', mapping['alias']), cwd=root)
     assert stopped.returncode == 0, stopped.stderr
     budget_path = task / 'execution-budget.yml'
     before = yaml.safe_load(budget_path.read_text())
@@ -782,7 +782,7 @@ def test_retry_does_not_override_a_new_stop(
     monkeypatch.setattr(recovery, '_send_session_locked', fail)
     result = invoke(root, arguments)
     assert result['recovery_status'] == 'resume-failed'
-    interrupted = run_process([str(installed_commands.runner), 'interrupt', mapping['alias']], cwd=root)
+    interrupted = run_process(runner_operation(installed_commands, 'interrupt', mapping['alias']), cwd=root)
     assert interrupted.returncode == 0, interrupted.stderr
     retried = invoke(root, {'alias': mapping['alias'], 'retry_event_id': result['recovery_event_id']})
     assert retried['recovery_status'] == 'resume-stale'
@@ -1614,7 +1614,7 @@ def test_approved_increment_lifts_budget_stop_but_keeps_session_stop(
     root, task, mapping, arguments = accepted_target
     adapter = NativeApproval(root, 'automatic')
     monkeypatch.setattr(recovery.runtime_adapter, 'select_runtime_adapter', lambda runtime: adapter)
-    interrupted = run_process([str(installed_commands.runner), 'interrupt', mapping['alias']], cwd=root)
+    interrupted = run_process(runner_operation(installed_commands, 'interrupt', mapping['alias']), cwd=root)
     assert interrupted.returncode == 0, interrupted.stderr
     stop_path = root / '.graphtraj/runner/sessions' / mapping['alias'] / 'stop.yml'
     stop = stop_path.read_bytes()
@@ -1667,7 +1667,7 @@ def test_budget_only_continue_is_not_blocked_by_a_stopped_old_root(
     monkeypatch.setattr(recovery.runtime_adapter, 'select_runtime_adapter', lambda runtime: adapter)
     result = invoke(root, {**arguments, 'additional_minutes': 0, 'resume': False})
     assert result['recovery_status'] == 'applied'
-    interrupted = run_process([str(installed_commands.runner), 'interrupt', mapping['alias']], cwd=root)
+    interrupted = run_process(runner_operation(installed_commands, 'interrupt', mapping['alias']), cwd=root)
     assert interrupted.returncode == 0, interrupted.stderr
     budget_path = task / 'execution-budget.yml'
     budget = yaml.safe_load(budget_path.read_text())

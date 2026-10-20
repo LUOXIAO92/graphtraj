@@ -46,6 +46,8 @@ from graphtraj.execution.runner_status import (
     read_terminal_outcome,
     read_execution_result,
     require_direct_authority,
+    require_project_reader,
+    project_redact,
     session_occupied,
     require_descendant_authority,
     require_execution_allowed,
@@ -487,10 +489,14 @@ def _session_report_paths(alias: str, cwd: Path) -> tuple[Path, ...]:
 
 
 def read_session_reports(alias: str, cwd: Path) -> dict:
-    """Read only the target's declared current report files for its direct owner."""
+    """Read the target's declared report files for any verified project caller.
+
+    Project development records cross Agents and non-direct relations; control
+    material and credentials are redacted from the projection, never granted.
+    """
     runner = discover_runner_directory(cwd)
     mapping, directory = read_alias_mapping(runner, alias)
-    require_direct_authority(runner, alias, mapping)
+    require_project_reader(runner)
     paths = _session_report_paths(alias, cwd)
     # A follow-up report beside a closed Round's retained one is <stem>-<n>.md.
     listed = []
@@ -566,7 +572,7 @@ def read_session_reports(alias: str, cwd: Path) -> dict:
             else:
                 confirmation = directory / f"terminal-confirmation-{mapping['execution_id']}.yml"
                 result['termination_confirmation'] = yaml.safe_load(confirmation.read_text())
-    return result
+    return project_redact(result)
 
 
 def submit_session_report(name: str, text: str, cwd: Path, *, notify_parent: bool = False) -> dict:

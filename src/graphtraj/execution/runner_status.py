@@ -276,6 +276,46 @@ def require_direct_authority(
     )
 
 
+_CONTROL_SECRET = re.compile(r'(?i)(control[_-]?(key|socket|directory)|socket|request[_-]?token)')
+
+
+def project_redact(value: Any) -> Any:
+    """Remove credentials and control material from a project development read."""
+    from graphtraj.runtimes.activity import redact
+
+    if isinstance(value, dict):
+        return {key: '[redacted]' if _CONTROL_SECRET.search(str(key)) else project_redact(item)
+                for key, item in redact(value).items()}
+    if isinstance(value, list):
+        return [project_redact(item) for item in value]
+    return redact(value)
+
+
+def require_project_reader(runner_directory: Path) -> str | None:
+    """Resolve the verified caller of a project development read.
+
+    Reports, results and linked Session history are readable across Agents,
+    models and non-direct relations inside this project under the caller's
+    real identity. Main, the user, a registered member and a verified native
+    Session qualify; an unknown native source is refused by ``caller_alias``
+    and never becomes human. This grants no control: sending, replying,
+    approval, recovery, stopping and replacement keep
+    ``require_direct_authority``. A native helper thread or an unregistered
+    identity is not a project caller.
+    """
+    caller = caller_alias(runner_directory)
+    if isinstance(caller, NativeCaller):
+        connection = caller.connection
+        if not connection.get('runtime') or connection.get('session') != str(caller):
+            raise RunnerError('authority-denied', 'Project reads require a verified project caller.')
+    elif caller is not None:
+        try:
+            read_alias_mapping(runner_directory, caller)
+        except RunnerError as error:
+            raise RunnerError('authority-denied', 'Project reads require a verified project caller.') from error
+    return caller
+
+
 def require_task_authority(
     state_directory: Path,
     runner_directory: Path,

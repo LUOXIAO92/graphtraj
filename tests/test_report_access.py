@@ -83,15 +83,15 @@ def test_failed_report_delivery_remains_visible_only_to_its_owner(
     assert receipt['parent_connection'] == {'runtime': 'codex', 'session': 'original-main'}
     assert observed['reports'][0]['text'] == 'Preserved findings'
     assert len(calls) == 1
+    # A non-direct project member reads the same development record.
     with runtime_caller(runner, 'research@x2'):
-        with pytest.raises(RunnerError, match='direct parent'):
-            runner_control.read_session_reports('research@x1', tmp_path)
+        assert runner_control.read_session_reports('research@x1', tmp_path)['reports'] == observed['reports']
 
 
 def test_direct_parent_reads_terminal_message_without_report_files(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Temporary children expose their completed result only to their parent."""
+    """Temporary children expose their completed result to verified project callers."""
     config = tmp_path / '.graphtraj/config.yml'
     directory = config.parent / 'runner/sessions/child@e1'
     directory.mkdir(parents=True)
@@ -101,9 +101,11 @@ def test_direct_parent_reads_terminal_message_without_report_files(
     monkeypatch.setattr(runner_control, 'read_alias_mapping',
                         lambda *args: ({'parent': 'parent@l1'}, directory))
     monkeypatch.setattr(runner_control, '_session_report_paths', lambda *args, **kwargs: ())
-    with runtime_caller(config.parent / 'runner', 'parent@l1'):
+    with runtime_caller(config.parent / 'runner', None):
         result = runner_control.read_session_reports('child@e1', tmp_path)
-        assert result == {'alias': 'child@e1', 'reports': [], 'last_agent_message': 'synthetic-result'}
+        assert result == {'alias': 'child@e1', 'reports': [], 'last_agent_message': 'synthetic-result',
+                          'execution': {'outcome': 'completed', 'terminal_confirmed': True}}
+    # An unregistered identity is not a project caller.
     with runtime_caller(config.parent / 'runner', 'sibling@e2'):
         with pytest.raises(RunnerError) as denied:
             runner_control.read_session_reports('child@e1', tmp_path)
@@ -145,11 +147,12 @@ def test_historical_report_assignments_preserve_ownership(
     launch_file.write_text(yaml.safe_dump({'runtime': 'codex', 'mapping': mapping,
                                          'connection': {}, 'adapter_request': request}))
     before = (mapping_file.read_bytes(), launch_file.read_bytes())
-    for caller in ('research@x1', 'parent@p1'):
+    # The member itself and a non-direct project member read the report.
+    for caller in ('research@x1', 'research@x2'):
         with runtime_caller(runner, caller):
             result = runner_control.read_session_reports('research@x1', tmp_path)
             assert result['reports'] == [{'path': str(own), 'text': 'Original findings'}]
-    with runtime_caller(runner, 'research@x2'), pytest.raises(RunnerError) as denied:
+    with runtime_caller(runner, 'native-helper-thread'), pytest.raises(RunnerError) as denied:
         runner_control.read_session_reports('research@x1', tmp_path)
     assert denied.value.code == 'authority-denied'
     with runtime_caller(runner, 'research@x1'):
@@ -160,12 +163,12 @@ def test_historical_report_assignments_preserve_ownership(
     assert sibling.read_text() == 'Private sibling evidence'
     assert before == (mapping_file.read_bytes(), launch_file.read_bytes())
     own.unlink()
-    with runtime_caller(runner, 'parent@p1'):
+    with runtime_caller(runner, 'research@x2'):
         result = runner_control.read_session_reports('research@x1', tmp_path)
     assert result['reports'] == []
     assert result['missing_reports'] == [str(own)]
     own.symlink_to(sibling)
-    with runtime_caller(runner, 'parent@p1'), pytest.raises(RunnerError) as redirected:
+    with runtime_caller(runner, 'research@x2'), pytest.raises(RunnerError) as redirected:
         runner_control.read_session_reports('research@x1', tmp_path)
     assert redirected.value.code == 'authority-denied'
 
@@ -394,3 +397,17 @@ def test_follow_up_reaches_only_a_running_report_collection(
         assert sent == []
     # The stop record is never lifted.
     assert (directory / 'stop.yml').read_text() == 'alias: member\n'
+
+
+def test_project_read_grants_no_control_to_a_non_parent(tmp_path: Path) -> None:
+    """A non-direct member reads reports but cannot query native requests or interrupt."""
+    runner, _, _ = result_project(tmp_path)
+    with runtime_caller(runner, 'research@x2'):
+        assert runner_control.read_session_reports('research@x1', tmp_path)['alias'] == 'research@x1'
+        for control in (
+            lambda: runner_control.pending_requests('research@x1', tmp_path),
+            lambda: runner_control.interrupt_session('research@x1', tmp_path),
+        ):
+            with pytest.raises(RunnerError) as denied:
+                control()
+            assert denied.value.code == 'authority-denied'

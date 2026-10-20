@@ -9,10 +9,8 @@ import yaml
 
 from graphtraj.configuration.project_configuration import load_project_configuration, ProjectConfiguration
 from graphtraj.execution.runner_models import RunnerError
-from graphtraj.execution.runner_connection import current_parent_connection
-from graphtraj.runtimes.replacement import caller_runtime
 from graphtraj.execution.runner_status import (
-    caller_alias, read_alias_mapping, runtime_caller_is_bound, NativeCaller, _status_session,
+    project_redact, read_alias_mapping, require_project_reader, _status_session,
 )
 from graphtraj.graph.delivery_state import read_team
 from graphtraj.graph.task_graph import _load_states
@@ -33,48 +31,38 @@ def observe(
     alias: str | None = None,
     cursor: str | None = None,
 ) -> dict:
-    """Return human project activity or a verified formal Agent's own Session.
+    """Return project activity to the human desktop or a verified project caller.
 
     A request can select only a recorded Task/member, never a filesystem path
-    or caller identity. Existing OS/native identity checks precede any Trace read.
+    or caller identity. Existing OS/native identity checks precede any Trace
+    read. Agents read the project's development records across Agents and
+    models with credentials and control material redacted; no messaging or
+    control is provided, and an unknown native source never becomes human.
     """
     runner = discover_runner_directory(cwd)
     from graphtraj.interfaces.desktop_host import owns_project
 
     window = human_observer.get() and owns_project(cwd)
-    caller = None if window else caller_alias(runner)
-    own = None
-    if caller is not None and not isinstance(caller, NativeCaller):
-        try:
-            own = read_alias_mapping(runner, caller)
-        except RunnerError as error:
-            raise RunnerError('authority-denied', 'Only a verified registered Session may read itself.') from error
-        if own[0]['task_id'] != task_id or alias not in {None, caller}:
-            raise RunnerError('authority-denied', 'Agent activity access is limited to its own Session and Task.')
-    else:
-        # A bound Main/unknown native caller is never an unbound human observer.
-        if not window and (not human_observer.get() or runtime_caller_is_bound()
-                or current_parent_connection() is not None or caller_runtime() is not None
-                or caller is not None):
-            raise RunnerError('authority-denied', 'Activity requires the human desktop host binding; human observation is unavailable to native Main/unknown callers.')
+    if window:
+        return _observe(cwd, runner, task_id, alias, cursor)
+    require_project_reader(runner)
+    return project_redact({**_observe(cwd, runner, task_id, alias, cursor), 'scope': 'project'})
 
+
+def _observe(cwd: Path, runner: Path, task_id: str | None, alias: str | None, cursor: str | None) -> dict:
+    """Read the selected project source for an already authorized observer."""
     configuration = load_project_configuration(cwd)
     if task_id is None:
         return project_activity(cwd, runner, configuration, alias, cursor)
-    if own is not None:
-        # Do not enumerate other Teams, members, historical records or Traces.
-        aliases = {caller}
-        current = {caller}
-    else:
-        states = _load_states(configuration.state / 'tasks')
-        if task_id not in states:
-            raise ValueError('Choose a registered Task.')
-        aliases, current = _task_aliases(*states[task_id])
+    states = _load_states(configuration.state / 'tasks')
+    if task_id not in states:
+        raise ValueError('Choose a registered Task.')
+    aliases, current = _task_aliases(*states[task_id])
     agents = []
     mappings = {}
     for member in sorted(aliases):
         try:
-            mapping, session_directory = own if own is not None else read_alias_mapping(runner, member)
+            mapping, session_directory = read_alias_mapping(runner, member)
             if mapping['task_id'] != task_id:
                 continue
             mappings[member] = mapping
@@ -97,7 +85,7 @@ def observe(
         except (RunnerError, OSError, ValueError):
             agents.append({'alias': member, 'historical': member not in current,
                            'state': 'unavailable', 'reason': 'Member evidence is missing or inaccessible.'})
-    response = {'task_id': task_id, 'agents': redact(agents), 'scope': 'self' if own else 'human',
+    response = {'task_id': task_id, 'agents': redact(agents), 'scope': 'human',
                 'updated_at': datetime.now(timezone.utc).isoformat()}
     if alias is None:
         return response

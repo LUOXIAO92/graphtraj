@@ -17,7 +17,6 @@ from conftest import InstalledCommands
 @pytest.fixture(autouse=True)
 def human_process(monkeypatch: pytest.MonkeyPatch) -> None:
     """Model an unbound human OS host only for in-process controlled-data checks."""
-    monkeypatch.setattr('graphtraj.execution.desktop_activity.caller_runtime', lambda: None)
 
 
 def query(root: Path, **arguments: object) -> dict:
@@ -89,23 +88,15 @@ def test_retired_binding_keeps_historical_trace(tmp_path: Path) -> None:
     assert result['events'][0]['text'] == 'retained work'
 
 
-def test_agent_cannot_use_human_observation_or_forge_path(tmp_path: Path) -> None:
-    """Registered Agents see only their own Session through the authenticated gateway."""
-    runner, _, _ = prepare(tmp_path, 'codex', [message('private')])
-    with pytest.raises(RunnerError, match='desktop host binding'):
-        handle_request({'action': 'execute', 'feature': 'desktop_activity', 'arguments': {'task_id': '148'}}, cwd=tmp_path)
-    with runtime_caller(runner, 'research@x1'):
+def test_agent_reads_project_activity_but_cannot_forge_path(tmp_path: Path) -> None:
+    """A registered Agent reads another member's activity under its own identity, never as human."""
+    runner, _, _ = prepare(tmp_path, 'codex', [message('project work')])
+    with runtime_caller(runner, 'research@x2'):
         allowed = handle_request({'action': 'execute', 'feature': 'desktop_activity',
             'arguments': {'task_id': '148', 'alias': 'research@x1'}}, cwd=tmp_path)
         assert not allowed.failed
-        assert allowed.document['scope'] == 'self'
-        assert [member['alias'] for member in allowed.document['agents']] == ['research@x1']
-        assert allowed.document['events'][0]['text'] == 'private'
-        for target in ('research@x2', 'research@x3', 'other@x1'):
-            with pytest.raises(RunnerError, match='own Session'):
-                query(tmp_path, alias=target)
-        with pytest.raises(RunnerError, match='own Session'):
-            query(tmp_path, task_id='other')
+        assert allowed.document['scope'] == 'project'
+        assert allowed.document['events'][0]['text'] == 'project work'
     refused = bind(tmp_path, desktop_observer=True)({'action': 'execute', 'feature': 'desktop_activity',
         'arguments': {'task_id': '148', 'path': '/private/elsewhere'}})
     assert refused.failed and 'unexpected parameter' in refused.document['error']
@@ -113,26 +104,19 @@ def test_agent_cannot_use_human_observation_or_forge_path(tmp_path: Path) -> Non
         query(tmp_path, alias='other@x1')
 
 
-@pytest.mark.parametrize('runtime', ['codex', 'pi', 'dsh'])
-def test_external_main_runtime_cannot_select_grandchild_trace(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, runtime: str,
-) -> None:
-    """A desktop flag cannot elevate an external Main detected by native ancestry."""
-    prepare(tmp_path, 'codex', [message('private grandchild')], parent='research@x2')
-    monkeypatch.setattr('graphtraj.execution.desktop_activity.caller_runtime', lambda: runtime)
-    with pytest.raises(RunnerError, match='human observation'):
-        query(tmp_path, alias='research@x1')
-
-
-def test_native_main_binding_is_not_a_human(tmp_path: Path) -> None:
-    """Main's explicitly bound None alias and host receiver both retain Agent limits."""
+def test_native_main_reads_project_activity_without_becoming_human(tmp_path: Path) -> None:
+    """Main's bound None identity and host receiver read with redaction, not human scope."""
     from graphtraj.execution.runner_connection import parent_connection
 
-    runner, _, _ = prepare(tmp_path, 'codex', [message('private grandchild')], parent='research@x2')
-    with runtime_caller(runner, None), pytest.raises(RunnerError, match='human observation'):
-        query(tmp_path, alias='research@x1')
-    with parent_connection('native-main-receiver'), pytest.raises(RunnerError, match='human observation'):
-        query(tmp_path, alias='research@x1')
+    runner, _, _ = prepare(tmp_path, 'codex', [message('grandchild work')], parent='research@x2')
+    with runtime_caller(runner, None):
+        page = handle_request({'action': 'execute', 'feature': 'desktop_activity',
+            'arguments': {'task_id': '148', 'alias': 'research@x1'}}, cwd=tmp_path).document
+    assert page['scope'] == 'project' and page['events'][0]['text'] == 'grandchild work'
+    with parent_connection('native-main-receiver'):
+        page = handle_request({'action': 'execute', 'feature': 'desktop_activity',
+            'arguments': {'task_id': '148', 'alias': 'research@x1'}}, cwd=tmp_path).document
+    assert page['scope'] == 'project'
 
 
 def test_missing_and_changed_traces_are_explicit(tmp_path: Path) -> None:
@@ -335,7 +319,8 @@ def test_installed_desktop_flag_preserves_actual_agent_identity(
     )
     assert result.returncode == 0, result.stderr
     reply = json.loads(result.stdout)
-    assert reply['failed'] and 'human observation' in reply.get('error', ''), reply
+    # The desktop flag never elevates an actual Agent to human scope.
+    assert not reply['failed'] and reply['result']['scope'] == 'project', reply
     assert 'private grandchild' not in result.stdout
 
 
@@ -380,7 +365,7 @@ def test_self_query_is_registered_for_authenticated_runtime_hosts(tmp_path: Path
     request = {'action': 'execute', 'feature': 'desktop_activity', 'arguments': {'task_id': '148'}}
     with runtime_caller(runner, 'research@x1'):
         result = handle_request(request, cwd=tmp_path, allowed_features=native_operation_features())
-        assert not result.failed and result.document['scope'] == 'self'
+        assert not result.failed and result.document['scope'] == 'project'
         assert [row['alias'] for row in result.document['agents']] == ['research@x1']
     for identity in ('unknown-native-thread', NativeCaller('research@x1', {'runtime': 'codex'})):
         with runtime_caller(runner, identity), pytest.raises(RunnerError):

@@ -496,7 +496,8 @@ def read_session_archive(arguments: Mapping[str, Any], *, cwd: Path | None = Non
 register_tool(
     "session_read",
     "Read a project-local canonical Session, ordered events and durable unfinished output. "
-    "Native Agents may read only their own verified Session; human hosts retain project access.",
+    "Verified project callers, including Main and other Agents, read the project's linked Sessions with "
+    "credentials and control material redacted; no messaging or control is provided.",
     {"type": "object", "properties": {
         "session_id": {"type": "string"}, "after": {"type": "integer"},
         "limit": {"type": "integer"},
@@ -518,7 +519,7 @@ register_tool(
     "desktop_activity",
     "Read associated Main Sessions, actual project members and bounded native Chat/usage records. "
     "Omit task_id to list project sources in the human desktop. "
-    "Verified registered Agents may read only their own Session and mapped Task; no messaging or control is provided.",
+    "Verified project callers read project members and Main with credentials redacted; no messaging or control is provided.",
     {"type": "object", "properties": {
         "task_id": {"type": "string"}, "alias": {"type": "string"},
         "cursor": {"type": "string"},

@@ -18,6 +18,7 @@ from graphtraj.graph.delivery_worldline import (
     read_worldline,
 )
 from graphtraj.execution.runner_io import write_yaml_durably, _sync_directory
+from graphtraj.execution.runner_models import RunnerError
 from graphtraj.execution.runner_status import caller_alias, read_alias_mapping, require_task_authority
 from graphtraj.workspace.runner_project import discover_runner_directory, run_git
 from graphtraj.graph.task_graph import _TRANSITIONS, _load_states
@@ -396,8 +397,15 @@ def _decision_evidence(
         else:
             relative = path.relative_to(worktree).as_posix()
             # Read committed bytes, so the evidence is tied to the judged version.
-            if run_git(worktree, 'cat-file', '-t', f'{submission["candidate"]}:{relative}') != 'blob':
-                raise ValueError('Decision evidence must name committed files or assigned reports')
+            try:
+                kind = run_git(worktree, 'cat-file', '-t', f'{submission["candidate"]}:{relative}')
+            except RunnerError:
+                kind = None
+            if kind != 'blob':
+                raise ValueError(
+                    f'Decision evidence {reference} is neither a committed file at '
+                    f'{submission["candidate"]} nor an assigned report'
+                )
             content = subprocess.check_output(
                 ['git', 'show', f'{submission["candidate"]}:{relative}'], cwd=worktree,
             )

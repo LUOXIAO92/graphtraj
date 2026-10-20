@@ -283,22 +283,18 @@ def test_managed_worker_grants_only_its_channel_and_closes_it(tmp_path: Path, pe
     assert not Path(observed[0]).exists()
 
 
-def test_native_submission_errors_identify_wrong_reference_and_git_failure(tmp_path: Path) -> None:
-    """Wrong report usage is actionable; a missing committed path retains Git diagnostics."""
+def test_native_submission_errors_identify_wrong_and_absent_references(tmp_path: Path) -> None:
+    """Wrong report usage is actionable; a path absent at the commit is named, not a Git failure."""
     import pytest
-    from graphtraj.execution.runner_models import RunnerError
 
     runner, _, commit = result_project(tmp_path)
     with runtime_caller(runner, 'research@x1'):
         with pytest.raises(ValueError, match='evidence_refs'):
             tools.submit_result({'commit': commit, 'result_refs': ['.state/teams/1/rounds/1/researcher-x1.md'],
                                  'completion': 'Done'}, cwd=tmp_path)
-        with pytest.raises(RunnerError) as failure:
+        with pytest.raises(ValueError, match=f'absent.md is not a committed file at {commit}'):
             tools.submit_result({'commit': commit, 'result_refs': ['absent.md'],
                                  'completion': 'Done'}, cwd=tmp_path)
-        assert 'git cat-file -t ' + commit + ':absent.md' in failure.value.message
-        assert str(tmp_path / 'worktrees/research') in failure.value.message
-        assert 'fatal:' in failure.value.message
 
 
 def test_shared_mcp_command_consumes_bound_graphtraj_dsh_channel(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

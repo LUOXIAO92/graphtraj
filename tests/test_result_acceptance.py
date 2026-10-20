@@ -133,6 +133,14 @@ def test_actual_parent_decides_with_its_own_retained_evidence(tmp_path: Path) ->
     with runtime_caller(runner, 'research@x3'):
         report = tools.submit_report({'name': 'researcher-x3.md', 'text': 'Checked required sources.'},
                                    cwd=tmp_path).document['report']
+        # Evidence absent at the judged commit is named instead of failing as Git.
+        (tmp_path / 'worktrees/research/draft.md').write_text('Not committed\n')
+        with pytest.raises(ValueError, match=f'worktrees/research/draft.md is neither a committed file at {commit}'):
+            tools.decide_result({
+                'submission_id': submission['event_id'], 'commit': commit, 'decision': 'accepted',
+                'reason': 'The required sources are covered.',
+                'evidence_refs': ['worktrees/research/draft.md'],
+            }, cwd=tmp_path)
         decided = tools.decide_result({
             'submission_id': submission['event_id'], 'commit': commit, 'decision': 'accepted',
             'reason': 'The required sources are covered.',

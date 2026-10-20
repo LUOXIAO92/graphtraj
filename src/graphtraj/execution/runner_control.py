@@ -52,6 +52,7 @@ from graphtraj.execution.runner_status import (
     require_descendant_authority,
     require_execution_allowed,
     _recorded_sessions,
+    caller_alias,
 )
 from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError
 
@@ -465,6 +466,7 @@ def continue_member(
     runner_directory = discover_runner_directory(cwd)
     mapping, session_directory = read_alias_mapping(runner_directory, alias)
     require_direct_authority(runner_directory, alias, mapping)
+    caller = caller_alias(runner_directory)
     if is_session_mapping(mapping):
         from graphtraj.teams.team_replacement import completed_task_member, require_active_session
 
@@ -481,8 +483,36 @@ def continue_member(
             caused_by_event_ids,
             cwd,
             reports_only=reports_only,
+            continued_by=caller if caller != alias else _NO_PARENT,
         )
     raise _not_resumable()
+
+
+_NO_PARENT = object()
+
+
+def _continue_after_parent_interrupt(session_directory: Path, alias: str, caller: str | None) -> None:
+    """Lift only the direct parent's own ordinary interrupt of this Session.
+
+    The caller holds the execution startup lock. A stop written by anyone
+    else, one without an interrupt origin (Runner recovery, replacement or an
+    abnormal-session answer), an ancestor's stop and a stop whose interrupted
+    execution still runs all remain. The execution budget is separate and
+    unaffected.
+    """
+    stop_file = session_directory / "stop.yml"
+    if stop_file.is_symlink() or not stop_file.is_file():
+        return
+    record = yaml.safe_load(stop_file.read_text())
+    if (not isinstance(record, dict) or record.get("alias") != alias
+            or record.get("kind") != "interrupt" or "by" not in record
+            or record["by"] != caller or record.get("resumed") is True):
+        return
+    mapping, _ = read_alias_mapping(session_directory.parent.parent, alias)
+    owning = owning_execution(alias, session_directory, mapping)
+    if owning is not None and owning["activity"] == "running":
+        return
+    write_yaml_durably(stop_file, {**record, "resumed": True})
 
 
 def _session_report_paths(alias: str, cwd: Path) -> tuple[Path, ...]:
@@ -711,11 +741,14 @@ def _send_session(
     system_notice: bool = False,
     retain_notice_channel: bool = False,
     parent_input: bool = True,
+    continued_by: Any = _NO_PARENT,
 ) -> Dict[str, str]:
     """Serialize alias changes so two idle sends cannot create competing owners.
 
     ``parent_input`` is false when the input is not the direct parent's own,
     such as delivered child results; a system notice is never parent input.
+    ``continued_by`` names the verified direct parent continuing this Session,
+    which lifts that parent's own ordinary interrupt.
     """
     launch_file = session_directory / "launch.yml"
     if launch_file.is_symlink() or not launch_file.is_file():
@@ -731,6 +764,8 @@ def _send_session(
         worktree = Path(mapping["worktree_path"])
         restored = False
         with execution_start_lock(session_directory.parent.parent):
+            if continued_by is not _NO_PARENT:
+                _continue_after_parent_interrupt(session_directory, alias, continued_by)
             require_execution_allowed(
                 session_directory.parent.parent, alias, mapping, reports_only=reports_only,
             )
@@ -989,12 +1024,15 @@ def _send_session_locked(
     return {**_execution_identity(alias, mapping), "send_status": "sent"}
 
 
-def interrupt_session(alias: str, cwd: Path) -> Dict[str, Any]:
+def interrupt_session(alias: str, cwd: Path, *, ordinary: bool = False) -> Dict[str, Any]:
     """Prevent further subtree work and interrupt every recorded descendant.
 
     Each member is addressed directly through its native execution owner.
     Failure to reach one member does not prevent the others being stopped,
     and only native terminal evidence counts as a complete confirmation.
+    An ``ordinary`` interrupt (the public ``agents interrupt``) records who
+    issued it, so that same direct parent can continue the Session later. It
+    never rewrites a stop already in force from another origin.
     """
 
     runner_directory = discover_runner_directory(cwd)
@@ -1005,7 +1043,15 @@ def interrupt_session(alias: str, cwd: Path) -> Dict[str, Any]:
     require_descendant_authority(runner_directory, alias, mapping)
     with execution_start_lock(runner_directory):
         mapping, session_directory = read_alias_mapping(runner_directory, alias)
-        write_yaml_durably(session_directory / "stop.yml", {"alias": alias})
+        stop = {"alias": alias}
+        if ordinary:
+            stop_file = session_directory / "stop.yml"
+            previous = yaml.safe_load(stop_file.read_text()) if stop_file.is_file() else None
+            caller = caller_alias(runner_directory)
+            if (not isinstance(previous, dict) or previous.get("resumed") is True
+                    or (previous.get("kind") == "interrupt" and previous.get("by") == caller)):
+                stop = {"alias": alias, "kind": "interrupt", "by": caller}
+        write_yaml_durably(session_directory / "stop.yml", stop)
         records, failures = _recorded_sessions(runner_directory, ownership_only=True)
         # Allocations still preparing a job have no native Session yet. They
         # must pass the Worker guard after we release this lock. Retain any

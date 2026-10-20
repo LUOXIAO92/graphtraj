@@ -218,7 +218,7 @@ class GraphTrajAgents:
         elif action == "wait":
             result, failed = self._wait(agent, arguments["timeout_seconds"])
         elif action == "interrupt":
-            result = interrupt_session(agent, self.root)
+            result = interrupt_session(agent, self.root, ordinary=True)
         elif action == "requests":
             result = pending_requests(agent, self.root, execution_id=arguments.get("execution"))
         elif action == "reply":

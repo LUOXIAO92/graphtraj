@@ -98,6 +98,12 @@ def test_agent_reads_project_activity_but_cannot_forge_path(tmp_path: Path) -> N
         assert not allowed.failed
         assert allowed.document['scope'] == 'project'
         assert allowed.document['events'][0]['text'] == 'project work'
+        listed = handle_request({'action': 'execute', 'feature': 'desktop_activity',
+            'arguments': {'task_id': '148'}}, cwd=tmp_path)
+        assert not listed.failed and 'research@x1' in [a['alias'] for a in listed.document['agents']]
+        # Without task_id or alias the default stays on the real hierarchy.
+        with pytest.raises(ValueError, match='explicit project read'):
+            handle_request({'action': 'execute', 'feature': 'desktop_activity', 'arguments': {}}, cwd=tmp_path)
     refused = bind(tmp_path, desktop_observer=True)({'action': 'execute', 'feature': 'desktop_activity',
         'arguments': {'task_id': '148', 'path': '/private/elsewhere'}})
     assert refused.failed and 'unexpected parameter' in refused.document['error']

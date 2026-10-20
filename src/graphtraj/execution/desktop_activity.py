@@ -9,9 +9,11 @@ import yaml
 
 from graphtraj.configuration.project_configuration import load_project_configuration, ProjectConfiguration
 from graphtraj.execution.runner_models import RunnerError
+from graphtraj.execution.runner_connection import current_parent_connection
 from graphtraj.execution.runner_status import (
-    project_redact, read_alias_mapping, require_project_reader, _status_session,
+    project_redact, read_alias_mapping, require_project_reader, runtime_caller_is_bound, _status_session,
 )
+from graphtraj.runtimes.runtime_adapter import current_host_connection
 from graphtraj.graph.delivery_state import read_team
 from graphtraj.graph.task_graph import _load_states
 from graphtraj.runtimes.activity import TraceReader, redact
@@ -45,7 +47,14 @@ def observe(
     window = human_observer.get() and owns_project(cwd)
     if window:
         return _observe(cwd, runner, task_id, alias, cursor)
-    require_project_reader(runner)
+    caller = require_project_reader(runner)
+    # The desktop flag with no native context at all is the user's own host.
+    human = (human_observer.get() and caller is None and not runtime_caller_is_bound()
+             and current_parent_connection() is None and current_host_connection() is None)
+    if task_id is None and alias is None and not human:
+        # Defaults stay on the real hierarchy; only an explicit read lists project sources.
+        raise ValueError('Supply task_id or alias for an explicit project read; '
+                         'the current hierarchy view is agents status.')
     return project_redact({**_observe(cwd, runner, task_id, alias, cursor), 'scope': 'project'})
 
 

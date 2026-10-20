@@ -200,10 +200,12 @@ def test_member_cursor_reconnect_rotation_truncation_and_counts(tmp_path: Path, 
     assert replay['events'][0]['usage']['identity'] == cold_events[-1]['usage']['identity']
     write_records(trace, [turn(tmp_path, 'three'), count(60100)])
     assert project_query(tmp_path, task_id='148', alias=alias, cursor=replay['cursor'])['availability'] == 'trace-changed'
-    # A member reads project-wide Main observation under its own identity, never as human.
+    # A member's default call does not list project sources; an explicit Task read does.
     from graphtraj.workspace.runner_project import discover_runner_directory
     with runtime_caller(discover_runner_directory(tmp_path), alias):
-        assert project_query(tmp_path)['scope'] == 'project'
+        with pytest.raises(ValueError, match='explicit project read'):
+            project_query(tmp_path)
+        assert project_query(tmp_path, task_id='148')['scope'] == 'project'
 
 
 def test_pi_native_entry_exposes_owned_main_and_excludes_plugin_children(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

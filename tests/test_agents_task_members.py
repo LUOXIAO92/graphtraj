@@ -101,3 +101,37 @@ def test_default_tree_keeps_current_seats_and_bounds_messages(tmp_path: Path, mo
     long = 'm' * 1000
     bounded = _preview({'agents': [{'last_agent_message': long, 'summary': long}]})['agents'][0]
     assert len(bounded['last_agent_message']) == PREVIEW_CHARACTERS + 1 and bounded['summary'] == long
+
+
+def test_current_members_leave_out_a_retired_seat(tmp_path: Path, monkeypatch) -> None:
+    """A replaced Leader still named in the active team.yml is not a current seat once retired."""
+    from graphtraj.configuration import project_configuration
+    from graphtraj.execution import desktop_activity, runner_status
+    from graphtraj.execution.runner_models import RunnerError
+    from graphtraj.graph import task_graph
+    from graphtraj.interfaces.agents import GraphTrajAgents
+    from graphtraj.workspace import runner_project
+
+    tasks = tmp_path / 'state/tasks'
+    tasks.mkdir(parents=True)
+    sessions = tmp_path / 'sessions'
+    for alias, live in (('current-leader', True), ('replaced-leader', False)):
+        (sessions / alias).mkdir(parents=True)
+        if live:
+            (sessions / alias / 'mapping.yml').write_text('task_id: "1"\n')
+
+    def mapping(runner, alias):
+        if alias == 'unknown':
+            raise RunnerError('unknown-alias', alias)
+        return {}, sessions / alias
+
+    monkeypatch.setattr(project_configuration, 'load_project_configuration',
+                        lambda root: type('C', (), {'state': tmp_path / 'state'})())
+    monkeypatch.setattr(runner_project, 'discover_runner_directory', lambda root: tmp_path)
+    monkeypatch.setattr(task_graph, '_load_states', lambda path: {'1': (tmp_path, {'status': 'running'})})
+    monkeypatch.setattr(desktop_activity, '_task_aliases', lambda directory, task: (
+        set(), {'current-leader', 'replaced-leader', 'unknown'}))
+    monkeypatch.setattr(runner_status, 'read_alias_mapping', mapping)
+    backend = object.__new__(GraphTrajAgents)
+    backend.root = tmp_path
+    assert backend._current_members() == {'current-leader'}

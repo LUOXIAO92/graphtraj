@@ -621,3 +621,64 @@ def test_real_claude_archive_public_query(
     assert any(e.get('data', {}).get('record', {}).get('type') == 'result' for e in data['events'])
     print('REAL_CLAUDE_321_QUERY=' + json.dumps(data, ensure_ascii=False))
     assert terminal['last_outcome'] == 'completed', terminal
+
+
+def test_public_interrupt_confirms_an_exited_owner_without_terminal_record(
+    installed_commands: InstalledCommands,
+    temporary_git_repository: Path,
+    fake_codex: FakeCodex,
+    tmp_path: Path,
+) -> None:
+    """An owner and Runtime that both exited are confirmed stopped, not natively ended."""
+    from graphtraj.execution.runner_heartbeat import ownership_is_held
+
+    root, environment = setup(installed_commands, temporary_git_repository, fake_codex, tmp_path)
+    batch = root / 'probe.yml'
+    batch.write_text(yaml.safe_dump({'tasks': [{'task_id': '320', 'role': 'researcher'}]}))
+    launched = command(installed_commands, root, environment, '--swarm-input', str(batch))
+    assert launched.returncode == 0, launched.stdout + launched.stderr
+    alias = yaml.safe_load(launched.stdout)['tasks'][0]['alias']
+    settled(installed_commands, root, environment, alias)
+    sent = command(installed_commands, root, environment, 'send', alias, '--instruction', 'wait',
+                   '--caused-by-event-id', events(root)[-1]['event_id'])
+    assert sent.returncode == 0, sent.stdout + sent.stderr
+    directory = root / '.graphtraj/runner/sessions' / alias
+    mapping = yaml.safe_load((directory / 'mapping.yml').read_text())
+
+    # Both recorded processes end without any terminal record.
+    os.killpg(mapping['runtime_pid'], signal.SIGKILL)
+    os.kill(mapping['worker_pid'], signal.SIGKILL)
+    deadline = time.monotonic() + 15
+    while ownership_is_held(directory, mapping['worker_pid']):
+        assert time.monotonic() < deadline, 'the killed owner still holds its lock'
+        time.sleep(0.02)
+    for leftover in directory.glob('control-*'):
+        shutil.rmtree(leftover, ignore_errors=True)
+    assert not (directory / 'execution.yml').exists()
+
+    response = command(installed_commands, root, environment, 'interrupt', alias)
+    assert response.returncode == 0, response.stdout + response.stderr
+    member = yaml.safe_load(response.stdout)['members'][0]
+    assert member['interrupt_status'] == 'stopped', response.stdout
+
+    # The owner exit stays an unconfirmed runtime error; the separate receipt
+    # records only the current confirmation that the Runtime group is gone.
+    execution = yaml.safe_load((directory / 'execution.yml').read_text())
+    assert execution['outcome'] == 'runtime-error'
+    assert execution['terminal_confirmed'] is False
+    assert execution['error']['code'] == 'owner-exited'
+    assert execution['execution_id'] == mapping['execution_id']
+    receipt = yaml.safe_load((directory / f"terminal-confirmation-{mapping['execution_id']}.yml").read_text())
+    assert receipt['terminal_confirmed'] is True
+    assert receipt['original_execution'] == execution
+    assert receipt['evidence']['running_members'] == []
+    status = settled(installed_commands, root, environment, alias)
+    assert status['activity'] == 'idle', status
+    assert status['last_outcome'] == 'runtime-error'
+
+    # The confirmed stop is the replacement precondition; authority is unchanged.
+    replaced = command(installed_commands, root, environment, 'replace', alias,
+                       '--caused-by-event-id', events(root)[-1]['event_id'])
+    assert 'replacement-not-stopped' not in replaced.stdout + replaced.stderr
+    assert replaced.returncode == 0, replaced.stdout + replaced.stderr
+    assert yaml.safe_load(replaced.stdout)['replacement_alias'] != alias

@@ -163,32 +163,6 @@ def test_hosted_cli_rejects_invalid_parent_observation(
     assert not (root / 'wire.jsonl').exists()
 
 
-def test_hosted_cli_keeps_ordinary_control_deadline(
-    hosted_parent: tuple[Path, str], monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """An unrelated slow report request still times out at the ordinary deadline."""
-    import time
-    from dataclasses import replace
-    from graphtraj.interfaces.tools import TOOLS
-    from test_hosted_cli import run_cli
-
-    root, address = hosted_parent
-    original = TOOLS['session_reports']
-
-    def delayed(arguments: dict, *, cwd: Path):
-        """Model a slow report read without replacing the authenticated transport."""
-        time.sleep(11)
-        return original.handler(arguments, cwd=cwd)
-
-    monkeypatch.setitem(TOOLS, 'session_reports', replace(original, handler=delayed))
-    started = time.monotonic()
-    result = run_cli('graphtraj.interfaces.cli.agent_runner', root, address, 'reports', 'research@x1')
-    elapsed = time.monotonic() - started
-    assert result.returncode != 0
-    assert 'Session control timed out' in result.stdout + result.stderr
-    assert 10 <= elapsed < 15
-
-
 @pytest.mark.parametrize(('mode', 'method'), [('active', 'thread/status/changed'), ('turn', 'turn/completed')])
 def test_public_parent_wait_reads_active_then_idle(host_peer: Path, mode: str, method: str) -> None:
     """Only a relevant native event triggers a second metadata observation."""

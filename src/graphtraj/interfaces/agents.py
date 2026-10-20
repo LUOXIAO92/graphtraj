@@ -110,6 +110,8 @@ class GraphTrajAgents:
                 return Outcome(outcome.result, agent=agent, session=outcome.session,
                                execution=outcome.execution, failed=outcome.failed)
             if action == "create" or (agent or "").startswith(AGENT_PREFIX):
+                if arguments.get("reports_only"):
+                    raise AgentsError("invalid-input", "request.reports_only: only for a Task member")
                 return self.control.operate(action, arguments, binding)
             if action == "status" and agent is None:
                 return self._hierarchy(binding)
@@ -203,7 +205,8 @@ class GraphTrajAgents:
             message = arguments.get("message")
             if message is None:
                 raise AgentsError("invalid-input", f"request.message: required to {action} a Task member")
-            result = continue_member(agent, message, self.root)
+            result = continue_member(agent, message, self.root,
+                                     reports_only=arguments.get("reports_only") is True)
         elif action == "wait":
             result, failed = self._wait(agent, arguments["timeout_seconds"])
         elif action == "interrupt":

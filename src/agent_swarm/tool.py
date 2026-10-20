@@ -43,7 +43,7 @@ TOOL_NAME = "agents"
 # from the host binding, so no action accepts them.
 ACTION_FIELDS: dict[str, tuple[frozenset[str], frozenset[str]]] = {
     "create":    (frozenset({"runtime", "instruction"}), frozenset({"name", "configuration"})),
-    "send":      (frozenset({"agent", "message"}), frozenset()),
+    "send":      (frozenset({"agent", "message"}), frozenset({"reports_only"})),
     "status":    (frozenset(), frozenset({"agent"})),
     "wait":      (frozenset({"agent", "timeout_seconds"}), frozenset()),
     "interrupt": (frozenset({"agent"}), frozenset()),
@@ -65,6 +65,9 @@ INPUT_SCHEMA: dict[str, Any] = {
         "instruction": {"type": "string", "description": "First message for the new Agent."},
         "name": {"type": "string", "description": "Readable name; grants no identity."},
         "message": {"type": "string", "description": "Plain-text message for the Agent."},
+        "reports_only": {"type": "boolean",
+                         "description": "Direct parent only: ask a stopped Task member for reports it "
+                                        "already holds; it starts no new work."},
         "timeout_seconds": {"type": "number",
                             "description": "Explicit finite wait in seconds, above 0."},
         "execution": {"type": "string",

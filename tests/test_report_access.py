@@ -447,3 +447,73 @@ def test_agents_send_to_a_stopped_member_is_ordinary_input(
         with pytest.raises(RunnerError) as refused:
             runner_status.require_execution_allowed(tmp_path, 'member', {'parent': None}, reports_only=False)
         assert refused.value.code == 'subtree-stopped'
+
+
+def test_agents_send_carries_an_explicit_reports_only_request(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """agents send forwards reports_only to the one continuation; nothing else adds it."""
+    import json
+    from agent_swarm import AgentsError
+    from agent_swarm.tool import validate_request
+    from graphtraj.interfaces import agents
+
+    request = json.loads('{"action": "send", "agent": "member", "message": "报告", "reports_only": true}')
+    assert validate_request(request) == ('send', {'agent': 'member', 'message': '报告', 'reports_only': True})
+    for invalid in ({**request, 'reports_only': 'yes'},
+                    {'action': 'resume', 'agent': 'member', 'reports_only': True}):
+        with pytest.raises(AgentsError) as rejected:
+            validate_request(invalid)
+        assert rejected.value.code == 'invalid-input'
+
+    sent = []
+    monkeypatch.setattr(runner_control, 'continue_member',
+                        lambda alias, message, root, **kwargs: sent.append(kwargs) or {'send_status': 'sent'})
+    backend = object.__new__(agents.GraphTrajAgents)
+    backend.root = tmp_path
+    monkeypatch.setattr(backend, '_references', lambda agent: (None, None), raising=False)
+    for arguments in ({'agent': 'member', 'message': 'Work.'}, request):
+        backend._operate('send', arguments)
+    assert sent == [{'reports_only': False}, {'reports_only': True}]
+    with pytest.raises(AgentsError):
+        backend.operate('send', {**request, 'agent': 'agent-core'}, None)
+
+
+def test_agents_reports_only_reaches_a_stopped_member(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An explicit reports-only send is admitted into a stopped subtree that refuses ordinary input."""
+    from graphtraj.execution import runner_status
+    from graphtraj.teams import team_replacement
+
+    sent = []
+    monkeypatch.setattr(runner_control, 'read_alias_mapping', lambda *args: ({'parent': None}, tmp_path))
+    monkeypatch.setattr(runner_control, 'require_direct_authority', lambda *args: None)
+    monkeypatch.setattr(runner_control, 'is_session_mapping', lambda mapping: True)
+    monkeypatch.setattr(runner_control, 'discover_runner_directory', lambda cwd: tmp_path)
+    monkeypatch.setattr(runner_control, 'discover_project', lambda *args, **kwargs: None)
+    monkeypatch.setattr(team_replacement, 'completed_task_member', lambda project, mapping: False)
+    monkeypatch.setattr(team_replacement, 'require_active_session', lambda *args, **kwargs: None)
+    monkeypatch.setattr(runner_status, 'session_record_directory', lambda runner, alias: tmp_path)
+    (tmp_path / 'stop.yml').write_text('alias: member\n')
+
+    def deliver(*args, reports_only):
+        runner_status.require_execution_allowed(tmp_path, 'member', {'parent': None}, reports_only=reports_only)
+        sent.append(reports_only)
+        return {'send_status': 'sent'}
+
+    monkeypatch.setattr(runner_control, '_send_session', deliver)
+    with pytest.raises(RunnerError) as refused:
+        runner_control.continue_member('member', 'Work.', tmp_path)
+    assert refused.value.code == 'subtree-stopped'
+    assert runner_control.continue_member('member', 'Report.', tmp_path, reports_only=True)['send_status'] == 'sent'
+    assert sent == [True]
+
+
+def test_reports_only_send_is_denied_to_a_non_parent(tmp_path: Path) -> None:
+    """reports_only grants no control: only the direct parent may send it."""
+    runner, _, _ = result_project(tmp_path)
+    with runtime_caller(runner, 'research@x2'):
+        with pytest.raises(RunnerError) as denied:
+            runner_control.continue_member('research@x1', 'Report.', tmp_path, reports_only=True)
+        assert denied.value.code == 'authority-denied'

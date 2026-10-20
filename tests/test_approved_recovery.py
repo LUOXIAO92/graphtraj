@@ -1487,7 +1487,7 @@ def test_budget_only_recovery_does_not_require_stopping_the_subtree(
         **before, 'approved_minutes': before.get('approved_minutes', 0) + 5,
     }
     assert not execution.exists()
-    with pytest.raises(RunnerError, match='stopped before replacement'):
+    with pytest.raises(RunnerError, match='stopped before recovery; .* is not idle'):
         call({'action': 'execute', 'feature': 'approved_recovery',
               'arguments': {**request, 'resume': True, 'additional_minutes': 1}})
 

@@ -1051,6 +1051,8 @@ def interrupt_session(alias: str, cwd: Path, *, ordinary: bool = False) -> Dict[
             if (not isinstance(previous, dict) or previous.get("resumed") is True
                     or (previous.get("kind") == "interrupt" and previous.get("by") == caller)):
                 stop = {"alias": alias, "kind": "interrupt", "by": caller}
+            else:
+                stop = previous  # a stop in force from another origin stays exactly as recorded
         write_yaml_durably(session_directory / "stop.yml", stop)
         records, failures = _recorded_sessions(runner_directory, ownership_only=True)
         # Allocations still preparing a job have no native Session yet. They

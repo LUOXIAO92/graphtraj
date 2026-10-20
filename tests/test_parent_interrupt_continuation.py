@@ -112,6 +112,11 @@ def test_ordinary_interrupt_records_its_origin_without_rewriting_another_stop(
     runner_control.interrupt_session('child', runner, ordinary=True)
     assert yaml.safe_load(stop.read_text()) == {'alias': 'child'}  # still the Runner's stop
 
+    other = {'alias': 'child', 'kind': 'interrupt', 'by': 'other-parent', 'note': 'kept'}
+    stop.write_text(yaml.safe_dump(other))
+    runner_control.interrupt_session('child', runner, ordinary=True)
+    assert yaml.safe_load(stop.read_text()) == other  # another parent's interrupt survives
+
     stop.write_text(yaml.safe_dump({'alias': 'child', 'resumed': True}))
     runner_control.interrupt_session('child', runner, ordinary=True)
     assert yaml.safe_load(stop.read_text()) == {'alias': 'child', 'kind': 'interrupt', 'by': 'leader'}

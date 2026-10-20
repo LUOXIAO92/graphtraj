@@ -58,6 +58,9 @@ class ClaudeExecution:
         self._execution_id = uuid.uuid4().hex
         self.proc: subprocess.Popen | None = None
         self.events: queue.Queue = queue.Queue()
+        # Native control requests in arrival order, answered ahead of the
+        # collection backlog; ``events`` still archives them in native order.
+        self.controls: queue.Queue = queue.Queue()
         self.pending: dict[str, dict] = {}
         self.lock = threading.RLock()
         self.write_lock = threading.Lock()
@@ -350,6 +353,8 @@ class ClaudeExecution:
                     if event.get('type') == 'system' and event.get('subtype') == 'session_state_changed':
                         self.drained_native_state = event.get('state')
                     self.events.put(event)
+                    if event.get("type") in ("control_request", "control_cancel_request"):
+                        self.controls.put(event)
                 self.stdout_eof = True
         finally:
             self.events.put({'type': 'eof'})
@@ -377,6 +382,36 @@ class ClaudeExecution:
         if self.stopping.is_set():
             raise RuntimeAdapterError('RUNTIME_EXECUTION_INTERRUPTED', 'Claude startup was interrupted.')
         self.started(self.session, self.proc.pid)
+
+    def _control_event(self, event: dict) -> None:
+        """Answer one native control request or cancellation."""
+        if event.get('type') == 'control_request':
+            request = event.get('request', {})
+            if request.get('subtype') == 'mcp_message' and self.independent:
+                self._sdk_message(event)
+            elif (self.independent and request.get('subtype') == 'hook_callback'
+                  and request.get('callback_id') == 'graphtraj_agents_display'):
+                from graphtraj.runtimes.claude.display import display_response
+
+                self._reply(event['request_id'], display_response(request['input'], self.displayed))
+            elif request.get('subtype') == 'hook_callback' and request.get('callback_id') == 'graphtraj_start':
+                self._bind(request)
+                self._reply(event['request_id'], {})
+                self.task_released = True
+            elif request.get('subtype') == 'hook_callback' and request.get('callback_id') == 'graphtraj_collect_child':
+                from graphtraj.runtimes.claude.collection import collect_hook
+
+                if not self.independent:
+                    collect_hook(request['input'], Path(self.request['worktree_path']))
+                self._reply(event['request_id'], {})
+            elif request.get('subtype') == 'can_use_tool':
+                self._permission(event)
+            else:
+                raise RuntimeAdapterError('RUNTIME_REQUEST_UNHANDLED', 'Unknown Claude control request.')
+        else:
+            with self.lock:
+                self.pending = {key: value for key, value in self.pending.items()
+                                if value['request_id'] != event.get('request_id')}
 
     def _permission(self, event: dict) -> None:
         """Send the native request to the direct parent without deciding consent."""
@@ -505,6 +540,7 @@ class ClaudeExecution:
                 stop_deadline = None
                 last_echo = last_result = 0
                 queued_turns = None
+                answered: set[int] = set()
                 while True:
                     if self.stopping.is_set() and stop_deadline is None:
                         stop_deadline = time.monotonic() + 5
@@ -512,6 +548,21 @@ class ClaudeExecution:
                         break
                     if self.session is None and time.monotonic() >= startup_deadline:
                         raise RuntimeAdapterError('RUNTIME_SESSION_MISSING', 'Claude did not attest startup within 45 seconds.')
+                    # A later prompt waits on its UserPromptSubmit hook for
+                    # only 30 s, while collection rewrites the durable archive
+                    # for each streamed fragment ahead of it. Once bound, answer
+                    # native requests first; ``events`` still archives them in
+                    # native order and skips the answered ones.
+                    while self.session is not None:
+                        try:
+                            control = self.controls.get_nowait()
+                        except queue.Empty:
+                            break
+                        if id(control) in answered:
+                            answered.remove(id(control))
+                        else:
+                            answered.add(id(control))
+                            self._control_event(control)
                     try:
                         event = self.events.get(timeout=0.1)
                     except queue.Empty:
@@ -539,33 +590,12 @@ class ClaudeExecution:
                             with self.lock:
                                 if not self.stopping.is_set():
                                     self._prompt(self.prompt)
-                    elif kind == 'control_request':
-                        request = event.get('request', {})
-                        if request.get('subtype') == 'mcp_message' and self.independent:
-                            self._sdk_message(event)
-                        elif (self.independent and request.get('subtype') == 'hook_callback'
-                              and request.get('callback_id') == 'graphtraj_agents_display'):
-                            from graphtraj.runtimes.claude.display import display_response
-
-                            self._reply(event['request_id'], display_response(request['input'], self.displayed))
-                        elif request.get('subtype') == 'hook_callback' and request.get('callback_id') == 'graphtraj_start':
-                            self._bind(request)
-                            self._reply(event['request_id'], {})
-                            self.task_released = True
-                        elif request.get('subtype') == 'hook_callback' and request.get('callback_id') == 'graphtraj_collect_child':
-                            from graphtraj.runtimes.claude.collection import collect_hook
-
-                            if not self.independent:
-                                collect_hook(request['input'], Path(self.request['worktree_path']))
-                            self._reply(event['request_id'], {})
-                        elif request.get('subtype') == 'can_use_tool':
-                            self._permission(event)
+                    elif kind in ('control_request', 'control_cancel_request'):
+                        if id(event) in answered:
+                            answered.remove(id(event))
                         else:
-                            raise RuntimeAdapterError('RUNTIME_REQUEST_UNHANDLED', 'Unknown Claude control request.')
-                    elif kind == 'control_cancel_request':
-                        with self.lock:
-                            self.pending = {key: value for key, value in self.pending.items()
-                                            if value['request_id'] != event.get('request_id')}
+                            answered.add(id(event))
+                            self._control_event(event)
                     elif kind == 'system' and event.get('subtype') == 'init':
                         if event.get('session_id') != self.native_id or event.get('model') != self.request['model']:
                             raise RuntimeAdapterError('RUNTIME_REQUEST_FAILED', 'Claude selected a different Session or model.')

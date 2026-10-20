@@ -234,6 +234,16 @@ def _differences(expected: Any, actual: Any, prefix: str = '') -> list[dict]:
     return [] if expected == actual else [{'field': prefix, 'expected': expected, 'actual': actual}]
 
 
+def _repair_differences(before: dict, current: dict) -> list[dict]:
+    """Return state changes that make a reviewed repair stale.
+
+    Task, Team, budget, stop, mapping, Round and definition are compared
+    exactly. A later Task event alone, such as a parent's note or report
+    notice during review, changes none of them and does not stale the repair.
+    """
+    return _differences({**before, 'latest_task_event': current['latest_task_event']}, current)
+
+
 def _apply_recovery(proposal: dict, cwd: Path) -> dict:
     """Apply the authorized snapshot atomically with its Worldline fact.
 
@@ -281,7 +291,7 @@ def _apply_recovery(proposal: dict, cwd: Path) -> dict:
                                 and event.get('proposal_sha256') == digest), None)
                 if applied is None:
                     current, paths = _snapshot(project, alias, administrative=not request['resume'])
-                    differences = _differences(proposal['before'], current)
+                    differences = _repair_differences(proposal['before'], current)
                     if differences:
                         return {'recovery_status': 'stale', 'applied': False, 'differences': differences}
                     if _changes_execution(request) or proposal['before']['mapping'] != proposal['after']['mapping']:
@@ -304,7 +314,7 @@ def _apply_recovery(proposal: dict, cwd: Path) -> dict:
                         current, _ = _snapshot(
                             project, alias, administrative=not request['resume'], worldline_locked=True,
                         )
-                        differences = _differences(proposal['before'], current)
+                        differences = _repair_differences(proposal['before'], current)
                         if differences:
                             raise RunnerError('recovery-stale', json.dumps(differences))
                         try:

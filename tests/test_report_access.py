@@ -411,3 +411,39 @@ def test_project_read_grants_no_control_to_a_non_parent(tmp_path: Path) -> None:
             with pytest.raises(RunnerError) as denied:
                 control()
             assert denied.value.code == 'authority-denied'
+
+
+@pytest.mark.parametrize(('completed', 'reports_only'), [(False, False), (True, True)])
+def test_agents_send_to_a_stopped_member_is_ordinary_input(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, completed: bool, reports_only: bool,
+) -> None:
+    """agents send forwards ordinary input, so a stopped subtree refuses it.
+
+    Only a completed Task's standby member is turned into a report
+    collection; agents send has no explicit reports-only choice.
+    """
+    from graphtraj.execution import runner_status
+    from graphtraj.teams import team_replacement
+
+    sent = []
+    monkeypatch.setattr(runner_control, 'read_alias_mapping', lambda *args: ({'parent': None}, tmp_path))
+    monkeypatch.setattr(runner_control, 'require_direct_authority', lambda *args: None)
+    monkeypatch.setattr(runner_control, 'is_session_mapping', lambda mapping: True)
+    monkeypatch.setattr(runner_control, 'discover_runner_directory', lambda cwd: tmp_path)
+    monkeypatch.setattr(runner_control, 'discover_project', lambda *args, **kwargs: None)
+    monkeypatch.setattr(team_replacement, 'completed_task_member', lambda project, mapping: completed)
+    monkeypatch.setattr(team_replacement, 'require_active_session', lambda *args, **kwargs: None)
+    monkeypatch.setattr(runner_control, '_send_session',
+                        lambda *args, reports_only: sent.append(reports_only) or {'send_status': 'sent'})
+    runner_control.continue_member('member', 'Work.', tmp_path)
+    assert sent == [reports_only]
+
+    # The admission check the send reaches refuses ordinary input in a stopped subtree.
+    monkeypatch.setattr(runner_status, 'session_record_directory', lambda runner, alias: tmp_path)
+    (tmp_path / 'stop.yml').write_text('alias: member\n')
+    if reports_only:
+        runner_status.require_execution_allowed(tmp_path, 'member', {'parent': None}, reports_only=True)
+    else:
+        with pytest.raises(RunnerError) as refused:
+            runner_status.require_execution_allowed(tmp_path, 'member', {'parent': None}, reports_only=False)
+        assert refused.value.code == 'subtree-stopped'

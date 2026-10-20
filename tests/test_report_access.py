@@ -351,3 +351,33 @@ def test_installed_report_collection_reaches_a_stopped_member(
     assert (directory / 'stop.yml').read_bytes() == stop
     assert (budget_file.read_bytes() if budget_file.exists() else None) == budget
     assert 'subtree-stopped' in send().stdout + send().stderr
+
+
+@pytest.mark.parametrize(('reports_only', 'collection', 'admitted'), [
+    (True, True, True), (True, False, False), (True, None, False), (False, True, False),
+])
+def test_follow_up_reaches_only_a_running_report_collection(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    reports_only: bool, collection: bool | None, admitted: bool,
+) -> None:
+    """A retried report collection steers the running one; ordinary input stays refused."""
+    directory = tmp_path / 'runner' / 'sessions' / 'member'
+    directory.mkdir(parents=True)
+    (directory / 'stop.yml').write_text('alias: member\n')
+    if collection is not None:
+        (directory / 'resume.yml').write_text(yaml.safe_dump({'reports_only': collection}))
+    mapping = {'parent': None, 'session': 's', 'execution_id': 'e'}
+    sent = []
+    monkeypatch.setattr(runner_control, 'owning_execution', lambda *_: {'activity': 'running'})
+    monkeypatch.setattr(runner_control, 'session_operation', lambda *args, **kwargs: sent.append(kwargs))
+    send = lambda: runner_control._send_session_locked(  # noqa: E731
+        'member', 'Report retained findings.', directory, mapping, (), tmp_path, reports_only=reports_only)
+    if admitted:
+        assert send()['send_status'] == 'sent'
+        assert sent == [{'instruction': 'Report retained findings.'}]
+    else:
+        with pytest.raises(RunnerError, match='stopped subtree'):
+            send()
+        assert sent == []
+    # The stop record is never lifted.
+    assert (directory / 'stop.yml').read_text() == 'alias: member\n'

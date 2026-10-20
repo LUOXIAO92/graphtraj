@@ -788,7 +788,13 @@ def _send_session_locked(
             if owning["activity"] != "running":
                 raise session_occupied(alias, owning)
             with execution_start_lock(session_directory.parent.parent):
-                require_execution_allowed(session_directory.parent.parent, alias, mapping)
+                # A reports-only follow-up, such as a retry after a client
+                # timeout, may steer a running report collection, never
+                # ordinary work. The last resume record names that execution.
+                require_execution_allowed(
+                    session_directory.parent.parent, alias, mapping,
+                    reports_only=reports_only and _running_reports_only(session_directory),
+                )
                 session_operation(mapping, "send", instruction=instruction)
             from graphtraj.execution.runner_worker import _append_follow_up
 
@@ -1145,6 +1151,20 @@ def _interrupt_session(
         _record_owner_exit(alias, session_directory, mapping)
         return _interrupt_session(alias, session_directory, mapping)
     return {"alias": alias, "interrupt_status": "interrupted"}
+
+
+def _running_reports_only(directory: Path) -> bool:
+    """Return whether the running execution was started as a report collection.
+
+    Only a resume starts a later execution, and each one rewrites resume.yml
+    under the alias lock, so that record names the running one. A first
+    launch has none; an unreadable record admits nothing.
+    """
+    try:
+        resume = yaml.safe_load((directory / "resume.yml").read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, yaml.YAMLError):
+        return False
+    return isinstance(resume, dict) and resume.get("reports_only") is True
 
 
 def _record_owner_exit(alias: str, directory: Path, mapping: dict) -> None:

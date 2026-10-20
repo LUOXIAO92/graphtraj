@@ -651,6 +651,33 @@ def test_approved_increment_after_waiting_counts_only_execution_time(
     ) == {**early, 'approved_minutes': 5}
 
 
+def test_approved_window_reports_its_planned_end_after_the_full_increment(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The planned-budget notice for an approved increment waits for that whole increment."""
+    from test_task_budget_control import monitor_at, sample_stop
+    from graphtraj.execution import execution_budget as budgets
+
+    monitor = monitor_at(tmp_path / 'budget')
+    monitor.record_session('researcher', 'researcher')
+    sample_stop(monitor, monkeypatch)
+    path = monitor.task_directory / 'execution-budget.yml'
+    stopped = yaml.safe_load(path.read_text())
+    approved_at = stopped['started_at'] + 500 * 60
+    granted = budgets.start_approved_window(
+        stopped, {**stopped, 'approved_minutes': 10, 'stopped': False}, approved_at)
+    path.write_text(yaml.safe_dump(granted))
+    monkeypatch.setattr(budgets.random, 'random', lambda: .999)
+    key = 'elapsed_minutes:' + str(stopped['budget']['execution_budget']['estimated_minutes']['total'] + 10)
+
+    monkeypatch.setattr(budgets.time, 'time', lambda: approved_at + 9 * 60)
+    monitor.check('researcher', 'resume')
+    assert key not in yaml.safe_load(path.read_text())['notifications']
+    monkeypatch.setattr(budgets.time, 'time', lambda: approved_at + 10 * 60 + 1)
+    monitor.check('researcher', 'later')
+    assert key in yaml.safe_load(path.read_text())['notifications']
+
+
 def test_recovery_reactivates_original_team_without_fabricating_new_round(target: tuple, monkeypatch: pytest.MonkeyPatch) -> None:
     """Administrative retirement can be corrected while its facts remain retained."""
     from graphtraj.graph.delivery_state import apply_delivery_state_request, read_team

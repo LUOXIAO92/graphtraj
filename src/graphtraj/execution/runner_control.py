@@ -466,7 +466,6 @@ def continue_member(
     runner_directory = discover_runner_directory(cwd)
     mapping, session_directory = read_alias_mapping(runner_directory, alias)
     require_direct_authority(runner_directory, alias, mapping)
-    caller = caller_alias(runner_directory)
     if is_session_mapping(mapping):
         from graphtraj.teams.team_replacement import completed_task_member, require_active_session
 
@@ -475,6 +474,8 @@ def continue_member(
         # reopening Task work, budget or its accepted result.
         reports_only = reports_only or completed_task_member(project, mapping)
         require_active_session(project, alias, reports_only=reports_only)
+        with execution_start_lock(runner_directory):
+            _continue_after_parent_interrupt(session_directory, alias, runner_directory)
         return _send_session(
             alias,
             instruction,
@@ -483,18 +484,15 @@ def continue_member(
             caused_by_event_ids,
             cwd,
             reports_only=reports_only,
-            continued_by=caller if caller != alias else _NO_PARENT,
         )
     raise _not_resumable()
 
 
-_NO_PARENT = object()
+def _continue_after_parent_interrupt(session_directory: Path, alias: str, runner_directory: Path) -> None:
+    """Lift only the verified direct parent's own ordinary interrupt of this Session.
 
-
-def _continue_after_parent_interrupt(session_directory: Path, alias: str, caller: str | None) -> None:
-    """Lift only the direct parent's own ordinary interrupt of this Session.
-
-    The caller holds the execution startup lock. A stop written by anyone
+    The caller holds the execution startup lock; the send that follows
+    re-checks admission under it. A stop written by anyone
     else, one without an interrupt origin (Runner recovery, replacement or an
     abnormal-session answer), an ancestor's stop and a stop whose interrupted
     execution still runs all remain. The execution budget is separate and
@@ -506,9 +504,12 @@ def _continue_after_parent_interrupt(session_directory: Path, alias: str, caller
     record = yaml.safe_load(stop_file.read_text())
     if (not isinstance(record, dict) or record.get("alias") != alias
             or record.get("kind") != "interrupt" or "by" not in record
-            or record["by"] != caller or record.get("resumed") is True):
+            or record.get("resumed") is True):
         return
-    mapping, _ = read_alias_mapping(session_directory.parent.parent, alias)
+    caller = caller_alias(runner_directory)
+    if record["by"] != caller or caller == alias:
+        return
+    mapping, _ = read_alias_mapping(runner_directory, alias)
     owning = owning_execution(alias, session_directory, mapping)
     if owning is not None and owning["activity"] == "running":
         return
@@ -741,14 +742,11 @@ def _send_session(
     system_notice: bool = False,
     retain_notice_channel: bool = False,
     parent_input: bool = True,
-    continued_by: Any = _NO_PARENT,
 ) -> Dict[str, str]:
     """Serialize alias changes so two idle sends cannot create competing owners.
 
     ``parent_input`` is false when the input is not the direct parent's own,
     such as delivered child results; a system notice is never parent input.
-    ``continued_by`` names the verified direct parent continuing this Session,
-    which lifts that parent's own ordinary interrupt.
     """
     launch_file = session_directory / "launch.yml"
     if launch_file.is_symlink() or not launch_file.is_file():
@@ -764,8 +762,6 @@ def _send_session(
         worktree = Path(mapping["worktree_path"])
         restored = False
         with execution_start_lock(session_directory.parent.parent):
-            if continued_by is not _NO_PARENT:
-                _continue_after_parent_interrupt(session_directory, alias, continued_by)
             require_execution_allowed(
                 session_directory.parent.parent, alias, mapping, reports_only=reports_only,
             )

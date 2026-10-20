@@ -36,6 +36,12 @@ def _stop(runner: Path, alias: str, record: dict) -> Path:
     return path
 
 
+def _lift(directory: Path, alias: str, caller: str | None, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Continue as ``caller``, the identity the process tree would resolve."""
+    monkeypatch.setattr(runner_control, 'caller_alias', lambda runner: caller)
+    runner_control._continue_after_parent_interrupt(directory, alias, directory.parent.parent)
+
+
 def _allowed(runner: Path, alias: str = 'child') -> bool:
     mapping = yaml.safe_load((runner / 'sessions' / alias / 'mapping.yml').read_text())
     try:
@@ -46,11 +52,11 @@ def _allowed(runner: Path, alias: str = 'child') -> bool:
     return True
 
 
-def test_the_interrupting_parent_continues_the_same_session(runner: Path) -> None:
+def test_the_interrupting_parent_continues_the_same_session(runner: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """The direct parent's own interrupt lifts on that parent's send or resume."""
     _stop(runner, 'child', {'alias': 'child', 'kind': 'interrupt', 'by': 'leader'})
     assert not _allowed(runner)
-    runner_control._continue_after_parent_interrupt(runner / 'sessions/child', 'child', 'leader')
+    _lift(runner / 'sessions/child', 'child', 'leader', monkeypatch)
     assert _allowed(runner)
 
 
@@ -59,11 +65,14 @@ def test_the_interrupting_parent_continues_the_same_session(runner: Path) -> Non
     ({'alias': 'child'}, 'leader'),                                      # Runner recovery or replacement
     ({'alias': 'child', 'by': 'leader'}, 'leader'),                      # no interrupt origin
     ({'alias': 'child', 'kind': 'interrupt', 'by': None}, 'leader'),     # Main's interrupt
+    ({'alias': 'child', 'kind': 'interrupt', 'by': 'child'}, 'child'),   # its own interrupt
 ])
-def test_other_stops_stay_in_force(runner: Path, record: dict, caller: str) -> None:
+def test_other_stops_stay_in_force(
+    runner: Path, record: dict, caller: str, monkeypatch: pytest.MonkeyPatch,
+) -> None:
     stop = _stop(runner, 'child', record)
     before = stop.read_bytes()
-    runner_control._continue_after_parent_interrupt(runner / 'sessions/child', 'child', caller)
+    _lift(runner / 'sessions/child', 'child', caller, monkeypatch)
     assert stop.read_bytes() == before and not _allowed(runner)
 
 
@@ -72,22 +81,22 @@ def test_an_ancestor_stop_and_a_running_execution_stay_in_force(
 ) -> None:
     _stop(runner, 'child', {'alias': 'child', 'kind': 'interrupt', 'by': 'leader'})
     _stop(runner, 'leader', {'alias': 'leader'})
-    runner_control._continue_after_parent_interrupt(runner / 'sessions/child', 'child', 'leader')
+    _lift(runner / 'sessions/child', 'child', 'leader', monkeypatch)
     assert not _allowed(runner)  # the child's own record lifted, the ancestor's did not
     assert yaml.safe_load((runner / 'sessions/child/stop.yml').read_text())['resumed'] is True
 
     _stop(runner, 'leader', {'alias': 'leader', 'kind': 'interrupt', 'by': None})
     monkeypatch.setattr(runner_control, 'owning_execution', lambda *args: {'activity': 'running'})
-    runner_control._continue_after_parent_interrupt(runner / 'sessions/leader', 'leader', None)
+    _lift(runner / 'sessions/leader', 'leader', None, monkeypatch)
     assert not _allowed(runner, 'leader')  # the interrupted execution is still running
 
 
-def test_the_execution_budget_stop_is_untouched(runner: Path) -> None:
+def test_the_execution_budget_stop_is_untouched(runner: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """The budget stop is separate Task state; lifting an interrupt never reads or clears it."""
     budget = runner / 'execution-budget.yml'
     budget.write_text(yaml.safe_dump({'stopped': True}))
     _stop(runner, 'child', {'alias': 'child', 'kind': 'interrupt', 'by': 'leader'})
-    runner_control._continue_after_parent_interrupt(runner / 'sessions/child', 'child', 'leader')
+    _lift(runner / 'sessions/child', 'child', 'leader', monkeypatch)
     assert yaml.safe_load(budget.read_text()) == {'stopped': True}
 
 

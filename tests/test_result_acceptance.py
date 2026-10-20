@@ -153,6 +153,37 @@ def test_actual_parent_decides_with_its_own_retained_evidence(tmp_path: Path) ->
     assert retained.read_text() == 'Checked required sources.'
 
 
+def test_parent_decides_after_retaining_evidence_for_the_submission(tmp_path: Path) -> None:
+    """Retained evidence names its submission but leaves it undecided."""
+    import yaml
+
+    runner, _, commit = result_project(tmp_path)
+    mapping_file = runner / 'sessions/research@x1/mapping.yml'
+    mapping = yaml.safe_load(mapping_file.read_text())
+    mapping_file.write_text(yaml.safe_dump({**mapping, 'parent': 'research@x3'}))
+    with runtime_caller(runner, 'research@x1'):
+        submission = tools.submit_result({'commit': commit, 'result_refs': ['result.md'],
+                                        'completion': 'Done'}, cwd=tmp_path).document
+    (tmp_path / 'worktrees/research/log.txt').write_text('Untracked check log\n')
+    with runtime_caller(runner, 'research@x3'):
+        retained = tools.retain_evidence({'submission_id': submission['event_id'],
+                                          'evidence_refs': ['log.txt']}, cwd=tmp_path).document
+        # A decision naming an unwritten report says which reference is absent.
+        missing = '.state/teams/1/rounds/1/engineer-absent.md'
+        with pytest.raises(ValueError, match=f'retained evidence does not exist: {missing}'):
+            tools.decide_result({
+                'submission_id': submission['event_id'], 'commit': commit, 'decision': 'accepted',
+                'reason': 'The report covers the checks.', 'evidence_refs': [missing],
+            }, cwd=tmp_path)
+        decided = tools.decide_result({
+            'submission_id': submission['event_id'], 'commit': commit, 'decision': 'accepted',
+            'reason': 'The retained log covers the checks.',
+            'evidence_refs': retained['evidence_refs'],
+        }, cwd=tmp_path).document
+    assert decided['event'] == 'team-round-accepted'
+    assert decided['submission_id'] == submission['event_id']
+
+
 def test_cli_accepts_code_as_actual_parent_and_mcp_exposes_same_operation(tmp_path: Path) -> None:
     """The CLI attests its process owner and accepts code through the common operation."""
     import io

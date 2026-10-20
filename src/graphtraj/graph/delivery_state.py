@@ -27,6 +27,9 @@ from graphtraj.graph.task_protocol import execution_record
 
 _COMMON = {"phase", "task_id", "caused_by_event_ids", "evidence_refs"}
 
+# Worldline events that record a parent's decision on one result submission.
+RESULT_DECISION_EVENTS = frozenset({"team-round-accepted", "team-round-implementation-rejected"})
+
 
 def current_result_rework_cause(
     events: list[dict[str, Any]],
@@ -243,11 +246,11 @@ def apply_delivery_state_request(
             open_round = True
             kind = "team-round-rework-started"
         else:
+            events = read_worldline(state_directory, harness_root)
             submission, author, prior_acceptance = _validate_result_decision(
-                state_directory, harness_root, request, task, team_update,
-                read_worldline(state_directory, harness_root),
+                state_directory, harness_root, request, task, team_update, events,
             )
-            snapshots = _decision_evidence(harness_root, submission, author, request["evidence_refs"])
+            snapshots = _decision_evidence(harness_root, submission, author, request["evidence_refs"], events)
             integration = task["status"] == "resolving-integration"
             if not integration:
                 task_update["current_candidate"] = submission["candidate"]
@@ -377,15 +380,19 @@ def _decision_evidence(
     submission: Mapping[str, Any],
     author: str | None,
     references: list[str],
+    events: list[dict[str, Any]],
 ) -> list[tuple[str, bytes]]:
-    """Read only submitted evidence, committed files, or the caller's own reports."""
+    """Read only submitted or retained evidence, committed files, or the caller's own reports."""
     from graphtraj.execution.runner_results import task_report_paths
 
     _validate_evidence(harness, references)
     runner = discover_runner_directory(harness)
     mapping, _ = read_alias_mapping(runner, submission["alias"])
     worktree = Path(mapping["worktree_path"]).resolve()
-    allowed = {(harness / ref).resolve() for ref in submission["evidence_refs"]}
+    retained = [ref for event in events if event["event"] == "evidence-retained"
+                and event["caused_by_event_ids"] == [submission["event_id"]]
+                for ref in event["evidence_refs"]]
+    allowed = {(harness / ref).resolve() for ref in (*submission["evidence_refs"], *retained)}
     if author is not None:
         owner, _ = read_alias_mapping(runner, author)
         allowed.update(path.resolve() for path in task_report_paths(owner, harness))
@@ -437,8 +444,9 @@ def _validate_result_decision(
     runner = discover_runner_directory(harness)
     mapping = require_task_authority(state, runner, task["task_id"], submission["alias"], "accept")
     author = caller_alias(runner)
-    decisions = [event for event in events
-                 if event.get("submission_id") == request["submission_id"]]
+    # Retained evidence also names its submission but is not a decision.
+    decisions = [event for event in events if event["event"] in RESULT_DECISION_EVENTS
+                 and event.get("submission_id") == request["submission_id"]]
     returning = task["status"] == "awaiting-integration"
     if (mapping["session"] != submission["session"]
             or task["status"] not in {"implementing", "reviewing", "resolving-integration", "awaiting-integration"}

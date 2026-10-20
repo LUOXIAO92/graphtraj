@@ -1293,6 +1293,30 @@ def retired_target(target: tuple) -> tuple:
     return root, task, mapping, request
 
 
+def test_unrelated_task_event_during_review_does_not_stale_the_repair(
+    target: tuple, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A parent's Task note recorded during review leaves the reviewed state unchanged."""
+    from graphtraj.graph.delivery_worldline import append_project_worldline_event
+
+    root, task, mapping, arguments = target
+    adapter = NativeApproval(root, 'automatic')
+    monkeypatch.setattr(recovery.runtime_adapter, 'select_runtime_adapter', lambda runtime: adapter)
+    state = task.parent.parent
+
+    def note() -> None:
+        """Model the parent recording an ordinary Task fact while approval is pending."""
+        append_project_worldline_event(state, root, {
+            'event': 'parent-note', 'task_id': mapping['task_id'],
+            'caused_by_event_ids': arguments['caused_by_event_ids'], 'evidence_refs': [],
+        })
+
+    adapter.before_apply = note
+    result = invoke(root, arguments)
+    assert result['applied'] is True, result
+    assert yaml.safe_load((task / 'execution-budget.yml').read_text())['approved_minutes'] == 7
+
+
 @pytest.mark.parametrize('decision', ['accept', 'decline', 'error', 'stale'])
 def test_task_budget_repair_retains_retired_sessions(
     retired_target: tuple, monkeypatch: pytest.MonkeyPatch, decision: str,

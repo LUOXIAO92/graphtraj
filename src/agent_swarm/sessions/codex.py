@@ -61,6 +61,10 @@ def _response(record: dict, event: dict, session: str, locator: str) -> dict:
         content = [{'type': 'tool-call', 'id': item['call_id'], 'name': item['name'],
                     'arguments': item[argument_field]}]
     elif kind in {'function_call_output', 'custom_tool_call_output'}:
+        if not isinstance(item.get('call_id'), str):
+            # Codex 0.163 also writes host-delivered outputs with only id/name
+            # and no originating call; keep them as native evidence.
+            return event
         role = 'tool'
         output = item['output']
         if isinstance(output, str):
@@ -607,6 +611,14 @@ class CodexJsonlArchive:
             if store is None:
                 self.activation = rollout.stat().st_size
                 return
+
+            # Byte cursors and locators belong to one physical rollout file.
+            # Codex can continue the same Session in a new file (for example
+            # after "Conversation reverted"); that file keeps its own cursor
+            # and file-qualified locators instead of the first file's offsets.
+            first_file = store.header['graphtraj']['native']['locator']
+            prefix     = '' if first_file == str(rollout) else f'{rollout.name}:'
+
             # The shared writer needs the retained projection, but only unseen
             # native bytes need parsing unless an excluded prefix is requested.
             events = []
@@ -617,7 +629,7 @@ class CodexJsonlArchive:
                 if not page['has_more']:
                     break
                 after = page['after']
-            position = max(store.position('rollout'), store.position('rollout:history'), 0)
+            position = max(store.position(f'{prefix}rollout'), store.position(f'{prefix}rollout:history'), 0)
             if rollout.stat().st_size < position:
                 raise ValueError('Codex rollout was truncated before its committed cursor.')
             if self.archive.backfill_history and store.pending():
@@ -658,7 +670,7 @@ class CodexJsonlArchive:
                 line = stream.readline()
                 if not line.endswith(b'\n'):
                     break
-                locator = f'byte:{start}'
+                locator = f'{prefix}byte:{start}'
                 if start < self.activation and not self.archive.backfill_history:
                     if excluded is None:
                         excluded = locator
@@ -675,6 +687,6 @@ class CodexJsonlArchive:
                     'path': 'history', 'reason': 'Historical content excluded by collection policy.',
                 }]
                 gap['graphtraj']['collectionBoundary'] = self.activation
-                store.checkpoint(gap, source='history-excluded', position=self.activation)
-            source = 'rollout:history' if self.archive.backfill_history else 'rollout'
+                store.checkpoint(gap, source=f'{prefix}history-excluded', position=self.activation)
+            source = f'{prefix}rollout:history' if self.archive.backfill_history else f'{prefix}rollout'
             store.publish(events, source=source, position=stream.tell() - len(line))

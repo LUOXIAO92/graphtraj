@@ -8,7 +8,7 @@ from click.testing import CliRunner
 
 from agent_swarm import write_config
 from graphtraj.interfaces.agents import ConfiguredSessionArchive
-from agent_swarm.sessions.codex import CodexJsonlArchive, NativeInputError
+from agent_swarm.sessions.codex import CodexJsonlArchive
 from graphtraj.runtimes.codex.session_entry import session_record
 from graphtraj.runtimes.codex.stop_hook import main as stop_hook
 from agent_swarm.sessions.archive import JsonlSessionStore, archive_path
@@ -56,8 +56,6 @@ def test_fork_activation_inside_a_record_starts_at_next_line(tmp_path: Path) -> 
     assert store.position('fork-records') == rollout.stat().st_size
 
 
-@pytest.mark.xfail(strict=True, raises=NativeInputError,
-                   reason='Open Task 345 work: the rollout cursor is not bound to its physical rollout file.')
 def test_cursor_from_one_physical_rollout_is_not_read_in_another(tmp_path: Path) -> None:
     """A second physical rollout of the same Session is never read from the first file's byte cursor."""
     root = tmp_path / 'swarm'
@@ -71,8 +69,22 @@ def test_cursor_from_one_physical_rollout_is_not_read_in_another(tmp_path: Path)
     first, second = tmp_path / 'A.jsonl', tmp_path / 'B.jsonl'
     first.write_text(''.join(json.dumps(record) + '\n' for record in [meta, user('first')]))
     second.write_text(''.join(json.dumps(record) + '\n' for record in [
-        meta, {'type': 'compacted', 'payload': {'message': 'summary ' * 30}}, user('after')]))
+        meta, {'type': 'compacted', 'payload': {'message': 'summary ' * 30}}, user('after'),
+        # Codex 0.163 host-delivered output: no originating call_id.
+        {'type': 'response_item', 'payload': {'type': 'function_call_output', 'id': 'fco', 'name': 'graphtraj',
+                                              'output': 'notice'}}]))
     for rollout in (first, second):
         collector = CodexJsonlArchive(ConfiguredSessionArchive(root), 'main', 's', rollout)
         collector.activation = 0
         collector.collect(rollout)
+
+    # Each physical file keeps its own cursor; both files' records stay distinct.
+    from agent_swarm.sessions.protocol import native_record
+
+    store = JsonlSessionStore(archive_path(root, 'codex:s'))
+    assert store.position('rollout') == first.stat().st_size
+    assert store.position('B.jsonl:rollout') == second.stat().st_size
+    records = [native_record(event) for event in store.page()['events']]
+    assert [record['payload'].get('content', [{}])[0].get('text') for record in records
+            if record['type'] == 'response_item'] == ['first', 'after', None]
+    assert records[-1]['payload']['output'] == 'notice'

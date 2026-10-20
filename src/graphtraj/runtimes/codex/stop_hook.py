@@ -120,10 +120,13 @@ def _archive(root: Path, session: str, transcript: str, *, new_session: bool = F
         size = source.stat().st_size
         activation = 0 if new_session else size
         if saved is not None:
-            if saved['session'] != session or saved['rollout'] != str(source):
+            if saved['session'] != session:
                 raise ValueError('Native archive boundary no longer matches the bound Session.')
             if saved['enabled'] and archive.save_normalized_sessions:
-                activation = saved['activation']
+                # A new physical rollout of the same Session (the collector
+                # still verifies its session_meta) continues the archived
+                # history from its first byte.
+                activation = saved['activation'] if saved['rollout'] == str(source) else 0
         collector = CodexJsonlArchive(archive, 'main', session, source)
         collector.activation = activation
         collector.collect(source)

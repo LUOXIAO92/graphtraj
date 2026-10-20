@@ -97,8 +97,11 @@ def notify_direct_parent(
     The delivery record: ``parent``, the acknowledged ``parent_session`` and
     ``parent_execution_id``, and ``delivery`` - ``received``,
     ``not-delivered`` with the observed activity or error, or
-    ``no-direct-parent``. The same record is appended to
-    ``parent-notices.jsonl`` in the notifying Session directory.
+    ``no-direct-parent``. ``received`` means the parent's input channel took
+    the notice; ``input`` says whether a resumed parent turn started on it or
+    it is only queued in a running execution, which a later turn consumes.
+    The same record is appended to ``parent-notices.jsonl`` in the notifying
+    Session directory.
     """
     record: Dict[str, Any] = {
         "at": time.time(), "notice": notice, "parent": None,
@@ -157,6 +160,13 @@ def notify_direct_parent(
                 "delivery": "received",
                 "parent_session": receipt["session"],
                 "parent_execution_id": receipt["execution_id"],
+                # A running parent only queued the input; its turn taking it
+                # up is not confirmed here. Otherwise a resumed turn bound it.
+                "input": (
+                    "queued-in-running-execution"
+                    if receipt["execution_id"] == parent_mapping.get("execution_id")
+                    else "started-parent-turn"
+                ),
             })
         elif mapping.get("parent_connection") is not None:
             address = mapping["parent_connection"]

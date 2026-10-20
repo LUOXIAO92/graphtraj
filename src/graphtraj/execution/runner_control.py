@@ -46,6 +46,8 @@ from graphtraj.execution.runner_status import (
     read_terminal_outcome,
     read_execution_result,
     require_direct_authority,
+    require_project_reader,
+    project_redact,
     session_occupied,
     require_descendant_authority,
     require_execution_allowed,
@@ -405,24 +407,20 @@ def send_instruction(
     *,
     reports_only: bool = False,
 ) -> Dict[str, str]:
-    """Steer an active execution or continue an idle mapped Session.
+    """Continue a Task member Session under GraphTraj's causal recording policy.
 
-    ``reports_only`` selects report collection: the Session is resumed to
-    return evidence it already holds, so it starts no new work and samples no
-    stopping check. The default keeps a continuation under budget control.
+    GraphTraj delivery requires the causing Project Worldline events before it
+    calls the same continuation ``agents send`` uses, then records them with
+    the follow-up. ``reports_only`` selects report collection: the Session is
+    resumed to return evidence it already holds, so it starts no new work and
+    samples no stopping check.
     """
 
-    if not instruction.strip():
-        raise RunnerError(
-            "invalid-input", "instruction must be non-empty plain text."
-        )
-    # Recording the causing Worldline events is GraphTraj's continuation
-    # policy for Task member Sessions; ordinary Agents use agents send.
     if not caused_by_event_ids:
         raise RunnerError(
             "invalid-input",
-            "Continuing a Task member Session requires at least one causal Project "
-            "Worldline event ID; ordinary Agents use agents send without one.",
+            "GraphTraj delivery continuation requires at least one causal Project "
+            "Worldline event ID; plain messages use agents send without one.",
         )
     if (
         len(caused_by_event_ids) != len(set(caused_by_event_ids))
@@ -431,11 +429,33 @@ def send_instruction(
         raise RunnerError(
             "invalid-input", "causal Project Worldline event IDs must be unique."
         )
+    _require_project_events(cwd, caused_by_event_ids)
+    return continue_member(alias, instruction, cwd, caused_by_event_ids, reports_only=reports_only)
+
+
+def continue_member(
+    alias: str,
+    instruction: str,
+    cwd: Path,
+    caused_by_event_ids: tuple[str, ...] = (),
+    *,
+    reports_only: bool = False,
+) -> Dict[str, str]:
+    """Steer an active execution or continue an idle mapped Session.
+
+    This is the one native continuation for Task member Sessions; ``agents``
+    calls it with no causes. The recorded direct parent alone may continue
+    it, in the same native Session.
+    """
+
+    if not instruction.strip():
+        raise RunnerError(
+            "invalid-input", "instruction must be non-empty plain text."
+        )
     runner_directory = discover_runner_directory(cwd)
     mapping, session_directory = read_alias_mapping(runner_directory, alias)
     require_direct_authority(runner_directory, alias, mapping)
     if is_session_mapping(mapping):
-        _require_project_events(cwd, caused_by_event_ids)
         from graphtraj.teams.team_replacement import completed_task_member, require_active_session
 
         project = discover_project(cwd, require_clean_integration=False)
@@ -469,13 +489,23 @@ def _session_report_paths(alias: str, cwd: Path) -> tuple[Path, ...]:
 
 
 def read_session_reports(alias: str, cwd: Path) -> dict:
-    """Read only the target's declared current report files for its direct owner."""
+    """Read the target's declared report files for any verified project caller.
+
+    Project development records cross Agents and non-direct relations; control
+    material and credentials are redacted from the projection, never granted.
+    """
     runner = discover_runner_directory(cwd)
     mapping, directory = read_alias_mapping(runner, alias)
-    require_direct_authority(runner, alias, mapping)
+    require_project_reader(runner)
     paths = _session_report_paths(alias, cwd)
+    # A follow-up report beside a closed Round's retained one is <stem>-<n>.md.
+    listed = []
+    for path in paths:
+        follow_ups = [item for item in path.parent.glob(f'{path.stem}-*.md')
+                      if item.stem[len(path.stem) + 1:].isdigit()]
+        listed += [path, *sorted(follow_ups, key=lambda item: int(item.stem[len(path.stem) + 1:]))]
     reports = [{'path': str(path), 'text': path.read_text(encoding='utf-8')}
-               for path in paths if path.is_file()]
+               for path in listed if path.is_file()]
     result = {'alias': alias, 'reports': reports}
     notices = directory / 'parent-notices.jsonl'
     if notices.is_file():
@@ -542,7 +572,7 @@ def read_session_reports(alias: str, cwd: Path) -> dict:
             else:
                 confirmation = directory / f"terminal-confirmation-{mapping['execution_id']}.yml"
                 result['termination_confirmation'] = yaml.safe_load(confirmation.read_text())
-    return result
+    return project_redact(result)
 
 
 def submit_session_report(name: str, text: str, cwd: Path, *, notify_parent: bool = False) -> dict:

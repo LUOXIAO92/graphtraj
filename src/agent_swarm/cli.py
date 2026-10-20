@@ -28,7 +28,7 @@ def main() -> None:
         code = error.code if isinstance(error, AgentsError) else 'invalid-input'
         document = {'error': {'code': code, 'message': str(error)}}
         failed = True
-    print(json.dumps(document))
+    print(json.dumps(document, ensure_ascii=False))
     raise SystemExit(1 if failed else 0)
 
 

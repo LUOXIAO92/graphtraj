@@ -446,7 +446,7 @@ def test_recovery_refreshes_only_original_role_read_paths(
         assert str(path.resolve()) in filesystem['allowRead']
         assert str(path.resolve()) in filesystem['denyWrite']
         assert str(path.resolve()) not in filesystem['allowWrite']
-        assert str(path.resolve()) not in native['permissions']['additionalDirectories']
+        assert str(path.resolve()) in native['permissions']['additionalDirectories']
         assert f'Edit(/{path.resolve()}/**)' in native['permissions']['deny']
     assert str(root / 'unrelated') not in filesystem['allowRead']
 

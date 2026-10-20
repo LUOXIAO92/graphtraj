@@ -19,23 +19,9 @@ from test_codex_app_server import peer
 
 
 @pytest.mark.parametrize('command, operation, arguments', [
-    (['status', 'one', 'two', '--operation-total', '--baseline', 'base', '--candidate', 'head'],
-     'alias_status', {'aliases': ['one', 'two'], 'operation_total': True,
-                      'baseline': 'base', 'candidate': 'head'}),
-    (['status'], 'alias_status', {'operation_total': False, 'baseline': None, 'candidate': None}),
-    (['requests', 'child', '--execution-id', 'turn'],
-     'pending_requests', {'alias': 'child', 'execution_id': 'turn'}),
-    (['reply', 'child', '--request-file', 'request.yml', '--response', '{"approved":false}'],
-     'reply_to_request', {'alias': 'child', 'request': {'request_id': 'native'},
-                          'response': {'approved': False}}),
-    (['send', 'child', '--instruction', 'Go', '--caused-by-event-id', 'one',
-      '--caused-by-event-id', 'two', '--reports-only'],
-     'send_instruction', {'alias': 'child', 'instruction': 'Go',
-                           'caused_by_event_ids': ['one', 'two'], 'reports_only': True}),
-    (['interrupt', 'child'], 'interrupt', {'alias': 'child'}),
-    (['replace', 'child', '--actor', 'user', '--caused-by-event-id', 'cause'],
+    (['replace', 'child', '--actor', 'user', '--caused-by-event-ids', '["cause"]'],
      'replace', {'alias': 'child', 'actor': 'user', 'caused_by_event_ids': ['cause']}),
-    (['continue', '--task-id', '205', '--caused-by-event-id', 'cause', '--budget-only'],
+    (['continue', '--task-id', '205', '--caused-by-event-ids', '["cause"]', '--budget-only'],
      'continue', {'task_id': '205', 'caused_by_event_ids': ['cause'], 'budget_only': True}),
     (['cleanup', '--task-id', '205'], 'cleanup', {'task_id': '205'}),
     (['submit-result', '--commit', 'head', '--result-ref', 'a', '--result-ref', 'b',
@@ -81,8 +67,6 @@ def test_cli_passes_execution_arguments_to_registered_operation(
 
 @pytest.mark.parametrize('operation, command, document', [
     ('cleanup', ['cleanup', '--task-id', '205'], {'error': {'message': 'refused'}}),
-    ('alias_status', ['status', 'missing'], {'aliases': [{'alias': 'missing', 'error': {'message': 'missing'}}]}),
-    ('alias_status', ['status'], {'agents': [{'alias': 'missing', 'error': {'message': 'missing'}}]}),
 ])
 def test_cli_keeps_operation_failure_document_and_exit(
     monkeypatch: pytest.MonkeyPatch,
@@ -98,7 +82,7 @@ def test_cli_keeps_operation_failure_document_and_exit(
     result = CliRunner().invoke(agent_runner.main, command)
     assert result.exit_code == 1
     assert yaml.safe_load(result.stdout) == document
-    assert ('refused' if operation == 'cleanup' else 'missing') in result.stderr
+    assert 'refused' in result.stderr
 
 
 @pytest.mark.parametrize('caller, actor', [('parent@s1', 'main'), ('outsider@s1', 'main'), ('outsider@s1', 'user')])

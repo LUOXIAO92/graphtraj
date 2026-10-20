@@ -65,6 +65,13 @@ try:
         result = status_aliases(arguments, root, operation_total=True).document
     elif operation == 'send':
         result = send_instruction(arguments[0], arguments[1], root, tuple(arguments[2]))
+    elif operation == 'agents':
+        # The independent agents action as the host's verified native Main.
+        from agent_swarm import Binding, Caller
+        from graphtraj.interfaces.agents import GraphTrajAgents
+        action, request, session = arguments
+        outcome = GraphTrajAgents(root).operate(action, request, Binding(Caller('graphtraj-gateway', None, session=session, runtime='codex')))
+        result = {'result': outcome.result, 'agent': outcome.agent, 'session': outcome.session, 'failed': outcome.failed}
     elif operation == 'requests':
         from graphtraj.execution.runner_control import pending_requests
         result = pending_requests(arguments[0], root, execution_id=arguments[1] if len(arguments) > 1 else None)
@@ -76,6 +83,9 @@ try:
     print(json.dumps(result))
 except RunnerError as error:
     print(json.dumps({'error': error.as_document()}))
+    sys.exit(1)
+except Exception as error:
+    print(json.dumps({'error': {'code': getattr(error, 'code', type(error).__name__), 'message': str(error)}}))
     sys.exit(1)
 """
 

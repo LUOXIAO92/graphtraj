@@ -5,15 +5,18 @@ over the tool's own data root ``<project>/.graphtraj/swarm``, with GraphTraj's
 :class:`~graphtraj.execution.agent_driver.AdapterDriver` running the native
 Runtime. No Task, Team, Round or Worldline event is needed for any action.
 
-Task member Sessions created by GraphTraj delivery keep their Runner aliases
-and existing controls for status, interrupt, requests, reply and retire; their
-continuation stays GraphTraj policy (``send_instruction`` with Worldline
-causes). Caller identity stays with the existing bindings: the native callback
-scope or the calling process tree resolved by ``caller_alias``.
+Task member Sessions created by GraphTraj delivery keep their Runner aliases,
+identities, memory and real parents. ``agents`` controls them with the same
+actions as ordinary Agents through their existing native Session controls;
+GraphTraj delivery applies its own Task policy, such as recording Worldline
+causes, before calling the same continuation. Caller identity stays with the
+existing bindings: the native callback scope or the calling process tree
+resolved by ``caller_alias``.
 """
 
 from __future__ import annotations
 
+import time
 from pathlib import Path
 from typing import Any, Callable, Mapping
 
@@ -28,7 +31,6 @@ from agent_swarm import (
     default_config,
     explicit_choices,
     read_config,
-    unavailable,
 )
 
 from graphtraj.execution.runner_models import RunnerError
@@ -39,26 +41,8 @@ from agent_swarm.sessions.archive import ConfiguredSessionArchive
 # Core Agent references; anything else is a Runner alias of a Task member.
 AGENT_PREFIX = "agent-"
 
-# Existing GraphTraj features whose permission check each action reuses at
-# the Codex dynamicTools boundary. Actions without a feature need none there;
-# read-only native helpers are refused them by that boundary.
-ACTION_FEATURES = {
-    "status":    "alias_status",
-    "interrupt": "interrupt",
-    "requests":  "pending_requests",
-    "reply":     "reply_to_request",
-    "retire":    "retire",
-}
-
-# Task member continuation and waiting remain GraphTraj delivery policy.
-TASK_SESSION_MISSING = {
-    "send":   "Task member Sessions continue through GraphTraj send_instruction with "
-              "Worldline causes; ordinary Agents created by agents accept send directly.",
-    "resume": "Task member Sessions continue through GraphTraj send_instruction with "
-              "Worldline causes; ordinary Agents created by agents accept resume directly.",
-    "wait":   "a finite wait on a Task member alias is not provided; ordinary Agents "
-              "created by agents accept wait directly.",
-}
+# Polling interval of a finite wait on a Task member Session.
+WAIT_INTERVAL_SECONDS = 0.2
 
 
 def swarm_root(root: Path) -> Path:
@@ -105,33 +89,72 @@ class GraphTrajAgents:
         """Perform one validated action, translating GraphTraj rejections."""
         agent = arguments.get("agent")
         try:
+            member = self._member_alias(agent)
+            if member is not None:
+                # A Task member's core reference uses its existing Session controls.
+                outcome = self._operate(action, {**arguments, "agent": member})
+                return Outcome(outcome.result, agent=agent, session=outcome.session,
+                               execution=outcome.execution, failed=outcome.failed)
             if action == "create" or (agent or "").startswith(AGENT_PREFIX):
                 return self.control.operate(action, arguments, binding)
             if action == "status" and agent is None:
                 return self._hierarchy(binding)
-            if action in TASK_SESSION_MISSING:
-                raise unavailable(action, TASK_SESSION_MISSING[action])
             return self._operate(action, arguments)
         except (RunnerError, RuntimeAdapterError) as error:
             raise AgentsError(error.code, error.message) from None
         except ValueError as error:
             raise AgentsError("invalid-input", str(error)) from None
 
+    def _member_alias(self, agent: str | None) -> str | None:
+        """Return the Runner alias a Task member's core Agent record retains.
+
+        The Worker records each Task member under the ``graphtraj-tasks`` host
+        with its alias as the only driver setting; any other reference is not
+        a Task member.
+        """
+        import json
+
+        from graphtraj.execution.task_agents import TASK_HOST
+
+        if not (agent or "").startswith(AGENT_PREFIX) or "/" in agent:
+            return None
+        record = swarm_root(self.root) / "control" / "agents" / f"{agent}.json"
+        try:
+            document = json.loads(record.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return None
+        alias = document.get("settings", {}).get("alias") if isinstance(document, dict) else None
+        return alias if document.get("host") == TASK_HOST and isinstance(alias, str) else None
+
     def _hierarchy(self, binding: Binding) -> Outcome:
-        """Return the caller's Agents and, separately, its Task member Sessions."""
+        """Return the caller's own Agents and its real Task member hierarchy.
+
+        A Task member caller adds the Sessions recorded under it. A native
+        Main adds the top-level Sessions it dispatched, as recorded by their
+        ``parent_connection``, with their subtrees. Each in-scope node keeps
+        its own error. Unrelated history is never scanned into this view;
+        current Task membership is ``tasks`` task_members.
+        """
         from graphtraj.execution.runner_status import status_tree
 
-        agents   = self.control.operate("status", {}, binding)
-        if (binding.caller.agent or '').startswith(AGENT_PREFIX):
-            # A core identity has no legacy Runner alias or Task participation.
+        agents = self.control.operate("status", {}, binding)
+        caller = binding.caller
+        if (caller.agent or "").startswith(AGENT_PREFIX):
             return agents
-        sessions = status_tree(self.root)
+        if caller.agent is None:
+            if caller.session is None or caller.runtime is None:
+                return agents
+            sessions = status_tree(self.root, owner_connection={
+                "runtime": caller.runtime, "session": caller.session})
+        else:
+            sessions = status_tree(self.root)
         return Outcome({**agents.result, "task_sessions": sessions.document},
                        failed=not sessions.succeeded)
 
     def _operate(self, action: str, arguments: Mapping[str, Any]) -> Outcome:
-        """Dispatch a Task member alias to its existing control function."""
+        """Dispatch a Task member alias to its existing native Session control."""
         from graphtraj.execution.runner_control import (
+            continue_member,
             interrupt_session,
             pending_requests,
             reply_to_request,
@@ -144,20 +167,46 @@ class GraphTrajAgents:
         # References are read before the action because retirement moves the
         # record; they are returned only when the action itself succeeds.
         session, execution = self._references(agent)
+        failed = False
         if action == "status":
             response = status_aliases([agent], self.root)
             result, failed = response.document, not response.succeeded
+        elif action in {"send", "resume"}:
+            message = arguments.get("message")
+            if message is None:
+                raise AgentsError("invalid-input", f"request.message: required to {action} a Task member")
+            result = continue_member(agent, message, self.root)
+        elif action == "wait":
+            result, failed = self._wait(agent, arguments["timeout_seconds"])
         elif action == "interrupt":
-            result, failed = interrupt_session(agent, self.root), False
+            result = interrupt_session(agent, self.root)
         elif action == "requests":
             result = pending_requests(agent, self.root, execution_id=arguments.get("execution"))
-            failed = False
         elif action == "reply":
             result = reply_to_request(agent, arguments["request"], arguments["response"], self.root)
-            failed = False
         else:
-            result, failed = retire_session(agent, self.root), False
+            result = retire_session(agent, self.root)
         return Outcome(result, agent=agent, session=session, execution=execution, failed=failed)
+
+    def _wait(self, agent: str, timeout_seconds: float) -> tuple[dict, bool]:
+        """Wait at most ``timeout_seconds`` for an idle member or a pending request."""
+        from graphtraj.execution.runner_control import pending_requests
+        from graphtraj.execution.runner_status import status_aliases
+
+        deadline = time.monotonic() + timeout_seconds
+        while True:
+            response = status_aliases([agent], self.root)
+            status   = response.document.get("aliases", [{}])[0]
+            if not response.succeeded:
+                return response.document, True
+            if status.get("activity") == "idle":
+                return {**status, "timed_out": False}, False
+            if pending_requests(agent, self.root).get("requests"):
+                return {**status, "timed_out": False}, False
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                return {**status, "timed_out": True}, False
+            time.sleep(min(WAIT_INTERVAL_SECONDS, remaining))
 
     def _references(self, agent: str) -> tuple[str | None, str | None]:
         """Return the target's native Session and current execution, if mapped.

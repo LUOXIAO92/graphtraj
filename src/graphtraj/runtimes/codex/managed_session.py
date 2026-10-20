@@ -373,7 +373,7 @@ class CodexManagedExecution:
                         self.approval_items[item['id']] = item
                 if notification['method'] == 'error':
                     with (self.directory / 'stderr.log').open('a', encoding='utf-8') as stream:
-                        stream.write(json.dumps(notification) + '\n')
+                        stream.write(json.dumps(notification, ensure_ascii=False) + '\n')
         except RuntimeAdapterError:
             return
 
@@ -752,15 +752,15 @@ async def authorize_mcp_caller(
                 or metadata.get('forkedFromId') != native_session
                 or not is_bound_checker(discover_runner_directory(root), adapter.native_connection(thread))):
             raise RunnerError('authority-denied', 'Caller is outside this native Session subtree.')
-    return thread, {'task_graph', 'alias_status'}
+    return thread, {'task_graph', 'agents'}
 
 
 def native_operation_features() -> set[str]:
     """Share the managed host's allowed operations across MCP and CLI."""
     from graphtraj.interfaces.tools import METHOD_FEATURE_NAMES
 
-    return ({'alias_status', 'swarm', 'send_instruction', 'interrupt', 'pending_requests',
-                'reply_to_request', 'session_reports', 'submit_report', 'submit_result',
-                'decide_result', 'task_graph', 'task_members', 'worldline_read'} | set(METHOD_FEATURE_NAMES)
-            | {'parent_status', 'retire', 'replace', 'cleanup', 'approved_recovery',
+    return ({'swarm', 'session_reports', 'submit_report', 'submit_result',
+                'decide_result', 'retain_evidence', 'task_graph', 'task_members', 'worldline_read'}
+            | set(METHOD_FEATURE_NAMES)
+            | {'parent_status', 'replace', 'cleanup', 'approved_recovery',
                'role_organization', 'runtime_connections', 'desktop_activity', 'session_read', 'agents'})

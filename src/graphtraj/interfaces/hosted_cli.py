@@ -144,8 +144,11 @@ def forward_request(
     # a fixed duration. Once the host accepts one, its own reply is awaited so
     # the receipt reports the write instead of an unconfirmed timeout.
     long_operation = (request.get('action') == 'execute'
-                      and request.get('feature') in {'approved_recovery', 'submit_result', 'decide_result',
-                                                     'submit_report', 'send_instruction'})
+                      and (request.get('feature') in {'approved_recovery', 'submit_result', 'decide_result',
+                                                      'submit_report'}
+                           or request.get('feature') == 'agents'
+                           and isinstance(request.get('arguments'), Mapping)
+                           and request['arguments'].get('action') in {'send', 'resume', 'wait'}))
     from agent_swarm.connection import client_native_context
 
     native = native_context if native_context is not None else client_native_context()

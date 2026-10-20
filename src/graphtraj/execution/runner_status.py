@@ -14,12 +14,13 @@ import yaml
 
 from graphtraj.workspace.git_repository import GitRepositoryError, SourceRepository
 from graphtraj.execution.runner_models import RunnerError, StatusResponse
-from graphtraj.execution.runner_connection import session_operation
+from graphtraj.execution.runner_connection import current_parent_connection, session_operation
 from graphtraj.execution.runner_heartbeat import ownership_is_held, read_heartbeat
 from graphtraj.execution.runner_process import process_ancestors
 from graphtraj.execution.runner_transport import valid_terminal_launch_failure
 from graphtraj.runtimes import runtime_adapter
 from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError
+from graphtraj.runtimes.replacement import caller_runtime
 from graphtraj.workspace.runner_project import discover_project_root, discover_runner_directory
 
 
@@ -274,6 +275,52 @@ def require_direct_authority(
         f"Resolved caller: {caller!r}; target is a "
         f"{'root' if mapping.get('parent') is None else 'child'} Session.",
     )
+
+
+_CONTROL_SECRET = re.compile(r'(?i)(control[_-]?(key|socket|directory)|socket|request[_-]?token)')
+
+
+def project_redact(value: Any) -> Any:
+    """Remove credentials and control material from a project development read."""
+    from graphtraj.runtimes.activity import redact
+
+    if isinstance(value, dict):
+        return {key: '[redacted]' if _CONTROL_SECRET.search(str(key)) else project_redact(item)
+                for key, item in redact(value).items()}
+    if isinstance(value, list):
+        return [project_redact(item) for item in value]
+    return redact(value)
+
+
+def require_project_reader(runner_directory: Path) -> str | None:
+    """Resolve the verified caller of a project development read.
+
+    Reports, results and linked Session history are readable across Agents,
+    models and non-direct relations inside this project under the caller's
+    real identity. Main, the user, a registered member and a verified native
+    Session qualify; an unknown native source is refused by ``caller_alias``
+    and never becomes human. This grants no control: sending, replying,
+    approval, recovery, stopping and replacement keep
+    ``require_direct_authority``. A native helper thread or an unregistered
+    identity is not a project caller.
+    """
+    caller = caller_alias(runner_directory)
+    if caller is None and _runtime_caller.get() is None and runtime_adapter.current_host_connection() is None:
+        # None is Main verified by its native association, Main bound on the
+        # Runtime callback or its host receiver, or the user's own process.
+        # Native ancestry without that verified association is not a caller.
+        if current_parent_connection() is None and caller_runtime() is not None:
+            raise RunnerError('authority-denied', 'Project reads require a verified project caller.')
+    if isinstance(caller, NativeCaller):
+        connection = caller.connection
+        if not connection.get('runtime') or connection.get('session') != str(caller):
+            raise RunnerError('authority-denied', 'Project reads require a verified project caller.')
+    elif caller is not None:
+        try:
+            read_alias_mapping(runner_directory, caller)
+        except RunnerError as error:
+            raise RunnerError('authority-denied', 'Project reads require a verified project caller.') from error
+    return caller
 
 
 def require_task_authority(
@@ -581,6 +628,7 @@ def status_tree(
     operation_total: bool = False,
     baseline: str | None = None,
     candidate: str | None = None,
+    owner_connection: Mapping[str, Any] | None = None,
 ) -> StatusResponse:
     """Return the visible Agent status tree from the Runner's own records.
 
@@ -601,6 +649,12 @@ def status_tree(
     that node's own error and leaves the remaining tree intact. A record with
     no known parent appears at the top level for Main and the user and stays
     out of a Session caller's tree, which the recorded relation defines.
+
+    ``owner_connection`` narrows a caller without a live Session to the
+    top-level Sessions whose recorded ``parent_connection`` is that native
+    Main (same Runtime and Session), not retired, with their subtrees. Records
+    that do not name that Main, cannot be read or are retired stay out of this
+    view and remain readable by explicit alias.
     """
     _require_git_pair(baseline, candidate)
     runner_directory = discover_runner_directory(cwd)
@@ -619,8 +673,15 @@ def status_tree(
         parent = mapping.get("parent")
         if isinstance(parent, str):
             children.setdefault(parent, []).append(alias)
+    def owned(mapping: Mapping[str, Any]) -> bool:
+        """Return whether a top-level record names ``owner_connection`` as its Main."""
+        recorded = mapping.get("parent_connection")
+        return isinstance(recorded, dict) and all(
+            recorded.get(key) == owner_connection.get(key) for key in ("runtime", "session"))
+
     roots = (
-        [alias for alias, mapping in records.items() if mapping.get("parent") is None]
+        [alias for alias, mapping in records.items() if mapping.get("parent") is None
+         and (owner_connection is None or owned(mapping))]
         if caller is None
         else [caller] if caller in records else [
             alias for alias, mapping in records.items() if is_direct_owner(caller, mapping)
@@ -656,11 +717,14 @@ def status_tree(
         except RunnerError as error:
             node["error"] = error.as_document()
             errors.append(error)
+        if owner_connection is not None and node.get("retire_status") == "retired":
+            # Retired members appear only through an explicit historical query.
+            continue
         nodes.append(node)
         pending.extend(
             (child, alias) for child in reversed(sorted(children.get(alias, ())))
         )
-    if caller is None:
+    if caller is None and owner_connection is None:
         for alias, error in failures:
             if read_retired_legacy_hosted_mapping(runner_directory, alias) is not None:
                 # A retired withdrawn hosted record is not a broken active

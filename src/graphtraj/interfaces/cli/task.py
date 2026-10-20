@@ -64,7 +64,7 @@ def revise_command(revision_file: Path, dry_run: bool) -> None:
         ProjectConfigurationError,
     ) as error:
         raise click.ClickException(str(error)) from error
-    click.echo(yaml.safe_dump(recorded, sort_keys=False), nl=False)
+    click.echo(yaml.safe_dump(recorded, sort_keys=False, allow_unicode=True), nl=False)
 
 
 @task.command("graph", cls=OperationCommand, feature="task_graph")
@@ -88,7 +88,7 @@ def graph_command(schema: bool, view: str, task_id: str | None, details: tuple[s
         ProjectConfigurationError,
     ) as error:
         raise click.ClickException(str(error)) from error
-    click.echo(yaml.safe_dump(view, sort_keys=False), nl=False)
+    click.echo(yaml.safe_dump(view, sort_keys=False, allow_unicode=True), nl=False)
 
 
 @task.command("members", cls=OperationCommand, feature="task_members")
@@ -102,7 +102,7 @@ def members_command(summary_task_id: str | None) -> None:
     except (OSError, UnicodeError, ValueError, yaml.YAMLError,
             ProjectConfigurationError, RunnerError) as error:
         raise click.ClickException(str(error)) from error
-    click.echo(yaml.safe_dump(members, sort_keys=False), nl=False)
+    click.echo(yaml.safe_dump(members, sort_keys=False, allow_unicode=True), nl=False)
 
 
 @task.command("complete", cls=OperationCommand, feature="task_complete")
@@ -115,7 +115,7 @@ def complete_command(completion_file: Path) -> None:
         result = invoke_tool("task_complete", request).document
     except (OSError, UnicodeError, ValueError, yaml.YAMLError, ProjectConfigurationError, RunnerError) as error:
         raise click.ClickException(str(error)) from error
-    click.echo(yaml.safe_dump(result, sort_keys=False), nl=False)
+    click.echo(yaml.safe_dump(result, sort_keys=False, allow_unicode=True), nl=False)
 
 
 @task.command("update", cls=OperationCommand, feature="task_update")
@@ -138,7 +138,7 @@ def update_command(state_file: Path) -> None:
         ProjectConfigurationError,
     ) as error:
         raise click.ClickException(str(error)) from error
-    click.echo(yaml.safe_dump(recorded, sort_keys=False), nl=False)
+    click.echo(yaml.safe_dump(recorded, sort_keys=False, allow_unicode=True), nl=False)
 
 
 @task.command("backup", cls=OperationCommand, feature="task_backup")
@@ -158,7 +158,7 @@ def backup_command(
         })
     except (OSError, ValueError, ProjectConfigurationError) as error:
         raise click.ClickException(str(error)) from error
-    click.echo(yaml.safe_dump(result.document, sort_keys=False), nl=False)
+    click.echo(yaml.safe_dump(result.document, sort_keys=False, allow_unicode=True), nl=False)
     if result.failed:
         raise click.ClickException("Backup was not published; see the reported result")
 
@@ -188,7 +188,7 @@ def apply_command(request_file: Path, facts_file: Path) -> None:
         ).document
     except (OSError, UnicodeError, ValueError, yaml.YAMLError, RunnerError) as error:
         raise click.ClickException(str(error)) from error
-    click.echo(yaml.safe_dump(recorded, sort_keys=False), nl=False)
+    click.echo(yaml.safe_dump(recorded, sort_keys=False, allow_unicode=True), nl=False)
 
 
 @click.command("integrate", cls=OperationCommand, feature="task_integrate")

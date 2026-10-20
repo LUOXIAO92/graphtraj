@@ -45,6 +45,7 @@ Path(os.environ['CLAUDE_FIXTURE_HOME'], 'native-permissions.json').write_text(js
     'effort': args[args.index('--effort') + 1] if '--effort' in args else None,
     'mode': permission_mode, 'settings': json.loads(args[args.index('--settings') + 1]),
     'restricted': '--restricted' in args,
+    'add_dirs': [args[i + 1] for i, item in enumerate(args) if item == '--add-dir'],
     'scrub': os.environ.get('CLAUDE_CODE_SUBPROCESS_ENV_SCRUB'),
     'permission_handler': args[args.index('--permission-prompt-tool') + 1],
 }))
@@ -142,7 +143,7 @@ def prompt(message: dict) -> None:
     elif text == 'mcp':
         command = json.loads(args[args.index('--mcp-config') + 1])['mcpServers']['agents']
         query = {'jsonrpc': '2.0', 'id': 1, 'method': 'tools/call', 'params': {
-            'name': 'tasks', 'arguments': {'action': 'execute', 'feature': 'alias_status', 'arguments': {}}}}
+            'name': 'tasks', 'arguments': {'action': 'execute', 'feature': 'session_reports', 'arguments': {'alias': 'research@x1'}}}}
         response = subprocess.run([command['command'], *command['args']], input=json.dumps(query) + '\n',
                                   text=True, capture_output=True, env={**os.environ, **command['env']})
         result(response.stdout or response.stderr)

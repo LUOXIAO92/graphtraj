@@ -73,7 +73,7 @@ def test_top_level_help_is_an_overview_and_directs_to_runner(
             result = CliRunner().invoke(command, ["--help"])
             assert result.exit_code == 0, result.output
             assert "agent-runner" in result.output
-            assert "send" in result.output
+            assert "submit-result" in result.output
             assert "input_schema" not in result.output
 
     manual = tmp_path / "manual.txt"
@@ -283,14 +283,17 @@ def test_literal_help_value_keeps_execution_resources(monkeypatch: pytest.Monkey
     def handler(arguments: dict[str, Any], **context: Any) -> tools.ToolResult:
         """Assert that Click parsed the literal value under normal execution context."""
         assert active == [True]
-        assert arguments["instruction"] == "--help"
-        return tools.ToolResult({"sent": True})
+        assert arguments["reason"] == "--help"
+        return tools.ToolResult({"decided": True})
 
     monkeypatch.setattr(agent_runner, "_budget_notices", notices)
-    monkeypatch.setitem(tools.TOOLS, "send_instruction", replace(
-        tools.TOOLS["send_instruction"], handler=handler,
+    monkeypatch.setitem(tools.TOOLS, "decide_result", replace(
+        tools.TOOLS["decide_result"], handler=handler,
     ))
-    result = CliRunner().invoke(agent_runner.main, ["send", "child", "--instruction", "--help"])
+    result = CliRunner().invoke(agent_runner.main, [
+        "decide-result", "--submission-id", "submission", "--commit", "commit",
+        "--decision", "rejected", "--reason", "--help", "--evidence-ref", "evidence",
+    ])
     assert result.exit_code == 0, result.output
     assert not active
 

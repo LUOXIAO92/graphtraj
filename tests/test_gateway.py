@@ -13,6 +13,26 @@ from graphtraj.interfaces import gateway, tools
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 
+# A registry entry these tests own, so gateway behavior is not tied to a
+# particular product feature.
+FIXTURE_FEATURE = tools.Tool(
+    "alias_status", "Read fixture aliases.",
+    {"type": "object", "properties": {
+        "aliases":         {"type": "array", "items": {"type": "string"}},
+        "operation_total": {"type": "boolean", "default": False},
+        "baseline":        {"type": ["string", "null"]},
+        "candidate":       {"type": ["string", "null"]},
+    }, "additionalProperties": False},
+    lambda arguments, *, cwd=None: tools.ToolResult({"received": dict(arguments)}),
+    manual_ref="manuals/task-delivery/guide.md",
+)
+
+
+@pytest.fixture(autouse=True)
+def fixture_feature(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Register the owned fixture feature for every gateway test."""
+    monkeypatch.setitem(tools.TOOLS, "alias_status", FIXTURE_FEATURE)
+
 
 @pytest.fixture
 def feature(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> list:
@@ -129,7 +149,7 @@ def test_invalid_envelope_is_a_local_failure(envelope: Any, feature: list) -> No
 
 
 @pytest.mark.parametrize("name, arguments, field", [
-    ("send_instruction", {"alias": "child"}, "instruction"),
+    ("replace", {"alias": "child"}, "caused_by_event_ids"),
     ("swarm", {"tasks": [{"role": "engineer", "caller": "Main"}]}, "tasks[0].caller"),
     ("swarm", {"tasks": [{"role": 1}]}, "tasks[0].role"),
     ("submit_result", {"commit": "abc", "completion": "done", "result_refs": []}, "result_refs"),

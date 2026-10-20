@@ -389,6 +389,32 @@ def test_cli_host_returns_a_slow_write_receipt_instead_of_a_timeout(
     assert 'did not acknowledge' not in result.stdout + result.stderr
 
 
+def test_cli_host_returns_a_slow_read_result_instead_of_a_timeout(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An accepted read that outlasts the ordinary deadline returns the owner's real result."""
+    import time
+    from dataclasses import replace
+
+    runner, _, _ = result_project(tmp_path)
+    directory = own_process(runner)
+    original = tools.TOOLS['task_members']
+
+    def slow(arguments: dict, *, cwd: Path | None = None) -> tools.ToolResult:
+        """Answer only after the ordinary ten-second control deadline."""
+        time.sleep(10.5)
+        return tools.ToolResult({'members': ['slow-but-answered']})
+
+    monkeypatch.setitem(tools.TOOLS, 'task_members', replace(original, handler=slow))
+    with hold_ownership(directory, os.getpid()), cli_connection(
+        tmp_path, 'research@x1', native_operation_features(),
+    ) as address:
+        result = run_cli('graphtraj.interfaces.cli.graphtraj', tmp_path, address,
+                         'task', 'members', process_timeout=30)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert yaml.safe_load(result.stdout) == {'members': ['slow-but-answered']}
+
+
 def test_agents_cli_uses_the_bound_task_channel(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """The independent agents CLI reaches a member's host through the MCP agents dispatch."""
     from agent_swarm.connection import CONNECTION_ENV as AGENTS_CONNECTION

@@ -387,6 +387,55 @@ def test_recovery_after_expired_budget_resumes_and_retries_without_new_minutes(
     assert yaml.safe_load(path.read_text()) == after
 
 
+def test_expired_budget_recovery_resumes_in_the_same_call_and_repeats_without_new_time(
+    accepted_task: tuple, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The approval window a call starts is not a stale change for that same call."""
+    root, _, state, _ = accepted_task
+    task = state / 'tasks/83-integration'
+    mappings = [yaml.safe_load(path.read_text())
+                for path in (root / '.graphtraj/runner/sessions').glob('*/mapping.yml')]
+    mapping = next(item for item in mappings if item['parent'] is None)
+    arguments = {
+        'alias': mapping['alias'], 'reason': 'Authorized continuation after waiting.',
+        'instruction': 'Validate the retained candidate only.',
+        'allowed_scope': 'Validation', 'forbidden_scope': 'No implementation',
+        'additional_minutes': 45, 'restore_active': True,
+        'caused_by_event_ids': [read_worldline(state, root)[-1]['event_id']],
+    }
+    monkeypatch.setattr(recovery, 'caller_runtime', lambda: 'codex')
+    path = task / 'execution-budget.yml'
+    before = yaml.safe_load(path.read_text())
+    before['started_at'] = recovery.time.time() - 86400
+    before['allowance_minutes'] = 0
+    path.write_text(yaml.safe_dump(before))
+    adapter = NativeApproval(root, 'automatic')
+    monkeypatch.setattr(recovery.runtime_adapter, 'select_runtime_adapter', lambda runtime: adapter)
+    sent = []
+
+    def resume(*args: object, **kwargs: object) -> dict:
+        """Acknowledge the original native Session."""
+        sent.append(args[1])
+        return {'alias': args[0], 'session': mapping['session'], 'send_status': 'sent'}
+
+    monkeypatch.setattr(recovery, '_send_session_locked', resume)
+    result = invoke(root, arguments)
+    assert result['recovery_status'] == 'resumed', result
+    after = yaml.safe_load(path.read_text())
+    assert after['approved_window_started_at'] > before['started_at']
+    assert after['approved_minutes'] == 45
+
+    # The same call and a same-event retry reuse the applied event and resumption.
+    repeated = invoke(root, arguments)
+    assert repeated['recovery_event_id'] == result['recovery_event_id']
+    assert repeated['resumption'] == result['resumption']
+    retry = {'alias': arguments['alias'], 'retry_event_id': result['recovery_event_id']}
+    assert invoke(root, retry)['resumption'] == result['resumption']
+    assert len(sent) == 1
+    assert len(adapter.proposals) == 1
+    assert yaml.safe_load(path.read_text()) == after
+
+
 @pytest.mark.parametrize('cutover', [False, True])
 def test_administrative_recovery_routes_reports_to_the_actual_current_host(
     accepted_task: tuple, monkeypatch: pytest.MonkeyPatch, fake_codex: FakeCodex,
@@ -1438,7 +1487,7 @@ def test_budget_only_recovery_does_not_require_stopping_the_subtree(
         **before, 'approved_minutes': before.get('approved_minutes', 0) + 5,
     }
     assert not execution.exists()
-    with pytest.raises(RunnerError, match='stopped before replacement'):
+    with pytest.raises(RunnerError, match='stopped before recovery; .* is not idle'):
         call({'action': 'execute', 'feature': 'approved_recovery',
               'arguments': {**request, 'resume': True, 'additional_minutes': 1}})
 

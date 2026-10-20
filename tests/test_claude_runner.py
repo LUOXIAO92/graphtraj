@@ -737,3 +737,28 @@ def test_stop_published_during_startup_refuses_the_first_turn(
     assert launch.returncode != 0
     assert 'subtree-stopped' in launched + launch_error
     assert not log.exists()
+
+
+def test_claude_member_can_read_project_records_but_not_control_channels(
+    installed_commands: InstalledCommands,
+    temporary_git_repository: Path,
+    fake_codex: FakeCodex,
+    tmp_path: Path,
+) -> None:
+    """Task state and Runner records are read-only reachable; control channels stay denied."""
+    root, environment = setup(installed_commands, temporary_git_repository, fake_codex, tmp_path)
+    batch = root / 'probe.yml'
+    batch.write_text(yaml.safe_dump({'tasks': [{'task_id': '320', 'role': 'researcher'}]}))
+    result = command(installed_commands, root, environment, '--swarm-input', str(batch))
+    assert result.returncode == 0, result.stdout + result.stderr
+    alias = yaml.safe_load(result.stdout)['tasks'][0]['alias']
+    settled(installed_commands, root, environment, alias)
+    settings = yaml.safe_load((root / '.graphtraj/runner/sessions' / alias / 'claude-settings.yml').read_text())
+    filesystem = settings['sandbox']['filesystem']
+    state, runner, cli = (str((root / '.graphtraj' / name).resolve()) for name in ('state', 'runner', 'cli'))
+    assert {state, runner} <= set(filesystem['allowRead'])
+    assert {state, runner} <= set(filesystem['denyWrite'])
+    assert cli in filesystem['denyRead'] and cli not in filesystem['allowRead']
+    assert f'Read(/{state}/**)' in settings['permissions']['allow']
+    assert f'Edit(/{runner}/**)' in settings['permissions']['deny']
+    assert f'Read(/{cli}/**)' in settings['permissions']['deny']

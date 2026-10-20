@@ -100,6 +100,7 @@ class ClaudeJsonlCollector:
         self.header: dict | None = None
         self.api_id: str | None = None
         self.streams: dict[str, dict] = {}
+        self.deferred: tuple[dict, int] | None = None
         self.position = 0
 
     def bind(self, path: Path, current_inputs: set[str] | None = None) -> None:
@@ -170,8 +171,22 @@ class ClaudeJsonlCollector:
             event['ignorable'] = True
         return event
 
-    def accept(self, record: dict, position: int, received_at_ms: int | None = None) -> None:
-        """Checkpoint compact live content; a notification cannot publish order."""
+    def flush(self) -> None:
+        """Checkpoint the stream draft whose fragments a backlog deferred."""
+        deferred, self.deferred = self.deferred, None
+        store = self._store() if deferred is not None else None
+        if store is not None:
+            store.checkpoint(deferred[0], source=self.execution, position=deferred[1])
+
+    def accept(self, record: dict, position: int, received_at_ms: int | None = None,
+               *, defer: bool = False) -> None:
+        """Checkpoint compact live content; a notification cannot publish order.
+
+        ``defer`` marks a fragment with more input already received behind it:
+        each checkpoint rewrites the whole archive, so consecutive fragments of
+        one draft share the checkpoint of the last, or of ``flush``. Received
+        input that is not yet checkpointed is lost on a crash either way.
+        """
         store = self._store()
         received_at_ms = received_at_ms if received_at_ms is not None else int(time.time() * 1000)
         if store is None:
@@ -186,7 +201,11 @@ class ClaudeJsonlCollector:
         if main and event.get('type') == 'message_start':
             self.api_id = event.get('message', {}).get('id')
         api_id = self.api_id
-        if main and api_id and record.get('type') == 'stream_event':
+        streaming = main and bool(api_id) and record.get('type') == 'stream_event'
+        if self.deferred is not None and not (
+                defer and streaming and self.deferred[0] is self.streams.get('stream:' + str(api_id))):
+            self.flush()
+        if streaming:
             key = 'stream:' + api_id
             if key not in self.streams:
                 pending = next((p['event'] for p in store.pending()
@@ -223,7 +242,10 @@ class ClaudeJsonlCollector:
                 append_stream_record(draft['data']['stream'], {'type': 'claude/native', 'record': record})
             if event.get('type') == 'message_stop':
                 draft['data']['nativeMessageComplete'] = True
-            store.checkpoint(draft, source=self.execution, position=position)
+            if defer:
+                self.deferred = (draft, position)
+            else:
+                store.checkpoint(draft, source=self.execution, position=position)
         elif (main and record.get('type') in {'assistant', 'user'} and isinstance(record.get('uuid'), str)
               and record.get('graphtraj_direction') != 'sent'):
             self.live_ids.add(record['uuid'])
@@ -386,4 +408,5 @@ class ClaudeJsonlCollector:
 
     def close(self) -> None:
         """Collect final native history; unresolved interrupted text stays pending."""
+        self.flush()
         self.collect()

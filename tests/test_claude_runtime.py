@@ -11,6 +11,7 @@ import time
 import pytest
 import yaml
 
+from graphtraj.configuration.project_configuration import cli_directory
 from graphtraj.configuration.project_roles import parse_inline_role
 from graphtraj.configuration.role_definitions import resolve_child_role
 from graphtraj.execution.runner_heartbeat import hold_ownership
@@ -323,6 +324,80 @@ def test_claude_send_and_confirmed_stop(tmp_path: Path, claude_environment: None
         assert 'finish' in future.result(timeout=10)['last_agent_message']
 
 
+def test_claude_later_prompt_hook_is_answered_behind_a_collection_backlog(
+        tmp_path: Path, claude_environment: None, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A prompt sent into a live execution is released before its native hook times out."""
+    from agent_swarm.sessions.claude import ClaudeJsonlCollector
+
+    result_project(tmp_path)
+    hooks = tmp_path / 'hooks.log'
+    monkeypatch.setenv('CLAUDE_FIXTURE_HOOK_LOG', str(hooks))
+    monkeypatch.setenv('CLAUDE_FIXTURE_LATER_HOOK_TIMEOUT', '2')
+    monkeypatch.setenv('CLAUDE_FIXTURE_STREAM_FRAGMENTS', '150')
+    accept = ClaudeJsonlCollector.accept
+
+    def durable(self, record: dict, position: int, *rest: object, **options: object) -> None:
+        """Stand in for the durable archive rewrite each streamed fragment costs."""
+        if record.get('type') == 'stream_event':
+            time.sleep(0.03)
+        return accept(self, record, position, *rest, **options)
+
+    monkeypatch.setattr(ClaudeJsonlCollector, 'accept', durable)
+    with ExitStack() as stack, ThreadPoolExecutor(max_workers=1) as pool:
+        turn, ready, _ = execution(tmp_path, stack, 'wait-stream')
+        future = pool.submit(turn.run)
+        try:
+            assert ready.wait(5)
+            history = tmp_path / (turn.session + '.json')
+            deadline = time.monotonic() + 5
+            while not (history.exists() and 'wait-stream' in history.read_text()) and time.monotonic() < deadline:
+                time.sleep(0.01)
+            # About 4.5 s of fragments are still being collected.
+            turn.operate({'operation': 'send', 'session': turn.session, 'execution_id': turn.execution_id,
+                          'instruction': 'finish'})
+            outcome = future.result(timeout=20)
+        finally:
+            if not turn.done.is_set():
+                turn.terminate()
+    assert 'timed out' not in hooks.read_text()
+    assert outcome['outcome'] == 'completed' and 'finish' in outcome['last_agent_message']
+
+
+def test_claude_interrupt_confirms_within_its_window_behind_a_collection_backlog(
+        tmp_path: Path, claude_environment: None, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Queued fragments share archive rewrites, so a stop is confirmed inside the operation window."""
+    from agent_swarm.sessions.archive import JsonlSessionStore
+
+    result_project(tmp_path)
+    monkeypatch.setenv('CLAUDE_FIXTURE_STREAM_FRAGMENTS', '1500')
+    checkpoint = JsonlSessionStore.checkpoint
+    rewrites = []
+
+    def durable(self, *args: object, **options: object) -> bool:
+        """Stand in for one whole-archive durable rewrite of a long Session."""
+        rewrites.append(1)
+        time.sleep(0.03)
+        return checkpoint(self, *args, **options)
+
+    monkeypatch.setattr(JsonlSessionStore, 'checkpoint', durable)
+    with ExitStack() as stack, ThreadPoolExecutor(max_workers=1) as pool:
+        turn, ready, _ = execution(tmp_path, stack, 'wait-stream')
+        future = pool.submit(turn.run)
+        assert ready.wait(5)
+        history = tmp_path / (turn.session + '.json')
+        deadline = time.monotonic() + 5
+        while not (history.exists() and 'wait-stream' in history.read_text()) and time.monotonic() < deadline:
+            time.sleep(0.01)
+        started = time.monotonic()
+        # One rewrite per fragment would hold the confirmation for 45 s.
+        assert turn.operate({'operation': 'interrupt', 'session': turn.session,
+                             'execution_id': turn.execution_id}) == {}
+        assert time.monotonic() - started < 20
+        stopped = future.result(timeout=10)
+    assert stopped['outcome'] == 'interrupted' and stopped['terminal_confirmed'] is True
+    assert len(rewrites) < 200
+
+
 def test_claude_mid_turn_input_shares_its_turn_result(tmp_path: Path, claude_environment: None) -> None:
     """Echoed input joined to a running turn completes with that turn's one result."""
     result_project(tmp_path)
@@ -442,6 +517,16 @@ def test_read_resources_are_native_readable_and_not_writable(
         assert str(path.resolve()) in filesystem['denyWrite']
         assert str(path.resolve()) not in filesystem['allowWrite']
         assert str(path.resolve()) not in filesystem['allowWrite']
+    # Project development records stay readable for diagnosis but unwritable;
+    # the CLI control channel stays unreadable.
+    for path in (tmp_path / 'state', tmp_path / '.graphtraj/runner'):
+        assert f'Read(/{path.resolve()}/**)' in settings['permissions']['allow']
+        assert f'Edit(/{path.resolve()}/**)' in settings['permissions']['deny']
+        assert str(path.resolve()) in filesystem['allowRead']
+        assert str(path.resolve()) in filesystem['denyWrite']
+    channel = cli_directory(tmp_path.resolve())
+    assert f'Read(/{channel}/**)' in settings['permissions']['deny']
+    assert str(channel) in filesystem['denyRead']
 
 
 def test_claude_resource_grants_and_read_only_recovery(tmp_path: Path, claude_environment: None) -> None:

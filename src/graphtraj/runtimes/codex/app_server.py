@@ -797,15 +797,22 @@ class CodexAppServer:
             'arguments': {'action': 'discover'}, '_meta': {'threadId': thread_id},
         })
         document = discovery.get('structuredContent')
+        report = {'main_session': thread_id, 'cwd': thread.get('cwd'),
+                  'activity': thread['status']['type'], 'reload_requested': not observe_only,
+                  'servers': [{key: item[key] for key in ('name', 'runtimeStatus', 'authStatus', 'toolsError')
+                               if key in item} | {'tools': sorted(item.get('tools', {}))}
+                              for item in inventory.get('data', []) if item.get('name') == server]}
         if discovery.get('isError') or not isinstance(document, dict) or not isinstance(document.get('service'), dict):
-            raise CodexAdapterError('RUNTIME_REQUEST_INVALID',
-                'MCP discovery did not return serving-source evidence; reload may still be queued. No adoption is certified.')
-        return {'main_session': thread_id, 'cwd': thread.get('cwd'),
-                'activity': thread['status']['type'], 'reload_requested': not observe_only,
-                'service': document['service'],
-                'servers': [{key: item[key] for key in ('name', 'runtimeStatus', 'authStatus', 'toolsError') if key in item}
-                            | {'tools': sorted(item.get('tools', {}))}
-                            for item in inventory.get('data', []) if item.get('name') == server],
+            # Keep what the host did return: its error, the fields present and
+            # the bounded tool text, so the missing stamp has a diagnosable cause.
+            return {**report, 'service': None, 'adoption_certified': False, 'discovery': {
+                        'isError': discovery.get('isError'),
+                        'structured_fields': sorted(document) if isinstance(document, dict) else None,
+                        'content': [str(item.get('text', item))[:2000] if isinstance(item, dict) else str(item)[:2000]
+                                    for item in (discovery.get('content') or [])[:4]]},
+                    'note': 'MCP discovery returned no serving-source evidence; reload may still be queued. '
+                            'No adoption is certified.'}
+        return {**report, 'service': document['service'],
                 'note': 'Compare actual source stamps. Reload ACK alone is not refresh completion or cutover.'}
 
     async def inspect_thread_reference(self, reference: str) -> dict[str, Any]:

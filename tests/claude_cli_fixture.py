@@ -4,6 +4,7 @@ import os
 from pathlib import Path
 import subprocess
 import sys
+import threading
 import time
 import uuid
 from datetime import datetime, timezone
@@ -67,6 +68,30 @@ sdk_create_results = []
 sdk_request_arguments = {'action': 'execute', 'feature': 'status', 'arguments': {}}
 sdk_display = False
 sdk_display_reply = None
+# As the real CLI does, a later prompt runs its UserPromptSubmit hook and is
+# dropped when the host does not answer within the hook timeout.
+later_hook_timeout = float(os.environ.get('CLAUDE_FIXTURE_LATER_HOOK_TIMEOUT', '0'))
+prompt_hooks = {}
+
+
+def later_prompt(message: dict) -> None:
+    """Hold a later prompt until the host answers its native hook."""
+    identity = 'prompt-' + str(uuid.uuid4())
+    prompt_hooks[identity] = message
+
+    def expire() -> None:
+        """Drop the prompt as the CLI reports its hook timeout."""
+        if prompt_hooks.pop(identity, None) is not None:
+            with open(os.environ['CLAUDE_FIXTURE_HOOK_LOG'], 'a') as log:
+                log.write(f'UserPromptSubmit hook callback timed out after {int(later_hook_timeout * 1000)}ms\n')
+
+    timer = threading.Timer(later_hook_timeout, expire)
+    timer.daemon = True
+    timer.start()
+    emit({'type': 'control_request', 'request_id': identity, 'request': {
+        'subtype': 'hook_callback', 'callback_id': 'graphtraj_start', 'input': {
+            'hook_event_name': 'UserPromptSubmit', 'session_id': session,
+            'transcript_path': str(transcript), 'prompt': message['message']['content']}}})
 
 
 def result(text: str, error: bool = False, queued: int = 0, idle: bool = True) -> None:
@@ -164,6 +189,15 @@ def prompt(message: dict) -> None:
     elif text.startswith('wait') or (
             os.environ.get('CLAUDE_FIXTURE_HOLD_FILE') and Path(os.environ['CLAUDE_FIXTURE_HOLD_FILE']).exists()
             and 'Direct child execution results' not in text):
+        if text == 'wait-stream':
+            # A long streamed answer the host collects fragment by fragment.
+            emit({'type': 'stream_event', 'session_id': session, 'parent_tool_use_id': None,
+                  'uuid': str(uuid.uuid4()), 'event': {'type': 'message_start', 'message': {
+                      'id': 'api-stream', 'model': model, 'role': 'assistant', 'content': []}}})
+            for _ in range(int(os.environ.get('CLAUDE_FIXTURE_STREAM_FRAGMENTS', '0'))):
+                emit({'type': 'stream_event', 'session_id': session, 'parent_tool_use_id': None,
+                      'uuid': str(uuid.uuid4()), 'event': {'type': 'content_block_delta', 'index': 0,
+                                                           'delta': {'type': 'text_delta', 'text': 'x'}}})
         waiting.append(text)
     else:
         while waiting:
@@ -245,7 +279,12 @@ for line in sys.stdin:
             result('interrupted')
     elif event['type'] == 'control_response':
         response = event['response']
-        if response['request_id'] == 'sdk-initialize':
+        held = prompt_hooks.pop(response['request_id'], None)
+        if held is not None:
+            prompt(held)
+        elif response['request_id'].startswith('prompt-'):
+            pass  # Answered after the CLI dropped the prompt.
+        elif response['request_id'] == 'sdk-initialize':
             assert response['response']['mcp_response']['result']['protocolVersion'] == '2025-06-18'
             emit({'type': 'control_request', 'request_id': 'sdk-initial-tools', 'request': {
                 'subtype': 'mcp_message', 'server_name': 'agents',
@@ -310,6 +349,8 @@ for line in sys.stdin:
         # it must not execute it until the host releases that hook.
         if not started:
             waiting.append(event)
+        elif later_hook_timeout:
+            later_prompt(event)
         else:
             prompt(event)
     if started and waiting and isinstance(waiting[0], dict):

@@ -45,6 +45,20 @@ AGENT_PREFIX = "agent-"
 WAIT_INTERVAL_SECONDS = 0.2
 
 
+PREVIEW_CHARACTERS = 200
+
+
+def _preview(value: Any) -> Any:
+    """Bound message bodies in the default listing; an explicit agent shows them."""
+    if isinstance(value, dict):
+        return {key: (item[:PREVIEW_CHARACTERS] + "…" if isinstance(item, str) and "message" in key
+                      and len(item) > PREVIEW_CHARACTERS else _preview(item))
+                for key, item in value.items()}
+    if isinstance(value, list):
+        return [_preview(item) for item in value]
+    return value
+
+
 def swarm_root(root: Path) -> Path:
     """Return the ``agents`` tool's data root inside a GraphTraj project."""
     return root / ".graphtraj" / "swarm"
@@ -145,11 +159,25 @@ class GraphTrajAgents:
             if caller.session is None or caller.runtime is None:
                 return agents
             sessions = status_tree(self.root, owner_connection={
-                "runtime": caller.runtime, "session": caller.session})
+                "runtime": caller.runtime, "session": caller.session},
+                current_members=self._current_members())
         else:
             sessions = status_tree(self.root)
-        return Outcome({**agents.result, "task_sessions": sessions.document},
+        return Outcome(_preview({**agents.result, "task_sessions": sessions.document}),
                        failed=not sessions.succeeded)
+
+    def _current_members(self) -> set[str]:
+        """Return the seated members of each unfinished Task's current Team."""
+        from graphtraj.configuration.project_configuration import load_project_configuration
+        from graphtraj.execution.desktop_activity import _task_aliases
+        from graphtraj.graph.task_graph import _load_states
+
+        tasks = load_project_configuration(self.root).state / "tasks"
+        members: set[str] = set()
+        for directory, task in (_load_states(tasks).values() if tasks.is_dir() else ()):
+            if task.get("status") != "integrated" and task.get("disposition", "active") == "active":
+                members |= _task_aliases(directory, task)[1]
+        return members
 
     def _operate(self, action: str, arguments: Mapping[str, Any]) -> Outcome:
         """Dispatch a Task member alias to its existing native Session control."""

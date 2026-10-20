@@ -629,6 +629,7 @@ def status_tree(
     baseline: str | None = None,
     candidate: str | None = None,
     owner_connection: Mapping[str, Any] | None = None,
+    current_members: set[str] | None = None,
 ) -> StatusResponse:
     """Return the visible Agent status tree from the Runner's own records.
 
@@ -655,6 +656,10 @@ def status_tree(
     Main (same Runtime and Session), not retired, with their subtrees. Records
     that do not name that Main, cannot be read or are retired stay out of this
     view and remain readable by explicit alias.
+
+    ``current_members`` further keeps only top-level Task members that hold a
+    seat in the current Team of an unfinished Task; replaced, retired and
+    completed members stay readable by explicit alias.
     """
     _require_git_pair(baseline, candidate)
     runner_directory = discover_runner_directory(cwd)
@@ -681,7 +686,8 @@ def status_tree(
 
     roots = (
         [alias for alias, mapping in records.items() if mapping.get("parent") is None
-         and (owner_connection is None or owned(mapping))]
+         and (owner_connection is None or owned(mapping))
+         and (current_members is None or alias in current_members)]
         if caller is None
         else [caller] if caller in records else [
             alias for alias, mapping in records.items() if is_direct_owner(caller, mapping)

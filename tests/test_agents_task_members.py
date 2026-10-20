@@ -72,3 +72,32 @@ def test_task_member_agent_reference_uses_its_session_controls(
     resumed = call('agents', ['resume', {'agent': alias, 'message': 'hold'}, 'main-a'])
     assert resumed['result']['send_status'] == 'sent'
     call('agents', ['interrupt', {'agent': agent}, 'main-a'])
+
+
+def test_default_tree_keeps_current_seats_and_bounds_messages(tmp_path: Path, monkeypatch) -> None:
+    """Main sees current seats and their subtrees; a member sees its own subtree."""
+    from graphtraj.execution import runner_status
+    from graphtraj.interfaces.agents import PREVIEW_CHARACTERS, _preview
+
+    main = {'runtime': 'codex', 'session': 'main-a'}
+    records = {
+        'current-leader': {'parent': None, 'parent_connection': main},
+        'replaced-leader': {'parent': None, 'parent_connection': main},
+        'completed-member': {'parent': None, 'parent_connection': main},
+        'current-engineer': {'parent': 'current-leader'},
+        'old-engineer': {'parent': 'replaced-leader'},
+    }
+    monkeypatch.setattr(runner_status, 'discover_runner_directory', lambda cwd: tmp_path)
+    monkeypatch.setattr(runner_status, '_recorded_sessions', lambda runner: (records, []))
+    monkeypatch.setattr(runner_status, '_status_alias', lambda runner, alias, **kwargs: (
+        {'error': {'code': 'x'}} if alias == 'replaced-leader' else {'activity': 'idle'}))
+    monkeypatch.setattr(runner_status, 'caller_alias', lambda runner: None)
+    tree = runner_status.status_tree(tmp_path, owner_connection=main, current_members={'current-leader'})
+    assert [node['alias'] for node in tree.document['agents']] == ['current-leader', 'current-engineer']
+    assert tree.succeeded  # the replaced Leader's old error is not in the default view
+    monkeypatch.setattr(runner_status, 'caller_alias', lambda runner: 'current-engineer')
+    assert [node['alias'] for node in runner_status.status_tree(tmp_path).document['agents']] == ['current-engineer']
+
+    long = 'm' * 1000
+    bounded = _preview({'agents': [{'last_agent_message': long, 'summary': long}]})['agents'][0]
+    assert len(bounded['last_agent_message']) == PREVIEW_CHARACTERS + 1 and bounded['summary'] == long

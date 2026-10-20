@@ -323,6 +323,45 @@ def test_claude_send_and_confirmed_stop(tmp_path: Path, claude_environment: None
         assert 'finish' in future.result(timeout=10)['last_agent_message']
 
 
+def test_claude_later_prompt_hook_is_answered_behind_a_collection_backlog(
+        tmp_path: Path, claude_environment: None, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A prompt sent into a live execution is released before its native hook times out."""
+    from agent_swarm.sessions.claude import ClaudeJsonlCollector
+
+    result_project(tmp_path)
+    hooks = tmp_path / 'hooks.log'
+    monkeypatch.setenv('CLAUDE_FIXTURE_HOOK_LOG', str(hooks))
+    monkeypatch.setenv('CLAUDE_FIXTURE_LATER_HOOK_TIMEOUT', '2')
+    monkeypatch.setenv('CLAUDE_FIXTURE_STREAM_FRAGMENTS', '150')
+    accept = ClaudeJsonlCollector.accept
+
+    def durable(self, record: dict, position: int, *rest: object) -> None:
+        """Stand in for the durable archive rewrite each streamed fragment costs."""
+        if record.get('type') == 'stream_event':
+            time.sleep(0.03)
+        return accept(self, record, position, *rest)
+
+    monkeypatch.setattr(ClaudeJsonlCollector, 'accept', durable)
+    with ExitStack() as stack, ThreadPoolExecutor(max_workers=1) as pool:
+        turn, ready, _ = execution(tmp_path, stack, 'wait-stream')
+        future = pool.submit(turn.run)
+        try:
+            assert ready.wait(5)
+            history = tmp_path / (turn.session + '.json')
+            deadline = time.monotonic() + 5
+            while not (history.exists() and 'wait-stream' in history.read_text()) and time.monotonic() < deadline:
+                time.sleep(0.01)
+            # About 4.5 s of fragments are still being collected.
+            turn.operate({'operation': 'send', 'session': turn.session, 'execution_id': turn.execution_id,
+                          'instruction': 'finish'})
+            outcome = future.result(timeout=20)
+        finally:
+            if not turn.done.is_set():
+                turn.terminate()
+    assert 'timed out' not in hooks.read_text()
+    assert outcome['outcome'] == 'completed' and 'finish' in outcome['last_agent_message']
+
+
 def test_claude_mid_turn_input_shares_its_turn_result(tmp_path: Path, claude_environment: None) -> None:
     """Echoed input joined to a running turn completes with that turn's one result."""
     result_project(tmp_path)

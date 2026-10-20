@@ -250,7 +250,8 @@ def run(job_file: Path) -> int:
                 # now durable before stop facts are read, so either this check
                 # sees the stop or the publisher interrupts this execution.
                 try:
-                    require_execution_allowed(session_directory.parent.parent, base_mapping["alias"], base_mapping)
+                    require_execution_allowed(session_directory.parent.parent, base_mapping["alias"], base_mapping,
+                                              reports_only=reports_only)
                 except RunnerError as error:
                     raise RuntimeAdapterError(error.code, error.message) from error
 

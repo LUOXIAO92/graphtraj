@@ -203,6 +203,14 @@ def _task_aliases(
 
 
 def task_members(cwd: Path, summary_task_id: str | None = None) -> dict:
+    """List the member Agents of current summary Tasks; see ``_task_members``."""
+    from graphtraj.execution.runner_status import one_retained_scan
+
+    with one_retained_scan():
+        return _task_members(cwd, summary_task_id)
+
+
+def _task_members(cwd: Path, summary_task_id: str | None = None) -> dict:
     """List the member Agents of current summary Tasks or of one chosen summary.
 
     By default the scope is every unfinished summary Task (an active Task with

@@ -151,8 +151,13 @@ class GraphTrajAgents:
         its own error. Unrelated history is never scanned into this view;
         current Task membership is ``tasks`` task_members.
         """
-        from graphtraj.execution.runner_status import status_tree
+        from graphtraj.execution.runner_status import one_retained_scan, status_tree
 
+        with one_retained_scan():
+            return self._hierarchy_view(binding, status_tree)
+
+    def _hierarchy_view(self, binding: Binding, status_tree: Any) -> Outcome:
+        """Build ``_hierarchy`` with retained records read from one shared scan."""
         agents = self.control.operate("status", {}, binding)
         caller = binding.caller
         if (caller.agent or "").startswith(AGENT_PREFIX):

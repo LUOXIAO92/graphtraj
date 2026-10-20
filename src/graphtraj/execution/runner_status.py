@@ -25,6 +25,7 @@ from graphtraj.workspace.runner_project import discover_project_root, discover_r
 
 
 _runtime_caller: ContextVar[tuple[Path, str | None] | None] = ContextVar('runtime_caller', default=None)
+_retained_scan: ContextVar[dict[Path, list[Path]] | None] = ContextVar('retained_scan', default=None)
 
 
 class NativeCaller(str):
@@ -626,7 +627,16 @@ def status_aliases(
     )
 
 
-def status_tree(
+def status_tree(cwd: Path, **options: Any) -> StatusResponse:
+    """Return the visible Agent status tree; see ``_status_tree``.
+
+    The whole view resolves retained records from one shared scan.
+    """
+    with one_retained_scan():
+        return _status_tree(cwd, **options)
+
+
+def _status_tree(
     cwd: Path,
     *,
     operation_total: bool = False,
@@ -768,6 +778,13 @@ def _recorded_sessions(
     the enumeration of the rest. Subtree interruption may read only parentage
     first; every selected member still requires its complete execution mapping.
     """
+    with one_retained_scan():
+        return _read_recorded_sessions(runner_directory, ownership_only=ownership_only)
+
+
+def _read_recorded_sessions(
+    runner_directory: Path, *, ownership_only: bool,
+) -> Tuple[Dict[str, Dict[str, Any]], list[Tuple[str, RunnerError]]]:
     session_root = runner_directory / "sessions"
     if session_root.is_symlink() or not session_root.is_dir():
         return {}, []
@@ -1038,17 +1055,41 @@ def _numstat_file(entry: bytes) -> Dict[str, Any]:
     }
 
 
+@contextmanager
+def one_retained_scan() -> Iterator[None]:
+    """Share one scan of the retained Session records across one enumeration.
+
+    Every alias without an active directory is otherwise resolved by its own
+    scan of all Task Traces, so a whole-project view costs one scan per
+    retained Session. The shared result lives only for this call's context.
+    """
+    if _retained_scan.get() is not None:
+        yield
+        return
+    token = _retained_scan.set({})
+    try:
+        yield
+    finally:
+        _retained_scan.reset(token)
+
+
 def retained_session_directories(runner_directory: Path) -> list[Path]:
     """Locate retired Session records within the existing durable Task Traces."""
     from graphtraj.configuration.project_configuration import load_project_configuration
     from graphtraj.workspace.runner_project import discover_project_root
 
+    shared = _retained_scan.get()
+    if shared is not None and runner_directory in shared:
+        return shared[runner_directory]
     try:
         configuration = load_project_configuration(discover_project_root(runner_directory))
     except (OSError, ValueError, RunnerError):
         return []
-    return [directory for directory in (configuration.state / "tasks").glob("*/teams/*/traces/*/runner")
-            if (directory / "session.yml").is_file()]
+    directories = [directory for directory in (configuration.state / "tasks").glob("*/teams/*/traces/*/runner")
+                   if (directory / "session.yml").is_file()]
+    if shared is not None:
+        shared[runner_directory] = directories
+    return directories
 
 
 def session_record_directory(runner_directory: Path, alias: str) -> Path:

@@ -196,9 +196,9 @@ An interrupted or failed execution alone is not retirement.
 When the caller's relationship requires approval, the public retirement
 operation obtains the selected Runtime review and executes only after approval.
 Callers do not run an internal Python bridge or supply an approval flag. A
-refusal or review error leaves that retirement unapplied. Cleanup and replacement
-use the same retirement operation and retain completed steps if a later step
-fails; retry through their public entries without reviving retired members.
+refusal or review error leaves that retirement unapplied. Replacement uses the
+same retirement operation and retains completed steps if a later step fails;
+retry through its public entry without reviving retired members.
 
 Ask the direct child to stop when possible; interrupt an out-of-control
 descendant subtree through Runner when needed. That control exception does not
@@ -211,8 +211,16 @@ A replacement root retains the original owning host's notification connection.
 Replacement composes retirement and the existing role registration operation.
 If registration fails after retirement, handle the reported partial outcome
 through the public retry path; do not resume the retired Agent or claim that
-replacement succeeded. Task cleanup uses the same retirement operation before
-removing an unused Worktree and branch.
+replacement succeeded.
+
+Task cleanup retires no member. Delivery-resource cleanup is separate from
+Agent retirement: after validated integration it removes the clean Task
+Worktree and merged branch, moves only unstarted allocations into their
+retained Traces, and returns each started member as a `standby_aliases` entry
+whose identity and native Session stay continuable. A completed Task's standby
+member answers a later reports-only follow-up in its original native Session
+at its recorded cwd, recreated empty for that continuation. Use `retire`
+separately only for a member that must be removed.
 
 If that root has no recorded connection, replacement uses the caller's existing
 host binding or the Runtime's actual host context when available. The replacement

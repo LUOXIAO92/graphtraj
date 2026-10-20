@@ -10,7 +10,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from conftest import FakeCodex, InstalledCommands, app_server_peer, run_process, wait_for_file
+from conftest import FakeCodex, InstalledCommands, app_server_peer, run_process, runner_command, wait_for_file
 from runner_fixtures import configure_harness
 from test_task_budget_control import BODY, sample_stop
 from test_task_graph import _change_status, _register, _task
@@ -34,7 +34,7 @@ def events(root: Path) -> list[dict]:
 
 def command(commands: InstalledCommands, root: Path, env: dict, *args: str) -> subprocess.CompletedProcess:
     """Invoke the public Runner with a bounded lifetime."""
-    return run_process([str(commands.runner), *args], cwd=root, env=env, timeout=30)
+    return run_process(runner_command(commands, *args), cwd=root, env=env, timeout=30)
 
 
 def prepare(

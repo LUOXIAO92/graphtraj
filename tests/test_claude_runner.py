@@ -10,7 +10,7 @@ import time
 import pytest
 import yaml
 
-from conftest import runner_operation, FakeCodex, InstalledCommands, run_process
+from conftest import runner_command, runner_operation, FakeCodex, InstalledCommands, run_process
 from runner_fixtures import configure_harness
 from test_task_recovery import installed_commands, events
 from test_task_budget_control import BODY
@@ -56,7 +56,7 @@ def setup(
 
 def command(commands: InstalledCommands, root: Path, environment: dict, *args: str):
     """Invoke the public installed Runner with a finite command timeout."""
-    return run_process([str(commands.runner), *args], cwd=root, env=environment, timeout=65)
+    return run_process(runner_command(commands, *args), cwd=root, env=environment, timeout=65)
 
 
 def settled(commands: InstalledCommands, root: Path, environment: dict, alias: str) -> dict:

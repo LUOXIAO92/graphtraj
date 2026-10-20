@@ -168,15 +168,15 @@ def test_installed_alias_control_resumes_and_interrupts_one_team_session(
 
     policy_log = tmp_path / "resumed-policy.jsonl"
     resumed = run_process(
-        [
-            str(installed_commands.runner),
+        runner_operation(
+            installed_commands,
             "send",
             alias,
             "--instruction",
             "Inspect the accepted candidate again.",
             "--caused-by-event-id",
             cause,
-        ],
+        ),
         cwd=harness_root,
         env={
             **environment,
@@ -217,15 +217,15 @@ def test_installed_alias_control_resumes_and_interrupts_one_team_session(
     }
 
     unsupported = run_process(
-        [
-            str(installed_commands.runner),
+        runner_operation(
+            installed_commands,
             "send",
             alias,
             "--instruction",
             "Do not queue this follow-up.",
             "--caused-by-event-id",
             cause,
-        ],
+        ),
         cwd=harness_root,
         env=environment,
     )
@@ -542,10 +542,10 @@ def test_installed_status_reports_native_requests_and_commit_diff(
     )
 
     result = run_process(
-        [
-            str(installed_commands.runner), "status", "--operation-total",
+        runner_operation(
+            installed_commands, "status", "--operation-total",
             "--baseline", baseline, "--candidate", candidate, alias,
-        ],
+        ),
         cwd=harness_root,
         env=environment,
     )

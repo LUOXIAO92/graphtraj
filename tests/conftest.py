@@ -47,10 +47,21 @@ parser.add_argument('--instruction')
 parser.add_argument('--caused-by-event-id', action='append', default=[])
 parser.add_argument('--caused-by-event-ids', type=json.loads, default=[])
 parser.add_argument('--reports-only', action='store_true')
+parser.add_argument('--execution-id')
+parser.add_argument('--request-file')
+parser.add_argument('--response')
 options = parser.parse_args()
 cwd = Path.cwd().resolve()
 identity = {'alias': options.aliases[0]} if options.operation != 'status' else {}
 try:
+    if options.operation in ('requests', 'reply'):
+        from graphtraj.execution.runner_control import pending_requests, reply_to_request
+        document = (pending_requests(options.aliases[0], cwd, execution_id=options.execution_id)
+                    if options.operation == 'requests' else reply_to_request(
+                        options.aliases[0], yaml.safe_load(Path(options.request_file).read_text()),
+                        json.loads(options.response), cwd))
+        sys.stdout.write(yaml.safe_dump(document, sort_keys=False))
+        sys.exit(0)
     if options.operation == 'status':
         selected = dict(operation_total=options.operation_total, baseline=options.baseline,
                         candidate=options.candidate)
@@ -73,9 +84,19 @@ except RunnerError as error:
 """
 
 
+REMOVED_RUNNER_OPERATIONS = frozenset({"status", "send", "interrupt", "requests", "reply"})
+
+
 def runner_operation(commands: "InstalledCommands", *arguments: str) -> list[str]:
-    """Return the argv running one removed agent-runner status/send/interrupt operation."""
+    """Return the argv running one removed agent-runner status/send/interrupt/requests/reply operation."""
     return [str(commands.runner.with_name("python")), "-c", _RUNNER_OPERATION, *arguments]
+
+
+def runner_command(commands: "InstalledCommands", *arguments: str) -> list[str]:
+    """Return the installed agent-runner argv, or the library replica of a removed operation."""
+    if arguments and arguments[0] in REMOVED_RUNNER_OPERATIONS:
+        return runner_operation(commands, *arguments)
+    return [str(commands.runner), *arguments]
 
 
 def run_process(

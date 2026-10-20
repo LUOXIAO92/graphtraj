@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from conftest import FakeCodex, InstalledCommands, run_process
+from conftest import FakeCodex, InstalledCommands, run_process, runner_operation
 from runner_fixtures import configure_harness
 from test_project_setup import CODING_METHOD_SKILL_NAMES
 from test_task_graph import _change_status, _register, _task
@@ -27,7 +27,7 @@ def remove_coding_method_skills(root: Path, user_home: Path) -> None:
 def wait_for_idle(commands: InstalledCommands, root: Path, env: dict, alias: str) -> dict:
     """Observe this test's native execution through bounded public status calls."""
     for _ in range(100):
-        result = run_process([str(commands.runner), 'status', alias], cwd=root, env=env)
+        result = run_process(runner_operation(commands, 'status', alias), cwd=root, env=env)
         assert result.returncode == 0, result.stderr
         status = yaml.safe_load(result.stdout)['aliases'][0]
         if status['activity'] == 'idle':

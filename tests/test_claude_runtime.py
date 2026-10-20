@@ -363,6 +363,45 @@ def test_claude_later_prompt_hook_is_answered_behind_a_collection_backlog(
     assert outcome['outcome'] == 'completed' and 'finish' in outcome['last_agent_message']
 
 
+def test_claude_later_prompt_hook_is_answered_during_one_slow_collection(
+        tmp_path: Path, claude_environment: None, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A long Session's single archive collection does not hold a later prompt past its hook timeout."""
+    from agent_swarm.sessions.claude import ClaudeJsonlCollector
+
+    result_project(tmp_path)
+    hooks = tmp_path / 'hooks.log'
+    monkeypatch.setenv('CLAUDE_FIXTURE_HOOK_LOG', str(hooks))
+    monkeypatch.setenv('CLAUDE_FIXTURE_LATER_HOOK_TIMEOUT', '1')
+    collect = ClaudeJsonlCollector.collect
+    history = None
+
+    def long_session(self) -> None:
+        """Stand in for re-reading and rewriting a long Session while the first turn runs."""
+        if history is not None and json.loads(history.read_text()) == ['wait']:
+            time.sleep(3)
+        return collect(self)
+
+    monkeypatch.setattr(ClaudeJsonlCollector, 'collect', long_session)
+    with ExitStack() as stack, ThreadPoolExecutor(max_workers=1) as pool:
+        turn, ready, _ = execution(tmp_path, stack, 'wait')
+        future = pool.submit(turn.run)
+        try:
+            assert ready.wait(5)
+            history = tmp_path / (turn.session + '.json')
+            deadline = time.monotonic() + 5
+            while not (history.exists() and 'wait' in history.read_text()) and time.monotonic() < deadline:
+                time.sleep(0.01)
+            # The first turn's echo is now being collected for three seconds.
+            turn.operate({'operation': 'send', 'session': turn.session, 'execution_id': turn.execution_id,
+                          'instruction': 'finish'})
+            outcome = future.result(timeout=30)
+        finally:
+            if not turn.done.is_set():
+                turn.terminate()
+    assert not hooks.exists() or 'timed out' not in hooks.read_text()
+    assert outcome['outcome'] == 'completed' and 'finish' in outcome['last_agent_message']
+
+
 def test_claude_interrupt_confirms_within_its_window_behind_a_collection_backlog(
         tmp_path: Path, claude_environment: None, monkeypatch: pytest.MonkeyPatch) -> None:
     """Queued fragments share archive rewrites, so a stop is confirmed inside the operation window."""
@@ -410,6 +449,26 @@ def test_claude_mid_turn_input_shares_its_turn_result(tmp_path: Path, claude_env
         completed = future.result(timeout=10)
         assert completed['outcome'] == 'completed'
         assert completed['last_agent_message'] == 'merge|finish'
+
+
+def test_claude_input_absorbed_mid_turn_settles_without_its_own_result(
+    tmp_path: Path, claude_environment: None,
+) -> None:
+    """Input the CLI absorbs into a running turn, without echo or queued count, still settles."""
+    result_project(tmp_path)
+    with ExitStack() as stack, ThreadPoolExecutor(max_workers=1) as pool:
+        turn, ready, _ = execution(tmp_path, stack, 'absorb')
+        future = pool.submit(turn.run)
+        assert ready.wait(5)
+        turn.operate({'operation': 'send', 'session': turn.session, 'execution_id': turn.execution_id,
+                      'instruction': 'joined'})
+        try:
+            completed = future.result(timeout=10)
+        finally:
+            if not future.done():
+                turn.terminate()
+        assert completed['outcome'] == 'completed'
+        assert completed['last_agent_message'] == 'absorb|joined'
 
 
 def test_claude_input_echoed_after_a_result_waits_for_the_next(

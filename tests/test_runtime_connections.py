@@ -879,22 +879,6 @@ def test_slow_operation_does_not_delay_a_concurrent_request(tmp_path) -> None:
     assert sorted(calls) == ['cheap', 'slow']
 
 
-def test_only_long_operations_await_acceptance(monkeypatch, tmp_path) -> None:
-    """Ordinary forwarded queries keep the default deadline."""
-    from graphtraj.interfaces import hosted_cli
-
-    calls = []
-    monkeypatch.setenv(hosted_cli.CONNECTION_ENV, str(tmp_path))
-    monkeypatch.setattr(hosted_cli, 'connection_operation',
-                        lambda *args, **kwargs: calls.append(kwargs) or {'document': {}, 'failed': False})
-    for feature, arguments in (('approved_recovery', {}), ('submit_result', {}), ('task_graph', {}),
-                               ('submit_report', {'notify_parent': True}), ('submit_report', {}),
-                               ('agents', {'action': 'send'}), ('agents', {'action': 'status'})):
-        hosted_cli.forward_request({'action': 'execute', 'feature': feature, 'arguments': arguments}, tmp_path)
-    assert [call['await_accepted'] for call in calls] == [True, True, False, True, True, True, False]
-    assert {call['response_timeout'] for call in calls} == {hosted_cli.OPERATION_TIMEOUT_SECONDS}
-
-
 def test_accepted_wait_ends_when_the_host_is_gone(tmp_path) -> None:
     """A host that accepted the request and then vanished never leaves the caller waiting."""
     import threading

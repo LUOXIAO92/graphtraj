@@ -21,6 +21,7 @@ from agent_swarm import AgentsResult
 from agent_swarm.discovery import handle_request as discover_agents
 from agent_swarm.mcp import tool_documents
 from graphtraj.sessions.archive import SessionArchive
+from graphtraj.runtimes.claude.history import read_records
 
 from graphtraj.execution.runner_io import write_yaml_durably
 from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError, SessionStarted, record_runtime_process
@@ -71,6 +72,7 @@ class ClaudeExecution:
         self.accepting = True
         self.sent = 0
         self.input_ids: set[str] = set()
+        self.transcript: Path | None = None
         self.results = 0
         self.echoes = 0
         self.native_state: str | None = None
@@ -216,6 +218,37 @@ class ClaudeExecution:
         self._send(message)
         self.events.put({**message, 'graphtraj_direction': 'sent'})
         self.sent += 1
+
+    def _absorbed_inputs(self) -> int:
+        """Count sent inputs that the native CLI absorbed into a running turn.
+
+        Such an input gets no result of its own, and its stream echo and the
+        result's ``queued_turn_count`` are not reliably present. The transcript
+        records each absorption as a queue removal with reason
+        ``absorbed_mid_turn``, naming the input's UUID directly or through
+        the delivery ID of its ``queued_command`` attachment.
+        """
+        if self.transcript is None:
+            return 0
+        try:
+            records = read_records(self.transcript, self.session)
+        except (OSError, ValueError):
+            return 0
+
+        sources = {}
+        for record in records:
+            attachment = record.get('attachment')
+            if isinstance(attachment, dict) and attachment.get('type') == 'queued_command':
+                sources[attachment.get('delivery_id')] = attachment.get('source_uuid')
+
+        absorbed = set()
+        for record in records:
+            if (record.get('type') == 'queue-operation' and record.get('operation') == 'remove'
+                    and record.get('reason') == 'absorbed_mid_turn'):
+                source = record.get('commandUuid') or sources.get(record.get('deliveryId'))
+                if source in self.input_ids:
+                    absorbed.add(source)
+        return len(absorbed)
 
     def _prepare(self, address: str | None) -> tuple[list[str], dict]:
         """Use native restricted mode and mandatory sandboxing without bypass flags."""
@@ -368,7 +401,9 @@ class ClaudeExecution:
         if self.session is not None:
             return
         self.session = native['session_id']
-        if self.independent and native.get('transcript_path'):
+        if native.get('transcript_path'):
+            self.transcript = Path(native['transcript_path'])
+        if self.independent and self.transcript is not None:
             self.collector.bind(Path(native['transcript_path']), self.input_ids)
         write_yaml_durably(self.directory / 'session.yml', {
             'session': self.session, 'rollout_path': native.get('transcript_path'),
@@ -655,11 +690,15 @@ class ClaudeExecution:
                             raise RuntimeAdapterError('RUNTIME_TRANSPORT_FAILED', 'Claude exited before a native terminal result.')
                         break
                     with self.lock:
-                        # Input joined to a running turn shares its single result:
-                        # every sent input is echoed before that result, which
-                        # reports no queued turn. A missing count is not assumed.
+                        # Input joined to a running turn shares its single result.
+                        # It is settled by its echo before that result with no
+                        # queued turn reported, or by the transcript's record of
+                        # its absorption once native idle. A missing count is
+                        # not assumed.
                         settled = self.results >= self.sent or (
-                            self.echoes >= self.sent and last_result > last_echo and queued_turns == 0)
+                            self.echoes >= self.sent and last_result > last_echo and queued_turns == 0) or (
+                            self.native_state == 'idle'
+                            and self.results + self._absorbed_inputs() >= self.sent)
                         if self.results and settled and self.native_state == 'idle':
                             self.accepting = False
                             break

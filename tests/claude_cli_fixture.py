@@ -62,6 +62,7 @@ Path(os.environ['CLAUDE_FIXTURE_HOME'], 'native-endpoint.json').write_text(
 started = False
 waiting = []
 merging = []
+absorbing = []
 late = []
 sdk_create_results = []
 sdk_request_arguments = {'action': 'execute', 'feature': 'status', 'arguments': {}}
@@ -93,14 +94,25 @@ def later_prompt(message: dict) -> None:
             'transcript_path': str(transcript), 'prompt': message['message']['content']}}})
 
 
-def result(text: str, error: bool = False, queued: int = 0, idle: bool = True) -> None:
+def write_transcript(record: dict) -> None:
+    """Append one native transcript record that has no stream counterpart."""
+    global parent_uuid
+    if 'uuid' in record:
+        record['parentUuid'] = parent_uuid
+        parent_uuid = record['uuid']
+    with transcript.open('a') as stream:
+        stream.write(json.dumps(record) + '\n')
+
+
+def result(text: str, error: bool = False, queued: int | None = 0, idle: bool = True) -> None:
     """Emit distinct result and quiescence records with native usage."""
     emit({'type': 'assistant', 'session_id': session, 'message': {
         'role': 'assistant', 'content': [{'type': 'text', 'text': text}]}})
     emit({'type': 'result', 'session_id': session, 'uuid': str(uuid.uuid4()),
-          'is_error': error, 'result': text, 'queued_turn_count': queued, 'usage': {
+          'is_error': error, 'result': text, 'usage': {
               'input_tokens': 11, 'cache_read_input_tokens': 7,
-              'cache_creation_input_tokens': 2, 'output_tokens': 5}})
+              'cache_creation_input_tokens': 2, 'output_tokens': 5},
+          **({'queued_turn_count': queued} if queued is not None else {})})
     if idle:
         emit({'type': 'system', 'subtype': 'session_state_changed', 'state': 'idle'})
 
@@ -130,6 +142,20 @@ def prompt(message: dict) -> None:
     text = message['message']['content']
     messages.append(text)
     history.write_text(json.dumps(messages))
+    if absorbing:
+        # As a 2.1.302 transcript recorded: input joining a running turn is a
+        # queued_command attachment plus its absorbed_mid_turn queue removal.
+        # Its stream echo and the result's queued-turn count were not retained,
+        # so this peer emits neither.
+        write_transcript({'type': 'queue-operation', 'operation': 'enqueue', 'sessionId': session})
+        write_transcript({'type': 'attachment', 'uuid': str(uuid.uuid4()), 'sessionId': session,
+                          'attachment': {'type': 'queued_command', 'prompt': text,
+                                         'source_uuid': message['uuid'], 'delivery_id': 'delivery-1'}})
+        write_transcript({'type': 'queue-operation', 'operation': 'remove', 'reason': 'absorbed_mid_turn',
+                          'sessionId': session, 'commandUuid': message['uuid'], 'deliveryId': 'delivery-1'})
+        absorbing.clear()
+        result('|'.join(messages), queued=None)
+        return
     emit({'type': 'system', 'subtype': 'session_state_changed', 'state': 'running'})
     if '--replay-user-messages' in args:
         # As observed: the echo is emitted when input joins the running turn.
@@ -147,6 +173,8 @@ def prompt(message: dict) -> None:
         merging.clear()
     elif text in ('merge', 'merge-late'):
         merging.append(text)
+    elif text == 'absorb':
+        absorbing.append(text)
     elif text == 'garbage':
         print('not json secret-token', flush=True)
     elif text == 'permission':

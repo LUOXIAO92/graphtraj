@@ -261,9 +261,13 @@ def test_changed_worktree_and_closed_submission_cannot_be_accepted_again(tmp_pat
     assert read_worldline(tmp_path / 'state', tmp_path) == before
     result.write_bytes(original)
     with runtime_caller(runner, None):
-        tools.decide_result(decision, cwd=tmp_path)
+        accepted = tools.decide_result(decision, cwd=tmp_path).document
+        decided = read_worldline(tmp_path / 'state', tmp_path)
+        # A retry after a lost receipt returns the recorded decision once.
+        assert tools.decide_result(decision, cwd=tmp_path).document == accepted
+        assert read_worldline(tmp_path / 'state', tmp_path) == decided
         with pytest.raises(ValueError):
-            tools.decide_result(decision, cwd=tmp_path)
+            tools.decide_result({**decision, 'reason': 'Accepted again.'}, cwd=tmp_path)
     with runtime_caller(runner, 'research@x1'):
         with pytest.raises(ValueError):
             tools.submit_result(arguments, cwd=tmp_path)

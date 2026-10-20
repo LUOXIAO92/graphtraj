@@ -75,8 +75,10 @@ def test_accepted_result_correction_and_integration(
             ])
             assert response.exit_code == 0, response.output
             returned = yaml.safe_load(response.output)
-        with pytest.raises(ValueError):
-            tools.decide_result(rejection, cwd=tmp_path)
+        # Repeating the same return records nothing more and returns it again.
+        returned_events = read_worldline(tmp_path / 'state', tmp_path)
+        assert tools.decide_result(rejection, cwd=tmp_path).document['event_id'] == returned['event_id']
+        assert read_worldline(tmp_path / 'state', tmp_path) == returned_events
     assert accepted['event_id'] in returned['caused_by_event_ids']
     assert read_worldline(tmp_path / 'state', tmp_path)[:len(before)] == before
     assert old_report.read_text() == 'Original evidence'

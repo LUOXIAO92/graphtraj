@@ -575,7 +575,7 @@ class ClaudeExecution:
                         continue
                     source_position += 1
                     if event.get('type') != 'eof':
-                        collector.accept(event, source_position)
+                        collector.accept(event, source_position, defer=not self.events.empty())
                     kind = event.get('type')
                     if kind in ('warning', 'error') or (
                             kind == 'system' and event.get('subtype') in ('warning', 'error')):
@@ -693,10 +693,10 @@ class ClaudeExecution:
                             event = self.events.get_nowait()
                             source_position += 1
                             if event.get('type') != 'eof':
-                                collector.accept(event, source_position)
+                                collector.accept(event, source_position, defer=not self.events.empty())
                         collector.close()
-                    elif getattr(collector, 'writer', None):
-                        collector.writer.checkpoint()
+                    else:
+                        collector.flush()
                 except Exception as error:
                     failure = RuntimeAdapterError('RUNTIME_ARCHIVE_FAILED', str(error))
                 if self.proc is not None and pipes_drained:

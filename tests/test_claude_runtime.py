@@ -335,11 +335,11 @@ def test_claude_later_prompt_hook_is_answered_behind_a_collection_backlog(
     monkeypatch.setenv('CLAUDE_FIXTURE_STREAM_FRAGMENTS', '150')
     accept = ClaudeJsonlCollector.accept
 
-    def durable(self, record: dict, position: int, *rest: object) -> None:
+    def durable(self, record: dict, position: int, *rest: object, **options: object) -> None:
         """Stand in for the durable archive rewrite each streamed fragment costs."""
         if record.get('type') == 'stream_event':
             time.sleep(0.03)
-        return accept(self, record, position, *rest)
+        return accept(self, record, position, *rest, **options)
 
     monkeypatch.setattr(ClaudeJsonlCollector, 'accept', durable)
     with ExitStack() as stack, ThreadPoolExecutor(max_workers=1) as pool:
@@ -360,6 +360,41 @@ def test_claude_later_prompt_hook_is_answered_behind_a_collection_backlog(
                 turn.terminate()
     assert 'timed out' not in hooks.read_text()
     assert outcome['outcome'] == 'completed' and 'finish' in outcome['last_agent_message']
+
+
+def test_claude_interrupt_confirms_within_its_window_behind_a_collection_backlog(
+        tmp_path: Path, claude_environment: None, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Queued fragments share archive rewrites, so a stop is confirmed inside the operation window."""
+    from agent_swarm.sessions.archive import JsonlSessionStore
+
+    result_project(tmp_path)
+    monkeypatch.setenv('CLAUDE_FIXTURE_STREAM_FRAGMENTS', '1500')
+    checkpoint = JsonlSessionStore.checkpoint
+    rewrites = []
+
+    def durable(self, *args: object, **options: object) -> bool:
+        """Stand in for one whole-archive durable rewrite of a long Session."""
+        rewrites.append(1)
+        time.sleep(0.03)
+        return checkpoint(self, *args, **options)
+
+    monkeypatch.setattr(JsonlSessionStore, 'checkpoint', durable)
+    with ExitStack() as stack, ThreadPoolExecutor(max_workers=1) as pool:
+        turn, ready, _ = execution(tmp_path, stack, 'wait-stream')
+        future = pool.submit(turn.run)
+        assert ready.wait(5)
+        history = tmp_path / (turn.session + '.json')
+        deadline = time.monotonic() + 5
+        while not (history.exists() and 'wait-stream' in history.read_text()) and time.monotonic() < deadline:
+            time.sleep(0.01)
+        started = time.monotonic()
+        # One rewrite per fragment would hold the confirmation for 45 s.
+        assert turn.operate({'operation': 'interrupt', 'session': turn.session,
+                             'execution_id': turn.execution_id}) == {}
+        assert time.monotonic() - started < 20
+        stopped = future.result(timeout=10)
+    assert stopped['outcome'] == 'interrupted' and stopped['terminal_confirmed'] is True
+    assert len(rewrites) < 200
 
 
 def test_claude_mid_turn_input_shares_its_turn_result(tmp_path: Path, claude_environment: None) -> None:

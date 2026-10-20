@@ -91,6 +91,8 @@ class ClaudeExecution:
         self.archive: SessionArchive | None = None
         self.agents_callback: Callable[[dict], AgentsResult] | None = None
         self.collector = None
+        self.collection: queue.Queue = queue.Queue()
+        self.collection_failure: Exception | None = None
         self.sdk_tools_listed = False
         self.sdk_calls: dict[str, tuple[dict, Future]] = {}
         self.displayed: set[tuple[str, str]] = set()
@@ -225,6 +227,28 @@ class ClaudeExecution:
         self._send(message)
         self.events.put({**message, 'graphtraj_direction': 'sent'})
         self.sent += 1
+
+    def _collect(self) -> None:
+        """Archive native records in arrival order, off the protocol loop.
+
+        Each message record makes the collector re-read the transcript and
+        rewrite the archive, which grows with the Session. A native hook waits
+        only 30 s, so the run loop keeps answering hooks while this thread
+        collects. The first failure is kept for the run loop to raise.
+        """
+        while True:
+            item = self.collection.get()
+            if item is None:
+                return
+            if self.collection_failure is not None:
+                continue
+            try:
+                if item[0] == 'bind':
+                    self.collector.bind(item[1], item[2])
+                else:
+                    self.collector.accept(item[1], item[2], defer=not self.collection.empty())
+            except Exception as error:
+                self.collection_failure = error
 
     def _absorbed_inputs(self) -> int:
         """Count sent inputs that the native CLI absorbed into a running turn.
@@ -410,7 +434,7 @@ class ClaudeExecution:
         self.session = native['session_id']
         if native.get('transcript_path'):
             self.transcript = Path(native['transcript_path'])
-            self.collector.bind(Path(native['transcript_path']), self.input_ids)
+            self.collection.put(('bind', Path(native['transcript_path']), set(self.input_ids)))
             # Keep the native file as the Trace reference, never a third
             # transport body. Nonempty older transport evidence stays untouched.
             transcript = Path(native['transcript_path'])
@@ -513,6 +537,7 @@ class ClaudeExecution:
         result_error = None
         reader = None
         stderr_reader = None
+        collecting = None
         failure = None
         with ExitStack() as resources:
             # Runner supplies Task context before the native registration hook;
@@ -544,6 +569,8 @@ class ClaudeExecution:
                 directory=channel_directory))
             stderr = resources.enter_context((self.directory / 'stderr.log').open('a', encoding='utf-8'))
             try:
+                collecting = threading.Thread(target=self._collect, daemon=True)
+                collecting.start()
                 argv, environment = self._prepare(address)
                 if self.stopping.is_set():
                     raise RuntimeAdapterError('RUNTIME_EXECUTION_INTERRUPTED', 'Claude stopped before process creation.')
@@ -586,6 +613,8 @@ class ClaudeExecution:
                         stop_deadline = time.monotonic() + 5
                     if stop_deadline is not None and time.monotonic() >= stop_deadline:
                         break
+                    if self.collection_failure is not None:
+                        raise self.collection_failure
                     if self.session is None and time.monotonic() >= startup_deadline:
                         raise RuntimeAdapterError('RUNTIME_SESSION_MISSING', 'Claude did not attest startup within 45 seconds.')
                     # A later prompt waits on its UserPromptSubmit hook for
@@ -609,7 +638,7 @@ class ClaudeExecution:
                         continue
                     source_position += 1
                     if event.get('type') != 'eof':
-                        collector.accept(event, source_position, defer=not self.events.empty())
+                        self.collection.put(('event', event, source_position))
                     kind = event.get('type')
                     if kind in ('warning', 'error') or (
                             kind == 'system' and event.get('subtype') in ('warning', 'error')):
@@ -725,6 +754,12 @@ class ClaudeExecution:
                     stderr_reader.join(timeout=5)
                 pipes_drained = all(thread is None or not thread.is_alive()
                                     for thread in (reader, stderr_reader))
+                if collecting is not None:
+                    # Records already handed over are archived before closing.
+                    self.collection.put(None)
+                    collecting.join()
+                    if self.collection_failure is not None and failure is None:
+                        failure = RuntimeAdapterError('RUNTIME_ARCHIVE_FAILED', str(self.collection_failure))
                 try:
                     if pipes_drained:
                         while not self.events.empty():

@@ -1046,7 +1046,9 @@ def interrupt_session(alias: str, cwd: Path, *, ordinary: bool = False) -> Dict[
             caller = caller_alias(runner_directory)
             if (not isinstance(previous, dict) or previous.get("resumed") is True
                     or (previous.get("kind") == "interrupt" and previous.get("by") == caller)):
-                stop = {"alias": alias, "kind": "interrupt", "by": caller}
+                # A native Main caller is a str subclass; the record keeps its plain value.
+                stop = {"alias": alias, "kind": "interrupt",
+                        "by": str(caller) if caller is not None else None}
             else:
                 stop = previous  # a stop in force from another origin stays exactly as recorded
         write_yaml_durably(session_directory / "stop.yml", stop)

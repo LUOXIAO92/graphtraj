@@ -45,7 +45,7 @@ Path(os.environ['CLAUDE_FIXTURE_HOME'], 'native-permissions.json').write_text(js
     'model': model,
     'effort': args[args.index('--effort') + 1] if '--effort' in args else None,
     'mode': permission_mode, 'settings': json.loads(args[args.index('--settings') + 1]),
-    'restricted': '--restricted' in args,
+    'restricted': '--restricted' in args, 'cwd': os.getcwd(),
     'add_dirs': [args[i + 1] for i, item in enumerate(args) if item == '--add-dir'],
     'scrub': os.environ.get('CLAUDE_CODE_SUBPROCESS_ENV_SCRUB'),
     'permission_handler': args[args.index('--permission-prompt-tool') + 1],

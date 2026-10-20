@@ -247,6 +247,18 @@ class ClaudeExecution:
                         str(worktree / '.agents')]
         if request['worktree_access'] == 'read':
             denied_write.append(str(worktree))
+        # A declared single file is readable only inside a working directory,
+        # so its parent becomes one, fenced to the declared paths (E4).
+        # The fence keeps open what the launch itself needs: the Worktree,
+        # records, docs, the git common directory, this Session's channel,
+        # the interpreter and this package.
+        parents, fenced = _single_file_fence(resources, worktree, [
+            *records, request['docs_directory'], request['git_common_directory'],
+            *([address] if address else []), str(Path(sys.prefix).resolve()),
+            str(Path(__file__).resolve().parents[2])])
+        denied_write.extend(map(str, fenced))
+        # A working directory is sandbox-writable by default; the parent is not.
+        denied_write.extend(map(str, parents))
         # A project-root cwd must not re-allow its private descendants. Linked
         # Worktrees need only their own exception beneath the denied directory.
         private = root / '.graphtraj'
@@ -258,12 +270,16 @@ class ClaudeExecution:
                 'blockReadsOutsideWorkingDirectories': True,
                 'allow': [rule for p in (*resources, *records) for rule in (f'Read(/{p})', f'Read(/{p}/**)')],
                 'deny': [rule for p in denied_read for rule in (f'Read(/{p})', f'Read(/{p}/**)')]
-                        + [rule for p in denied_write for rule in (f'Edit(/{p})', f'Edit(/{p}/**)')]
+                        + [rule for p in map(_literal_rule_path, fenced)
+                           for rule in (f'Read(/{p})', f'Read(/{p}/**)', f'Edit(/{p})', f'Edit(/{p}/**)')]
+                        + [rule for p in denied_write if Path(p) not in fenced and Path(p) not in parents
+                           for rule in (f'Edit(/{p})', f'Edit(/{p}/**)')]
                         + (['Edit', 'Write', 'NotebookEdit'] if request['worktree_access'] == 'read' else []),
                 # Native Read/Grep/Glob and Bash path checks read only working
                 # directories, so configured read-only resources are added here.
                 # Their Edit deny rules and sandbox denyWrite keep them unwritable.
-                'additionalDirectories': [str(path) for path in resources if path.is_dir()],
+                'additionalDirectories': [str(path) for path in resources if path.is_dir()]
+                                         + [str(path) for path in parents],
             },
             'sandbox': {
                 'enabled': True, 'failIfUnavailable': True, 'allowUnsandboxedCommands': False,
@@ -276,7 +292,8 @@ class ClaudeExecution:
                                   request['git_common_directory'], *map(str, resources),
                                   str(Path(sys.prefix).resolve()), str(Path(__file__).resolve().parents[2])],
                     'allowWrite': ([address] if address else []) + ([request['git_common_directory']]
-                                              if request['worktree_access'] == 'write' else []),
+                                              if request['worktree_access'] == 'write' else [])
+                                  + ([str(worktree)] if parents and request['worktree_access'] == 'write' else []),
                     'denyWrite': denied_write,
                 },
             },
@@ -865,6 +882,52 @@ class ClaudeExecution:
         if not self.done.wait(timeout=30) or not self.terminal_confirmed:
             raise RuntimeAdapterError('operation-failed', 'Claude interruption is not yet confirmed.', terminal_confirmed=False)
         return {}
+
+
+def _literal_rule_path(path: Path) -> str:
+    """Escape gitignore pattern characters so a deny rule names exactly ``path``."""
+    return ''.join('\\' + character if character in '\\*?[]!#' else character for character in str(path))
+
+
+def _single_file_fence(
+    resources: list[Path], worktree: Path, kept: list[str],
+) -> tuple[list[Path], list[Path]]:
+    """Return the parents that make declared single files readable, and their fence.
+
+    Claude's file tools read only inside working directories, which must be
+    directories. Each parent of a declared file outside the existing working
+    directories becomes one. Inside it, every existing entry that is neither
+    a declared or kept path nor an ancestor of one is returned for Read and
+    Edit denial and a sandbox write denial, recursing along those ancestors.
+    Entries created later directly in a parent are not fenced here.
+    """
+    directories = [worktree, *(path for path in resources if path.is_dir())]
+    parents = sorted({path.parent for path in resources if path.is_file()
+                      and not any(path.is_relative_to(directory) for directory in directories)})
+    if not parents:
+        return [], []
+    open_paths = {*resources, worktree, *(Path(path).resolve() for path in kept)}
+    fenced: list[Path] = []
+    pending = list(parents)
+    seen: set[Path] = set()
+    while pending:
+        directory = pending.pop()
+        if directory in seen:
+            continue
+        seen.add(directory)
+        try:
+            entries = sorted(directory.iterdir())
+        except OSError:
+            continue
+        for entry in entries:
+            if entry in open_paths:
+                continue
+            if any(path.is_relative_to(entry) for path in open_paths):
+                if entry.is_dir() and not entry.is_symlink():
+                    pending.append(entry)
+                continue
+            fenced.append(entry)
+    return parents, fenced
 
 
 def yaml_document(path: Path) -> dict:

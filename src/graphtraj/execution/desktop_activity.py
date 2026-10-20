@@ -66,7 +66,7 @@ def _observe(cwd: Path, runner: Path, task_id: str | None, alias: str | None, cu
     states = _load_states(configuration.state / 'tasks')
     if task_id not in states:
         raise ValueError('Choose a registered Task.')
-    aliases, current = _task_aliases(*states[task_id])
+    aliases, current = _task_aliases(*states[task_id], runner, registration_order(configuration.state))
     agents = []
     mappings = {}
     for member in sorted(aliases):
@@ -106,22 +106,100 @@ def _observe(cwd: Path, runner: Path, task_id: str | None, alias: str | None, cu
     return {**response, **read_page(configuration.harness_root, mapping, alias, task_id, cursor)}
 
 
-def _task_aliases(directory: Path, task: dict) -> tuple[set[str], set[str]]:
-    """Return every recorded member alias of one Task and those of its active Team.
+def registration_order(state_directory: Path) -> tuple[dict[str, int], set[str]]:
+    """Return each member's position in the Worldline Team registrations and the Team starters.
+
+    A start or member registration event names the registered Session by its
+    ``mapping.yml`` evidence. The Session a ``team-started`` event registers
+    holds the Team's lead seat, the one Main fills again on a handover.
+    """
+    from graphtraj.graph.delivery_worldline import read_worldline
+
+    order: dict[str, int] = {}
+    starters: set[str] = set()
+    try:
+        events = read_worldline(state_directory)
+    except (OSError, ValueError):
+        # Without readable registrations every live seat stays visible.
+        events = []
+    for index, event in enumerate(events):
+        if event.get('event') in {'team-started', 'team-member-started', 'team-member-replaced'}:
+            for ref in event.get('evidence_refs', ()):
+                parts = Path(ref).parts
+                if len(parts) >= 3 and parts[-1] == 'mapping.yml' and parts[-3] == 'sessions':
+                    order[parts[-2]] = index
+                    if event['event'] == 'team-started':
+                        starters.add(parts[-2])
+    return order, starters
+
+
+def _task_aliases(
+    directory: Path, task: dict, runner: Path, registrations: tuple[dict[str, int], set[str]],
+) -> tuple[set[str], set[str]]:
+    """Return every recorded member alias of one Task and its current seat holders.
 
     Seats name members; retained Trace records add members that left a seat.
+    A current holder occupies a seat of the active Team with a live Session.
+    The Team's lead seat has one holder: the top-level Session of the Team
+    starter's role registered last, so an earlier one that Main handed over
+    is history. Other top-level roles may hold seats in parallel. A member
+    under a superseded or retired parent is history with it. History is not
+    retirement: it stays readable by explicit alias.
     """
+    order, starters = registrations
     aliases = set()
-    current = set()
+    seated: dict[str, int] = {}
     for team_path in (directory / 'teams').glob('*/team.yml'):
         team = read_team(team_path)
-        members = {member['session_ref'] for member in team['members'].values() if member['session_ref']}
+        members = [member['session_ref'] for member in team['members'].values() if member['session_ref']]
         aliases.update(members)
         if team['team_ordinal'] == task['active_team_ordinal'] and team['status'] == 'active':
-            current.update(members)
+            seated = {alias: position for position, alias in enumerate(members)}
     aliases.update(path.name for path in (directory / 'teams').glob('*/traces/*')
                    if (path / 'runner/session.yml').is_file())
-    return aliases, current
+
+    mappings = {}
+    for alias in set(seated) | (starters & aliases):
+        try:
+            mappings[alias] = read_alias_mapping(runner, alias)
+        except RunnerError:
+            continue
+    lead_roles = {mapping['role'] for alias, (mapping, _) in mappings.items() if alias in starters}
+    parents: dict[str, str | None] = {}
+    leads: dict[str, str] = {}
+    for alias in seated:
+        if alias not in mappings or not (mappings[alias][1] / 'mapping.yml').is_file():
+            continue
+        mapping = mappings[alias][0]
+        parents[alias] = mapping.get('parent')
+        if parents[alias] is not None and parents[alias] not in seated:
+            # A parent outside this Team, as for a child Task's member, makes it
+            # a top-level member here; a retired parent in this Team does not.
+            try:
+                outer = read_alias_mapping(runner, parents[alias])[0]
+            except RunnerError:
+                outer = {}
+            if (outer.get('task_id'), outer.get('team_generation')) != (
+                    mapping.get('task_id'), mapping.get('team_generation')):
+                parents[alias] = None
+        if parents[alias] is None and mapping['role'] in lead_roles:
+            holder = leads.get(mapping['role'])
+            rank = lambda member: (order.get(member, -1), seated[member])  # noqa: E731
+            if holder is None or rank(alias) > rank(holder):
+                leads[mapping['role']] = alias
+
+    def current(alias: str) -> bool:
+        """Return whether ``alias`` descends through live seats from a current top-level holder."""
+        seen = set()
+        while alias in parents and alias not in seen:
+            seen.add(alias)
+            if parents[alias] is None:
+                role = mappings[alias][0]['role']
+                return role not in leads or leads[role] == alias
+            alias = parents[alias]
+        return False
+
+    return aliases, {alias for alias in parents if current(alias)}
 
 
 def task_members(cwd: Path, summary_task_id: str | None = None) -> dict:
@@ -129,7 +207,7 @@ def task_members(cwd: Path, summary_task_id: str | None = None) -> dict:
 
     By default the scope is every unfinished summary Task (an active Task with
     children, or a top-level one, that is not integrated) and its recursive
-    child Tasks; retired members are omitted. ``summary_task_id`` selects one
+    child Tasks; retired and superseded members are omitted. ``summary_task_id`` selects one
     Task and its recursive children regardless of completion and also lists
     retired members as history. Reading changes no identity or state.
 
@@ -170,9 +248,10 @@ def task_members(cwd: Path, summary_task_id: str | None = None) -> dict:
             pending.extend(children[key])
 
     states  = _load_states(configuration.state / 'tasks') if scope else {}
+    order   = registration_order(configuration.state) if scope else {}
     members = []
     for task_id in sorted(scope, key=int):
-        aliases, current = _task_aliases(*states[task_id])
+        aliases, current = _task_aliases(*states[task_id], runner, order)
         for member in sorted(aliases):
             try:
                 mapping, session_directory = read_alias_mapping(runner, member)
@@ -181,7 +260,7 @@ def task_members(cwd: Path, summary_task_id: str | None = None) -> dict:
             if mapping['task_id'] != task_id:
                 continue
             retired = not (session_directory / 'mapping.yml').is_file()
-            if retired and summary_task_id is None:
+            if (retired or member not in current) and summary_task_id is None:
                 continue
             entry = {'alias': member, 'task_id': task_id, 'team': mapping['team_generation'],
                      'role': mapping['role'], 'runtime': mapping['runtime'],

@@ -103,35 +103,78 @@ def test_default_tree_keeps_current_seats_and_bounds_messages(tmp_path: Path, mo
     assert len(bounded['last_agent_message']) == PREVIEW_CHARACTERS + 1 and bounded['summary'] == long
 
 
-def test_current_members_leave_out_a_retired_seat(tmp_path: Path, monkeypatch) -> None:
-    """A replaced Leader still named in the active team.yml is not a current seat once retired."""
-    from graphtraj.configuration import project_configuration
-    from graphtraj.execution import desktop_activity, runner_status
-    from graphtraj.execution.runner_models import RunnerError
-    from graphtraj.graph import task_graph
-    from graphtraj.interfaces.agents import GraphTrajAgents
-    from graphtraj.workspace import runner_project
+def test_current_members_follow_the_current_seat_holders(tmp_path: Path, monkeypatch) -> None:
+    """Handed-over and retired Leaders and their Engineers are history, not current seats.
 
-    tasks = tmp_path / 'state/tasks'
-    tasks.mkdir(parents=True)
-    sessions = tmp_path / 'sessions'
-    for alias, live in (('current-leader', True), ('replaced-leader', False)):
+    The records mirror Task 344 (team_leader standby, _3 and _4 retired, _5
+    current) and 337 (two unretired top-level Leaders registered in turn).
+    """
+    from graphtraj.execution import desktop_activity
+    from graphtraj.execution.runner_models import RunnerError
+
+    sessions = tmp_path / 'runner/sessions'
+    records = {
+        # alias: (task, role, parent, live)
+        'tl': ('344', 'team-leader', None, True), 'e': ('344', 'engineer', 'tl', True),
+        'tl3': ('344', 'team-leader', None, False), 'e2': ('344', 'engineer', 'tl3', True),
+        'tl4': ('344', 'team-leader', None, False), 'e3': ('344', 'engineer', 'tl4', True),
+        'tl5': ('344', 'team-leader', None, True), 'e4': ('344', 'engineer', 'tl5', True),
+        'e5': ('344', 'engineer', 'tl5', True),
+        'c-tl': ('337', 'team-leader', None, True), 'c-e': ('337', 'engineer', 'c-tl', True),
+        'c-tl2': ('337', 'team-leader', None, True),
+    }
+    for alias, (_, _, _, live) in records.items():
         (sessions / alias).mkdir(parents=True)
         if live:
-            (sessions / alias / 'mapping.yml').write_text('task_id: "1"\n')
+            (sessions / alias / 'mapping.yml').touch()
 
     def mapping(runner, alias):
-        if alias == 'unknown':
+        if alias not in records:
             raise RunnerError('unknown-alias', alias)
-        return {}, sessions / alias
+        task, role, parent, _ = records[alias]
+        return {'task_id': task, 'team_generation': 1, 'role': role, 'parent': parent}, sessions / alias
 
-    monkeypatch.setattr(project_configuration, 'load_project_configuration',
-                        lambda root: type('C', (), {'state': tmp_path / 'state'})())
-    monkeypatch.setattr(runner_project, 'discover_runner_directory', lambda root: tmp_path)
-    monkeypatch.setattr(task_graph, '_load_states', lambda path: {'1': (tmp_path, {'status': 'running'})})
-    monkeypatch.setattr(desktop_activity, '_task_aliases', lambda directory, task: (
-        set(), {'current-leader', 'replaced-leader', 'unknown'}))
-    monkeypatch.setattr(runner_status, 'read_alias_mapping', mapping)
-    backend = object.__new__(GraphTrajAgents)
-    backend.root = tmp_path
-    assert backend._current_members() == {'current-leader'}
+    monkeypatch.setattr(desktop_activity, 'read_alias_mapping', mapping)
+
+    def team(task: str, seats: dict) -> tuple[Path, dict]:
+        directory = tmp_path / 'tasks' / task
+        (directory / 'teams/1').mkdir(parents=True)
+        (directory / 'teams/1/team.yml').write_text(yaml.safe_dump({
+            'team_ordinal': 1, 'status': 'active', 'current_round': 1, 'started_at': 'x',
+            'members': {name: {'role': role, 'session_ref': ref} for name, (role, ref) in seats.items()},
+        }, sort_keys=False))
+        return directory, {'active_team_ordinal': 1}
+
+    # Retirement empties a seat; a later Leader takes a seat of its own.
+    first = team('344', {'team_leader': ('team-leader', 'tl'), 'engineer': ('engineer', 'e'),
+                         'tl3': ('team-leader', None), 'e2': ('engineer', 'e2'),
+                         'tl4': ('team-leader', None), 'e3': ('engineer', 'e3'),
+                         'tl5': ('team-leader', 'tl5'), 'e4': ('engineer', 'e4'), 'e5': ('engineer', 'e5')})
+    order = {alias: index for index, alias in enumerate(['tl', 'e', 'tl3', 'e2', 'tl4', 'e3', 'tl5', 'e4', 'e5'])}
+    aliases, current = desktop_activity._task_aliases(*first, tmp_path, (order, {'tl'}))
+    assert current == {'tl5', 'e4', 'e5'}
+    assert {'tl', 'e', 'e2', 'e3'} <= aliases
+
+    # The Worldline registration order, not the seat position or alias, picks the holder.
+    second = team('337', {'team_leader': ('team-leader', 'c-tl'), 'engineer': ('engineer', 'c-e'),
+                          'c-tl2': ('team-leader', 'c-tl2')})
+    registered = {'c-tl': 1, 'c-e': 2, 'c-tl2': 3}
+    assert desktop_activity._task_aliases(*second, tmp_path, (registered, {'c-tl'}))[1] == {'c-tl2'}
+    reversed_order = {'c-tl': 3, 'c-e': 4, 'c-tl2': 1}
+    assert desktop_activity._task_aliases(*second, tmp_path, (reversed_order, {'c-tl2'}))[1] == {'c-tl', 'c-e'}
+    # Parallel top-level members outside the lead role all stay current.
+    assert desktop_activity._task_aliases(*second, tmp_path, (registered, set()))[1] == {'c-tl', 'c-e', 'c-tl2'}
+
+
+def test_registration_order_reads_the_worldline_member_evidence(tmp_path: Path, monkeypatch) -> None:
+    """Registration events name the Session by its mapping evidence; later ones rank higher."""
+    from graphtraj.execution import desktop_activity
+    from graphtraj.graph import delivery_worldline
+
+    events = [
+        {'event': 'team-started', 'evidence_refs': ['.graphtraj/runner/sessions/tl/mapping.yml']},
+        {'event': 'team-round-accepted', 'evidence_refs': ['.graphtraj/runner/sessions/x/mapping.yml']},
+        {'event': 'team-member-started', 'evidence_refs': ['.graphtraj/runner/sessions/tl2/mapping.yml']},
+    ]
+    monkeypatch.setattr(delivery_worldline, 'read_worldline', lambda state: events)
+    assert desktop_activity.registration_order(tmp_path) == ({'tl': 0, 'tl2': 2}, {'tl'})

@@ -169,32 +169,25 @@ class GraphTrajAgents:
                        failed=not sessions.succeeded)
 
     def _current_members(self) -> set[str]:
-        """Return the seated members of each unfinished Task's current Team.
+        """Return the current seat holders of each unfinished Task's current Team.
 
-        A seat whose Session was retired, such as a replaced Leader, is left
-        out as ``tasks`` task_members does; it stays readable by explicit alias.
+        Replaced, handed-over and retired seats stay readable by explicit
+        alias, as ``tasks`` task_members with a summary shows them.
         """
         from graphtraj.configuration.project_configuration import load_project_configuration
-        from graphtraj.execution.desktop_activity import _task_aliases
-        from graphtraj.execution.runner_status import read_alias_mapping
+        from graphtraj.execution.desktop_activity import _task_aliases, registration_order
         from graphtraj.graph.task_graph import _load_states
         from graphtraj.workspace.runner_project import discover_runner_directory
 
-        tasks = load_project_configuration(self.root).state / "tasks"
+        state = load_project_configuration(self.root).state
         runner = discover_runner_directory(self.root)
+        states = _load_states(state / "tasks") if (state / "tasks").is_dir() else {}
+        order = registration_order(state) if states else {}
         members: set[str] = set()
-        for directory, task in (_load_states(tasks).values() if tasks.is_dir() else ()):
+        for directory, task in states.values():
             if task.get("status") != "integrated" and task.get("disposition", "active") == "active":
-                members |= _task_aliases(directory, task)[1]
-
-        def seated(alias: str) -> bool:
-            """Return whether the alias still has its live, unretired Session record."""
-            try:
-                return (read_alias_mapping(runner, alias)[1] / "mapping.yml").is_file()
-            except RunnerError:
-                return False
-
-        return {alias for alias in members if seated(alias)}
+                members |= _task_aliases(directory, task, runner, order)[1]
+        return members
 
     def _operate(self, action: str, arguments: Mapping[str, Any]) -> Outcome:
         """Dispatch a Task member alias to its existing native Session control."""

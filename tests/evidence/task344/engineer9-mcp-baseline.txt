@@ -1,0 +1,60 @@
+.......F.Fss.F..FF                                                       [100%]
+=================================== FAILURES ===================================
+______ test_installed_mcp_server_dispatches_and_controls_a_managed_child _______
+tests/test_mcp_host_tools.py:782: in test_installed_mcp_server_dispatches_and_controls_a_managed_child
+    assert cli_sent.returncode == 1
+E   AssertionError: assert 0 == 1
+E    +  where 0 = CompletedProcess(args=['/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1062/install...56a6c-2bed-43e4-b14b-2f6bf99496fc\nexecution_id: eb67fc90-74ce-40e0-bbde-f587b7bcb213\nsend_status: sent\n', stderr='').returncode
+_ test_installed_mcp_server_continues_a_stopped_task_with_unchanged_semantics __
+tests/test_mcp_host_tools.py:882: in test_installed_mcp_server_continues_a_stopped_task_with_unchanged_semantics
+    clock = tmp_path / "mcp-continue-clock"
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_mcp_host_tools.py:1395: in _await_retained_stop
+    ]
+      
+E   AssertionError: the dispatched member was never stopped
+E   assert 1122164.047246666 < 1122164.029487708
+E    +  where 1122164.047246666 = <built-in function monotonic>()
+E    +    where <built-in function monotonic> = time.monotonic
+______ test_installed_runner_returns_a_budget_stop_with_the_awaiting_call ______
+tests/test_mcp_host_tools.py:1645: in test_installed_runner_returns_a_budget_stop_with_the_awaiting_call
+    FAKE_CODEX_CAPTURE_STDIN="1",
+E   AssertionError: retained_batch_file: /private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1062/test_installed_runner_returns_0/.graphtraj/state/batches/20261021T204523.627801+0900.yml
+E     tasks:
+E     - task_id: '76'
+E       task_name: session-alias-control
+E       role: team-leader
+E       alias: 76-session_alias_control-handover0-team_leader@team_leader
+E       session: 76-session_alias_control-handover0-team_leader@team_leader
+E       execution_id: 4ed608e4-403d-440b-908b-19f095f5beb2
+E       worktree_path: /private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1062/test_installed_runner_returns_0/.graphtraj/.agent-worktrees/76-session-alias-control
+E       launch_status: launched
+E     
+E   assert 0 == 1
+E    +  where 0 = CompletedProcess(args=['/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1062/install...stalled_runner_returns_0/.graphtraj/.agent-worktrees/76-session-alias-control\n  launch_status: launched\n", stderr='').returncode
+_ test_installed_mcp_server_does_not_queue_a_late_stop_without_a_waiting_call __
+tests/test_mcp_host_tools.py:1857: in test_installed_mcp_server_does_not_queue_a_late_stop_without_a_waiting_call
+    )["result"]
+        ^^^^^^^^
+E   AssertionError: {'content': [{'type': 'text', 'text': "action: send
+E     error:
+E       code: authority-unavailable
+E       message: 'agents needs a...eds a verified caller: a managed Session or a verified native Main Session. This call has neither.'}}, 'isError': True}
+E   assert True is False
+___ test_installed_mcp_server_keeps_the_continue_path_on_the_request_caller ____
+tests/test_mcp_host_tools.py:1926: in test_installed_mcp_server_keeps_the_continue_path_on_the_request_caller
+    BUDGET_CLOCK=str(clock),
+tests/test_mcp_host_tools.py:1395: in _await_retained_stop
+    ]
+      
+E   AssertionError: the dispatched member was never stopped
+E   assert 1122308.986135625 < 1122308.985240166
+E    +  where 1122308.986135625 = <built-in function monotonic>()
+E    +    where <built-in function monotonic> = time.monotonic
+=========================== short test summary info ============================
+FAILED tests/test_mcp_host_tools.py::test_installed_mcp_server_dispatches_and_controls_a_managed_child
+FAILED tests/test_mcp_host_tools.py::test_installed_mcp_server_continues_a_stopped_task_with_unchanged_semantics
+FAILED tests/test_mcp_host_tools.py::test_installed_runner_returns_a_budget_stop_with_the_awaiting_call
+FAILED tests/test_mcp_host_tools.py::test_installed_mcp_server_does_not_queue_a_late_stop_without_a_waiting_call
+FAILED tests/test_mcp_host_tools.py::test_installed_mcp_server_keeps_the_continue_path_on_the_request_caller
+5 failed, 11 passed, 2 skipped in 259.40s (0:04:19)

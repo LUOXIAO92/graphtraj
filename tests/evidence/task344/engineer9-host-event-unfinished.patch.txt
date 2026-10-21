@@ -1,0 +1,52 @@
+diff --git a/tests/test_host_event_delivery.py b/tests/test_host_event_delivery.py
+index d0252be..8ab004b 100644
+--- a/tests/test_host_event_delivery.py
++++ b/tests/test_host_event_delivery.py
+@@ -38,11 +38,14 @@ raise SystemExit(int(os.environ['HOST_FAIL']) if phase == 'later' else 0)
+ 
+ HOST = r'''
+ import asyncio, json, os, sys, time
++from contextlib import ExitStack
+ from pathlib import Path
+ import yaml
+ from graphtraj.interfaces.local_tool import bind
++from graphtraj.interfaces.hosted_cli import CONNECTION_ENV, cli_connection
+ from graphtraj.execution.execution_budget import budget_notice_output
+ from graphtraj.runtimes.codex.app_server import CodexAppServer
++from graphtraj.runtimes.codex.managed_session import native_operation_features
+ 
+ root, scratch, peer = map(Path, sys.argv[1:4])
+ 
+@@ -60,6 +63,13 @@ async def main():
+     actions = []
+     current = None
+     waiting = None
++    session = None
++    connections = ExitStack()
++    # The native parent invokes CLI tools through its own authenticated host.
++    os.environ[CONNECTION_ENV] = connections.enter_context(cli_connection(
++        root, None, native_operation_features(),
++        native_context=lambda: {'runtime':'codex','session':session.thread_id,'cwd':str(root)},
++    ))
+     async with CodexAppServer(cwd=root, command=[str(peer)], experimental_api=True) as adapter:
+         session = await adapter.create_session(Context())
+         # This Session exists before GraphTraj binding or child launch.
+@@ -183,6 +193,7 @@ async def main():
+             if alias:
+                 await asyncio.to_thread(call,'agents',{'action':'interrupt','agent':alias})
+             await asyncio.to_thread(tool.close)
++            await asyncio.to_thread(connections.close)
+ 
+ asyncio.run(main())
+ '''
+@@ -236,7 +247,9 @@ def test_owning_host_processes_events_during_and_after_tool_call(
+                  else [str(Path(os.environ['HOST_RUNNER']).with_name('agents')),json.dumps({
+                      'action':'execute','feature':operation,'arguments':arguments})])
+         action = subprocess.run(command,
+-                                cwd=os.environ['HOST_PROJECT'], capture_output=True, text=True)
++                                cwd=os.environ['HOST_PROJECT'], capture_output=True, text=True,
++                                env={**os.environ, 'CODEX_THREAD_ID':thread_id,
++                                     'GRAPHTRAJ_NATIVE_RUNTIME':'codex'})
+         assert action.returncode == 0, action.stdout + action.stderr
+         with open(os.environ['HOST_ACTIONS'], 'a') as stream:
+             stream.write(json.dumps({'session':thread_id,'event':event['event'],

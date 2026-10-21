@@ -1,0 +1,14 @@
+.F.                                                                      [100%]
+=================================== FAILURES ===================================
+_ test_installed_runner_returns_after_launch_and_delivers_a_native_budget_stop _
+tests/test_mcp_host_tools.py:1661: in test_installed_runner_returns_after_launch_and_delivers_a_native_budget_stop
+    _await_retained_stop(task_directory)
+tests/test_mcp_host_tools.py:1407: in _await_retained_stop
+    assert time.monotonic() < deadline, "the dispatched member was never stopped"
+E   AssertionError: the dispatched member was never stopped
+E   assert 1122519.786471291 < 1122519.764457583
+E    +  where 1122519.786471291 = <built-in function monotonic>()
+E    +    where <built-in function monotonic> = time.monotonic
+=========================== short test summary info ============================
+FAILED tests/test_mcp_host_tools.py::test_installed_runner_returns_after_launch_and_delivers_a_native_budget_stop
+1 failed, 2 passed, 15 deselected in 128.07s (0:02:08)

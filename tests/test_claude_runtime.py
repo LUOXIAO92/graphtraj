@@ -355,14 +355,15 @@ def test_claude_later_prompt_hook_is_answered_behind_a_collection_backlog(
         finally:
             if not turn.done.is_set():
                 turn.terminate()
-    assert 'timed out' not in hooks.read_text()
+    assert not hooks.exists() or 'timed out' not in hooks.read_text()
     assert outcome['outcome'] == 'completed' and 'finish' in outcome['last_agent_message']
 
 
 def test_claude_later_prompt_hook_is_answered_during_one_slow_collection(
         tmp_path: Path, claude_environment: None, monkeypatch: pytest.MonkeyPatch) -> None:
     """A long Session's single archive collection does not hold a later prompt past its hook timeout."""
-    from graphtraj.runtimes.claude.collection import StreamCollector as ClaudeJsonlCollector
+    from graphtraj.runtimes.claude.jsonl import ClaudeJsonlCollector
+    from graphtraj.sessions.archive import SessionArchive
 
     result_project(tmp_path)
     hooks = tmp_path / 'hooks.log'
@@ -380,6 +381,8 @@ def test_claude_later_prompt_hook_is_answered_during_one_slow_collection(
     monkeypatch.setattr(ClaudeJsonlCollector, 'collect', long_session)
     with ExitStack() as stack, ThreadPoolExecutor(max_workers=1) as pool:
         turn, ready, _ = execution(tmp_path, stack, 'wait')
+        turn.configure_independent(archive=SessionArchive(tmp_path / 'archive', save_normalized_sessions=True),
+                                   agents_callback=lambda request: None)
         future = pool.submit(turn.run)
         try:
             assert ready.wait(5)

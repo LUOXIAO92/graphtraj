@@ -5,6 +5,7 @@ required native records, so messages() refuses incomplete reconstruction.
 """
 
 from copy import deepcopy
+from hashlib import sha256
 import json
 import re
 from xml.etree import ElementTree
@@ -517,6 +518,44 @@ class CodexJsonlArchive:
             parent_revision = None
         return (revision, parent_revision, self.archive.save_normalized_sessions, self.archive.backfill_history)
 
+    def _continue_header(
+        self,
+        header: dict,
+        previous: dict,
+        kind: str,
+        offset: int,
+        record: dict,
+    ) -> dict:
+        """Identify a real native boundary independently of collection notifications.
+
+        Continuation is not a fork: retain parentSession for native fork ancestry
+        and record the preceding project Session separately. Native identity and
+        Agent ownership stay unchanged. The source coordinate makes retries
+        select the same record, including after an interrupted collection.
+        """
+        header = deepcopy(header)
+        native = header['graphtraj']['native']
+        coordinate = json.dumps([native['locator'], offset], ensure_ascii=False)
+        header['id'] = 'codex:' + self.session + ':boundary:' + sha256(coordinate.encode()).hexdigest()
+        header['graphtraj']['previousSession'] = previous['id']
+        header['graphtraj']['boundary'] = {'kind': kind, 'offset': offset}
+        created = _timestamp(record.get('timestamp'))
+        header['createdAt'] = created if created is not None else 0
+        missing = [item for item in header['graphtraj'].get('missing', []) if item['path'] != 'createdAt']
+        header['graphtraj']['missing'] = missing + ([] if created is not None else [{
+            'path': 'createdAt', 'reason': 'Native boundary time is unavailable.',
+        }])
+        return header
+
+    def _exclude_history(self, store: JsonlSessionStore, locator: str, prefix: str) -> None:
+        """Retain a policy gap in every affected Session until explicit backfill."""
+        gap = retain_native('codex', {}, session_id=self.session, locator=locator, seq=0, time=0)
+        gap['graphtraj']['missing'] = [{
+            'path': 'history', 'reason': 'Historical content excluded by collection policy.',
+        }]
+        gap['graphtraj']['collectionBoundary'] = self.activation
+        store.checkpoint(gap, source=f'{prefix}history-excluded', position=self.activation)
+
     def _seed(self, store: JsonlSessionStore, stream: BinaryIO, metadata: dict) -> tuple[list[dict], int] | None:
         """Resolve the native exclusive inheritance cut without scanning Runtime Home."""
         if self.activation and not self.archive.backfill_history:
@@ -589,6 +628,10 @@ class CodexJsonlArchive:
             metadata = metadata_record.get('payload', {})
             if metadata_record.get('type') != 'session_meta' or metadata.get('id') != self.session:
                 raise ValueError('Codex rollout does not match the owned Session.')
+            # A fresh hook process and a long-lived collector resolve the same
+            # current record; late callbacks for older files do not create a
+            # second continuation or change the newest file's association.
+            self.header = self.archive.native_header('codex', self.session, locator=str(rollout))
             if self.header is None:
                 created = _timestamp(metadata.get('timestamp') or metadata_record.get('timestamp'))
                 self.header = {
@@ -604,13 +647,30 @@ class CodexJsonlArchive:
                 }
                 if metadata.get('forked_from_id'):
                     self.header['parentSession'] = self.archive.native_id('codex', metadata['forked_from_id'])
-                self.header = self.archive.native_header('codex', self.session) or self.header
-                self.id = self.header['id']
-                self.archive.map_session(self.header)
+                previous = self.archive.native_header('codex', self.session)
+                if previous is not None:
+                    if Path(previous['graphtraj']['native']['locator']).is_absolute():
+                        self.header = self._continue_header(self.header, previous, 'rollout', 0, metadata_record)
+                    else:
+                        # Imported headers without a physical source do not
+                        # establish that this is a different rollout.
+                        self.header = previous
+            self.id = self.header['id']
+            self.archive.map_session(self.header)
             store = self.archive.store(self.id)
             if store is None:
                 self.activation = rollout.stat().st_size
                 return
+            if self.archive.backfill_history and store.pending():
+                # Backfill starts at this file's first linked record so the
+                # same boundaries are replayed into their existing Sessions.
+                while self.header.get('graphtraj', {}).get('previousSession'):
+                    previous = JsonlSessionStore(archive_path(
+                        self.archive.root, self.header['graphtraj']['previousSession'],
+                    ))
+                    if previous.header['graphtraj']['native']['locator'] != str(rollout):
+                        break
+                    self.header, self.id, store = previous.header, previous.header['id'], previous
 
             # Byte cursors and locators belong to one physical rollout file.
             # Codex can continue the same Session in a new file (for example
@@ -635,6 +695,27 @@ class CodexJsonlArchive:
             if self.archive.backfill_history and store.pending():
                 events = []
                 position = 0
+            boundary = self.header.get('graphtraj', {}).get('boundary', {})
+            if not events and boundary.get('kind') in {'compaction', 'rollback'}:
+                # Resume a collection interrupted after creating the successor
+                # header but before publishing its first native projection.
+                previous = JsonlSessionStore(archive_path(
+                    self.archive.root, self.header['graphtraj']['previousSession'],
+                ))
+                after = -1
+                while True:
+                    page = previous.page(after)
+                    events.extend(page['events'])
+                    if not page['has_more']:
+                        break
+                    after = page['after']
+                for original in events:
+                    for attachment in original.get('graphtraj', {}).get('attachments', []):
+                        if attachment.get('storage') == 'session':
+                            store.put_attachment(previous.attachment(attachment['sha256']))
+                for pending in previous.pending():
+                    store.checkpoint(pending['event'], source=pending['source'], position=pending['position'])
+                position = boundary['offset']
             if metadata.get('forked_from_id') and not events:
                 seeded = self._seed(store, stream, metadata)
                 if seeded is None:
@@ -676,17 +757,40 @@ class CodexJsonlArchive:
                         excluded = locator
                     continue
                 record = rollout_record(line, rollout, start)
+                kind = record.get('type')
+                rolled_back = (kind == 'event_msg'
+                               and record.get('payload', {}).get('type') == 'thread_rolled_back'
+                               and record['payload'].get('num_turns', 0) > 0)
+                boundary = self.header.get('graphtraj', {}).get('boundary', {})
+                if (kind == 'compacted' or rolled_back) and boundary.get('offset') != start:
+                    source = f'{prefix}rollout:history' if self.archive.backfill_history else f'{prefix}rollout'
+                    if excluded is not None:
+                        self._exclude_history(store, excluded, prefix)
+                    store.publish(events, source=source, position=start)
+                    header = self._continue_header(
+                        self.header, self.header, 'compaction' if kind == 'compacted' else 'rollback', start, record,
+                    )
+                    self.archive.map_session(header)
+                    successor = self.archive.store(header['id'])
+                    if successor is None:
+                        return
+                    # ponytail: copying the prefix keeps rollback reconstruction
+                    # direct; use referenced prefixes if archive size warrants it.
+                    # Keep the exact native prefix for rollback reconstruction;
+                    # the prior Session is retained at its boundary. Attachments
+                    # and unresolved observations remain portable with it.
+                    for original in events:
+                        for attachment in original.get('graphtraj', {}).get('attachments', []):
+                            if attachment.get('storage') == 'session':
+                                successor.put_attachment(store.attachment(attachment['sha256']))
+                    for pending in store.pending():
+                        successor.checkpoint(pending['event'], source=pending['source'], position=pending['position'])
+                    self.header, self.id, store = header, header['id'], successor
                 _append_record(events, record, self.session, locator, store)
             if excluded is not None:
                 # Keep an unresolved observation, not a fabricated native event.
                 # Later backfill resolves it by the first omitted record's
                 # source coordinate. messages() refuses the partial history.
-                gap = retain_native('codex', {}, session_id=self.session, locator=excluded,
-                                    seq=0, time=0)
-                gap['graphtraj']['missing'] = [{
-                    'path': 'history', 'reason': 'Historical content excluded by collection policy.',
-                }]
-                gap['graphtraj']['collectionBoundary'] = self.activation
-                store.checkpoint(gap, source=f'{prefix}history-excluded', position=self.activation)
+                self._exclude_history(store, excluded, prefix)
             source = f'{prefix}rollout:history' if self.archive.backfill_history else f'{prefix}rollout'
             store.publish(events, source=source, position=stream.tell() - len(line))

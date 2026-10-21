@@ -990,9 +990,15 @@ def test_stop_checks_after_the_session_moves_to_a_new_rollout(host: tuple[Path, 
     with moved.open('a') as stream:
         stream.write(json.dumps(done) + '\n')
     assert native_hook(root, 'SessionEnd', transcript_path=str(moved)) == {}
-    store = JsonlSessionStore(archive_path(swarm_root(root), 'codex:main'))
-    assert [native_record(event) for event in store.page()['events']] == [
-        json.loads(line) for line in first.splitlines()] + [meta, turn, done]
+    from agent_swarm.sessions.archive import SessionArchive
+
+    archive = SessionArchive(swarm_root(root))
+    store = JsonlSessionStore(archive_path(archive.root, archive.native_id('codex', 'main')))
+    assert store.header['graphtraj']['previousSession'] == 'codex:main'
+    assert [native_record(event) for event in store.page()['events']] == [meta, turn, done]
+    original = JsonlSessionStore(archive_path(archive.root, 'codex:main'))
+    assert [native_record(event) for event in original.page()['events']] == [
+        json.loads(line) for line in first.splitlines()]
 
 
 def test_external_hook_remembers_saving_boundary_across_invocations(host: tuple[Path, Path]) -> None:

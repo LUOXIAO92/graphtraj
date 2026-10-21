@@ -11,7 +11,7 @@ from graphtraj.interfaces.agents import ConfiguredSessionArchive
 from agent_swarm.sessions.codex import CodexJsonlArchive
 from graphtraj.runtimes.codex.session_entry import session_record
 from graphtraj.runtimes.codex.stop_hook import main as stop_hook
-from agent_swarm.sessions.archive import JsonlSessionStore, archive_path
+from agent_swarm.sessions.archive import JsonlSessionStore, SessionArchive, archive_path
 
 
 def test_empty_stdin_names_hook_stdin_and_keeps_stop_error() -> None:
@@ -78,13 +78,19 @@ def test_cursor_from_one_physical_rollout_is_not_read_in_another(tmp_path: Path)
         collector.activation = 0
         collector.collect(rollout)
 
-    # Each physical file keeps its own cursor; both files' records stay distinct.
+    # Each physical file has its own linked project Session and byte cursor.
     from agent_swarm.sessions.protocol import native_record
 
     store = JsonlSessionStore(archive_path(root, 'codex:s'))
     assert store.position('rollout') == first.stat().st_size
-    assert store.position('B.jsonl:rollout') == second.stat().st_size
+    assert len(store.messages()) == 1
+    current = SessionArchive(root).native_header('codex', 's')
+    assert current['id'] != store.header['id']
+    previous = JsonlSessionStore(archive_path(root, current['graphtraj']['previousSession']))
+    assert previous.header['graphtraj']['previousSession'] == store.header['id']
+    store = JsonlSessionStore(archive_path(root, current['id']))
+    assert store.position('rollout') == second.stat().st_size
     records = [native_record(event) for event in store.page()['events']]
     assert [record['payload'].get('content', [{}])[0].get('text') for record in records
-            if record['type'] == 'response_item'] == ['first', 'after', None]
+            if record['type'] == 'response_item'] == ['after', None]
     assert records[-1]['payload']['output'] == 'notice'

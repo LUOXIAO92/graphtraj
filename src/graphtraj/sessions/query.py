@@ -17,6 +17,8 @@ def read_session(cwd: Path, session_id: str, after: int = -1, limit: int = 200) 
     including Main under its native identity, reads the project's linked
     Sessions with credentials and control material redacted. Agent IDs and
     Task IDs in content grant nothing; no caller supplies a filesystem path.
+    Native IDs select the latest linked project Session; explicit project IDs
+    continue to select their own retained history across native boundaries.
     """
     from graphtraj.interfaces.desktop_host import owns_project
 

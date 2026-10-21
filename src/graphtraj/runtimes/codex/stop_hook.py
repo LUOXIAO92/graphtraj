@@ -133,6 +133,7 @@ def _archive(root: Path, session: str, transcript: str, *, new_session: bool = F
         write_yaml_durably(boundary, {
             'session': session, 'rollout': str(source), 'activation': activation,
             'enabled': archive.save_normalized_sessions,
+            'project_session': collector.id if archive.save_normalized_sessions else None,
         })
 
 

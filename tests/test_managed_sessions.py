@@ -148,6 +148,7 @@ def managed_project(
     ) -> dict:
         """Each invocation is a separate caller process that must return."""
         command = (
+            [str(python), '-m', 'agent_swarm.cli', json.dumps(arguments)] if operation == 'agents-cli' else
             [str(installed_commands.runner), *arguments] if operation == 'cli' else
             [str(python), '-c', CALL, str(root), json.dumps([operation, arguments])]
         )
@@ -571,12 +572,13 @@ def test_installed_cli_declines_the_same_request_as_python(managed_project: Mana
     alias = launched['alias']
     call('send', [alias, 'unhandled request', [cause]])
     queried = call('requests', [alias])
-    assert call('cli', ['requests', alias, '--execution-id', queried['execution_id']]) == queried
+    assert call('agents-cli', {'action': 'execute', 'feature': 'requests', 'arguments': {
+        'agent': alias, 'execution': queried['execution_id'],
+    }})['result'] == queried
     request, = queried['requests']
-    request_file = root / 'request.yml'
-    request_file.write_text(yaml.safe_dump(request))
-    reply = call('cli', ['reply', alias, '--request-file', str(request_file),
-                         '--response', '{"decision":"decline"}'])
+    reply = call('agents-cli', {'action': 'execute', 'feature': 'reply', 'arguments': {
+        'agent': alias, 'request': request, 'response': {'decision': 'decline'},
+    }})['result']
     assert reply == {
         'alias': alias, 'session': request['session'], 'execution_id': request['execution_id'],
         'request_id': 'approval', 'reply_status': 'submitted',
@@ -660,9 +662,9 @@ def test_multiple_native_requests_keep_input_and_trace_contents(managed_project:
     assert call('status', [alias])['aliases'][0]['waiting_for'] == 'runtime-request'
     assert call('requests', [alias])['requests'] == [user_input]
     answer = {'answers': {'color': {'answers': ['蓝色']}}}
-    request_file = root / 'input-request.json'
-    request_file.write_text(json.dumps(user_input))
-    call('cli', ['reply', alias, '--request-file', str(request_file), '--response', json.dumps(answer)])
+    call('agents-cli', {'action': 'execute', 'feature': 'reply', 'arguments': {
+        'agent': alias, 'request': user_input, 'response': answer,
+    }})
     observe(call, alias, 'idle', 'completed')
     native = root / 'native' / ('rollout-' + launched['session'] + '.jsonl')
     assert [json.loads(line) for line in native.with_suffix('.replies.jsonl').read_text().splitlines()] == [

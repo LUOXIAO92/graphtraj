@@ -6,6 +6,7 @@ Adapter, process ownership and native request/reply transports remain in use.
 
 from __future__ import annotations
 
+from conftest import runner_operation
 import fcntl
 import json
 import os
@@ -353,11 +354,15 @@ def test_parent_consumes_notices_and_replies_while_driver_waits(
         if not idle:
             with (tmp_path / 'send-stderr.log').open('w') as diagnostics:
                 probe = subprocess.run(
-                    [
-                        str(installed_commands.runner), "send", leader["alias"],
-                        "--instruction", "Run the pair probe now.",
-                        "--caused-by-event-id", _last_worldline_event(root),
-                    ],
+                    runner_operation(
+                        installed_commands,
+                        "send",
+                        leader["alias"],
+                        "--instruction",
+                        "Run the pair probe now.",
+                        "--caused-by-event-id",
+                        _last_worldline_event(root),
+                    ),
                     cwd=root,
                     env={
                         **environment,
@@ -439,11 +444,15 @@ def test_parent_consumes_notices_and_replies_while_driver_waits(
             encoding="utf-8",
         )
         refused = run_process(
-            [
-                str(installed_commands.runner), "reply", child_alias,
-                "--request-file", str(outside_request),
-                "--response", '{"decision":"accept"}',
-            ],
+            runner_operation(
+                installed_commands,
+                "reply",
+                child_alias,
+                "--request-file",
+                str(outside_request),
+                "--response",
+                '{"decision":"accept"}',
+            ),
             cwd=root, env=environment, timeout=30,
         )
         assert refused.returncode == 1, refused.stdout + refused.stderr
@@ -512,7 +521,7 @@ def test_parent_consumes_notices_and_replies_while_driver_waits(
         assert active is None
     finally:
         if 'leader' in locals():
-            run_process([str(installed_commands.runner), 'interrupt', leader['alias']],
+            run_process(runner_operation(installed_commands, 'interrupt', leader['alias']),
                         cwd=root, env=environment, timeout=30)
         round_process.kill()
         round_process.wait(timeout=30)

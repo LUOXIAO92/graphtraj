@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from conftest import runner_operation
 import json
 import os
 import shutil
@@ -81,7 +82,7 @@ def test_probe_artifact_boundary_interrupts_running_runtime(
         else:
             wait_for_probe_artifacts(installed_commands, alias, harness, env, proofs)
         status = run_process(
-            [str(installed_commands.runner), 'status', alias], cwd=harness, env=env,
+            runner_operation(installed_commands, 'status', alias), cwd=harness, env=env,
         )
         assert status.returncode == 0, status.stderr
         assert yaml.safe_load(status.stdout)['aliases'][0]['last_outcome'] == 'interrupted'

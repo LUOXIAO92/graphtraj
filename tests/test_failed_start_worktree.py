@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from conftest import runner_operation
 import shutil
 import sys
 import time
@@ -353,8 +354,15 @@ def test_cleaned_task_member_answers_a_follow_up_in_its_native_session(
     env.pop('FAKE_CODEX_LIFECYCLE_ACTION')
     worldline = run_process([str(installed_commands.product), 'worldline', 'read'], cwd=root, env=env)
     cause = json.loads(worldline.stdout.splitlines()[-1])['event_id']
-    sent = run_process([str(installed_commands.runner), 'send', alias, '--instruction', 'What did you deliver?',
-                        '--caused-by-event-id', cause], cwd=root, env=env, timeout=30)
+    sent = run_process(runner_operation(
+        installed_commands,
+        'send',
+        alias,
+        '--instruction',
+        'What did you deliver?',
+        '--caused-by-event-id',
+        cause,
+    ), cwd=root, env=env, timeout=30)
 
     assert sent.returncode == 0, sent.stdout + sent.stderr
     assert yaml.safe_load(sent.stdout)['session'] == session
@@ -367,8 +375,15 @@ def test_cleaned_task_member_answers_a_follow_up_in_its_native_session(
         assert worktree.is_dir() and not any(worktree.iterdir())
         # Once the other execution has ended, the next continuation to end removes it.
         (other / 'execution.yml').write_text('outcome: completed\n')
-        sent = run_process([str(installed_commands.runner), 'send', alias, '--instruction', 'Anything else?',
-                            '--caused-by-event-id', cause], cwd=root, env=env, timeout=30)
+        sent = run_process(runner_operation(
+            installed_commands,
+            'send',
+            alias,
+            '--instruction',
+            'Anything else?',
+            '--caused-by-event-id',
+            cause,
+        ), cwd=root, env=env, timeout=30)
         assert sent.returncode == 0, sent.stdout + sent.stderr
     # The Worker removes the continuation-only cwd after its terminal record,
     # so a later reopen still provisions the Worktree.
@@ -396,8 +411,15 @@ def test_cleaned_task_member_answers_a_follow_up_in_its_native_session(
     retained = {path: path.read_bytes() for path in reports.rglob('*') if path.is_file()}
     modes = {path: path.stat().st_mode for path in reports.iterdir()}
     env['FAKE_CODEX_LIFECYCLE_ACTION'] = 'follow-up-report'
-    sent = run_process([str(installed_commands.runner), 'send', alias, '--instruction', 'Record the check.',
-                        '--caused-by-event-id', cause], cwd=root, env=env, timeout=30)
+    sent = run_process(runner_operation(
+        installed_commands,
+        'send',
+        alias,
+        '--instruction',
+        'Record the check.',
+        '--caused-by-event-id',
+        cause,
+    ), cwd=root, env=env, timeout=30)
     assert sent.returncode == 0, sent.stdout + sent.stderr
     deadline = time.monotonic() + 15
     while worktree.exists() and time.monotonic() < deadline:
@@ -422,7 +444,7 @@ def test_cleaned_task_member_answers_a_follow_up_in_its_native_session(
     assert status.result['last_result']['last_message'] == (
         yaml.safe_load(execution.read_text()).get('last_agent_message'))
     # The member's public status carries the core's Agent and two-state view.
-    observed = run_process([str(installed_commands.runner), 'status', alias], cwd=root, env=env)
+    observed = run_process(runner_operation(installed_commands, 'status', alias), cwd=root, env=env)
     assert observed.returncode == 0, observed.stdout + observed.stderr
     member = yaml.safe_load(observed.stdout)['aliases'][0]
     assert member['agent'] == mapping['agent'] and member['state'] == 'standby', member

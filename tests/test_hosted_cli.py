@@ -59,7 +59,7 @@ def own_process(runner: Path) -> Path:
 
 
 def test_cli_host_submits_exact_result_and_preserves_report_authority(tmp_path: Path) -> None:
-    """Forged environment identities cannot change the author or read another report."""
+    """Project reports are readable; forged environment identities cannot change authorship."""
     runner, _, commit = result_project(tmp_path)
     directory = own_process(runner)
     with runtime_caller(runner, 'research@x1'):
@@ -78,9 +78,11 @@ def test_cli_host_submits_exact_result_and_preserves_report_authority(tmp_path: 
         assert submission['candidate'] == commit
         assert submission['event_id']
         assert (tmp_path / submission['evidence_refs'][0]).read_text() == 'Retained evidence'
-        refused = cli(tmp_path, address, 'reports', 'research@x2')
+        sibling = cli(tmp_path, address, 'reports', 'research@x2')
+        assert sibling.returncode == 0, sibling.stdout + sibling.stderr
+        assert yaml.safe_load(sibling.stdout)['alias'] == 'research@x2'
+        refused = cli(tmp_path, address, 'submit-report', '--name', 'researcher-x2.md', '--text', 'forged')
         assert refused.returncode == 1
-        assert yaml.safe_load(refused.stdout)['error']['code'] == 'authority-denied'
     with runtime_caller(runner, None):
         assert tools.read_reports({'alias': 'research@x1'}, cwd=tmp_path).document['submissions'] == [submission]
 
@@ -117,8 +119,8 @@ def test_cli_host_accepts_the_session_worktree_and_refuses_other_directories(tmp
         assert refused.returncode == 1
         assert yaml.safe_load(refused.stdout)['error']['code'] == 'invalid-config'
         sibling = cli(worktree, address, 'reports', 'research@x2')
-        assert sibling.returncode == 1
-        assert yaml.safe_load(sibling.stdout)['error']['code'] == 'authority-denied'
+        assert sibling.returncode == 0, sibling.stdout + sibling.stderr
+        assert yaml.safe_load(sibling.stdout)['alias'] == 'research@x2'
 
 
 def test_cli_connection_uses_and_cleans_a_sandbox_visible_channel(tmp_path: Path) -> None:
@@ -303,8 +305,8 @@ def test_shared_mcp_command_consumes_bound_graphtraj_dsh_channel(tmp_path: Path,
     directory = own_process(runner)
     monkeypatch.delenv('AGENT_SWARM_CONNECTION', raising=False)
     expected = {'runtime': 'dsh', 'session': 'owned-dsh-session', 'source': 'main', 'cwd': str(tmp_path)}
-    request = {'jsonrpc': '2.0', 'id': 1, 'method': 'tools/call', 'params': {'name': 'tasks',
-        'arguments': {'action': 'execute', 'feature': 'alias_status', 'arguments': {}}}}
+    request = {'jsonrpc': '2.0', 'id': 1, 'method': 'tools/call', 'params': {'name': 'agents',
+        'arguments': {'action': 'execute', 'feature': 'status', 'arguments': {}}}}
     with hold_ownership(directory, os.getpid()), cli_connection(
         tmp_path, 'research@x1', native_operation_features(), native_context=lambda: expected,
     ) as address:

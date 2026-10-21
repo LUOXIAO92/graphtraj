@@ -1,5 +1,6 @@
 """Member registration at the native create/execute boundary."""
 
+from conftest import runner_operation
 import json
 from pathlib import Path
 
@@ -86,8 +87,15 @@ def test_native_creation_registers_members_before_execution(
         causes = [json.loads(line)['event_id'] for shard in (root / '.graphtraj/state/worldline').glob('*.jsonl')
                   for line in shard.read_text().splitlines()]
         resumed = run_process(
-            [str(installed_commands.runner), 'send', mappings[0]['alias'],
-             '--instruction', 'Continue only if registered.', '--caused-by-event-id', causes[-1]],
+            runner_operation(
+                installed_commands,
+                'send',
+                mappings[0]['alias'],
+                '--instruction',
+                'Continue only if registered.',
+                '--caused-by-event-id',
+                causes[-1],
+            ),
             cwd=root, env=env, timeout=20,
         )
         assert resumed.returncode != 0

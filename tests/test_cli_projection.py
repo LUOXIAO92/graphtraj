@@ -99,34 +99,32 @@ def test_schema_change_updates_help_describe_and_scalar_input(
         calls.append(arguments)
         return tools.ToolResult({"received": arguments})
 
-    original = tools.TOOLS["alias_status"]
+    original = tools.TOOLS["parent_status"]
     for choices, default in (([7, 9], 7), ([11, 13], 13)):
         schema = deepcopy(original.input_schema)
-        schema["properties"]["baseline"] = {
+        schema["properties"]["timeout_seconds"] = {
             "type": "integer", "enum": choices, "default": default,
             "description": "Controlled baseline parameter",
         }
-        schema["required"] = ["candidate"]
-        monkeypatch.setitem(tools.TOOLS, "alias_status", replace(
+        schema["required"] = ["timeout_seconds"]
+        monkeypatch.setitem(tools.TOOLS, "parent_status", replace(
             original, input_schema=schema, handler=handler,
         ))
-        described = gateway.handle_request({"action": "describe", "feature": "alias_status", "schema": True})
+        described = gateway.handle_request({"action": "describe", "feature": "parent_status", "schema": True})
         assert described.document["input_schema"] == schema
-        help_result = CliRunner().invoke(agent_runner.main, ["status", "--help"])
+        help_result = CliRunner().invoke(agent_runner.main, ["parent-status", "--help"])
         assert help_result.exit_code == 0, help_result.output
         assert "Controlled baseline parameter" in help_result.output
         assert str(default) in help_result.output
         assert "integer" in help_result.output
-        for extra in ([], ["--candidate", "head", "--baseline", "text"],
-                      ["--candidate", "head", "--baseline", "99"]):
-            rejected = CliRunner().invoke(agent_runner.main, ["status", *extra])
+        for extra in (["--timeout-seconds", "text"], ["--timeout-seconds", "99"]):
+            rejected = CliRunner().invoke(agent_runner.main, ["parent-status", *extra])
             assert rejected.exit_code == 2, rejected.output
         assert not calls
-        for extra, expected in (([], default), (["--baseline", str(choices[0])], choices[0])):
-            accepted = CliRunner().invoke(agent_runner.main, ["status", "--candidate", "head", *extra])
+        for extra, expected in (([], default), (["--timeout-seconds", str(choices[0])], choices[0])):
+            accepted = CliRunner().invoke(agent_runner.main, ["parent-status", *extra])
             assert accepted.exit_code == 0, accepted.output
-            assert calls[-1]["baseline"] == expected
-            assert calls[-1]["candidate"] == "head"
+            assert calls[-1]["timeout_seconds"] == expected
         calls.clear()
 
 
@@ -149,7 +147,8 @@ def test_file_content_uses_same_nested_schema_as_gateway(
         alternative["properties"]["task_id"] = schema["properties"]["task_id"]
     monkeypatch.setitem(tools.TOOLS, "task_register", replace(original, input_schema=schema, handler=handler))
     document = {"task_id": 210, "task_name": "fixture", "source": "source", "title": "title",
-                "body": "body", "dependencies": []}
+                "body": "body", "dependencies": [], "disposition": "active",
+                "schema_version": 2, "parent_id": None, "replaced_by": [], "retirement_reason": None}
     path = tmp_path / "task.yml"
     for value in ("210", 211, 210):
         arguments = {**document, "task_id": value}

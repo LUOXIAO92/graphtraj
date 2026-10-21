@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from conftest import runner_operation
 import subprocess
 from pathlib import Path
 
@@ -449,7 +450,7 @@ def test_setup_and_runner_reject_a_nested_configured_source_repository(
     monkeypatch.setenv("CODEX_THREAD_ID", "query-without-recovery-skill")
     assert not (harness_root / ".agents/skills/retro/SKILL.md").exists()
     status = run_process(
-        [str(installed_commands.runner), "status", "missing@e1"],
+        runner_operation(installed_commands, "status", "missing@e1"),
         cwd=harness_root,
     )
 

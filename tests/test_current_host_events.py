@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from conftest import runner_operation
 import json
 import os
 import subprocess
@@ -224,7 +225,7 @@ def test_root_completion_after_entry_and_send_exit(
             original_alias = alias
             original_file = root / '.graphtraj/runner/sessions' / alias / 'mapping.yml'
             original_bytes = original_file.read_bytes()
-            stopped = run_process([str(installed_commands.runner), 'interrupt', alias],
+            stopped = run_process(runner_operation(installed_commands, 'interrupt', alias),
                                   cwd=root, env=environment, timeout=30)
             assert stopped.returncode == 0, stopped.stdout + stopped.stderr
             # The CLI owns a notice channel and waits for the new execution.
@@ -248,13 +249,20 @@ def test_root_completion_after_entry_and_send_exit(
             retained = yaml.safe_load((Path(yaml.safe_load(original_bytes)['trace_file']).parent / 'runner/session.yml').read_text())
             assert retained['retirement']['mapping'] == yaml.safe_load(original_bytes)
             # A native host descriptor remains valid through public mapping reads.
-            status = run_process([str(installed_commands.runner), 'status', alias],
+            status = run_process(runner_operation(installed_commands, 'status', alias),
                                  cwd=root, env=changed, timeout=30)
             assert status.returncode == 0, status.stdout + status.stderr
             assert yaml.safe_load(status.stdout)['aliases'][0]['alias'] == alias
         else:
-            sent = run_process([str(installed_commands.runner), 'send', alias, '--instruction', 'later',
-                                '--caused-by-event-id', events[-1]['event_id']], cwd=root, env=changed, timeout=30)
+            sent = run_process(runner_operation(
+                installed_commands,
+                'send',
+                alias,
+                '--instruction',
+                'later',
+                '--caused-by-event-id',
+                events[-1]['event_id'],
+            ), cwd=root, env=changed, timeout=30)
             assert sent.returncode == 0, sent.stdout + sent.stderr
             assert yaml.safe_load(sent.stdout)['send_status'] == 'sent'
         if operation == 'send':
@@ -268,4 +276,4 @@ def test_root_completion_after_entry_and_send_exit(
         assert {item['home'] for item in turns} == {str(tmp_path / 'owning-home')}
     finally:
         (tmp_path / 'release').touch()
-        run_process([str(installed_commands.runner), 'interrupt', alias], cwd=root, env=environment, timeout=30)
+        run_process(runner_operation(installed_commands, 'interrupt', alias), cwd=root, env=environment, timeout=30)

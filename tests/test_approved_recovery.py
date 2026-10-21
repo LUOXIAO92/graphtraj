@@ -518,10 +518,9 @@ def test_administrative_recovery_routes_reports_to_the_actual_current_host(
         # continuation, rather than rejecting the retained original launch.
         monkeypatch.setenv('PATH', str(fake_codex.executable.parent) + os.pathsep + os.environ['PATH'])
         monkeypatch.setenv('FAKE_CODEX_LOG', str(fake_codex.log_file))
-        continued = host({'action': 'execute', 'feature': 'send_instruction', 'arguments': {
-            'alias': original['alias'], 'instruction': 'Return the retained validation result.',
-            'caused_by_event_ids': [read_worldline(state, root)[-1]['event_id']],
-        }}).document
+        continued = host({'action': 'execute', 'feature': 'agents', 'arguments': {
+            'action': 'send', 'agent': original['alias'], 'message': 'Return the retained validation result.',
+        }}).document['result']
         assert continued['send_status'] == 'sent'
         assert continued['session'] == original['session']
         assert continued['execution_id'] != original['execution_id']
@@ -1169,8 +1168,8 @@ def test_parent_interrupt_recovery_reuses_existing_authority(
     monkeypatch.setattr(recovery, '_send_session_locked', resume)
     call = local_tool.bind(root, recovery_reviewer=unexpected_review)
     with runtime_caller(runner, parent['alias']):
-        stopped = call({'action': 'execute', 'feature': 'interrupt',
-                        'arguments': {'alias': child['alias']}}).document
+        stopped = call({'action': 'execute', 'feature': 'agents',
+                        'arguments': {'action': 'interrupt', 'agent': child['alias']}}).document['result']
         assert stopped['interrupt_status'] == 'interrupted'
         stop_file = runner / 'sessions' / child['alias'] / 'stop.yml'
         before_stop = yaml.safe_load(stop_file.read_text())
@@ -1274,7 +1273,8 @@ def retired_target(target: tuple) -> tuple:
     root, task, mapping, arguments = target
     invoke(root, {**arguments, 'additional_minutes': 0, 'resume': False})
     call = local_tool.bind(root)
-    call({'action': 'execute', 'feature': 'interrupt', 'arguments': {'alias': mapping['alias']}})
+    call({'action': 'execute', 'feature': 'agents',
+          'arguments': {'action': 'interrupt', 'agent': mapping['alias']}})
     runner = root / '.graphtraj/runner'
     mappings = [yaml.safe_load(path.read_text()) for path in (runner / 'sessions').glob('*/mapping.yml')]
     for member in sorted(mappings, key=lambda item: item['parent'] is None):
@@ -1652,10 +1652,10 @@ def test_approved_increment_lifts_budget_stop_but_keeps_session_stop(
     assert yaml.safe_load(budget_path.read_text())['approved_minutes'] == 90
     assert retry['recovery_status'] == 'applied'
     monkeypatch.chdir(root)
-    refused = CliRunner().invoke(main, ['send', mapping['alias'], '--instruction', 'Continue old work.',
-                                        '--caused-by-event-id', result['recovery_event_id']])
-    assert refused.exit_code != 0
-    assert 'subtree-stopped' in refused.output
+    refused = local_tool.bind(root)({'action': 'execute', 'feature': 'agents', 'arguments': {
+        'action': 'send', 'agent': mapping['alias'], 'message': 'Continue old work.',
+    }})
+    assert refused.failed and refused.document['error']['code'] == 'subtree-stopped'
 
 
 def test_budget_only_continue_is_not_blocked_by_a_stopped_old_root(
@@ -1679,7 +1679,7 @@ def test_budget_only_continue_is_not_blocked_by_a_stopped_old_root(
     assert continued.exit_code == 0, continued.output
     assert yaml.safe_load(continued.output)['tasks'] == []
     assert yaml.safe_load(budget_path.read_text()) == {**budget, 'stopped': False}
-    refused = CliRunner().invoke(main, ['send', mapping['alias'], '--instruction', 'Continue old work.',
-                                        '--caused-by-event-id', result['recovery_event_id']])
-    assert refused.exit_code != 0
-    assert 'subtree-stopped' in refused.output
+    refused = local_tool.bind(root)({'action': 'execute', 'feature': 'agents', 'arguments': {
+        'action': 'send', 'agent': mapping['alias'], 'message': 'Continue old work.',
+    }})
+    assert refused.failed and refused.document['error']['code'] == 'subtree-stopped'

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from conftest import runner_operation
 import json
 import os
 import re
@@ -140,7 +141,7 @@ def test_installed_runner_notifies_its_nested_caller_before_the_worker_finishes(
         assert instant == expected.replace(microsecond=0)
 
         status = run_process(
-            [str(installed_commands.runner), "status", alias],
+            runner_operation(installed_commands, "status", alias),
             cwd=harness,
             env=probe_environment,
         )
@@ -266,7 +267,7 @@ def test_installed_runner_delivers_sampled_stop_to_leader_before_engineer_stops(
         deadline = time.monotonic() + 10
         while time.monotonic() < deadline:
             status = run_process(
-                [str(installed_commands.runner), "status", alias],
+                runner_operation(installed_commands, "status", alias),
                 cwd=harness,
                 env=probe_environment,
             )
@@ -398,15 +399,15 @@ def test_installed_runner_collects_reviews_already_running_at_sampled_stop(
         for line in path.read_text(encoding="utf-8").splitlines()
     ][-1]
     blocked = run_process(
-        [
-            str(installed_commands.runner),
+        runner_operation(
+            installed_commands,
             "send",
             reviewer_mappings[0]["alias"],
             "--instruction",
             "Start another Review.",
             "--caused-by-event-id",
             cause,
-        ],
+        ),
         cwd=harness,
         env=run_environment,
     )
@@ -932,15 +933,15 @@ def test_installed_send_notifies_its_caller_while_a_budgeted_resume_runs(
         "w+", encoding="utf-8"
     ) as err:
         sent = subprocess.Popen(
-            [
-                str(installed_commands.runner),
+            runner_operation(
+                installed_commands,
                 "send",
                 mapping["alias"],
                 "--instruction",
                 "Retry the retained Team Leader Session.",
                 "--caused-by-event-id",
                 cause,
-            ],
+            ),
             cwd=harness,
             env=send_environment,
             text=True,
@@ -976,7 +977,7 @@ def test_installed_send_notifies_its_caller_while_a_budgeted_resume_runs(
             deadline = time.monotonic() + 5
             while True:
                 running = run_process(
-                    [str(installed_commands.runner), "status", mapping["alias"]],
+                    runner_operation(installed_commands, "status", mapping["alias"]),
                     cwd=harness,
                     env=environment,
                 )
@@ -1033,15 +1034,15 @@ def test_installed_send_notifies_its_caller_while_a_budgeted_resume_runs(
         "PYTHONPATH": str(controls),
     }
     stopped_send = run_process(
-        [
-            str(installed_commands.runner),
+        runner_operation(
+            installed_commands,
             "send",
             mapping["alias"],
             "--instruction",
             "Continue the retained Leader work.",
             "--caused-by-event-id",
             cause,
-        ],
+        ),
         cwd=harness,
         env=stopped_environment,
     )
@@ -1049,9 +1050,16 @@ def test_installed_send_notifies_its_caller_while_a_budgeted_resume_runs(
     assert yaml.safe_load(stopped_send.stdout)["error"]["code"] == "EXECUTION_BUDGET_STOPPED"
     # Only an explicit parent request collects the stopped Session's report.
     collected = run_process(
-        [str(installed_commands.runner), "send", mapping["alias"],
-         "--reports-only", "--instruction", "Report the retained result.",
-         "--caused-by-event-id", cause],
+        runner_operation(
+            installed_commands,
+            "send",
+            mapping["alias"],
+            "--reports-only",
+            "--instruction",
+            "Report the retained result.",
+            "--caused-by-event-id",
+            cause,
+        ),
         cwd=harness, env=stopped_environment,
     )
     assert collected.returncode == 0, collected.stdout + collected.stderr
@@ -1163,15 +1171,15 @@ def test_installed_send_delivers_elapsed_notices_to_the_resumed_leader(
         "w", encoding="utf-8"
     ) as err:
         sent = subprocess.Popen(
-            [
-                str(installed_commands.runner),
+            runner_operation(
+                installed_commands,
                 "send",
                 alias,
                 "--instruction",
                 "Inspect the retained result.",
                 "--caused-by-event-id",
                 cause,
-            ],
+            ),
             cwd=harness,
             env=run_environment,
             text=True,
@@ -1282,8 +1290,8 @@ def test_installed_send_collects_reports_without_sampling_the_stop(
     send_environment.pop("FAKE_CODEX_LIFECYCLE_ACTION", None)
     try:
         sent = run_process(
-            [
-                str(installed_commands.runner),
+            runner_operation(
+                installed_commands,
                 "send",
                 alias,
                 "--instruction",
@@ -1291,7 +1299,7 @@ def test_installed_send_collects_reports_without_sampling_the_stop(
                 "--caused-by-event-id",
                 cause,
                 "--reports-only",
-            ],
+            ),
             cwd=harness,
             env=send_environment,
             timeout=30,
@@ -1446,15 +1454,15 @@ def test_installed_send_retains_a_late_stop_without_an_awaiting_call(
     completed_mapping = yaml.safe_load(session_mapping_file.read_text(encoding="utf-8"))
     with stderr.open("w+", encoding="utf-8") as err:
         sent = subprocess.Popen(
-            [
-                str(installed_commands.runner),
+            runner_operation(
+                installed_commands,
                 "send",
                 alias,
                 "--instruction",
                 "Inspect the retained result.",
                 "--caused-by-event-id",
                 cause,
-            ],
+            ),
             cwd=harness,
             env=send_environment,
             text=True,

@@ -153,15 +153,22 @@ def test_single_role_launch_registers_and_executes_without_placeholder_members(
     assert launch['context_evidence']['model'] == 'configured-author'
     expected = reports or [role.rpartition('.')[2].replace('_', '-') + '.md']
     assert [Path(path).name for path in mapping['report_files']] == expected
-    assert permission[str(root / '.graphtraj/state')] == 'none'
+    assert permission[str(root / '.graphtraj/state')] == 'read'
     before = (task_directory / 'teams/1/traces' / task['alias'] / 'events.jsonl').read_bytes()
-    sent = run_process([str(installed_commands.runner), 'send', task['alias'],
-                        '--instruction', 'Continue the same research.', '--caused-by-event-id', events[-1]['event_id']],
+    sent = run_process(runner_operation(
+        installed_commands,
+        'send',
+        task['alias'],
+        '--instruction',
+        'Continue the same research.',
+        '--caused-by-event-id',
+        events[-1]['event_id'],
+    ),
                        cwd=root, env=env, timeout=20)
     assert sent.returncode == 0, sent.stdout + sent.stderr
     # This is a bounded development test wait for its own controlled Runtime.
     for _ in range(100):
-        status = run_process([str(installed_commands.runner), 'status', task['alias']], cwd=root, env=env)
+        status = run_process(runner_operation(installed_commands, 'status', task['alias']), cwd=root, env=env)
         observed = yaml.safe_load(status.stdout)['aliases'][0]
         if observed['activity'] == 'idle':
             break
@@ -281,8 +288,15 @@ def test_configured_parent_dispatch_and_ordinary_resume_keep_actual_authority(
         roles_file.write_text(yaml.safe_dump(roles))
 
         original_batch = retained.read_bytes()
-    sent = run_process([str(installed_commands.runner), 'send', parent['alias'],
-                        '--instruction', 'Dispatch again', '--caused-by-event-id', events[-1]['event_id']],
+    sent = run_process(runner_operation(
+        installed_commands,
+        'send',
+        parent['alias'],
+        '--instruction',
+        'Dispatch again',
+        '--caused-by-event-id',
+        events[-1]['event_id'],
+    ),
                        cwd=root, env=env, timeout=20)
     assert sent.returncode == 0, sent.stdout + sent.stderr
     for _ in range(200):

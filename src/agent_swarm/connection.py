@@ -58,6 +58,7 @@ def worker_connection(
     if os.name == 'nt':
         raise AgentsError('authority-denied', 'Windows does not support the authenticated local control pipe.')
     stop = threading.Event()
+    closing = threading.Event()
     with tempfile.TemporaryDirectory(prefix='control-', dir=directory) as address:
         # Held for the host's lifetime; the kernel releases it if the host dies.
         host_lock = os.open(address, os.O_RDONLY | os.O_DIRECTORY)
@@ -65,10 +66,14 @@ def worker_connection(
 
         accepted: dict[str, threading.Thread] = {}
 
+        def refuse_closed(request: dict) -> dict:
+            """Reject late requests without invoking the operation during close."""
+            raise AgentsError('request-not-accepted', 'The Session control channel is closing.')
+
         def answer(name: str, descriptor: int) -> None:
             """Answer one request in its own empty context, then release its slot."""
             try:
-                _answer_request(descriptor, operate, authenticate)
+                _answer_request(descriptor, refuse_closed if closing.is_set() else operate, authenticate)
             finally:
                 os.close(descriptor)
                 del accepted[name]
@@ -99,8 +104,7 @@ def worker_connection(
         try:
             yield address
         finally:
-            stop.set()
-            thread.join()
+            closing.set()
             # Every request already taken finishes and publishes its reply.
             for running in list(accepted.values()):
                 running.join()
@@ -109,6 +113,10 @@ def worker_connection(
             deadline = time.monotonic() + OPERATION_TIMEOUT_SECONDS
             while any(Path(address).iterdir()) and time.monotonic() < deadline:
                 time.sleep(0.01)
+            stop.set()
+            thread.join()
+            for running in list(accepted.values()):
+                running.join()
             os.close(host_lock)
 
 
@@ -192,6 +200,7 @@ def connection_operation(
     if os.name == 'nt':
         raise AgentsError('authority-denied', 'Windows does not support the authenticated local control pipe.')
 
+    published = False
     try:
         with tempfile.TemporaryDirectory(dir=address) as directory:
             request = Path(directory) / 'request.tmp'
@@ -201,6 +210,7 @@ def connection_operation(
                 stream.write(json.dumps(document))
                 stream.flush()
                 os.replace(request, request.with_suffix('.json'))
+                published = True
                 response_file = Path(directory) / 'response.json'
                 accepted_file = request.with_suffix('.json')
                 deadline = time.monotonic() + response_timeout
@@ -214,13 +224,21 @@ def connection_operation(
                             raise TimeoutError('The Session host closed before replying; '
                                                'the accepted operation is unconfirmed.')
                     elif time.monotonic() >= deadline:
-                        raise TimeoutError('Session control timed out; delivery is unconfirmed.')
+                        try:
+                            # Removing an unclaimed request wins admission:
+                            # the host must unlink it before calling operate.
+                            accepted_file.unlink()
+                        except FileNotFoundError:
+                            raise TimeoutError('Session control timed out; delivery is unconfirmed.')
+                        raise AgentsError('request-not-accepted', 'The Session host did not accept the request.')
                     time.sleep(0.01)
                 response = json.loads(response_file.read_text())
         if 'error' in response:
             raise AgentsError(response['error']['code'], response['error']['message'])
         return response
     except (OSError, ValueError, KeyError, TypeError) as error:
+        if not published and isinstance(error, FileNotFoundError):
+            raise AgentsError('request-not-accepted', 'The Session control channel closed before the request.') from error
         raise AgentsError(
             'operation-failed', 'The mapped Session owner did not acknowledge the operation: ' + str(error),
         ) from error

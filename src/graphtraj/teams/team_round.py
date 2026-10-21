@@ -544,42 +544,47 @@ def _run_registered_children(
 
     directory = project.runner_directory / "sessions" / alias
     registration = directory / "child-registration.yml"
-    # The original Driver retains aggregation while notices resume native
-    # turns. Those Workers must not become a second Driver for this Session.
-    with (directory / "children.lock").open("a+b") as driver:
-        try:
-            file_lock.flock(driver, file_lock.LOCK_EX | file_lock.LOCK_NB)
-        except BlockingIOError:
-            return
-        mapping, _ = read_alias_mapping(project.runner_directory, alias)
-        # Only the completed execution that registered a Batch starts it; an
-        # earlier or unattributed registration is never replayed here.
-        while _registered_execution(registration) == mapping["execution_id"]:
-            worktree = Path(mapping["worktree_path"])
-            batch, retained = _registered_batch(registration, worktree)
-            children = _run_batch_workers(project, batch, retained, alias, capacity_fd)
-            _send_session(
-                alias, "Direct child execution results:\n" + yaml.safe_dump(children.document, allow_unicode=True),
-                directory, mapping, (), project.harness_root, capacity_fd=capacity_fd,
-                retain_notice_channel=True, parent_input=False,
-            )
-            # Input acknowledgement is not completion. Retain the Driver until
-            # the parent consumes results and finishes any further registration.
-            while True:
-                with (directory / "launch.yml").open("rb") as lock:
-                    file_lock.flock(lock, file_lock.LOCK_EX)
+    while True:
+        # Serialize consumption, not the children's lifetimes: a later parent
+        # execution may register another Batch while these children still run.
+        with (directory / "children.lock").open("a+b") as driver:
+            try:
+                file_lock.flock(driver, file_lock.LOCK_EX | file_lock.LOCK_NB)
+            except BlockingIOError:
+                return
+            with (directory / "launch.yml").open("rb") as lock:
+                file_lock.flock(lock, file_lock.LOCK_EX)
+                with execution_start_lock(project.runner_directory):
                     mapping, _ = read_alias_mapping(project.runner_directory, alias)
-                    if (directory / "execution.yml").is_file():
-                        outcome = read_terminal_outcome(directory / "execution.yml")
-                        terminal = yaml.safe_load((directory / "execution.yml").read_text())
-                        if terminal.get("budget_stopped"):
-                            raise RunnerError("EXECUTION_BUDGET_STOPPED", "Runner stopped the parent execution.")
-                        if outcome != "completed":
-                            raise RunnerError("RUNTIME_PROVIDER_FAILED", "The parent ended with " + outcome)
-                        break
-                    if not ownership_is_held(directory, mapping["worker_pid"]):
-                        raise RunnerError("RUNTIME_WORKER_FAILED", "The parent Worker ended without a terminal result.")
-                time.sleep(0.05)
+                    if (_registered_execution(registration) != mapping["execution_id"]
+                            or not (directory / "execution.yml").is_file()
+                            or read_terminal_outcome(directory / "execution.yml") != "completed"):
+                        return
+                    require_execution_allowed(project.runner_directory, alias, mapping)
+                    batch, retained = _registered_batch(registration, Path(mapping["worktree_path"]))
+        children = _run_batch_workers(project, batch, retained, alias, capacity_fd)
+        _send_session(
+            alias, "Direct child execution results:\n" + yaml.safe_dump(children.document, allow_unicode=True),
+            directory, mapping, (), project.harness_root, capacity_fd=capacity_fd,
+            retain_notice_channel=True, parent_input=False,
+        )
+        # Input acknowledgement is not completion. Each Driver retains its
+        # results until the parent finishes any further registration.
+        while True:
+            with (directory / "launch.yml").open("rb") as lock:
+                file_lock.flock(lock, file_lock.LOCK_EX)
+                mapping, _ = read_alias_mapping(project.runner_directory, alias)
+                if (directory / "execution.yml").is_file():
+                    outcome = read_terminal_outcome(directory / "execution.yml")
+                    terminal = yaml.safe_load((directory / "execution.yml").read_text())
+                    if terminal.get("budget_stopped"):
+                        raise RunnerError("EXECUTION_BUDGET_STOPPED", "Runner stopped the parent execution.")
+                    if outcome != "completed":
+                        raise RunnerError("RUNTIME_PROVIDER_FAILED", "The parent ended with " + outcome)
+                    break
+                if not ownership_is_held(directory, mapping["worker_pid"]):
+                    raise RunnerError("RUNTIME_WORKER_FAILED", "The parent Worker ended without a terminal result.")
+            time.sleep(0.05)
 
 
 def _registered_batch(registration: Path, worktree: Path) -> tuple[Batch, Path]:
@@ -635,8 +640,8 @@ def _withdraw_ended_registration(registration: Path, execution_id: str) -> None:
 def withdraw_pending_children(directory: Path) -> None:
     """Withdraw a stopped Session's unstarted child Batch.
 
-    A Driver that already holds the Session's children lock has consumed the
-    registration it runs and observes the stop through its parent itself.
+    The children lock protects consumption only. Already consumed Batches
+    observe the stop through their parent before starting further work.
     """
     registration = directory / "child-registration.yml"
     if not registration.is_file():

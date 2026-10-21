@@ -203,10 +203,13 @@ def prompt(message: dict) -> None:
         subprocess.run(['git', '-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.com',
                         'commit', '-m', 'Controlled Claude result'], check=True, capture_output=True)
         commit = subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip()
-        report = tool('submit_report', {'name': 'evidence.md', 'text': 'Controlled process evidence'})
-        submitted = tool('submit_result', {'commit': commit, 'result_refs': ['claude-result.md'],
-                                         'evidence_refs': [report['report']], 'completion': 'Controlled result',
-                                         'unresolved': []})
+        report_request = {'name': 'evidence.md', 'text': 'Controlled process evidence'}
+        report = tool('submit_report', report_request)
+        assert tool('submit_report', report_request) == report
+        submission = {'commit': commit, 'result_refs': ['claude-result.md'],
+                      'evidence_refs': [report['report']], 'completion': 'Controlled result', 'unresolved': []}
+        submitted = tool('submit_result', submission)
+        assert tool('submit_result', submission) == submitted
         result(json.dumps(submitted))
     elif text.startswith('register'):
         # Register one direct helper child, then answer with the tool outcome.

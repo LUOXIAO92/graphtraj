@@ -60,14 +60,19 @@ def command(commands: InstalledCommands, root: Path, environment: dict, *args: s
     Session controls use the Python Runner entry points; their old CLI
     commands were removed when the agents entry became independent.
     """
-    if args[0] in {'status', 'send', 'interrupt'}:
+    if args[0] in {'status', 'send', 'interrupt', 'reports'}:
         script = """
 import sys, yaml
 from pathlib import Path
-from graphtraj.execution.runner_control import send_instruction, interrupt_session
-from graphtraj.execution.runner_status import status_aliases
+from graphtraj.execution.runner_control import send_instruction, interrupt_session, read_session_reports
+from graphtraj.execution.runner_status import status_aliases, runtime_caller
 args = sys.argv[1:]
-if args[0] == 'status':
+if args[0] == 'reports':
+    # The fixture host binds its verified root read scope; this is not a
+    # caller-supplied CLI identity or a native-authentication acceptance test.
+    with runtime_caller(Path.cwd() / '.graphtraj/runner', None):
+        result = read_session_reports(args[1], Path.cwd())
+elif args[0] == 'status':
     response = status_aliases(args[1:], Path.cwd())
     result = response.document
 elif args[0] == 'send':
@@ -132,6 +137,14 @@ def test_claude_public_launch_resume_interrupt(
                        '--decision', 'accepted', '--reason', 'Controlled result verified',
                        '--evidence-ref', submission['evidence_refs'][0])
     assert accepted.returncode == 0, accepted.stdout + accepted.stderr
+    before_retry = events(root)
+    repeated = command(installed_commands, root, environment, 'decide-result',
+                       '--submission-id', submission['event_id'], '--commit', submission['candidate'],
+                       '--decision', 'accepted', '--reason', 'Controlled result verified',
+                       '--evidence-ref', submission['evidence_refs'][0])
+    assert repeated.returncode == 0, repeated.stdout + repeated.stderr
+    assert yaml.safe_load(repeated.stdout) == yaml.safe_load(accepted.stdout)
+    assert events(root) == before_retry
     import sys
 
     integrated = run_process([str(installed_commands.product), 'task', 'integrate', '--task-id', '320',

@@ -600,6 +600,50 @@ def test_claude_reports_physical_stop_before_archive_finishes(
         assert final['collection_join_seconds'] >= 0
 
 
+def test_collection_progress_is_public_while_native_turn_remains_open(
+    tmp_path: Path, claude_environment: None, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Public reports advance without another prompt or native termination."""
+    from graphtraj.interfaces import tools
+    from graphtraj.runtimes.claude.collection import StreamCollector
+
+    result_project(tmp_path)
+    blocked, release = threading.Event(), threading.Event()
+    accept = StreamCollector.accept
+
+    def hold(self, record: dict, position: int, *args: object, **kwargs: object) -> None:
+        """Hold one received echo so both public progress states are observable."""
+        if record.get('isReplay') is True:
+            blocked.set()
+            assert release.wait(30)
+        accept(self, record, position, *args, **kwargs)
+
+    monkeypatch.setattr(StreamCollector, 'accept', hold)
+    with ExitStack() as stack, ThreadPoolExecutor(max_workers=1) as pool:
+        turn, ready, _ = execution(tmp_path, stack, 'wait-public')
+        future = pool.submit(turn.run)
+        try:
+            assert ready.wait(5) and blocked.wait(5)
+            before = tools.read_reports({'alias': 'research@x1'}, cwd=tmp_path).document['runtime_diagnostics']
+            assert before['collection_progress']['batch_complete'] is False
+            release.set()
+            deadline = time.monotonic() + 5
+            while True:
+                after = tools.read_reports({'alias': 'research@x1'}, cwd=tmp_path).document['runtime_diagnostics']
+                if (after['collection_progress']['batch_complete']
+                        and after['collection_progress']['batches'] > before['collection_progress']['batches']):
+                    break
+                assert time.monotonic() < deadline
+                time.sleep(0.01)
+            assert after['prompt_hook'] == before['prompt_hook']
+            assert after['collection_progress']['elapsed_seconds'] > 0
+            assert 'termination' not in after and not future.done()
+        finally:
+            release.set()
+            turn.terminate()
+        assert future.result(timeout=10)['terminal_confirmed'] is True
+
+
 def test_claude_mid_turn_input_shares_its_turn_result(tmp_path: Path, claude_environment: None) -> None:
     """Echoed input joined to a running turn completes with that turn's one result."""
     result_project(tmp_path)

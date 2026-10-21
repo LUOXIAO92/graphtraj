@@ -99,6 +99,7 @@ def test_scoped_grant_and_withdrawal_preserve_other_policy(tmp_path: Path, peer:
     request = context(tmp_path, peer).launch_document()['adapter_request']
     native = request['session_parameters']['config']
     profile = native['permissions'][native['default_permissions']]
+    native['features'] = {**native['features'], 'network_proxy': True}
     profile['network'] = {'enabled': True, 'domains': {'api.example.org': 'allow'},
                           'unix_sockets': {'/existing.sock': 'allow'}}
     baseline = copy.deepcopy(profile)
@@ -136,6 +137,8 @@ def test_managed_same_session_adopts_then_revokes(
     worktree.mkdir()
     config = settings(worktree)
     request = context(worktree, peer).launch_document()['adapter_request']
+    from graphtraj.runtimes.codex.codex_adapter import apply_unix_socket_access
+    apply_unix_socket_access(request, {str(worktree): []})
     directory = tmp_path / 'session'
     directory.mkdir()
     log = tmp_path / 'wire.jsonl'
@@ -194,7 +197,7 @@ def test_only_selected_role_receives_native_access(tmp_path: Path, peer: Path, e
     project_defaults(tmp_path, {'local_websocket': config})
     role = ResolvedChildRole('temporary-role', '', RolePreset(
         'codex', 'chosen-model', None, None,
-        codex={'local_websocket_access': enabled},
+        codex={'local_websocket_access': enabled, 'unix_sockets': {str(tmp_path): []}},
     ))
     request = context(tmp_path, peer, role).launch_document()['adapter_request']
     native = request['session_parameters']['config']
@@ -218,3 +221,27 @@ def test_existing_denial_is_not_replaced(tmp_path: Path, peer: Path, denial: str
         profile['network'] = {'enabled': False}
     with pytest.raises(RuntimeAdapterError):
         project_access(request, config)
+
+
+@pytest.mark.parametrize('proxy_enabled', [False, True])
+def test_no_domains_requires_existing_enforced_proxy(tmp_path: Path, peer: Path, proxy_enabled: bool) -> None:
+    """Do not activate a default-deny proxy over previously unmediated networking."""
+    config = settings(tmp_path)
+    request = context(tmp_path, peer).launch_document()['adapter_request']
+    native = request['session_parameters']['config']
+    profile = native['permissions'][native['default_permissions']]
+    profile['network'] = {'enabled': True}
+    native['features'] = {**native['features'], 'network_proxy': proxy_enabled}
+    before = copy.deepcopy(request)
+    if not proxy_enabled:
+        with pytest.raises(RuntimeAdapterError, match='already enabled'):
+            project_access(request, config)
+        assert request == before
+    else:
+        project_access(request, config)
+        assert profile['network']['domains'] == {'127.0.0.1': 'allow'}
+        # On 0.163.0, absent domains under an enabled proxy already denies external hosts.
+        # Only the loopback allow is added; no wildcard or external permission is emitted.
+        project_access(request, None)
+        assert request['session_parameters'] == before['session_parameters']
+        assert 'local_websocket_projection' not in request

@@ -304,7 +304,10 @@ class ClaudeExecution:
                         str(worktree / 'CONTEXT.md'), str(worktree / 'docs'), str(worktree / 'AGENTS.md'),
                         str(worktree / '.agents')]
         if request['worktree_access'] == 'read':
-            denied_write.append(str(worktree))
+            # Claude also adds the linked repository's common Git directory to
+            # its native writable roots. A reader must not mutate shared refs
+            # or indexes there; its separate authenticated channel stays writable.
+            denied_write.extend((str(worktree), request['git_common_directory']))
         # A project-root cwd must not re-allow its private descendants. Linked
         # Worktrees need only their own exception beneath the denied directory.
         private = root / '.graphtraj'

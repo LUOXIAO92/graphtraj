@@ -627,8 +627,9 @@ def test_claude_configuration_is_exact_and_approval_fails_closed(tmp_path: Path,
         context(tmp_path, model='opus')
 
 
+@pytest.mark.parametrize('access', ['read', 'write'])
 def test_read_resources_are_native_readable_and_not_writable(
-    tmp_path: Path, claude_environment: None,
+    tmp_path: Path, claude_environment: None, access: str,
 ) -> None:
     """Let native file tools read configured resources while every write stays denied."""
     result_project(tmp_path)
@@ -637,7 +638,8 @@ def test_read_resources_are_native_readable_and_not_writable(
         path.mkdir(parents=True)
     with ExitStack() as stack:
         turn, _, _ = execution(tmp_path, stack, 'Inspect native permission configuration',
-                               claude={'read_paths': list(map(str, resources))})
+                               claude={'read_paths': list(map(str, resources))},
+                               worktree_access=access)
         turn.run()
     launch = json.loads((tmp_path / 'native-permissions.json').read_text())
     settings = launch['settings']
@@ -650,7 +652,9 @@ def test_read_resources_are_native_readable_and_not_writable(
         assert str(path.resolve()) in filesystem['allowRead']
         assert str(path.resolve()) in filesystem['denyWrite']
         assert str(path.resolve()) not in filesystem['allowWrite']
-        assert str(path.resolve()) not in filesystem['allowWrite']
+    common = str(tmp_path / 'worktrees/research/.git')
+    assert (common in filesystem['denyWrite']) == (access == 'read')
+    assert (common in filesystem['allowWrite']) == (access == 'write')
     # Project development records stay readable for diagnosis but unwritable;
     # the CLI control channel stays unreadable.
     for path in (tmp_path / 'state', tmp_path / '.graphtraj/runner'):

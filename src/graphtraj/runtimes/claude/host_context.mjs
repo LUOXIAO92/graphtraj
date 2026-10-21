@@ -63,41 +63,50 @@ async function context($, document) {
   return JSON.parse(result.stdout);
 }
 
+// Deliver member events into the Main's turn or its idle Session through
+// Claude's own prompt submission; acknowledge only after it was accepted.
+// Without that host capability the notices stay queued for the next result.
+function startPush($, state) {
+  if (state.pushing) return;
+  state.pushing = true;
+  schedulePush($, state);
+}
+
+function schedulePush($, state) {
+  try {
+    $.clock.setTimeout(() => pushNotices($, state), 5000);
+  } catch {
+    setTimeout(() => pushNotices($, state), 5000);
+  }
+}
+
+async function pushNotices($, state) {
+  try {
+    if (!state.busy) {
+      const session = await $.session.id();
+      const pending = await context($, {operation: 'notices', session});
+      if (pending.notices?.length) {
+        await $.prompt.submit(noticePrompt(pending.notices));
+        state.pushed = true;
+        await context($, {operation: 'acknowledge', session, position: pending.position});
+      }
+    }
+  } catch (error) {
+    state.pushError = String(error);
+    // No prompt submission on this host: stop; notices come with the next result.
+    if (error instanceof TypeError) return;
+  }
+  schedulePush($, state);
+}
+
 export function register(on) {
   const displayed = new Set();
-  let busy = false;
-  let pushing = false;
-
-  // Deliver member events into the Main's turn or its idle Session through
-  // Claude's own prompt submission; acknowledge only after it was accepted.
-  // Without that host capability the notices stay queued for the next result.
-  function startPush($) {
-    if (pushing || typeof $.prompt?.submit !== 'function') return false;
-    pushing = true;
-    const later = (fn) => (typeof $.clock?.setTimeout === 'function' ? $.clock.setTimeout(fn, 5000) : setTimeout(fn, 5000));
-    const tick = async () => {
-      try {
-        if (!busy) {
-          const session = await $.session.id();
-          const pending = await context($, {operation: 'notices', session});
-          if (pending.notices?.length) {
-            await $.prompt.submit(noticePrompt(pending.notices));
-            await context($, {operation: 'acknowledge', session, position: pending.position});
-          }
-        }
-      } catch (error) {
-        // The MCP owner may not be running yet; queued notices are kept.
-      }
-      later(tick);
-    };
-    later(tick);
-    return true;
-  }
+  const state = {busy: false, pushing: false, pushed: false, pushError: null};
 
   on('session.start', async ($, event, next) => {
     await $.command.register({name: 'agents-context',
       description: 'Show current native Session and agents registration without a model turn', immediate: true});
-    startPush($);
+    startPush($, state);
     return next(event);
   });
 
@@ -109,8 +118,9 @@ export function register(on) {
       await $.ui.log(tools.some((tool) => tool.name === `mcp__agents__${name}`)
         ? `MCP ${name} registered` : `MCP ${name} missing`);
     }
-    await $.ui.log(typeof $.prompt?.submit === 'function'
-      ? 'notice push: prompt submission available' : 'notice push unavailable; notices arrive with the next result');
+    await $.ui.log(state.pushed ? 'notice push: delivered through prompt submission'
+      : state.pushError ? `notice push unavailable (${state.pushError}); notices arrive with the next result`
+      : 'notice push: waiting for a notice');
     return {};
   });
 
@@ -119,8 +129,8 @@ export function register(on) {
     on('tool.call', {tool}, async ($, event, next) => {
       // No association may overlap another native permission chain. A refused
       // concurrent call never clears or consumes the first call's context.
-      if (busy) return {deny: 'Another agents call is pending; wait for its result.'};
-      busy = true;
+      if (state.busy) return {deny: 'Another agents call is pending; wait for its result.'};
+      state.busy = true;
       try {
         await context($, {operation: 'end'});
         const result = await next(event);
@@ -138,7 +148,7 @@ export function register(on) {
       } finally {
         try { await context($, {operation: 'end'}); }
         catch (error) { $.ui.log('agents context cleanup failed: ' + String(error)); }
-        busy = false;
+        state.busy = false;
       }
     }).catch(async ($, event, next) => next.called ? next(event)
       : {deny: 'The native agents context hook failed; no call was authorized.'});

@@ -27,13 +27,14 @@ const host = {
    contexts.push(JSON.parse(options.stdin));
    return {exitCode: fail ? 1 : 0, stdout: '{}', stderr: fail ? 'native owner unavailable' : ''};
  }},
+ clock: {setTimeout: () => {}},
  ui: {log: value => log.push(value)},
 };
 await handlers.get('session.start')(host, {}, async () => 'started');
 assert.equal(registrations[0].name, 'agents-context');
 assert.deepEqual(await handlers.get('command.run')(host), {});
 assert.ok(log.includes('MCP agents registered') && log.includes('MCP tasks missing'));
-assert.ok(log.at(-1).includes('notice push unavailable'));
+assert.ok(log.at(-1).includes('notice push: waiting'));
 const input = {action: 'execute', feature: 'send', arguments: {agent: 'agent-child', message: 'hello child\nsecond line'}};
 for (session of ['first', 'after-clear', 'resumed']) {
  for (const decision of ['allow', 'ask', 'deny']) {

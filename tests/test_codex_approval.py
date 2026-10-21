@@ -388,6 +388,49 @@ def resume_settings(
     return root
 
 
+@pytest.mark.parametrize('access', ['read', 'write'])
+def test_new_native_owner_refreshes_project_reads_from_old_request(
+    tmp_path: Path, peer: Path, monkeypatch: pytest.MonkeyPatch, access: str,
+) -> None:
+    """A new Worker repairs stale read projection before the same native resume."""
+    wire = tmp_path / 'native-parameters.jsonl'
+    monkeypatch.setenv('MANAGED_SESSION_PARAMETERS', str(wire))
+    request, directory = managed(tmp_path, peer, monkeypatch)
+    completion_stub(monkeypatch, 'accept', [])
+    first = CodexManagedExecution(request, 'request: first', directory,
+        lambda *_: None, {}, directory / 'events.jsonl').run()
+    resume_settings(tmp_path, directory, monkeypatch, {'approval': ROUTE}, {})
+    root = Path(request['worktree_path'])
+    configuration = load_project_configuration(root)
+    from graphtraj.configuration.project_configuration import runner_directory
+
+    reads = (configuration.state, configuration.docs, configuration.agent_worktrees,
+             runner_directory(root))
+    stale = copy.deepcopy(request)
+    config = stale['session_parameters']['config']
+    filesystem = config['permissions'][config['default_permissions']]['filesystem']
+    for path in reads:
+        filesystem.pop(str(path), None)
+    filesystem[str(configuration.state)] = 'none'
+    filesystem[':workspace_roots']['.'] = access
+    before = copy.deepcopy(stale)
+    resumed = CodexManagedExecution(stale, 'request: resumed', directory,
+        lambda *_: None, {}, directory / 'events.jsonl',
+        expected_session=first['session_id'], session_created=lambda *_: None).run()
+
+    assert resumed['outcome'] == 'completed'
+    assert resumed['session_id'] == first['session_id']
+    assert stale == before
+    received = json.loads(wire.read_text().splitlines()[-1])
+    assert received['method'] == 'thread/resume'
+    actual = received['params']['config']
+    permissions = actual['permissions'][actual['default_permissions']]['filesystem']
+    assert all(permissions[str(path)] == 'read' for path in reads)
+    assert permissions[str(root / '.graphtraj')] == 'none'
+    assert permissions[':workspace_roots']['.'] == access
+    assert actual['model_provider'] == config['model_provider']
+
+
 @pytest.mark.parametrize('initial_source,route_source', [
     ('role', 'role'), ('default', 'default'),
     ('hosted-role', 'hosted-role'), ('hosted-default', 'hosted-default'),

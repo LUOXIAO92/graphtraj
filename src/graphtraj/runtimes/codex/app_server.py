@@ -648,7 +648,7 @@ class CodexAppServer:
 
     async def send_input(self, execution: CodexExecution, prompt: str) -> None:
         """Steer exactly the expected active native execution."""
-        self._require_active(execution)
+        self._require_active(execution, inactive_code='runtime-input-closed')
         result = await self._call('turn/steer', {
             'threadId': execution.thread_id, 'expectedTurnId': execution.turn_id,
             'input': _text_input(prompt),
@@ -681,12 +681,14 @@ class CodexAppServer:
         if not isinstance(session, CodexSession) or self._sessions.get(session.thread_id) is not session:
             raise CodexAdapterError('RUNTIME_LIFECYCLE_INVALID', 'The Session belongs to another connection.')
 
-    def _require_active(self, execution: CodexExecution) -> None:
+    def _require_active(
+        self, execution: CodexExecution, *, inactive_code: str = 'RUNTIME_LIFECYCLE_INVALID',
+    ) -> None:
         """Reject stale active control before sending a native request."""
         self._require_connection()
         self._execution_state(execution)
         if self._active.get(execution.thread_id) != execution.turn_id:
-            raise CodexAdapterError('RUNTIME_LIFECYCLE_INVALID', 'The target execution is not active.')
+            raise CodexAdapterError(inactive_code, 'The target execution is not active.')
 
     async def wait(
         self, execution: CodexExecution, *, timeout: float | None = None,

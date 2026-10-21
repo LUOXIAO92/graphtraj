@@ -208,6 +208,7 @@ def test_configured_parent_dispatch_and_ordinary_resume_keep_actual_authority(
     root, _, _, env = configure_harness(
         installed_commands, temporary_git_repository, fake_codex, tmp_path,
     )
+    env['FAKE_CODEX_PROCESS_STEER'] = '1'
     actual_parent = parent_role.rpartition('.')[2]
     roles = {role: {'runtime': 'codex', 'model': 'selected-model', 'allow_runtime_swarm': True}
              for role in (parent_role, child_role, 'engineer')}
@@ -255,10 +256,12 @@ def test_configured_parent_dispatch_and_ordinary_resume_keep_actual_authority(
         parent = document['tasks'][0]
         worktree = Path(parent['worktree_path'])
         for _ in range(200):
-            if (worktree / 'parent-turns.txt').exists() and (worktree / 'parent-turns.txt').read_text() == '2':
+            summaries = worktree / 'parent-batch-summaries.txt'
+            if summaries.exists() and int(summaries.read_text()) >= 1:
                 break
             time.sleep(.05)
-        assert (worktree / 'parent-turns.txt').read_text() == '2'
+        assert int(summaries.read_text()) >= 1
+        assert (worktree / 'parent-dispatches.txt').read_text() == '1'
         wait_for_idle(installed_commands, root, env, parent['alias'])
         child = json.loads((worktree / 'last-child.json').read_text())
         assert child['launch_status'] == 'registered'
@@ -303,10 +306,11 @@ def test_configured_parent_dispatch_and_ordinary_resume_keep_actual_authority(
                        cwd=root, env=env, timeout=20)
     assert sent.returncode == 0, sent.stdout + sent.stderr
     for _ in range(200):
-        if (worktree / 'parent-turns.txt').read_text() == '4':
+        if int((worktree / 'parent-batch-summaries.txt').read_text()) >= 2:
             break
         time.sleep(.05)
-    assert (worktree / 'parent-turns.txt').read_text() == '4'
+    assert int((worktree / 'parent-batch-summaries.txt').read_text()) >= 2
+    assert (worktree / 'parent-dispatches.txt').read_text() == '2'
     wait_for_idle(installed_commands, root, env, parent['alias'])
     team = yaml.safe_load((task / 'teams/1/team.yml').read_text())
     assert len(team['members']) == 3

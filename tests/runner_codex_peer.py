@@ -30,7 +30,7 @@ def toml(value: object) -> str:
     return json.dumps(value)
 
 
-def finish(turn: str, prompt: str) -> None:
+def scenario_result(prompt: str) -> tuple[int, str | None]:
     """Execute only the test scenario, then report its native terminal result."""
     global process
     config = dict(parameters['config'], developer_instructions=parameters['developerInstructions'])
@@ -62,7 +62,20 @@ def finish(turn: str, prompt: str) -> None:
             answer = item.get('text')
         if event.get('type') in ('error', 'turn.failed'):
             print(line, file=sys.stderr, end='')
-    code = process.wait()
+    return process.wait(), answer
+
+
+def finish(turn: str, prompt: str) -> None:
+    """Consume acknowledged steer input before publishing terminal completion."""
+    global accepting
+    while True:
+        code, answer = scenario_result(prompt)
+        with input_lock:
+            if pending_inputs and not interrupted and code == 0:
+                prompt = pending_inputs.pop(0)
+                continue
+            accepting = False
+            break
     emit({'method': 'turn/completed', 'params': {'threadId': session, 'turn': {
         'id': turn, 'status': 'interrupted' if interrupted else 'failed' if code else 'completed',
         'error': {'message': 'scenario failed'} if code and not interrupted else None,
@@ -70,6 +83,9 @@ def finish(turn: str, prompt: str) -> None:
     }}})
 
 
+input_lock = threading.Lock()
+pending_inputs = []
+accepting = False
 output_lock = threading.Lock()
 ready = threading.Event()
 process = None
@@ -104,6 +120,7 @@ for line in sys.stdin:
             native.write_text(json.dumps({'type': 'session_meta', 'payload': {'id': session}}) + '\n')
         result = {'thread': {'id': session, 'path': str(native)}}
     elif method == 'turn/start':
+        accepting = True
         turn = str(uuid.uuid4())
         with native.open('a') as stream:
             stream.write(json.dumps({'type': 'turn_context', 'payload': {
@@ -114,6 +131,14 @@ for line in sys.stdin:
         worker.start()
     elif method == 'turn/steer':
         assert params['threadId'] == session and params['expectedTurnId'] == turn
+        if os.environ.get('FAKE_CODEX_PROCESS_STEER'):
+            with input_lock:
+                if not accepting:
+                    emit({'id': request['id'], 'error': {
+                        'code': -32000, 'message': 'The controlled turn already completed.',
+                    }})
+                    continue
+                pending_inputs.append(params['input'][0]['text'])
         result = {'turnId': turn}
     elif method == 'turn/interrupt':
         assert params['threadId'] == session and params['turnId'] == turn

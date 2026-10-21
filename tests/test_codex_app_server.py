@@ -269,8 +269,9 @@ def test_active_input_and_interrupt_target_only_the_expected_execution(
             await adapter.interrupt(target)
             assert (await adapter.wait(target, timeout=2))['outcome'] == 'interrupted'
             assert (await adapter.wait(independent, timeout=2))['last_agent_message'] == 'peer finishes'
-            with pytest.raises(RuntimeAdapterError, match='active'):
+            with pytest.raises(RuntimeAdapterError, match='active') as refused:
                 await adapter.send_input(target, 'stale input')
+            assert refused.value.code == 'runtime-input-closed'
             continued = await adapter.start_execution(first, 'after interrupt')
             assert (await adapter.wait(continued, timeout=2))['outcome'] == 'completed'
 

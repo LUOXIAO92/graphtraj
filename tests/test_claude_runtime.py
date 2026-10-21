@@ -767,6 +767,9 @@ def test_read_resources_are_native_readable_and_not_writable(
     resources = [tmp_path / 'authorized/bin', tmp_path / 'authorized/lib']
     for path in resources:
         path.mkdir(parents=True)
+    resource_file = tmp_path / 'authorized/AGENTS.md'
+    resource_file.write_text('Read this original file without granting its parent.\n')
+    resources.append(resource_file)
     with ExitStack() as stack:
         turn, _, _ = execution(tmp_path, stack, 'Inspect native permission configuration',
                                claude={'read_paths': list(map(str, resources))},
@@ -777,12 +780,15 @@ def test_read_resources_are_native_readable_and_not_writable(
     filesystem = settings['sandbox']['filesystem']
     for path in resources:
         assert str(path.resolve()) in settings['permissions']['additionalDirectories']
-        assert str(path.resolve()) in launch['add_dirs'] and launch['restricted']
+        assert (str(path.resolve()) in launch['add_dirs']) == path.is_dir()
+        assert launch['restricted']
         assert f'Read(/{path.resolve()}/**)' in settings['permissions']['allow']
         assert f'Edit(/{path.resolve()}/**)' in settings['permissions']['deny']
         assert str(path.resolve()) in filesystem['allowRead']
         assert str(path.resolve()) in filesystem['denyWrite']
         assert str(path.resolve()) not in filesystem['allowWrite']
+    assert str(resource_file.parent.resolve()) not in settings['permissions']['additionalDirectories']
+    assert str(resource_file.parent.resolve()) not in filesystem['allowWrite']
     common = str(tmp_path / 'worktrees/research/.git')
     assert (common in filesystem['denyWrite']) == (access == 'read')
     assert (common in filesystem['allowWrite']) == (access == 'write')

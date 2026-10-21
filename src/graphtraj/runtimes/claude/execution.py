@@ -354,10 +354,11 @@ class ClaudeExecution:
                 'deny': [rule for p in denied_read for rule in (f'Read(/{p})', f'Read(/{p}/**)')]
                         + [rule for p in denied_write for rule in (f'Edit(/{p})', f'Edit(/{p}/**)')]
                         + (['Edit', 'Write', 'NotebookEdit'] if request['worktree_access'] == 'read' else []),
-                # Native Read/Grep/Glob and Bash path checks read only working
-                # directories, so configured read-only resources are added here.
-                # Their Edit deny rules and sandbox denyWrite keep them unwritable.
-                'additionalDirectories': [str(path) for path in resources if path.is_dir()],
+                # Settings admit exact resource paths, including files; unlike
+                # --add-dir they do not require a directory. Keep file grants
+                # exact rather than granting their parent. Edit and sandbox
+                # denyWrite still protect every declared resource.
+                'additionalDirectories': list(map(str, resources)),
             },
             'sandbox': {
                 'enabled': True, 'failIfUnavailable': True, 'allowUnsandboxedCommands': False,

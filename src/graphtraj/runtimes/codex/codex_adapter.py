@@ -98,6 +98,7 @@ class _CodexRole:
     native_settings: Mapping[str, Any]
     approval: Mapping[str, str] | None = None
     runtime_home: str | None = None
+    unix_sockets: Mapping[str, Any] | None = None
 
     def _launch_request(
         self,
@@ -186,12 +187,14 @@ class _CodexRole:
         # Runtime keeps its own built-in base prompt.
         if self.base_instructions:
             session_parameters["baseInstructions"] = self.base_instructions
-        return {
+        request = {
             **({"approval": dict(self.approval)} if self.approval is not None else {}),
             "arguments": arguments,
             "worktree_path": str(worktree),
             "session_parameters": session_parameters,
         }
+        apply_unix_socket_access(request, self.unix_sockets)
+        return request
 
 
 @dataclass(frozen=True)
@@ -1252,6 +1255,7 @@ def _resolve_codex_role(role: ResolvedChildRole, harness_root: Path) -> _CodexRo
     )
     return _CodexRole(
         name=role.name,
+        unix_sockets=(role.settings.codex or {}).get('unix_sockets'),
         runtime_home=role.settings.runtime_home,
         approval=approval_route(
             role.settings.codex,
@@ -1269,6 +1273,48 @@ def _resolve_codex_role(role: ResolvedChildRole, harness_root: Path) -> _CodexRo
             if key not in ADAPTER_ROLE_KEYS
         },
     )
+
+
+def apply_unix_socket_access(request: dict, configured: Mapping[str, Any] | None) -> None:
+    """Project Main-owned, Worktree-scoped socket grants into native permissions.
+
+    ``codex.unix_sockets`` maps exact absolute Worktrees to socket path lists.
+    It does not read Agent-writable native configuration or change filesystem,
+    account, approval or external network rules. An explicit empty list revokes
+    previously projected socket grants on normal same-Session continuation.
+    """
+    if configured is None:
+        return
+    if not isinstance(configured, dict):
+        raise _invalid_role_value('codex.unix_sockets')
+    for worktree, paths in configured.items():
+        if (not isinstance(worktree, str) or not Path(worktree).is_absolute()
+                or not isinstance(paths, list)
+                or any(not isinstance(path, str) or not Path(path).is_absolute()
+                       or any(token in path for token in ('*', '?', '[', '\x00'))
+                       or '..' in Path(path).parts for path in paths)):
+            raise _invalid_role_value('codex.unix_sockets')
+    paths = configured.get(request['worktree_path'])
+    if paths is None:
+        return
+    config = request['session_parameters']['config']
+    profile = config['permissions'][config['default_permissions']]
+    network = profile.setdefault('network', {})
+    # Keep narrower existing external-network policy. No wildcard socket grant
+    # or permission to listen on arbitrary local addresses is introduced.
+    network.setdefault('enabled', True)
+    network.update(allow_local_binding=False, dangerously_allow_all_unix_sockets=False,
+                   dangerously_allow_non_loopback_proxy=False)
+    previous = network.get('unix_sockets', {})
+    network['unix_sockets'] = {**{path: 'deny' for path in previous},
+                               **{path: 'allow' for path in paths}}
+    config['features'] = {**config.get('features', {}), 'network_proxy': True}
+    arguments = request['arguments']
+    for key in ('permissions', 'features'):
+        for index in range(len(arguments) - 2, -1, -1):
+            if arguments[index] == '-c' and arguments[index + 1].startswith(key + '='):
+                del arguments[index:index + 2]
+        arguments[2:2] = ['-c', key + '=' + _toml_value(config[key])]
 
 
 def _validate_role_schema(document: Mapping[str, Any]) -> None:

@@ -18,7 +18,7 @@ from typing import Iterator
 import pytest
 import yaml
 
-from conftest import FakeCodex, InstalledCommands, run_process
+from conftest import FakeCodex, InstalledCommands, run_process, runner_command
 from graphtraj.interfaces import gateway, tools
 from runner_fixtures import configure_harness
 from test_task_graph import _configure, _task, _write
@@ -27,6 +27,14 @@ from test_task_graph import _configure, _task, _write
 # The original gateway remains alongside the two public function names.
 TOOL_NAMES = {"agents", "tasks"}
 MCP_TOOL_NAME = "tasks"
+AGENT_ACTIONS = frozenset({'status', 'send', 'interrupt', 'requests', 'reply'})
+
+
+def operation_document(result: dict, action: str) -> dict:
+    """Unwrap agents metadata when comparing its result to the Runner operation."""
+    if action in AGENT_ACTIONS and 'result' in result.get('structuredContent', {}):
+        return {**result, 'structuredContent': result['structuredContent']['result']}
+    return result
 
 
 def tool_envelope(feature: str, arguments: dict) -> dict:
@@ -109,10 +117,14 @@ class McpServerProcess:
         host sends as ``params._meta.threadId`` on its own tool request.
         """
 
-        params = {"name": MCP_TOOL_NAME, "arguments": tool_envelope(name, arguments)}
+        params = {"name": 'agents' if name in AGENT_ACTIONS else MCP_TOOL_NAME,
+                  "arguments": tool_envelope(name, arguments)}
         if thread_id is not None:
             params["_meta"] = {"threadId": thread_id}
-        return self.request("tools/call", params)
+        response = self.request("tools/call", params)
+        if 'result' in response:
+            response['result'] = operation_document(response['result'], name)
+        return response
 
     def close(self) -> None:
         self.process.stdin.close()
@@ -146,7 +158,7 @@ def _runner(
         if name != "CODEX_THREAD_ID"
     }
     return run_process(
-        [str(installed_commands.runner), *arguments],
+        runner_command(installed_commands, *arguments),
         cwd=project,
         env=inherited,
     )
@@ -434,23 +446,22 @@ def test_installed_mcp_server_submits_the_same_graph_operations_as_the_cli(
     ]
 
 
-def test_installed_mcp_server_reports_the_same_alias_status_as_the_cli(
+def test_installed_mcp_server_requires_verified_agent_status_caller(
     installed_commands: InstalledCommands, mcp_executable: Path, tmp_path: Path
 ) -> None:
-    """Alias queries reuse the D.2.2 status operation and its document."""
+    """Agent queries cannot create an anonymous Main identity in a new project."""
 
     project = tmp_path / "project"
     project.mkdir()
     _configure(project)
 
     with _started_mcp(mcp_executable, project) as server:
-        call = server.call("alias_status", {"aliases": ["missing@l1"]})["result"]
+        call = server.call('status', {'agent': "missing@l1"})["result"]
 
     assert call["isError"] is True
-    cli = _runner(installed_commands, project, "status", "missing@l1")
-    assert cli.returncode == 1
-    assert call["structuredContent"] == yaml.safe_load(cli.stdout)
-    assert call["structuredContent"]["aliases"][0]["error"]["code"] == "alias-not-found"
+    assert call['structuredContent']['error']['code'] in {
+        'authority-unavailable', 'authority-denied',
+    }
 
 
 def test_installed_mcp_server_reports_invalid_input_and_unknown_requests(
@@ -489,10 +500,10 @@ def test_installed_mcp_server_reports_invalid_input_and_unknown_requests(
     assert unknown_method["error"]["code"] == -32601
 
 
-def test_installed_mcp_server_survives_a_rejected_alias_status_call(
+def test_installed_mcp_server_survives_a_rejected_agent_status_call(
     installed_commands: InstalledCommands, mcp_executable: Path, tmp_path: Path
 ) -> None:
-    """An incomplete Git diagnostics pair is a tool failure, not a crash."""
+    """Task diagnostics are not parameters of Agent status; rejection keeps MCP alive."""
 
     project = tmp_path / "project"
     project.mkdir()
@@ -500,22 +511,13 @@ def test_installed_mcp_server_survives_a_rejected_alias_status_call(
 
     with _started_mcp(mcp_executable, project) as server:
         rejected = server.call(
-            "alias_status", {"aliases": ["missing@l1"], "baseline": "abc123"}
+            'status', {'agent': "missing@l1", 'baseline': "abc123"}
         )["result"]
         # The same process must keep serving the other tools afterwards.
         after = server.call("task_graph", {})["result"]
 
-    cli = _runner(
-        installed_commands,
-        project,
-        "status",
-        "missing@l1",
-        "--baseline",
-        "abc123",
-    )
-    assert cli.returncode == 1
     assert rejected["isError"] is True
-    assert rejected["content"][0]["text"] == (yaml.safe_load(cli.stdout).get("error") or yaml.safe_load(cli.stdout)["tasks"][0]["error"])["message"]
+    assert 'baseline' in rejected["content"][0]["text"]
     assert after["isError"] is False
     assert after["structuredContent"]["tasks"] == []
 
@@ -523,13 +525,13 @@ def test_installed_mcp_server_survives_a_rejected_alias_status_call(
 def test_installed_mcp_server_reports_a_missing_project_root_like_the_graph_tools(
     installed_commands: InstalledCommands, mcp_executable: Path, tmp_path: Path
 ) -> None:
-    """A status query outside a Harness Project Root fails like the graph tools."""
+    """Both hosted surfaces reject an absent project without creating one."""
 
     plain = tmp_path / "plain"
     plain.mkdir()
 
     with _started_mcp(mcp_executable, plain) as server:
-        status = server.call("alias_status", {"aliases": ["missing@l1"]})["result"]
+        status = server.call('status', {'agent': "missing@l1"})["result"]
         graph = server.call("task_graph", {})["result"]
 
     cli = _cli(installed_commands, plain, "task", "graph")
@@ -537,8 +539,9 @@ def test_installed_mcp_server_reports_a_missing_project_root_like_the_graph_tool
     message = cli.stderr.strip().removeprefix("Error: ")
     assert status["isError"] is True
     assert graph["isError"] is True
-    assert status["content"][0]["text"] == message
+    assert status['structuredContent']['error']['code'] == 'PROJECT_NOT_FOUND'
     assert graph["content"][0]["text"] == message
+    assert not (plain / '.graphtraj').exists()
 
 
 @dataclass(frozen=True)
@@ -553,7 +556,7 @@ class ManagedMcp:
     def call(self, name: str, arguments: dict) -> dict:
         """Call one execution or interaction tool and return its MCP result."""
 
-        thread_id = None if name in {"swarm", "send_instruction"} else "managed-main"
+        thread_id = "managed-main"
         return self.server.call(name, arguments, thread_id=thread_id)["result"]
 
     def document(self, name: str, arguments: dict) -> dict:
@@ -593,7 +596,7 @@ def _observe(
 
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
-        status = managed.document("alias_status", {"aliases": [alias]})["aliases"][0]
+        status = managed.document('status', {'agent': alias})["aliases"][0]
         if (
             status.get("activity") == activity
             and (outcome is None or status.get("last_outcome") == outcome)
@@ -669,7 +672,7 @@ def managed_mcp(
         yield managed
         for mapping in (root / ".graphtraj/runner/sessions").glob("*/mapping.yml"):
             # Leave no controlled execution running behind the fixture.
-            server.call("interrupt", {"alias": mapping.parent.name})
+            server.call('interrupt', {'agent': mapping.parent.name})
 
 
 def test_installed_mcp_server_dispatches_and_controls_a_managed_child(
@@ -698,22 +701,21 @@ def test_installed_mcp_server_dispatches_and_controls_a_managed_child(
         installed_commands, root, "status", alias, environment=managed_mcp.environment
     )
     assert cli.returncode == 0, cli.stderr
-    assert managed_mcp.document("alias_status", {"aliases": [alias]}) == (
+    assert managed_mcp.document('status', {'agent': alias}) == (
         yaml.safe_load(cli.stdout)
     )
 
     # An explicit instruction from the user reaches the owned execution.
     sent = managed_mcp.document(
-        "send_instruction",
-        {"alias": alias, "instruction": "unhandled request",
-         "caused_by_event_ids": [cause]},
+        'send',
+        {'agent': alias, 'message': "unhandled request"},
     )
     assert sent == {"alias": alias, "send_status": "sent",
                     "session": session, "execution_id": running["execution_id"]}
 
     # The native approval request returns through the one interaction path.
     _observe(managed_mcp, alias, "running", waiting_for="runtime-request")
-    queried = managed_mcp.document("pending_requests", {"alias": alias})
+    queried = managed_mcp.document('requests', {'agent': alias})
     cli_query = _runner(
         installed_commands, root, "requests", alias,
         "--execution-id", queried["execution_id"],
@@ -724,8 +726,8 @@ def test_installed_mcp_server_dispatches_and_controls_a_managed_child(
     request, = queried["requests"]
     assert request["request_id"] == "approval"
     replied = managed_mcp.document(
-        "reply_to_request",
-        {"alias": alias, "request": request, "response": {"decision": "accept"}},
+        'reply',
+        {'agent': alias, 'request': request, 'response': {"decision": "accept"}},
     )
     assert replied == {
         "alias":        alias,
@@ -744,8 +746,8 @@ def test_installed_mcp_server_dispatches_and_controls_a_managed_child(
 
     # A stale reply is rejected by the shared operation, not by this tool.
     stale = managed_mcp.call(
-        "reply_to_request",
-        {"alias": alias, "request": request, "response": {"decision": "accept"}},
+        'reply',
+        {'agent': alias, 'request': request, 'response': {"decision": "accept"}},
     )
     request_file = _write(root / "request.yml", request)
     cli_stale = _runner(
@@ -759,32 +761,29 @@ def test_installed_mcp_server_dispatches_and_controls_a_managed_child(
 
     # The same identity addresses a second waiting execution and its interrupt.
     managed_mcp.document(
-        "send_instruction",
-        {"alias": alias, "instruction": "request:approval",
-         "caused_by_event_ids": [cause]},
+        'send',
+        {'agent': alias, 'message': "request:approval"},
     )
     active = _observe(managed_mcp, alias, "running", waiting_for="runtime-request")
     assert active["execution_id"] != completed["execution_id"]
-    assert managed_mcp.document("interrupt", {"alias": alias}) == {
+    assert managed_mcp.document('interrupt', {'agent': alias}) == {
         "alias": alias, "interrupt_status": "interrupted",
         "members": [{"alias": alias, "interrupt_status": "interrupted"}],
     }
     after = _observe(managed_mcp, alias, "idle", "interrupted")
     assert after["execution_id"] == active["execution_id"]
     assert after["session"] == session
-    assert managed_mcp.document("pending_requests", {"alias": alias})["requests"] == []
+    assert managed_mcp.document('requests', {'agent': alias})["requests"] == []
 
     # Explicit interruption stops the entity; neither surface may revive it.
     cli_sent = _runner(installed_commands, root, "send", alias, "--instruction", "hold",
                        "--caused-by-event-id", cause, environment=managed_mcp.environment)
-    denied = managed_mcp.call("send_instruction", {
-        "alias": alias, "instruction": "hold", "caused_by_event_ids": [cause],
-    })
+    denied = managed_mcp.call('send', {'agent': alias, 'message': "hold"})
     assert cli_sent.returncode == 1
     assert denied['isError'] is True
     assert yaml.safe_load(cli_sent.stdout)['error']['code'] == 'subtree-stopped'
     assert _observe(managed_mcp, alias, 'idle', 'interrupted')['session'] == session
-    repeated = managed_mcp.document('interrupt', {'alias': alias})
+    repeated = managed_mcp.document('interrupt', {'agent': alias})
     assert repeated['members'] == [{'alias': alias, 'interrupt_status': 'stopped'}]
 
 
@@ -805,13 +804,11 @@ def test_installed_mcp_server_rejects_execution_input_like_the_cli(
         ("swarm", {"tasks": []}, ["--swarm-input", str(empty_batch)]),
         ("swarm", {"tasks": [_inline_task() | {"task_id": "999"}]},
          ["--swarm-input", str(unregistered)]),
-        ("send_instruction", {"alias": "missing@l1", "instruction": "steer",
-                              "caused_by_event_ids": []},
-         ["send", "missing@l1", "--instruction", "steer"]),
-        ("interrupt", {"alias": "missing@l1"}, ["interrupt", "missing@l1"]),
-        ("pending_requests", {"alias": "missing@l1"}, ["requests", "missing@l1"]),
-        ("reply_to_request", {"alias": "missing@l1", "request": {"alias": "missing@l1"},
-                              "response": {}},
+        ('send', {'agent': "missing@l1", 'message': "steer"},
+         ["send", "missing@l1", "--instruction", "steer", "--caused-by-event-id", cause]),
+        ('interrupt', {'agent': "missing@l1"}, ["interrupt", "missing@l1"]),
+        ('requests', {'agent': "missing@l1"}, ["requests", "missing@l1"]),
+        ('reply', {'agent': "missing@l1", 'request': {"alias": "missing@l1"}, 'response': {}},
          ["reply", "missing@l1", "--request-file", str(stale_request),
           "--response", "{}"]),
         ("continue", {"task_id": "113", "caused_by_event_ids": [cause]},
@@ -844,7 +841,7 @@ def test_installed_mcp_server_rejects_execution_input_like_the_cli(
         installed_commands, root, "status", "missing@l1",
         environment=managed_mcp.environment,
     )
-    missing = managed_mcp.call("alias_status", {"aliases": ["missing@l1"]})
+    missing = managed_mcp.call('status', {'agent': "missing@l1"})
     assert cli_missing.returncode == 1
     assert missing["isError"] is True
     assert missing["structuredContent"] == yaml.safe_load(cli_missing.stdout)
@@ -1113,16 +1110,14 @@ def test_real_codex_host_discovers_and_calls_the_mcp_graph_tools_offline(
             {
                 "server":    "graphtraj",
                 "threadId":  host.thread_id,
-                "tool":      MCP_TOOL_NAME,
+                "tool":      "agents",
                 "arguments": tool_envelope(
-                    "alias_status", {"aliases": ["missing@l1"], "baseline": "abc123"}
+                    'status', {'agent': "missing@l1", 'baseline': "abc123"}
                 ),
             },
         )["result"]
         assert rejected["isError"] is True
-        assert rejected["content"][0]["text"] == (
-            "Git diagnostics require both --baseline and --candidate."
-        )
+        assert 'baseline' in rejected["content"][0]["text"]
 
         graph = host.request(
             "mcpServer/tool/call",
@@ -1176,13 +1171,13 @@ def _host_tool(host: "CodexHost", probe: Path, tool: str, arguments: dict) -> di
         {
             "server":    "graphtraj",
             "threadId":  host.thread_id,
-            "tool":      MCP_TOOL_NAME,
+            "tool":      'agents' if tool in AGENT_ACTIONS else MCP_TOOL_NAME,
             "arguments": tool_envelope(tool, arguments),
         },
         timeout=60,
     )["result"]
     _record_host_exchange(probe, tool, arguments, result)
-    return result
+    return operation_document(result, tool)
 
 
 def _host_observe(
@@ -1199,7 +1194,7 @@ def _host_observe(
     deadline = time.monotonic() + timeout
     status: dict = {}
     while time.monotonic() < deadline:
-        result = _host_tool(host, probe, "alias_status", {"aliases": [alias]})
+        result = _host_tool(host, probe, 'status', {'agent': alias})
         assert result.get("isError") is False, result
         status = result["structuredContent"]["aliases"][0]
         if (
@@ -1315,20 +1310,19 @@ def test_real_codex_host_dispatches_and_controls_a_managed_child_offline(
         assert running["execution_id"]
 
         sent = _host_tool(
-            host, probe, "send_instruction",
-            {"alias": alias, "instruction": "unhandled request",
-             "caused_by_event_ids": [cause]},
+            host, probe, 'send',
+            {'agent': alias, 'message': "unhandled request"},
         )
         assert sent["structuredContent"] == {"alias": alias, "send_status": "sent"}
         waiting = _host_observe(
             host, probe, alias, "running", waiting_for="runtime-request"
         )
-        queried = _host_tool(host, probe, "pending_requests", {"alias": alias})
+        queried = _host_tool(host, probe, 'requests', {'agent': alias})
         request, = queried["structuredContent"]["requests"]
         assert request["execution_id"] == waiting["execution_id"]
         replied = _host_tool(
-            host, probe, "reply_to_request",
-            {"alias": alias, "request": request, "response": {"decision": "accept"}},
+            host, probe, 'reply',
+            {'agent': alias, 'request': request, 'response': {"decision": "accept"}},
         )
         assert replied["structuredContent"] == {
             "alias":        alias,
@@ -1341,15 +1335,14 @@ def test_real_codex_host_dispatches_and_controls_a_managed_child_offline(
         assert completed["execution_id"] == waiting["execution_id"]
 
         _host_tool(
-            host, probe, "send_instruction",
-            {"alias": alias, "instruction": "request:approval",
-             "caused_by_event_ids": [cause]},
+            host, probe, 'send',
+            {'agent': alias, 'message': "request:approval"},
         )
         active = _host_observe(
             host, probe, alias, "running", waiting_for="runtime-request"
         )
         assert active["execution_id"] != completed["execution_id"]
-        interrupted = _host_tool(host, probe, "interrupt", {"alias": alias})
+        interrupted = _host_tool(host, probe, 'interrupt', {'agent': alias})
         assert interrupted["structuredContent"] == {
             "alias": alias, "interrupt_status": "interrupted",
             "members": [{"alias": alias, "interrupt_status": "interrupted"}],
@@ -1357,7 +1350,7 @@ def test_real_codex_host_dispatches_and_controls_a_managed_child_offline(
         after = _host_observe(host, probe, alias, "idle", "interrupted")
         assert after["execution_id"] == active["execution_id"]
         assert after["session"] == session
-        assert _host_tool(host, probe, "pending_requests", {"alias": alias})[
+        assert _host_tool(host, probe, 'requests', {'agent': alias})[
             "structuredContent"
         ]["requests"] == []
 
@@ -1788,7 +1781,7 @@ def test_installed_mcp_swarm_returns_after_registration_and_stops_on_the_native_
             release.touch()
 
         observed = server.call(
-            "alias_status", {"aliases": [alias]}, thread_id="other-caller"
+            'status', {'agent': alias}, thread_id="other-caller"
         )["result"]
         assert observed["isError"] is False
         assert "stop_deliveries" not in observed["structuredContent"]
@@ -1858,12 +1851,8 @@ def test_installed_mcp_server_does_not_queue_a_late_stop_without_a_waiting_call(
         release.unlink()
         try:
             sent = server.call(
-                "send_instruction",
-                {
-                    "alias":               alias,
-                    "instruction":         "Inspect the retained result.",
-                    "caused_by_event_ids": [cause],
-                },
+                'send',
+                {'agent': alias, 'message': "Inspect the retained result."},
             )["result"]
             assert sent["isError"] is False, sent
             sent_task = sent['structuredContent']
@@ -1882,7 +1871,7 @@ def test_installed_mcp_server_does_not_queue_a_late_stop_without_a_waiting_call(
             release.touch()
 
         observed = server.call(
-            "alias_status", {"aliases": [alias]}, thread_id="other-caller"
+            'status', {'agent': alias}, thread_id="other-caller"
         )["result"]
         assert observed["isError"] is False
         assert "stop_deliveries" not in observed["structuredContent"]

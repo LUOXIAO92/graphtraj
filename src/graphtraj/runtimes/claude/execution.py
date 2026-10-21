@@ -238,8 +238,9 @@ class ClaudeExecution:
                 from graphtraj.sessions.storage import SessionStore
 
                 self.collector.store = stores.enter_context(SessionStore(self.collector.store.path))
+            pending = []
             while True:
-                item = self.collection.get()
+                item = pending.pop() if pending else self.collection.get()
                 if item is None:
                     return
                 if self.collection_failure is not None:
@@ -248,8 +249,20 @@ class ClaudeExecution:
                     if item[0] == 'bind':
                         self.collector.bind(item[1], item[2])
                     else:
-                        self.collector.accept(item[1], item[2],
-                                              **({'defer': not self.collection.empty()} if self.independent else {}))
+                        records = [(item[1], item[2])]
+                        # Read one archive snapshot for the already received batch,
+                        # not once per fragment. Binding and end remain ordered.
+                        for _ in range(self.collection.qsize()):
+                            following = self.collection.get_nowait()
+                            if following is None or following[0] != 'event':
+                                pending.append(following)
+                                break
+                            records.append((following[1], following[2]))
+                        if self.independent:
+                            self.collector.accept_batch(records)
+                        else:
+                            for record, position in records:
+                                self.collector.accept(record, position)
                 except Exception as error:
                     self.collection_failure = error
 

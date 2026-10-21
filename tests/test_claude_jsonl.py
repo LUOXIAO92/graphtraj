@@ -355,3 +355,35 @@ def test_assistant_first_context_change_replaces_surface_preserving_history(
         assert any(o['event'] == gap for o in result.observations())
     c.collect()
     assert store(archive).page()['events'] == events
+
+
+def test_received_batch_preserves_fragments_boundaries_and_policy(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A backlog reads the archive per batch while retaining content and later disablement."""
+    c, _, archive = collector(tmp_path, [])
+    opened = []
+    initialize = JsonlSessionStore.__init__
+
+    def observe(self, path: Path) -> None:
+        """Count full archive reads, the long-Session cost under investigation."""
+        opened.append(path)
+        initialize(self, path)
+
+    monkeypatch.setattr(JsonlSessionStore, '__init__', observe)
+    records = [{'type': 'stream_event', 'session_id': 's', 'event': {
+        'type': 'message_start', 'message': {'id': 'api'}}}]
+    records.extend({'type': 'stream_event', 'session_id': 's', 'uuid': str(i), 'event': {
+        'type': 'content_block_delta', 'index': 0, 'delta': {'type': 'text_delta', 'text': str(i) + ','}}}
+        for i in range(100))
+    boundary = {'type': 'control_request', 'session_id': 's', 'request': {'unknown': 'retained'}}
+    records.append(boundary)
+    c.accept_batch(list(zip(records, range(len(records)))))
+    assert len(opened) < 10  # No whole-archive read for each of the 100 fragments.
+    retained = store(archive)
+    draft = next(p['event'] for p in retained.pending()
+                 if p['event']['graphtraj']['native']['locator'] == 'stream:api')
+    assert draft['data']['stream'][1]['text'] == ''.join(str(i) + ',' for i in range(100))
+    assert any(p['event']['graphtraj']['native']['record'] == boundary for p in retained.pending())
+    before = retained.path.read_bytes()
+    archive.save_normalized_sessions = False
+    c.accept_batch([(boundary, len(records))])
+    assert retained.path.read_bytes() == before

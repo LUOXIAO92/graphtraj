@@ -206,10 +206,20 @@ def adoption_material(root: Path, claude: Path) -> dict[str, object]:
 
 
 def write_adoption(material: dict[str, object]) -> None:
-    """Write printed adoption material: JSON values as JSON, the mod as text."""
+    """Write printed adoption material: JSON values as JSON, the mod as text.
+
+    An existing JSON file keeps its other settings: each top-level object
+    (for example ``env`` or ``mcpServers``) is merged one level deep.
+    """
     for path, content in material.items():
         target = Path(path)
         target.parent.mkdir(parents=True, exist_ok=True)
+        if not isinstance(content, str) and target.exists():
+            existing = json.loads(target.read_text(encoding='utf-8'))
+            for key, value in content.items():
+                existing[key] = ({**existing[key], **value}
+                                 if isinstance(value, dict) and isinstance(existing.get(key), dict) else value)
+            content = existing
         target.write_text(content if isinstance(content, str) else json.dumps(content, indent=2) + '\n',
                           encoding='utf-8')
 

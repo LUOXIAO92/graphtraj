@@ -136,3 +136,21 @@ def test_mod_notice_operations_read_then_acknowledge(tmp_path: Path) -> None:
         host.context({'operation': 'acknowledge', 'session': session, 'position': '1'})
     with pytest.raises(ValueError):
         host.context({'operation': 'notices', 'session': 'not-a-uuid'})
+
+
+def test_adoption_material_is_the_plugin_layout_and_keeps_settings(tmp_path: Path) -> None:
+    """configuration --write produces the plugin directory and merges existing JSON settings."""
+    from graphtraj.runtimes.claude.host import adoption_material, write_adoption
+
+    (tmp_path / '.claude').mkdir()
+    (tmp_path / '.claude/settings.local.json').write_text(json.dumps({'env': {'KEEP': '1'}, 'permissions': {'allow': []}}))
+    material = adoption_material(tmp_path, tmp_path / 'claude')
+    write_adoption(material)
+    plugin = tmp_path / '.claude/skills/graphtraj-claude-host'
+    assert json.loads((plugin / 'hooks/hooks.json').read_text()) == {'modules': ['./host_context.mjs']}
+    assert json.loads((plugin / '.claude-plugin/plugin.json').read_text())['name'] == 'graphtraj-claude-host'
+    assert 'export function register' in (plugin / 'hooks/host_context.mjs').read_text()
+    settings = json.loads((tmp_path / '.claude/settings.local.json').read_text())
+    assert settings['env']['KEEP'] == '1' and 'GRAPHTRAJ_CLAUDE_HOST_CONFIG' in settings['env']
+    assert settings['permissions'] == {'allow': []}
+    assert list(json.loads((tmp_path / '.mcp.json').read_text())['mcpServers']) == ['agents']

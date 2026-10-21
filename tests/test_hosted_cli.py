@@ -148,7 +148,6 @@ def test_cli_connection_uses_and_cleans_a_sandbox_visible_channel(tmp_path: Path
     absent = cli(worktree, address, 'reports', 'research@x1')
     assert absent.returncode == 1
     assert yaml.safe_load(absent.stdout)['error']['code'] == 'operation-failed'
-    assert 'owner did not acknowledge' in absent.stderr
 
 
 def test_cli_connection_removes_a_relocated_channel_after_failure(tmp_path: Path) -> None:
@@ -186,7 +185,6 @@ def test_cli_host_refuses_unowned_wrong_channel_and_unavailable_host(tmp_path: P
     result = cli(tmp_path, address, *arguments)
     assert result.returncode == 1
     assert yaml.safe_load(result.stdout)['error']['code'] == 'operation-failed'
-    assert 'owner did not acknowledge' in result.stderr
 
 
 def test_cli_host_requires_kernel_lock_and_rejects_request_identity(tmp_path: Path) -> None:

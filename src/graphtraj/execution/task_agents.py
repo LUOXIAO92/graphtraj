@@ -12,6 +12,7 @@ Worker job. Mappings recorded before this reference keep their existing path.
 from __future__ import annotations
 
 from pathlib import Path
+import threading
 from typing import Any, Mapping
 
 from agent_swarm import AgentControl, AgentsError, Binding, Caller, Run
@@ -85,6 +86,7 @@ class TaskAgent:
         self.control = AgentControl(swarm_root(root), {runtime: driver})
         self.driver  = driver
         self.binding = Binding(caller)
+        self.input_lock = threading.Lock()
 
     @property
     def run(self) -> Run:
@@ -105,9 +107,12 @@ class TaskAgent:
             if operation == "send":
                 # Only the running execution takes input here; a continuation
                 # after its end is a new execution owned by another Worker.
-                if self.control.operate("status", {"agent": agent}, self.binding).result["state"] != "active":
-                    raise AgentsError("operation-failed", "The member execution has ended.")
-                self.control.send(agent, request["instruction"], self.binding)
+                with self.input_lock:
+                    if self.control.operate("status", {"agent": agent}, self.binding).result["state"] != "active":
+                        raise AgentsError("runtime-input-closed", "The member execution has ended without taking this input.")
+                    outcome = self.control.send(agent, request["instruction"], self.binding)
+                    if outcome.failed:
+                        raise AgentsError("delivery-unknown", "The member input delivery is unconfirmed.")
                 return {}
             if operation == "interrupt":
                 stopped = self.control.interrupt(agent, self.binding.caller).result["interrupt"]
@@ -121,12 +126,15 @@ class TaskAgent:
     def finished(self, terminal: Mapping[str, Any]) -> None:
         """Report the Runner's terminal record as the core execution's end."""
         error = terminal.get("error")
-        self.run.events.finished(
-            FINISHED.get(terminal.get("outcome"), "failed"),
-            last_message=terminal.get("last_agent_message"),
-            error=dict(error) if isinstance(error, Mapping) else None,
-            terminal_confirmed=terminal.get("terminal_confirmed", True) is not False,
-        )
+        # A send checked as active must not create a second core execution
+        # between that check and delivery into this Worker's one native turn.
+        with self.input_lock:
+            self.run.events.finished(
+                FINISHED.get(terminal.get("outcome"), "failed"),
+                last_message=terminal.get("last_agent_message"),
+                error=dict(error) if isinstance(error, Mapping) else None,
+                terminal_confirmed=terminal.get("terminal_confirmed", True) is not False,
+            )
 
 
 def begin_task_agent(

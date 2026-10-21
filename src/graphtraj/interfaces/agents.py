@@ -214,6 +214,10 @@ class GraphTrajAgents:
         if action == "status":
             response = status_aliases([agent], self.root)
             result, failed = response.document, not response.succeeded
+            # A summary-only native caller gets the same references in the
+            # envelope as in its status view, not the unrestricted mapping.
+            visible = next(iter(result.get('aliases', [])), {})
+            session, execution = visible.get('session'), visible.get('execution_id')
         elif action in {"send", "resume"}:
             message = arguments.get("message")
             if message is None:

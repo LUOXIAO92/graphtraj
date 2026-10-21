@@ -443,6 +443,9 @@ def test_claude_reports_physical_stop_before_archive_finishes(
     """Native stop is confirmed independently; the occupied Worker retains archive work."""
     from agent_swarm.sessions.claude import ClaudeJsonlCollector
     from graphtraj.interfaces import tools
+    from graphtraj.execution.runner_connection import worker_connection
+    from graphtraj.execution.runner_models import RunnerError
+    from graphtraj.execution.runner_status import require_stopped_subtree
 
     result_project(tmp_path)
     blocked, release = threading.Event(), threading.Event()
@@ -460,6 +463,11 @@ def test_claude_reports_physical_stop_before_archive_finishes(
     monkeypatch.setattr(ClaudeJsonlCollector, 'accept', delayed)
     with ExitStack() as stack, ThreadPoolExecutor(max_workers=1) as pool:
         turn, ready, _ = execution(tmp_path, stack, 'wait-public')
+        address = stack.enter_context(worker_connection(turn.directory, turn.operate))
+        mapping_file = turn.directory / 'mapping.yml'
+        mapping = yaml.safe_load(mapping_file.read_text())
+        mapping['control_directory'] = address
+        mapping_file.write_text(yaml.safe_dump(mapping))
         future = pool.submit(turn.run)
         try:
             assert ready.wait(5) and blocked.wait(5)
@@ -473,6 +481,9 @@ def test_claude_reports_physical_stop_before_archive_finishes(
                                    'execution_id': turn.execution_id})
             assert status == {'activity': 'running', 'waiting_for': 'archive',
                               'native_terminal_confirmed': True}
+            with pytest.raises(RunnerError) as refusal:
+                require_stopped_subtree(turn.directory.parent.parent, 'research@x1')
+            assert refusal.value.code == 'replacement-not-stopped'
             diagnostics = tools.read_reports({'alias': 'research@x1'}, cwd=tmp_path).document['runtime_diagnostics']
             evidence = diagnostics['termination']
             assert diagnostics['collection'] == 'pending'

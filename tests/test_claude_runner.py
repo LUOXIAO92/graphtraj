@@ -55,7 +55,21 @@ def setup(
 
 
 def command(commands: InstalledCommands, root: Path, environment: dict, *args: str):
-    """Invoke the public installed Runner with a finite command timeout."""
+    """Invoke public Runner controls and bind the fixture host for report reads."""
+    if args[0] == 'reports':
+        script = """
+import sys, yaml
+from pathlib import Path
+from graphtraj.execution.runner_control import read_session_reports
+from graphtraj.execution.runner_status import runtime_caller
+# The controlled fixture host supplies verified project read scope.
+# This does not validate native caller authentication.
+with runtime_caller(Path.cwd() / '.graphtraj/runner', None):
+    result = read_session_reports(sys.argv[1], Path.cwd())
+print(yaml.safe_dump(result))
+"""
+        return run_process([str(commands.runner.with_name('python')), '-c', script, args[1]],
+                           cwd=root, env=environment, timeout=65)
     return run_process(runner_command(commands, *args), cwd=root, env=environment, timeout=65)
 
 
@@ -109,6 +123,14 @@ def test_claude_public_launch_resume_interrupt(
                        '--decision', 'accepted', '--reason', 'Controlled result verified',
                        '--evidence-ref', submission['evidence_refs'][0])
     assert accepted.returncode == 0, accepted.stdout + accepted.stderr
+    before_retry = events(root)
+    repeated = command(installed_commands, root, environment, 'decide-result',
+                       '--submission-id', submission['event_id'], '--commit', submission['candidate'],
+                       '--decision', 'accepted', '--reason', 'Controlled result verified',
+                       '--evidence-ref', submission['evidence_refs'][0])
+    assert repeated.returncode == 0, repeated.stdout + repeated.stderr
+    assert yaml.safe_load(repeated.stdout) == yaml.safe_load(accepted.stdout)
+    assert events(root) == before_retry
     import sys
 
     integrated = run_process([str(installed_commands.product), 'task', 'integrate', '--task-id', '320',

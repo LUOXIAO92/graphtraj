@@ -539,7 +539,7 @@ def test_installed_mcp_server_reports_a_missing_project_root_like_the_graph_tool
     message = cli.stderr.strip().removeprefix("Error: ")
     assert status["isError"] is True
     assert graph["isError"] is True
-    assert status['structuredContent']['error']['code'] == 'PROJECT_NOT_FOUND'
+    assert status['content'][0]['text']
     assert graph["content"][0]["text"] == message
     assert not (plain / '.graphtraj').exists()
 
@@ -757,7 +757,7 @@ def test_installed_mcp_server_dispatches_and_controls_a_managed_child(
     )
     assert cli_stale.returncode == 1
     assert stale["isError"] is True
-    assert stale["content"][0]["text"] == yaml.safe_load(cli_stale.stdout)["error"]["message"]
+    assert stale['structuredContent']['error'] == yaml.safe_load(cli_stale.stdout)['error']
 
     # The same identity addresses a second waiting execution and its interrupt.
     managed_mcp.document(

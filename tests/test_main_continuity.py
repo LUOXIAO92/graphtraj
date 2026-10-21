@@ -52,6 +52,8 @@ def test_single_controller_decision(tmp_path: Path) -> None:
     assert 'continued by claude Session claude-main' in refused.value.message
     # A human CLI call carries no native connection and keeps its authority.
     require_control(tmp_path, None)
+    # A native helper that never was Main keeps its own authorization result.
+    require_control(tmp_path, {'runtime': 'codex', 'session': 'native-helper'})
 
 
 def test_first_control_claims_only_for_a_fresh_host_entry(tmp_path: Path) -> None:

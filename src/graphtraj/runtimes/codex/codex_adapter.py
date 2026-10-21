@@ -99,6 +99,7 @@ class _CodexRole:
     approval: Mapping[str, str] | None = None
     runtime_home: str | None = None
     unix_sockets: Mapping[str, Any] | None = None
+    local_websocket: Mapping[str, Any] | None = None
 
     def _launch_request(
         self,
@@ -194,6 +195,8 @@ class _CodexRole:
             "session_parameters": session_parameters,
         }
         apply_unix_socket_access(request, self.unix_sockets)
+        from graphtraj.runtimes.codex.local_websocket import project_access
+        project_access(request, self.local_websocket)
         return request
 
 
@@ -1046,7 +1049,7 @@ def _validate_launch_request(
     if (
         not isinstance(request, dict)
         or not {"arguments", "worktree_path"}.issubset(request)
-        or not set(request).issubset({"arguments", "worktree_path", "session_parameters", "approval"})
+        or not set(request).issubset({"arguments", "worktree_path", "session_parameters", "approval", "local_websocket_projection"})
     ):
         raise CodexAdapterError(
             "RUNTIME_REQUEST_INVALID",
@@ -1255,6 +1258,7 @@ def _resolve_codex_role(role: ResolvedChildRole, harness_root: Path) -> _CodexRo
     )
     return _CodexRole(
         name=role.name,
+        local_websocket=(defaults or {}).get('local_websocket'),
         unix_sockets=(role.settings.codex or {}).get('unix_sockets'),
         runtime_home=role.settings.runtime_home,
         approval=approval_route(

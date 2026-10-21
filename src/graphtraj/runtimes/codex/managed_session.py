@@ -95,7 +95,8 @@ def refresh_approval_route(request: dict, session_directory: Path) -> None:
         if configuration_exists(harness_root) else None
     )
     from graphtraj.runtimes.codex.local_websocket import project_access
-    project_access(request, (defaults or {}).get('local_websocket'))
+    project_access(request, (defaults or {}).get('local_websocket')
+                   if (settings.codex or {}).get('local_websocket_access') is True else None)
     route = approval_route(
         settings.codex,
         custom=config.get('model_provider', 'openai') != 'openai',

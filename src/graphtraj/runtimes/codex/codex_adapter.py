@@ -1258,7 +1258,8 @@ def _resolve_codex_role(role: ResolvedChildRole, harness_root: Path) -> _CodexRo
     )
     return _CodexRole(
         name=role.name,
-        local_websocket=(defaults or {}).get('local_websocket'),
+        local_websocket=((defaults or {}).get('local_websocket')
+                         if (role.settings.codex or {}).get('local_websocket_access') is True else None),
         unix_sockets=(role.settings.codex or {}).get('unix_sockets'),
         runtime_home=role.settings.runtime_home,
         approval=approval_route(

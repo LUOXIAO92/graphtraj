@@ -144,7 +144,8 @@ def test_managed_same_session_adopts_then_revokes(
     first = CodexManagedExecution(request, 'first', directory, lambda *_: None,
                                   {}, directory / 'events.jsonl').run()
     assert first['outcome'] == 'completed', first
-    root = resume_settings(tmp_path, directory, monkeypatch, None, {'local_websocket': config})
+    root = resume_settings(tmp_path, directory, monkeypatch, {'local_websocket_access': True},
+                           {'local_websocket': config})
     execution = CodexManagedExecution(request, 'grant', directory, lambda *_: None,
                                      {}, directory / 'events.jsonl', expected_session=first['session_id'])
     second = execution.run()
@@ -181,3 +182,39 @@ def test_harness_connection_cannot_be_retargeted_by_event(tmp_path: Path) -> Non
     child = tmp_path / 'unselected'
     child.mkdir()
     assert configured_connection(child, config['codex_home']) is None
+
+
+@pytest.mark.parametrize('enabled', [False, True])
+def test_only_selected_role_receives_native_access(tmp_path: Path, peer: Path, enabled: bool) -> None:
+    """Other roles in the same Worktree do not inherit the new local capability."""
+    from test_codex_approval import project_defaults
+    from graphtraj.configuration.project_roles import RolePreset
+    from graphtraj.configuration.role_definitions import ResolvedChildRole
+    config = settings(tmp_path)
+    project_defaults(tmp_path, {'local_websocket': config})
+    role = ResolvedChildRole('temporary-role', '', RolePreset(
+        'codex', 'chosen-model', None, None,
+        codex={'local_websocket_access': enabled},
+    ))
+    request = context(tmp_path, peer, role).launch_document()['adapter_request']
+    native = request['session_parameters']['config']
+    profile = native['permissions'][native['default_permissions']]
+    assert (config['token_file'] in profile['filesystem']) is enabled
+    assert ('127.0.0.1' in profile.get('network', {}).get('domains', {})) is enabled
+
+
+@pytest.mark.parametrize('denial', ['host', 'file', 'network'])
+def test_existing_denial_is_not_replaced(tmp_path: Path, peer: Path, denial: str) -> None:
+    """A resource grant cannot silently override an existing native denial."""
+    config = settings(tmp_path)
+    request = context(tmp_path, peer).launch_document()['adapter_request']
+    native = request['session_parameters']['config']
+    profile = native['permissions'][native['default_permissions']]
+    if denial == 'file':
+        profile['filesystem'][config['token_file']] = 'deny'
+    elif denial == 'host':
+        profile['network'] = {'domains': {'127.0.0.1': 'deny'}}
+    else:
+        profile['network'] = {'enabled': False}
+    with pytest.raises(RuntimeAdapterError):
+        project_access(request, config)

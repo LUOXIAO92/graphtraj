@@ -1,0 +1,88 @@
+...FFFFFFFFFF                                                            [100%]
+=================================== FAILURES ===================================
+_ test_configured_parent_dispatch_and_ordinary_resume_keep_actual_authority[researcher-analyst-False-cli] _
+tests/test_generic_role_execution.py:258: in test_configured_parent_dispatch_and_ordinary_resume_keep_actual_authority
+    assert (worktree / 'parent-turns.txt').read_text() == '2'
+E   AssertionError: assert '1' == '2'
+E     
+E     - 2
+E     + 1
+_ test_configured_parent_dispatch_and_ordinary_resume_keep_actual_authority[researcher-analyst-False-mcp] _
+tests/test_generic_role_execution.py:258: in test_configured_parent_dispatch_and_ordinary_resume_keep_actual_authority
+    assert (worktree / 'parent-turns.txt').read_text() == '2'
+E   AssertionError: assert '1' == '2'
+E     
+E     - 2
+E     + 1
+_ test_configured_parent_dispatch_and_ordinary_resume_keep_actual_authority[team-leader-analyst-False-cli] _
+tests/test_generic_role_execution.py:258: in test_configured_parent_dispatch_and_ordinary_resume_keep_actual_authority
+    assert (worktree / 'parent-turns.txt').read_text() == '2'
+E   AssertionError: assert '1' == '2'
+E     
+E     - 2
+E     + 1
+_ test_configured_parent_dispatch_and_ordinary_resume_keep_actual_authority[team-leader-analyst-False-mcp] _
+tests/test_generic_role_execution.py:258: in test_configured_parent_dispatch_and_ordinary_resume_keep_actual_authority
+    assert (worktree / 'parent-turns.txt').read_text() == '2'
+E   AssertionError: assert '1' == '2'
+E     
+E     - 2
+E     + 1
+_ test_configured_parent_dispatch_and_ordinary_resume_keep_actual_authority[engineer-analyst-False-cli] _
+tests/test_generic_role_execution.py:258: in test_configured_parent_dispatch_and_ordinary_resume_keep_actual_authority
+    assert (worktree / 'parent-turns.txt').read_text() == '2'
+E   AssertionError: assert '1' == '2'
+E     
+E     - 2
+E     + 1
+_ test_configured_parent_dispatch_and_ordinary_resume_keep_actual_authority[engineer-analyst-False-mcp] _
+tests/test_generic_role_execution.py:258: in test_configured_parent_dispatch_and_ordinary_resume_keep_actual_authority
+    assert (worktree / 'parent-turns.txt').read_text() == '2'
+E   AssertionError: assert '1' == '2'
+E     
+E     - 2
+E     + 1
+_ test_configured_parent_dispatch_and_ordinary_resume_keep_actual_authority[engineer-expert-engineer-junior-False-cli] _
+tests/test_generic_role_execution.py:258: in test_configured_parent_dispatch_and_ordinary_resume_keep_actual_authority
+    if (worktree / 'parent-turns.txt').exists() and (worktree / 'parent-turns.txt').read_text() == '2':
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   AssertionError: assert '1' == '2'
+E     
+E     - 2
+E     + 1
+_ test_configured_parent_dispatch_and_ordinary_resume_keep_actual_authority[engineer-expert-engineer-junior-False-mcp] _
+tests/test_generic_role_execution.py:258: in test_configured_parent_dispatch_and_ordinary_resume_keep_actual_authority
+    if (worktree / 'parent-turns.txt').exists() and (worktree / 'parent-turns.txt').read_text() == '2':
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   AssertionError: assert '1' == '2'
+E     
+E     - 2
+E     + 1
+_ test_configured_parent_dispatch_and_ordinary_resume_keep_actual_authority[coding-team.engineer-analyst-True-cli] _
+tests/test_generic_role_execution.py:258: in test_configured_parent_dispatch_and_ordinary_resume_keep_actual_authority
+    if (worktree / 'parent-turns.txt').exists() and (worktree / 'parent-turns.txt').read_text() == '2':
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   AssertionError: assert '1' == '2'
+E     
+E     - 2
+E     + 1
+_ test_configured_parent_dispatch_and_ordinary_resume_keep_actual_authority[coding-team.engineer-analyst-True-mcp] _
+tests/test_generic_role_execution.py:258: in test_configured_parent_dispatch_and_ordinary_resume_keep_actual_authority
+    if (worktree / 'parent-turns.txt').exists() and (worktree / 'parent-turns.txt').read_text() == '2':
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   AssertionError: assert '1' == '2'
+E     
+E     - 2
+E     + 1
+=========================== short test summary info ============================
+FAILED tests/test_generic_role_execution.py::test_configured_parent_dispatch_and_ordinary_resume_keep_actual_authority[researcher-analyst-False-cli]
+FAILED tests/test_generic_role_execution.py::test_configured_parent_dispatch_and_ordinary_resume_keep_actual_authority[researcher-analyst-False-mcp]
+FAILED tests/test_generic_role_execution.py::test_configured_parent_dispatch_and_ordinary_resume_keep_actual_authority[team-leader-analyst-False-cli]
+FAILED tests/test_generic_role_execution.py::test_configured_parent_dispatch_and_ordinary_resume_keep_actual_authority[team-leader-analyst-False-mcp]
+FAILED tests/test_generic_role_execution.py::test_configured_parent_dispatch_and_ordinary_resume_keep_actual_authority[engineer-analyst-False-cli]
+FAILED tests/test_generic_role_execution.py::test_configured_parent_dispatch_and_ordinary_resume_keep_actual_authority[engineer-analyst-False-mcp]
+FAILED tests/test_generic_role_execution.py::test_configured_parent_dispatch_and_ordinary_resume_keep_actual_authority[engineer-expert-engineer-junior-False-cli]
+FAILED tests/test_generic_role_execution.py::test_configured_parent_dispatch_and_ordinary_resume_keep_actual_authority[engineer-expert-engineer-junior-False-mcp]
+FAILED tests/test_generic_role_execution.py::test_configured_parent_dispatch_and_ordinary_resume_keep_actual_authority[coding-team.engineer-analyst-True-cli]
+FAILED tests/test_generic_role_execution.py::test_configured_parent_dispatch_and_ordinary_resume_keep_actual_authority[coding-team.engineer-analyst-True-mcp]
+10 failed, 3 passed in 183.12s (0:03:03)

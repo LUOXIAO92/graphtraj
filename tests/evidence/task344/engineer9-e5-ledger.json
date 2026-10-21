@@ -1,0 +1,785 @@
+{
+  "historical_candidate": "ff5960e0888a6c9ccf5ded8e2eefcde5f47f19d0",
+  "historical_count": 87,
+  "scope": "All87 retained IDs, plus separate later access/host/budget failures; not a full-suite pass. No later baseline used to excuse344 migration.",
+  "counts": {
+    "historical_control_expectation": 5,
+    "historical_guard_failure": 40,
+    "corrected": 32,
+    "covered_by_retained_run": 1,
+    "historical_owner_fixture": 2,
+    "historical_timeout_fixture": 1,
+    "historical_definition_fixture": 6
+  },
+  "rows": [
+    {
+      "historical_nodeid": "tests/test_agent_runner_cleanup.py::test_native_interrupt_confirms_only_pre_runtime_allocations[absent]",
+      "classification": "historical_control_expectation",
+      "finding": "Pre-Runtime identity requirement introduced6b2ae7d (2026-10-13); fixture lacks established native process identity. Old failure retained, no relaxed termination claim.",
+      "evidence_refs": [
+        "tests/evidence/task344/engineer6-cleanup-failures.txt",
+        "tests/evidence/task344/engineer9-e5-before-migration.json"
+      ]
+    },
+    {
+      "historical_nodeid": "tests/test_agent_runner_cleanup.py::test_native_interrupt_confirms_only_pre_runtime_allocations[waiting]",
+      "classification": "historical_control_expectation",
+      "finding": "Pre-Runtime identity requirement introduced6b2ae7d (2026-10-13); fixture lacks established native process identity. Old failure retained, no relaxed termination claim.",
+      "evidence_refs": [
+        "tests/evidence/task344/engineer6-cleanup-failures.txt",
+        "tests/evidence/task344/engineer9-e5-before-migration.json"
+      ]
+    },
+    {
+      "historical_nodeid": "tests/test_agent_runner_cleanup.py::test_pi_crashed_creation_retains_binding_without_certifying_tool_stop",
+      "classification": "historical_control_expectation",
+      "finding": "Pi structured termination evidence introduced291882a (2026-10-18); old fixture exact dictionary omits new facts. Accepted external Runtime/control evidence is not revalidated or reopened here.",
+      "evidence_refs": [
+        "tests/evidence/task344/engineer6-cleanup-failures.txt",
+        "tests/evidence/task344/engineer9-e5-before-migration.json"
+      ]
+    },
+    {
+      "historical_nodeid": "tests/test_agent_runner_cleanup.py::test_pi_failed_creation_retains_owned_process_and_native_stop[False]",
+      "classification": "historical_control_expectation",
+      "finding": "Pi structured termination evidence introduced291882a (2026-10-18); old fixture exact dictionary omits new facts. Accepted external Runtime/control evidence is not revalidated or reopened here.",
+      "evidence_refs": [
+        "tests/evidence/task344/engineer6-cleanup-failures.txt",
+        "tests/evidence/task344/engineer9-e5-before-migration.json"
+      ]
+    },
+    {
+      "historical_nodeid": "tests/test_agent_runner_cleanup.py::test_pi_failed_creation_retains_owned_process_and_native_stop[True]",
+      "classification": "historical_control_expectation",
+      "finding": "Pi structured termination evidence introduced291882a (2026-10-18); old fixture exact dictionary omits new facts. Accepted external Runtime/control evidence is not revalidated or reopened here.",
+      "evidence_refs": [
+        "tests/evidence/task344/engineer6-cleanup-failures.txt",
+        "tests/evidence/task344/engineer9-e5-before-migration.json"
+      ]
+    },
+    {
+      "historical_nodeid": "tests/test_approved_recovery.py::test_administrative_recovery_preserves_an_already_usable_status",
+      "classification": "historical_guard_failure",
+      "finding": "Retained integrated target fixture requests restore_active; current failure reaches task disposition/completed-ancestor revision guard introduced b069acf (2026-10-12), before Task344 control migration. Do not remove guard or repeat accepted346 recovery semantics. Any removed routes inside the unreached body were migrated in5a4d1e2; whole case is not passing.",
+      "evidence_refs": [
+        "tests/evidence/task344/engineer9-resumed-compat.txt",
+        "tests/evidence/task344/engineer9-e5-before-migration.json"
+      ]
+    },
+    {
+      "historical_nodeid": "tests/test_approved_recovery.py::test_administrative_recovery_routes_reports_to_the_actual_current_host[False]",
+      "classification": "historical_guard_failure",
+      "finding": "Retained integrated target fixture requests restore_active; current failure reaches task disposition/completed-ancestor revision guard introduced b069acf (2026-10-12), before Task344 control migration. Do not remove guard or repeat accepted346 recovery semantics. Any removed routes inside the unreached body were migrated in5a4d1e2; whole case is not passing.",
+      "evidence_refs": [
+        "tests/evidence/task344/engineer9-resumed-compat.txt",
+        "tests/evidence/task344/engineer9-e5-before-migration.json"
+      ]
+    },
+    {
+      "historical_nodeid": "tests/test_approved_recovery.py::test_administrative_recovery_routes_reports_to_the_actual_current_host[True]",
+      "classification": "historical_guard_failure",
+      "finding": "Retained integrated target fixture requests restore_active; current failure reaches task disposition/completed-ancestor revision guard introduced b069acf (2026-10-12), before Task344 control migration. Do not remove guard or repeat accepted346 recovery semantics. Any removed routes inside the unreached body were migrated in5a4d1e2; whole case is not passing.",
+      "evidence_refs": [
+        "tests/evidence/task344/engineer9-resumed-compat.txt",
+        "tests/evidence/task344/engineer9-e5-before-migration.json"
+      ]
+    },
+    {
+      "historical_nodeid": "tests/test_approved_recovery.py::test_administrative_restore_allows_separate_budget_only_continue",
+      "classification": "historical_guard_failure",
+      "finding": "Retained integrated target fixture requests restore_active; current failure reaches task disposition/completed-ancestor revision guard introduced b069acf (2026-10-12), before Task344 control migration. Do not remove guard or repeat accepted346 recovery semantics. Any removed routes inside the unreached body were migrated in5a4d1e2; whole case is not passing.",
+      "evidence_refs": [
+        "tests/evidence/task344/engineer9-resumed-compat.txt",
+        "tests/evidence/task344/engineer9-e5-before-migration.json"
+      ]
+    },
+    {
+      "historical_nodeid": "tests/test_approved_recovery.py::test_approved_increment_lifts_budget_stop_but_keeps_session_stop",
+      "classification": "corrected",
+      "finding": "Removed control routes/handler migrated to bound host review and retained Runner continuation; current focused checks pass.",
+      "evidence_refs": [
+        "tests/evidence/task344/engineer9-managed-user-review.txt",
+        "tests/evidence/task344/engineer9-budget-recovery.txt"
+      ]
+    },
+    {
+      "historical_nodeid": "tests/test_approved_recovery.py::test_approved_integrated_repair_retains_history_and_retries_once[automatic]",
+      "classification": "historical_guard_failure",
+      "finding": "Retained integrated target fixture requests restore_active; current failure reaches task disposition/completed-ancestor revision guard introduced b069acf (2026-10-12), before Task344 control migration. Do not remove guard or repeat accepted346 recovery semantics. Any removed routes inside the unreached body were migrated in5a4d1e2; whole case is not passing.",
+      "evidence_refs": [
+        "tests/evidence/task344/engineer9-resumed-compat.txt",
+        "tests/evidence/task344/engineer9-e5-before-migration.json"
+      ]
+    },
+    {
+      "historical_nodeid": "tests/test_approved_recovery.py::test_approved_integrated_repair_retains_history_and_retries_once[existing-authority]",
+      "classification": "historical_guard_failure",
+      "finding": "Retained integrated target fixture requests restore_active; current failure reaches task disposition/completed-ancestor revision guard introduced b069acf (2026-10-12), before Task344 control migration. Do not remove guard or repeat accepted346 recovery semantics. Any removed routes inside the unreached body were migrated in5a4d1e2; whole case is not passing.",
+      "evidence_refs": [
+        "tests/evidence/task344/engineer9-resumed-compat.txt",
+        "tests/evidence/task344/engineer9-e5-before-migration.json"
+      ]
+    },
+    {
+      "historical_nodeid": "tests/test_approved_recovery.py::test_approved_integrated_repair_retains_history_and_retries_once[human]",
+      "classification": "historical_guard_failure",
+      "finding": "Retained integrated target fixture requests restore_active; current failure reaches task disposition/completed-ancestor revision guard introduced b069acf (2026-10-12), before Task344 control migration. Do not remove guard or repeat accepted346 recovery semantics. Any removed routes inside the unreached body were migrated in5a4d1e2; whole case is not passing.",
+      "evidence_refs": [
+        "tests/evidence/task344/engineer9-resumed-compat.txt",
+        "tests/evidence/task344/engineer9-e5-before-migration.json"
+      ]
+    },
+    {
+      "historical_nodeid": "tests/test_approved_recovery.py::test_bound_host_decides_inside_recover[accept]",
+      "classification": "historical_guard_failure",
+      "finding": "Retained integrated target fixture requests restore_active; current failure reaches task disposition/completed-ancestor revision guard introduced b069acf (2026-10-12), before Task344 control migration. Do not remove guard or repeat accepted346 recovery semantics. Any removed routes inside the unreached body were migrated in5a4d1e2; whole case is not passing.",
+      "evidence_refs": [
+        "tests/evidence/task344/engineer9-resumed-compat.txt",
+        "tests/evidence/task344/engineer9-e5-before-migration.json"
+      ]
+    },
+    {
+      "historical_nodeid": "tests/test_approved_recovery.py::test_bound_host_decides_inside_recover[decline]",
+      "classification": "historical_guard_failure",
+      "finding": "Retained integrated target fixture requests restore_active; current failure reaches task disposition/completed-ancestor revision guard introduced b069acf (2026-10-12), before Task344 control migration. Do not remove guard or repeat accepted346 recovery semantics. Any removed routes inside the unreached body were migrated in5a4d1e2; whole case is not passing.",
+      "evidence_refs": [
+        "tests/evidence/task344/engineer9-resumed-compat.txt",
+        "tests/evidence/task344/engineer9-e5-before-migration.json"
+      ]
+    },
+    {
+      "historical_nodeid": "tests/test_approved_recovery.py::test_bound_host_decides_inside_recover[error]",
+      "classification": "historical_guard_failure",
+      "finding": "Retained integrated target fixture requests restore_active; current failure reaches task disposition/completed-ancestor revision guard introduced b069acf (2026-10-12), before Task344 control migration. Do not remove guard or repeat accepted346 recovery semantics. Any removed routes inside the unreached body were migrated in5a4d1e2; whole case is not passing.",
+      "evidence_refs": [
+        "tests/evidence/task344/engineer9-resumed-compat.txt",
+        "tests/evidence/task344/engineer9-e5-before-migration.json"
+      ]
+    },
+    {
+      "historical_nodeid": "tests/test_approved_recovery.py::test_budget_only_continue_is_not_blocked_by_a_stopped_old_root",
+      "classification": "corrected",
+      "finding": "Removed control routes/handler migrated to bound host review and retained Runner continuation; current focused checks pass.",
+      "evidence_refs": [
+        "tests/evidence/task344/engineer9-managed-user-review.txt",
+        "tests/evidence/task344/engineer9-budget-recovery.txt"
+      ]
+    },
+    {
+      "historical_nodeid": "tests/test_approved_recovery.py::test_cli_administrative_request_matches_shared_tool",
+      "classification": "historical_guard_failure",
+      "finding": "Retained integrated target fixture requests restore_active; current failure reaches task disposition/completed-ancestor revision guard introduced b069acf (2026-10-12), before Task344 control migration. Do not remove guard or repeat accepted346 recovery semantics. Any removed routes inside the unreached body were migrated in5a4d1e2; whole case is not passing.",
+      "evidence_refs": [
+        "tests/evidence/task344/engineer9-resumed-compat.txt",
+        "tests/evidence/task344/engineer9-e5-before-migration.json"
+      ]
+    },
+    {
+      "historical_nodeid": "tests/test_approved_recovery.py::test_existing_authority_never_calls_reviewer",
+      "classification": "historical_guard_failure",
+      "finding": "Retained integrated target fixture requests restore_active; current failure reaches task disposition/completed-ancestor revision guard introduced b069acf (2026-10-12), before Task344 control migration. Do not remove guard or repeat accepted346 recovery semantics. Any removed routes inside the unreached body were migrated in5a4d1e2; whole case is not passing.",
+      "evidence_refs": [
+        "tests/evidence/task344/engineer9-resumed-compat.txt",
+        "tests/evidence/task344/engineer9-e5-before-migration.json"
+      ]
+    },
+    {
+      "historical_nodeid": "tests/test_approved_recovery.py::test_managed_user_recovery_waits_for_existing_reply_channel[accept]",
+      "classification": "corrected",
+      "finding": "Removed control routes/handler migrated to bound host review and retained Runner continuation; current focused checks pass.",
+      "evidence_refs": [
+        "tests/evidence/task344/engineer9-managed-user-review.txt",
+        "tests/evidence/task344/engineer9-budget-recovery.txt"
+      ]
+    },
+    {
+      "historical_nodeid": "tests/test_approved_recovery.py::test_managed_user_recovery_waits_for_existing_reply_channel[decline]",
+      "classification": "corrected",
+      "finding": "Removed control routes/handler migrated to bound host review and retained Runner continuation; current focused checks pass.",
+      "evidence_refs": [
+        "tests/evidence/task344/engineer9-managed-user-review.txt",
+        "tests/evidence/task344/engineer9-budget-recovery.txt"
+      ]
+    },
+    {
+      "historical_nodeid": "tests/test_approved_recovery.py::test_native_approved_command_reaches_original_session_with_exact_scope[False]",
+      "classification": "historical_guard_failure",
+      "finding": "Retained integrated target fixture requests restore_active; current failure reaches task disposition/completed-ancestor revision guard introduced b069acf (2026-10-12), before Task344 control migration. Do not remove guard or repeat accepted346 recovery semantics. Any removed routes inside the unreached body were migrated in5a4d1e2; whole case is not passing.",
+      "evidence_refs": [
+        "tests/evidence/task344/engineer9-resumed-compat.txt",
+        "tests/evidence/task344/engineer9-e5-before-migration.json"
+      ]
+    },
+    {
+      "historical_nodeid": "tests/test_approved_recovery.py::test_native_approved_command_reaches_original_session_with_exact_scope[True]",
+      "classification": "historical_guard_failure",
+      "finding": "Retained integrated target fixture requests restore_active; current failure reaches task disposition/completed-ancestor revision guard introduced b069acf (2026-10-12), before Task344 control migration. Do not remove guard or repeat accepted346 recovery semantics. Any removed routes inside the unreached body were migrated in5a4d1e2; whole case is not passing.",
+      "evidence_refs": [
+        "tests/evidence/task344/engineer9-resumed-compat.txt",
+        "tests/evidence/task344/engineer9-e5-before-migration.json"
+      ]
+    },
+    {
+      "historical_nodeid": "tests/test_approved_recovery.py::test_native_refusal_and_failure_leave_state_untouched[denied]",
+      "classification": "historical_guard_failure",
+      "finding": "Retained integrated target fixture requests restore_active; current failure reaches task disposition/completed-ancestor revision guard introduced b069acf (2026-10-12), before Task344 control migration. Do not remove guard or repeat accepted346 recovery semantics. Any removed routes inside the unreached body were migrated in5a4d1e2; whole case is not passing.",
+      "evidence_refs": [
+        "tests/evidence/task344/engineer9-resumed-compat.txt",
+        "tests/evidence/task344/engineer9-e5-before-migration.json"
+      ]
+    },
+    {
+      "historical_nodeid": "tests/test_approved_recovery.py::test_native_refusal_and_failure_leave_state_untouched[failed]",
+      "classification": "historical_guard_failure",
+      "finding": "Retained integrated target fixture requests restore_active; current failure reaches task disposition/completed-ancestor revision guard introduced b069acf (2026-10-12), before Task344 control migration. Do not remove guard or repeat accepted346 recovery semantics. Any removed routes inside the unreached body were migrated in5a4d1e2; whole case is not passing.",
+      "evidence_refs": [
+        "tests/evidence/task344/engineer9-resumed-compat.txt",
+        "tests/evidence/task344/engineer9-e5-before-migration.json"
+      ]
+    },
+    {
+      "historical_nodeid": "tests/test_approved_recovery.py::test_new_budget_stop_during_resume_is_reported_as_applied_but_not_resumed",
+      "classification": "historical_guard_failure",
+      "finding": "Retained integrated target fixture requests restore_active; current failure reaches task disposition/completed-ancestor revision guard introduced b069acf (2026-10-12), before Task344 control migration. Do not remove guard or repeat accepted346 recovery semantics. Any removed routes inside the unreached body were migrated in5a4d1e2; whole case is not passing.",
+      "evidence_refs": [
+        "tests/evidence/task344/engineer9-resumed-compat.txt",
+        "tests/evidence/task344/engineer9-e5-before-migration.json"
+      ]
+    },
+    {
+      "historical_nodeid": "tests/test_approved_recovery.py::test_parent_interrupt_recovery_reuses_existing_authority",
+      "classification": "historical_guard_failure",
+      "finding": "Retained integrated target fixture requests restore_active; current failure reaches task disposition/completed-ancestor revision guard introduced b069acf (2026-10-12), before Task344 control migration. Do not remove guard or repeat accepted346 recovery semantics. Any removed routes inside the unreached body were migrated in5a4d1e2; whole case is not passing.",
+      "evidence_refs": [
+        "tests/evidence/task344/engineer9-resumed-compat.txt",
+        "tests/evidence/task344/engineer9-e5-before-migration.json"
+      ]
+    },
+    {
+      "historical_nodeid": "tests/test_approved_recovery.py::test_postapproval_race_returns_exact_differences",
+      "classification": "historical_guard_failure",
+      "finding": "Retained integrated target fixture requests restore_active; current failure reaches task disposition/completed-ancestor revision guard introduced b069acf (2026-10-12), before Task344 control migration. Do not remove guard or repeat accepted346 recovery semantics. Any removed routes inside the unreached body were migrated in5a4d1e2; whole case is not passing.",
+      "evidence_refs": [
+        "tests/evidence/task344/engineer9-resumed-compat.txt",
+        "tests/evidence/task344/engineer9-e5-before-migration.json"
+      ]
+    },
+    {
+      "historical_nodeid": "tests/test_approved_recovery.py::test_recovered_unchanged_result_returns_to_integration",
+      "classification": "historical_guard_failure",
+      "finding": "Retained integrated target fixture requests restore_active; current failure reaches task disposition/completed-ancestor revision guard introduced b069acf (2026-10-12), before Task344 control migration. Do not remove guard or repeat accepted346 recovery semantics. Any removed routes inside the unreached body were migrated in5a4d1e2; whole case is not passing.",
+      "evidence_refs": [
+        "tests/evidence/task344/engineer9-resumed-compat.txt",
+        "tests/evidence/task344/engineer9-e5-before-migration.json"
+      ]
+    },
+    {
+      "historical_nodeid": "tests/test_approved_recovery.py::test_recovery_reactivates_original_team_without_fabricating_new_round",
+      "classification": "historical_guard_failure",
+      "finding": "Retained integrated target fixture requests restore_active; current failure reaches task disposition/completed-ancestor revision guard introduced b069acf (2026-10-12), before Task344 control migration. Do not remove guard or repeat accepted346 recovery semantics. Any removed routes inside the unreached body were migrated in5a4d1e2; whole case is not passing.",
+      "evidence_refs": [
+        "tests/evidence/task344/engineer9-resumed-compat.txt",
+        "tests/evidence/task344/engineer9-e5-before-migration.json"
+      ]
+    },
+    {
+      "historical_nodeid": "tests/test_approved_recovery.py::test_recovery_scopes_mapping_validation_to_recorded_descendants",
+      "classification": "historical_guard_failure",
+      "finding": "Retained integrated target fixture requests restore_active; current failure reaches task disposition/completed-ancestor revision guard introduced b069acf (2026-10-12), before Task344 control migration. Do not remove guard or repeat accepted346 recovery semantics. Any removed routes inside the unreached body were migrated in5a4d1e2; whole case is not passing.",
+      "evidence_refs": [
+        "tests/evidence/task344/engineer9-resumed-compat.txt",
+        "tests/evidence/task344/engineer9-e5-before-migration.json"
+      ]
+    },
+    {
+      "historical_nodeid": "tests/test_approved_recovery.py::test_retry_does_not_override_a_new_stop",
+      "classification": "historical_guard_failure",
+      "finding": "Retained integrated target fixture requests restore_active; current failure reaches task disposition/completed-ancestor revision guard introduced b069acf (2026-10-12), before Task344 control migration. Do not remove guard or repeat accepted346 recovery semantics. Any removed routes inside the unreached body were migrated in5a4d1e2; whole case is not passing.",
+      "evidence_refs": [
+        "tests/evidence/task344/engineer9-resumed-compat.txt",
+        "tests/evidence/task344/engineer9-e5-before-migration.json"
+      ]
+    },
+    {
+      "historical_nodeid": "tests/test_approved_recovery.py::test_selected_http_reviewer_controls_recovery[accept-retired_target]",
+      "classification": "historical_guard_failure",
+      "finding": "Retained integrated target fixture requests restore_active; current failure reaches task disposition/completed-ancestor revision guard introduced b069acf (2026-10-12), before Task344 control migration. Do not remove guard or repeat accepted346 recovery semantics. Any removed routes inside the unreached body were migrated in5a4d1e2; whole case is not passing.",
+      "evidence_refs": [
+        "tests/evidence/task344/engineer9-resumed-compat.txt",
+        "tests/evidence/task344/engineer9-e5-before-migration.json"
+      ]
+    },
+    {
+      "historical_nodeid": "tests/test_approved_recovery.py::test_selected_http_reviewer_controls_recovery[accept-target]",
+      "classification": "historical_guard_failure",
+      "finding": "Retained integrated target fixture requests restore_active; current failure reaches task disposition/completed-ancestor revision guard introduced b069acf (2026-10-12), before Task344 control migration. Do not remove guard or repeat accepted346 recovery semantics. Any removed routes inside the unreached body were migrated in5a4d1e2; whole case is not passing.",
+      "evidence_refs": [
+        "tests/evidence/task344/engineer9-resumed-compat.txt",
+        "tests/evidence/task344/engineer9-e5-before-migration.json"
+      ]
+    },
+    {
+      "historical_nodeid": "tests/test_approved_recovery.py::test_selected_http_reviewer_controls_recovery[decline-retired_target]",
+      "classification": "historical_guard_failure",
+      "finding": "Retained integrated target fixture requests restore_active; current failure reaches task disposition/completed-ancestor revision guard introduced b069acf (2026-10-12), before Task344 control migration. Do not remove guard or repeat accepted346 recovery semantics. Any removed routes inside the unreached body were migrated in5a4d1e2; whole case is not passing.",
+      "evidence_refs": [
+        "tests/evidence/task344/engineer9-resumed-compat.txt",
+        "tests/evidence/task344/engineer9-e5-before-migration.json"
+      ]
+    },
+    {
+      "historical_nodeid": "tests/test_approved_recovery.py::test_selected_http_reviewer_controls_recovery[decline-target]",
+      "classification": "historical_guard_failure",
+      "finding": "Retained integrated target fixture requests restore_active; current failure reaches task disposition/completed-ancestor revision guard introduced b069acf (2026-10-12), before Task344 control migration. Do not remove guard or repeat accepted346 recovery semantics. Any removed routes inside the unreached body were migrated in5a4d1e2; whole case is not passing.",
+      "evidence_refs": [
+        "tests/evidence/task344/engineer9-resumed-compat.txt",
+        "tests/evidence/task344/engineer9-e5-before-migration.json"
+      ]
+    },
+    {
+      "historical_nodeid": "tests/test_approved_recovery.py::test_selected_http_reviewer_controls_recovery[error-retired_target]",
+      "classification": "historical_guard_failure",
+      "finding": "Retained integrated target fixture requests restore_active; current failure reaches task disposition/completed-ancestor revision guard introduced b069acf (2026-10-12), before Task344 control migration. Do not remove guard or repeat accepted346 recovery semantics. Any removed routes inside the unreached body were migrated in5a4d1e2; whole case is not passing.",
+      "evidence_refs": [
+        "tests/evidence/task344/engineer9-resumed-compat.txt",
+        "tests/evidence/task344/engineer9-e5-before-migration.json"
+      ]
+    },
+    {
+      "historical_nodeid": "tests/test_approved_recovery.py::test_selected_http_reviewer_controls_recovery[error-target]",
+      "classification": "historical_guard_failure",
+      "finding": "Retained integrated target fixture requests restore_active; current failure reaches task disposition/completed-ancestor revision guard introduced b069acf (2026-10-12), before Task344 control migration. Do not remove guard or repeat accepted346 recovery semantics. Any removed routes inside the unreached body were migrated in5a4d1e2; whole case is not passing.",
+      "evidence_refs": [
+        "tests/evidence/task344/engineer9-resumed-compat.txt",
+        "tests/evidence/task344/engineer9-e5-before-migration.json"
+      ]
+    },
+    {
+      "historical_nodeid": "tests/test_approved_recovery.py::test_selected_http_reviewer_controls_recovery[wrong-request-retired_target]",
+      "classification": "historical_guard_failure",
+      "finding": "Retained integrated target fixture requests restore_active; current failure reaches task disposition/completed-ancestor revision guard introduced b069acf (2026-10-12), before Task344 control migration. Do not remove guard or repeat accepted346 recovery semantics. Any removed routes inside the unreached body were migrated in5a4d1e2; whole case is not passing.",
+      "evidence_refs": [
+        "tests/evidence/task344/engineer9-resumed-compat.txt",
+        "tests/evidence/task344/engineer9-e5-before-migration.json"
+      ]
+    },
+    {
+      "historical_nodeid": "tests/test_approved_recovery.py::test_selected_http_reviewer_controls_recovery[wrong-request-target]",
+      "classification": "historical_guard_failure",
+      "finding": "Retained integrated target fixture requests restore_active; current failure reaches task disposition/completed-ancestor revision guard introduced b069acf (2026-10-12), before Task344 control migration. Do not remove guard or repeat accepted346 recovery semantics. Any removed routes inside the unreached body were migrated in5a4d1e2; whole case is not passing.",
+      "evidence_refs": [
+        "tests/evidence/task344/engineer9-resumed-compat.txt",
+        "tests/evidence/task344/engineer9-e5-before-migration.json"
+      ]
+    },
+    {
+      "historical_nodeid": "tests/test_approved_recovery.py::test_task_budget_repair_retains_retired_sessions[accept]",
+      "classification": "historical_guard_failure",
+      "finding": "Retained integrated target fixture requests restore_active; current failure reaches task disposition/completed-ancestor revision guard introduced b069acf (2026-10-12), before Task344 control migration. Do not remove guard or repeat accepted346 recovery semantics. Any removed routes inside the unreached body were migrated in5a4d1e2; whole case is not passing.",
+      "evidence_refs": [
+        "tests/evidence/task344/engineer9-resumed-compat.txt",
+        "tests/evidence/task344/engineer9-e5-before-migration.json"
+      ]
+    },
+    {
+      "historical_nodeid": "tests/test_approved_recovery.py::test_task_budget_repair_retains_retired_sessions[decline]",
+      "classification": "historical_guard_failure",
+      "finding": "Retained integrated target fixture requests restore_active; current failure reaches task disposition/completed-ancestor revision guard introduced b069acf (2026-10-12), before Task344 control migration. Do not remove guard or repeat accepted346 recovery semantics. Any removed routes inside the unreached body were migrated in5a4d1e2; whole case is not passing.",
+      "evidence_refs": [
+        "tests/evidence/task344/engineer9-resumed-compat.txt",
+        "tests/evidence/task344/engineer9-e5-before-migration.json"
+      ]
+    },
+    {
+      "historical_nodeid": "tests/test_approved_recovery.py::test_task_budget_repair_retains_retired_sessions[error]",
+      "classification": "historical_guard_failure",
+      "finding": "Retained integrated target fixture requests restore_active; current failure reaches task disposition/completed-ancestor revision guard introduced b069acf (2026-10-12), before Task344 control migration. Do not remove guard or repeat accepted346 recovery semantics. Any removed routes inside the unreached body were migrated in5a4d1e2; whole case is not passing.",
+      "evidence_refs": [
+        "tests/evidence/task344/engineer9-resumed-compat.txt",
+        "tests/evidence/task344/engineer9-e5-before-migration.json"
+      ]
+    },
+    {
+      "historical_nodeid": "tests/test_approved_recovery.py::test_task_budget_repair_retains_retired_sessions[stale]",
+      "classification": "historical_guard_failure",
+      "finding": "Retained integrated target fixture requests restore_active; current failure reaches task disposition/completed-ancestor revision guard introduced b069acf (2026-10-12), before Task344 control migration. Do not remove guard or repeat accepted346 recovery semantics. Any removed routes inside the unreached body were migrated in5a4d1e2; whole case is not passing.",
+      "evidence_refs": [
+        "tests/evidence/task344/engineer9-resumed-compat.txt",
+        "tests/evidence/task344/engineer9-e5-before-migration.json"
+      ]
+    },
+    {
+      "historical_nodeid": "tests/test_approved_recovery.py::test_task_cli_recovery_matches_shared_tool",
+      "classification": "historical_guard_failure",
+      "finding": "Retained integrated target fixture requests restore_active; current failure reaches task disposition/completed-ancestor revision guard introduced b069acf (2026-10-12), before Task344 control migration. Do not remove guard or repeat accepted346 recovery semantics. Any removed routes inside the unreached body were migrated in5a4d1e2; whole case is not passing.",
+      "evidence_refs": [
+        "tests/evidence/task344/engineer9-resumed-compat.txt",
+        "tests/evidence/task344/engineer9-e5-before-migration.json"
+      ]
+    },
+    {
+      "historical_nodeid": "tests/test_approved_recovery.py::test_task_recovery_authority_targets_and_separate_continuation",
+      "classification": "historical_guard_failure",
+      "finding": "Retained integrated target fixture requests restore_active; current failure reaches task disposition/completed-ancestor revision guard introduced b069acf (2026-10-12), before Task344 control migration. Do not remove guard or repeat accepted346 recovery semantics. Any removed routes inside the unreached body were migrated in5a4d1e2; whole case is not passing.",
+      "evidence_refs": [
+        "tests/evidence/task344/engineer9-resumed-compat.txt",
+        "tests/evidence/task344/engineer9-e5-before-migration.json"
+      ]
+    },
+    {
+      "historical_nodeid": "tests/test_approved_recovery.py::test_unrelated_task_event_during_review_does_not_stale_the_repair",
+      "classification": "historical_guard_failure",
+      "finding": "Retained integrated target fixture requests restore_active; current failure reaches task disposition/completed-ancestor revision guard introduced b069acf (2026-10-12), before Task344 control migration. Do not remove guard or repeat accepted346 recovery semantics. Any removed routes inside the unreached body were migrated in5a4d1e2; whole case is not passing.",
+      "evidence_refs": [
+        "tests/evidence/task344/engineer9-resumed-compat.txt",
+        "tests/evidence/task344/engineer9-e5-before-migration.json"
+      ]
+    },
+    {
+      "historical_nodeid": "tests/test_approved_recovery.py::test_zero_time_recovery_preserves_budget_stop[False]",
+      "classification": "historical_guard_failure",
+      "finding": "Retained integrated target fixture requests restore_active; current failure reaches task disposition/completed-ancestor revision guard introduced b069acf (2026-10-12), before Task344 control migration. Do not remove guard or repeat accepted346 recovery semantics. Any removed routes inside the unreached body were migrated in5a4d1e2; whole case is not passing.",
+      "evidence_refs": [
+        "tests/evidence/task344/engineer9-resumed-compat.txt",
+        "tests/evidence/task344/engineer9-e5-before-migration.json"
+      ]
+    },
+    {
+      "historical_nodeid": "tests/test_approved_recovery.py::test_zero_time_recovery_preserves_budget_stop[True]",
+      "classification": "historical_guard_failure",
+      "finding": "Retained integrated target fixture requests restore_active; current failure reaches task disposition/completed-ancestor revision guard introduced b069acf (2026-10-12), before Task344 control migration. Do not remove guard or repeat accepted346 recovery semantics. Any removed routes inside the unreached body were migrated in5a4d1e2; whole case is not passing.",
+      "evidence_refs": [
+        "tests/evidence/task344/engineer9-resumed-compat.txt",
+        "tests/evidence/task344/engineer9-e5-before-migration.json"
+      ]
+    },
+    {
+      "historical_nodeid": "tests/test_claude_runner.py::test_public_interrupt_reconfirms_an_undrained_worker",
+      "classification": "covered_by_retained_run",
+      "finding": "Current Claude Runner development batch17pass3deselected after native resource handshake; accepted346 real physical-stop evidence reused, not rerun.",
+      "evidence_refs": [
+        "tests/evidence/task344/engineer9-history-regression.txt",
+        "tests/evidence/task344/engineer9-claude-delivery.txt"
+      ]
+    },
+    {
+      "historical_nodeid": "tests/test_claude_runtime.py::test_claude_later_prompt_hook_is_answered_during_one_slow_collection",
+      "classification": "corrected",
+      "finding": "Original long collection/backlog case passes in current80 combined tests; original real long transcript case not rerun.",
+      "evidence_refs": [
+        "tests/evidence/task344/stage-dc89e9b-combined.txt"
+      ]
+    },
+    {
+      "historical_nodeid": "tests/test_cli_projection.py::test_file_content_uses_same_nested_schema_as_gateway",
+      "classification": "corrected",
+      "finding": "Migrated removed alias_status fixtures; current65 boundary/projection cases pass.",
+      "evidence_refs": [
+        "tests/evidence/task344/engineer9-boundary-inventory.txt"
+      ]
+    },
+    {
+      "historical_nodeid": "tests/test_cli_projection.py::test_schema_change_updates_help_describe_and_scalar_input",
+      "classification": "corrected",
+      "finding": "Migrated removed alias_status fixtures; current65 boundary/projection cases pass.",
+      "evidence_refs": [
+        "tests/evidence/task344/engineer9-boundary-inventory.txt"
+      ]
+    },
+    {
+      "historical_nodeid": "tests/test_descendant_stop_control.py::test_native_root_owner_outlives_historical_checker_membership[SessionStart]",
+      "classification": "historical_owner_fixture",
+      "finding": "Now reaches role_organization owner refusal (same old Stop failure). Gate09dfc1b Oct5 and NativeCaller cc60f16 Oct9 predate344; do not grant a caller Main authority to pass. Original SessionStart earlier checker observation changed, current both refuse at owner gate.",
+      "evidence_refs": [
+        "tests/evidence/task344/engineer9-e5-remaining.txt",
+        "tests/evidence/task344/engineer9-owner-first.txt",
+        "tests/evidence/task344/engineer9-e5-before-migration.json"
+      ]
+    },
+    {
+      "historical_nodeid": "tests/test_descendant_stop_control.py::test_native_root_owner_outlives_historical_checker_membership[Stop]",
+      "classification": "historical_owner_fixture",
+      "finding": "Now reaches role_organization owner refusal (same old Stop failure). Gate09dfc1b Oct5 and NativeCaller cc60f16 Oct9 predate344; do not grant a caller Main authority to pass. Original SessionStart earlier checker observation changed, current both refuse at owner gate.",
+      "evidence_refs": [
+        "tests/evidence/task344/engineer9-e5-remaining.txt",
+        "tests/evidence/task344/engineer9-owner-first.txt",
+        "tests/evidence/task344/engineer9-e5-before-migration.json"
+      ]
+    },
+    {
+      "historical_nodeid": "tests/test_descendant_stop_control.py::test_unresponsive_parent_does_not_prevent_descendant_interrupt",
+      "classification": "historical_timeout_fixture",
+      "finding": "The unchanged pre344 INTERRUPT_RESPONSE_SECONDS is30+OPERATION_TIMEOUT_SECONDS(10), while this outer test times out after30s. Both pre76aecae and current source retain40s native response. No production stop semantics weakened; accepted346 actual evidence remains reusable.",
+      "evidence_refs": [
+        "tests/evidence/task344/engineer9-e5-remaining.txt",
+        "tests/evidence/task344/engineer9-owner-first.txt"
+      ]
+    },
+    {
+      "historical_nodeid": "tests/test_hosted_cli.py::test_cli_host_accepts_the_session_worktree_and_refuses_other_directories",
+      "classification": "corrected",
+      "finding": "Current installed bound CLI/MCP cases pass in49-pass batch; project non-direct report reads remain authorized, actual caller binding retained.",
+      "evidence_refs": [
+        "tests/evidence/task344/engineer9-e5-remaining.txt"
+      ]
+    },
+    {
+      "historical_nodeid": "tests/test_hosted_cli.py::test_cli_host_submits_exact_result_and_preserves_report_authority",
+      "classification": "corrected",
+      "finding": "Current installed bound CLI/MCP cases pass in49-pass batch; project non-direct report reads remain authorized, actual caller binding retained.",
+      "evidence_refs": [
+        "tests/evidence/task344/engineer9-e5-remaining.txt"
+      ]
+    },
+    {
+      "historical_nodeid": "tests/test_hosted_cli.py::test_shared_mcp_command_consumes_bound_graphtraj_dsh_channel",
+      "classification": "corrected",
+      "finding": "Current installed bound CLI/MCP cases pass in49-pass batch; project non-direct report reads remain authorized, actual caller binding retained.",
+      "evidence_refs": [
+        "tests/evidence/task344/engineer9-e5-remaining.txt"
+      ]
+    },
+    {
+      "historical_nodeid": "tests/test_managed_sessions.py::test_identifier_without_the_ownership_lock_is_not_the_owned_execution",
+      "classification": "corrected",
+      "finding": "Two CLI migrations had anonymous outer pytest caller. Test now uses existing controlled bound agents host seam; public installed agents CLI remains independently covered in hosted_cli. Reused-PID fixture includes original execution identity so it tests ownership lock rather than malformed mapping. Three cases pass.",
+      "evidence_refs": [
+        "tests/evidence/task344/engineer9-control-fix.txt"
+      ]
+    },
+    {
+      "historical_nodeid": "tests/test_managed_sessions.py::test_installed_cli_declines_the_same_request_as_python",
+      "classification": "corrected",
+      "finding": "Two CLI migrations had anonymous outer pytest caller. Test now uses existing controlled bound agents host seam; public installed agents CLI remains independently covered in hosted_cli. Reused-PID fixture includes original execution identity so it tests ownership lock rather than malformed mapping. Three cases pass.",
+      "evidence_refs": [
+        "tests/evidence/task344/engineer9-control-fix.txt"
+      ]
+    },
+    {
+      "historical_nodeid": "tests/test_managed_sessions.py::test_multiple_native_requests_keep_input_and_trace_contents",
+      "classification": "corrected",
+      "finding": "Two CLI migrations had anonymous outer pytest caller. Test now uses existing controlled bound agents host seam; public installed agents CLI remains independently covered in hosted_cli. Reused-PID fixture includes original execution identity so it tests ownership lock rather than malformed mapping. Three cases pass.",
+      "evidence_refs": [
+        "tests/evidence/task344/engineer9-control-fix.txt"
+      ]
+    },
+    {
+      "historical_nodeid": "tests/test_native_status_identity.py::test_native_status_uses_callback_identity[helper-False-send-False]",
+      "classification": "corrected",
+      "finding": "0053296 migrated removed callback feature to native authenticated MCP boundary; replacement four identity cases pass in current49-pass batch, not fourteen new native real checks.",
+      "evidence_refs": [
+        "tests/evidence/task344/engineer9-e5-remaining.txt"
+      ]
+    },
+    {
+      "historical_nodeid": "tests/test_native_status_identity.py::test_native_status_uses_callback_identity[helper-False-send-True]",
+      "classification": "corrected",
+      "finding": "0053296 migrated removed callback feature to native authenticated MCP boundary; replacement four identity cases pass in current49-pass batch, not fourteen new native real checks.",
+      "evidence_refs": [
+        "tests/evidence/task344/engineer9-e5-remaining.txt"
+      ]
+    },
+    {
+      "historical_nodeid": "tests/test_native_status_identity.py::test_native_status_uses_callback_identity[helper-False-status-False]",
+      "classification": "corrected",
+      "finding": "0053296 migrated removed callback feature to native authenticated MCP boundary; replacement four identity cases pass in current49-pass batch, not fourteen new native real checks.",
+      "evidence_refs": [
+        "tests/evidence/task344/engineer9-e5-remaining.txt"
+      ]
+    },
+    {
+      "historical_nodeid": "tests/test_native_status_identity.py::test_native_status_uses_callback_identity[helper-False-status-True]",
+      "classification": "corrected",
+      "finding": "0053296 migrated removed callback feature to native authenticated MCP boundary; replacement four identity cases pass in current49-pass batch, not fourteen new native real checks.",
+      "evidence_refs": [
+        "tests/evidence/task344/engineer9-e5-remaining.txt"
+      ]
+    },
+    {
+      "historical_nodeid": "tests/test_native_status_identity.py::test_native_status_uses_callback_identity[helper-True-status-False]",
+      "classification": "corrected",
+      "finding": "0053296 migrated removed callback feature to native authenticated MCP boundary; replacement four identity cases pass in current49-pass batch, not fourteen new native real checks.",
+      "evidence_refs": [
+        "tests/evidence/task344/engineer9-e5-remaining.txt"
+      ]
+    },
+    {
+      "historical_nodeid": "tests/test_native_status_identity.py::test_native_status_uses_callback_identity[helper-True-status-True]",
+      "classification": "corrected",
+      "finding": "0053296 migrated removed callback feature to native authenticated MCP boundary; replacement four identity cases pass in current49-pass batch, not fourteen new native real checks.",
+      "evidence_refs": [
+        "tests/evidence/task344/engineer9-e5-remaining.txt"
+      ]
+    },
+    {
+      "historical_nodeid": "tests/test_native_status_identity.py::test_native_status_uses_callback_identity[outsider-False-send-False]",
+      "classification": "corrected",
+      "finding": "0053296 migrated removed callback feature to native authenticated MCP boundary; replacement four identity cases pass in current49-pass batch, not fourteen new native real checks.",
+      "evidence_refs": [
+        "tests/evidence/task344/engineer9-e5-remaining.txt"
+      ]
+    },
+    {
+      "historical_nodeid": "tests/test_native_status_identity.py::test_native_status_uses_callback_identity[outsider-False-send-True]",
+      "classification": "corrected",
+      "finding": "0053296 migrated removed callback feature to native authenticated MCP boundary; replacement four identity cases pass in current49-pass batch, not fourteen new native real checks.",
+      "evidence_refs": [
+        "tests/evidence/task344/engineer9-e5-remaining.txt"
+      ]
+    },
+    {
+      "historical_nodeid": "tests/test_native_status_identity.py::test_native_status_uses_callback_identity[outsider-False-status-False]",
+      "classification": "corrected",
+      "finding": "0053296 migrated removed callback feature to native authenticated MCP boundary; replacement four identity cases pass in current49-pass batch, not fourteen new native real checks.",
+      "evidence_refs": [
+        "tests/evidence/task344/engineer9-e5-remaining.txt"
+      ]
+    },
+    {
+      "historical_nodeid": "tests/test_native_status_identity.py::test_native_status_uses_callback_identity[outsider-False-status-True]",
+      "classification": "corrected",
+      "finding": "0053296 migrated removed callback feature to native authenticated MCP boundary; replacement four identity cases pass in current49-pass batch, not fourteen new native real checks.",
+      "evidence_refs": [
+        "tests/evidence/task344/engineer9-e5-remaining.txt"
+      ]
+    },
+    {
+      "historical_nodeid": "tests/test_native_status_identity.py::test_native_status_uses_callback_identity[thread-1-False-send-False]",
+      "classification": "corrected",
+      "finding": "0053296 migrated removed callback feature to native authenticated MCP boundary; replacement four identity cases pass in current49-pass batch, not fourteen new native real checks.",
+      "evidence_refs": [
+        "tests/evidence/task344/engineer9-e5-remaining.txt"
+      ]
+    },
+    {
+      "historical_nodeid": "tests/test_native_status_identity.py::test_native_status_uses_callback_identity[thread-1-False-send-True]",
+      "classification": "corrected",
+      "finding": "0053296 migrated removed callback feature to native authenticated MCP boundary; replacement four identity cases pass in current49-pass batch, not fourteen new native real checks.",
+      "evidence_refs": [
+        "tests/evidence/task344/engineer9-e5-remaining.txt"
+      ]
+    },
+    {
+      "historical_nodeid": "tests/test_native_status_identity.py::test_native_status_uses_callback_identity[thread-1-False-status-False]",
+      "classification": "corrected",
+      "finding": "0053296 migrated removed callback feature to native authenticated MCP boundary; replacement four identity cases pass in current49-pass batch, not fourteen new native real checks.",
+      "evidence_refs": [
+        "tests/evidence/task344/engineer9-e5-remaining.txt"
+      ]
+    },
+    {
+      "historical_nodeid": "tests/test_native_status_identity.py::test_native_status_uses_callback_identity[thread-1-False-status-True]",
+      "classification": "corrected",
+      "finding": "0053296 migrated removed callback feature to native authenticated MCP boundary; replacement four identity cases pass in current49-pass batch, not fourteen new native real checks.",
+      "evidence_refs": [
+        "tests/evidence/task344/engineer9-e5-remaining.txt"
+      ]
+    },
+    {
+      "historical_nodeid": "tests/test_report_access.py::test_installed_send_recovers_historical_reports[cli-launch]",
+      "classification": "corrected",
+      "finding": "Reports-only resume preserves read access even from cli-launch history. Outer pytest report lookup uses bounded fixture member identity rather than pretending anonymous CLI is verified; three report modes pass.",
+      "evidence_refs": [
+        "tests/evidence/task344/engineer9-access-fix.txt"
+      ]
+    },
+    {
+      "historical_nodeid": "tests/test_session_alias_control.py::test_installed_alias_control_resumes_and_interrupts_one_team_session",
+      "classification": "corrected",
+      "finding": "Current status includes agent/state/terminal fields; assertions preserve alias/nativeSession/execution and stable AgentID instead of demanding old closed dictionary. Final focused pass.",
+      "evidence_refs": [
+        "tests/evidence/task344/engineer9-alias-final.txt"
+      ]
+    },
+    {
+      "historical_nodeid": "tests/test_stop_instruction.py::test_cli_delivers_the_configured_stop_text_to_its_caller",
+      "classification": "corrected",
+      "finding": "Engineer7 migrated removed interrupt CLI delivery check to still-supported submit-report;56 combined stop/projection checks retained.",
+      "evidence_refs": [
+        "tests/evidence/task344/engineer7-stop-projection.txt"
+      ]
+    },
+    {
+      "historical_nodeid": "tests/test_stop_instruction.py::test_cli_empty_stop_text_returns_facts_without_method_text",
+      "classification": "corrected",
+      "finding": "Engineer7 migrated removed interrupt CLI delivery check to still-supported submit-report;56 combined stop/projection checks retained.",
+      "evidence_refs": [
+        "tests/evidence/task344/engineer7-stop-projection.txt"
+      ]
+    },
+    {
+      "historical_nodeid": "tests/test_stop_instruction.py::test_cli_ordinary_completion_carries_no_stop_text",
+      "classification": "corrected",
+      "finding": "Engineer7 migrated removed interrupt CLI delivery check to still-supported submit-report;56 combined stop/projection checks retained.",
+      "evidence_refs": [
+        "tests/evidence/task344/engineer7-stop-projection.txt"
+      ]
+    },
+    {
+      "historical_nodeid": "tests/test_task_recovery.py::test_budget_only_continuation_leaves_old_subtree_for_new_configured_root[cli]",
+      "classification": "historical_definition_fixture",
+      "finding": "Old task revise request omits required current_definition; definition model predates344 (b069acf, renameded4b614). Existing test failure retained; no weakening of revision checks.",
+      "evidence_refs": [
+        "tests/evidence/task344/engineer6-task-recovery-failures.txt",
+        "tests/evidence/task344/engineer9-e5-before-migration.json"
+      ]
+    },
+    {
+      "historical_nodeid": "tests/test_task_recovery.py::test_budget_only_continuation_leaves_old_subtree_for_new_configured_root[mcp]",
+      "classification": "historical_definition_fixture",
+      "finding": "Old task revise request omits required current_definition; definition model predates344 (b069acf, renameded4b614). Existing test failure retained; no weakening of revision checks.",
+      "evidence_refs": [
+        "tests/evidence/task344/engineer6-task-recovery-failures.txt",
+        "tests/evidence/task344/engineer9-e5-before-migration.json"
+      ]
+    },
+    {
+      "historical_nodeid": "tests/test_task_recovery.py::test_cancelled_task_is_neither_recoverable_nor_cleanable",
+      "classification": "historical_definition_fixture",
+      "finding": "Old task revise request omits required current_definition; definition model predates344 (b069acf, renameded4b614). Existing test failure retained; no weakening of revision checks.",
+      "evidence_refs": [
+        "tests/evidence/task344/engineer6-task-recovery-failures.txt",
+        "tests/evidence/task344/engineer9-e5-before-migration.json"
+      ]
+    },
+    {
+      "historical_nodeid": "tests/test_task_recovery.py::test_failed_first_creation_can_continue_budget_before_ordinary_launch[False]",
+      "classification": "historical_definition_fixture",
+      "finding": "Old task revise request omits required current_definition; definition model predates344 (b069acf, renameded4b614). Existing test failure retained; no weakening of revision checks.",
+      "evidence_refs": [
+        "tests/evidence/task344/engineer6-task-recovery-failures.txt",
+        "tests/evidence/task344/engineer9-e5-before-migration.json"
+      ]
+    },
+    {
+      "historical_nodeid": "tests/test_task_recovery.py::test_failed_first_creation_can_continue_budget_before_ordinary_launch[True]",
+      "classification": "historical_definition_fixture",
+      "finding": "Old task revise request omits required current_definition; definition model predates344 (b069acf, renameded4b614). Existing test failure retained; no weakening of revision checks.",
+      "evidence_refs": [
+        "tests/evidence/task344/engineer6-task-recovery-failures.txt",
+        "tests/evidence/task344/engineer9-e5-before-migration.json"
+      ]
+    },
+    {
+      "historical_nodeid": "tests/test_task_recovery.py::test_task_continuation_requires_active_ready_task_before_first_session[True]",
+      "classification": "historical_definition_fixture",
+      "finding": "Old task revise request omits required current_definition; definition model predates344 (b069acf, renameded4b614). Existing test failure retained; no weakening of revision checks.",
+      "evidence_refs": [
+        "tests/evidence/task344/engineer6-task-recovery-failures.txt",
+        "tests/evidence/task344/engineer9-e5-before-migration.json"
+      ]
+    }
+  ],
+  "before_migration_evidence": "tests/evidence/task344/engineer9-e5-before-migration.json",
+  "before_first_task344_commit": "76aecaed3132ba82d762890451fa4eb3ab542c87",
+  "additional_migration_results": {
+    "generic_roles": "Frozen32 cases plus2 Codex input checks pass34 after f711067. Prior98pass4fail retained; turn-count model redispatch and ignored acknowledged steer were controlled peer shortcomings; no product notification deletion.",
+    "codex_input": "Local pre-native-send inactive target now explicit runtime-input-closed; wrong owner and unknown delivery do not retry. 2ef unproven terminal-file patch fully reverted.",
+    "combined_ab619": "74pass147deselected includes70 CodexAppServer and4 fork-profile checks; precise shared fork fix preserved."
+  },
+  "additional_budget_host_failure": {
+    "classification": "controlled_host_transport_mismatch",
+    "evidence_ref": "tests/evidence/task344/engineer9-budget-host-evidence.txt",
+    "finding": "Existing codex-binding fixture declares CODEX_THREAD_ID but its fake executable parses stdio JSON, while current host opens WebSocket proxy. JSONDecodeError occurs before helper registration. Not counted passing, not treated as a new native permission or Task344 migration gate."
+  }
+}

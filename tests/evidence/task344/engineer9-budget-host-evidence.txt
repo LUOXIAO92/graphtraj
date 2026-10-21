@@ -1,0 +1,24 @@
+F                                                                        [100%]
+=================================== FAILURES ===================================
+_ test_integration_helper_stops_and_returns_notice_to_its_caller[codex-binding] _
+tests/test_task_budget_control.py:468: in test_integration_helper_stops_and_returns_notice_to_its_caller
+    pytest.fail('Integration caller ended before helper registration:\n' + stdout + stderr)
+E   Failed: Integration caller ended before helper registration:
+E   error: "Codex WebSocket Upgrade failed: Connection lost Proxy stderr:   return _default_decoder.decode(s)\n\
+E     \           ~~~~~~~~~~~~~~~~~~~~~~~^^^\n  File \"/Users/luoxiao/miniconda3/lib/python3.13/json/decoder.py\"\
+E     , line 345, in decode\n    obj, end = self.raw_decode(s, idx=_w(s, 0).end())\n \
+E     \              ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/luoxiao/miniconda3/lib/python3.13/json/decoder.py\"\
+E     , line 363, in raw_decode\n    raise JSONDecodeError(\"Expecting value\", s, err.value)\
+E     \ from None\njson.decoder.JSONDecodeError: Expecting value: line 1 column 1 (char\
+E     \ 0)"
+E   Error: Codex WebSocket Upgrade failed: Connection lost Proxy stderr:   return _default_decoder.decode(s)
+E              ~~~~~~~~~~~~~~~~~~~~~~~^^^
+E     File "/Users/luoxiao/miniconda3/lib/python3.13/json/decoder.py", line 345, in decode
+E       obj, end = self.raw_decode(s, idx=_w(s, 0).end())
+E                  ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+E     File "/Users/luoxiao/miniconda3/lib/python3.13/json/decoder.py", line 363, in raw_decode
+E       raise JSONDecodeError("Expecting value", s, err.value) from None
+E   json.decoder.JSONDecodeError: Expecting value: line 1 column 1 (char 0)
+=========================== short test summary info ============================
+FAILED tests/test_task_budget_control.py::test_integration_helper_stops_and_returns_notice_to_its_caller[codex-binding]
+1 failed in 26.77s

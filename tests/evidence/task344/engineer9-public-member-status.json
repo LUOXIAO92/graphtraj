@@ -1,0 +1,66 @@
+{
+  "caller": "344-agents_tasks_boundary_rework-handover0-engineer@engineer_9",
+  "explicit_agent_id": {
+    "action": "status",
+    "agent": "agent-bac97cd90b2c40ae98e4880efcbc072d",
+    "session": "01a15e42-be1b-7f12-b428-95c21a83dc56",
+    "execution": "01a15f07-743f-7882-8dca-5df178f01c49",
+    "message": null,
+    "result": {
+      "aliases": [
+        {
+          "alias": "344-agents_tasks_boundary_rework-handover0-engineer@engineer_9",
+          "session": "01a15e42-be1b-7f12-b428-95c21a83dc56",
+          "execution_id": "01a15f07-743f-7882-8dca-5df178f01c49",
+          "activity": "running",
+          "last_outcome": "completed",
+          "agent": "agent-bac97cd90b2c40ae98e4880efcbc072d",
+          "state": "active",
+          "last_result": {
+            "id": "26d073111c574c97adbbad93e6caf7e0",
+            "outcome": "completed",
+            "last_message": "Leader9：阶段候选 `31a3777` 已提交，提交号 `20261021T210558.084025+0900`。\n\n恢复检查 2 项、MCP 兼容检查 9 项通过。精确双包、哈希、回退和失败证据已交接。\n\n真实 Main 原生审核尚待验证；E4/E5 未完成，Task344 未接受。截止前收尾，保留原 Session。",
+            "error": null,
+            "terminal_confirmed": true,
+            "ended_at": 1792584824.664713
+          }
+        }
+      ]
+    }
+  },
+  "default_status": {
+    "action": "status",
+    "agent": null,
+    "session": null,
+    "execution": null,
+    "message": null,
+    "result": {
+      "agents": [],
+      "task_sessions": {
+        "agents": [
+          {
+            "alias": "344-agents_tasks_boundary_rework-handover0-engineer@engineer_9",
+            "parent": "344-agents_tasks_boundary_rework-handover0-team_leader@team_leader_9",
+            "children": [],
+            "session": "01a15e42-be1b-7f12-b428-95c21a83dc56",
+            "execution_id": "01a15f07-743f-7882-8dca-5df178f01c49",
+            "activity": "running",
+            "last_outcome": "completed",
+            "agent": "agent-bac97cd90b2c40ae98e4880efcbc072d",
+            "state": "active",
+            "last_result": {
+              "id": "26d073111c574c97adbbad93e6caf7e0",
+              "outcome": "completed",
+              "last_message": "Leader9：阶段候选 `31a3777` 已提交，提交号 `20261021T210558.084025+0900`。\n\n恢复检查 2 项、MCP 兼容检查 9 项通过。精确双包、哈希、回退和失败证据已交接。\n\n真实 Main 原生审核尚待验证；E4/E5 未完成，Task344 未接受。截止前收尾，保留原 Session。",
+              "error": null,
+              "terminal_confirmed": true,
+              "ended_at": 1792584824.664713
+            }
+          }
+        ]
+      }
+    }
+  },
+  "scope": "Actual public MCP under original Engineer9 Session. Main's full subtree and control operations are separate retained acceptance evidence, not inferred from this member view."
+}
+

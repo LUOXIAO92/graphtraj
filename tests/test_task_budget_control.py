@@ -463,6 +463,9 @@ def test_integration_helper_stops_and_returns_notice_to_its_caller(
             if mappings:
                 break
             time.sleep(.02)
+        if not mappings and process.poll() is not None:
+            stdout, stderr = process.communicate(timeout=5)
+            pytest.fail('Integration caller ended before helper registration:\n' + stdout + stderr)
         assert mappings
         directory = mappings[0].parent
         monitor = budgets.execution_budget_monitor(state / 'tasks/83-integration', '83', 'integration')

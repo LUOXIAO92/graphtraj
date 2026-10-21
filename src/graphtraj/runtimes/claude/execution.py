@@ -252,10 +252,10 @@ class ClaudeExecution:
                 began = time.monotonic()
                 progress = {'batches': batches, 'elapsed_seconds': elapsed,
                             'batch_started_at': time.time(), 'batch_complete': False}
-                with self.lock:
-                    self.diagnostics['collection_progress'] = progress
-                    self._save_diagnostics()
                 try:
+                    with self.lock:
+                        self.diagnostics['collection_progress'] = progress
+                        self._save_diagnostics()
                     if item[0] == 'bind':
                         self.collector.bind(item[1], item[2])
                     else:
@@ -283,7 +283,11 @@ class ClaudeExecution:
                             **progress, 'batches': batches, 'elapsed_seconds': elapsed,
                             'batch_complete': True, 'queued_records': self.collection.qsize(),
                         }
-                        self._save_diagnostics()
+                        try:
+                            self._save_diagnostics()
+                        except Exception as error:
+                            if self.collection_failure is None:
+                                self.collection_failure = error
 
     def _absorbed_inputs(self) -> int:
         """Count sent inputs that the native CLI absorbed into a running turn.

@@ -38,9 +38,16 @@ raise SystemExit(int(os.environ['HOST_FAIL']) if phase == 'later' else 0)
 
 HOST = r'''
 import asyncio, json, os, sys, time
+from contextlib import ExitStack
 from pathlib import Path
 import yaml
+from agent_swarm import Caller
+from agent_swarm.connection import verify_native_context
+from graphtraj.interfaces.agents import agents_callback
 from graphtraj.interfaces.local_tool import bind
+from graphtraj.interfaces.hosted_cli import CONNECTION_ENV
+from graphtraj.execution.runner_connection import worker_connection, parent_connection
+from graphtraj.execution.runner_status import runtime_caller
 from graphtraj.execution.execution_budget import budget_notice_output
 from graphtraj.runtimes.codex.app_server import CodexAppServer
 
@@ -60,6 +67,25 @@ async def main():
     actions = []
     current = None
     waiting = None
+    session = None
+    connections = ExitStack()
+
+    def operate(document):
+        """Authenticate the owned peer before handling its public CLI request."""
+        assert set(document) == {'cwd', 'request', 'native'}
+        assert document['cwd'] == str(root)
+        verify_native_context(document['native'], {
+            'runtime': 'codex', 'session': session.thread_id, 'cwd': str(root),
+        })
+        request = document['request']
+        assert request['action'] == 'execute'
+        result = invoke(request['feature'], request['arguments'])
+        return {'document': result.document, 'failed': result.failed}
+
+    os.environ[CONNECTION_ENV] = connections.enter_context(worker_connection(
+        scratch, operate,
+        authenticate=lambda pid: adapter.authenticate_caller(pid),
+    ))
     async with CodexAppServer(cwd=root, command=[str(peer)], experimental_api=True) as adapter:
         session = await adapter.create_session(Context())
         # This Session exists before GraphTraj binding or child launch.
@@ -93,9 +119,17 @@ async def main():
             asyncio.run_coroutine_threadsafe(forward(event), loop).result(timeout=8)
 
         tool = bind(root, event_receiver=receiver)
+        def invoke(feature, arguments):
+            """The owning host binds agents to its already created native Session."""
+            if feature == 'agents':
+                with parent_connection(tool.address), runtime_caller(root / '.graphtraj/runner', None):
+                    return agents_callback(root, Caller('native-host', None,
+                        runtime='codex', session=session.thread_id))(arguments)
+            return tool({'action':'execute','feature':feature,'arguments':arguments})
+
         def call(feature, arguments):
             """Run public operations in a thread so the host client continues reading."""
-            return tool({'action':'execute','feature':feature,'arguments':arguments}).document
+            return invoke(feature, arguments).document
 
         def launch():
             """Exercise both detached return and an original waiting call."""
@@ -104,7 +138,9 @@ async def main():
             read_fd, write_fd = os.pipe()
             try:
                 with budget_notice_output(write_fd):
-                    return call('swarm', {'tasks':[{'task_id':'76','role':'researcher','instruction':'request:'+os.environ['HOST_MODE'] if os.environ['HOST_MODE'] in {'approval','input'} else 'initial'}]})
+                    launched = call('swarm', {'tasks':[{'task_id':'76','role':'researcher','instruction':'initial'}]})
+                    call('agents', {'action':'wait','agent':launched['tasks'][0]['alias'],'timeout_seconds':30})
+                    return launched
             finally:
                 os.close(write_fd)
                 os.close(read_fd)
@@ -147,8 +183,10 @@ async def main():
                 raise AssertionError('event was reparented to a different host')
             other = bind(root,event_receiver=wrong_receiver)
             try:
-                response = await asyncio.to_thread(other,{'action':'execute','feature':'agents','arguments':{
-                    'action':'send','agent':alias,'message':'later'}})
+                with parent_connection(other.address), runtime_caller(root / '.graphtraj/runner', None):
+                    response = await asyncio.to_thread(agents_callback(root, Caller('native-host', None,
+                        runtime='codex', session=session.thread_id)),{
+                        'action':'send','agent':alias,'message':'later'})
                 ack=response.document['result']
             finally:
                 await asyncio.to_thread(other.close)
@@ -183,6 +221,7 @@ async def main():
             if alias:
                 await asyncio.to_thread(call,'agents',{'action':'interrupt','agent':alias})
             await asyncio.to_thread(tool.close)
+            await asyncio.to_thread(connections.close)
 
 asyncio.run(main())
 '''
@@ -236,7 +275,9 @@ def test_owning_host_processes_events_during_and_after_tool_call(
                  else [str(Path(os.environ['HOST_RUNNER']).with_name('agents')),json.dumps({
                      'action':'execute','feature':operation,'arguments':arguments})])
         action = subprocess.run(command,
-                                cwd=os.environ['HOST_PROJECT'], capture_output=True, text=True)
+                                cwd=os.environ['HOST_PROJECT'], capture_output=True, text=True,
+                                env={**os.environ, 'CODEX_THREAD_ID':thread_id,
+                                     'GRAPHTRAJ_NATIVE_RUNTIME':'codex'})
         assert action.returncode == 0, action.stdout + action.stderr
         with open(os.environ['HOST_ACTIONS'], 'a') as stream:
             stream.write(json.dumps({'session':thread_id,'event':event['event'],

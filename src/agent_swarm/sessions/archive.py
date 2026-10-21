@@ -476,11 +476,20 @@ class SessionArchive:
         self._native_headers: dict[tuple, dict[str, dict]] = {}
         self._native_revision: int | None = None
 
-    def native_header(self, runtime: str, native_id: str, *, agent_id: str | None = None) -> dict | None:
+    def native_header(
+        self,
+        runtime: str,
+        native_id: str,
+        *,
+        agent_id: str | None = None,
+        locator: str | None = None,
+    ) -> dict | None:
         """Resolve a native reference through retained headers, never ID spelling.
 
-        Only this tool's archive root is inspected. Multiple canonical headers
-        claiming the same native reference are an explicit migration conflict.
+        Only this tool's archive root is inspected. Explicit predecessor links
+        select the current project Session without changing native identity.
+        Unrelated headers claiming one native reference remain a conflict.
+        A locator selects the latest record for that physical native source.
         """
         directory = self.root / 'sessions'
         revision = directory.stat().st_mtime_ns if directory.exists() else 0
@@ -503,9 +512,27 @@ class SessionArchive:
             if (native.get('runtime') == runtime and native.get('sessionId') == native_id
                     and native.get('agentId') == agent_id):
                 matches[header['id']] = header
-        if len(matches) > 1:
+        if locator is not None:
+            matches = {key: header for key, header in matches.items()
+                       if header.get('graphtraj', {}).get('native', {}).get('locator') == locator}
+        predecessors = {header.get('graphtraj', {}).get('previousSession') for header in matches.values()}
+        latest = {key: header for key, header in matches.items() if key not in predecessors}
+        if matches and len(latest) != 1:
             raise ValueError('Native Session maps to multiple canonical archive IDs.')
-        return deepcopy(next(iter(matches.values()))) if matches else None
+        if latest:
+            current = next(iter(latest.values()))
+            visited = set()
+            cursor = current
+            while cursor['id'] not in visited:
+                visited.add(cursor['id'])
+                previous = cursor.get('graphtraj', {}).get('previousSession')
+                if previous not in matches:
+                    break
+                cursor = matches[previous]
+            if visited != set(matches):
+                raise ValueError('Native Session maps to unrelated canonical archive IDs.')
+            return deepcopy(current)
+        return None
 
     def native_id(self, runtime: str, native_id: str, *, agent_id: str | None = None) -> str:
         """Return the retained archive ID, or the default ID for a new archive."""

@@ -56,7 +56,7 @@ def test_boundaries_keep_identity_history_and_current_public_reads(tmp_path: Pat
         write(source, records)
         store = collect(source)
         assert store.header['graphtraj']['previousSession'] == ids[-1]
-        assert store.header['graphtraj']['native-research@x1']['sessionId'] == 'native-research@x1'
+        assert store.header['graphtraj']['native']['sessionId'] == 'native-research@x1'
         assert store.header['graphtraj']['agentId'] == agent
         assert 'parentSession' not in store.header  # Continuation is not a native fork.
         assert store.messages()[0]['content'][0]['text'] == f'summary-{index}'

@@ -144,7 +144,8 @@ def require_control(runner: Path, connection: Mapping[str, Any] | None) -> None:
         claim_main(runner, connection, f'{runtime}:first-control')
         on_claim()
         return
-    if current is None:
+    if current is None or session not in main_sessions(runner):
+        # Not a project Main (for example a native helper): its own authority decides.
         return
     at = time.strftime('%Y-%m-%dT%H:%M:%S%z', time.localtime(current['at']))
     raise RunnerError(

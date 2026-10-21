@@ -149,9 +149,9 @@ async def main():
                 raise AssertionError('event was reparented to a different host')
             other = bind(root,event_receiver=wrong_receiver)
             try:
-                response = await asyncio.to_thread(other,{'action':'execute','feature':'send_instruction','arguments':{
-                    'alias':alias,'instruction':'later','caused_by_event_ids':[events[-1]['event_id']]}})
-                ack=response.document
+                response = await asyncio.to_thread(other,{'action':'execute','feature':'agents','arguments':{
+                    'action':'send','agent':alias,'message':'later','caused_by_event_ids':[events[-1]['event_id']]}})
+                ack=response.document['result']
             finally:
                 await asyncio.to_thread(other.close)
             assert ack['send_status']=='sent',ack
@@ -183,7 +183,7 @@ async def main():
             (scratch/'initial-release').touch()
             (scratch/'later-release').touch()
             if alias:
-                await asyncio.to_thread(call,'interrupt',{'alias':alias})
+                await asyncio.to_thread(call,'agents',{'action':'interrupt','agent':alias})
             await asyncio.to_thread(tool.close)
 
 asyncio.run(main())
@@ -229,15 +229,15 @@ def test_owning_host_processes_events_during_and_after_tool_call(
         import subprocess
         event = json.loads(text)
         operation = 'reports' if event['event'] == 'result-submitted' else 'status'
-        arguments=[operation,event['alias']]
+        arguments={'agent':event['alias']}
         if event['event'] in {'item/commandExecution/requestApproval','item/tool/requestUserInput'}:
             operation='reply'
-            import tempfile
             details=json.loads(event['message'].split('\n')[-1])
-            with tempfile.NamedTemporaryFile(mode='w',suffix='.json',delete=False) as target:
-                json.dump(details,target)
-            arguments=['reply',event['alias'],'--request-file',target.name,'--response',json.dumps({'decision':'accept'} if event['event'].endswith('requestApproval') else {'answers':{'color':{'answers':['blue']}}})]
-        action = subprocess.run([os.environ['HOST_RUNNER'], *arguments],
+            arguments.update(request=details,response=({'decision':'accept'} if event['event'].endswith('requestApproval') else {'answers':{'color':{'answers':['blue']}}}))
+        command=([os.environ['HOST_RUNNER'],'reports',event['alias']] if operation=='reports'
+                 else [str(Path(os.environ['HOST_RUNNER']).with_name('agents')),json.dumps({
+                     'action':'execute','feature':operation,'arguments':arguments})])
+        action = subprocess.run(command,
                                 cwd=os.environ['HOST_PROJECT'], capture_output=True, text=True)
         assert action.returncode == 0, action.stdout + action.stderr
         with open(os.environ['HOST_ACTIONS'], 'a') as stream:

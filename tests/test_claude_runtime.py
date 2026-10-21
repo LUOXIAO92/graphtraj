@@ -3,6 +3,7 @@ from concurrent.futures import ThreadPoolExecutor
 from contextlib import ExitStack
 import json
 import os
+import shutil
 from pathlib import Path
 import sys
 import threading
@@ -402,6 +403,85 @@ def test_claude_later_prompt_hook_is_answered_during_one_slow_collection(
     assert outcome['outcome'] == 'completed' and 'finish' in outcome['last_agent_message']
 
 
+@pytest.mark.skipif(not os.environ.get('CLAUDE_TEST_TRANSCRIPT'), reason='Explicit authorized long native transcript')
+def test_claude_prompt_during_original_long_history_collection(
+    tmp_path: Path, claude_environment: None, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Exercise the owned protocol with real history costs, without a delayed collector.
+
+    The process is the controlled CLI peer, not real Claude. Only the explicitly
+    supplied transcript is copied; the original Session is never resumed or edited.
+    """
+    from graphtraj.interfaces import tools
+    from agent_swarm.sessions.claude_history import conversation, read_records
+    from agent_swarm.sessions.claude import ClaudeJsonlCollector
+    from agent_swarm.sessions.archive import JsonlSessionStore, SessionArchive, archive_path
+
+    original = Path(os.environ['CLAUDE_TEST_TRANSCRIPT'])
+    native_id = original.stem
+    records = read_records(original, native_id)
+    leaf = conversation(records)[-1]['uuid']
+    result_project(tmp_path)
+    shutil.copyfile(original, tmp_path / (native_id + '.jsonl'))
+    monkeypatch.setenv('CLAUDE_FIXTURE_PARENT_UUID', leaf)
+    monkeypatch.setenv('CLAUDE_FIXTURE_LATER_HOOK_TIMEOUT', '2')
+    hooks = tmp_path / 'hooks.log'
+    monkeypatch.setenv('CLAUDE_FIXTURE_HOOK_LOG', str(hooks))
+    monkeypatch.setenv('CLAUDE_FIXTURE_STREAM_FRAGMENTS', '100')
+    collecting = threading.Event()
+    collect = ClaudeJsonlCollector.collect
+
+    def observe(self) -> None:
+        """Signal real collection without changing its cost or outcome."""
+        collecting.set()
+        collect(self)
+
+    monkeypatch.setattr(ClaudeJsonlCollector, 'collect', observe)
+    archive = SessionArchive(tmp_path / 'archive', save_normalized_sessions=True, backfill_history=True)
+    with ExitStack() as stack, ThreadPoolExecutor(max_workers=1) as pool:
+        turn, ready, _ = execution(tmp_path, stack, 'wait-stream', expected=native_id)
+        turn.configure_independent(archive=archive, agents_callback=lambda request: None)
+        future = pool.submit(turn.run)
+        try:
+            assert ready.wait(10) and collecting.wait(10)
+            turn.operate({'operation': 'send', 'session': turn.session, 'execution_id': turn.execution_id,
+                          'instruction': 'finish'})
+            outcome = future.result(timeout=180)
+        finally:
+            if not turn.done.is_set():
+                turn.terminate()
+        assert outcome['outcome'] == 'completed'
+        assert outcome['last_agent_message'] == 'wait-stream|finish'
+        assert not hooks.exists() or 'timed out' not in hooks.read_text()
+        diagnostics = tools.read_reports({'alias': 'research@x1'}, cwd=tmp_path).document['runtime_diagnostics']
+        hook = diagnostics['prompt_hook']
+        assert hook['queue_seconds'] + hook['handler_seconds'] < 2
+        assert diagnostics['collection'] == 'complete'
+        retained = JsonlSessionStore(archive_path(archive.root, 'claude:' + native_id))
+        # This peer deliberately never finishes api-stream. Its interrupted
+        # output must remain pending instead of disappearing behind a result.
+        drafts = [item['event'] for item in retained.pending()]
+        assert len(drafts) == 1
+        assert drafts[0]['graphtraj']['native']['locator'] == 'stream:api-stream'
+        assert ''.join(item.get('text', '') for item in drafts[0]['data']['stream']) == 'x' * 100
+        with pytest.raises(ValueError, match='Unresolved observations'):
+            retained.messages()
+        events, after = [], -1
+        while True:
+            page = retained.page(after, 1000)
+            events.extend(page['events'])
+            if not page['has_more']:
+                break
+            after = page['after']
+        messages = [event['data'] if event['type'] == 'user/message' else event['data']['message']
+                    for event in events if event['type'] in {'user/message', 'assistant/message'}]
+        assert sum(message['id'] == leaf for message in messages) == 1
+        assert messages[-1]['content'] == [{'type': 'text', 'text': 'wait-stream|finish'}]
+        print(json.dumps({'transcript_bytes': original.stat().st_size, 'prompt_hook': hook,
+                          'collection_progress': diagnostics['collection_progress'],
+                          'collection_join_seconds': diagnostics['collection_join_seconds']}))
+
+
 def test_claude_interrupt_confirms_within_its_window_behind_a_collection_backlog(
         tmp_path: Path, claude_environment: None, monkeypatch: pytest.MonkeyPatch) -> None:
     """Queued fragments share archive rewrites, so a stop is confirmed inside the operation window."""
@@ -491,6 +571,10 @@ def test_claude_reports_physical_stop_before_archive_finishes(
             diagnostics = tools.read_reports({'alias': 'research@x1'}, cwd=tmp_path).document['runtime_diagnostics']
             evidence = diagnostics['termination']
             assert diagnostics['collection'] == 'pending'
+            assert diagnostics['collection_progress']['batch_complete'] is False
+            hook = diagnostics['prompt_hook']
+            assert hook['received_at'] <= hook['replied_at']
+            assert hook['queue_seconds'] >= 0 and hook['handler_seconds'] >= 0
             assert evidence['execution_id'] == turn.execution_id
             assert evidence['process_group_closed'] and evidence['pipes_closed']
             assert evidence['stdout_eof'] and evidence['stderr_eof']
@@ -510,6 +594,9 @@ def test_claude_reports_physical_stop_before_archive_finishes(
         final = tools.read_reports({'alias': 'research@x1'}, cwd=tmp_path).document['runtime_diagnostics']
         assert final['termination'] == evidence
         assert final['collection'] == ('failed' if archive_fails else 'complete')
+        assert final['collection_progress']['batch_complete'] is True
+        assert final['collection_progress']['elapsed_seconds'] > 0
+        assert final['collection_join_seconds'] >= 0
 
 
 def test_claude_mid_turn_input_shares_its_turn_result(tmp_path: Path, claude_environment: None) -> None:

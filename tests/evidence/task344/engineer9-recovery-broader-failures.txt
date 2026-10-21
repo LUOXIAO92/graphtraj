@@ -1,0 +1,302 @@
+FFFFFFFFFFF.ssF.                                                         [100%]
+=================================== FAILURES ===================================
+________________ test_bound_host_decides_inside_recover[accept] ________________
+tests/test_approved_recovery.py:975: in test_bound_host_decides_inside_recover
+    result = call(request).document
+             ^^^^^^^^^^^^^
+src/graphtraj/interfaces/local_tool.py:89: in review_bound
+    return callback(request)
+           ^^^^^^^^^^^^^^^^^
+src/graphtraj/interfaces/gateway.py:111: in handle_request
+    return tool.handler(request["arguments"], cwd=cwd)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/graphtraj/interfaces/tools.py:735: in recover_execution
+    result = approved_recovery(dict(arguments), cwd or Path.cwd())
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/graphtraj/execution/approved_recovery.py:80: in approved_recovery
+    after = _repair_snapshot(project, before, request)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/graphtraj/execution/approved_recovery.py:142: in _repair_snapshot
+    raise RunnerError('invalid-input', 'Task disposition and completed ancestors require task-graph revision.')
+E   graphtraj.execution.runner_models.RunnerError: Task disposition and completed ancestors require task-graph revision.
+_______________ test_bound_host_decides_inside_recover[decline] ________________
+tests/test_approved_recovery.py:983: in test_bound_host_decides_inside_recover
+    assert len(observed) == 1
+E   assert 0 == 1
+E    +  where 0 = len([])
+________________ test_bound_host_decides_inside_recover[error] _________________
+tests/test_approved_recovery.py:983: in test_bound_host_decides_inside_recover
+    assert len(observed) == 1
+E   assert 0 == 1
+E    +  where 0 = len([])
+_________ test_selected_http_reviewer_controls_recovery[accept-target] _________
+tests/test_approved_recovery.py:1029: in test_selected_http_reviewer_controls_recovery
+    result = invoke(root, request)
+             ^^^^^^^^^^^^^^^^^^^^^
+tests/test_approved_recovery.py:54: in invoke
+    result = local_tool.bind(root)({'action': 'execute', 'feature': 'approved_recovery', 'arguments': arguments})
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/graphtraj/interfaces/gateway.py:111: in handle_request
+    return tool.handler(request["arguments"], cwd=cwd)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/graphtraj/interfaces/tools.py:735: in recover_execution
+    result = approved_recovery(dict(arguments), cwd or Path.cwd())
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/graphtraj/execution/approved_recovery.py:80: in approved_recovery
+    after = _repair_snapshot(project, before, request)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/graphtraj/execution/approved_recovery.py:142: in _repair_snapshot
+    raise RunnerError('invalid-input', 'Task disposition and completed ancestors require task-graph revision.')
+E   graphtraj.execution.runner_models.RunnerError: Task disposition and completed ancestors require task-graph revision.
+_____ test_selected_http_reviewer_controls_recovery[accept-retired_target] _____
+tests/test_approved_recovery.py:995: in test_selected_http_reviewer_controls_recovery
+    root, task, _, arguments = request.getfixturevalue(fixture_name)
+                               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/Users/luoxiao/miniconda3/lib/python3.13/site-packages/_pytest/fixtures.py:630: in getfixturevalue
+    fixturedef = self._get_active_fixturedef(argname)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/Users/luoxiao/miniconda3/lib/python3.13/site-packages/_pytest/fixtures.py:726: in _get_active_fixturedef
+    fixturedef.execute(request=subrequest)
+/Users/luoxiao/miniconda3/lib/python3.13/site-packages/_pytest/fixtures.py:1232: in execute
+    result: FixtureValue = ihook.pytest_fixture_setup(
+/Users/luoxiao/miniconda3/lib/python3.13/site-packages/pluggy/_hooks.py:513: in __call__
+    return self._hookexec(self.name, self._hookimpls.copy(), kwargs, firstresult)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/Users/luoxiao/miniconda3/lib/python3.13/site-packages/pluggy/_manager.py:120: in _hookexec
+    return self._inner_hookexec(hook_name, methods, kwargs, firstresult)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/Users/luoxiao/miniconda3/lib/python3.13/site-packages/_pytest/setuponly.py:36: in pytest_fixture_setup
+    return (yield)
+            ^^^^^
+/Users/luoxiao/miniconda3/lib/python3.13/site-packages/_pytest/fixtures.py:1328: in pytest_fixture_setup
+    result = call_fixture_func(fixturefunc, request, kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/Users/luoxiao/miniconda3/lib/python3.13/site-packages/_pytest/fixtures.py:1005: in call_fixture_func
+    fixture_result = fixturefunc(**kwargs)
+                     ^^^^^^^^^^^^^^^^^^^^^
+tests/test_approved_recovery.py:1274: in retired_target
+    invoke(root, {**arguments, 'additional_minutes': 0, 'resume': False})
+tests/test_approved_recovery.py:54: in invoke
+    result = local_tool.bind(root)({'action': 'execute', 'feature': 'approved_recovery', 'arguments': arguments})
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/graphtraj/interfaces/gateway.py:111: in handle_request
+    return tool.handler(request["arguments"], cwd=cwd)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/graphtraj/interfaces/tools.py:735: in recover_execution
+    result = approved_recovery(dict(arguments), cwd or Path.cwd())
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/graphtraj/execution/approved_recovery.py:80: in approved_recovery
+    after = _repair_snapshot(project, before, request)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/graphtraj/execution/approved_recovery.py:142: in _repair_snapshot
+    raise RunnerError('invalid-input', 'Task disposition and completed ancestors require task-graph revision.')
+E   graphtraj.execution.runner_models.RunnerError: Task disposition and completed ancestors require task-graph revision.
+________ test_selected_http_reviewer_controls_recovery[decline-target] _________
+tests/test_approved_recovery.py:1037: in test_selected_http_reviewer_controls_recovery
+    assert error.value.code == 'recovery-denied'
+E   AssertionError: assert 'invalid-input' == 'recovery-denied'
+E     
+E     - recovery-denied
+E     + invalid-input
+____ test_selected_http_reviewer_controls_recovery[decline-retired_target] _____
+tests/test_approved_recovery.py:995: in test_selected_http_reviewer_controls_recovery
+    root, task, _, arguments = request.getfixturevalue(fixture_name)
+                               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/Users/luoxiao/miniconda3/lib/python3.13/site-packages/_pytest/fixtures.py:630: in getfixturevalue
+    fixturedef = self._get_active_fixturedef(argname)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/Users/luoxiao/miniconda3/lib/python3.13/site-packages/_pytest/fixtures.py:726: in _get_active_fixturedef
+    fixturedef.execute(request=subrequest)
+/Users/luoxiao/miniconda3/lib/python3.13/site-packages/_pytest/fixtures.py:1232: in execute
+    result: FixtureValue = ihook.pytest_fixture_setup(
+/Users/luoxiao/miniconda3/lib/python3.13/site-packages/pluggy/_hooks.py:513: in __call__
+    return self._hookexec(self.name, self._hookimpls.copy(), kwargs, firstresult)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/Users/luoxiao/miniconda3/lib/python3.13/site-packages/pluggy/_manager.py:120: in _hookexec
+    return self._inner_hookexec(hook_name, methods, kwargs, firstresult)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/Users/luoxiao/miniconda3/lib/python3.13/site-packages/_pytest/setuponly.py:36: in pytest_fixture_setup
+    return (yield)
+            ^^^^^
+/Users/luoxiao/miniconda3/lib/python3.13/site-packages/_pytest/fixtures.py:1328: in pytest_fixture_setup
+    result = call_fixture_func(fixturefunc, request, kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/Users/luoxiao/miniconda3/lib/python3.13/site-packages/_pytest/fixtures.py:1005: in call_fixture_func
+    fixture_result = fixturefunc(**kwargs)
+                     ^^^^^^^^^^^^^^^^^^^^^
+tests/test_approved_recovery.py:1274: in retired_target
+    invoke(root, {**arguments, 'additional_minutes': 0, 'resume': False})
+tests/test_approved_recovery.py:54: in invoke
+    result = local_tool.bind(root)({'action': 'execute', 'feature': 'approved_recovery', 'arguments': arguments})
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/graphtraj/interfaces/gateway.py:111: in handle_request
+    return tool.handler(request["arguments"], cwd=cwd)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/graphtraj/interfaces/tools.py:735: in recover_execution
+    result = approved_recovery(dict(arguments), cwd or Path.cwd())
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/graphtraj/execution/approved_recovery.py:80: in approved_recovery
+    after = _repair_snapshot(project, before, request)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/graphtraj/execution/approved_recovery.py:142: in _repair_snapshot
+    raise RunnerError('invalid-input', 'Task disposition and completed ancestors require task-graph revision.')
+E   graphtraj.execution.runner_models.RunnerError: Task disposition and completed ancestors require task-graph revision.
+_____ test_selected_http_reviewer_controls_recovery[wrong-request-target] ______
+tests/test_approved_recovery.py:1040: in test_selected_http_reviewer_controls_recovery
+    assert error.value.code == 'RUNTIME_REQUEST_FAILED'
+E   AssertionError: assert 'invalid-input' == 'RUNTIME_REQUEST_FAILED'
+E     
+E     - RUNTIME_REQUEST_FAILED
+E     + invalid-input
+_ test_selected_http_reviewer_controls_recovery[wrong-request-retired_target] __
+tests/test_approved_recovery.py:995: in test_selected_http_reviewer_controls_recovery
+    root, task, _, arguments = request.getfixturevalue(fixture_name)
+                               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/Users/luoxiao/miniconda3/lib/python3.13/site-packages/_pytest/fixtures.py:630: in getfixturevalue
+    fixturedef = self._get_active_fixturedef(argname)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/Users/luoxiao/miniconda3/lib/python3.13/site-packages/_pytest/fixtures.py:726: in _get_active_fixturedef
+    fixturedef.execute(request=subrequest)
+/Users/luoxiao/miniconda3/lib/python3.13/site-packages/_pytest/fixtures.py:1232: in execute
+    result: FixtureValue = ihook.pytest_fixture_setup(
+/Users/luoxiao/miniconda3/lib/python3.13/site-packages/pluggy/_hooks.py:513: in __call__
+    return self._hookexec(self.name, self._hookimpls.copy(), kwargs, firstresult)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/Users/luoxiao/miniconda3/lib/python3.13/site-packages/pluggy/_manager.py:120: in _hookexec
+    return self._inner_hookexec(hook_name, methods, kwargs, firstresult)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/Users/luoxiao/miniconda3/lib/python3.13/site-packages/_pytest/setuponly.py:36: in pytest_fixture_setup
+    return (yield)
+            ^^^^^
+/Users/luoxiao/miniconda3/lib/python3.13/site-packages/_pytest/fixtures.py:1328: in pytest_fixture_setup
+    result = call_fixture_func(fixturefunc, request, kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/Users/luoxiao/miniconda3/lib/python3.13/site-packages/_pytest/fixtures.py:1005: in call_fixture_func
+    fixture_result = fixturefunc(**kwargs)
+                     ^^^^^^^^^^^^^^^^^^^^^
+tests/test_approved_recovery.py:1274: in retired_target
+    invoke(root, {**arguments, 'additional_minutes': 0, 'resume': False})
+tests/test_approved_recovery.py:54: in invoke
+    result = local_tool.bind(root)({'action': 'execute', 'feature': 'approved_recovery', 'arguments': arguments})
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/graphtraj/interfaces/gateway.py:111: in handle_request
+    return tool.handler(request["arguments"], cwd=cwd)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/graphtraj/interfaces/tools.py:735: in recover_execution
+    result = approved_recovery(dict(arguments), cwd or Path.cwd())
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/graphtraj/execution/approved_recovery.py:80: in approved_recovery
+    after = _repair_snapshot(project, before, request)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/graphtraj/execution/approved_recovery.py:142: in _repair_snapshot
+    raise RunnerError('invalid-input', 'Task disposition and completed ancestors require task-graph revision.')
+E   graphtraj.execution.runner_models.RunnerError: Task disposition and completed ancestors require task-graph revision.
+_________ test_selected_http_reviewer_controls_recovery[error-target] __________
+tests/test_approved_recovery.py:1040: in test_selected_http_reviewer_controls_recovery
+    assert error.value.code == 'RUNTIME_REQUEST_FAILED'
+E   AssertionError: assert 'invalid-input' == 'RUNTIME_REQUEST_FAILED'
+E     
+E     - RUNTIME_REQUEST_FAILED
+E     + invalid-input
+_____ test_selected_http_reviewer_controls_recovery[error-retired_target] ______
+tests/test_approved_recovery.py:995: in test_selected_http_reviewer_controls_recovery
+    root, task, _, arguments = request.getfixturevalue(fixture_name)
+                               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/Users/luoxiao/miniconda3/lib/python3.13/site-packages/_pytest/fixtures.py:630: in getfixturevalue
+    fixturedef = self._get_active_fixturedef(argname)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/Users/luoxiao/miniconda3/lib/python3.13/site-packages/_pytest/fixtures.py:726: in _get_active_fixturedef
+    fixturedef.execute(request=subrequest)
+/Users/luoxiao/miniconda3/lib/python3.13/site-packages/_pytest/fixtures.py:1232: in execute
+    result: FixtureValue = ihook.pytest_fixture_setup(
+/Users/luoxiao/miniconda3/lib/python3.13/site-packages/pluggy/_hooks.py:513: in __call__
+    return self._hookexec(self.name, self._hookimpls.copy(), kwargs, firstresult)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/Users/luoxiao/miniconda3/lib/python3.13/site-packages/pluggy/_manager.py:120: in _hookexec
+    return self._inner_hookexec(hook_name, methods, kwargs, firstresult)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/Users/luoxiao/miniconda3/lib/python3.13/site-packages/_pytest/setuponly.py:36: in pytest_fixture_setup
+    return (yield)
+            ^^^^^
+/Users/luoxiao/miniconda3/lib/python3.13/site-packages/_pytest/fixtures.py:1328: in pytest_fixture_setup
+    result = call_fixture_func(fixturefunc, request, kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/Users/luoxiao/miniconda3/lib/python3.13/site-packages/_pytest/fixtures.py:1005: in call_fixture_func
+    fixture_result = fixturefunc(**kwargs)
+                     ^^^^^^^^^^^^^^^^^^^^^
+tests/test_approved_recovery.py:1274: in retired_target
+    invoke(root, {**arguments, 'additional_minutes': 0, 'resume': False})
+tests/test_approved_recovery.py:54: in invoke
+    result = local_tool.bind(root)({'action': 'execute', 'feature': 'approved_recovery', 'arguments': arguments})
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/graphtraj/interfaces/gateway.py:111: in handle_request
+    return tool.handler(request["arguments"], cwd=cwd)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/graphtraj/interfaces/tools.py:735: in recover_execution
+    result = approved_recovery(dict(arguments), cwd or Path.cwd())
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/graphtraj/execution/approved_recovery.py:80: in approved_recovery
+    after = _repair_snapshot(project, before, request)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/graphtraj/execution/approved_recovery.py:142: in _repair_snapshot
+    raise RunnerError('invalid-input', 'Task disposition and completed ancestors require task-graph revision.')
+E   graphtraj.execution.runner_models.RunnerError: Task disposition and completed ancestors require task-graph revision.
+_______________ test_mcp_recovery_waits_for_strict_native_review _______________
+/private/tmp/344-e9-source/tests/test_approved_recovery.py:1762: in test_mcp_recovery_waits_for_strict_native_review
+    with runtime_caller(root / '.graphtraj/runner', None):
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/private/tmp/344-e9-source/src/graphtraj/interfaces/mcp.py:284: in serve
+    serve_stdio(input_stream, output_stream, respond)
+/private/tmp/344-e9-source/src/agent_swarm/mcp.py:64: in serve
+    reply = (responder(message) if isinstance(message, dict)
+             ^^^^^^^^^^^^^^^^^^
+/private/tmp/344-e9-source/src/graphtraj/interfaces/mcp.py:281: in respond
+    return _respond(message)
+           ^^^^^^^^^^^^^^^^^
+/private/tmp/344-e9-source/src/graphtraj/interfaces/mcp.py:190: in _respond
+    return respond(message, _tool_documents, _tool_call_response, SERVER_INFO)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/private/tmp/344-e9-source/src/agent_swarm/mcp.py:48: in respond
+    return call(request_id, params)
+           ^^^^^^^^^^^^^^^^^^^^^^^^
+/private/tmp/344-e9-source/src/graphtraj/interfaces/mcp.py:143: in _tool_call_response
+    result = dispatch(arguments)
+             ^^^^^^^^^^^^^^^^^^^
+/private/tmp/344-e9-source/src/graphtraj/interfaces/mcp.py:132: in dispatch
+    return result if result is not None else gateway.handle_request(request, cwd=Path.cwd())
+                                             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/private/tmp/344-e9-source/src/graphtraj/interfaces/gateway.py:111: in handle_request
+    return tool.handler(request["arguments"], cwd=cwd)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/private/tmp/344-e9-source/src/graphtraj/interfaces/tools.py:735: in recover_execution
+    result = approved_recovery(dict(arguments), cwd or Path.cwd())
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/private/tmp/344-e9-source/src/graphtraj/execution/approved_recovery.py:89: in approved_recovery
+    decision = review_proposal(proposal, cwd, project.runner_directory)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/private/tmp/344-e9-source/src/graphtraj/execution/approved_recovery.py:113: in review_proposal
+    return reviewer(proposal)
+           ^^^^^^^^^^^^^^^^^^
+/private/tmp/344-e9-source/src/graphtraj/interfaces/mcp.py:280: in <lambda>
+    with recovery_review(lambda proposal: review(proposal, message['id'])):
+                                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/private/tmp/344-e9-source/src/graphtraj/interfaces/mcp.py:229: in review
+    output_stream.write(json.dumps(request, ensure_ascii=False) + '\n')
+/private/tmp/344-e9-source/tests/test_approved_recovery.py:1740: in write
+    summary = json.loads(params['message'].split('\n', 1)[1])
+           ^^^^^^^^^^^^^^^^^^
+E   KeyError: 'request'
+=========================== short test summary info ============================
+FAILED tests/test_approved_recovery.py::test_bound_host_decides_inside_recover[accept]
+FAILED tests/test_approved_recovery.py::test_bound_host_decides_inside_recover[decline]
+FAILED tests/test_approved_recovery.py::test_bound_host_decides_inside_recover[error]
+FAILED tests/test_approved_recovery.py::test_selected_http_reviewer_controls_recovery[accept-target]
+FAILED tests/test_approved_recovery.py::test_selected_http_reviewer_controls_recovery[accept-retired_target]
+FAILED tests/test_approved_recovery.py::test_selected_http_reviewer_controls_recovery[decline-target]
+FAILED tests/test_approved_recovery.py::test_selected_http_reviewer_controls_recovery[decline-retired_target]
+FAILED tests/test_approved_recovery.py::test_selected_http_reviewer_controls_recovery[wrong-request-target]
+FAILED tests/test_approved_recovery.py::test_selected_http_reviewer_controls_recovery[wrong-request-retired_target]
+FAILED tests/test_approved_recovery.py::test_selected_http_reviewer_controls_recovery[error-target]
+FAILED tests/test_approved_recovery.py::test_selected_http_reviewer_controls_recovery[error-retired_target]
+FAILED tests/test_approved_recovery.py::test_mcp_recovery_waits_for_strict_native_review
+12 failed, 2 passed, 2 skipped, 44 deselected in 101.38s (0:01:41)

@@ -441,6 +441,71 @@ class SessionArchive:
         self.save_normalized_sessions = save_normalized_sessions
         self.backfill_history = backfill_history
         self._mapped: dict[str, dict] = {}
+        self._native_headers: dict[tuple, dict[str, dict]] = {}
+        self._native_revision: int | None = None
+
+    def native_header(
+        self,
+        runtime: str,
+        native_id: str,
+        *,
+        agent_id: str | None = None,
+        locator: str | None = None,
+    ) -> dict | None:
+        """Resolve a native reference through retained headers, never ID spelling.
+
+        Only this tool's archive root is inspected. Explicit predecessor links
+        select the current project Session without changing native identity.
+        Unrelated headers claiming one native reference remain a conflict.
+        A locator selects the latest record for that physical native source.
+        """
+        directory = self.root / 'sessions'
+        revision = directory.stat().st_mtime_ns if directory.exists() else 0
+        if revision != self._native_revision:
+            headers = {}
+            for path in directory.glob('*/session.jsonl'):
+                with path.open(encoding='utf-8') as stream:
+                    metadata = json.loads(next(stream))
+                if metadata.get('archiveVersion') != 1:
+                    raise ValueError('Unsupported Session archive version.')
+                header = metadata['header']
+                validate_header(header)
+                native = header.get('graphtraj', {}).get('native', header.get('native', {}))
+                key = (native.get('runtime'), native.get('sessionId'), native.get('agentId'))
+                headers.setdefault(key, {})[header['id']] = header
+            self._native_headers, self._native_revision = headers, revision
+        matches = dict(self._native_headers.get((runtime, native_id, agent_id), {}))
+        for header in self._mapped.values():
+            native = header.get('graphtraj', {}).get('native', header.get('native', {}))
+            if (native.get('runtime') == runtime and native.get('sessionId') == native_id
+                    and native.get('agentId') == agent_id):
+                matches[header['id']] = header
+        if locator is not None:
+            matches = {key: header for key, header in matches.items()
+                       if header.get('graphtraj', {}).get('native', {}).get('locator') == locator}
+        predecessors = {header.get('graphtraj', {}).get('previousSession') for header in matches.values()}
+        latest = {key: header for key, header in matches.items() if key not in predecessors}
+        if matches and len(latest) != 1:
+            raise ValueError('Native Session maps to multiple canonical archive IDs.')
+        if latest:
+            current = next(iter(latest.values()))
+            visited = set()
+            cursor = current
+            while cursor['id'] not in visited:
+                visited.add(cursor['id'])
+                previous = cursor.get('graphtraj', {}).get('previousSession')
+                if previous not in matches:
+                    break
+                cursor = matches[previous]
+            if visited != set(matches):
+                raise ValueError('Native Session maps to unrelated canonical archive IDs.')
+            return deepcopy(current)
+        return None
+
+    def native_id(self, runtime: str, native_id: str, *, agent_id: str | None = None) -> str:
+        """Return the retained archive ID, or the default ID for a new archive."""
+        header = self.native_header(runtime, native_id, agent_id=agent_id)
+        return header['id'] if header else runtime + ':' + native_id + (':agent:' + agent_id if agent_id else '')
 
     def map_session(self, header: dict) -> None:
         """Register an already verified mapping supplied by the owning host.

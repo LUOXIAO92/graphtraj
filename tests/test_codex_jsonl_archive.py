@@ -9,7 +9,7 @@ import pytest
 from agent_swarm import write_config
 from graphtraj.interfaces.agents import ConfiguredSessionArchive
 from graphtraj.runtimes.codex.jsonl_archive import CodexJsonlArchive
-from graphtraj.sessions.archive import JsonlSessionStore, archive_path
+from graphtraj.sessions.archive import JsonlSessionStore, SessionArchive, archive_path
 from graphtraj.sessions.protocol import native_record
 from graphtraj.runtimes.codex.app_server import CodexAppServer
 from test_codex_app_server import context, peer  # noqa: F401
@@ -18,6 +18,11 @@ from test_codex_app_server import context, peer  # noqa: F401
 def write(path: Path, records: list[dict]) -> None:
     """Write complete native records in their supplied source order."""
     path.write_text(''.join(json.dumps(record) + '\n' for record in records))
+
+
+def current(root: Path) -> JsonlSessionStore:
+    """Read the current project Session for the test's native conversation."""
+    return JsonlSessionStore(archive_path(root, SessionArchive(root).native_id('codex', 'native')))
 
 
 def history() -> list[dict]:
@@ -51,7 +56,7 @@ def test_jsonl_native_order_content_ciphertext_and_partial_tail(tmp_path: Path) 
     with source.open('a') as stream:
         stream.write(tail[:20])
     collector.collect(source)
-    store = JsonlSessionStore(archive_path(root, 'codex:native'))
+    store = current(root)
     assert [native_record(event) for event in store.page()['events']] == records[:-1]
     assert [message['toolCallId'] for message in store.messages() if message['role'] == 'tool'] == ['b', 'a']
     with source.open('a') as stream:
@@ -108,7 +113,7 @@ def test_empty_compaction_replaces_messages_without_losing_evidence(tmp_path: Pa
     write(source, records)
     collector = CodexJsonlArchive(ConfiguredSessionArchive(root), 'agent', 'native', source)
     collector.collect(source)
-    store = JsonlSessionStore(archive_path(root, 'codex:native'))
+    store = current(root)
     assert native_record(store.page()['events'][-2]) == records[-1]
     assert store.messages() == []
 
@@ -132,7 +137,7 @@ def test_compaction_retained_context_and_rollback(tmp_path: Path) -> None:
     collector = CodexJsonlArchive(ConfiguredSessionArchive(root), 'agent', 'native', source)
     collector.collect(source)
     collector.collect(source)
-    store = JsonlSessionStore(archive_path(root, 'codex:native'))
+    store = current(root)
     assert [message['content'][0]['text'] for message in store.messages()] == ['keep']
     assert any(native_record(event) == records[-3] for event in store.page()['events']
                if event['type'] != 'graphtraj/history')
@@ -157,7 +162,7 @@ def test_rollback_restores_history_before_removed_legacy_compaction(tmp_path: Pa
     ])
     write(source, records)
     CodexJsonlArchive(ConfiguredSessionArchive(root), 'agent', 'native', source).collect(source)
-    store = JsonlSessionStore(archive_path(root, 'codex:native'))
+    store = current(root)
     assert [message['content'][0]['text'] for message in store.messages()] == ['keep']
 
 
@@ -182,7 +187,7 @@ def test_rollback_keeps_persistent_developer_prefix_and_original_annotations(tmp
     write(source, records)
     collector = CodexJsonlArchive(ConfiguredSessionArchive(root), 'agent', 'native', source)
     collector.collect(source)
-    store = JsonlSessionStore(archive_path(root, 'codex:native'))
+    store = current(root)
     assert store.messages()[0]['content'] == [{'type': 'text', 'text': 'persistent'}]
     assert native_record(store.page()['events'][1])['payload'] == developer
     # Replaying a later no-op rollback must not duplicate the derived prefix.
@@ -204,14 +209,14 @@ def test_native_agent_communication_keeps_author_ciphertext_and_rollback_boundar
     write(source, records)
     collector = CodexJsonlArchive(ConfiguredSessionArchive(root), 'agent', 'native', source)
     collector.collect(source)
-    store = JsonlSessionStore(archive_path(root, 'codex:native'))
+    store = current(root)
     message = store.messages()[-1]
     assert message['source']['author'] == 'main/worker'
     assert message['content'][0]['item']['content'][-1]['encrypted_content'] == 'opaque+/='
     assert native_record(store.page()['events'][-1]) == communication
     write(source, records + [{'type': 'event_msg', 'payload': {'type': 'thread_rolled_back', 'num_turns': 1}}])
     collector.collect(source)
-    assert len(JsonlSessionStore(store.path).messages()) == 1
+    assert len(current(root).messages()) == 1
 
 
 def test_copied_fork_seeds_before_child_messages(tmp_path: Path) -> None:
@@ -229,7 +234,7 @@ def test_copied_fork_seeds_before_child_messages(tmp_path: Path) -> None:
     write(source, records)
     collector = CodexJsonlArchive(ConfiguredSessionArchive(root), 'agent', 'native', source)
     collector.collect(source)
-    store = JsonlSessionStore(archive_path(root, 'codex:native'))
+    store = current(root)
     assert store.header['parentSession'] == 'codex:parent'
     assert len(store.messages()) == 8
     assert store.messages()[-1]['content'][0]['text'] == 'child'

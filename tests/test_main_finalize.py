@@ -960,6 +960,47 @@ def test_native_session_end_archives_terminal_tail_without_checking(host: tuple[
     assert native_record(store.page()['events'][-1]) == terminal
 
 
+def test_stop_checks_after_the_session_moves_to_a_new_rollout(host: tuple[Path, Path]) -> None:
+    """A reverted Codex Session continues in a new file; Stop still checks and archives it.
+
+    The first file's byte cursor lands inside a record of the new file, which
+    used to fail every later Stop with a bare JSON decode error.
+    """
+    from agent_swarm import write_config
+    from graphtraj.sessions.protocol import native_record
+
+    root, binding = host
+    binding.unlink()
+    write_config(swarm_root(root), save_normalized_sessions=True, backfill_history=False)
+    rollout(root)
+    first = (root / 'rollout.jsonl').read_text()
+    assert native_hook(root, 'SessionStart', source='startup')['systemMessage']
+
+    moved = root / 'rollout-moved.jsonl'
+    meta  = {'type': 'session_meta', 'payload': {'id': 'main', 'source': 'cli', 'base_instructions': 'x' * 400}}
+    turn  = {'type': 'turn_context', 'payload': {'turn_id': 'main-turn', 'model': 'actual-model', 'effort': 'high'}}
+    moved.write_text(json.dumps(meta) + '\n' + json.dumps(turn) + '\n')
+    assert len(first) < len(json.dumps(meta))
+    result = native_hook(root, transcript_path=str(moved))
+    assert 'Completion Check · completed' in result['systemMessage'], result
+    assert yaml.safe_load(binding.read_text())['activity']['trace_file'] == str(moved.resolve())
+
+    # The following hook reads only the new file's unseen records.
+    done = {'type': 'event_msg', 'payload': {'type': 'task_complete', 'turn_id': 'main-turn'}}
+    with moved.open('a') as stream:
+        stream.write(json.dumps(done) + '\n')
+    assert native_hook(root, 'SessionEnd', transcript_path=str(moved)) == {}
+    from graphtraj.sessions.archive import SessionArchive
+
+    archive = SessionArchive(swarm_root(root))
+    store = JsonlSessionStore(archive_path(archive.root, archive.native_id('codex', 'main')))
+    assert store.header['graphtraj']['previousSession'] == 'codex:main'
+    assert [native_record(event) for event in store.page()['events']] == [meta, turn, done]
+    original = JsonlSessionStore(archive_path(archive.root, 'codex:main'))
+    assert [native_record(event) for event in original.page()['events']] == [
+        json.loads(line) for line in first.splitlines()]
+
+
 def test_external_hook_remembers_saving_boundary_across_invocations(host: tuple[Path, Path]) -> None:
     """A later hook cannot silently backfill the time when collection was off."""
     from agent_swarm import write_config
@@ -1037,6 +1078,22 @@ def test_unknown_source_and_stale_event_leave_main_unchanged(host: tuple[Path, P
     assert native_hook(root, 'SessionStart')['continue'] is False
     rollout(root)
     assert native_hook(root, 'SessionStart', session_id='another-session')['continue'] is False
+    assert binding.read_bytes() == original
+
+
+@pytest.mark.parametrize('source', ['startup', 'compact'])
+def test_unreadable_start_input_is_visible_without_stopping_the_turn(host: tuple[Path, Path], source: str) -> None:
+    """Unreadable rollout bytes at SessionStart name their source; Stop still stops on them."""
+    root, binding = host
+    original = binding.read_bytes()
+    (root / 'rollout.jsonl').write_text('not json\n')
+    result = native_hook(root, 'SessionStart', source=source)
+    assert set(result) == {'systemMessage'}
+    assert f'SessionStart ({source}) input failed: Codex rollout' in result['systemMessage']
+    assert 'at byte 0' in result['systemMessage']
+    (root / 'rollout.jsonl').unlink()
+    assert 'cannot be read' in native_hook(root, 'SessionStart', source=source)['systemMessage']
+    assert native_hook(root)['continue'] is False
     assert binding.read_bytes() == original
 
 

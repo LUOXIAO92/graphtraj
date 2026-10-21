@@ -107,6 +107,14 @@ def validate_header(header: dict) -> None:
         _require(ext['version'] == EXTENSION_VERSION, 'header.graphtraj.version')
         _strings(ext, ('projectId', 'agentId'), 'header.graphtraj')
         _require(all(type(item) is str and item for item in ext['taskIds']), 'header.graphtraj.taskIds')
+        if 'previousSession' in ext:
+            _strings(ext, ('previousSession',), 'header.graphtraj')
+            _require(ext['previousSession'] != header['id'], 'header.graphtraj.previousSession')
+            _fields(ext, {'boundary': dict}, 'header.graphtraj')
+            boundary = ext['boundary']
+            _fields(boundary, {'kind': str, 'offset': int}, 'header.graphtraj.boundary')
+            _require(boundary['kind'] in {'rollout', 'compaction', 'rollback'}, 'header.graphtraj.boundary.kind')
+            _integer(boundary['offset'], 'header.graphtraj.boundary.offset')
 
 
 def validate_content(content: list) -> None:

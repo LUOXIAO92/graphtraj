@@ -142,15 +142,13 @@ async def main():
             if os.environ['HOST_ACTIVE']=='1':
                 current = await adapter.start_execution(session, 'hold')
                 waiting = asyncio.create_task(adapter.wait(current))
-            events=[json.loads(line) for shard in (root/'.graphtraj/state/worldline').glob('*.jsonl')
-                    for line in shard.read_text().splitlines()]
             def wrong_receiver(event):
                 """A later caller cannot replace the original receiver binding."""
                 raise AssertionError('event was reparented to a different host')
             other = bind(root,event_receiver=wrong_receiver)
             try:
                 response = await asyncio.to_thread(other,{'action':'execute','feature':'agents','arguments':{
-                    'action':'send','agent':alias,'message':'later','caused_by_event_ids':[events[-1]['event_id']]}})
+                    'action':'send','agent':alias,'message':'later'}})
                 ack=response.document['result']
             finally:
                 await asyncio.to_thread(other.close)

@@ -325,7 +325,12 @@ def test_second_child_batch_starts_while_first_batch_is_running(
     roles_file.write_text(yaml.safe_dump(roles))
     batch = root / 'probe.yml'
     batch.write_text(yaml.safe_dump({'tasks': [{'task_id': '320', 'role': 'researcher'}]}))
-    launched = command(installed_commands, root, environment, '--swarm-input', str(batch))
+    # An explicit baseline installation also exercises adoption with its old
+    # first-Batch Driver still alive, without changing the shared installation.
+    first_commands = installed_commands
+    if baseline := os.environ.get('CLAUDE_OLD_RUNNER_BIN'):
+        first_commands = InstalledCommands(Path(baseline) / 'graphtraj', Path(baseline) / 'agent-runner')
+    launched = command(first_commands, root, environment, '--swarm-input', str(batch))
     assert launched.returncode == 0, launched.stdout + launched.stderr
     alias = yaml.safe_load(launched.stdout)['tasks'][0]['alias']
     first = settled(installed_commands, root, environment, alias)
@@ -347,7 +352,8 @@ def test_second_child_batch_starts_while_first_batch_is_running(
     try:
         executions = []
         for count in (1, 2):
-            sent = command(installed_commands, root, environment, 'send', alias, '--instruction', 'register',
+            sent = command(first_commands if count == 1 else installed_commands, root, environment,
+                           'send', alias, '--instruction', 'register',
                            '--caused-by-event-id', events(root)[-1]['event_id'])
             assert sent.returncode == 0, sent.stdout + sent.stderr
             terminal = settled(installed_commands, root, environment, alias)

@@ -1425,7 +1425,7 @@ def refresh_codex_report_paths(
     reports_only: bool = False,
     session_directory: Path | None = None,
 ) -> Dict[str, Any]:
-    """Refresh only exact report and direct-control permissions in one resume."""
+    """Refresh project reads and exact report grants without widening native writes."""
 
     arguments, request_worktree = _validate_launch_request(request)
     if request_worktree != worktree:
@@ -1478,6 +1478,11 @@ def refresh_codex_report_paths(
             "The durable Codex launch request has invalid report permissions.",
         )
     filesystem = profile["filesystem"]
+    if session_directory is not None:
+        from graphtraj.runtimes.codex.access import project_development_reads
+        from graphtraj.configuration.project_configuration import runner_project_root
+
+        filesystem.update(project_development_reads(runner_project_root(session_directory.parent.parent)))
     workspace_roots = filesystem.get(":workspace_roots")
     if reports_only:
         if not isinstance(workspace_roots, dict) or "." not in workspace_roots:

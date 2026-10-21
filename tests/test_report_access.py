@@ -321,7 +321,7 @@ def test_installed_send_recovers_historical_reports(
     assert filesystem[str(own)] == ('write' if source == 'cli-launch' else 'read')
     assert filesystem[str(reference)] == 'read'
     assert str(private) not in filesystem
-    assert filesystem[str(root / '.graphtraj/state')] == 'none'
+    assert filesystem[str(root / '.graphtraj/state')] == 'read'
     assert private.read_text() == 'Private sibling evidence'
     assert filesystem[':workspace_roots']['.'] == 'read'
     reports = run_process([str(installed_commands.runner), 'reports', task['alias']], cwd=root, env=env)

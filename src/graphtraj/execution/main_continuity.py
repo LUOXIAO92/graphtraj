@@ -169,6 +169,14 @@ def route_notice(runner: Path, connection: Mapping[str, Any]) -> Mapping[str, An
     return {**current['connection'], 'runtime': current['runtime'], 'session': current['session']}
 
 
+def recorded_by_main(runner: Path, recorded: Mapping[str, Any]) -> bool:
+    """Whether a root's recorded creator or owner is any verified project Main Session.
+
+    Every verified Main reads these roots as the project's Main working state.
+    """
+    return recorded.get('agent') is None and recorded.get('session') in main_sessions(runner)
+
+
 def owns_main_root(runner: Path, recorded: Mapping[str, Any], connection: Mapping[str, Any]) -> bool:
     """Whether a root recorded under ``recorded`` Main belongs to ``connection``'s Main.
 
@@ -227,8 +235,7 @@ class MainRoots:
     def owns(self, caller: Any, creator: Mapping[str, Any]) -> bool:
         """Whether a root created by ``creator`` belongs to the project Main."""
         return (caller.agent is None and isinstance(caller.session, str)
-                and creator.get('agent') is None
-                and creator.get('session') in main_sessions(self.runner))
+                and recorded_by_main(self.runner, creator))
 
     def require_control(self, caller: Any) -> None:
         """Refuse control from a continued Main with the shared explanation."""

@@ -62,6 +62,7 @@ class ClaudeExecution:
         # Native control requests in arrival order, answered ahead of the
         # collection backlog; ``events`` still archives them in native order.
         self.controls: queue.Queue = queue.Queue()
+        self.prompt_received: dict[str, tuple[float, float]] = {}
         self.pending: dict[str, dict] = {}
         self.lock = threading.RLock()
         self.write_lock = threading.Lock()
@@ -239,12 +240,19 @@ class ClaudeExecution:
 
                 self.collector.store = stores.enter_context(SessionStore(self.collector.store.path))
             pending = []
+            batches = 0
+            elapsed = 0.0
             while True:
                 item = pending.pop() if pending else self.collection.get()
                 if item is None:
                     return
                 if self.collection_failure is not None:
                     continue
+                began = time.monotonic()
+                progress = {'batches': batches, 'elapsed_seconds': elapsed,
+                            'batch_started_at': time.time(), 'batch_complete': False}
+                with self.lock:
+                    self.diagnostics['collection_progress'] = progress
                 try:
                     if item[0] == 'bind':
                         self.collector.bind(item[1], item[2])
@@ -265,6 +273,14 @@ class ClaudeExecution:
                                 self.collector.accept(record, position)
                 except Exception as error:
                     self.collection_failure = error
+                finally:
+                    batches += 1
+                    elapsed += time.monotonic() - began
+                    with self.lock:
+                        self.diagnostics['collection_progress'] = {
+                            **progress, 'batches': batches, 'elapsed_seconds': elapsed,
+                            'batch_complete': True, 'queued_records': self.collection.qsize(),
+                        }
 
     def _absorbed_inputs(self) -> int:
         """Count sent inputs that the native CLI absorbed into a running turn.
@@ -432,6 +448,9 @@ class ClaudeExecution:
                         trace.flush()
                     if event.get('type') == 'system' and event.get('subtype') == 'session_state_changed':
                         self.drained_native_state = event.get('state')
+                    if (event.get('type') == 'control_request'
+                            and event.get('request', {}).get('callback_id') == 'graphtraj_start'):
+                        self.prompt_received[event['request_id']] = (time.monotonic(), time.time())
                     self.events.put(event)
                     if event.get("type") in ("control_request", "control_cancel_request"):
                         self.controls.put(event)
@@ -477,9 +496,20 @@ class ClaudeExecution:
 
                 self._reply(event['request_id'], display_response(request['input'], self.displayed))
             elif request.get('subtype') == 'hook_callback' and request.get('callback_id') == 'graphtraj_start':
+                began = time.monotonic()
+                received, received_at = self.prompt_received.pop(event['request_id'])
                 self._bind(request)
                 self._reply(event['request_id'], {})
                 self.task_released = True
+                # These are host observations, not native message timestamps.
+                # Keep the latest prompt's queue and handler costs separate.
+                with self.lock:
+                    self.diagnostics['prompt_hook'] = {
+                        'received_at': received_at, 'replied_at': time.time(),
+                        'queue_seconds': began - received,
+                        'handler_seconds': time.monotonic() - began,
+                    }
+                    self._save_diagnostics()
             elif request.get('subtype') == 'hook_callback' and request.get('callback_id') == 'graphtraj_collect_child':
                 from graphtraj.runtimes.claude.collection import collect_hook
 
@@ -491,6 +521,7 @@ class ClaudeExecution:
             else:
                 raise RuntimeAdapterError('RUNTIME_REQUEST_UNHANDLED', 'Unknown Claude control request.')
         else:
+            self.prompt_received.pop(event.get('request_id'), None)
             with self.lock:
                 self.pending = {key: value for key, value in self.pending.items()
                                 if value['request_id'] != event.get('request_id')}
@@ -819,7 +850,9 @@ class ClaudeExecution:
                 if collecting is not None:
                     # Records already handed over are archived before closing.
                     self.collection.put(None)
+                    archive_wait = time.monotonic()
                     collecting.join()
+                    self.diagnostics['collection_join_seconds'] = time.monotonic() - archive_wait
                     if not self.independent:
                         from graphtraj.sessions.storage import SessionStore
 

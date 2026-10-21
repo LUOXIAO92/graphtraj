@@ -173,6 +173,11 @@ class ClaudeJsonlCollector:
         try:
             for index, (record, position) in enumerate(records):
                 self.accept(record, position, defer=index < len(records) - 1)
+            # Every live observation is checkpointed above. Resolve the native
+            # history once after this batch, rather than rebuilding the same
+            # long transcript for every message already waiting in the queue.
+            if any(record.get('type') in {'assistant', 'user', 'result'} for record, _ in records):
+                self.collect()
         finally:
             del self.batch_store
 
@@ -259,7 +264,7 @@ class ClaudeJsonlCollector:
             # small explicitly non-native marker in the log.
             draft = self._event(f'live:{self.execution}:{position}', record)
             store.checkpoint(draft, source=self.execution, position=position)
-        if record.get('type') in {'assistant', 'user', 'result'}:
+        if record.get('type') in {'assistant', 'user', 'result'} and not hasattr(self, 'batch_store'):
             self.collect()
 
     def _message(self, record: dict, store: JsonlSessionStore) -> dict:

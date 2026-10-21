@@ -387,3 +387,28 @@ def test_received_batch_preserves_fragments_boundaries_and_policy(tmp_path: Path
     archive.save_normalized_sessions = False
     c.accept_batch([(boundary, len(records))])
     assert retained.path.read_bytes() == before
+
+
+def test_message_batch_reads_native_history_once(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Resolve a message backlog once, preserving native order and observations."""
+    c, path, archive = collector(tmp_path, [])
+    records = [message('q', None, 'question'), message('a', 'q', 'answer', role='assistant')]
+    write(path, records)
+    reads = []
+    original_open = Path.open
+
+    def observe(self: Path, *args: object, **kwargs: object):
+        """Measure actual transcript reads without replacing collection work."""
+        if self == path:
+            reads.append(self)
+        return original_open(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, 'open', observe)
+    # Notifications can arrive backwards; the native chain decides order.
+    boundary = {'type': 'control_request', 'request': {'unknown': 'retained'}}
+    c.accept_batch([(records[1], 0), (records[0], 1), (boundary, 2)])
+    assert len(reads) == 1
+    retained = store(archive)
+    assert [m['id'] for m in retained.messages()] == ['q', 'a']
+    observed = [o['event']['graphtraj']['native']['record'] for o in retained.observations()]
+    assert all(record in observed for record in [*records, boundary])

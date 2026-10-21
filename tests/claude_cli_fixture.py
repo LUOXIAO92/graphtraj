@@ -52,7 +52,8 @@ Path(os.environ['CLAUDE_FIXTURE_HOME'], 'native-permissions.json').write_text(js
 }))
 history = Path(os.environ['CLAUDE_FIXTURE_HOME']) / (session + '.json')
 transcript = history.with_suffix('.jsonl')
-parent_uuid = json.loads(transcript.read_text().splitlines()[-1])['uuid'] if transcript.exists() else None
+parent_uuid = os.environ.get('CLAUDE_FIXTURE_PARENT_UUID') or (
+    json.loads(transcript.read_text().splitlines()[-1])['uuid'] if transcript.exists() else None)
 Path(os.environ['CLAUDE_FIXTURE_HOME'], 'native-selection.json').write_text(json.dumps({
     'model': model, 'effort': args[args.index('--effort') + 1] if '--effort' in args else None,
     'environment_effort': os.environ.get('CLAUDE_CODE_EFFORT_LEVEL'),

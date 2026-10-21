@@ -1612,7 +1612,7 @@ def test_installed_mcp_server_returns_a_budget_stop_to_the_request_caller(
         assert _native_queue_submissions(protocol) == []
 
 
-def test_installed_runner_returns_a_budget_stop_with_the_awaiting_call(
+def test_installed_runner_returns_after_launch_and_delivers_a_native_budget_stop(
     installed_commands: InstalledCommands,
     temporary_git_repository: Path,
     fake_codex: FakeCodex,
@@ -1654,10 +1654,11 @@ def test_installed_runner_returns_a_budget_stop_with_the_awaiting_call(
         env={**run_environment, "CODEX_THREAD_ID": "thread-main"},
         timeout=300,
     )
-    assert completed.returncode == 1, completed.stdout + completed.stderr
+    assert completed.returncode == 0, completed.stdout + completed.stderr
     document = yaml.safe_load(completed.stdout)
-    assert document["tasks"][0]["launch_status"] == "stopped"
+    assert document["tasks"][0]["launch_status"] == "launched"
     task_directory = harness / ".graphtraj/state/tasks/76-session-alias-control"
+    _await_retained_stop(task_directory)
     _assert_native_budget_stop(protocol, task_directory, "thread-main")
     assert "stop_deliveries" not in document
     assert _native_queue_submissions(protocol) == []
@@ -1865,6 +1866,7 @@ def test_installed_mcp_server_does_not_queue_a_late_stop_without_a_waiting_call(
             sent = server.call(
                 'send',
                 {'agent': alias, 'message': "Inspect the retained result."},
+                thread_id="thread-main",
             )["result"]
             assert sent["isError"] is False, sent
             sent_task = sent['structuredContent']

@@ -982,10 +982,12 @@ class CodexAppServer:
             # natively. The socket entry is not a limit: other Unix sockets
             # and loopback TCP stay reachable under managed network.
             parameters['permissions'] = CHECKER_PERMISSION_PROFILE
-            parameters['config'] = {'permissions': {CHECKER_PERMISSION_PROFILE: {
+            # A root permissions override replaces Main's named profiles.
+            # Override only the checker entry so its parent remains resolvable.
+            parameters['config'] = {'permissions.' + CHECKER_PERMISSION_PROFILE: {
                 'extends': profile['id'],
                 'network': {'enabled': True, 'unix_sockets': {socket: 'allow'}},
-            }}}
+            }}
         elif isinstance(profile, dict) and isinstance(profile.get('id'), str):
             parameters['permissions'] = profile['id']
         elif 'sandbox' in configuration:

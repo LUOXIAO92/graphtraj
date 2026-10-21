@@ -82,8 +82,12 @@ def project_access(request: dict, value: Any) -> None:
             features['network_proxy'] = previous['proxy']
         config['features'] = features
     if value and request['worktree_path'] in value['worktrees']:
+        if (config.get('features', {}).get('network_proxy') is not True
+                or profile.get('network', {}).get('enabled') is not True):
+            raise RuntimeAdapterError('ROLE_CONFIG_INVALID',
+                                      'local_websocket requires an already enabled native network proxy.')
         had_network = 'network' in profile
-        network = profile.setdefault('network', {})
+        network = profile['network']
         if network.get('enabled') is False:
             raise RuntimeAdapterError('ROLE_CONFIG_INVALID', 'local_websocket conflicts with disabled network.')
         had_domains = 'domains' in network

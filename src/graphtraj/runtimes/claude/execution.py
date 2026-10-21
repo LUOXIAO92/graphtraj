@@ -324,11 +324,32 @@ class ClaudeExecution:
         resources = [p.resolve() for p in (worktree / 'docs', worktree / 'CONTEXT.md',
                                            worktree / 'AGENTS.md', worktree / '.agents') if p.exists()]
         resources.extend(Path(path).resolve() for path in request['resources'])
+        from graphtraj.runtimes.codex.access import project_history_files
+
+        history = {path for path in project_history_files(root)
+                   if not path.is_relative_to(project_cli_directory(root).resolve())}
+        resources.extend(sorted(history))
         # Project development records stay readable for diagnosis across
         # Agents; control channels, Runtime homes and credentials stay denied.
         records = [request['state_directory'], str(project_runner_directory(root))]
         denied_read = [str(project_cli_directory(root)),
                        str(root / '.codex'), str(Path.home() / '.codex'), str(home)]
+        native_denied_read = []
+        for protected in map(Path, denied_read):
+            if not any(path.is_relative_to(protected) for path in history):
+                native_denied_read.append(str(protected))
+                continue
+            # Native Read deny rules override exact file grants. Restricted
+            # mode instead confines these reads to the declared history files;
+            # sandbox denyRead stays in force with exact allowRead exceptions.
+            # Never use this arrangement when a working directory exposes the
+            # protected home itself or another part of it.
+            if any(path.is_relative_to(protected) or protected.is_relative_to(path)
+                   for path in (worktree, *(p for p in resources if p.is_dir()))):
+                raise RuntimeAdapterError(
+                    'RUNTIME_ACCESS_DENIED',
+                    'Exact native history reads require working directories outside protected Runtime homes.',
+                )
         denied_write = [*records, *map(str, resources), request['docs_directory'], str(home),
                         str(project_configuration_file(root)), str(project_core_directory(root) / 'roles.yml'),
                         str(Path(request['git_common_directory']) / 'config'),
@@ -351,7 +372,7 @@ class ClaudeExecution:
             'permissions': {
                 'blockReadsOutsideWorkingDirectories': True,
                 'allow': [rule for p in (*resources, *records) for rule in (f'Read(/{p})', f'Read(/{p}/**)')],
-                'deny': [rule for p in denied_read for rule in (f'Read(/{p})', f'Read(/{p}/**)')]
+                'deny': [rule for p in native_denied_read for rule in (f'Read(/{p})', f'Read(/{p}/**)')]
                         + [rule for p in denied_write for rule in (f'Edit(/{p})', f'Edit(/{p}/**)')]
                         + (['Edit', 'Write', 'NotebookEdit'] if request['worktree_access'] == 'read' else []),
                 # Settings admit exact resource paths, including files; unlike

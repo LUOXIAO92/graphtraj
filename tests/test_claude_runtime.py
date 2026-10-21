@@ -825,6 +825,45 @@ def test_claude_resource_grants_and_read_only_recovery(tmp_path: Path, claude_en
         context(tmp_path, claude={'read_paths': [str(cli_directory(tmp_path))]})
 
 
+@pytest.mark.parametrize('access', ['read', 'write'])
+def test_project_history_files_keep_native_home_private(
+    tmp_path: Path, claude_environment: None, access: str, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Grant associated original histories without admitting their home or neighbors."""
+    result_project(tmp_path)
+    home = tmp_path / 'native-home'
+    home.mkdir()
+    history = home / 'other-agent.jsonl'
+    history.write_text('{"development": "retained project record"}\n')
+    unrelated = home / 'unrelated.jsonl'
+    unrelated.write_text('Not associated with this project.\n')
+    association = tmp_path / '.graphtraj/runner/sessions/other/session.yml'
+    association.parent.mkdir(parents=True)
+    association.write_text(yaml.safe_dump({'session': 'other', 'rollout_path': str(history)}))
+    monkeypatch.setenv('CLAUDE_CONFIG_DIR', str(home))
+    fields = {'worktree_access': access}
+    for path in (home, unrelated):
+        with pytest.raises(RuntimeAdapterError, match='credentials'):
+            context(tmp_path, **fields, claude={'read_paths': [str(path)]})
+    with ExitStack() as stack:
+        turn, _, _ = execution(tmp_path, stack, 'history configuration', **fields,
+                               claude={'read_paths': [str(history)]})
+        turn.run()
+    launch = json.loads((tmp_path / 'native-permissions.json').read_text())
+    settings = launch['settings']
+    permissions = settings['permissions']
+    filesystem = settings['sandbox']['filesystem']
+    assert launch['restricted'] and permissions['blockReadsOutsideWorkingDirectories']
+    assert str(history) in permissions['additionalDirectories']
+    assert str(home) not in permissions['additionalDirectories']
+    assert str(unrelated) not in permissions['additionalDirectories']
+    assert str(history) in filesystem['allowRead']
+    assert str(home) in filesystem['denyRead']
+    assert str(home) in filesystem['denyWrite']
+    assert f'Edit(/{history})' in permissions['deny']
+    assert not settings['sandbox']['allowUnsandboxedCommands']
+
+
 def test_claude_stop_without_native_settlement_confirms_only_exit(
     tmp_path: Path, claude_environment: None, monkeypatch: pytest.MonkeyPatch,
 ) -> None:

@@ -406,12 +406,22 @@ def test_new_native_owner_refreshes_project_reads_from_old_request(
 
     reads = (configuration.state, configuration.docs, configuration.agent_worktrees,
              runner_directory(root))
+    native_home = tmp_path / 'retained-native-home'
+    native_home.mkdir()
+    history = native_home / 'other-agent.jsonl'
+    history.write_text('Associated project development record\n')
+    unrelated = native_home / 'unrelated.jsonl'
+    unrelated.write_text('Outside this project\n')
+    association = runner_directory(root) / 'sessions/other-agent/session.yml'
+    association.parent.mkdir(parents=True)
+    association.write_text(yaml.safe_dump({'session': 'other-agent', 'rollout_path': str(history)}))
     stale = copy.deepcopy(request)
     config = stale['session_parameters']['config']
     filesystem = config['permissions'][config['default_permissions']]['filesystem']
     for path in reads:
         filesystem.pop(str(path), None)
     filesystem[str(configuration.state)] = 'none'
+    filesystem[str(native_home)] = 'none'
     filesystem[':workspace_roots']['.'] = access
     before = copy.deepcopy(stale)
     resumed = CodexManagedExecution(stale, 'request: resumed', directory,
@@ -426,6 +436,9 @@ def test_new_native_owner_refreshes_project_reads_from_old_request(
     actual = received['params']['config']
     permissions = actual['permissions'][actual['default_permissions']]['filesystem']
     assert all(permissions[str(path)] == 'read' for path in reads)
+    assert permissions[str(history)] == 'read'
+    assert permissions[str(native_home)] == 'none'
+    assert str(unrelated) not in permissions
     assert permissions[str(root / '.graphtraj')] == 'none'
     assert permissions[':workspace_roots']['.'] == access
     assert actual['model_provider'] == config['model_provider']

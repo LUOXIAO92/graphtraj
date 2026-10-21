@@ -68,10 +68,20 @@ or invoke a second apply command. A rejected or failed review leaves the
 unapproved repair unapplied. Causal references and caller-supplied claims are
 not approval tokens.
 
+For a direct Codex MCP client advertising form elicitation, `approved_recovery`
+requests sensitive, synchronous native automatic review through that same
+connection. It keeps the original call pending and requires the matching
+`auto_review` response before applying the repair. Refusal, cancellation,
+disconnect or an unavailable reviewer applies nothing. There is no separate
+approval token or apply command. Reload the adopted MCP server through the
+host's normal path before using new server behavior; changing disk files alone
+does not update an already running server.
+
 For Codex, configured HTTP review uses the existing `codex.approval` settings,
 including role overrides. Managed Codex executions configured for human review
 use the existing pending request and reply channel. Plain CLI calls require
-the selected HTTP route; other local hosts must bind an actual selected reviewer.
+the selected HTTP route; forwarded managed calls retain their owner's reviewer
+binding, and other local hosts must bind an actual selected reviewer.
 A host-bound reviewer must actually be available; selecting a
 native reviewer without a callable host route does not grant approval. HTTP
 review is not evidence that Codex's native automatic reviewer ran. Do not

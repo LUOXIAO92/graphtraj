@@ -15,6 +15,8 @@ from __future__ import annotations
 import os
 import sys
 import hashlib
+import json
+import uuid
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Iterator, Mapping, TextIO
@@ -189,10 +191,97 @@ def _respond(message: Mapping[str, Any]) -> dict[str, Any] | None:
 
 
 def serve(input_stream: TextIO, output_stream: TextIO) -> None:
-    """Use the same framing as independent MCP, preserving the public host seam."""
+    """Serve tools and obtain recovery decisions from the same native MCP client."""
     from agent_swarm.mcp import serve as serve_stdio
+    from graphtraj.runtimes.runtime_adapter import recovery_review
 
-    serve_stdio(input_stream, output_stream, _respond)
+    capabilities = {}
+
+    def review(proposal: dict, call_id: Any) -> dict:
+        """Keep the repair pending until its strict native review response arrives."""
+        from graphtraj.execution.approved_recovery import _differences
+
+        request_id = 'recovery-' + uuid.uuid4().hex
+        summary = {'request': proposal['request'],
+                   'changes': _differences(proposal['before'], proposal['after']),
+                   'authority': proposal['authority']}
+        request = {'jsonrpc': '2.0', 'id': request_id, 'method': 'elicitation/create',
+                   'params': {
+                       'mode': 'form',
+                       'message': 'Review this exact Task recovery before any repair is applied.\n'
+                                  + json.dumps(summary, ensure_ascii=False),
+                       'requestedSchema': {'type': 'object', 'properties': {}},
+                       '_meta': {
+                           'codex_request_type': 'approval_request',
+                           'codex_approval_kind': 'mcp_tool_call',
+                           'codex_strict_auto_review': True,
+                           'codex_sensitive_action': True,
+                           'tool_name': 'tasks',
+                           'tool_title': 'Approve Task recovery',
+                           'tool_description': 'Add only the requested execution time and apply '
+                                               'the shown repair to the original Task and Session.\n'
+                                               + json.dumps({'changes': summary['changes'],
+                                                             'authority': summary['authority']}, ensure_ascii=False),
+                           'tool_params': {'action': 'execute', 'feature': 'approved_recovery',
+                                           'arguments': proposal['request']},
+                       },
+                   }}
+        output_stream.write(json.dumps(request, ensure_ascii=False) + '\n')
+        output_stream.flush()
+        while line := input_stream.readline():
+            response = json.loads(line)
+            if not isinstance(response, dict):
+                raise RunnerError('native-approval-unavailable', 'Invalid native recovery response.')
+            if response.get('method') == 'notifications/cancelled':
+                if response.get('params', {}).get('requestId') in (call_id, request_id):
+                    raise RunnerError('recovery-denied', 'Native recovery review was cancelled.')
+                continue
+            if 'method' in response:
+                # Do not run another mutation while the reviewed snapshot waits.
+                if 'id' in response:
+                    reply = (_result_response(response['id'], {}) if response['method'] == 'ping'
+                             else _error_response(response['id'], -32000, 'Recovery review is pending.'))
+                    output_stream.write(json.dumps(reply, ensure_ascii=False) + '\n')
+                    output_stream.flush()
+                continue
+            if response.get('id') != request_id or 'error' in response:
+                raise RunnerError('native-approval-unavailable', 'Native recovery review did not return a decision.')
+            result = response.get('result', {})
+            if not isinstance(result, dict):
+                raise RunnerError('native-approval-unavailable', 'Invalid native recovery decision.')
+            metadata = result.get('_meta') or {}
+            if not isinstance(metadata, dict):
+                raise RunnerError('native-approval-unavailable', 'Invalid native recovery metadata.')
+            if result.get('action') in ('decline', 'cancel'):
+                return {'decision': 'decline', 'rationale': metadata.get('message', 'Native review refused recovery.')}
+            if (result.get('action') == 'accept' and result.get('content') == {}
+                    and metadata.get('approvals_reviewer') == 'auto_review'):
+                return {'decision': 'accept'}
+            raise RunnerError('native-approval-unavailable', 'Recovery requires an actual native auto_review decision.')
+        raise RunnerError('native-approval-unavailable', 'Native recovery review disconnected before deciding.')
+
+    def respond(message: Mapping[str, Any]) -> dict | None:
+        """Bind only a direct Codex MCP recovery call to its client's review channel."""
+        nonlocal capabilities
+        params = message.get('params', {})
+        if message.get('method') == 'initialize':
+            capabilities = params.get('capabilities', {}) if isinstance(params, dict) else {}
+        if not isinstance(params, dict):
+            return _respond(message)
+        arguments = params.get('arguments', {})
+        metadata = params.get('_meta', {})
+        elicitation = capabilities.get('elicitation') if isinstance(capabilities, dict) else None
+        if (message.get('method') == 'tools/call' and params.get('name') == 'tasks'
+                and isinstance(arguments, dict) and arguments.get('action') == 'execute'
+                and arguments.get('feature') == 'approved_recovery'
+                and isinstance(metadata, dict) and isinstance(metadata.get('threadId'), str)
+                and isinstance(elicitation, dict) and (not elicitation or 'form' in elicitation)
+                and 'GRAPHTRAJ_CLI_CONNECTION' not in os.environ):
+            with recovery_review(lambda proposal: review(proposal, message['id'])):
+                return _respond(message)
+        return _respond(message)
+
+    serve_stdio(input_stream, output_stream, respond)
 
 
 def main() -> None:

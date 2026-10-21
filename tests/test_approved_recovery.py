@@ -1683,3 +1683,131 @@ def test_budget_only_continue_is_not_blocked_by_a_stopped_old_root(
         'action': 'send', 'agent': mapping['alias'], 'message': 'Continue old work.',
     }})
     assert refused.failed and refused.document['error']['code'] == 'subtree-stopped'
+
+
+def test_mcp_recovery_waits_for_strict_native_review(
+    accepted_target: tuple, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The public stdio call applies only its matched native automatic decision."""
+    from collections import deque
+    from contextlib import nullcontext
+    from io import TextIOBase
+    from graphtraj.interfaces import mcp
+
+    root, task, _, arguments = accepted_target
+    monkeypatch.chdir(root)
+    monkeypatch.delenv('GRAPHTRAJ_CLI_CONNECTION', raising=False)
+    monkeypatch.delenv('AGENT_SWARM_CONNECTION', raising=False)
+    monkeypatch.setattr(mcp, '_caller_notices', lambda params: nullcontext(None))
+    arguments = {**arguments, 'resume': False}
+    budget_file = task / 'execution-budget.yml'
+    before = budget_file.read_bytes()
+    events = read_worldline(task.parent.parent, root)
+
+    class ClientInput(TextIOBase):
+        """Supply client messages and the later response to the server's request."""
+        def __init__(self, messages: list[dict]) -> None:
+            self.messages = deque(json.dumps(message) + '\n' for message in messages)
+
+        def readline(self, size: int = -1) -> str:
+            """Return the next protocol message, or signal client disconnection."""
+            return self.messages.popleft() if self.messages else ''
+
+    for decision in ('decline', 'cancel', 'unmarked', 'wrong-id', 'error', 'disconnect', 'accept', 'retry'):
+        source = ClientInput([
+            {'jsonrpc': '2.0', 'id': 1, 'method': 'initialize',
+             'params': {'capabilities': {'elicitation': {'form': {}}}}},
+            {'jsonrpc': '2.0', 'id': 2, 'method': 'tools/call', 'params': {
+                'name': 'tasks', '_meta': {'threadId': 'controlled-main'},
+                'arguments': {'action': 'execute', 'feature': 'approved_recovery',
+                              'arguments': arguments}}},
+        ])
+        observed = []
+
+        class ClientOutput(TextIOBase):
+            """Observe the exact proposal before returning the controlled client decision."""
+            def write(self, text: str) -> int:
+                message = json.loads(text)
+                observed.append(message)
+                if message.get('method') == 'elicitation/create':
+                    assert decision != 'retry'
+                    assert budget_file.read_bytes() == before
+                    params = message['params']
+                    assert params['requestedSchema'] == {'type': 'object', 'properties': {}}
+                    assert params['_meta']['codex_strict_auto_review'] is True
+                    assert params['_meta']['codex_sensitive_action'] is True
+                    assert params['_meta']['tool_params']['arguments'] == arguments
+                    summary = json.loads(params['message'].split('\n', 1)[1])
+                    assert summary['request'] == arguments
+                    assert {'field': 'budget.approved_minutes', 'expected': None, 'actual': 7} in summary['changes']
+                    reply = {'jsonrpc': '2.0', 'id': message['id'], 'result': {
+                        'action': decision if decision in ('decline', 'cancel') else 'accept',
+                        'content': {} if decision not in ('decline', 'cancel') else None,
+                        '_meta': {'approvals_reviewer': 'auto_review'},
+                    }}
+                    if decision == 'unmarked':
+                        reply['result'].pop('_meta')
+                    elif decision == 'wrong-id':
+                        reply['id'] = 'unrelated-review'
+                    elif decision == 'error':
+                        reply = {'jsonrpc': '2.0', 'id': message['id'],
+                                 'error': {'code': -32603, 'message': 'Reviewer unavailable'}}
+                    if decision != 'disconnect':
+                        source.messages.append(json.dumps(reply) + '\n')
+                return len(text)
+
+            def flush(self) -> None:
+                """Responses become available immediately in this controlled transport."""
+
+        with runtime_caller(root / '.graphtraj/runner', None):
+            mcp.serve(source, ClientOutput())
+        result = observed[-1]['result']
+        if decision in ('accept', 'retry'):
+            assert not result['isError'], result
+            assert result['structuredContent']['recovery_status'] == 'applied'
+            assert yaml.safe_load(budget_file.read_text())['approved_minutes'] == 7
+        else:
+            assert result['isError'], result
+            assert budget_file.read_bytes() == before
+            assert read_worldline(task.parent.parent, root) == events
+
+
+def test_installed_mcp_recovery_uses_client_elicitation(
+    accepted_target: tuple, installed_commands: InstalledCommands,
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+) -> None:
+    """The installed server awaits approval on its actual stdio connection."""
+    from test_mcp_host_tools import McpServerProcess, _associate_native_mains
+
+    root, task, _, arguments = accepted_target
+    native_bin = tmp_path / 'recovery-main-bin'
+    native_bin.mkdir()
+    peer = native_bin / 'codex'
+    peer.write_text('#!' + sys.executable + '\nimport runpy\nrunpy.run_path('
+                    + repr(str(Path(__file__).with_name('codex_stdio_peer.py'))) + ')\n')
+    peer.chmod(0o755)
+    environment = {key: value for key, value in os.environ.items()
+                   if key not in ('GRAPHTRAJ_CLI_CONNECTION', 'AGENT_SWARM_CONNECTION', 'CODEX_THREAD_ID')}
+    environment.update(PATH=str(native_bin) + os.pathsep + environment['PATH'],
+                       CODEX_HOME=str(tmp_path / 'recovery-native-home'),
+                       PEER_MAIN_THREADS='recovery-main')
+    _associate_native_mains(installed_commands, root, environment)
+    before = (task / 'execution-budget.yml').read_bytes()
+    with McpServerProcess(installed_commands.product.with_name('graphtraj-mcp'), root, environment) as server:
+        server.request('initialize', {'protocolVersion': '2025-06-18',
+                                     'capabilities': {'elicitation': {'form': {}}}})
+        response = server.request('tools/call', {'name': 'tasks', '_meta': {'threadId': 'recovery-main'},
+            'arguments': {'action': 'execute', 'feature': 'approved_recovery',
+                          'arguments': {**arguments, 'resume': False}}})
+        assert response.get('method') == 'elicitation/create', response
+        assert (task / 'execution-budget.yml').read_bytes() == before
+        assert response['params']['_meta']['codex_sensitive_action'] is True
+        server.process.stdin.write(json.dumps({'jsonrpc': '2.0', 'id': response['id'], 'result': {
+            'action': 'accept', 'content': {}, '_meta': {'approvals_reviewer': 'auto_review'},
+        }}) + '\n')
+        server.process.stdin.flush()
+        final = json.loads(server.process.stdout.readline())
+        assert final['id'] == server.sequence
+        assert not final['result']['isError'], final
+        assert final['result']['structuredContent']['recovery_status'] == 'applied'
+    assert yaml.safe_load((task / 'execution-budget.yml').read_text())['approved_minutes'] == 7

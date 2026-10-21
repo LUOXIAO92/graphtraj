@@ -201,20 +201,17 @@ def test_installed_alias_control_resumes_and_interrupts_one_team_session(
     )
     assert running.returncode == 0, running.stderr
     running_status = yaml.safe_load(running.stdout)
+    assert running_status["aliases"][0].pop("agent") == mapping["agent"]
     assert running_status["aliases"][0].pop("session") == session
     native_execution = running_status["aliases"][0].pop("execution_id")
     assert native_execution
     # The continuation reported the execution the resumed Worker recorded.
     assert resumed_document["execution_id"] == native_execution
-    assert running_status == {
-        "aliases": [
-            {
-                "alias": alias,
-                "activity": "running",
-                "last_outcome": "completed",
-            }
-        ]
-    }
+    current, = running_status["aliases"]
+    assert current["alias"] == alias
+    assert current["activity"] == "running"
+    assert current["last_outcome"] == "completed"
+    assert current["state"] == "active"
 
     unsupported = run_process(
         runner_operation(
@@ -290,15 +287,11 @@ def test_installed_alias_control_resumes_and_interrupts_one_team_session(
     idle_status = yaml.safe_load(idle.stdout)
     assert idle_status["aliases"][0].pop("session") == session
     assert idle_status["aliases"][0].pop("execution_id") == native_execution
-    assert idle_status == {
-        "aliases": [
-            {
-                "alias": alias,
-                "activity": "idle",
-                "last_outcome": "interrupted",
-            }
-        ]
-    }
+    current, = idle_status["aliases"]
+    assert current["agent"] == mapping["agent"]
+    assert current["alias"] == alias
+    assert current["activity"] == "idle"
+    assert current["last_outcome"] == "interrupted"
     # The Runner records the follow-up cause in the Session's own records,
     # while the Trace entry keeps reading the Runtime-owned Session file.
     assert session_records.read_text(encoding="utf-8") != records_before

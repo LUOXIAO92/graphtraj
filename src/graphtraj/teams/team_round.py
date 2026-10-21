@@ -1237,7 +1237,22 @@ def _run_session_worker(
         mapping = yaml.safe_load(
             (session_directory / "mapping.yml").read_text(encoding="utf-8")
         )
-        terminal = yaml.safe_load(execution.read_text(encoding="utf-8"))
+        try:
+            terminal = yaml.safe_load(execution.read_text(encoding="utf-8"))
+        except FileNotFoundError:
+            # A child notice can already have resumed this same Session after
+            # our Worker exited successfully. Its startup replaces the mapping
+            # and removes the preceding terminal record under this lock.
+            with execution_start_lock(session_directory.parent.parent):
+                current, _ = read_alias_mapping(
+                    session_directory.parent.parent, session_directory.name,
+                )
+                if (current.get("session") == mapping.get("session")
+                        and current.get("worker_pid") != worker.pid
+                        and current.get("execution_id")
+                        and ownership_is_held(session_directory, current["worker_pid"])):
+                    return current["session"], "running"
+                terminal = yaml.safe_load(execution.read_text(encoding="utf-8"))
     except (OSError, UnicodeError, yaml.YAMLError) as failure:
         raise RunnerError("RUNTIME_WORKER_FAILED", "The Runtime Session could not be started.") from failure
     finally:

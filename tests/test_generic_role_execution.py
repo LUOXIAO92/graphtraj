@@ -10,6 +10,8 @@ import pytest
 import yaml
 
 from conftest import FakeCodex, InstalledCommands, run_process, runner_operation
+from graphtraj.execution.runner_control import read_session_reports
+from graphtraj.execution.runner_status import runtime_caller
 from runner_fixtures import configure_harness
 from test_project_setup import CODING_METHOD_SKILL_NAMES
 from test_task_graph import _change_status, _register, _task
@@ -132,9 +134,9 @@ def test_single_role_launch_registers_and_executes_without_placeholder_members(
 
     worktree = Path(task['worktree_path'])
     assert (worktree / 'result.md').is_file() and (worktree / 'result.tex').is_file()
-    response = run_process([str(installed_commands.runner), 'reports', task['alias']], cwd=root, env=env)
-    assert response.returncode == 0, response.stdout + response.stderr
-    assert len(yaml.safe_load(response.stdout)['submissions']) == 1
+    with runtime_caller(root / '.graphtraj/runner', task['alias']):
+        response = read_session_reports(task['alias'], root)
+    assert len(response['submissions']) == 1
     records = [json.loads(line) for line in fake_codex.log_file.read_text().splitlines()]
     settings = {}
     for index, arg in enumerate(records[0]['argv'][:-1]):
@@ -177,8 +179,9 @@ def test_single_role_launch_registers_and_executes_without_placeholder_members(
     assert observed['session'] == task['session']
     assert (worktree / 'visits.txt').read_text() == '2'
     assert (task_directory / 'teams/1/traces' / task['alias'] / 'events.jsonl').read_bytes().startswith(before)
-    reports = run_process([str(installed_commands.runner), 'reports', task['alias']], cwd=root, env=env)
-    assert len(yaml.safe_load(reports.stdout)['submissions']) == 2
+    with runtime_caller(root / '.graphtraj/runner', task['alias']):
+        reports = read_session_reports(task['alias'], root)
+    assert len(reports['submissions']) == 2
 
 
 @pytest.mark.parametrize('surface', ['cli', 'mcp'])
@@ -422,11 +425,8 @@ def test_public_launch_rejects_retired_skill_selection(
         batch.write_text(yaml.safe_dump(request))
         result = run_process([str(installed_commands.runner), '--swarm-input', str(batch)],
                              cwd=root, env=env)
-        assert result.returncode == 1
-        document = yaml.safe_load(result.stdout)
-        assert document['error']['code'] == 'invalid-input'
-        message = document['error']['message']
-        assert 'Runtime native Skill selection' in message
+        assert result.returncode == 2
+        assert 'skills' in result.stderr and 'unexpected parameter' in result.stderr
     else:
         with McpServerProcess(installed_commands.runner.with_name('graphtraj-mcp'), root, env) as server:
             result = server.call('swarm', request)['result']

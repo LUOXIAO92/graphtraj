@@ -6,6 +6,7 @@ from pathlib import Path
 
 from graphtraj.execution.runner_models import RunnerError
 from graphtraj.interfaces import tools
+from graphtraj.interfaces.agents import run_agents_feature
 
 root = Path(os.environ['GRAPHTRAJ_HARNESS_ROOT'])
 role = os.environ['GRAPHTRAJ_ROLE']
@@ -22,13 +23,10 @@ if role == 'researcher':
             raise AssertionError('Undeclared role-tree edge was authorized')
         foreign = os.environ.get('FOREIGN_CHILD')
         if foreign:
-            try:
-                tools.send_session_instruction({'alias': foreign, 'instruction': 'Hijack',
-                                             'caused_by_event_ids': [os.environ['CAUSE']]}, cwd=root)
-            except RunnerError as error:
-                assert error.code == 'authority-denied', error
-            else:
-                raise AssertionError('Same-role other-instance control was authorized')
+            result = run_agents_feature({
+                'action': 'send', 'agent': foreign, 'message': 'Hijack',
+            }, cwd=root)
+            assert result.failed and result.document['error']['code'] == 'authority-denied', result.document
         response = tools.launch_swarm_tool({'tasks': [{'role': 'analyst'}]}, cwd=root)
         assert not response.failed, response.document
         Path('last-child.json').write_text(json.dumps(response.document['tasks'][0]))

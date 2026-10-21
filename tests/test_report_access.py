@@ -318,15 +318,17 @@ def test_installed_send_recovers_historical_reports(
         if argument == '-c':
             settings.update(tomllib.loads(records[-1]['argv'][index + 1]))
     filesystem = settings['permissions'][settings['default_permissions']]['filesystem']
-    assert filesystem[str(own)] == ('write' if source == 'cli-launch' else 'read')
+    assert filesystem[str(own)] == 'read'
     assert filesystem[str(reference)] == 'read'
     assert str(private) not in filesystem
     assert filesystem[str(root / '.graphtraj/state')] == 'read'
     assert private.read_text() == 'Private sibling evidence'
     assert filesystem[':workspace_roots']['.'] == 'read'
-    reports = run_process([str(installed_commands.runner), 'reports', task['alias']], cwd=root, env=env)
-    assert reports.returncode == 0, reports.stdout + reports.stderr
-    assert yaml.safe_load(reports.stdout)['reports'] == [{'path': str(own), 'text': 'Retained evidence'}]
+    # This outer pytest process is not a verified native project caller. Read
+    # the retained operation under the actual fixture member's bounded identity.
+    with runtime_caller(root / '.graphtraj/runner', task['alias']):
+        reports = runner_control.read_session_reports(task['alias'], root)
+    assert reports['reports'] == [{'path': str(own), 'text': 'Retained evidence'}]
 
 
 def test_parent_reads_follow_up_reports_beside_the_assignment(tmp_path: Path) -> None:

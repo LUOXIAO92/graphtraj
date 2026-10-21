@@ -11,7 +11,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from conftest import FakeCodex, InstalledCommands, app_server_peer, run_process, wait_for_file
+from conftest import FakeCodex, InstalledCommands, app_server_peer, run_process, wait_for_file, runner_operation
 from graphtraj.execution import execution_budget as budgets
 from runner_fixtures import configure_harness
 from test_task_integration import accepted_task
@@ -212,7 +212,7 @@ print(json.dumps({'type': 'item.completed', 'item': {'type': 'agent_message', 't
     try:
         wait_for_file(Path(launched['worktree_path']) / 'result.md')
         # The Session may wait normally without being classified as failed.
-        status = run_process([str(commands.runner), 'status', alias], cwd=root, env=env)
+        status = run_process(runner_operation(commands, 'status', alias), cwd=root, env=env)
         assert yaml.safe_load(status.stdout)['aliases'][0]['activity'] == 'running'
         # Only the parent is live; retained child mappings are controlled
         # inputs to the notice seam. A nested sender must address its own
@@ -319,8 +319,8 @@ print(json.dumps({'type': 'item.completed', 'item': {'type': 'agent_message', 't
         events = [json.loads(line) for shard in (root / '.graphtraj/state/worldline').glob('*.jsonl')
                   for line in shard.read_text().splitlines()]
         resumed = run_process(
-            [str(commands.runner), 'send', alias, '--instruction', 'Return the existing research.',
-             '--caused-by-event-id', events[-1]['event_id']], cwd=root, env=env, timeout=15,
+            runner_operation(commands, 'send', alias, '--instruction', 'Return the existing research.',
+             '--caused-by-event-ids', json.dumps([events[-1]['event_id']])), cwd=root, env=env, timeout=15,
         )
         assert resumed.returncode == 0, resumed.stdout + resumed.stderr
         resume = yaml.safe_load((directory / 'resume.yml').read_text())

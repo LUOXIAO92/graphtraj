@@ -565,20 +565,20 @@ def test_later_caller_can_answer_native_approval(managed_project: ManagedProject
     assert records[-1]['payload']['last_agent_message'] == 'approval:accept'
 
 
-def test_installed_cli_declines_the_same_request_as_python(managed_project: ManagedProject) -> None:
+def test_bound_agents_declines_the_same_request_as_runner(managed_project: ManagedProject) -> None:
     """Both interfaces expose identical requests and preserve an explicit decline."""
     root, cause, call, _ = managed_project
     launched = call('launch', launch_document())['tasks'][0]
     alias = launched['alias']
     call('send', [alias, 'unhandled request', [cause]])
     queried = call('requests', [alias])
-    assert call('agents-cli', {'action': 'execute', 'feature': 'requests', 'arguments': {
+    assert call('agents', ['requests', {
         'agent': alias, 'execution': queried['execution_id'],
-    }})['result'] == queried
+    }, 'main-a'])['result'] == queried
     request, = queried['requests']
-    reply = call('agents-cli', {'action': 'execute', 'feature': 'reply', 'arguments': {
+    reply = call('agents', ['reply', {
         'agent': alias, 'request': request, 'response': {'decision': 'decline'},
-    }})['result']
+    }, 'main-a'])['result']
     assert reply == {
         'alias': alias, 'session': request['session'], 'execution_id': request['execution_id'],
         'request_id': 'approval', 'reply_status': 'submitted',
@@ -662,9 +662,9 @@ def test_multiple_native_requests_keep_input_and_trace_contents(managed_project:
     assert call('status', [alias])['aliases'][0]['waiting_for'] == 'runtime-request'
     assert call('requests', [alias])['requests'] == [user_input]
     answer = {'answers': {'color': {'answers': ['蓝色']}}}
-    call('agents-cli', {'action': 'execute', 'feature': 'reply', 'arguments': {
+    call('agents', ['reply', {
         'agent': alias, 'request': user_input, 'response': answer,
-    }})
+    }, 'main-a'])
     observe(call, alias, 'idle', 'completed')
     native = root / 'native' / ('rollout-' + launched['session'] + '.jsonl')
     assert [json.loads(line) for line in native.with_suffix('.replies.jsonl').read_text().splitlines()] == [
@@ -852,6 +852,7 @@ def test_identifier_without_the_ownership_lock_is_not_the_owned_execution(
                     'alias': alias,
                     'runtime': 'codex',
                     'session': 'native-session',
+                    'execution_id': 'native-execution',
                     'task_id': '113',
                     'team_generation': 1,
                     'role': 'managed-probe',

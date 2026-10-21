@@ -47,11 +47,14 @@ def bind_session(
     summary_issue: str = '',
     activity_source: str | None = None,
     paused: bool | None = None,
+    entry: str | None = None,
 ) -> dict[str, Any]:
     """Associate an Adapter-observed external Session using existing Main storage.
 
     Callers of this internal boundary obtain connection facts from their Runtime,
     never from model operation arguments. A task hint does not define identity.
+    ``entry`` names a real native start/resume boundary; that verified Main
+    then continues the project's Main working state (``main_continuity``).
     """
     cwd = discover_project_root(cwd)
     runner = discover_runner_directory(cwd)
@@ -109,6 +112,10 @@ def bind_session(
         if activity:
             binding['activity'] = activity
         write_yaml_durably(path, binding)
+    if entry is not None:
+        from graphtraj.execution.main_continuity import claim_main
+
+        claim_main(runner, connection, entry)
     return {'binding': str(path), 'session': session, 'user_pause': pause,
             'hook': adapter.finalize_hook(path, binding)}
 

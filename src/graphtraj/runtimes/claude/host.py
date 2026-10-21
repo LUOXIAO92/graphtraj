@@ -3,6 +3,11 @@
 The trusted mod supplies current Session facts over the existing PID-verified
 local transport. MCP arguments never select their caller. The native permission
 chain still decides whether the MCP call is made; association does not approve it.
+
+The verified Main continues the project's Main working state through the
+shared ``main_continuity`` record. Claude has no native entry event this host
+can observe, so a Session's first control call in this host process is its
+entry; reads never take control. ``agents`` and ``tasks`` share that identity.
 """
 from __future__ import annotations
 
@@ -13,6 +18,7 @@ import os
 from pathlib import Path
 import sys
 import threading
+import time
 from typing import Callable
 from uuid import UUID
 
@@ -43,8 +49,10 @@ class NativeCalls:
             if operation == 'end':
                 self.pending = None
                 return {'ended': True}
-            if operation != 'prepare' or set(document) != {'operation', 'session', 'cwd', 'agent', 'request'}:
+            if operation != 'prepare' or set(document) != {'operation', 'tool', 'session', 'cwd', 'agent', 'request'}:
                 raise AgentsError('invalid-input', 'Expected one native per-call context.')
+            if document['tool'] not in {'agents', 'tasks'}:
+                raise AgentsError('invalid-input', 'Expected the agents or tasks entry.')
             if document['agent'] is not None:
                 raise AgentsError('authority-denied', 'A native subagent cannot adopt the Main association.')
             if (not isinstance(document['session'], str)
@@ -57,13 +65,13 @@ class NativeCalls:
             self.pending = copy.deepcopy(document)
             return {'prepared': True}
 
-    def call(self, request: dict) -> AgentsResult:
+    def call(self, request: dict, tool: str = 'agents') -> AgentsResult:
         """Match the MCP request before consuming its host-supplied association."""
         with self.lock:
             native, self.pending = self.pending, None
-        if native is None or native['request'] != request:
+        if native is None or native['request'] != request or native['tool'] != tool:
             raise AgentsError('authority-denied', 'No matching current native call association.')
-        return handle_request(request, self.make_call(native['session'], self.cwd))
+        return self.make_call(native['session'], self.cwd)(tool, request)
 
 
 def native_parent(executable: Path, *, stage: str = 'serve') -> int:
@@ -82,12 +90,92 @@ def native_parent(executable: Path, *, stage: str = 'serve') -> int:
     return parent
 
 
+def main_calls(root: Path, control: AgentControl, archive: object) -> Callable[[str, Path], Callable]:
+    """Return the per-Session factory serving one verified Main's agents and tasks calls.
+
+    Each call runs as Main (Runner caller ``None``) with this Session's host
+    connection, so dispatched roots record it as their owner. A Session's
+    first control call in this process claims Main (``main_continuity``); after
+    another Main continues the project, its control calls are refused until a
+    new host process. Queued member notices are returned with the next result.
+    """
+    from graphtraj.execution.main_continuity import claimable, take_notices
+    from graphtraj.execution.runner_connection import parent_connection
+    from graphtraj.execution.runner_status import runtime_caller
+    from graphtraj.interfaces.gateway import handle_request as handle_task
+
+    runner = root / '.graphtraj' / 'runner'
+    callers: dict[str, Callable] = {}
+    # Sessions that already entered as Main in this process.
+    claimed: set[str] = set()
+
+    def make_call(session: str, current: Path) -> Callable:
+        """Bind one verified Main Session; the model request never selects it."""
+        if session not in callers:
+            callers[session] = bind(control, Caller('claude-native', None, session, 'claude'), archive=archive)
+        connection = {'runtime': 'claude', 'session': session, 'runner': str(runner)}
+
+        def call(tool: str, request: dict) -> AgentsResult:
+            """Run one call as this Main; return queued Main notices with it."""
+            entry = None if session in claimed else (lambda: claimed.add(session))
+            with claimable(entry), parent_connection(connection):
+                if tool == 'agents':
+                    result = handle_request(request, callers[session])
+                else:
+                    with runtime_caller(runner, None):
+                        result = handle_task(request, cwd=root)
+            notices = take_notices(runner, 'claude', session)
+            if notices:
+                result = AgentsResult({**result.document, 'main_notices': notices}, failed=result.failed)
+            return result
+
+        return call
+
+    return make_call
+
+
+def adoption_material(root: Path, claude: Path) -> dict:
+    """Return the files a user adopts to host Claude Code Main in one project.
+
+    Nothing is written or trusted here: the user places the material and
+    Claude Code's own project MCP approval and mod trust decide adoption.
+    The host configuration names the Claude CLI that must launch this host.
+    """
+    root, claude = root.resolve(), claude.resolve()
+    config = root / '.graphtraj' / 'claude-host' / 'config.json'
+    python = Path(sys.executable)
+    return {
+        config.as_posix(): {
+            'root': str(root), 'cwd': str(root), 'claude': str(claude),
+            'channel_file': str(config.parent / 'live' / 'channel.json'),
+        },
+        (root / '.mcp.json').as_posix(): {'mcpServers': {'agents': {
+            'command': str(python),
+            'args': ['-m', 'graphtraj.runtimes.claude.host', 'serve', '--config', str(config)],
+        }}},
+        (root / '.claude' / 'settings.local.json').as_posix(): {'env': {
+            'GRAPHTRAJ_CLAUDE_HOST_PYTHON': str(python),
+            'GRAPHTRAJ_CLAUDE_HOST_CONFIG': str(config),
+        }},
+        'mod': str(Path(__file__).with_name('host_context.mjs')),
+    }
+
+
 def main() -> None:
-    """Serve MCP, or send one native mod context over its verified local channel."""
+    """Serve MCP, send one native mod context, or print adoption material."""
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('operation', choices=['serve', 'context'])
-    parser.add_argument('--config', required=True, type=Path)
+    parser.add_argument('operation', choices=['serve', 'context', 'configuration'])
+    parser.add_argument('--config', type=Path)
+    parser.add_argument('--project', type=Path, help='Harness Project Root for configuration.')
+    parser.add_argument('--claude', type=Path, help='Claude CLI executable for configuration.')
     options = parser.parse_args()
+    if options.operation == 'configuration':
+        if options.project is None or options.claude is None:
+            parser.error('configuration requires --project and --claude')
+        print(json.dumps(adoption_material(options.project, options.claude), indent=2, ensure_ascii=False))
+        return
+    if options.config is None:
+        parser.error(f'{options.operation} requires --config')
     configuration = json.loads(options.config.read_text())
     if set(configuration) != {'root', 'cwd', 'claude', 'channel_file'}:
         raise ValueError('Expected root, cwd, claude and channel_file in the trusted host configuration.')
@@ -111,16 +199,12 @@ def main() -> None:
         raise AgentsError('authority-denied', 'A bound child must use its existing owner, not adopt Main.')
     if Path.cwd().resolve() != cwd.resolve():
         raise ValueError('The native host cwd differs from the configured cwd.')
-    control = AgentControl(root / '.graphtraj/swarm', {'claude': AdapterDriver(root, cwd)})
-    archive = configured_archive(root)
-    callers: dict[str, Callable] = {}
+    from graphtraj.execution.main_continuity import MainRoots
 
-    def make_call(session: str, current: Path) -> Callable:
-        """Retain the native root scope across calls and explicit Session resume."""
-        if session not in callers:
-            callers[session] = bind(control, Caller('claude-native', None, session, 'claude'), archive=archive)
-        return callers[session]
-
+    runner = root / '.graphtraj' / 'runner'
+    control = AgentControl(root / '.graphtraj/swarm', {'claude': AdapterDriver(root, cwd)},
+                           roots=MainRoots(runner))
+    make_call = main_calls(root, control, configured_archive(root))
     calls = NativeCalls(make_call, cwd)
 
     def authenticate(pid: int) -> None:
@@ -143,22 +227,13 @@ def main() -> None:
             finally:
                 channel_file.unlink()
     finally:
-        for call in callers.values():
-            status = call({'action': 'status'})
-            if status.failed:
-                raise RuntimeError('Cannot confirm native children before host shutdown.')
-            pending = list(status.document['result']['agents'])
-            owned = []
-            while pending:
-                agent = pending.pop()
-                owned.append(agent)
-                pending.extend(agent['children'])
-            for agent in reversed(owned):
-                if agent['state'] == 'active':
-                    call({'action': 'interrupt', 'agent': agent['agent']})
-                    stopped = call({'action': 'wait', 'agent': agent['agent'], 'timeout_seconds': 10})
-                    if stopped.failed or stopped.document['result']['state'] != 'standby':
-                        raise RuntimeError('Claude child stop was not confirmed at MCP shutdown.')
+        # Stop the native work this process runs, whichever Main created it.
+        deadline = time.monotonic() + 10
+        for agent in control.interrupt_owned():
+            while control.owns_running(agent):
+                if time.monotonic() > deadline:
+                    raise RuntimeError('Claude child stop was not confirmed at MCP shutdown.')
+                time.sleep(0.05)
 
 
 if __name__ == '__main__':

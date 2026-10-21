@@ -71,7 +71,11 @@ def native_event(event: dict, project_root: Path | None = None) -> dict:
         _archive(root, session, event['transcript_path'])
         return {}
     if name == 'SessionStart':
-        bind_session(connection, root, activity_source=event.get('transcript_path'))
+        # Startup, resume and clear are new Main entries; compaction continues
+        # the same entry and never takes control back from a later Main.
+        native = event.get('source') or 'unknown'
+        bind_session(connection, root, activity_source=event.get('transcript_path'),
+                     entry=None if native == 'compact' else f'codex:SessionStart:{native}')
         _archive(root, session, event['transcript_path'], new_session=event.get('source') == 'startup')
         return {'systemMessage': 'GraphTraj Main Session associated.'}
     if not binding.is_file():

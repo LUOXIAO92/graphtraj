@@ -31,6 +31,7 @@ where = ["src"]
 agent_swarm = ["dsh/*.mjs", "dsh/package.json"]
 graphtraj = [
     "interfaces/desktop-host.json",
+    "runtimes/claude/*.mjs",
     "runtimes/codex/policy/*",
     "runtimes/dsh/*.mjs",
     "runtimes/pi/*.mjs",

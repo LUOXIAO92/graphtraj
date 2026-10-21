@@ -23,26 +23,33 @@ def serve(
     input_stream: TextIO,
     output_stream: TextIO,
     cwd: Path,
-    native_call: Callable[[dict], AgentsResult] | None = None,
+    native_call: Callable[..., AgentsResult] | None = None,
 ) -> None:
-    """Expose one lightweight entry; the actual host retains caller authority."""
+    """Expose the lightweight entries; the actual host retains caller authority.
+
+    ``native_call(request, tool)`` serves both ``agents`` and ``tasks`` for a
+    verified native Main host.
+    """
     def tasks(request: dict) -> AgentsResult:
-        """Reuse Task authority through its existing hosted channel."""
+        """Reuse Task authority through the native host or its existing hosted channel."""
         if request.get('feature') == 'agents':
             raise AgentsError('invalid-input', 'Use the agents entry for Agent controls.')
-        answer = forward_request(request, cwd)
-        answer = answer if answer is not None else handle_request(request, cwd=cwd)
+        if native_call is not None:
+            answer = native_call(request, 'tasks')
+        else:
+            answer = forward_request(request, cwd)
+            answer = answer if answer is not None else handle_request(request, cwd=cwd)
         if request.get('action') == 'discover' and 'features' in answer.document:
             return AgentsResult({**answer.document, 'features': [item for item in answer.document['features']
                                 if item['feature'] != 'agents']}, failed=answer.failed)
         return answer
 
     def descriptors() -> list[dict]:
-        """Independent hosts expose agents; GraphTraj hosts also expose tasks."""
-        return tool_documents() + ([] if native_call is not None else [{
+        """Expose agents and the GraphTraj tasks entry."""
+        return tool_documents() + [{
             'name': 'tasks', 'description': 'Discover, describe, or execute Task features.',
             'inputSchema': INPUT_SCHEMA,
-        }])
+        }]
 
     def dispatch(request: dict) -> AgentsResult:
         """Use the already-bound gateway; never manufacture an anonymous Main."""

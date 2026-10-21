@@ -11,7 +11,10 @@ def test_native_context_is_per_call_and_permissions_are_unchanged(tmp_path: Path
 import assert from 'node:assert/strict';
 const {register} = await import(process.argv[1]);
 const handlers = new Map();
-register((name, matcher, fn) => {handlers.set(name, fn ?? matcher); return {catch() {}};});
+register((name, matcher, fn) => {
+ const key = fn && matcher.tool ? `${name}:${matcher.tool}` : name;
+ handlers.set(key, fn ?? matcher); return {catch() {}};
+});
 let session = 'first', fail = false;
 const contexts = [], log = [], registrations = [];
 const host = {
@@ -35,18 +38,24 @@ for (session of ['first', 'after-clear', 'resumed']) {
  for (const decision of ['allow', 'ask', 'deny']) {
   const native = {decision, reason: 'native reason', ceiling: 'ask'};
   const before = contexts.length;
-  const result = await handlers.get('tool.check')(host, {tool: 'mcp__agents__agents', input}, async () => native);
+  const result = await handlers.get('tool.check:mcp__agents__agents')(host, {tool: 'mcp__agents__agents', input}, async () => native);
   assert.equal(result, native);
   if (decision === 'deny') assert.equal(contexts.length, before);
-  else assert.deepEqual(contexts.at(-1), {operation: 'prepare', session, cwd: '/native/current', agent: null, request: input});
+  else assert.deepEqual(contexts.at(-1), {operation: 'prepare', tool: 'agents', session, cwd: '/native/current', agent: null, request: input});
  }
 }
+// tasks uses the same per-call association, naming its own entry.
+const task = {action: 'execute', feature: 'task_graph', arguments: {}};
+await handlers.get('tool.check:mcp__agents__tasks')(host, {tool: 'mcp__agents__tasks', input: task}, async () => ({decision: 'allow'}));
+assert.deepEqual(contexts.at(-1), {operation: 'prepare', tool: 'tasks', session, cwd: '/native/current', agent: null, request: task});
+const taskChild = await handlers.get('tool.check:mcp__agents__tasks')(host, {agentId: 'native-child', input: task}, async () => ({decision: 'allow'}));
+assert.equal(taskChild.decision, 'deny');
 const count = contexts.length;
-const child = await handlers.get('tool.check')(host, {agentId: 'native-child', input}, async () => ({decision: 'allow'}));
+const child = await handlers.get('tool.check:mcp__agents__agents')(host, {agentId: 'native-child', input}, async () => ({decision: 'allow'}));
 assert.equal(child.decision, 'deny');
 assert.equal(contexts.length, count);
 fail = true;
-const broken = await handlers.get('tool.check')(host, {input}, async () => ({decision: 'ask'}));
+const broken = await handlers.get('tool.check:mcp__agents__agents')(host, {input}, async () => ({decision: 'ask'}));
 assert.equal(broken.decision, 'deny');
 fail = false;
 const event = {tool: 'mcp__agents__agents', ...input};
@@ -55,11 +64,11 @@ const native = {result: [{type: 'text', text: JSON.stringify(document)}]};
 // A resumed plugin has no in-memory display receipts. A new execution's
 // status includes the previous last_result, which is not its new reply.
 const stale = {result: [{type: 'text', text: JSON.stringify({...document, execution: 'execution-two'})}]};
-await handlers.get('tool.call')(host, {...event, feature: 'status', arguments: {}}, async () => stale);
+await handlers.get('tool.call:mcp__agents__agents')(host, {...event, feature: 'status', arguments: {}}, async () => stale);
 assert.equal(log.filter(line => line.includes('hello parent')).length, 0);
-const returned = await handlers.get('tool.call')(host, event, async received => {
+const returned = await handlers.get('tool.call:mcp__agents__agents')(host, event, async received => {
  assert.equal(received, event);
- const concurrent = await handlers.get('tool.call')(host, event, async () => assert.fail('overlap'));
+ const concurrent = await handlers.get('tool.call:mcp__agents__agents')(host, event, async () => assert.fail('overlap'));
  assert.ok(concurrent.deny);
  return native;
 });
@@ -73,8 +82,13 @@ assert.ok(log.includes('│ hello parent'));
 assert.ok(log.every(line => !line.includes('\n') && !line.includes('\r')));
 assert.deepEqual(contexts.at(-1), {operation: 'end'});
 const replies = log.filter(line => line.includes('│ hello parent')).length;
-await handlers.get('tool.call')(host, {...event, feature: 'status', arguments: {}}, async () => native);
+await handlers.get('tool.call:mcp__agents__agents')(host, {...event, feature: 'status', arguments: {}}, async () => native);
 assert.equal(log.filter(line => line.includes('│ hello parent')).length, replies);
+// A queued member notice arrives with the next tasks result and is shown once.
+const queued = {main_notices: [{at: 1, event: {message: JSON.stringify({alias: 'leader@l1', message: 'Session execution ended'})}}]};
+await handlers.get('tool.call:mcp__agents__tasks')(host, {tool: 'mcp__agents__tasks', ...task}, async () => ({result: [{type: 'text', text: JSON.stringify(queued)}]}));
+assert.ok(log.includes('┌ agents · leader@l1 → resumed'));
+assert.ok(log.includes('│ Session execution ended'));
 let ended = false;
 await handlers.get('session.end')(host, {reason: 'clear'}, async () => {ended = true;});
 assert.equal(ended, true);

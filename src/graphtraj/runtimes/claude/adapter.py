@@ -99,12 +99,24 @@ class ClaudeRuntimeAdapter:
     finalize_event = staticmethod(unsupported)
     check_main_finalize = staticmethod(unsupported)
     finalize_response = staticmethod(unsupported)
-    send_host_event = staticmethod(unsupported)
     parent_host_status = staticmethod(unsupported)
 
     def current_host_connection(self) -> None:
-        """No interactive Main host is captured by this child-only Adapter."""
+        """The native Main host supplies its connection per call, not this Adapter."""
         return None
+
+    def send_host_event(self, connection: Mapping[str, Any], event: dict[str, str]) -> dict:
+        """Queue a notice for the native Claude Main host's next agents/tasks result.
+
+        The host has no push channel into an idle Main turn; the durable queue
+        is read once by that Main Session's host (``main_continuity``).
+        """
+        from graphtraj.execution.main_continuity import queue_notice
+
+        runner = connection.get('runner')
+        if not isinstance(runner, str) or not Path(runner).is_absolute():
+            raise RuntimeAdapterError('operation-unavailable', 'The Claude Main host connection has no project.')
+        return queue_notice(Path(runner), connection, event)
 
     def native_replacement_approval(self) -> Any:
         """Claude has approvals; an unavailable host never means no mechanism."""

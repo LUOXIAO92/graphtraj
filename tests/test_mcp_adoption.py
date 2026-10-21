@@ -11,8 +11,9 @@ from conftest import InstalledCommands
 
 
 @pytest.mark.parametrize('observe_only', [False, True])
+@pytest.mark.parametrize('missing_service', [False, True])
 def test_installed_proxy_uses_websocket_for_public_refresh(
-    tmp_path: Path, observe_only: bool, installed_commands: InstalledCommands,
+    tmp_path: Path, observe_only: bool, missing_service: bool, installed_commands: InstalledCommands,
 ) -> None:
     """The real proxy carries Upgrade and framed RPCs, without a real host or model."""
     from websockets.asyncio.server import unix_serve
@@ -53,6 +54,8 @@ def test_installed_proxy_uses_websocket_for_public_refresh(
                                   'arguments': {'action': 'discover'}, '_meta': {'threadId': 'current-main'}}
                 result = {'content': [], 'structuredContent': {
                     'service': {'mcp': {'sha256': 'still-old-code'}}, 'features': [{'private': 'omit'}]}}
+                if missing_service:
+                    result = {'isError': True, 'content': [{'type': 'text', 'text': 'native discovery refused'}]}
             await connection.send(json.dumps({'id': request['id'], 'result': result}))
 
     async def check() -> None:
@@ -74,12 +77,17 @@ def test_installed_proxy_uses_websocket_for_public_refresh(
                     if process.returncode is None:
                         process.terminate()
                         await process.wait()
-                assert process.returncode == 0, error.decode()
+                assert process.returncode == (1 if missing_service else 0), error.decode()
                 import yaml
 
                 report = yaml.safe_load(output)
                 assert report['main_session'] == 'current-main'
-                assert report['service']['mcp']['sha256'] == 'still-old-code'
+                if missing_service:
+                    assert report['service'] is None and report['adoption_certified'] is False
+                    assert report['discovery']['content'] == ['native discovery refused']
+                    assert 'no adoption is certified' in error.decode()
+                else:
+                    assert report['service']['mcp']['sha256'] == 'still-old-code'
                 assert report['reload_requested'] is not observe_only
                 assert 'adopted' not in report and 'features' not in report
                 assert report['servers'][0]['tools'] == ['agents', 'tasks']

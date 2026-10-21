@@ -77,7 +77,7 @@ def test_cli_does_not_adopt_graphtraj_owner(tmp_path: Path) -> None:
     result = subprocess.run([sys.executable, '-m', 'agent_swarm.cli', request],
                             cwd=tmp_path, env=env, capture_output=True, text=True, timeout=10)
     assert result.returncode == 1
-    assert json.loads(result.stdout)['error']['code'] == 'operation-failed'
+    assert json.loads(result.stdout)['error']['code'] == 'request-not-accepted'
     # Outside GraphTraj, with no channel at all, the independent owner is still required.
     env.pop('GRAPHTRAJ_CLI_CONNECTION')
     result = subprocess.run([sys.executable, '-m', 'agent_swarm.cli', request],

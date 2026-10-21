@@ -120,6 +120,87 @@ def test_claude_public_launch_resume_interrupt(
     assert not Path(task['worktree_path']).exists()
 
 
+def test_input_after_native_close_continues_same_session_once(
+    installed_commands: InstalledCommands,
+    temporary_git_repository: Path,
+    fake_codex: FakeCodex,
+    tmp_path: Path,
+) -> None:
+    """A definitely refused input waits for close and enters one new execution."""
+    root, environment = setup(installed_commands, temporary_git_repository, fake_codex, tmp_path)
+    closed = tmp_path / 'native-stdin-closed'
+    environment.update(CLAUDE_FIXTURE_HOLD_ON_EOF='1', CLAUDE_FIXTURE_EOF_FILE=str(closed))
+    batch = root / 'probe.yml'
+    batch.write_text(yaml.safe_dump({'tasks': [{'task_id': '320', 'role': 'researcher'}]}))
+    launched = command(installed_commands, root, environment, '--swarm-input', str(batch))
+    assert launched.returncode == 0, launched.stdout + launched.stderr
+    original = yaml.safe_load(launched.stdout)['tasks'][0]
+    alias = original['alias']
+    try:
+        deadline = time.monotonic() + 10
+        while not closed.exists():
+            assert time.monotonic() < deadline, 'native input never closed'
+            time.sleep(0.01)
+        sent = command(installed_commands, root, environment, 'send', alias, '--instruction', 'after-close',
+                       '--caused-by-event-id', events(root)[-1]['event_id'])
+        assert sent.returncode == 0, sent.stdout + sent.stderr
+        delivered = yaml.safe_load(sent.stdout)
+        assert delivered['session'] == original['session']
+        assert delivered['execution_id'] != original['execution_id']
+        terminal = settled(installed_commands, root, environment, alias)
+        assert terminal['last_outcome'] == 'completed'
+        history = tmp_path / (original['session'].split(':')[-1] + '.json')
+        assert json.loads(history.read_text()).count('after-close') == 1
+    finally:
+        command(installed_commands, root, environment, 'interrupt', alias)
+
+
+def test_unknown_input_delivery_is_not_retried(
+    installed_commands: InstalledCommands,
+    temporary_git_repository: Path,
+    fake_codex: FakeCodex,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An ambiguous transport failure preserves the execution and never resends."""
+    from graphtraj.execution import runner_control
+    from graphtraj.execution.runner_models import RunnerError
+
+    root, environment = setup(installed_commands, temporary_git_repository, fake_codex, tmp_path)
+    batch = root / 'probe.yml'
+    batch.write_text(yaml.safe_dump({'tasks': [{'task_id': '320', 'role': 'researcher'}]}))
+    launched = command(installed_commands, root, environment, '--swarm-input', str(batch))
+    assert launched.returncode == 0, launched.stdout + launched.stderr
+    original = yaml.safe_load(launched.stdout)['tasks'][0]
+    settled(installed_commands, root, environment, original['alias'])
+    waiting = command(installed_commands, root, environment, 'send', original['alias'],
+                      '--instruction', 'wait-public', '--caused-by-event-id', events(root)[-1]['event_id'])
+    assert waiting.returncode == 0, waiting.stdout + waiting.stderr
+    original = yaml.safe_load(waiting.stdout)
+    calls = []
+    operation = runner_control.session_operation
+
+    def lost_reply(mapping: dict, action: str, **arguments: object) -> dict:
+        """Lose only a send reply at the native control transport boundary."""
+        if action == 'send':
+            calls.append(arguments['instruction'])
+            raise RunnerError('operation-failed', 'Delivery is unconfirmed.')
+        return operation(mapping, action, **arguments)
+
+    try:
+        with monkeypatch.context() as patch:
+            patch.setattr(runner_control, 'session_operation', lost_reply)
+            with pytest.raises(RunnerError, match='Delivery is unconfirmed'):
+                runner_control.send_instruction(original['alias'], 'unknown-input', root,
+                                                (events(root)[-1]['event_id'],))
+        assert calls == ['unknown-input']
+        status = command(installed_commands, root, environment, 'status', original['alias'])
+        current = yaml.safe_load(status.stdout)['aliases'][0]
+        assert current['execution_id'] == original['execution_id']
+    finally:
+        command(installed_commands, root, environment, 'interrupt', original['alias'])
+
+
 def test_child_registration_follows_its_owning_execution(
     installed_commands: InstalledCommands,
     temporary_git_repository: Path,
@@ -204,6 +285,81 @@ def test_child_registration_follows_its_owning_execution(
     assert stopped.returncode == 0, stopped.stdout + stopped.stderr
     assert not registration.exists() and withdrawn() == [stale, legacy]
     assert len(helpers()) == 1
+
+
+def test_second_child_batch_starts_while_first_batch_is_running(
+    installed_commands: InstalledCommands,
+    temporary_git_repository: Path,
+    fake_codex: FakeCodex,
+    tmp_path: Path,
+) -> None:
+    """Separate completed parent executions each start their registered children."""
+    root, environment = setup(installed_commands, temporary_git_repository, fake_codex, tmp_path)
+    roles_file = root / '.graphtraj/roles.yml'
+    roles = yaml.safe_load(roles_file.read_text())
+    roles['roles']['helper'] = {'runtime': 'claude', 'model': 'claude-opus-5-5', 'reasoning_effort': 'high'}
+    roles['role_tree'] = {'researcher': {'helper': {}}}
+    roles_file.write_text(yaml.safe_dump(roles))
+    batch = root / 'probe.yml'
+    batch.write_text(yaml.safe_dump({'tasks': [{'task_id': '320', 'role': 'researcher'}]}))
+    # An explicit baseline installation also exercises adoption with its old
+    # first-Batch Driver still alive, without changing the shared installation.
+    first_commands = installed_commands
+    if baseline := os.environ.get('CLAUDE_OLD_RUNNER_BIN'):
+        first_commands = InstalledCommands(Path(baseline) / 'graphtraj', Path(baseline) / 'agent-runner')
+    launched = command(first_commands, root, environment, '--swarm-input', str(batch))
+    assert launched.returncode == 0, launched.stdout + launched.stderr
+    alias = yaml.safe_load(launched.stdout)['tasks'][0]['alias']
+    first = settled(installed_commands, root, environment, alias)
+    history = tmp_path / (first['session'].split(':')[-1] + '.json')
+    environment['CLAUDE_FIXTURE_HOLD_FILE'] = str(tmp_path / 'hold')
+    (tmp_path / 'hold').touch()
+
+    def running_helpers() -> list[dict]:
+        """Read started children through the public Runner status."""
+        aliases = [path.name for path in (root / '.graphtraj/runner/sessions').iterdir()
+                   if 'helper' in path.name and (path / 'mapping.yml').is_file()]
+        if not aliases:
+            return []
+        status = command(installed_commands, root, environment, 'status', *aliases)
+        assert status.returncode == 0, status.stdout + status.stderr
+        return [item for item in yaml.safe_load(status.stdout)['aliases']
+                if item['activity'] == 'running']
+
+    try:
+        executions = []
+        for count in (1, 2):
+            sent = command(first_commands if count == 1 else installed_commands, root, environment,
+                           'send', alias, '--instruction', 'register',
+                           '--caused-by-event-id', events(root)[-1]['event_id'])
+            assert sent.returncode == 0, sent.stdout + sent.stderr
+            terminal = settled(installed_commands, root, environment, alias)
+            assert terminal['last_outcome'] == 'completed'
+            executions.append(terminal['execution_id'])
+            deadline = time.monotonic() + 20
+            while len(helpers := running_helpers()) != count:
+                assert time.monotonic() < deadline, f'Batch {count} did not start while earlier children ran'
+                time.sleep(0.1)
+        assert executions[0] != executions[1]
+        # Both children are still running; interrupt the owned descendants
+        # and require exactly one result for each retained Batch.
+        (tmp_path / 'hold').unlink()
+        for helper in helpers:
+            sent = command(installed_commands, root, environment, 'interrupt', helper['alias'])
+            assert sent.returncode == 0, sent.stdout + sent.stderr
+        deadline = time.monotonic() + 30
+        while len(notices := [text for text in json.loads(history.read_text())
+                              if text.startswith('Direct child execution results:')]) < 2:
+            assert time.monotonic() < deadline, 'Both Batch results must reach the parent'
+            time.sleep(0.1)
+        assert len(notices) == 2
+        delivered = [yaml.safe_load(text.split('\n', 1)[1]) for text in notices]
+        assert len({item['retained_batch_file'] for item in delivered}) == 2
+        assert all(item['tasks'][0]['launch_status'] == 'stopped' for item in delivered)
+        assert settled(installed_commands, root, environment, alias)['last_outcome'] == 'completed'
+    finally:
+        # Even a regression must leave no fixture Runtime running.
+        command(installed_commands, root, environment, 'interrupt', alias)
 
 
 def test_stopped_child_is_reported_as_stopped(

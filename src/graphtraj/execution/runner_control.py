@@ -865,12 +865,19 @@ def _send_session_locked(
                     session_directory.parent.parent, alias, mapping,
                     reports_only=reports_only and _running_reports_only(session_directory),
                 )
-                session_operation(mapping, "send", instruction=instruction)
-            from graphtraj.execution.runner_worker import _append_follow_up
+                try:
+                    session_operation(mapping, "send", instruction=instruction)
+                except RunnerError as error:
+                    # Only an explicit refusal before writing input permits
+                    # continuation after close. Unknown delivery is not retried.
+                    if error.code not in {"runtime-input-closed", "request-not-accepted"}:
+                        raise
+                else:
+                    from graphtraj.execution.runner_worker import _append_follow_up
 
-            if caused_by_event_ids:
-                _append_follow_up(session_directory / "events.jsonl", list(caused_by_event_ids))
-            return {**_execution_identity(alias, mapping), "send_status": "sent"}
+                    if caused_by_event_ids:
+                        _append_follow_up(session_directory / "events.jsonl", list(caused_by_event_ids))
+                    return {**_execution_identity(alias, mapping), "send_status": "sent"}
         # Native completion can precede the owner's final Trace drain and close.
         deadline = time.monotonic() + OPERATION_TIMEOUT_SECONDS
         while not execution_file.is_file():

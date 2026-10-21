@@ -62,6 +62,8 @@ messages = json.loads(history.read_text()) if history.exists() else []
 Path(os.environ['CLAUDE_FIXTURE_HOME'], 'native-endpoint.json').write_text(
     json.dumps(os.environ.get('ANTHROPIC_BASE_URL')))
 started = False
+startup_sent = False
+sdk_ready = False
 waiting = []
 merging = []
 absorbing = []
@@ -305,7 +307,7 @@ for line in sys.stdin:
                         'jsonrpc': '2.0', 'id': 10, 'method': 'initialize',
                         'params': {'protocolVersion': '2025-06-18'}}}})
             else:
-                startup()
+                sdk_ready = True
         elif request['subtype'] == 'interrupt':
             if os.environ.get('CLAUDE_FIXTURE_ESCAPED_PIPE'):
                 # A tool child outside the owned group keeps stdout open until
@@ -335,7 +337,7 @@ for line in sys.stdin:
                 'message': {'jsonrpc': '2.0', 'id': 11, 'method': 'tools/list'}}})
         elif response['request_id'] == 'sdk-initial-tools':
             assert response['response']['mcp_response']['result']['tools'][0]['name'] == 'agents'
-            startup()
+            sdk_ready = True
         elif response['request_id'] == 'startup':
             started = True
             if os.environ.get('CLAUDE_FIXTURE_HOOK_LOG'):
@@ -397,6 +399,11 @@ for line in sys.stdin:
             later_prompt(event)
         else:
             prompt(event)
+    # UserPromptSubmit belongs to an actual prompt, not initialize. This also
+    # keeps readiness behind the initial prompt when settings are applied first.
+    if waiting and sdk_ready and not startup_sent:
+        startup_sent = True
+        startup()
     if started and waiting and isinstance(waiting[0], dict):
         prompt(waiting.pop(0))
 if os.environ.get('CLAUDE_FIXTURE_EOF_FILE'):

@@ -178,7 +178,10 @@ def adoption_material(root: Path, claude: Path) -> dict[str, object]:
     trust prompts decide adoption. The host configuration names the Claude
     CLI that must launch this host.
     """
-    root, claude = root.resolve(), claude.resolve()
+    # Keep the user's stable launcher (for example ~/.local/bin/claude), not the
+    # versioned file it selects now: serve resolves it when it checks its parent,
+    # so a Claude Code self-update does not invalidate this configuration.
+    root, claude = root.resolve(), Path(os.path.abspath(claude))
     config = root / '.graphtraj' / 'claude-host' / 'config.json'
     plugin = root / '.claude' / 'skills' / 'graphtraj-claude-host'
     python = Path(sys.executable)

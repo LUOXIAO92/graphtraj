@@ -230,20 +230,28 @@ class ClaudeExecution:
         only 30 s, so the run loop keeps answering hooks while this thread
         collects. The first failure is kept for the run loop to raise.
         """
-        while True:
-            item = self.collection.get()
-            if item is None:
-                return
-            if self.collection_failure is not None:
-                continue
-            try:
-                if item[0] == 'bind':
-                    self.collector.bind(item[1], item[2])
-                else:
-                    self.collector.accept(item[1], item[2],
-                                          **({'defer': not self.collection.empty()} if self.independent else {}))
-            except Exception as error:
-                self.collection_failure = error
+        # dev's managed archive uses a thread-affine SQLite connection.
+        # Each phase opens its own connection; only collection writes while
+        # this thread is alive, and finalization runs after it has joined.
+        with ExitStack() as stores:
+            if not self.independent:
+                from graphtraj.sessions.storage import SessionStore
+
+                self.collector.store = stores.enter_context(SessionStore(self.collector.store.path))
+            while True:
+                item = self.collection.get()
+                if item is None:
+                    return
+                if self.collection_failure is not None:
+                    continue
+                try:
+                    if item[0] == 'bind':
+                        self.collector.bind(item[1], item[2])
+                    else:
+                        self.collector.accept(item[1], item[2],
+                                              **({'defer': not self.collection.empty()} if self.independent else {}))
+                except Exception as error:
+                    self.collection_failure = error
 
     def _absorbed_inputs(self) -> int:
         """Count sent inputs that the native CLI absorbed into a running turn.
@@ -799,6 +807,10 @@ class ClaudeExecution:
                     # Records already handed over are archived before closing.
                     self.collection.put(None)
                     collecting.join()
+                    if not self.independent:
+                        from graphtraj.sessions.storage import SessionStore
+
+                        collector.store = resources.enter_context(SessionStore(collector.store.path))
                     if self.collection_failure is not None and failure is None:
                         failure = RuntimeAdapterError('RUNTIME_ARCHIVE_FAILED', str(self.collection_failure))
                 try:

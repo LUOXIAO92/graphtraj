@@ -328,23 +328,29 @@ class CodexAppServer:
 
     async def _open_local_websocket(self) -> CodexAppServer:
         """Authenticate to an existing service through the native HTTP proxy."""
+        import logging
         from websockets.asyncio.client import connect
         assert self._local_websocket is not None
         settings = self._local_websocket
         self._opened = True
+        phase = 'token-file'
         try:
             token = Path(settings['token_file']).read_text(encoding='utf-8').strip()
             if not token or any(char.isspace() for char in token):
                 raise ValueError('Invalid local token file.')
+            phase = 'native-proxy'
             proxy_url = self._environment.get('HTTP_PROXY') or self._environment.get('http_proxy')
             if not proxy_url:
                 raise ValueError('A native HTTP proxy is required for the local connection.')
+            phase = 'authenticated-upgrade'
             self._remote_socket = await connect(
                 settings['url'], proxy=proxy_url,
                 additional_headers={'Authorization': 'Bearer ' + token},
                 open_timeout=self._timeout, close_timeout=self._timeout,
                 max_size=128 * 1024 * 1024,
+                logger=logging.Logger('graphtraj.codex.local', level=logging.WARNING),
             )
+            phase = 'native-identity'
             self._reader = asyncio.create_task(self._read())
             result = await self._call('initialize', {
                 'clientInfo': {'name': 'graphtraj', 'version': '0.1.0'},
@@ -360,7 +366,7 @@ class CodexAppServer:
             # Handshake exceptions may contain request headers. Never retain them.
             raise CodexAdapterError(
                 'RUNTIME_CONNECTION_FAILED',
-                'Local Codex WebSocket authentication or identity check failed (' + type(error).__name__ + ').',
+                'Local Codex WebSocket failed during ' + phase + ' (' + type(error).__name__ + ').',
                 terminal_confirmed=False,
             ) from None
         return self
@@ -1127,6 +1133,7 @@ class CodexAppServer:
     async def _send(self, message: dict[str, Any]) -> None:
         """Write JSONL for stdio services or a Text message for daemon proxies."""
         self._require_connection()
+        from websockets.exceptions import ConnectionClosed
         try:
             encoded = json.dumps(message, allow_nan=False)
             if self._remote_socket is not None:
@@ -1137,7 +1144,7 @@ class CodexAppServer:
                 assert self._process is not None and self._process.stdin is not None
                 self._process.stdin.write((encoded + '\n').encode())
                 await self._process.stdin.drain()
-        except (OSError, ValueError, TypeError) as error:
+        except (OSError, ValueError, TypeError, ConnectionClosed) as error:
             failure = CodexAdapterError('RUNTIME_CONNECTION_FAILED', f'Writing Codex stdio failed: {error}',
                                         terminal_confirmed=False)
             self._fail(failure)

@@ -1773,23 +1773,36 @@ CHECKER_WORKSPACE = {'sandbox': {'type': 'workspaceWrite', 'writableRoots': [], 
                      'activePermissionProfile': {'id': 'graphtraj_checker', 'extends': ':workspace'}}
 
 
-def test_checker_profile_enables_managed_network_on_main_profile(host: tuple[Path, Path]) -> None:
+@pytest.mark.parametrize('parent_profile', [':workspace', 'task345_validation'])
+def test_checker_profile_enables_managed_network_on_main_profile(
+    host: tuple[Path, Path], parent_profile: str,
+) -> None:
     """The fork extends Main's profile with managed network and Main's socket entry."""
     root, binding = host
     (root / 'options.json').write_text(json.dumps({
-        'configuration': MAIN_WORKSPACE, 'fork_configuration': CHECKER_WORKSPACE,
+        'configuration': {**MAIN_WORKSPACE, 'activePermissionProfile': {'id': parent_profile, 'extends': ':workspace' if not parent_profile.startswith(':') else None}},
+        'fork_configuration': {**CHECKER_WORKSPACE, 'activePermissionProfile': {
+            'id': 'graphtraj_checker', 'extends': parent_profile}},
     }))
     assert 'Completion Check · completed' in stop(binding)['systemMessage']
     wire = [json.loads(line) for line in (root / 'wire.jsonl').read_text().splitlines()]
     fork = next(message['params'] for message in wire if message['method'] == 'thread/fork')
     assert fork['permissions'] == 'graphtraj_checker' and 'sandbox' not in fork
     socket = os.path.realpath(root / 'app-server-control' / 'app-server-control.sock')
-    assert fork['config']['permissions'] == {'graphtraj_checker': {
-        'extends': ':workspace', 'network': {'enabled': True, 'unix_sockets': {socket: 'allow'}},
-    }}
+    assert fork['config']['permissions.graphtraj_checker'] == {
+        'extends': parent_profile, 'network': {'enabled': True, 'unix_sockets': {socket: 'allow'}},
+    }
+    # Apply the native dotted override to a profile set with a protected parent.
+    profiles = {parent_profile: {'filesystem': {'/protected': 'deny'}}}
+    for key, value in fork['config'].items():
+        if key == 'permissions':
+            profiles = value
+        elif key.startswith('permissions.'):
+            profiles[key.removeprefix('permissions.')] = value
+    assert profiles[parent_profile]['filesystem']['/protected'] == 'deny'
     evidence = yaml.safe_load(next(binding.parent.glob('checks/*/execution.yml')).read_text())
     assert evidence['authorized_difference'] == {
-        'permission_profile': {'id': 'graphtraj_checker', 'extends': ':workspace'},
+        'permission_profile': {'id': 'graphtraj_checker', 'extends': parent_profile},
         'unix_socket': socket, 'network_access': {'main': False, 'checker': True},
     }
 

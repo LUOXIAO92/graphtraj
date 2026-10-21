@@ -220,8 +220,7 @@ def test_selected_reviewer_refusal_preserves_retirement(
 
     monkeypatch.setattr(runtime_adapter, "select_runtime_adapter", lambda runtime: TestAdapter())
     with pytest.raises(RunnerError) as failure:
-        local_tool.bind(tmp_path)({'action': 'execute', 'feature': 'retire',
-                                   'arguments': {'alias': parent}})
+        runner_retirement.retire_session(parent, tmp_path)
     expected = ("review-failed" if decision == "error" else "retirement-denied")
     assert failure.value.code == (expected if activity == "idle" else "replacement-not-stopped")
     assert len(invoked) == (1 if activity == "idle" else 0)

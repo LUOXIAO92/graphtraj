@@ -74,6 +74,9 @@ try:
     if options.operation == 'send':
         document = send_instruction(options.aliases[0], options.instruction, cwd,
                                     (*options.caused_by_event_id, *options.caused_by_event_ids), reports_only=options.reports_only)
+    elif options.operation == 'retire':
+        from graphtraj.execution.runner_retirement import retire_session
+        document = retire_session(options.aliases[0], cwd)
     else:
         document = interrupt_session(options.aliases[0], cwd)
     sys.stdout.write(yaml.safe_dump(document, sort_keys=False))
@@ -84,11 +87,11 @@ except RunnerError as error:
 """
 
 
-REMOVED_RUNNER_OPERATIONS = frozenset({"status", "send", "interrupt", "requests", "reply"})
+REMOVED_RUNNER_OPERATIONS = frozenset({"status", "send", "interrupt", "requests", "reply", "retire"})
 
 
 def runner_operation(commands: "InstalledCommands", *arguments: str) -> list[str]:
-    """Return the argv running one removed agent-runner status/send/interrupt/requests/reply operation."""
+    """Exercise a retained Runner library operation after its CLI route was removed."""
     return [str(commands.runner.with_name("python")), "-c", _RUNNER_OPERATION, *arguments]
 
 

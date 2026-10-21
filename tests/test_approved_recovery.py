@@ -13,7 +13,9 @@ from click.testing import CliRunner
 
 from conftest import runner_operation, FakeCodex, InstalledCommands, run_process, wait_for_file
 from graphtraj.execution import approved_recovery as recovery
+from graphtraj.execution.runner_control import continue_member, interrupt_session
 from graphtraj.execution.runner_models import RunnerError
+from graphtraj.execution.runner_retirement import retire_session
 from graphtraj.execution.runner_status import runtime_caller
 from graphtraj.graph.delivery_worldline import read_worldline
 from graphtraj.interfaces import local_tool
@@ -200,7 +202,7 @@ def test_recovered_unchanged_result_returns_to_integration(
             'action': 'execute', 'feature': feature, 'arguments': arguments,
         }).document
 
-    execute('interrupt', {'alias': mapping['alias']})
+    interrupt_session(mapping['alias'], root)
     before = read_worldline(state, root)
     accepted = next(event for event in reversed(before) if event['event'] == 'team-round-accepted')
     original = next(event for event in before if event['event_id'] == accepted['submission_id'])
@@ -1064,15 +1066,15 @@ def test_recovery_rejects_public_bypasses(target: tuple, monkeypatch: pytest.Mon
 
 @pytest.mark.parametrize('decision', ['accept', 'decline'])
 def test_managed_user_recovery_waits_for_existing_reply_channel(
-    target: tuple, peer: Path, monkeypatch: pytest.MonkeyPatch, decision: str,
+    accepted_target: tuple, peer: Path, monkeypatch: pytest.MonkeyPatch, decision: str,
 ) -> None:
     """The owning host keeps recovery pending until its explicit user reply arrives."""
     import asyncio
     from graphtraj.runtimes.codex import managed_session
-    from graphtraj.runtimes.codex.app_server import CodexExecution, CodexServerRequest
+    from graphtraj.runtimes.codex.app_server import CodexExecution
     from test_codex_app_server import context
 
-    root, task, mapping, arguments = target
+    root, task, mapping, arguments = accepted_target
     directory = root / '.graphtraj/runner/sessions' / mapping['alias']
     child = next(yaml.safe_load(path.read_text()) for path in directory.parent.glob('*/mapping.yml')
                  if yaml.safe_load(path.read_text()).get('parent') == mapping['alias'])
@@ -1080,7 +1082,7 @@ def test_managed_user_recovery_waits_for_existing_reply_channel(
     before = (task / 'execution-budget.yml').read_bytes()
 
     async def exercise() -> None:
-        """Enter the production native gateway and reply through public Runtime control."""
+        """Enter the bound host callback and reply through public Runtime control."""
         resolved = context(root, peer)
         worker = managed_session.CodexManagedExecution(
             resolved.launch_document()['adapter_request'], 'Use only the authorized task budget.',
@@ -1101,11 +1103,14 @@ def test_managed_user_recovery_waits_for_existing_reply_channel(
             return {'delivery': 'received'}
 
         monkeypatch.setattr(managed_session, 'notify_direct_parent', notice)
-        native = CodexServerRequest('recovery-tool', 'item/tool/call', {
-            'threadId': mapping['session'], 'turnId': 'controlled-turn', 'tool': 'graphtraj',
-            'arguments': {'action': 'execute', 'feature': 'approved_recovery', 'arguments': request},
-        })
-        running = asyncio.create_task(worker._native_runner_request(native))
+        def call() -> dict:
+            """Use the host's selected reviewer on its ordinary public tool entry."""
+            with runtime_caller(directory.parent.parent, mapping['alias']):
+                return local_tool.bind(root, recovery_reviewer=worker._review_recovery_sync)({
+                    'action': 'execute', 'feature': 'approved_recovery', 'arguments': request,
+                }).document
+
+        running = asyncio.create_task(asyncio.to_thread(call))
         await asyncio.wait_for(notified.wait(), 5)
         identity = {'session': mapping['session'], 'execution_id': 'controlled-turn'}
         pending = await asyncio.to_thread(worker.operate, {**identity, 'operation': 'requests'})
@@ -1127,12 +1132,13 @@ def test_managed_user_recovery_waits_for_existing_reply_channel(
             **identity, 'operation': 'reply', 'request_token': details['request_token'],
             'response': {'decision': decision},
         })
-        response = await asyncio.wait_for(running, 5)
-        document = json.loads(response['contentItems'][0]['text'])
-        assert response['success'] is (decision == 'accept'), document
         if decision == 'decline':
+            with pytest.raises(RunnerError) as refused:
+                await asyncio.wait_for(running, 5)
+            assert refused.value.code == 'recovery-denied'
             assert (task / 'execution-budget.yml').read_bytes() == before
         else:
+            document = await asyncio.wait_for(running, 5)
             assert document['recovery_status'] == 'applied'
             retained = applied_proposal(root, document)
             assert set(retained) == {'request', 'before', 'after', 'authority'}
@@ -1272,15 +1278,12 @@ def retired_target(target: tuple) -> tuple:
     """Retire every member through public operations, preserving their records."""
     root, task, mapping, arguments = target
     invoke(root, {**arguments, 'additional_minutes': 0, 'resume': False})
-    call = local_tool.bind(root)
-    call({'action': 'execute', 'feature': 'agents',
-          'arguments': {'action': 'interrupt', 'agent': mapping['alias']}})
+    interrupt_session(mapping['alias'], root)
     runner = root / '.graphtraj/runner'
     mappings = [yaml.safe_load(path.read_text()) for path in (runner / 'sessions').glob('*/mapping.yml')]
     for member in sorted(mappings, key=lambda item: item['parent'] is None):
         with runtime_caller(runner, member['parent']):
-            result = call({'action': 'execute', 'feature': 'retire',
-                           'arguments': {'alias': member['alias']}}).document
+            result = retire_session(member['alias'], root)
         assert result['retire_status'] == 'retired'
     assert all(member['session_ref'] is None for member in
                yaml.safe_load((task / 'teams/1/team.yml').read_text())['members'].values())
@@ -1652,10 +1655,9 @@ def test_approved_increment_lifts_budget_stop_but_keeps_session_stop(
     assert yaml.safe_load(budget_path.read_text())['approved_minutes'] == 90
     assert retry['recovery_status'] == 'applied'
     monkeypatch.chdir(root)
-    refused = local_tool.bind(root)({'action': 'execute', 'feature': 'agents', 'arguments': {
-        'action': 'send', 'agent': mapping['alias'], 'message': 'Continue old work.',
-    }})
-    assert refused.failed and refused.document['error']['code'] == 'subtree-stopped'
+    with pytest.raises(RunnerError) as refused:
+        continue_member(mapping['alias'], 'Continue old work.', root)
+    assert refused.value.code == 'subtree-stopped'
 
 
 def test_budget_only_continue_is_not_blocked_by_a_stopped_old_root(
@@ -1675,14 +1677,13 @@ def test_budget_only_continue_is_not_blocked_by_a_stopped_old_root(
     budget_path.write_text(yaml.safe_dump(budget))
     monkeypatch.chdir(root)
     continued = CliRunner().invoke(main, ['continue', '--task-id', '83', '--budget-only',
-                                         '--caused-by-event-id', result['recovery_event_id']])
+                                         '--caused-by-event-ids', json.dumps([result['recovery_event_id']])])
     assert continued.exit_code == 0, continued.output
     assert yaml.safe_load(continued.output)['tasks'] == []
     assert yaml.safe_load(budget_path.read_text()) == {**budget, 'stopped': False}
-    refused = local_tool.bind(root)({'action': 'execute', 'feature': 'agents', 'arguments': {
-        'action': 'send', 'agent': mapping['alias'], 'message': 'Continue old work.',
-    }})
-    assert refused.failed and refused.document['error']['code'] == 'subtree-stopped'
+    with pytest.raises(RunnerError) as refused:
+        continue_member(mapping['alias'], 'Continue old work.', root)
+    assert refused.value.code == 'subtree-stopped'
 
 
 def test_mcp_recovery_waits_for_strict_native_review(

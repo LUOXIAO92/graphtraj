@@ -1,0 +1,938 @@
+FFFFF......................s...................................FFFFF..FF [ 59%]
+FFFFF...FFFFFFFFFFFFFFFFFFFF.FFFssFEEEEEE....FF..                        [100%]
+==================================== ERRORS ====================================
+__ ERROR at setup of test_task_budget_repair_retains_retired_sessions[accept] __
+tests/test_approved_recovery.py:1274: in retired_target
+    invoke(root, {**arguments, 'additional_minutes': 0, 'resume': False})
+tests/test_approved_recovery.py:54: in invoke
+    result = local_tool.bind(root)({'action': 'execute', 'feature': 'approved_recovery', 'arguments': arguments})
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/graphtraj/interfaces/gateway.py:111: in handle_request
+    return tool.handler(request["arguments"], cwd=cwd)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/graphtraj/interfaces/tools.py:735: in recover_execution
+    result = approved_recovery(dict(arguments), cwd or Path.cwd())
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/graphtraj/execution/approved_recovery.py:80: in approved_recovery
+    after = _repair_snapshot(project, before, request)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/graphtraj/execution/approved_recovery.py:142: in _repair_snapshot
+    raise RunnerError('invalid-input', 'Task disposition and completed ancestors require task-graph revision.')
+E   graphtraj.execution.runner_models.RunnerError: Task disposition and completed ancestors require task-graph revision.
+_ ERROR at setup of test_task_budget_repair_retains_retired_sessions[decline] __
+tests/test_approved_recovery.py:1274: in retired_target
+    invoke(root, {**arguments, 'additional_minutes': 0, 'resume': False})
+tests/test_approved_recovery.py:54: in invoke
+    result = local_tool.bind(root)({'action': 'execute', 'feature': 'approved_recovery', 'arguments': arguments})
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/graphtraj/interfaces/gateway.py:111: in handle_request
+    return tool.handler(request["arguments"], cwd=cwd)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/graphtraj/interfaces/tools.py:735: in recover_execution
+    result = approved_recovery(dict(arguments), cwd or Path.cwd())
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/graphtraj/execution/approved_recovery.py:80: in approved_recovery
+    after = _repair_snapshot(project, before, request)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/graphtraj/execution/approved_recovery.py:142: in _repair_snapshot
+    raise RunnerError('invalid-input', 'Task disposition and completed ancestors require task-graph revision.')
+E   graphtraj.execution.runner_models.RunnerError: Task disposition and completed ancestors require task-graph revision.
+__ ERROR at setup of test_task_budget_repair_retains_retired_sessions[error] ___
+tests/test_approved_recovery.py:1274: in retired_target
+    invoke(root, {**arguments, 'additional_minutes': 0, 'resume': False})
+tests/test_approved_recovery.py:54: in invoke
+    result = local_tool.bind(root)({'action': 'execute', 'feature': 'approved_recovery', 'arguments': arguments})
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/graphtraj/interfaces/gateway.py:111: in handle_request
+    return tool.handler(request["arguments"], cwd=cwd)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/graphtraj/interfaces/tools.py:735: in recover_execution
+    result = approved_recovery(dict(arguments), cwd or Path.cwd())
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/graphtraj/execution/approved_recovery.py:80: in approved_recovery
+    after = _repair_snapshot(project, before, request)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/graphtraj/execution/approved_recovery.py:142: in _repair_snapshot
+    raise RunnerError('invalid-input', 'Task disposition and completed ancestors require task-graph revision.')
+E   graphtraj.execution.runner_models.RunnerError: Task disposition and completed ancestors require task-graph revision.
+__ ERROR at setup of test_task_budget_repair_retains_retired_sessions[stale] ___
+tests/test_approved_recovery.py:1274: in retired_target
+    invoke(root, {**arguments, 'additional_minutes': 0, 'resume': False})
+tests/test_approved_recovery.py:54: in invoke
+    result = local_tool.bind(root)({'action': 'execute', 'feature': 'approved_recovery', 'arguments': arguments})
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/graphtraj/interfaces/gateway.py:111: in handle_request
+    return tool.handler(request["arguments"], cwd=cwd)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/graphtraj/interfaces/tools.py:735: in recover_execution
+    result = approved_recovery(dict(arguments), cwd or Path.cwd())
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/graphtraj/execution/approved_recovery.py:80: in approved_recovery
+    after = _repair_snapshot(project, before, request)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/graphtraj/execution/approved_recovery.py:142: in _repair_snapshot
+    raise RunnerError('invalid-input', 'Task disposition and completed ancestors require task-graph revision.')
+E   graphtraj.execution.runner_models.RunnerError: Task disposition and completed ancestors require task-graph revision.
+_ ERROR at setup of test_task_recovery_authority_targets_and_separate_continuation _
+tests/test_approved_recovery.py:1274: in retired_target
+    invoke(root, {**arguments, 'additional_minutes': 0, 'resume': False})
+tests/test_approved_recovery.py:54: in invoke
+    result = local_tool.bind(root)({'action': 'execute', 'feature': 'approved_recovery', 'arguments': arguments})
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/graphtraj/interfaces/gateway.py:111: in handle_request
+    return tool.handler(request["arguments"], cwd=cwd)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/graphtraj/interfaces/tools.py:735: in recover_execution
+    result = approved_recovery(dict(arguments), cwd or Path.cwd())
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/graphtraj/execution/approved_recovery.py:80: in approved_recovery
+    after = _repair_snapshot(project, before, request)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/graphtraj/execution/approved_recovery.py:142: in _repair_snapshot
+    raise RunnerError('invalid-input', 'Task disposition and completed ancestors require task-graph revision.')
+E   graphtraj.execution.runner_models.RunnerError: Task disposition and completed ancestors require task-graph revision.
+_________ ERROR at setup of test_task_cli_recovery_matches_shared_tool _________
+tests/test_approved_recovery.py:1274: in retired_target
+    invoke(root, {**arguments, 'additional_minutes': 0, 'resume': False})
+tests/test_approved_recovery.py:54: in invoke
+    result = local_tool.bind(root)({'action': 'execute', 'feature': 'approved_recovery', 'arguments': arguments})
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/graphtraj/interfaces/gateway.py:111: in handle_request
+    return tool.handler(request["arguments"], cwd=cwd)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/graphtraj/interfaces/tools.py:735: in recover_execution
+    result = approved_recovery(dict(arguments), cwd or Path.cwd())
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/graphtraj/execution/approved_recovery.py:80: in approved_recovery
+    after = _repair_snapshot(project, before, request)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/graphtraj/execution/approved_recovery.py:142: in _repair_snapshot
+    raise RunnerError('invalid-input', 'Task disposition and completed ancestors require task-graph revision.')
+E   graphtraj.execution.runner_models.RunnerError: Task disposition and completed ancestors require task-graph revision.
+=================================== FAILURES ===================================
+_____ test_installed_proxy_uses_websocket_for_public_refresh[False-False] ______
+tests/test_mcp_adoption.py:95: in test_installed_proxy_uses_websocket_for_public_refresh
+    asyncio.run(check())
+/Users/luoxiao/miniconda3/lib/python3.13/asyncio/runners.py:195: in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+/Users/luoxiao/miniconda3/lib/python3.13/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/Users/luoxiao/miniconda3/lib/python3.13/asyncio/base_events.py:725: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+tests/test_mcp_adoption.py:67: in check
+    async with unix_serve(handle, str(socket)):
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../claude-501/venv344/lib/python3.13/site-packages/websockets/asyncio/server.py:829: in __aenter__
+    return await self
+           ^^^^^^^^^^
+../claude-501/venv344/lib/python3.13/site-packages/websockets/asyncio/server.py:847: in __await_impl__
+    server = await self.create_server
+             ^^^^^^^^^^^^^^^^^^^^^^^^
+/Users/luoxiao/miniconda3/lib/python3.13/asyncio/unix_events.py:321: in create_unix_server
+    sock.bind(path)
+E   PermissionError: [Errno 1] Operation not permitted
+______ test_installed_proxy_uses_websocket_for_public_refresh[False-True] ______
+tests/test_mcp_adoption.py:95: in test_installed_proxy_uses_websocket_for_public_refresh
+    asyncio.run(check())
+/Users/luoxiao/miniconda3/lib/python3.13/asyncio/runners.py:195: in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+/Users/luoxiao/miniconda3/lib/python3.13/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/Users/luoxiao/miniconda3/lib/python3.13/asyncio/base_events.py:725: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+tests/test_mcp_adoption.py:67: in check
+    async with unix_serve(handle, str(socket)):
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../claude-501/venv344/lib/python3.13/site-packages/websockets/asyncio/server.py:829: in __aenter__
+    return await self
+           ^^^^^^^^^^
+../claude-501/venv344/lib/python3.13/site-packages/websockets/asyncio/server.py:847: in __await_impl__
+    server = await self.create_server
+             ^^^^^^^^^^^^^^^^^^^^^^^^
+/Users/luoxiao/miniconda3/lib/python3.13/asyncio/unix_events.py:321: in create_unix_server
+    sock.bind(path)
+E   PermissionError: [Errno 1] Operation not permitted
+______ test_installed_proxy_uses_websocket_for_public_refresh[True-False] ______
+tests/test_mcp_adoption.py:95: in test_installed_proxy_uses_websocket_for_public_refresh
+    asyncio.run(check())
+/Users/luoxiao/miniconda3/lib/python3.13/asyncio/runners.py:195: in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+/Users/luoxiao/miniconda3/lib/python3.13/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/Users/luoxiao/miniconda3/lib/python3.13/asyncio/base_events.py:725: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+tests/test_mcp_adoption.py:67: in check
+    async with unix_serve(handle, str(socket)):
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../claude-501/venv344/lib/python3.13/site-packages/websockets/asyncio/server.py:829: in __aenter__
+    return await self
+           ^^^^^^^^^^
+../claude-501/venv344/lib/python3.13/site-packages/websockets/asyncio/server.py:847: in __await_impl__
+    server = await self.create_server
+             ^^^^^^^^^^^^^^^^^^^^^^^^
+/Users/luoxiao/miniconda3/lib/python3.13/asyncio/unix_events.py:321: in create_unix_server
+    sock.bind(path)
+E   PermissionError: [Errno 1] Operation not permitted
+______ test_installed_proxy_uses_websocket_for_public_refresh[True-True] _______
+tests/test_mcp_adoption.py:95: in test_installed_proxy_uses_websocket_for_public_refresh
+    asyncio.run(check())
+/Users/luoxiao/miniconda3/lib/python3.13/asyncio/runners.py:195: in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+/Users/luoxiao/miniconda3/lib/python3.13/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/Users/luoxiao/miniconda3/lib/python3.13/asyncio/base_events.py:725: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+tests/test_mcp_adoption.py:67: in check
+    async with unix_serve(handle, str(socket)):
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../claude-501/venv344/lib/python3.13/site-packages/websockets/asyncio/server.py:829: in __aenter__
+    return await self
+           ^^^^^^^^^^
+../claude-501/venv344/lib/python3.13/site-packages/websockets/asyncio/server.py:847: in __await_impl__
+    server = await self.create_server
+             ^^^^^^^^^^^^^^^^^^^^^^^^
+/Users/luoxiao/miniconda3/lib/python3.13/asyncio/unix_events.py:321: in create_unix_server
+    sock.bind(path)
+E   PermissionError: [Errno 1] Operation not permitted
+________ test_installed_proxy_does_not_convert_json_lines_to_websocket _________
+tests/test_mcp_adoption.py:134: in test_installed_proxy_does_not_convert_json_lines_to_websocket
+    asyncio.run(check())
+/Users/luoxiao/miniconda3/lib/python3.13/asyncio/runners.py:195: in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+/Users/luoxiao/miniconda3/lib/python3.13/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/Users/luoxiao/miniconda3/lib/python3.13/asyncio/base_events.py:725: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+tests/test_mcp_adoption.py:120: in check
+    async with await asyncio.start_unix_server(capture, path=str(socket)):
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/Users/luoxiao/miniconda3/lib/python3.13/asyncio/streams.py:113: in start_unix_server
+    return await loop.create_unix_server(factory, path, **kwds)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/Users/luoxiao/miniconda3/lib/python3.13/asyncio/unix_events.py:321: in create_unix_server
+    sock.bind(path)
+E   PermissionError: [Errno 1] Operation not permitted
+_______ test_recovery_scopes_mapping_validation_to_recorded_descendants ________
+tests/test_approved_recovery.py:177: in test_recovery_scopes_mapping_validation_to_recorded_descendants
+    assert error.value.code == 'operation-failed'
+E   AssertionError: assert 'invalid-input' == 'operation-failed'
+E     
+E     - operation-failed
+E     + invalid-input
+____________ test_recovered_unchanged_result_returns_to_integration ____________
+tests/test_approved_recovery.py:223: in test_recovered_unchanged_result_returns_to_integration
+    recovered = invoke(root, {**arguments, 'additional_minutes': 0})
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_approved_recovery.py:54: in invoke
+    result = local_tool.bind(root)({'action': 'execute', 'feature': 'approved_recovery', 'arguments': arguments})
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/graphtraj/interfaces/gateway.py:111: in handle_request
+    return tool.handler(request["arguments"], cwd=cwd)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/graphtraj/interfaces/tools.py:735: in recover_execution
+    result = approved_recovery(dict(arguments), cwd or Path.cwd())
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/graphtraj/execution/approved_recovery.py:80: in approved_recovery
+    after = _repair_snapshot(project, before, request)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/graphtraj/execution/approved_recovery.py:142: in _repair_snapshot
+    raise RunnerError('invalid-input', 'Task disposition and completed ancestors require task-graph revision.')
+E   graphtraj.execution.runner_models.RunnerError: Task disposition and completed ancestors require task-graph revision.
+___ test_approved_integrated_repair_retains_history_and_retries_once[human] ____
+tests/test_approved_recovery.py:308: in test_approved_integrated_repair_retains_history_and_retries_once
+    result = invoke(root, arguments)
+             ^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_approved_recovery.py:54: in invoke
+    result = local_tool.bind(root)({'action': 'execute', 'feature': 'approved_recovery', 'arguments': arguments})
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/graphtraj/interfaces/gateway.py:111: in handle_request
+    return tool.handler(request["arguments"], cwd=cwd)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/graphtraj/interfaces/tools.py:735: in recover_execution
+    result = approved_recovery(dict(arguments), cwd or Path.cwd())
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/graphtraj/execution/approved_recovery.py:80: in approved_recovery
+    after = _repair_snapshot(project, before, request)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/graphtraj/execution/approved_recovery.py:142: in _repair_snapshot
+    raise RunnerError('invalid-input', 'Task disposition and completed ancestors require task-graph revision.')
+E   graphtraj.execution.runner_models.RunnerError: Task disposition and completed ancestors require task-graph revision.
+_ test_approved_integrated_repair_retains_history_and_retries_once[automatic] __
+tests/test_approved_recovery.py:308: in test_approved_integrated_repair_retains_history_and_retries_once
+    result = invoke(root, arguments)
+             ^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_approved_recovery.py:54: in invoke
+    result = local_tool.bind(root)({'action': 'execute', 'feature': 'approved_recovery', 'arguments': arguments})
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/graphtraj/interfaces/gateway.py:111: in handle_request
+    return tool.handler(request["arguments"], cwd=cwd)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/graphtraj/interfaces/tools.py:735: in recover_execution
+    result = approved_recovery(dict(arguments), cwd or Path.cwd())
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/graphtraj/execution/approved_recovery.py:80: in approved_recovery
+    after = _repair_snapshot(project, before, request)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/graphtraj/execution/approved_recovery.py:142: in _repair_snapshot
+    raise RunnerError('invalid-input', 'Task disposition and completed ancestors require task-graph revision.')
+E   graphtraj.execution.runner_models.RunnerError: Task disposition and completed ancestors require task-graph revision.
+_ test_approved_integrated_repair_retains_history_and_retries_once[existing-authority] _
+tests/test_approved_recovery.py:308: in test_approved_integrated_repair_retains_history_and_retries_once
+    result = invoke(root, arguments)
+             ^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_approved_recovery.py:54: in invoke
+    result = local_tool.bind(root)({'action': 'execute', 'feature': 'approved_recovery', 'arguments': arguments})
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/graphtraj/interfaces/gateway.py:111: in handle_request
+    return tool.handler(request["arguments"], cwd=cwd)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/graphtraj/interfaces/tools.py:735: in recover_execution
+    result = approved_recovery(dict(arguments), cwd or Path.cwd())
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/graphtraj/execution/approved_recovery.py:80: in approved_recovery
+    after = _repair_snapshot(project, before, request)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/graphtraj/execution/approved_recovery.py:142: in _repair_snapshot
+    raise RunnerError('invalid-input', 'Task disposition and completed ancestors require task-graph revision.')
+E   graphtraj.execution.runner_models.RunnerError: Task disposition and completed ancestors require task-graph revision.
+_ test_administrative_recovery_routes_reports_to_the_actual_current_host[False] _
+tests/test_approved_recovery.py:521: in test_administrative_recovery_routes_reports_to_the_actual_current_host
+    continued = host({'action': 'execute', 'feature': 'agents', 'arguments': {
+E   KeyError: 'result'
+_ test_administrative_recovery_routes_reports_to_the_actual_current_host[True] _
+/private/tmp/344-e9-resume-check/tests/test_approved_recovery.py:521: in test_administrative_recovery_routes_reports_to_the_actual_current_host
+    continued = host({'action': 'execute', 'feature': 'agents', 'arguments': {
+E   KeyError: 'result'
+________ test_native_refusal_and_failure_leave_state_untouched[denied] _________
+tests/test_approved_recovery.py:543: in test_native_refusal_and_failure_leave_state_untouched
+    with pytest.raises(RunnerError, match=mode):
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   AssertionError: Regex pattern did not match.
+E     Expected regex: 'denied'
+E     Actual message: 'Task disposition and completed ancestors require task-graph revision.'
+________ test_native_refusal_and_failure_leave_state_untouched[failed] _________
+tests/test_approved_recovery.py:543: in test_native_refusal_and_failure_leave_state_untouched
+    with pytest.raises(RunnerError, match=mode):
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   AssertionError: Regex pattern did not match.
+E     Expected regex: 'failed'
+E     Actual message: 'Task disposition and completed ancestors require task-graph revision.'
+_______________ test_postapproval_race_returns_exact_differences _______________
+tests/test_approved_recovery.py:562: in test_postapproval_race_returns_exact_differences
+    result = invoke(root, arguments)
+             ^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_approved_recovery.py:54: in invoke
+    result = local_tool.bind(root)({'action': 'execute', 'feature': 'approved_recovery', 'arguments': arguments})
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/graphtraj/interfaces/gateway.py:111: in handle_request
+    return tool.handler(request["arguments"], cwd=cwd)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/graphtraj/interfaces/tools.py:735: in recover_execution
+    result = approved_recovery(dict(arguments), cwd or Path.cwd())
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/graphtraj/execution/approved_recovery.py:80: in approved_recovery
+    after = _repair_snapshot(project, before, request)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/graphtraj/execution/approved_recovery.py:142: in _repair_snapshot
+    raise RunnerError('invalid-input', 'Task disposition and completed ancestors require task-graph revision.')
+E   graphtraj.execution.runner_models.RunnerError: Task disposition and completed ancestors require task-graph revision.
+_ test_native_approved_command_reaches_original_session_with_exact_scope[False] _
+tests/test_approved_recovery.py:618: in test_native_approved_command_reaches_original_session_with_exact_scope
+    result = invoke(root, arguments)
+             ^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_approved_recovery.py:54: in invoke
+    result = local_tool.bind(root)({'action': 'execute', 'feature': 'approved_recovery', 'arguments': arguments})
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/graphtraj/interfaces/gateway.py:111: in handle_request
+    return tool.handler(request["arguments"], cwd=cwd)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/graphtraj/interfaces/tools.py:735: in recover_execution
+    result = approved_recovery(dict(arguments), cwd or Path.cwd())
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/graphtraj/execution/approved_recovery.py:80: in approved_recovery
+    after = _repair_snapshot(project, before, request)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/graphtraj/execution/approved_recovery.py:142: in _repair_snapshot
+    raise RunnerError('invalid-input', 'Task disposition and completed ancestors require task-graph revision.')
+E   graphtraj.execution.runner_models.RunnerError: Task disposition and completed ancestors require task-graph revision.
+_ test_native_approved_command_reaches_original_session_with_exact_scope[True] _
+tests/test_approved_recovery.py:618: in test_native_approved_command_reaches_original_session_with_exact_scope
+    result = invoke(root, arguments)
+             ^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_approved_recovery.py:54: in invoke
+    result = local_tool.bind(root)({'action': 'execute', 'feature': 'approved_recovery', 'arguments': arguments})
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/graphtraj/interfaces/gateway.py:111: in handle_request
+    return tool.handler(request["arguments"], cwd=cwd)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/graphtraj/interfaces/tools.py:735: in recover_execution
+    result = approved_recovery(dict(arguments), cwd or Path.cwd())
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/graphtraj/execution/approved_recovery.py:80: in approved_recovery
+    after = _repair_snapshot(project, before, request)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/graphtraj/execution/approved_recovery.py:142: in _repair_snapshot
+    raise RunnerError('invalid-input', 'Task disposition and completed ancestors require task-graph revision.')
+E   graphtraj.execution.runner_models.RunnerError: Task disposition and completed ancestors require task-graph revision.
+____ test_recovery_reactivates_original_team_without_fabricating_new_round _____
+tests/test_approved_recovery.py:759: in test_recovery_reactivates_original_team_without_fabricating_new_round
+    result = invoke(root, arguments)
+             ^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_approved_recovery.py:54: in invoke
+    result = local_tool.bind(root)({'action': 'execute', 'feature': 'approved_recovery', 'arguments': arguments})
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/graphtraj/interfaces/gateway.py:111: in handle_request
+    return tool.handler(request["arguments"], cwd=cwd)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/graphtraj/interfaces/tools.py:735: in recover_execution
+    result = approved_recovery(dict(arguments), cwd or Path.cwd())
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/graphtraj/execution/approved_recovery.py:80: in approved_recovery
+    after = _repair_snapshot(project, before, request)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/graphtraj/execution/approved_recovery.py:142: in _repair_snapshot
+    raise RunnerError('invalid-input', 'Task disposition and completed ancestors require task-graph revision.')
+E   graphtraj.execution.runner_models.RunnerError: Task disposition and completed ancestors require task-graph revision.
+___________________ test_retry_does_not_override_a_new_stop ____________________
+tests/test_approved_recovery.py:782: in test_retry_does_not_override_a_new_stop
+    result = invoke(root, arguments)
+             ^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_approved_recovery.py:54: in invoke
+    result = local_tool.bind(root)({'action': 'execute', 'feature': 'approved_recovery', 'arguments': arguments})
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/graphtraj/interfaces/gateway.py:111: in handle_request
+    return tool.handler(request["arguments"], cwd=cwd)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/graphtraj/interfaces/tools.py:735: in recover_execution
+    result = approved_recovery(dict(arguments), cwd or Path.cwd())
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/graphtraj/execution/approved_recovery.py:80: in approved_recovery
+    after = _repair_snapshot(project, before, request)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/graphtraj/execution/approved_recovery.py:142: in _repair_snapshot
+    raise RunnerError('invalid-input', 'Task disposition and completed ancestors require task-graph revision.')
+E   graphtraj.execution.runner_models.RunnerError: Task disposition and completed ancestors require task-graph revision.
+__ test_new_budget_stop_during_resume_is_reported_as_applied_but_not_resumed ___
+tests/test_approved_recovery.py:812: in test_new_budget_stop_during_resume_is_reported_as_applied_but_not_resumed
+    result = invoke(root, arguments)
+             ^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_approved_recovery.py:54: in invoke
+    result = local_tool.bind(root)({'action': 'execute', 'feature': 'approved_recovery', 'arguments': arguments})
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/graphtraj/interfaces/gateway.py:111: in handle_request
+    return tool.handler(request["arguments"], cwd=cwd)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/graphtraj/interfaces/tools.py:735: in recover_execution
+    result = approved_recovery(dict(arguments), cwd or Path.cwd())
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/graphtraj/execution/approved_recovery.py:80: in approved_recovery
+    after = _repair_snapshot(project, before, request)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/graphtraj/execution/approved_recovery.py:142: in _repair_snapshot
+    raise RunnerError('invalid-input', 'Task disposition and completed ancestors require task-graph revision.')
+E   graphtraj.execution.runner_models.RunnerError: Task disposition and completed ancestors require task-graph revision.
+_______ test_administrative_recovery_preserves_an_already_usable_status ________
+tests/test_approved_recovery.py:830: in test_administrative_recovery_preserves_an_already_usable_status
+    applied = invoke(root, arguments)
+              ^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_approved_recovery.py:54: in invoke
+    result = local_tool.bind(root)({'action': 'execute', 'feature': 'approved_recovery', 'arguments': arguments})
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/graphtraj/interfaces/gateway.py:111: in handle_request
+    return tool.handler(request["arguments"], cwd=cwd)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/graphtraj/interfaces/tools.py:735: in recover_execution
+    result = approved_recovery(dict(arguments), cwd or Path.cwd())
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/graphtraj/execution/approved_recovery.py:80: in approved_recovery
+    after = _repair_snapshot(project, before, request)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/graphtraj/execution/approved_recovery.py:142: in _repair_snapshot
+    raise RunnerError('invalid-input', 'Task disposition and completed ancestors require task-graph revision.')
+E   graphtraj.execution.runner_models.RunnerError: Task disposition and completed ancestors require task-graph revision.
+_____________ test_zero_time_recovery_preserves_budget_stop[False] _____________
+tests/test_approved_recovery.py:867: in test_zero_time_recovery_preserves_budget_stop
+    result = invoke(root, {**arguments, 'additional_minutes': 0, 'resume': resume})
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_approved_recovery.py:54: in invoke
+    result = local_tool.bind(root)({'action': 'execute', 'feature': 'approved_recovery', 'arguments': arguments})
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/graphtraj/interfaces/gateway.py:111: in handle_request
+    return tool.handler(request["arguments"], cwd=cwd)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/graphtraj/interfaces/tools.py:735: in recover_execution
+    result = approved_recovery(dict(arguments), cwd or Path.cwd())
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/graphtraj/execution/approved_recovery.py:80: in approved_recovery
+    after = _repair_snapshot(project, before, request)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/graphtraj/execution/approved_recovery.py:142: in _repair_snapshot
+    raise RunnerError('invalid-input', 'Task disposition and completed ancestors require task-graph revision.')
+E   graphtraj.execution.runner_models.RunnerError: Task disposition and completed ancestors require task-graph revision.
+_____________ test_zero_time_recovery_preserves_budget_stop[True] ______________
+tests/test_approved_recovery.py:867: in test_zero_time_recovery_preserves_budget_stop
+    result = invoke(root, {**arguments, 'additional_minutes': 0, 'resume': resume})
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_approved_recovery.py:54: in invoke
+    result = local_tool.bind(root)({'action': 'execute', 'feature': 'approved_recovery', 'arguments': arguments})
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/graphtraj/interfaces/gateway.py:111: in handle_request
+    return tool.handler(request["arguments"], cwd=cwd)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/graphtraj/interfaces/tools.py:735: in recover_execution
+    result = approved_recovery(dict(arguments), cwd or Path.cwd())
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/graphtraj/execution/approved_recovery.py:80: in approved_recovery
+    after = _repair_snapshot(project, before, request)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/graphtraj/execution/approved_recovery.py:142: in _repair_snapshot
+    raise RunnerError('invalid-input', 'Task disposition and completed ancestors require task-graph revision.')
+E   graphtraj.execution.runner_models.RunnerError: Task disposition and completed ancestors require task-graph revision.
+_____________ test_cli_administrative_request_matches_shared_tool ______________
+/private/tmp/344-e9-resume-check/tests/test_approved_recovery.py:890: in test_cli_administrative_request_matches_shared_tool
+    tool = invoke(root, request)
+           ^^^^^^^^^^^^^^^^^^^^^
+/private/tmp/344-e9-resume-check/tests/test_approved_recovery.py:54: in invoke
+    result = local_tool.bind(root)({'action': 'execute', 'feature': 'approved_recovery', 'arguments': arguments})
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/private/tmp/344-e9-resume-check/src/graphtraj/interfaces/gateway.py:111: in handle_request
+    return tool.handler(request["arguments"], cwd=cwd)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/private/tmp/344-e9-resume-check/src/graphtraj/interfaces/tools.py:735: in recover_execution
+    result = approved_recovery(dict(arguments), cwd or Path.cwd())
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/private/tmp/344-e9-resume-check/src/graphtraj/execution/approved_recovery.py:80: in approved_recovery
+    after = _repair_snapshot(project, before, request)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/private/tmp/344-e9-resume-check/src/graphtraj/execution/approved_recovery.py:142: in _repair_snapshot
+    raise RunnerError('invalid-input', 'Task disposition and completed ancestors require task-graph revision.')
+E   graphtraj.execution.runner_models.RunnerError: Task disposition and completed ancestors require task-graph revision.
+_______ test_administrative_restore_allows_separate_budget_only_continue _______
+tests/test_approved_recovery.py:914: in test_administrative_restore_allows_separate_budget_only_continue
+    result = invoke(root, {**arguments, 'additional_minutes': 0, 'resume': False})
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_approved_recovery.py:54: in invoke
+    result = local_tool.bind(root)({'action': 'execute', 'feature': 'approved_recovery', 'arguments': arguments})
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/graphtraj/interfaces/gateway.py:111: in handle_request
+    return tool.handler(request["arguments"], cwd=cwd)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/graphtraj/interfaces/tools.py:735: in recover_execution
+    result = approved_recovery(dict(arguments), cwd or Path.cwd())
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/graphtraj/execution/approved_recovery.py:80: in approved_recovery
+    after = _repair_snapshot(project, before, request)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/graphtraj/execution/approved_recovery.py:142: in _repair_snapshot
+    raise RunnerError('invalid-input', 'Task disposition and completed ancestors require task-graph revision.')
+E   graphtraj.execution.runner_models.RunnerError: Task disposition and completed ancestors require task-graph revision.
+_________________ test_existing_authority_never_calls_reviewer _________________
+tests/test_approved_recovery.py:942: in test_existing_authority_never_calls_reviewer
+    result = local_tool.bind(root, recovery_reviewer=unexpected_review)({
+src/graphtraj/interfaces/local_tool.py:89: in review_bound
+    return callback(request)
+           ^^^^^^^^^^^^^^^^^
+src/graphtraj/interfaces/gateway.py:111: in handle_request
+    return tool.handler(request["arguments"], cwd=cwd)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/graphtraj/interfaces/tools.py:735: in recover_execution
+    result = approved_recovery(dict(arguments), cwd or Path.cwd())
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/graphtraj/execution/approved_recovery.py:80: in approved_recovery
+    after = _repair_snapshot(project, before, request)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/graphtraj/execution/approved_recovery.py:142: in _repair_snapshot
+    raise RunnerError('invalid-input', 'Task disposition and completed ancestors require task-graph revision.')
+E   graphtraj.execution.runner_models.RunnerError: Task disposition and completed ancestors require task-graph revision.
+________________ test_bound_host_decides_inside_recover[accept] ________________
+tests/test_approved_recovery.py:975: in test_bound_host_decides_inside_recover
+    result = call(request).document
+             ^^^^^^^^^^^^^
+src/graphtraj/interfaces/local_tool.py:89: in review_bound
+    return callback(request)
+           ^^^^^^^^^^^^^^^^^
+src/graphtraj/interfaces/gateway.py:111: in handle_request
+    return tool.handler(request["arguments"], cwd=cwd)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/graphtraj/interfaces/tools.py:735: in recover_execution
+    result = approved_recovery(dict(arguments), cwd or Path.cwd())
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/graphtraj/execution/approved_recovery.py:80: in approved_recovery
+    after = _repair_snapshot(project, before, request)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/graphtraj/execution/approved_recovery.py:142: in _repair_snapshot
+    raise RunnerError('invalid-input', 'Task disposition and completed ancestors require task-graph revision.')
+E   graphtraj.execution.runner_models.RunnerError: Task disposition and completed ancestors require task-graph revision.
+_______________ test_bound_host_decides_inside_recover[decline] ________________
+tests/test_approved_recovery.py:983: in test_bound_host_decides_inside_recover
+    assert len(observed) == 1
+E   assert 0 == 1
+E    +  where 0 = len([])
+________________ test_bound_host_decides_inside_recover[error] _________________
+tests/test_approved_recovery.py:983: in test_bound_host_decides_inside_recover
+    assert len(observed) == 1
+E   assert 0 == 1
+E    +  where 0 = len([])
+_________ test_selected_http_reviewer_controls_recovery[accept-target] _________
+tests/test_approved_recovery.py:1029: in test_selected_http_reviewer_controls_recovery
+    result = invoke(root, request)
+             ^^^^^^^^^^^^^^^^^^^^^
+tests/test_approved_recovery.py:54: in invoke
+    result = local_tool.bind(root)({'action': 'execute', 'feature': 'approved_recovery', 'arguments': arguments})
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/graphtraj/interfaces/gateway.py:111: in handle_request
+    return tool.handler(request["arguments"], cwd=cwd)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/graphtraj/interfaces/tools.py:735: in recover_execution
+    result = approved_recovery(dict(arguments), cwd or Path.cwd())
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/graphtraj/execution/approved_recovery.py:80: in approved_recovery
+    after = _repair_snapshot(project, before, request)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/graphtraj/execution/approved_recovery.py:142: in _repair_snapshot
+    raise RunnerError('invalid-input', 'Task disposition and completed ancestors require task-graph revision.')
+E   graphtraj.execution.runner_models.RunnerError: Task disposition and completed ancestors require task-graph revision.
+_____ test_selected_http_reviewer_controls_recovery[accept-retired_target] _____
+tests/test_approved_recovery.py:995: in test_selected_http_reviewer_controls_recovery
+    root, task, _, arguments = request.getfixturevalue(fixture_name)
+                               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/Users/luoxiao/miniconda3/lib/python3.13/site-packages/_pytest/fixtures.py:630: in getfixturevalue
+    fixturedef = self._get_active_fixturedef(argname)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/Users/luoxiao/miniconda3/lib/python3.13/site-packages/_pytest/fixtures.py:726: in _get_active_fixturedef
+    fixturedef.execute(request=subrequest)
+/Users/luoxiao/miniconda3/lib/python3.13/site-packages/_pytest/fixtures.py:1232: in execute
+    result: FixtureValue = ihook.pytest_fixture_setup(
+/Users/luoxiao/miniconda3/lib/python3.13/site-packages/pluggy/_hooks.py:513: in __call__
+    return self._hookexec(self.name, self._hookimpls.copy(), kwargs, firstresult)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/Users/luoxiao/miniconda3/lib/python3.13/site-packages/pluggy/_manager.py:120: in _hookexec
+    return self._inner_hookexec(hook_name, methods, kwargs, firstresult)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/Users/luoxiao/miniconda3/lib/python3.13/site-packages/_pytest/setuponly.py:36: in pytest_fixture_setup
+    return (yield)
+            ^^^^^
+/Users/luoxiao/miniconda3/lib/python3.13/site-packages/_pytest/fixtures.py:1328: in pytest_fixture_setup
+    result = call_fixture_func(fixturefunc, request, kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/Users/luoxiao/miniconda3/lib/python3.13/site-packages/_pytest/fixtures.py:1005: in call_fixture_func
+    fixture_result = fixturefunc(**kwargs)
+                     ^^^^^^^^^^^^^^^^^^^^^
+tests/test_approved_recovery.py:1274: in retired_target
+    invoke(root, {**arguments, 'additional_minutes': 0, 'resume': False})
+tests/test_approved_recovery.py:54: in invoke
+    result = local_tool.bind(root)({'action': 'execute', 'feature': 'approved_recovery', 'arguments': arguments})
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/graphtraj/interfaces/gateway.py:111: in handle_request
+    return tool.handler(request["arguments"], cwd=cwd)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/graphtraj/interfaces/tools.py:735: in recover_execution
+    result = approved_recovery(dict(arguments), cwd or Path.cwd())
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/graphtraj/execution/approved_recovery.py:80: in approved_recovery
+    after = _repair_snapshot(project, before, request)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/graphtraj/execution/approved_recovery.py:142: in _repair_snapshot
+    raise RunnerError('invalid-input', 'Task disposition and completed ancestors require task-graph revision.')
+E   graphtraj.execution.runner_models.RunnerError: Task disposition and completed ancestors require task-graph revision.
+________ test_selected_http_reviewer_controls_recovery[decline-target] _________
+tests/test_approved_recovery.py:1037: in test_selected_http_reviewer_controls_recovery
+    assert error.value.code == 'recovery-denied'
+E   AssertionError: assert 'invalid-input' == 'recovery-denied'
+E     
+E     - recovery-denied
+E     + invalid-input
+____ test_selected_http_reviewer_controls_recovery[decline-retired_target] _____
+tests/test_approved_recovery.py:995: in test_selected_http_reviewer_controls_recovery
+    root, task, _, arguments = request.getfixturevalue(fixture_name)
+                               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/Users/luoxiao/miniconda3/lib/python3.13/site-packages/_pytest/fixtures.py:630: in getfixturevalue
+    fixturedef = self._get_active_fixturedef(argname)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/Users/luoxiao/miniconda3/lib/python3.13/site-packages/_pytest/fixtures.py:726: in _get_active_fixturedef
+    fixturedef.execute(request=subrequest)
+/Users/luoxiao/miniconda3/lib/python3.13/site-packages/_pytest/fixtures.py:1232: in execute
+    result: FixtureValue = ihook.pytest_fixture_setup(
+/Users/luoxiao/miniconda3/lib/python3.13/site-packages/pluggy/_hooks.py:513: in __call__
+    return self._hookexec(self.name, self._hookimpls.copy(), kwargs, firstresult)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/Users/luoxiao/miniconda3/lib/python3.13/site-packages/pluggy/_manager.py:120: in _hookexec
+    return self._inner_hookexec(hook_name, methods, kwargs, firstresult)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/Users/luoxiao/miniconda3/lib/python3.13/site-packages/_pytest/setuponly.py:36: in pytest_fixture_setup
+    return (yield)
+            ^^^^^
+/Users/luoxiao/miniconda3/lib/python3.13/site-packages/_pytest/fixtures.py:1328: in pytest_fixture_setup
+    result = call_fixture_func(fixturefunc, request, kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/Users/luoxiao/miniconda3/lib/python3.13/site-packages/_pytest/fixtures.py:1005: in call_fixture_func
+    fixture_result = fixturefunc(**kwargs)
+                     ^^^^^^^^^^^^^^^^^^^^^
+tests/test_approved_recovery.py:1274: in retired_target
+    invoke(root, {**arguments, 'additional_minutes': 0, 'resume': False})
+tests/test_approved_recovery.py:54: in invoke
+    result = local_tool.bind(root)({'action': 'execute', 'feature': 'approved_recovery', 'arguments': arguments})
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/graphtraj/interfaces/gateway.py:111: in handle_request
+    return tool.handler(request["arguments"], cwd=cwd)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/graphtraj/interfaces/tools.py:735: in recover_execution
+    result = approved_recovery(dict(arguments), cwd or Path.cwd())
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/graphtraj/execution/approved_recovery.py:80: in approved_recovery
+    after = _repair_snapshot(project, before, request)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/graphtraj/execution/approved_recovery.py:142: in _repair_snapshot
+    raise RunnerError('invalid-input', 'Task disposition and completed ancestors require task-graph revision.')
+E   graphtraj.execution.runner_models.RunnerError: Task disposition and completed ancestors require task-graph revision.
+_____ test_selected_http_reviewer_controls_recovery[wrong-request-target] ______
+tests/test_approved_recovery.py:1040: in test_selected_http_reviewer_controls_recovery
+    assert error.value.code == 'RUNTIME_REQUEST_FAILED'
+E   AssertionError: assert 'invalid-input' == 'RUNTIME_REQUEST_FAILED'
+E     
+E     - RUNTIME_REQUEST_FAILED
+E     + invalid-input
+_ test_selected_http_reviewer_controls_recovery[wrong-request-retired_target] __
+tests/test_approved_recovery.py:995: in test_selected_http_reviewer_controls_recovery
+    root, task, _, arguments = request.getfixturevalue(fixture_name)
+                               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/Users/luoxiao/miniconda3/lib/python3.13/site-packages/_pytest/fixtures.py:630: in getfixturevalue
+    fixturedef = self._get_active_fixturedef(argname)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/Users/luoxiao/miniconda3/lib/python3.13/site-packages/_pytest/fixtures.py:726: in _get_active_fixturedef
+    fixturedef.execute(request=subrequest)
+/Users/luoxiao/miniconda3/lib/python3.13/site-packages/_pytest/fixtures.py:1232: in execute
+    result: FixtureValue = ihook.pytest_fixture_setup(
+/Users/luoxiao/miniconda3/lib/python3.13/site-packages/pluggy/_hooks.py:513: in __call__
+    return self._hookexec(self.name, self._hookimpls.copy(), kwargs, firstresult)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/Users/luoxiao/miniconda3/lib/python3.13/site-packages/pluggy/_manager.py:120: in _hookexec
+    return self._inner_hookexec(hook_name, methods, kwargs, firstresult)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/Users/luoxiao/miniconda3/lib/python3.13/site-packages/_pytest/setuponly.py:36: in pytest_fixture_setup
+    return (yield)
+            ^^^^^
+/Users/luoxiao/miniconda3/lib/python3.13/site-packages/_pytest/fixtures.py:1328: in pytest_fixture_setup
+    result = call_fixture_func(fixturefunc, request, kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/Users/luoxiao/miniconda3/lib/python3.13/site-packages/_pytest/fixtures.py:1005: in call_fixture_func
+    fixture_result = fixturefunc(**kwargs)
+                     ^^^^^^^^^^^^^^^^^^^^^
+tests/test_approved_recovery.py:1274: in retired_target
+    invoke(root, {**arguments, 'additional_minutes': 0, 'resume': False})
+tests/test_approved_recovery.py:54: in invoke
+    result = local_tool.bind(root)({'action': 'execute', 'feature': 'approved_recovery', 'arguments': arguments})
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/graphtraj/interfaces/gateway.py:111: in handle_request
+    return tool.handler(request["arguments"], cwd=cwd)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/graphtraj/interfaces/tools.py:735: in recover_execution
+    result = approved_recovery(dict(arguments), cwd or Path.cwd())
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/graphtraj/execution/approved_recovery.py:80: in approved_recovery
+    after = _repair_snapshot(project, before, request)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/graphtraj/execution/approved_recovery.py:142: in _repair_snapshot
+    raise RunnerError('invalid-input', 'Task disposition and completed ancestors require task-graph revision.')
+E   graphtraj.execution.runner_models.RunnerError: Task disposition and completed ancestors require task-graph revision.
+_________ test_selected_http_reviewer_controls_recovery[error-target] __________
+tests/test_approved_recovery.py:1040: in test_selected_http_reviewer_controls_recovery
+    assert error.value.code == 'RUNTIME_REQUEST_FAILED'
+E   AssertionError: assert 'invalid-input' == 'RUNTIME_REQUEST_FAILED'
+E     
+E     - RUNTIME_REQUEST_FAILED
+E     + invalid-input
+_____ test_selected_http_reviewer_controls_recovery[error-retired_target] ______
+tests/test_approved_recovery.py:995: in test_selected_http_reviewer_controls_recovery
+    root, task, _, arguments = request.getfixturevalue(fixture_name)
+                               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/Users/luoxiao/miniconda3/lib/python3.13/site-packages/_pytest/fixtures.py:630: in getfixturevalue
+    fixturedef = self._get_active_fixturedef(argname)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/Users/luoxiao/miniconda3/lib/python3.13/site-packages/_pytest/fixtures.py:726: in _get_active_fixturedef
+    fixturedef.execute(request=subrequest)
+/Users/luoxiao/miniconda3/lib/python3.13/site-packages/_pytest/fixtures.py:1232: in execute
+    result: FixtureValue = ihook.pytest_fixture_setup(
+/Users/luoxiao/miniconda3/lib/python3.13/site-packages/pluggy/_hooks.py:513: in __call__
+    return self._hookexec(self.name, self._hookimpls.copy(), kwargs, firstresult)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/Users/luoxiao/miniconda3/lib/python3.13/site-packages/pluggy/_manager.py:120: in _hookexec
+    return self._inner_hookexec(hook_name, methods, kwargs, firstresult)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/Users/luoxiao/miniconda3/lib/python3.13/site-packages/_pytest/setuponly.py:36: in pytest_fixture_setup
+    return (yield)
+            ^^^^^
+/Users/luoxiao/miniconda3/lib/python3.13/site-packages/_pytest/fixtures.py:1328: in pytest_fixture_setup
+    result = call_fixture_func(fixturefunc, request, kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/Users/luoxiao/miniconda3/lib/python3.13/site-packages/_pytest/fixtures.py:1005: in call_fixture_func
+    fixture_result = fixturefunc(**kwargs)
+                     ^^^^^^^^^^^^^^^^^^^^^
+tests/test_approved_recovery.py:1274: in retired_target
+    invoke(root, {**arguments, 'additional_minutes': 0, 'resume': False})
+tests/test_approved_recovery.py:54: in invoke
+    result = local_tool.bind(root)({'action': 'execute', 'feature': 'approved_recovery', 'arguments': arguments})
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/graphtraj/interfaces/gateway.py:111: in handle_request
+    return tool.handler(request["arguments"], cwd=cwd)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/graphtraj/interfaces/tools.py:735: in recover_execution
+    result = approved_recovery(dict(arguments), cwd or Path.cwd())
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/graphtraj/execution/approved_recovery.py:80: in approved_recovery
+    after = _repair_snapshot(project, before, request)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/graphtraj/execution/approved_recovery.py:142: in _repair_snapshot
+    raise RunnerError('invalid-input', 'Task disposition and completed ancestors require task-graph revision.')
+E   graphtraj.execution.runner_models.RunnerError: Task disposition and completed ancestors require task-graph revision.
+_____ test_managed_user_recovery_waits_for_existing_reply_channel[accept] ______
+tests/test_approved_recovery.py:1144: in test_managed_user_recovery_waits_for_existing_reply_channel
+    asyncio.run(exercise())
+/Users/luoxiao/miniconda3/lib/python3.13/asyncio/runners.py:195: in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+/Users/luoxiao/miniconda3/lib/python3.13/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/Users/luoxiao/miniconda3/lib/python3.13/asyncio/base_events.py:725: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+tests/test_approved_recovery.py:1108: in exercise
+    running = asyncio.create_task(worker._native_runner_request(native))
+                                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   AttributeError: 'CodexManagedExecution' object has no attribute '_native_runner_request'
+_____ test_managed_user_recovery_waits_for_existing_reply_channel[decline] _____
+tests/test_approved_recovery.py:1144: in test_managed_user_recovery_waits_for_existing_reply_channel
+    asyncio.run(exercise())
+/Users/luoxiao/miniconda3/lib/python3.13/asyncio/runners.py:195: in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+/Users/luoxiao/miniconda3/lib/python3.13/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/Users/luoxiao/miniconda3/lib/python3.13/asyncio/base_events.py:725: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+tests/test_approved_recovery.py:1108: in exercise
+    running = asyncio.create_task(worker._native_runner_request(native))
+                                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   AttributeError: 'CodexManagedExecution' object has no attribute '_native_runner_request'
+___________ test_parent_interrupt_recovery_reuses_existing_authority ___________
+tests/test_approved_recovery.py:1176: in test_parent_interrupt_recovery_reuses_existing_authority
+    result = call({'action': 'execute', 'feature': 'approved_recovery', 'arguments': {
+src/graphtraj/interfaces/local_tool.py:89: in review_bound
+    return callback(request)
+           ^^^^^^^^^^^^^^^^^
+src/graphtraj/interfaces/gateway.py:111: in handle_request
+    return tool.handler(request["arguments"], cwd=cwd)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/graphtraj/interfaces/tools.py:735: in recover_execution
+    result = approved_recovery(dict(arguments), cwd or Path.cwd())
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/graphtraj/execution/approved_recovery.py:80: in approved_recovery
+    after = _repair_snapshot(project, before, request)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/graphtraj/execution/approved_recovery.py:142: in _repair_snapshot
+    raise RunnerError('invalid-input', 'Task disposition and completed ancestors require task-graph revision.')
+E   graphtraj.execution.runner_models.RunnerError: Task disposition and completed ancestors require task-graph revision.
+______ test_unrelated_task_event_during_review_does_not_stale_the_repair _______
+tests/test_approved_recovery.py:1315: in test_unrelated_task_event_during_review_does_not_stale_the_repair
+    result = invoke(root, arguments)
+             ^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_approved_recovery.py:54: in invoke
+    result = local_tool.bind(root)({'action': 'execute', 'feature': 'approved_recovery', 'arguments': arguments})
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/graphtraj/interfaces/gateway.py:111: in handle_request
+    return tool.handler(request["arguments"], cwd=cwd)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/graphtraj/interfaces/tools.py:735: in recover_execution
+    result = approved_recovery(dict(arguments), cwd or Path.cwd())
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/graphtraj/execution/approved_recovery.py:80: in approved_recovery
+    after = _repair_snapshot(project, before, request)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/graphtraj/execution/approved_recovery.py:142: in _repair_snapshot
+    raise RunnerError('invalid-input', 'Task disposition and completed ancestors require task-graph revision.')
+E   graphtraj.execution.runner_models.RunnerError: Task disposition and completed ancestors require task-graph revision.
+_______ test_approved_increment_lifts_budget_stop_but_keeps_session_stop _______
+/private/tmp/344-e9-resume-check/tests/test_approved_recovery.py:1658: in test_approved_increment_lifts_budget_stop_but_keeps_session_stop
+    assert refused.failed and refused.document['error']['code'] == 'subtree-stopped'
+E   AssertionError: assert (True and 'authority-unavailable' == 'subtree-stopped'
+E    +  where True = ToolResult(document={'action': 'send', 'error': {'code': 'authority-unavailable', 'message': 'agents needs a verified caller: a managed Session or a verified native Main Session. This call has neither.'}}, failed=True).failed
+E     
+E     - subtree-stopped
+E     + authority-unavailable)
+________ test_budget_only_continue_is_not_blocked_by_a_stopped_old_root ________
+/private/tmp/344-e9-resume-check/tests/test_approved_recovery.py:1685: in test_budget_only_continue_is_not_blocked_by_a_stopped_old_root
+    assert refused.failed and refused.document['error']['code'] == 'subtree-stopped'
+E   AssertionError: assert (True and 'authority-unavailable' == 'subtree-stopped'
+E    +  where True = ToolResult(document={'action': 'send', 'error': {'code': 'authority-unavailable', 'message': 'agents needs a verified caller: a managed Session or a verified native Main Session. This call has neither.'}}, failed=True).failed
+E     
+E     - subtree-stopped
+E     + authority-unavailable)
+=========================== short test summary info ============================
+FAILED tests/test_mcp_adoption.py::test_installed_proxy_uses_websocket_for_public_refresh[False-False]
+FAILED tests/test_mcp_adoption.py::test_installed_proxy_uses_websocket_for_public_refresh[False-True]
+FAILED tests/test_mcp_adoption.py::test_installed_proxy_uses_websocket_for_public_refresh[True-False]
+FAILED tests/test_mcp_adoption.py::test_installed_proxy_uses_websocket_for_public_refresh[True-True]
+FAILED tests/test_mcp_adoption.py::test_installed_proxy_does_not_convert_json_lines_to_websocket
+FAILED tests/test_approved_recovery.py::test_recovery_scopes_mapping_validation_to_recorded_descendants
+FAILED tests/test_approved_recovery.py::test_recovered_unchanged_result_returns_to_integration
+FAILED tests/test_approved_recovery.py::test_approved_integrated_repair_retains_history_and_retries_once[human]
+FAILED tests/test_approved_recovery.py::test_approved_integrated_repair_retains_history_and_retries_once[automatic]
+FAILED tests/test_approved_recovery.py::test_approved_integrated_repair_retains_history_and_retries_once[existing-authority]
+FAILED tests/test_approved_recovery.py::test_administrative_recovery_routes_reports_to_the_actual_current_host[False]
+FAILED tests/test_approved_recovery.py::test_administrative_recovery_routes_reports_to_the_actual_current_host[True]
+FAILED tests/test_approved_recovery.py::test_native_refusal_and_failure_leave_state_untouched[denied]
+FAILED tests/test_approved_recovery.py::test_native_refusal_and_failure_leave_state_untouched[failed]
+FAILED tests/test_approved_recovery.py::test_postapproval_race_returns_exact_differences
+FAILED tests/test_approved_recovery.py::test_native_approved_command_reaches_original_session_with_exact_scope[False]
+FAILED tests/test_approved_recovery.py::test_native_approved_command_reaches_original_session_with_exact_scope[True]
+FAILED tests/test_approved_recovery.py::test_recovery_reactivates_original_team_without_fabricating_new_round
+FAILED tests/test_approved_recovery.py::test_retry_does_not_override_a_new_stop
+FAILED tests/test_approved_recovery.py::test_new_budget_stop_during_resume_is_reported_as_applied_but_not_resumed
+FAILED tests/test_approved_recovery.py::test_administrative_recovery_preserves_an_already_usable_status
+FAILED tests/test_approved_recovery.py::test_zero_time_recovery_preserves_budget_stop[False]
+FAILED tests/test_approved_recovery.py::test_zero_time_recovery_preserves_budget_stop[True]
+FAILED tests/test_approved_recovery.py::test_cli_administrative_request_matches_shared_tool
+FAILED tests/test_approved_recovery.py::test_administrative_restore_allows_separate_budget_only_continue
+FAILED tests/test_approved_recovery.py::test_existing_authority_never_calls_reviewer
+FAILED tests/test_approved_recovery.py::test_bound_host_decides_inside_recover[accept]
+FAILED tests/test_approved_recovery.py::test_bound_host_decides_inside_recover[decline]
+FAILED tests/test_approved_recovery.py::test_bound_host_decides_inside_recover[error]
+FAILED tests/test_approved_recovery.py::test_selected_http_reviewer_controls_recovery[accept-target]
+FAILED tests/test_approved_recovery.py::test_selected_http_reviewer_controls_recovery[accept-retired_target]
+FAILED tests/test_approved_recovery.py::test_selected_http_reviewer_controls_recovery[decline-target]
+FAILED tests/test_approved_recovery.py::test_selected_http_reviewer_controls_recovery[decline-retired_target]
+FAILED tests/test_approved_recovery.py::test_selected_http_reviewer_controls_recovery[wrong-request-target]
+FAILED tests/test_approved_recovery.py::test_selected_http_reviewer_controls_recovery[wrong-request-retired_target]
+FAILED tests/test_approved_recovery.py::test_selected_http_reviewer_controls_recovery[error-target]
+FAILED tests/test_approved_recovery.py::test_selected_http_reviewer_controls_recovery[error-retired_target]
+FAILED tests/test_approved_recovery.py::test_managed_user_recovery_waits_for_existing_reply_channel[accept]
+FAILED tests/test_approved_recovery.py::test_managed_user_recovery_waits_for_existing_reply_channel[decline]
+FAILED tests/test_approved_recovery.py::test_parent_interrupt_recovery_reuses_existing_authority
+FAILED tests/test_approved_recovery.py::test_unrelated_task_event_during_review_does_not_stale_the_repair
+FAILED tests/test_approved_recovery.py::test_approved_increment_lifts_budget_stop_but_keeps_session_stop
+FAILED tests/test_approved_recovery.py::test_budget_only_continue_is_not_blocked_by_a_stopped_old_root
+ERROR tests/test_approved_recovery.py::test_task_budget_repair_retains_retired_sessions[accept]
+ERROR tests/test_approved_recovery.py::test_task_budget_repair_retains_retired_sessions[decline]
+ERROR tests/test_approved_recovery.py::test_task_budget_repair_retains_retired_sessions[error]
+ERROR tests/test_approved_recovery.py::test_task_budget_repair_retains_retired_sessions[stale]
+ERROR tests/test_approved_recovery.py::test_task_recovery_authority_targets_and_separate_continuation
+ERROR tests/test_approved_recovery.py::test_task_cli_recovery_matches_shared_tool
+43 failed, 69 passed, 3 skipped, 6 errors in 435.72s (0:07:15)

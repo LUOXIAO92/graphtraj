@@ -69,7 +69,10 @@ def pi_event(event: dict, cwd: Path) -> dict:
     if source != 'main' or connection is None:
         raise ValueError('Unknown Pi Session source; Main was not associated.')
     connection.update(native_header=header, native_entries=entries)
-    bind_session(connection, cwd, entry=f"pi:session_start:{event['reason']}")
+    # Only a real start or resume continues Main; reload and fork do not.
+    reason = event['reason']
+    bind_session(connection, cwd, entry=(f'pi:session_start:{reason}'
+                                         if reason in {'startup', 'new', 'resume'} else None))
     return {'source': 'main'}
 
 

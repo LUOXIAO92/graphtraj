@@ -22,23 +22,25 @@ import time
 from typing import Callable
 from uuid import UUID
 
-from agent_swarm import AgentControl, AgentsError, AgentsResult, Caller, bind
+from agent_swarm import AgentsError, AgentsResult, Caller, bind
 from agent_swarm.connection import connection_operation, worker_connection
 from agent_swarm.discovery import handle_request
 from agent_swarm.process import process_ancestors
-from graphtraj.execution.agent_driver import AdapterDriver
 from graphtraj.execution.runner_process import process_executable
-from graphtraj.interfaces.agents import configured_archive
+from graphtraj.interfaces.agents import GraphTrajAgents, configured_archive
 from graphtraj.runtimes.claude.mcp import serve
 
 
 class NativeCalls:
     """Consume one current native association exactly once, never a startup ID."""
 
-    def __init__(self, make_call: Callable[[str, Path], Callable], cwd: Path) -> None:
-        """Bind the host's backend factory and permitted native working directory."""
+    def __init__(
+        self, make_call: Callable[[str, Path], Callable], cwd: Path, runner: Path | None = None,
+    ) -> None:
+        """Bind the backend factory, permitted native cwd and the notice queue's project."""
         self.make_call = make_call
         self.cwd = cwd.resolve()
+        self.runner = runner
         self.pending: dict | None = None
         self.lock = threading.Lock()
 
@@ -49,6 +51,8 @@ class NativeCalls:
             if operation == 'end':
                 self.pending = None
                 return {'ended': True}
+            if operation in {'notices', 'acknowledge'}:
+                return self.notices(document)
             if operation != 'prepare' or set(document) != {'operation', 'tool', 'session', 'cwd', 'agent', 'request'}:
                 raise AgentsError('invalid-input', 'Expected one native per-call context.')
             if document['tool'] not in {'agents', 'tasks'}:
@@ -64,6 +68,25 @@ class NativeCalls:
                 raise AgentsError('authority-denied', 'A different native call is already pending.')
             self.pending = copy.deepcopy(document)
             return {'prepared': True}
+
+    def notices(self, document: dict) -> dict:
+        """Let the mod push queued notices into the idle Main, acknowledging after submit.
+
+        Only the authenticated mod of this same Claude process reaches this.
+        """
+        from graphtraj.execution.main_continuity import acknowledge_notices, pending_notices
+
+        session = document.get('session')
+        if (self.runner is None or not isinstance(session, str) or str(UUID(session)) != session
+                or set(document) - {'operation', 'session', 'position'}):
+            raise AgentsError('invalid-input', 'Expected one native notice operation.')
+        if document['operation'] == 'notices':
+            notices, position = pending_notices(self.runner, 'claude', session)
+            return {'notices': notices, 'position': position}
+        if type(document.get('position')) is not int:
+            raise AgentsError('invalid-input', 'Expected the position returned by notices.')
+        acknowledge_notices(self.runner, 'claude', session, document['position'])
+        return {'acknowledged': True}
 
     def call(self, request: dict, tool: str = 'agents') -> AgentsResult:
         """Match the MCP request before consuming its host-supplied association."""
@@ -90,16 +113,20 @@ def native_parent(executable: Path, *, stage: str = 'serve') -> int:
     return parent
 
 
-def main_calls(root: Path, control: AgentControl, archive: object) -> Callable[[str, Path], Callable]:
+def main_calls(root: Path, backend: object, archive: object) -> Callable[[str, Path], Callable]:
     """Return the per-Session factory serving one verified Main's agents and tasks calls.
 
     Each call runs as Main (Runner caller ``None``) with this Session's host
     connection, so dispatched roots record it as their owner. A Session's
     first control call in this process claims Main (``main_continuity``); after
     another Main continues the project, its control calls are refused until a
-    new host process. Queued member notices are returned with the next result.
+    new host process. ``backend`` is the same ``agents`` backend the Codex Main
+    uses (``GraphTrajAgents``: every Runtime driver and Task member Sessions).
+    Queued member notices not yet delivered are returned with each result and
+    acknowledged only once that result is built; a pickup failure is reported
+    beside the result and never fails the executed call.
     """
-    from graphtraj.execution.main_continuity import claimable, take_notices
+    from graphtraj.execution.main_continuity import acknowledge_notices, claimable, pending_notices
     from graphtraj.execution.runner_connection import parent_connection
     from graphtraj.execution.runner_status import runtime_caller
     from graphtraj.interfaces.gateway import handle_request as handle_task
@@ -112,21 +139,29 @@ def main_calls(root: Path, control: AgentControl, archive: object) -> Callable[[
     def make_call(session: str, current: Path) -> Callable:
         """Bind one verified Main Session; the model request never selects it."""
         if session not in callers:
-            callers[session] = bind(control, Caller('claude-native', None, session, 'claude'), archive=archive)
+            callers[session] = bind(backend, Caller('claude-native', None, session, 'claude'), archive=archive)
         connection = {'runtime': 'claude', 'session': session, 'runner': str(runner)}
 
         def call(tool: str, request: dict) -> AgentsResult:
             """Run one call as this Main; return queued Main notices with it."""
             entry = None if session in claimed else (lambda: claimed.add(session))
-            with claimable(entry), parent_connection(connection):
+            with claimable(entry), parent_connection(connection), runtime_caller(runner, None):
                 if tool == 'agents':
                     result = handle_request(request, callers[session])
                 else:
-                    with runtime_caller(runner, None):
-                        result = handle_task(request, cwd=root)
-            notices = take_notices(runner, 'claude', session)
-            if notices:
-                result = AgentsResult({**result.document, 'main_notices': notices}, failed=result.failed)
+                    result = handle_task(request, cwd=root)
+            try:
+                notices, position = pending_notices(runner, 'claude', session)
+            except Exception as error:
+                return AgentsResult({**result.document, 'main_notices_error': str(error)}, failed=result.failed)
+            if not notices:
+                return result
+            result = AgentsResult({**result.document, 'main_notices': notices}, failed=result.failed)
+            try:
+                acknowledge_notices(runner, 'claude', session, position)
+            except Exception as error:
+                # Unacknowledged notices are offered again; never fail the call.
+                result.document['main_notices_error'] = str(error)
             return result
 
         return call
@@ -134,15 +169,18 @@ def main_calls(root: Path, control: AgentControl, archive: object) -> Callable[[
     return make_call
 
 
-def adoption_material(root: Path, claude: Path) -> dict:
-    """Return the files a user adopts to host Claude Code Main in one project.
+def adoption_material(root: Path, claude: Path) -> dict[str, object]:
+    """Return every file a user adopts to host Claude Code Main in one project.
 
-    Nothing is written or trusted here: the user places the material and
-    Claude Code's own project MCP approval and mod trust decide adoption.
-    The host configuration names the Claude CLI that must launch this host.
+    Keys are absolute paths; a value is JSON content or, for the mod, its
+    text. Nothing is written or trusted here: Claude Code loads the plugin
+    directory under ``.claude/skills/`` and its own project MCP approval and
+    trust prompts decide adoption. The host configuration names the Claude
+    CLI that must launch this host.
     """
     root, claude = root.resolve(), claude.resolve()
     config = root / '.graphtraj' / 'claude-host' / 'config.json'
+    plugin = root / '.claude' / 'skills' / 'graphtraj-claude-host'
     python = Path(sys.executable)
     return {
         config.as_posix(): {
@@ -157,14 +195,30 @@ def adoption_material(root: Path, claude: Path) -> dict:
             'GRAPHTRAJ_CLAUDE_HOST_PYTHON': str(python),
             'GRAPHTRAJ_CLAUDE_HOST_CONFIG': str(config),
         }},
-        'mod': str(Path(__file__).with_name('host_context.mjs')),
+        (plugin / '.claude-plugin' / 'plugin.json').as_posix(): {
+            'name': 'graphtraj-claude-host', 'version': '1',
+            'description': 'GraphTraj Main host context for the agents and tasks MCP entries.',
+        },
+        (plugin / 'hooks' / 'hooks.json').as_posix(): {'modules': ['./host_context.mjs']},
+        (plugin / 'hooks' / 'host_context.mjs').as_posix():
+            Path(__file__).with_name('host_context.mjs').read_text(encoding='utf-8'),
     }
+
+
+def write_adoption(material: dict[str, object]) -> None:
+    """Write printed adoption material: JSON values as JSON, the mod as text."""
+    for path, content in material.items():
+        target = Path(path)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(content if isinstance(content, str) else json.dumps(content, indent=2) + '\n',
+                          encoding='utf-8')
 
 
 def main() -> None:
     """Serve MCP, send one native mod context, or print adoption material."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('operation', choices=['serve', 'context', 'configuration'])
+    parser.add_argument('--write', action='store_true', help='Write the configuration material.')
     parser.add_argument('--config', type=Path)
     parser.add_argument('--project', type=Path, help='Harness Project Root for configuration.')
     parser.add_argument('--claude', type=Path, help='Claude CLI executable for configuration.')
@@ -172,7 +226,10 @@ def main() -> None:
     if options.operation == 'configuration':
         if options.project is None or options.claude is None:
             parser.error('configuration requires --project and --claude')
-        print(json.dumps(adoption_material(options.project, options.claude), indent=2, ensure_ascii=False))
+        material = adoption_material(options.project, options.claude)
+        if options.write:
+            write_adoption(material)
+        print(json.dumps(material if not options.write else sorted(material), indent=2, ensure_ascii=False))
         return
     if options.config is None:
         parser.error(f'{options.operation} requires --config')
@@ -199,13 +256,12 @@ def main() -> None:
         raise AgentsError('authority-denied', 'A bound child must use its existing owner, not adopt Main.')
     if Path.cwd().resolve() != cwd.resolve():
         raise ValueError('The native host cwd differs from the configured cwd.')
-    from graphtraj.execution.main_continuity import MainRoots
-
-    runner = root / '.graphtraj' / 'runner'
-    control = AgentControl(root / '.graphtraj/swarm', {'claude': AdapterDriver(root, cwd)},
-                           roots=MainRoots(runner))
-    make_call = main_calls(root, control, configured_archive(root))
-    calls = NativeCalls(make_call, cwd)
+    # The same agents view and control as the Codex Main: every Runtime driver,
+    # continued Main roots (MainRoots) and Task member Sessions.
+    agents = GraphTrajAgents(root, cwd)
+    control = agents.control
+    make_call = main_calls(root, agents, configured_archive(root))
+    calls = NativeCalls(make_call, cwd, root / '.graphtraj' / 'runner')
 
     def authenticate(pid: int) -> None:
         """Require a live direct child of this same verified Claude process."""

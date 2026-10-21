@@ -130,6 +130,9 @@ class GraphTrajAgents:
                 return self._hierarchy(binding)
             if action in TASK_SESSION_MISSING:
                 raise unavailable(action, TASK_SESSION_MISSING[action])
+            if action != "status" and binding.caller.agent is None:
+                # A continued Main controls no Task member either.
+                self.control.roots.require_control(binding.caller)
             return self._operate(action, arguments)
         except (RunnerError, RuntimeAdapterError) as error:
             raise AgentsError(error.code, error.message) from None

@@ -918,3 +918,76 @@ def test_claude_member_can_read_project_records_but_not_control_channels(
     assert f'Read(/{state}/**)' in settings['permissions']['allow']
     assert f'Edit(/{runner}/**)' in settings['permissions']['deny']
     assert f'Read(/{cli}/**)' in settings['permissions']['deny']
+
+
+@pytest.mark.parametrize('during_review', ['note', 'budget'])
+def test_budget_recovery_retries_preserve_stopped_session(
+    installed_commands: InstalledCommands,
+    temporary_git_repository: Path,
+    fake_codex: FakeCodex,
+    tmp_path: Path,
+    during_review: str,
+) -> None:
+    """Public recovery ignores unrelated facts, preserves real races and never wakes stopped members."""
+    from graphtraj.graph.delivery_worldline import append_project_worldline_event
+    from graphtraj.interfaces import local_tool
+
+    root, environment = setup(installed_commands, temporary_git_repository, fake_codex, tmp_path)
+    batch = root / 'probe.yml'
+    batch.write_text(yaml.safe_dump({'tasks': [{'task_id': '320', 'role': 'researcher'}]}))
+    launched = command(installed_commands, root, environment, '--swarm-input', str(batch))
+    assert launched.returncode == 0, launched.stdout + launched.stderr
+    alias = yaml.safe_load(launched.stdout)['tasks'][0]['alias']
+    original = settled(installed_commands, root, environment, alias)
+    stopped = command(installed_commands, root, environment, 'interrupt', alias)
+    assert stopped.returncode == 0, stopped.stdout + stopped.stderr
+    state = root / '.graphtraj/state'
+    budget_file = state / 'tasks/320-claude-probe/execution-budget.yml'
+    stop_file = root / '.graphtraj/runner/sessions' / alias / 'stop.yml'
+    before_budget, before_stop = yaml.safe_load(budget_file.read_text()), stop_file.read_bytes()
+    arguments = {
+        'alias': alias, 'additional_minutes': 7, 'resume': False,
+        'reason': 'Controlled administrative recovery of this isolated fixture.',
+        'instruction': 'Retain the original stopped member without resuming it.',
+        'allowed_scope': 'Record only the reviewed fixture allowance.',
+        'forbidden_scope': 'Do not resume members, reset accounting, or change real Tasks.',
+        'caused_by_event_ids': [events(root)[-1]['event_id']],
+    }
+    reviewed = []
+
+    def review(proposal: dict) -> dict:
+        """Record a public concurrent fact or repair while approval is pending."""
+        reviewed.append(proposal)
+        if during_review == 'note':
+            append_project_worldline_event(state, root, {
+                'event': 'parent-note', 'task_id': '320',
+                'caused_by_event_ids': arguments['caused_by_event_ids'], 'evidence_refs': [],
+            })
+        else:
+            nested = local_tool.bind(root, recovery_reviewer=lambda request: {'decision': 'accept'})
+            assert nested({'action': 'execute', 'feature': 'approved_recovery', 'arguments': {
+                **arguments, 'additional_minutes': 2, 'reason': 'Concurrent fixture repair',
+            }}).document['applied'] is True
+        return {'decision': 'accept'}
+
+    call = local_tool.bind(root, recovery_reviewer=review)
+    payload = {'action': 'execute', 'feature': 'approved_recovery', 'arguments': arguments}
+    result = call(payload).document
+    if during_review == 'note':
+        assert result['applied'] is True, result
+        after = events(root)
+        assert call(payload).document == result
+        assert call({'action': 'execute', 'feature': 'approved_recovery', 'arguments': {
+            'alias': alias, 'retry_event_id': result['recovery_event_id'],
+        }}).document == result
+        assert events(root) == after
+    else:
+        assert result['recovery_status'] == 'stale' and result['applied'] is False
+    budget = yaml.safe_load(budget_file.read_text())
+    assert budget['approved_minutes'] == before_budget.get('approved_minutes', 0) + (7 if during_review == 'note' else 2)
+    for field in ('started_at', 'sessions', 'stopping_checks'):
+        assert budget.get(field) == before_budget.get(field)
+    assert stop_file.read_bytes() == before_stop
+    current = settled(installed_commands, root, environment, alias)
+    assert current['session'] == original['session'] and current['execution_id'] == original['execution_id']
+    assert len(reviewed) == 1

@@ -196,7 +196,8 @@ class ClaudeExecution:
 
     def _save_diagnostics(self) -> None:
         """Persist only this execution's allowlisted diagnostic snapshot."""
-        write_yaml_durably(self.directory / f'claude-diagnostics-{self.execution_id}.yml', self.diagnostics)
+        with self.lock:
+            write_yaml_durably(self.directory / f'claude-diagnostics-{self.execution_id}.yml', self.diagnostics)
 
     def _diagnostic_warning(self, source: str, text: object) -> None:
         """Retain at most eight fixed warning labels, with no native free text."""
@@ -250,9 +251,10 @@ class ClaudeExecution:
             began = time.monotonic()
             progress = {'batches': batches, 'elapsed_seconds': elapsed,
                         'batch_started_at': time.time(), 'batch_complete': False}
-            with self.lock:
-                self.diagnostics['collection_progress'] = progress
             try:
+                with self.lock:
+                    self.diagnostics['collection_progress'] = progress
+                    self._save_diagnostics()
                 if item[0] == 'bind':
                     self.collector.bind(item[1], item[2])
                 else:
@@ -276,6 +278,11 @@ class ClaudeExecution:
                         **progress, 'batches': batches, 'elapsed_seconds': elapsed,
                         'batch_complete': True, 'queued_records': self.collection.qsize(),
                     }
+                    try:
+                        self._save_diagnostics()
+                    except Exception as error:
+                        if self.collection_failure is None:
+                            self.collection_failure = error
 
     def _absorbed_inputs(self) -> int:
         """Count sent inputs that the native CLI absorbed into a running turn.

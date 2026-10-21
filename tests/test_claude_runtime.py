@@ -778,6 +778,7 @@ def test_read_resources_are_native_readable_and_not_writable(
     launch = json.loads((tmp_path / 'native-permissions.json').read_text())
     settings = launch['settings']
     filesystem = settings['sandbox']['filesystem']
+    assert launch['resource_update_before_prompt']
     for path in resources:
         assert str(path.resolve()) in settings['permissions']['additionalDirectories']
         assert (str(path.resolve()) in launch['add_dirs']) == path.is_dir()
@@ -802,6 +803,24 @@ def test_read_resources_are_native_readable_and_not_writable(
     channel = cli_directory(tmp_path.resolve())
     assert f'Read(/{channel}/**)' in settings['permissions']['deny']
     assert str(channel) in filesystem['denyRead']
+
+
+def test_native_refusal_of_exact_resources_prevents_model_work(
+    tmp_path: Path, claude_environment: None, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A native settings refusal cannot release the prompt with incomplete access."""
+    result_project(tmp_path)
+    resource = tmp_path / 'authorized-file.md'
+    resource.write_text('Explicitly authorized original file\n')
+    monkeypatch.setenv('CLAUDE_FIXTURE_REJECT_RESOURCES', '1')
+    with ExitStack() as stack:
+        turn, _, _ = execution(tmp_path, stack, 'Must not run',
+                               claude={'read_paths': [str(resource)]})
+        with pytest.raises(RuntimeAdapterError, match='refused exact resource settings'):
+            turn.run()
+    assert not (tmp_path / (turn.native_id + '.json')).exists()
+    assert turn.diagnostics['read_resources']['control_status'] == 'error'
+    assert turn.terminal_confirmed
 
 
 def test_claude_resource_grants_and_read_only_recovery(tmp_path: Path, claude_environment: None) -> None:

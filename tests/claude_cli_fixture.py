@@ -279,6 +279,18 @@ for line in sys.stdin:
     event = json.loads(line)
     if event['type'] == 'control_request':
         request = event['request']
+        if request['subtype'] == 'apply_flag_settings':
+            if os.environ.get('CLAUDE_FIXTURE_REJECT_RESOURCES'):
+                emit({'type': 'control_response', 'response': {
+                    'subtype': 'error', 'request_id': event['request_id'],
+                    'error': 'Exact resource settings refused by native peer.',
+                }})
+                continue
+            path = Path(os.environ['CLAUDE_FIXTURE_HOME'], 'native-permissions.json')
+            observed = json.loads(path.read_text())
+            observed['settings'].update(request['settings'])
+            observed['resource_update_before_prompt'] = not messages
+            path.write_text(json.dumps(observed))
         initialized = {'hooks_applied': True}
         if os.environ.get('CLAUDE_FIXTURE_DIAGNOSTICS'):
             initialized.update(autoModeAvailable=False, permissionMode='default',

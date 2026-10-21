@@ -375,11 +375,8 @@ class ClaudeExecution:
                 'deny': [rule for p in native_denied_read for rule in (f'Read(/{p})', f'Read(/{p}/**)')]
                         + [rule for p in denied_write for rule in (f'Edit(/{p})', f'Edit(/{p}/**)')]
                         + (['Edit', 'Write', 'NotebookEdit'] if request['worktree_access'] == 'read' else []),
-                # Settings admit exact resource paths, including files; unlike
-                # --add-dir they do not require a directory. Keep file grants
-                # exact rather than granting their parent. Edit and sandbox
-                # denyWrite still protect every declared resource.
-                'additionalDirectories': list(map(str, resources)),
+                # Startup validates directories in both settings and --add-dir.
+                'additionalDirectories': [str(path) for path in resources if path.is_dir()],
             },
             'sandbox': {
                 'enabled': True, 'failIfUnavailable': True, 'allowUnsandboxedCommands': False,
@@ -406,6 +403,14 @@ class ClaudeExecution:
             mcp = {'mcpServers': {}}
         if request.get('permission_mode') is not None:
             settings['permissions']['defaultMode'] = request['permission_mode']
+        self.resource_settings = None
+        if any(path.is_file() and not path.is_relative_to(worktree) for path in resources):
+            # The native session settings API applies these exact resource
+            # declarations before any prompt. Keep every deny and restriction;
+            # a refusal ends startup instead of falling back to a broader root.
+            self.resource_settings = {'permissions': {
+                **settings['permissions'], 'additionalDirectories': list(map(str, resources)),
+            }}
         argv = [request['executable'], '--print', '--verbose', '--input-format', 'stream-json',
                 '--output-format', 'stream-json', '--include-partial-messages',
                 # Native echoes stay in the Trace. One observed run echoed mid-turn
@@ -677,6 +682,7 @@ class ClaudeExecution:
                                          'hookCallbackIds': ['graphtraj_agents_display']}]}
                        if self.independent else {}),
                 })
+                resource_update = None
                 startup_deadline = time.monotonic() + 45
                 stop_deadline = None
                 last_echo = last_result = 0
@@ -730,6 +736,22 @@ class ClaudeExecution:
                                 raise RuntimeAdapterError('RUNTIME_REQUEST_FAILED', 'Claude initialization failed.')
                             if response.get('response', {}).get('hooks_applied') is not True:
                                 raise RuntimeAdapterError('RUNTIME_REQUEST_FAILED', 'Claude did not install the registration hook.')
+                            with self.lock:
+                                if not self.stopping.is_set():
+                                    if self.resource_settings is None:
+                                        self._prompt(self.prompt)
+                                    else:
+                                        resource_update = self._control('apply_flag_settings', settings=self.resource_settings)
+                                        self.diagnostics['read_resources'] = {
+                                            'requested_paths': self.resource_settings['permissions']['additionalDirectories'],
+                                            'control_status': 'pending',
+                                        }
+                                        self._save_diagnostics()
+                        elif resource_update is not None and response.get('request_id') == resource_update:
+                            self.diagnostics['read_resources']['control_status'] = response.get('subtype', 'unknown')
+                            self._save_diagnostics()
+                            if response.get('subtype') != 'success':
+                                raise RuntimeAdapterError('RUNTIME_REQUEST_FAILED', 'Claude refused exact resource settings.')
                             with self.lock:
                                 if not self.stopping.is_set():
                                     self._prompt(self.prompt)

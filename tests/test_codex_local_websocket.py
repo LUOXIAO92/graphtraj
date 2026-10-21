@@ -104,7 +104,7 @@ def test_scoped_grant_and_withdrawal_preserve_other_policy(tmp_path: Path, peer:
                           'unix_sockets': {'/existing.sock': 'allow'}}
     baseline = copy.deepcopy(profile)
     project_access(request, config)
-    assert profile['network']['domains'] == {'api.example.org': 'allow', '127.0.0.1': 'allow'}
+    assert profile['network']['domains'] == {'api.example.org': 'allow', '127.0.0.1': 'allow', 'chatgpt.com': 'allow'}
     assert profile['filesystem'][config['token_file']] == 'read'
     retained = copy.deepcopy(request)
     project_access(retained, None)
@@ -241,7 +241,7 @@ def test_no_domains_requires_existing_enforced_proxy(tmp_path: Path, peer: Path,
         assert request == before
     else:
         project_access(request, config)
-        assert profile['network']['domains'] == {'127.0.0.1': 'allow'}
+        assert profile['network']['domains'] == {'127.0.0.1': 'allow', 'chatgpt.com': 'allow'}
         # On 0.163.0, absent domains under an enabled proxy already denies external hosts.
         # Only the loopback allow is added; no wildcard or external permission is emitted.
         project_access(request, None)

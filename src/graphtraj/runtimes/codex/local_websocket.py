@@ -58,6 +58,8 @@ def project_access(request: dict, value: Any) -> None:
     if previous:
         network = profile['network']
         domains = network['domains']
+        if 'provider_domain' in previous and domains.get('chatgpt.com') == 'deny':
+            raise RuntimeAdapterError('ROLE_CONFIG_INVALID', 'local_websocket conflicts with an explicit deny.')
         for mapping, key, saved in (
             (domains, '127.0.0.1', previous['domain']),
             (profile['filesystem'], previous['token_file'], previous['file']),
@@ -66,6 +68,12 @@ def project_access(request: dict, value: Any) -> None:
                 mapping.pop(key, None)
             else:
                 mapping[key] = saved
+        # Old retained projections predate the provider grant.
+        if 'provider_domain' in previous:
+            if previous['provider_domain'] is None:
+                domains.pop('chatgpt.com', None)
+            else:
+                domains['chatgpt.com'] = previous['provider_domain']
         if not domains and not previous['had_domains']:
             network.pop('domains')
         for key, saved in previous['network'].items():
@@ -94,10 +102,13 @@ def project_access(request: dict, value: Any) -> None:
         domains = network.setdefault('domains', {})
         token = value['token_file']
         # Explicit denials are not converted to grants by this resource projection.
-        if domains.get('127.0.0.1') == 'deny' or profile['filesystem'].get(token) == 'deny':
+        if (domains.get('127.0.0.1') == 'deny'
+                or domains.get('chatgpt.com') == 'deny'
+                or profile['filesystem'].get(token) == 'deny'):
             raise RuntimeAdapterError('ROLE_CONFIG_INVALID', 'local_websocket conflicts with an explicit deny.')
         request['local_websocket_projection'] = {
             'domain': domains.get('127.0.0.1'), 'file': profile['filesystem'].get(token),
+            'provider_domain': domains.get('chatgpt.com'),
             'token_file': token, 'had_domains': had_domains, 'had_network': had_network,
             'network': {key: network.get(key) for key in (
                 'enabled', 'allow_local_binding', 'dangerously_allow_all_unix_sockets',
@@ -105,6 +116,8 @@ def project_access(request: dict, value: Any) -> None:
             'proxy': config.get('features', {}).get('network_proxy'),
         }
         domains['127.0.0.1'] = 'allow'
+        # The approved authenticated service uses this same native proxy.
+        domains['chatgpt.com'] = 'allow'
         profile['filesystem'][token] = 'read'
         network.setdefault('enabled', True)
         network.update(allow_local_binding=False, dangerously_allow_all_unix_sockets=False,

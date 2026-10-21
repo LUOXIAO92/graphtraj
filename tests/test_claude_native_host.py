@@ -154,3 +154,24 @@ def test_adoption_material_is_the_plugin_layout_and_keeps_settings(tmp_path: Pat
     assert settings['env']['KEEP'] == '1' and 'GRAPHTRAJ_CLAUDE_HOST_CONFIG' in settings['env']
     assert settings['permissions'] == {'allow': []}
     assert list(json.loads((tmp_path / '.mcp.json').read_text())['mcpServers']) == ['agents']
+
+
+def test_configured_launcher_survives_a_claude_update(tmp_path: Path, monkeypatch) -> None:
+    """The stored launcher is resolved at check time; other parents stay refused."""
+    from graphtraj.runtimes.claude import host
+
+    old, new, other = tmp_path / '2.1.306', tmp_path / '2.1.307', tmp_path / 'other-cli'
+    for path in (old, new, other):
+        path.touch()
+    launcher = tmp_path / 'claude'
+    launcher.symlink_to(old)
+    stored = Path(host.adoption_material(tmp_path, launcher)[str(tmp_path / '.graphtraj/claude-host/config.json')]['claude'])
+    assert stored == launcher
+
+    launcher.unlink()
+    launcher.symlink_to(new)  # Claude Code updated itself after configuration.
+    monkeypatch.setattr(host, 'process_executable', lambda pid: new)
+    assert host.native_parent(stored) > 1
+    monkeypatch.setattr(host, 'process_executable', lambda pid: other)
+    with pytest.raises(AgentsError, match='observed_executable.*other-cli'):
+        host.native_parent(stored)

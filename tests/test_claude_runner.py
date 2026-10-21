@@ -451,7 +451,7 @@ def test_recovery_refreshes_only_original_role_read_paths(
     assert str(root / 'unrelated') not in filesystem['allowRead']
 
     # A later role change still cannot expose private control/state paths.
-    roles['roles']['original_team']['researcher']['claude']['read_paths'] = [str(root / '.graphtraj/state')]
+    roles['roles']['original_team']['researcher']['claude']['read_paths'] = [str(root / '.graphtraj/cli')]
     role_file.write_text(yaml.safe_dump(roles))
     refused = command(installed_commands, root, environment, 'send', alias,
                       '--instruction', 'Do not start with private resource access',

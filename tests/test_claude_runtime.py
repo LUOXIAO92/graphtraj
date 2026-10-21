@@ -589,7 +589,7 @@ def test_read_resources_are_native_readable_and_not_writable(
 
 
 def test_claude_resource_grants_and_read_only_recovery(tmp_path: Path, claude_environment: None) -> None:
-    """Retain external read-only resources and refuse grants to private state."""
+    """Keep project records readable on recovery while control channels stay protected."""
     result_project(tmp_path)
     resource = tmp_path / 'external-method'
     resource.mkdir()
@@ -602,8 +602,11 @@ def test_claude_resource_grants_and_read_only_recovery(tmp_path: Path, claude_en
     )
     assert recovered['worktree_access'] == 'read' and request['worktree_access'] == 'write'
     assert recovered['resources'] == request['resources']
-    with pytest.raises(RuntimeAdapterError, match='private'):
-        context(tmp_path, claude={'read_paths': [str(tmp_path / 'state')]})
+    for path in (tmp_path / 'state', tmp_path / '.graphtraj/runner'):
+        _, records = context(tmp_path, claude={'read_paths': [str(path)]})
+        assert records.launch_document()['adapter_request']['resources'] == [str(path)]
+    with pytest.raises(RuntimeAdapterError, match='control'):
+        context(tmp_path, claude={'read_paths': [str(cli_directory(tmp_path))]})
 
 
 def test_claude_stop_without_native_settlement_confirms_only_exit(

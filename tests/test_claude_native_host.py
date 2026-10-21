@@ -175,3 +175,49 @@ def test_configured_launcher_survives_a_claude_update(tmp_path: Path, monkeypatc
     monkeypatch.setattr(host, 'process_executable', lambda pid: other)
     with pytest.raises(AgentsError, match='observed_executable.*other-cli'):
         host.native_parent(stored)
+
+
+def test_host_survives_failing_task_operations(tmp_path: Path) -> None:
+    """A rejected or crashing operation is a tool error; later calls are still served."""
+    failures = iter([ValueError('Task 901 is already registered'), RuntimeError('boom')])
+
+    def call(request: dict, tool: str = 'agents') -> AgentsResult:
+        """Fail twice, then answer, like a Task write followed by a status read."""
+        failure = next(failures, None)
+        if failure is not None:
+            raise failure
+        return AgentsResult({'ok': tool})
+
+    request = {'action': 'execute', 'feature': 'task_register', 'arguments': {}}
+    lines = ''.join(json.dumps({'jsonrpc': '2.0', 'id': index, 'method': 'tools/call',
+                                'params': {'name': 'tasks', 'arguments': request}}) + '\n'
+                    for index in range(3))
+    output = StringIO()
+    serve(StringIO(lines), output, tmp_path, native_call=call)
+    replies = [json.loads(line)['result'] for line in output.getvalue().splitlines()]
+    assert [reply['isError'] for reply in replies] == [True, True, False]
+    assert replies[0]['structuredContent']['error'] == {'code': 'operation-failed',
+                                                       'message': 'Task 901 is already registered'}
+    assert replies[1]['structuredContent']['error']['code'] == 'internal-error'
+    assert replies[2]['structuredContent'] == {'ok': 'tasks'}
+
+
+def test_stray_output_never_reaches_the_mcp_channel(tmp_path: Path) -> None:
+    """Prints, subprocess output and stdin readers cannot touch the reserved MCP stdio."""
+    import subprocess
+    import sys
+
+    program = (
+        'import os, sys; from pathlib import Path\n'
+        'from graphtraj.runtimes.claude.host import isolate_stdio\n'
+        'mcp_in, mcp_out = isolate_stdio(Path(sys.argv[1]))\n'
+        'print("stray print"); os.system("echo stray subprocess; cat > /dev/null")\n'
+        'mcp_out.write(mcp_in.readline().upper()); mcp_out.flush()\n'
+    )
+    log = tmp_path / 'claude-host/host.log'
+    result = subprocess.run([sys.executable, '-c', program, str(log)], input='{"id": 1}\n',
+                            capture_output=True, text=True, timeout=20,
+                            env={**__import__('os').environ, 'PYTHONPATH': 'src'})
+    assert result.returncode == 0, result.stderr
+    assert result.stdout == '{"ID": 1}\n'
+    assert 'stray print' in log.read_text() and 'stray subprocess' in log.read_text()

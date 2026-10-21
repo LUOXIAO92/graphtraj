@@ -8,7 +8,10 @@ from __future__ import annotations
 import json
 from pathlib import Path
 import sys
+import traceback
 from typing import Callable, TextIO
+
+import yaml
 
 from agent_swarm import AgentsError, AgentsResult
 from agent_swarm.discovery import handle_request as discover_agents
@@ -67,6 +70,15 @@ def serve(
                       native_call(arguments) if native_call is not None else discover_agents(arguments, dispatch))
         except (AgentsError, RunnerError, RuntimeAdapterError) as error:
             result = AgentsResult({'error': {'code': error.code, 'message': error.message}}, failed=True)
+        except (OSError, UnicodeError, ValueError, yaml.YAMLError) as error:
+            # A rejected Task operation is a tool failure, as in graphtraj-mcp;
+            # it must never end the host that serves this Main's later calls.
+            result = AgentsResult({'error': {'code': 'operation-failed', 'message': str(error)}}, failed=True)
+        except Exception as error:
+            # Keep serving; the traceback goes to the host's own diagnostics.
+            traceback.print_exc(file=sys.stderr)
+            result = AgentsResult({'error': {'code': 'internal-error',
+                                             'message': f'{type(error).__name__}: {error}'}}, failed=True)
         return result_response(identity, {
             'content': [{'type': 'text', 'text': json.dumps(result.document, ensure_ascii=False)}],
             'structuredContent': result.document, 'isError': result.failed,

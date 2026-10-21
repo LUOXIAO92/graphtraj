@@ -13,13 +13,14 @@ from __future__ import annotations
 
 import argparse
 import copy
+import faulthandler
 import json
 import os
 from pathlib import Path
 import sys
 import threading
 import time
-from typing import Callable
+from typing import Callable, TextIO
 from uuid import UUID
 
 from agent_swarm import AgentsError, AgentsResult, Caller, bind
@@ -169,6 +170,28 @@ def main_calls(root: Path, backend: object, archive: object) -> Callable[[str, P
     return make_call
 
 
+def isolate_stdio(log: Path) -> tuple[TextIO, TextIO]:
+    """Reserve the MCP stdio for this host and send everything else to ``log``.
+
+    Returns private streams over the original stdin/stdout. File descriptors
+    0, 1 and 2 then point at /dev/null and the log, so stray output of any
+    Task operation or subprocess can neither corrupt nor consume the MCP
+    channel, and tracebacks are kept for diagnosis.
+    """
+    log.parent.mkdir(parents=True, exist_ok=True)
+    mcp_in  = os.fdopen(os.dup(0), 'r', encoding='utf-8')
+    mcp_out = os.fdopen(os.dup(1), 'w', encoding='utf-8')
+    sink = open(log, 'a', encoding='utf-8', buffering=1)
+    null = os.open(os.devnull, os.O_RDONLY)
+    os.dup2(null, 0)
+    os.close(null)
+    os.dup2(sink.fileno(), 1)
+    os.dup2(sink.fileno(), 2)
+    sys.stdout = sys.stderr = sink
+    faulthandler.enable(sink)
+    return mcp_in, mcp_out
+
+
 def adoption_material(root: Path, claude: Path) -> dict[str, object]:
     """Return every file a user adopts to host Claude Code Main in one project.
 
@@ -292,7 +315,8 @@ def main() -> None:
             with channel_file.open('x') as stream:
                 json.dump({'parent': parent, 'executable': str(executable), 'address': address}, stream)
             try:
-                serve(sys.stdin, sys.stdout, cwd, native_call=calls.call)
+                mcp_in, mcp_out = isolate_stdio(directory.parent / 'host.log')
+                serve(mcp_in, mcp_out, cwd, native_call=calls.call)
             finally:
                 channel_file.unlink()
     finally:

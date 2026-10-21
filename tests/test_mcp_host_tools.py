@@ -164,6 +164,20 @@ def _runner(
     )
 
 
+def _agents(
+    commands: InstalledCommands,
+    project: Path,
+    action: str,
+    arguments: dict,
+    environment: dict[str, str],
+) -> subprocess.CompletedProcess[str]:
+    """Call the installed agents CLI with the same verified host as MCP."""
+    return run_process(
+        [str(commands.product.with_name('agents')), json.dumps(tool_envelope(action, arguments))],
+        cwd=project, env=environment,
+    )
+
+
 def _started_mcp(
     mcp_executable: Path,
     project: Path,
@@ -680,7 +694,7 @@ def test_installed_mcp_server_dispatches_and_controls_a_managed_child(
 ) -> None:
     """A host dispatches one managed child and controls it by its identity."""
 
-    root, cause = managed_mcp.root, managed_mcp.cause
+    root = managed_mcp.root
     require_no_retro_skill(root)
     managed_mcp.environment["CODEX_THREAD_ID"] = "managed-main"
     dispatched = managed_mcp.document("swarm", {"tasks": [_inline_task()]})
@@ -697,12 +711,12 @@ def test_installed_mcp_server_dispatches_and_controls_a_managed_child(
     assert running["session"] == session
     assert running["execution_id"]
     # The same identity is readable through the CLI the user already uses.
-    cli = _runner(
-        installed_commands, root, "status", alias, environment=managed_mcp.environment
+    cli = _agents(
+        installed_commands, root, 'status', {'agent': alias}, managed_mcp.environment
     )
     assert cli.returncode == 0, cli.stderr
     assert managed_mcp.document('status', {'agent': alias}) == (
-        yaml.safe_load(cli.stdout)
+        json.loads(cli.stdout)['result']
     )
 
     # An explicit instruction from the user reaches the owned execution.
@@ -716,13 +730,11 @@ def test_installed_mcp_server_dispatches_and_controls_a_managed_child(
     # The native approval request returns through the one interaction path.
     _observe(managed_mcp, alias, "running", waiting_for="runtime-request")
     queried = managed_mcp.document('requests', {'agent': alias})
-    cli_query = _runner(
-        installed_commands, root, "requests", alias,
-        "--execution-id", queried["execution_id"],
-        environment=managed_mcp.environment,
+    cli_query = _agents(
+        installed_commands, root, 'requests', {'agent': alias}, managed_mcp.environment,
     )
     assert cli_query.returncode == 0, cli_query.stderr
-    assert queried == yaml.safe_load(cli_query.stdout)
+    assert queried == json.loads(cli_query.stdout)['result']
     request, = queried["requests"]
     assert request["request_id"] == "approval"
     replied = managed_mcp.document(
@@ -749,11 +761,10 @@ def test_installed_mcp_server_dispatches_and_controls_a_managed_child(
         'reply',
         {'agent': alias, 'request': request, 'response': {"decision": "accept"}},
     )
-    request_file = _write(root / "request.yml", request)
-    cli_stale = _runner(
-        installed_commands, root, "reply", alias, "--request-file", str(request_file),
-        "--response", '{"decision": "accept"}',
-        environment=managed_mcp.environment,
+    cli_stale = _agents(
+        installed_commands, root, 'reply',
+        {'agent': alias, 'request': request, 'response': {'decision': 'accept'}},
+        managed_mcp.environment,
     )
     assert cli_stale.returncode == 1
     assert stale["isError"] is True
@@ -775,14 +786,18 @@ def test_installed_mcp_server_dispatches_and_controls_a_managed_child(
     assert after["session"] == session
     assert managed_mcp.document('requests', {'agent': alias})["requests"] == []
 
-    # Explicit interruption stops the entity; neither surface may revive it.
-    cli_sent = _runner(installed_commands, root, "send", alias, "--instruction", "hold",
-                       "--caused-by-event-id", cause, environment=managed_mcp.environment)
-    denied = managed_mcp.call('send', {'agent': alias, 'message': "hold"})
-    assert cli_sent.returncode == 1
-    assert denied['isError'] is True
-    assert yaml.safe_load(cli_sent.stdout)['error']['code'] == 'subtree-stopped'
-    assert _observe(managed_mcp, alias, 'idle', 'interrupted')['session'] == session
+    # The direct parent resumes its own settled interruption in the same Session.
+    cli_sent = _agents(installed_commands, root, 'send',
+                       {'agent': alias, 'message': 'hold'}, managed_mcp.environment)
+    assert cli_sent.returncode == 0, cli_sent.stdout + cli_sent.stderr
+    resumed = _observe(managed_mcp, alias, 'running')
+    assert resumed['session'] == session
+    assert resumed['execution_id'] != active['execution_id']
+    steered = managed_mcp.document('send', {'agent': alias, 'message': 'hold'})
+    assert steered['session'] == session
+    assert steered['execution_id'] == resumed['execution_id']
+    managed_mcp.document('interrupt', {'agent': alias})
+    assert _observe(managed_mcp, alias, 'idle')['session'] == session
     repeated = managed_mcp.document('interrupt', {'agent': alias})
     assert repeated['members'] == [{'alias': alias, 'interrupt_status': 'stopped'}]
 
@@ -799,32 +814,29 @@ def test_installed_mcp_server_rejects_execution_input_like_the_cli(
     unregistered = _write(
         root / "unregistered-batch.yml", {"tasks": [_inline_task() | {"task_id": "999"}]}
     )
-    stale_request = _write(root / "stale-request.yml", {"alias": "missing@l1"})
     cases = (
         ("swarm", {"tasks": []}, ["--swarm-input", str(empty_batch)]),
         ("swarm", {"tasks": [_inline_task() | {"task_id": "999"}]},
          ["--swarm-input", str(unregistered)]),
-        ('send', {'agent': "missing@l1", 'message': "steer"},
-         ["send", "missing@l1", "--instruction", "steer", "--caused-by-event-id", cause]),
-        ('interrupt', {'agent': "missing@l1"}, ["interrupt", "missing@l1"]),
-        ('requests', {'agent': "missing@l1"}, ["requests", "missing@l1"]),
-        ('reply', {'agent': "missing@l1", 'request': {"alias": "missing@l1"}, 'response': {}},
-         ["reply", "missing@l1", "--request-file", str(stale_request),
-          "--response", "{}"]),
+        ('send', {'agent': "missing@l1", 'message': "steer"}, []),
+        ('interrupt', {'agent': "missing@l1"}, []),
+        ('requests', {'agent': "missing@l1"}, []),
+        ('reply', {'agent': "missing@l1", 'request': {"alias": "missing@l1"}, 'response': {}}, []),
         ("continue", {"task_id": "113", "caused_by_event_ids": [cause]},
-         ["continue", "--task-id", "113", "--caused-by-event-id", cause]),
+         ["continue", "--task-id", "113", "--caused-by-event-ids", json.dumps([cause])]),
         ("continue", {"task_id": "999", "caused_by_event_ids": [cause]},
-         ["continue", "--task-id", "999", "--caused-by-event-id", cause]),
+         ["continue", "--task-id", "999", "--caused-by-event-ids", json.dumps([cause])]),
         ("continue", {"task_id": "113", "caused_by_event_ids": []},
-         ["continue", "--task-id", "113", "--caused-by-event-id", ""]),
+         ["continue", "--task-id", "113", "--caused-by-event-ids", json.dumps([""])]),
     )
 
     for tool, arguments, cli_arguments in cases:
         result = managed_mcp.call(tool, arguments)
-        cli = _runner(
-            installed_commands, root, *cli_arguments,
-            environment=managed_mcp.environment,
-        )
+        cli = (_agents(installed_commands, root, tool, arguments, managed_mcp.environment)
+               if tool in AGENT_ACTIONS else _runner(
+                   installed_commands, root, *cli_arguments,
+                   environment=managed_mcp.environment,
+               ))
         assert result["isError"] is True, (tool, result)
         assert cli.returncode == 1, (tool, cli.stderr)
         cli_document = yaml.safe_load(cli.stdout)
@@ -837,14 +849,14 @@ def test_installed_mcp_server_rejects_execution_input_like_the_cli(
             assert result["content"][0]["text"] == cli_error["message"], tool
 
     # The server keeps serving the same project after rejected calls.
-    cli_missing = _runner(
-        installed_commands, root, "status", "missing@l1",
-        environment=managed_mcp.environment,
+    cli_missing = _agents(
+        installed_commands, root, 'status', {'agent': 'missing@l1'},
+        managed_mcp.environment,
     )
     missing = managed_mcp.call('status', {'agent': "missing@l1"})
     assert cli_missing.returncode == 1
     assert missing["isError"] is True
-    assert missing["structuredContent"] == yaml.safe_load(cli_missing.stdout)
+    assert missing["structuredContent"] == json.loads(cli_missing.stdout)['result']
 
 
 def test_installed_mcp_server_continues_a_stopped_task_with_unchanged_semantics(
@@ -1363,7 +1375,7 @@ def test_real_codex_host_dispatches_and_controls_a_managed_child_offline(
     # has no stopped Team, so both interfaces report the same rejection.
     cli = _runner(
         installed_commands, harness, "continue", "--task-id", "113",
-        "--caused-by-event-id", cause, environment=environment,
+        "--caused-by-event-ids", json.dumps([cause]), environment=environment,
     )
     assert cli.returncode == 1, cli.stderr
     assert continued["isError"] is True

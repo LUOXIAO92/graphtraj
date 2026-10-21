@@ -74,6 +74,7 @@ class ClaudeExecution:
         self.write_lock = threading.Lock()
         self.stopping = threading.Event()
         self.done = threading.Event()
+        self.termination_checked = threading.Event()
         self.outcome: dict | None = None
         self.terminal_confirmed = False
         self.accepting = True
@@ -754,24 +755,6 @@ class ClaudeExecution:
                     stderr_reader.join(timeout=5)
                 pipes_drained = all(thread is None or not thread.is_alive()
                                     for thread in (reader, stderr_reader))
-                if collecting is not None:
-                    # Records already handed over are archived before closing.
-                    self.collection.put(None)
-                    collecting.join()
-                    if self.collection_failure is not None and failure is None:
-                        failure = RuntimeAdapterError('RUNTIME_ARCHIVE_FAILED', str(self.collection_failure))
-                try:
-                    if pipes_drained:
-                        while not self.events.empty():
-                            event = self.events.get_nowait()
-                            source_position += 1
-                            if event.get('type') != 'eof':
-                                collector.accept(event, source_position, defer=not self.events.empty())
-                        collector.close()
-                    else:
-                        collector.flush()
-                except Exception as error:
-                    failure = RuntimeAdapterError('RUNTIME_ARCHIVE_FAILED', str(error))
                 if self.proc is not None and pipes_drained:
                     for stream in (self.proc.stdout, self.proc.stderr):
                         if stream is not None:
@@ -779,7 +762,7 @@ class ClaudeExecution:
                 if self.proc is not None:
                     # Keep the owner's separate observations: the native idle
                     # event may arrive while _close drains after the loop ends.
-                    write_yaml_durably(self.directory / f'claude-termination-{self.execution_id}.yml', {
+                    termination = {
                         'session': self.session, 'execution_id': self.execution_id,
                         'runtime_pid': self.proc.pid, 'worker_pid': os.getpid(),
                         'process_group_closed': process_group_closed,
@@ -787,7 +770,9 @@ class ClaudeExecution:
                         'stdout_eof': self.stdout_eof, 'stderr_eof': self.stderr_eof,
                         'pipes_closed': pipes_drained and self.proc.stdout.closed and self.proc.stderr.closed,
                         'native_idle': self.drained_native_state == 'idle',
-                    })
+                    }
+                    write_yaml_durably(self.directory / f'claude-termination-{self.execution_id}.yml', termination)
+                    self.diagnostics['termination'] = termination
                 # A runtime killed after its stop window never reports idle. Its
                 # exit, closed group and drained pipes confirm termination; idle
                 # is still required while the runtime could continue.
@@ -808,6 +793,34 @@ class ClaudeExecution:
                 if self.proc is not None:
                     record_runtime_process(self.proc.pid, {'terminal_confirmed': self.terminal_confirmed,
                                                           'runtime_exit_code': self.proc.poll()})
+                # Physical stopping is independent of the retained archive.
+                # Keep the Worker occupied until collection finishes, so no
+                # resume or replacement can overlap its remaining writes.
+                self.diagnostics['collection'] = 'pending'
+                self._save_diagnostics()
+                self.termination_checked.set()
+                if collecting is not None:
+                    # Records already handed over are archived before closing.
+                    self.collection.put(None)
+                    collecting.join()
+                    if self.collection_failure is not None and failure is None:
+                        failure = RuntimeAdapterError('RUNTIME_ARCHIVE_FAILED', str(self.collection_failure))
+                try:
+                    if pipes_drained:
+                        while not self.events.empty():
+                            event = self.events.get_nowait()
+                            source_position += 1
+                            if event.get('type') != 'eof':
+                                collector.accept(event, source_position, defer=not self.events.empty())
+                        collector.close()
+                    else:
+                        collector.flush()
+                except Exception as error:
+                    failure = RuntimeAdapterError('RUNTIME_ARCHIVE_FAILED', str(error))
+                self.diagnostics['collection'] = ('failed' if self.collection_failure is not None
+                                                  or getattr(failure, 'code', None) == 'RUNTIME_ARCHIVE_FAILED'
+                                                  else 'complete')
+                self._save_diagnostics()
                 if failure is None and self.session is not None:
                     self.outcome = {'outcome': 'interrupted' if self.stopping.is_set() else 'completed',
                                     'terminal_confirmed': self.terminal_confirmed,
@@ -903,6 +916,9 @@ class ClaudeExecution:
                 raise RuntimeAdapterError('operation-failed', 'Claude execution is not owned.')
             operation = request.get('operation')
             if operation == 'status':
+                if self.termination_checked.is_set() and not self.done.is_set():
+                    return {'activity': 'running', 'waiting_for': 'archive',
+                            'native_terminal_confirmed': self.terminal_confirmed}
                 return ({'activity': 'idle', 'last_outcome': self.outcome['outcome']} if self.outcome else
                         {'activity': 'running', **({'waiting_for': 'runtime-request'} if self.pending else {})})
             if operation == 'requests':
@@ -938,7 +954,7 @@ class ClaudeExecution:
             if operation != 'interrupt':
                 raise RuntimeAdapterError('invalid-input', 'Unknown Claude operation.')
         self.terminate()
-        if not self.done.wait(timeout=30) or not self.terminal_confirmed:
+        if not self.termination_checked.wait(timeout=30) or not self.terminal_confirmed:
             raise RuntimeAdapterError('operation-failed', 'Claude interruption is not yet confirmed.', terminal_confirmed=False)
         return {}
 

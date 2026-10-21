@@ -437,6 +437,81 @@ def test_claude_interrupt_confirms_within_its_window_behind_a_collection_backlog
     assert len(rewrites) < 200
 
 
+@pytest.mark.parametrize('archive_fails', [False, True])
+def test_claude_reports_physical_stop_before_archive_finishes(
+    tmp_path: Path,
+    claude_environment: None,
+    monkeypatch: pytest.MonkeyPatch,
+    archive_fails: bool,
+) -> None:
+    """Native stop is confirmed independently; the occupied Worker retains archive work."""
+    from agent_swarm.sessions.claude import ClaudeJsonlCollector
+    from graphtraj.interfaces import tools
+    from graphtraj.execution.runner_connection import worker_connection
+    from graphtraj.execution.runner_models import RunnerError
+    from graphtraj.execution.runner_status import require_stopped_subtree
+
+    result_project(tmp_path)
+    blocked, release = threading.Event(), threading.Event()
+    accept = ClaudeJsonlCollector.accept
+
+    def delayed(self, record: dict, position: int, *args: object, **kwargs: object) -> None:
+        """Hold one archive operation while the actual native process is stopped."""
+        if record.get('isReplay') is True:
+            blocked.set()
+            assert release.wait(60)
+            if archive_fails:
+                raise OSError('Controlled archive failure after native exit')
+        accept(self, record, position, *args, **kwargs)
+
+    monkeypatch.setattr(ClaudeJsonlCollector, 'accept', delayed)
+    with ExitStack() as stack, ThreadPoolExecutor(max_workers=1) as pool:
+        turn, ready, _ = execution(tmp_path, stack, 'wait-public')
+        address = stack.enter_context(worker_connection(turn.directory, turn.operate))
+        mapping_file = turn.directory / 'mapping.yml'
+        mapping = yaml.safe_load(mapping_file.read_text())
+        mapping['control_directory'] = address
+        mapping_file.write_text(yaml.safe_dump(mapping))
+        future = pool.submit(turn.run)
+        try:
+            assert ready.wait(5) and blocked.wait(5)
+            started = time.monotonic()
+            assert turn.operate({'operation': 'interrupt', 'session': turn.session,
+                                 'execution_id': turn.execution_id}) == {}
+            assert time.monotonic() - started < 10
+            assert turn.proc.poll() is not None
+            assert not future.done()
+            status = turn.operate({'operation': 'status', 'session': turn.session,
+                                   'execution_id': turn.execution_id})
+            assert status == {'activity': 'running', 'waiting_for': 'archive',
+                              'native_terminal_confirmed': True}
+            with pytest.raises(RunnerError) as refusal:
+                require_stopped_subtree(turn.directory.parent.parent, 'research@x1')
+            assert refusal.value.code == 'replacement-not-stopped'
+            diagnostics = tools.read_reports({'alias': 'research@x1'}, cwd=tmp_path).document['runtime_diagnostics']
+            evidence = diagnostics['termination']
+            assert diagnostics['collection'] == 'pending'
+            assert evidence['execution_id'] == turn.execution_id
+            assert evidence['process_group_closed'] and evidence['pipes_closed']
+            assert evidence['stdout_eof'] and evidence['stderr_eof']
+            assert type(evidence['runtime_exit_code']) is int
+        finally:
+            release.set()
+            if not future.done():
+                turn.terminate()
+        if archive_fails:
+            with pytest.raises(RuntimeAdapterError) as caught:
+                future.result(timeout=10)
+            assert caught.value.code == 'RUNTIME_ARCHIVE_FAILED'
+            assert caught.value.terminal_confirmed is True
+        else:
+            terminal = future.result(timeout=10)
+            assert terminal['outcome'] == 'interrupted' and terminal['terminal_confirmed'] is True
+        final = tools.read_reports({'alias': 'research@x1'}, cwd=tmp_path).document['runtime_diagnostics']
+        assert final['termination'] == evidence
+        assert final['collection'] == ('failed' if archive_fails else 'complete')
+
+
 def test_claude_mid_turn_input_shares_its_turn_result(tmp_path: Path, claude_environment: None) -> None:
     """Echoed input joined to a running turn completes with that turn's one result."""
     result_project(tmp_path)

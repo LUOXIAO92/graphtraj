@@ -171,9 +171,51 @@ releasing the first prompt, and distinguishes an interrupt request from verified
 termination. Native helpers and background tasks are disabled for these children.
 Managed output and supported native Main hook records are collected into
 [project-local Session archives](examples/sessions/README.md#claude-collection).
-Collection does not install hooks or migrate existing history. Interactive
-Claude Main hosting and its replacement approval route are explicitly unavailable.
-Unknown approval capability fails closed.
+Collection does not install hooks or migrate existing history. Claude's native
+replacement approval route is explicitly unavailable. Unknown approval
+capability fails closed.
+
+### Continuing Main from any Runtime
+
+A project has one Main working state: the Main-owned root Agents and their
+hierarchy, pending notices and results, and the current summary scope. Each
+verified external Main Session, whether Codex, Claude Code, Pi or DSH, continues
+that state, so default `agents` status and `tasks` views show the existing members
+rather than an empty list. Continuation is a new associated record in
+`.graphtraj/runner/main-sessions/continuity.jsonl`; original Sessions, member
+identities and parents stay unchanged. Native subagents, GraphTraj members and
+completion checkers never become Main.
+
+A Main takes control at its native entry: a Codex `SessionStart` (startup, resume
+or clear; compaction does not count), a Pi `session_start`, or a DSH
+`agent/created`. Claude Code takes control at its first control call in a new host
+process. Reads never take control. When another Main has continued the project,
+the earlier Session can still read status, but its control calls fail with
+`main-continued` naming the current Main. Resume it through its native entry to
+continue Main there. Member events and results go to the current Main.
+
+### Claude Code as Main
+
+The Claude Code host serves both `agents` and `tasks`, with Main authority for
+Task operations, from one project MCP server. A Claude Code mod supplies each
+call's native Session. Print the adoption material from the GraphTraj
+installation:
+
+```bash
+python -m graphtraj.runtimes.claude.host configuration \
+  --project /path/to/project --claude "$(command -v claude)"
+```
+
+The output names four items. Write the host `config.json`. Add the `agents`
+server to the project `.mcp.json` and the two `env` entries to
+`.claude/settings.local.json`. Enable the packaged `host_context.mjs` mod
+(`mod`) through Claude Code's mod configuration. Claude Code's own project MCP
+approval and mod trust prompts decide adoption; GraphTraj writes and trusts
+nothing itself. Replace any earlier hand-made `graphtraj`/`agents` server entries
+for this host, so one entry serves both tools. The selected Claude CLI must
+launch the host directly. Member notices queue durably and arrive with the
+Main's next `agents`/`tasks` result, shown in the mod's message frames, because
+the host cannot push into an idle Claude turn.
 
 The execution host needs access to the chosen Runtime executable, credentials,
 project files and subprocess sandbox. Role permissions do not replace the

@@ -17,9 +17,9 @@ def test_progressive_mcp_consumes_current_context_once(tmp_path: Path) -> None:
 
     def bind(session: str, cwd: Path):
         """Record only the caller established outside the model request."""
-        def call(request: dict) -> AgentsResult:
-            invocations.append((session, cwd, request))
-            return AgentsResult({'native': session})
+        def call(tool: str, request: dict) -> AgentsResult:
+            invocations.append((tool, session, cwd, request))
+            return AgentsResult({'native': session, 'tool': tool})
         return call
 
     host = NativeCalls(bind, tmp_path)
@@ -27,14 +27,22 @@ def test_progressive_mcp_consumes_current_context_once(tmp_path: Path) -> None:
     with pytest.raises(AgentsError, match='No matching'):
         host.call(request)
     first, second = str(uuid4()), str(uuid4())
-    context = {'operation': 'prepare', 'session': first, 'cwd': str(tmp_path),
+    context = {'operation': 'prepare', 'tool': 'agents', 'session': first, 'cwd': str(tmp_path),
                'agent': None, 'request': request}
     host.context(context)
-    assert host.call(request).document == {'native': first}
+    assert host.call(request).document == {'native': first, 'tool': 'agents'}
     with pytest.raises(AgentsError, match='No matching'):
         host.call(request)
     host.context({**context, 'session': second})
-    assert host.call(request).document == {'native': second}
+    assert host.call(request).document == {'native': second, 'tool': 'agents'}
+    # One association serves only the entry it was prepared for.
+    host.context({**context, 'tool': 'tasks'})
+    with pytest.raises(AgentsError, match='No matching'):
+        host.call(request)
+    host.context({**context, 'tool': 'tasks'})
+    assert host.call(request, 'tasks').document == {'native': first, 'tool': 'tasks'}
+    with pytest.raises(AgentsError, match='agents or tasks'):
+        host.context({**context, 'tool': 'other'})
     host.context(context)
     with pytest.raises(AgentsError, match='No matching'):
         host.call({**request, 'arguments': {'caller': first}})
@@ -46,13 +54,13 @@ def test_progressive_mcp_consumes_current_context_once(tmp_path: Path) -> None:
     host.context({'operation': 'end'})
     with pytest.raises(AgentsError, match='No matching'):
         host.call(request)
-    assert len(invocations) == 2
+    assert len(invocations) == 3
 
     output = StringIO()
     serve(StringIO(json.dumps({'id': 1, 'method': 'tools/list'}) + '\n'), output,
           tmp_path, native_call=host.call)
     tools = json.loads(output.getvalue())['result']['tools']
-    assert [tool['name'] for tool in tools] == ['agents']
+    assert [tool['name'] for tool in tools] == ['agents', 'tasks']
     assert tools[0]['inputSchema']['properties']['action']['enum'] == ['discover', 'describe', 'execute']
     assert 'runtime' not in tools[0]['inputSchema']['properties']
 

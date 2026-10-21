@@ -667,7 +667,8 @@ def _status_tree(
 
     ``owner_connection`` narrows a caller without a live Session to the
     top-level Sessions whose recorded ``parent_connection`` is that native
-    Main (same Runtime and Session), not retired, with their subtrees. Records
+    Main (same Runtime and Session) or any verified project Main it
+    continues, not retired, with their subtrees. Records
     that do not name that Main, cannot be read or are retired stay out of this
     view and remain readable by explicit alias.
 
@@ -693,10 +694,17 @@ def _status_tree(
         if isinstance(parent, str):
             children.setdefault(parent, []).append(alias)
     def owned(mapping: Mapping[str, Any]) -> bool:
-        """Return whether a top-level record names ``owner_connection`` as its Main."""
+        """Return whether a top-level record names ``owner_connection`` or any project Main.
+
+        Every verified Main reads the project's Main working state, including
+        roots that an earlier Main Session dispatched (``main_continuity``).
+        """
+        from graphtraj.execution.main_continuity import recorded_by_main
+
         recorded = mapping.get("parent_connection")
-        return isinstance(recorded, dict) and all(
+        return isinstance(recorded, dict) and (all(
             recorded.get(key) == owner_connection.get(key) for key in ("runtime", "session"))
+            or recorded_by_main(runner_directory, recorded))
 
     roots = (
         [alias for alias, mapping in records.items() if mapping.get("parent") is None

@@ -224,3 +224,20 @@ def test_claude_host_serves_agents_and_tasks_as_the_continuing_main(tmp_path: Pa
     assert refused.document['error']['code'] == 'main-continued'
     assert current_main(runner)['session'] == 'codex-main'
     assert len(driver.started) == 2
+
+
+def test_continued_main_cannot_control_task_members_through_agents(tmp_path: Path) -> None:
+    """agents' Task member path applies the same single-controller decision (S2)."""
+    from agent_swarm import Binding
+    from graphtraj.interfaces.agents import GraphTrajAgents
+
+    runner = tmp_path / '.graphtraj/runner'
+    claim_main(runner, CODEX, 'codex:SessionStart:startup')
+    claim_main(runner, {**CLAUDE, 'runner': str(runner)}, 'claude:first-control')
+    backend = GraphTrajAgents(tmp_path)
+    old_main = Binding(Caller('graphtraj-gateway', None, 'codex-main', 'codex'))
+    for action, arguments in [('interrupt', {'agent': 'leader@l1'}), ('retire', {'agent': 'leader@l1'}),
+                              ('reply', {'agent': 'leader@l1', 'request': {}, 'response': {}})]:
+        with pytest.raises(AgentsError) as refused:
+            backend.operate(action, arguments, old_main)
+        assert refused.value.code == 'main-continued'

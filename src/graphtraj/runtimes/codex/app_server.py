@@ -196,6 +196,7 @@ class CodexAppServer:
         on_request: Callable[[CodexServerRequest], Awaitable[Mapping[str, Any] | None]] | None = None,
         request_handler_timeout: float | None | object = _DEFAULT_TIMEOUT,
         experimental_api: bool = False,
+        local_websocket: Mapping[str, Any] | None = None,
     ) -> None:
         """Configure an unopened service with immutable environment overrides."""
         if (
@@ -211,6 +212,9 @@ class CodexAppServer:
                 'RUNTIME_REQUEST_INVALID',
                 'Supply a command and a finite positive request timeout.',
             )
+        from graphtraj.runtimes.codex.local_websocket import validate_connection
+        self._local_websocket = validate_connection(local_websocket)
+        self._remote_socket = None
         self._cwd = cwd
         self._command = tuple(command)
         self._environment = {key: value for key, value in {**os.environ, **(environment or {})}.items()
@@ -268,6 +272,8 @@ class CodexAppServer:
         """Open stdio and perform initialize/initialized before Session operations."""
         if self._opened or self._closed:
             raise CodexAdapterError('RUNTIME_LIFECYCLE_INVALID', 'The connection cannot be opened twice.')
+        if self._local_websocket is not None:
+            return await self._open_local_websocket()
         # A proxy does not launch or configure a service. Its existing host owns
         # configuration and permissions; do not read or override them here.
         if self._command[1:3] != ('app-server', 'proxy'):
@@ -320,6 +326,45 @@ class CodexAppServer:
             self._close_task = asyncio.create_task(self._close_connection())
         await asyncio.shield(self._close_task)
 
+    async def _open_local_websocket(self) -> CodexAppServer:
+        """Authenticate to an existing service through the native HTTP proxy."""
+        from websockets.asyncio.client import connect
+        assert self._local_websocket is not None
+        settings = self._local_websocket
+        self._opened = True
+        try:
+            token = Path(settings['token_file']).read_text(encoding='utf-8').strip()
+            if not token or any(char.isspace() for char in token):
+                raise ValueError('Invalid local token file.')
+            proxy_url = self._environment.get('HTTP_PROXY') or self._environment.get('http_proxy')
+            if not proxy_url:
+                raise ValueError('A native HTTP proxy is required for the local connection.')
+            self._remote_socket = await connect(
+                settings['url'], proxy=proxy_url,
+                additional_headers={'Authorization': 'Bearer ' + token},
+                open_timeout=self._timeout, close_timeout=self._timeout,
+                max_size=128 * 1024 * 1024,
+            )
+            self._reader = asyncio.create_task(self._read())
+            result = await self._call('initialize', {
+                'clientInfo': {'name': 'graphtraj', 'version': '0.1.0'},
+                'capabilities': {'experimentalApi': self._experimental_api},
+            })
+            if result.get('codexHome') != settings['codex_home']:
+                raise ValueError('Native service returned a different Codex home.')
+            await self._send({'method': 'initialized', 'params': {}})
+        except BaseException as error:
+            await self.close()
+            if isinstance(error, asyncio.CancelledError):
+                raise
+            # Handshake exceptions may contain request headers. Never retain them.
+            raise CodexAdapterError(
+                'RUNTIME_CONNECTION_FAILED',
+                'Local Codex WebSocket authentication or identity check failed (' + type(error).__name__ + ').',
+                terminal_confirmed=False,
+            ) from None
+        return self
+
     async def _close_connection(self) -> None:
         """Bound EOF shutdown, then terminate only this explicitly owned service group."""
         await asyncio.gather(*self._ordered_tasks.values(), return_exceptions=True)
@@ -331,6 +376,10 @@ class CodexAppServer:
         for task in self._handlers.values():
             task.cancel()
         await asyncio.gather(*self._handlers.values(), return_exceptions=True)
+        if self._remote_socket is not None:
+            await self._remote_socket.close()
+            if self._reader is not None:
+                await self._reader
         if self._process is not None:
             assert self._process.stdin is not None
             self._process.stdin.close()
@@ -364,7 +413,8 @@ class CodexAppServer:
     def service_pid(self) -> int:
         """Identify the owned service for process cleanup, never execution status."""
         self._require_connection()
-        assert self._process is not None
+        if self._process is None:
+            raise CodexAdapterError('authority-denied', 'An existing WebSocket service is not an owned process.')
         return self._process.pid
 
     def authenticate_caller(self, pid: int) -> None:
@@ -1006,7 +1056,7 @@ class CodexAppServer:
         """Reject work after transport failure or outside the open lifetime."""
         if self._failure is not None:
             raise self._failure
-        if self._process is None:
+        if self._process is None and self._remote_socket is None:
             raise CodexAdapterError('RUNTIME_LIFECYCLE_INVALID', 'Open the Codex connection first.')
 
     def _fail(self, error: CodexAdapterError) -> None:
@@ -1077,12 +1127,14 @@ class CodexAppServer:
     async def _send(self, message: dict[str, Any]) -> None:
         """Write JSONL for stdio services or a Text message for daemon proxies."""
         self._require_connection()
-        assert self._process is not None and self._process.stdin is not None
         try:
             encoded = json.dumps(message, allow_nan=False)
-            if self._websocket is not None:
+            if self._remote_socket is not None:
+                await self._remote_socket.send(encoded)
+            elif self._websocket is not None:
                 await self._websocket.send(encoded)
             else:
+                assert self._process is not None and self._process.stdin is not None
                 self._process.stdin.write((encoded + '\n').encode())
                 await self._process.stdin.drain()
         except (OSError, ValueError, TypeError) as error:
@@ -1093,9 +1145,8 @@ class CodexAppServer:
 
     async def _read(self) -> None:
         """Consume responses and native completion notifications asynchronously."""
-        assert self._process is not None and self._process.stdout is not None
         try:
-            messages = (
+            messages = self._remote_socket if self._remote_socket is not None else (
                 self._websocket.messages() if self._websocket is not None
                 else self._process.stdout
             )

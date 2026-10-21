@@ -64,8 +64,11 @@ def proxy(
     if any(not isinstance(connection.get(k), str) or not connection[k]
            for k in ('session', 'codex_home')):
         raise ValueError('Invalid owning Codex connection.')
+    from graphtraj.runtimes.codex.local_websocket import configured_connection
+    websocket = configured_connection(Path.cwd(), connection['codex_home'])
     return CodexAppServer(
         cwd=Path.cwd(),
+        local_websocket=websocket,
         command=(str(runtime_executable('codex')), 'app-server', 'proxy',
                  '--sock', control_socket(connection['codex_home'])),
         environment={'CODEX_HOME': connection['codex_home']}, experimental_api=True,

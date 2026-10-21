@@ -213,10 +213,12 @@ def test_existing_denial_is_not_replaced(tmp_path: Path, peer: Path, denial: str
     request = context(tmp_path, peer).launch_document()['adapter_request']
     native = request['session_parameters']['config']
     profile = native['permissions'][native['default_permissions']]
+    native['features'] = {**native['features'], 'network_proxy': True}
+    profile['network'] = {'enabled': True}
     if denial == 'file':
         profile['filesystem'][config['token_file']] = 'deny'
     elif denial == 'host':
-        profile['network'] = {'domains': {'127.0.0.1': 'deny'}}
+        profile['network'] = {'enabled': True, 'domains': {'127.0.0.1': 'deny'}}
     else:
         profile['network'] = {'enabled': False}
     with pytest.raises(RuntimeAdapterError):

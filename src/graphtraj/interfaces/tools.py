@@ -869,11 +869,11 @@ register_tool(
 
 
 def read_reports(arguments: Mapping[str, Any], *, cwd: Path | None = None) -> ToolResult:
-    """Read the declared reports of an authorized direct child."""
+    """Read retained project development reports under the verified caller identity."""
     return ToolResult(read_session_reports(_string_argument(arguments, 'alias'), cwd or Path.cwd()))
 
 
-register_tool('session_reports', "Read your or your direct child's reports and retained result submissions.",
+register_tool('session_reports', "Read project Session reports and retained result submissions without changing authorship or control.",
               _ALIAS_SCHEMA, read_reports, manual_ref='manuals/task-delivery/guide.md')
 
 

@@ -574,6 +574,9 @@ def test_each_session_projects_resolved_role_skills_and_task_access(
 
     async def exercise() -> None:
         contexts = []
+        native_home = tmp_path / 'native-home'
+        native_home.mkdir()
+        (native_home / 'unrelated.jsonl').write_text('Unrelated native history\n')
         for name, role_name, model, effort in [
             ('first', 'engineer', 'first-model', 'low'),
             ('second', 'standards-reviewer', 'second-model', 'high'),
@@ -585,13 +588,23 @@ def test_each_session_projects_resolved_role_skills_and_task_access(
                 skill.write_text(f'---\nname: {skill_name}\ndescription: temporary check\n---\n')
             role = ResolvedChildRole(role_name, f'Role {name}.',
                                      RolePreset('codex', model, None, None, reasoning_effort=effort,
+                                                runtime_home=str(native_home),
                                                 worktree_access='read' if name == 'second' else 'write'))
             from test_task_graph import _configure
 
             _configure(root)
+            native_file = native_home / f'{name}.jsonl'
+            native_file.write_text('Associated project history\n')
+            category = 'sessions' if name == 'first' else 'main-sessions'
+            association = root / '.graphtraj/runner' / category / name / 'session.yml'
+            association.parent.mkdir(parents=True)
+            source = ({'rollout_path': str(native_file)} if name == 'first' else
+                      {'activity': {'trace_file': str(native_file)}})
+            association.write_text(yaml.safe_dump({'session': name, **source}))
             contexts.append(context(root, peer, role, (),
                                     (Path('.state/teams/1/rounds/1/report.md'),)))
-        async with CodexAppServer(command=[str(peer)], cwd=tmp_path) as adapter:
+        async with CodexAppServer(command=[str(peer)], cwd=tmp_path,
+                                  environment=contexts[0].runtime_environment()) as adapter:
             sessions = await asyncio.gather(*(adapter.create_session(value) for value in contexts))
             for index, session in enumerate(sessions):
                 turn = await adapter.start_execution(session, 'configuration')
@@ -614,11 +627,32 @@ def test_each_session_projects_resolved_role_skills_and_task_access(
                 assert filesystem[str(root / '.graphtraj/runner')] == 'read'
                 assert filesystem[str(root / '.graphtraj')] == 'none'
                 assert filesystem[str(root / '.codex')] == 'none'
+                assert filesystem[str(native_home)] == 'none'
+                assert filesystem[str(native_home / f'{name}.jsonl')] == 'read'
+                assert str(native_home / 'unrelated.jsonl') not in filesystem
+                assert str(native_home / f'{["second", "first"][index]}.jsonl') not in filesystem
                 assert filesystem[str(root / 'evidence/teams/1/rounds/1/report.md')] == 'read'
                 assert (str(root / 'git-common') in filesystem) == (index == 0)
                 assert not any(str(tmp_path / ['second', 'first'][index]) in key for key in filesystem)
+                # A retained launch from before project-history grants gains
+                # only its associated file on resume, without changing the original.
+                request = contexts[index].launch_document()['adapter_request']
+                prior = request['session_parameters']['config']
+                prior_files = prior['permissions'][prior['default_permissions']]['filesystem']
+                history = str(native_home / f'{name}.jsonl')
+                del prior_files[history]
+                resumed = refresh_codex_report_paths(
+                    request, worktree=root, evidence=root / 'evidence', report_files=(),
+                    role='engineer', session_directory=root / '.graphtraj/runner/sessions/current',
+                )
+                refreshed = resumed['session_parameters']['config']
+                resumed_files = refreshed['permissions'][refreshed['default_permissions']]['filesystem']
+                assert resumed_files[history] == 'read'
+                assert history not in prior_files
+                assert resumed_files[':workspace_roots']['.'] == ['write', 'read'][index]
             different_connection = context(tmp_path / 'third', peer, replace(
                 role, settings=replace(role.settings, base_url='https://different.invalid/v1',
+                    runtime_home=str(tmp_path / 'other-native-home'),
                     codex={'approval': {'model': 'review', 'base_url': 'https://review.invalid',
                                          'api_key_env': 'REVIEW_KEY'}})))
             with pytest.raises(RuntimeAdapterError) as caught:

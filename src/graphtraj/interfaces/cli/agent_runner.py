@@ -339,7 +339,7 @@ def cleanup(task_id: str | None) -> None:
 @main.command('reports', cls=OperationCommand, feature="session_reports")
 @click.argument('alias')
 def reports(alias: str) -> None:
-    """Read a directly owned Session's reports and retained result submissions."""
+    """Read project Session reports and retained result submissions."""
     from graphtraj.interfaces.hosted_cli import CONNECTION_ENV
     from graphtraj.workspace.runner_project import discover_project_root
 

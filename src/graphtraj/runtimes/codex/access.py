@@ -12,6 +12,8 @@ import os
 import sys
 from pathlib import Path
 
+import yaml
+
 from graphtraj.configuration.project_configuration import configuration_exists, load_project_configuration
 
 
@@ -48,7 +50,41 @@ def project_development_reads(root: Path) -> dict[str, str]:
     if not configuration_exists(root):
         return {}
     configuration = load_project_configuration(root)
-    return {str(path): 'read' for path in (
+    filesystem = {str(path): 'read' for path in (
         configuration.state, configuration.docs, configuration.agent_worktrees,
         project_runner_directory(root),
     )}
+    filesystem.update({str(path): 'read' for path in project_history_files(root)})
+    return filesystem
+
+
+def project_history_files(root: Path) -> set[Path]:
+    """Select exact native JSONL files from this project's retained associations.
+
+    Read only association metadata, never a Runtime home's directory or history
+    contents. A file grant cannot expose unrelated Sessions or credential files
+    alongside it. Missing associations remain missing rather than being guessed.
+    """
+    from graphtraj.execution.runner_status import retained_session_directories
+
+    runner = project_runner_directory(root)
+    records = [
+        *(runner / 'sessions').glob('*/session.yml'),
+        *(directory / 'session.yml' for directory in retained_session_directories(runner)),
+        *(runner / 'main-sessions').glob('*/session.yml'),
+        *(root / '.graphtraj/swarm/native').glob('*/session.yml'),
+    ]
+    files = set()
+    for path in records:
+        try:
+            record = yaml.safe_load(path.read_text(encoding='utf-8'))
+            if not isinstance(record, dict) or not record.get('session'):
+                continue
+            source = record.get('rollout_path') or record.get('activity', {}).get('trace_file')
+            if isinstance(source, str):
+                native = Path(source)
+                if native.is_absolute() and native.suffix == '.jsonl' and native.is_file():
+                    files.add(native.resolve())
+        except (OSError, ValueError, yaml.YAMLError):
+            continue
+    return files

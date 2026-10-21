@@ -84,7 +84,7 @@ def approved_recovery(arguments: dict, cwd: Path) -> dict:
     }
     _confirm_unconfirmed_target(project.runner_directory, alias)
     if _changes_execution(request) or before['mapping'] != after['mapping']:
-        require_stopped_subtree(project.runner_directory, alias)
+        require_stopped_subtree(project.runner_directory, alias, operation='recovery')
     if minutes:
         decision = review_proposal(proposal, cwd, project.runner_directory)
         if decision != {'decision': 'accept'}:
@@ -234,6 +234,16 @@ def _differences(expected: Any, actual: Any, prefix: str = '') -> list[dict]:
     return [] if expected == actual else [{'field': prefix, 'expected': expected, 'actual': actual}]
 
 
+def _repair_differences(before: dict, current: dict) -> list[dict]:
+    """Return state changes that make a reviewed repair stale.
+
+    Task, Team, budget, stop, mapping, Round and definition are compared
+    exactly. A later Task event alone, such as a parent's note or report
+    notice during review, changes none of them and does not stale the repair.
+    """
+    return _differences({**before, 'latest_task_event': current['latest_task_event']}, current)
+
+
 def _apply_recovery(proposal: dict, cwd: Path) -> dict:
     """Apply the authorized snapshot atomically with its Worldline fact.
 
@@ -281,11 +291,11 @@ def _apply_recovery(proposal: dict, cwd: Path) -> dict:
                                 and event.get('proposal_sha256') == digest), None)
                 if applied is None:
                     current, paths = _snapshot(project, alias, administrative=not request['resume'])
-                    differences = _differences(proposal['before'], current)
+                    differences = _repair_differences(proposal['before'], current)
                     if differences:
                         return {'recovery_status': 'stale', 'applied': False, 'differences': differences}
                     if _changes_execution(request) or proposal['before']['mapping'] != proposal['after']['mapping']:
-                        require_stopped_subtree(project.runner_directory, alias)
+                        require_stopped_subtree(project.runner_directory, alias, operation='recovery')
                     original = {key: path.read_bytes() if path.exists() else None
                                 for key, path in paths.items() if key != 'round'}
                     original_mode = paths['round'].stat().st_mode & 0o777
@@ -304,7 +314,7 @@ def _apply_recovery(proposal: dict, cwd: Path) -> dict:
                         current, _ = _snapshot(
                             project, alias, administrative=not request['resume'], worldline_locked=True,
                         )
-                        differences = _differences(proposal['before'], current)
+                        differences = _repair_differences(proposal['before'], current)
                         if differences:
                             raise RunnerError('recovery-stale', json.dumps(differences))
                         try:

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import os
-import math
 import sys
 import hashlib
 from contextlib import contextmanager
@@ -12,7 +11,6 @@ from typing import Any, Callable, Collection, Iterator, Mapping
 
 from graphtraj.execution.runner_connection import connection_operation, worker_connection
 from graphtraj.execution.runner_models import RunnerError
-from graphtraj.execution.runner_process import OPERATION_TIMEOUT_SECONDS
 from graphtraj.execution.runner_status import process_caller_alias, read_alias_mapping, runtime_caller
 from graphtraj.interfaces.gateway import handle_request
 from graphtraj.interfaces.tools import ToolResult
@@ -127,22 +125,10 @@ def forward_request(
         return None
     if not address:
         raise RunnerError('operation-unavailable', 'The Session CLI host connection is unavailable.')
-    response_timeout = OPERATION_TIMEOUT_SECONDS
-    if request.get('action') == 'execute' and request.get('feature') == 'parent_status':
-        arguments = request.get('arguments', {})
-        observation = arguments.get('timeout_seconds', 0) if isinstance(arguments, Mapping) else 0
-        # Invalid arguments still reach the authenticated gateway for rejection;
-        # they must never extend the client's transport deadline.
-        if type(observation) in (int, float) and math.isfinite(observation) and observation >= 0:
-            response_timeout += observation
-    # Recovery and a continuation can include Session startup, and a result
-    # or notified report reaches the direct parent; none has a fixed duration,
-    # so once the host accepts one its own reply is awaited.
-    long_operation = (request.get('action') == 'execute'
-                      and (request.get('feature') in {'approved_recovery', 'submit_result', 'send_instruction'}
-                           or request.get('feature') == 'submit_report'
-                           and isinstance(request.get('arguments'), Mapping)
-                           and request['arguments'].get('notify_parent') is True))
+    # The host removes a request when it accepts it. Reads, status, interrupt,
+    # recovery and writes have no fixed duration once accepted, so the owner's
+    # own reply is awaited until it arrives or the host closes the channel.
+    # Only a request the host never accepts ends at the ordinary deadline.
     from agent_swarm.connection import client_native_context
 
     native = native_context if native_context is not None else client_native_context()
@@ -150,5 +136,5 @@ def forward_request(
         'cwd': str(cwd.resolve()),
         'request': request,
         **({'native': native} if native is not None else {}),
-    }, authenticate=True, response_timeout=response_timeout, await_accepted=long_operation)
+    }, authenticate=True, await_accepted=True)
     return ToolResult(response['document'], failed=response['failed'])

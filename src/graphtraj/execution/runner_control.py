@@ -93,8 +93,11 @@ def notify_direct_parent(
     The delivery record: ``parent``, the acknowledged ``parent_session`` and
     ``parent_execution_id``, and ``delivery`` - ``received``,
     ``not-delivered`` with the observed activity or error, or
-    ``no-direct-parent``. The same record is appended to
-    ``parent-notices.jsonl`` in the notifying Session directory.
+    ``no-direct-parent``. ``received`` means the parent's input channel took
+    the notice; ``input`` says whether a resumed parent turn started on it or
+    it is only queued in a running execution, which a later turn consumes.
+    The same record is appended to ``parent-notices.jsonl`` in the notifying
+    Session directory.
     """
     record: Dict[str, Any] = {
         "at": time.time(), "notice": notice, "parent": None,
@@ -153,6 +156,13 @@ def notify_direct_parent(
                 "delivery": "received",
                 "parent_session": receipt["session"],
                 "parent_execution_id": receipt["execution_id"],
+                # A running parent only queued the input; its turn taking it
+                # up is not confirmed here. Otherwise a resumed turn bound it.
+                "input": (
+                    "queued-in-running-execution"
+                    if receipt["execution_id"] == parent_mapping.get("execution_id")
+                    else "started-parent-turn"
+                ),
             })
         elif mapping.get("parent_connection") is not None:
             address = mapping["parent_connection"]
@@ -323,7 +333,7 @@ def owned_root_undecided_results(harness_root: Path, connection: Mapping[str, An
     -------
     Each owned Session mapping with its undecided ``result-submitted`` event.
     """
-    from graphtraj.graph.delivery_state import read_team
+    from graphtraj.graph.delivery_state import RESULT_DECISION_EVENTS, read_team
     from graphtraj.graph.delivery_worldline import read_worldline
     from graphtraj.graph.task_graph import _load_states
 
@@ -332,7 +342,7 @@ def owned_root_undecided_results(harness_root: Path, connection: Mapping[str, An
         return []
     configuration = load_project_configuration(harness_root)
     events = read_worldline(configuration.state, configuration.harness_root)
-    decided = {event['submission_id'] for event in events if 'submission_id' in event}
+    decided = {event['submission_id'] for event in events if event['event'] in RESULT_DECISION_EVENTS}
     tasks = _load_states(configuration.state / 'tasks')
     undecided = []
     for alias, mapping in roots:
@@ -792,12 +802,19 @@ def _send_session_locked(
                     session_directory.parent.parent, alias, mapping,
                     reports_only=reports_only and _running_reports_only(session_directory),
                 )
-                session_operation(mapping, "send", instruction=instruction)
-            from graphtraj.execution.runner_worker import _append_follow_up
+                try:
+                    session_operation(mapping, "send", instruction=instruction)
+                except RunnerError as error:
+                    # Only an explicit refusal before writing input permits
+                    # continuation after close. Unknown delivery is not retried.
+                    if error.code not in {"runtime-input-closed", "request-not-accepted"}:
+                        raise
+                else:
+                    from graphtraj.execution.runner_worker import _append_follow_up
 
-            if caused_by_event_ids:
-                _append_follow_up(session_directory / "events.jsonl", list(caused_by_event_ids))
-            return {**_execution_identity(alias, mapping), "send_status": "sent"}
+                    if caused_by_event_ids:
+                        _append_follow_up(session_directory / "events.jsonl", list(caused_by_event_ids))
+                    return {**_execution_identity(alias, mapping), "send_status": "sent"}
         # Native completion can precede the owner's final Trace drain and close.
         deadline = time.monotonic() + OPERATION_TIMEOUT_SECONDS
         while not execution_file.is_file():

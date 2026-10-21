@@ -16,6 +16,7 @@ from graphtraj.interfaces.cli.worldline import worldline
 from graphtraj.interfaces.cli.project_setup import setup, doctor
 from graphtraj.interfaces.cli.task import delivery_state, task
 from graphtraj.interfaces.cli.finalize import bind_command
+from graphtraj.interfaces.cli.mcp_adoption import refresh_mcp_command
 
 
 @click.group(cls=OperationGroup)
@@ -57,6 +58,7 @@ main.add_command(delivery_state)
 main.add_command(roles)
 
 main.add_command(bind_command)
+main.add_command(refresh_mcp_command)
 
 
 @main.command("migrate-tickets")

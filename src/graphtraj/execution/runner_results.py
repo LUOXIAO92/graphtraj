@@ -15,7 +15,7 @@ from graphtraj.configuration.project_roles import configured_role_name
 from graphtraj.execution.runner_models import RunnerError
 from graphtraj.execution.runner_io import _sync_directory
 from graphtraj.execution.runner_status import caller_alias, read_alias_mapping, require_task_authority
-from graphtraj.graph.delivery_state import current_result_rework_cause, read_team
+from graphtraj.graph.delivery_state import RESULT_DECISION_EVENTS, current_result_rework_cause, read_team
 from graphtraj.graph.delivery_worldline import append_project_worldline_event, read_worldline
 from graphtraj.graph.task_graph import _load_states
 from graphtraj.workspace.runner_project import discover_project_root, discover_runner_directory, run_git
@@ -129,8 +129,13 @@ def submit_session_result(
             raise ValueError('Result files must be Worktree-relative.')
         if path.parts and path.parts[0] == '.state':
             raise ValueError('Assigned reports belong in evidence_refs; result_refs must name committed files.')
-        if run_git(worktree, 'cat-file', '-t', f'{commit}:{reference}') != 'blob':
-            raise ValueError('Result references must name committed files.')
+        # HEAD was already resolved here, so a Git failure means the path is absent.
+        try:
+            kind = run_git(worktree, 'cat-file', '-t', f'{commit}:{reference}')
+        except RunnerError:
+            kind = None
+        if kind != 'blob':
+            raise ValueError(f'Result reference {reference} is not a committed file at {commit}.')
         return reference
 
     for reference in result_refs:
@@ -264,6 +269,19 @@ def decide_session_result(
                        and event["event"] == "result-submitted"), None)
     if submission is None:
         raise ValueError("Unknown result submission")
+
+    # A retry after a lost receipt returns the decision this caller already
+    # recorded, while it is still the submission's latest decision, instead of
+    # a second decision or an unrelated refusal.
+    recorded = "team-round-accepted" if decision == "accepted" else "team-round-implementation-rejected"
+    decisions = [event for event in events if event["event"] in RESULT_DECISION_EVENTS
+                 and event.get("submission_id") == submission_id]
+    if decisions:
+        prior = decisions[-1]
+        if (prior["event"] == recorded and prior.get("candidate") == commit and prior.get("reason") == reason
+                and prior.get("alias") == caller_alias(discover_runner_directory(cwd))):
+            return prior
+
     request = {
         "phase": "final", "task_id": submission["task_id"],
         "submission_id": submission_id, "candidate": commit,

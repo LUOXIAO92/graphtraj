@@ -96,6 +96,7 @@ def test_judged_abnormality_notifies_the_parent_and_stops_the_subtree(
     # Session and the execution it reached are the ones that parent recorded.
     record, = _notices(root, child)
     assert record['delivery'] == 'received', record
+    assert record['input'] == 'queued-in-running-execution', record
     assert record['parent'] == parent
     assert record['parent_session'] == parent_before['session']
     assert record['parent_execution_id'] == parent_before['execution_id']

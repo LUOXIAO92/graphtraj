@@ -148,7 +148,6 @@ def test_cli_connection_uses_and_cleans_a_sandbox_visible_channel(tmp_path: Path
     absent = cli(worktree, address, 'reports', 'research@x1')
     assert absent.returncode == 1
     assert yaml.safe_load(absent.stdout)['error']['code'] == 'operation-failed'
-    assert 'owner did not acknowledge' in absent.stderr
 
 
 def test_cli_connection_removes_a_relocated_channel_after_failure(tmp_path: Path) -> None:
@@ -186,7 +185,6 @@ def test_cli_host_refuses_unowned_wrong_channel_and_unavailable_host(tmp_path: P
     result = cli(tmp_path, address, *arguments)
     assert result.returncode == 1
     assert yaml.safe_load(result.stdout)['error']['code'] == 'operation-failed'
-    assert 'owner did not acknowledge' in result.stderr
 
 
 def test_cli_host_requires_kernel_lock_and_rejects_request_identity(tmp_path: Path) -> None:
@@ -283,22 +281,18 @@ def test_managed_worker_grants_only_its_channel_and_closes_it(tmp_path: Path, pe
     assert not Path(observed[0]).exists()
 
 
-def test_native_submission_errors_identify_wrong_reference_and_git_failure(tmp_path: Path) -> None:
-    """Wrong report usage is actionable; a missing committed path retains Git diagnostics."""
+def test_native_submission_errors_identify_wrong_and_absent_references(tmp_path: Path) -> None:
+    """Wrong report usage is actionable; a path absent at the commit is named, not a Git failure."""
     import pytest
-    from graphtraj.execution.runner_models import RunnerError
 
     runner, _, commit = result_project(tmp_path)
     with runtime_caller(runner, 'research@x1'):
         with pytest.raises(ValueError, match='evidence_refs'):
             tools.submit_result({'commit': commit, 'result_refs': ['.state/teams/1/rounds/1/researcher-x1.md'],
                                  'completion': 'Done'}, cwd=tmp_path)
-        with pytest.raises(RunnerError) as failure:
+        with pytest.raises(ValueError, match=f'absent.md is not a committed file at {commit}'):
             tools.submit_result({'commit': commit, 'result_refs': ['absent.md'],
                                  'completion': 'Done'}, cwd=tmp_path)
-        assert 'git cat-file -t ' + commit + ':absent.md' in failure.value.message
-        assert str(tmp_path / 'worktrees/research') in failure.value.message
-        assert 'fatal:' in failure.value.message
 
 
 def test_shared_mcp_command_consumes_bound_graphtraj_dsh_channel(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -356,3 +350,29 @@ def test_managed_channel_discovers_and_describes_task_members(tmp_path: Path) ->
     report = handle_request({'action': 'describe', 'feature': 'submit_report', 'schema': True},
                             cwd=tmp_path, allowed_features=allowed)
     assert 'notify_parent' in report.document['input_schema']['properties']
+
+
+def test_cli_host_returns_a_slow_read_result_instead_of_a_timeout(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An accepted read that outlasts the ordinary deadline returns the owner's real result."""
+    import time
+    from dataclasses import replace
+
+    runner, _, _ = result_project(tmp_path)
+    directory = own_process(runner)
+    original = tools.TOOLS['task_members']
+
+    def slow(arguments: dict, *, cwd: Path | None = None) -> tools.ToolResult:
+        """Answer only after the ordinary ten-second control deadline."""
+        time.sleep(10.5)
+        return tools.ToolResult({'members': ['slow-but-answered']})
+
+    monkeypatch.setitem(tools.TOOLS, 'task_members', replace(original, handler=slow))
+    with hold_ownership(directory, os.getpid()), cli_connection(
+        tmp_path, 'research@x1', native_operation_features(),
+    ) as address:
+        result = run_cli('graphtraj.interfaces.cli.graphtraj', tmp_path, address,
+                         'task', 'members', process_timeout=30)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert yaml.safe_load(result.stdout) == {'members': ['slow-but-answered']}

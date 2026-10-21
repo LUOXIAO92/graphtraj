@@ -226,3 +226,24 @@ def test_selected_reviewer_refusal_preserves_retirement(
     assert failure.value.code == (expected if activity == "idle" else "replacement-not-stopped")
     assert len(invoked) == (1 if activity == "idle" else 0)
     assert {path: path.read_bytes() for path in root.rglob("*") if path.is_file()} == retained
+
+
+def test_recovery_refusal_names_recovery_and_the_running_member(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Execution-changing recovery on a non-idle subtree is not refused as a replacement."""
+    from graphtraj.execution import approved_recovery
+
+    root = tmp_path / "runner"
+    parent = "344-task-handover0-team_leader@leader"
+    child = "344-task-handover0-engineer@child"
+    _record_direct_session(root, parent, "team-leader", None)
+    _record_direct_session(root, child, "engineer", parent)
+    (root / "sessions" / parent / "execution.yml").write_text("outcome: completed\n")
+    monkeypatch.setattr(runner_status, "caller_alias", lambda directory: None)
+    monkeypatch.setattr(runner_status, "session_operation", lambda *a: {"activity": "running"})
+    with pytest.raises(RunnerError) as error:
+        approved_recovery.require_stopped_subtree(root, parent, operation="recovery")
+    assert error.value.code == "replacement-not-stopped"
+    assert error.value.message == (
+        f"The target and all descendants must be stopped before recovery; {child} is not idle.")

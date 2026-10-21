@@ -225,7 +225,7 @@ def _validate_evidence(harness_root: Path, references: list[str]) -> None:
         except (OSError, ValueError) as error:
             raise ValueError("retained evidence reference escapes the Harness Project Root") from error
         if not evidence.is_file():
-            raise ValueError("retained evidence does not exist")
+            raise ValueError(f"retained evidence does not exist: {reference}")
 
 
 def _validate_recorded_event(

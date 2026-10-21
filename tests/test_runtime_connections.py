@@ -879,22 +879,6 @@ def test_slow_operation_does_not_delay_a_concurrent_request(tmp_path) -> None:
     assert sorted(calls) == ['cheap', 'slow']
 
 
-def test_only_long_operations_await_acceptance(monkeypatch, tmp_path) -> None:
-    """Ordinary forwarded queries keep the default deadline."""
-    from graphtraj.interfaces import hosted_cli
-
-    calls = []
-    monkeypatch.setenv(hosted_cli.CONNECTION_ENV, str(tmp_path))
-    monkeypatch.setattr(hosted_cli, 'connection_operation',
-                        lambda *args, **kwargs: calls.append(kwargs) or {'document': {}, 'failed': False})
-    for feature, arguments in (('approved_recovery', {}), ('submit_result', {}), ('alias_status', {}),
-                               ('submit_report', {'notify_parent': True}), ('submit_report', {}),
-                               ('send_instruction', {})):
-        hosted_cli.forward_request({'action': 'execute', 'feature': feature, 'arguments': arguments}, tmp_path)
-    assert [call['await_accepted'] for call in calls] == [True, True, False, True, False, True]
-    assert {call['response_timeout'] for call in calls} == {hosted_cli.OPERATION_TIMEOUT_SECONDS}
-
-
 def test_accepted_wait_ends_when_the_host_is_gone(tmp_path) -> None:
     """A host that accepted the request and then vanished never leaves the caller waiting."""
     import threading
@@ -923,3 +907,91 @@ def test_accepted_wait_ends_when_the_host_is_gone(tmp_path) -> None:
                                                await_accepted=True)
     taker.join()
     assert time.monotonic() - started < 5
+
+
+def test_unclaimed_request_cancellation_prevents_late_execution(tmp_path: Path) -> None:
+    """A timeout can prove non-delivery only by withdrawing the unclaimed request."""
+    import threading
+    import sys
+
+    from graphtraj.execution import runner_connection
+    from graphtraj.execution.runner_models import RunnerError
+
+    release = threading.Event()
+    calls = []
+
+    def authenticate(pid: int) -> None:
+        """Hold admission before the server claims the request."""
+        assert release.wait(5)
+
+    def operate(request: dict) -> dict:
+        """Record any actual operation after admission."""
+        calls.append(request)
+        return {}
+
+    with runner_connection.worker_connection(tmp_path, operate, authenticate=authenticate) as address:
+        try:
+            client = subprocess.run([sys.executable, '-c', '''
+import sys
+from graphtraj.execution import runner_connection
+from graphtraj.execution.runner_models import RunnerError
+try:
+    runner_connection.connection_operation(sys.argv[1], {'value': 1}, authenticate=True,
+                                           response_timeout=0.1)
+except RunnerError as error:
+    print(error.code)
+''', address], capture_output=True, text=True, timeout=5)
+            assert client.returncode == 0, client.stderr
+            assert client.stdout.strip() == 'request-not-accepted'
+        finally:
+            release.set()
+    assert calls == []
+
+
+def test_closing_connection_refuses_input_without_executing_it(tmp_path: Path) -> None:
+    """Closing keeps replying to late requests while an accepted request drains."""
+    from concurrent.futures import ThreadPoolExecutor
+    import queue
+    import threading
+    import time
+
+    from graphtraj.execution import runner_connection
+    from graphtraj.execution.runner_models import RunnerError
+
+    addresses = queue.Queue()
+    started, release, close, exiting = (threading.Event() for _ in range(4))
+    calls = []
+
+    def operate(request: dict) -> dict:
+        """Keep the first admitted operation in flight until the test releases it."""
+        calls.append(request)
+        started.set()
+        assert release.wait(5)
+        return {'done': True}
+
+    def serve() -> None:
+        """Close the real control service while its first request is outstanding."""
+        with runner_connection.worker_connection(tmp_path, operate) as address:
+            addresses.put(address)
+            assert close.wait(5)
+            exiting.set()
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        host = pool.submit(serve)
+        address = addresses.get(timeout=5)
+        first = pool.submit(runner_connection.connection_operation, address, {'first': True},
+                            await_accepted=True)
+        try:
+            assert started.wait(5)
+            close.set()
+            assert exiting.wait(5)
+            time.sleep(0.05)
+            with pytest.raises(RunnerError) as caught:
+                runner_connection.connection_operation(address, {'late': True}, response_timeout=0.2)
+            assert caught.value.code == 'request-not-accepted'
+        finally:
+            release.set()
+            close.set()
+        assert first.result(timeout=5) == {'done': True}
+        host.result(timeout=5)
+    assert calls == [{'first': True}]

@@ -915,6 +915,30 @@ def test_native_start_resume_and_stop_need_no_main_binding_input(host: tuple[Pat
     assert any(native_record(event).get('method') == 'thread/items/list' for event in events)
 
 
+def test_codex_entries_continue_main_but_compaction_does_not(host: tuple[Path, Path]) -> None:
+    """A real start/resume claims the project's Main; compaction and Stop do not."""
+    from graphtraj.execution.main_continuity import claims
+
+    root, binding = host
+    binding.unlink()
+    runner = root / '.graphtraj/runner'
+    options = root / 'options.json'
+    options.write_text(json.dumps({**json.loads(options.read_text()), 'read_id_from_request': True}))
+    rollout(root, session='first-main')
+    started = native_hook(root, 'SessionStart', source='startup')
+    assert 'associated' in started.get('systemMessage', ''), started
+    rollout(root, session='second-main')
+    assert native_hook(root, 'SessionStart', source='startup')['systemMessage']
+    rollout(root, session='first-main')
+    assert native_hook(root, 'SessionStart', source='compact')['systemMessage']
+    assert [(item['session'], item['entry']) for item in claims(runner)] == [
+        ('first-main', 'codex:SessionStart:startup'), ('second-main', 'codex:SessionStart:startup'),
+    ]
+    assert native_hook(root, 'SessionStart', source='resume')['systemMessage']
+    assert claims(runner)[-1]['session'] == 'first-main'
+    assert claims(runner)[-1]['previous'] == {'runtime': 'codex', 'session': 'second-main'}
+
+
 def test_native_start_selects_harness_for_external_cwd(
     host: tuple[Path, Path], tmp_path_factory: pytest.TempPathFactory,
 ) -> None:

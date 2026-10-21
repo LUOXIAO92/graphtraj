@@ -1,0 +1,77 @@
+{
+  "purpose": "Retain the requested public candidate-client/shared-host adoption observation; not a Runtime dispatch or acceptance.",
+  "caller_status": {
+    "action": "status",
+    "agent": "344-agents_tasks_boundary_rework-handover0-engineer@engineer_7",
+    "session": "01a15d8a-cbe1-72c0-92b9-de880aeb2ed7",
+    "execution": "01a15d8a-ee77-74a0-bc56-5359ccd07375",
+    "message": null,
+    "result": {
+      "aliases": [
+        {
+          "alias": "344-agents_tasks_boundary_rework-handover0-engineer@engineer_7",
+          "session": "01a15d8a-cbe1-72c0-92b9-de880aeb2ed7",
+          "execution_id": "01a15d8a-ee77-74a0-bc56-5359ccd07375",
+          "activity": "running",
+          "agent": "agent-0a144ee724284b8d85ac2a137b4db5aa",
+          "state": "active"
+        }
+      ]
+    }
+  },
+  "candidate": "0053296a9552d8b9b563845fb54e0ed7b4908c0c",
+  "command": "/private/tmp/344-e7-candidate/0053296/venv/bin/graphtraj-mcp <<'EOF'\n{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"tasks\",\"arguments\":{\"action\":\"discover\",\"query\":\"swarm\"}}}\nEOF",
+  "request": {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "method": "tools/call",
+    "params": {
+      "name": "tasks",
+      "arguments": {
+        "action": "discover",
+        "query": "swarm"
+      }
+    }
+  },
+  "environment_changes": [],
+  "exit_code": 0,
+  "response": {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "result": {
+      "content": [
+        {
+          "type": "text",
+          "text": "features:\n- feature: swarm\n  description: Activate the roles this swarm input selects and return each Agent's\n    alias, so later calls query, steer and continue it by that alias rather than by\n    another launch input. Equivalent to `agent-runner --swarm-input`.\ndescribe:\n  action: describe\n  feature: <feature>\nservice:\n  host:\n    executable: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.venv-runtime/bin/python\n    module: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.venv-runtime/lib/python3.13/site-packages/graphtraj/interfaces/hosted_cli.py\n    sha256: b722419f3f5042a58863e4308bac9e13a9304e1397f8872a4fa9fb0a6de3ce12\n    configuration_sha256: 113292db5dd97d2c8b3ef3007f221db67cbd0ff303304d8795ae1876a16b8e71\n  mcp:\n    executable: /private/tmp/344-e7-candidate/0053296/venv/bin/python\n    module: /private/tmp/344-e7-candidate/0053296/venv/lib/python3.13/site-packages/graphtraj/interfaces/mcp.py\n    sha256: f66911c482a470798fa65c2986f2e1966a03d26c68d6bd668a1cf395787d09f9\n    configuration_sha256: 113292db5dd97d2c8b3ef3007f221db67cbd0ff303304d8795ae1876a16b8e71\n"
+        }
+      ],
+      "structuredContent": {
+        "features": [
+          {
+            "feature": "swarm",
+            "description": "Activate the roles this swarm input selects and return each Agent's alias, so later calls query, steer and continue it by that alias rather than by another launch input. Equivalent to `agent-runner --swarm-input`."
+          }
+        ],
+        "describe": {
+          "action": "describe",
+          "feature": "<feature>"
+        },
+        "service": {
+          "host": {
+            "executable": "/Users/luoxiao/workspace/you-are-a-product-architect-delivery/.venv-runtime/bin/python",
+            "module": "/Users/luoxiao/workspace/you-are-a-product-architect-delivery/.venv-runtime/lib/python3.13/site-packages/graphtraj/interfaces/hosted_cli.py",
+            "sha256": "b722419f3f5042a58863e4308bac9e13a9304e1397f8872a4fa9fb0a6de3ce12",
+            "configuration_sha256": "113292db5dd97d2c8b3ef3007f221db67cbd0ff303304d8795ae1876a16b8e71"
+          },
+          "mcp": {
+            "executable": "/private/tmp/344-e7-candidate/0053296/venv/bin/python",
+            "module": "/private/tmp/344-e7-candidate/0053296/venv/lib/python3.13/site-packages/graphtraj/interfaces/mcp.py",
+            "sha256": "f66911c482a470798fa65c2986f2e1966a03d26c68d6bd668a1cf395787d09f9",
+            "configuration_sha256": "113292db5dd97d2c8b3ef3007f221db67cbd0ff303304d8795ae1876a16b8e71"
+          }
+        }
+      },
+      "isError": false
+    }
+  }
+}

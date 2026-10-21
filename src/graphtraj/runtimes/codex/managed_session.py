@@ -71,7 +71,7 @@ def _approval_history_text(value: object) -> object:
 
 
 def refresh_approval_route(request: dict, session_directory: Path) -> None:
-    """Reload only approval routing for the mapped role, preserving work settings."""
+    """Reload approval and scoped socket access, preserving captured work settings."""
     config = request.get('session_parameters', {}).get('config', {})
     root = os.environ.get('GRAPHTRAJ_HARNESS_ROOT')
     if not root:
@@ -87,6 +87,9 @@ def refresh_approval_route(request: dict, session_directory: Path) -> None:
         # Approval can change without resolving a new work connection. Removing
         # a catalog entry must not invalidate a captured Session.
         settings = roles.presets[roles.resolve(mapping.get('role_reference') or mapping['role'])]
+    from graphtraj.runtimes.codex.codex_adapter import apply_unix_socket_access
+
+    apply_unix_socket_access(request, (settings.codex or {}).get('unix_sockets'))
     defaults = (
         load_project_configuration(harness_root).codex
         if configuration_exists(harness_root) else None
@@ -142,6 +145,10 @@ class CodexManagedExecution:
         self.approval = request.get("approval")
         self.approval_items: dict[str, dict] = {}
         self.command = (request['arguments'][0], 'app-server', '--listen', 'stdio://')
+        if request['session_parameters']['config'].get('features', {}).get('network_proxy'):
+            # The owning service must enable the proxy before creating or
+            # resuming the thread that selects its scoped socket permissions.
+            self.command += ('-c', 'features.network_proxy=true')
         self.prompt = prompt
         self.directory = session_directory
         self.trace_file = trace_file

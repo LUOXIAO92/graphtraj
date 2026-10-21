@@ -545,23 +545,18 @@ def _run_registered_children(
     directory = project.runner_directory / "sessions" / alias
     registration = directory / "child-registration.yml"
     while True:
-        # Serialize consumption, not the children's lifetimes: a later parent
-        # execution may register another Batch while these children still run.
-        with (directory / "children.lock").open("a+b") as driver:
-            try:
-                file_lock.flock(driver, file_lock.LOCK_EX | file_lock.LOCK_NB)
-            except BlockingIOError:
-                return
-            with (directory / "launch.yml").open("rb") as lock:
-                file_lock.flock(lock, file_lock.LOCK_EX)
-                with execution_start_lock(project.runner_directory):
-                    mapping, _ = read_alias_mapping(project.runner_directory, alias)
-                    if (_registered_execution(registration) != mapping["execution_id"]
-                            or not (directory / "execution.yml").is_file()
-                            or read_terminal_outcome(directory / "execution.yml") != "completed"):
-                        return
-                    require_execution_allowed(project.runner_directory, alias, mapping)
-                    batch, retained = _registered_batch(registration, Path(mapping["worktree_path"]))
+        # Existing input and startup locks serialize registration consumption
+        # with sends, registration and stops; children need no lifetime lock.
+        with (directory / "launch.yml").open("rb") as lock:
+            file_lock.flock(lock, file_lock.LOCK_EX)
+            with execution_start_lock(project.runner_directory):
+                mapping, _ = read_alias_mapping(project.runner_directory, alias)
+                if (_registered_execution(registration) != mapping["execution_id"]
+                        or not (directory / "execution.yml").is_file()
+                        or read_terminal_outcome(directory / "execution.yml") != "completed"):
+                    return
+                require_execution_allowed(project.runner_directory, alias, mapping)
+                batch, retained = _registered_batch(registration, Path(mapping["worktree_path"]))
         children = _run_batch_workers(project, batch, retained, alias, capacity_fd)
         _send_session(
             alias, "Direct child execution results:\n" + yaml.safe_dump(children.document, allow_unicode=True),
@@ -638,21 +633,14 @@ def _withdraw_ended_registration(registration: Path, execution_id: str) -> None:
 
 
 def withdraw_pending_children(directory: Path) -> None:
-    """Withdraw a stopped Session's unstarted child Batch.
+    """Withdraw a stopped Session's unstarted Batch under the caller's startup lock.
 
-    The children lock protects consumption only. Already consumed Batches
+    Registration and consumption take the same lock. Already consumed Batches
     observe the stop through their parent before starting further work.
     """
     registration = directory / "child-registration.yml"
-    if not registration.is_file():
-        return
-    with (directory / "children.lock").open("a+b") as driver:
-        try:
-            file_lock.flock(driver, file_lock.LOCK_EX | file_lock.LOCK_NB)
-        except BlockingIOError:
-            return
-        if registration.is_file():
-            withdraw_child_registration(registration, "The Session was interrupted before it started.")
+    if registration.is_file():
+        withdraw_child_registration(registration, "The Session was interrupted before it started.")
 
 
 def withdraw_child_registration(registration: Path, reason: str) -> None:

@@ -240,7 +240,8 @@ class ClaudeExecution:
                 if item[0] == 'bind':
                     self.collector.bind(item[1], item[2])
                 else:
-                    self.collector.accept(item[1], item[2], defer=not self.collection.empty())
+                    self.collector.accept(item[1], item[2],
+                                          **({'defer': not self.collection.empty()} if self.independent else {}))
             except Exception as error:
                 self.collection_failure = error
 
@@ -806,10 +807,14 @@ class ClaudeExecution:
                             event = self.events.get_nowait()
                             source_position += 1
                             if event.get('type') != 'eof':
-                                collector.accept(event, source_position, defer=not self.events.empty())
+                                collector.accept(event, source_position,
+                                                 **({'defer': not self.events.empty()} if self.independent else {}))
                         collector.close()
                     else:
-                        collector.flush()
+                        if self.independent:
+                            collector.flush()
+                        elif collector.writer:
+                            collector.writer.checkpoint()
                 except Exception as error:
                     failure = RuntimeAdapterError('RUNTIME_ARCHIVE_FAILED', str(error))
                 self.diagnostics['collection'] = ('failed' if self.collection_failure is not None

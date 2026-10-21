@@ -376,5 +376,3 @@ def test_cli_host_returns_a_slow_read_result_instead_of_a_timeout(
                          'task', 'members', process_timeout=30)
     assert result.returncode == 0, result.stdout + result.stderr
     assert yaml.safe_load(result.stdout) == {'members': ['slow-but-answered']}
-
-

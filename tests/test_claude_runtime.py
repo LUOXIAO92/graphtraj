@@ -323,7 +323,7 @@ def test_claude_send_and_confirmed_stop(tmp_path: Path, claude_environment: None
 def test_claude_later_prompt_hook_is_answered_behind_a_collection_backlog(
         tmp_path: Path, claude_environment: None, monkeypatch: pytest.MonkeyPatch) -> None:
     """A prompt sent into a live execution is released before its native hook times out."""
-    from agent_swarm.sessions.claude import ClaudeJsonlCollector
+    from graphtraj.runtimes.claude.collection import StreamCollector as ClaudeJsonlCollector
 
     result_project(tmp_path)
     hooks = tmp_path / 'hooks.log'
@@ -362,7 +362,7 @@ def test_claude_later_prompt_hook_is_answered_behind_a_collection_backlog(
 def test_claude_later_prompt_hook_is_answered_during_one_slow_collection(
         tmp_path: Path, claude_environment: None, monkeypatch: pytest.MonkeyPatch) -> None:
     """A long Session's single archive collection does not hold a later prompt past its hook timeout."""
-    from agent_swarm.sessions.claude import ClaudeJsonlCollector
+    from graphtraj.runtimes.claude.collection import StreamCollector as ClaudeJsonlCollector
 
     result_project(tmp_path)
     hooks = tmp_path / 'hooks.log'
@@ -401,7 +401,7 @@ def test_claude_later_prompt_hook_is_answered_during_one_slow_collection(
 def test_claude_interrupt_confirms_within_its_window_behind_a_collection_backlog(
         tmp_path: Path, claude_environment: None, monkeypatch: pytest.MonkeyPatch) -> None:
     """Queued fragments share archive rewrites, so a stop is confirmed inside the operation window."""
-    from agent_swarm.sessions.archive import JsonlSessionStore
+    from graphtraj.sessions.archive import JsonlSessionStore, SessionArchive
 
     result_project(tmp_path)
     monkeypatch.setenv('CLAUDE_FIXTURE_STREAM_FRAGMENTS', '1500')
@@ -417,6 +417,8 @@ def test_claude_interrupt_confirms_within_its_window_behind_a_collection_backlog
     monkeypatch.setattr(JsonlSessionStore, 'checkpoint', durable)
     with ExitStack() as stack, ThreadPoolExecutor(max_workers=1) as pool:
         turn, ready, _ = execution(tmp_path, stack, 'wait-stream')
+        turn.configure_independent(archive=SessionArchive(tmp_path / 'archive', save_normalized_sessions=True),
+                                   agents_callback=lambda request: None)
         future = pool.submit(turn.run)
         assert ready.wait(5)
         history = tmp_path / (turn.session + '.json')
@@ -441,7 +443,7 @@ def test_claude_reports_physical_stop_before_archive_finishes(
     archive_fails: bool,
 ) -> None:
     """Native stop is confirmed independently; the occupied Worker retains archive work."""
-    from agent_swarm.sessions.claude import ClaudeJsonlCollector
+    from graphtraj.runtimes.claude.collection import StreamCollector as ClaudeJsonlCollector
     from graphtraj.interfaces import tools
     from graphtraj.execution.runner_connection import worker_connection
     from graphtraj.execution.runner_models import RunnerError

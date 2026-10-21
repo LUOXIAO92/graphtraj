@@ -7,7 +7,7 @@ continues that state instead of starting an empty one. This module keeps the
 only continuity record and the single decision point for who may control it::
 
     <runner>/main-sessions/continuity.jsonl   append-only control claims
-    <runner>/main-sessions/inbox/<key>.jsonl  notices for a pull-only Main host
+    <runner>/main-sessions/inbox/<key>.jsonl  notices for the Claude Main host
 
 A claim is a new associated record. It never rewrites a historical parent,
 a member identity, a Session binding or a native log. Runtime entries supply
@@ -29,8 +29,9 @@ from graphtraj import file_lock
 from graphtraj.execution.runner_models import RunnerError
 
 
-# A host whose Main has no native entry event (Claude's MCP host) states per
-# call whether this Session's first control may claim Main in this process.
+# Claude Code continues Main at the first control call of each host process
+# (the mod's session.start precedes the MCP owner and carries no claim). Its
+# host states per call whether this Session's first control may claim.
 _claimable: ContextVar[Callable[[], None] | None] = ContextVar('main_claimable', default=None)
 
 
@@ -86,7 +87,9 @@ def claim_main(runner: Path, connection: Mapping[str, Any], entry: str) -> dict:
         }
         with (directory / 'continuity.jsonl').open('a', encoding='utf-8') as stream:
             stream.write(json.dumps(record, sort_keys=True) + '\n')
-        return record
+    if previous is not None:
+        _transfer_notices(runner, previous, record)
+    return record
 
 
 def main_sessions(runner: Path) -> set[str]:
@@ -101,10 +104,11 @@ def main_sessions(runner: Path) -> set[str]:
     for path in _directory(runner).glob('finalize_*/session.yml'):
         try:
             binding = yaml.safe_load(path.read_text(encoding='utf-8'))
-        except (OSError, yaml.YAMLError):
-            continue
-        if isinstance(binding, dict) and isinstance(binding.get('session'), str):
             sessions.add(binding['session'])
+        except (OSError, yaml.YAMLError, TypeError, KeyError) as error:
+            # An unreadable Main binding must not hide its members or let its
+            # Session past the single-controller check.
+            raise RunnerError('authority-unavailable', f'Main binding {path} is unreadable: {error}') from error
     return sessions
 
 
@@ -121,8 +125,8 @@ def claimable(on_claim: Callable[[], None] | None) -> Iterator[None]:
 def require_control(runner: Path, connection: Mapping[str, Any] | None) -> None:
     """Refuse control from a Main Session another Main has continued.
 
-    This is the single-controller decision point (Main's proposal pending
-    user confirmation). Reads never come here. A human CLI call has no
+    This is the single-controller decision point, confirmed by the user:
+    Main is the one central dispatcher. Reads never come here. A human CLI call has no
     native connection and keeps its existing authority. Before any claim
     exists the project keeps its previous single-Main behavior.
 
@@ -152,7 +156,9 @@ def require_control(runner: Path, connection: Mapping[str, Any] | None) -> None:
         'main-continued',
         f'This Main Session ({runtime} {session}) was continued by {current["runtime"]} '
         f'Session {current["session"]} at {at}; its later control calls are refused. '
-        'Status remains readable. Resume this Session through its native entry to continue Main here.',
+        'Status remains readable. To continue Main here, re-enter it: start or resume this Session '
+        '(Codex SessionStart, Pi session_start, DSH agent/created) or, for Claude Code, use it in a new '
+        'Claude Code process; the same Claude Code process cannot take control back.',
     )
 
 
@@ -161,10 +167,13 @@ def route_notice(runner: Path, connection: Mapping[str, Any]) -> Mapping[str, An
 
     The recorded owner of a member is unchanged; only delivery follows the
     continuation. A connection that is not a Main Session is returned as is.
+    A current Main whose Runtime cannot receive host events yet (Pi, DSH)
+    keeps the existing delivery to the recorded owner, so nothing is lost.
     """
     current = current_main(runner)
     session = connection.get('session')
     if (current is None or _same(current, connection.get('runtime'), session)
+            or current['runtime'] not in RECEIVING_RUNTIMES
             or session not in main_sessions(runner)):
         return connection
     return {**current['connection'], 'runtime': current['runtime'], 'session': current['session']}
@@ -192,6 +201,10 @@ def owns_main_root(runner: Path, recorded: Mapping[str, Any], connection: Mappin
             and recorded.get('session') in main_sessions(runner))
 
 
+# Main Runtimes whose Adapter delivers host events to a continuing Main.
+RECEIVING_RUNTIMES = frozenset({'codex', 'claude'})
+
+
 def _inbox(runner: Path, runtime: str, session: str) -> Path:
     """Return one pull-only Main host's notice queue."""
     key = hashlib.sha256((runtime + ':' + session).encode()).hexdigest()
@@ -199,26 +212,61 @@ def _inbox(runner: Path, runtime: str, session: str) -> Path:
 
 
 def queue_notice(runner: Path, connection: Mapping[str, Any], event: Mapping[str, Any]) -> dict:
-    """Durably queue one notice for a Main host that has no push channel."""
+    """Durably queue one notice for the Claude Main host, under the queue lock."""
     path = _inbox(runner, connection['runtime'], connection['session'])
     path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open('a', encoding='utf-8') as stream:
-        stream.write(json.dumps({'at': time.time(), 'event': dict(event)}, sort_keys=True) + '\n')
+    with path.with_suffix('.lock').open('a+b') as lock:
+        file_lock.flock(lock, file_lock.LOCK_EX)
+        with path.open('a', encoding='utf-8') as stream:
+            stream.write(json.dumps({'at': time.time(), 'event': dict(event)}, sort_keys=True) + '\n')
+            stream.flush()
+            os.fsync(stream.fileno())
     return {'accepted': True, 'delivery': 'queued-for-main-host'}
 
 
-def take_notices(runner: Path, runtime: str, session: str) -> list[dict]:
-    """Return this Main Session's queued notices not yet returned, once each."""
+def pending_notices(runner: Path, runtime: str, session: str) -> tuple[list[dict], int]:
+    """Return this Main Session's unacknowledged notices and the position after them.
+
+    Nothing is consumed: call :func:`acknowledge_notices` with the position
+    only after the notices reached the Main.
+    """
     path = _inbox(runner, runtime, session)
     if not path.exists():
-        return []
-    cursor = path.with_suffix('.cursor')
+        return [], 0
     with path.with_suffix('.lock').open('a+b') as lock:
         file_lock.flock(lock, file_lock.LOCK_EX)
         lines = path.read_text(encoding='utf-8').splitlines()
+        cursor = path.with_suffix('.cursor')
         seen = int(cursor.read_text()) if cursor.exists() else 0
-        cursor.write_text(str(len(lines)))
-    return [json.loads(line) for line in lines[seen:] if line.strip()]
+    return [json.loads(line) for line in lines[seen:]], len(lines)
+
+
+def acknowledge_notices(runner: Path, runtime: str, session: str, position: int) -> None:
+    """Atomically record that notices before ``position`` reached the Main."""
+    path = _inbox(runner, runtime, session)
+    with path.with_suffix('.lock').open('a+b') as lock:
+        file_lock.flock(lock, file_lock.LOCK_EX)
+        cursor = path.with_suffix('.cursor')
+        if position > (int(cursor.read_text()) if cursor.exists() else 0):
+            temporary = cursor.with_suffix('.cursor-new')
+            temporary.write_text(str(position))
+            os.replace(temporary, cursor)
+
+
+def _transfer_notices(runner: Path, previous: Mapping[str, Any], current: Mapping[str, Any]) -> None:
+    """Hand the earlier Main's undelivered queued notices to the continuing Main.
+
+    The queue exists only for a Claude Main. A continuing Claude Main receives
+    them in its own queue; another Runtime keeps them in the earlier queue,
+    readable as history (see the reported gap).
+    """
+    if previous['runtime'] != 'claude' or current['runtime'] != 'claude':
+        return
+    notices, position = pending_notices(runner, previous['runtime'], previous['session'])
+    for notice in notices:
+        queue_notice(runner, current, notice['event'])
+    if notices:
+        acknowledge_notices(runner, previous['runtime'], previous['session'], position)
 
 
 class MainRoots:
@@ -242,10 +290,16 @@ class MainRoots:
         """Refuse control from a continued Main with the shared explanation."""
         from agent_swarm import AgentsError
 
+        from graphtraj.execution.runner_connection import current_parent_connection
+
         if caller.session is None:
             return
+        # Claim with the host's full connection, so notices can reach it.
+        host = current_parent_connection()
+        connection = (host if isinstance(host, Mapping) and host.get('session') == caller.session
+                      else {'runtime': caller.runtime, 'session': caller.session})
         try:
-            require_control(self.runner, {'runtime': caller.runtime, 'session': caller.session})
+            require_control(self.runner, connection)
         except RunnerError as error:
             raise AgentsError(error.code, error.message) from None
 
@@ -269,24 +323,20 @@ def require_feature_control(feature: str, cwd: Path | None) -> None:
     if feature in READ_FEATURES:
         return
     from graphtraj.execution.runner_connection import current_parent_connection
-    from graphtraj.execution.runner_status import _runtime_caller, process_caller_alias
+    from graphtraj.execution.runner_status import caller_alias
     from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError, current_host_connection
     from graphtraj.workspace.runner_project import discover_runner_directory
 
-    bound = _runtime_caller.get()
-    if bound is not None and bound[1] is not None:
-        return
     try:
         runner = discover_runner_directory(cwd or Path.cwd())
+        if caller_alias(runner) is not None:
+            return  # A member or native helper keeps its own authority.
     except RunnerError:
-        return
-    if bound is None and process_caller_alias(runner, os.getpid()) is not None:
-        return
+        return  # Identity failures stay with the feature's own authorization.
     connection = current_parent_connection()
     if not isinstance(connection, Mapping):
         try:
             connection = current_host_connection()
         except RuntimeAdapterError:
-            # Identity failures stay with the feature's own authorization.
             return
     require_control(runner, connection)

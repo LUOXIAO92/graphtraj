@@ -32,7 +32,8 @@ const host = {
 await handlers.get('session.start')(host, {}, async () => 'started');
 assert.equal(registrations[0].name, 'agents-context');
 assert.deepEqual(await handlers.get('command.run')(host), {});
-assert.ok(log.at(-1).includes('MCP agents registered'));
+assert.ok(log.includes('MCP agents registered') && log.includes('MCP tasks missing'));
+assert.ok(log.at(-1).includes('notice push unavailable'));
 const input = {action: 'execute', feature: 'send', arguments: {agent: 'agent-child', message: 'hello child\nsecond line'}};
 for (session of ['first', 'after-clear', 'resumed']) {
  for (const decision of ['allow', 'ask', 'deny']) {
@@ -85,7 +86,7 @@ const replies = log.filter(line => line.includes('│ hello parent')).length;
 await handlers.get('tool.call:mcp__agents__agents')(host, {...event, feature: 'status', arguments: {}}, async () => native);
 assert.equal(log.filter(line => line.includes('│ hello parent')).length, replies);
 // A queued member notice arrives with the next tasks result and is shown once.
-const queued = {main_notices: [{at: 1, event: {message: JSON.stringify({alias: 'leader@l1', message: 'Session execution ended'})}}]};
+const queued = {main_notices: [{at: 1, event: {source: 'graphtraj', alias: 'leader@l1', event: 'completed', message: 'Session execution ended'}}]};
 await handlers.get('tool.call:mcp__agents__tasks')(host, {tool: 'mcp__agents__tasks', ...task}, async () => ({result: [{type: 'text', text: JSON.stringify(queued)}]}));
 assert.ok(log.includes('┌ agents · leader@l1 → resumed'));
 assert.ok(log.includes('│ Session execution ended'));
@@ -93,6 +94,48 @@ let ended = false;
 await handlers.get('session.end')(host, {reason: 'clear'}, async () => {ended = true;});
 assert.equal(ended, true);
 assert.deepEqual(contexts.at(-1), {operation: 'end'});
+'''
+    result = subprocess.run(['node', '--input-type=module', '-e', program, module.as_uri()],
+                            capture_output=True, text=True, timeout=20)
+    assert result.returncode == 0, result.stderr
+
+
+def test_queued_notices_are_pushed_into_main_then_acknowledged(tmp_path: Path) -> None:
+    """With prompt submission the mod delivers pending notices and acknowledges only after it."""
+    module = tmp_path / 'host_context.mjs'
+    module.write_text(Path('src/graphtraj/runtimes/claude/host_context.mjs').read_text())
+    program = r'''
+import assert from 'node:assert/strict';
+const {register} = await import(process.argv[1]);
+const handlers = new Map();
+register((name, matcher, fn) => {handlers.set(fn && matcher.tool ? `${name}:${matcher.tool}` : name, fn ?? matcher); return {catch() {}};});
+const operations = [], submitted = [], timers = [];
+let fail = true;
+const pending = {notices: [{at: 1, event: {source: 'graphtraj', alias: 'leader@l1', event: 'completed', message: 'done'}}], position: 1};
+const host = {
+ session: {id: async () => 'main-session', cwd: async () => '/p'},
+ command: {register: async () => {}},
+ env: {get: async key => key.endsWith('PYTHON') ? '/venv/python' : '/host/config'},
+ process: {run: async (argv, options) => {
+   const document = JSON.parse(options.stdin);
+   operations.push(document);
+   const reply = document.operation === 'notices' ? pending : {acknowledged: true};
+   return {exitCode: 0, stdout: JSON.stringify(reply), stderr: ''};
+ }},
+ prompt: {submit: async text => { if (fail) throw new Error('busy'); submitted.push(text); }},
+ clock: {setTimeout: (fn) => timers.push(fn)},
+ ui: {log: () => {}},
+};
+await handlers.get('session.start')(host, {}, async () => 'started');
+await timers.shift()();
+assert.equal(submitted.length, 0);
+assert.ok(!operations.some(item => item.operation === 'acknowledge'));
+fail = false;
+await timers.shift()();
+assert.equal(submitted.length, 1);
+assert.ok(submitted[0].includes('leader@l1') && submitted[0].includes('done'));
+assert.deepEqual(operations.at(-1), {operation: 'acknowledge', session: 'main-session', position: 1});
+assert.equal(timers.length, 1);
 '''
     result = subprocess.run(['node', '--input-type=module', '-e', program, module.as_uri()],
                             capture_output=True, text=True, timeout=20)

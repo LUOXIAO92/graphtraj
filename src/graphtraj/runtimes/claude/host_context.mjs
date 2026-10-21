@@ -8,13 +8,20 @@ function noticeFrames(session, document, frame) {
   // Member events queued for this Main arrive with its next agents/tasks result.
   const frames = [];
   for (const notice of Array.isArray(document.main_notices) ? document.main_notices : []) {
-    let body = notice.event;
-    try { body = JSON.parse(notice.event?.message ?? 'null') ?? body; } catch {}
+    const body = notice.event;
     const sender = typeof body?.alias === 'string' ? body.alias : 'graphtraj';
     const text = typeof body?.message === 'string' ? body.message : JSON.stringify(notice.event);
     frames.push(frame(sender, session, text));
   }
   return frames;
+}
+
+function noticePrompt(notices) {
+  // One plain-text Main input; the full structured notices stay in the queue history.
+  return notices.map((notice) => {
+    const body = notice.event ?? {};
+    return `[GraphTraj notice from ${body.alias ?? 'graphtraj'} · ${body.event ?? 'event'}]\n${body.message ?? JSON.stringify(body)}`;
+  }).join('\n\n');
 }
 
 function exchangeFrames(session, event, result, seen) {
@@ -59,9 +66,38 @@ async function context($, document) {
 export function register(on) {
   const displayed = new Set();
   let busy = false;
+  let pushing = false;
+
+  // Deliver member events into the Main's turn or its idle Session through
+  // Claude's own prompt submission; acknowledge only after it was accepted.
+  // Without that host capability the notices stay queued for the next result.
+  function startPush($) {
+    if (pushing || typeof $.prompt?.submit !== 'function') return false;
+    pushing = true;
+    const later = (fn) => (typeof $.clock?.setTimeout === 'function' ? $.clock.setTimeout(fn, 5000) : setTimeout(fn, 5000));
+    const tick = async () => {
+      try {
+        if (!busy) {
+          const session = await $.session.id();
+          const pending = await context($, {operation: 'notices', session});
+          if (pending.notices?.length) {
+            await $.prompt.submit(noticePrompt(pending.notices));
+            await context($, {operation: 'acknowledge', session, position: pending.position});
+          }
+        }
+      } catch (error) {
+        // The MCP owner may not be running yet; queued notices are kept.
+      }
+      later(tick);
+    };
+    later(tick);
+    return true;
+  }
+
   on('session.start', async ($, event, next) => {
     await $.command.register({name: 'agents-context',
       description: 'Show current native Session and agents registration without a model turn', immediate: true});
+    startPush($);
     return next(event);
   });
 
@@ -69,8 +105,12 @@ export function register(on) {
     const session = await $.session.id();
     const tools = await $.tool.list();
     await $.ui.log(`agents · current Session ${session}`);
-    await $.ui.log(tools.some((tool) => tool.name === 'mcp__agents__agents')
-      ? 'MCP agents registered' : 'MCP agents missing');
+    for (const name of ['agents', 'tasks']) {
+      await $.ui.log(tools.some((tool) => tool.name === `mcp__agents__${name}`)
+        ? `MCP ${name} registered` : `MCP ${name} missing`);
+    }
+    await $.ui.log(typeof $.prompt?.submit === 'function'
+      ? 'notice push: prompt submission available' : 'notice push unavailable; notices arrive with the next result');
     return {};
   });
 

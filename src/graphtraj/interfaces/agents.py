@@ -107,6 +107,10 @@ class GraphTrajAgents:
         agent = arguments.get("agent")
         try:
             member = self._member_alias(agent)
+            core = member is None and (action == "create" or (agent or "").startswith(AGENT_PREFIX))
+            if not core and action not in {"status", "wait"} and binding.caller.agent is None:
+                # A continued Main controls no Task member either.
+                self.control.roots.require_control(binding.caller)
             if member is not None:
                 # A Task member's core reference uses its existing Session controls.
                 outcome = self._operate(action, {**arguments, "agent": member})

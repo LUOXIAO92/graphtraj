@@ -249,17 +249,17 @@ def _current_main_address(runner_directory: Path, address: str | dict) -> str | 
     return dict(route_notice(runner_directory, address)) if isinstance(address, dict) else address
 
 
-def receipt_is_display_only(mapping: Mapping[str, Any], runner_directory: Path | None = None) -> bool:
+def receipt_is_display_only(mapping: Mapping[str, Any], runner_directory: Path) -> bool:
     """Whether an ordinary receipt to this Session's parent can be kept unsent.
 
     A Runner member parent sees it in the records and a Codex Main host shows
-    it at its next hook. Other hosts keep their current delivery. With
-    ``runner_directory`` a root's receipt follows the Main now continuing it.
+    it at its next hook. Other hosts keep their current delivery. A root's
+    receipt follows the Main now continuing it (``runner_directory``).
     """
     if isinstance(mapping.get("parent"), str):
         return True
     connection = mapping.get("parent_connection")
-    if isinstance(connection, Mapping) and runner_directory is not None:
+    if isinstance(connection, Mapping):
         connection = _current_main_address(runner_directory, dict(connection))
     return isinstance(connection, Mapping) and connection.get("runtime") == "codex"
 

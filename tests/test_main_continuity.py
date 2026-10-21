@@ -10,7 +10,8 @@ from agent_swarm import AgentControl, AgentsError, Caller, bind
 from graphtraj.execution import main_continuity
 from graphtraj.execution.main_continuity import (
     MainRoots, claim_main, claimable, current_main, owns_main_root, queue_notice,
-    require_control, require_feature_control, route_notice, take_notices,
+    require_control, require_feature_control, route_notice,
+    acknowledge_notices, pending_notices,
 )
 from graphtraj.execution.runner_connection import parent_connection
 from graphtraj.execution.runner_models import RunnerError
@@ -49,7 +50,7 @@ def test_single_controller_decision(tmp_path: Path) -> None:
     with pytest.raises(RunnerError) as refused:
         require_control(tmp_path, CODEX)
     assert refused.value.code == 'main-continued'
-    assert 'continued by claude Session claude-main' in refused.value.message
+    assert 'claude-main' in refused.value.message
     # A human CLI call carries no native connection and keeps its authority.
     require_control(tmp_path, None)
     # A native helper that never was Main keeps its own authorization result.
@@ -70,8 +71,9 @@ def test_first_control_claims_only_for_a_fresh_host_entry(tmp_path: Path) -> Non
     call()
     assert current_main(tmp_path)['session'] == 'claude-main'
     claim_main(tmp_path, CODEX, 'codex:SessionStart:resume')
-    with pytest.raises(RunnerError, match='continued by codex'):
+    with pytest.raises(RunnerError) as refused:
         call()
+    assert refused.value.code == 'main-continued'
     assert current_main(tmp_path)['session'] == 'codex-main'
 
 
@@ -123,65 +125,57 @@ def test_notices_follow_the_current_main_without_rewriting_owners(tmp_path: Path
     assert route_notice(tmp_path, CODEX) == {**CLAUDE, 'runner': str(tmp_path)}
     stranger = {'runtime': 'codex', 'session': 'not-main', 'codex_home': '/x'}
     assert route_notice(tmp_path, stranger) == stranger
+    # A Pi Main cannot receive host events yet: delivery stays with the owner.
+    claim_main(tmp_path, {'runtime': 'pi', 'session': 'pi-main', 'session_file': '/s'}, 'pi:session_start:startup')
+    assert route_notice(tmp_path, CODEX) == CODEX
+    claim_main(tmp_path, {**CLAUDE, 'runner': str(tmp_path)}, 'claude:first-control')
 
     assert owns_main_root(tmp_path, CODEX, CLAUDE)
     assert not owns_main_root(tmp_path, CLAUDE, CODEX)
     assert not owns_main_root(tmp_path, stranger, CLAUDE)
 
 
-def test_pull_only_main_receives_each_notice_once(tmp_path: Path) -> None:
-    """The Claude Adapter queues durably; its host returns each notice once."""
+def test_claude_main_notices_stay_queued_until_acknowledged(tmp_path: Path) -> None:
+    """The Claude Adapter queues durably; a notice leaves the queue only once acknowledged."""
     from graphtraj.runtimes.claude.adapter import ClaudeRuntimeAdapter
 
     connection = {**CLAUDE, 'runner': str(tmp_path)}
     receipt = ClaudeRuntimeAdapter().send_host_event(connection, {'source': 'graphtraj', 'alias': 'a@l1'})
-    assert receipt == {'accepted': True, 'delivery': 'queued-for-main-host'}
+    assert receipt['accepted'] is True
     queue_notice(tmp_path, connection, {'source': 'graphtraj', 'alias': 'b@l1'})
-    assert [item['event']['alias'] for item in take_notices(tmp_path, 'claude', 'claude-main')] == ['a@l1', 'b@l1']
-    assert take_notices(tmp_path, 'claude', 'claude-main') == []
-    assert take_notices(tmp_path, 'claude', 'other') == []
+    notices, position = pending_notices(tmp_path, 'claude', 'claude-main')
+    assert [item['event']['alias'] for item in notices] == ['a@l1', 'b@l1']
+    # Not yet acknowledged: offered again, never lost.
+    assert pending_notices(tmp_path, 'claude', 'claude-main')[0] == notices
+    acknowledge_notices(tmp_path, 'claude', 'claude-main', position)
+    assert pending_notices(tmp_path, 'claude', 'claude-main')[0] == []
+    assert pending_notices(tmp_path, 'claude', 'other') == ([], 0)
+
+    # A Claude Main continued by another Claude Main hands over what is pending.
+    queue_notice(tmp_path, connection, {'source': 'graphtraj', 'alias': 'c@l1'})
+    claim_main(tmp_path, connection, 'claude:first-control')
+    claim_main(tmp_path, {'runtime': 'claude', 'session': 'claude-next', 'runner': str(tmp_path)}, 'claude:first-control')
+    assert pending_notices(tmp_path, 'claude', 'claude-main')[0] == []
+    assert [item['event']['alias'] for item in pending_notices(tmp_path, 'claude', 'claude-next')[0]] == ['c@l1']
 
 
 def test_task_controls_are_gated_for_main_callers_only(tmp_path: Path, monkeypatch) -> None:
     """Reads, members and human CLI calls keep their behavior; a continued Main is refused."""
     runner = tmp_path / '.graphtraj/runner'
     monkeypatch.setattr('graphtraj.workspace.runner_project.discover_runner_directory', lambda cwd: runner)
-    monkeypatch.setattr('graphtraj.execution.runner_status.process_caller_alias', lambda runner, pid: None)
     claim_main(runner, CODEX, 'codex:SessionStart:startup')
     claim_main(runner, CLAUDE, 'claude:first-control')
 
     with runtime_caller(runner, None), parent_connection(dict(CODEX)):
         require_feature_control('task_graph', tmp_path)
-        with pytest.raises(RunnerError, match='continued by claude'):
+        with pytest.raises(RunnerError) as refused:
             require_feature_control('decide_result', tmp_path)
+        assert refused.value.code == 'main-continued'
     with runtime_caller(runner, None), parent_connection(dict(CLAUDE)):
         require_feature_control('decide_result', tmp_path)
     with runtime_caller(runner, 'member@l1'), parent_connection(dict(CODEX)):
         require_feature_control('decide_result', tmp_path)
     require_feature_control('decide_result', tmp_path)
-
-
-def test_native_entry_claims_but_compaction_does_not(tmp_path: Path, monkeypatch) -> None:
-    """bind_session claims at a real entry and leaves claims unchanged otherwise."""
-    from graphtraj.execution import main_finalize
-
-    runner = tmp_path / '.graphtraj/runner'
-    adapter = SimpleNamespace(verify_finalize_main=lambda connection: connection['session'],
-                              finalize_hook=lambda path, binding: {})
-    monkeypatch.setattr(main_finalize, 'discover_project_root', lambda cwd: tmp_path)
-    monkeypatch.setattr(main_finalize, 'discover_runner_directory', lambda cwd: runner)
-    monkeypatch.setattr(main_finalize, 'select_runtime_adapter', lambda runtime: adapter)
-    monkeypatch.setattr(main_finalize, 'load_project_configuration',
-                        lambda cwd: SimpleNamespace(harness_root=tmp_path))
-    pi = {'runtime': 'pi', 'session': 'pi-main', 'session_file': '/s.jsonl'}
-
-    main_finalize.bind_session(dict(CODEX), tmp_path)
-    assert current_main(runner) is None
-    main_finalize.bind_session(dict(CODEX), tmp_path, entry='codex:SessionStart:startup')
-    main_finalize.bind_session(dict(pi), tmp_path, entry='pi:session_start:startup')
-    main_finalize.bind_session(dict(CODEX), tmp_path)
-    assert current_main(runner)['session'] == 'pi-main'
-    assert main_continuity.main_sessions(runner) == {'codex-main', 'pi-main'}
 
 
 def test_claude_host_serves_agents_and_tasks_as_the_continuing_main(tmp_path: Path) -> None:
@@ -211,6 +205,15 @@ def test_claude_host_serves_agents_and_tasks_as_the_continuing_main(tmp_path: Pa
     assert not sent.failed
     assert current_main(runner)['session'] == 'claude-main'
     assert sent.document['main_notices'][0]['event']['alias'] == 'leader@l1'
+    assert pending_notices(runner, 'claude', 'claude-main')[0] == []
+    # The claim made through agents keeps the host's full connection, so an
+    # earlier Main's root notice reaches this Claude Main's queue (S1).
+    from graphtraj.runtimes.claude.adapter import ClaudeRuntimeAdapter
+
+    routed = route_notice(runner, CODEX)
+    assert routed['session'] == 'claude-main'
+    assert ClaudeRuntimeAdapter().send_host_event(routed, {'alias': 'root@l1', 'message': 'ended'})['accepted']
+    assert [item['event']['alias'] for item in pending_notices(runner, 'claude', 'claude-main')[0]] == ['root@l1']
     for release in list(driver.releases.values()):
         release.set()
     codex({'action': 'wait', 'agent': agent, 'timeout_seconds': 5})

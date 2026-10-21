@@ -36,6 +36,7 @@ def display(event: dict, state_directory: Path) -> dict:
 
 def _receipt_facts(event: dict, session: str) -> list[tuple[str, str, str, str]]:
     """Read retained ordinary receipts addressed to this Codex Session's host."""
+    from graphtraj.execution.main_continuity import owns_main_root
     from graphtraj.execution.runner_models import RunnerError
     from graphtraj.workspace.runner_project import discover_runner_directory
 
@@ -61,8 +62,10 @@ def _receipt_facts(event: dict, session: str) -> list[tuple[str, str, str, str]]
             except (ValueError, KeyError, TypeError):
                 continue
             connection = record.get('parent_connection')
+            # A continuing Main also shows receipts retained for an earlier Main.
             if (record.get('delivery') != 'retained' or not isinstance(connection, dict)
-                    or connection.get('session') != session):
+                    or (connection.get('session') != session
+                        and not owns_main_root(runner, connection, {'runtime': 'codex', 'session': session}))):
                 continue
             identity = record.get('identity', {})
             facts.append((f"receipt:{notice.get('alias')}:{identity.get('execution_id')}",

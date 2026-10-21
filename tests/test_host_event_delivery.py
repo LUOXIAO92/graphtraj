@@ -113,7 +113,7 @@ async def main():
             """Await fixture synchronization, never poll child reports for an event."""
             deadline=loop.time()+30
             while not predicate():
-                assert loop.time()<deadline, actions
+                assert loop.time()<deadline, (actions, adapter.stderr_tail)
                 await asyncio.sleep(.02)
 
         alias = None

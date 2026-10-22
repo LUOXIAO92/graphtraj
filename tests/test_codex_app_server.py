@@ -153,9 +153,9 @@ def test_terminal_trace_link_failure_keeps_confirmed_execution_status(
 ) -> None:
     """A post-terminal Trace failure keeps the native execution confirmation."""
 
-    from graphtraj.runtimes.codex import codex_adapter
+    from agent_swarm.codex import trace
 
-    original_link = codex_adapter._link_native_trace
+    original_link = trace._link_native_trace
     failing = False
 
     def link_or_fail(trace_file: Path, rollout: Path) -> None:
@@ -163,7 +163,7 @@ def test_terminal_trace_link_failure_keeps_confirmed_execution_status(
             raise OSError(errno.ENOSPC, 'No space left on device')
         original_link(trace_file, rollout)
 
-    monkeypatch.setattr(codex_adapter, '_link_native_trace', link_or_fail)
+    monkeypatch.setattr(trace, '_link_native_trace', link_or_fail)
 
     async def exercise() -> None:
         nonlocal failing

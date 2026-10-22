@@ -13,7 +13,7 @@ dependencies = [
 ]
 
 [tool.setuptools]
-packages = ["agent_swarm", "agent_swarm.dsh"]
+packages = ["agent_swarm", "agent_swarm.dsh", "agent_swarm.codex"]
 package-dir = {agent_swarm = "."}
 
 [tool.setuptools.package-data]

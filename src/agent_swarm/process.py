@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import ctypes
+import os
 from pathlib import Path
 import sys
 import subprocess
@@ -118,3 +119,21 @@ def authenticate_process(process: subprocess.Popen | None, caller_pid: int) -> N
 
     if process is None or process.poll() is not None or process.pid not in process_ancestors(caller_pid):
         raise AgentsError('authority-denied', 'The request is not owned by this live native process.')
+
+
+def process_executable(pid: int) -> Path | None:
+    """Read the kernel's executable path for a live process, without argv aliases."""
+    if sys.platform.startswith("linux"):
+        try:
+            return Path(os.readlink(f"/proc/{pid}/exe"))
+        except OSError:
+            return None
+    if sys.platform == "darwin":
+        library = _libproc()
+        if library is not None:
+            buffer = ctypes.create_string_buffer(4096)
+            library.proc_pidpath.argtypes = [ctypes.c_int, ctypes.c_void_p, ctypes.c_uint32]
+            library.proc_pidpath.restype = ctypes.c_int
+            if library.proc_pidpath(pid, buffer, len(buffer)) > 0:
+                return Path(os.fsdecode(buffer.value))
+    return None

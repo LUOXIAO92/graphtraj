@@ -367,3 +367,32 @@ validate and select a project directly. Without it, the saved selection is used.
 - [Recovery](manuals/task-delivery/references/recovery.md): interruptions, failures and continuation.
 - [Research](manuals/research/guide.md) and [concept clarification](manuals/concept-clarification/guide.md): optional methods for your project.
 - [Coding Skill examples](examples/coding-skills/README.md): optional development methods, separate from the Runtime installation.
+
+### Independent Claude Code control
+
+The `agent-swarm` wheel includes `agent_swarm.claude.ClaudeDriver` and the
+native Claude host. No GraphTraj project, Git repository or Task is required.
+For a new isolated working directory, use the dedicated environment containing
+only `agent-swarm` and its dependencies:
+
+```sh
+python -m agent_swarm.claude.host configuration --project /absolute/working-directory \
+  --claude /absolute/path/to/claude --write
+```
+
+Start Claude Code normally in that directory and approve its ordinary project,
+plugin and MCP trust prompts. The existing native mod supplies the current
+Session identity for every `agents` MCP call; model arguments cannot choose it.
+The host exposes progressive `discover`, `describe`, and `execute` requests.
+`/agents-context` shows native binding and notice delivery. GraphTraj users
+continue to use the GraphTraj host, which also exposes `tasks`.
+
+The generated `.agents-control/claude-host.json` retains the native executable,
+working directory and explicit child `settings`. Child permissions default to
+Claude's native `auto` review; sandboxing and native permission replies remain
+in force. Optional settings include `model`, `reasoning_effort`, `runtime_home`,
+`instructions`, `read_paths`, `worktree_access`, `permission_mode`, `base_url`
+and `api_key_env` (an environment variable name, never its value). Existing
+login and trust are not copied. Session continuation uses the original child's
+captured settings. Normalized archiving is off by default; GraphTraj supplies
+its existing optional collector separately.

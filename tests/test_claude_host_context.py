@@ -6,7 +6,7 @@ import subprocess
 def test_native_context_is_per_call_and_permissions_are_unchanged(tmp_path: Path) -> None:
     """Current host facts bind each MCP call; rendering never adds model input."""
     module = tmp_path / 'host_context.mjs'
-    module.write_text(Path('src/graphtraj/runtimes/claude/host_context.mjs').read_text())
+    module.write_text(Path('src/agent_swarm/claude/host_context.mjs').read_text())
     program = r'''
 import assert from 'node:assert/strict';
 const {register} = await import(process.argv[1]);
@@ -23,7 +23,7 @@ const host = {
  tool: {list: async () => [{name: 'mcp__agents__agents'}]},
  env: {get: async key => key.endsWith('PYTHON') ? '/venv/python' : '/host/config'},
  process: {run: async (argv, options) => {
-   assert.deepEqual(argv, ['/venv/python', '-m', 'graphtraj.runtimes.claude.host', 'context', '--config', '/host/config']);
+   assert.deepEqual(argv, ['/venv/python', '-m', 'agent_swarm.claude.host', 'context', '--config', '/host/config']);
    contexts.push(JSON.parse(options.stdin));
    return {exitCode: fail ? 1 : 0, stdout: '{}', stderr: fail ? 'native owner unavailable' : ''};
  }},
@@ -104,7 +104,7 @@ assert.deepEqual(contexts.at(-1), {operation: 'end'});
 def test_queued_notices_are_pushed_into_main_then_acknowledged(tmp_path: Path) -> None:
     """With prompt submission the mod delivers pending notices and acknowledges only after it."""
     module = tmp_path / 'host_context.mjs'
-    module.write_text(Path('src/graphtraj/runtimes/claude/host_context.mjs').read_text())
+    module.write_text(Path('src/agent_swarm/claude/host_context.mjs').read_text())
     program = r'''
 import assert from 'node:assert/strict';
 const {register} = await import(process.argv[1]);

@@ -62,7 +62,7 @@ def test_wheels_have_separate_owners(built_wheel: Path) -> None:
     assert 'agent_swarm/dsh/client.mjs' in agents
     assert 'agent_swarm/dsh/communication.mjs' in agents
     assert 'agent_swarm/dsh/package.json' in agents
-    assert 'graphtraj/runtimes/claude/host_context.mjs' in graphtraj
+    assert 'agent_swarm/claude/host_context.mjs' in agents
 
 
 def test_combined_native_values_and_adapters(installed_commands: InstalledCommands) -> None:

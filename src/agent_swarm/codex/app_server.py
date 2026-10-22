@@ -954,12 +954,13 @@ class CodexAppServer:
         self._fork_archives[session.thread_id] = archive
 
     async def retain_ordered_history(
-        self, session: CodexSession, collector: Any,
+        self, session: CodexSession, create_collector: Callable[[], Any],
     ) -> None:
         """Capture the owned child's inheritance cut before its first model call."""
         self._require_session(session)
         if session.thread_id in self._ordered_archives:
             raise CodexAdapterError('RUNTIME_LIFECYCLE_INVALID', 'History is already retained.')
+        collector = create_collector()
         self._ordered_archives[session.thread_id] = collector
         await collector.collect()
 

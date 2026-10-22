@@ -344,8 +344,9 @@ class CodexAppServer(NativeCodexAppServer):
         """Construct the existing collector without making native control import it."""
         from graphtraj.runtimes.codex.history_archive import CodexHistoryArchive
 
-        collector = CodexHistoryArchive(archive, agent, session.inherited_history, self._call)
-        await super().retain_ordered_history(session, collector)
+        await super().retain_ordered_history(
+            session, lambda: CodexHistoryArchive(archive, agent, session.inherited_history, self._call),
+        )
 
     async def refresh_mcp(self, thread_id: str, server: str, *, observe_only: bool = False) -> dict[str, Any]:
         """Request native MCP refresh and observe one loaded thread without resuming it.

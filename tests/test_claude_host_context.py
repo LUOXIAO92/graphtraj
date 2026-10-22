@@ -123,7 +123,12 @@ const host = {
    const reply = document.operation === 'notices' ? pending : {acknowledged: true};
    return {exitCode: 0, stdout: JSON.stringify(reply), stderr: ''};
  }},
- prompt: {submit: async text => { if (fail) throw new Error('busy'); submitted.push(text); }},
+ prompt: {submit: async input => {
+   if (fail) { const error = new Error('takes { text } (a string)'); error.name = 'HooksError'; throw error; }
+   assert.deepEqual(Object.keys(input), ['text']);
+   assert.equal(typeof input.text, 'string');
+   submitted.push(input.text);
+ }},
  clock: {setTimeout: (fn) => timers.push(fn)},
  ui: {log: () => {}},
 };

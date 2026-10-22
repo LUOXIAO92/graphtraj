@@ -249,6 +249,7 @@ class PiExecution:
         ):
             if request.get(field):
                 policy['network'][native_field] = request[field]
+        _require_read_denials(policy['filesystem'])
         # Grants are native filesystem rules, never a command/path-filter hook.
         policy_file = self.directory / 'pi-policy.json'
         policy_file.write_text(json.dumps(policy), encoding='utf-8')
@@ -678,3 +679,23 @@ def _write_yaml(path: Path, document: dict) -> None:
     except BaseException:
         Path(temporary).unlink(missing_ok=True)
         raise
+
+
+def _require_read_denials(filesystem: dict) -> None:
+    """Refuse a launch whose read grants would void an existing protected path.
+
+    srt lets allowRead override denyRead, so a denied path inside a readable
+    directory (for example ``<root>/.graphtraj`` in a worktree that is the
+    project root) cannot be expressed. A protected path that does not exist
+    has no contents to expose.
+    """
+    for denied in filesystem['denyRead']:
+        protected = Path(denied).resolve()
+        if not protected.exists():
+            continue
+        for allowed in filesystem['allowRead']:
+            if protected.is_relative_to(Path(allowed).resolve()):
+                raise RuntimeAdapterError(
+                    'ROLE_CONFIG_UNSUPPORTED',
+                    f'Pi cannot deny reading {protected} inside the readable {allowed}; '
+                    'use a worktree or data root that does not contain it.')

@@ -314,7 +314,8 @@ def test_real_claude_auto_and_native_denial(project: Path, monkeypatch: pytest.M
     if not os.environ.get('CLAUDE_REAL_AUTO_DEFAULT'):
         document['roles']['claude']['claude'] = {'permission_mode': 'auto'}
     roles.write_text(yaml.safe_dump(document))
-    denied = project / '.graphtraj/state/task332-denied.txt'
+    # Members may read .graphtraj/state since b3a6071; the control directory stays denied.
+    denied = project / '.graphtraj/cli/task332-denied.txt'
     denied.parent.mkdir(parents=True, exist_ok=True)
     denied.write_text('TASK332-SYNTHETIC-NO-SECRET')
     assert denied.is_file() and denied.read_text() == 'TASK332-SYNTHETIC-NO-SECRET'

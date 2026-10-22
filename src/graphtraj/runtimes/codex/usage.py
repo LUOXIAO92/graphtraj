@@ -335,8 +335,26 @@ class CodexCheckUsage:
             parts = [response.get(field) for response in responses]
             if all(type(value) is int and value >= 0 for value in parts):
                 values[field] = sum(parts)
+                if field == 'input_tokens':
+                    values['largest_request_input_tokens'] = max(parts)
         return CheckUsage(**values, model_requests=len(responses),
                           tool_calls=len(self.native_calls.get(turn, set())))
+
+    def _requests(self, turn: str, input_tokens: int | None) -> dict:
+        """Return request facts when public updates account for the whole input.
+
+        Each accepted update carries one model request's own ``last`` usage.
+        They count as the check's requests only without attribution errors or
+        an unreported item, and when their inputs sum exactly to the measured
+        input, so no request is missing or counted twice.
+        """
+        update = self.updates.get(turn, {})
+        parts  = [usage.get('input_tokens') for usage in update.get('usage', [])]
+        if (not parts or update.get('pending') or update.get('attribution_errors')
+                or not all(type(value) is int and value >= 0 for value in parts)
+                or sum(parts) != input_tokens):
+            return {}
+        return {'model_requests': len(parts), 'largest_request_input_tokens': max(parts)}
 
     def finish(self, turn: str) -> CheckUsage:
         """Count only complete appended records associated with this native turn."""
@@ -353,8 +371,9 @@ class CodexCheckUsage:
                 parts = [increment.get(field) for increment in increments]
                 if all(type(value) is int and value >= 0 for value in parts):
                     values[field] = sum(parts)
-            # A cumulative snapshot is not a response ID or independent request.
-            return CheckUsage(**values, tool_calls=len(self.native_calls.get(turn, set())))
+            # A cumulative snapshot is not a response ID; requests need the full sum.
+            return CheckUsage(**values, **self._requests(turn, values.get('input_tokens')),
+                              tool_calls=len(self.native_calls.get(turn, set())))
         if not self.ready or self.path is None:
             return CheckUsage()
         try:
@@ -417,6 +436,7 @@ class CodexCheckUsage:
                 after = total.get(native) if total is not None else None
                 if type(before) is int and type(after) is int and 0 <= before <= after:
                     values[field] = after - before
-            return CheckUsage(**values, tool_calls=len(calls))
+            return CheckUsage(**values, **self._requests(turn, values.get('input_tokens')),
+                              tool_calls=len(calls))
         except (OSError, ValueError, TypeError, KeyError):
             return CheckUsage()

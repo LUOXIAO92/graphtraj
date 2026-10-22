@@ -76,5 +76,3 @@ class RuntimeContext(Protocol):
 
     def runtime_environment(self) -> Mapping[str, str]:
         """Return non-persistent environment overrides for the Runtime connection."""
-
-

@@ -19,7 +19,7 @@ import json
 import uuid
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any, Iterator, Mapping, TextIO
+from typing import Any, Callable, Iterator, Mapping, TextIO
 
 import yaml
 
@@ -186,6 +186,78 @@ def _respond(message: Mapping[str, Any]) -> dict[str, Any] | None:
     return respond(message, _tool_documents, _tool_call_response, SERVER_INFO)
 
 
+def elicit_review(
+    input_stream: TextIO, output_stream: TextIO, proposal: dict, call_id: Any, feature: str,
+    accepted: Callable[[dict], bool],
+) -> dict:
+    """Keep the change pending until the client's strict native review response arrives.
+
+    The client's own elicitation handling decides; ``accepted`` checks the
+    accept result for what that client's native decision requires.
+    Decline and cancel refuse; any other answer or a disconnect raises.
+    """
+    from graphtraj.execution.approved_recovery import _differences
+
+    request_id = 'recovery-' + uuid.uuid4().hex
+    summary = {'request': proposal['request'],
+               'changes': _differences(proposal['before'], proposal['after']),
+               **({'authority': proposal['authority']} if 'authority' in proposal else {})}
+    role_change = feature == 'role_organization'
+    title = 'Approve child-role configuration' if role_change else 'Approve Task recovery'
+    description = ('Save only the reviewed child-role configuration change.' if role_change else
+                   'Add only the requested execution time and apply the shown repair to the original Task and Session.')
+    request = {'jsonrpc': '2.0', 'id': request_id, 'method': 'elicitation/create',
+               'params': {
+                   'mode': 'form',
+                   'message': description + '\n'
+                              + json.dumps(summary, ensure_ascii=False),
+                   'requestedSchema': {'type': 'object', 'properties': {}},
+                   '_meta': {
+                       'codex_request_type': 'approval_request',
+                       'codex_approval_kind': 'mcp_tool_call',
+                       'codex_strict_auto_review': True,
+                       'codex_sensitive_action': True,
+                       'tool_name': 'tasks',
+                       'tool_title': title,
+                       'tool_description': description + '\n' + json.dumps(summary, ensure_ascii=False),
+                       'tool_params': {'action': 'execute', 'feature': feature,
+                                       'arguments': proposal['request']},
+                   },
+               }}
+    output_stream.write(json.dumps(request, ensure_ascii=False) + '\n')
+    output_stream.flush()
+    while line := input_stream.readline():
+        response = json.loads(line)
+        if not isinstance(response, dict):
+            raise RunnerError('native-approval-unavailable', 'Invalid native recovery response.')
+        if response.get('method') == 'notifications/cancelled':
+            if response.get('params', {}).get('requestId') in (call_id, request_id):
+                raise RunnerError('recovery-denied', 'Native recovery review was cancelled.')
+            continue
+        if 'method' in response:
+            # Do not run another mutation while the reviewed snapshot waits.
+            if 'id' in response:
+                reply = (_result_response(response['id'], {}) if response['method'] == 'ping'
+                         else _error_response(response['id'], -32000, 'Recovery review is pending.'))
+                output_stream.write(json.dumps(reply, ensure_ascii=False) + '\n')
+                output_stream.flush()
+            continue
+        if response.get('id') != request_id or 'error' in response:
+            raise RunnerError('native-approval-unavailable', 'Native recovery review did not return a decision.')
+        result = response.get('result', {})
+        if not isinstance(result, dict):
+            raise RunnerError('native-approval-unavailable', 'Invalid native recovery decision.')
+        metadata = result.get('_meta') or {}
+        if not isinstance(metadata, dict):
+            raise RunnerError('native-approval-unavailable', 'Invalid native recovery metadata.')
+        if result.get('action') in ('decline', 'cancel'):
+            return {'decision': 'decline', 'rationale': metadata.get('message', 'Native review refused recovery.')}
+        if result.get('action') == 'accept' and accepted(result):
+            return {'decision': 'accept'}
+        raise RunnerError('native-approval-unavailable', 'Recovery requires an actual native approval decision.')
+    raise RunnerError('native-approval-unavailable', 'Native recovery review disconnected before deciding.')
+
+
 def serve(input_stream: TextIO, output_stream: TextIO) -> None:
     """Serve tools and bind native review for recovery and child-role changes."""
     from agent_swarm.mcp import serve as serve_stdio
@@ -194,68 +266,10 @@ def serve(input_stream: TextIO, output_stream: TextIO) -> None:
     capabilities = {}
 
     def review(proposal: dict, call_id: Any, feature: str) -> dict:
-        """Keep the repair pending until its strict native review response arrives."""
-        from graphtraj.execution.approved_recovery import _differences
-
-        request_id = 'recovery-' + uuid.uuid4().hex
-        summary = {'request': proposal['request'],
-                   'changes': _differences(proposal['before'], proposal['after']),
-                   **({'authority': proposal['authority']} if 'authority' in proposal else {})}
-        role_change = feature == 'role_organization'
-        title = 'Approve child-role configuration' if role_change else 'Approve Task recovery'
-        description = ('Save only the reviewed child-role configuration change.' if role_change else
-                       'Add only the requested execution time and apply the shown repair to the original Task and Session.')
-        request = {'jsonrpc': '2.0', 'id': request_id, 'method': 'elicitation/create',
-                   'params': {
-                       'mode': 'form',
-                       'message': description + '\n'
-                                  + json.dumps(summary, ensure_ascii=False),
-                       'requestedSchema': {'type': 'object', 'properties': {}},
-                       '_meta': {
-                           'codex_request_type': 'approval_request',
-                           'codex_approval_kind': 'mcp_tool_call',
-                           'codex_strict_auto_review': True,
-                           'codex_sensitive_action': True,
-                           'tool_name': 'tasks',
-                           'tool_title': title,
-                           'tool_description': description + '\n' + json.dumps(summary, ensure_ascii=False),
-                           'tool_params': {'action': 'execute', 'feature': feature,
-                                           'arguments': proposal['request']},
-                       },
-                   }}
-        output_stream.write(json.dumps(request, ensure_ascii=False) + '\n')
-        output_stream.flush()
-        while line := input_stream.readline():
-            response = json.loads(line)
-            if not isinstance(response, dict):
-                raise RunnerError('native-approval-unavailable', 'Invalid native recovery response.')
-            if response.get('method') == 'notifications/cancelled':
-                if response.get('params', {}).get('requestId') in (call_id, request_id):
-                    raise RunnerError('recovery-denied', 'Native recovery review was cancelled.')
-                continue
-            if 'method' in response:
-                # Do not run another mutation while the reviewed snapshot waits.
-                if 'id' in response:
-                    reply = (_result_response(response['id'], {}) if response['method'] == 'ping'
-                             else _error_response(response['id'], -32000, 'Recovery review is pending.'))
-                    output_stream.write(json.dumps(reply, ensure_ascii=False) + '\n')
-                    output_stream.flush()
-                continue
-            if response.get('id') != request_id or 'error' in response:
-                raise RunnerError('native-approval-unavailable', 'Native recovery review did not return a decision.')
-            result = response.get('result', {})
-            if not isinstance(result, dict):
-                raise RunnerError('native-approval-unavailable', 'Invalid native recovery decision.')
-            metadata = result.get('_meta') or {}
-            if not isinstance(metadata, dict):
-                raise RunnerError('native-approval-unavailable', 'Invalid native recovery metadata.')
-            if result.get('action') in ('decline', 'cancel'):
-                return {'decision': 'decline', 'rationale': metadata.get('message', 'Native review refused recovery.')}
-            if (result.get('action') == 'accept' and result.get('content') == {}
-                    and metadata.get('approvals_reviewer') == 'auto_review'):
-                return {'decision': 'accept'}
-            raise RunnerError('native-approval-unavailable', 'Recovery requires an actual native auto_review decision.')
-        raise RunnerError('native-approval-unavailable', 'Native recovery review disconnected before deciding.')
+        """Accept only Codex's actual auto_review decision."""
+        return elicit_review(input_stream, output_stream, proposal, call_id, feature,
+                             lambda result: result.get('content') == {}
+                             and (result.get('_meta') or {}).get('approvals_reviewer') == 'auto_review')
 
     def respond(message: Mapping[str, Any]) -> dict | None:
         """Bind these direct Codex mutations to their existing client review channel."""

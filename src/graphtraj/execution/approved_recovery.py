@@ -163,12 +163,14 @@ def _repair_snapshot(project: Any, before: dict, request: dict) -> dict:
         after['stop']['resumed'] = True
     if not after['task']['active'] or after['team']['status'] != 'active':
         raise RunnerError('team-not-active', 'This recovery needs restore_active to repair administrative state.')
-    if before['mapping'].get('parent') is None and caller_alias(project.runner_directory) is None:
+    if (before['mapping'].get('parent') is None and before['mapping'].get('parent_connection') is None
+            and caller_alias(project.runner_directory) is None):
         from graphtraj.execution.runner_connection import current_parent_connection
 
-        # An authenticated Main's recovery retains the Agent and native Session,
-        # but returns its notices to that Main's actual host. The event keeps
-        # the former connection; no model argument can choose a recipient.
+        # A root without any recorded host gets the authenticated Main's host
+        # so its notices are delivered at all. A recorded host is never
+        # rewritten: delivery follows the current Main (``route_notice``).
+        # No model argument can choose a recipient.
         host = current_parent_connection() or runtime_adapter.current_host_connection()
         if host is not None:
             after['mapping']['parent_connection'] = host

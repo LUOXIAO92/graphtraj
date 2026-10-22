@@ -39,7 +39,8 @@ class DshContext:
                 'sandbox': self.request['sandbox'], 'service_scope': 'agent',
                 # The default automatic review has no DSH equivalent; report it.
                 'auto_review': {'requested': 'default', 'native': 'unavailable',
-                                'reason': 'DSH exposes no native approval or automatic review mode.'},
+                                'reason': 'DSH has no native automatic review mode; tool permissions '
+                                          'still use its native permission requests, answered by the parent.'},
                 **({'connection': self.request['connection'],
                     'connection_revision': self.request['connection_revision'],
                     'runtime_home': self.request['runtime_home']} if self.request.get('connection') else {})}

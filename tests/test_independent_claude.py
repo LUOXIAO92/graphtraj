@@ -83,13 +83,25 @@ def test_native_main_notice_is_scoped_and_acknowledged(tmp_path: Path, claude_en
     assert host.context({'operation': 'notices', 'session': session})['notices'] == []
 
 
-def test_native_print_result_delivers_queued_notice_once(tmp_path: Path) -> None:
-    """A print host receives the body through its next result even without idle push."""
+def test_native_print_result_delivers_queued_notice_once(tmp_path: Path, claude_environment: None) -> None:
+    """A print host receives real child output once without polling the mod channel."""
+    import time
+
     host = IndependentCalls(tmp_path / 'agents', tmp_path, {})
     session = str(uuid4())
     call = host.make_call(session, tmp_path)
-    host.queue[session] = [{'event': {'alias': 'child', 'message': 'remembered352'}}]
-    result = call('agents', {'action': 'execute', 'feature': 'status', 'arguments': {}})
-    assert result.document['main_notices'][0]['event']['message'] == 'remembered352'
+    created = call('agents', {'action': 'execute', 'feature': 'create',
+        'arguments': {'runtime': 'claude', 'instruction': 'remembered352'}})
+    assert not created.failed, created.document
+    agent = created.document['agent']
+    replies = [call('agents', {'action': 'execute', 'feature': 'wait',
+        'arguments': {'agent': agent, 'timeout_seconds': 20}}).document]
+    deadline = time.monotonic() + 5
+    while not any(reply.get('main_notices') for reply in replies) and time.monotonic() < deadline:
+        replies.append(call('agents', {'action': 'execute', 'feature': 'status',
+                                      'arguments': {'agent': agent}}).document)
+        time.sleep(0.01)
+    notices = [notice for reply in replies for notice in reply.get('main_notices', [])]
+    assert [notice['event']['message'] for notice in notices] == ['remembered352']
     assert 'main_notices' not in call('agents', {'action': 'discover'}).document
     assert host.context({'operation': 'notices', 'session': session})['notices'] == []

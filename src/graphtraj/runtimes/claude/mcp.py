@@ -5,6 +5,7 @@ Managed callers continue using their existing authenticated gateway channel.
 """
 from __future__ import annotations
 
+import functools
 import json
 from pathlib import Path
 import sys
@@ -19,7 +20,7 @@ from agent_swarm.mcp import error_response, respond, result_response, serve as s
 from graphtraj.execution.runner_models import RunnerError
 from graphtraj.interfaces.gateway import handle_request, INPUT_SCHEMA
 from graphtraj.interfaces.hosted_cli import forward_request
-from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError
+from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError, recovery_review
 
 
 def serve(
@@ -31,8 +32,22 @@ def serve(
     """Expose the lightweight entries; the actual host retains caller authority.
 
     ``native_call(request, tool)`` serves both ``agents`` and ``tasks`` for a
-    verified native Main host.
+    verified native Main host. That host's recovery needing review asks Claude
+    Code itself through MCP elicitation: its own dialog shows the exact repair,
+    and only its accept applies it in this same call.
     """
+    capabilities: dict = {}
+
+    def review(proposal: dict, call_id: object) -> dict:
+        """Wait for Claude Code's own accept, decline or cancel of this repair."""
+        from graphtraj.interfaces.mcp import elicit_review
+
+        if not isinstance(capabilities.get('elicitation'), dict):
+            raise RunnerError('native-approval-unavailable',
+                              'This Claude Code client offers no MCP elicitation for recovery approval.')
+        return elicit_review(input_stream, output_stream, proposal, call_id, 'approved_recovery',
+                             lambda result: result.get('content') in (None, {}))
+
     def tasks(request: dict) -> AgentsResult:
         """Reuse Task authority through the native host or its existing hosted channel."""
         if request.get('feature') == 'agents':
@@ -66,8 +81,12 @@ def serve(
             return error_response(identity, -32602, 'Expected agents and object arguments.')
         try:
             arguments = params.get('arguments', {})
-            result = (tasks(arguments) if params['name'] == 'tasks' else
-                      native_call(arguments) if native_call is not None else discover_agents(arguments, dispatch))
+            reviewer = (functools.partial(review, call_id=identity)
+                        if native_call is not None and params['name'] == 'tasks'
+                        and arguments.get('feature') == 'approved_recovery' else None)
+            with recovery_review(reviewer):
+                result = (tasks(arguments) if params['name'] == 'tasks' else
+                          native_call(arguments) if native_call is not None else discover_agents(arguments, dispatch))
         except (AgentsError, RunnerError, RuntimeAdapterError) as error:
             result = AgentsResult({'error': {'code': error.code, 'message': error.message}}, failed=True)
         except (OSError, UnicodeError, ValueError, yaml.YAMLError) as error:
@@ -84,8 +103,14 @@ def serve(
             'structuredContent': result.document, 'isError': result.failed,
         })
 
-    serve_stdio(input_stream, output_stream, lambda message: respond(
-        message, descriptors, call, {'name': 'agents', 'version': '1'}))
+    def answer(message: dict) -> dict | None:
+        """Keep the client's declared capabilities for its later review."""
+        params = message.get('params')
+        if message.get('method') == 'initialize' and isinstance(params, dict):
+            capabilities.update(params.get('capabilities') or {})
+        return respond(message, descriptors, call, {'name': 'agents', 'version': '1'})
+
+    serve_stdio(input_stream, output_stream, answer)
 
 
 def main() -> None:

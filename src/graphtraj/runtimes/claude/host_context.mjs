@@ -86,15 +86,17 @@ async function pushNotices($, state) {
       const session = await $.session.id();
       const pending = await context($, {operation: 'notices', session});
       if (pending.notices?.length) {
-        await $.prompt.submit(noticePrompt(pending.notices));
+        await $.prompt.submit({text: noticePrompt(pending.notices)});
         state.pushed = true;
+        state.pushError = null;
         await context($, {operation: 'acknowledge', session, position: pending.position});
       }
     }
   } catch (error) {
     state.pushError = String(error);
-    // No prompt submission on this host: stop; notices come with the next result.
-    if (error instanceof TypeError) return;
+    // Only a missing interface stops the loop; a host error (HooksError) is
+    // retried, and the notices stay queued until a submit succeeds.
+    if (error?.name === 'TypeError' && /not a function|undefined/.test(error.message)) return;
   }
   schedulePush($, state);
 }

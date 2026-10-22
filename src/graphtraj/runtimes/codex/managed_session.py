@@ -116,7 +116,6 @@ def refresh_approval_route(request: dict, session_directory: Path) -> None:
     arguments[2:2] = ['-c', 'approvals_reviewer="user"']
 
 
-
 class CodexManagedExecution(NativeCodexExecution):
     """Attach GraphTraj task policy to the independent native execution owner."""
 
@@ -198,163 +197,164 @@ class CodexManagedExecution(NativeCodexExecution):
         return CodexJsonlArchive(configured_archive(root), self.directory.name, session.thread_id,
                                  session.rollout_path, new_session=self.expected_session is None,
                                  task_ids=(mapping['task_id'],))
+
     def _review_recovery_sync(self, proposal: dict) -> dict:
-            """Bridge the tool worker to this existing execution's selected reviewer."""
-            return asyncio.run_coroutine_threadsafe(self._review_recovery(proposal), self.loop).result()
+        """Bridge the tool worker to this existing execution's selected reviewer."""
+        return asyncio.run_coroutine_threadsafe(self._review_recovery(proposal), self.loop).result()
 
     async def _review_recovery(self, proposal: dict) -> dict:
-            """Review a host action; never present it as a native Codex request."""
-            assert self.execution is not None and self.result is not None
-            token = uuid.uuid4().hex
-            context = {
-                **self._approval_context(), 'request_id': token,
-                'method': 'graphtraj/recoveryApproval', 'request': proposal,
-                'allowed_decisions': ['accept', 'decline'], 'authorization': self.prompt,
-                'developer_instructions': self.context.session_document()['adapter_request'].get('developerInstructions'),
-            }
-            if self.approval is not None:
-                return await review_request(self.approval, context)
-            params = self.context.session_document()['adapter_request']
-            reviewer = params.get('approvalsReviewer', params.get('config', {}).get('approvals_reviewer', 'user'))
-            if reviewer != 'user':
-                raise RuntimeAdapterError('native-approval-unavailable',
-                                          'The selected native automatic reviewer has no recovery callback.')
-            response = asyncio.get_running_loop().create_future()
-            from graphtraj.execution.approved_recovery import _differences
+        """Review a host action; never present it as a native Codex request."""
+        assert self.execution is not None and self.result is not None
+        token = uuid.uuid4().hex
+        context = {
+            **self._approval_context(), 'request_id': token,
+            'method': 'graphtraj/recoveryApproval', 'request': proposal,
+            'allowed_decisions': ['accept', 'decline'], 'authorization': self.prompt,
+            'developer_instructions': self.context.session_document()['adapter_request'].get('developerInstructions'),
+        }
+        if self.approval is not None:
+            return await review_request(self.approval, context)
+        params = self.context.session_document()['adapter_request']
+        reviewer = params.get('approvalsReviewer', params.get('config', {}).get('approvals_reviewer', 'user'))
+        if reviewer != 'user':
+            raise RuntimeAdapterError('native-approval-unavailable',
+                                      'The selected native automatic reviewer has no recovery callback.')
+        response = asyncio.get_running_loop().create_future()
+        from graphtraj.execution.approved_recovery import _differences
 
-            # Keep the exact snapshot in this pending call; disclose only the action
-            # and concrete changed values needed for the user's decision.
-            summary = {'request': proposal['request'],
-                       'changes': _differences(proposal['before'], proposal['after'])}
-            identity = {'session': self.execution.thread_id, 'execution_id': self.execution.turn_id,
-                        'request_id': token, 'request_token': token,
-                        'method': 'graphtraj/recoveryApproval'}
-            details = {**identity, 'params': summary}
-            self.recovery_requests[token] = (details, response)
-            try:
-                receipt = await asyncio.to_thread(
-                    notify_direct_parent, self.directory,
-                    'Recovery needs an explicit user decision through the pending-request reply:\n'
-                    + json.dumps(details, ensure_ascii=False), identity,
-                )
-                if receipt['delivery'] != 'received':
-                    raise RuntimeAdapterError('native-approval-unavailable', 'The selected user review channel is unavailable.')
-                done, _ = await asyncio.wait((response, self.result), return_when=asyncio.FIRST_COMPLETED)
-                if self.result in done:
-                    raise RuntimeAdapterError('operation-failed', 'Execution ended before recovery review completed.')
-                return response.result()
-            finally:
-                self.recovery_requests.pop(token, None)
-                if not response.done():
-                    response.cancel()
+        # Keep the exact snapshot in this pending call; disclose only the action
+        # and concrete changed values needed for the user's decision.
+        summary = {'request': proposal['request'],
+                   'changes': _differences(proposal['before'], proposal['after'])}
+        identity = {'session': self.execution.thread_id, 'execution_id': self.execution.turn_id,
+                    'request_id': token, 'request_token': token,
+                    'method': 'graphtraj/recoveryApproval'}
+        details = {**identity, 'params': summary}
+        self.recovery_requests[token] = (details, response)
+        try:
+            receipt = await asyncio.to_thread(
+                notify_direct_parent, self.directory,
+                'Recovery needs an explicit user decision through the pending-request reply:\n'
+                + json.dumps(details, ensure_ascii=False), identity,
+            )
+            if receipt['delivery'] != 'received':
+                raise RuntimeAdapterError('native-approval-unavailable', 'The selected user review channel is unavailable.')
+            done, _ = await asyncio.wait((response, self.result), return_when=asyncio.FIRST_COMPLETED)
+            if self.result in done:
+                raise RuntimeAdapterError('operation-failed', 'Execution ended before recovery review completed.')
+            return response.result()
+        finally:
+            self.recovery_requests.pop(token, None)
+            if not response.done():
+                response.cancel()
 
     async def _review_approval(self, request: CodexServerRequest) -> dict:
-            """Review this request and return its native response without a separate log."""
-            if request.method not in {
-                'item/commandExecution/requestApproval', 'item/fileChange/requestApproval',
-                'item/permissions/requestApproval',
-                'mcpServer/elicitation/request',
-            }:
-                raise RuntimeAdapterError('RUNTIME_REQUEST_UNHANDLED', 'Unsupported automatic approval request.')
-            available = request.params.get('availableDecisions')
-            # Codex 0.154.0 normally offers Abort (wire: cancel), not Declined.
-            # Preserve the offered denial's continue/interrupt semantics.
-            deny = next((value for value in ('decline', 'cancel')
-                         if available is None or value in available), None)
-            if deny is None:
-                raise RuntimeAdapterError('RUNTIME_REQUEST_UNHANDLED', 'Approval request has no supported deny decision.')
-            decisions = {'decline': deny}
-            if available is None or 'accept' in available:
-                decisions['accept'] = 'accept'
-            allowed = [value for value in ('accept', 'decline') if value in decisions]
-            params = self.context.session_document()['adapter_request']
-            context = {
-                'request_id': request.request_id, 'method': request.method,
-                'request': request.params, 'allowed_decisions': allowed,
-                'native_decisions': decisions,
-                'authorization': self.prompt,
-                'developer_instructions': params['developerInstructions'],
-                'permissions': params['config'].get('permissions'),
-                'default_permissions': params['config'].get('default_permissions'),
-                'item': self.approval_items.get(request.params.get('itemId')),
-            }
-            context.update(self._approval_context())
-            if request.method == 'item/fileChange/requestApproval' and not context['item']:
-                raise RuntimeAdapterError(
-                    'RUNTIME_REQUEST_FAILED', 'File changes are not available for review.',
-                    terminal_confirmed=False,
-                )
-            result = await review_request(self.approval, context)
-            if request.method == 'mcpServer/elicitation/request':
-                # Review the exact native tool call, without granting persistent
-                # server trust or answering ordinary server input elicitations.
-                return {'action': result['decision']}
-            if request.method == 'item/permissions/requestApproval':
-                # Return only the exact requested profile; omitted scope uses Codex's
-                # native default (turn). A denial grants nothing, only after review.
-                return {'permissions': (
-                    request.params['permissions'] if result['decision'] == 'accept' else {}
-                )}
-            return {'decision': decisions[result['decision']]}
+        """Review this request and return its native response without a separate log."""
+        if request.method not in {
+            'item/commandExecution/requestApproval', 'item/fileChange/requestApproval',
+            'item/permissions/requestApproval',
+            'mcpServer/elicitation/request',
+        }:
+            raise RuntimeAdapterError('RUNTIME_REQUEST_UNHANDLED', 'Unsupported automatic approval request.')
+        available = request.params.get('availableDecisions')
+        # Codex 0.154.0 normally offers Abort (wire: cancel), not Declined.
+        # Preserve the offered denial's continue/interrupt semantics.
+        deny = next((value for value in ('decline', 'cancel')
+                     if available is None or value in available), None)
+        if deny is None:
+            raise RuntimeAdapterError('RUNTIME_REQUEST_UNHANDLED', 'Approval request has no supported deny decision.')
+        decisions = {'decline': deny}
+        if available is None or 'accept' in available:
+            decisions['accept'] = 'accept'
+        allowed = [value for value in ('accept', 'decline') if value in decisions]
+        params = self.context.session_document()['adapter_request']
+        context = {
+            'request_id': request.request_id, 'method': request.method,
+            'request': request.params, 'allowed_decisions': allowed,
+            'native_decisions': decisions,
+            'authorization': self.prompt,
+            'developer_instructions': params['developerInstructions'],
+            'permissions': params['config'].get('permissions'),
+            'default_permissions': params['config'].get('default_permissions'),
+            'item': self.approval_items.get(request.params.get('itemId')),
+        }
+        context.update(self._approval_context())
+        if request.method == 'item/fileChange/requestApproval' and not context['item']:
+            raise RuntimeAdapterError(
+                'RUNTIME_REQUEST_FAILED', 'File changes are not available for review.',
+                terminal_confirmed=False,
+            )
+        result = await review_request(self.approval, context)
+        if request.method == 'mcpServer/elicitation/request':
+            # Review the exact native tool call, without granting persistent
+            # server trust or answering ordinary server input elicitations.
+            return {'action': result['decision']}
+        if request.method == 'item/permissions/requestApproval':
+            # Return only the exact requested profile; omitted scope uses Codex's
+            # native default (turn). A denial grants nothing, only after review.
+            return {'permissions': (
+                request.params['permissions'] if result['decision'] == 'accept' else {}
+            )}
+        return {'decision': decisions[result['decision']]}
 
     def _approval_context(self) -> dict:
-            """Select textual native evidence without summarizing safety constraints.
+        """Select textual native evidence without summarizing safety constraints.
 
-            Codex 0.154.0 history/src/rollout_payload.rs defines compacted.message,
-            replacement_history, retained_context, and separate turn_context and
-            retained_context events. Preserve user/developer inputs across snapshots
-            so compaction cannot remove explicit task restrictions from this review.
-            """
-            visible = {
-                'message', 'function_call', 'function_call_output',
-                'custom_tool_call', 'custom_tool_call_output',
-            }
-            context = {'history': [], 'authorization_messages': [],
-                       'compaction': None, 'retained_context_events': [], 'turn_context': None}
-            if not self.trace_file.exists():
-                return context
-            with self.trace_file.open(encoding='utf-8') as stream:
-                for line in stream:
-                    record = json.loads(line)
-                    payload = record.get('payload', {})
-                    kind = record.get('type')
-                    if kind == 'response_item' and payload.get('type') in visible:
-                        if payload.get('type') == 'message' and payload.get('role') in {'user', 'developer'}:
-                            context['authorization_messages'].append(payload)
-                            # Keep provenance/order in history, but send this often
-                            # large authorization body only once across both fields.
-                            context['history'].append({
-                                'type': 'authorization_reference',
-                                'index': len(context['authorization_messages']) - 1,
-                            })
-                        else:
-                            context['history'].append(payload)
-                    elif kind == 'compacted':
-                        # Use the native replacement and summary rather than summarize
-                        # or silently retain superseded tool evidence ourselves.
-                        replacement = payload.get('replacement_history')
-                        context['history'] = [
-                            item for item in (replacement or []) if item.get('type') in visible
-                        ]
-                        context['compaction'] = {
-                            'message': payload.get('message'),
-                            'retained_context': payload.get('retained_context'),
-                        }
-                    elif kind == 'retained_context':
-                        context['retained_context_events'].append(payload)
-                    elif kind == 'turn_context':
-                        context['turn_context'] = payload
-            # A native replacement history may itself contain authorizations already
-            # retained above. Reference those too, without losing their new position.
-            for index, item in enumerate(context['history']):
-                if item.get('type') == 'message' and item.get('role') in {'user', 'developer'}:
-                    if item not in context['authorization_messages']:
-                        context['authorization_messages'].append(item)
-                    context['history'][index] = {
-                        'type': 'authorization_reference',
-                        'index': context['authorization_messages'].index(item),
+        Codex 0.154.0 history/src/rollout_payload.rs defines compacted.message,
+        replacement_history, retained_context, and separate turn_context and
+        retained_context events. Preserve user/developer inputs across snapshots
+        so compaction cannot remove explicit task restrictions from this review.
+        """
+        visible = {
+            'message', 'function_call', 'function_call_output',
+            'custom_tool_call', 'custom_tool_call_output',
+        }
+        context = {'history': [], 'authorization_messages': [],
+                   'compaction': None, 'retained_context_events': [], 'turn_context': None}
+        if not self.trace_file.exists():
+            return context
+        with self.trace_file.open(encoding='utf-8') as stream:
+            for line in stream:
+                record = json.loads(line)
+                payload = record.get('payload', {})
+                kind = record.get('type')
+                if kind == 'response_item' and payload.get('type') in visible:
+                    if payload.get('type') == 'message' and payload.get('role') in {'user', 'developer'}:
+                        context['authorization_messages'].append(payload)
+                        # Keep provenance/order in history, but send this often
+                        # large authorization body only once across both fields.
+                        context['history'].append({
+                            'type': 'authorization_reference',
+                            'index': len(context['authorization_messages']) - 1,
+                        })
+                    else:
+                        context['history'].append(payload)
+                elif kind == 'compacted':
+                    # Use the native replacement and summary rather than summarize
+                    # or silently retain superseded tool evidence ourselves.
+                    replacement = payload.get('replacement_history')
+                    context['history'] = [
+                        item for item in (replacement or []) if item.get('type') in visible
+                    ]
+                    context['compaction'] = {
+                        'message': payload.get('message'),
+                        'retained_context': payload.get('retained_context'),
                     }
-            return _approval_history_text(context)
+                elif kind == 'retained_context':
+                    context['retained_context_events'].append(payload)
+                elif kind == 'turn_context':
+                    context['turn_context'] = payload
+        # A native replacement history may itself contain authorizations already
+        # retained above. Reference those too, without losing their new position.
+        for index, item in enumerate(context['history']):
+            if item.get('type') == 'message' and item.get('role') in {'user', 'developer'}:
+                if item not in context['authorization_messages']:
+                    context['authorization_messages'].append(item)
+                context['history'][index] = {
+                    'type': 'authorization_reference',
+                    'index': context['authorization_messages'].index(item),
+                }
+        return _approval_history_text(context)
 
 async def authorize_mcp_caller(
     adapter: CodexAppServer,

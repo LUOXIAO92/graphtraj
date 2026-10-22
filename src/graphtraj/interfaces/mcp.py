@@ -186,6 +186,22 @@ def _respond(message: Mapping[str, Any]) -> dict[str, Any] | None:
     return respond(message, _tool_documents, _tool_call_response, SERVER_INFO)
 
 
+# Native dialog title and description for each reviewed operation.
+REVIEW_TEXT = {
+    'approved_recovery':   ('Approve Task recovery',
+                            'Add only the requested execution time and apply the shown repair to the original Task and Session.'),
+    'role_organization':   ('Approve child-role configuration',
+                            'Save only the reviewed child-role configuration change.'),
+    'runtime_connections': ('Approve Runtime connections',
+                            'Save only the reviewed user Runtime connection change.'),
+    'retire':              ('Approve Agent retirement',
+                            'Retire only the shown stopped Agent; its Session, Trace, parent relationships and Worktree are kept.'),
+    'replace':             ('Approve Agent replacement',
+                            'Retire only the shown stopped Agent for the shown replacement; '
+                            'its Session, Trace, parent relationships and Worktree are kept.'),
+}
+
+
 def elicit_review(
     input_stream: TextIO, output_stream: TextIO, proposal: dict, call_id: Any, feature: str,
     accepted: Callable[[dict], bool],
@@ -195,17 +211,20 @@ def elicit_review(
     The client's own elicitation handling decides; ``accepted`` checks the
     accept result for what that client's native decision requires.
     Decline and cancel refuse; any other answer or a disconnect raises.
+    The dialog names the reviewed operation: a retirement or replacement
+    proposal names itself, otherwise ``feature`` does.
     """
     from graphtraj.execution.approved_recovery import _differences
 
     request_id = 'recovery-' + uuid.uuid4().hex
-    summary = {'request': proposal['request'],
-               'changes': _differences(proposal['before'], proposal['after']),
-               **({'authority': proposal['authority']} if 'authority' in proposal else {})}
-    role_change = feature == 'role_organization'
-    title = 'Approve child-role configuration' if role_change else 'Approve Task recovery'
-    description = ('Save only the reviewed child-role configuration change.' if role_change else
-                   'Add only the requested execution time and apply the shown repair to the original Task and Session.')
+    # A connection save reviews the user catalog file, not a request document.
+    reviewed  = proposal.get('request', {'scope': proposal.get('scope'), 'path': proposal.get('path')})
+    summary   = {'request': reviewed,
+                 'changes': _differences(proposal['before'], proposal['after']),
+                 **({'authority': proposal['authority']} if 'authority' in proposal else {})}
+    operation = reviewed.get('operation')
+    title, description = REVIEW_TEXT.get(operation if operation in ('retire', 'replace') else feature,
+                                         REVIEW_TEXT['approved_recovery'])
     request = {'jsonrpc': '2.0', 'id': request_id, 'method': 'elicitation/create',
                'params': {
                    'mode': 'form',
@@ -221,7 +240,7 @@ def elicit_review(
                        'tool_title': title,
                        'tool_description': description + '\n' + json.dumps(summary, ensure_ascii=False),
                        'tool_params': {'action': 'execute', 'feature': feature,
-                                       'arguments': proposal['request']},
+                                       'arguments': reviewed},
                    },
                }}
     output_stream.write(json.dumps(request, ensure_ascii=False) + '\n')
@@ -251,7 +270,7 @@ def elicit_review(
         if not isinstance(metadata, dict):
             raise RunnerError('native-approval-unavailable', 'Invalid native recovery metadata.')
         if result.get('action') in ('decline', 'cancel'):
-            return {'decision': 'decline', 'rationale': metadata.get('message', 'Native review refused recovery.')}
+            return {'decision': 'decline', 'rationale': metadata.get('message', 'Native review refused this change.')}
         if result.get('action') == 'accept' and accepted(result):
             return {'decision': 'accept'}
         raise RunnerError('native-approval-unavailable', 'Recovery requires an actual native approval decision.')

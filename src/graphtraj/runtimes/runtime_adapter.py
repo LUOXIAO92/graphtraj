@@ -6,13 +6,21 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Callable, Dict, Literal, Mapping, Protocol, Sequence, TypedDict
+from typing import TYPE_CHECKING, Any, Callable, Dict, Mapping, Protocol, Sequence
+
+# Keep existing consumer imports bound to the independent definitions.
+from agent_swarm.runtime import (
+    RuntimeAdapterError,
+    RuntimeContext,
+    RuntimeExecutionResult,
+    RuntimeTurn,
+    SessionStarted,
+)
 
 if TYPE_CHECKING:
     from graphtraj.configuration.role_definitions import ResolvedChildRole
 
 
-SessionStarted = Callable[[str, int], None]
 NativeReplacement = Callable[[Sequence[str]], dict]
 _recovery_reviewer: ContextVar[Callable[[dict], dict] | None] = ContextVar('recovery_reviewer', default=None)
 _process_owner: ContextVar[Callable[[int, dict | None], None] | None] = ContextVar('process_owner', default=None)
@@ -102,72 +110,6 @@ def recovery_review(reviewer: Callable[[dict], dict] | None):
 def current_recovery_reviewer() -> Callable[[dict], dict] | None:
     """Return the reviewer bound by this call's owning host."""
     return _recovery_reviewer.get()
-
-
-class RuntimeExecutionResult(TypedDict):
-    """One terminal native result; failures use RuntimeAdapterError."""
-
-    outcome: Literal["completed", "interrupted"]
-    session_id: str
-    execution_id: str
-    last_agent_message: str | None
-
-
-class RuntimeAdapterError(Exception):
-    """A Runtime Adapter failed with a stable Runner-facing error."""
-
-    def __init__(
-        self,
-        code: str,
-        message: str,
-        *,
-        terminal_confirmed: bool = True,
-    ) -> None:
-        super().__init__(message)
-        self.code = code
-        self.message = message
-        self.terminal_confirmed = terminal_confirmed
-
-
-class RuntimeTurn(Protocol):
-    """One managed invocation, including native control and public identity."""
-
-    def run(self) -> Dict[str, Any]:
-        """Run the invocation until its Runtime reaches a terminal state."""
-
-    @property
-    def execution_id(self) -> str | None:
-        """Return the opaque execution ID, available before session_started."""
-
-    def operate(self, request: dict) -> dict:
-        """Control the exact Session/execution named by a Worker request."""
-
-    def terminate(self) -> bool:
-        """Retain a stop request; return whether native interruption was scheduled.
-
-        This is not terminal confirmation. run() retains ownership until the
-        Runtime stops, including a stop requested before Session creation.
-        """
-
-
-class RuntimeContext(Protocol):
-    """One immutable Adapter-owned launch, evidence, and recovery Context."""
-
-    @property
-    def runtime(self) -> str:
-        """Return the selected Runtime's stable name."""
-
-    def launch_document(self) -> Dict[str, Any]:
-        """Return a fresh durable document for launch and resume."""
-
-    def evidence_document(self) -> Dict[str, Any]:
-        """Return a fresh document of the effective Context facts."""
-
-    def session_document(self) -> Dict[str, Any]:
-        """Return fresh Adapter-owned configuration for native Session operations."""
-
-    def runtime_environment(self) -> Mapping[str, str]:
-        """Return non-persistent environment overrides for the Runtime connection."""
 
 
 class RuntimeContextPreflight(Protocol):

@@ -18,12 +18,20 @@ commit and whose primary worktree is on `main`.
 Choose a tag or commit to install, replacing `<tag-or-commit>`:
 
 ```sh
-uv tool install "git+https://github.com/LUOXIAO92/graphtraj.git@<tag-or-commit>"
+uv tool install --with "agent-swarm @ git+https://github.com/LUOXIAO92/graphtraj.git@<tag-or-commit>#subdirectory=src/agent_swarm" \
+  "git+https://github.com/LUOXIAO92/graphtraj.git@<tag-or-commit>"
 cd /path/to/your-project
 graphtraj setup
 graphtraj doctor
 graphtraj task graph
 ```
+
+GraphTraj and `agent-swarm` are separate distributions built from the same
+revision. GraphTraj requires the same `agent-swarm` version; install the two
+matching artifacts together. From a checkout, build both with
+`python -m pip wheel --no-deps -w dist ./src/agent_swarm .`, then install both
+wheels in your dedicated environment. The independent distribution can also
+be installed on its own from `./src/agent_swarm`.
 
 Setup shows its plan and asks before creating the `dev` branch. It creates or
 registers a separate worktree for integration and stores configuration and task
@@ -280,8 +288,8 @@ It does not provide task execution controls.
 
 For Apple Silicon macOS, extract the ZIP and open `GraphTraj.app` from the
 extracted folder to try it; copying it to `/Applications` is optional. Electron
-is included, but Python is separate. Install the accompanying GraphTraj wheel
-in a Python environment, and make its `graphtraj-tool` available on the app's
+is included, but Python is separate. Install the accompanying GraphTraj and
+agent-swarm wheels in a Python environment, and make `graphtraj-tool` available on the app's
 launch `PATH` or set `GRAPHTRAJ_TOOL` to that executable. Use the matching CLI
 package rather than an older global installation. The macOS build is unsigned.
 

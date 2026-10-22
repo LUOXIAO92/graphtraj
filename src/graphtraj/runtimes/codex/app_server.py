@@ -23,7 +23,7 @@ from graphtraj.runtimes.codex.codex_adapter import (
     CodexNativeTrace,
     _reject_legacy_user_sandbox_config,
 )
-from graphtraj.runtimes.runtime_adapter import RuntimeContext, RuntimeExecutionResult
+from agent_swarm.runtime import RuntimeContext, RuntimeExecutionResult
 from graphtraj.runtimes.codex.websocket import CodexWebSocket
 from graphtraj.runtimes.codex.session_archive import CodexSessionArchive
 from graphtraj.runtimes.codex.jsonl_archive import CodexJsonlArchive

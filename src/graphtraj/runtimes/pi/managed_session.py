@@ -17,7 +17,8 @@ import time
 import uuid
 
 from graphtraj.execution.runner_io import write_yaml_durably
-from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError, SessionStarted, record_runtime_process
+from agent_swarm.runtime import RuntimeAdapterError, SessionStarted
+from graphtraj.runtimes.runtime_adapter import record_runtime_process
 
 
 INFORMATION = {'notify', 'setStatus', 'setWidget', 'setTitle', 'set_editor_text'}

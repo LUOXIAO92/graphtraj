@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "agent-swarm"
+version = "0.1.0"
+description = "Independent native Agent control."
+requires-python = ">=3.12"
+dependencies = [
+    "PyYAML>=6,<7",
+    "websockets>=15,<17",
+]
+
+[tool.setuptools]
+packages = ["agent_swarm", "agent_swarm.dsh"]
+package-dir = {agent_swarm = "."}
+
+[tool.setuptools.package-data]
+agent_swarm = ["dsh/*.mjs", "dsh/package.json"]

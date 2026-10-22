@@ -24,7 +24,8 @@ from graphtraj.sessions.archive import SessionArchive
 from graphtraj.runtimes.claude.history import read_records
 
 from graphtraj.execution.runner_io import write_yaml_durably
-from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError, SessionStarted, record_runtime_process
+from agent_swarm.runtime import RuntimeAdapterError, SessionStarted
+from graphtraj.runtimes.runtime_adapter import record_runtime_process
 from graphtraj.runtimes.claude.diagnostics import (
     launch_projection, model_projection, native_projection, warning_projection,
 )

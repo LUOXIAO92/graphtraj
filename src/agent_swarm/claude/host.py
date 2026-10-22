@@ -97,7 +97,17 @@ class IndependentCalls(NativeCalls):
             """Expose agents only through the verified native association."""
             if tool != 'agents':
                 raise AgentsError('invalid-input', 'The independent host exposes agents only.')
-            return handle_request(request, self.callers[session])
+            result = handle_request(request, self.callers[session])
+            # Reuse the native host's next-result delivery when prompt push is
+            # unavailable (notably print mode); the mod renders this same fact.
+            with self.lock:
+                queue = self.queue.get(session, [])
+                notices = queue[self.acknowledged.get(session, 0):]
+                if not notices:
+                    return result
+                result = AgentsResult({**result.document, 'main_notices': notices}, failed=result.failed)
+                self.acknowledged[session] = len(queue)
+            return result
         return call
 
     def receive(self, event: dict) -> bool:

@@ -76,7 +76,20 @@ def test_native_main_notice_is_scoped_and_acknowledged(tmp_path: Path, claude_en
         'arguments': {'agent': created.document['agent'], 'timeout_seconds': 20}})
     assert not wait.failed
     pending = host.context({'operation': 'notices', 'session': session})
-    assert [item['event']['message'] for item in pending['notices']] == ['hello']
+    delivered = wait.document.get('main_notices', []) + pending['notices']
+    assert [item['event']['message'] for item in delivered] == ['hello']
     assert host.context({'operation': 'notices', 'session': str(uuid4())})['notices'] == []
     host.context({'operation': 'acknowledge', 'session': session, 'position': pending['position']})
+    assert host.context({'operation': 'notices', 'session': session})['notices'] == []
+
+
+def test_native_print_result_delivers_queued_notice_once(tmp_path: Path) -> None:
+    """A print host receives the body through its next result even without idle push."""
+    host = IndependentCalls(tmp_path / 'agents', tmp_path, {})
+    session = str(uuid4())
+    call = host.make_call(session, tmp_path)
+    host.queue[session] = [{'event': {'alias': 'child', 'message': 'remembered352'}}]
+    result = call('agents', {'action': 'execute', 'feature': 'status', 'arguments': {}})
+    assert result.document['main_notices'][0]['event']['message'] == 'remembered352'
+    assert 'main_notices' not in call('agents', {'action': 'discover'}).document
     assert host.context({'operation': 'notices', 'session': session})['notices'] == []

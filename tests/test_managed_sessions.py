@@ -306,6 +306,11 @@ def test_real_registered_session(managed_project: ManagedProject) -> None:
     from graphtraj.execution.runner_status import read_alias_mapping
     from graphtraj.runtimes.codex.codex_adapter import read_codex_last_agent_message
     mapping, directory = read_alias_mapping(root / '.graphtraj/runner', alias)
+    # Without an explicit reviewer, the child requests and reports native auto review.
+    permissions = yaml.safe_load((directory / 'session.yml').read_text())['permissions']
+    print(json.dumps({'alias': alias, 'permissions': permissions}))
+    assert permissions['requested'] == 'auto_review' and permissions['source'] == 'default', permissions
+    assert permissions['observed'] == 'auto_review' and permissions['matches_request'] is True, permissions
 
     def answer_contains(*words: str) -> None:
         """Check consumed input using the Adapter's retained native final answer."""

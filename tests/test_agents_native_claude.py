@@ -310,7 +310,9 @@ def test_real_claude_auto_and_native_denial(project: Path, monkeypatch: pytest.M
     document = yaml.safe_load(roles.read_text())
     document['roles']['claude']['model'] = 'claude-opus-5-5'
     document['roles']['claude']['reasoning_effort'] = 'high'
-    document['roles']['claude']['claude'] = {'permission_mode': 'auto'}
+    # CLAUDE_REAL_AUTO_DEFAULT leaves the role unset to observe the default selection.
+    if not os.environ.get('CLAUDE_REAL_AUTO_DEFAULT'):
+        document['roles']['claude']['claude'] = {'permission_mode': 'auto'}
     roles.write_text(yaml.safe_dump(document))
     denied = project / '.graphtraj/state/task332-denied.txt'
     denied.parent.mkdir(parents=True, exist_ok=True)

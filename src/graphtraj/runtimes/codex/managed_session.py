@@ -289,12 +289,17 @@ class CodexManagedExecution:
                 finally:
                     self.startup = None
                 self.native_session = session.thread_id
+                permissions = self.permission_evidence(session.configuration)
                 write_yaml_durably(self.directory / 'session.yml', {
                     'session': session.thread_id,
                     'rollout_path': str(session.rollout_path) if session.rollout_path else None,
+                    'permissions': permissions,
                 })
                 if self.created is not None:
                     self.created(session.thread_id, adapter.service_pid)
+                if permissions['matches_request'] is False:
+                    raise RuntimeAdapterError('RUNTIME_REQUEST_FAILED',
+                                              'Codex did not confirm the requested approvals reviewer.')
                 archive = None
                 if self.independent and self.archive is not None:
                     archive = CodexJsonlArchive(
@@ -690,6 +695,21 @@ class CodexManagedExecution:
                     'index': context['authorization_messages'].index(item),
                 }
         return _approval_history_text(context)
+
+    def permission_evidence(self, observed: dict) -> dict:
+        """Distinguish the requested reviewer and its source from Codex's startup report."""
+        params = self.context.session_document()['adapter_request']
+        requested = params.get('approvalsReviewer', params.get('config', {}).get('approvals_reviewer'))
+        selection = self.context.evidence_document().get('approvals_reviewer') or {}
+        actual = observed.get('approvalsReviewer')
+        return {
+            'requested': requested,
+            'source': 'role' if self.approval is not None else selection.get('source', 'unknown'),
+            'observed': actual if isinstance(actual, str) else 'unknown',
+            'observed_source': 'thread/start' if isinstance(actual, str) else 'unknown',
+            'approval_policy': observed.get('approvalPolicy'),
+            'matches_request': None if requested is None or not isinstance(actual, str) else requested == actual,
+        }
 
     def _pending_requests(self) -> list[dict]:
         """Snapshot native contents with the identity of this execution's owner."""

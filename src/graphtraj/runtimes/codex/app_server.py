@@ -527,7 +527,9 @@ class CodexAppServer:
             path = thread.get('path')
             if path is not None and (not isinstance(path, str) or not Path(path).is_absolute()):
                 raise ValueError('Invalid native rollout path')
-            session = CodexSession(returned_id, Path(path) if path else None)
+            # Keep the native approval facts the Runtime reported at startup.
+            facts = {key: response[key] for key in ('approvalPolicy', 'approvalsReviewer') if key in response}
+            session = CodexSession(returned_id, Path(path) if path else None, facts)
         except (KeyError, TypeError, ValueError, AttributeError) as error:
             raise self._protocol_failure(f'{method}: {error}') from error
         self._sessions[session.thread_id] = session

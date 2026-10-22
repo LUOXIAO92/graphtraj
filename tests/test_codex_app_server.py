@@ -1224,7 +1224,8 @@ def test_permission_request_feature_reaches_fresh_and_resumed_activation(
 
 @pytest.mark.parametrize(
     'selected, expected',
-    [('auto_review', 'auto_review'), (None, None), ('user', 'user')],
+    # Without an explicit selection, the child defaults to native auto review.
+    [('auto_review', 'auto_review'), (None, 'auto_review'), ('user', 'user')],
 )
 def test_harness_approvals_reviewer_reaches_create_and_resume(
     tmp_path: Path, peer: Path, selected: str | None, expected: str | None,

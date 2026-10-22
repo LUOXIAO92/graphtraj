@@ -154,19 +154,12 @@ class _CodexRole:
                             resource.parent if resource.name == "SKILL.md" else resource
                         )
                         filesystem.setdefault(str(directory), "read")
-        approvals_reviewer = (
-            "user" if self.approval is not None
-            else _harness_approvals_reviewer(runtime_store)
-        )
+        approvals_reviewer, _ = self.approvals_reviewer(runtime_store)
         overrides = (
             *native_settings.items(),
             ("default_permissions", self.default_permissions),
             ("model_reasoning_effort", self.reasoning_effort),
-            *(
-                (("approvals_reviewer", approvals_reviewer),)
-                if approvals_reviewer is not None
-                else ()
-            ),
+            ("approvals_reviewer", approvals_reviewer),
             ("developer_instructions", developer_instructions),
             ("agents", self.agents),
             ("features", CODEX_PERMISSION_REQUEST_FEATURES),
@@ -198,6 +191,15 @@ class _CodexRole:
         from graphtraj.runtimes.codex.local_websocket import project_access
         project_access(request, self.local_websocket)
         return request
+
+    def approvals_reviewer(self, runtime_store: Path) -> Tuple[Any, str]:
+        """Select the explicit reviewer, otherwise Codex's native auto review."""
+        if self.approval is not None:
+            return "user", "role"
+        selected = _harness_approvals_reviewer(runtime_store)
+        if selected is not None:
+            return selected, "configuration"
+        return "auto_review", "default"
 
 
 @dataclass(frozen=True)
@@ -246,6 +248,10 @@ class _CodexRuntimePreflight:
                 "model": self._model,
                 "model_reasoning_effort": self._role.reasoning_effort,
                 "native_skills": self._native_skills,
+                "approvals_reviewer": dict(zip(
+                    ("requested", "source"),
+                    self._role.approvals_reviewer(self._runtime_store),
+                )),
                 **({"connection": self._connection_reference,
                     "connection_revision": self._connection_revision,
                     "runtime_home": self._role.runtime_home}

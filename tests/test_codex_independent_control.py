@@ -144,3 +144,47 @@ def test_external_root_reply_uses_existing_receiver(tmp_path: Path) -> None:
     assert result['creator']['session'] == 'parent-session'
     assert result['last_result']['notification'] == 'delivered'
     assert result['last_result']['last_message'] is None
+
+
+def test_lost_parent_acknowledgement_does_not_repeat_child_body(
+    tmp_path: Path,
+    native_settings: dict,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A submitted native callback stays unconfirmed after its connection closes."""
+    import time
+    from agent_swarm.codex.host import CodexHost
+
+    monkeypatch.setenv('PEER_DROP_HOST_REPLY', '1')
+    host = CodexHost(native_settings, tmp_path / 'lost-reply', 'mcp-create-child')
+    host.run()
+    call = bind(host.control, Caller('codex', None, host.native_session, 'codex'))
+    deadline = time.monotonic() + 5
+    while True:
+        result = call({'action': 'status'})
+        assert not result.failed, result.document
+        [child] = result.document['result']['agents']
+        if child['last_result'].get('notification') != 'pending':
+            break
+        assert time.monotonic() < deadline
+        time.sleep(0.01)
+    assert child['last_result']['notification'] == 'unconfirmed'
+    assert child['last_result']['last_message'] is None
+
+
+def test_host_cli_reports_native_turn_failure(tmp_path: Path, native_settings: dict) -> None:
+    """A native failed turn must not produce a successful product command exit."""
+    import subprocess
+
+    settings = tmp_path / 'settings.json'
+    settings.write_text(json.dumps(native_settings))
+    output = tmp_path / 'failed-result.json'
+    result = subprocess.run([
+        sys.executable, '-m', 'agent_swarm.codex.host', '--settings', str(settings),
+        '--directory', str(tmp_path / 'failed-host'), '--output', str(output), 'failed-turn',
+    ], capture_output=True, text=True, timeout=10)
+    assert result.returncode == 1, result.stdout + result.stderr
+    native = json.loads(output.read_text())
+    assert native['outcome'] == 'runtime-error'
+    assert native['error']['code'] == 'RUNTIME_EXECUTION_FAILED'
+    assert 'native execution failed' in result.stderr

@@ -113,12 +113,11 @@ class CodexHost(CodexManagedExecution):
         # No model-provided string or Session ID selects the recipient.
         event = {'source': 'agents', 'alias': notice['agent'], 'event': 'completed',
                  'message': notice['body']}
-        try:
-            asyncio.run_coroutine_threadsafe(
-                self.adapter.send_host_event(self.native_session, event), self.loop,
-            ).result(timeout=30)
-        except (RuntimeAdapterError, RuntimeError, TimeoutError):
-            return False
+        # Once submitted, a lost acknowledgement is unconfirmed, not unavailable.
+        # Let the existing backend retain that distinction and suppress duplicates.
+        asyncio.run_coroutine_threadsafe(
+            self.adapter.send_host_event(self.native_session, event), self.loop,
+        ).result()
         self._display(notice['agent'], self.native_session, notice['body'])
         self.deliveries.append({'agent': notice['agent'], 'parent_session': self.native_session,
                                 'body': notice['body'], 'accepted': True})
@@ -164,6 +163,9 @@ def main() -> None:
     if arguments.output is not None:
         arguments.output.write_text(json.dumps(result, ensure_ascii=False, indent=2) + '\n')
     print(result.get('last_agent_message') or result['outcome'])
+    if result.get('error') is not None:
+        print(json.dumps(result['error'], ensure_ascii=False), file=sys.stderr)
+        raise SystemExit(1)
 
 
 if __name__ == '__main__':

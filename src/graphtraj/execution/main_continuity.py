@@ -112,6 +112,33 @@ def main_sessions(runner: Path) -> set[str]:
     return sessions
 
 
+def _unclaimed_codex_entry(runner: Path, runtime: Any, session: str) -> dict | None:
+    """Return a Codex Main binding whose native entry never continued Main.
+
+    Codex continues at SessionStart, and its native hook Session identifies
+    that entry (caller identity has already matched it to the live thread). A
+    binding whose entry recorded no claim (one written by an installation
+    before continuity existed) continues Main at its first control.
+    Once that hook Session has claimed, it is refused after another Main
+    continues until Codex starts or resumes it again.
+    """
+    import yaml
+
+    if runtime != 'codex':
+        return None
+    key = hashlib.sha256(('codex:' + session).encode()).hexdigest()
+    path = _directory(runner) / ('finalize_' + key) / 'session.yml'
+    if not path.is_file():
+        return None
+    connection = yaml.safe_load(path.read_text(encoding='utf-8'))['connection']
+    hook = connection.get('hook_session')
+    if not isinstance(hook, str) or any(
+            _same(record, 'codex', session) and record['connection'].get('hook_session') == hook
+            for record in claims(runner)):
+        return None
+    return {**connection, 'runtime': 'codex', 'session': session}
+
+
 @contextmanager
 def claimable(on_claim: Callable[[], None] | None) -> Iterator[None]:
     """Let this call's first control claim Main for a host without entry events."""
@@ -150,6 +177,10 @@ def require_control(runner: Path, connection: Mapping[str, Any] | None) -> None:
         return
     if current is None or session not in main_sessions(runner):
         # Not a project Main (for example a native helper): its own authority decides.
+        return
+    entry = _unclaimed_codex_entry(runner, runtime, session)
+    if entry is not None:
+        claim_main(runner, entry, 'codex:first-control')
         return
     at = time.strftime('%Y-%m-%dT%H:%M:%S%z', time.localtime(current['at']))
     raise RunnerError(

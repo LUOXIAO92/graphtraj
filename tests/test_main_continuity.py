@@ -77,6 +77,72 @@ def test_first_control_claims_only_for_a_fresh_host_entry(tmp_path: Path) -> Non
     assert current_main(tmp_path)['session'] == 'codex-main'
 
 
+def _codex_binding(runner: Path, hook_session: str) -> dict:
+    """Write the Codex Main binding SessionStart/Stop keeps, without a claim."""
+    import hashlib
+
+    import yaml
+
+    connection = {**CODEX, 'hook_session': hook_session}
+    key = hashlib.sha256(b'codex:codex-main').hexdigest()
+    directory = runner / 'main-sessions' / ('finalize_' + key)
+    directory.mkdir(parents=True, exist_ok=True)
+    (directory / 'session.yml').write_text(yaml.safe_dump(
+        {'runtime': 'codex', 'session': 'codex-main', 'connection': connection, 'cwd': '/h'}))
+    return connection
+
+
+def test_unclaimed_codex_entry_continues_at_first_control_once(tmp_path: Path, monkeypatch) -> None:
+    """A resident Codex Main entry without a claim continues Main once; no ping-pong."""
+    runner = tmp_path / '.graphtraj/runner'
+    monkeypatch.setattr('graphtraj.workspace.runner_project.discover_runner_directory', lambda cwd: runner)
+    entry = _codex_binding(runner, 'hook-1')
+    claim_main(runner, {**CLAUDE, 'runner': str(runner)}, 'claude:first-control')
+
+    with runtime_caller(runner, None), parent_connection(dict(CODEX)):
+        # Reads never continue Main.
+        require_feature_control('task_graph', tmp_path)
+        assert current_main(runner)['session'] == 'claude-main'
+        require_feature_control('decide_result', tmp_path)
+    record = current_main(runner)
+    assert (record['entry'], record['connection']) == ('codex:first-control', entry)
+    assert record['previous'] == {'runtime': 'claude', 'session': 'claude-main'}
+    # Notices for the earlier Claude Main reach the Codex daemon of this entry.
+    assert route_notice(runner, CLAUDE)['codex_home'] == CODEX['codex_home']
+    # The superseded Claude process stays refused; the Codex Main keeps control.
+    with pytest.raises(RunnerError) as refused:
+        require_control(runner, CLAUDE)
+    assert refused.value.code == 'main-continued'
+    require_control(runner, CODEX)
+
+    # Another Main continues: this Codex entry is refused, never claiming again.
+    with claimable(lambda: None):
+        require_control(runner, {'runtime': 'claude', 'session': 'claude-next'})
+    with pytest.raises(RunnerError) as refused:
+        require_control(runner, CODEX)
+    assert refused.value.code == 'main-continued'
+    assert [item['entry'] for item in main_continuity.claims(runner)] == [
+        'claude:first-control', 'codex:first-control', 'claude:first-control']
+
+    # Only a native re-entry (SessionStart resume) takes control back.
+    claim_main(runner, _codex_binding(runner, 'hook-2'), 'codex:SessionStart:resume')
+    require_control(runner, CODEX)
+    # A native helper or checker has no Main binding and never claims.
+    require_control(runner, {'runtime': 'codex', 'session': 'native-helper'})
+    assert len(main_continuity.claims(runner)) == 4
+
+
+def test_codex_entry_claimed_at_session_start_is_refused_after_continuation(tmp_path: Path) -> None:
+    """A Codex Main that claimed at SessionStart cannot take control back by first control."""
+    runner = tmp_path / 'runner'
+    claim_main(runner, _codex_binding(runner, 'hook-1'), 'codex:SessionStart:startup')
+    claim_main(runner, CLAUDE, 'claude:first-control')
+    with pytest.raises(RunnerError) as refused:
+        require_control(runner, CODEX)
+    assert refused.value.code == 'main-continued'
+    assert current_main(runner)['session'] == 'claude-main'
+
+
 def test_current_main_continues_roots_of_earlier_main_sessions(tmp_path: Path) -> None:
     """Default status shows earlier Main roots; the earlier Main may read but not control."""
     runner  = tmp_path / 'runner'

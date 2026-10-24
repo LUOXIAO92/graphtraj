@@ -12,8 +12,12 @@ def project(record: dict, context: dict) -> list[dict]:
     base = {'model': context.get('model'), 'provider': context.get('provider')}
     if kind in {'assistant', 'user'}:
         message = record.get('message', {})
+        base['model'] = message.get('model') or base['model']
         events = []
-        for block in message.get('content', []):
+        content = message.get('content', [])
+        if isinstance(content, str):
+            content = [{'type': 'text', 'text': content}]
+        for block in content:
             if block.get('type') == 'tool_use':
                 events.append({**base, 'kind': 'tool', 'phase': 'call', 'call_id': block.get('id'),
                                'name': block.get('name'), 'arguments': block.get('input')})
@@ -24,6 +28,17 @@ def project(record: dict, context: dict) -> list[dict]:
             else:
                 events.append({**base, 'kind': 'message', 'role': kind,
                                'text': text_content([block]), 'phase': 'final'})
+        if (kind == 'assistant' and isinstance(record.get('sessionId'), str)
+                and isinstance(message.get('usage'), dict)):
+            # Native fragments/replays of one API response share message.id.
+            # Consumers replace snapshots under this identity, never sum them.
+            # A transcript UUID identifies a record, not a provider call.
+            identity = message.get('id')
+            usage = usage_fact(message['usage'], 'claude',
+                               identity if isinstance(identity, str) and identity else None, 'snapshot')
+            if not usage['attributable'] and record.get('uuid'):
+                usage['observation_id'] = 'native-record:' + record['uuid']
+            events.append({**base, 'kind': 'usage', 'usage': usage})
         return events
     if kind == 'stream_event':
         event = record.get('event', {})

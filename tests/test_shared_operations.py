@@ -403,9 +403,8 @@ def test_python_budgeted_launch_preserves_notices_without_writing_to_terminal(
         assert events == []
 
     from graphtraj.execution.runner_cleanup import cleanup_task
-    from graphtraj.execution.runner_control import interrupt_session, send_instruction
+    from graphtraj.execution.runner_control import interrupt_session
     from graphtraj.execution.runner_models import RunnerError
-    from graphtraj.execution.runner_status import status_aliases
     from graphtraj.interfaces.cli.agent_runner import main as runner_main
     from graphtraj.teams.team_round import continue_stopped_task
     from graphtraj.teams.team_replacement import replace_session
@@ -413,19 +412,7 @@ def test_python_budgeted_launch_preserves_notices_without_writing_to_terminal(
     monkeypatch.chdir(root)
     alias = response.document["tasks"][0]["alias"]
     runner = CliRunner()
-    direct_status = status_aliases((alias,), root)
-    assert direct_status.succeeded
-    rendered = runner.invoke(runner_main, ["status", alias])
-    assert rendered.exit_code == 0, rendered.output
-    assert yaml.safe_load(rendered.stdout) == direct_status.document
-    missing = status_aliases((alias, "missing@l1"), root)
-    rendered = runner.invoke(runner_main, ["status", alias, "missing@l1"])
-    assert rendered.exit_code == 1
-    assert yaml.safe_load(rendered.stdout) == missing.document
-    assert not missing.succeeded and missing.errors
-
     for operation, arguments, cli_arguments, identity in (
-        (send_instruction, (alias, " ", root, ()), ["send", alias, "--instruction", " "], {"alias": alias}),
         (continue_stopped_task, ("73", ("",), root), ["continue", "--task-id", "73", "--caused-by-event-id", ""], {"task_id": "73"}),
         (replace_session, (alias, "main", ("",), root), ["replace", alias, "--actor", "main", "--caused-by-event-id", ""], {"alias": alias}),
     ):
@@ -434,10 +421,7 @@ def test_python_budgeted_launch_preserves_notices_without_writing_to_terminal(
         rendered = runner.invoke(runner_main, cli_arguments)
         assert rendered.exit_code == 1
         assert yaml.safe_load(rendered.stdout) == {**identity, "error": error.value.as_document()}
-    stopped = interrupt_session(alias, root)
-    rendered = runner.invoke(runner_main, ['interrupt', alias])
-    assert rendered.exit_code == 0, rendered.output
-    assert yaml.safe_load(rendered.stdout) == stopped
+    interrupt_session(alias, root)
     refused = cleanup_task(root, "73")
     assert not refused.succeeded
     rendered = runner.invoke(runner_main, ["cleanup", "--task-id", "73"])

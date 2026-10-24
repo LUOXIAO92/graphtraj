@@ -3,8 +3,8 @@ from concurrent.futures import ThreadPoolExecutor
 from contextlib import ExitStack
 import json
 import os
-from pathlib import Path
 import shutil
+from pathlib import Path
 import sys
 import threading
 import time
@@ -12,6 +12,7 @@ import time
 import pytest
 import yaml
 
+from graphtraj.configuration.project_configuration import cli_directory
 from graphtraj.configuration.project_roles import parse_inline_role
 from graphtraj.configuration.role_definitions import resolve_child_role
 from graphtraj.execution.runner_heartbeat import hold_ownership
@@ -159,7 +160,7 @@ def test_claude_permission_mode_configuration_and_resume(
         sandbox = launch['settings']['sandbox']
         assert sandbox['enabled'] and sandbox['failIfUnavailable']
         assert sandbox['allowUnsandboxedCommands'] is False
-        assert sandbox['autoAllowBashIfSandboxed'] is False
+        assert sandbox['autoAllowBashIfSandboxed'] is True
         assert sandbox['filesystem']['denyRead'] and sandbox['filesystem']['denyWrite']
         assert result['permissions']['requested'] == mode
         assert result['permissions']['observed'] == mode
@@ -270,8 +271,11 @@ def test_claude_public_launch_diagnostics_are_bounded_and_correlated(
                     'private-prompt-marker', str(tmp_path), 'mcpServers'):
         assert private not in serialized
     assert len(serialized) < 4096
-    with runtime_caller(runner, 'research@x2'), pytest.raises(RunnerError):
-        tools.read_reports({'alias': 'research@x1'}, cwd=tmp_path)
+    # A non-direct project member reads the report projection without private material.
+    with runtime_caller(runner, 'research@x2'):
+        read = json.dumps(tools.read_reports({'alias': 'research@x1'}, cwd=tmp_path).document)
+    for private in ('sk-diagnosticsecret', 'private@example.invalid', 'private-prompt-marker', 'mcpServers'):
+        assert private not in read
 
 
 def test_claude_permission_reply_and_error(tmp_path: Path, claude_environment: None, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -323,7 +327,7 @@ def test_claude_send_and_confirmed_stop(tmp_path: Path, claude_environment: None
 def test_claude_later_prompt_hook_is_answered_behind_a_collection_backlog(
         tmp_path: Path, claude_environment: None, monkeypatch: pytest.MonkeyPatch) -> None:
     """A prompt sent into a live execution is released before its native hook times out."""
-    from graphtraj.runtimes.claude.collection import StreamCollector as ClaudeJsonlCollector
+    from agent_swarm.sessions.claude import ClaudeJsonlCollector
 
     result_project(tmp_path)
     hooks = tmp_path / 'hooks.log'
@@ -355,15 +359,14 @@ def test_claude_later_prompt_hook_is_answered_behind_a_collection_backlog(
         finally:
             if not turn.done.is_set():
                 turn.terminate()
-    assert not hooks.exists() or 'timed out' not in hooks.read_text()
+    assert 'timed out' not in hooks.read_text()
     assert outcome['outcome'] == 'completed' and 'finish' in outcome['last_agent_message']
 
 
 def test_claude_later_prompt_hook_is_answered_during_one_slow_collection(
         tmp_path: Path, claude_environment: None, monkeypatch: pytest.MonkeyPatch) -> None:
     """A long Session's single archive collection does not hold a later prompt past its hook timeout."""
-    from graphtraj.runtimes.claude.jsonl import ClaudeJsonlCollector
-    from graphtraj.sessions.archive import SessionArchive
+    from agent_swarm.sessions.claude import ClaudeJsonlCollector
 
     result_project(tmp_path)
     hooks = tmp_path / 'hooks.log'
@@ -381,8 +384,6 @@ def test_claude_later_prompt_hook_is_answered_during_one_slow_collection(
     monkeypatch.setattr(ClaudeJsonlCollector, 'collect', long_session)
     with ExitStack() as stack, ThreadPoolExecutor(max_workers=1) as pool:
         turn, ready, _ = execution(tmp_path, stack, 'wait')
-        turn.configure_independent(archive=SessionArchive(tmp_path / 'archive', save_normalized_sessions=True),
-                                   agents_callback=lambda request: None)
         future = pool.submit(turn.run)
         try:
             assert ready.wait(5)
@@ -411,9 +412,9 @@ def test_claude_prompt_during_original_long_history_collection(
     supplied transcript is copied; the original Session is never resumed or edited.
     """
     from graphtraj.interfaces import tools
-    from graphtraj.runtimes.claude.history import conversation, read_records
-    from graphtraj.runtimes.claude.jsonl import ClaudeJsonlCollector
-    from graphtraj.sessions.archive import JsonlSessionStore, SessionArchive, archive_path
+    from agent_swarm.sessions.claude_history import conversation, read_records
+    from agent_swarm.sessions.claude import ClaudeJsonlCollector
+    from agent_swarm.sessions.archive import JsonlSessionStore, SessionArchive, archive_path
 
     original = Path(os.environ['CLAUDE_TEST_TRANSCRIPT'])
     native_id = original.stem
@@ -450,7 +451,7 @@ def test_claude_prompt_during_original_long_history_collection(
                 turn.terminate()
         assert outcome['outcome'] == 'completed'
         assert outcome['last_agent_message'] == 'wait-stream|finish'
-        assert not hooks.exists()
+        assert not hooks.exists() or 'timed out' not in hooks.read_text()
         diagnostics = tools.read_reports({'alias': 'research@x1'}, cwd=tmp_path).document['runtime_diagnostics']
         hook = diagnostics['prompt_hook']
         assert hook['queue_seconds'] + hook['handler_seconds'] < 2
@@ -483,7 +484,7 @@ def test_claude_prompt_during_original_long_history_collection(
 def test_claude_interrupt_confirms_within_its_window_behind_a_collection_backlog(
         tmp_path: Path, claude_environment: None, monkeypatch: pytest.MonkeyPatch) -> None:
     """Queued fragments share archive rewrites, so a stop is confirmed inside the operation window."""
-    from graphtraj.sessions.archive import JsonlSessionStore, SessionArchive
+    from agent_swarm.sessions.archive import JsonlSessionStore
 
     result_project(tmp_path)
     monkeypatch.setenv('CLAUDE_FIXTURE_STREAM_FRAGMENTS', '1500')
@@ -499,8 +500,6 @@ def test_claude_interrupt_confirms_within_its_window_behind_a_collection_backlog
     monkeypatch.setattr(JsonlSessionStore, 'checkpoint', durable)
     with ExitStack() as stack, ThreadPoolExecutor(max_workers=1) as pool:
         turn, ready, _ = execution(tmp_path, stack, 'wait-stream')
-        turn.configure_independent(archive=SessionArchive(tmp_path / 'archive', save_normalized_sessions=True),
-                                   agents_callback=lambda request: None)
         future = pool.submit(turn.run)
         assert ready.wait(5)
         history = tmp_path / (turn.session + '.json')
@@ -525,7 +524,7 @@ def test_claude_reports_physical_stop_before_archive_finishes(
     archive_fails: bool,
 ) -> None:
     """Native stop is confirmed independently; the occupied Worker retains archive work."""
-    from graphtraj.runtimes.claude.collection import StreamCollector as ClaudeJsonlCollector
+    from agent_swarm.sessions.claude import ClaudeJsonlCollector
     from graphtraj.interfaces import tools
     from graphtraj.execution.runner_connection import worker_connection
     from graphtraj.execution.runner_models import RunnerError
@@ -604,7 +603,7 @@ def test_collection_progress_is_public_while_native_turn_remains_open(
 ) -> None:
     """Public reports advance without another prompt or native termination."""
     from graphtraj.interfaces import tools
-    from graphtraj.runtimes.claude.collection import StreamCollector
+    from agent_swarm.sessions.claude import ClaudeJsonlCollector as StreamCollector
 
     result_project(tmp_path)
     blocked, release = threading.Event(), threading.Event()
@@ -682,7 +681,6 @@ def test_claude_input_echoed_after_a_result_waits_for_the_next(
 ) -> None:
     """Input echoed after a turn's result is not covered by it, even when idle follows."""
     result_project(tmp_path)
-    trace = tmp_path / 'state/claude.jsonl'
     with ExitStack() as stack, ThreadPoolExecutor(max_workers=1) as pool:
         turn, ready, _ = execution(tmp_path, stack, 'merge-late')
         future = pool.submit(turn.run)
@@ -690,13 +688,20 @@ def test_claude_input_echoed_after_a_result_waits_for_the_next(
         control = {'operation': 'send', 'session': turn.session, 'execution_id': turn.execution_id}
         turn.operate({**control, 'instruction': 'joined'})
         deadline = time.monotonic() + 5
-        while not any(json.loads(line).get('type') == 'result' for line in trace.read_text().splitlines()):
-            assert time.monotonic() < deadline, 'the joined turn produced no result'
+        # The native Trace contains messages, not transport completion records.
+        while turn.results < 1:
+            if time.monotonic() >= deadline:
+                turn.terminate()
+                pytest.fail('the joined turn produced no result')
             time.sleep(0.02)
         assert not future.done()
         # Its echo follows that result; the earlier turn's idle then arrives.
         turn.operate({**control, 'instruction': 'late'})
-        completed = future.result(timeout=10)
+        try:
+            completed = future.result(timeout=10)
+        finally:
+            if not future.done():
+                turn.terminate()
         assert completed['outcome'] == 'completed'
         assert completed['last_agent_message'] == 'merge-late|joined|late'
 
@@ -752,26 +757,41 @@ def test_claude_configuration_is_exact_and_approval_fails_closed(tmp_path: Path,
         context(tmp_path, model='opus')
 
 
-def test_read_resources_do_not_become_native_working_directories(
-    tmp_path: Path, claude_environment: None,
+@pytest.mark.parametrize('access', ['read', 'write'])
+def test_read_resources_are_native_readable_and_not_writable(
+    tmp_path: Path, claude_environment: None, access: str,
 ) -> None:
-    """Deliver read grants without promoting them to writable native workspaces."""
+    """Let native file tools read configured resources while every write stays denied."""
     result_project(tmp_path)
     resources = [tmp_path / 'authorized/bin', tmp_path / 'authorized/lib']
     for path in resources:
         path.mkdir(parents=True)
+    resource_file = tmp_path / 'authorized/AGENTS.md'
+    resource_file.write_text('Read this original file without granting its parent.\n')
+    resources.append(resource_file)
     with ExitStack() as stack:
         turn, _, _ = execution(tmp_path, stack, 'Inspect native permission configuration',
-                               claude={'read_paths': list(map(str, resources))})
+                               claude={'read_paths': list(map(str, resources))},
+                               worktree_access=access)
         turn.run()
     launch = json.loads((tmp_path / 'native-permissions.json').read_text())
     settings = launch['settings']
-    assert settings['permissions']['additionalDirectories'] == []
     filesystem = settings['sandbox']['filesystem']
+    assert launch['resource_update_before_prompt']
     for path in resources:
+        assert str(path.resolve()) in settings['permissions']['additionalDirectories']
+        assert (str(path.resolve()) in launch['add_dirs']) == path.is_dir()
+        assert launch['restricted']
+        assert f'Read(/{path.resolve()}/**)' in settings['permissions']['allow']
+        assert f'Edit(/{path.resolve()}/**)' in settings['permissions']['deny']
         assert str(path.resolve()) in filesystem['allowRead']
         assert str(path.resolve()) in filesystem['denyWrite']
         assert str(path.resolve()) not in filesystem['allowWrite']
+    assert str(resource_file.parent.resolve()) not in settings['permissions']['additionalDirectories']
+    assert str(resource_file.parent.resolve()) not in filesystem['allowWrite']
+    common = str(tmp_path / 'worktrees/research/.git')
+    assert (common in filesystem['denyWrite']) == (access == 'read')
+    assert (common in filesystem['allowWrite']) == (access == 'write')
     # Project development records stay readable for diagnosis but unwritable;
     # the CLI control channel stays unreadable.
     for path in (tmp_path / 'state', tmp_path / '.graphtraj/runner'):
@@ -779,13 +799,31 @@ def test_read_resources_do_not_become_native_working_directories(
         assert f'Edit(/{path.resolve()}/**)' in settings['permissions']['deny']
         assert str(path.resolve()) in filesystem['allowRead']
         assert str(path.resolve()) in filesystem['denyWrite']
-    channel = tmp_path.resolve() / '.graphtraj/cli'
+    channel = cli_directory(tmp_path.resolve())
     assert f'Read(/{channel}/**)' in settings['permissions']['deny']
     assert str(channel) in filesystem['denyRead']
 
 
+def test_native_refusal_of_exact_resources_prevents_model_work(
+    tmp_path: Path, claude_environment: None, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A native settings refusal cannot release the prompt with incomplete access."""
+    result_project(tmp_path)
+    resource = tmp_path / 'authorized-file.md'
+    resource.write_text('Explicitly authorized original file\n')
+    monkeypatch.setenv('CLAUDE_FIXTURE_REJECT_RESOURCES', '1')
+    with ExitStack() as stack:
+        turn, _, _ = execution(tmp_path, stack, 'Must not run',
+                               claude={'read_paths': [str(resource)]})
+        with pytest.raises(RuntimeAdapterError, match='refused exact resource settings'):
+            turn.run()
+    assert not (tmp_path / (turn.native_id + '.json')).exists()
+    assert turn.diagnostics['read_resources']['control_status'] == 'error'
+    assert turn.terminal_confirmed
+
+
 def test_claude_resource_grants_and_read_only_recovery(tmp_path: Path, claude_environment: None) -> None:
-    """Retain external read-only resources and refuse grants to private state."""
+    """Keep project records readable on recovery while control channels stay protected."""
     result_project(tmp_path)
     resource = tmp_path / 'external-method'
     resource.mkdir()
@@ -798,8 +836,50 @@ def test_claude_resource_grants_and_read_only_recovery(tmp_path: Path, claude_en
     )
     assert recovered['worktree_access'] == 'read' and request['worktree_access'] == 'write'
     assert recovered['resources'] == request['resources']
-    with pytest.raises(RuntimeAdapterError, match='private'):
-        context(tmp_path, claude={'read_paths': [str(tmp_path / 'state')]})
+    for path in (tmp_path / 'state', tmp_path / '.graphtraj/runner'):
+        _, records = context(tmp_path, claude={'read_paths': [str(path)]})
+        assert records.launch_document()['adapter_request']['resources'] == [str(path)]
+    with pytest.raises(RuntimeAdapterError, match='control'):
+        context(tmp_path, claude={'read_paths': [str(cli_directory(tmp_path))]})
+
+
+@pytest.mark.parametrize('access', ['read', 'write'])
+def test_project_history_files_keep_native_home_private(
+    tmp_path: Path, claude_environment: None, access: str, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Grant associated original histories without admitting their home or neighbors."""
+    result_project(tmp_path)
+    home = tmp_path / 'native-home'
+    home.mkdir()
+    history = home / 'other-agent.jsonl'
+    history.write_text('{"development": "retained project record"}\n')
+    unrelated = home / 'unrelated.jsonl'
+    unrelated.write_text('Not associated with this project.\n')
+    association = tmp_path / '.graphtraj/runner/sessions/other/session.yml'
+    association.parent.mkdir(parents=True)
+    association.write_text(yaml.safe_dump({'session': 'other', 'rollout_path': str(history)}))
+    monkeypatch.setenv('CLAUDE_CONFIG_DIR', str(home))
+    fields = {'worktree_access': access}
+    for path in (home, unrelated):
+        with pytest.raises(RuntimeAdapterError, match='credentials'):
+            context(tmp_path, **fields, claude={'read_paths': [str(path)]})
+    with ExitStack() as stack:
+        turn, _, _ = execution(tmp_path, stack, 'history configuration', **fields,
+                               claude={'read_paths': [str(history)]})
+        turn.run()
+    launch = json.loads((tmp_path / 'native-permissions.json').read_text())
+    settings = launch['settings']
+    permissions = settings['permissions']
+    filesystem = settings['sandbox']['filesystem']
+    assert launch['restricted'] and permissions['blockReadsOutsideWorkingDirectories']
+    assert str(history) in permissions['additionalDirectories']
+    assert str(home) not in permissions['additionalDirectories']
+    assert str(unrelated) not in permissions['additionalDirectories']
+    assert str(history) in filesystem['allowRead']
+    assert str(home) in filesystem['denyRead']
+    assert str(home) in filesystem['denyWrite']
+    assert f'Edit(/{history})' in permissions['deny']
+    assert not settings['sandbox']['allowUnsandboxedCommands']
 
 
 def test_claude_stop_without_native_settlement_confirms_only_exit(

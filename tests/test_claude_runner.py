@@ -10,7 +10,7 @@ import time
 import pytest
 import yaml
 
-from conftest import FakeCodex, InstalledCommands, run_process
+from conftest import runner_command, runner_operation, FakeCodex, InstalledCommands, run_process
 from runner_fixtures import configure_harness
 from test_task_recovery import installed_commands, events
 from test_task_budget_control import BODY
@@ -55,36 +55,22 @@ def setup(
 
 
 def command(commands: InstalledCommands, root: Path, environment: dict, *args: str):
-    """Invoke installed public Runner operations with a finite timeout.
-
-    Session controls use the Python Runner entry points; their old CLI
-    commands were removed when the agents entry became independent.
-    """
-    if args[0] in {'status', 'send', 'interrupt', 'reports'}:
+    """Invoke public Runner controls and bind the fixture host for report reads."""
+    if args[0] == 'reports':
         script = """
 import sys, yaml
 from pathlib import Path
-from graphtraj.execution.runner_control import send_instruction, interrupt_session, read_session_reports
-from graphtraj.execution.runner_status import status_aliases, runtime_caller
-args = sys.argv[1:]
-if args[0] == 'reports':
-    # The fixture host binds its verified root read scope; this is not a
-    # caller-supplied CLI identity or a native-authentication acceptance test.
-    with runtime_caller(Path.cwd() / '.graphtraj/runner', None):
-        result = read_session_reports(args[1], Path.cwd())
-elif args[0] == 'status':
-    response = status_aliases(args[1:], Path.cwd())
-    result = response.document
-elif args[0] == 'send':
-    result = send_instruction(args[1], args[args.index('--instruction') + 1], Path.cwd(),
-                              (args[args.index('--caused-by-event-id') + 1],))
-else:
-    result = interrupt_session(args[1], Path.cwd())
+from graphtraj.execution.runner_control import read_session_reports
+from graphtraj.execution.runner_status import runtime_caller
+# The controlled fixture host supplies verified project read scope.
+# This does not validate native caller authentication.
+with runtime_caller(Path.cwd() / '.graphtraj/runner', None):
+    result = read_session_reports(sys.argv[1], Path.cwd())
 print(yaml.safe_dump(result))
 """
-        return run_process([str(commands.runner.with_name('python')), '-c', script, *args],
+        return run_process([str(commands.runner.with_name('python')), '-c', script, args[1]],
                            cwd=root, env=environment, timeout=65)
-    return run_process([str(commands.runner), *args], cwd=root, env=environment, timeout=65)
+    return run_process(runner_command(commands, *args), cwd=root, env=environment, timeout=65)
 
 
 def settled(commands: InstalledCommands, root: Path, environment: dict, alias: str) -> dict:
@@ -286,8 +272,8 @@ def test_child_registration_follows_its_owning_execution(
     def last_tool_result() -> dict:
         """Read the swarm outcome the native peer answered with in its Trace."""
         results = [json.loads(line) for line in trace.read_text().splitlines()
-                   if json.loads(line).get('type') == 'result']
-        return json.loads(results[-1]['result'])
+                   if json.loads(line).get('type') == 'assistant']
+        return json.loads(results[-1]['message']['content'][0]['text'])
 
     failed = send('register-error')
     assert failed['last_outcome'] == 'runtime-error'
@@ -638,12 +624,12 @@ def test_recovery_refreshes_only_original_role_read_paths(
         assert str(path.resolve()) in filesystem['allowRead']
         assert str(path.resolve()) in filesystem['denyWrite']
         assert str(path.resolve()) not in filesystem['allowWrite']
-        assert str(path.resolve()) not in native['permissions']['additionalDirectories']
+        assert str(path.resolve()) in native['permissions']['additionalDirectories']
         assert f'Edit(/{path.resolve()}/**)' in native['permissions']['deny']
     assert str(root / 'unrelated') not in filesystem['allowRead']
 
     # A later role change still cannot expose private control/state paths.
-    roles['roles']['original_team']['researcher']['claude']['read_paths'] = [str(root / '.graphtraj/state')]
+    roles['roles']['original_team']['researcher']['claude']['read_paths'] = [str(root / '.graphtraj/cli')]
     role_file.write_text(yaml.safe_dump(roles))
     refused = command(installed_commands, root, environment, 'send', alias,
                       '--instruction', 'Do not start with private resource access',
@@ -874,6 +860,61 @@ def test_public_interrupt_confirms_an_exited_owner_without_terminal_record(
     assert 'replacement-not-stopped' not in replaced.stdout + replaced.stderr
     assert replaced.returncode == 0, replaced.stdout + replaced.stderr
     assert yaml.safe_load(replaced.stdout)['replacement_alias'] != alias
+
+
+def test_startup_hook_reply_does_not_wait_for_another_startup(
+    installed_commands: InstalledCommands,
+    temporary_git_repository: Path,
+    fake_codex: FakeCodex,
+    tmp_path: Path,
+) -> None:
+    """Another process holding the project startup lock must not delay the hook reply."""
+    root, environment = setup(installed_commands, temporary_git_repository, fake_codex, tmp_path)
+    log = tmp_path / 'hook-replies.log'
+    environment.update(CLAUDE_FIXTURE_START_LOCK=str(root / '.graphtraj/runner/execution-start.lock'),
+                       CLAUDE_FIXTURE_START_LOCK_SECONDS='4', CLAUDE_FIXTURE_HOOK_LOG=str(log))
+    batch = root / 'probe.yml'
+    batch.write_text(yaml.safe_dump({'tasks': [{'task_id': '320', 'role': 'researcher'}]}))
+    result = command(installed_commands, root, environment, '--swarm-input', str(batch))
+    assert result.returncode == 0, result.stdout + result.stderr
+    alias = yaml.safe_load(result.stdout)['tasks'][0]['alias']
+    assert settled(installed_commands, root, environment, alias)['last_outcome'] == 'completed'
+    assert Path(str(root / '.graphtraj/runner/execution-start.lock') + '.held').exists()
+    assert float(log.read_text().split()[0]) < 2
+
+
+def test_stop_published_during_startup_refuses_the_first_turn(
+    installed_commands: InstalledCommands,
+    temporary_git_repository: Path,
+    fake_codex: FakeCodex,
+    tmp_path: Path,
+) -> None:
+    """A public interrupt between process start and the startup hook still stops the turn."""
+    root, environment = setup(installed_commands, temporary_git_repository, fake_codex, tmp_path)
+    gate = tmp_path / 'hook-gate'
+    log = tmp_path / 'hook-replies.log'
+    environment.update(CLAUDE_FIXTURE_HOOK_GATE=str(gate), CLAUDE_FIXTURE_HOOK_LOG=str(log))
+    batch = root / 'probe.yml'
+    batch.write_text(yaml.safe_dump({'tasks': [{'task_id': '320', 'role': 'researcher'}]}))
+    launch = subprocess.Popen([str(installed_commands.runner), '--swarm-input', str(batch)], cwd=root,
+                              env=environment, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    deadline = time.monotonic() + 30
+    while not Path(str(gate) + '.waiting').exists():
+        assert time.monotonic() < deadline and launch.poll() is None
+        time.sleep(0.05)
+    alias = next(path.name for path in (root / '.graphtraj/runner/sessions').iterdir() if path.is_dir())
+    stopping = subprocess.Popen(runner_operation(installed_commands, 'interrupt', alias), cwd=root,
+                                env=environment, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    # The interrupt publishes its stop before addressing the execution; the
+    # held hook is then released so this execution reaches Session binding.
+    time.sleep(1)
+    gate.touch()
+    stdout, stderr = stopping.communicate(timeout=60)
+    launched, launch_error = launch.communicate(timeout=60)
+    assert stopping.returncode == 0, stdout + stderr
+    assert launch.returncode != 0
+    assert 'subtree-stopped' in launched + launch_error
+    assert not log.exists()
 
 
 def test_claude_member_can_read_project_records_but_not_control_channels(

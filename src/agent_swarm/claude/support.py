@@ -1,6 +1,5 @@
 """Native transcript, credential and diagnostic helpers."""
 from __future__ import annotations
-import json
 import os
 import re
 import tempfile
@@ -8,23 +7,6 @@ from pathlib import Path
 from typing import Any
 import yaml
 from agent_swarm.runtime import RuntimeAdapterError
-
-def read_records(path: Path, session: str) -> list[dict]:
-    """Read complete lines from the one attested transcript, never scan a home."""
-    records = []
-    with path.open('rb') as stream:
-        for line in stream:
-            # The SDK accepts a valid final JSON value without a newline. A
-            # torn value raises with its original bytes/text still available
-            # to the collector as an unresolved observation.
-            record = json.loads(line)
-            if not isinstance(record, dict):
-                raise ValueError('Claude transcript entry must be an object.')
-            if record.get('sessionId', session) != session:
-                raise ValueError('Claude transcript belongs to another Session.')
-            records.append(record)
-    return records
-
 
 _SECRET = re.compile(
     r'(?i)(api[_-]?key|authorization|password|secret|credential|access[_-]?token|'

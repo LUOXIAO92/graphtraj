@@ -6,8 +6,8 @@ from pathlib import Path
 import pytest
 
 from agent_swarm import write_config
-from graphtraj.sessions.archive import JsonlSessionStore, SessionArchive, archive_path
-from graphtraj.runtimes.codex.jsonl_archive import CodexJsonlArchive
+from agent_swarm.sessions.archive import JsonlSessionStore, SessionArchive, archive_path
+from agent_swarm.sessions.codex import CodexJsonlArchive
 from graphtraj.interfaces.agents import ConfiguredSessionArchive, swarm_root
 from graphtraj.interfaces.gateway import handle_request
 from graphtraj.execution.runner_status import runtime_caller

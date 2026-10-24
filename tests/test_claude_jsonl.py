@@ -7,9 +7,9 @@ import subprocess
 
 import pytest
 
-from graphtraj.runtimes.claude.history import conversation, message_id
-from graphtraj.runtimes.claude.jsonl import ClaudeJsonlCollector
-from graphtraj.sessions.archive import JsonlSessionStore, SessionArchive, archive_path
+from agent_swarm.sessions.claude_history import conversation, message_id
+from agent_swarm.sessions.claude import ClaudeJsonlCollector
+from agent_swarm.sessions.archive import JsonlSessionStore, SessionArchive, archive_path
 
 
 def message(uid: str, parent: str | None, text: str, *, role: str = 'user', **fields: object) -> dict:

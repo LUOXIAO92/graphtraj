@@ -1,14 +1,20 @@
 """GraphTraj policy and optional archives for the shared Claude native owner."""
 from __future__ import annotations
 
+from graphtraj.configuration.project_configuration import (
+    cli_directory as project_cli_directory,
+    configuration_file as project_configuration_file,
+    core_directory as project_core_directory,
+    runner_directory as project_runner_directory,
+)
+
 from contextlib import ExitStack
-import os
 from pathlib import Path
 import sys
 import tempfile
 
 from agent_swarm.claude.execution import ClaudeExecution as NativeClaudeExecution
-from graphtraj.runtimes.runtime_adapter import record_runtime_process
+from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError, record_runtime_process
 
 
 class ClaudeExecution(NativeClaudeExecution):
@@ -27,20 +33,44 @@ class ClaudeExecution(NativeClaudeExecution):
         resources = [p.resolve() for p in (worktree / 'docs', worktree / 'CONTEXT.md',
                                            worktree / 'AGENTS.md', worktree / '.agents') if p.exists()]
         resources.extend(Path(path).resolve() for path in request['resources'])
+        from graphtraj.runtimes.codex.access import project_history_files
+
+        history = {path for path in project_history_files(root)
+                   if not path.is_relative_to(project_cli_directory(root).resolve())}
+        resources.extend(sorted(history))
         # Project development records stay readable for diagnosis across
         # Agents; control channels, Runtime homes and credentials stay denied.
-        records = [request['state_directory'], str(root / '.graphtraj/runner')]
-        denied_read = [str(root / '.graphtraj/cli'),
+        records = [request['state_directory'], str(project_runner_directory(root))]
+        denied_read = [str(project_cli_directory(root)),
                        str(root / '.codex'), str(Path.home() / '.codex'), str(home)]
+        native_denied_read = []
+        for protected in map(Path, denied_read):
+            if not any(path.is_relative_to(protected) for path in history):
+                native_denied_read.append(str(protected))
+                continue
+            # Native Read deny rules override exact file grants. Restricted
+            # mode instead confines these reads to the declared history files;
+            # sandbox denyRead stays in force with exact allowRead exceptions.
+            # Never use this arrangement when a working directory exposes the
+            # protected home itself or another part of it.
+            if any(path.is_relative_to(protected) or protected.is_relative_to(path)
+                   for path in (worktree, *(p for p in resources if p.is_dir()))):
+                raise RuntimeAdapterError(
+                    'RUNTIME_ACCESS_DENIED',
+                    'Exact native history reads require working directories outside protected Runtime homes.',
+                )
         denied_write = [*records, *map(str, resources), request['docs_directory'], str(home),
-                        str(root / '.graphtraj/config.yml'), str(root / '.graphtraj/roles.yml'),
+                        str(project_configuration_file(root)), str(project_core_directory(root) / 'roles.yml'),
                         str(Path(request['git_common_directory']) / 'config'),
                         str(Path(request['git_common_directory']) / 'hooks'),
                         str(worktree / '.claude'), str(worktree / '.state'),
                         str(worktree / 'CONTEXT.md'), str(worktree / 'docs'), str(worktree / 'AGENTS.md'),
                         str(worktree / '.agents')]
         if request['worktree_access'] == 'read':
-            denied_write.append(str(worktree))
+            # Claude also adds the linked repository's common Git directory to
+            # its native writable roots. A reader must not mutate shared refs
+            # or indexes there; its separate authenticated channel stays writable.
+            denied_write.extend((str(worktree), request['git_common_directory']))
         # A project-root cwd must not re-allow its private descendants. Linked
         # Worktrees need only their own exception beneath the denied directory.
         private = root / '.graphtraj'
@@ -51,16 +81,17 @@ class ClaudeExecution(NativeClaudeExecution):
             'permissions': {
                 'blockReadsOutsideWorkingDirectories': True,
                 'allow': [rule for p in (*resources, *records) for rule in (f'Read(/{p})', f'Read(/{p}/**)')],
-                'deny': [rule for p in denied_read for rule in (f'Read(/{p})', f'Read(/{p}/**)')]
+                'deny': [rule for p in native_denied_read for rule in (f'Read(/{p})', f'Read(/{p}/**)')]
                         + [rule for p in denied_write for rule in (f'Edit(/{p})', f'Edit(/{p}/**)')]
                         + (['Edit', 'Write', 'NotebookEdit'] if request['worktree_access'] == 'read' else []),
-                # Native additional working directories are writable sandbox
-                # roots. Read-only resources belong solely in allowRead below.
-                'additionalDirectories': [],
+                # Startup validates directories in both settings and --add-dir.
+                'additionalDirectories': [str(path) for path in resources if path.is_dir()],
             },
             'sandbox': {
                 'enabled': True, 'failIfUnavailable': True, 'allowUnsandboxedCommands': False,
-                'autoAllowBashIfSandboxed': False, 'excludedCommands': [],
+                # Every Bash command runs sandboxed with no unsandboxed retry,
+                # so ordinary development needs no per-use parent approval.
+                'autoAllowBashIfSandboxed': True, 'excludedCommands': [],
                 'filesystem': {
                     'denyRead': [str(root / '.graphtraj'), *denied_read],
                     'allowRead': [*worktree_read, *records, *([address] if address else []),
@@ -77,6 +108,14 @@ class ClaudeExecution(NativeClaudeExecution):
             'command': sys.executable, 'args': ['-m', 'graphtraj.runtimes.claude.mcp'],
             'env': {'GRAPHTRAJ_CLI_CONNECTION': address},
         }}}
+        if any(path.is_file() and not path.is_relative_to(worktree) for path in resources):
+            # The native session settings API applies these exact resource
+            # declarations before any prompt. Keep every deny and restriction;
+            # a refusal ends startup instead of falling back to a broader root.
+            permissions = {**settings['permissions'], 'additionalDirectories': list(map(str, resources))}
+            if request.get('permission_mode') is not None:
+                permissions['defaultMode'] = request['permission_mode']
+            self.resource_settings = {'permissions': permissions}
         return settings, {'mcpServers': {}} if self.independent else mcp
 
     def _parent_notice(self, message: str, details: dict) -> dict:
@@ -86,41 +125,26 @@ class ClaudeExecution(NativeClaudeExecution):
         return notify_direct_parent(self.directory, message, details)
 
     def _collect_child(self, event: dict) -> None:
-        """Collect native helpers only for the existing managed archive path."""
+        """Collect native helpers only for the GraphTraj-managed archive path."""
         if not self.independent:
-            from graphtraj.runtimes.claude.collection import collect_hook
+            from graphtraj.runtimes.claude.collection import collect_jsonl_hook
 
-            collect_hook(event, Path(self.request['worktree_path']))
-
-    def _collection_store(self, resources: ExitStack) -> None:
-        """Open thread-affine legacy storage in the thread that consumes it."""
-        if not self.independent:
-            from graphtraj.sessions.storage import SessionStore
-
-            self.collector.store = resources.enter_context(SessionStore(self.collector.store.path))
+            collect_jsonl_hook(event, Path(self.request['worktree_path']))
 
     def _collector(self, resources: ExitStack):
         """Provide the project's existing optional or managed collector."""
         provider = self.request.get('provider', 'native')
         if provider == 'native' and not self.request.get('base_url'):
             provider = 'anthropic'
-        if self.independent:
-            from graphtraj.runtimes.claude.jsonl import ClaudeJsonlCollector
+        from agent_swarm.sessions.claude import ClaudeJsonlCollector
 
-            return ClaudeJsonlCollector(self.archive, self.native_id, self.directory.name,
-                                       Path(self.request['worktree_path']), self.execution_id,
-                                       provider=provider, resumed=self.expected is not None)
-        from graphtraj.runtimes.claude.collection import open_archive, StreamCollector
-        from graphtraj.sessions.storage import StreamWriter
+        if not self.independent:
+            from graphtraj.interfaces.agents import configured_archive
 
-        task_id = os.environ.get('GRAPHTRAJ_TASK_ID')
-        archive = resources.enter_context(open_archive(
-            Path(self.request['state_directory']), Path(self.request['harness_root']),
-            self.native_id, self.directory.name, source='managed',
-            task_ids=[task_id] if task_id else []))
-        if archive.pending():
-            StreamWriter(archive, archive.pending()['source']).finish(content=[], interrupted=True)
-        return StreamCollector(archive, self.execution_id, self.request['model'], provider)
+            self.archive = configured_archive(Path(self.request['harness_root']))
+        return ClaudeJsonlCollector(self.archive, self.native_id, self.directory.name,
+                                   Path(self.request['worktree_path']), self.execution_id,
+                                   provider=provider, resumed=self.expected is not None)
 
     def _connection(self, resources: ExitStack) -> str | None:
         """Bind Runner tools only for the GraphTraj-managed invocation."""

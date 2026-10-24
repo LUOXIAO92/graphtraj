@@ -9,8 +9,8 @@ import pytest
 from agent_swarm import write_config
 from graphtraj.interfaces.agents import ConfiguredSessionArchive
 from graphtraj.runtimes.codex.app_server import CodexAppServer
-from graphtraj.sessions.archive import JsonlSessionStore, archive_path
-from graphtraj.sessions.protocol import native_record
+from agent_swarm.sessions.archive import JsonlSessionStore, archive_path
+from agent_swarm.sessions.protocol import native_record
 from test_codex_app_server import peer  # noqa: F401
 
 
@@ -80,7 +80,7 @@ def test_rejected_session_does_not_register_an_archive_source(tmp_path: Path, pe
     """Ownership rejection must precede the collector's public mapping side effect."""
     from graphtraj.runtimes.codex.app_server import CodexSession
     from agent_swarm.runtime import RuntimeAdapterError
-    from graphtraj.sessions.archive import SessionArchive
+    from agent_swarm.sessions.archive import SessionArchive
 
     async def exercise() -> None:
         """Use the public native control and archive capabilities."""

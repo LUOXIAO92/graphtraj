@@ -1,0 +1,470 @@
+FFFFF                                                                    [100%]
+=================================== FAILURES ===================================
+_ test_owning_host_processes_events_during_and_after_tool_call[True-True-False-normal] _
+tests/test_host_event_delivery.py:275: in test_owning_host_processes_events_during_and_after_tool_call
+    assert result.returncode == 0, result.stdout + result.stderr
+E   AssertionError: Traceback (most recent call last):
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/test_owning_host_processes_eve0/host.py", line 160, in <module>
+E         asyncio.run(main())
+E         ~~~~~~~~~~~^^^^^^^^
+E       File "/Users/luoxiao/miniconda3/lib/python3.13/asyncio/runners.py", line 195, in run
+E         return runner.run(main)
+E                ~~~~~~~~~~^^^^^^
+E       File "/Users/luoxiao/miniconda3/lib/python3.13/asyncio/runners.py", line 118, in run
+E         return self._loop.run_until_complete(task)
+E                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^
+E       File "/Users/luoxiao/miniconda3/lib/python3.13/asyncio/base_events.py", line 725, in run_until_complete
+E         return future.result()
+E                ~~~~~~~~~~~~~^^
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/test_owning_host_processes_eve0/host.py", line 105, in main
+E         assert not launched.done()
+E                ^^^^^^^^^^^^^^^^^^^
+E     AssertionError
+E     Task exception was never retrieved
+E     future: <Task finished name='Task-5' coro=<CodexAppServer.wait() done, defined at /private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/installed-environment0/venv/lib/python3.13/site-packages/graphtraj/runtimes/codex/app_server.py:635> exception=CodexAdapterError('Codex connection explicitly closed.')>
+E     Traceback (most recent call last):
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/installed-environment0/venv/lib/python3.13/site-packages/graphtraj/runtimes/codex/app_server.py", line 657, in wait
+E     graphtraj.runtimes.codex.codex_adapter.CodexAdapterError: Codex connection explicitly closed.
+E     
+E   assert 1 == 0
+E    +  where 1 = CompletedProcess(args=['/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/install...", line 657, in wait\ngraphtraj.runtimes.codex.codex_adapter.CodexAdapterError: Codex connection explicitly closed.\n').returncode
+_ test_owning_host_processes_events_during_and_after_tool_call[False-False-True-normal] _
+tests/test_host_event_delivery.py:275: in test_owning_host_processes_events_during_and_after_tool_call
+    assert result.returncode == 0, result.stdout + result.stderr
+E   AssertionError: Traceback (most recent call last):
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/test_owning_host_processes_eve1/host.py", line 160, in <module>
+E         asyncio.run(main())
+E         ~~~~~~~~~~~^^^^^^^^
+E       File "/Users/luoxiao/miniconda3/lib/python3.13/asyncio/runners.py", line 195, in run
+E         return runner.run(main)
+E                ~~~~~~~~~~^^^^^^
+E       File "/Users/luoxiao/miniconda3/lib/python3.13/asyncio/runners.py", line 118, in run
+E         return self._loop.run_until_complete(task)
+E                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^
+E       File "/Users/luoxiao/miniconda3/lib/python3.13/asyncio/base_events.py", line 725, in run_until_complete
+E         return future.result()
+E                ~~~~~~~~~~~~~^^
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/test_owning_host_processes_eve1/host.py", line 110, in main
+E         await until(lambda:any(a['event']['event']=='completed' for a in actions))
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/test_owning_host_processes_eve1/host.py", line 88, in until
+E         assert loop.time()<deadline, (actions, adapter.stderr_tail)
+E                ^^^^^^^^^^^^^^^^^^^^
+E     AssertionError: ([{'event': {'source': 'graphtraj', 'alias': '76-session_alias_control-handover0-researcher@researcher', 'event': 'result-submitted', 'message': 'Result submitted for assessment:\n{"event_id": "20261021T204839.691024+0900", "captured_at": "2026-10-21T20:48:39.691024+09:00", "event": "result-submitted", "task_id": "76", "alias": "76-session_alias_control-handover0-researcher@researcher", "session": "76-session_alias_control-handover0-researcher@researcher", "role": "researcher", "team_ordinal": 1, "round": 1, "candidate": "5d306650171c90e6b8267774f48bb2e4941d84ee", "result_refs": ["README.md"], "completion": "host-owned result", "unresolved": [], "caused_by_event_ids": ["20261021T204839.365816+0900"], "evidence_refs": []}'}, 'result': {'outcome': 'completed', 'session_id': 'thread-1', 'execution_id': 'turn-2', 'last_agent_message': 'handled:result-submitted'}}], 'Traceback (most recent call last):\n  File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/test_owning_host_processes_eve1/parent-peer", line 386, in <module>\n    complete(thread_id, turn_id, prompt)\n    ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/test_owning_host_processes_eve1/parent-peer", line 78, in complete\n    assert action.returncode == 0, action.stdout + action.stderr\n           ^^^^^^^^^^^^^^^^^^^^^^\nAssertionError: {"action": "status", "error": {"code": "authority-unavailable", "message": "agents needs a verified caller: a managed Session or a verified native Main Session. This call has neither."}}\n\n')
+E     
+E   assert 1 == 0
+E    +  where 1 = CompletedProcess(args=['/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/install...ts needs a verified caller: a managed Session or a verified native Main Session. This call has neither."}}\\n\\n\')\n').returncode
+_ test_owning_host_processes_events_during_and_after_tool_call[False-False-False-stop] _
+tests/test_host_event_delivery.py:275: in test_owning_host_processes_events_during_and_after_tool_call
+    assert result.returncode == 0, result.stdout + result.stderr
+E   AssertionError: Traceback (most recent call last):
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/test_owning_host_processes_eve2/host.py", line 160, in <module>
+E         asyncio.run(main())
+E         ~~~~~~~~~~~^^^^^^^^
+E       File "/Users/luoxiao/miniconda3/lib/python3.13/asyncio/runners.py", line 195, in run
+E         return runner.run(main)
+E                ~~~~~~~~~~^^^^^^
+E       File "/Users/luoxiao/miniconda3/lib/python3.13/asyncio/runners.py", line 118, in run
+E         return self._loop.run_until_complete(task)
+E                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^
+E       File "/Users/luoxiao/miniconda3/lib/python3.13/asyncio/base_events.py", line 725, in run_until_complete
+E         return future.result()
+E                ~~~~~~~~~~~~~^^
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/test_owning_host_processes_eve2/host.py", line 110, in main
+E         await until(lambda:any(a['event']['event']=='completed' for a in actions))
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/test_owning_host_processes_eve2/host.py", line 88, in until
+E         assert loop.time()<deadline, (actions, adapter.stderr_tail)
+E                ^^^^^^^^^^^^^^^^^^^^
+E     AssertionError: ([{'event': {'source': 'graphtraj', 'alias': '76-session_alias_control-handover0-researcher@researcher', 'event': 'result-submitted', 'message': 'Result submitted for assessment:\n{"event_id": "20261021T204912.546809+0900", "captured_at": "2026-10-21T20:49:12.546809+09:00", "event": "result-submitted", "task_id": "76", "alias": "76-session_alias_control-handover0-researcher@researcher", "session": "76-session_alias_control-handover0-researcher@researcher", "role": "researcher", "team_ordinal": 1, "round": 1, "candidate": "a79130430e0fb3d47bea447a1e64010bdd303408", "result_refs": ["README.md"], "completion": "host-owned result", "unresolved": [], "caused_by_event_ids": ["20261021T204912.234436+0900"], "evidence_refs": []}'}, 'result': {'outcome': 'completed', 'session_id': 'thread-1', 'execution_id': 'turn-2', 'last_agent_message': 'handled:result-submitted'}}], 'Traceback (most recent call last):\n  File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/test_owning_host_processes_eve2/parent-peer", line 386, in <module>\n    complete(thread_id, turn_id, prompt)\n    ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/test_owning_host_processes_eve2/parent-peer", line 78, in complete\n    assert action.returncode == 0, action.stdout + action.stderr\n           ^^^^^^^^^^^^^^^^^^^^^^\nAssertionError: {"action": "status", "error": {"code": "authority-unavailable", "message": "agents needs a verified caller: a managed Session or a verified native Main Session. This call has neither."}}\n\n')
+E     
+E   assert 1 == 0
+E    +  where 1 = CompletedProcess(args=['/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/install...ts needs a verified caller: a managed Session or a verified native Main Session. This call has neither."}}\\n\\n\')\n').returncode
+_ test_owning_host_processes_events_during_and_after_tool_call[False-False-False-approval] _
+tests/test_host_event_delivery.py:275: in test_owning_host_processes_events_during_and_after_tool_call
+    assert result.returncode == 0, result.stdout + result.stderr
+E   AssertionError: Traceback (most recent call last):
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/test_owning_host_processes_eve3/host.py", line 160, in <module>
+E         asyncio.run(main())
+E         ~~~~~~~~~~~^^^^^^^^
+E       File "/Users/luoxiao/miniconda3/lib/python3.13/asyncio/runners.py", line 195, in run
+E         return runner.run(main)
+E                ~~~~~~~~~~^^^^^^
+E       File "/Users/luoxiao/miniconda3/lib/python3.13/asyncio/runners.py", line 118, in run
+E         return self._loop.run_until_complete(task)
+E                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^
+E       File "/Users/luoxiao/miniconda3/lib/python3.13/asyncio/base_events.py", line 725, in run_until_complete
+E         return future.result()
+E                ~~~~~~~~~~~~~^^
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/test_owning_host_processes_eve3/host.py", line 97, in main
+E         await until(lambda:len(actions)==2)
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/test_owning_host_processes_eve3/host.py", line 88, in until
+E         assert loop.time()<deadline, (actions, adapter.stderr_tail)
+E                ^^^^^^^^^^^^^^^^^^^^
+E     AssertionError: ([], 'Traceback (most recent call last):\n  File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/test_owning_host_processes_eve3/parent-peer", line 386, in <module>\n    complete(thread_id, turn_id, prompt)\n    ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/test_owning_host_processes_eve3/parent-peer", line 78, in complete\n    assert action.returncode == 0, action.stdout + action.stderr\n           ^^^^^^^^^^^^^^^^^^^^^^\nAssertionError: {"action": "reply", "error": {"code": "authority-unavailable", "message": "agents needs a verified caller: a managed Session or a verified native Main Session. This call has neither."}}\n\n')
+E     
+E   assert 1 == 0
+E    +  where 1 = CompletedProcess(args=['/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/install...ts needs a verified caller: a managed Session or a verified native Main Session. This call has neither."}}\\n\\n\')\n').returncode
+_ test_owning_host_processes_events_during_and_after_tool_call[True-False-False-input] _
+tests/test_host_event_delivery.py:275: in test_owning_host_processes_events_during_and_after_tool_call
+    assert result.returncode == 0, result.stdout + result.stderr
+E   AssertionError: Traceback (most recent call last):
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/test_owning_host_processes_eve4/host.py", line 160, in <module>
+E         asyncio.run(main())
+E         ~~~~~~~~~~~^^^^^^^^
+E       File "/Users/luoxiao/miniconda3/lib/python3.13/asyncio/runners.py", line 195, in run
+E         return runner.run(main)
+E                ~~~~~~~~~~^^^^^^
+E       File "/Users/luoxiao/miniconda3/lib/python3.13/asyncio/runners.py", line 118, in run
+E         return self._loop.run_until_complete(task)
+E                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^
+E       File "/Users/luoxiao/miniconda3/lib/python3.13/asyncio/base_events.py", line 725, in run_until_complete
+E         return future.result()
+E                ~~~~~~~~~~~~~^^
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/test_owning_host_processes_eve4/host.py", line 97, in main
+E         await until(lambda:len(actions)==2)
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/test_owning_host_processes_eve4/host.py", line 88, in until
+E         assert loop.time()<deadline, (actions, adapter.stderr_tail)
+E                ^^^^^^^^^^^^^^^^^^^^
+E     AssertionError: ([], 'Traceback (most recent call last):\n  File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/test_owning_host_processes_eve4/parent-peer", line 399, in <module>\n    complete(params[\'threadId\'], params[\'expectedTurnId\'], params[\'input\'][0][\'text\'])\n    ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/test_owning_host_processes_eve4/parent-peer", line 78, in complete\n    assert action.returncode == 0, action.stdout + action.stderr\n           ^^^^^^^^^^^^^^^^^^^^^^\nAssertionError: {"action": "reply", "error": {"code": "authority-unavailable", "message": "agents needs a verified caller: a managed Session or a verified native Main Session. This call has neither."}}\n\n')
+E     Task exception was never retrieved
+E     future: <Task finished name='Task-5' coro=<CodexAppServer.wait() done, defined at /private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/installed-environment0/venv/lib/python3.13/site-packages/graphtraj/runtimes/codex/app_server.py:635> exception=CodexAdapterError('Codex stdio closed before explicit close.')>
+E     Traceback (most recent call last):
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/installed-environment0/venv/lib/python3.13/site-packages/graphtraj/interfaces/local_tool.py", line 125, in receive
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/test_owning_host_processes_eve4/host.py", line 65, in receiver
+E         asyncio.run_coroutine_threadsafe(forward(event), loop).result(timeout=8)
+E       File "/Users/luoxiao/miniconda3/lib/python3.13/concurrent/futures/_base.py", line 456, in result
+E       File "/Users/luoxiao/miniconda3/lib/python3.13/concurrent/futures/_base.py", line 401, in __get_result
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/test_owning_host_processes_eve4/host.py", line 50, in forward
+E         current = await adapter.start_execution(session, prompt)
+E                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/installed-environment0/venv/lib/python3.13/site-packages/graphtraj/runtimes/codex/app_server.py", line 534, in start_execution
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/installed-environment0/venv/lib/python3.13/site-packages/graphtraj/runtimes/codex/app_server.py", line 624, in _require_session
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/installed-environment0/venv/lib/python3.13/site-packages/graphtraj/runtimes/codex/app_server.py", line 1050, in _require_connection
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/installed-environment0/venv/lib/python3.13/site-packages/graphtraj/interfaces/local_tool.py", line 125, in receive
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/test_owning_host_processes_eve4/host.py", line 65, in receiver
+E         asyncio.run_coroutine_threadsafe(forward(event), loop).result(timeout=8)
+E       File "/Users/luoxiao/miniconda3/lib/python3.13/concurrent/futures/_base.py", line 456, in result
+E       File "/Users/luoxiao/miniconda3/lib/python3.13/concurrent/futures/_base.py", line 401, in __get_result
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/test_owning_host_processes_eve4/host.py", line 50, in forward
+E         current = await adapter.start_execution(session, prompt)
+E                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/installed-environment0/venv/lib/python3.13/site-packages/graphtraj/runtimes/codex/app_server.py", line 534, in start_execution
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/installed-environment0/venv/lib/python3.13/site-packages/graphtraj/runtimes/codex/app_server.py", line 624, in _require_session
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/installed-environment0/venv/lib/python3.13/site-packages/graphtraj/runtimes/codex/app_server.py", line 1050, in _require_connection
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/installed-environment0/venv/lib/python3.13/site-packages/graphtraj/interfaces/local_tool.py", line 125, in receive
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/test_owning_host_processes_eve4/host.py", line 65, in receiver
+E         asyncio.run_coroutine_threadsafe(forward(event), loop).result(timeout=8)
+E       File "/Users/luoxiao/miniconda3/lib/python3.13/concurrent/futures/_base.py", line 456, in result
+E       File "/Users/luoxiao/miniconda3/lib/python3.13/concurrent/futures/_base.py", line 401, in __get_result
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/test_owning_host_processes_eve4/host.py", line 50, in forward
+E         current = await adapter.start_execution(session, prompt)
+E                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/installed-environment0/venv/lib/python3.13/site-packages/graphtraj/runtimes/codex/app_server.py", line 534, in start_execution
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/installed-environment0/venv/lib/python3.13/site-packages/graphtraj/runtimes/codex/app_server.py", line 624, in _require_session
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/installed-environment0/venv/lib/python3.13/site-packages/graphtraj/runtimes/codex/app_server.py", line 1050, in _require_connection
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/installed-environment0/venv/lib/python3.13/site-packages/graphtraj/interfaces/local_tool.py", line 125, in receive
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/test_owning_host_processes_eve4/host.py", line 65, in receiver
+E         asyncio.run_coroutine_threadsafe(forward(event), loop).result(timeout=8)
+E       File "/Users/luoxiao/miniconda3/lib/python3.13/concurrent/futures/_base.py", line 456, in result
+E       File "/Users/luoxiao/miniconda3/lib/python3.13/concurrent/futures/_base.py", line 401, in __get_result
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/test_owning_host_processes_eve4/host.py", line 50, in forward
+E         current = await adapter.start_execution(session, prompt)
+E                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/installed-environment0/venv/lib/python3.13/site-packages/graphtraj/runtimes/codex/app_server.py", line 534, in start_execution
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/installed-environment0/venv/lib/python3.13/site-packages/graphtraj/runtimes/codex/app_server.py", line 624, in _require_session
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/installed-environment0/venv/lib/python3.13/site-packages/graphtraj/runtimes/codex/app_server.py", line 1050, in _require_connection
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/installed-environment0/venv/lib/python3.13/site-packages/graphtraj/interfaces/local_tool.py", line 125, in receive
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/test_owning_host_processes_eve4/host.py", line 65, in receiver
+E         asyncio.run_coroutine_threadsafe(forward(event), loop).result(timeout=8)
+E       File "/Users/luoxiao/miniconda3/lib/python3.13/concurrent/futures/_base.py", line 456, in result
+E       File "/Users/luoxiao/miniconda3/lib/python3.13/concurrent/futures/_base.py", line 401, in __get_result
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/test_owning_host_processes_eve4/host.py", line 50, in forward
+E         current = await adapter.start_execution(session, prompt)
+E                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/installed-environment0/venv/lib/python3.13/site-packages/graphtraj/runtimes/codex/app_server.py", line 534, in start_execution
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/installed-environment0/venv/lib/python3.13/site-packages/graphtraj/runtimes/codex/app_server.py", line 624, in _require_session
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/installed-environment0/venv/lib/python3.13/site-packages/graphtraj/runtimes/codex/app_server.py", line 1050, in _require_connection
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/installed-environment0/venv/lib/python3.13/site-packages/graphtraj/interfaces/local_tool.py", line 125, in receive
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/test_owning_host_processes_eve4/host.py", line 65, in receiver
+E         asyncio.run_coroutine_threadsafe(forward(event), loop).result(timeout=8)
+E       File "/Users/luoxiao/miniconda3/lib/python3.13/concurrent/futures/_base.py", line 456, in result
+E       File "/Users/luoxiao/miniconda3/lib/python3.13/concurrent/futures/_base.py", line 401, in __get_result
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/test_owning_host_processes_eve4/host.py", line 50, in forward
+E         current = await adapter.start_execution(session, prompt)
+E                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/installed-environment0/venv/lib/python3.13/site-packages/graphtraj/runtimes/codex/app_server.py", line 534, in start_execution
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/installed-environment0/venv/lib/python3.13/site-packages/graphtraj/runtimes/codex/app_server.py", line 624, in _require_session
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/installed-environment0/venv/lib/python3.13/site-packages/graphtraj/runtimes/codex/app_server.py", line 1050, in _require_connection
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/installed-environment0/venv/lib/python3.13/site-packages/graphtraj/interfaces/local_tool.py", line 125, in receive
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/test_owning_host_processes_eve4/host.py", line 65, in receiver
+E         asyncio.run_coroutine_threadsafe(forward(event), loop).result(timeout=8)
+E       File "/Users/luoxiao/miniconda3/lib/python3.13/concurrent/futures/_base.py", line 456, in result
+E       File "/Users/luoxiao/miniconda3/lib/python3.13/concurrent/futures/_base.py", line 401, in __get_result
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/test_owning_host_processes_eve4/host.py", line 50, in forward
+E         current = await adapter.start_execution(session, prompt)
+E                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/installed-environment0/venv/lib/python3.13/site-packages/graphtraj/runtimes/codex/app_server.py", line 534, in start_execution
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/installed-environment0/venv/lib/python3.13/site-packages/graphtraj/runtimes/codex/app_server.py", line 624, in _require_session
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/installed-environment0/venv/lib/python3.13/site-packages/graphtraj/runtimes/codex/app_server.py", line 1050, in _require_connection
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/installed-environment0/venv/lib/python3.13/site-packages/graphtraj/interfaces/local_tool.py", line 125, in receive
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/test_owning_host_processes_eve4/host.py", line 65, in receiver
+E         asyncio.run_coroutine_threadsafe(forward(event), loop).result(timeout=8)
+E       File "/Users/luoxiao/miniconda3/lib/python3.13/concurrent/futures/_base.py", line 456, in result
+E       File "/Users/luoxiao/miniconda3/lib/python3.13/concurrent/futures/_base.py", line 401, in __get_result
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/test_owning_host_processes_eve4/host.py", line 50, in forward
+E         current = await adapter.start_execution(session, prompt)
+E                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/installed-environment0/venv/lib/python3.13/site-packages/graphtraj/runtimes/codex/app_server.py", line 534, in start_execution
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/installed-environment0/venv/lib/python3.13/site-packages/graphtraj/runtimes/codex/app_server.py", line 624, in _require_session
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/installed-environment0/venv/lib/python3.13/site-packages/graphtraj/runtimes/codex/app_server.py", line 1050, in _require_connection
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/installed-environment0/venv/lib/python3.13/site-packages/graphtraj/interfaces/local_tool.py", line 125, in receive
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/test_owning_host_processes_eve4/host.py", line 65, in receiver
+E         asyncio.run_coroutine_threadsafe(forward(event), loop).result(timeout=8)
+E       File "/Users/luoxiao/miniconda3/lib/python3.13/concurrent/futures/_base.py", line 456, in result
+E       File "/Users/luoxiao/miniconda3/lib/python3.13/concurrent/futures/_base.py", line 401, in __get_result
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/test_owning_host_processes_eve4/host.py", line 50, in forward
+E         current = await adapter.start_execution(session, prompt)
+E                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/installed-environment0/venv/lib/python3.13/site-packages/graphtraj/runtimes/codex/app_server.py", line 534, in start_execution
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/installed-environment0/venv/lib/python3.13/site-packages/graphtraj/runtimes/codex/app_server.py", line 624, in _require_session
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/installed-environment0/venv/lib/python3.13/site-packages/graphtraj/runtimes/codex/app_server.py", line 1050, in _require_connection
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/installed-environment0/venv/lib/python3.13/site-packages/graphtraj/interfaces/local_tool.py", line 125, in receive
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/test_owning_host_processes_eve4/host.py", line 65, in receiver
+E         asyncio.run_coroutine_threadsafe(forward(event), loop).result(timeout=8)
+E       File "/Users/luoxiao/miniconda3/lib/python3.13/concurrent/futures/_base.py", line 456, in result
+E       File "/Users/luoxiao/miniconda3/lib/python3.13/concurrent/futures/_base.py", line 401, in __get_result
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/test_owning_host_processes_eve4/host.py", line 50, in forward
+E         current = await adapter.start_execution(session, prompt)
+E                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/installed-environment0/venv/lib/python3.13/site-packages/graphtraj/runtimes/codex/app_server.py", line 534, in start_execution
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/installed-environment0/venv/lib/python3.13/site-packages/graphtraj/runtimes/codex/app_server.py", line 624, in _require_session
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/installed-environment0/venv/lib/python3.13/site-packages/graphtraj/runtimes/codex/app_server.py", line 1050, in _require_connection
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/installed-environment0/venv/lib/python3.13/site-packages/graphtraj/interfaces/local_tool.py", line 125, in receive
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/test_owning_host_processes_eve4/host.py", line 65, in receiver
+E         asyncio.run_coroutine_threadsafe(forward(event), loop).result(timeout=8)
+E       File "/Users/luoxiao/miniconda3/lib/python3.13/concurrent/futures/_base.py", line 456, in result
+E       File "/Users/luoxiao/miniconda3/lib/python3.13/concurrent/futures/_base.py", line 401, in __get_result
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/test_owning_host_processes_eve4/host.py", line 50, in forward
+E         current = await adapter.start_execution(session, prompt)
+E                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/installed-environment0/venv/lib/python3.13/site-packages/graphtraj/runtimes/codex/app_server.py", line 534, in start_execution
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/installed-environment0/venv/lib/python3.13/site-packages/graphtraj/runtimes/codex/app_server.py", line 624, in _require_session
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/installed-environment0/venv/lib/python3.13/site-packages/graphtraj/runtimes/codex/app_server.py", line 1050, in _require_connection
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/installed-environment0/venv/lib/python3.13/site-packages/graphtraj/interfaces/local_tool.py", line 125, in receive
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/test_owning_host_processes_eve4/host.py", line 65, in receiver
+E         asyncio.run_coroutine_threadsafe(forward(event), loop).result(timeout=8)
+E       File "/Users/luoxiao/miniconda3/lib/python3.13/concurrent/futures/_base.py", line 456, in result
+E       File "/Users/luoxiao/miniconda3/lib/python3.13/concurrent/futures/_base.py", line 401, in __get_result
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/test_owning_host_processes_eve4/host.py", line 50, in forward
+E         current = await adapter.start_execution(session, prompt)
+E                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/installed-environment0/venv/lib/python3.13/site-packages/graphtraj/runtimes/codex/app_server.py", line 534, in start_execution
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/installed-environment0/venv/lib/python3.13/site-packages/graphtraj/runtimes/codex/app_server.py", line 624, in _require_session
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/installed-environment0/venv/lib/python3.13/site-packages/graphtraj/runtimes/codex/app_server.py", line 1050, in _require_connection
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/installed-environment0/venv/lib/python3.13/site-packages/graphtraj/interfaces/local_tool.py", line 125, in receive
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/test_owning_host_processes_eve4/host.py", line 65, in receiver
+E         asyncio.run_coroutine_threadsafe(forward(event), loop).result(timeout=8)
+E       File "/Users/luoxiao/miniconda3/lib/python3.13/concurrent/futures/_base.py", line 456, in result
+E       File "/Users/luoxiao/miniconda3/lib/python3.13/concurrent/futures/_base.py", line 401, in __get_result
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/test_owning_host_processes_eve4/host.py", line 50, in forward
+E         current = await adapter.start_execution(session, prompt)
+E                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/installed-environment0/venv/lib/python3.13/site-packages/graphtraj/runtimes/codex/app_server.py", line 534, in start_execution
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/installed-environment0/venv/lib/python3.13/site-packages/graphtraj/runtimes/codex/app_server.py", line 624, in _require_session
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/installed-environment0/venv/lib/python3.13/site-packages/graphtraj/runtimes/codex/app_server.py", line 1050, in _require_connection
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/installed-environment0/venv/lib/python3.13/site-packages/graphtraj/interfaces/local_tool.py", line 125, in receive
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/test_owning_host_processes_eve4/host.py", line 65, in receiver
+E         asyncio.run_coroutine_threadsafe(forward(event), loop).result(timeout=8)
+E       File "/Users/luoxiao/miniconda3/lib/python3.13/concurrent/futures/_base.py", line 456, in result
+E       File "/Users/luoxiao/miniconda3/lib/python3.13/concurrent/futures/_base.py", line 401, in __get_result
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/test_owning_host_processes_eve4/host.py", line 50, in forward
+E         current = await adapter.start_execution(session, prompt)
+E                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/installed-environment0/venv/lib/python3.13/site-packages/graphtraj/runtimes/codex/app_server.py", line 534, in start_execution
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/installed-environment0/venv/lib/python3.13/site-packages/graphtraj/runtimes/codex/app_server.py", line 624, in _require_session
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/installed-environment0/venv/lib/python3.13/site-packages/graphtraj/runtimes/codex/app_server.py", line 1050, in _require_connection
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/installed-environment0/venv/lib/python3.13/site-packages/graphtraj/interfaces/local_tool.py", line 125, in receive
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/test_owning_host_processes_eve4/host.py", line 65, in receiver
+E         asyncio.run_coroutine_threadsafe(forward(event), loop).result(timeout=8)
+E       File "/Users/luoxiao/miniconda3/lib/python3.13/concurrent/futures/_base.py", line 456, in result
+E       File "/Users/luoxiao/miniconda3/lib/python3.13/concurrent/futures/_base.py", line 401, in __get_result
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/test_owning_host_processes_eve4/host.py", line 50, in forward
+E         current = await adapter.start_execution(session, prompt)
+E                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/installed-environment0/venv/lib/python3.13/site-packages/graphtraj/runtimes/codex/app_server.py", line 534, in start_execution
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/installed-environment0/venv/lib/python3.13/site-packages/graphtraj/runtimes/codex/app_server.py", line 624, in _require_session
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/installed-environment0/venv/lib/python3.13/site-packages/graphtraj/runtimes/codex/app_server.py", line 1050, in _require_connection
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/installed-environment0/venv/lib/python3.13/site-packages/graphtraj/interfaces/local_tool.py", line 125, in receive
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/test_owning_host_processes_eve4/host.py", line 65, in receiver
+E         asyncio.run_coroutine_threadsafe(forward(event), loop).result(timeout=8)
+E       File "/Users/luoxiao/miniconda3/lib/python3.13/concurrent/futures/_base.py", line 456, in result
+E       File "/Users/luoxiao/miniconda3/lib/python3.13/concurrent/futures/_base.py", line 401, in __get_result
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/test_owning_host_processes_eve4/host.py", line 50, in forward
+E         current = await adapter.start_execution(session, prompt)
+E                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/installed-environment0/venv/lib/python3.13/site-packages/graphtraj/runtimes/codex/app_server.py", line 534, in start_execution
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/installed-environment0/venv/lib/python3.13/site-packages/graphtraj/runtimes/codex/app_server.py", line 624, in _require_session
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/installed-environment0/venv/lib/python3.13/site-packages/graphtraj/runtimes/codex/app_server.py", line 1050, in _require_connection
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/installed-environment0/venv/lib/python3.13/site-packages/graphtraj/interfaces/local_tool.py", line 125, in receive
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/test_owning_host_processes_eve4/host.py", line 65, in receiver
+E         asyncio.run_coroutine_threadsafe(forward(event), loop).result(timeout=8)
+E       File "/Users/luoxiao/miniconda3/lib/python3.13/concurrent/futures/_base.py", line 456, in result
+E       File "/Users/luoxiao/miniconda3/lib/python3.13/concurrent/futures/_base.py", line 401, in __get_result
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/test_owning_host_processes_eve4/host.py", line 50, in forward
+E         current = await adapter.start_execution(session, prompt)
+E                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/installed-environment0/venv/lib/python3.13/site-packages/graphtraj/runtimes/codex/app_server.py", line 534, in start_execution
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/installed-environment0/venv/lib/python3.13/site-packages/graphtraj/runtimes/codex/app_server.py", line 624, in _require_session
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/installed-environment0/venv/lib/python3.13/site-packages/graphtraj/runtimes/codex/app_server.py", line 1050, in _require_connection
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/installed-environment0/venv/lib/python3.13/site-packages/graphtraj/interfaces/local_tool.py", line 125, in receive
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/test_owning_host_processes_eve4/host.py", line 65, in receiver
+E         asyncio.run_coroutine_threadsafe(forward(event), loop).result(timeout=8)
+E       File "/Users/luoxiao/miniconda3/lib/python3.13/concurrent/futures/_base.py", line 456, in result
+E       File "/Users/luoxiao/miniconda3/lib/python3.13/concurrent/futures/_base.py", line 401, in __get_result
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/test_owning_host_processes_eve4/host.py", line 50, in forward
+E         current = await adapter.start_execution(session, prompt)
+E                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/installed-environment0/venv/lib/python3.13/site-packages/graphtraj/runtimes/codex/app_server.py", line 534, in start_execution
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/installed-environment0/venv/lib/python3.13/site-packages/graphtraj/runtimes/codex/app_server.py", line 624, in _require_session
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/installed-environment0/venv/lib/python3.13/site-packages/graphtraj/runtimes/codex/app_server.py", line 1050, in _require_connection
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/installed-environment0/venv/lib/python3.13/site-packages/graphtraj/interfaces/local_tool.py", line 125, in receive
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/test_owning_host_processes_eve4/host.py", line 65, in receiver
+E         asyncio.run_coroutine_threadsafe(forward(event), loop).result(timeout=8)
+E       File "/Users/luoxiao/miniconda3/lib/python3.13/concurrent/futures/_base.py", line 456, in result
+E       File "/Users/luoxiao/miniconda3/lib/python3.13/concurrent/futures/_base.py", line 401, in __get_result
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/test_owning_host_processes_eve4/host.py", line 50, in forward
+E         current = await adapter.start_execution(session, prompt)
+E                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/installed-environment0/venv/lib/python3.13/site-packages/graphtraj/runtimes/codex/app_server.py", line 534, in start_execution
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/installed-environment0/venv/lib/python3.13/site-packages/graphtraj/runtimes/codex/app_server.py", line 624, in _require_session
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/installed-environment0/venv/lib/python3.13/site-packages/graphtraj/runtimes/codex/app_server.py", line 1050, in _require_connection
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/installed-environment0/venv/lib/python3.13/site-packages/graphtraj/interfaces/local_tool.py", line 125, in receive
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/test_owning_host_processes_eve4/host.py", line 65, in receiver
+E         asyncio.run_coroutine_threadsafe(forward(event), loop).result(timeout=8)
+E       File "/Users/luoxiao/miniconda3/lib/python3.13/concurrent/futures/_base.py", line 456, in result
+E       File "/Users/luoxiao/miniconda3/lib/python3.13/concurrent/futures/_base.py", line 401, in __get_result
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/test_owning_host_processes_eve4/host.py", line 50, in forward
+E         current = await adapter.start_execution(session, prompt)
+E                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/installed-environment0/venv/lib/python3.13/site-packages/graphtraj/runtimes/codex/app_server.py", line 534, in start_execution
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/installed-environment0/venv/lib/python3.13/site-packages/graphtraj/runtimes/codex/app_server.py", line 624, in _require_session
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/installed-environment0/venv/lib/python3.13/site-packages/graphtraj/runtimes/codex/app_server.py", line 1050, in _require_connection
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/installed-environment0/venv/lib/python3.13/site-packages/graphtraj/interfaces/local_tool.py", line 125, in receive
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/test_owning_host_processes_eve4/host.py", line 65, in receiver
+E         asyncio.run_coroutine_threadsafe(forward(event), loop).result(timeout=8)
+E       File "/Users/luoxiao/miniconda3/lib/python3.13/concurrent/futures/_base.py", line 456, in result
+E       File "/Users/luoxiao/miniconda3/lib/python3.13/concurrent/futures/_base.py", line 401, in __get_result
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/test_owning_host_processes_eve4/host.py", line 50, in forward
+E         current = await adapter.start_execution(session, prompt)
+E                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/installed-environment0/venv/lib/python3.13/site-packages/graphtraj/runtimes/codex/app_server.py", line 534, in start_execution
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/installed-environment0/venv/lib/python3.13/site-packages/graphtraj/runtimes/codex/app_server.py", line 624, in _require_session
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/installed-environment0/venv/lib/python3.13/site-packages/graphtraj/runtimes/codex/app_server.py", line 1050, in _require_connection
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/installed-environment0/venv/lib/python3.13/site-packages/graphtraj/interfaces/local_tool.py", line 125, in receive
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/test_owning_host_processes_eve4/host.py", line 65, in receiver
+E         asyncio.run_coroutine_threadsafe(forward(event), loop).result(timeout=8)
+E       File "/Users/luoxiao/miniconda3/lib/python3.13/concurrent/futures/_base.py", line 456, in result
+E       File "/Users/luoxiao/miniconda3/lib/python3.13/concurrent/futures/_base.py", line 401, in __get_result
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/test_owning_host_processes_eve4/host.py", line 50, in forward
+E         current = await adapter.start_execution(session, prompt)
+E                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/installed-environment0/venv/lib/python3.13/site-packages/graphtraj/runtimes/codex/app_server.py", line 534, in start_execution
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/installed-environment0/venv/lib/python3.13/site-packages/graphtraj/runtimes/codex/app_server.py", line 624, in _require_session
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/installed-environment0/venv/lib/python3.13/site-packages/graphtraj/runtimes/codex/app_server.py", line 1050, in _require_connection
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/installed-environment0/venv/lib/python3.13/site-packages/graphtraj/interfaces/local_tool.py", line 125, in receive
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/test_owning_host_processes_eve4/host.py", line 65, in receiver
+E         asyncio.run_coroutine_threadsafe(forward(event), loop).result(timeout=8)
+E       File "/Users/luoxiao/miniconda3/lib/python3.13/concurrent/futures/_base.py", line 456, in result
+E       File "/Users/luoxiao/miniconda3/lib/python3.13/concurrent/futures/_base.py", line 401, in __get_result
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/test_owning_host_processes_eve4/host.py", line 50, in forward
+E         current = await adapter.start_execution(session, prompt)
+E                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/installed-environment0/venv/lib/python3.13/site-packages/graphtraj/runtimes/codex/app_server.py", line 534, in start_execution
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/installed-environment0/venv/lib/python3.13/site-packages/graphtraj/runtimes/codex/app_server.py", line 624, in _require_session
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/installed-environment0/venv/lib/python3.13/site-packages/graphtraj/runtimes/codex/app_server.py", line 1050, in _require_connection
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/installed-environment0/venv/lib/python3.13/site-packages/graphtraj/interfaces/local_tool.py", line 125, in receive
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/test_owning_host_processes_eve4/host.py", line 65, in receiver
+E         asyncio.run_coroutine_threadsafe(forward(event), loop).result(timeout=8)
+E       File "/Users/luoxiao/miniconda3/lib/python3.13/concurrent/futures/_base.py", line 456, in result
+E       File "/Users/luoxiao/miniconda3/lib/python3.13/concurrent/futures/_base.py", line 401, in __get_result
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/test_owning_host_processes_eve4/host.py", line 50, in forward
+E         current = await adapter.start_execution(session, prompt)
+E                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/installed-environment0/venv/lib/python3.13/site-packages/graphtraj/runtimes/codex/app_server.py", line 534, in start_execution
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/installed-environment0/venv/lib/python3.13/site-packages/graphtraj/runtimes/codex/app_server.py", line 624, in _require_session
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/installed-environment0/venv/lib/python3.13/site-packages/graphtraj/runtimes/codex/app_server.py", line 1050, in _require_connection
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/installed-environment0/venv/lib/python3.13/site-packages/graphtraj/interfaces/local_tool.py", line 125, in receive
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/test_owning_host_processes_eve4/host.py", line 65, in receiver
+E         asyncio.run_coroutine_threadsafe(forward(event), loop).result(timeout=8)
+E       File "/Users/luoxiao/miniconda3/lib/python3.13/concurrent/futures/_base.py", line 456, in result
+E       File "/Users/luoxiao/miniconda3/lib/python3.13/concurrent/futures/_base.py", line 401, in __get_result
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/test_owning_host_processes_eve4/host.py", line 50, in forward
+E         current = await adapter.start_execution(session, prompt)
+E                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/installed-environment0/venv/lib/python3.13/site-packages/graphtraj/runtimes/codex/app_server.py", line 534, in start_execution
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/installed-environment0/venv/lib/python3.13/site-packages/graphtraj/runtimes/codex/app_server.py", line 624, in _require_session
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/installed-environment0/venv/lib/python3.13/site-packages/graphtraj/runtimes/codex/app_server.py", line 1050, in _require_connection
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/installed-environment0/venv/lib/python3.13/site-packages/graphtraj/interfaces/local_tool.py", line 125, in receive
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/test_owning_host_processes_eve4/host.py", line 65, in receiver
+E         asyncio.run_coroutine_threadsafe(forward(event), loop).result(timeout=8)
+E       File "/Users/luoxiao/miniconda3/lib/python3.13/concurrent/futures/_base.py", line 456, in result
+E       File "/Users/luoxiao/miniconda3/lib/python3.13/concurrent/futures/_base.py", line 401, in __get_result
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/test_owning_host_processes_eve4/host.py", line 50, in forward
+E         current = await adapter.start_execution(session, prompt)
+E                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/installed-environment0/venv/lib/python3.13/site-packages/graphtraj/runtimes/codex/app_server.py", line 534, in start_execution
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/installed-environment0/venv/lib/python3.13/site-packages/graphtraj/runtimes/codex/app_server.py", line 624, in _require_session
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/installed-environment0/venv/lib/python3.13/site-packages/graphtraj/runtimes/codex/app_server.py", line 1050, in _require_connection
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/installed-environment0/venv/lib/python3.13/site-packages/graphtraj/interfaces/local_tool.py", line 125, in receive
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/test_owning_host_processes_eve4/host.py", line 65, in receiver
+E         asyncio.run_coroutine_threadsafe(forward(event), loop).result(timeout=8)
+E       File "/Users/luoxiao/miniconda3/lib/python3.13/concurrent/futures/_base.py", line 456, in result
+E       File "/Users/luoxiao/miniconda3/lib/python3.13/concurrent/futures/_base.py", line 401, in __get_result
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/test_owning_host_processes_eve4/host.py", line 50, in forward
+E         current = await adapter.start_execution(session, prompt)
+E                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/installed-environment0/venv/lib/python3.13/site-packages/graphtraj/runtimes/codex/app_server.py", line 534, in start_execution
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/installed-environment0/venv/lib/python3.13/site-packages/graphtraj/runtimes/codex/app_server.py", line 624, in _require_session
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/installed-environment0/venv/lib/python3.13/site-packages/graphtraj/runtimes/codex/app_server.py", line 1050, in _require_connection
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/installed-environment0/venv/lib/python3.13/site-packages/graphtraj/interfaces/local_tool.py", line 125, in receive
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/test_owning_host_processes_eve4/host.py", line 65, in receiver
+E         asyncio.run_coroutine_threadsafe(forward(event), loop).result(timeout=8)
+E       File "/Users/luoxiao/miniconda3/lib/python3.13/concurrent/futures/_base.py", line 456, in result
+E       File "/Users/luoxiao/miniconda3/lib/python3.13/concurrent/futures/_base.py", line 401, in __get_result
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/test_owning_host_processes_eve4/host.py", line 50, in forward
+E         current = await adapter.start_execution(session, prompt)
+E                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/installed-environment0/venv/lib/python3.13/site-packages/graphtraj/runtimes/codex/app_server.py", line 534, in start_execution
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/installed-environment0/venv/lib/python3.13/site-packages/graphtraj/runtimes/codex/app_server.py", line 624, in _require_session
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/installed-environment0/venv/lib/python3.13/site-packages/graphtraj/runtimes/codex/app_server.py", line 1050, in _require_connection
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/installed-environment0/venv/lib/python3.13/site-packages/graphtraj/interfaces/local_tool.py", line 125, in receive
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/test_owning_host_processes_eve4/host.py", line 65, in receiver
+E         asyncio.run_coroutine_threadsafe(forward(event), loop).result(timeout=8)
+E       File "/Users/luoxiao/miniconda3/lib/python3.13/concurrent/futures/_base.py", line 456, in result
+E       File "/Users/luoxiao/miniconda3/lib/python3.13/concurrent/futures/_base.py", line 401, in __get_result
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/test_owning_host_processes_eve4/host.py", line 50, in forward
+E         current = await adapter.start_execution(session, prompt)
+E                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/installed-environment0/venv/lib/python3.13/site-packages/graphtraj/runtimes/codex/app_server.py", line 534, in start_execution
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/installed-environment0/venv/lib/python3.13/site-packages/graphtraj/runtimes/codex/app_server.py", line 624, in _require_session
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/installed-environment0/venv/lib/python3.13/site-packages/graphtraj/runtimes/codex/app_server.py", line 1050, in _require_connection
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/installed-environment0/venv/lib/python3.13/site-packages/graphtraj/interfaces/local_tool.py", line 125, in receive
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/test_owning_host_processes_eve4/host.py", line 65, in receiver
+E         asyncio.run_coroutine_threadsafe(forward(event), loop).result(timeout=8)
+E       File "/Users/luoxiao/miniconda3/lib/python3.13/concurrent/futures/_base.py", line 456, in result
+E       File "/Users/luoxiao/miniconda3/lib/python3.13/concurrent/futures/_base.py", line 401, in __get_result
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/installed-environment0/venv/lib/python3.13/site-packages/graphtraj/runtimes/codex/app_server.py", line 657, in wait
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/test_owning_host_processes_eve4/host.py", line 48, in forward
+E         await adapter.send_input(current, prompt)
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/installed-environment0/venv/lib/python3.13/site-packages/graphtraj/runtimes/codex/app_server.py", line 596, in send_input
+E       File "/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/installed-environment0/venv/lib/python3.13/site-packages/graphtraj/runtimes/codex/app_server.py", line 1113, in _call
+E     graphtraj.runtimes.codex.codex_adapter.CodexAdapterError: Codex stdio closed before explicit close.
+E     
+E   assert 1 == 0
+E    +  where 1 = CompletedProcess(args=['/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/pytest-of-luoxiao/pytest-1066/install...1113, in _call\ngraphtraj.runtimes.codex.codex_adapter.CodexAdapterError: Codex stdio closed before explicit close.\n').returncode
+=========================== short test summary info ============================
+FAILED tests/test_host_event_delivery.py::test_owning_host_processes_events_during_and_after_tool_call[True-True-False-normal]
+FAILED tests/test_host_event_delivery.py::test_owning_host_processes_events_during_and_after_tool_call[False-False-True-normal]
+FAILED tests/test_host_event_delivery.py::test_owning_host_processes_events_during_and_after_tool_call[False-False-False-stop]
+FAILED tests/test_host_event_delivery.py::test_owning_host_processes_events_during_and_after_tool_call[False-False-False-approval]
+FAILED tests/test_host_event_delivery.py::test_owning_host_processes_events_during_and_after_tool_call[True-False-False-input]
+5 failed in 138.73s (0:02:18)

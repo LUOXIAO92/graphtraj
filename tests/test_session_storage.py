@@ -10,7 +10,7 @@ from time import perf_counter
 import pytest
 
 from graphtraj.sessions.storage import SessionStore, StreamWriter, session_path
-from graphtraj.sessions.protocol import retain_native
+from agent_swarm.sessions.protocol import retain_native
 
 
 def header(session_id: str = 'canonical') -> dict:
@@ -216,12 +216,13 @@ def test_public_query_authority_and_independent_archive(tmp_path: Path, monkeypa
         assert result.document['events'][0]['data']['ciphertext'] == 'opaque'
         with pytest.raises(ValueError, match='unavailable'):
             handle_request({**request, 'arguments': {'session_id': 'not-collected'}}, cwd=tmp_path)
-    with runtime_caller(runner, 'research@x2'), pytest.raises(RunnerError, match='own verified'):
+    # Project history crosses Agents; Main reads it without becoming human.
+    for caller in ('research@x2', None):
+        with runtime_caller(runner, caller):
+            assert handle_request(request, cwd=tmp_path).document['header']['id'] == 'canonical'
+    with runtime_caller(runner, 'native-helper-thread'), pytest.raises(RunnerError, match='verified project caller'):
         handle_request(request, cwd=tmp_path)
-    monkeypatch.setattr('graphtraj.sessions.query.caller_runtime', lambda: None)
-    with runtime_caller(runner, None):
-        with pytest.raises(RunnerError):
-            handle_request(request, cwd=tmp_path)
+    monkeypatch.setattr('graphtraj.execution.runner_status.caller_runtime', lambda: None)
     result = bind(tmp_path, desktop_observer=True)(request)
     assert not result.failed and result.document['header']['id'] == 'canonical'
     forbidden = deepcopy(request)
@@ -235,7 +236,7 @@ def test_public_query_reads_jsonl_with_existing_native_authority(tmp_path: Path)
     from graphtraj.execution.runner_status import runtime_caller
     from graphtraj.interfaces.gateway import handle_request
     from graphtraj.interfaces.agents import swarm_root
-    from graphtraj.sessions.archive import SessionArchive
+    from agent_swarm.sessions.archive import SessionArchive
     from test_result_submission import result_project
 
     runner, _, _ = result_project(tmp_path)
@@ -249,8 +250,99 @@ def test_public_query_reads_jsonl_with_existing_native_authority(tmp_path: Path)
         result = handle_request(request, cwd=tmp_path)
         assert result.document['header']['id'] == identity
         assert result.document['events'][0]['data']['record']['ciphertext'] == 'opaque'
-    with runtime_caller(runner, 'research@x2'), pytest.raises(RunnerError, match='own verified'):
+    with runtime_caller(runner, 'research@x2'):
+        assert handle_request(request, cwd=tmp_path).document['header']['id'] == identity
+
+
+def test_main_and_members_read_linked_project_sessions_without_secrets(tmp_path: Path) -> None:
+    """Main reads its own Session by native ID; a member reads Main's; secrets stay out."""
+    from graphtraj.execution.runner_models import RunnerError
+    from graphtraj.execution.runner_status import NativeCaller, runtime_caller
+    from graphtraj.interfaces.gateway import handle_request
+    from graphtraj.interfaces.agents import swarm_root
+    from agent_swarm.sessions.archive import SessionArchive
+    from test_result_submission import result_project
+
+    runner, _, _ = result_project(tmp_path)
+    thread = '01a15203-d14d-7bf3-8900-6a3a3b5e1031'
+    identity = 'codex:' + thread
+    archive = SessionArchive(swarm_root(tmp_path), save_normalized_sessions=True)
+    main_header = header(identity)
+    main_header['graphtraj']['native']['sessionId'] = thread
+    archive.map_session(main_header)
+    archive.collect(identity, [retain_native('codex', {
+        'text': 'Main hook failed: Expecting value', 'request_token': 'private-request-token',
+        'control_key': 'private-control-key', 'api_key': 'private-api-key',
+    }, session_id=thread, locator='byte:0', seq=0, time=1)], source='rollout', position=1)
+    request = {'action': 'execute', 'feature': 'session_read', 'arguments': {'session_id': thread}}
+    main = NativeCaller(thread, {'runtime': 'codex', 'session': thread})
+    for caller in (main, 'research@x1'):
+        with runtime_caller(runner, caller):
+            document = handle_request(request, cwd=tmp_path).document
+        assert document['header']['id'] == identity
+        record = document['events'][0]['data']['record']
+        assert record['text'] == 'Main hook failed: Expecting value'
+        serialized = json.dumps(document)
+        assert all(secret not in serialized for secret in (
+            'private-request-token', 'private-control-key', 'private-api-key'))
+    # A native identity without its verified association is not a project caller.
+    with runtime_caller(runner, NativeCaller(thread, {'runtime': 'codex'})), pytest.raises(RunnerError):
         handle_request(request, cwd=tmp_path)
+    # Content outside this project's archive is not reachable by ID.
+    with runtime_caller(runner, main), pytest.raises(ValueError):
+        handle_request({**request, 'arguments': {'session_id': 'codex:other-project-thread'}}, cwd=tmp_path)
+
+
+def test_member_reads_an_unmigrated_codex_session_by_its_bare_native_id(tmp_path: Path) -> None:
+    """A bare native ID selects its runtime-prefixed archive; redaction and authority stay."""
+    from graphtraj.execution.runner_models import RunnerError
+    from graphtraj.execution.runner_status import runtime_caller
+    from graphtraj.interfaces.gateway import handle_request
+    from test_result_submission import result_project
+
+    runner, _, _ = result_project(tmp_path)
+    thread = '01a15203-d14d-7bf3-8900-6a3a3b5e1031'
+    with SessionStore.create(session_path(tmp_path / 'state', 'codex:' + thread),
+                             header('codex:' + thread)) as store:
+        store.append({'type': 'unknown/encrypted', 'seq': 0, 'time': 1, 'data': {
+            'text': 'Main progress', 'api_key': 'private-api-key'}}, source='native', position=0)
+    request = {'action': 'execute', 'feature': 'session_read', 'arguments': {'session_id': thread}}
+    with runtime_caller(runner, 'research@x1'):
+        bare = handle_request(request, cwd=tmp_path).document
+        prefixed = handle_request({**request, 'arguments': {'session_id': 'codex:' + thread}},
+                                  cwd=tmp_path).document
+    assert bare == prefixed and bare['header']['id'] == 'codex:' + thread
+    assert bare['events'][0]['data']['text'] == 'Main progress'
+    assert 'private-api-key' not in json.dumps(bare)
+    with runtime_caller(runner, 'native-helper-thread'), pytest.raises(RunnerError, match='verified project caller'):
+        handle_request(request, cwd=tmp_path)
+
+
+def test_public_query_pages_migrated_evidence_without_claiming_native_order(tmp_path: Path) -> None:
+    """Old evidence respects the selected page size and keeps its own cursor."""
+    from agent_swarm.sessions.migration import import_sqlite
+    from graphtraj.execution.runner_status import runtime_caller
+    from graphtraj.interfaces.gateway import handle_request
+    from graphtraj.interfaces.agents import swarm_root
+    from test_result_submission import result_project
+
+    runner, _, _ = result_project(tmp_path)
+    source = session_path(tmp_path / 'state', 'canonical')
+    with SessionStore.create(source, header()) as store:
+        for seq in range(3):
+            store.append({'type': 'unknown/encrypted', 'seq': seq, 'time': 1,
+                          'data': {'ciphertext': str(seq)}}, source='old-notification', position=seq)
+    import_sqlite(source, swarm_root(tmp_path))
+    request = {'action': 'execute', 'feature': 'session_read',
+               'arguments': {'session_id': 'canonical', 'limit': 1}}
+    with runtime_caller(runner, 'research@x1'):
+        first = handle_request(request, cwd=tmp_path).document
+        assert first['events'] == []
+        assert [event['seq'] for event in first['legacy']['events']] == [0]
+        assert first['legacy']['has_more'] and not first['legacy']['native_order_verified']
+        request['arguments']['after'] = first['legacy']['after']
+        second = handle_request(request, cwd=tmp_path).document
+        assert [event['seq'] for event in second['legacy']['events']] == [1]
 
 
 def test_fragment_size_equivalence_and_measurements(tmp_path: Path) -> None:
@@ -369,7 +461,7 @@ def test_pending_initial_ancestry_is_portable_atomic_and_one_way(tmp_path: Path)
 
 def test_initial_pending_cannot_be_validated_as_canonical_history() -> None:
     """Ordinary protocol consumers must not treat undecided observations as history."""
-    from graphtraj.sessions.protocol import INITIAL_COLLECTION_TYPE, validate_session
+    from agent_swarm.sessions.protocol import INITIAL_COLLECTION_TYPE, validate_session
 
     event = {'type': INITIAL_COLLECTION_TYPE, 'seq': 0, 'time': 1, 'data': {}}
     with pytest.raises(ValueError, match='pending-collection'):

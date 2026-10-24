@@ -10,10 +10,10 @@ import yaml
 from graphtraj.configuration.project_configuration import load_project_configuration, ProjectConfiguration
 from graphtraj.execution.runner_models import RunnerError
 from graphtraj.execution.runner_connection import current_parent_connection
-from graphtraj.runtimes.replacement import caller_runtime
 from graphtraj.execution.runner_status import (
-    caller_alias, read_alias_mapping, runtime_caller_is_bound, NativeCaller, _status_session,
+    project_redact, read_alias_mapping, require_project_reader, runtime_caller_is_bound, _status_session,
 )
+from graphtraj.runtimes.runtime_adapter import current_host_connection
 from graphtraj.graph.delivery_state import read_team
 from graphtraj.graph.task_graph import _load_states
 from graphtraj.runtimes.activity import TraceReader, redact
@@ -33,48 +33,45 @@ def observe(
     alias: str | None = None,
     cursor: str | None = None,
 ) -> dict:
-    """Return human project activity or a verified formal Agent's own Session.
+    """Return project activity to the human desktop or a verified project caller.
 
     A request can select only a recorded Task/member, never a filesystem path
-    or caller identity. Existing OS/native identity checks precede any Trace read.
+    or caller identity. Existing OS/native identity checks precede any Trace
+    read. Agents read the project's development records across Agents and
+    models with credentials and control material redacted; no messaging or
+    control is provided, and an unknown native source never becomes human.
     """
     runner = discover_runner_directory(cwd)
     from graphtraj.interfaces.desktop_host import owns_project
 
     window = human_observer.get() and owns_project(cwd)
-    caller = None if window else caller_alias(runner)
-    own = None
-    if caller is not None and not isinstance(caller, NativeCaller):
-        try:
-            own = read_alias_mapping(runner, caller)
-        except RunnerError as error:
-            raise RunnerError('authority-denied', 'Only a verified registered Session may read itself.') from error
-        if own[0]['task_id'] != task_id or alias not in {None, caller}:
-            raise RunnerError('authority-denied', 'Agent activity access is limited to its own Session and Task.')
-    else:
-        # A bound Main/unknown native caller is never an unbound human observer.
-        if not window and (not human_observer.get() or runtime_caller_is_bound()
-                or current_parent_connection() is not None or caller_runtime() is not None
-                or caller is not None):
-            raise RunnerError('authority-denied', 'Activity requires the human desktop host binding; human observation is unavailable to native Main/unknown callers.')
+    if window:
+        return _observe(cwd, runner, task_id, alias, cursor)
+    caller = require_project_reader(runner)
+    # The desktop flag with no native context at all is the user's own host.
+    human = (human_observer.get() and caller is None and not runtime_caller_is_bound()
+             and current_parent_connection() is None and current_host_connection() is None)
+    if task_id is None and alias is None and not human:
+        # Defaults stay on the real hierarchy; only an explicit read lists project sources.
+        raise ValueError('Supply task_id or alias for an explicit project read; '
+                         'the current hierarchy view is agents status.')
+    return project_redact({**_observe(cwd, runner, task_id, alias, cursor), 'scope': 'project'})
 
+
+def _observe(cwd: Path, runner: Path, task_id: str | None, alias: str | None, cursor: str | None) -> dict:
+    """Read the selected project source for an already authorized observer."""
     configuration = load_project_configuration(cwd)
     if task_id is None:
         return project_activity(cwd, runner, configuration, alias, cursor)
-    if own is not None:
-        # Do not enumerate other Teams, members, historical records or Traces.
-        aliases = {caller}
-        current = {caller}
-    else:
-        states = _load_states(configuration.state / 'tasks')
-        if task_id not in states:
-            raise ValueError('Choose a registered Task.')
-        aliases, current = _task_aliases(*states[task_id])
+    states = _load_states(configuration.state / 'tasks')
+    if task_id not in states:
+        raise ValueError('Choose a registered Task.')
+    aliases, current = _task_aliases(*states[task_id], runner, registration_order(configuration.state))
     agents = []
     mappings = {}
     for member in sorted(aliases):
         try:
-            mapping, session_directory = own if own is not None else read_alias_mapping(runner, member)
+            mapping, session_directory = read_alias_mapping(runner, member)
             if mapping['task_id'] != task_id:
                 continue
             mappings[member] = mapping
@@ -97,7 +94,7 @@ def observe(
         except (RunnerError, OSError, ValueError):
             agents.append({'alias': member, 'historical': member not in current,
                            'state': 'unavailable', 'reason': 'Member evidence is missing or inaccessible.'})
-    response = {'task_id': task_id, 'agents': redact(agents), 'scope': 'self' if own else 'human',
+    response = {'task_id': task_id, 'agents': redact(agents), 'scope': 'human',
                 'updated_at': datetime.now(timezone.utc).isoformat()}
     if alias is None:
         return response
@@ -109,30 +106,116 @@ def observe(
     return {**response, **read_page(configuration.harness_root, mapping, alias, task_id, cursor)}
 
 
-def _task_aliases(directory: Path, task: dict) -> tuple[set[str], set[str]]:
-    """Return every recorded member alias of one Task and those of its active Team.
+def registration_order(state_directory: Path) -> tuple[dict[str, int], set[str]]:
+    """Return each member's position in the Worldline Team registrations and the Team starters.
+
+    A start or member registration event names the registered Session by its
+    ``mapping.yml`` evidence. The Session a ``team-started`` event registers
+    holds the Team's lead seat, the one Main fills again on a handover.
+    """
+    from graphtraj.graph.delivery_worldline import read_worldline
+
+    order: dict[str, int] = {}
+    starters: set[str] = set()
+    try:
+        events = read_worldline(state_directory)
+    except (OSError, ValueError):
+        # Without readable registrations every live seat stays visible.
+        events = []
+    for index, event in enumerate(events):
+        if event.get('event') in {'team-started', 'team-member-started', 'team-member-replaced'}:
+            for ref in event.get('evidence_refs', ()):
+                parts = Path(ref).parts
+                if len(parts) >= 3 and parts[-1] == 'mapping.yml' and parts[-3] == 'sessions':
+                    order[parts[-2]] = index
+                    if event['event'] == 'team-started':
+                        starters.add(parts[-2])
+    return order, starters
+
+
+def _task_aliases(
+    directory: Path, task: dict, runner: Path, registrations: tuple[dict[str, int], set[str]],
+) -> tuple[set[str], set[str]]:
+    """Return every recorded member alias of one Task and its current seat holders.
 
     Seats name members; retained Trace records add members that left a seat.
+    A current holder occupies a seat of the active Team with a live Session.
+    The Team's lead seat has one holder: the top-level Session of the Team
+    starter's role registered last, so an earlier one that Main handed over
+    is history. Other top-level roles may hold seats in parallel. A member
+    under a superseded or retired parent is history with it. History is not
+    retirement: it stays readable by explicit alias.
     """
+    order, starters = registrations
     aliases = set()
-    current = set()
+    seated: dict[str, int] = {}
     for team_path in (directory / 'teams').glob('*/team.yml'):
         team = read_team(team_path)
-        members = {member['session_ref'] for member in team['members'].values() if member['session_ref']}
+        members = [member['session_ref'] for member in team['members'].values() if member['session_ref']]
         aliases.update(members)
         if team['team_ordinal'] == task['active_team_ordinal'] and team['status'] == 'active':
-            current.update(members)
+            seated = {alias: position for position, alias in enumerate(members)}
     aliases.update(path.name for path in (directory / 'teams').glob('*/traces/*')
                    if (path / 'runner/session.yml').is_file())
-    return aliases, current
+
+    mappings = {}
+    for alias in set(seated) | (starters & aliases):
+        try:
+            mappings[alias] = read_alias_mapping(runner, alias)
+        except RunnerError:
+            continue
+    lead_roles = {mapping['role'] for alias, (mapping, _) in mappings.items() if alias in starters}
+    parents: dict[str, str | None] = {}
+    leads: dict[str, str] = {}
+    for alias in seated:
+        if alias not in mappings or not (mappings[alias][1] / 'mapping.yml').is_file():
+            continue
+        mapping = mappings[alias][0]
+        parents[alias] = mapping.get('parent')
+        if parents[alias] is not None and parents[alias] not in seated:
+            # A parent outside this Team, as for a child Task's member, makes it
+            # a top-level member here; a retired parent in this Team does not.
+            try:
+                outer = read_alias_mapping(runner, parents[alias])[0]
+            except RunnerError:
+                outer = {}
+            if (outer.get('task_id'), outer.get('team_generation')) != (
+                    mapping.get('task_id'), mapping.get('team_generation')):
+                parents[alias] = None
+        if parents[alias] is None and mapping['role'] in lead_roles:
+            holder = leads.get(mapping['role'])
+            rank = lambda member: (order.get(member, -1), seated[member])  # noqa: E731
+            if holder is None or rank(alias) > rank(holder):
+                leads[mapping['role']] = alias
+
+    def current(alias: str) -> bool:
+        """Return whether ``alias`` descends through live seats from a current top-level holder."""
+        seen = set()
+        while alias in parents and alias not in seen:
+            seen.add(alias)
+            if parents[alias] is None:
+                role = mappings[alias][0]['role']
+                return role not in leads or leads[role] == alias
+            alias = parents[alias]
+        return False
+
+    return aliases, {alias for alias in parents if current(alias)}
 
 
 def task_members(cwd: Path, summary_task_id: str | None = None) -> dict:
+    """List the member Agents of current summary Tasks; see ``_task_members``."""
+    from graphtraj.execution.runner_status import one_retained_scan
+
+    with one_retained_scan():
+        return _task_members(cwd, summary_task_id)
+
+
+def _task_members(cwd: Path, summary_task_id: str | None = None) -> dict:
     """List the member Agents of current summary Tasks or of one chosen summary.
 
     By default the scope is every unfinished summary Task (an active Task with
     children, or a top-level one, that is not integrated) and its recursive
-    child Tasks; retired members are omitted. ``summary_task_id`` selects one
+    child Tasks; retired and superseded members are omitted. ``summary_task_id`` selects one
     Task and its recursive children regardless of completion and also lists
     retired members as history. Reading changes no identity or state.
 
@@ -144,11 +227,13 @@ def task_members(cwd: Path, summary_task_id: str | None = None) -> dict:
     ``last_outcome``, ``historical`` and ``retired``. An activity other than
     running or idle is kept as the ``diagnostic`` of that two-state view.
     """
-    from graphtraj.graph.task_index import read_index
+    from graphtraj.graph.task_graph import _load_state
+    from graphtraj.graph.task_index import read_index, task_directory
 
     configuration = load_project_configuration(cwd)
     runner        = discover_runner_directory(cwd)
-    records       = read_index(configuration.state)['tasks']
+    index         = read_index(configuration.state)
+    records       = index['tasks']
     children: dict[str, list[str]] = {key: [] for key in records}
     for key, record in records.items():
         if record['parent_id'] is not None:
@@ -172,10 +257,13 @@ def task_members(cwd: Path, summary_task_id: str | None = None) -> dict:
             scope.add(key)
             pending.extend(children[key])
 
-    states  = _load_states(configuration.state / 'tasks') if scope else {}
+    # Only the Tasks in scope are read; the index already names their directories.
+    states  = {key: (directory, _load_state(directory / 'task.yml')[1])
+               for key in scope for directory in (task_directory(configuration.state, index, key),)}
+    order   = registration_order(configuration.state) if scope else {}
     members = []
     for task_id in sorted(scope, key=int):
-        aliases, current = _task_aliases(*states[task_id])
+        aliases, current = _task_aliases(*states[task_id], runner, order)
         for member in sorted(aliases):
             try:
                 mapping, session_directory = read_alias_mapping(runner, member)
@@ -184,7 +272,7 @@ def task_members(cwd: Path, summary_task_id: str | None = None) -> dict:
             if mapping['task_id'] != task_id:
                 continue
             retired = not (session_directory / 'mapping.yml').is_file()
-            if retired and summary_task_id is None:
+            if (retired or member not in current) and summary_task_id is None:
                 continue
             entry = {'alias': member, 'task_id': task_id, 'team': mapping['team_generation'],
                      'role': mapping['role'], 'runtime': mapping['runtime'],

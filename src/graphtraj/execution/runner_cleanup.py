@@ -198,13 +198,14 @@ def _cleanup(target: CleanupTarget) -> CleanupResponse:
         )
     task_commit = (target.candidate if branch_only else
                      run_git(target.project.repository, "rev-parse", target.branch))
+    content_integrated = None
     if not git_succeeds(
         target.project.repository,
         "merge-base",
         "--is-ancestor",
         task_commit,
         target.project.dev_commit,
-    ):
+    ) and (branch_only or (content_integrated := _content_integrated(target, task_commit)) is None):
         return _refused(
             target,
             "cleanup-not-integrated",
@@ -269,10 +270,34 @@ def _cleanup(target: CleanupTarget) -> CleanupResponse:
                 "integration_branch": target.project.integration_branch,
                 "integration_commit": target.project.dev_commit,
                 "task_commit": task_commit,
+                **({"content_integrated": content_integrated} if content_integrated else {}),
             },
         },
         succeeded=True,
     )
+
+
+def _content_integrated(target: CleanupTarget, branch_head: str) -> dict[str, str] | None:
+    """Accept a Worktree branch head whose content dev already holds exactly.
+
+    A later merge on the Task branch (for example of its accepted candidate
+    with another accepted line) need not be an ancestor of dev. It is still
+    integrated when the accepted candidate is in dev and merging the head into
+    dev conflicts nowhere and changes nothing. The head and the equal tree are
+    returned so the removed ref can be recreated.
+    """
+    repository, dev = target.project.repository, target.project.dev_commit
+    if target.candidate is None or not git_succeeds(
+            repository, "merge-base", "--is-ancestor", target.candidate, dev):
+        return None
+    try:
+        merged = run_git(repository, "merge-tree", "--write-tree", dev, branch_head).splitlines()
+    except RunnerError:
+        return None  # a conflict exits nonzero
+    tree = run_git(repository, "rev-parse", dev + "^{tree}")
+    if not merged or merged[0] != tree:
+        return None
+    return {"branch_head": branch_head, "tree": tree}
 
 
 def _task_mappings(

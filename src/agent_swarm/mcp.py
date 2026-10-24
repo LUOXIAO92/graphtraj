@@ -64,7 +64,7 @@ def serve(input_stream: TextIO, output_stream: TextIO, responder: Callable[[Mapp
             reply = (responder(message) if isinstance(message, dict)
                      else error_response(None, -32600, 'Invalid request'))
         if reply is not None:
-            output_stream.write(json.dumps(reply) + '\n')
+            output_stream.write(json.dumps(reply, ensure_ascii=False) + '\n')
             output_stream.flush()
 
 
@@ -87,7 +87,7 @@ def call(request_id: Any, params: Mapping) -> dict:
     except AgentsError as error:
         document = {'error': {'code': error.code, 'message': error.message}}
         failed = True
-    return result_response(request_id, {'content': [{'type': 'text', 'text': json.dumps(document)}],
+    return result_response(request_id, {'content': [{'type': 'text', 'text': json.dumps(document, ensure_ascii=False)}],
                                          'structuredContent': document, 'isError': failed})
 
 

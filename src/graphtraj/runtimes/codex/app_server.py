@@ -342,7 +342,7 @@ class CodexAppServer(NativeCodexAppServer):
 
     async def retain_ordered_history(self, session: CodexSession, archive: object, agent: str) -> None:
         """Construct the existing collector without making native control import it."""
-        from graphtraj.runtimes.codex.history_archive import CodexHistoryArchive
+        from agent_swarm.sessions.codex_history import CodexHistoryArchive
 
         await super().retain_ordered_history(
             session, lambda: CodexHistoryArchive(archive, agent, session.inherited_history, self._call),

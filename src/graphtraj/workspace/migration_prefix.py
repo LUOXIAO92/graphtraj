@@ -12,7 +12,7 @@ import yaml
 
 from graphtraj.runtimes.codex.physical_history import rollout_identity, locate_physical_rollout, open_physical_rollout
 
-from graphtraj.configuration.project_configuration import load_project_configuration
+from graphtraj.configuration.project_configuration import load_project_configuration, runner_directory
 from graphtraj.workspace.session_migration import session_sources
 
 
@@ -67,7 +67,7 @@ def inspect_prefix(
     project = configuration.harness_root
     if (project / '.graphtraj/migration-snapshot.yml').exists():
         raise ValueError('Query inherited source metadata from the original lawful native host.')
-    candidates = [item for item in session_sources(configuration.state, project / '.graphtraj/runner', project)
+    candidates = [item for item in session_sources(configuration.state, runner_directory(project), project)
                   if item.get('runtime') == 'codex' and item.get('session') == session]
     if len(candidates) != 1 or candidates[0].get('kind') != 'main' or candidates[0].get('identity_conflicts'):
         raise ValueError('An unambiguous retained project Main association is required.')
@@ -197,7 +197,7 @@ def capture_prefix_chain(
     project = configuration.harness_root
     if (project / '.graphtraj/migration-snapshot.yml').exists():
         raise ValueError('Capture a declared chain only through the original lawful native host.')
-    inventory = session_sources(configuration.state, project / '.graphtraj/runner', project)
+    inventory = session_sources(configuration.state, runner_directory(project), project)
     owned = {item['session']: item for item in inventory
              if item.get('runtime') == 'codex' and item.get('agent') and not item.get('identity_conflicts')}
     main = owned.get(session)
@@ -507,7 +507,7 @@ def diagnose_next_prefix(cwd: Path, session: str, manifest: Path) -> dict:
     chain = verify_partial_chain(project, session, manifest)
     edge = chain['next_reference']
 
-    inventory = session_sources(configuration.state, project / '.graphtraj/runner', project)
+    inventory = session_sources(configuration.state, runner_directory(project), project)
     owned = {item['session']: item for item in inventory
              if item.get('runtime') == 'codex' and item.get('agent') and not item.get('identity_conflicts')}
     main = owned.get(session)

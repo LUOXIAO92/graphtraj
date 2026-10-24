@@ -11,9 +11,9 @@ import json
 from pathlib import Path
 import uuid
 
-from graphtraj.sessions.archive import ArchiveStream, JsonlSessionStore, SessionArchive, archive_path
-from graphtraj.sessions.protocol import append_stream_record, retain_native
-from .projection import native_time, project_messages
+from agent_swarm.sessions.archive import ArchiveStream, JsonlSessionStore, SessionArchive, archive_path
+from agent_swarm.sessions.protocol import append_stream_record, retain_native
+from .pi_projection import native_time, project_messages
 
 
 def archive_events(store: JsonlSessionStore) -> list[dict]:
@@ -68,7 +68,7 @@ class PiArchive:
         """Bind a verified native header and the activation's history boundary."""
         self.archive = archive
         self.session = header['id']
-        self.key = 'pi:' + self.session
+        self.key = archive.native_id('pi', self.session)
         self.entries = deepcopy(entries)
         self.leaf_id = leaf_id
         self.source = 'rpc:' + uuid.uuid4().hex
@@ -146,7 +146,7 @@ class PiArchive:
         old = self._events()
         # Pi can defer its header until the first message. Keep later native
         # header evidence without rewriting the original mapping's timestamp.
-        original_header = store.header['graphtraj']['native']['record']
+        original_header = store.header['graphtraj']['native'].get('record', self.native_header)
         if self.native_header != original_header:
             entries = [self.native_header, *entries]
         old_by_id = {event['data']['record']['id']: event for event in old if event['type'] == 'graphtraj/native'}

@@ -272,11 +272,7 @@ def test_retire_refuses_running_descendant_then_preserves_history(
         assert stopped.returncode == 0, stopped.stdout + stopped.stderr
         evidence = {name: (runner / alias / name).read_bytes()
                     for name in ('launch.yml', 'execution.yml', 'events.jsonl')}
-        retired = subprocess.run(
-            [str(installed_commands.runner.with_name('graphtraj-tool'))], cwd=root, env=env,
-            input=json.dumps({'action': 'execute', 'feature': 'retire', 'arguments': {'alias': alias}}) + '\n',
-            text=True, capture_output=True, timeout=30,
-        )
+        retired = command(installed_commands, root, env, 'retire', alias)
         assert retired.returncode == 0, retired.stdout + retired.stderr
         assert 'retired' in retired.stdout
         assert not (runner / alias).exists()
@@ -286,7 +282,11 @@ def test_retire_refuses_running_descendant_then_preserves_history(
         assert yaml.safe_load((runner / child / 'mapping.yml').read_text())['parent'] == alias
         team = yaml.safe_load((root / '.graphtraj/state/tasks/154-recovery/teams/1/team.yml').read_text())
         assert alias not in {member['session_ref'] for member in team['members'].values()}
-        assert command(installed_commands, root, env, 'reports', alias).returncode == 0
+        from graphtraj.execution.runner_status import runtime_caller
+        from graphtraj.interfaces.tools import read_reports
+
+        with runtime_caller(runner.parent, child):
+            assert read_reports({'alias': alias}, cwd=root).document['alias'] == alias
         assert command(installed_commands, root, env, 'status', alias).returncode == 0
         stale = command(installed_commands, root, env, 'send', alias, '--instruction', 'Work',
                         '--caused-by-event-id', events(root)[-1]['event_id'])
@@ -347,7 +347,6 @@ def test_retire_unknown_termination_does_not_interrupt(
 
     from graphtraj.execution import runner_control, runner_retirement, runner_status
     from graphtraj.execution.runner_models import RunnerError
-    from graphtraj.interfaces.cli.projection import invoke_tool
     from test_direct_control_authority import _record_direct_session
 
     runner = tmp_path / 'runner'
@@ -366,6 +365,6 @@ def test_retire_unknown_termination_does_not_interrupt(
     monkeypatch.setattr(runner_control, 'respond_to_abnormal_session',
                         lambda *args: pytest.fail('Retirement must not trigger interruption'))
     with pytest.raises(RunnerError, match='must be stopped'):
-        invoke_tool('retire', {'alias': alias}, cwd=tmp_path)
+        runner_retirement.retire_session(alias, tmp_path)
     assert (runner / 'sessions' / alias / 'mapping.yml').is_file()
     assert not (runner / 'sessions' / alias / 'stop.yml').exists()

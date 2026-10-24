@@ -1,0 +1,9 @@
+...........F                                                             [100%]
+=================================== FAILURES ===================================
+_ test_integration_helper_stops_and_returns_notice_to_its_caller[codex-binding] _
+tests/test_task_budget_control.py:466: in test_integration_helper_stops_and_returns_notice_to_its_caller
+    assert mappings
+E   assert []
+=========================== short test summary info ============================
+FAILED tests/test_task_budget_control.py::test_integration_helper_stops_and_returns_notice_to_its_caller[codex-binding]
+1 failed, 11 passed in 84.29s (0:01:24)

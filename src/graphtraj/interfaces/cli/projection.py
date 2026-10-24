@@ -80,7 +80,7 @@ class OperationCommand(click.Command):
         """Open Runner resources only after Click has handled help and parsing."""
         tool = TOOLS[self.feature]
         if tool.cli_path[0] == "agent-runner" and self.feature not in {
-            "alias_status", "parent_status", "pending_requests", "session_reports",
+            "parent_status", "session_reports",
         }:
             from graphtraj.interfaces.cli.agent_runner import _budget_notices
 
@@ -96,6 +96,10 @@ class OperationCommand(click.Command):
         tool = TOOLS[self.feature]
         properties = tool.input_schema.get("properties", {})
         required = tool.input_schema.get("required", [])
+        # An input reachable through two CLI forms is required by the shared
+        # schema check, not by either form alone.
+        mapped = [name for name, _ in tool.cli_parameters.values()]
+        required = [name for name in required if mapped.count(name) < 2]
         parameters = []
         for original in super().get_params(ctx):
             parameter = copy(original)
@@ -118,7 +122,7 @@ class OperationCommand(click.Command):
                     parameter.type = SchemaType(scalar, parameter.type)
             elif name:
                 parameter.required = name in required
-            if isinstance(parameter, click.Option):
+            if isinstance(parameter, click.Option) and encoding != "json":
                 parameter.help = schema.get("description", "")
                 parameter.show_default = True
             parameters.append(parameter)
@@ -143,7 +147,7 @@ class OperationCommand(click.Command):
         tool = TOOLS[self.feature]
         with formatter.section("Parameters"):
             for parameter in self.get_params(ctx):
-                if parameter.name == "help":
+                if parameter.name == "help" or getattr(parameter, "hidden", False):
                     continue
                 name, encoding = tool.cli_parameters.get(parameter.name, (parameter.name, "value"))
                 form = ", ".join(parameter.opts)

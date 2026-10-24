@@ -19,7 +19,7 @@ from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence, Tuple
 import yaml
 
 from graphtraj.runtimes.codex.session_archive import CodexSessionArchive
-from graphtraj.runtimes.codex.jsonl_archive import CodexJsonlArchive
+from agent_swarm.sessions.codex import CodexJsonlArchive
 
 from graphtraj.runtimes.runtime_adapter import (
     NativeReplacement,
@@ -1071,6 +1071,48 @@ def _resolve_codex_role(role: ResolvedChildRole, harness_root: Path) -> _CodexRo
     )
 
 
+def apply_unix_socket_access(request: dict, configured: Mapping[str, Any] | None) -> None:
+    """Project Main-owned, Worktree-scoped socket grants into native permissions.
+
+    ``codex.unix_sockets`` maps exact absolute Worktrees to socket path lists.
+    It does not read Agent-writable native configuration or change filesystem,
+    account, approval or external network rules. An explicit empty list revokes
+    previously projected socket grants on normal same-Session continuation.
+    """
+    if configured is None:
+        return
+    if not isinstance(configured, dict):
+        raise _invalid_role_value('codex.unix_sockets')
+    for worktree, paths in configured.items():
+        if (not isinstance(worktree, str) or not Path(worktree).is_absolute()
+                or not isinstance(paths, list)
+                or any(not isinstance(path, str) or not Path(path).is_absolute()
+                       or any(token in path for token in ('*', '?', '[', '\x00'))
+                       or '..' in Path(path).parts for path in paths)):
+            raise _invalid_role_value('codex.unix_sockets')
+    paths = configured.get(request['worktree_path'])
+    if paths is None:
+        return
+    config = request['session_parameters']['config']
+    profile = config['permissions'][config['default_permissions']]
+    network = profile.setdefault('network', {})
+    # Keep narrower existing external-network policy. No wildcard socket grant
+    # or permission to listen on arbitrary local addresses is introduced.
+    network.setdefault('enabled', True)
+    network.update(allow_local_binding=False, dangerously_allow_all_unix_sockets=False,
+                   dangerously_allow_non_loopback_proxy=False)
+    previous = network.get('unix_sockets', {})
+    network['unix_sockets'] = {**{path: 'deny' for path in previous},
+                               **{path: 'allow' for path in paths}}
+    config['features'] = {**config.get('features', {}), 'network_proxy': True}
+    arguments = request['arguments']
+    for key in ('permissions', 'features'):
+        for index in range(len(arguments) - 2, -1, -1):
+            if arguments[index] == '-c' and arguments[index + 1].startswith(key + '='):
+                del arguments[index:index + 2]
+        arguments[2:2] = ['-c', key + '=' + _toml_value(config[key])]
+
+
 def _validate_role_schema(document: Mapping[str, Any]) -> None:
     keys = frozenset(document)
     if not ADAPTER_ROLE_KEYS.issubset(keys):
@@ -1180,7 +1222,7 @@ def refresh_codex_report_paths(
     reports_only: bool = False,
     session_directory: Path | None = None,
 ) -> Dict[str, Any]:
-    """Refresh only exact report and direct-control permissions in one resume."""
+    """Refresh project reads and exact report grants without widening native writes."""
 
     arguments, request_worktree = _validate_launch_request(request)
     if request_worktree != worktree:
@@ -1233,6 +1275,11 @@ def refresh_codex_report_paths(
             "The durable Codex launch request has invalid report permissions.",
         )
     filesystem = profile["filesystem"]
+    if session_directory is not None:
+        from graphtraj.runtimes.codex.access import member_project_reads
+        from graphtraj.configuration.project_configuration import runner_project_root
+
+        filesystem.update(member_project_reads(runner_project_root(session_directory.parent.parent)))
     workspace_roots = filesystem.get(":workspace_roots")
     if reports_only:
         if not isinstance(workspace_roots, dict) or "." not in workspace_roots:

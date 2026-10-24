@@ -36,13 +36,19 @@ export function installCollection(ctx, entry) {
     if (state.running) return state.running;
     state.running = (async () => {
       while (state.pending.length || !state.initialized) {
-        const batch = state.pending.slice();
+        // Native Session order supplies a complete prefix. Re-observing lets
+        // enabling backfill recover earlier history without retaining a third
+        // body in this plugin. JSONL publication already processes that prefix.
+        const observation = await ctx.sessionQuery.observeSession(state.agent.session.id, { projectionMode: 'none' });
+        let batch;
+        try { batch = [...observation.events]; }
+        finally { observation[Symbol.dispose](); }
         const records = [];
         for (const event of batch) records.push({ event, attachments: await attachments(ctx, event) });
         // Collection must also settle aborted/failed attempts, so it is not
         // cancelled with a turn's AbortSignal. Native persistence owns replay.
         const result = await entry(state.agent, {
-          event: 'session/collect', header: state.agent.session.header, records,
+          event: 'session/collect', header: state.agent.session.header, records, history_boundary: state.boundary,
         });
         if (result.deferred) return;
         const expected = batch.at(-1)?.seq ?? -1;
@@ -86,14 +92,15 @@ export function installCollection(ctx, entry) {
     await Promise.all([...sessions.values()].map(state => drain(state)));
   });
 
-  return async agent => {
+  return async (agent, source = 'startup') => {
     // A live observation includes seed events, which never emit session/event.
     // Install the queue first: events appended while observing are deduplicated
     // against the captured cursor without dropping the new tail.
-    const state = { agent, pending: [], running: null, initialized: false, ready: false };
+    const state = { agent, pending: [], running: null, initialized: false, ready: false, boundary: -1 };
     sessions.set(agent.session.id, state);
     const observation = await ctx.sessionQuery.observeSession(agent.session.id, { projectionMode: 'none' });
     try {
+      state.boundary = source === 'resume' ? observation.cursor : -1;
       state.pending = [...observation.events,
         ...state.pending.filter(event => event.seq > observation.cursor)];
     } finally { observation[Symbol.dispose](); }

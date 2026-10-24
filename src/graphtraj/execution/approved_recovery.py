@@ -100,7 +100,7 @@ def _changes_execution(request: dict) -> bool:
     """Whether a recovery resumes the Session or reactivates its Task.
 
     Only these need the target subtree stopped. A budget increment without
-    either keeps running work, its stop facts and its original clock.
+    either keeps running work, Session stop facts and its original clock.
     """
     return request['resume'] or request.get('restore_active', False)
 
@@ -154,9 +154,11 @@ def _repair_snapshot(project: Any, before: dict, request: dict) -> dict:
     if minutes and before['budget'] is None:
         raise RunnerError('invalid-input', 'Time extension requires existing execution accounting.')
     if minutes:
+        # Approved minutes lift the Task's sampled budget stop, so newly
+        # dispatched members can start. A Session's explicit stop stays
+        # unless this recovery also resumes that Session.
         after['budget']['approved_minutes'] = after['budget'].get('approved_minutes', 0) + minutes
-        if resume:
-            after['budget']['stopped'] = False
+        after['budget']['stopped'] = False
     budget_stopped = after['budget'] is not None and after['budget'].get('stopped', False)
     # Administrative reopening grants neither execution permission nor more time.
     if resume and not budget_stopped and after['stop'] is not None:
@@ -416,9 +418,11 @@ def _resume_locked(project: Any, applied: dict, directory: Path) -> dict:
     if prior:
         return {**result, 'recovery_status': 'resumed', 'resumption': prior['resumption']}
     current, _ = _snapshot(project, alias)
-    expected = {**proposal['after'], 'latest_task_event': applied['event_id']}
-    if 'applied_budget' in applied:
-        expected['budget'] = applied['applied_budget']
+    # Later budget writes (another approved increment, sampled checks) and
+    # later Task events are ordinary progress, not a changed repair. Budget
+    # permission is rechecked when input is sent, and retry never adds time.
+    expected = {**proposal['after'], 'budget': current['budget'],
+                'latest_task_event': current['latest_task_event']}
     differences = _differences(expected, current)
     # Native startup replaces transport and clears the terminal summary before
     # turn admission. These changes do not alter Session ownership or authority.

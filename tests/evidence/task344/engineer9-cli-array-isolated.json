@@ -1,0 +1,31 @@
+{
+  "scope": "Isolated installed CLI operation; not real Main/Runtime acceptance",
+  "executable": "/private/tmp/344-e9-stage-0aca60a/venv/bin/agent-runner",
+  "argv": [
+    "continue",
+    "--task-id",
+    "160",
+    "--budget-only",
+    "--caused-by-event-ids",
+    "[\"20261022T023503.894087+0900\", \"20261022T023504.047490+0900\"]"
+  ],
+  "exit_code": 0,
+  "stdout": "task_id: '160'\ncontinuation_event_id: 20261022T023504.313037+0900\ntasks: []\n",
+  "stderr": "",
+  "retained_event": {
+    "event_id": "20261022T023504.313037+0900",
+    "captured_at": "2026-10-22T02:35:04.313037+09:00",
+    "event": "team-continuation-started",
+    "caused_by_event_ids": [
+      "20261022T023503.894087+0900",
+      "20261022T023504.047490+0900"
+    ],
+    "evidence_refs": [
+      ".graphtraj/state/tasks/160-cli-event-list/task.md",
+      "delivery-evidence.md"
+    ],
+    "task_id": "160"
+  },
+  "same_budget_except_sampled_stop": true,
+  "native_sessions_created": 0
+}

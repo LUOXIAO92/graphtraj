@@ -45,7 +45,8 @@ Path(os.environ['CLAUDE_FIXTURE_HOME'], 'native-permissions.json').write_text(js
     'model': model,
     'effort': args[args.index('--effort') + 1] if '--effort' in args else None,
     'mode': permission_mode, 'settings': json.loads(args[args.index('--settings') + 1]),
-    'restricted': '--restricted' in args,
+    'restricted': '--restricted' in args, 'cwd': os.getcwd(),
+    'add_dirs': [args[i + 1] for i, item in enumerate(args) if item == '--add-dir'],
     'scrub': os.environ.get('CLAUDE_CODE_SUBPROCESS_ENV_SCRUB'),
     'permission_handler': args[args.index('--permission-prompt-tool') + 1],
 }))
@@ -61,6 +62,8 @@ messages = json.loads(history.read_text()) if history.exists() else []
 Path(os.environ['CLAUDE_FIXTURE_HOME'], 'native-endpoint.json').write_text(
     json.dumps(os.environ.get('ANTHROPIC_BASE_URL')))
 started = False
+startup_sent = False
+sdk_ready = False
 waiting = []
 merging = []
 absorbing = []
@@ -107,8 +110,10 @@ def write_transcript(record: dict) -> None:
 
 def result(text: str, error: bool = False, queued: int | None = 0, idle: bool = True) -> None:
     """Emit distinct result and quiescence records with native usage."""
+    usage = {'input_tokens': 11, 'cache_read_input_tokens': 7,
+             'cache_creation_input_tokens': 2, 'output_tokens': 5}
     emit({'type': 'assistant', 'session_id': session, 'message': {
-        'role': 'assistant', 'content': [{'type': 'text', 'text': text}]}})
+        'role': 'assistant', 'content': [{'type': 'text', 'text': text}], 'usage': usage}})
     emit({'type': 'result', 'session_id': session, 'uuid': str(uuid.uuid4()),
           'is_error': error, 'result': text, 'usage': {
               'input_tokens': 11, 'cache_read_input_tokens': 7,
@@ -194,7 +199,7 @@ def prompt(message: dict) -> None:
     elif text == 'mcp':
         command = json.loads(args[args.index('--mcp-config') + 1])['mcpServers']['agents']
         query = {'jsonrpc': '2.0', 'id': 1, 'method': 'tools/call', 'params': {
-            'name': 'tasks', 'arguments': {'action': 'execute', 'feature': 'alias_status', 'arguments': {}}}}
+            'name': 'tasks', 'arguments': {'action': 'execute', 'feature': 'session_reports', 'arguments': {'alias': 'research@x1'}}}}
         response = subprocess.run([command['command'], *command['args']], input=json.dumps(query) + '\n',
                                   text=True, capture_output=True, env={**os.environ, **command['env']})
         result(response.stdout or response.stderr)
@@ -236,8 +241,36 @@ def prompt(message: dict) -> None:
                else '|'.join(messages), text == 'provider-error')
 
 
+def hold_start_lock() -> None:
+    """Let another process hold the project startup lock across the startup hook."""
+    lock = os.environ.get('CLAUDE_FIXTURE_START_LOCK')
+    if not lock:
+        return
+    ready = Path(lock + '.held')
+    subprocess.Popen([sys.executable, '-c', (
+        'import fcntl,sys,time\n'
+        'stream = open(sys.argv[1], "a+b")\n'
+        'fcntl.flock(stream, fcntl.LOCK_EX)\n'
+        'open(sys.argv[1] + ".held", "w").close()\n'
+        'time.sleep(float(sys.argv[2]))\n'), lock, os.environ['CLAUDE_FIXTURE_START_LOCK_SECONDS']],
+        start_new_session=True)
+    deadline = time.monotonic() + 10
+    while not ready.exists() and time.monotonic() < deadline:
+        time.sleep(0.01)
+
+
 def startup() -> None:
     """Attest the native Session after completing any SDK tool handshake."""
+    global hook_sent
+    hold_start_lock()
+    gate = os.environ.get('CLAUDE_FIXTURE_HOOK_GATE')
+    if gate:
+        # Let the test publish a stop after process start but before the hook.
+        Path(gate + '.waiting').touch()
+        deadline = time.monotonic() + 60
+        while not Path(gate).exists() and time.monotonic() < deadline:
+            time.sleep(0.01)
+    hook_sent = time.monotonic()
     emit({'type': 'control_request', 'request_id': 'startup', 'request': {
         'subtype': 'hook_callback', 'callback_id': 'graphtraj_start', 'input': {
             'hook_event_name': 'UserPromptSubmit', 'session_id': session,
@@ -248,6 +281,18 @@ for line in sys.stdin:
     event = json.loads(line)
     if event['type'] == 'control_request':
         request = event['request']
+        if request['subtype'] == 'apply_flag_settings':
+            if os.environ.get('CLAUDE_FIXTURE_REJECT_RESOURCES'):
+                emit({'type': 'control_response', 'response': {
+                    'subtype': 'error', 'request_id': event['request_id'],
+                    'error': 'Exact resource settings refused by native peer.',
+                }})
+                continue
+            path = Path(os.environ['CLAUDE_FIXTURE_HOME'], 'native-permissions.json')
+            observed = json.loads(path.read_text())
+            observed['settings'].update(request['settings'])
+            observed['resource_update_before_prompt'] = not messages
+            path.write_text(json.dumps(observed))
         initialized = {'hooks_applied': True}
         if os.environ.get('CLAUDE_FIXTURE_DIAGNOSTICS'):
             initialized.update(autoModeAvailable=False, permissionMode='default',
@@ -262,7 +307,7 @@ for line in sys.stdin:
                         'jsonrpc': '2.0', 'id': 10, 'method': 'initialize',
                         'params': {'protocolVersion': '2025-06-18'}}}})
             else:
-                startup()
+                sdk_ready = True
         elif request['subtype'] == 'interrupt':
             if os.environ.get('CLAUDE_FIXTURE_ESCAPED_PIPE'):
                 # A tool child outside the owned group keeps stdout open until
@@ -292,9 +337,12 @@ for line in sys.stdin:
                 'message': {'jsonrpc': '2.0', 'id': 11, 'method': 'tools/list'}}})
         elif response['request_id'] == 'sdk-initial-tools':
             assert response['response']['mcp_response']['result']['tools'][0]['name'] == 'agents'
-            startup()
+            sdk_ready = True
         elif response['request_id'] == 'startup':
             started = True
+            if os.environ.get('CLAUDE_FIXTURE_HOOK_LOG'):
+                with open(os.environ['CLAUDE_FIXTURE_HOOK_LOG'], 'a') as log:
+                    log.write(f'{time.monotonic() - hook_sent}\n')
             init = {'type': 'system', 'subtype': 'init', 'session_id': session, 'model': model}
             if sdk_servers:
                 init['tools'] = ['mcp__agents__agents']
@@ -351,6 +399,11 @@ for line in sys.stdin:
             later_prompt(event)
         else:
             prompt(event)
+    # UserPromptSubmit belongs to an actual prompt, not initialize. This also
+    # keeps readiness behind the initial prompt when settings are applied first.
+    if waiting and sdk_ready and not startup_sent:
+        startup_sent = True
+        startup()
     if started and waiting and isinstance(waiting[0], dict):
         prompt(waiting.pop(0))
 if os.environ.get('CLAUDE_FIXTURE_EOF_FILE'):

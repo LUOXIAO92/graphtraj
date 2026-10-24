@@ -1,0 +1,8 @@
+.................................................................        [100%]
+=============================== warnings summary ===============================
+tests/test_cli_projection.py: 37 warnings
+  /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/.agent-worktrees/344-agents-tasks-boundary-rework/src/graphtraj/interfaces/cli/projection.py:92: DeprecationWarning: 'click.utils.make_default_short_help' is deprecated and will be removed in Click 9.0.
+    return click.utils.make_default_short_help(TOOLS[self.feature].description, limit)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+65 passed, 37 warnings in 14.27s

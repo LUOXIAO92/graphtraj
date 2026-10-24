@@ -26,6 +26,7 @@ import yaml
 from agent_swarm.mcp import error_response as _error_response, result_response as _result_response
 
 from graphtraj.configuration.project_configuration import ProjectConfigurationError
+from graphtraj.configuration import project_configuration
 from graphtraj.execution.execution_budget import budget_notice_output, caller_notice_fd
 from graphtraj.execution.runner_models import RunnerError
 from graphtraj.interfaces import gateway
@@ -35,7 +36,8 @@ from graphtraj.runtimes.codex.codex_adapter import CodexAdapterError
 
 SERVER_INFO      = {"name": "graphtraj", "version": "0.1.0"}
 _SERVICE = {'executable': sys.executable, 'module': __file__,
-            'sha256': hashlib.sha256(Path(__file__).read_bytes()).hexdigest()}
+            'sha256': hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
+            'configuration_sha256': hashlib.sha256(Path(project_configuration.__file__).read_bytes()).hexdigest()}
 
 INVALID_PARAMS   = -32602
 
@@ -132,9 +134,11 @@ def _tool_call_response(
             if name == 'agents':
                 from agent_swarm.discovery import handle_request
 
-                result = handle_request(arguments, lambda request: dispatch({
-                    'action': 'execute', 'feature': 'agents', 'arguments': request,
-                }))
+                from agent_swarm.connection import client_native_context
+                from graphtraj.interfaces.hosted_cli import agents_dispatch
+
+                result = handle_request(arguments, lambda request: agents_dispatch(
+                    request, Path.cwd(), native_context=client_native_context(metadata)))
             else:
                 result = dispatch(arguments)
                 if arguments.get('action') == 'discover' and not result.failed:
@@ -171,7 +175,7 @@ def _tool_call_response(
         {
             # The text is the CLI's YAML rendering of the same document.
             "content":           [
-                {"type": "text", "text": yaml.safe_dump(document, sort_keys=False)}
+                {"type": "text", "text": yaml.safe_dump(document, sort_keys=False, allow_unicode=True)}
             ],
             "structuredContent": document,
             "isError":           result.failed,

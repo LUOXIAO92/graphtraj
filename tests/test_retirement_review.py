@@ -8,10 +8,11 @@ import yaml
 
 from conftest import InstalledCommands, run_process
 from graphtraj.execution.runner_models import RunnerError
+from graphtraj.execution.runner_retirement import retire_session
 from graphtraj.execution.runner_status import read_alias_mapping
 from graphtraj.graph.delivery_worldline import read_worldline
 from graphtraj.interfaces import local_tool
-from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError
+from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError, recovery_review
 from test_task_integration import accepted_task
 
 
@@ -65,8 +66,16 @@ def test_public_retirement_review(
         arguments.update(actor='user', caused_by_event_ids=[read_worldline(state, root)[-1]['event_id']])
     call = local_tool.bind(root, recovery_reviewer=review)
     request = {'action': 'execute', 'feature': operation, 'arguments': arguments}
+
+    def operate() -> dict:
+        """Exercise retirement's shared Runner API or the public Task replacement."""
+        if operation == 'retire':
+            with recovery_review(review):
+                return retire_session(alias, root)
+        return call(request).document
+
     if decision == 'accept':
-        result = call(request).document
+        result = operate()
         assert result.get('retire_status') == 'retired' or result.get('completed_actions') == ['retired']
         assert not directory.exists()
         retained, record_directory = read_alias_mapping(runner, alias)
@@ -74,17 +83,17 @@ def test_public_retirement_review(
         assert yaml.safe_load((record_directory / 'session.yml').read_text())['retirement']
     else:
         with pytest.raises(RunnerError):
-            call(request)
+            operate()
         assert (directory / 'mapping.yml').read_bytes() == before
         assert not yaml.safe_load((directory / 'session.yml').read_text()).get('retirement')
     assert len(observed) == 1
 
 
-def test_cleanup_retries_after_root_retirement(
+def test_cleanup_preserves_members_after_root_retirement(
     accepted_task: tuple,
     installed_commands: InstalledCommands,
 ) -> None:
-    """A refused child leaves the retired root and history intact for public retry."""
+    """Task cleanup preserves members and does not request their separate retirement."""
     root, worktrees, state, _ = accepted_task
     integrated = run_process([
         str(installed_commands.product), 'task', 'integrate', '--task-id', '83',
@@ -106,29 +115,17 @@ def test_cleanup_retries_after_root_retirement(
 
     call = local_tool.bind(root, recovery_reviewer=decline)
     # Root ownership needs no review. This also reproduces #243's retained root.
-    assert call({'action': 'execute', 'feature': 'retire',
-                 'arguments': {'alias': parent['alias']}}).document['retire_status'] == 'retired'
+    assert retire_session(parent['alias'], root)['retire_status'] == 'retired'
     assert seen == []
     request = {'action': 'execute', 'feature': 'cleanup', 'arguments': {'task_id': '83'}}
-    refused = call(request).document
-    assert refused['cleanup_status'] == 'refused'
-    assert len(seen) == 1
-    assert (worktrees / '83-integration').is_dir()
-    assert not (runner / 'sessions' / parent['alias']).exists()
-
-    def accept(proposal: dict) -> dict:
-        """Observe unchanged parent identity while permitting each remaining member."""
-        assert proposal['caller'] is None
-        assert proposal['parent'] == parent['alias']
-        seen.append(proposal['request']['alias'])
-        return {'decision': 'accept'}
-
-    call = local_tool.bind(root, recovery_reviewer=accept)
     assert call(request).document['cleanup_status'] == 'cleaned'
+    assert seen == []
     assert not (worktrees / '83-integration').exists()
     assert call(request).document['cleanup_status'] == 'already-cleaned'
     for mapping in mappings:
         retained, directory = read_alias_mapping(runner, mapping['alias'])
         assert retained == mapping
         assert Path(mapping['trace_file']).read_bytes() == history[mapping['alias']]
-        assert yaml.safe_load((directory / 'session.yml').read_text())['retirement']
+        assert bool(yaml.safe_load((directory / 'session.yml').read_text()).get('retirement')) == (mapping == parent)
+        if mapping != parent:
+            assert directory == runner / 'sessions' / mapping['alias']

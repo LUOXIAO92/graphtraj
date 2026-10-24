@@ -5,16 +5,21 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "agent-swarm"
 version = "0.1.0"
-description = "Independent native Agent control."
+description = "Independent native Agent control and optional native Session archives."
 requires-python = ">=3.12"
 dependencies = [
     "PyYAML>=6,<7",
     "websockets>=15,<17",
 ]
 
+[project.scripts]
+agents = "agent_swarm.cli:main"
+agents-mcp = "agent_swarm.mcp:main"
+
 [tool.setuptools]
-packages = ["agent_swarm", "agent_swarm.dsh", "agent_swarm.claude", "agent_swarm.pi", "agent_swarm.codex"]
+packages = ["agent_swarm", "agent_swarm.dsh", "agent_swarm.claude", "agent_swarm.pi", "agent_swarm.codex",
+            "agent_swarm.sessions"]
 package-dir = {agent_swarm = "."}
 
 [tool.setuptools.package-data]
-agent_swarm = ["dsh/*.mjs", "dsh/package.json", "claude/*.mjs", "pi/*.mjs"]
+agent_swarm = ["dsh/*.mjs", "dsh/package.json", "claude/*.mjs", "pi/*.mjs", "sessions/DSH-LICENSE"]

@@ -1,0 +1,83 @@
+============================= test session starts ==============================
+platform darwin -- Python 3.13.11, pytest-9.1.1, pluggy-1.5.0 -- /private/tmp/claude-501/venv344/bin/python
+rootdir: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/.agent-worktrees/344-agents-tasks-boundary-rework
+configfile: pyproject.toml
+plugins: anyio-4.10.0
+collecting ... collected 1 item
+
+tests/test_claude_runtime.py::test_claude_send_and_confirmed_stop Timeout (0:00:20)!
+Thread 0x000000017506f000 (most recent call first):
+  File "/Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/.agent-worktrees/344-agents-tasks-boundary-rework/src/graphtraj/runtimes/claude/execution.py", line 472 in _read
+  File "/Users/luoxiao/miniconda3/lib/python3.13/threading.py", line 995 in run
+  File "/Users/luoxiao/miniconda3/lib/python3.13/threading.py", line 1044 in _bootstrap_inner
+  File "/Users/luoxiao/miniconda3/lib/python3.13/threading.py", line 1015 in _bootstrap
+
+Thread 0x0000000174063000 (most recent call first):
+  File "/Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/.agent-worktrees/344-agents-tasks-boundary-rework/src/graphtraj/runtimes/claude/execution.py", line 668 in drain_stderr
+  File "/Users/luoxiao/miniconda3/lib/python3.13/threading.py", line 995 in run
+  File "/Users/luoxiao/miniconda3/lib/python3.13/threading.py", line 1044 in _bootstrap_inner
+  File "/Users/luoxiao/miniconda3/lib/python3.13/threading.py", line 1015 in _bootstrap
+
+Thread 0x0000000173057000 (most recent call first):
+  File "/Users/luoxiao/miniconda3/lib/python3.13/threading.py", line 359 in wait
+  File "/Users/luoxiao/miniconda3/lib/python3.13/queue.py", line 199 in get
+  File "/Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/.agent-worktrees/344-agents-tasks-boundary-rework/src/graphtraj/runtimes/claude/execution.py", line 246 in _collect
+  File "/Users/luoxiao/miniconda3/lib/python3.13/threading.py", line 995 in run
+  File "/Users/luoxiao/miniconda3/lib/python3.13/threading.py", line 1044 in _bootstrap_inner
+  File "/Users/luoxiao/miniconda3/lib/python3.13/threading.py", line 1015 in _bootstrap
+
+Thread 0x000000017204b000 (most recent call first):
+  File "/Users/luoxiao/miniconda3/lib/python3.13/threading.py", line 363 in wait
+  File "/Users/luoxiao/miniconda3/lib/python3.13/threading.py", line 660 in wait
+  File "/Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/.agent-worktrees/344-agents-tasks-boundary-rework/src/agent_swarm/connection.py", line 100 in serve
+  File "/Users/luoxiao/miniconda3/lib/python3.13/threading.py", line 995 in run
+  File "/Users/luoxiao/miniconda3/lib/python3.13/threading.py", line 1044 in _bootstrap_inner
+  File "/Users/luoxiao/miniconda3/lib/python3.13/threading.py", line 1015 in _bootstrap
+
+Thread 0x000000017103f000 (most recent call first):
+  File "/Users/luoxiao/miniconda3/lib/python3.13/threading.py", line 363 in wait
+  File "/Users/luoxiao/miniconda3/lib/python3.13/queue.py", line 210 in get
+  File "/Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/.agent-worktrees/344-agents-tasks-boundary-rework/src/graphtraj/runtimes/claude/execution.py", line 716 in run
+  File "/Users/luoxiao/miniconda3/lib/python3.13/concurrent/futures/thread.py", line 59 in run
+  File "/Users/luoxiao/miniconda3/lib/python3.13/concurrent/futures/thread.py", line 93 in _worker
+  File "/Users/luoxiao/miniconda3/lib/python3.13/threading.py", line 995 in run
+  File "/Users/luoxiao/miniconda3/lib/python3.13/threading.py", line 1044 in _bootstrap_inner
+  File "/Users/luoxiao/miniconda3/lib/python3.13/threading.py", line 1015 in _bootstrap
+
+Thread 0x00000001f044a180 (most recent call first):
+  File "/Users/luoxiao/miniconda3/lib/python3.13/threading.py", line 1095 in join
+  File "/Users/luoxiao/miniconda3/lib/python3.13/concurrent/futures/thread.py", line 239 in shutdown
+  File "/Users/luoxiao/miniconda3/lib/python3.13/concurrent/futures/_base.py", line 647 in __exit__
+  File "/Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/.agent-worktrees/344-agents-tasks-boundary-rework/tests/test_claude_runtime.py", line 320 in test_claude_send_and_confirmed_stop
+  File "/Users/luoxiao/miniconda3/lib/python3.13/site-packages/_pytest/python.py", line 167 in pytest_pyfunc_call
+  File "/Users/luoxiao/miniconda3/lib/python3.13/site-packages/pluggy/_callers.py", line 103 in _multicall
+  File "/Users/luoxiao/miniconda3/lib/python3.13/site-packages/pluggy/_manager.py", line 120 in _hookexec
+  File "/Users/luoxiao/miniconda3/lib/python3.13/site-packages/pluggy/_hooks.py", line 513 in __call__
+  File "/Users/luoxiao/miniconda3/lib/python3.13/site-packages/_pytest/python.py", line 1707 in runtest
+  File "/Users/luoxiao/miniconda3/lib/python3.13/site-packages/_pytest/runner.py", line 184 in pytest_runtest_call
+  File "/Users/luoxiao/miniconda3/lib/python3.13/site-packages/pluggy/_callers.py", line 103 in _multicall
+  File "/Users/luoxiao/miniconda3/lib/python3.13/site-packages/pluggy/_manager.py", line 120 in _hookexec
+  File "/Users/luoxiao/miniconda3/lib/python3.13/site-packages/pluggy/_hooks.py", line 513 in __call__
+  File "/Users/luoxiao/miniconda3/lib/python3.13/site-packages/_pytest/runner.py", line 250 in <lambda>
+  File "/Users/luoxiao/miniconda3/lib/python3.13/site-packages/_pytest/runner.py", line 361 in from_call
+  File "/Users/luoxiao/miniconda3/lib/python3.13/site-packages/_pytest/runner.py", line 249 in call_and_report
+  File "/Users/luoxiao/miniconda3/lib/python3.13/site-packages/_pytest/runner.py", line 139 in runtestprotocol
+  File "/Users/luoxiao/miniconda3/lib/python3.13/site-packages/_pytest/runner.py", line 118 in pytest_runtest_protocol
+  File "/Users/luoxiao/miniconda3/lib/python3.13/site-packages/pluggy/_callers.py", line 103 in _multicall
+  File "/Users/luoxiao/miniconda3/lib/python3.13/site-packages/pluggy/_manager.py", line 120 in _hookexec
+  File "/Users/luoxiao/miniconda3/lib/python3.13/site-packages/pluggy/_hooks.py", line 513 in __call__
+  File "/Users/luoxiao/miniconda3/lib/python3.13/site-packages/_pytest/main.py", line 408 in pytest_runtestloop
+  File "/Users/luoxiao/miniconda3/lib/python3.13/site-packages/pluggy/_callers.py", line 103 in _multicall
+  File "/Users/luoxiao/miniconda3/lib/python3.13/site-packages/pluggy/_manager.py", line 120 in _hookexec
+  File "/Users/luoxiao/miniconda3/lib/python3.13/site-packages/pluggy/_hooks.py", line 513 in __call__
+  File "/Users/luoxiao/miniconda3/lib/python3.13/site-packages/_pytest/main.py", line 384 in _main
+  File "/Users/luoxiao/miniconda3/lib/python3.13/site-packages/_pytest/main.py", line 330 in wrap_session
+  File "/Users/luoxiao/miniconda3/lib/python3.13/site-packages/_pytest/main.py", line 377 in pytest_cmdline_main
+  File "/Users/luoxiao/miniconda3/lib/python3.13/site-packages/pluggy/_callers.py", line 103 in _multicall
+  File "/Users/luoxiao/miniconda3/lib/python3.13/site-packages/pluggy/_manager.py", line 120 in _hookexec
+  File "/Users/luoxiao/miniconda3/lib/python3.13/site-packages/pluggy/_hooks.py", line 513 in __call__
+  File "/Users/luoxiao/miniconda3/lib/python3.13/site-packages/_pytest/config/__init__.py", line 229 in _main
+  File "/Users/luoxiao/miniconda3/lib/python3.13/site-packages/_pytest/config/__init__.py", line 253 in _console_main
+  File "/Users/luoxiao/miniconda3/lib/python3.13/site-packages/pytest/__main__.py", line 9 in <module>
+  File "<frozen runpy>", line 88 in _run_code
+  File "<frozen runpy>", line 198 in _run_module_as_main

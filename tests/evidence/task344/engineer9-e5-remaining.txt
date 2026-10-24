@@ -1,0 +1,102 @@
+....................FF.F.....s...ss........F..F.....F.F....              [100%]
+=================================== FAILURES ===================================
+_ test_native_root_owner_outlives_historical_checker_membership[SessionStart] __
+tests/test_descendant_stop_control.py:220: in test_native_root_owner_outlives_historical_checker_membership
+    organized = tool({'action': 'execute', 'feature': 'role_organization',
+src/graphtraj/interfaces/local_tool.py:89: in review_bound
+    return callback(request)
+           ^^^^^^^^^^^^^^^^^
+src/graphtraj/interfaces/gateway.py:111: in handle_request
+    return tool.handler(request["arguments"], cwd=cwd)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/graphtraj/interfaces/tools.py:841: in organize_roles
+    return ToolResult(organize_child_roles(arguments, cwd=cwd or Path.cwd()))
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/graphtraj/execution/role_organization.py:52: in organize_child_roles
+    return _organize_child_roles(arguments, cwd=cwd, review=True)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/graphtraj/execution/role_organization.py:78: in _organize_child_roles
+    raise RunnerError(
+E   graphtraj.execution.runner_models.RunnerError: Only the caller that owns the Harness Project may organize its child roles.
+_____ test_native_root_owner_outlives_historical_checker_membership[Stop] ______
+tests/test_descendant_stop_control.py:220: in test_native_root_owner_outlives_historical_checker_membership
+    organized = tool({'action': 'execute', 'feature': 'role_organization',
+src/graphtraj/interfaces/local_tool.py:89: in review_bound
+    return callback(request)
+           ^^^^^^^^^^^^^^^^^
+src/graphtraj/interfaces/gateway.py:111: in handle_request
+    return tool.handler(request["arguments"], cwd=cwd)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/graphtraj/interfaces/tools.py:841: in organize_roles
+    return ToolResult(organize_child_roles(arguments, cwd=cwd or Path.cwd()))
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/graphtraj/execution/role_organization.py:52: in organize_child_roles
+    return _organize_child_roles(arguments, cwd=cwd, review=True)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/graphtraj/execution/role_organization.py:78: in _organize_child_roles
+    raise RunnerError(
+E   graphtraj.execution.runner_models.RunnerError: Only the caller that owns the Harness Project may organize its child roles.
+________ test_unresponsive_parent_does_not_prevent_descendant_interrupt ________
+tests/test_descendant_stop_control.py:279: in test_unresponsive_parent_does_not_prevent_descendant_interrupt
+    result = call('interrupt', [parent], timeout=30)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_managed_sessions.py:155: in call
+    completed = run_process(
+tests/conftest.py:112: in run_process
+    return subprocess.run(
+/Users/luoxiao/miniconda3/lib/python3.13/subprocess.py:556: in run
+    stdout, stderr = process.communicate(input, timeout=timeout)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/Users/luoxiao/miniconda3/lib/python3.13/subprocess.py:1222: in communicate
+    stdout, stderr = self._communicate(input, endtime, timeout)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/Users/luoxiao/miniconda3/lib/python3.13/subprocess.py:2155: in _communicate
+    self._check_timeout(endtime, orig_timeout, stdout, stderr)
+/Users/luoxiao/miniconda3/lib/python3.13/subprocess.py:1269: in _check_timeout
+    raise TimeoutExpired(
+E   subprocess.TimeoutExpired: Command '['/private/tmp/344-e9-e5-remaining/installed-environment0/venv/bin/python', '-c', '\nimport json, sys\nfrom pathlib import Path\nfrom typing import Callable, Iterator\nfrom graphtraj.execution.runner_batch import parse_batch\nfrom graphtraj.execution.runner_launch import launch_batch\nfrom graphtraj.execution.runner_status import status_aliases\nfrom graphtraj.execution.runner_control import send_instruction, interrupt_session\nfrom graphtraj.execution.runner_models import RunnerError\nroot = Path(sys.argv[1])\noperation, arguments = json.loads(sys.argv[2])\ntry:\n    if operation == \'launch\':\n        result = launch_batch(parse_batch(arguments), root).document\n    elif operation in (\'child\', \'resume-worker\'):\n        # Exercise the common managed Worker boundary with a parent-bound job.\n        import os, subprocess, yaml\n        from graphtraj.execution.runner_control import _await_session_resume\n        from graphtraj.execution.runner_status import read_alias_mapping\n        parent, alias = arguments[:2]\n        runner = root / \'.graphtraj/runner\'\n        parent_mapping, parent_directory = read_alias_mapping(runner, parent)\n        job = yaml.safe_load((parent_directory / \'launch.yml\').read_text())\n        directory = runner / \'sessions\' / alias\n        if operation == \'child\':\n            directory.mkdir()\n            (directory / \'events.jsonl\').touch()\n            job[\'mapping\'].update(alias=alias, parent=parent, trace_file=str(directory / \'native.jsonl\'))\n        else:\n            job.update(operation=\'resume\', expected_session=parent_mapping[\'session\'])\n        job_file = directory / (\'launch.yml\' if operation == \'child\' else \'resume.yml\')\n        job_file.write_text(yaml.safe_dump(job))\n        with (directory / \'worker-stderr.log\').open(\'w\') as diagnostics:\n            worker = subprocess.Popen([sys.executable, \'-m\', \'graphtraj.execution.runner_worker\', str(job_file)],\n                                      stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=diagnostics,\n                                      env={**os.environ, "GRAPHTRAJ_TASK_ID": parent_mapping["task_id"],\n                                           "GRAPHTRAJ_ROLE": parent_mapping["role"], "GRAPHTRAJ_PARENT_ALIAS": alias})\n            worker.stdin.write((arguments[2] if len(arguments) > 2 else \'hold\').encode())\n            worker.stdin.close()\n        _await_session_resume(worker, directory, directory / (\'launch-error.yml\' if operation == \'child\' else \'resume-error.yml\'), None)\n        result = {\'alias\': alias, \'session\': read_alias_mapping(runner, alias)[0][\'session\']}\n    elif operation == \'status\':\n        result = status_aliases(arguments, root, operation_total=True).document\n    elif operation == \'tree\':\n        # The alias-free status tree the agents host builds for its callers.\n        from graphtraj.execution.runner_status import status_tree\n        response = status_tree(root)\n        result = response.document\n        if not response.succeeded:\n            print(json.dumps(result))\n            sys.exit(1)\n    elif operation == \'send\':\n        result = send_instruction(arguments[0], arguments[1], root, tuple(arguments[2]))\n    elif operation == \'agents\':\n        # The independent agents action as the host\'s verified native Main.\n        from agent_swarm import Binding, Caller\n        from graphtraj.interfaces.agents import GraphTrajAgents\n        action, request, session = arguments\n        outcome = GraphTrajAgents(root).operate(action, request, Binding(Caller(\'graphtraj-gateway\', None, session=session, runtime=\'codex\')))\n        result = {\'result\': outcome.result, \'agent\': outcome.agent, \'session\': outcome.session, \'failed\': outcome.failed}\n    elif operation == \'requests\':\n        from graphtraj.execution.runner_control import pending_requests\n        result = pending_requests(arguments[0], root, execution_id=arguments[1] if len(arguments) > 1 else None)\n    elif operation == \'reply\':\n        from graphtraj.execution.runner_control import reply_to_request\n        result = reply_to_request(arguments[0], arguments[1], arguments[2], root)\n    else:\n        result = interrupt_session(arguments[0], root)\n    print(json.dumps(result))\nexcept RunnerError as error:\n    print(json.dumps({\'error\': error.as_document()}))\n    sys.exit(1)\nexcept Exception as error:\n    print(json.dumps({\'error\': {\'code\': getattr(error, \'code\', type(error).__name__), \'message\': str(error)}}))\n    sys.exit(1)\n', '/private/tmp/344-e9-e5-remaining/test_unresponsive_parent_does_0', '["interrupt", ["113-managed_probe-handover0-managed_probe@managed_probe"]]']' timed out after 30 seconds
+____________ test_installed_cli_declines_the_same_request_as_python ____________
+tests/test_managed_sessions.py:575: in test_installed_cli_declines_the_same_request_as_python
+    assert call('agents-cli', {'action': 'execute', 'feature': 'requests', 'arguments': {
+tests/test_managed_sessions.py:164: in call
+    assert completed.returncode == returncode, completed.stdout + completed.stderr
+E   AssertionError: {"action": "requests", "error": {"code": "authority-unavailable", "message": "agents needs a verified caller: a managed Session or a verified native Main Session. This call has neither."}}
+E     
+E   assert 1 == 0
+E    +  where 1 = CompletedProcess(args=['/private/tmp/344-e9-e5-remaining/installed-environment0/venv/bin/python', '-m', 'agent_swarm.c... needs a verified caller: a managed Session or a verified native Main Session. This call has neither."}}\n', stderr='').returncode
+_________ test_multiple_native_requests_keep_input_and_trace_contents __________
+tests/test_managed_sessions.py:665: in test_multiple_native_requests_keep_input_and_trace_contents
+    call('agents-cli', {'action': 'execute', 'feature': 'reply', 'arguments': {
+tests/test_managed_sessions.py:164: in call
+    assert completed.returncode == returncode, completed.stdout + completed.stderr
+E   AssertionError: {"action": "reply", "error": {"code": "authority-unavailable", "message": "agents needs a verified caller: a managed Session or a verified native Main Session. This call has neither."}}
+E     
+E   assert 1 == 0
+E    +  where 1 = CompletedProcess(args=['/private/tmp/344-e9-e5-remaining/installed-environment0/venv/bin/python', '-m', 'agent_swarm.c... needs a verified caller: a managed Session or a verified native Main Session. This call has neither."}}\n', stderr='').returncode
+____ test_identifier_without_the_ownership_lock_is_not_the_owned_execution _____
+tests/test_managed_sessions.py:877: in test_identifier_without_the_ownership_lock_is_not_the_owned_execution
+    status = call('status', [alias])['aliases'][0]
+             ^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_managed_sessions.py:164: in call
+    assert completed.returncode == returncode, completed.stdout + completed.stderr
+E   AssertionError: {"error": {"code": "KeyError", "message": "'execution_id'"}}
+E     
+E   assert 1 == 0
+E    +  where 1 = CompletedProcess(args=['/private/tmp/344-e9-e5-remaining/installed-environment0/venv/bin/python', '-c', '\nimport json...identifier@e1"]]'], returncode=1, stdout='{"error": {"code": "KeyError", "message": "\'execution_id\'"}}\n', stderr='').returncode
+_____ test_installed_alias_control_resumes_and_interrupts_one_team_session _____
+tests/test_session_alias_control.py:209: in test_installed_alias_control_resumes_and_interrupts_one_team_session
+    assert running_status == {
+E   AssertionError: assert {'aliases': [...f60e8', ...}]} == {'aliases': [...'completed'}]}
+E     
+E     Differing items:
+E     {'aliases': [{'alias': '76-session_alias_control-handover0-team_leader@team_leader', 'activity': 'running', 'last_outcome': 'completed', 'agent': 'agent-14eb86cfb2ef40528b512871ec4f60e8', ...}]} != {'aliases': [{'alias': '76-session_alias_control-handover0-team_leader@team_leader', 'activity': 'running', 'last_outcome': 'completed'}]}
+E     Use -v to get more diff
+=========================== short test summary info ============================
+FAILED tests/test_descendant_stop_control.py::test_native_root_owner_outlives_historical_checker_membership[SessionStart]
+FAILED tests/test_descendant_stop_control.py::test_native_root_owner_outlives_historical_checker_membership[Stop]
+FAILED tests/test_descendant_stop_control.py::test_unresponsive_parent_does_not_prevent_descendant_interrupt
+FAILED tests/test_managed_sessions.py::test_installed_cli_declines_the_same_request_as_python
+FAILED tests/test_managed_sessions.py::test_multiple_native_requests_keep_input_and_trace_contents
+FAILED tests/test_managed_sessions.py::test_identifier_without_the_ownership_lock_is_not_the_owned_execution
+FAILED tests/test_session_alias_control.py::test_installed_alias_control_resumes_and_interrupts_one_team_session
+7 failed, 49 passed, 3 skipped in 252.49s (0:04:12)

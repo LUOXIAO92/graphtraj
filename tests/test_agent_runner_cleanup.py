@@ -11,7 +11,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from conftest import FakeCodex, InstalledCommands, run_process, wait_for_file
+from conftest import runner_operation, FakeCodex, InstalledCommands, run_process, wait_for_file
 from runner_fixtures import configure_harness
 from test_task_graph import _change_status, _register, _task
 from test_task_recovery import installed_commands
@@ -60,7 +60,7 @@ def test_native_interrupt_confirms_only_pre_runtime_allocations(
             # confirms the recorded process group's exit.
             waiter = threading.Thread(target=worker.wait)
             waiter.start()
-        result = run_process([str(installed_commands.runner), 'interrupt', alias],
+        result = run_process(runner_operation(installed_commands, 'interrupt', alias),
                              cwd=task.root, env=task.environment, timeout=20)
         if worker_case in {'foreign-group', 'runtime-artifact'}:
             assert result.returncode == 1, result.stdout + result.stderr
@@ -190,7 +190,7 @@ def _deliver_task(
                                   stdout=subprocess.PIPE, stderr=subprocess.PIPE) as launching:
                 wait_for_file(ready)
                 allocation = next((root / '.graphtraj/runner/sessions').iterdir())
-                interrupted = run_process([str(commands.runner), 'interrupt', allocation.name],
+                interrupted = run_process(runner_operation(commands, 'interrupt', allocation.name),
                                           cwd=root, env=environment, timeout=15)
                 assert interrupted.returncode == 0, interrupted.stdout + interrupted.stderr
                 assert yaml.safe_load(interrupted.stdout)['interrupt_status'] == 'interrupted'
@@ -399,14 +399,14 @@ def test_installed_cleanup_uses_only_task_identity_and_preserves_trajectory(
     durable_before = _durable_contents(task)
     mappings = _task_mappings(task)
     assert mappings
-    from graphtraj.sessions.storage import SessionStore, session_path
+    from agent_swarm.sessions.archive import JsonlSessionStore, SessionArchive, archive_path
 
     archives = {}
     for directory in mappings:
         mapping = yaml.safe_load((directory / 'mapping.yml').read_text())
-        path = session_path(task.state, 'codex:' + mapping['session'])
-        with SessionStore(path, readonly=True) as archive:
-            archives[path] = archive.page()
+        root = task.root / '.graphtraj/swarm'
+        path = archive_path(root, SessionArchive(root).native_id('codex', mapping['session']))
+        archives[path] = JsonlSessionStore(path).page()
 
     cleaned = _cleanup(task)
 
@@ -424,8 +424,7 @@ def test_installed_cleanup_uses_only_task_identity_and_preserves_trajectory(
     assert all((path / "mapping.yml").exists() for path in mappings)
     _assert_durable_contents(task, durable_before)
     for path, expected in archives.items():
-        with SessionStore(path, readonly=True) as archive:
-            assert archive.page() == expected
+        assert JsonlSessionStore(path).page() == expected
     assert historical_marker.read_text(encoding="utf-8") == "historical evidence\n"
 
     repeated = _cleanup(task)
@@ -717,7 +716,7 @@ def test_installed_cleanup_retains_a_terminal_unmapped_startup_failure_after_int
         else:
             assert "artifacts" not in proof
         assert "fixture-secret" not in cleaned.stdout
-        refused_stop = run_process([str(task.commands.runner), 'interrupt', failed_session.name],
+        refused_stop = run_process(runner_operation(task.commands, 'interrupt', failed_session.name),
                                    cwd=task.root, env=task.environment)
         assert refused_stop.returncode == 1, refused_stop.stdout + refused_stop.stderr
         assert task.worktree.is_dir()
@@ -760,7 +759,7 @@ def test_pi_failed_creation_retains_owned_process_and_native_stop(
     assert not (directory / 'mapping.yml').exists()
     assert not (directory / 'session.yml').exists()
     original_failure = (directory / 'launch-error.yml').read_bytes()
-    stopped = run_process([str(task.commands.runner), 'interrupt', alias],
+    stopped = run_process(runner_operation(task.commands, 'interrupt', alias),
                           cwd=task.root, env=task.environment)
     assert stopped.returncode == 0, stopped.stdout + stopped.stderr
     assert yaml.safe_load(stopped.stdout)['interrupt_status'] == 'stopped'
@@ -789,7 +788,7 @@ def test_pi_crashed_creation_retains_binding_without_certifying_tool_stop(
     assert heartbeat['process_outcome'] == {'terminal_confirmed': False, 'runtime_exit_code': 71}
     original_failure = (directory / 'launch-error.yml').read_bytes()
     assert yaml.safe_load(original_failure)['terminal_confirmed'] is False
-    stopped = run_process([str(task.commands.runner), 'interrupt', alias],
+    stopped = run_process(runner_operation(task.commands, 'interrupt', alias),
                           cwd=task.root, env=task.environment)
     assert stopped.returncode == 1, stopped.stdout + stopped.stderr
     cleaned = _cleanup(task)

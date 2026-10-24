@@ -1,7 +1,7 @@
 """Own Claude Code's official stream-JSON control transport for one invocation."""
 from __future__ import annotations
 
-from contextlib import ExitStack, nullcontext
+from contextlib import ExitStack
 from concurrent.futures import Future
 import copy
 import json
@@ -21,7 +21,8 @@ from agent_swarm import AgentsResult
 from agent_swarm.discovery import handle_request as discover_agents
 from agent_swarm.mcp import tool_documents
 from agent_swarm import SessionArchive
-from .support import read_records, write_yaml_durably, credential_environment, redact
+from agent_swarm.sessions.claude_history import read_records
+from .support import write_yaml_durably, credential_environment, redact
 
 from agent_swarm.runtime import RuntimeAdapterError, SessionStarted
 from .diagnostics import (
@@ -86,6 +87,8 @@ class ClaudeExecution:
         self.archive: SessionArchive | None = None
         self.agents_callback: Callable[[dict], AgentsResult] | None = None
         self.collector = None
+        # Exact read-only resource settings applied before the first prompt.
+        self.resource_settings: dict | None = None
         self.collection: queue.Queue = queue.Queue()
         self.collection_failure: Exception | None = None
         self.sdk_tools_listed = False
@@ -98,9 +101,6 @@ class ClaudeExecution:
 
     def record_process(self, pid: int, outcome: dict | None = None) -> None:
         """Let the owning consumer retain process lifecycle observations."""
-
-    def _collection_store(self, resources: ExitStack) -> None:
-        """The optional independent collector owns its own storage."""
 
     def _collector(self, resources: ExitStack):
         """Use an explicitly supplied collector; plain control needs no archive."""
@@ -291,59 +291,50 @@ class ClaudeExecution:
         only 30 s, so the run loop keeps answering hooks while this thread
         collects. The first failure is kept for the run loop to raise.
         """
-        # dev's managed archive uses a thread-affine SQLite connection.
-        # Each phase opens its own connection; only collection writes while
-        # this thread is alive, and finalization runs after it has joined.
-        with ExitStack() as stores:
-            self._collection_store(stores)
-            pending = []
-            batches = 0
-            elapsed = 0.0
-            while True:
-                item = pending.pop() if pending else self.collection.get()
-                if item is None:
-                    return
-                if self.collection_failure is not None:
-                    continue
-                began = time.monotonic()
-                progress = {'batches': batches, 'elapsed_seconds': elapsed,
-                            'batch_started_at': time.time(), 'batch_complete': False}
-                try:
-                    with self.lock:
-                        self.diagnostics['collection_progress'] = progress
+        pending = []
+        batches = 0
+        elapsed = 0.0
+        while True:
+            item = pending.pop() if pending else self.collection.get()
+            if item is None:
+                return
+            if self.collection_failure is not None:
+                continue
+            began = time.monotonic()
+            progress = {'batches': batches, 'elapsed_seconds': elapsed,
+                        'batch_started_at': time.time(), 'batch_complete': False}
+            try:
+                with self.lock:
+                    self.diagnostics['collection_progress'] = progress
+                    self._save_diagnostics()
+                if item[0] == 'bind':
+                    self.collector.bind(item[1], item[2])
+                else:
+                    records = [(item[1], item[2])]
+                    # Read one archive snapshot for the already received batch,
+                    # not once per fragment. Binding and end remain ordered.
+                    for _ in range(self.collection.qsize()):
+                        following = self.collection.get_nowait()
+                        if following is None or following[0] != 'event':
+                            pending.append(following)
+                            break
+                        records.append((following[1], following[2]))
+                    self.collector.accept_batch(records)
+            except Exception as error:
+                self.collection_failure = error
+            finally:
+                batches += 1
+                elapsed += time.monotonic() - began
+                with self.lock:
+                    self.diagnostics['collection_progress'] = {
+                        **progress, 'batches': batches, 'elapsed_seconds': elapsed,
+                        'batch_complete': True, 'queued_records': self.collection.qsize(),
+                    }
+                    try:
                         self._save_diagnostics()
-                    if item[0] == 'bind':
-                        self.collector.bind(item[1], item[2])
-                    else:
-                        records = [(item[1], item[2])]
-                        # Read one archive snapshot for the already received batch,
-                        # not once per fragment. Binding and end remain ordered.
-                        for _ in range(self.collection.qsize()):
-                            following = self.collection.get_nowait()
-                            if following is None or following[0] != 'event':
-                                pending.append(following)
-                                break
-                            records.append((following[1], following[2]))
-                        if self.independent:
-                            self.collector.accept_batch(records)
-                        else:
-                            for record, position in records:
-                                self.collector.accept(record, position)
-                except Exception as error:
-                    self.collection_failure = error
-                finally:
-                    batches += 1
-                    elapsed += time.monotonic() - began
-                    with self.lock:
-                        self.diagnostics['collection_progress'] = {
-                            **progress, 'batches': batches, 'elapsed_seconds': elapsed,
-                            'batch_complete': True, 'queued_records': self.collection.qsize(),
-                        }
-                        try:
-                            self._save_diagnostics()
-                        except Exception as error:
-                            if self.collection_failure is None:
-                                self.collection_failure = error
+                    except Exception as error:
+                        if self.collection_failure is None:
+                            self.collection_failure = error
 
     def _absorbed_inputs(self) -> int:
         """Count sent inputs that the native CLI absorbed into a running turn.
@@ -390,6 +381,9 @@ class ClaudeExecution:
                 '--replay-user-messages',
                 '--permission-prompt-tool', 'stdio',
                 '--restricted', '--strict-mcp-config',
+                # Restricted mode confines file tools to cwd; native --add-dir
+                # admits the declared read-only directories, still Edit-denied.
+                *[item for path in settings['permissions']['additionalDirectories'] for item in ('--add-dir', path)],
                 '--mcp-config', json.dumps(mcp), '--settings', json.dumps(settings),
                 '--tools', 'Bash,Read,Write,Edit,Glob,Grep', '--model', request['model'],
                 '--append-system-prompt', request['instructions'],
@@ -437,30 +431,24 @@ class ClaudeExecution:
         """Retain native records unchanged, including unknown fields and failures."""
         assert self.proc is not None
         try:
-            with (nullcontext(None) if self.independent else self.trace.open('a', encoding='utf-8')) as trace:
-                for line in self.proc.stdout:
-                    try:
-                        event = json.loads(line)
-                        if not isinstance(event, dict):
-                            raise ValueError('object')
-                    except ValueError as error:
-                        # Only the failure class is kept, never the native line.
-                        self.events.put({'type': 'transport_error', 'exception': type(error).__name__})
-                        return
-                    # Partial text is compacted in the canonical archive, not copied
-                    # to a second permanent per-fragment transport log.
-                    if trace is not None and event.get('type') != 'stream_event':
-                        trace.write(line)
-                        trace.flush()
-                    if event.get('type') == 'system' and event.get('subtype') == 'session_state_changed':
-                        self.drained_native_state = event.get('state')
-                    if (event.get('type') == 'control_request'
-                            and event.get('request', {}).get('callback_id') == 'graphtraj_start'):
-                        self.prompt_received[event['request_id']] = (time.monotonic(), time.time())
-                    self.events.put(event)
-                    if event.get("type") in ("control_request", "control_cancel_request"):
-                        self.controls.put(event)
-                self.stdout_eof = True
+            for line in self.proc.stdout:
+                try:
+                    event = json.loads(line)
+                    if not isinstance(event, dict):
+                        raise ValueError('object')
+                except ValueError as error:
+                    # Only the failure class is kept, never the native line.
+                    self.events.put({'type': 'transport_error', 'exception': type(error).__name__})
+                    return
+                if event.get('type') == 'system' and event.get('subtype') == 'session_state_changed':
+                    self.drained_native_state = event.get('state')
+                if (event.get('type') == 'control_request'
+                        and event.get('request', {}).get('callback_id') == 'graphtraj_start'):
+                    self.prompt_received[event['request_id']] = (time.monotonic(), time.time())
+                self.events.put(event)
+                if event.get("type") in ("control_request", "control_cancel_request"):
+                    self.controls.put(event)
+            self.stdout_eof = True
         finally:
             self.events.put({'type': 'eof'})
 
@@ -475,8 +463,14 @@ class ClaudeExecution:
         self.session = native['session_id']
         if native.get('transcript_path'):
             self.transcript = Path(native['transcript_path'])
-        if self.independent and self.transcript is not None and self.collector is not None:
-            self.collection.put(('bind', self.transcript, set(self.input_ids)))
+            if self.collector is not None:
+                self.collection.put(('bind', self.transcript, set(self.input_ids)))
+            # Keep the native file as the Trace reference, never a third
+            # transport body. Nonempty older transport evidence stays untouched.
+            self.trace.parent.mkdir(parents=True, exist_ok=True)
+            if not self.trace.is_symlink() and (not self.trace.exists() or self.trace.stat().st_size == 0):
+                self.trace.unlink(missing_ok=True)
+                self.trace.symlink_to(self.transcript)
         write_yaml_durably(self.directory / 'session.yml', {
             'session': self.session, 'rollout_path': native.get('transcript_path'),
             'runtime_version': self.request['version'], 'source': native.get('source'),
@@ -618,6 +612,7 @@ class ClaudeExecution:
                                          'hookCallbackIds': ['graphtraj_agents_display']}]}
                        if self.independent else {}),
                 })
+                resource_update = None
                 startup_deadline = time.monotonic() + 45
                 stop_deadline = None
                 last_echo = last_result = 0
@@ -671,6 +666,22 @@ class ClaudeExecution:
                                 raise RuntimeAdapterError('RUNTIME_REQUEST_FAILED', 'Claude initialization failed.')
                             if response.get('response', {}).get('hooks_applied') is not True:
                                 raise RuntimeAdapterError('RUNTIME_REQUEST_FAILED', 'Claude did not install the registration hook.')
+                            with self.lock:
+                                if not self.stopping.is_set():
+                                    if self.resource_settings is None:
+                                        self._prompt(self.prompt)
+                                    else:
+                                        resource_update = self._control('apply_flag_settings', settings=self.resource_settings)
+                                        self.diagnostics['read_resources'] = {
+                                            'requested_paths': self.resource_settings['permissions']['additionalDirectories'],
+                                            'control_status': 'pending',
+                                        }
+                                        self._save_diagnostics()
+                        elif resource_update is not None and response.get('request_id') == resource_update:
+                            self.diagnostics['read_resources']['control_status'] = response.get('subtype', 'unknown')
+                            self._save_diagnostics()
+                            if response.get('subtype') != 'success':
+                                raise RuntimeAdapterError('RUNTIME_REQUEST_FAILED', 'Claude refused exact resource settings.')
                             with self.lock:
                                 if not self.stopping.is_set():
                                     self._prompt(self.prompt)
@@ -819,7 +830,6 @@ class ClaudeExecution:
                     archive_wait = time.monotonic()
                     collecting.join()
                     self.diagnostics['collection_join_seconds'] = time.monotonic() - archive_wait
-                    self._collection_store(resources)
                     if self.collection_failure is not None and failure is None:
                         failure = RuntimeAdapterError('RUNTIME_ARCHIVE_FAILED', str(self.collection_failure))
                 try:
@@ -828,14 +838,10 @@ class ClaudeExecution:
                             event = self.events.get_nowait()
                             source_position += 1
                             if event.get('type') != 'eof':
-                                collector.accept(event, source_position,
-                                                 **({'defer': not self.events.empty()} if self.independent else {}))
+                                collector.accept(event, source_position, defer=not self.events.empty())
                         collector.close()
                     elif collector is not None:
-                        if self.independent:
-                            collector.flush()
-                        elif collector.writer:
-                            collector.writer.checkpoint()
+                        collector.flush()
                 except Exception as error:
                     failure = RuntimeAdapterError('RUNTIME_ARCHIVE_FAILED', str(error))
                 self.diagnostics['collection'] = ('failed' if self.collection_failure is not None

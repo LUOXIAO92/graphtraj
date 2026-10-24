@@ -234,7 +234,7 @@ class CodexManagedExecution:
                         self.approval_items[item['id']] = item
                 if notification['method'] == 'error':
                     with (self.directory / 'stderr.log').open('a', encoding='utf-8') as stream:
-                        stream.write(json.dumps(notification) + '\n')
+                        stream.write(json.dumps(notification, ensure_ascii=False) + '\n')
         except RuntimeAdapterError:
             return
 
@@ -249,6 +249,8 @@ class CodexManagedExecution:
             return {'activity': 'idle', 'last_outcome': self.outcome['outcome']}
         if request.get('operation') == 'requests' and self.outcome is not None:
             return {'requests': []}
+        if request.get('operation') == 'send' and self.outcome is not None:
+            raise RuntimeAdapterError('runtime-input-closed', 'The execution has stopped accepting input.')
         if self.outcome is not None or self.loop is None or self.loop.is_closed():
             raise RuntimeAdapterError('operation-failed', 'The execution is no longer active.')
         try:

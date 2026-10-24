@@ -65,8 +65,8 @@ def test_codex_uses_progressive_mcp_with_native_session_authority(
             'outcome': 'completed', 'terminal_confirmed': True,
         }))
         requests.append({'jsonrpc': '2.0', 'id': 5, 'method': 'tools/call',
-                         'params': {'name': 'tasks', 'arguments': {'action': 'execute',
-                         'feature': 'alias_status', 'arguments': {'aliases': ['child@e1']}}}})
+                         'params': {'name': 'agents', 'arguments': {'action': 'execute',
+                         'feature': 'status', 'arguments': {'agent': 'child@e1'}}}})
     monkeypatch.setenv('PEER_MCP_REQUESTS', json.dumps(requests))
 
     async def native_request(request: CodexServerRequest) -> dict:
@@ -91,10 +91,12 @@ def test_codex_uses_progressive_mcp_with_native_session_authority(
         assert observed[1]['result']['structuredContent']['features'][0]['feature'] == 'status'
         assert set(observed[2]['result']['structuredContent']['input_schema']['properties']) == {'agent'}
         assert observed[3]['result']['isError'] is False
-    else:
-        # The formal gateway may disclose schemas locally; execution still
-        # reaches the owner and must reject another native Session.
+    elif host == 'independent':
+        # The standalone owner admits only its bound native Session.
         assert observed[3]['result']['isError'] is True
+    else:
+        # A verified native helper retains the GraphTraj host's summary reads.
+        assert observed[3]['result']['isError'] is False
     if host == 'main':
         assert observed[4]['result']['isError'] is False, observed[4]
         assert ('private-native-session' in json.dumps(observed[4])) is (issuer == 'thread-1')

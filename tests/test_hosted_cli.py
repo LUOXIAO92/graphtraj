@@ -59,7 +59,7 @@ def own_process(runner: Path) -> Path:
 
 
 def test_cli_host_submits_exact_result_and_preserves_report_authority(tmp_path: Path) -> None:
-    """Forged environment identities cannot change the author or read another report."""
+    """Project reports are readable; forged environment identities cannot change authorship."""
     runner, _, commit = result_project(tmp_path)
     directory = own_process(runner)
     with runtime_caller(runner, 'research@x1'):
@@ -78,9 +78,11 @@ def test_cli_host_submits_exact_result_and_preserves_report_authority(tmp_path: 
         assert submission['candidate'] == commit
         assert submission['event_id']
         assert (tmp_path / submission['evidence_refs'][0]).read_text() == 'Retained evidence'
-        refused = cli(tmp_path, address, 'reports', 'research@x2')
+        sibling = cli(tmp_path, address, 'reports', 'research@x2')
+        assert sibling.returncode == 0, sibling.stdout + sibling.stderr
+        assert yaml.safe_load(sibling.stdout)['alias'] == 'research@x2'
+        refused = cli(tmp_path, address, 'submit-report', '--name', 'researcher-x2.md', '--text', 'forged')
         assert refused.returncode == 1
-        assert yaml.safe_load(refused.stdout)['error']['code'] == 'authority-denied'
     with runtime_caller(runner, None):
         assert tools.read_reports({'alias': 'research@x1'}, cwd=tmp_path).document['submissions'] == [submission]
 
@@ -117,8 +119,8 @@ def test_cli_host_accepts_the_session_worktree_and_refuses_other_directories(tmp
         assert refused.returncode == 1
         assert yaml.safe_load(refused.stdout)['error']['code'] == 'invalid-config'
         sibling = cli(worktree, address, 'reports', 'research@x2')
-        assert sibling.returncode == 1
-        assert yaml.safe_load(sibling.stdout)['error']['code'] == 'authority-denied'
+        assert sibling.returncode == 0, sibling.stdout + sibling.stderr
+        assert yaml.safe_load(sibling.stdout)['alias'] == 'research@x2'
 
 
 def test_cli_connection_uses_and_cleans_a_sandbox_visible_channel(tmp_path: Path) -> None:
@@ -305,8 +307,8 @@ def test_shared_mcp_command_consumes_bound_graphtraj_dsh_channel(tmp_path: Path,
     directory = own_process(runner)
     monkeypatch.delenv('AGENT_SWARM_CONNECTION', raising=False)
     expected = {'runtime': 'dsh', 'session': 'owned-dsh-session', 'source': 'main', 'cwd': str(tmp_path)}
-    request = {'jsonrpc': '2.0', 'id': 1, 'method': 'tools/call', 'params': {'name': 'tasks',
-        'arguments': {'action': 'execute', 'feature': 'alias_status', 'arguments': {}}}}
+    request = {'jsonrpc': '2.0', 'id': 1, 'method': 'tools/call', 'params': {'name': 'agents',
+        'arguments': {'action': 'execute', 'feature': 'status', 'arguments': {}}}}
     with hold_ownership(directory, os.getpid()), cli_connection(
         tmp_path, 'research@x1', native_operation_features(), native_context=lambda: expected,
     ) as address:
@@ -320,11 +322,14 @@ def test_shared_mcp_command_consumes_bound_graphtraj_dsh_channel(tmp_path: Path,
                             DSH_SESSION_ID=expected['session'], DSH_AGENT_SOURCE='main')
         service = json.loads(discovery.stdout)['result']['structuredContent']['service']
         import hashlib
+        from graphtraj.configuration import project_configuration
 
         for component in ('mcp', 'host'):
             assert service[component]['executable'] == sys.executable
             assert service[component]['sha256'] == hashlib.sha256(
                 Path(service[component]['module']).read_bytes()).hexdigest()
+            assert service[component]['configuration_sha256'] == hashlib.sha256(
+                Path(project_configuration.__file__).read_bytes()).hexdigest()
         assert service['mcp']['module'] != service['host']['module']
         for session, source in ((expected['session'], 'main'), ('other', 'main'), (expected['session'], 'child')):
             result = run_cli('graphtraj.interfaces.mcp', tmp_path, address,
@@ -356,6 +361,38 @@ def test_managed_channel_discovers_and_describes_task_members(tmp_path: Path) ->
     assert 'notify_parent' in report.document['input_schema']['properties']
 
 
+def test_cli_host_returns_a_slow_write_receipt_instead_of_a_timeout(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A report the host persists after the ordinary deadline still returns its receipt once."""
+    import time
+    from dataclasses import replace
+
+    runner, _, _ = result_project(tmp_path)
+    directory = own_process(runner)
+    original = tools.TOOLS['submit_report']
+    calls = []
+
+    def slow(arguments: dict, *, cwd: Path | None = None) -> tools.ToolResult:
+        """Persist the report only after the ordinary ten-second control deadline."""
+        calls.append(arguments)
+        time.sleep(10.5)
+        return original.handler(arguments, cwd=cwd)
+
+    monkeypatch.setitem(tools.TOOLS, 'submit_report', replace(original, handler=slow))
+    with hold_ownership(directory, os.getpid()), cli_connection(
+        tmp_path, 'research@x1', native_operation_features(),
+    ) as address:
+        result = run_cli('graphtraj.interfaces.cli.agent_runner', tmp_path, address,
+                         'submit-report', '--name', 'researcher-x1.md', '--text', 'Slow evidence',
+                         process_timeout=30)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert len(calls) == 1
+    receipt = yaml.safe_load(result.stdout)
+    assert Path(receipt['report']).read_text() == 'Slow evidence'
+    assert 'did not acknowledge' not in result.stdout + result.stderr
+
+
 def test_cli_host_returns_a_slow_read_result_instead_of_a_timeout(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -380,3 +417,27 @@ def test_cli_host_returns_a_slow_read_result_instead_of_a_timeout(
                          'task', 'members', process_timeout=30)
     assert result.returncode == 0, result.stdout + result.stderr
     assert yaml.safe_load(result.stdout) == {'members': ['slow-but-answered']}
+
+
+def test_agents_cli_uses_the_bound_task_channel(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """The independent agents CLI reaches a member's host through the MCP agents dispatch."""
+    from agent_swarm.connection import CONNECTION_ENV as AGENTS_CONNECTION
+
+    runner, _, _ = result_project(tmp_path)
+    directory = own_process(runner)
+    monkeypatch.delenv(AGENTS_CONNECTION, raising=False)
+    status = json.dumps({'action': 'execute', 'feature': 'status', 'arguments': {}})
+    with cli_connection(tmp_path, 'research@x1', native_operation_features()) as address:
+        refused = run_cli('agent_swarm.cli', tmp_path, address, status)
+        assert refused.returncode == 1  # the channel locates, it never authorizes
+        assert json.loads(refused.stdout)['error']['code'] == 'authority-denied'
+    with hold_ownership(directory, os.getpid()), cli_connection(
+        tmp_path, 'research@x1', native_operation_features(),
+    ) as address:
+        found = run_cli('agent_swarm.cli', tmp_path, address, json.dumps({'action': 'discover'}))
+        assert found.returncode == 0 and 'status' in found.stdout
+        result = run_cli('agent_swarm.cli', tmp_path, address, status)
+        assert result.returncode == 0, result.stdout + result.stderr
+        assert 'research@x1' in result.stdout
+        both = run_cli('agent_swarm.cli', tmp_path, address, status, **{AGENTS_CONNECTION: address})
+        assert json.loads(both.stdout)['error']['code'] == 'authority-denied'

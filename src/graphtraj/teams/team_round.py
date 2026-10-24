@@ -273,10 +273,13 @@ def continue_stopped_task(
                     raise RunnerError("authority-denied", "Only the root caller may continue this Task.")
             # Validate the whole operation before clearing its sampled stop. Explicit
             # subtree stops stay bound to the old entities and require replacement.
+            # A budget-only continuation resumes no root, so their stops still
+            # refuse them later but do not block a separately scoped swarm.
             for alias, mapping in roots.items():
                 require_direct_authority(project.runner_directory, alias, mapping)
-                require_stopped_subtree(project.runner_directory, alias)
-                require_execution_allowed(project.runner_directory, alias, mapping)
+                if not budget_only:
+                    require_stopped_subtree(project.runner_directory, alias)
+                    require_execution_allowed(project.runner_directory, alias, mapping)
         except (OSError, TypeError, ValueError, yaml.YAMLError, RunnerError) as error:
             if isinstance(error, RunnerError):
                 raise
@@ -1337,7 +1340,7 @@ def _worker_main() -> None:
         result = _failed_task(task, RunnerError(error.code, error.message))
         if error.code in {"EXECUTION_BUDGET_STOPPED", "subtree-stopped"}:
             result["launch_status"] = "stopped"
-    print(yaml.safe_dump(result, sort_keys=False), end="")
+    print(yaml.safe_dump(result, sort_keys=False, allow_unicode=True), end="")
 
 
 if __name__ == "__main__":

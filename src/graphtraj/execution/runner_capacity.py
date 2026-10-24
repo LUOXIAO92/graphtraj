@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from graphtraj.configuration.project_configuration import runner_directory as project_runner_directory
+
 import os
 from contextlib import contextmanager
 from typing import Iterator, BinaryIO
@@ -20,7 +22,7 @@ def capacity_positions(
     try:
         if inherited_fd is not None:
             positions.append(os.fdopen(os.dup(inherited_fd), "rb"))
-        directory = project.harness_root / ".graphtraj" / "runner" / "capacity"
+        directory = project_runner_directory(project.harness_root) / "capacity"
         directory.mkdir(parents=True, exist_ok=True)
         for index in range(project.max_concurrency):
             if len(positions) == count:

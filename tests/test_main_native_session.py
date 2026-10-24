@@ -40,8 +40,8 @@ def test_main_start_and_resume_preserve_native_configuration(
         assert resumed['last_agent_message'] == 'second'
 
     asyncio.run(exercise())
-    from graphtraj.sessions.protocol import native_record
-    from graphtraj.sessions.archive import JsonlSessionStore, archive_path
+    from agent_swarm.sessions.protocol import native_record
+    from agent_swarm.sessions.archive import JsonlSessionStore, archive_path
     from graphtraj.interfaces.agents import swarm_root
 
     archive = JsonlSessionStore(archive_path(swarm_root(tmp_path), 'codex:thread-1'))

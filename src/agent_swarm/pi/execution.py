@@ -154,8 +154,8 @@ class PiExecution:
         credential_environment(request.get('api_key_env'))
         worktree = Path(request['worktree_path']).resolve()
         root = Path(request['harness_root']).resolve()
-        # This directory belongs to retained Trace evidence, not disposable Worker state.
-        native = self.trace.with_suffix('.pi')
+        # Migrated hosts retain native files separately from Task Trace views.
+        native = Path(request['native_directory']) if request.get('native_directory') else self.trace.with_suffix('.pi')
         native.mkdir(parents=True, exist_ok=True)
         source = Path(request['agent_dir'])
         agent = native / 'agent'
@@ -207,6 +207,9 @@ class PiExecution:
                 'allowWrite': write,
                 'denyWrite': [str(source), str(root / '.graphtraj/config.yml'),
                               str(root / '.graphtraj/roles.yml'),
+                              # The migrated project layout keeps both under core.
+                              str(root / '.graphtraj/core/config.yml'),
+                              str(root / '.graphtraj/core/roles.yml'),
                               request['docs_directory'],
                               str(Path(sys.prefix).resolve()), *self.packages,
                               str(Path(request['git_common_directory']) / 'config'),
@@ -687,12 +690,16 @@ def _require_read_denials(filesystem: dict) -> None:
     srt lets allowRead override denyRead, so a denied path inside a readable
     directory (for example ``<root>/.graphtraj`` in a worktree that is the
     project root) cannot be expressed. A protected path that does not exist
-    has no contents to expose.
+    has no contents to expose. A path the launching host itself may not
+    inspect is treated as existing, so a covering grant is still refused.
     """
     for denied in filesystem['denyRead']:
         protected = Path(denied).resolve()
-        if not protected.exists():
-            continue
+        try:
+            if not protected.exists():
+                continue
+        except PermissionError:
+            pass
         for allowed in filesystem['allowRead']:
             if protected.is_relative_to(Path(allowed).resolve()):
                 raise RuntimeAdapterError(

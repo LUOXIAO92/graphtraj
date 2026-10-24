@@ -1,6 +1,11 @@
 """Prepare Claude Code's structured CLI without changing user configuration."""
 from __future__ import annotations
 
+from graphtraj.configuration.project_configuration import (
+    cli_directory as project_cli_directory,
+    runner_directory as project_runner_directory,
+)
+
 import copy
 from dataclasses import dataclass
 import json
@@ -41,16 +46,21 @@ def unsupported(*args: object, **kwargs: object) -> Any:
 
 
 def _validated_resources(value: object, root: Path, state: Path, home: Path) -> list[str]:
-    """Validate explicit read grants against the same private paths on launch and resume."""
+    """Admit project development records without granting control or credential access."""
+    from graphtraj.runtimes.codex.access import project_history_files
+
     if (not isinstance(value, list)
             or any(not isinstance(path, str) or not Path(path).is_absolute() for path in value)):
         raise RuntimeAdapterError('ROLE_CONFIG_INVALID', 'claude.read_paths must list absolute resource paths.')
-    protected = (state, root / '.graphtraj/runner', root / '.graphtraj/cli',
+    protected = (project_cli_directory(root),
                  root / '.codex', Path.home() / '.codex', home)
+    history = project_history_files(root)
     for resource in value:
         path = Path(resource).resolve()
+        if path in history and not path.is_relative_to(project_cli_directory(root).resolve()):
+            continue
         if any(path.is_relative_to(item.resolve()) or item.resolve().is_relative_to(path) for item in protected):
-            raise RuntimeAdapterError('RUNTIME_ACCESS_DENIED', 'A Claude resource grant would expose private control/history.')
+            raise RuntimeAdapterError('RUNTIME_ACCESS_DENIED', 'A Claude resource grant would expose control or Runtime credentials.')
     return list(value)
 
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from conftest import runner_operation
 from pathlib import Path
 
 import yaml
@@ -126,7 +127,7 @@ def test_swarm_input_starts_each_selected_agent_from_the_registered_task(
     # does not rewrite the current Task definition.
     alias = launched[0]["alias"]
     status = run_process(
-        [str(installed_commands.runner), "status", alias],
+        runner_operation(installed_commands, "status", alias),
         cwd=root, env=environment, timeout=30,
     )
     assert status.returncode == 0, status.stderr
@@ -134,11 +135,15 @@ def test_swarm_input_starts_each_selected_agent_from_the_registered_task(
     assert observed["alias"] == alias
     assert observed["session"] == launched[0]["session"]
     message = run_process(
-        [
-            str(installed_commands.runner), "send", alias,
-            "--instruction", "Report your current activity.",
-            "--caused-by-event-id", _cause(root),
-        ],
+        runner_operation(
+            installed_commands,
+            "send",
+            alias,
+            "--instruction",
+            "Report your current activity.",
+            "--caused-by-event-id",
+            _cause(root),
+        ),
         cwd=root, env=environment, timeout=60,
     )
     assert message.returncode == 0, message.stdout + message.stderr

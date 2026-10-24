@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from graphtraj.configuration.project_configuration import runner_directory as project_runner_directory
+
 from pathlib import Path
 from typing import Any
 
@@ -33,7 +35,7 @@ def require_unestablished_resolution(
                      and event['event'] == 'task-integration-conflict-started'), None)
     if conflict is None or conflict.get('parent') != parent_alias:
         raise ValueError('Retry must retain the original resolution actual parent')
-    runner = configuration.harness_root / '.graphtraj/runner'
+    runner = project_runner_directory(configuration.harness_root)
     failed = []
     for launch_file in (runner / 'sessions').glob('*/launch.yml'):
         launch = yaml.safe_load(launch_file.read_text(encoding='utf-8'))

@@ -123,8 +123,8 @@ def test_unverifiable_caller_returns_mcp_error_without_closing_server(
     monkeypatch.setenv('GRAPHTRAJ_NATIVE_RUNTIME', 'pi')
     requests = [
         {'jsonrpc': '2.0', 'id': 1, 'method': 'tools/call', 'params': {
-            'name': 'graphtraj', 'arguments': {
-                'action': 'execute', 'feature': 'alias_status', 'arguments': {},
+            'name': 'agents', 'arguments': {
+                'action': 'execute', 'feature': 'status', 'arguments': {},
             },
         }},
         {'jsonrpc': '2.0', 'id': 2, 'method': 'ping'},

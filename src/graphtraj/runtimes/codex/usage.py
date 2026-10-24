@@ -234,10 +234,11 @@ class CodexCheckUsage:
                 identifier = item.get('id')
                 output = item.get('aggregatedOutput')
                 if (method == 'item/completed' and kind == 'commandExecution'
-                        and isinstance(output, str) and output.startswith('error:')):
+                        and isinstance(output, str) and output.startswith('{')):
+                    # The agents CLI prints one JSON result document.
                     try:
-                        document = yaml.safe_load(output)
-                    except yaml.YAMLError:
+                        document = json.loads(output)
+                    except ValueError:
                         document = None
                     detail = document.get('diagnostic') if isinstance(document, dict) else None
                     if (isinstance(detail, dict) and detail.get('feature') == 'alias_status'

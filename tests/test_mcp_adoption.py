@@ -8,7 +8,6 @@ import tempfile
 
 import pytest
 from conftest import InstalledCommands
-from test_task_recovery import installed_commands
 
 
 @pytest.mark.parametrize('observe_only', [False, True])

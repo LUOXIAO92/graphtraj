@@ -8,10 +8,10 @@ from click.testing import CliRunner
 
 from agent_swarm import write_config
 from graphtraj.interfaces.agents import ConfiguredSessionArchive
-from graphtraj.runtimes.codex.jsonl_archive import CodexJsonlArchive
+from agent_swarm.sessions.codex import CodexJsonlArchive
 from graphtraj.runtimes.codex.session_entry import session_record
 from graphtraj.runtimes.codex.stop_hook import main as stop_hook
-from graphtraj.sessions.archive import JsonlSessionStore, SessionArchive, archive_path
+from agent_swarm.sessions.archive import JsonlSessionStore, SessionArchive, archive_path
 
 
 def test_empty_stdin_names_hook_stdin_and_keeps_stop_error() -> None:
@@ -79,7 +79,7 @@ def test_cursor_from_one_physical_rollout_is_not_read_in_another(tmp_path: Path)
         collector.collect(rollout)
 
     # Each physical file has its own linked project Session and byte cursor.
-    from graphtraj.sessions.protocol import native_record
+    from agent_swarm.sessions.protocol import native_record
 
     store = JsonlSessionStore(archive_path(root, 'codex:s'))
     assert store.position('rollout') == first.stat().st_size

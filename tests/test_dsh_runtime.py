@@ -79,7 +79,14 @@ class NativePeer:
     def follow(self, session: str, *, assistant_stream: bool = False) -> dict:
         """Observe this exact session before input."""
         self.calls.append(('follow', session))
-        return {'type': 'snapshot'}
+        rows = [json.loads(line) for line in self.log.read_text().splitlines()]
+        self.records = rows[1:]
+        return {'type': 'snapshot', 'header': rows[0], 'cursor': len(self.records) - 1,
+                'hasMore': False, 'records': [{'event': row} for row in self.records]}
+
+    def history(self, snapshot: dict) -> list[dict]:
+        """Return this fixture's complete opening page."""
+        return snapshot['records']
 
     def open_events(self) -> str:
         """Bind the forwarded approval channel before any native work starts."""
@@ -135,24 +142,37 @@ class NativePeer:
         if self.frames:
             kind = self.frames.pop(0)
             if isinstance(kind, dict):
-                return kind
-            if kind == 'turn/end':
-                self.running = False
-            return {'type': 'event', 'event': {'type': kind, 'data': {
-                **self.event_data,
-                'reason': {'kind': self.reason},
-                'message': {'content': [{'type': 'text', 'text': 'Native response'}]},
-            }}}
+                if kind.get('type') != 'event':
+                    return kind
+                event = kind['event']
+                if 'seq' in event:
+                    return kind
+                event.setdefault('seq', len(self.records))
+                event.setdefault('time', 1)
+                event['data'].setdefault('turn', 0)
+                event['data'].setdefault('step', 0)
+            else:
+                if kind == 'turn/end':
+                    self.running = False
+                event = {'type': kind, 'seq': len(self.records), 'time': 1, 'data': {
+                    'turn': 0, 'step': 0, 'stream': [], 'callId': 'fixture-call', 'arguments': '{}',
+                    **self.event_data,
+                    'reason': {'kind': self.reason, 'error': {'message': 'Native failure', 'code': 'TEST'}},
+                    'message': {'id': 'answer', 'role': 'assistant',
+                                'source': {'kind': 'model', 'provider': 'controlled', 'model': 'fixture'},
+                                'content': [{'type': 'text', 'text': 'Native response'}]},
+                }}
+                if kind == 'assistant/message':
+                    event['surfaceOp'] = 'append'
+            self.records.append(event)
+            if getattr(self, 'persist_events', True):
+                with self.log.open('a') as stream:
+                    stream.write(json.dumps(event) + '\n')
+            return {'type': 'event', 'event': event}
         return {}
 
     def close(self) -> None:
         """Only this native service is closed."""
-        from graphtraj.runtimes.dsh.collection import collect
-
-        collect(self.archive_root / '.graphtraj/state',
-                {'version': 4, 'id': self.session, 'createdAt': 1, 'isSeeded': False}, [],
-                project_id=str(self.archive_root), agent_id='controlled-member',
-                task_ids=[], source='member')
         self.closed = True
 
 
@@ -172,6 +192,7 @@ def peer(monkeypatch: pytest.MonkeyPatch) -> list:
 def run_turn(
     tmp_path: Path, *, expected: str | None = None, trace_file: Path | None = None,
     instructions: str = 'Assigned responsibility', package: str | None = None,
+    native_directory: Path | None = None,
 ) -> tuple:
     """Run the public RuntimeTurn asynchronously so controls overlap active work."""
     from graphtraj.configuration.project_configuration import default_configuration_content
@@ -180,8 +201,11 @@ def run_turn(
     config.parent.mkdir(exist_ok=True)
     config.write_text(default_configuration_content(tmp_path, tmp_path))
     bindings = []
+    settings = request(tmp_path, instructions, package or '/installed/dsh/package.json')
+    if native_directory is not None:
+        settings['native_directory'] = str(native_directory)
     turn = select_runtime_adapter('dsh').managed_execution(
-        request(tmp_path, instructions, package or '/installed/dsh/package.json'),
+        settings,
         'Original instruction', tmp_path,
         lambda session, pid: bindings.append(('started', session)), {},
         trace_file=trace_file or tmp_path / 'trace.jsonl', expected_session=expected,
@@ -201,7 +225,7 @@ def run_turn(
     deadline = time.monotonic() + 3
     while len(bindings) < 2 and time.monotonic() < deadline and thread.is_alive():
         time.sleep(0.005)
-    assert bindings == [('created', expected or 'native-dsh'), ('started', expected or 'native-dsh')]
+    assert bindings == [('created', expected or 'native-dsh'), ('started', expected or 'native-dsh')], outcome
     return turn, thread, outcome
 
 
@@ -264,22 +288,7 @@ def test_agents_control_dsh_without_task_or_archive(
             """This controlled native history fits in its opening page."""
             return snapshot['records']
 
-        def receive(self, timeout: float = 1) -> dict:
-            """Publish native events before the separately delayed disk flush."""
-            frame = super().receive(timeout)
-            if frame.get('type') == 'event':
-                row = frame['event']
-                row.update(seq=len(self.records), time=100 + len(self.records))
-                if row['type'] == 'assistant/message':
-                    row.update(surfaceOp='append', data={'turn': 0, 'step': 0, 'stream': [], 'message': {
-                        'id': 'answer', 'role': 'assistant',
-                        'source': {'kind': 'model', 'provider': 'controlled', 'model': 'peer'},
-                        'content': [{'type': 'text', 'text': 'Native response'}],
-                    }})
-                else:
-                    row['data'] = {'turn': 0, 'reason': {'kind': 'completed'}}
-                self.records.append(row)
-            return frame
+        persist_events = False
 
         def close(self) -> None:
             """End only this controlled service."""
@@ -294,7 +303,7 @@ def test_agents_control_dsh_without_task_or_archive(
     })
     control = AgentControl(tmp_path / '.graphtraj/swarm', {'dsh': driver})
     from agent_swarm import write_config
-    from graphtraj.sessions.archive import SessionArchive, JsonlSessionStore, archive_path
+    from agent_swarm.sessions.archive import SessionArchive, JsonlSessionStore, archive_path
 
     write_config(control.root, save_normalized_sessions=archiving)
     archive = SessionArchive(control.root, save_normalized_sessions=archiving)
@@ -376,8 +385,8 @@ def test_stop_drains_cursorless_terminal_before_native_flush(tmp_path: Path, mon
     """A cancel receipt cannot close before queued final/live frames are collected."""
     from concurrent.futures import ThreadPoolExecutor
     from agent_swarm.dsh.execution import DshExecution
-    from graphtraj.runtimes.dsh.collection import DshArchive
-    from graphtraj.sessions.archive import SessionArchive, JsonlSessionStore, archive_path
+    from agent_swarm.sessions.dsh import DshArchive
+    from agent_swarm.sessions.archive import SessionArchive, JsonlSessionStore, archive_path
 
     class StreamingPeer(NativePeer):
         """Separate native event commitment, transport delivery and disk flush."""
@@ -527,6 +536,7 @@ def test_prepared_profile_restates_the_standard_preset_persona(
 
     peer[0].frames.extend(['assistant/message', 'turn/end'])
     thread.join(3)
+    assert 'result' in outcome, outcome
     assert outcome['result']['outcome'] == 'completed'
 
 
@@ -804,6 +814,34 @@ def test_native_trace_survives_control_directory_retirement(tmp_path: Path, peer
     assert trace.read_bytes() == content
 
 
+def test_native_resources_resume_from_tool_directory(tmp_path: Path, peer: list) -> None:
+    """The same native ID and history are used after relocating owned resources."""
+    control = tmp_path / 'control'
+    control.mkdir()
+    trace = tmp_path / 'traces/events.jsonl'
+    turn, thread, outcome = run_turn(control, trace_file=trace)
+    peer[0].frames.append('turn/end')
+    thread.join(3)
+    assert outcome['result']['outcome'] == 'completed'
+    original = peer[0].log.read_bytes()
+    native = tmp_path / 'swarm/native/dsh'
+    native.mkdir(parents=True)
+    (trace.parent / 'dsh-native').rename(native / 'dsh-native')
+    (control / 'dsh-home').rename(native / 'dsh-home')
+    # The public cutover separately verifies this owned Trace-link relocation.
+    trace.unlink()
+    trace.symlink_to(native / 'dsh-native' / peer[0].log.relative_to(trace.parent / 'dsh-native'))
+    resumed, thread, outcome = run_turn(control, trace_file=trace, expected=turn.session,
+                                       native_directory=native)
+    assert peer[1].log.is_relative_to(native)
+    assert peer[1].log.read_bytes().startswith(original)
+    peer[1].frames.append('turn/end')
+    thread.join(3)
+    assert 'result' in outcome, outcome
+    assert outcome['result']['outcome'] == 'completed'
+    assert resumed.session == turn.session
+
+
 def test_completion_requires_the_final_native_prefix(tmp_path: Path, peer: list) -> None:
     """A native completion receipt cannot hide an uncommitted archive tail."""
     turn, thread, outcome = run_turn(tmp_path)
@@ -830,7 +868,7 @@ def test_public_json_cli_uses_host_identity_and_report_checks(tmp_path: Path) ->
         tmp_path, 'research@x1', native_operation_features(),
     ) as address:
         result = subprocess.run(
-            [sys.executable, '-m', 'agent_swarm.mcp'],
+            [sys.executable, '-c', 'from graphtraj.interfaces.local_tool import main; main()'],
             cwd=tmp_path, env={**os.environ, CONNECTION_ENV: address,
                               'GRAPHTRAJ_CALLER_ALIAS': 'research@x2',
                               'PYTHONPATH': str(Path(__file__).resolve().parents[1] / 'src')},

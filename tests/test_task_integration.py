@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from conftest import runner_operation
 import json
 import os
 import subprocess
@@ -937,7 +938,7 @@ def test_unestablished_resolver_retry_does_not_restart_stopped_budget(
     assert read_worldline(state, root) == history
     if manual_stop:
         original_root = next(mapping['alias'] for mapping in mappings if mapping['parent'] is None)
-        stopped = run_process([str(installed_commands.runner), 'interrupt', original_root],
+        stopped = run_process(runner_operation(installed_commands, 'interrupt', original_root),
                               cwd=root, env=environment)
         assert stopped.returncode == 0, stopped.stdout + stopped.stderr
         refused = run_process(continue_command + ['--budget-only'], cwd=root, env=environment)

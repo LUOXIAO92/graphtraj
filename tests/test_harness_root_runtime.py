@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from conftest import runner_operation
 import json
 import os
 import shutil
@@ -25,7 +26,7 @@ def wait_for_probe_completion(commands, alias, harness_root, environment):
     deadline = time.monotonic() + 300
     while time.monotonic() < deadline:
         result = run_process(
-            [str(commands.runner), 'status', alias],
+            runner_operation(commands, 'status', alias),
             cwd=harness_root, env=environment, timeout=15,
         )
         assert result.returncode == 0, result.stdout + result.stderr
@@ -35,7 +36,7 @@ def wait_for_probe_completion(commands, alias, harness_root, environment):
             return
         time.sleep(1)
     interrupted = run_process(
-        [str(commands.runner), 'interrupt', alias],
+        runner_operation(commands, 'interrupt', alias),
         cwd=harness_root, env=environment, timeout=30,
     )
     raise AssertionError('Probe timed out; Runner interruption: ' + interrupted.stdout + interrupted.stderr)
@@ -46,13 +47,13 @@ def wait_for_probe_artifacts(commands, alias, harness_root, environment, proofs,
     while not all(path.is_file() for path in proofs) and time.monotonic() < deadline:
         time.sleep(1)
     result = run_process(
-        [str(commands.runner), 'status', alias],
+        runner_operation(commands, 'status', alias),
         cwd=harness_root, env=environment, timeout=15,
     )
     assert result.returncode == 0, result.stdout + result.stderr
     if yaml.safe_load(result.stdout)['aliases'][0]['activity'] != 'idle':
         interrupted = run_process(
-            [str(commands.runner), 'interrupt', alias],
+            runner_operation(commands, 'interrupt', alias),
             cwd=harness_root, env=environment, timeout=30,
         )
         assert interrupted.returncode == 0, interrupted.stdout + interrupted.stderr
@@ -81,7 +82,7 @@ def test_probe_artifact_boundary_interrupts_running_runtime(
         else:
             wait_for_probe_artifacts(installed_commands, alias, harness, env, proofs)
         status = run_process(
-            [str(installed_commands.runner), 'status', alias], cwd=harness, env=env,
+            runner_operation(installed_commands, 'status', alias), cwd=harness, env=env,
         )
         assert status.returncode == 0, status.stderr
         assert yaml.safe_load(status.stdout)['aliases'][0]['last_outcome'] == 'interrupted'

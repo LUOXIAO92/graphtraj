@@ -44,14 +44,14 @@ class PiManagedExecution(PiExecution):
 
     def _archive_collector(self, header: dict, native: dict):
         """Archive Runner executions under their Task mapping in the project archive."""
-        from graphtraj.runtimes.pi.collection import PiArchive
+        from agent_swarm.sessions.pi import PiArchive
 
         archive, agent, tasks, source = self.archive, self.agent, [], 'child'
         if not self.independent:
             import yaml
             from agent_swarm import default_config
             from graphtraj.interfaces.agents import swarm_root
-            from graphtraj.sessions.archive import SessionArchive
+            from agent_swarm.sessions.archive import SessionArchive
 
             mapping_file = self.directory / 'mapping.yml'
             mapping = yaml.safe_load(mapping_file.read_text()) if mapping_file.is_file() else {}

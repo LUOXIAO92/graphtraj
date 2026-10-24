@@ -7,7 +7,7 @@ import shutil
 import pytest
 
 from graphtraj.runtimes.codex.session_archive import CodexSessionArchive
-from graphtraj.sessions.protocol import native_record
+from agent_swarm.sessions.protocol import native_record
 from graphtraj.sessions.storage import SessionStore, session_path
 
 

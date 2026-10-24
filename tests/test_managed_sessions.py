@@ -63,8 +63,23 @@ try:
         result = {'alias': alias, 'session': read_alias_mapping(runner, alias)[0]['session']}
     elif operation == 'status':
         result = status_aliases(arguments, root, operation_total=True).document
+    elif operation == 'tree':
+        # The alias-free status tree the agents host builds for its callers.
+        from graphtraj.execution.runner_status import status_tree
+        response = status_tree(root)
+        result = response.document
+        if not response.succeeded:
+            print(json.dumps(result))
+            sys.exit(1)
     elif operation == 'send':
         result = send_instruction(arguments[0], arguments[1], root, tuple(arguments[2]))
+    elif operation == 'agents':
+        # The independent agents action as the host's verified native Main.
+        from agent_swarm import Binding, Caller
+        from graphtraj.interfaces.agents import GraphTrajAgents
+        action, request, session = arguments
+        outcome = GraphTrajAgents(root).operate(action, request, Binding(Caller('graphtraj-gateway', None, session=session, runtime='codex')))
+        result = {'result': outcome.result, 'agent': outcome.agent, 'session': outcome.session, 'failed': outcome.failed}
     elif operation == 'requests':
         from graphtraj.execution.runner_control import pending_requests
         result = pending_requests(arguments[0], root, execution_id=arguments[1] if len(arguments) > 1 else None)
@@ -76,6 +91,9 @@ try:
     print(json.dumps(result))
 except RunnerError as error:
     print(json.dumps({'error': error.as_document()}))
+    sys.exit(1)
+except Exception as error:
+    print(json.dumps({'error': {'code': getattr(error, 'code', type(error).__name__), 'message': str(error)}}))
     sys.exit(1)
 """
 
@@ -130,6 +148,7 @@ def managed_project(
     ) -> dict:
         """Each invocation is a separate caller process that must return."""
         command = (
+            [str(python), '-m', 'agent_swarm.cli', json.dumps(arguments)] if operation == 'agents-cli' else
             [str(installed_commands.runner), *arguments] if operation == 'cli' else
             [str(python), '-c', CALL, str(root), json.dumps([operation, arguments])]
         )
@@ -198,7 +217,7 @@ def test_managed_archive_is_readable_after_native_shutdown(managed_project: Mana
     """Public Runner start/resume collect into one independent, authorized archive."""
     from graphtraj.execution.runner_status import runtime_caller
     from graphtraj.interfaces.gateway import handle_request
-    from graphtraj.sessions.protocol import native_record
+    from agent_swarm.sessions.protocol import native_record
     from graphtraj.workspace.runner_project import discover_runner_directory
 
     root, cause, call, _ = managed_project
@@ -551,19 +570,20 @@ def test_later_caller_can_answer_native_approval(managed_project: ManagedProject
     assert records[-1]['payload']['last_agent_message'] == 'approval:accept'
 
 
-def test_installed_cli_declines_the_same_request_as_python(managed_project: ManagedProject) -> None:
+def test_bound_agents_declines_the_same_request_as_runner(managed_project: ManagedProject) -> None:
     """Both interfaces expose identical requests and preserve an explicit decline."""
     root, cause, call, _ = managed_project
     launched = call('launch', launch_document())['tasks'][0]
     alias = launched['alias']
     call('send', [alias, 'unhandled request', [cause]])
     queried = call('requests', [alias])
-    assert call('cli', ['requests', alias, '--execution-id', queried['execution_id']]) == queried
+    assert call('agents', ['requests', {
+        'agent': alias, 'execution': queried['execution_id'],
+    }, 'main-a'])['result'] == queried
     request, = queried['requests']
-    request_file = root / 'request.yml'
-    request_file.write_text(yaml.safe_dump(request))
-    reply = call('cli', ['reply', alias, '--request-file', str(request_file),
-                         '--response', '{"decision":"decline"}'])
+    reply = call('agents', ['reply', {
+        'agent': alias, 'request': request, 'response': {'decision': 'decline'},
+    }, 'main-a'])['result']
     assert reply == {
         'alias': alias, 'session': request['session'], 'execution_id': request['execution_id'],
         'request_id': 'approval', 'reply_status': 'submitted',
@@ -647,9 +667,9 @@ def test_multiple_native_requests_keep_input_and_trace_contents(managed_project:
     assert call('status', [alias])['aliases'][0]['waiting_for'] == 'runtime-request'
     assert call('requests', [alias])['requests'] == [user_input]
     answer = {'answers': {'color': {'answers': ['蓝色']}}}
-    request_file = root / 'input-request.json'
-    request_file.write_text(json.dumps(user_input))
-    call('cli', ['reply', alias, '--request-file', str(request_file), '--response', json.dumps(answer)])
+    call('agents', ['reply', {
+        'agent': alias, 'request': user_input, 'response': answer,
+    }, 'main-a'])
     observe(call, alias, 'idle', 'completed')
     native = root / 'native' / ('rollout-' + launched['session'] + '.jsonl')
     assert [json.loads(line) for line in native.with_suffix('.replies.jsonl').read_text().splitlines()] == [
@@ -837,6 +857,7 @@ def test_identifier_without_the_ownership_lock_is_not_the_owned_execution(
                     'alias': alias,
                     'runtime': 'codex',
                     'session': 'native-session',
+                    'execution_id': 'native-execution',
                     'task_id': '113',
                     'team_generation': 1,
                     'role': 'managed-probe',

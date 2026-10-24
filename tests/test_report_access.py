@@ -9,7 +9,7 @@ from graphtraj.configuration.project_configuration import default_configuration_
 from graphtraj.execution import runner_control
 from graphtraj.execution.runner_models import RunnerError
 from graphtraj.execution.runner_status import runtime_caller
-from conftest import FakeCodex, InstalledCommands
+from conftest import runner_operation, FakeCodex, InstalledCommands
 from test_result_submission import result_project
 
 
@@ -83,9 +83,9 @@ def test_failed_report_delivery_remains_visible_only_to_its_owner(
     assert receipt['parent_connection'] == {'runtime': 'codex', 'session': 'original-main'}
     assert observed['reports'][0]['text'] == 'Preserved findings'
     assert len(calls) == 1
+    # A non-direct project member reads the same development record.
     with runtime_caller(runner, 'research@x2'):
-        with pytest.raises(RunnerError, match='direct parent'):
-            runner_control.read_session_reports('research@x1', tmp_path)
+        assert runner_control.read_session_reports('research@x1', tmp_path)['reports'] == observed['reports']
 
 
 def test_stopped_member_of_a_blocked_task_submits_its_collected_report(
@@ -128,7 +128,7 @@ def test_stopped_member_of_a_blocked_task_submits_its_collected_report(
 def test_direct_parent_reads_terminal_message_without_report_files(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Temporary children expose their completed result only to their parent."""
+    """Temporary children expose their completed result to verified project callers."""
     config = tmp_path / '.graphtraj/config.yml'
     directory = config.parent / 'runner/sessions/child@e1'
     directory.mkdir(parents=True)
@@ -138,9 +138,11 @@ def test_direct_parent_reads_terminal_message_without_report_files(
     monkeypatch.setattr(runner_control, 'read_alias_mapping',
                         lambda *args: ({'parent': 'parent@l1'}, directory))
     monkeypatch.setattr(runner_control, '_session_report_paths', lambda *args, **kwargs: ())
-    with runtime_caller(config.parent / 'runner', 'parent@l1'):
+    with runtime_caller(config.parent / 'runner', None):
         result = runner_control.read_session_reports('child@e1', tmp_path)
-        assert result == {'alias': 'child@e1', 'reports': [], 'last_agent_message': 'synthetic-result'}
+        assert result == {'alias': 'child@e1', 'reports': [], 'last_agent_message': 'synthetic-result',
+                          'execution': {'outcome': 'completed', 'terminal_confirmed': True}}
+    # An unregistered identity is not a project caller.
     with runtime_caller(config.parent / 'runner', 'sibling@e2'):
         with pytest.raises(RunnerError) as denied:
             runner_control.read_session_reports('child@e1', tmp_path)
@@ -182,11 +184,12 @@ def test_historical_report_assignments_preserve_ownership(
     launch_file.write_text(yaml.safe_dump({'runtime': 'codex', 'mapping': mapping,
                                          'connection': {}, 'adapter_request': request}))
     before = (mapping_file.read_bytes(), launch_file.read_bytes())
-    for caller in ('research@x1', 'parent@p1'):
+    # The member itself and a non-direct project member read the report.
+    for caller in ('research@x1', 'research@x2'):
         with runtime_caller(runner, caller):
             result = runner_control.read_session_reports('research@x1', tmp_path)
             assert result['reports'] == [{'path': str(own), 'text': 'Original findings'}]
-    with runtime_caller(runner, 'research@x2'), pytest.raises(RunnerError) as denied:
+    with runtime_caller(runner, 'native-helper-thread'), pytest.raises(RunnerError) as denied:
         runner_control.read_session_reports('research@x1', tmp_path)
     assert denied.value.code == 'authority-denied'
     with runtime_caller(runner, 'research@x1'):
@@ -197,12 +200,12 @@ def test_historical_report_assignments_preserve_ownership(
     assert sibling.read_text() == 'Private sibling evidence'
     assert before == (mapping_file.read_bytes(), launch_file.read_bytes())
     own.unlink()
-    with runtime_caller(runner, 'parent@p1'):
+    with runtime_caller(runner, 'research@x2'):
         result = runner_control.read_session_reports('research@x1', tmp_path)
     assert result['reports'] == []
     assert result['missing_reports'] == [str(own)]
     own.symlink_to(sibling)
-    with runtime_caller(runner, 'parent@p1'), pytest.raises(RunnerError) as redirected:
+    with runtime_caller(runner, 'research@x2'), pytest.raises(RunnerError) as redirected:
         runner_control.read_session_reports('research@x1', tmp_path)
     assert redirected.value.code == 'authority-denied'
 
@@ -300,9 +303,9 @@ def test_installed_send_recovers_historical_reports(
     trace = (directory / 'events.jsonl').read_bytes()
     events = [json.loads(line) for shard in (root / '.graphtraj/state/worldline').glob('*.jsonl')
               for line in shard.read_text().splitlines()]
-    sent = run_process([str(installed_commands.runner), 'send', task['alias'],
+    sent = run_process(runner_operation(installed_commands, 'send', task['alias'],
                         '--instruction', 'Return retained findings.', '--reports-only',
-                        '--caused-by-event-id', events[-1]['event_id']], cwd=root, env=env, timeout=20)
+                        '--caused-by-event-ids', json.dumps([events[-1]['event_id']])), cwd=root, env=env, timeout=20)
     assert sent.returncode == 0, sent.stdout + sent.stderr
     status = wait_for_idle(installed_commands, root, env, task['alias'])
     assert status['session'] == task['session']
@@ -315,15 +318,30 @@ def test_installed_send_recovers_historical_reports(
         if argument == '-c':
             settings.update(tomllib.loads(records[-1]['argv'][index + 1]))
     filesystem = settings['permissions'][settings['default_permissions']]['filesystem']
-    assert filesystem[str(own)] == ('write' if source == 'cli-launch' else 'read')
+    assert filesystem[str(own)] == 'read'
     assert filesystem[str(reference)] == 'read'
     assert str(private) not in filesystem
-    assert filesystem[str(root / '.graphtraj/state')] == 'none'
+    assert filesystem[str(root / '.graphtraj/state')] == 'read'
     assert private.read_text() == 'Private sibling evidence'
     assert filesystem[':workspace_roots']['.'] == 'read'
-    reports = run_process([str(installed_commands.runner), 'reports', task['alias']], cwd=root, env=env)
-    assert reports.returncode == 0, reports.stdout + reports.stderr
-    assert yaml.safe_load(reports.stdout)['reports'] == [{'path': str(own), 'text': 'Retained evidence'}]
+    # This outer pytest process is not a verified native project caller. Read
+    # the retained operation under the actual fixture member's bounded identity.
+    with runtime_caller(root / '.graphtraj/runner', task['alias']):
+        reports = runner_control.read_session_reports(task['alias'], root)
+    assert reports['reports'] == [{'path': str(own), 'text': 'Retained evidence'}]
+
+
+def test_parent_reads_follow_up_reports_beside_the_assignment(tmp_path: Path) -> None:
+    """A newly added <stem>-<n>.md report is read in order; other siblings are not."""
+    runner, team, _ = result_project(tmp_path)
+    rounds = team.parent / 'rounds/1'
+    rounds.mkdir(parents=True, exist_ok=True)
+    for name, text in [('researcher-x1.md', 'first'), ('researcher-x1-10.md', 'tenth'),
+                       ('researcher-x1-2.md', '第二份'), ('researcher-x1-private.md', 'other')]:
+        (rounds / name).write_text(text)
+    with runtime_caller(runner, None):
+        reports = runner_control.read_session_reports('research@x1', tmp_path)['reports']
+    assert [report['text'] for report in reports] == ['first', '第二份', 'tenth']
 
 
 def test_installed_report_collection_reaches_a_stopped_member(
@@ -355,7 +373,7 @@ def test_installed_report_collection_reaches_a_stopped_member(
     assert result.returncode == 0, result.stdout + result.stderr
     task = yaml.safe_load(result.stdout)['tasks'][0]
     wait_for_idle(installed_commands, root, env, task['alias'])
-    stopped = run_process([str(installed_commands.runner), 'interrupt', task['alias']],
+    stopped = run_process(runner_operation(installed_commands, 'interrupt', task['alias']),
                           cwd=root, env=env, timeout=30)
     assert stopped.returncode == 0, stopped.stdout + stopped.stderr
     directory = root / '.graphtraj/runner/sessions' / task['alias']
@@ -367,9 +385,9 @@ def test_installed_report_collection_reaches_a_stopped_member(
 
     def send(*extra: str):
         """Send one instruction to the stopped member through the installed Runner."""
-        return run_process([str(installed_commands.runner), 'send', task['alias'],
+        return run_process(runner_operation(installed_commands, 'send', task['alias'],
                             '--instruction', 'Return retained findings.', *extra,
-                            '--caused-by-event-id', events[-1]['event_id']], cwd=root, env=env, timeout=20)
+                            '--caused-by-event-ids', json.dumps([events[-1]['event_id']])), cwd=root, env=env, timeout=20)
 
     # Ordinary work stays refused in the stopped subtree.
     refused = send()
@@ -418,3 +436,123 @@ def test_follow_up_reaches_only_a_running_report_collection(
         assert sent == []
     # The stop record is never lifted.
     assert (directory / 'stop.yml').read_text() == 'alias: member\n'
+
+
+def test_project_read_grants_no_control_to_a_non_parent(tmp_path: Path) -> None:
+    """A non-direct member reads reports but cannot query native requests or interrupt."""
+    runner, _, _ = result_project(tmp_path)
+    with runtime_caller(runner, 'research@x2'):
+        assert runner_control.read_session_reports('research@x1', tmp_path)['alias'] == 'research@x1'
+        for control in (
+            lambda: runner_control.pending_requests('research@x1', tmp_path),
+            lambda: runner_control.interrupt_session('research@x1', tmp_path),
+        ):
+            with pytest.raises(RunnerError) as denied:
+                control()
+            assert denied.value.code == 'authority-denied'
+
+
+@pytest.mark.parametrize(('completed', 'reports_only'), [(False, False), (True, True)])
+def test_agents_send_to_a_stopped_member_is_ordinary_input(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, completed: bool, reports_only: bool,
+) -> None:
+    """agents send forwards ordinary input, so a stopped subtree refuses it.
+
+    Only a completed Task's standby member is turned into a report
+    collection; agents send has no explicit reports-only choice.
+    """
+    from graphtraj.execution import runner_status
+    from graphtraj.teams import team_replacement
+
+    sent = []
+    monkeypatch.setattr(runner_control, 'read_alias_mapping', lambda *args: ({'parent': None}, tmp_path))
+    monkeypatch.setattr(runner_control, 'require_direct_authority', lambda *args: None)
+    monkeypatch.setattr(runner_control, 'is_session_mapping', lambda mapping: True)
+    monkeypatch.setattr(runner_control, 'discover_runner_directory', lambda cwd: tmp_path)
+    monkeypatch.setattr(runner_control, 'discover_project', lambda *args, **kwargs: None)
+    monkeypatch.setattr(team_replacement, 'completed_task_member', lambda project, mapping: completed)
+    monkeypatch.setattr(team_replacement, 'require_active_session', lambda *args, **kwargs: None)
+    monkeypatch.setattr(runner_control, '_send_session',
+                        lambda *args, reports_only: sent.append(reports_only) or {'send_status': 'sent'})
+    runner_control.continue_member('member', 'Work.', tmp_path)
+    assert sent == [reports_only]
+
+    # The admission check the send reaches refuses ordinary input in a stopped subtree.
+    monkeypatch.setattr(runner_status, 'session_record_directory', lambda runner, alias: tmp_path)
+    (tmp_path / 'stop.yml').write_text('alias: member\n')
+    if reports_only:
+        runner_status.require_execution_allowed(tmp_path, 'member', {'parent': None}, reports_only=True)
+    else:
+        with pytest.raises(RunnerError) as refused:
+            runner_status.require_execution_allowed(tmp_path, 'member', {'parent': None}, reports_only=False)
+        assert refused.value.code == 'subtree-stopped'
+
+
+def test_agents_send_carries_an_explicit_reports_only_request(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """agents send forwards reports_only to the one continuation; nothing else adds it."""
+    import json
+    from agent_swarm import AgentsError
+    from agent_swarm.tool import validate_request
+    from graphtraj.interfaces import agents
+
+    request = json.loads('{"action": "send", "agent": "member", "message": "报告", "reports_only": true}')
+    assert validate_request(request) == ('send', {'agent': 'member', 'message': '报告', 'reports_only': True})
+    for invalid in ({**request, 'reports_only': 'yes'},
+                    {'action': 'resume', 'agent': 'member', 'reports_only': True}):
+        with pytest.raises(AgentsError) as rejected:
+            validate_request(invalid)
+        assert rejected.value.code == 'invalid-input'
+
+    sent = []
+    monkeypatch.setattr(runner_control, 'continue_member',
+                        lambda alias, message, root, **kwargs: sent.append(kwargs) or {'send_status': 'sent'})
+    backend = object.__new__(agents.GraphTrajAgents)
+    backend.root = tmp_path
+    monkeypatch.setattr(backend, '_references', lambda agent: (None, None), raising=False)
+    for arguments in ({'agent': 'member', 'message': 'Work.'}, request):
+        backend._operate('send', arguments)
+    assert sent == [{'reports_only': False}, {'reports_only': True}]
+    with pytest.raises(AgentsError):
+        backend.operate('send', {**request, 'agent': 'agent-core'}, None)
+
+
+def test_agents_reports_only_reaches_a_stopped_member(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An explicit reports-only send is admitted into a stopped subtree that refuses ordinary input."""
+    from graphtraj.execution import runner_status
+    from graphtraj.teams import team_replacement
+
+    sent = []
+    monkeypatch.setattr(runner_control, 'read_alias_mapping', lambda *args: ({'parent': None}, tmp_path))
+    monkeypatch.setattr(runner_control, 'require_direct_authority', lambda *args: None)
+    monkeypatch.setattr(runner_control, 'is_session_mapping', lambda mapping: True)
+    monkeypatch.setattr(runner_control, 'discover_runner_directory', lambda cwd: tmp_path)
+    monkeypatch.setattr(runner_control, 'discover_project', lambda *args, **kwargs: None)
+    monkeypatch.setattr(team_replacement, 'completed_task_member', lambda project, mapping: False)
+    monkeypatch.setattr(team_replacement, 'require_active_session', lambda *args, **kwargs: None)
+    monkeypatch.setattr(runner_status, 'session_record_directory', lambda runner, alias: tmp_path)
+    (tmp_path / 'stop.yml').write_text('alias: member\n')
+
+    def deliver(*args, reports_only):
+        runner_status.require_execution_allowed(tmp_path, 'member', {'parent': None}, reports_only=reports_only)
+        sent.append(reports_only)
+        return {'send_status': 'sent'}
+
+    monkeypatch.setattr(runner_control, '_send_session', deliver)
+    with pytest.raises(RunnerError) as refused:
+        runner_control.continue_member('member', 'Work.', tmp_path)
+    assert refused.value.code == 'subtree-stopped'
+    assert runner_control.continue_member('member', 'Report.', tmp_path, reports_only=True)['send_status'] == 'sent'
+    assert sent == [True]
+
+
+def test_reports_only_send_is_denied_to_a_non_parent(tmp_path: Path) -> None:
+    """reports_only grants no control: only the direct parent may send it."""
+    runner, _, _ = result_project(tmp_path)
+    with runtime_caller(runner, 'research@x2'):
+        with pytest.raises(RunnerError) as denied:
+            runner_control.continue_member('research@x1', 'Report.', tmp_path, reports_only=True)
+        assert denied.value.code == 'authority-denied'

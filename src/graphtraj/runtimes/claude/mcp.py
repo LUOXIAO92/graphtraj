@@ -19,7 +19,7 @@ from agent_swarm.discovery import handle_request as discover_agents
 from agent_swarm.mcp import error_response, respond, result_response, serve as serve_stdio, tool_documents
 from graphtraj.execution.runner_models import RunnerError
 from graphtraj.interfaces.gateway import handle_request, INPUT_SCHEMA
-from graphtraj.interfaces.hosted_cli import forward_request
+from graphtraj.interfaces.hosted_cli import agents_dispatch, forward_request
 from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError, recovery_review
 
 
@@ -72,9 +72,7 @@ def serve(
 
     def dispatch(request: dict) -> AgentsResult:
         """Use the already-bound gateway; never manufacture an anonymous Main."""
-        envelope = {'action': 'execute', 'feature': 'agents', 'arguments': request}
-        answer = forward_request(envelope, cwd)
-        return answer if answer is not None else handle_request(envelope, cwd=cwd)
+        return agents_dispatch(request, cwd)
 
     def call(identity: object, params: dict) -> dict:
         """Return shared discovery or execution without expanding the tool list."""

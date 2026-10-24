@@ -13,10 +13,23 @@ import json
 from pathlib import Path
 import time
 
-from graphtraj.sessions.archive import JsonlSessionStore, SessionArchive, archive_path
-from graphtraj.sessions.protocol import SURFACE_TYPES, append_stream_record
-from graphtraj.runtimes.claude.collection import timestamp
-from graphtraj.runtimes.claude.history import conversation, message_id, read_records
+from agent_swarm.sessions.archive import JsonlSessionStore, SessionArchive, archive_path
+from agent_swarm.sessions.protocol import SURFACE_TYPES, append_stream_record
+from datetime import datetime
+
+def timestamp(record: dict) -> tuple[int, list[dict]]:
+    """Read native ISO time; zero is an explicitly missing protocol placeholder."""
+    value = record.get('timestamp')
+    if isinstance(value, str):
+        try:
+            parsed = datetime.fromisoformat(value.replace('Z', '+00:00'))
+            if parsed.tzinfo is not None:
+                return int(parsed.timestamp() * 1000), []
+        except ValueError:
+            pass
+    return 0, [{
+        'path': 'time', 'reason': 'Native timestamp unavailable; zero is a protocol placeholder.'}]
+from agent_swarm.sessions.claude_history import conversation, message_id, read_records
 
 
 def _events(store: JsonlSessionStore) -> list[dict]:
@@ -64,11 +77,14 @@ class ClaudeJsonlCollector:
         *,
         provider: str = 'anthropic',
         resumed: bool | None = None,
+        child_id: str | None = None,
+        history_count: int | None = None,
     ) -> None:
         """Capture policy without creating files when collection is disabled."""
         self.archive = archive
         self.session = session
-        self.identity = 'claude:' + session
+        self.identity = archive.native_id('claude', session, agent_id=child_id) if archive else 'claude:' + session
+        self.child_id = child_id
         self.agent = agent
         self.cwd = cwd
         self.execution = execution
@@ -77,6 +93,7 @@ class ClaudeJsonlCollector:
         self.cut_known = True
         self.live_ids: set[str] = set()
         self.history_count = 0
+        self.activation_count = history_count
         self.before_bind: list[tuple[dict, int, int]] = []
         self.path: Path | None = None
         self.excluded: set[str] = set()
@@ -102,13 +119,9 @@ class ClaudeJsonlCollector:
             records = []
             self.cut_known = False
         if not self.archive.backfill_history:
-            self.history_count = len(records) if self.resumed is not False else 0
-            try:
-                self.excluded = ({r['uuid'] for r in conversation(records)}
-                                 if self.resumed is not False else set())
-            except (ValueError, KeyError, TypeError):
-                self.excluded = {r['uuid'] for r in records if isinstance(r.get('uuid'), str)}
-                self.cut_known = False
+            self.history_count = (self.activation_count if self.activation_count is not None
+                                  else len(records) if self.resumed is not False else 0)
+            self.excluded = {r['uuid'] for r in records[:self.history_count] if isinstance(r.get('uuid'), str)}
             self.excluded.difference_update(current_inputs or ())
             self.live_ids.update(r['uuid'] for r in records if r.get('uuid') in (current_inputs or ()))
         destination = archive_path(self.archive.root, self.identity)
@@ -129,7 +142,10 @@ class ClaudeJsonlCollector:
                 },
             }
             if parents:
-                self.header['parentSession'] = 'claude:' + next(iter(parents))
+                self.header['parentSession'] = self.archive.native_id('claude', next(iter(parents)))
+        if self.child_id and not destination.exists():
+            self.header['origin'] = 'subagent'
+            self.header['graphtraj']['native'].update(agentId=self.child_id, parentNativeSessionId=self.session)
         self.archive.map_session(self.header)
         self.collect()
         pending, self.before_bind = self.before_bind, []

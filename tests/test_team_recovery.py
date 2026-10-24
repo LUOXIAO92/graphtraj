@@ -1,5 +1,6 @@
 """Explicit recovery preserves actual Sessions and versioned task evidence."""
 
+from conftest import runner_operation
 import json
 import sys
 import time
@@ -76,7 +77,7 @@ def test_explicit_retry_preserves_session_without_automatic_report_gates(
     alias = task['alias']
     directory = root / '.graphtraj/runner/sessions' / alias
     for _ in range(100):
-        result = run_process([str(installed_commands.runner), 'status', alias], cwd=root, env=env)
+        result = run_process(runner_operation(installed_commands, 'status', alias), cwd=root, env=env)
         observed = yaml.safe_load(result.stdout)['aliases'][0]
         if observed['activity'] == 'idle':
             break
@@ -92,9 +93,15 @@ def test_explicit_retry_preserves_session_without_automatic_report_gates(
     assert state['status'] == 'implementing' and state['current_candidate'] is None
     history = [json.loads(line) for shard in sorted((root / '.graphtraj/state/worldline').glob('*.jsonl'))
                for line in shard.read_text().splitlines()]
-    resumed = run_process([str(installed_commands.runner), 'send', alias,
-                           '--instruction', 'Repair the assigned result',
-                           '--caused-by-event-id', history[-1]['event_id']],
+    resumed = run_process(runner_operation(
+        installed_commands,
+        'send',
+        alias,
+        '--instruction',
+        'Repair the assigned result',
+        '--caused-by-event-id',
+        history[-1]['event_id'],
+    ),
                           cwd=root, env=env, timeout=30)
     assert resumed.returncode == 0, resumed.stdout + resumed.stderr
     current = wait_for_idle(installed_commands, root, env, alias)

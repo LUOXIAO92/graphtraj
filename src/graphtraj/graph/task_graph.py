@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from graphtraj.configuration.project_configuration import runner_directory as project_runner_directory
+
 import os
 import re
 import shutil
@@ -206,7 +208,10 @@ def revise_tasks(
                     and revised_budget is not None
                     and revised_budget.revision_reason is None
                 ):
-                    raise ValueError("a revised execution budget requires its reason")
+                    raise ValueError(
+                        "a revised execution budget requires its reason: set "
+                        "execution_budget.revision_reason in the revised body front matter"
+                    )
                 meaningful = meaningful or (
                     (directory / old["current_definition"]).read_text(
                         encoding="utf-8"
@@ -254,7 +259,7 @@ def revise_tasks(
                 from graphtraj.execution.runner_status import caller_alias, require_task_authority
                 from graphtraj.graph.delivery_worldline import read_worldline
 
-                runner = harness_root / ".graphtraj/runner"
+                runner = project_runner_directory(harness_root)
                 if caller_alias(runner) is not None:
                     submissions = [event for event in read_worldline(state, harness_root)
                                    if event["event"] == "result-submitted"
@@ -637,7 +642,7 @@ def complete_task(state: Path, harness_root: Path, request: dict[str, Any]) -> d
     _validate_string_list(request, "caused_by_event_ids", allow_empty=True)
     if not request["reason"].strip():
         raise ValueError("Completion requires the task's own acceptance reason")
-    if caller_alias(harness_root / ".graphtraj/runner") is not None:
+    if caller_alias(project_runner_directory(harness_root)) is not None:
         raise ValueError("Completion without a Team requires the owning top-level caller")
     tasks = state / "tasks"
     if not tasks.is_dir():
@@ -917,7 +922,7 @@ def _write_yaml(path: Path, value: dict[str, Any]) -> None:
     """Write execution facts without duplicating a v2 immutable definition."""
     temporary = path.with_name(".{0}.tmp".format(path.name))
     stored = protocol.execution_record(value) if path.name == "task.yml" else value
-    temporary.write_text(yaml.safe_dump(stored, sort_keys=False), encoding="utf-8")
+    temporary.write_text(yaml.safe_dump(stored, sort_keys=False, allow_unicode=True), encoding="utf-8")
     os.replace(temporary, path)
 
 

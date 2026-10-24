@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from graphtraj.configuration.project_configuration import cli_directory
+from graphtraj.configuration import project_configuration
+
 import os
 import sys
 import hashlib
@@ -15,12 +18,13 @@ from graphtraj.execution.runner_status import process_caller_alias, read_alias_m
 from graphtraj.interfaces.gateway import handle_request
 from graphtraj.interfaces.tools import ToolResult
 from graphtraj.runtimes.runtime_adapter import recovery_review
-from graphtraj.workspace.runner_project import discover_runner_directory
+from graphtraj.workspace.runner_project import discover_project_root, discover_runner_directory
 
 
 CONNECTION_ENV = 'GRAPHTRAJ_CLI_CONNECTION'
 _SERVICE = {'executable': sys.executable, 'module': __file__,
-            'sha256': hashlib.sha256(Path(__file__).read_bytes()).hexdigest()}
+            'sha256': hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
+            'configuration_sha256': hashlib.sha256(Path(project_configuration.__file__).read_bytes()).hexdigest()}
 
 
 def _caller_in_scope(document_cwd: Any, root: Path, runner: Path, alias: str) -> bool:
@@ -69,7 +73,7 @@ def cli_connection(
     """
     runner = discover_runner_directory(root)
     if directory is None:
-        directory = runner.parent / 'cli'
+        directory = cli_directory(root)
     directory.mkdir(parents=True, exist_ok=True)
 
     def authenticate(pid: int) -> None:
@@ -105,6 +109,51 @@ def cli_connection(
 
     with worker_connection(directory, operate, authenticate=authenticate) as address:
         yield address
+
+
+def agents_dispatch(
+    request: Mapping[str, Any], cwd: Path, *, native_context: dict | None = None,
+) -> ToolResult:
+    """Run one ``agents`` action over this process's bound channel, else in this project.
+
+    Both MCP entries and the ``agents`` CLI use this one route, so a Task
+    member's control stays in the host that verifies its caller.
+    """
+    envelope = {'action': 'execute', 'feature': 'agents', 'arguments': dict(request)}
+    answer = forward_request(envelope, cwd, native_context=native_context)
+    return answer if answer is not None else handle_request(envelope, cwd=cwd)
+
+
+def agents_host(cwd: Path) -> Callable[[dict], Any] | None:
+    """Claim the independent ``agents`` CLI only inside GraphTraj (``agent_swarm.hosts`` entry).
+
+    A process bound to a Task channel, or a caller inside a Harness project,
+    uses ``agents_dispatch``; anywhere else the CLI keeps its own owner. The
+    environment only locates the channel; the host still verifies the caller.
+    """
+    if CONNECTION_ENV not in os.environ:
+        try:
+            discover_project_root(cwd)
+        except RunnerError:
+            return None
+
+    def dispatch(request: dict) -> Any:
+        """Report a host rejection in the CLI's own error shape."""
+        from agent_swarm import AgentsError, AgentsResult
+        from graphtraj.configuration.project_configuration import ProjectConfigurationError
+        from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError
+
+        try:
+            result = agents_dispatch(request, cwd)
+        except (RunnerError, RuntimeAdapterError, ProjectConfigurationError) as error:
+            raise AgentsError(getattr(error, 'code', 'operation-failed'), str(error)) from error
+        document = result.document
+        if result.failed and isinstance(document.get('diagnostic'), dict):
+            # Name the entry so a checker can attribute a CLI status failure.
+            document = {**document, 'diagnostic': {**document['diagnostic'], 'entry': 'cli'}}
+        return AgentsResult(document, failed=result.failed)
+
+    return dispatch
 
 
 def forward_cli(feature: str, arguments: dict, cwd: Path) -> ToolResult | None:

@@ -58,8 +58,8 @@ def test_installed_dsh_model_mcp_and_same_session(tmp_path: Path) -> None:
 @pytest.mark.skipif(not os.environ.get('TASK334_DSH_TRACE'), reason='Requires one explicitly retained native trace.')
 def test_retained_official_trace_messages(tmp_path: Path) -> None:
     """Compare the actual native projection and JSONL archive without more turns."""
-    from graphtraj.runtimes.dsh.collection import collect_jsonl
-    from graphtraj.sessions.archive import SessionArchive
+    from agent_swarm.sessions.dsh import collect_jsonl
+    from agent_swarm.sessions.archive import SessionArchive
 
     trace = Path(os.environ['TASK334_DSH_TRACE'])
     header, *events = [json.loads(line) for line in trace.read_text().splitlines()]

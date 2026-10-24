@@ -1,0 +1,8 @@
+- insert:
+  - id: graphtraj
+    name: /tmp/claude-501/k349/venv/lib/python3.13/site-packages/graphtraj/runtimes/dsh/tool.mjs
+  - id: agents-mcp
+    name: /tmp/claude-501/k349/venv/lib/python3.13/site-packages/agent_swarm/dsh/plugin.mjs
+    config:
+      mcpCommand: /tmp/claude-501/k349/venv/bin/graphtraj-mcp
+      mcpArgs: []

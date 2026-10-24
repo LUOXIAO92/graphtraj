@@ -1,0 +1,2 @@
+{"at": 1792835801.339741, "event": {"alias": "canary@k1", "event": "completed", "message": "CANARY-NOTICE-349", "source": "graphtraj"}}
+{"at": 1792835932.040252, "event": {"alias": "canary@k2", "event": "completed", "message": "CANARY-PI-NOTICE-349", "source": "graphtraj"}}

@@ -12,7 +12,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from conftest import FakeCodex, InstalledCommands, run_process, wait_for_file
+from conftest import runner_operation, FakeCodex, InstalledCommands, run_process, wait_for_file
 from test_project_setup import install_user_skills, run_ready_setup as run_setup
 
 
@@ -172,11 +172,11 @@ def engineer_probe(commands, harness, fake_codex, environment, *, body="Probe th
             yield alias, Path(mapping["worktree_path"]), env
         finally:
             if alias:
-                status = run_process([str(commands.runner), "status", alias], cwd=harness, env=env)
+                status = run_process(runner_operation(commands, "status", alias), cwd=harness, env=env)
                 if yaml.safe_load(status.stdout)["aliases"][0].get("activity") == "running":
-                    interrupted = run_process([str(commands.runner), "interrupt", alias], cwd=harness, env=env)
+                    interrupted = run_process(runner_operation(commands, "interrupt", alias), cwd=harness, env=env)
                     if interrupted.returncode:
-                        observed = run_process([str(commands.runner), "status", alias], cwd=harness, env=env)
+                        observed = run_process(runner_operation(commands, "status", alias), cwd=harness, env=env)
                         assert yaml.safe_load(observed.stdout)["aliases"][0].get("activity") == "idle"
             process.wait(timeout=60)
 

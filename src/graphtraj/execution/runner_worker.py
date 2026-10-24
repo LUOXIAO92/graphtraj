@@ -123,10 +123,14 @@ def run(job_file: Path) -> int:
                 raise ValueError("follow-up causes are invalid")
             adapter = select_runtime_adapter(runtime)
 
+            # A report collection resumed into a stopped subtree keeps its
+            # admission; it drives no children and samples no budget.
+            reports_only = operation == "resume" and job.get("reports_only") is True
             startup_lock = execution_start_lock(session_directory.parent.parent)
             try:
                 require_execution_allowed(
                     session_directory.parent.parent, base_mapping["alias"], base_mapping,
+                    reports_only=reports_only,
                 )
             except RunnerError as error:
                 raise RuntimeAdapterError(error.code, error.message, terminal_confirmed=True) from error
@@ -149,12 +153,17 @@ def run(job_file: Path) -> int:
             heartbeat_thread.start()
 
             def record_created(session: str, runtime_pid: int) -> None:
-                """Bind the native Session and register assignment before its first turn."""
-                nonlocal mapping_recorded, execution_mapping, startup_lock
-                startup_lock.close()
-                startup_lock = execution_start_lock(session_directory.parent.parent)
+                """Bind the native Session and register assignment before its first turn.
+
+                This runs while the Runtime waits for its startup hook reply, so
+                it never waits for the project startup lock held by unrelated
+                startups. ``record_session`` rechecks stops once this execution
+                is addressable; see there.
+                """
+                nonlocal mapping_recorded, execution_mapping
                 try:
-                    require_execution_allowed(session_directory.parent.parent, base_mapping["alias"], base_mapping)
+                    require_execution_allowed(session_directory.parent.parent, base_mapping["alias"], base_mapping,
+                                              reports_only=reports_only)
                 except RunnerError as error:
                     raise RuntimeAdapterError(error.code, error.message) from error
                 if operation == "resume" and session != expected_session:
@@ -235,6 +244,16 @@ def run(job_file: Path) -> int:
                 heartbeat["execution_id"] = mapping["execution_id"]
                 write_heartbeat(session_directory, heartbeat)
                 startup_lock.close()
+
+                # A stop publisher writes stop.yml under the startup lock, then
+                # interrupts the mapping it reads. This execution's mapping is
+                # now durable before stop facts are read, so either this check
+                # sees the stop or the publisher interrupts this execution.
+                try:
+                    require_execution_allowed(session_directory.parent.parent, base_mapping["alias"], base_mapping,
+                                              reports_only=reports_only)
+                except RunnerError as error:
+                    raise RuntimeAdapterError(error.code, error.message) from error
 
             if runtime in {'pi', 'dsh'}:
                 from graphtraj.configuration.project_configuration import core_directory
@@ -378,7 +397,8 @@ def _register_created_member(
     Runtime files are protected from Agent writes. In addition to that boundary,
     verify the canonical launch file, persisted native identity and live Worker
     ownership; an Agent's request, role or environment cannot grant this path.
-    The caller holds the existing execution-start lock across this mutation.
+    The caller does not hold the project startup lock; a stop published
+    meanwhile is rechecked before the first turn and refuses the execution.
     """
     from graphtraj.execution.runner_heartbeat import ownership_is_held
     from graphtraj.execution.runner_status import read_alias_mapping

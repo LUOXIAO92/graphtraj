@@ -1,0 +1,63 @@
+{
+  "commit": "d3690abf384ee9720ba6e736013cfa3852e6d228",
+  "baseline": "b36e6eb74e618f8b909ec6b0c106e6584573ad91",
+  "dev": "f0173091aeab108892651a77822de99feacbefad",
+  "source": "/private/tmp/344-e9-stage-d3690ab/source",
+  "site": "/private/tmp/344-e9-stage-d3690ab/venv/lib/python3.13/site-packages",
+  "wheels": [
+    {
+      "path": "/private/tmp/344-e9-stage-d3690ab/wheels/agent_swarm-0.1.0-py3-none-any.whl",
+      "sha256": "b16e6cdda7bf398cc5eac3bf0baef3406ac1b14dcbcccc637c4a1d554973cbb9",
+      "checked_files": 36,
+      "manuals": 0
+    },
+    {
+      "path": "/private/tmp/344-e9-stage-d3690ab/wheels/graphtraj-0.1.0-py3-none-any.whl",
+      "sha256": "9dbb739a4c567c4055277ca2007f564c277ab4a0a872aa39839e76903b01c68c",
+      "checked_files": 142,
+      "manuals": 7
+    }
+  ],
+  "rollback": [
+    {
+      "path": "/private/tmp/344-e9-rollback-b36/wheels/agent_swarm-0.1.0-py3-none-any.whl",
+      "sha256": "8425a01a823cc0da233fb52803fc33f6121a5ea8790aef3b477854c17121d897",
+      "checked_files": 36,
+      "manuals": 0
+    },
+    {
+      "path": "/private/tmp/344-e9-rollback-b36/wheels/graphtraj-0.1.0-py3-none-any.whl",
+      "sha256": "10d504f3b98eaa12900a85b86c00d188322cfc54e42abd5570b205e87cde3444",
+      "checked_files": 142,
+      "manuals": 7
+    }
+  ],
+  "mismatches": [],
+  "dependencies": [
+    {
+      "name": "agent-swarm",
+      "version": "0.1.0"
+    },
+    {
+      "name": "click",
+      "version": "8.5.0"
+    },
+    {
+      "name": "graphtraj",
+      "version": "0.1.0"
+    },
+    {
+      "name": "pip",
+      "version": "25.3"
+    },
+    {
+      "name": "PyYAML",
+      "version": "6.0.3"
+    },
+    {
+      "name": "websockets",
+      "version": "16.1.1"
+    }
+  ],
+  "production_diff": " src/graphtraj/runtimes/claude/execution.py | 9 +++++----\n 1 file changed, 5 insertions(+), 4 deletions(-)\n"
+}

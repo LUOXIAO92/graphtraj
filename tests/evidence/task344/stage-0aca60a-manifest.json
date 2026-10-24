@@ -1,0 +1,70 @@
+{
+  "candidate": {
+    "commit": "0aca60ae9419589897a50c202ca583c6fd845312",
+    "source": "/private/tmp/344-e9-stage-0aca60a/source",
+    "wheels": [
+      {
+        "path": "/private/tmp/344-e9-stage-0aca60a/wheels/agent_swarm-0.1.0-py3-none-any.whl",
+        "sha256": "aab8fc42629fd276ca599256849a1ac109d7afca4a63ea8bf7d7d9455e7023c3",
+        "checked_files": 36,
+        "manuals": 0
+      },
+      {
+        "path": "/private/tmp/344-e9-stage-0aca60a/wheels/graphtraj-0.1.0-py3-none-any.whl",
+        "sha256": "7d2f6789ee6537184bf690bdbf52520b086b8a39e9d1376c36dd054d4317da0a",
+        "checked_files": 142,
+        "manuals": 7
+      }
+    ]
+  },
+  "rollback": {
+    "commit": "ab619ea643f8de25f6b4fe84f168127418816579",
+    "source": "/private/tmp/344-e9-rollback-ab619ea/source",
+    "wheels": [
+      {
+        "path": "/private/tmp/344-e9-rollback-ab619ea/wheels/agent_swarm-0.1.0-py3-none-any.whl",
+        "sha256": "99154e666665f2c87a31e95587b8f4d185d64b394ad78b77339060d50bfba901",
+        "checked_files": 36,
+        "manuals": 0
+      },
+      {
+        "path": "/private/tmp/344-e9-rollback-ab619ea/wheels/graphtraj-0.1.0-py3-none-any.whl",
+        "sha256": "f443d73a75b4a64218987faadfc9e78329d7e5e83f86c66302ddf486c888047a",
+        "checked_files": 142,
+        "manuals": 7
+      }
+    ]
+  },
+  "baseline": "ab619ea643f8de25f6b4fe84f168127418816579",
+  "dev": "f0173091aeab108892651a77822de99feacbefad",
+  "mismatches": [],
+  "site": "/private/tmp/344-e9-stage-0aca60a/venv/lib/python3.13/site-packages",
+  "dependencies": [
+    {
+      "name": "agent-swarm",
+      "version": "0.1.0"
+    },
+    {
+      "name": "click",
+      "version": "8.5.0"
+    },
+    {
+      "name": "graphtraj",
+      "version": "0.1.0"
+    },
+    {
+      "name": "pip",
+      "version": "25.3"
+    },
+    {
+      "name": "PyYAML",
+      "version": "6.0.3"
+    },
+    {
+      "name": "websockets",
+      "version": "16.1.1"
+    }
+  ],
+  "python": "Python 3.13.11",
+  "installed_correspondence": "178 package files and 7 manuals byte-identical to wheels and exact source"
+}

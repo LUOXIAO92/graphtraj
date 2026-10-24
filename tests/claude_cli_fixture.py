@@ -4,6 +4,7 @@ import os
 from pathlib import Path
 import subprocess
 import sys
+import threading
 import time
 import uuid
 from datetime import datetime, timezone
@@ -44,13 +45,15 @@ Path(os.environ['CLAUDE_FIXTURE_HOME'], 'native-permissions.json').write_text(js
     'model': model,
     'effort': args[args.index('--effort') + 1] if '--effort' in args else None,
     'mode': permission_mode, 'settings': json.loads(args[args.index('--settings') + 1]),
-    'restricted': '--restricted' in args,
+    'restricted': '--restricted' in args, 'cwd': os.getcwd(),
+    'add_dirs': [args[i + 1] for i, item in enumerate(args) if item == '--add-dir'],
     'scrub': os.environ.get('CLAUDE_CODE_SUBPROCESS_ENV_SCRUB'),
     'permission_handler': args[args.index('--permission-prompt-tool') + 1],
 }))
 history = Path(os.environ['CLAUDE_FIXTURE_HOME']) / (session + '.json')
 transcript = history.with_suffix('.jsonl')
-parent_uuid = json.loads(transcript.read_text().splitlines()[-1])['uuid'] if transcript.exists() else None
+parent_uuid = os.environ.get('CLAUDE_FIXTURE_PARENT_UUID') or (
+    json.loads(transcript.read_text().splitlines()[-1])['uuid'] if transcript.exists() else None)
 Path(os.environ['CLAUDE_FIXTURE_HOME'], 'native-selection.json').write_text(json.dumps({
     'model': model, 'effort': args[args.index('--effort') + 1] if '--effort' in args else None,
     'environment_effort': os.environ.get('CLAUDE_CODE_EFFORT_LEVEL'),
@@ -59,25 +62,63 @@ messages = json.loads(history.read_text()) if history.exists() else []
 Path(os.environ['CLAUDE_FIXTURE_HOME'], 'native-endpoint.json').write_text(
     json.dumps(os.environ.get('ANTHROPIC_BASE_URL')))
 started = False
+startup_sent = False
+sdk_ready = False
 waiting = []
 merging = []
+absorbing = []
 late = []
 sdk_create_results = []
 sdk_request_arguments = {'action': 'execute', 'feature': 'status', 'arguments': {}}
 sdk_display = False
 sdk_display_reply = None
+# As the real CLI does, a later prompt runs its UserPromptSubmit hook and is
+# dropped when the host does not answer within the hook timeout.
+later_hook_timeout = float(os.environ.get('CLAUDE_FIXTURE_LATER_HOOK_TIMEOUT', '0'))
+prompt_hooks = {}
 
 
-def result(text: str, error: bool = False, queued: int = 0, idle: bool = True) -> None:
+def later_prompt(message: dict) -> None:
+    """Hold a later prompt until the host answers its native hook."""
+    identity = 'prompt-' + str(uuid.uuid4())
+    prompt_hooks[identity] = message
+
+    def expire() -> None:
+        """Drop the prompt as the CLI reports its hook timeout."""
+        if prompt_hooks.pop(identity, None) is not None:
+            with open(os.environ['CLAUDE_FIXTURE_HOOK_LOG'], 'a') as log:
+                log.write(f'UserPromptSubmit hook callback timed out after {int(later_hook_timeout * 1000)}ms\n')
+
+    timer = threading.Timer(later_hook_timeout, expire)
+    timer.daemon = True
+    timer.start()
+    emit({'type': 'control_request', 'request_id': identity, 'request': {
+        'subtype': 'hook_callback', 'callback_id': 'graphtraj_start', 'input': {
+            'hook_event_name': 'UserPromptSubmit', 'session_id': session,
+            'transcript_path': str(transcript), 'prompt': message['message']['content']}}})
+
+
+def write_transcript(record: dict) -> None:
+    """Append one native transcript record that has no stream counterpart."""
+    global parent_uuid
+    if 'uuid' in record:
+        record['parentUuid'] = parent_uuid
+        parent_uuid = record['uuid']
+    with transcript.open('a') as stream:
+        stream.write(json.dumps(record) + '\n')
+
+
+def result(text: str, error: bool = False, queued: int | None = 0, idle: bool = True) -> None:
     """Emit distinct result and quiescence records with native usage."""
     usage = {'input_tokens': 11, 'cache_read_input_tokens': 7,
              'cache_creation_input_tokens': 2, 'output_tokens': 5}
     emit({'type': 'assistant', 'session_id': session, 'message': {
         'role': 'assistant', 'content': [{'type': 'text', 'text': text}], 'usage': usage}})
     emit({'type': 'result', 'session_id': session, 'uuid': str(uuid.uuid4()),
-          'is_error': error, 'result': text, 'queued_turn_count': queued, 'usage': {
+          'is_error': error, 'result': text, 'usage': {
               'input_tokens': 11, 'cache_read_input_tokens': 7,
-              'cache_creation_input_tokens': 2, 'output_tokens': 5}})
+              'cache_creation_input_tokens': 2, 'output_tokens': 5},
+          **({'queued_turn_count': queued} if queued is not None else {})})
     if idle:
         emit({'type': 'system', 'subtype': 'session_state_changed', 'state': 'idle'})
 
@@ -107,6 +148,20 @@ def prompt(message: dict) -> None:
     text = message['message']['content']
     messages.append(text)
     history.write_text(json.dumps(messages))
+    if absorbing:
+        # As a 2.1.302 transcript recorded: input joining a running turn is a
+        # queued_command attachment plus its absorbed_mid_turn queue removal.
+        # Its stream echo and the result's queued-turn count were not retained,
+        # so this peer emits neither.
+        write_transcript({'type': 'queue-operation', 'operation': 'enqueue', 'sessionId': session})
+        write_transcript({'type': 'attachment', 'uuid': str(uuid.uuid4()), 'sessionId': session,
+                          'attachment': {'type': 'queued_command', 'prompt': text,
+                                         'source_uuid': message['uuid'], 'delivery_id': 'delivery-1'}})
+        write_transcript({'type': 'queue-operation', 'operation': 'remove', 'reason': 'absorbed_mid_turn',
+                          'sessionId': session, 'commandUuid': message['uuid'], 'deliveryId': 'delivery-1'})
+        absorbing.clear()
+        result('|'.join(messages), queued=None)
+        return
     emit({'type': 'system', 'subtype': 'session_state_changed', 'state': 'running'})
     if '--replay-user-messages' in args:
         # As observed: the echo is emitted when input joins the running turn.
@@ -124,6 +179,8 @@ def prompt(message: dict) -> None:
         merging.clear()
     elif text in ('merge', 'merge-late'):
         merging.append(text)
+    elif text == 'absorb':
+        absorbing.append(text)
     elif text == 'garbage':
         print('not json secret-token', flush=True)
     elif text == 'permission':
@@ -142,7 +199,7 @@ def prompt(message: dict) -> None:
     elif text == 'mcp':
         command = json.loads(args[args.index('--mcp-config') + 1])['mcpServers']['agents']
         query = {'jsonrpc': '2.0', 'id': 1, 'method': 'tools/call', 'params': {
-            'name': 'tasks', 'arguments': {'action': 'execute', 'feature': 'alias_status', 'arguments': {}}}}
+            'name': 'tasks', 'arguments': {'action': 'execute', 'feature': 'session_reports', 'arguments': {'alias': 'research@x1'}}}}
         response = subprocess.run([command['command'], *command['args']], input=json.dumps(query) + '\n',
                                   text=True, capture_output=True, env={**os.environ, **command['env']})
         result(response.stdout or response.stderr)
@@ -152,10 +209,13 @@ def prompt(message: dict) -> None:
         subprocess.run(['git', '-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.com',
                         'commit', '-m', 'Controlled Claude result'], check=True, capture_output=True)
         commit = subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip()
-        report = tool('submit_report', {'name': 'evidence.md', 'text': 'Controlled process evidence'})
-        submitted = tool('submit_result', {'commit': commit, 'result_refs': ['claude-result.md'],
-                                         'evidence_refs': [report['report']], 'completion': 'Controlled result',
-                                         'unresolved': []})
+        report_request = {'name': 'evidence.md', 'text': 'Controlled process evidence'}
+        report = tool('submit_report', report_request)
+        assert tool('submit_report', report_request) == report
+        submission = {'commit': commit, 'result_refs': ['claude-result.md'],
+                      'evidence_refs': [report['report']], 'completion': 'Controlled result', 'unresolved': []}
+        submitted = tool('submit_result', submission)
+        assert tool('submit_result', submission) == submitted
         result(json.dumps(submitted))
     elif text.startswith('register'):
         # Register one direct helper child, then answer with the tool outcome.
@@ -163,6 +223,15 @@ def prompt(message: dict) -> None:
     elif text.startswith('wait') or (
             os.environ.get('CLAUDE_FIXTURE_HOLD_FILE') and Path(os.environ['CLAUDE_FIXTURE_HOLD_FILE']).exists()
             and 'Direct child execution results' not in text):
+        if text == 'wait-stream':
+            # A long streamed answer the host collects fragment by fragment.
+            emit({'type': 'stream_event', 'session_id': session, 'parent_tool_use_id': None,
+                  'uuid': str(uuid.uuid4()), 'event': {'type': 'message_start', 'message': {
+                      'id': 'api-stream', 'model': model, 'role': 'assistant', 'content': []}}})
+            for _ in range(int(os.environ.get('CLAUDE_FIXTURE_STREAM_FRAGMENTS', '0'))):
+                emit({'type': 'stream_event', 'session_id': session, 'parent_tool_use_id': None,
+                      'uuid': str(uuid.uuid4()), 'event': {'type': 'content_block_delta', 'index': 0,
+                                                           'delta': {'type': 'text_delta', 'text': 'x'}}})
         waiting.append(text)
     else:
         while waiting:
@@ -172,8 +241,36 @@ def prompt(message: dict) -> None:
                else '|'.join(messages), text == 'provider-error')
 
 
+def hold_start_lock() -> None:
+    """Let another process hold the project startup lock across the startup hook."""
+    lock = os.environ.get('CLAUDE_FIXTURE_START_LOCK')
+    if not lock:
+        return
+    ready = Path(lock + '.held')
+    subprocess.Popen([sys.executable, '-c', (
+        'import fcntl,sys,time\n'
+        'stream = open(sys.argv[1], "a+b")\n'
+        'fcntl.flock(stream, fcntl.LOCK_EX)\n'
+        'open(sys.argv[1] + ".held", "w").close()\n'
+        'time.sleep(float(sys.argv[2]))\n'), lock, os.environ['CLAUDE_FIXTURE_START_LOCK_SECONDS']],
+        start_new_session=True)
+    deadline = time.monotonic() + 10
+    while not ready.exists() and time.monotonic() < deadline:
+        time.sleep(0.01)
+
+
 def startup() -> None:
     """Attest the native Session after completing any SDK tool handshake."""
+    global hook_sent
+    hold_start_lock()
+    gate = os.environ.get('CLAUDE_FIXTURE_HOOK_GATE')
+    if gate:
+        # Let the test publish a stop after process start but before the hook.
+        Path(gate + '.waiting').touch()
+        deadline = time.monotonic() + 60
+        while not Path(gate).exists() and time.monotonic() < deadline:
+            time.sleep(0.01)
+    hook_sent = time.monotonic()
     emit({'type': 'control_request', 'request_id': 'startup', 'request': {
         'subtype': 'hook_callback', 'callback_id': 'graphtraj_start', 'input': {
             'hook_event_name': 'UserPromptSubmit', 'session_id': session,
@@ -184,6 +281,18 @@ for line in sys.stdin:
     event = json.loads(line)
     if event['type'] == 'control_request':
         request = event['request']
+        if request['subtype'] == 'apply_flag_settings':
+            if os.environ.get('CLAUDE_FIXTURE_REJECT_RESOURCES'):
+                emit({'type': 'control_response', 'response': {
+                    'subtype': 'error', 'request_id': event['request_id'],
+                    'error': 'Exact resource settings refused by native peer.',
+                }})
+                continue
+            path = Path(os.environ['CLAUDE_FIXTURE_HOME'], 'native-permissions.json')
+            observed = json.loads(path.read_text())
+            observed['settings'].update(request['settings'])
+            observed['resource_update_before_prompt'] = not messages
+            path.write_text(json.dumps(observed))
         initialized = {'hooks_applied': True}
         if os.environ.get('CLAUDE_FIXTURE_DIAGNOSTICS'):
             initialized.update(autoModeAvailable=False, permissionMode='default',
@@ -198,7 +307,7 @@ for line in sys.stdin:
                         'jsonrpc': '2.0', 'id': 10, 'method': 'initialize',
                         'params': {'protocolVersion': '2025-06-18'}}}})
             else:
-                startup()
+                sdk_ready = True
         elif request['subtype'] == 'interrupt':
             if os.environ.get('CLAUDE_FIXTURE_ESCAPED_PIPE'):
                 # A tool child outside the owned group keeps stdout open until
@@ -216,16 +325,24 @@ for line in sys.stdin:
             result('interrupted')
     elif event['type'] == 'control_response':
         response = event['response']
-        if response['request_id'] == 'sdk-initialize':
+        held = prompt_hooks.pop(response['request_id'], None)
+        if held is not None:
+            prompt(held)
+        elif response['request_id'].startswith('prompt-'):
+            pass  # Answered after the CLI dropped the prompt.
+        elif response['request_id'] == 'sdk-initialize':
             assert response['response']['mcp_response']['result']['protocolVersion'] == '2025-06-18'
             emit({'type': 'control_request', 'request_id': 'sdk-initial-tools', 'request': {
                 'subtype': 'mcp_message', 'server_name': 'agents',
                 'message': {'jsonrpc': '2.0', 'id': 11, 'method': 'tools/list'}}})
         elif response['request_id'] == 'sdk-initial-tools':
             assert response['response']['mcp_response']['result']['tools'][0]['name'] == 'agents'
-            startup()
+            sdk_ready = True
         elif response['request_id'] == 'startup':
             started = True
+            if os.environ.get('CLAUDE_FIXTURE_HOOK_LOG'):
+                with open(os.environ['CLAUDE_FIXTURE_HOOK_LOG'], 'a') as log:
+                    log.write(f'{time.monotonic() - hook_sent}\n')
             init = {'type': 'system', 'subtype': 'init', 'session_id': session, 'model': model}
             if sdk_servers:
                 init['tools'] = ['mcp__agents__agents']
@@ -278,10 +395,19 @@ for line in sys.stdin:
         # it must not execute it until the host releases that hook.
         if not started:
             waiting.append(event)
+        elif later_hook_timeout:
+            later_prompt(event)
         else:
             prompt(event)
+    # UserPromptSubmit belongs to an actual prompt, not initialize. This also
+    # keeps readiness behind the initial prompt when settings are applied first.
+    if waiting and sdk_ready and not startup_sent:
+        startup_sent = True
+        startup()
     if started and waiting and isinstance(waiting[0], dict):
         prompt(waiting.pop(0))
+if os.environ.get('CLAUDE_FIXTURE_EOF_FILE'):
+    Path(os.environ['CLAUDE_FIXTURE_EOF_FILE']).touch()
 if os.environ.get('CLAUDE_FIXTURE_HOLD_ON_EOF'):
     # A CLI still inside its turn outlives stdin closure until signalled.
     time.sleep(60)

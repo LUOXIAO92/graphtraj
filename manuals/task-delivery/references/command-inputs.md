@@ -1,11 +1,32 @@
-# Delivery command inputs
+# Delivery operation inputs
 
-Use block-style YAML for Task command inputs. Read current Task state before
-updating it; commands validate and persist the supplied decisions.
+Use MCP `agents` / `tasks`, following the delivery guide. Describe the selected
+feature with `schema: true`, then execute with structured arguments. The
+installed schema determines supported fields. Agent communication and execution
+belong to `agents`; Task policy, participation and delivery belong to `tasks`.
+An installed duplicate control route is a defect, not an ownership rule. Read
+current Task state before updates. CLI examples below apply only when that
+MCP entry is unavailable or failing; use block-style YAML for fallback files.
+
+| Outcome | MCP feature |
+| --- | --- |
+| Register / inspect / revise Tasks | `task_register` / `task_graph` / `task_revise` |
+| Record readiness / complete a non-file Task | `task_update` / `task_complete` |
+| Dispatch Task participation | `tasks`: `swarm` |
+| Communicate / observe Agent hierarchy | `agents`: `send` / `status` |
+| Wait / interrupt / resume / retire Agents | Discover the needed `agents` feature |
+| Handle native Agent permission requests | `agents`: `requests` / `reply` |
+| Deliver / read reports | `submit_report` / `session_reports` |
+| Submit / decide a result | `submit_result` / `decide_result` |
+| Repair Task authorization / accounting | Discover the needed `tasks` recovery feature; Agent execution remains in `agents` |
+| Integrate / clean up | `task_integrate` / `cleanup` |
+
+Discover migration and host-maintenance capabilities when needed. An absent MCP
+feature can justify its public CLI fallback; other operations still use MCP.
 
 ## Register a missing Task
 
-Run `graphtraj task register --task-file <task.yml>` with:
+Execute MCP `task_register` with:
 
 - `task_id`: stable Task ID.
 - `task_name`: Task name.
@@ -20,7 +41,7 @@ Run `graphtraj task register --task-file <task.yml>` with:
   Superseded tasks name their direct replacements and reason; cancelled tasks
   have a reason and no replacements. Both retain their parent.
 
-Read `graphtraj task graph --schema` for the common task projection schema.
+Describe MCP `task_graph` for the common task projection schema.
 The default graph expands open work in the caller's Task, or the whole project
 for Main, and folds completed history into summaries. Use `--view full` to list
 all Tasks, `--task-id <id>` to select another scope, or `--details <id>` to include
@@ -57,7 +78,7 @@ leave the old data usable rather than inventing parents or treating them as root
 
 ## Record readiness
 
-Run `graphtraj task update --state-file <state.yml>` for a selected pending
+Execute MCP `task_update` for a selected pending
 Task whose prerequisites have validated integration. Supply:
 
 - `task_id` and `status: ready`.
@@ -67,7 +88,7 @@ Task whose prerequisites have validated integration. Supply:
 
 ## Revise the graph
 
-Run `graphtraj task revise --revision-file <revision.yml>` with:
+Execute MCP `task_revise` with:
 
 - `product_preserving: true`.
 - `caused_by_event_ids` and Harness-root-relative `evidence_refs`.
@@ -77,6 +98,19 @@ Run `graphtraj task revise --revision-file <revision.yml>` with:
 - `reopen_task_ids`: explicitly include completed tasks and affected ancestors
   that must reopen when required work or relationships change.
 - Optional `dry_run: true` (or CLI `--dry-run`) validates without writing.
+- A changed `execution_budget` states its reason as
+  `execution_budget.revision_reason` in that task's `body` front matter;
+  without it the revision is rejected:
+
+  ```yaml
+  ---
+  execution_budget:
+    estimated_minutes:
+      total: 105
+    revision_reason: 45 minutes moved to Task 343 by the recorded decision.
+    # remaining existing budget fields unchanged
+  ---
+  ```
 
 Include definitions whose relationships change and evidence for parentage,
 retirement and scope changes. A stale definition fails instead of overwriting
@@ -85,8 +119,7 @@ original definitions and delivery history.
 
 ## Complete a task without a file result
 
-Use `graphtraj task complete --completion-file <completion.yml>` (Tool/MCP
-`task_complete`) for an active v2 task with its own accepted outcome and no
+Use MCP `task_complete` for an active v2 task with its own accepted outcome and no
 file-delivery history. Supply `task_id`, observed `current_definition`, a
 nonempty `reason`, `caused_by_event_ids`, existing `evidence_refs`, and
 `cancelled_scope`: a map of each required cancelled task ID to the reason that
@@ -99,7 +132,8 @@ acceptance and integration below; `complete` cannot replace those steps.
 
 ## Submit and decide a result
 
-The executing Session commits its file results, then records the exact version:
+The executing Session commits its file results, then uses MCP `submit_result`
+to record the exact version. CLI fallback:
 
 ```text
 agent-runner submit-result --commit <commit> --result-ref <result-path> --completion <statement> [--evidence-ref <evidence-path>] [--unresolved <remaining-work>]
@@ -111,15 +145,17 @@ For versioned results, `result_refs` must name files or directories present in
 the submitted commit. Put retained reports, test logs and installation evidence
 in `evidence_refs`; a report stored outside Git is not a committed result path.
 
-Within a managed Session, use the public CLI through the host connection prepared
-by the Runner. The host verifies the caller and applies the same operation and
-authority checks as the native tool. This does not permit direct access to
+Within a managed Session, use MCP with its prepared caller context. If that
+entry is unavailable or fails, the public CLI must use the host connection
+prepared by the Runner. Both paths verify the same caller and authority.
+This does not permit direct access to
 private control records or caller-selected identity. A refused or broken prepared
 connection must not fall back to executing the operation with broader authority.
 Installing a new CLI alone does not establish adoption by an existing Session;
 use supported Runner preparation and verify an actual call in that Session.
 
-The authorized caller assesses that submitted version and records its decision:
+The authorized caller assesses that version and uses MCP `decide_result`
+to record its decision. CLI fallback:
 
 ```text
 agent-runner decide-result --submission-id <submission-event> --commit <commit> --decision accepted|rejected --reason <reason> --evidence-ref <evidence-path>
@@ -132,7 +168,7 @@ its authorized owner, not inferred text or direct state-file edits.
 
 ## Observe the owning host
 
-From a bound root Agent, `agent-runner parent-status` reads its recorded host
+From a bound root Agent, MCP `parent_status` reads its recorded host
 parent's activity and latest turn metadata once. The shared `parent_status`
 operation takes `timeout_seconds`, defaulting to zero. A finite positive value,
 also available as CLI `--timeout-seconds`, waits for native idle events up to
@@ -144,14 +180,15 @@ use this operation to choose another Session to observe.
 
 ## Approved recovery
 
-Use the alias of the original Session with the exact repair reason, permitted
-work and continuation instruction:
+Use MCP `approved_recovery` with the original Session alias, exact repair
+reason, permitted work and continuation instruction. CLI fallback:
 
 ```text
-agent-runner recover <alias> --reason <reason> --instruction <continuation> --allowed-scope <allowed-work> --forbidden-scope <excluded-work> --caused-by-event-id <actual-authority-event> [--additional-minutes <increment>] [--restore-active] [--no-resume]
+agent-runner recover <alias> --reason <reason> --instruction <continuation> --allowed-scope <allowed-work> --forbidden-scope <excluded-work> --caused-by-event-ids '["<actual-authority-event>"]' [--additional-minutes <increment>] [--restore-active] [--no-resume]
 ```
 
-Repeat `--caused-by-event-id` for additional actual causal references. The
+`--caused-by-event-ids` takes one JSON array of strings, such as
+`'["event-a", "event-b"]'`, for all actual causal references. The
 shared `approved_recovery` operation uses `alias`, `reason`, `instruction`,
 `allowed_scope`, `forbidden_scope`, `caused_by_event_ids`, optional
 `additional_minutes`, `restore_active` and `resume` with the same semantics.
@@ -194,6 +231,8 @@ for retained history, native rejection and changed-state handling.
 
 ## Integrate accepted files
 
+Use MCP `task_integrate`. CLI fallback:
+
 ```text
 graphtraj task integrate --task-id <id> -- <validation-command> <arguments>
 ```
@@ -205,7 +244,7 @@ adopting the result. Keep the original argv and causal/stop history; it is not a
 shortcut for missing acceptance or failed validation. Use `--resolve-conflict`
 only for an actual conflict requiring a specialist.
 
-After successful integration use `agent-runner cleanup --task-id <id>` and
+After successful integration use MCP `cleanup` with the Task ID and
 regenerate the task graph. These operations retain the original task evidence.
 
 For a retained integration conflict, select the permitted role explicitly:
@@ -216,7 +255,7 @@ graphtraj task integrate --task-id <id> --resolve-conflict '<diagnosis>' --role 
 
 `--role` also accepts the same inline YAML role definition as swarm. The role's
 configured instructions, Skills, reports and access apply. The selected member
-commits and submits its result, its actual parent uses `decide-result`, and the
+commits and submits its result, its actual parent uses MCP `decide_result`, and the
 integrator repeats the original validation command to complete integration. A
 Session's final message cannot accept a result.
 

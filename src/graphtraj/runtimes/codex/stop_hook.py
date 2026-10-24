@@ -13,7 +13,7 @@ import yaml
 
 from graphtraj.execution.main_finalize import bind_session, check_main_finalize, session_binding
 from graphtraj.runtimes.codex.session_entry import (
-    event_record, session_source, is_bound_checker, owns_native_root,
+    NativeInputError, event_record, session_source, is_bound_checker, owns_native_root,
 )
 
 
@@ -71,7 +71,11 @@ def native_event(event: dict, project_root: Path | None = None) -> dict:
         _archive(root, session, event['transcript_path'])
         return {}
     if name == 'SessionStart':
-        bind_session(connection, root, activity_source=event.get('transcript_path'))
+        # Startup, resume and clear are new Main entries; compaction continues
+        # the same entry and never takes control back from a later Main.
+        native = event.get('source') or 'unknown'
+        bind_session(connection, root, activity_source=event.get('transcript_path'),
+                     entry=None if native == 'compact' else f'codex:SessionStart:{native}')
         _archive(root, session, event['transcript_path'], new_session=event.get('source') == 'startup')
         return {'systemMessage': 'GraphTraj Main Session associated.'}
     if not binding.is_file():
@@ -120,16 +124,20 @@ def _archive(root: Path, session: str, transcript: str, *, new_session: bool = F
         size = source.stat().st_size
         activation = 0 if new_session else size
         if saved is not None:
-            if saved['session'] != session or saved['rollout'] != str(source):
+            if saved['session'] != session:
                 raise ValueError('Native archive boundary no longer matches the bound Session.')
             if saved['enabled'] and archive.save_normalized_sessions:
-                activation = saved['activation']
+                # A new physical rollout of the same Session (the collector
+                # still verifies its session_meta) continues the archived
+                # history from its first byte.
+                activation = saved['activation'] if saved['rollout'] == str(source) else 0
         collector = CodexJsonlArchive(archive, 'main', session, source)
         collector.activation = activation
         collector.collect(source)
         write_yaml_durably(boundary, {
             'session': session, 'rollout': str(source), 'activation': activation,
             'enabled': archive.save_normalized_sessions,
+            'project_session': collector.id if archive.save_normalized_sessions else None,
         })
 
 
@@ -161,8 +169,13 @@ def main(
 
         click.echo(json.dumps(hook(Path(), {}), ensure_ascii=False))
         return
+    event = None
     try:
-        event = json.load(sys.stdin)
+        raw = sys.stdin.read()
+        try:
+            event = json.loads(raw)
+        except json.JSONDecodeError as error:
+            raise NativeInputError(f'Codex hook stdin ({len(raw)} characters) is not a lifecycle event JSON: {error}') from None
         if not isinstance(event, dict):
             raise ValueError('Invalid native lifecycle event.')
         if binding is None:
@@ -182,6 +195,17 @@ def main(
         raise SystemExit(130)
     except Exception as error:
         from graphtraj.runtimes.codex.finalize import response
+
+        name = event.get('hook_event_name') if isinstance(event, dict) else None
+        if isinstance(error, NativeInputError) and name in {'SessionStart', 'SessionEnd'}:
+            # Unreadable input is not a completion verdict. Codex stops the
+            # pending user turn on continue=false, so report it without
+            # consuming input. Identity refusals and an event whose kind is
+            # unknown still stop; the next Stop checks or reports its own failure.
+            label = f"{name} ({event.get('source') or 'unknown source'})"
+            click.echo(json.dumps({'systemMessage': f'GraphTraj {label} input failed: {error}'},
+                                  ensure_ascii=False))
+            return
         from graphtraj.runtimes.runtime_adapter import CheckUsage
 
         result = response({'status': 'error', 'reason': f'Completion hook failed: {error}',

@@ -7,9 +7,12 @@ is not failed work; normal tool, watchdog and approval waits are not failures.
 
 Keep one existing execution. Send changed instructions through its live channel;
 after an actual failure ends execution, use the supported public continuation
-operation with the causal event. Public `agent-runner status` supplies summaries;
-`reports` exposes only directly owned reports. Apply the project's shared polling
-limit. A send acknowledgement is not completion. Never wake a second Driver to
+operation with the causal event. MCP `agents` supplies Agent status and control;
+`tasks` supplies Task participation and delivery state. An installed legacy
+Task control route is a defect, not a second supported Agent interface.
+`session_reports` exposes only directly owned reports. Follow the delivery
+guide's MCP-first rule; CLI examples below are fallback syntax only. Apply the
+project's shared polling limit. A send acknowledgement is not completion. Never wake a second Driver to
 collect status or fill a missing report.
 
 Preserve the candidate, author-attributed reports, original inputs, Session and
@@ -31,7 +34,7 @@ reset project-specific validation limits or expand the task's budget.
 
 ## Recover with the selected reviewer
 
-Use `agent-runner recover <alias>` or the shared `approved_recovery` operation
+Use MCP `approved_recovery`
 to perform one concrete repair and continuation of the original Session. Supply
 the reason, continuation instruction, allowed and forbidden scope, and actual
 causal event IDs. Include `additional_minutes` only for the time increment
@@ -53,7 +56,7 @@ A retained retired alias can request a positive Task budget increment with
 `--no-resume` and without `--restore-active`. The same reviewer and caller
 authority checks apply. Approval changes only the retained budget; it neither
 restarts Sessions nor reverses retirement. Main can then separately use
-`continue --task-id <id> --budget-only --caused-by-event-id <recovery_event_id>`
+`continue --task-id <id> --budget-only --caused-by-event-ids '["<recovery_event_id>"]'`
 and ordinary swarm dispatch with explicit first instructions for a new member.
 Original accounting, stops and identities remain retained.
 
@@ -65,10 +68,20 @@ or invoke a second apply command. A rejected or failed review leaves the
 unapproved repair unapplied. Causal references and caller-supplied claims are
 not approval tokens.
 
+For a direct Codex MCP client advertising form elicitation, `approved_recovery`
+requests sensitive, synchronous native automatic review through that same
+connection. It keeps the original call pending and requires the matching
+`auto_review` response before applying the repair. Refusal, cancellation,
+disconnect or an unavailable reviewer applies nothing. There is no separate
+approval token or apply command. Reload the adopted MCP server through the
+host's normal path before using new server behavior; changing disk files alone
+does not update an already running server.
+
 For Codex, configured HTTP review uses the existing `codex.approval` settings,
 including role overrides. Managed Codex executions configured for human review
 use the existing pending request and reply channel. Plain CLI calls require
-the selected HTTP route; other local hosts must bind an actual selected reviewer.
+the selected HTTP route; forwarded managed calls retain their owner's reviewer
+binding, and other local hosts must bind an actual selected reviewer.
 A host-bound reviewer must actually be available; selecting a
 native reviewer without a callable host route does not grant approval. HTTP
 review is not evidence that Codex's native automatic reviewer ran. Do not
@@ -122,7 +135,7 @@ For a sampled stop that needs no additional administrative or time repair, the
 existing narrow continuation after actual authorization remains:
 
 ```text
-agent-runner continue --task-id <id> --caused-by-event-id <authorization-or-decision-event>
+agent-runner continue --task-id <id> --caused-by-event-ids '["<authorization-or-decision-event>"]'
 ```
 
 The default resumes existing roots with a generic continuation message. A revised
@@ -147,17 +160,18 @@ candidate and unchanged validation through the public integration entry as
 specified in [command inputs](command-inputs.md).
 
 Where execution permission still admits the Session,
-`agent-runner send <alias> --reports-only` can collect retained reports using an
-explicit instruction and causal event. It grants no implementation window and
+Read retained reports through the public report operation without waking the
+Agent. If a new message is necessary, use `agents` within existing authority.
+Report collection grants no implementation window and
 does not bypass a manual subtree stop. Use the selected Runtime's actual notification channel and report a delivery failure through the caller.
 
 ## Return an accepted artifact to integration after recovery
 
 When authorized recovery work leaves the committed artifact unchanged, the
 original executing Session can write its new verification evidence and use
-`submit-result` with the same commit. Its actual parent accepts that new
-submission ID with `decide-result`, then the accepted result can be integrated
-through `graphtraj task integrate`. The original submission and acceptance
+MCP `submit_result` with the same commit. Its actual parent accepts that new
+submission ID with MCP `decide_result`, then the accepted result can be integrated
+through MCP `task_integrate`. The original submission and acceptance
 remain historical facts. Do not decide the old submission a second time or
 manufacture an empty commit, a rejection or another Round to change the state.
 A new submission describes completed recovery work; it does not waive its
@@ -192,9 +206,9 @@ An interrupted or failed execution alone is not retirement.
 When the caller's relationship requires approval, the public retirement
 operation obtains the selected Runtime review and executes only after approval.
 Callers do not run an internal Python bridge or supply an approval flag. A
-refusal or review error leaves that retirement unapplied. Cleanup and replacement
-use the same retirement operation and retain completed steps if a later step
-fails; retry through their public entries without reviving retired members.
+refusal or review error leaves that retirement unapplied. Replacement uses the
+same retirement operation and retains completed steps if a later step fails;
+retry through its public entry without reviving retired members.
 
 Ask the direct child to stop when possible; interrupt an out-of-control
 descendant subtree through Runner when needed. That control exception does not
@@ -207,8 +221,15 @@ A replacement root retains the original owning host's notification connection.
 Replacement composes retirement and the existing role registration operation.
 If registration fails after retirement, handle the reported partial outcome
 through the public retry path; do not resume the retired Agent or claim that
-replacement succeeded. Task cleanup uses the same retirement operation before
-removing an unused Worktree and branch.
+replacement succeeded.
+
+Task cleanup is separate from Agent retirement. After validated integration,
+it removes the clean Task Worktree and merged branch, moves unstarted allocations
+into their retained Traces, and returns started members as `standby_aliases`.
+Their identities and native Sessions remain available for continuation.
+Retire a member separately only when its removal is authorized. A later
+reports-only continuation uses the original Session and recreates its recorded
+cwd when needed; this empty directory does not restore removed source files.
 
 If that root has no recorded connection, replacement uses the caller's existing
 host binding or the Runtime's actual host context when available. The replacement

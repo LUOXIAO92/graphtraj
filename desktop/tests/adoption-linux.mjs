@@ -29,7 +29,9 @@ const userData = path.join(root, 'preferences');
 
 /** Compare the public Session identity after each GUI lifecycle boundary. */
 function runningTask(project) {
-  const status = fixtures.operate(project, 'alias_status', { aliases: [process.env.ADOPTION_AGENT_ALIAS] });
+  const status = fixtures.operate(project, 'agents', {
+    action: 'status', agent: process.env.ADOPTION_AGENT_ALIAS,
+  }).result;
   const task = status.aliases[0];
   assert.equal(task.activity, 'running', 'The controlled Runner task must remain active');
   return { session: task.session, execution_id: task.execution_id };

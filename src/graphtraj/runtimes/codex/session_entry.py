@@ -7,6 +7,8 @@ import asyncio
 from pathlib import Path
 from typing import Any
 
+from agent_swarm.sessions.codex import NativeInputError, rollout_record
+
 
 def session_record(path: Path, turn: str | None = None) -> tuple[dict, dict]:
     """Read identity and the requested turn settings from a native rollout.
@@ -17,9 +19,19 @@ def session_record(path: Path, turn: str | None = None) -> tuple[dict, dict]:
     metadata: dict[str, Any] = {}
     context: dict[str, Any] = {}
     current_turn = None
-    with path.open(encoding='utf-8') as stream:
-        for line in stream:
-            record = json.loads(line)
+    try:
+        stream = path.open('rb')
+    except OSError as error:
+        raise NativeInputError(f'Codex rollout {path} cannot be read: {error}') from error
+    with stream:
+        while True:
+            offset = stream.tell()
+            line = stream.readline()
+            if not line.endswith(b'\n'):
+                # Codex may still be appending its final record; only complete
+                # lines are native records, as in the archive collector.
+                break
+            record = rollout_record(line, path, offset)
             payload = record.get('payload', {})
             if record.get('type') == 'session_meta' and not metadata:
                 # Copied forks retain ancestral metadata after their own first

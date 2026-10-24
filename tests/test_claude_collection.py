@@ -32,7 +32,7 @@ def query(root: Path, identity: str) -> dict:
 def test_native_hook_resume_child_and_portable_archive(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Parent and child sources stay separate; replay and missing source preserve history."""
     result_project(tmp_path)
-    monkeypatch.setattr('graphtraj.sessions.query.caller_runtime', lambda: None)
+    monkeypatch.setattr('graphtraj.execution.runner_status.caller_runtime', lambda: None)
     parent = tmp_path / 'parent.jsonl'
     child = tmp_path / 'child.jsonl'
     message = {'type': 'assistant', 'sessionId': 'parent', 'uuid': 'm',
@@ -67,7 +67,7 @@ def test_native_hook_resume_child_and_portable_archive(tmp_path: Path, monkeypat
 def test_transcript_incomplete_tail_and_wrong_source(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Partial source records replay; a child transcript cannot become a root source."""
     result_project(tmp_path)
-    monkeypatch.setattr('graphtraj.sessions.query.caller_runtime', lambda: None)
+    monkeypatch.setattr('graphtraj.execution.runner_status.caller_runtime', lambda: None)
     path = tmp_path / 'native.jsonl'
     line = json.dumps({'type': 'user', 'sessionId': 's', 'message': {'content': 'hello'}})
     path.write_text(line)
@@ -121,7 +121,7 @@ def test_stream_fragment_compaction_unknown_boundaries_and_interrupt(tmp_path: P
 def test_true_fork_retains_prefix_without_agent_parent(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Only explicit native fork provenance creates parentSession and seed cut."""
     result_project(tmp_path)
-    monkeypatch.setattr('graphtraj.sessions.query.caller_runtime', lambda: None)
+    monkeypatch.setattr('graphtraj.execution.runner_status.caller_runtime', lambda: None)
     path = tmp_path / 'fork.jsonl'
     inherited = {'type': 'user', 'sessionId': 'fork', 'uuid': 'new-message',
                  'forkedFrom': {'sessionId': 'original', 'messageUuid': 'old-message'},
@@ -218,9 +218,11 @@ def test_attachment_bytes_and_child_query_scope(tmp_path: Path, monkeypatch: pyt
     mapping = yaml.safe_load(mapping_path.read_text())
     mapping.update(runtime='claude', session='native')
     mapping_path.write_text(yaml.safe_dump(mapping))
-    with runtime_caller(runner, 'research@x1'), pytest.raises(RunnerError, match='own verified'):
-        handle_request({'action': 'execute', 'feature': 'session_read',
-                        'arguments': {'session_id': result['session_id']}}, cwd=tmp_path)
+    # A child Session is project history; another member reads it under its own identity.
+    with runtime_caller(runner, 'research@x1'):
+        read = handle_request({'action': 'execute', 'feature': 'session_read',
+                               'arguments': {'session_id': result['session_id']}}, cwd=tmp_path)
+        assert read.document['header']['id'] == result['session_id']
 
 
 def test_claude_command_hook_output(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -245,7 +247,7 @@ def test_claude_command_hook_output(tmp_path: Path, monkeypatch: pytest.MonkeyPa
 def test_late_fork_and_interleaved_metadata(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, initial: str) -> None:
     """Late ancestry publishes the true inherited prefix before every local hook."""
     result_project(tmp_path)
-    monkeypatch.setattr('graphtraj.sessions.query.caller_runtime', lambda: None)
+    monkeypatch.setattr('graphtraj.execution.runner_status.caller_runtime', lambda: None)
     path = tmp_path / 'late.jsonl'
     inherited = {'type': 'user', 'sessionId': 'late', 'uuid': 'first',
                  'forkedFrom': {'sessionId': 'parent', 'messageUuid': 'old-first'},
@@ -324,7 +326,7 @@ def test_stream_model_is_observed_not_requested(tmp_path: Path, observed: str | 
 def test_unknown_fork_stays_pending_after_terminal_and_source_loss(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """A fork hint without actual parent proof never manufactures ancestry."""
     result_project(tmp_path)
-    monkeypatch.setattr('graphtraj.sessions.query.caller_runtime', lambda: None)
+    monkeypatch.setattr('graphtraj.execution.runner_status.caller_runtime', lambda: None)
     path = tmp_path / 'unknown.jsonl'
     record = {'type': 'user', 'sessionId': 'unknown', 'message': {'content': 'local'}}
     path.write_text(json.dumps(record) + '\n')

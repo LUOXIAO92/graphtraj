@@ -766,7 +766,7 @@ def test_whole_check_usage_excludes_inheritance_and_repeated_records(host: tuple
     usage = yaml.safe_load(next(binding.parent.glob('checks/*/execution.yml')).read_text())['usage']
     assert usage == {'input_tokens': 400, 'cached_input_tokens': 240, 'cache_hit_ratio': 0.6,
                      'output_tokens': 30, 'reasoning_tokens': 5, 'tool_calls': 3,
-                     'model_requests': None}
+                     'model_requests': None, 'largest_request_input_tokens': None}
     assert 'Input 400' in result['systemMessage']
     assert 'Cached 240 (60.0%)' in result['systemMessage']
     assert 'Output 30 (Reasoning 5)' in result['systemMessage']
@@ -799,7 +799,8 @@ def test_partial_and_zero_usage(
     result = stop(binding)
     usage = yaml.safe_load(next(binding.parent.glob('checks/*/execution.yml')).read_text())['usage']
     default = {key: None for key in ('input_tokens', 'cached_input_tokens', 'output_tokens',
-                                    'reasoning_tokens', 'model_requests', 'cache_hit_ratio')}
+                                    'reasoning_tokens', 'model_requests', 'cache_hit_ratio',
+                                    'largest_request_input_tokens')}
     assert usage == {**default, 'tool_calls': 0, **expected}
     assert 'Reviewer Usage · This Check' in result['systemMessage']
 
@@ -915,6 +916,30 @@ def test_native_start_resume_and_stop_need_no_main_binding_input(host: tuple[Pat
     assert any(native_record(event).get('method') == 'thread/items/list' for event in events)
 
 
+def test_codex_entries_continue_main_but_compaction_does_not(host: tuple[Path, Path]) -> None:
+    """A real start/resume claims the project's Main; compaction and Stop do not."""
+    from graphtraj.execution.main_continuity import claims
+
+    root, binding = host
+    binding.unlink()
+    runner = root / '.graphtraj/runner'
+    options = root / 'options.json'
+    options.write_text(json.dumps({**json.loads(options.read_text()), 'read_id_from_request': True}))
+    rollout(root, session='first-main')
+    started = native_hook(root, 'SessionStart', source='startup')
+    assert 'associated' in started.get('systemMessage', ''), started
+    rollout(root, session='second-main')
+    assert native_hook(root, 'SessionStart', source='startup')['systemMessage']
+    rollout(root, session='first-main')
+    assert native_hook(root, 'SessionStart', source='compact')['systemMessage']
+    assert [(item['session'], item['entry']) for item in claims(runner)] == [
+        ('first-main', 'codex:SessionStart:startup'), ('second-main', 'codex:SessionStart:startup'),
+    ]
+    assert native_hook(root, 'SessionStart', source='resume')['systemMessage']
+    assert claims(runner)[-1]['session'] == 'first-main'
+    assert claims(runner)[-1]['previous'] == {'runtime': 'codex', 'session': 'second-main'}
+
+
 def test_native_start_selects_harness_for_external_cwd(
     host: tuple[Path, Path], tmp_path_factory: pytest.TempPathFactory,
 ) -> None:
@@ -958,6 +983,47 @@ def test_native_session_end_archives_terminal_tail_without_checking(host: tuple[
     assert (root / 'wire.jsonl').read_bytes() == before
     store = JsonlSessionStore(archive_path(swarm_root(root), 'codex:main'))
     assert native_record(store.page()['events'][-1]) == terminal
+
+
+def test_stop_checks_after_the_session_moves_to_a_new_rollout(host: tuple[Path, Path]) -> None:
+    """A reverted Codex Session continues in a new file; Stop still checks and archives it.
+
+    The first file's byte cursor lands inside a record of the new file, which
+    used to fail every later Stop with a bare JSON decode error.
+    """
+    from agent_swarm import write_config
+    from agent_swarm.sessions.protocol import native_record
+
+    root, binding = host
+    binding.unlink()
+    write_config(swarm_root(root), save_normalized_sessions=True, backfill_history=False)
+    rollout(root)
+    first = (root / 'rollout.jsonl').read_text()
+    assert native_hook(root, 'SessionStart', source='startup')['systemMessage']
+
+    moved = root / 'rollout-moved.jsonl'
+    meta  = {'type': 'session_meta', 'payload': {'id': 'main', 'source': 'cli', 'base_instructions': 'x' * 400}}
+    turn  = {'type': 'turn_context', 'payload': {'turn_id': 'main-turn', 'model': 'actual-model', 'effort': 'high'}}
+    moved.write_text(json.dumps(meta) + '\n' + json.dumps(turn) + '\n')
+    assert len(first) < len(json.dumps(meta))
+    result = native_hook(root, transcript_path=str(moved))
+    assert 'Completion Check · completed' in result['systemMessage'], result
+    assert yaml.safe_load(binding.read_text())['activity']['trace_file'] == str(moved.resolve())
+
+    # The following hook reads only the new file's unseen records.
+    done = {'type': 'event_msg', 'payload': {'type': 'task_complete', 'turn_id': 'main-turn'}}
+    with moved.open('a') as stream:
+        stream.write(json.dumps(done) + '\n')
+    assert native_hook(root, 'SessionEnd', transcript_path=str(moved)) == {}
+    from agent_swarm.sessions.archive import SessionArchive
+
+    archive = SessionArchive(swarm_root(root))
+    store = JsonlSessionStore(archive_path(archive.root, archive.native_id('codex', 'main')))
+    assert store.header['graphtraj']['previousSession'] == 'codex:main'
+    assert [native_record(event) for event in store.page()['events']] == [meta, turn, done]
+    original = JsonlSessionStore(archive_path(archive.root, 'codex:main'))
+    assert [native_record(event) for event in original.page()['events']] == [
+        json.loads(line) for line in first.splitlines()]
 
 
 def test_external_hook_remembers_saving_boundary_across_invocations(host: tuple[Path, Path]) -> None:
@@ -1040,6 +1106,22 @@ def test_unknown_source_and_stale_event_leave_main_unchanged(host: tuple[Path, P
     assert binding.read_bytes() == original
 
 
+@pytest.mark.parametrize('source', ['startup', 'compact'])
+def test_unreadable_start_input_is_visible_without_stopping_the_turn(host: tuple[Path, Path], source: str) -> None:
+    """Unreadable rollout bytes at SessionStart name their source; Stop still stops on them."""
+    root, binding = host
+    original = binding.read_bytes()
+    (root / 'rollout.jsonl').write_text('not json\n')
+    result = native_hook(root, 'SessionStart', source=source)
+    assert set(result) == {'systemMessage'}
+    assert f'SessionStart ({source}) input failed: Codex rollout' in result['systemMessage']
+    assert 'at byte 0' in result['systemMessage']
+    (root / 'rollout.jsonl').unlink()
+    assert 'cannot be read' in native_hook(root, 'SessionStart', source=source)['systemMessage']
+    assert native_hook(root)['continue'] is False
+    assert binding.read_bytes() == original
+
+
 def test_native_checker_and_changed_turn_do_not_recurse(host: tuple[Path, Path]) -> None:
     """Creation-time checker ownership wins even when Codex fork source is root."""
     root, binding = host
@@ -1075,10 +1157,11 @@ def test_registered_pathless_checker_start_does_not_stop_inference(host: tuple[P
 
 @pytest.mark.parametrize('connection_fails', [False, True])
 def test_external_checker_cli_identity_needs_metadata_not_rollout(
-    host: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch, connection_fails: bool,
+    host: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture,
+    connection_fails: bool,
 ) -> None:
-    """The real CLI verifies its native thread before any target lookup, without history."""
-    from graphtraj.interfaces.cli.agent_runner import main as runner_cli
+    """The real agents CLI verifies its native thread before any target lookup, without history."""
+    from agent_swarm.cli import main as agents_cli
     from graphtraj.runtimes import runtime_adapter
     from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError
 
@@ -1097,10 +1180,15 @@ def test_external_checker_cli_identity_needs_metadata_not_rollout(
                                       'Codex WebSocket Upgrade failed: Connection lost')
         monkeypatch.setattr(finalize, 'proxy', failed_proxy)
     monkeypatch.chdir(root)
-    reply = CliRunner().invoke(runner_cli, ['status', 'requested-current-alias'])
-    assert reply.exit_code == 1
+    monkeypatch.delenv('AGENT_SWARM_CONNECTION', raising=False)
+    monkeypatch.setattr(sys, 'argv', ['agents', json.dumps({
+        'action': 'execute', 'feature': 'status', 'arguments': {'agent': 'requested-current-alias'},
+    })])
+    with pytest.raises(SystemExit) as exited:
+        agents_cli()
+    assert exited.value.code == 1
     # CLI keeps its structured stdout separate from any human stderr detail.
-    document = yaml.safe_load(reply.stdout)
+    document = json.loads(capsys.readouterr().out)
     if connection_fails:
         assert document['diagnostic'] == {
             'feature': 'alias_status', 'stage': 'caller_identity', 'entry': 'cli',
@@ -1110,8 +1198,9 @@ def test_external_checker_cli_identity_needs_metadata_not_rollout(
         assert 'Connection lost' in document['error']['message']
         assert 'aliases' not in document  # No target was queried or classified.
     else:
-        assert document['aliases'][0]['alias'] == 'requested-current-alias'
-        assert document['aliases'][0]['error']['code'] == 'alias-not-found'
+        aliases = document['result']['aliases']
+        assert aliases[0]['alias'] == 'requested-current-alias'
+        assert aliases[0]['error']['code'] == 'alias-not-found'
         wire = [json.loads(line) for line in (root / 'wire.jsonl').read_text().splitlines()]
         assert any(message.get('method') == 'thread/read' and message['params'] == {
             'threadId': 'checker', 'includeTurns': False,
@@ -1119,13 +1208,14 @@ def test_external_checker_cli_identity_needs_metadata_not_rollout(
 
 
 def test_checker_retains_only_structured_cli_status_failure(host: tuple[Path, Path]) -> None:
-    """Existing canonical command output carries bounded next-call error evidence."""
+    """The agents CLI's result document carries bounded next-call error evidence."""
     root, binding = host
-    output = yaml.safe_dump({
+    output = json.dumps({
+        'action': 'status',
         'error': {'code': 'operation-failed', 'message': 'private transport details'},
         'diagnostic': {'entry': 'cli', 'feature': 'alias_status', 'stage': 'caller_identity',
                        'requested_aliases': ['current-target']},
-    }, sort_keys=False)
+    }) + '\n'
     (root / 'options.json').write_text(json.dumps({'notifications': [{
         'method': 'item/completed', 'params': {'threadId': 'checker', 'turnId': 'check-turn',
             'item': {'id': 'status-command', 'type': 'commandExecution',
@@ -1317,7 +1407,7 @@ def test_fork_without_baseline_does_not_guess_request_increments(host: tuple[Pat
     assert evidence['usage'] == {
         'input_tokens': None, 'cached_input_tokens': None, 'output_tokens': None,
         'reasoning_tokens': None, 'model_requests': None, 'cache_hit_ratio': None,
-        'tool_calls': 2,
+        'tool_calls': 2, 'largest_request_input_tokens': None,
     }
     assert 'unknown' in result['systemMessage']
 
@@ -1355,6 +1445,7 @@ def test_pathless_fork_retains_first_response_and_unique_usage(host: tuple[Path,
     assert evidence['usage'] == {
         'input_tokens': 400, 'cached_input_tokens': 320, 'output_tokens': 30,
         'reasoning_tokens': 5, 'tool_calls': 1, 'model_requests': 2, 'cache_hit_ratio': 0.8,
+        'largest_request_input_tokens': 300,
     }
     responses = evidence['response_usage']
     assert responses['first_response'] == responses['responses'][0]
@@ -1428,7 +1519,10 @@ def test_pathless_public_usage_without_raw_subscription(
     usage = evidence['usage']
     assert usage['input_tokens'] == (None if missing_final_usage else 400)
     assert usage['cached_input_tokens'] == (None if missing_final_usage else 240)
-    assert usage['model_requests'] is None and usage['tool_calls'] == 1
+    # Public updates count as requests only when they account for the whole input.
+    assert usage['model_requests'] == (None if missing_final_usage else 2)
+    assert usage['largest_request_input_tokens'] == (None if missing_final_usage else 300)
+    assert usage['tool_calls'] == 1
     facts = evidence['response_usage']
     assert facts['responses'] == [] and facts['first_response'] is None
     assert facts['first_usage_update']['input_tokens'] == 100
@@ -1716,23 +1810,36 @@ CHECKER_WORKSPACE = {'sandbox': {'type': 'workspaceWrite', 'writableRoots': [], 
                      'activePermissionProfile': {'id': 'graphtraj_checker', 'extends': ':workspace'}}
 
 
-def test_checker_profile_enables_managed_network_on_main_profile(host: tuple[Path, Path]) -> None:
+@pytest.mark.parametrize('parent_profile', [':workspace', 'task345_validation'])
+def test_checker_profile_enables_managed_network_on_main_profile(
+    host: tuple[Path, Path], parent_profile: str,
+) -> None:
     """The fork extends Main's profile with managed network and Main's socket entry."""
     root, binding = host
     (root / 'options.json').write_text(json.dumps({
-        'configuration': MAIN_WORKSPACE, 'fork_configuration': CHECKER_WORKSPACE,
+        'configuration': {**MAIN_WORKSPACE, 'activePermissionProfile': {'id': parent_profile, 'extends': ':workspace' if not parent_profile.startswith(':') else None}},
+        'fork_configuration': {**CHECKER_WORKSPACE, 'activePermissionProfile': {
+            'id': 'graphtraj_checker', 'extends': parent_profile}},
     }))
     assert 'Completion Check · completed' in stop(binding)['systemMessage']
     wire = [json.loads(line) for line in (root / 'wire.jsonl').read_text().splitlines()]
     fork = next(message['params'] for message in wire if message['method'] == 'thread/fork')
     assert fork['permissions'] == 'graphtraj_checker' and 'sandbox' not in fork
     socket = os.path.realpath(root / 'app-server-control' / 'app-server-control.sock')
-    assert fork['config']['permissions'] == {'graphtraj_checker': {
-        'extends': ':workspace', 'network': {'enabled': True, 'unix_sockets': {socket: 'allow'}},
-    }}
+    assert fork['config']['permissions.graphtraj_checker'] == {
+        'extends': parent_profile, 'network': {'enabled': True, 'unix_sockets': {socket: 'allow'}},
+    }
+    # Apply the native dotted override to a profile set with a protected parent.
+    profiles = {parent_profile: {'filesystem': {'/protected': 'deny'}}}
+    for key, value in fork['config'].items():
+        if key == 'permissions':
+            profiles = value
+        elif key.startswith('permissions.'):
+            profiles[key.removeprefix('permissions.')] = value
+    assert profiles[parent_profile]['filesystem']['/protected'] == 'deny'
     evidence = yaml.safe_load(next(binding.parent.glob('checks/*/execution.yml')).read_text())
     assert evidence['authorized_difference'] == {
-        'permission_profile': {'id': 'graphtraj_checker', 'extends': ':workspace'},
+        'permission_profile': {'id': 'graphtraj_checker', 'extends': parent_profile},
         'unix_socket': socket, 'network_access': {'main': False, 'checker': True},
     }
 
@@ -1880,6 +1987,17 @@ def test_check_usage_summary_groups_large_counters() -> None:
     assert 'Tools 6' in summary
     assert '\n' not in summary
     assert 'reasoning_tokens' not in summary and 'cache_hit_ratio' not in summary
+
+
+def test_check_usage_summary_separates_total_and_single_request_input() -> None:
+    """Total input over several requests is never read as one context size."""
+    summary = CheckUsage(input_tokens=1058228, cached_input_tokens=1052032, output_tokens=984,
+                         reasoning_tokens=643, tool_calls=1, model_requests=4,
+                         largest_request_input_tokens=266876).summary()
+    assert 'Input 1,058,228 total' in summary
+    assert 'Requests 4 (largest input 266,876)' in summary
+    assert 'Requests unknown (largest input unknown)' in CheckUsage(input_tokens=5).summary()
+    assert 'Requests 0 ·' in CheckUsage(0, 0, 0, 0, 0, 0).summary()
 
 
 def test_check_usage_summary_keeps_unknowns_unknown() -> None:
@@ -2264,7 +2382,7 @@ def test_execution_activity_invalidates_waiting_without_task_or_input_change(
 
 
 def test_continued_flag_reuses_but_new_turn_still_checks(host: tuple[Path, Path]) -> None:
-    """Carrier reentry alone reuses a release; a real later native turn still checks."""
+    """Carrier reentry alone reuses a release; a later turn with user input still checks."""
     root, _ = host
     rollout(root)
     assert native_hook(root)['systemMessage']
@@ -2274,6 +2392,9 @@ def test_continued_flag_reuses_but_new_turn_still_checks(host: tuple[Path, Path]
     with (root / 'rollout.jsonl').open('a') as stream:
         stream.write(json.dumps({'type': 'turn_context', 'payload': {
             'turn_id': 'next-main-turn', 'model': 'actual-model', 'effort': 'high',
+        }}) + '\n')
+        stream.write(json.dumps({'type': 'event_msg', 'payload': {
+            'type': 'user_message', 'message': 'Next request.',
         }}) + '\n')
     (root / 'options.json').write_text(json.dumps({'child': 'next-checker', 'current_turn': 'next-main-turn'}))
     assert native_hook(root, turn_id='next-main-turn')['systemMessage']
@@ -2325,6 +2446,135 @@ def test_waiting_new_input_still_checks(host: tuple[Path, Path], kind: str) -> N
                                        'output': 'A new actionable result.'})
     next_waiting_turn(root, 'next', {'type': 'response_item', 'payload': payload})
     assert native_hook(root, turn_id='next')['systemMessage']
+    assert wire(root).count('thread/fork') == wire(root).count('turn/start') == 2
+
+
+def member_notice(event: str) -> dict:
+    """Return the record Codex writes for one GraphTraj notice that started a Main turn."""
+    return {'type': 'response_item', 'payload': {
+        'type': 'function_call_output', 'id': 'fco-' + event, 'name': 'graphtraj',
+        'output': json.dumps({'source': 'graphtraj', 'alias': 'research@x1', 'event': event,
+                              'message': 'Submitted report leader.md for its direct parent to handle.'}),
+    }}
+
+
+def notice_turn(root: Path, turn: str, *records: dict, access: str | None = None) -> None:
+    """Start a native turn the way Codex records it, then append its items."""
+    with (root / 'rollout.jsonl').open('a') as stream:
+        stream.write(json.dumps({'type': 'turn_context', 'payload': {
+            'turn_id': turn, 'root_turn_id': turn, 'model': 'actual-model', 'effort': 'high',
+            'cyber_access_program': access,
+        }}) + '\n')
+        for record in records:
+            stream.write(json.dumps(record) + '\n')
+    (root / 'options.json').write_text(json.dumps({
+        'child': 'checker-' + turn, 'current_turn': turn, 'output': json.dumps({
+            'status': 'waiting', 'conclusion': 'May wait.', 'reason': 'The user asked for one operation.',
+            'nodes': ['148'],
+        }),
+    }))
+
+
+EMPTY_ANSWER = {'type': 'response_item', 'payload': {
+    'type': 'message', 'role': 'assistant', 'content': [{'type': 'output_text', 'text': ''}],
+}}
+
+
+@pytest.mark.parametrize('status', ['waiting', 'completed'])
+def test_member_notice_reuses_an_unchanged_release(host: tuple[Path, Path], status: str) -> None:
+    """Notice turns that change no fact reuse the release; real changes still check."""
+    from graphtraj.graph.delivery_worldline import append_project_worldline_event, read_worldline
+    from test_generic_members import _register_research_team
+
+    root, _ = host
+    configuration = root / '.graphtraj/config.yml'
+    document = yaml.safe_load(configuration.read_text())
+    document['paths']['state'] = 'state'
+    configuration.write_text(yaml.safe_dump(document))
+    _register_research_team(root, multiple=False)
+    rollout(root)
+    activity = {'activity': 'idle', 'last_outcome': 'completed'}
+    mapping = root / '.graphtraj/runner/sessions/research@x1/mapping.yml'
+    with owned_child(root, [], alias='research@x1', task_id='148', activity=activity):
+        notice_turn(root, 'user-turn', {'type': 'event_msg', 'payload': {
+            'type': 'user_message', 'message': 'Only apply the approved extension.',
+        }}, access='standard')
+        options = json.loads((root / 'options.json').read_text())
+        options['output'] = json.dumps({**json.loads(options['output']), 'status': status})
+        (root / 'options.json').write_text(json.dumps(options))
+        assert status in native_hook(root, turn_id='user-turn')['systemMessage']
+        for turn in ('notice-one', 'notice-two'):
+            # The member ran again and ended the same way; only its execution changed.
+            document = yaml.safe_load(mapping.read_text())
+            mapping.write_text(yaml.safe_dump({**document, 'execution_id': turn}))
+            notice_turn(root, turn, member_notice('report-submitted'), EMPTY_ANSWER,
+                        member_notice('completed'), EMPTY_ANSWER)
+            assert native_hook(root, turn_id=turn) == {}
+        assert wire(root).count('thread/fork') == wire(root).count('turn/start') == 1
+
+        # A member that is running again changes what Main can do.
+        activity.update(activity='running')
+        notice_turn(root, 'member-running', member_notice('report-submitted'))
+        assert 'waiting' in native_hook(root, turn_id='member-running')['systemMessage']
+        assert wire(root).count('thread/fork') == wire(root).count('turn/start') == 2
+
+        # The user resuming work is new input, never hidden behind a notice.
+        notice_turn(root, 'user-resume', member_notice('completed'), {'type': 'event_msg', 'payload': {
+            'type': 'user_message', 'message': 'Continue the work.',
+        }}, access='standard')
+        assert 'waiting' in native_hook(root, turn_id='user-resume')['systemMessage']
+        assert wire(root).count('thread/fork') == wire(root).count('turn/start') == 3
+
+        # A new formal result continues the same Main without any checker.
+        state = root / 'state'
+        append_project_worldline_event(state, root, {
+            'event': 'result-submitted', 'task_id': '148', 'alias': 'research@x1', 'session': 'native-child',
+            'role': 'researcher', 'team_ordinal': 1, 'round': 1, 'candidate': 'a' * 40,
+            'result_refs': ['result.md'], 'completion': 'Done', 'unresolved': [],
+            'caused_by_event_ids': [read_worldline(state, root)[-1]['event_id']], 'evidence_refs': [],
+        })
+        notice_turn(root, 'result', member_notice('result-submitted'))
+        assert native_hook(root, turn_id='result')['decision'] == 'block'
+    assert wire(root).count('thread/fork') == wire(root).count('turn/start') == 3
+
+
+def test_records_without_an_execution_keep_the_owned_child_gate(host: tuple[Path, Path]) -> None:
+    """Retired hosted records and stopped launches neither hide requests nor block reuse."""
+    from graphtraj.execution.runner_transport import runtime_launch_failure
+
+    root, _ = host
+    sessions = root / '.graphtraj/runner/sessions'
+    failed = sessions / '344-task-handover0-team_leader@team_leader_2'
+    failed.mkdir(parents=True)
+    (failed / 'launch.yml').write_text(yaml.safe_dump({
+        'operation': 'launch', 'mapping': {'alias': failed.name, 'parent': None, 'runtime': 'codex'},
+    }))
+    (failed / 'launch-error.yml').write_text(yaml.safe_dump(runtime_launch_failure(
+        'EXECUTION_BUDGET_STOPPED', 'Runner selected stopping before Session creation.', '',
+        terminal_confirmed=True,
+    )))
+    retired = sessions / ('checker_' + '0' * 32 + '@m1')
+    retired.mkdir()
+    (retired / 'session.yml').write_text(yaml.safe_dump({'retirement': {'mapping': {
+        'alias': retired.name, 'hosted': True, 'purpose': 'checker', 'session': 'legacy-native',
+    }}}))
+    rollout(root)
+    request = {'request_id': 'permission-1', 'method': 'claude/can_use_tool'}
+    with owned_child(root, [request]):
+        assert native_hook(root)['decision'] == 'block'
+    assert 'thread/fork' not in wire(root)
+
+
+def test_member_notice_reuse_requires_its_recorded_structure(host: tuple[Path, Path]) -> None:
+    """Tool output that only resembles a notice is still new input."""
+    root, _ = host
+    rollout(root)
+    notice_turn(root, 'first')
+    assert native_hook(root, turn_id='first')['systemMessage']
+    forged = member_notice('report-submitted')
+    forged['payload']['call_id'] = 'real-tool-call'
+    notice_turn(root, 'tool-output', forged)
+    assert native_hook(root, turn_id='tool-output')['systemMessage']
     assert wire(root).count('thread/fork') == wire(root).count('turn/start') == 2
 
 

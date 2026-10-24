@@ -46,10 +46,16 @@ from graphtraj.execution.runner_status import (
     read_terminal_outcome,
     read_execution_result,
     require_direct_authority,
+    require_project_reader,
+    project_redact,
     session_occupied,
     require_descendant_authority,
     require_execution_allowed,
+    read_retired_legacy_hosted_mapping,
+    session_record_directory,
     _recorded_sessions,
+    caller_alias,
+    _terminal_unestablished_launch,
 )
 from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError
 
@@ -95,8 +101,11 @@ def notify_direct_parent(
     The delivery record: ``parent``, the acknowledged ``parent_session`` and
     ``parent_execution_id``, and ``delivery`` - ``received``,
     ``not-delivered`` with the observed activity or error, or
-    ``no-direct-parent``. The same record is appended to
-    ``parent-notices.jsonl`` in the notifying Session directory.
+    ``no-direct-parent``. ``received`` means the parent's input channel took
+    the notice; ``input`` says whether a resumed parent turn started on it or
+    it is only queued in a running execution, which a later turn consumes.
+    The same record is appended to ``parent-notices.jsonl`` in the notifying
+    Session directory.
     """
     record: Dict[str, Any] = {
         "at": time.time(), "notice": notice, "parent": None,
@@ -155,9 +164,16 @@ def notify_direct_parent(
                 "delivery": "received",
                 "parent_session": receipt["session"],
                 "parent_execution_id": receipt["execution_id"],
+                # A running parent only queued the input; its turn taking it
+                # up is not confirmed here. Otherwise a resumed turn bound it.
+                "input": (
+                    "queued-in-running-execution"
+                    if receipt["execution_id"] == parent_mapping.get("execution_id")
+                    else "started-parent-turn"
+                ),
             })
         elif mapping.get("parent_connection") is not None:
-            address = mapping["parent_connection"]
+            address = _current_main_address(runner_directory, mapping["parent_connection"])
             record["parent_connection"] = address
             # Once the parent's host takes the notice, await its own receipt:
             # a late receipt must not make retries forward the notice twice.
@@ -194,7 +210,8 @@ def deliver_execution_end(
     }, ensure_ascii=False)
     identity = {'type': terminal['outcome'], 'session': mapping['session'],
                 'execution_id': mapping.get('execution_id')}
-    if terminal['outcome'] == 'completed' and not parent_input and receipt_is_display_only(mapping):
+    if (terminal['outcome'] == 'completed' and not parent_input
+            and receipt_is_display_only(mapping, session_directory.parent.parent)):
         return retain_parent_receipt(session_directory, notice, identity)
     return deliver_parent_event(session_directory, notice, identity)
 
@@ -216,7 +233,8 @@ def retain_parent_receipt(
                               "event": identity["type"], "message": notice}, ensure_ascii=False),
     }
     if record["parent"] is None and mapping.get("parent_connection") is not None:
-        record["parent_connection"] = mapping["parent_connection"]
+        record["parent_connection"] = _current_main_address(
+            session_directory.parent.parent, mapping["parent_connection"])
     try:
         _append_notice_record(session_directory, record)
     except OSError:
@@ -224,15 +242,28 @@ def retain_parent_receipt(
     return record
 
 
-def receipt_is_display_only(mapping: Mapping[str, Any]) -> bool:
+def _current_main_address(runner_directory: Path, address: str | dict) -> str | dict:
+    """Deliver a root's notice to the Main now continuing its recorded Main.
+
+    The member's recorded ``parent_connection`` is never rewritten.
+    """
+    from graphtraj.execution.main_continuity import route_notice
+
+    return dict(route_notice(runner_directory, address)) if isinstance(address, dict) else address
+
+
+def receipt_is_display_only(mapping: Mapping[str, Any], runner_directory: Path) -> bool:
     """Whether an ordinary receipt to this Session's parent can be kept unsent.
 
     A Runner member parent sees it in the records and a Codex Main host shows
-    it at its next hook. Other hosts keep their current delivery.
+    it at its next hook. Other hosts keep their current delivery. A root's
+    receipt follows the Main now continuing it (``runner_directory``).
     """
     if isinstance(mapping.get("parent"), str):
         return True
     connection = mapping.get("parent_connection")
+    if isinstance(connection, Mapping):
+        connection = _current_main_address(runner_directory, dict(connection))
     return isinstance(connection, Mapping) and connection.get("runtime") == "codex"
 
 
@@ -325,7 +356,7 @@ def owned_root_undecided_results(harness_root: Path, connection: Mapping[str, An
     -------
     Each owned Session mapping with its undecided ``result-submitted`` event.
     """
-    from graphtraj.graph.delivery_state import read_team
+    from graphtraj.graph.delivery_state import RESULT_DECISION_EVENTS, read_team
     from graphtraj.graph.delivery_worldline import read_worldline
     from graphtraj.graph.task_graph import _load_states
 
@@ -334,7 +365,7 @@ def owned_root_undecided_results(harness_root: Path, connection: Mapping[str, An
         return []
     configuration = load_project_configuration(harness_root)
     events = read_worldline(configuration.state, configuration.harness_root)
-    decided = {event['submission_id'] for event in events if 'submission_id' in event}
+    decided = {event['submission_id'] for event in events if event['event'] in RESULT_DECISION_EVENTS}
     tasks = _load_states(configuration.state / 'tasks')
     undecided = []
     for alias, mapping in roots:
@@ -354,16 +385,22 @@ def owned_root_undecided_results(harness_root: Path, connection: Mapping[str, An
 def _owned_roots(runner_directory: Path, connection: Mapping[str, Any]) -> list[tuple[str, dict]]:
     """Return the top-level Sessions whose recorded native owner is ``connection``.
 
-    Ownership follows ``is_direct_owner``; any unreadable record raises.
+    Ownership follows ``is_direct_owner``; the current Main also continues
+    roots of earlier Main Sessions. Any other unreadable record raises. A
+    retired hosted record or a launch that stopped before creating its Session
+    has no execution, request or result, so it is not unreadable evidence.
     """
+    from graphtraj.execution.main_continuity import owns_main_root
+
     records, failures = _recorded_sessions(runner_directory)
-    if failures:
-        raise failures[0][1]
+    for alias, error in failures:
+        if (read_retired_legacy_hosted_mapping(runner_directory, alias) is None
+                and not _terminal_unestablished_launch(session_record_directory(runner_directory, alias))):
+            raise error
     return [
         (alias, mapping) for alias, mapping in sorted(records.items())
         if mapping.get('parent') is None and isinstance(mapping.get('parent_connection'), dict)
-        and all(mapping['parent_connection'].get(key) == connection.get(key)
-                for key in ('runtime', 'session', 'codex_home'))
+        and owns_main_root(runner_directory, mapping['parent_connection'], connection)
     ]
 
 
@@ -405,24 +442,20 @@ def send_instruction(
     *,
     reports_only: bool = False,
 ) -> Dict[str, str]:
-    """Steer an active execution or continue an idle mapped Session.
+    """Continue a Task member Session under GraphTraj's causal recording policy.
 
-    ``reports_only`` selects report collection: the Session is resumed to
-    return evidence it already holds, so it starts no new work and samples no
-    stopping check. The default keeps a continuation under budget control.
+    GraphTraj delivery requires the causing Project Worldline events before it
+    calls the same continuation ``agents send`` uses, then records them with
+    the follow-up. ``reports_only`` selects report collection: the Session is
+    resumed to return evidence it already holds, so it starts no new work and
+    samples no stopping check.
     """
 
-    if not instruction.strip():
-        raise RunnerError(
-            "invalid-input", "instruction must be non-empty plain text."
-        )
-    # Recording the causing Worldline events is GraphTraj's continuation
-    # policy for Task member Sessions; ordinary Agents use agents send.
     if not caused_by_event_ids:
         raise RunnerError(
             "invalid-input",
-            "Continuing a Task member Session requires at least one causal Project "
-            "Worldline event ID; ordinary Agents use agents send without one.",
+            "GraphTraj delivery continuation requires at least one causal Project "
+            "Worldline event ID; plain messages use agents send without one.",
         )
     if (
         len(caused_by_event_ids) != len(set(caused_by_event_ids))
@@ -431,11 +464,33 @@ def send_instruction(
         raise RunnerError(
             "invalid-input", "causal Project Worldline event IDs must be unique."
         )
+    _require_project_events(cwd, caused_by_event_ids)
+    return continue_member(alias, instruction, cwd, caused_by_event_ids, reports_only=reports_only)
+
+
+def continue_member(
+    alias: str,
+    instruction: str,
+    cwd: Path,
+    caused_by_event_ids: tuple[str, ...] = (),
+    *,
+    reports_only: bool = False,
+) -> Dict[str, str]:
+    """Steer an active execution or continue an idle mapped Session.
+
+    This is the one native continuation for Task member Sessions; ``agents``
+    calls it with no causes. The recorded direct parent alone may continue
+    it, in the same native Session.
+    """
+
+    if not instruction.strip():
+        raise RunnerError(
+            "invalid-input", "instruction must be non-empty plain text."
+        )
     runner_directory = discover_runner_directory(cwd)
     mapping, session_directory = read_alias_mapping(runner_directory, alias)
     require_direct_authority(runner_directory, alias, mapping)
     if is_session_mapping(mapping):
-        _require_project_events(cwd, caused_by_event_ids)
         from graphtraj.teams.team_replacement import completed_task_member, require_active_session
 
         project = discover_project(cwd, require_clean_integration=False)
@@ -443,6 +498,8 @@ def send_instruction(
         # reopening Task work, budget or its accepted result.
         reports_only = reports_only or completed_task_member(project, mapping)
         require_active_session(project, alias, reports_only=reports_only)
+        with execution_start_lock(runner_directory):
+            _continue_after_parent_interrupt(session_directory, alias, runner_directory)
         return _send_session(
             alias,
             instruction,
@@ -453,6 +510,34 @@ def send_instruction(
             reports_only=reports_only,
         )
     raise _not_resumable()
+
+
+def _continue_after_parent_interrupt(session_directory: Path, alias: str, runner_directory: Path) -> None:
+    """Lift only the verified direct parent's own ordinary interrupt of this Session.
+
+    The caller holds the execution startup lock; the send that follows
+    re-checks admission under it. A stop written by anyone
+    else, one without an interrupt origin (Runner recovery, replacement or an
+    abnormal-session answer), an ancestor's stop and a stop whose interrupted
+    execution still runs all remain. The execution budget is separate and
+    unaffected.
+    """
+    stop_file = session_directory / "stop.yml"
+    if stop_file.is_symlink() or not stop_file.is_file():
+        return
+    record = yaml.safe_load(stop_file.read_text())
+    if (not isinstance(record, dict) or record.get("alias") != alias
+            or record.get("kind") != "interrupt" or "by" not in record
+            or record.get("resumed") is True):
+        return
+    caller = caller_alias(runner_directory)
+    if record["by"] != caller or caller == alias:
+        return
+    mapping, _ = read_alias_mapping(runner_directory, alias)
+    owning = owning_execution(alias, session_directory, mapping)
+    if owning is not None and owning["activity"] == "running":
+        return
+    write_yaml_durably(stop_file, {**record, "resumed": True})
 
 
 def _session_report_paths(alias: str, cwd: Path) -> tuple[Path, ...]:
@@ -469,13 +554,23 @@ def _session_report_paths(alias: str, cwd: Path) -> tuple[Path, ...]:
 
 
 def read_session_reports(alias: str, cwd: Path) -> dict:
-    """Read only the target's declared current report files for its direct owner."""
+    """Read the target's declared report files for any verified project caller.
+
+    Project development records cross Agents and non-direct relations; control
+    material and credentials are redacted from the projection, never granted.
+    """
     runner = discover_runner_directory(cwd)
     mapping, directory = read_alias_mapping(runner, alias)
-    require_direct_authority(runner, alias, mapping)
+    require_project_reader(runner)
     paths = _session_report_paths(alias, cwd)
+    # A follow-up report beside a closed Round's retained one is <stem>-<n>.md.
+    listed = []
+    for path in paths:
+        follow_ups = [item for item in path.parent.glob(f'{path.stem}-*.md')
+                      if item.stem[len(path.stem) + 1:].isdigit()]
+        listed += [path, *sorted(follow_ups, key=lambda item: int(item.stem[len(path.stem) + 1:]))]
     reports = [{'path': str(path), 'text': path.read_text(encoding='utf-8')}
-               for path in paths if path.is_file()]
+               for path in listed if path.is_file()]
     result = {'alias': alias, 'reports': reports}
     notices = directory / 'parent-notices.jsonl'
     if notices.is_file():
@@ -542,7 +637,7 @@ def read_session_reports(alias: str, cwd: Path) -> dict:
             else:
                 confirmation = directory / f"terminal-confirmation-{mapping['execution_id']}.yml"
                 result['termination_confirmation'] = yaml.safe_load(confirmation.read_text())
-    return result
+    return project_redact(result)
 
 
 def submit_session_report(name: str, text: str, cwd: Path, *, notify_parent: bool = False) -> dict:
@@ -571,12 +666,13 @@ def submit_session_report(name: str, text: str, cwd: Path, *, notify_parent: boo
     paths = [path for path in _session_report_paths(alias, cwd) if path.name == name]
     if len(paths) != 1:
         raise RunnerError('authority-denied', 'The report is not assigned to this Session.')
-    from graphtraj.execution.runner_results import start_result_correction
+    from graphtraj.execution.runner_results import RESULT_STATUSES, start_result_correction
     from graphtraj.graph.task_graph import _load_states
 
     state = load_project_configuration(cwd).state
-    if _load_states(state / 'tasks')[mapping['task_id']][1]['status'] in ACCEPTED_STATUSES:
-        # A finished Task opens no Round; its member, e.g. after a follow-up,
+    if _load_states(state / 'tasks')[mapping['task_id']][1]['status'] not in RESULT_STATUSES:
+        # A Task not accepting results, e.g. finished or blocked, opens no Round;
+        # its member, e.g. after a follow-up or a stopped report collection,
         # adds its own report beside the retained one in the closed Round.
         path = next(path for path in _session_report_paths(alias, cwd) if path.name == name)
         written = _add_closed_round_report(path, text)
@@ -618,10 +714,6 @@ def _reported(session_directory: Path, alias: str, path: Path, notify: bool) -> 
         if receipt.get('parent') is not None:
             result['parent'] = receipt['parent']
     return result
-
-
-# Task states after a result was accepted: no new result or Round is recorded.
-ACCEPTED_STATUSES = frozenset({'awaiting-integration', 'integrating', 'integrated'})
 
 
 def _add_closed_round_report(path: Path, text: str) -> Path:
@@ -694,7 +786,9 @@ def _send_session(
         worktree = Path(mapping["worktree_path"])
         restored = False
         with execution_start_lock(session_directory.parent.parent):
-            require_execution_allowed(session_directory.parent.parent, alias, mapping)
+            require_execution_allowed(
+                session_directory.parent.parent, alias, mapping, reports_only=reports_only,
+            )
             absent = not os.path.lexists(str(worktree))
             if reports_only and worktree.is_absolute() and (absent or (
                     worktree.is_dir() and not worktree.is_symlink() and not any(worktree.iterdir()))):
@@ -788,13 +882,26 @@ def _send_session_locked(
             if owning["activity"] != "running":
                 raise session_occupied(alias, owning)
             with execution_start_lock(session_directory.parent.parent):
-                require_execution_allowed(session_directory.parent.parent, alias, mapping)
-                session_operation(mapping, "send", instruction=instruction)
-            from graphtraj.execution.runner_worker import _append_follow_up
+                # A reports-only follow-up, such as a retry after a client
+                # timeout, may steer a running report collection, never
+                # ordinary work. The last resume record names that execution.
+                require_execution_allowed(
+                    session_directory.parent.parent, alias, mapping,
+                    reports_only=reports_only and _running_reports_only(session_directory),
+                )
+                try:
+                    session_operation(mapping, "send", instruction=instruction)
+                except RunnerError as error:
+                    # Only an explicit refusal before writing input permits
+                    # continuation after close. Unknown delivery is not retried.
+                    if error.code not in {"runtime-input-closed", "request-not-accepted"}:
+                        raise
+                else:
+                    from graphtraj.execution.runner_worker import _append_follow_up
 
-            if caused_by_event_ids:
-                _append_follow_up(session_directory / "events.jsonl", list(caused_by_event_ids))
-            return {**_execution_identity(alias, mapping), "send_status": "sent"}
+                    if caused_by_event_ids:
+                        _append_follow_up(session_directory / "events.jsonl", list(caused_by_event_ids))
+                    return {**_execution_identity(alias, mapping), "send_status": "sent"}
         # Native completion can precede the owner's final Trace drain and close.
         deadline = time.monotonic() + OPERATION_TIMEOUT_SECONDS
         while not execution_file.is_file():
@@ -856,6 +963,7 @@ def _send_session_locked(
         resume = {
             "operation": "resume",
             "drive_children": not (reports_only or stopped),
+            "reports_only": reports_only,
             "runtime": mapping["runtime"],
             "adapter_request": request,
             "context_evidence": context_evidence,
@@ -943,12 +1051,15 @@ def _send_session_locked(
     return {**_execution_identity(alias, mapping), "send_status": "sent"}
 
 
-def interrupt_session(alias: str, cwd: Path) -> Dict[str, Any]:
+def interrupt_session(alias: str, cwd: Path, *, ordinary: bool = False) -> Dict[str, Any]:
     """Prevent further subtree work and interrupt every recorded descendant.
 
     Each member is addressed directly through its native execution owner.
     Failure to reach one member does not prevent the others being stopped,
     and only native terminal evidence counts as a complete confirmation.
+    An ``ordinary`` interrupt (the public ``agents interrupt``) records who
+    issued it, so that same direct parent can continue the Session later. It
+    never rewrites a stop already in force from another origin.
     """
 
     runner_directory = discover_runner_directory(cwd)
@@ -959,7 +1070,19 @@ def interrupt_session(alias: str, cwd: Path) -> Dict[str, Any]:
     require_descendant_authority(runner_directory, alias, mapping)
     with execution_start_lock(runner_directory):
         mapping, session_directory = read_alias_mapping(runner_directory, alias)
-        write_yaml_durably(session_directory / "stop.yml", {"alias": alias})
+        stop = {"alias": alias}
+        if ordinary:
+            stop_file = session_directory / "stop.yml"
+            previous = yaml.safe_load(stop_file.read_text()) if stop_file.is_file() else None
+            caller = caller_alias(runner_directory)
+            if (not isinstance(previous, dict) or previous.get("resumed") is True
+                    or (previous.get("kind") == "interrupt" and previous.get("by") == caller)):
+                # A native Main caller is a str subclass; the record keeps its plain value.
+                stop = {"alias": alias, "kind": "interrupt",
+                        "by": str(caller) if caller is not None else None}
+            else:
+                stop = previous  # a stop in force from another origin stays exactly as recorded
+        write_yaml_durably(session_directory / "stop.yml", stop)
         records, failures = _recorded_sessions(runner_directory, ownership_only=True)
         # Allocations still preparing a job have no native Session yet. They
         # must pass the Worker guard after we release this lock. Retain any
@@ -1133,10 +1256,58 @@ def _interrupt_session(
         # Native completion can precede the Worker's terminal-file drain.
         # Reuse its live terminal acknowledgement as well as durable outcomes;
         # lost contact or a stale heartbeat still cannot establish stopping.
-        if owning_execution(alias, session_directory, mapping) is not None:
+        owning = owning_execution(alias, session_directory, mapping)
+        if owning is None:
+            return {"alias": alias, "interrupt_status": "stopped"}
+        if owning["activity"] != "abnormal":
             raise
-        return {"alias": alias, "interrupt_status": "stopped"}
+        # The owner released its lock without a terminal record. Retain that
+        # exit as an unconfirmed outcome; only the Runtime's own termination
+        # confirmation, retained separately, can then establish stopping.
+        _record_owner_exit(alias, session_directory, mapping)
+        return _interrupt_session(alias, session_directory, mapping)
     return {"alias": alias, "interrupt_status": "interrupted"}
+
+
+def _running_reports_only(directory: Path) -> bool:
+    """Return whether the running execution was started as a report collection.
+
+    Only a resume starts a later execution, and each one rewrites resume.yml
+    under the alias lock, so that record names the running one. A first
+    launch has none; an unreadable record admits nothing.
+    """
+    try:
+        resume = yaml.safe_load((directory / "resume.yml").read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, yaml.YAMLError):
+        return False
+    return isinstance(resume, dict) and resume.get("reports_only") is True
+
+
+def _record_owner_exit(alias: str, directory: Path, mapping: dict) -> None:
+    """Retain an exited owner's missing end as an unconfirmed runtime error.
+
+    Written under the startup lock only while the same execution is mapped,
+    its owner lock is released and no terminal record exists. A record that
+    an abnormal response already wrote is kept. No native terminal event is
+    implied: ``terminal_confirmed`` stays false.
+    """
+    runner = directory.parent.parent
+    execution_file = directory / "execution.yml"
+    with execution_start_lock(runner):
+        current, _ = read_alias_mapping(runner, alias)
+        if current != mapping or ownership_is_held(directory, mapping["worker_pid"]):
+            raise RunnerError("termination-unconfirmed",
+                              "The execution changed while its owner exit was being recorded.")
+        if os.path.lexists(str(execution_file)):
+            return
+        write_yaml_durably(execution_file, {
+            "outcome": "runtime-error",
+            "session_id": mapping["session"],
+            "execution_id": mapping["execution_id"],
+            "terminal_confirmed": False,
+            "error": {"code": "owner-exited",
+                      "message": "The process owning this execution exited before reporting its end."},
+        })
 
 
 def _confirm_termination(alias: str, directory: Path, mapping: dict) -> dict:

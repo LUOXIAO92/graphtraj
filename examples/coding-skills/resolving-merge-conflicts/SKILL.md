@@ -16,8 +16,8 @@ description: "Resolve software implementation conflicts in an in-progress Git me
    authority; follow the project's responsibilities.
 
 5. **Finish the assigned work.** Commit the resolved merge before handoff. For a
-   GraphTraj assignment, submit the committed version through `submit-result`;
-   the actual authorized parent records `decide-result`, then the caller repeats
+   GraphTraj assignment, submit the committed version through MCP `submit_result`;
+   the actual authorized parent records MCP `decide_result`, then the caller repeats
    the original integration validation to finish. Report incompatible accepted
    requirements to the caller. For standalone work, commit the resolved merge
    or continue the rebase until all commits are rebased.

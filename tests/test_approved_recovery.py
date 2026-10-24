@@ -11,9 +11,11 @@ import pytest
 import yaml
 from click.testing import CliRunner
 
-from conftest import FakeCodex, InstalledCommands, run_process, wait_for_file
+from conftest import runner_operation, FakeCodex, InstalledCommands, run_process, wait_for_file
 from graphtraj.execution import approved_recovery as recovery
+from graphtraj.execution.runner_control import continue_member, interrupt_session
 from graphtraj.execution.runner_models import RunnerError
+from graphtraj.execution.runner_retirement import retire_session
 from graphtraj.execution.runner_status import runtime_caller
 from graphtraj.graph.delivery_worldline import read_worldline
 from graphtraj.interfaces import local_tool
@@ -200,7 +202,7 @@ def test_recovered_unchanged_result_returns_to_integration(
             'action': 'execute', 'feature': feature, 'arguments': arguments,
         }).document
 
-    execute('interrupt', {'alias': mapping['alias']})
+    interrupt_session(mapping['alias'], root)
     before = read_worldline(state, root)
     accepted = next(event for event in reversed(before) if event['event'] == 'team-round-accepted')
     original = next(event for event in before if event['event_id'] == accepted['submission_id'])
@@ -387,12 +389,61 @@ def test_recovery_after_expired_budget_resumes_and_retries_without_new_minutes(
     assert yaml.safe_load(path.read_text()) == after
 
 
+def test_expired_budget_recovery_resumes_in_the_same_call_and_repeats_without_new_time(
+    accepted_task: tuple, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The approval window a call starts is not a stale change for that same call."""
+    root, _, state, _ = accepted_task
+    task = state / 'tasks/83-integration'
+    mappings = [yaml.safe_load(path.read_text())
+                for path in (root / '.graphtraj/runner/sessions').glob('*/mapping.yml')]
+    mapping = next(item for item in mappings if item['parent'] is None)
+    arguments = {
+        'alias': mapping['alias'], 'reason': 'Authorized continuation after waiting.',
+        'instruction': 'Validate the retained candidate only.',
+        'allowed_scope': 'Validation', 'forbidden_scope': 'No implementation',
+        'additional_minutes': 45, 'restore_active': True,
+        'caused_by_event_ids': [read_worldline(state, root)[-1]['event_id']],
+    }
+    monkeypatch.setattr(recovery, 'caller_runtime', lambda: 'codex')
+    path = task / 'execution-budget.yml'
+    before = yaml.safe_load(path.read_text())
+    before['started_at'] = recovery.time.time() - 86400
+    before['allowance_minutes'] = 0
+    path.write_text(yaml.safe_dump(before))
+    adapter = NativeApproval(root, 'automatic')
+    monkeypatch.setattr(recovery.runtime_adapter, 'select_runtime_adapter', lambda runtime: adapter)
+    sent = []
+
+    def resume(*args: object, **kwargs: object) -> dict:
+        """Acknowledge the original native Session."""
+        sent.append(args[1])
+        return {'alias': args[0], 'session': mapping['session'], 'send_status': 'sent'}
+
+    monkeypatch.setattr(recovery, '_send_session_locked', resume)
+    result = invoke(root, arguments)
+    assert result['recovery_status'] == 'resumed', result
+    after = yaml.safe_load(path.read_text())
+    assert after['approved_window_started_at'] > before['started_at']
+    assert after['approved_minutes'] == 45
+
+    # The same call and a same-event retry reuse the applied event and resumption.
+    repeated = invoke(root, arguments)
+    assert repeated['recovery_event_id'] == result['recovery_event_id']
+    assert repeated['resumption'] == result['resumption']
+    retry = {'alias': arguments['alias'], 'retry_event_id': result['recovery_event_id']}
+    assert invoke(root, retry)['resumption'] == result['resumption']
+    assert len(sent) == 1
+    assert len(adapter.proposals) == 1
+    assert yaml.safe_load(path.read_text()) == after
+
+
 @pytest.mark.parametrize('cutover', [False, True])
 def test_administrative_recovery_routes_reports_to_the_actual_current_host(
     accepted_task: tuple, monkeypatch: pytest.MonkeyPatch, fake_codex: FakeCodex,
     cutover: bool,
 ) -> None:
-    """The current host receives reports without a new Session or budget grant."""
+    """A root without a recorded host gets the current one, without a new Session or budget grant."""
     root, _, state, _ = accepted_task
     runner = root / '.graphtraj/runner'
     if cutover:
@@ -408,24 +459,14 @@ def test_administrative_recovery_routes_reports_to_the_actual_current_host(
                 for path in (runner / 'sessions').glob('*/mapping.yml')]
     path, original = next(pair for pair in mappings if pair[1]['parent'] is None)
     launch_before = (path.parent / 'launch.yml').read_bytes()
-    original['parent_connection'] = {'runtime': 'codex', 'session': 'old-main',
-                                     'codex_home': '/old-native-home'}
+    original['parent_connection'] = None
     path.write_text(yaml.safe_dump(original))
     budget = (state / 'tasks/83-integration/execution-budget.yml').read_bytes()
-    from graphtraj.execution import runner_control
-
-    def unavailable_host(*args: object, **kwargs: object) -> None:
-        """Retain the real failure path for the old host's missing thread."""
-        raise RunnerError('RUNTIME_RPC_ERROR', 'thread not found: old-main')
-
-    with monkeypatch.context() as patch:
-        patch.setattr(runner_control, 'connection_operation', unavailable_host)
-        patch.setattr(runner_control, 'OPERATION_TIMEOUT_SECONDS', 0)
-        with runtime_caller(runner, original['alias']):
-            failed = local_tool.bind(root)({'action': 'execute', 'feature': 'submit_report',
-                'arguments': {'name': Path(original['report_files'][0]).name,
-                              'text': 'Retained result', 'notify_parent': True}}).document
-        assert failed['delivery'] == 'not-delivered'
+    with runtime_caller(runner, original['alias']):
+        failed = local_tool.bind(root)({'action': 'execute', 'feature': 'submit_report',
+            'arguments': {'name': Path(original['report_files'][0]).name,
+                          'text': 'Retained result', 'notify_parent': True}}).document
+    assert failed['delivery'] == 'no-direct-parent'
     request = {
         'alias': original['alias'], 'reason': 'Current Main resumes delivery ownership.',
         'instruction': 'Repair report delivery only.', 'allowed_scope': 'Delivery',
@@ -438,13 +479,11 @@ def test_administrative_recovery_routes_reports_to_the_actual_current_host(
         result = host({'action': 'execute', 'feature': 'approved_recovery',
                        'arguments': request}).document
         assert result['recovery_status'] == 'applied'
-        assert result['report_notification']['delivery'] == 'received'
-        assert len(received) == 1
         retry = host({'action': 'execute', 'feature': 'approved_recovery', 'arguments': {
             'alias': original['alias'], 'retry_event_id': result['recovery_event_id'],
         }}).document
         assert retry['recovery_status'] == 'applied'
-        assert len(received) == 1
+        assert received == []
         changed = yaml.safe_load(path.read_text())
         assert changed == {**original, 'parent_connection': host.address}
         assert (state / 'tasks/83-integration/execution-budget.yml').read_bytes() == budget
@@ -457,7 +496,7 @@ def test_administrative_recovery_routes_reports_to_the_actual_current_host(
                 'notify_parent': True,
             }}).document
         assert report['delivery'] == 'received'
-        assert len(received) == 2 and received[0]['event'] == 'report-submitted'
+        assert len(received) == 1 and received[0]['event'] == 'report-submitted'
         # A member cannot redirect itself to a different host's receiver.
         with local_tool.bind(root, event_receiver=lambda event: pytest.fail('Wrong host')) as other:
             with runtime_caller(runner, original['alias']):
@@ -469,10 +508,9 @@ def test_administrative_recovery_routes_reports_to_the_actual_current_host(
         # continuation, rather than rejecting the retained original launch.
         monkeypatch.setenv('PATH', str(fake_codex.executable.parent) + os.pathsep + os.environ['PATH'])
         monkeypatch.setenv('FAKE_CODEX_LOG', str(fake_codex.log_file))
-        continued = host({'action': 'execute', 'feature': 'send_instruction', 'arguments': {
-            'alias': original['alias'], 'instruction': 'Return the retained validation result.',
-            'caused_by_event_ids': [read_worldline(state, root)[-1]['event_id']],
-        }}).document
+        continued = host({'action': 'execute', 'feature': 'agents', 'arguments': {
+            'action': 'send', 'agent': original['alias'], 'message': 'Return the retained validation result.',
+        }}).document['result']
         assert continued['send_status'] == 'sent'
         assert continued['session'] == original['session']
         assert continued['execution_id'] != original['execution_id']
@@ -557,7 +595,7 @@ def test_native_approved_command_reaches_original_session_with_exact_scope(
         script = script.replace(str(original_peer), str(peer))
     fake_codex.executable.write_text(script)
     # The public stop and budget stop are separate restrictions, both retained.
-    stopped = run_process([str(installed_commands.runner), 'interrupt', mapping['alias']], cwd=root)
+    stopped = run_process(runner_operation(installed_commands, 'interrupt', mapping['alias']), cwd=root)
     assert stopped.returncode == 0, stopped.stderr
     budget_path = task / 'execution-budget.yml'
     before = yaml.safe_load(budget_path.read_text())
@@ -664,6 +702,33 @@ def test_approved_increment_after_waiting_counts_only_execution_time(
     ) == {**early, 'approved_minutes': 5}
 
 
+def test_approved_window_reports_its_planned_end_after_the_full_increment(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The planned-budget notice for an approved increment waits for that whole increment."""
+    from test_task_budget_control import monitor_at, sample_stop
+    from graphtraj.execution import execution_budget as budgets
+
+    monitor = monitor_at(tmp_path / 'budget')
+    monitor.record_session('researcher', 'researcher')
+    sample_stop(monitor, monkeypatch)
+    path = monitor.task_directory / 'execution-budget.yml'
+    stopped = yaml.safe_load(path.read_text())
+    approved_at = stopped['started_at'] + 500 * 60
+    granted = budgets.start_approved_window(
+        stopped, {**stopped, 'approved_minutes': 10, 'stopped': False}, approved_at)
+    path.write_text(yaml.safe_dump(granted))
+    monkeypatch.setattr(budgets.random, 'random', lambda: .999)
+    key = 'elapsed_minutes:' + str(stopped['budget']['execution_budget']['estimated_minutes']['total'] + 10)
+
+    monkeypatch.setattr(budgets.time, 'time', lambda: approved_at + 9 * 60)
+    monitor.check('researcher', 'resume')
+    assert key not in yaml.safe_load(path.read_text())['notifications']
+    monkeypatch.setattr(budgets.time, 'time', lambda: approved_at + 10 * 60 + 1)
+    monitor.check('researcher', 'later')
+    assert key in yaml.safe_load(path.read_text())['notifications']
+
+
 def test_recovery_reactivates_original_team_without_fabricating_new_round(target: tuple, monkeypatch: pytest.MonkeyPatch) -> None:
     """Administrative retirement can be corrected while its facts remain retained."""
     from graphtraj.graph.delivery_state import apply_delivery_state_request, read_team
@@ -706,7 +771,7 @@ def test_retry_does_not_override_a_new_stop(
     monkeypatch.setattr(recovery, '_send_session_locked', fail)
     result = invoke(root, arguments)
     assert result['recovery_status'] == 'resume-failed'
-    interrupted = run_process([str(installed_commands.runner), 'interrupt', mapping['alias']], cwd=root)
+    interrupted = run_process(runner_operation(installed_commands, 'interrupt', mapping['alias']), cwd=root)
     assert interrupted.returncode == 0, interrupted.stderr
     retried = invoke(root, {'alias': mapping['alias'], 'retry_event_id': result['recovery_event_id']})
     assert retried['recovery_status'] == 'resume-stale'
@@ -989,23 +1054,29 @@ def test_recovery_rejects_public_bypasses(target: tuple, monkeypatch: pytest.Mon
 
 @pytest.mark.parametrize('decision', ['accept', 'decline'])
 def test_managed_user_recovery_waits_for_existing_reply_channel(
-    target: tuple, peer: Path, monkeypatch: pytest.MonkeyPatch, decision: str,
+    accepted_target: tuple, peer: Path, monkeypatch: pytest.MonkeyPatch, decision: str,
 ) -> None:
     """The owning host keeps recovery pending until its explicit user reply arrives."""
     import asyncio
     from graphtraj.runtimes.codex import managed_session
-    from graphtraj.runtimes.codex.app_server import CodexExecution, CodexServerRequest
+    from graphtraj.runtimes.codex.app_server import CodexExecution
     from test_codex_app_server import context
 
-    root, task, mapping, arguments = target
+    root, task, mapping, arguments = accepted_target
     directory = root / '.graphtraj/runner/sessions' / mapping['alias']
     child = next(yaml.safe_load(path.read_text()) for path in directory.parent.glob('*/mapping.yml')
                  if yaml.safe_load(path.read_text()).get('parent') == mapping['alias'])
     request = {**arguments, 'alias': child['alias'], 'resume': False}
     before = (task / 'execution-budget.yml').read_bytes()
 
+    # Children default to native auto review; this host selects the user channel.
+    store = root / '.codex'
+    store.mkdir(exist_ok=True)
+    with (store / 'config.toml').open('a', encoding='utf-8') as config:
+        config.write('\napprovals_reviewer = "user"\n')
+
     async def exercise() -> None:
-        """Enter the production native gateway and reply through public Runtime control."""
+        """Enter the bound host callback and reply through public Runtime control."""
         resolved = context(root, peer)
         worker = managed_session.CodexManagedExecution(
             resolved.launch_document()['adapter_request'], 'Use only the authorized task budget.',
@@ -1026,11 +1097,14 @@ def test_managed_user_recovery_waits_for_existing_reply_channel(
             return {'delivery': 'received'}
 
         monkeypatch.setattr(managed_session, 'notify_direct_parent', notice)
-        native = CodexServerRequest('recovery-tool', 'item/tool/call', {
-            'threadId': mapping['session'], 'turnId': 'controlled-turn', 'tool': 'graphtraj',
-            'arguments': {'action': 'execute', 'feature': 'approved_recovery', 'arguments': request},
-        })
-        running = asyncio.create_task(worker._native_runner_request(native))
+        def call() -> dict:
+            """Use the host's selected reviewer on its ordinary public tool entry."""
+            with runtime_caller(directory.parent.parent, mapping['alias']):
+                return local_tool.bind(root, recovery_reviewer=worker._review_recovery_sync)({
+                    'action': 'execute', 'feature': 'approved_recovery', 'arguments': request,
+                }).document
+
+        running = asyncio.create_task(asyncio.to_thread(call))
         await asyncio.wait_for(notified.wait(), 5)
         identity = {'session': mapping['session'], 'execution_id': 'controlled-turn'}
         pending = await asyncio.to_thread(worker.operate, {**identity, 'operation': 'requests'})
@@ -1052,12 +1126,13 @@ def test_managed_user_recovery_waits_for_existing_reply_channel(
             **identity, 'operation': 'reply', 'request_token': details['request_token'],
             'response': {'decision': decision},
         })
-        response = await asyncio.wait_for(running, 5)
-        document = json.loads(response['contentItems'][0]['text'])
-        assert response['success'] is (decision == 'accept'), document
         if decision == 'decline':
+            with pytest.raises(RunnerError) as refused:
+                await asyncio.wait_for(running, 5)
+            assert refused.value.code == 'recovery-denied'
             assert (task / 'execution-budget.yml').read_bytes() == before
         else:
+            document = await asyncio.wait_for(running, 5)
             assert document['recovery_status'] == 'applied'
             retained = applied_proposal(root, document)
             assert set(retained) == {'request', 'before', 'after', 'authority'}
@@ -1093,8 +1168,8 @@ def test_parent_interrupt_recovery_reuses_existing_authority(
     monkeypatch.setattr(recovery, '_send_session_locked', resume)
     call = local_tool.bind(root, recovery_reviewer=unexpected_review)
     with runtime_caller(runner, parent['alias']):
-        stopped = call({'action': 'execute', 'feature': 'interrupt',
-                        'arguments': {'alias': child['alias']}}).document
+        stopped = call({'action': 'execute', 'feature': 'agents',
+                        'arguments': {'action': 'interrupt', 'agent': child['alias']}}).document['result']
         assert stopped['interrupt_status'] == 'interrupted'
         stop_file = runner / 'sessions' / child['alias'] / 'stop.yml'
         before_stop = yaml.safe_load(stop_file.read_text())
@@ -1197,14 +1272,12 @@ def retired_target(target: tuple) -> tuple:
     """Retire every member through public operations, preserving their records."""
     root, task, mapping, arguments = target
     invoke(root, {**arguments, 'additional_minutes': 0, 'resume': False})
-    call = local_tool.bind(root)
-    call({'action': 'execute', 'feature': 'interrupt', 'arguments': {'alias': mapping['alias']}})
+    interrupt_session(mapping['alias'], root)
     runner = root / '.graphtraj/runner'
     mappings = [yaml.safe_load(path.read_text()) for path in (runner / 'sessions').glob('*/mapping.yml')]
     for member in sorted(mappings, key=lambda item: item['parent'] is None):
         with runtime_caller(runner, member['parent']):
-            result = call({'action': 'execute', 'feature': 'retire',
-                           'arguments': {'alias': member['alias']}}).document
+            result = retire_session(member['alias'], root)
         assert result['retire_status'] == 'retired'
     assert all(member['session_ref'] is None for member in
                yaml.safe_load((task / 'teams/1/team.yml').read_text())['members'].values())
@@ -1215,6 +1288,30 @@ def retired_target(target: tuple) -> tuple:
     request = {key: value for key, value in arguments.items() if key != 'restore_active'}
     request.update(resume=False)
     return root, task, mapping, request
+
+
+def test_unrelated_task_event_during_review_does_not_stale_the_repair(
+    target: tuple, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A parent's Task note recorded during review leaves the reviewed state unchanged."""
+    from graphtraj.graph.delivery_worldline import append_project_worldline_event
+
+    root, task, mapping, arguments = target
+    adapter = NativeApproval(root, 'automatic')
+    monkeypatch.setattr(recovery.runtime_adapter, 'select_runtime_adapter', lambda runtime: adapter)
+    state = task.parent.parent
+
+    def note() -> None:
+        """Model the parent recording an ordinary Task fact while approval is pending."""
+        append_project_worldline_event(state, root, {
+            'event': 'parent-note', 'task_id': mapping['task_id'],
+            'caused_by_event_ids': arguments['caused_by_event_ids'], 'evidence_refs': [],
+        })
+
+    adapter.before_apply = note
+    result = invoke(root, arguments)
+    assert result['applied'] is True, result
+    assert yaml.safe_load((task / 'execution-budget.yml').read_text())['approved_minutes'] == 7
 
 
 @pytest.mark.parametrize('decision', ['accept', 'decline', 'error', 'stale'])
@@ -1411,7 +1508,7 @@ def test_budget_only_recovery_does_not_require_stopping_the_subtree(
         **before, 'approved_minutes': before.get('approved_minutes', 0) + 5,
     }
     assert not execution.exists()
-    with pytest.raises(RunnerError, match='stopped before replacement'):
+    with pytest.raises(RunnerError, match='stopped before recovery; .* is not idle'):
         call({'action': 'execute', 'feature': 'approved_recovery',
               'arguments': {**request, 'resume': True, 'additional_minutes': 1}})
 
@@ -1451,3 +1548,383 @@ def test_failed_confirmation_still_refuses_recovery(target: tuple, monkeypatch: 
         invoke(root, {**arguments, 'additional_minutes': 0, 'restore_active': False})
     assert refused.value.code == 'termination-unconfirmed' and not sent
     assert not (directory / f"terminal-confirmation-{mapping['execution_id']}.yml").exists()
+
+
+@pytest.fixture
+def accepted_target(accepted_task: tuple, monkeypatch: pytest.MonkeyPatch) -> tuple:
+    """Use the accepted, not yet integrated Task and its original root Session."""
+    root, _, state, _ = accepted_task
+    mappings = [yaml.safe_load(path.read_text())
+                for path in (root / '.graphtraj/runner/sessions').glob('*/mapping.yml')]
+    mapping = next(item for item in mappings if item['parent'] is None)
+    arguments = {
+        'alias': mapping['alias'], 'reason': 'Authorized continuation after waiting.',
+        'instruction': 'Validate the retained candidate only.',
+        'allowed_scope': 'Validation', 'forbidden_scope': 'No implementation',
+        'additional_minutes': 7, 'restore_active': True,
+        'caused_by_event_ids': [read_worldline(state, root)[-1]['event_id']],
+    }
+    monkeypatch.setattr(recovery, 'caller_runtime', lambda: 'codex')
+    monkeypatch.delenv('CODEX_ESCALATE_SOCKET', raising=False)
+    return root, state / 'tasks/83-integration', mapping, arguments
+
+
+def test_retry_continues_after_a_later_approved_budget_increment(
+    accepted_target: tuple, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A later applied increment does not make an earlier applied recovery stale."""
+    root, task, mapping, arguments = accepted_target
+    adapter = NativeApproval(root, 'automatic')
+    monkeypatch.setattr(recovery.runtime_adapter, 'select_runtime_adapter', lambda runtime: adapter)
+    sent = []
+
+    def resume(*args: object, **kwargs: object) -> dict:
+        """Fail once at transport, then acknowledge the original native Session."""
+        sent.append(args[1])
+        if len(sent) == 1:
+            raise RunnerError('native-unavailable', 'controlled transport failure')
+        return {'alias': args[0], 'session': mapping['session'], 'send_status': 'sent'}
+
+    monkeypatch.setattr(recovery, '_send_session_locked', resume)
+    result = invoke(root, arguments)
+    assert result['recovery_status'] == 'resume-failed'
+    budget_path = task / 'execution-budget.yml'
+    started_at = yaml.safe_load(budget_path.read_text())['started_at']
+    administrative = invoke(root, {**arguments, 'additional_minutes': 90, 'resume': False,
+                                   'restore_active': False})
+    assert administrative['recovery_status'] == 'applied'
+    retry = {'alias': mapping['alias'], 'retry_event_id': result['recovery_event_id']}
+    assert invoke(root, retry)['recovery_status'] == 'resumed'
+    assert invoke(root, retry)['recovery_status'] == 'resumed'
+    budget = yaml.safe_load(budget_path.read_text())
+    assert budget['approved_minutes'] == 97
+    assert budget['started_at'] == started_at
+    assert len(sent) == 2
+    assert len(adapter.proposals) == 2
+
+
+def test_approved_increment_lifts_budget_stop_but_keeps_session_stop(
+    accepted_target: tuple, installed_commands: InstalledCommands, monkeypatch: pytest.MonkeyPatch,
+    fake_codex: FakeCodex,
+) -> None:
+    """New minutes admit new members; the stopped original Session stays refused."""
+    root, task, mapping, arguments = accepted_target
+    adapter = NativeApproval(root, 'automatic')
+    monkeypatch.setattr(recovery.runtime_adapter, 'select_runtime_adapter', lambda runtime: adapter)
+    interrupted = run_process(runner_operation(installed_commands, 'interrupt', mapping['alias']), cwd=root)
+    assert interrupted.returncode == 0, interrupted.stderr
+    stop_path = root / '.graphtraj/runner/sessions' / mapping['alias'] / 'stop.yml'
+    stop = stop_path.read_bytes()
+    budget_path = task / 'execution-budget.yml'
+    budget = yaml.safe_load(budget_path.read_text())
+    budget.update(stopped=True, stopping_checks=3, notifications=['stochastic_stop:3'])
+    budget_path.write_text(yaml.safe_dump(budget))
+    batch = root / 'new-member.yml'
+    batch.write_text(yaml.safe_dump({'tasks': [{
+        'task_id': '83', 'role': 'coding-team.team-leader', 'instruction': 'Inspect retained evidence only.',
+    }]}))
+    environment = dict(os.environ, FAKE_CODEX_LOG=str(fake_codex.log_file),
+                       FAKE_CODEX_EVENTS=json.dumps([
+                           {'type': 'thread.started', 'thread_id': 'new-member-session'},
+                           {'type': 'turn.started'}, {'type': 'turn.completed'},
+                       ]))
+    environment['HOME'] = str(root / 'operator-home')
+    environment['PATH'] = str(fake_codex.executable.parent) + os.pathsep + environment['PATH']
+    refused = run_process([str(installed_commands.runner), '--swarm-input', str(batch)],
+                          cwd=root, env=environment, timeout=30)
+    assert refused.returncode != 0
+    assert 'EXECUTION_BUDGET_STOPPED' in refused.stdout + refused.stderr
+    result = invoke(root, {**arguments, 'additional_minutes': 90, 'resume': False})
+    assert result['recovery_status'] == 'applied'
+    after = yaml.safe_load(budget_path.read_text())
+    assert after['stopped'] is False
+    launched = run_process([str(installed_commands.runner), '--swarm-input', str(batch)],
+                           cwd=root, env=environment, timeout=30)
+    assert launched.returncode == 0, launched.stdout + launched.stderr
+    assert yaml.safe_load(launched.stdout)['tasks'][0]['alias'] != mapping['alias']
+    assert after['approved_minutes'] == 90
+    assert after['started_at'] == budget['started_at']
+    assert stop_path.read_bytes() == stop
+    retry = invoke(root, {'alias': mapping['alias'], 'retry_event_id': result['recovery_event_id']})
+    assert yaml.safe_load(budget_path.read_text())['approved_minutes'] == 90
+    assert retry['recovery_status'] == 'applied'
+    monkeypatch.chdir(root)
+    with pytest.raises(RunnerError) as refused:
+        continue_member(mapping['alias'], 'Continue old work.', root)
+    assert refused.value.code == 'subtree-stopped'
+
+
+def test_budget_only_continue_is_not_blocked_by_a_stopped_old_root(
+    accepted_target: tuple, installed_commands: InstalledCommands, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A sampled stop can be lifted for a new swarm while the old root stays stopped."""
+    root, task, mapping, arguments = accepted_target
+    adapter = NativeApproval(root, 'automatic')
+    monkeypatch.setattr(recovery.runtime_adapter, 'select_runtime_adapter', lambda runtime: adapter)
+    result = invoke(root, {**arguments, 'additional_minutes': 0, 'resume': False})
+    assert result['recovery_status'] == 'applied'
+    interrupted = run_process(runner_operation(installed_commands, 'interrupt', mapping['alias']), cwd=root)
+    assert interrupted.returncode == 0, interrupted.stderr
+    budget_path = task / 'execution-budget.yml'
+    budget = yaml.safe_load(budget_path.read_text())
+    budget.update(stopped=True, stopping_checks=3, notifications=['stochastic_stop:3'])
+    budget_path.write_text(yaml.safe_dump(budget))
+    monkeypatch.chdir(root)
+    continued = CliRunner().invoke(main, ['continue', '--task-id', '83', '--budget-only',
+                                         '--caused-by-event-ids', json.dumps([result['recovery_event_id']])])
+    assert continued.exit_code == 0, continued.output
+    assert yaml.safe_load(continued.output)['tasks'] == []
+    assert yaml.safe_load(budget_path.read_text()) == {**budget, 'stopped': False}
+    with pytest.raises(RunnerError) as refused:
+        continue_member(mapping['alias'], 'Continue old work.', root)
+    assert refused.value.code == 'subtree-stopped'
+
+
+def test_mcp_recovery_waits_for_strict_native_review(
+    accepted_target: tuple, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The public stdio call applies only its matched native automatic decision."""
+    from collections import deque
+    from contextlib import nullcontext
+    from io import TextIOBase
+    from graphtraj.interfaces import mcp
+
+    root, task, _, arguments = accepted_target
+    monkeypatch.chdir(root)
+    monkeypatch.delenv('GRAPHTRAJ_CLI_CONNECTION', raising=False)
+    monkeypatch.delenv('AGENT_SWARM_CONNECTION', raising=False)
+    monkeypatch.setattr(mcp, '_caller_notices', lambda params: nullcontext(None))
+    arguments = {**arguments, 'resume': False}
+    budget_file = task / 'execution-budget.yml'
+    before = budget_file.read_bytes()
+    events = read_worldline(task.parent.parent, root)
+
+    class ClientInput(TextIOBase):
+        """Supply client messages and the later response to the server's request."""
+        def __init__(self, messages: list[dict]) -> None:
+            self.messages = deque(json.dumps(message) + '\n' for message in messages)
+
+        def readline(self, size: int = -1) -> str:
+            """Return the next protocol message, or signal client disconnection."""
+            return self.messages.popleft() if self.messages else ''
+
+    for decision in ('decline', 'cancel', 'unmarked', 'wrong-id', 'error', 'disconnect', 'accept', 'retry'):
+        source = ClientInput([
+            {'jsonrpc': '2.0', 'id': 1, 'method': 'initialize',
+             'params': {'capabilities': {'elicitation': {'form': {}}}}},
+            {'jsonrpc': '2.0', 'id': 2, 'method': 'tools/call', 'params': {
+                'name': 'tasks', '_meta': {'threadId': 'controlled-main'},
+                'arguments': {'action': 'execute', 'feature': 'approved_recovery',
+                              'arguments': arguments}}},
+        ])
+        observed = []
+
+        class ClientOutput(TextIOBase):
+            """Observe the exact proposal before returning the controlled client decision."""
+            def write(self, text: str) -> int:
+                message = json.loads(text)
+                observed.append(message)
+                if message.get('method') == 'elicitation/create':
+                    assert decision != 'retry'
+                    assert budget_file.read_bytes() == before
+                    params = message['params']
+                    assert params['requestedSchema'] == {'type': 'object', 'properties': {}}
+                    assert params['_meta']['codex_strict_auto_review'] is True
+                    assert params['_meta']['codex_sensitive_action'] is True
+                    assert params['_meta']['tool_params']['arguments'] == arguments
+                    summary = json.loads(params['message'].split('\n', 1)[1])
+                    assert summary['request'] == arguments
+                    assert {'field': 'budget.approved_minutes', 'expected': None, 'actual': 7} in summary['changes']
+                    reply = {'jsonrpc': '2.0', 'id': message['id'], 'result': {
+                        'action': decision if decision in ('decline', 'cancel') else 'accept',
+                        'content': {} if decision not in ('decline', 'cancel') else None,
+                        '_meta': {'approvals_reviewer': 'auto_review'},
+                    }}
+                    if decision == 'unmarked':
+                        reply['result'].pop('_meta')
+                    elif decision == 'wrong-id':
+                        reply['id'] = 'unrelated-review'
+                    elif decision == 'error':
+                        reply = {'jsonrpc': '2.0', 'id': message['id'],
+                                 'error': {'code': -32603, 'message': 'Reviewer unavailable'}}
+                    if decision != 'disconnect':
+                        source.messages.append(json.dumps(reply) + '\n')
+                return len(text)
+
+            def flush(self) -> None:
+                """Responses become available immediately in this controlled transport."""
+
+        with runtime_caller(root / '.graphtraj/runner', None):
+            mcp.serve(source, ClientOutput())
+        result = observed[-1]['result']
+        if decision in ('accept', 'retry'):
+            assert not result['isError'], result
+            assert result['structuredContent']['recovery_status'] == 'applied'
+            assert yaml.safe_load(budget_file.read_text())['approved_minutes'] == 7
+        else:
+            assert result['isError'], result
+            assert budget_file.read_bytes() == before
+            assert read_worldline(task.parent.parent, root) == events
+
+
+def test_installed_mcp_recovery_uses_client_elicitation(
+    accepted_target: tuple, installed_commands: InstalledCommands,
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+) -> None:
+    """The installed server awaits approval on its actual stdio connection."""
+    from test_mcp_host_tools import McpServerProcess, _associate_native_mains
+
+    root, task, _, arguments = accepted_target
+    native_bin = tmp_path / 'recovery-main-bin'
+    native_bin.mkdir()
+    peer = native_bin / 'codex'
+    peer.write_text('#!' + sys.executable + '\nimport runpy\nrunpy.run_path('
+                    + repr(str(Path(__file__).with_name('codex_stdio_peer.py'))) + ')\n')
+    peer.chmod(0o755)
+    environment = {key: value for key, value in os.environ.items()
+                   if key not in ('GRAPHTRAJ_CLI_CONNECTION', 'AGENT_SWARM_CONNECTION', 'CODEX_THREAD_ID')}
+    environment.update(PATH=str(native_bin) + os.pathsep + environment['PATH'],
+                       CODEX_HOME=str(tmp_path / 'recovery-native-home'),
+                       PEER_MAIN_THREADS='recovery-main')
+    _associate_native_mains(installed_commands, root, environment)
+    before = (task / 'execution-budget.yml').read_bytes()
+    with McpServerProcess(installed_commands.product.with_name('graphtraj-mcp'), root, environment) as server:
+        server.request('initialize', {'protocolVersion': '2025-06-18',
+                                     'capabilities': {'elicitation': {'form': {}}}})
+        response = server.request('tools/call', {'name': 'tasks', '_meta': {'threadId': 'recovery-main'},
+            'arguments': {'action': 'execute', 'feature': 'approved_recovery',
+                          'arguments': {**arguments, 'resume': False}}})
+        assert response.get('method') == 'elicitation/create', response
+        assert (task / 'execution-budget.yml').read_bytes() == before
+        assert response['params']['_meta']['codex_sensitive_action'] is True
+        server.process.stdin.write(json.dumps({'jsonrpc': '2.0', 'id': response['id'], 'result': {
+            'action': 'accept', 'content': {}, '_meta': {'approvals_reviewer': 'auto_review'},
+        }}) + '\n')
+        server.process.stdin.flush()
+        final = json.loads(server.process.stdout.readline())
+        assert final['id'] == server.sequence
+        assert not final['result']['isError'], final
+        assert final['result']['structuredContent']['recovery_status'] == 'applied'
+    assert yaml.safe_load((task / 'execution-budget.yml').read_text())['approved_minutes'] == 7
+
+
+@pytest.mark.parametrize('decision', ['accept', 'decline', 'cancel', 'no-elicitation'])
+def test_claude_main_recovery_is_decided_by_claude_code_elicitation(
+    target: tuple, monkeypatch: pytest.MonkeyPatch, decision: str,
+) -> None:
+    """A verified Claude Main's time grant waits for Claude Code's own dialog answer."""
+    from collections import deque
+    from io import TextIOBase
+
+    from agent_swarm import AgentControl
+    from graphtraj.execution.main_continuity import MainRoots, current_main
+    from graphtraj.runtimes.claude.host import main_calls
+    from graphtraj.runtimes.claude.mcp import serve
+    from test_agent_control import ScriptedDriver
+
+    root, task, mapping, arguments = target
+    # Process ancestry names no Runtime, as for the real Claude host.
+    monkeypatch.setattr(recovery, 'caller_runtime', lambda: None)
+    budget = task / 'execution-budget.yml'
+    before = yaml.safe_load(budget.read_text())
+    events = read_worldline(task.parent.parent, root)
+    runner = root / '.graphtraj/runner'
+    control = AgentControl(root / '.graphtraj/swarm', {'claude': ScriptedDriver()}, roots=MainRoots(runner))
+    session = '1845493c-4a13-43d4-b4ea-c5864f8b22cb'
+    call = main_calls(root, control, None)(session, root)
+    request = {'action': 'execute', 'feature': 'approved_recovery',
+               'arguments': {**arguments, 'restore_active': False, 'resume': False}}
+    capabilities = {} if decision == 'no-elicitation' else {'elicitation': {}}
+
+    class ClientInput(TextIOBase):
+        """Send the call; the dialog answer follows the observed elicitation."""
+        def __init__(self) -> None:
+            self.messages = deque(json.dumps(message) + '\n' for message in [
+                {'jsonrpc': '2.0', 'id': 1, 'method': 'initialize',
+                 'params': {'capabilities': capabilities}},
+                {'jsonrpc': '2.0', 'id': 2, 'method': 'tools/call',
+                 'params': {'name': 'tasks', 'arguments': request}},
+            ])
+
+        def readline(self, size: int = -1) -> str:
+            """Return one complete transport frame."""
+            return self.messages.popleft() if self.messages else ''
+
+    source = ClientInput()
+    observed = []
+
+    class ClientOutput(TextIOBase):
+        """Answer the elicitation as Claude Code's dialog would."""
+        def write(self, text: str) -> int:
+            message = json.loads(text)
+            observed.append(message)
+            if message.get('method') == 'elicitation/create':
+                assert yaml.safe_load(budget.read_text()) == before
+                summary = json.loads(message['params']['message'].split('\n', 1)[1])
+                assert summary['request']['additional_minutes'] == 7
+                if decision == 'cancel':
+                    reply = {'jsonrpc': '2.0', 'method': 'notifications/cancelled',
+                             'params': {'requestId': 2}}
+                else:
+                    reply = {'jsonrpc': '2.0', 'id': message['id'],
+                             'result': {'action': decision, 'content': {}}}
+                source.messages.append(json.dumps(reply) + '\n')
+            return len(text)
+
+    serve(source, ClientOutput(), root, native_call=lambda request, tool='agents': call(tool, request))
+
+    elicitations = [message for message in observed if message.get('method') == 'elicitation/create']
+    result = next(message for message in observed if message.get('id') == 2)['result']
+    assert current_main(runner)['session'] == session
+    if decision == 'accept':
+        assert len(elicitations) == 1
+        assert result['structuredContent']['recovery_status'] == 'applied', result
+        assert yaml.safe_load(budget.read_text())['approved_minutes'] == before.get('approved_minutes', 0) + 7
+        applied = read_worldline(task.parent.parent, root)[-1]
+        assert applied['event'] == 'recovery-applied'
+        assert applied['proposal']['request']['additional_minutes'] == 7
+        return
+    assert len(elicitations) == (0 if decision == 'no-elicitation' else 1)
+    error = result['structuredContent']['error']
+    assert error['code'] == ('native-approval-unavailable' if decision == 'no-elicitation'
+                             else 'recovery-denied'), error
+    assert 'unknown' not in error['message']
+    assert yaml.safe_load(budget.read_text()) == before
+    assert read_worldline(task.parent.parent, root) == events
+
+
+def test_time_grant_keeps_the_recorded_parent_and_notices_reach_the_current_main(
+    target: tuple, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A later Main's recovery adds only time; delivery follows the continuity record."""
+    from graphtraj.execution import runner_control
+    from graphtraj.execution.main_continuity import claim_main
+
+    root, task, mapping, arguments = target
+    runner = root / '.graphtraj/runner'
+    path = runner / 'sessions' / mapping['alias'] / 'mapping.yml'
+    claude = {'runtime': 'claude', 'session': 'claude-main', 'runner': str(runner)}
+    codex = {'runtime': 'codex', 'session': 'codex-main', 'codex_home': str(root / 'native-home')}
+    original = {**yaml.safe_load(path.read_text()), 'parent_connection': claude}
+    path.write_text(yaml.safe_dump(original))
+    claim_main(runner, claude, 'claude:first-control')
+    claim_main(runner, codex, 'codex:SessionStart:resume')
+    request = {**arguments, 'additional_minutes': 5, 'restore_active': False, 'resume': False}
+    call = local_tool.bind(root, recovery_reviewer=lambda proposal: {'decision': 'accept'})
+
+    result = call({'action': 'execute', 'feature': 'approved_recovery', 'arguments': request}).document
+
+    assert result['recovery_status'] == 'applied', result
+    assert yaml.safe_load(path.read_text()) == original
+    proposal = applied_proposal(root, result)
+    assert proposal['after']['mapping'] == proposal['before']['mapping'] == original
+    delivered = []
+    monkeypatch.setattr(runner_control, 'connection_operation',
+                        lambda address, document, **options: delivered.append(address) or {})
+    with runtime_caller(runner, mapping['alias']):
+        report = local_tool.bind(root)({'action': 'execute', 'feature': 'submit_report', 'arguments': {
+            'name': Path(mapping['report_files'][0]).name, 'text': 'Result', 'notify_parent': True,
+        }}).document
+    assert report['delivery'] == 'received'
+    assert [address['session'] for address in delivered] == ['codex-main']
+    assert yaml.safe_load(path.read_text())['parent_connection'] == claude

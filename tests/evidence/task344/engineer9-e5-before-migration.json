@@ -1,0 +1,53 @@
+{
+  "before_first_task344_commit": "76aecaed3132ba82d762890451fa4eb3ab542c87",
+  "first_task344_commit": "d582cf9",
+  "first_control_route_migration": "ffe64ccdc2711d0d285fd63ad759871a894d849e",
+  "records": [
+    {
+      "path": "src/graphtraj/execution/approved_recovery.py",
+      "before": "        return after\n    if request.get('restore_active', False):\n        if not before['task']['active'] or before['task']['status'] == 'integrated':\n            raise RunnerError('invalid-input', 'Task disposition and completed ancestors require task-graph revision.')\n        if before['task']['replaced_by']:\n            raise RunnerError('invalid-input', 'A replaced Task requires task-graph revision.')",
+      "current": "        return after\n    if request.get('restore_active', False):\n        if not before['task']['active'] or before['task']['status'] == 'integrated':\n            raise RunnerError('invalid-input', 'Task disposition and completed ancestors require task-graph revision.')\n        if before['task']['replaced_by']:\n            raise RunnerError('invalid-input', 'A replaced Task requires task-graph revision.')",
+      "same_excerpt": true,
+      "before_file_sha256": "1c01a2c2e7b96851112135d4717f6734bfd6ea81aa3ec791abad610191d7ae3d",
+      "current_file_sha256": "2b2f52eb3792598f9f95f207071197d54609b7045b0621b957283ac2924b8b92"
+    },
+    {
+      "path": "src/graphtraj/execution/role_organization.py",
+      "before": "    if caller is not None:\n        raise RunnerError(\n            \"authority-denied\",\n            \"Only the caller that owns the Harness Project may organize its child roles.\",\n        )\n",
+      "current": "    if caller is not None:\n        raise RunnerError(\n            \"authority-denied\",\n            \"Only the caller that owns the Harness Project may organize its child roles.\",\n        )\n",
+      "same_excerpt": true,
+      "before_file_sha256": "683eb550117c138127be407e40d88a4be2b94ad57251244cddf58b9599f35e63",
+      "current_file_sha256": "683eb550117c138127be407e40d88a4be2b94ad57251244cddf58b9599f35e63"
+    },
+    {
+      "path": "src/graphtraj/execution/runner_process.py",
+      "before": "        count = library.proc_pidinfo(pid, _PROC_PIDT_SHORTBSDINFO, 0, record, len(record))\n        if count != len(record):\n            if process_is_alive(pid):\n                raise OSError('Native process identity is unavailable')\n            continue\n        values = [int.from_bytes(record.raw[offset:offset + 4], sys.byteorder)",
+      "current": "        count = library.proc_pidinfo(pid, _PROC_PIDT_SHORTBSDINFO, 0, record, len(record))\n        if count != len(record):\n            if process_is_alive(pid):\n                raise OSError('Native process identity is unavailable')\n            continue\n        values = [int.from_bytes(record.raw[offset:offset + 4], sys.byteorder)",
+      "same_excerpt": true,
+      "before_file_sha256": "3edd27fd8e52aab9cde9dfb3983d1b1d1131b510e24c7d9ac2c836aac2cbec9a",
+      "current_file_sha256": "3edd27fd8e52aab9cde9dfb3983d1b1d1131b510e24c7d9ac2c836aac2cbec9a"
+    },
+    {
+      "path": "src/graphtraj/runtimes/pi/managed_session.py",
+      "before": "        \"\"\"\n        if self.proc is None:\n            return {'terminal_confirmed': False, 'wrapper_exited': False,\n                    'native_idle_confirmed': bool(native_idle), 'owned_process_group_exited': None}\n        code = self.proc.poll()\n        group_exited = None",
+      "current": "        \"\"\"\n        if self.proc is None:\n            return {'terminal_confirmed': False, 'wrapper_exited': False,\n                    'native_idle_confirmed': bool(native_idle), 'owned_process_group_exited': None}\n        code = self.proc.poll()\n        group_exited = None",
+      "same_excerpt": true,
+      "before_file_sha256": "fe4144204b42fd331ea08548ccdd0552561fb34d8ff4e6067eaff1da3fbd1d8d",
+      "current_file_sha256": "ac1baa084d34098d94a6a02a85e240139b92789acf805153217def07f5c9c4c0"
+    },
+    {
+      "path": "src/graphtraj/graph/task_graph.py",
+      "before": "                if old[\"task_name\"] != definition[\"task_name\"]:\n                    raise ValueError(\"a stable Task identity cannot change\")\n                if definition[\"current_definition\"] != old[\"current_definition\"]:\n                    raise ValueError(\"Task current_definition changed; inspect the current definition\")\n                previous_budget = read_execution_budget(\n                    (directory / old[\"current_definition\"]).read_text(",
+      "current": "                if old[\"task_name\"] != definition[\"task_name\"]:\n                    raise ValueError(\"a stable Task identity cannot change\")\n                if definition[\"current_definition\"] != old[\"current_definition\"]:\n                    raise ValueError(\"Task current_definition changed; inspect the current definition\")\n                previous_budget = read_execution_budget(\n                    (directory / old[\"current_definition\"]).read_text(",
+      "same_excerpt": true,
+      "before_file_sha256": "ca162ed5195722004cc72ed9fbc93567c7e38c7b169bdef3e97fb4c6465438f8",
+      "current_file_sha256": "d3f127cc823fca2b2329af21df5cc05b57b4712505cdccdee93f3e631e6be9d2"
+    }
+  ],
+  "caller_alias_ast_unchanged": true,
+  "interrupt_timeout_comparison": {
+    "before": "76aecae runner_control.py:1112 INTERRUPT_RESPONSE_SECONDS = 30 + OPERATION_TIMEOUT_SECONDS",
+    "current": "runner_control.py:1213 same value; OPERATION_TIMEOUT_SECONDS=10",
+    "test_timeout_seconds": 30
+  }
+}

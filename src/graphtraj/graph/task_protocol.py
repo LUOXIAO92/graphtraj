@@ -50,6 +50,11 @@ def definition_schema(*, revision: bool = False) -> dict:
     properties = dict(TASK_PROPERTIES)
     if revision:
         properties["current_definition"] = {"type": ["string", "null"]}
+        properties["body"] = {
+            "type": "string",
+            "description": "Complete Task body. A changed execution budget states its reason "
+                           "in the body front matter as execution_budget.revision_reason.",
+        }
     return object_schema(properties)
 
 
@@ -89,7 +94,7 @@ def render_definition(definition: dict[str, Any]) -> str:
     """
     body = definition["body"]
     metadata = {"task": {key: definition[key] for key in TASK_PROPERTIES if key != "body"}}
-    return "---\n" + yaml.safe_dump(metadata, sort_keys=False) + "---\n" + body
+    return "---\n" + yaml.safe_dump(metadata, sort_keys=False, allow_unicode=True) + "---\n" + body
 
 
 def read_definition(snapshot: str) -> dict[str, Any]:

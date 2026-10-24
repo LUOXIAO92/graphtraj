@@ -6,8 +6,12 @@ description: Coordinate accepted tasks through dispatch, result submission, acce
 # Task Delivery
 
 Read the project's guidance, current task graph and accepted requirements. Use
-the configured paths, roles, Runtime settings and execution limits. Run Harness
-commands from the Harness Project Root.
+the configured paths, roles, Runtime settings and execution limits.
+Use MCP `agents` / `tasks` and the installed feature schemas.
+Use the corresponding CLI only for an unavailable or failing MCP entry; retain
+the failure, preserve identity and native permissions, and limit fallback to
+that operation. Return to MCP when it works. CLI examples in references are
+fallback syntax, not the default model workflow.
 
 The shared tool's default describe returns a readable guide reference. Read that
 file as needed; request describe with `schema: true` for the selected operation's
@@ -30,8 +34,8 @@ running a second assessment. Consume the registered node's required artifacts
 and preserved evidence; use the project's selected professional methods without
 changing the common completion protocol.
 
-Formal dispatch uses `agent-runner --swarm-input <swarm.yml>` with the selected
-role, instruction and ready Task ID. Reuse the registered definition and
+Formal dispatch uses MCP `swarm` with the selected role, instruction and ready
+Task ID, following its installed input schema. Reuse the registered definition and
 returned aliases. Supply external role instructions and explicitly selected
 resources through the configured Runtime's supported mechanisms; GraphTraj
 does not choose a professional Skill by its name.
@@ -53,14 +57,14 @@ when an additional observation is necessary. Public status gives cross-level
 summaries; private reports stay within the direct relationship. Send changed
 instructions through the existing execution rather than waking another copy.
 
-The executing Session commits its file results and uses `submit-result` to record
+The executing Session commits its file results and uses MCP `submit_result` to record
 the version, result references, completion statement, evidence and unresolved work.
 Use assigned report destinations. No role-specific filename or prose format is a
 universal submission or acceptance condition. Session completion alone does not
 accept or finish a Task.
 
 When an assigned report needs the direct parent's action, use `submit_report`
-with `notify_parent: true` (CLI `--notify-parent`). This includes an acceptance
+through MCP with `notify_parent: true`. This includes an acceptance
 handoff or a blocker discovered while handling a child event. The default is
 `false`: saving a report alone does not wake the parent. The notice names the
 report and its path, without copying its body; check the returned delivery
@@ -85,7 +89,7 @@ Session. A channel write or forwarding acknowledgement is not evidence that
 the parent processed the event. Handle the event's result or explicit request
 through the existing result/reply operation.
 
-A root Agent can use `agent-runner parent-status` or `parent_status` to observe
+A root Agent can use MCP `parent_status` to observe
 its recorded owning host without sending input. With a positive finite timeout,
 the operation waits on native events for that host to become idle. Choose the
 timeout within the remaining execution budget. The caller supplies no parent
@@ -95,8 +99,11 @@ After observing idle, notification validation still needs an ordinary event to
 reach the same Main and be handled there.
 
 The authorized parent or task-authorized caller assesses the submitted version
-against the task's criteria, reusing valid evidence. Use `decide-result` to record
+against the task's criteria, reusing valid evidence. Use MCP `decide_result` to record
 the exact submission/version, accepted or rejected decision, reason and evidence.
+Acceptance advances the Task's formal result. Use it only when the submitted
+result meets the complete Task definition; record partial development readiness
+in a report instead.
 Use actual caller identity; a role label is not permission. Return concrete missing
 behavior or evidence for correction and preserve the earlier decision. Read
 [command inputs](references/command-inputs.md) for current operations.
@@ -114,12 +121,12 @@ valid evidence for unchanged inputs and verify the affected combined result
 through the project's assigned executor. No coding review or named merge role
 is a universal integration requirement.
 
-Integrate the accepted result with `graphtraj task integrate`, using the task's
+Integrate the accepted result with MCP `task_integrate`, using the task's
 necessary validation and its assigned executor. If integration changes the accepted
 result, confirm the affected behavior before completion and reuse unaffected
 checks. For an actual conflict, use a permitted specialist and the retained evidence.
 
-After integration use `agent-runner cleanup --task-id <id>`, retain original
+After integration use MCP `cleanup` with the Task ID, retain original
 Batches/Sessions/Traces, regenerate the task graph and continue newly ready work. A completed input
 remains a dependency. A later node absorbs an earlier result only when it
 actually contains the artifact its consumer needs; retain independent inputs.
@@ -188,6 +195,6 @@ and descendants are stopped and the real parent or user has authority. Preserve
 native approvals and file/report boundaries.
 
 When evidence changes task boundaries or reveals a common prerequisite, use
-the project's decomposition method and `task revise` to correct the graph before dependent
+the project's decomposition method and MCP `task_revise` to correct the graph before dependent
 work. Preserve original inputs and causal evidence. Product changes need user
 direction; ordinary product-preserving graph corrections follow project guidance.

@@ -1,0 +1,19 @@
+{
+  "candidate": "7f628432c4ef9338e028772d035e2c7c302ae940",
+  "native_version": "codex-cli 0.163.0",
+  "native_binary": "/opt/homebrew/lib/node_modules/@openai/codex/node_modules/@openai/codex-darwin-arm64/vendor/aarch64-apple-darwin/bin/codex",
+  "present_binary_strings": [
+    "codex_strict_auto_review",
+    "codex_sensitive_action",
+    "codex_request_type",
+    "approval_request",
+    "approvals_reviewer"
+  ],
+  "official_sources": [
+    "https://github.com/openai/codex/blob/main/codex-rs/core/src/session/mcp.rs",
+    "https://github.com/openai/codex/blob/main/codex-rs/codex-mcp/src/elicitation.rs",
+    "https://github.com/openai/codex/blob/main/codex-rs/protocol/src/mcp_approval_meta.rs"
+  ],
+  "checked_at": "2026-10-21 JST",
+  "boundary": "Native version/string presence plus upstream protocol source; not proof of actual model auto-review. Installed MCP test uses a controlled client decision. Main original-client adoption and native result remain pending."
+}

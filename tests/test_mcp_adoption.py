@@ -10,21 +10,10 @@ import pytest
 from conftest import InstalledCommands
 
 
-def test_source_inspection_requires_observe_only() -> None:
-    """A source-only administrative request cannot accidentally reload the host."""
-    from click.testing import CliRunner
-    from graphtraj.interfaces.cli.graphtraj import main
-
-    result = CliRunner().invoke(main, ['refresh-mcp', '--socket', '/not-opened',
-        '--main-session', 'current-main', '--server-source'])
-    assert result.exit_code == 2 and '--server-source requires --observe-only' in result.output
-
-
 @pytest.mark.parametrize('observe_only', [False, True])
-@pytest.mark.parametrize('response_mode', ['structured', 'text', 'tool-error', 'unknown-wrapper', 'rpc-error'])
+@pytest.mark.parametrize('missing_service', [False, True])
 def test_installed_proxy_uses_websocket_for_public_refresh(
-    tmp_path: Path, observe_only: bool, installed_commands: InstalledCommands,
-    response_mode: str,
+    tmp_path: Path, observe_only: bool, missing_service: bool, installed_commands: InstalledCommands,
 ) -> None:
     """The real proxy carries Upgrade and framed RPCs, without a real host or model."""
     from websockets.asyncio.server import unix_serve
@@ -32,7 +21,6 @@ def test_installed_proxy_uses_websocket_for_public_refresh(
     if shutil.which('codex') is None:
         pytest.skip('Installed Codex proxy required for the real transport boundary')
     requests = []
-    inspect_source = observe_only and response_mode == 'structured'
 
     async def handle(connection) -> None:
         """Serve only the public metadata and MCP methods in the fixed operation."""
@@ -61,36 +49,13 @@ def test_installed_proxy_uses_websocket_for_public_refresh(
                                   'detail': 'toolsAndAuthOnly'}
                 result = {'data': [{'name': 'graphtraj', 'tools': {'agents': {}, 'tasks': {}},
                                     'runtimeStatus': 'connected'}], 'nextCursor': None}
-            elif method == 'config/read':
-                assert params == {'cwd': str(tmp_path), 'includeLayers': False}
-                result = {'config': {'unrelated': 'DO-NOT-DISCLOSE', 'mcp_servers': {
-                    'graphtraj': {'command': '/selected/python', 'args': ['-m', 'graphtraj.interfaces.mcp',
-                        '--token', 'secret-credential'], 'cwd': str(tmp_path), 'enabled': True,
-                        'env': {'GRAPHTRAJ_CLI_CONNECTION': 'DO-NOT-DISCLOSE'}},
-                    'unrelated-server': {'command': 'DO-NOT-DISCLOSE'}}},
-                    'origins': {'mcp_servers.graphtraj.command': {'name': {'type': 'user', 'file': '/selected/config.toml'},
-                                                              'version': 'selected-revision'},
-                                'unrelated': {'private': 'DO-NOT-DISCLOSE'}}}
             elif method == 'mcpServer/tool/call':
                 assert params == {'threadId': 'current-main', 'server': 'graphtraj', 'tool': 'tasks',
                                   'arguments': {'action': 'discover'}, '_meta': {'threadId': 'current-main'}}
                 result = {'content': [], 'structuredContent': {
-                    'service': {'mcp': {'sha256': 'still-old-code', 'token': 'DO-NOT-DISCLOSE'}},
-                    'features': [{'private': 'DO-NOT-DISCLOSE'}]}}
-                if response_mode == 'text':
-                    import yaml
-
-                    result = {'content': [{'type': 'text', 'text': yaml.safe_dump(result['structuredContent'])}]}
-                elif response_mode == 'tool-error':
-                    result = {'content': [{'type': 'text', 'text': 'Native discovery refused; Bearer secret-credential'}],
-                              'isError': True}
-                elif response_mode == 'unknown-wrapper':
-                    result = {'content': [], 'structuredContent': {'result': result['structuredContent']}}
-                elif response_mode == 'rpc-error':
-                    await connection.send(json.dumps({'id': request['id'], 'error': {
-                        'code': -32603, 'message': 'Native transport failed; Bearer secret-credential',
-                        'data': {'private_body': 'DO-NOT-DISCLOSE'}}}))
-                    continue
+                    'service': {'mcp': {'sha256': 'still-old-code'}}, 'features': [{'private': 'omit'}]}}
+                if missing_service:
+                    result = {'isError': True, 'content': [{'type': 'text', 'text': 'native discovery refused'}]}
             await connection.send(json.dumps({'id': request['id'], 'result': result}))
 
     async def check() -> None:
@@ -104,8 +69,6 @@ def test_installed_proxy_uses_websocket_for_public_refresh(
                            '--socket', str(socket), '--main-session', 'current-main']
                 if observe_only:
                     command.append('--observe-only')
-                if inspect_source:
-                    command.append('--server-source')
                 process = await asyncio.create_subprocess_exec(*command, cwd=tmp_path, env=environment,
                     stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
                 try:
@@ -114,43 +77,26 @@ def test_installed_proxy_uses_websocket_for_public_refresh(
                     if process.returncode is None:
                         process.terminate()
                         await process.wait()
-                success = response_mode in {'structured', 'text'}
-                assert process.returncode == (0 if success else 1), error.decode()
+                assert process.returncode == (1 if missing_service else 0), error.decode()
                 import yaml
 
                 report = yaml.safe_load(output)
                 assert report['main_session'] == 'current-main'
-                assert report['evidence_available'] is success
-                if success:
-                    assert report['service']['mcp']['sha256'] == 'still-old-code'
-                    assert report['discovery']['service_source'] == ('structuredContent' if response_mode == 'structured' else 'content[0].text')
-                elif response_mode == 'tool-error':
-                    assert report['discovery']['isError'] is True
-                    assert 'Native discovery refused' in str(report['discovery']['errors'])
-                elif response_mode == 'unknown-wrapper':
-                    assert report['discovery']['structured_fields'] == ['result']
-                    assert report['discovery']['structured_children']['result'] == ['features', 'service']
+                if missing_service:
+                    assert report['service'] is None and report['adoption_certified'] is False
+                    assert report['discovery']['content'] == ['native discovery refused']
+                    assert 'no adoption is certified' in error.decode()
                 else:
-                    assert 'Native transport failed' in report['discovery']['rpc_error']['message']
-                    assert report['discovery']['rpc_error']['code'] == -32603
-                assert 'DO-NOT-DISCLOSE' not in output.decode()
-                assert 'secret-credential' not in output.decode()
+                    assert report['service']['mcp']['sha256'] == 'still-old-code'
                 assert report['reload_requested'] is not observe_only
                 assert 'adopted' not in report and 'features' not in report
                 assert report['servers'][0]['tools'] == ['agents', 'tasks']
-                if inspect_source:
-                    selected = report['configured_server']
-                    assert selected['command'] == '/selected/python'
-                    assert selected['args'] == ['-m', 'graphtraj.interfaces.mcp', '--token', '[redacted]']
-                    assert selected['environment_keys'] == ['GRAPHTRAJ_CLI_CONNECTION']
-                    assert list(selected['origins']) == ['mcp_servers.graphtraj.command']
-                    assert 'unrelated-server' not in output.decode()
 
     asyncio.run(check())
     assert [item['method'] for item in requests] == [
         'initialize', 'initialized', 'thread/read',
         *([] if observe_only else ['config/mcpServer/reload']),
-        'mcpServerStatus/list', *(['config/read'] if inspect_source else []), 'mcpServer/tool/call',
+        'mcpServerStatus/list', 'mcpServer/tool/call',
     ]
 
 
@@ -186,3 +132,39 @@ def test_installed_proxy_does_not_convert_json_lines_to_websocket(tmp_path: Path
                     await process.communicate()
 
     asyncio.run(check())
+
+
+@pytest.mark.parametrize('discovery', [
+    {'isError': True, 'content': [{'type': 'text', 'text': 'tasks: unknown action discover'}]},
+    {'content': [], 'structuredContent': {'features': []}},
+])
+def test_refresh_without_serving_source_returns_the_native_evidence(discovery: dict) -> None:
+    """A discovery without a service stamp is reported with its native cause, never certified."""
+    from graphtraj.runtimes.codex.app_server import CodexAppServer
+
+    host = CodexAppServer.__new__(CodexAppServer)
+    calls = []
+
+    async def read_thread(thread_id: str) -> dict:
+        """Return a loaded native Main."""
+        return {'id': thread_id, 'cwd': '/project', 'source': 'appServer', 'status': {'type': 'idle'}}
+
+    async def call(method: str, params: object) -> dict:
+        """Answer the fixed public methods."""
+        calls.append(method)
+        if method == 'mcpServerStatus/list':
+            return {'data': [{'name': 'graphtraj', 'runtimeStatus': 'connected', 'toolsError': 'stale schema',
+                              'tools': {'tasks': {}}}]}
+        return discovery if method == 'mcpServer/tool/call' else {}
+
+    host.read_thread, host._call = read_thread, call
+    report = asyncio.run(host.refresh_mcp('current-main', 'graphtraj'))
+    assert calls == ['config/mcpServer/reload', 'mcpServerStatus/list', 'mcpServer/tool/call']
+    assert report['service'] is None and report['adoption_certified'] is False
+    assert report['servers'] == [{'name': 'graphtraj', 'runtimeStatus': 'connected',
+                                  'toolsError': 'stale schema', 'tools': ['tasks']}]
+    assert report['discovery']['isError'] is discovery.get('isError')
+    if discovery.get('isError'):
+        assert report['discovery']['content'] == ['tasks: unknown action discover']
+    else:
+        assert report['discovery']['structured_fields'] == ['features']

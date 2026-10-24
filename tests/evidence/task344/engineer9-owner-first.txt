@@ -1,0 +1,24 @@
+F
+=================================== FAILURES ===================================
+_ test_native_root_owner_outlives_historical_checker_membership[SessionStart] __
+tests/test_descendant_stop_control.py:220: in test_native_root_owner_outlives_historical_checker_membership
+    organized = tool({'action': 'execute', 'feature': 'role_organization',
+src/graphtraj/interfaces/local_tool.py:89: in review_bound
+    return callback(request)
+           ^^^^^^^^^^^^^^^^^
+src/graphtraj/interfaces/gateway.py:111: in handle_request
+    return tool.handler(request["arguments"], cwd=cwd)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/graphtraj/interfaces/tools.py:841: in organize_roles
+    return ToolResult(organize_child_roles(arguments, cwd=cwd or Path.cwd()))
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/graphtraj/execution/role_organization.py:52: in organize_child_roles
+    return _organize_child_roles(arguments, cwd=cwd, review=True)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/graphtraj/execution/role_organization.py:78: in _organize_child_roles
+    raise RunnerError(
+E   graphtraj.execution.runner_models.RunnerError: Only the caller that owns the Harness Project may organize its child roles.
+=========================== short test summary info ============================
+FAILED tests/test_descendant_stop_control.py::test_native_root_owner_outlives_historical_checker_membership[SessionStart]
+!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!
+1 failed in 7.79s

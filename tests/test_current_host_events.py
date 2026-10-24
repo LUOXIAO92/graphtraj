@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from conftest import runner_operation
 import json
 import os
 import subprocess
@@ -157,7 +158,9 @@ def test_root_completion_after_entry_and_send_exit(
                         'HOST_TEST_ROOT':str(tmp_path)})
     # The native source is now verified on every external call. Establish
     # both controlled hosts through SessionStart, not bare environment IDs.
-    for session, home in [('original-host', 'owning-home'), ('different-caller', 'other-home')]:
+    # Main is the one central dispatcher: the last entered host controls.
+    def enter(session: str, home: str, source: str = 'startup') -> None:
+        """Start or resume one controlled Main through its real SessionStart."""
         rollout = tmp_path / (session + '.jsonl')
         rollout.write_text(json.dumps({'type': 'session_meta', 'payload': {
             'id': session, 'source': 'appServer',
@@ -165,7 +168,7 @@ def test_root_completion_after_entry_and_send_exit(
         entered = subprocess.run(
             [str(installed_commands.runner.with_name('python')), '-m',
              'graphtraj.runtimes.codex.stop_hook'],
-            input=json.dumps({'hook_event_name': 'SessionStart', 'source': 'startup',
+            input=json.dumps({'hook_event_name': 'SessionStart', 'source': source,
                               'cwd': str(root), 'session_id': session + '-session',
                               'transcript_path': str(rollout)}),
             cwd=root, env={**environment, 'CODEX_THREAD_ID': session,
@@ -174,6 +177,9 @@ def test_root_completion_after_entry_and_send_exit(
         )
         assert entered.returncode == 0, entered.stderr
         assert 'associated' in json.loads(entered.stdout)['systemMessage']
+
+    enter('different-caller', 'other-home')
+    enter('original-host', 'owning-home')
     if not capture_host:
         environment.pop('CODEX_THREAD_ID')
     batch = {'tasks': [{'task_id': '76', 'role': 'researcher', 'instruction': 'wait for release'}]}
@@ -220,12 +226,16 @@ def test_root_completion_after_entry_and_send_exit(
         changed = dict(environment,
                        CODEX_THREAD_ID='different-caller' if capture_host else 'original-host',
                        CODEX_HOME=str(tmp_path / ('other-home' if capture_host else 'owning-home')))
+        # The steering Main resumes first and so continues the project's Main.
+        steering = 'other-home' if capture_host else 'owning-home'
+        enter(changed['CODEX_THREAD_ID'], steering, 'resume')
         if operation == 'replace':
             original_alias = alias
             original_file = root / '.graphtraj/runner/sessions' / alias / 'mapping.yml'
             original_bytes = original_file.read_bytes()
-            stopped = run_process([str(installed_commands.runner), 'interrupt', alias],
-                                  cwd=root, env=environment, timeout=30)
+            # Only the Main now in control may stop the original member.
+            stopped = run_process(runner_operation(installed_commands, 'interrupt', alias),
+                                  cwd=root, env=changed, timeout=30)
             assert stopped.returncode == 0, stopped.stdout + stopped.stderr
             # The CLI owns a notice channel and waits for the new execution.
             (tmp_path / 'release').touch()
@@ -248,13 +258,20 @@ def test_root_completion_after_entry_and_send_exit(
             retained = yaml.safe_load((Path(yaml.safe_load(original_bytes)['trace_file']).parent / 'runner/session.yml').read_text())
             assert retained['retirement']['mapping'] == yaml.safe_load(original_bytes)
             # A native host descriptor remains valid through public mapping reads.
-            status = run_process([str(installed_commands.runner), 'status', alias],
+            status = run_process(runner_operation(installed_commands, 'status', alias),
                                  cwd=root, env=changed, timeout=30)
             assert status.returncode == 0, status.stdout + status.stderr
             assert yaml.safe_load(status.stdout)['aliases'][0]['alias'] == alias
         else:
-            sent = run_process([str(installed_commands.runner), 'send', alias, '--instruction', 'later',
-                                '--caused-by-event-id', events[-1]['event_id']], cwd=root, env=changed, timeout=30)
+            sent = run_process(runner_operation(
+                installed_commands,
+                'send',
+                alias,
+                '--instruction',
+                'later',
+                '--caused-by-event-id',
+                events[-1]['event_id'],
+            ), cwd=root, env=changed, timeout=30)
             assert sent.returncode == 0, sent.stdout + sent.stderr
             assert yaml.safe_load(sent.stdout)['send_status'] == 'sent'
         if operation == 'send':
@@ -265,7 +282,9 @@ def test_root_completion_after_entry_and_send_exit(
         turns = [item for item in wire if item['request']['method'] == 'turn/start']
         assert len([item for item in turns if json.loads(item['request']['params']['toolOutput']['output'])['event'] == 'completed']) == (2 if capture_host else 1)
         assert json.loads((tmp_path / 'completed-received').read_text())['alias'] == alias
-        assert {item['home'] for item in turns} == {str(tmp_path / 'owning-home')}
+        # The first completion reached the dispatching Main; the later one the
+        # Main that continued it. The recorded owner itself is unchanged.
+        assert {item['home'] for item in turns} == {str(tmp_path / 'owning-home'), str(tmp_path / steering)}
     finally:
         (tmp_path / 'release').touch()
-        run_process([str(installed_commands.runner), 'interrupt', alias], cwd=root, env=environment, timeout=30)
+        run_process(runner_operation(installed_commands, 'interrupt', alias), cwd=root, env=environment, timeout=30)

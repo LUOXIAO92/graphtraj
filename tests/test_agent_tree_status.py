@@ -43,6 +43,11 @@ def _last_command(root: Path) -> dict:
     return json.loads(lines[-1])
 
 
+_TREE = ("import json; from pathlib import Path; "
+         "from graphtraj.execution.runner_status import status_tree; "
+         "print(json.dumps(status_tree(Path.cwd()).document))")
+
+
 def _aliases(document: dict) -> dict:
     """Index one tree document by alias."""
     return {node["alias"]: node for node in document["agents"]}
@@ -88,7 +93,7 @@ def test_one_query_reports_every_member_and_a_lost_one_blocks_nothing(
         before = _records(root)
         budget = _budget(root)
         heartbeat = read_heartbeat(lost_directory)["updated_at"]
-        completed = call("cli", ["status"], timeout=30)
+        completed = call("tree", [], timeout=30)
         print(_last_command(root)["stdout"])
         after = _records(root)
         frozen = read_heartbeat(lost_directory)["updated_at"]
@@ -141,7 +146,7 @@ def test_the_visible_tree_and_its_detail_follow_the_recorded_relation(
     broken.mkdir()
     (broken / "mapping.yml").write_text("{}\n", encoding="utf-8")
 
-    completed = call("cli", ["status"], timeout=30, returncode=1)
+    completed = call("tree", [], timeout=30, returncode=1)
     print(_last_command(root)["stdout"])
     tree = _aliases(completed)
     assert tree[outer["alias"]]["children"] == [middle["alias"]], tree
@@ -188,7 +193,8 @@ def test_a_real_team_tree_is_reachable_in_one_query(
         installed_commands, harness, fake_codex, environment
     ) as (engineer, _, probe_environment):
         completed = run_process(
-            [str(installed_commands.runner), "status"],
+            # The alias-free tree the agents host builds, read by the installed package.
+            [str(installed_commands.runner.with_name("python")), "-c", _TREE],
             cwd=harness,
             env=probe_environment,
             timeout=60,

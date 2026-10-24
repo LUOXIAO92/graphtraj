@@ -28,6 +28,80 @@ class FakeCodex:
     log_file: Path
 
 
+# Task 344 removed the agent-runner status/send/interrupt routes; agents is the
+# public control. Tests of the Runner behaviour behind those routes run the same
+# library operations in the installed package, with the removed command's output.
+_RUNNER_OPERATION = """
+import argparse, json, sys, yaml
+from pathlib import Path
+from graphtraj.execution.runner_models import RunnerError
+from graphtraj.execution.runner_status import status_aliases, status_tree
+from graphtraj.execution.runner_control import interrupt_session, send_instruction
+parser = argparse.ArgumentParser()
+parser.add_argument('operation')
+parser.add_argument('aliases', nargs='*')
+parser.add_argument('--operation-total', action='store_true')
+parser.add_argument('--baseline')
+parser.add_argument('--candidate')
+parser.add_argument('--instruction')
+parser.add_argument('--caused-by-event-id', action='append', default=[])
+parser.add_argument('--caused-by-event-ids', type=json.loads, default=[])
+parser.add_argument('--reports-only', action='store_true')
+parser.add_argument('--execution-id')
+parser.add_argument('--request-file')
+parser.add_argument('--response')
+options = parser.parse_args()
+cwd = Path.cwd().resolve()
+identity = {'alias': options.aliases[0]} if options.operation != 'status' else {}
+try:
+    if options.operation in ('requests', 'reply'):
+        from graphtraj.execution.runner_control import pending_requests, reply_to_request
+        document = (pending_requests(options.aliases[0], cwd, execution_id=options.execution_id)
+                    if options.operation == 'requests' else reply_to_request(
+                        options.aliases[0], yaml.safe_load(Path(options.request_file).read_text()),
+                        json.loads(options.response), cwd))
+        sys.stdout.write(yaml.safe_dump(document, sort_keys=False))
+        sys.exit(0)
+    if options.operation == 'status':
+        selected = dict(operation_total=options.operation_total, baseline=options.baseline,
+                        candidate=options.candidate)
+        response = (status_aliases(options.aliases, cwd, **selected) if options.aliases
+                    else status_tree(cwd, **selected))
+        sys.stdout.write(yaml.safe_dump(response.document, sort_keys=False))
+        for error in response.errors:
+            sys.stderr.write(error.message + '\\n')
+        sys.exit(0 if response.succeeded else 1)
+    if options.operation == 'send':
+        document = send_instruction(options.aliases[0], options.instruction, cwd,
+                                    (*options.caused_by_event_id, *options.caused_by_event_ids), reports_only=options.reports_only)
+    elif options.operation == 'retire':
+        from graphtraj.execution.runner_retirement import retire_session
+        document = retire_session(options.aliases[0], cwd)
+    else:
+        document = interrupt_session(options.aliases[0], cwd)
+    sys.stdout.write(yaml.safe_dump(document, sort_keys=False))
+except RunnerError as error:
+    sys.stdout.write(yaml.safe_dump({**identity, 'error': error.as_document()}, sort_keys=False))
+    sys.stderr.write(error.message + '\\n')
+    sys.exit(1)
+"""
+
+
+REMOVED_RUNNER_OPERATIONS = frozenset({"status", "send", "interrupt", "requests", "reply", "retire"})
+
+
+def runner_operation(commands: "InstalledCommands", *arguments: str) -> list[str]:
+    """Exercise a retained Runner library operation after its CLI route was removed."""
+    return [str(commands.runner.with_name("python")), "-c", _RUNNER_OPERATION, *arguments]
+
+
+def runner_command(commands: "InstalledCommands", *arguments: str) -> list[str]:
+    """Return the installed agent-runner argv, or the library replica of a removed operation."""
+    if arguments and arguments[0] in REMOVED_RUNNER_OPERATIONS:
+        return runner_operation(commands, *arguments)
+    return [str(commands.runner), *arguments]
+
+
 def run_process(
     command: Sequence[str],
     *,
@@ -522,7 +596,7 @@ def _build_wheel(build_root: Path) -> Path:
             "--no-deps",
             "-w",
             str(wheelhouse),
-            str(source / 'packages/agent-swarm'),
+            str(source / "src" / "agent_swarm"),
             str(source),
         ],
         cwd=source,
@@ -556,7 +630,7 @@ def _install_commands(environment: Path, wheel: Path) -> InstalledCommands:
             "install",
             "--disable-pip-version-check",
             "--no-deps",
-            str(next(wheel.parent.glob('agent_swarm-*.whl'))),
+            str(wheel.with_name("agent_swarm-0.1.0-py3-none-any.whl")),
             str(wheel),
         ],
         cwd=wheel.parent,

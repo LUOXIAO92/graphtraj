@@ -239,7 +239,7 @@ class ExecutionEvents:
                 last_message=last_message, terminal_confirmed=terminal_confirmed,
                 error=dict(error) if error else None,
             )
-            notify = receiver is not None and bool(last_message) and record['parent'] is not None
+            notify = receiver is not None and bool(last_message)
             if notify:
                 current['notification'] = 'pending'
             # Keep the native receiver while this Agent is in standby so its
@@ -300,17 +300,27 @@ class AgentControl:
     drivers
         Runtime name to the driver that executes it. A Runtime without a
         driver is rejected at ``create``.
+    roots
+        Optional host policy for callers without an Agent reference:
+        ``roots.owns(caller, creator)`` says whether a root created by
+        ``creator`` belongs to the verified ``caller`` (for example a later
+        Session continuing the same project Main), and
+        ``roots.require_control(caller)`` raises :class:`AgentsError` when that
+        caller may view but not control. Without it a root caller sees only
+        roots it created with the same host and Session.
     """
 
     def __init__(
         self, root: Path, drivers: Mapping[str, RuntimeDriver], *,
         event_receiver: Callable[[dict], bool] | None = None,
+        roots: Any = None,
     ) -> None:
         """Bind the data root and the available Runtime drivers."""
         self.root    = Path(root)
         self.drivers = dict(drivers)
         self._held   = threading.local()
         self.event_receiver = event_receiver
+        self.roots   = roots
         self._receivers: dict[str, tuple[str, Callable[[dict], bool]]] = {}
 
     # -- Backend --------------------------------------------------------
@@ -363,6 +373,7 @@ class AgentControl:
         if driver is None:
             raise AgentsError("unsupported-runtime", f"No driver is available for Runtime {runtime!r}.")
         caller   = binding.caller
+        self._require_root_control(caller)
         # Keep the original call shape for drivers whose users select defaults.
         settings = (driver.prepare(runtime, caller) if configuration is None else
                     driver.prepare(runtime, caller, configuration=configuration))
@@ -510,6 +521,31 @@ class AgentControl:
             record["retired_at"] = _now()
             record["retired_by"] = _scope(caller)
             return self._outcome(record, result={"retired": True})
+
+    def interrupt_owned(self) -> list[str]:
+        """Request a stop of every execution this process owns; host shutdown only.
+
+        A host that is exiting stops the native work it runs itself, whoever
+        created the Agent. Executions owned by other processes are untouched.
+        Returns the Agents whose execution this process owns.
+        """
+        owned = []
+        for path in sorted((self.root / "control" / "agents").glob("*.json")):
+            with self._locked(path.stem) as record:
+                current = _running(record)
+                if current is None or current["process"].get("worker_pid") != os.getpid():
+                    continue
+                owned.append(record["agent"])
+                if current.get("stop_requested_at") is None and current["started"]:
+                    scheduled = self._driver(record).interrupt(self._run(record, current, "", None))
+                    current.update(stop_requested_at=_now(), stop_scheduled=bool(scheduled))
+        return owned
+
+    def owns_running(self, agent: str) -> bool:
+        """Whether this process still owns a running execution of ``agent``."""
+        with self._locked(agent) as record:
+            current = _running(record)
+            return current is not None and current["process"].get("worker_pid") == os.getpid()
 
     def hierarchy(self, caller: Caller) -> list[dict]:
         """Return the caller's visible descendants nested by true control parent.
@@ -687,7 +723,11 @@ class AgentControl:
                 current = self._load(current["parent"]) if current["parent"] else None
             return False
         top = self._top(record)
-        return top["parent"] is None and top["creator"] == _scope(caller)
+        if top["parent"] is not None:
+            return False
+        if top["creator"] == _scope(caller):
+            return True
+        return self.roots is not None and bool(self.roots.owns(caller, top["creator"]))
 
     def _require_view(self, record: Mapping[str, Any], caller: Caller) -> None:
         """Reject a caller outside the Agent's true hierarchy as ``not-found``."""
@@ -695,10 +735,16 @@ class AgentControl:
             raise AgentsError("not-found", f"No Agent {record['agent']!r} exists.")
 
     def _require_control(self, record: Mapping[str, Any], caller: Caller) -> None:
-        """Require visibility and a record that has not been retired."""
+        """Require visibility, the host's control policy and a record that is not retired."""
         self._require_view(record, caller)
+        self._require_root_control(caller)
         if record["retired_at"] is not None:
             raise AgentsError("retired", "The Agent is retired; its record is kept as history.")
+
+    def _require_root_control(self, caller: Caller) -> None:
+        """Apply the host's control policy to a caller without an Agent reference."""
+        if caller.agent is None and self.roots is not None:
+            self.roots.require_control(caller)
 
     def _authorized(self, agent: str, caller: Caller) -> dict:
         """Return the record for a caller allowed to view it."""

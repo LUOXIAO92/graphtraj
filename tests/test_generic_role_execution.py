@@ -9,7 +9,9 @@ from pathlib import Path
 import pytest
 import yaml
 
-from conftest import FakeCodex, InstalledCommands, run_process
+from conftest import FakeCodex, InstalledCommands, run_process, runner_operation
+from graphtraj.execution.runner_control import read_session_reports
+from graphtraj.execution.runner_status import runtime_caller
 from runner_fixtures import configure_harness
 from test_project_setup import CODING_METHOD_SKILL_NAMES
 from test_task_graph import _change_status, _register, _task
@@ -27,7 +29,7 @@ def remove_coding_method_skills(root: Path, user_home: Path) -> None:
 def wait_for_idle(commands: InstalledCommands, root: Path, env: dict, alias: str) -> dict:
     """Observe this test's native execution through bounded public status calls."""
     for _ in range(100):
-        result = run_process([str(commands.runner), 'status', alias], cwd=root, env=env)
+        result = run_process(runner_operation(commands, 'status', alias), cwd=root, env=env)
         assert result.returncode == 0, result.stderr
         status = yaml.safe_load(result.stdout)['aliases'][0]
         if status['activity'] == 'idle':
@@ -132,9 +134,9 @@ def test_single_role_launch_registers_and_executes_without_placeholder_members(
 
     worktree = Path(task['worktree_path'])
     assert (worktree / 'result.md').is_file() and (worktree / 'result.tex').is_file()
-    response = run_process([str(installed_commands.runner), 'reports', task['alias']], cwd=root, env=env)
-    assert response.returncode == 0, response.stdout + response.stderr
-    assert len(yaml.safe_load(response.stdout)['submissions']) == 1
+    with runtime_caller(root / '.graphtraj/runner', task['alias']):
+        response = read_session_reports(task['alias'], root)
+    assert len(response['submissions']) == 1
     records = [json.loads(line) for line in fake_codex.log_file.read_text().splitlines()]
     settings = {}
     for index, arg in enumerate(records[0]['argv'][:-1]):
@@ -153,15 +155,22 @@ def test_single_role_launch_registers_and_executes_without_placeholder_members(
     assert launch['context_evidence']['model'] == 'configured-author'
     expected = reports or [role.rpartition('.')[2].replace('_', '-') + '.md']
     assert [Path(path).name for path in mapping['report_files']] == expected
-    assert permission[str(root / '.graphtraj/state')] == 'none'
+    assert permission[str(root / '.graphtraj/state')] == 'read'
     before = (task_directory / 'teams/1/traces' / task['alias'] / 'events.jsonl').read_bytes()
-    sent = run_process([str(installed_commands.runner), 'send', task['alias'],
-                        '--instruction', 'Continue the same research.', '--caused-by-event-id', events[-1]['event_id']],
+    sent = run_process(runner_operation(
+        installed_commands,
+        'send',
+        task['alias'],
+        '--instruction',
+        'Continue the same research.',
+        '--caused-by-event-id',
+        events[-1]['event_id'],
+    ),
                        cwd=root, env=env, timeout=20)
     assert sent.returncode == 0, sent.stdout + sent.stderr
     # This is a bounded development test wait for its own controlled Runtime.
     for _ in range(100):
-        status = run_process([str(installed_commands.runner), 'status', task['alias']], cwd=root, env=env)
+        status = run_process(runner_operation(installed_commands, 'status', task['alias']), cwd=root, env=env)
         observed = yaml.safe_load(status.stdout)['aliases'][0]
         if observed['activity'] == 'idle':
             break
@@ -170,8 +179,9 @@ def test_single_role_launch_registers_and_executes_without_placeholder_members(
     assert observed['session'] == task['session']
     assert (worktree / 'visits.txt').read_text() == '2'
     assert (task_directory / 'teams/1/traces' / task['alias'] / 'events.jsonl').read_bytes().startswith(before)
-    reports = run_process([str(installed_commands.runner), 'reports', task['alias']], cwd=root, env=env)
-    assert len(yaml.safe_load(reports.stdout)['submissions']) == 2
+    with runtime_caller(root / '.graphtraj/runner', task['alias']):
+        reports = read_session_reports(task['alias'], root)
+    assert len(reports['submissions']) == 2
 
 
 @pytest.mark.parametrize('surface', ['cli', 'mcp'])
@@ -198,6 +208,7 @@ def test_configured_parent_dispatch_and_ordinary_resume_keep_actual_authority(
     root, _, _, env = configure_harness(
         installed_commands, temporary_git_repository, fake_codex, tmp_path,
     )
+    env['FAKE_CODEX_PROCESS_STEER'] = '1'
     actual_parent = parent_role.rpartition('.')[2]
     roles = {role: {'runtime': 'codex', 'model': 'selected-model', 'allow_runtime_swarm': True}
              for role in (parent_role, child_role, 'engineer')}
@@ -245,10 +256,12 @@ def test_configured_parent_dispatch_and_ordinary_resume_keep_actual_authority(
         parent = document['tasks'][0]
         worktree = Path(parent['worktree_path'])
         for _ in range(200):
-            if (worktree / 'parent-turns.txt').exists() and (worktree / 'parent-turns.txt').read_text() == '2':
+            summaries = worktree / 'parent-batch-summaries.txt'
+            if summaries.exists() and int(summaries.read_text()) >= 1:
                 break
             time.sleep(.05)
-        assert (worktree / 'parent-turns.txt').read_text() == '2'
+        assert int(summaries.read_text()) >= 1
+        assert (worktree / 'parent-dispatches.txt').read_text() == '1'
         wait_for_idle(installed_commands, root, env, parent['alias'])
         child = json.loads((worktree / 'last-child.json').read_text())
         assert child['launch_status'] == 'registered'
@@ -281,15 +294,23 @@ def test_configured_parent_dispatch_and_ordinary_resume_keep_actual_authority(
         roles_file.write_text(yaml.safe_dump(roles))
 
         original_batch = retained.read_bytes()
-    sent = run_process([str(installed_commands.runner), 'send', parent['alias'],
-                        '--instruction', 'Dispatch again', '--caused-by-event-id', events[-1]['event_id']],
+    sent = run_process(runner_operation(
+        installed_commands,
+        'send',
+        parent['alias'],
+        '--instruction',
+        'Dispatch again',
+        '--caused-by-event-id',
+        events[-1]['event_id'],
+    ),
                        cwd=root, env=env, timeout=20)
     assert sent.returncode == 0, sent.stdout + sent.stderr
     for _ in range(200):
-        if (worktree / 'parent-turns.txt').read_text() == '4':
+        if int((worktree / 'parent-batch-summaries.txt').read_text()) >= 2:
             break
         time.sleep(.05)
-    assert (worktree / 'parent-turns.txt').read_text() == '4'
+    assert int((worktree / 'parent-batch-summaries.txt').read_text()) >= 2
+    assert (worktree / 'parent-dispatches.txt').read_text() == '2'
     wait_for_idle(installed_commands, root, env, parent['alias'])
     team = yaml.safe_load((task / 'teams/1/team.yml').read_text())
     assert len(team['members']) == 3
@@ -408,11 +429,8 @@ def test_public_launch_rejects_retired_skill_selection(
         batch.write_text(yaml.safe_dump(request))
         result = run_process([str(installed_commands.runner), '--swarm-input', str(batch)],
                              cwd=root, env=env)
-        assert result.returncode == 1
-        document = yaml.safe_load(result.stdout)
-        assert document['error']['code'] == 'invalid-input'
-        message = document['error']['message']
-        assert 'Runtime native Skill selection' in message
+        assert result.returncode == 2
+        assert 'skills' in result.stderr and 'unexpected parameter' in result.stderr
     else:
         with McpServerProcess(installed_commands.runner.with_name('graphtraj-mcp'), root, env) as server:
             result = server.call('swarm', request)['result']

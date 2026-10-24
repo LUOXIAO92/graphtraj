@@ -1,0 +1,72 @@
+...........F.F...F.F............                                         [100%]
+=================================== FAILURES ===================================
+_ test_configured_parent_dispatch_and_ordinary_resume_keep_actual_authority[researcher-analyst-False-cli] _
+tests/test_generic_role_execution.py:245: in test_configured_parent_dispatch_and_ordinary_resume_keep_actual_authority
+    assert result.returncode == 0, result.stdout + result.stderr
+E   AssertionError: retained_batch_file: /private/tmp/344-e9-generic-complete/test_configured_parent_dispatc0/.graphtraj/state/batches/20261022T014242.989951+0900.yml
+E     tasks:
+E     - task_id: '150'
+E       task_name: dispatch
+E       role: researcher
+E       launch_status: failed
+E       error:
+E         code: launch-failed
+E         message: The Runtime Session could not be started.
+E     The Runtime Session could not be started.
+E     
+E   assert 1 == 0
+E    +  where 1 = CompletedProcess(args=['/private/tmp/344-e9-generic-complete/installed-environment0/venv/bin/agent-runner', '--swarm-i...ailed\n    message: The Runtime Session could not be started.\n", stderr='The Runtime Session could not be started.\n').returncode
+_ test_configured_parent_dispatch_and_ordinary_resume_keep_actual_authority[team-leader-analyst-False-cli] _
+tests/test_generic_role_execution.py:245: in test_configured_parent_dispatch_and_ordinary_resume_keep_actual_authority
+    assert result.returncode == 0, result.stdout + result.stderr
+E   AssertionError: retained_batch_file: /private/tmp/344-e9-generic-complete/test_configured_parent_dispatc2/.graphtraj/state/batches/20261022T014257.168791+0900.yml
+E     tasks:
+E     - task_id: '150'
+E       task_name: dispatch
+E       role: team-leader
+E       launch_status: failed
+E       error:
+E         code: launch-failed
+E         message: The Runtime Session could not be started.
+E     The Runtime Session could not be started.
+E     
+E   assert 1 == 0
+E    +  where 1 = CompletedProcess(args=['/private/tmp/344-e9-generic-complete/installed-environment0/venv/bin/agent-runner', '--swarm-i...ailed\n    message: The Runtime Session could not be started.\n", stderr='The Runtime Session could not be started.\n').returncode
+_ test_configured_parent_dispatch_and_ordinary_resume_keep_actual_authority[engineer-expert-engineer-junior-False-cli] _
+tests/test_generic_role_execution.py:245: in test_configured_parent_dispatch_and_ordinary_resume_keep_actual_authority
+    assert result.returncode == 0, result.stdout + result.stderr
+E   AssertionError: retained_batch_file: /private/tmp/344-e9-generic-complete/test_configured_parent_dispatc6/.graphtraj/state/batches/20261022T014331.553660+0900.yml
+E     tasks:
+E     - task_id: '150'
+E       task_name: dispatch
+E       role: engineer-expert
+E       launch_status: failed
+E       error:
+E         code: launch-failed
+E         message: The Runtime Session could not be started.
+E     The Runtime Session could not be started.
+E     
+E   assert 1 == 0
+E    +  where 1 = CompletedProcess(args=['/private/tmp/344-e9-generic-complete/installed-environment0/venv/bin/agent-runner', '--swarm-i...ailed\n    message: The Runtime Session could not be started.\n", stderr='The Runtime Session could not be started.\n').returncode
+_ test_configured_parent_dispatch_and_ordinary_resume_keep_actual_authority[coding-team.engineer-analyst-True-cli] _
+tests/test_generic_role_execution.py:245: in test_configured_parent_dispatch_and_ordinary_resume_keep_actual_authority
+    assert result.returncode == 0, result.stdout + result.stderr
+E   AssertionError: retained_batch_file: /private/tmp/344-e9-generic-complete/test_configured_parent_dispatc8/.graphtraj/state/batches/20261022T014345.955765+0900.yml
+E     tasks:
+E     - task_id: '150'
+E       task_name: dispatch
+E       role: engineer
+E       launch_status: failed
+E       error:
+E         code: launch-failed
+E         message: The Runtime Session could not be started.
+E     The Runtime Session could not be started.
+E     
+E   assert 1 == 0
+E    +  where 1 = CompletedProcess(args=['/private/tmp/344-e9-generic-complete/installed-environment0/venv/bin/agent-runner', '--swarm-i...ailed\n    message: The Runtime Session could not be started.\n", stderr='The Runtime Session could not be started.\n').returncode
+=========================== short test summary info ============================
+FAILED tests/test_generic_role_execution.py::test_configured_parent_dispatch_and_ordinary_resume_keep_actual_authority[researcher-analyst-False-cli]
+FAILED tests/test_generic_role_execution.py::test_configured_parent_dispatch_and_ordinary_resume_keep_actual_authority[team-leader-analyst-False-cli]
+FAILED tests/test_generic_role_execution.py::test_configured_parent_dispatch_and_ordinary_resume_keep_actual_authority[engineer-expert-engineer-junior-False-cli]
+FAILED tests/test_generic_role_execution.py::test_configured_parent_dispatch_and_ordinary_resume_keep_actual_authority[coding-team.engineer-analyst-True-cli]
+4 failed, 28 passed in 149.33s (0:02:29)

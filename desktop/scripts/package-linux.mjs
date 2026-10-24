@@ -40,7 +40,7 @@ run(python, ['-m', 'venv', path.join(output, 'build-python')]);
 run(buildPython, ['-m', 'pip', 'install', 'setuptools==75.8.0', 'wheel==0.45.1']);
 await desktopHostManifest(path.join(install, 'graphtraj-desktop-bin'), app, source);
 run(buildPython, ['-m', 'pip', 'wheel', '--no-build-isolation', '--no-deps',
-  '--wheel-dir', path.join(install, 'wheels'), source]);
+  '--wheel-dir', path.join(install, 'wheels'), path.join(source, 'src/agent_swarm'), source]);
 run(buildPython, ['-m', 'pip', 'download', '--only-binary=:all:', '--no-deps',
   '--dest', path.join(install, 'wheels'), ...pins]);
 await fs.writeFile(path.join(install, 'python-requirements.txt'), pins.join('\n') + '\n');

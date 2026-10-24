@@ -18,12 +18,20 @@ commit and whose primary worktree is on `main`.
 Choose a tag or commit to install, replacing `<tag-or-commit>`:
 
 ```sh
-uv tool install "git+https://github.com/LUOXIAO92/graphtraj.git@<tag-or-commit>"
+uv tool install --with "agent-swarm @ git+https://github.com/LUOXIAO92/graphtraj.git@<tag-or-commit>#subdirectory=src/agent_swarm" \
+  "git+https://github.com/LUOXIAO92/graphtraj.git@<tag-or-commit>"
 cd /path/to/your-project
 graphtraj setup
 graphtraj doctor
 graphtraj task graph
 ```
+
+GraphTraj and `agent-swarm` are separate distributions built from the same
+revision. GraphTraj requires the same `agent-swarm` version; install the two
+matching artifacts together. From a checkout, build both with
+`python -m pip wheel --no-deps -w dist ./src/agent_swarm .`, then install both
+wheels in your dedicated environment. The independent distribution can also
+be installed on its own from `./src/agent_swarm`.
 
 Setup shows its plan and asks before creating the `dev` branch. It creates or
 registers a separate worktree for integration and stores configuration and task
@@ -33,6 +41,68 @@ project has no tasks or Agent roles yet, so its first graph is empty.
 Running setup again preserves existing configuration and history. For a layout
 with a separate source repository, or other project conventions, see the
 [setup guide](manuals/setup-project/guide.md).
+
+## Independent Codex control
+
+Install only `agent-swarm` in a dedicated Python environment and authenticate
+Codex using its normal account setup. No GraphTraj installation, Task or Git
+repository is needed. The installed host reuses the same native execution
+implementation as GraphTraj:
+
+```sh
+python -m agent_swarm.codex.host --help
+python -m agent_swarm.codex.host --settings native-settings.json \
+  --directory /absolute/agent-state 'Use agents MCP to delegate a short question.'
+```
+
+`native-settings.json` supplies the existing native launch values. Replace the
+model and absolute working path with your choices:
+
+```json
+{
+  "adapter_request": {
+    "arguments": ["codex"],
+    "worktree_path": "/absolute/work",
+    "session_parameters": {
+      "cwd": "/absolute/work",
+      "model": "your-selected-model",
+      "developerInstructions": "",
+      "config": {
+        "default_permissions": "work",
+        "permissions": {
+          "work": {
+            "extends": ":workspace",
+            "filesystem": {":workspace_roots": {".": "write"}}
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+The settings can also retain native provider/reasoning/network options in
+`session_parameters.config`, and a `connection` with `runtime_home`, `base_url`
+or `api_key_env` (an environment variable name, never its secret value).
+Codex's native `auto_review` is the default; explicit native reviewer settings
+win. Existing sandbox, account and trust controls remain effective.
+
+The host owns the actual parent process and Session. It exposes only `agents`
+through MCP, authenticating requests by process ancestry and the bound native
+Session. Inside that same host, the authenticated CLI is also available:
+
+```sh
+python -m agent_swarm.cli '{"action":"discover"}'
+```
+
+CLI arguments cannot supply an identity. Child results return through the
+owning native parent connection; status does not repeat a body already sent as
+a notification. Native requests for the parent itself print to stderr and take
+an explicit native JSON response on stdin. Use `--resume` with the same directory
+to continue the retained parent Session. A closing host interrupts its active
+children, preserving their native Sessions. Normalized archiving is off; the
+existing optional archive integration remains a GraphTraj consumer capability
+until the separate archive extraction is delivered.
 
 ## Use it with your Agent
 
@@ -171,9 +241,70 @@ releasing the first prompt, and distinguishes an interrupt request from verified
 termination. Native helpers and background tasks are disabled for these children.
 Managed output and supported native Main hook records are collected into
 [project-local Session archives](examples/sessions/README.md#claude-collection).
-Collection does not install hooks or migrate existing history. Interactive
-Claude Main hosting and its replacement approval route are explicitly unavailable.
-Unknown approval capability fails closed.
+Collection does not install hooks or migrate existing history. Claude's native
+replacement approval route is explicitly unavailable. Unknown approval
+capability fails closed.
+
+### Continuing Main from any Runtime
+
+A project has one Main working state: the Main-owned root Agents and their
+hierarchy, pending notices and results, and the current summary scope. Each
+verified external Main Session, whether Codex, Claude Code, Pi or DSH, continues
+that state, so default `agents` status and `tasks` views show the existing members
+rather than an empty list. Continuation is a new associated record in
+`.graphtraj/runner/main-sessions/continuity.jsonl`; original Sessions, member
+identities and parents stay unchanged. Native subagents, GraphTraj members and
+completion checkers never become Main.
+
+Main is the one central dispatcher. A Main takes control at its native entry:
+a Codex `SessionStart` (startup, resume or clear), a Pi `session_start`
+(startup, new or resume) or a DSH `agent/created`; compaction, Pi `reload` and
+`fork` are not entries. Claude Code takes control at the first control call of
+each host process. Reads never take control. When another Main has continued
+the project, the earlier Session can still read status, but its control calls
+fail with `main-continued` naming the current Main. To continue Main there,
+start or resume it through its native entry; a Claude Code Session needs a new
+Claude Code process. Member events and results go to the current Main when its
+Runtime receives host events (Codex, Claude Code); a Pi or DSH Main keeps the
+existing delivery to each member's recorded owner.
+
+### Claude Code as Main
+
+The Claude Code host serves both `agents` and `tasks` from one project MCP
+server, with the same Agent view and control as a Codex Main (every Runtime,
+Task member Sessions) and Main authority for Task operations. A Claude Code
+plugin supplies each call's native Session. Print, or with `--write` write, the
+adoption material from the GraphTraj installation:
+
+```bash
+python -m graphtraj.runtimes.claude.host configuration --write \
+  --project /path/to/project --claude "$(command -v claude)"
+```
+
+It produces:
+
+- `.graphtraj/claude-host/config.json`: the host configuration naming the
+  Claude CLI that must launch the host directly;
+- `.mcp.json`: one `agents` server serving both tools (replace earlier
+  hand-made `graphtraj`/`agents` entries for this host);
+- `.claude/settings.local.json` `env`: `GRAPHTRAJ_CLAUDE_HOST_PYTHON` and
+  `GRAPHTRAJ_CLAUDE_HOST_CONFIG`;
+- the plugin `.claude/skills/graphtraj-claude-host/`, which Claude Code loads
+  at session start: `.claude-plugin/plugin.json`, `hooks/hooks.json`
+  (`{"modules": ["./host_context.mjs"]}`) and `hooks/host_context.mjs`.
+
+Check it with `claude plugin validate .claude/skills/graphtraj-claude-host`;
+`claude --plugin-dir <dir>` loads it for a temporary session. Claude Code's own
+project MCP approval and trust prompts decide adoption; GraphTraj trusts nothing
+itself. In a session, `/agents-context` shows the current Session, whether the
+`agents` and `tasks` entries are registered, and whether notice push is available.
+
+Member notices for this Main are appended to a durable per-Session queue in
+`.graphtraj/runner/main-sessions/inbox/`. The plugin submits them into the
+Main's turn or idle Session through Claude Code's prompt submission and
+acknowledges them only afterwards; until then they are also returned with the
+next `agents`/`tasks` result. Without prompt submission they arrive only with
+that next result.
 
 The execution host needs access to the chosen Runtime executable, credentials,
 project files and subprocess sandbox. Role permissions do not replace the
@@ -219,8 +350,8 @@ It does not provide task execution controls.
 
 For Apple Silicon macOS, extract the ZIP and open `GraphTraj.app` from the
 extracted folder to try it; copying it to `/Applications` is optional. Electron
-is included, but Python is separate. Install the accompanying GraphTraj wheel
-in a Python environment, and make its `graphtraj-tool` available on the app's
+is included, but Python is separate. Install the accompanying GraphTraj and
+agent-swarm wheels in a Python environment, and make `graphtraj-tool` available on the app's
 launch `PATH` or set `GRAPHTRAJ_TOOL` to that executable. Use the matching CLI
 package rather than an older global installation. The macOS build is unsigned.
 
@@ -298,3 +429,32 @@ validate and select a project directly. Without it, the saved selection is used.
 - [Recovery](manuals/task-delivery/references/recovery.md): interruptions, failures and continuation.
 - [Research](manuals/research/guide.md) and [concept clarification](manuals/concept-clarification/guide.md): optional methods for your project.
 - [Coding Skill examples](examples/coding-skills/README.md): optional development methods, separate from the Runtime installation.
+
+### Independent Claude Code control
+
+The `agent-swarm` wheel includes `agent_swarm.claude.ClaudeDriver` and the
+native Claude host. No GraphTraj project, Git repository or Task is required.
+For a new isolated working directory, use the dedicated environment containing
+only `agent-swarm` and its dependencies:
+
+```sh
+python -m agent_swarm.claude.host configuration --project /absolute/working-directory \
+  --claude /absolute/path/to/claude --write
+```
+
+Start Claude Code normally in that directory and approve its ordinary project,
+plugin and MCP trust prompts. The existing native mod supplies the current
+Session identity for every `agents` MCP call; model arguments cannot choose it.
+The host exposes progressive `discover`, `describe`, and `execute` requests.
+`/agents-context` shows native binding and notice delivery. GraphTraj users
+continue to use the GraphTraj host, which also exposes `tasks`.
+
+The generated `.agents-control/claude-host.json` retains the native executable,
+working directory and explicit child `settings`. Child permissions default to
+Claude's native `auto` review; sandboxing and native permission replies remain
+in force. Optional settings include `model`, `reasoning_effort`, `runtime_home`,
+`instructions`, `read_paths`, `worktree_access`, `permission_mode`, `base_url`
+and `api_key_env` (an environment variable name, never its value). Existing
+login and trust are not copied. Session continuation uses the original child's
+captured settings. Normalized archiving is off by default; GraphTraj supplies
+its existing optional collector separately.

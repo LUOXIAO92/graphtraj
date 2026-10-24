@@ -7,6 +7,7 @@ from consumption, result assessment and child progress.
 
 from __future__ import annotations
 
+from conftest import runner_operation
 import fcntl
 import json
 import subprocess
@@ -255,10 +256,15 @@ def test_send_returned_before_result_parent_consumes_and_acts(
     assert child['parent'] == parent['alias']
     child_file.write_text(child['alias'])
     try:
-        sent = run_process([
-            str(installed_commands.runner), 'send', parent['alias'],
-            '--instruction', 'followup', '--caused-by-event-id', _last_worldline_event(root),
-        ], cwd=root, env=environment, timeout=30)
+        sent = run_process(runner_operation(
+            installed_commands,
+            'send',
+            parent['alias'],
+            '--instruction',
+            'followup',
+            '--caused-by-event-id',
+            _last_worldline_event(root),
+        ), cwd=root, env=environment, timeout=30)
         assert sent.returncode == 0, sent.stdout + sent.stderr
         actions = _await_records(log, lambda rows: any('send_ack' in r for r in rows))
         receipt = next(r['send_ack'] for r in actions if 'send_ack' in r)
@@ -311,7 +317,7 @@ def test_send_returned_before_result_parent_consumes_and_acts(
         assert len(list((runner / 'sessions').iterdir())) == 2
     finally:
         release.touch()
-        run_process([str(installed_commands.runner), 'interrupt', parent['alias']],
+        run_process(runner_operation(installed_commands, 'interrupt', parent['alias']),
                     cwd=root, env=environment, timeout=30)
 
 
@@ -359,10 +365,15 @@ def test_original_driver_keeps_its_result_when_parent_starts_successor(
         try:
             parent = _mapping_for_role(runner, 'team-leader')
             child = _mapping_for_role(runner, 'engineer')
-            sent = run_process([
-                str(installed_commands.runner), 'send', parent['alias'],
-                '--instruction', 'race', '--caused-by-event-id', _last_worldline_event(root),
-            ], cwd=root, env=environment, timeout=20)
+            sent = run_process(runner_operation(
+                installed_commands,
+                'send',
+                parent['alias'],
+                '--instruction',
+                'race',
+                '--caused-by-event-id',
+                _last_worldline_event(root),
+            ), cwd=root, env=environment, timeout=20)
             assert sent.returncode == 0, sent.stdout + sent.stderr
             wait_for_file(ready)
             initial_release.touch()
@@ -378,6 +389,6 @@ def test_original_driver_keeps_its_result_when_parent_starts_successor(
             initial_release.touch()
             release.touch()
             if 'parent' in locals():
-                run_process([str(installed_commands.runner), 'interrupt', parent['alias']],
+                run_process(runner_operation(installed_commands, 'interrupt', parent['alias']),
                             cwd=root, env=environment, timeout=30)
             process.wait(timeout=30)

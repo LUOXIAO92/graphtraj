@@ -1,0 +1,249 @@
+...............FFF............FFFFFFFFFFFFFFFFFFFFF.......F.F.           [100%]
+=================================== FAILURES ===================================
+___________ test_installed_send_recovers_historical_reports[mapping] ___________
+tests/test_report_access.py:328: in test_installed_send_recovers_historical_reports
+    assert reports.returncode == 0, reports.stdout + reports.stderr
+E   AssertionError: error:
+E       code: authority-denied
+E       message: Project reads require a verified project caller.
+E     Project reads require a verified project caller.
+E     
+E   assert 1 == 0
+E    +  where 1 = CompletedProcess(args=['/private/tmp/344-e9-access-current/installed-environment0/venv/bin/agent-runner', 'reports', '...sage: Project reads require a verified project caller.\n', stderr='Project reads require a verified project caller.\n').returncode
+___________ test_installed_send_recovers_historical_reports[launch] ____________
+tests/test_report_access.py:328: in test_installed_send_recovers_historical_reports
+    assert reports.returncode == 0, reports.stdout + reports.stderr
+E   AssertionError: error:
+E       code: authority-denied
+E       message: Project reads require a verified project caller.
+E     Project reads require a verified project caller.
+E     
+E   assert 1 == 0
+E    +  where 1 = CompletedProcess(args=['/private/tmp/344-e9-access-current/installed-environment0/venv/bin/agent-runner', 'reports', '...sage: Project reads require a verified project caller.\n', stderr='Project reads require a verified project caller.\n').returncode
+_________ test_installed_send_recovers_historical_reports[cli-launch] __________
+tests/test_report_access.py:321: in test_installed_send_recovers_historical_reports
+    assert filesystem[str(own)] == ('write' if source == 'cli-launch' else 'read')
+E   AssertionError: assert 'read' == 'write'
+E     
+E     - write
+E     + read
+_ test_single_role_launch_registers_and_executes_without_placeholder_members[researcher-True-reports0-None] _
+tests/test_generic_role_execution.py:136: in test_single_role_launch_registers_and_executes_without_placeholder_members
+    assert response.returncode == 0, response.stdout + response.stderr
+E   AssertionError: error:
+E       code: authority-denied
+E       message: Project reads require a verified project caller.
+E     Project reads require a verified project caller.
+E     
+E   assert 1 == 0
+E    +  where 1 = CompletedProcess(args=['/private/tmp/344-e9-access-current/installed-environment0/venv/bin/agent-runner', 'reports', '...sage: Project reads require a verified project caller.\n', stderr='Project reads require a verified project caller.\n').returncode
+_ test_single_role_launch_registers_and_executes_without_placeholder_members[engineer-False-reports1-None] _
+tests/test_generic_role_execution.py:136: in test_single_role_launch_registers_and_executes_without_placeholder_members
+    assert response.returncode == 0, response.stdout + response.stderr
+E   AssertionError: error:
+E       code: authority-denied
+E       message: Project reads require a verified project caller.
+E     Project reads require a verified project caller.
+E     
+E   assert 1 == 0
+E    +  where 1 = CompletedProcess(args=['/private/tmp/344-e9-access-current/installed-environment0/venv/bin/agent-runner', 'reports', '...sage: Project reads require a verified project caller.\n', stderr='Project reads require a verified project caller.\n').returncode
+_ test_single_role_launch_registers_and_executes_without_placeholder_members[researcher-False-reports2-None] _
+tests/test_generic_role_execution.py:136: in test_single_role_launch_registers_and_executes_without_placeholder_members
+    assert response.returncode == 0, response.stdout + response.stderr
+E   AssertionError: error:
+E       code: authority-denied
+E       message: Project reads require a verified project caller.
+E     Project reads require a verified project caller.
+E     
+E   assert 1 == 0
+E    +  where 1 = CompletedProcess(args=['/private/tmp/344-e9-access-current/installed-environment0/venv/bin/agent-runner', 'reports', '...sage: Project reads require a verified project caller.\n', stderr='Project reads require a verified project caller.\n').returncode
+_ test_single_role_launch_registers_and_executes_without_placeholder_members[research_team.team_leader-False-reports3-None] _
+tests/test_generic_role_execution.py:136: in test_single_role_launch_registers_and_executes_without_placeholder_members
+    assert response.returncode == 0, response.stdout + response.stderr
+E   AssertionError: error:
+E       code: authority-denied
+E       message: Project reads require a verified project caller.
+E     Project reads require a verified project caller.
+E     
+E   assert 1 == 0
+E    +  where 1 = CompletedProcess(args=['/private/tmp/344-e9-access-current/installed-environment0/venv/bin/agent-runner', 'reports', '...sage: Project reads require a verified project caller.\n', stderr='Project reads require a verified project caller.\n').returncode
+_ test_single_role_launch_registers_and_executes_without_placeholder_members[spec_reviewer-False-reports4-None] _
+tests/test_generic_role_execution.py:136: in test_single_role_launch_registers_and_executes_without_placeholder_members
+    assert response.returncode == 0, response.stdout + response.stderr
+E   AssertionError: error:
+E       code: authority-denied
+E       message: Project reads require a verified project caller.
+E     Project reads require a verified project caller.
+E     
+E   assert 1 == 0
+E    +  where 1 = CompletedProcess(args=['/private/tmp/344-e9-access-current/installed-environment0/venv/bin/agent-runner', 'reports', '...sage: Project reads require a verified project caller.\n', stderr='Project reads require a verified project caller.\n').returncode
+_ test_single_role_launch_registers_and_executes_without_placeholder_members[engineer-False-reports5-None] _
+tests/test_generic_role_execution.py:136: in test_single_role_launch_registers_and_executes_without_placeholder_members
+    assert response.returncode == 0, response.stdout + response.stderr
+E   AssertionError: error:
+E       code: authority-denied
+E       message: Project reads require a verified project caller.
+E     Project reads require a verified project caller.
+E     
+E   assert 1 == 0
+E    +  where 1 = CompletedProcess(args=['/private/tmp/344-e9-access-current/installed-environment0/venv/bin/agent-runner', 'reports', '...sage: Project reads require a verified project caller.\n', stderr='Project reads require a verified project caller.\n').returncode
+_ test_single_role_launch_registers_and_executes_without_placeholder_members[engineer-expert-False-reports6-None] _
+tests/test_generic_role_execution.py:136: in test_single_role_launch_registers_and_executes_without_placeholder_members
+    assert response.returncode == 0, response.stdout + response.stderr
+E   AssertionError: error:
+E       code: authority-denied
+E       message: Project reads require a verified project caller.
+E     Project reads require a verified project caller.
+E     
+E   assert 1 == 0
+E    +  where 1 = CompletedProcess(args=['/private/tmp/344-e9-access-current/installed-environment0/venv/bin/agent-runner', 'reports', '...sage: Project reads require a verified project caller.\n', stderr='Project reads require a verified project caller.\n').returncode
+_ test_single_role_launch_registers_and_executes_without_placeholder_members[coding-team.engineer-junior-False-reports7-None] _
+tests/test_generic_role_execution.py:136: in test_single_role_launch_registers_and_executes_without_placeholder_members
+    assert response.returncode == 0, response.stdout + response.stderr
+E   AssertionError: error:
+E       code: authority-denied
+E       message: Project reads require a verified project caller.
+E     Project reads require a verified project caller.
+E     
+E   assert 1 == 0
+E    +  where 1 = CompletedProcess(args=['/private/tmp/344-e9-access-current/installed-environment0/venv/bin/agent-runner', 'reports', '...sage: Project reads require a verified project caller.\n', stderr='Project reads require a verified project caller.\n').returncode
+_ test_single_role_launch_registers_and_executes_without_placeholder_members[engineer-senior-False-reports8-None] _
+tests/test_generic_role_execution.py:136: in test_single_role_launch_registers_and_executes_without_placeholder_members
+    assert response.returncode == 0, response.stdout + response.stderr
+E   AssertionError: error:
+E       code: authority-denied
+E       message: Project reads require a verified project caller.
+E     Project reads require a verified project caller.
+E     
+E   assert 1 == 0
+E    +  where 1 = CompletedProcess(args=['/private/tmp/344-e9-access-current/installed-environment0/venv/bin/agent-runner', 'reports', '...sage: Project reads require a verified project caller.\n', stderr='Project reads require a verified project caller.\n').returncode
+_ test_single_role_launch_registers_and_executes_without_placeholder_members[translator-False-reports9-relative] _
+tests/test_generic_role_execution.py:136: in test_single_role_launch_registers_and_executes_without_placeholder_members
+    assert response.returncode == 0, response.stdout + response.stderr
+E   AssertionError: error:
+E       code: authority-denied
+E       message: Project reads require a verified project caller.
+E     Project reads require a verified project caller.
+E     
+E   assert 1 == 0
+E    +  where 1 = CompletedProcess(args=['/private/tmp/344-e9-access-current/installed-environment0/venv/bin/agent-runner', 'reports', '...sage: Project reads require a verified project caller.\n', stderr='Project reads require a verified project caller.\n').returncode
+_ test_single_role_launch_registers_and_executes_without_placeholder_members[translator-False-reports10-absolute] _
+tests/test_generic_role_execution.py:136: in test_single_role_launch_registers_and_executes_without_placeholder_members
+    assert response.returncode == 0, response.stdout + response.stderr
+E   AssertionError: error:
+E       code: authority-denied
+E       message: Project reads require a verified project caller.
+E     Project reads require a verified project caller.
+E     
+E   assert 1 == 0
+E    +  where 1 = CompletedProcess(args=['/private/tmp/344-e9-access-current/installed-environment0/venv/bin/agent-runner', 'reports', '...sage: Project reads require a verified project caller.\n', stderr='Project reads require a verified project caller.\n').returncode
+_ test_configured_parent_dispatch_and_ordinary_resume_keep_actual_authority[researcher-analyst-False-cli] _
+tests/test_generic_role_execution.py:258: in test_configured_parent_dispatch_and_ordinary_resume_keep_actual_authority
+    assert (worktree / 'parent-turns.txt').read_text() == '2'
+E   AssertionError: assert '1' == '2'
+E     
+E     - 2
+E     + 1
+_ test_configured_parent_dispatch_and_ordinary_resume_keep_actual_authority[researcher-analyst-False-mcp] _
+tests/test_generic_role_execution.py:258: in test_configured_parent_dispatch_and_ordinary_resume_keep_actual_authority
+    assert (worktree / 'parent-turns.txt').read_text() == '2'
+E   AssertionError: assert '1' == '2'
+E     
+E     - 2
+E     + 1
+_ test_configured_parent_dispatch_and_ordinary_resume_keep_actual_authority[team-leader-analyst-False-cli] _
+tests/test_generic_role_execution.py:258: in test_configured_parent_dispatch_and_ordinary_resume_keep_actual_authority
+    assert (worktree / 'parent-turns.txt').read_text() == '2'
+E   AssertionError: assert '1' == '2'
+E     
+E     - 2
+E     + 1
+_ test_configured_parent_dispatch_and_ordinary_resume_keep_actual_authority[team-leader-analyst-False-mcp] _
+tests/test_generic_role_execution.py:258: in test_configured_parent_dispatch_and_ordinary_resume_keep_actual_authority
+    assert (worktree / 'parent-turns.txt').read_text() == '2'
+E   AssertionError: assert '1' == '2'
+E     
+E     - 2
+E     + 1
+_ test_configured_parent_dispatch_and_ordinary_resume_keep_actual_authority[engineer-analyst-False-cli] _
+tests/test_generic_role_execution.py:258: in test_configured_parent_dispatch_and_ordinary_resume_keep_actual_authority
+    assert (worktree / 'parent-turns.txt').read_text() == '2'
+E   AssertionError: assert '1' == '2'
+E     
+E     - 2
+E     + 1
+_ test_configured_parent_dispatch_and_ordinary_resume_keep_actual_authority[engineer-analyst-False-mcp] _
+tests/test_generic_role_execution.py:258: in test_configured_parent_dispatch_and_ordinary_resume_keep_actual_authority
+    assert (worktree / 'parent-turns.txt').read_text() == '2'
+E   AssertionError: assert '1' == '2'
+E     
+E     - 2
+E     + 1
+_ test_configured_parent_dispatch_and_ordinary_resume_keep_actual_authority[engineer-expert-engineer-junior-False-cli] _
+tests/test_generic_role_execution.py:258: in test_configured_parent_dispatch_and_ordinary_resume_keep_actual_authority
+    assert (worktree / 'parent-turns.txt').read_text() == '2'
+E   AssertionError: assert '1' == '2'
+E     
+E     - 2
+E     + 1
+_ test_configured_parent_dispatch_and_ordinary_resume_keep_actual_authority[engineer-expert-engineer-junior-False-mcp] _
+tests/test_generic_role_execution.py:258: in test_configured_parent_dispatch_and_ordinary_resume_keep_actual_authority
+    assert (worktree / 'parent-turns.txt').read_text() == '2'
+E   AssertionError: assert '1' == '2'
+E     
+E     - 2
+E     + 1
+_ test_configured_parent_dispatch_and_ordinary_resume_keep_actual_authority[coding-team.engineer-analyst-True-cli] _
+tests/test_generic_role_execution.py:258: in test_configured_parent_dispatch_and_ordinary_resume_keep_actual_authority
+    assert (worktree / 'parent-turns.txt').read_text() == '2'
+E   AssertionError: assert '1' == '2'
+E     
+E     - 2
+E     + 1
+_ test_configured_parent_dispatch_and_ordinary_resume_keep_actual_authority[coding-team.engineer-analyst-True-mcp] _
+tests/test_generic_role_execution.py:258: in test_configured_parent_dispatch_and_ordinary_resume_keep_actual_authority
+    assert (worktree / 'parent-turns.txt').read_text() == '2'
+E   AssertionError: assert '1' == '2'
+E     
+E     - 2
+E     + 1
+_______ test_public_launch_rejects_retired_skill_selection[skills0-cli] ________
+tests/test_generic_role_execution.py:425: in test_public_launch_rejects_retired_skill_selection
+    batch.write_text(yaml.safe_dump(request))
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   assert 2 == 1
+E    +  where 2 = CompletedProcess(args=['/private/tmp/344-e9-access-current/installed-environment0/venv/bin/agent-runner', '--swarm-inp...S] COMMAND [ARGS]...\nTry 'agent-runner --help' for help.\n\nError: arguments.tasks[0].skills: unexpected parameter\n").returncode
+_______ test_public_launch_rejects_retired_skill_selection[skills1-cli] ________
+tests/test_generic_role_execution.py:425: in test_public_launch_rejects_retired_skill_selection
+    batch.write_text(yaml.safe_dump(request))
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   assert 2 == 1
+E    +  where 2 = CompletedProcess(args=['/private/tmp/344-e9-access-current/installed-environment0/venv/bin/agent-runner', '--swarm-inp...S] COMMAND [ARGS]...\nTry 'agent-runner --help' for help.\n\nError: arguments.tasks[0].skills: unexpected parameter\n").returncode
+=========================== short test summary info ============================
+FAILED tests/test_report_access.py::test_installed_send_recovers_historical_reports[mapping]
+FAILED tests/test_report_access.py::test_installed_send_recovers_historical_reports[launch]
+FAILED tests/test_report_access.py::test_installed_send_recovers_historical_reports[cli-launch]
+FAILED tests/test_generic_role_execution.py::test_single_role_launch_registers_and_executes_without_placeholder_members[researcher-True-reports0-None]
+FAILED tests/test_generic_role_execution.py::test_single_role_launch_registers_and_executes_without_placeholder_members[engineer-False-reports1-None]
+FAILED tests/test_generic_role_execution.py::test_single_role_launch_registers_and_executes_without_placeholder_members[researcher-False-reports2-None]
+FAILED tests/test_generic_role_execution.py::test_single_role_launch_registers_and_executes_without_placeholder_members[research_team.team_leader-False-reports3-None]
+FAILED tests/test_generic_role_execution.py::test_single_role_launch_registers_and_executes_without_placeholder_members[spec_reviewer-False-reports4-None]
+FAILED tests/test_generic_role_execution.py::test_single_role_launch_registers_and_executes_without_placeholder_members[engineer-False-reports5-None]
+FAILED tests/test_generic_role_execution.py::test_single_role_launch_registers_and_executes_without_placeholder_members[engineer-expert-False-reports6-None]
+FAILED tests/test_generic_role_execution.py::test_single_role_launch_registers_and_executes_without_placeholder_members[coding-team.engineer-junior-False-reports7-None]
+FAILED tests/test_generic_role_execution.py::test_single_role_launch_registers_and_executes_without_placeholder_members[engineer-senior-False-reports8-None]
+FAILED tests/test_generic_role_execution.py::test_single_role_launch_registers_and_executes_without_placeholder_members[translator-False-reports9-relative]
+FAILED tests/test_generic_role_execution.py::test_single_role_launch_registers_and_executes_without_placeholder_members[translator-False-reports10-absolute]
+FAILED tests/test_generic_role_execution.py::test_configured_parent_dispatch_and_ordinary_resume_keep_actual_authority[researcher-analyst-False-cli]
+FAILED tests/test_generic_role_execution.py::test_configured_parent_dispatch_and_ordinary_resume_keep_actual_authority[researcher-analyst-False-mcp]
+FAILED tests/test_generic_role_execution.py::test_configured_parent_dispatch_and_ordinary_resume_keep_actual_authority[team-leader-analyst-False-cli]
+FAILED tests/test_generic_role_execution.py::test_configured_parent_dispatch_and_ordinary_resume_keep_actual_authority[team-leader-analyst-False-mcp]
+FAILED tests/test_generic_role_execution.py::test_configured_parent_dispatch_and_ordinary_resume_keep_actual_authority[engineer-analyst-False-cli]
+FAILED tests/test_generic_role_execution.py::test_configured_parent_dispatch_and_ordinary_resume_keep_actual_authority[engineer-analyst-False-mcp]
+FAILED tests/test_generic_role_execution.py::test_configured_parent_dispatch_and_ordinary_resume_keep_actual_authority[engineer-expert-engineer-junior-False-cli]
+FAILED tests/test_generic_role_execution.py::test_configured_parent_dispatch_and_ordinary_resume_keep_actual_authority[engineer-expert-engineer-junior-False-mcp]
+FAILED tests/test_generic_role_execution.py::test_configured_parent_dispatch_and_ordinary_resume_keep_actual_authority[coding-team.engineer-analyst-True-cli]
+FAILED tests/test_generic_role_execution.py::test_configured_parent_dispatch_and_ordinary_resume_keep_actual_authority[coding-team.engineer-analyst-True-mcp]
+FAILED tests/test_generic_role_execution.py::test_public_launch_rejects_retired_skill_selection[skills0-cli]
+FAILED tests/test_generic_role_execution.py::test_public_launch_rejects_retired_skill_selection[skills1-cli]
+26 failed, 36 passed in 248.06s (0:04:08)

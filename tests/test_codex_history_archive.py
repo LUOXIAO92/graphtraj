@@ -74,3 +74,22 @@ def test_ephemeral_saving_and_backfill_are_effective(tmp_path: Path, peer: Path)
         assert native_record(store.page()['events'][-1])['pages'][0]['data'] == [entry]
 
     asyncio.run(exercise())
+
+
+def test_rejected_session_does_not_register_an_archive_source(tmp_path: Path, peer: Path) -> None:
+    """Ownership rejection must precede the collector's public mapping side effect."""
+    from graphtraj.runtimes.codex.app_server import CodexSession
+    from agent_swarm.runtime import RuntimeAdapterError
+    from agent_swarm.sessions.archive import SessionArchive
+
+    async def exercise() -> None:
+        """Use the public native control and archive capabilities."""
+        archive = SessionArchive(tmp_path / 'archive', save_normalized_sessions=True)
+        foreign = CodexSession('unowned', None, inherited_history={'id': 'unowned'})
+        async with CodexAppServer(command=[str(peer)], cwd=tmp_path) as adapter:
+            with pytest.raises(RuntimeAdapterError):
+                await adapter.retain_ordered_history(foreign, archive, 'other-agent')
+        with pytest.raises(ValueError, match='explicitly mapped'):
+            archive.store('codex:unowned')
+
+    asyncio.run(exercise())

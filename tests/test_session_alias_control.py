@@ -8,7 +8,7 @@ from pathlib import Path
 
 import yaml
 
-from conftest import app_server_peer, FakeCodex, InstalledCommands, run_process, wait_for_file
+from conftest import runner_operation, app_server_peer, FakeCodex, InstalledCommands, run_process, wait_for_file
 from runner_fixtures import configure_harness
 
 
@@ -90,7 +90,7 @@ def test_installed_alias_control_resumes_and_interrupts_one_team_session(
         tmp_path,
     )
     send_help = run_process(
-        [str(installed_commands.runner), "send", "--help"],
+        runner_operation(installed_commands, "send", "--help"),
         cwd=harness_root,
         env=environment,
     )
@@ -168,15 +168,15 @@ def test_installed_alias_control_resumes_and_interrupts_one_team_session(
 
     policy_log = tmp_path / "resumed-policy.jsonl"
     resumed = run_process(
-        [
-            str(installed_commands.runner),
+        runner_operation(
+            installed_commands,
             "send",
             alias,
             "--instruction",
             "Inspect the accepted candidate again.",
             "--caused-by-event-id",
             cause,
-        ],
+        ),
         cwd=harness_root,
         env={
             **environment,
@@ -195,37 +195,34 @@ def test_installed_alias_control_resumes_and_interrupts_one_team_session(
     assert resumed_document["session"] == session
     assert resumed_document["send_status"] == "sent"
     running = run_process(
-        [str(installed_commands.runner), "status", alias],
+        runner_operation(installed_commands, "status", alias),
         cwd=harness_root,
         env=environment,
     )
     assert running.returncode == 0, running.stderr
     running_status = yaml.safe_load(running.stdout)
+    assert running_status["aliases"][0].pop("agent") == mapping["agent"]
     assert running_status["aliases"][0].pop("session") == session
     native_execution = running_status["aliases"][0].pop("execution_id")
     assert native_execution
     # The continuation reported the execution the resumed Worker recorded.
     assert resumed_document["execution_id"] == native_execution
-    assert running_status == {
-        "aliases": [
-            {
-                "alias": alias,
-                "activity": "running",
-                "last_outcome": "completed",
-            }
-        ]
-    }
+    current, = running_status["aliases"]
+    assert current["alias"] == alias
+    assert current["activity"] == "running"
+    assert current["last_outcome"] == "completed"
+    assert current["state"] == "active"
 
     unsupported = run_process(
-        [
-            str(installed_commands.runner),
+        runner_operation(
+            installed_commands,
             "send",
             alias,
             "--instruction",
             "Do not queue this follow-up.",
             "--caused-by-event-id",
             cause,
-        ],
+        ),
         cwd=harness_root,
         env=environment,
     )
@@ -241,8 +238,8 @@ def test_installed_alias_control_resumes_and_interrupts_one_team_session(
     wait_for_file(policy_log)
     peer_before = peer_mapping_file.read_text()
     denied = run_process(
-        [str(installed_commands.runner), "send", peer_alias,
-         "--instruction", "Inspect the candidate.", "--caused-by-event-id", cause],
+        runner_operation(installed_commands, "send", peer_alias,
+         "--instruction", "Inspect the candidate.", "--caused-by-event-id", cause),
         cwd=harness_root, env=environment,
     )
     assert denied.returncode == 1
@@ -256,7 +253,7 @@ def test_installed_alias_control_resumes_and_interrupts_one_team_session(
     assert yaml.safe_load(denied_batch.stdout)["error"]["code"] == "insufficient-capacity"
 
     interrupted = run_process(
-        [str(installed_commands.runner), "interrupt", alias],
+        runner_operation(installed_commands, "interrupt", alias),
         cwd=harness_root,
         env=environment,
         timeout=10,
@@ -273,8 +270,8 @@ def test_installed_alias_control_resumes_and_interrupts_one_team_session(
     }
     wait_for_file(mapping_file.parent / "execution.yml")
     retry = run_process(
-        [str(installed_commands.runner), "send", peer_alias,
-         "--instruction", "Inspect the candidate.", "--caused-by-event-id", cause],
+        runner_operation(installed_commands, "send", peer_alias,
+         "--instruction", "Inspect the candidate.", "--caused-by-event-id", cause),
         cwd=harness_root, env=environment,
     )
     # Releasing capacity does not make Main this descendant's direct parent.
@@ -282,7 +279,7 @@ def test_installed_alias_control_resumes_and_interrupts_one_team_session(
     assert yaml.safe_load(retry.stdout)["error"]["code"] == "authority-denied"
     assert peer_mapping_file.read_text() == peer_before
     idle = run_process(
-        [str(installed_commands.runner), "status", alias],
+        runner_operation(installed_commands, "status", alias),
         cwd=harness_root,
         env=environment,
     )
@@ -290,15 +287,11 @@ def test_installed_alias_control_resumes_and_interrupts_one_team_session(
     idle_status = yaml.safe_load(idle.stdout)
     assert idle_status["aliases"][0].pop("session") == session
     assert idle_status["aliases"][0].pop("execution_id") == native_execution
-    assert idle_status == {
-        "aliases": [
-            {
-                "alias": alias,
-                "activity": "idle",
-                "last_outcome": "interrupted",
-            }
-        ]
-    }
+    current, = idle_status["aliases"]
+    assert current["agent"] == mapping["agent"]
+    assert current["alias"] == alias
+    assert current["activity"] == "idle"
+    assert current["last_outcome"] == "interrupted"
     # The Runner records the follow-up cause in the Session's own records,
     # while the Trace entry keeps reading the Runtime-owned Session file.
     assert session_records.read_text(encoding="utf-8") != records_before
@@ -542,10 +535,10 @@ def test_installed_status_reports_native_requests_and_commit_diff(
     )
 
     result = run_process(
-        [
-            str(installed_commands.runner), "status", "--operation-total",
+        runner_operation(
+            installed_commands, "status", "--operation-total",
             "--baseline", baseline, "--candidate", candidate, alias,
-        ],
+        ),
         cwd=harness_root,
         env=environment,
     )
@@ -627,7 +620,7 @@ def test_installed_status_accepts_configured_entity_names_and_retains_history(
     retained_record = (retained / "mapping.yml").read_bytes()
 
     located = run_process(
-        [str(installed_commands.runner), "status", current_alias, retained_alias],
+        runner_operation(installed_commands, "status", current_alias, retained_alias),
         cwd=harness_root,
         env=environment,
     )
@@ -645,7 +638,7 @@ def test_installed_status_accepts_configured_entity_names_and_retains_history(
         "76-session_alias_control-handover0-engineer@first@second",
     ):
         refused = run_process(
-            [str(installed_commands.runner), "status", refused_alias],
+            runner_operation(installed_commands, "status", refused_alias),
             cwd=harness_root,
             env=environment,
         )

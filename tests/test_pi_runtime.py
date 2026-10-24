@@ -5,6 +5,7 @@ from contextlib import ExitStack
 import json
 import os
 from pathlib import Path
+import shutil
 import sys
 import threading
 import time
@@ -361,13 +362,54 @@ def test_pi_dialog_notice_is_retried_while_the_dialog_is_pending(
 
 
 def test_pi_child_cli_preserves_real_caller(tmp_path: Path, pi_environment: dict) -> None:
-    """A real child process uses the hosted CLI from its Worktree and cannot forge a sibling identity."""
+    """A real child process uses the hosted CLI from its Worktree and cannot forge a sibling identity.
+
+    The forged alias is ignored: the report is written as the child itself.
+    Reading the sibling's project reports is ordinary project read access.
+    """
     result_project(tmp_path)
     with ExitStack() as stack:
         turn, _, _ = execution(tmp_path, pi_environment, 'research@x1', 'cli', stack)
         result = turn.run()
-    assert 'authority-denied' in result['last_agent_message']
     receipt = json.loads(result['last_agent_message'])
     assert receipt['authorized_exit'] == 0, receipt
-    assert receipt['refused_exit'] == 1
-    assert yaml.safe_load(receipt['refused'])['error']['code'] == 'authority-denied'
+    assert yaml.safe_load(receipt['authorized'])['alias'] == 'research@x1'
+    assert receipt['refused_exit'] == 0, receipt
+
+
+@pytest.mark.parametrize('protected', ['.graphtraj', '.codex'])
+def test_pi_standalone_root_worktree_refuses_unexpressible_read_denial(
+    tmp_path: Path, pi_environment: dict, monkeypatch: pytest.MonkeyPatch, protected: str,
+) -> None:
+    """A project-root worktree cannot re-allow its own protected state to the child."""
+    from agent_swarm import AgentControl, Caller, bind
+    from agent_swarm.pi import PiDriver
+
+    _, prepared = context(tmp_path, pi_environment)
+    project = tmp_path / 'standalone'
+    (project / 'docs').mkdir(parents=True)
+    request = {**prepared.launch_document()['adapter_request'],
+               'worktree_path': str(project), 'harness_root': str(project),
+               'git_common_directory': str(project / '.git'), 'docs_directory': str(project / 'docs'),
+               'worktree_access': 'read', 'reports': [], 'resources': []}
+    captured = tmp_path / 'native-policy.json'
+    monkeypatch.setenv('PI_FIXTURE_POLICY', str(captured))
+    call = bind(AgentControl(tmp_path / 'data', {'pi': PiDriver(request)}), Caller('standalone-host', None))
+
+    (project / protected).mkdir()
+    (project / protected / 'canary.txt').write_text('canary')
+    refused = call({'action': 'create', 'runtime': 'pi', 'instruction': 'policy'})
+    error = refused.document['result']['last_result']['error']
+    assert refused.failed and error['code'] == 'ROLE_CONFIG_UNSUPPORTED', refused.document
+    assert str((project / protected).resolve()) in error['message']
+    assert not captured.exists()
+
+    # Absent protected state has nothing to expose; the denial stays declared.
+    shutil.rmtree(project / protected)
+    created = call({'action': 'create', 'runtime': 'pi', 'instruction': 'policy'})
+    assert not created.failed, created.document
+    done = call({'action': 'wait', 'agent': created.document['agent'], 'timeout_seconds': 10})
+    assert not done.failed and done.document['result']['state'] != 'active', done.document
+    filesystem = json.loads(captured.read_text())['filesystem']
+    assert str(project / protected) in filesystem['denyRead']
+    assert str(project.resolve()) in filesystem['allowRead']

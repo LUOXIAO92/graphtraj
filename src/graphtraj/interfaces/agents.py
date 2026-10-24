@@ -5,15 +5,18 @@ over the tool's own data root ``<project>/.graphtraj/swarm``, with GraphTraj's
 :class:`~graphtraj.execution.agent_driver.AdapterDriver` running the native
 Runtime. No Task, Team, Round or Worldline event is needed for any action.
 
-Task member Sessions created by GraphTraj delivery keep their Runner aliases
-and existing controls for status, interrupt, requests, reply and retire; their
-continuation stays GraphTraj policy (``send_instruction`` with Worldline
-causes). Caller identity stays with the existing bindings: the native callback
-scope or the calling process tree resolved by ``caller_alias``.
+Task member Sessions created by GraphTraj delivery keep their Runner aliases,
+identities, memory and real parents. ``agents`` controls them with the same
+actions as ordinary Agents through their existing native Session controls;
+GraphTraj delivery applies its own Task policy, such as recording Worldline
+causes, before calling the same continuation. Caller identity stays with the
+existing bindings: the native callback scope or the calling process tree
+resolved by ``caller_alias``.
 """
 
 from __future__ import annotations
 
+import time
 from pathlib import Path
 from typing import Any, Callable, Mapping
 
@@ -28,7 +31,6 @@ from agent_swarm import (
     default_config,
     explicit_choices,
     read_config,
-    unavailable,
 )
 
 from graphtraj.execution.runner_models import RunnerError
@@ -39,26 +41,22 @@ from agent_swarm.sessions.archive import ConfiguredSessionArchive
 # Core Agent references; anything else is a Runner alias of a Task member.
 AGENT_PREFIX = "agent-"
 
-# Existing GraphTraj features whose permission check each action reuses at
-# the Codex dynamicTools boundary. Actions without a feature need none there;
-# read-only native helpers are refused them by that boundary.
-ACTION_FEATURES = {
-    "status":    "alias_status",
-    "interrupt": "interrupt",
-    "requests":  "pending_requests",
-    "reply":     "reply_to_request",
-    "retire":    "retire",
-}
+# Polling interval of a finite wait on a Task member Session.
+WAIT_INTERVAL_SECONDS = 0.2
 
-# Task member continuation and waiting remain GraphTraj delivery policy.
-TASK_SESSION_MISSING = {
-    "send":   "Task member Sessions continue through GraphTraj send_instruction with "
-              "Worldline causes; ordinary Agents created by agents accept send directly.",
-    "resume": "Task member Sessions continue through GraphTraj send_instruction with "
-              "Worldline causes; ordinary Agents created by agents accept resume directly.",
-    "wait":   "a finite wait on a Task member alias is not provided; ordinary Agents "
-              "created by agents accept wait directly.",
-}
+
+PREVIEW_CHARACTERS = 200
+
+
+def _preview(value: Any) -> Any:
+    """Bound message bodies in the default listing; an explicit agent shows them."""
+    if isinstance(value, dict):
+        return {key: (item[:PREVIEW_CHARACTERS] + "…" if isinstance(item, str) and "message" in key
+                      and len(item) > PREVIEW_CHARACTERS else _preview(item))
+                for key, item in value.items()}
+    if isinstance(value, list):
+        return [_preview(item) for item in value]
+    return value
 
 
 def swarm_root(root: Path) -> Path:
@@ -95,43 +93,118 @@ class GraphTrajAgents:
     def __init__(self, root: Path, cwd: Path | None = None) -> None:
         """Bind the project, the core data root and the Adapter driver."""
         from graphtraj.execution.agent_driver import SUPPORTED_RUNTIMES, AdapterDriver
+        from graphtraj.execution.main_continuity import MainRoots
 
         self.root    = root
         driver       = AdapterDriver(root, cwd or root)
-        self.control = AgentControl(swarm_root(root), {name: driver for name in SUPPORTED_RUNTIMES})
+        # Every verified Main continues the roots of the project's Main.
+        self.control = AgentControl(swarm_root(root), {name: driver for name in SUPPORTED_RUNTIMES},
+                                    roots=MainRoots(root / ".graphtraj" / "runner"))
         default_config(swarm_root(root), save_normalized_sessions=True)
 
     def operate(self, action: str, arguments: Mapping[str, Any], binding: Binding) -> Outcome:
         """Perform one validated action, translating GraphTraj rejections."""
         agent = arguments.get("agent")
         try:
+            member = self._member_alias(agent)
+            core = member is None and (action == "create" or (agent or "").startswith(AGENT_PREFIX))
+            if not core and action not in {"status", "wait"} and binding.caller.agent is None:
+                # A continued Main controls no Task member either.
+                self.control.roots.require_control(binding.caller)
+            if member is not None:
+                # A Task member's core reference uses its existing Session controls.
+                outcome = self._operate(action, {**arguments, "agent": member})
+                return Outcome(outcome.result, agent=agent, session=outcome.session,
+                               execution=outcome.execution, failed=outcome.failed)
             if action == "create" or (agent or "").startswith(AGENT_PREFIX):
+                if arguments.get("reports_only"):
+                    raise AgentsError("invalid-input", "request.reports_only: only for a Task member")
                 return self.control.operate(action, arguments, binding)
             if action == "status" and agent is None:
                 return self._hierarchy(binding)
-            if action in TASK_SESSION_MISSING:
-                raise unavailable(action, TASK_SESSION_MISSING[action])
             return self._operate(action, arguments)
         except (RunnerError, RuntimeAdapterError) as error:
             raise AgentsError(error.code, error.message) from None
         except ValueError as error:
             raise AgentsError("invalid-input", str(error)) from None
 
-    def _hierarchy(self, binding: Binding) -> Outcome:
-        """Return the caller's Agents and, separately, its Task member Sessions."""
-        from graphtraj.execution.runner_status import status_tree
+    def _member_alias(self, agent: str | None) -> str | None:
+        """Return the Runner alias a Task member's core Agent record retains.
 
-        agents   = self.control.operate("status", {}, binding)
-        if (binding.caller.agent or '').startswith(AGENT_PREFIX):
-            # A core identity has no legacy Runner alias or Task participation.
+        The Worker records each Task member under the ``graphtraj-tasks`` host
+        with its alias as the only driver setting; any other reference is not
+        a Task member.
+        """
+        import json
+
+        from graphtraj.execution.task_agents import TASK_HOST
+
+        if not (agent or "").startswith(AGENT_PREFIX) or "/" in agent:
+            return None
+        record = swarm_root(self.root) / "control" / "agents" / f"{agent}.json"
+        try:
+            document = json.loads(record.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return None
+        alias = document.get("settings", {}).get("alias") if isinstance(document, dict) else None
+        return alias if document.get("host") == TASK_HOST and isinstance(alias, str) else None
+
+    def _hierarchy(self, binding: Binding) -> Outcome:
+        """Return the caller's own Agents and its real Task member hierarchy.
+
+        A Task member caller adds the Sessions recorded under it. A native
+        Main adds the top-level Sessions it dispatched, as recorded by their
+        ``parent_connection``, with their subtrees. Each in-scope node keeps
+        its own error. Unrelated history is never scanned into this view;
+        current Task membership is ``tasks`` task_members.
+        """
+        from graphtraj.execution.runner_status import one_retained_scan, status_tree
+
+        with one_retained_scan():
+            return self._hierarchy_view(binding, status_tree)
+
+    def _hierarchy_view(self, binding: Binding, status_tree: Any) -> Outcome:
+        """Build ``_hierarchy`` with retained records read from one shared scan."""
+        agents = self.control.operate("status", {}, binding)
+        caller = binding.caller
+        if (caller.agent or "").startswith(AGENT_PREFIX):
             return agents
-        sessions = status_tree(self.root)
-        return Outcome({**agents.result, "task_sessions": sessions.document},
+        if caller.agent is None:
+            if caller.session is None or caller.runtime is None:
+                return agents
+            sessions = status_tree(self.root, owner_connection={
+                "runtime": caller.runtime, "session": caller.session},
+                current_members=self._current_members())
+        else:
+            sessions = status_tree(self.root)
+        return Outcome(_preview({**agents.result, "task_sessions": sessions.document}),
                        failed=not sessions.succeeded)
 
+    def _current_members(self) -> set[str]:
+        """Return the current seat holders of each unfinished Task's current Team.
+
+        Replaced, handed-over and retired seats stay readable by explicit
+        alias, as ``tasks`` task_members with a summary shows them.
+        """
+        from graphtraj.configuration.project_configuration import load_project_configuration
+        from graphtraj.execution.desktop_activity import _task_aliases, registration_order
+        from graphtraj.graph.task_graph import _load_states
+        from graphtraj.workspace.runner_project import discover_runner_directory
+
+        state = load_project_configuration(self.root).state
+        runner = discover_runner_directory(self.root)
+        states = _load_states(state / "tasks") if (state / "tasks").is_dir() else {}
+        order = registration_order(state) if states else {}
+        members: set[str] = set()
+        for directory, task in states.values():
+            if task.get("status") != "integrated" and task.get("disposition", "active") == "active":
+                members |= _task_aliases(directory, task, runner, order)[1]
+        return members
+
     def _operate(self, action: str, arguments: Mapping[str, Any]) -> Outcome:
-        """Dispatch a Task member alias to its existing control function."""
+        """Dispatch a Task member alias to its existing native Session control."""
         from graphtraj.execution.runner_control import (
+            continue_member,
             interrupt_session,
             pending_requests,
             reply_to_request,
@@ -144,20 +217,51 @@ class GraphTrajAgents:
         # References are read before the action because retirement moves the
         # record; they are returned only when the action itself succeeds.
         session, execution = self._references(agent)
+        failed = False
         if action == "status":
             response = status_aliases([agent], self.root)
             result, failed = response.document, not response.succeeded
+            # A summary-only native caller gets the same references in the
+            # envelope as in its status view, not the unrestricted mapping.
+            visible = next(iter(result.get('aliases', [])), {})
+            session, execution = visible.get('session'), visible.get('execution_id')
+        elif action in {"send", "resume"}:
+            message = arguments.get("message")
+            if message is None:
+                raise AgentsError("invalid-input", f"request.message: required to {action} a Task member")
+            result = continue_member(agent, message, self.root,
+                                     reports_only=arguments.get("reports_only") is True)
+        elif action == "wait":
+            result, failed = self._wait(agent, arguments["timeout_seconds"])
         elif action == "interrupt":
-            result, failed = interrupt_session(agent, self.root), False
+            result = interrupt_session(agent, self.root, ordinary=True)
         elif action == "requests":
             result = pending_requests(agent, self.root, execution_id=arguments.get("execution"))
-            failed = False
         elif action == "reply":
             result = reply_to_request(agent, arguments["request"], arguments["response"], self.root)
-            failed = False
         else:
-            result, failed = retire_session(agent, self.root), False
+            result = retire_session(agent, self.root)
         return Outcome(result, agent=agent, session=session, execution=execution, failed=failed)
+
+    def _wait(self, agent: str, timeout_seconds: float) -> tuple[dict, bool]:
+        """Wait at most ``timeout_seconds`` for an idle member or a pending request."""
+        from graphtraj.execution.runner_control import pending_requests
+        from graphtraj.execution.runner_status import status_aliases
+
+        deadline = time.monotonic() + timeout_seconds
+        while True:
+            response = status_aliases([agent], self.root)
+            status   = response.document.get("aliases", [{}])[0]
+            if not response.succeeded:
+                return response.document, True
+            if status.get("activity") == "idle":
+                return {**status, "timed_out": False}, False
+            if pending_requests(agent, self.root).get("requests"):
+                return {**status, "timed_out": False}, False
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                return {**status, "timed_out": True}, False
+            time.sleep(min(WAIT_INTERVAL_SECONDS, remaining))
 
     def _references(self, agent: str) -> tuple[str | None, str | None]:
         """Return the target's native Session and current execution, if mapped.
@@ -195,6 +299,7 @@ def run_agents_feature(arguments: Mapping[str, Any], *, cwd: Path | None = None)
     refused rather than sharing one anonymous root scope with other callers.
     New Agents run in the call's working directory.
     """
+    from graphtraj.execution.runner_models import RunnerError
     from graphtraj.execution.runner_status import NativeCaller, caller_alias, runtime_caller_is_bound
     from graphtraj.interfaces.tools import ToolResult
     from graphtraj.workspace.runner_project import discover_project_root, discover_runner_directory
@@ -202,7 +307,19 @@ def run_agents_feature(arguments: Mapping[str, Any], *, cwd: Path | None = None)
     working = cwd or Path.cwd()
     root    = discover_project_root(working)
     runner  = discover_runner_directory(root)
-    alias   = caller_alias(runner)
+    try:
+        alias = caller_alias(runner)
+    except RunnerError as error:
+        if arguments.get('action') != 'status':
+            raise
+        # A status query keeps its structured caller verification failure:
+        # which stage failed for which requested Agent, never transport detail.
+        agent = arguments.get('agent')
+        return ToolResult({'action': 'status', 'error': error.as_document(), 'diagnostic': {
+            'feature': 'alias_status', 'stage': 'caller_identity',
+            'requested_aliases': [agent] if isinstance(agent, str) else None,
+            'native_error_code': error.code,
+        }}, failed=True)
     caller  = None
     if alias is None and not runtime_caller_is_bound():
         from graphtraj.runtimes.runtime_adapter import current_host_connection

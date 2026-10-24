@@ -133,6 +133,14 @@ def test_actual_parent_decides_with_its_own_retained_evidence(tmp_path: Path) ->
     with runtime_caller(runner, 'research@x3'):
         report = tools.submit_report({'name': 'researcher-x3.md', 'text': 'Checked required sources.'},
                                    cwd=tmp_path).document['report']
+        # Evidence absent at the judged commit is named instead of failing as Git.
+        (tmp_path / 'worktrees/research/draft.md').write_text('Not committed\n')
+        with pytest.raises(ValueError, match=f'worktrees/research/draft.md is neither a committed file at {commit}'):
+            tools.decide_result({
+                'submission_id': submission['event_id'], 'commit': commit, 'decision': 'accepted',
+                'reason': 'The required sources are covered.',
+                'evidence_refs': ['worktrees/research/draft.md'],
+            }, cwd=tmp_path)
         decided = tools.decide_result({
             'submission_id': submission['event_id'], 'commit': commit, 'decision': 'accepted',
             'reason': 'The required sources are covered.',
@@ -143,6 +151,37 @@ def test_actual_parent_decides_with_its_own_retained_evidence(tmp_path: Path) ->
     retained = tmp_path / decided['evidence_refs'][0]
     assert retained != Path(report)
     assert retained.read_text() == 'Checked required sources.'
+
+
+def test_parent_decides_after_retaining_evidence_for_the_submission(tmp_path: Path) -> None:
+    """Retained evidence names its submission but leaves it undecided."""
+    import yaml
+
+    runner, _, commit = result_project(tmp_path)
+    mapping_file = runner / 'sessions/research@x1/mapping.yml'
+    mapping = yaml.safe_load(mapping_file.read_text())
+    mapping_file.write_text(yaml.safe_dump({**mapping, 'parent': 'research@x3'}))
+    with runtime_caller(runner, 'research@x1'):
+        submission = tools.submit_result({'commit': commit, 'result_refs': ['result.md'],
+                                        'completion': 'Done'}, cwd=tmp_path).document
+    (tmp_path / 'worktrees/research/log.txt').write_text('Untracked check log\n')
+    with runtime_caller(runner, 'research@x3'):
+        retained = tools.retain_evidence({'submission_id': submission['event_id'],
+                                          'evidence_refs': ['log.txt']}, cwd=tmp_path).document
+        # A decision naming an unwritten report says which reference is absent.
+        missing = '.state/teams/1/rounds/1/engineer-absent.md'
+        with pytest.raises(ValueError, match=f'retained evidence does not exist: {missing}'):
+            tools.decide_result({
+                'submission_id': submission['event_id'], 'commit': commit, 'decision': 'accepted',
+                'reason': 'The report covers the checks.', 'evidence_refs': [missing],
+            }, cwd=tmp_path)
+        decided = tools.decide_result({
+            'submission_id': submission['event_id'], 'commit': commit, 'decision': 'accepted',
+            'reason': 'The retained log covers the checks.',
+            'evidence_refs': retained['evidence_refs'],
+        }, cwd=tmp_path).document
+    assert decided['event'] == 'team-round-accepted'
+    assert decided['submission_id'] == submission['event_id']
 
 
 def test_cli_accepts_code_as_actual_parent_and_mcp_exposes_same_operation(tmp_path: Path) -> None:
@@ -222,9 +261,13 @@ def test_changed_worktree_and_closed_submission_cannot_be_accepted_again(tmp_pat
     assert read_worldline(tmp_path / 'state', tmp_path) == before
     result.write_bytes(original)
     with runtime_caller(runner, None):
-        tools.decide_result(decision, cwd=tmp_path)
+        accepted = tools.decide_result(decision, cwd=tmp_path).document
+        decided = read_worldline(tmp_path / 'state', tmp_path)
+        # A retry after a lost receipt returns the recorded decision once.
+        assert tools.decide_result(decision, cwd=tmp_path).document == accepted
+        assert read_worldline(tmp_path / 'state', tmp_path) == decided
         with pytest.raises(ValueError):
-            tools.decide_result(decision, cwd=tmp_path)
+            tools.decide_result({**decision, 'reason': 'Accepted again.'}, cwd=tmp_path)
     with runtime_caller(runner, 'research@x1'):
         with pytest.raises(ValueError):
             tools.submit_result(arguments, cwd=tmp_path)

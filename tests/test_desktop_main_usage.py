@@ -71,7 +71,7 @@ def test_native_main_two_projects_reopen_and_attribution(
 ) -> None:
     """Actual entry carrier plus controlled native peer establishes readable scoped Main."""
     root, binding = host
-    monkeypatch.setattr('graphtraj.execution.desktop_activity.caller_runtime', lambda: None)
+    monkeypatch.setattr('graphtraj.execution.runner_status.caller_runtime', lambda: None)
     second = root / 'second'
     second.mkdir()
     config = second / '.graphtraj/config.yml'
@@ -142,7 +142,7 @@ def test_copied_main_keeps_canonical_identity_in_activity(
 ) -> None:
     """Inherited metadata cannot make the verified Main's own output disappear."""
     root, _ = host
-    monkeypatch.setattr('graphtraj.execution.desktop_activity.caller_runtime', lambda: None)
+    monkeypatch.setattr('graphtraj.execution.runner_status.caller_runtime', lambda: None)
     rows = [
         {'type': 'session_meta', 'payload': {'id': 'main', 'source': 'cli', 'forked_from_id': 'ancestor'}},
         {'type': 'session_meta', 'payload': {'id': 'ancestor', 'source': 'cli'}},
@@ -158,7 +158,7 @@ def test_copied_main_keeps_canonical_identity_in_activity(
 
 def test_member_cursor_reconnect_rotation_truncation_and_counts(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """The same dataset gives bounded hot/reopen reads and replay after physical replacement."""
-    monkeypatch.setattr('graphtraj.execution.desktop_activity.caller_runtime', lambda: None)
+    monkeypatch.setattr('graphtraj.execution.runner_status.caller_runtime', lambda: None)
     _, _, trace = prepare(tmp_path, 'codex', [turn(tmp_path, 'one')] + [count(i * 100) for i in range(1, 601)])
     alias = 'research@x1'
     started = time.perf_counter()
@@ -200,10 +200,12 @@ def test_member_cursor_reconnect_rotation_truncation_and_counts(tmp_path: Path, 
     assert replay['events'][0]['usage']['identity'] == cold_events[-1]['usage']['identity']
     write_records(trace, [turn(tmp_path, 'three'), count(60100)])
     assert project_query(tmp_path, task_id='148', alias=alias, cursor=replay['cursor'])['availability'] == 'trace-changed'
-    # An Agent remains restricted to its own task: project-wide Main observation is human-only.
+    # A member's default call does not list project sources; an explicit Task read does.
     from graphtraj.workspace.runner_project import discover_runner_directory
-    with runtime_caller(discover_runner_directory(tmp_path), alias), pytest.raises(RunnerError, match='own Session'):
-        project_query(tmp_path)
+    with runtime_caller(discover_runner_directory(tmp_path), alias):
+        with pytest.raises(ValueError, match='explicit project read'):
+            project_query(tmp_path)
+        assert project_query(tmp_path, task_id='148')['scope'] == 'project'
 
 
 def test_pi_native_entry_exposes_owned_main_and_excludes_plugin_children(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -229,7 +231,7 @@ def test_pi_native_entry_exposes_owned_main_and_excludes_plugin_children(tmp_pat
     for name in ('GRAPHTRAJ_NATIVE_RUNTIME', 'GRAPHTRAJ_NATIVE_SESSION', 'GRAPHTRAJ_NATIVE_SESSION_FILE', 'PI_SUBAGENT_CHILD'):
         monkeypatch.delenv(name, raising=False)
     monkeypatch.setattr(replacement, 'caller_runtime', lambda: None)
-    monkeypatch.setattr('graphtraj.execution.desktop_activity.caller_runtime', lambda: None)
+    monkeypatch.setattr('graphtraj.execution.runner_status.caller_runtime', lambda: None)
     listing = project_query(tmp_path)
     assert [agent['alias'] for agent in listing['agents']] == ['Main:pi:pi-main']
     page = project_query(tmp_path, alias='Main:pi:pi-main')

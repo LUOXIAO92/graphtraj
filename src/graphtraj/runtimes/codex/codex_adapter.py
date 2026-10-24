@@ -37,6 +37,27 @@ from graphtraj.runtimes.codex.usage import tool_call_id
 from graphtraj.configuration.project_configuration import configuration_exists, load_project_configuration
 from graphtraj.configuration.role_definitions import ResolvedChildRole
 
+from agent_swarm.codex.context import (
+    CodexAdapterError,
+    _CodexRuntimeContext,
+    restore_codex_context,
+    _validate_launch_request,
+    _reject_legacy_user_sandbox_config,
+    _legacy_codex_api_key_env,
+    _connection_environment,
+    codex_connection_environment,
+    _toml_value,
+    _toml_key,
+    apply_unix_socket_access,
+)
+from agent_swarm.codex.trace import (
+    CodexNativeTrace,
+    _linked_to,
+    _retains_records,
+    _link_native_trace,
+    _find_native_session,
+)
+
 
 ADAPTER_ROLE_KEYS = frozenset(
     {
@@ -81,10 +102,6 @@ CODEX_PERMISSION_REQUEST_FEATURES: Mapping[str, Any] = {
 }
 
 
-class CodexAdapterError(RuntimeAdapterError):
-    """A selected Codex role cannot be launched safely."""
-
-
 @dataclass(frozen=True)
 class _CodexRole:
     """Validated effective settings for one Harness-owned custom Agent."""
@@ -98,6 +115,8 @@ class _CodexRole:
     native_settings: Mapping[str, Any]
     approval: Mapping[str, str] | None = None
     runtime_home: str | None = None
+    unix_sockets: Mapping[str, Any] | None = None
+    local_websocket: Mapping[str, Any] | None = None
 
     def _launch_request(
         self,
@@ -126,11 +145,12 @@ class _CodexRole:
         filesystem = native_settings["permissions"][self.default_permissions][
             "filesystem"
         ]
-        from graphtraj.runtimes.codex.access import private_filesystem
+        from graphtraj.runtimes.codex.access import member_project_reads, private_filesystem
 
         # Control now runs on the private native callback, not through files
         # writable by an Agent or by a helper inheriting its tool permissions.
         filesystem.update(private_filesystem(runtime_store, self.runtime_home))
+        filesystem.update(member_project_reads(runtime_store.parent))
         if filesystem.get(":workspace_roots", {}).get(".") == "write":
             filesystem[str(git_common_directory)] = "write"
             filesystem[str(git_common_directory / 'config')] = "read"
@@ -152,19 +172,12 @@ class _CodexRole:
                             resource.parent if resource.name == "SKILL.md" else resource
                         )
                         filesystem.setdefault(str(directory), "read")
-        approvals_reviewer = (
-            "user" if self.approval is not None
-            else _harness_approvals_reviewer(runtime_store)
-        )
+        approvals_reviewer, _ = self.approvals_reviewer(runtime_store)
         overrides = (
             *native_settings.items(),
             ("default_permissions", self.default_permissions),
             ("model_reasoning_effort", self.reasoning_effort),
-            *(
-                (("approvals_reviewer", approvals_reviewer),)
-                if approvals_reviewer is not None
-                else ()
-            ),
+            ("approvals_reviewer", approvals_reviewer),
             ("developer_instructions", developer_instructions),
             ("agents", self.agents),
             ("features", CODEX_PERMISSION_REQUEST_FEATURES),
@@ -186,12 +199,25 @@ class _CodexRole:
         # Runtime keeps its own built-in base prompt.
         if self.base_instructions:
             session_parameters["baseInstructions"] = self.base_instructions
-        return {
+        request = {
             **({"approval": dict(self.approval)} if self.approval is not None else {}),
             "arguments": arguments,
             "worktree_path": str(worktree),
             "session_parameters": session_parameters,
         }
+        apply_unix_socket_access(request, self.unix_sockets)
+        from graphtraj.runtimes.codex.local_websocket import project_access
+        project_access(request, self.local_websocket)
+        return request
+
+    def approvals_reviewer(self, runtime_store: Path) -> Tuple[Any, str]:
+        """Select the explicit reviewer, otherwise Codex's native auto review."""
+        if self.approval is not None:
+            return "user", "role"
+        selected = _harness_approvals_reviewer(runtime_store)
+        if selected is not None:
+            return selected, "configuration"
+        return "auto_review", "default"
 
 
 @dataclass(frozen=True)
@@ -240,6 +266,10 @@ class _CodexRuntimePreflight:
                 "model": self._model,
                 "model_reasoning_effort": self._role.reasoning_effort,
                 "native_skills": self._native_skills,
+                "approvals_reviewer": dict(zip(
+                    ("requested", "source"),
+                    self._role.approvals_reviewer(self._runtime_store),
+                )),
                 **({"connection": self._connection_reference,
                     "connection_revision": self._connection_revision,
                     "runtime_home": self._role.runtime_home}
@@ -247,74 +277,6 @@ class _CodexRuntimePreflight:
             }),
             _environment=self._environment,
         )
-
-
-@dataclass(frozen=True)
-class _CodexRuntimeContext:
-    """Immutable native configuration, safe to retain and restore in a Worker."""
-
-    _launch: str
-    _evidence: str
-    _environment: Mapping[str, str]
-    runtime: str = "codex"
-
-    def launch_document(self) -> Dict[str, Any]:
-        """Return the durable Adapter input for launch and resume."""
-        return json.loads(self._launch)
-
-    def evidence_document(self) -> Dict[str, Any]:
-        """Return the effective Context facts for mechanical evidence."""
-        return json.loads(self._evidence)
-
-    def session_document(self) -> Dict[str, Any]:
-        """Return the resolved role and access as native thread parameters."""
-        return {
-            "runtime": self.runtime,
-            "adapter_request": self.launch_document()["adapter_request"]["session_parameters"],
-        }
-
-    def runtime_environment(self) -> Mapping[str, str]:
-        """Return ephemeral connection settings for the Runtime process."""
-        return dict(self._environment)
-
-
-def restore_codex_context(
-    request: Mapping[str, Any], evidence: Mapping[str, Any],
-) -> RuntimeContext:
-    """Restore a Worker's resolved Context without consulting current role defaults."""
-    arguments, worktree = _validate_launch_request(request)
-    params = request.get("session_parameters")
-    if params is None:
-        # Historical exec launches retain the actual settings in CLI overrides.
-        # Reconstruct only those captured values, never current role defaults.
-        try:
-            config = {}
-            for index, argument in enumerate(arguments[:-1]):
-                if argument == "-c":
-                    config.update(tomllib.loads(arguments[index + 1]))
-            model = arguments[arguments.index("--model") + 1]
-            params = {
-                "cwd": str(worktree), "model": model,
-                "developerInstructions": config.pop("developer_instructions"),
-                "config": config,
-            }
-        except (ValueError, IndexError, KeyError, tomllib.TOMLDecodeError) as error:
-            raise CodexAdapterError(
-                "RUNTIME_REQUEST_INVALID", "The retained Codex CLI Context is invalid.",
-            ) from error
-        request = {**request, "session_parameters": params}
-    if (
-        not isinstance(params, dict)
-        or params.get("cwd") != request["worktree_path"]
-        or not isinstance(params.get("config"), dict)
-        or not isinstance(params.get("model"), str)
-        or not isinstance(params.get("developerInstructions"), str)
-    ):
-        raise CodexAdapterError("RUNTIME_REQUEST_INVALID", "The native Session Context is invalid.")
-    return _CodexRuntimeContext(
-        json.dumps({"runtime": "codex", "adapter_request": request}),
-        json.dumps(evidence), {},
-    )
 
 
 class CodexRuntimeAdapter:
@@ -795,96 +757,6 @@ class _NativePositionStorageError(OSError):
         self.position = position
 
 
-class CodexNativeTrace:
-    """Read one Runtime-owned native Session record through its retained Trace.
-
-    The Trace entry is a symbolic link to the native rollout file that the
-    Runtime owns, so a reader sees the native records themselves, including
-    records appended while the Session runs. An assigned archive additionally
-    commits those records into project storage. GraphTraj never writes through
-    the native link.
-    """
-
-    def __init__(
-        self,
-        trace_file: Path,
-        session: str,
-        rollout_path: Path | None,
-        codex_home: Path,
-        *,
-        archive: CodexSessionArchive | CodexJsonlArchive | None = None,
-    ) -> None:
-        """Record the Trace entry and the native Session it must read."""
-
-        self._trace_file = trace_file
-        self._session = session
-        self._codex_home = codex_home
-        self._rollout = rollout_path
-        self._archive = archive
-        self._collected_file: tuple | None = None
-
-    def collect(self) -> None:
-        """Archive new records and link the Trace when the native file exists."""
-
-        if self._rollout is None:
-            discovered = _find_native_session(self._session, self._codex_home)
-            if discovered is None:
-                return
-            self._rollout = discovered
-        try:
-            stat = self._rollout.stat()
-        except FileNotFoundError:
-            # A notification can precede creation of the declared rollout.
-            return
-        signature = (stat.st_dev, stat.st_ino, stat.st_size, stat.st_mtime_ns)
-        if isinstance(self._archive, CodexJsonlArchive):
-            signature += (self._archive.collection_key(),)
-        if self._archive is not None and signature != self._collected_file:
-            self._archive.collect(self._rollout)
-            # Capture the pre-read signature: appends during collection must
-            # trigger another pass, including completion of a partial line.
-            self._collected_file = signature
-        if _linked_to(self._trace_file, self._rollout):
-            return
-        if _retains_records(self._trace_file):
-            return
-        _link_native_trace(self._trace_file, self._rollout)
-
-
-def _linked_to(trace_file: Path, rollout: Path) -> bool:
-    """Return whether this Trace entry already reads that native file."""
-
-    try:
-        if not trace_file.is_symlink():
-            return False
-        return Path(os.path.realpath(trace_file)) == Path(os.path.realpath(rollout))
-    except OSError:
-        return False
-
-
-def _retains_records(trace_file: Path) -> bool:
-    """Return whether this Trace entry already holds an earlier record set."""
-
-    try:
-        return not trace_file.is_symlink() and trace_file.stat().st_size > 0
-    except OSError:
-        return False
-
-
-def _link_native_trace(trace_file: Path, rollout: Path) -> None:
-    """Point one Trace entry at its Runtime-owned native Session file.
-
-    The link replaces any placeholder atomically so a reader never observes a
-    missing Trace entry.
-    """
-
-    trace_file.parent.mkdir(parents=True, exist_ok=True)
-    pending = trace_file.with_name("." + trace_file.name + ".link")
-    pending.unlink(missing_ok=True)
-    pending.symlink_to(rollout)
-    os.replace(pending, trace_file)
-
-
 def create_codex_turn(
     request: Mapping[str, Any],
     prompt: str,
@@ -993,19 +865,6 @@ def _native_session_state(
     return Path(path), position
 
 
-def _find_native_session(
-    session: str,
-    codex_home: Path | None = None,
-) -> Optional[Path]:
-    if codex_home is None:
-        codex_home = Path(os.environ.get("CODEX_HOME", Path.home() / ".codex"))
-    sessions = codex_home / "sessions"
-    try:
-        return next(sessions.rglob("*{0}.jsonl".format(session)), None)
-    except OSError:
-        return None
-
-
 def _append_native_records(
     rollout: Path,
     position: int,
@@ -1037,39 +896,6 @@ def _append_native_records(
     return position
 
 
-def _validate_launch_request(
-    request: Mapping[str, Any],
-) -> Tuple[List[str], Path]:
-    if (
-        not isinstance(request, dict)
-        or not {"arguments", "worktree_path"}.issubset(request)
-        or not set(request).issubset({"arguments", "worktree_path", "session_parameters", "approval"})
-    ):
-        raise CodexAdapterError(
-            "RUNTIME_REQUEST_INVALID",
-            "The durable Codex launch request is invalid.",
-        )
-    arguments = request["arguments"]
-    worktree_value = request["worktree_path"]
-    if (
-        not isinstance(arguments, list)
-        or not arguments
-        or any(not isinstance(argument, str) for argument in arguments)
-        or not isinstance(worktree_value, str)
-    ):
-        raise CodexAdapterError(
-            "RUNTIME_REQUEST_INVALID",
-            "The durable Codex launch request is invalid.",
-        )
-    worktree = Path(worktree_value)
-    if not worktree.is_absolute() or not worktree.is_dir():
-        raise CodexAdapterError(
-            "RUNTIME_REQUEST_INVALID",
-            "The durable Codex launch request is invalid.",
-        )
-    return arguments, worktree
-
-
 def _require_codex_permissions(executable: Path) -> None:
     """Refuse Codex releases without filesystem sandboxing."""
     try:
@@ -1086,35 +912,6 @@ def _require_codex_permissions(executable: Path) -> None:
         raise CodexAdapterError(
             "ROLE_CONFIG_UNSUPPORTED",
             "Codex must support filesystem sandboxing.",
-        )
-
-
-def _reject_legacy_user_sandbox_config(codex_home: Path | None = None) -> None:
-    """Reject legacy sandbox settings in the selected service's configuration."""
-    if codex_home is None:
-        codex_home = Path(os.environ.get("CODEX_HOME", Path.home() / ".codex"))
-    config = codex_home / "config.toml"
-    try:
-        document = tomllib.loads(config.read_text(encoding="utf-8"))
-    except FileNotFoundError:
-        return
-    except (OSError, UnicodeError, tomllib.TOMLDecodeError):
-        return
-
-    profile = document.get("profile")
-    profiles = document.get("profiles")
-    selected_profile = (
-        profiles.get(profile)
-        if isinstance(profile, str) and isinstance(profiles, dict)
-        else None
-    )
-    if "sandbox_mode" in document or (
-        isinstance(selected_profile, dict) and "sandbox_mode" in selected_profile
-    ):
-        raise CodexAdapterError(
-            "LEGACY_SANDBOX_CONFIG_CONFLICT",
-            "The loaded Codex user configuration contains sandbox_mode, "
-            "which disables the selected permission profile.",
         )
 
 
@@ -1252,6 +1049,9 @@ def _resolve_codex_role(role: ResolvedChildRole, harness_root: Path) -> _CodexRo
     )
     return _CodexRole(
         name=role.name,
+        local_websocket=((defaults or {}).get('local_websocket')
+                         if (role.settings.codex or {}).get('local_websocket_access') is True else None),
+        unix_sockets=(role.settings.codex or {}).get('unix_sockets'),
         runtime_home=role.settings.runtime_home,
         approval=approval_route(
             role.settings.codex,
@@ -1269,6 +1069,48 @@ def _resolve_codex_role(role: ResolvedChildRole, harness_root: Path) -> _CodexRo
             if key not in ADAPTER_ROLE_KEYS
         },
     )
+
+
+def apply_unix_socket_access(request: dict, configured: Mapping[str, Any] | None) -> None:
+    """Project Main-owned, Worktree-scoped socket grants into native permissions.
+
+    ``codex.unix_sockets`` maps exact absolute Worktrees to socket path lists.
+    It does not read Agent-writable native configuration or change filesystem,
+    account, approval or external network rules. An explicit empty list revokes
+    previously projected socket grants on normal same-Session continuation.
+    """
+    if configured is None:
+        return
+    if not isinstance(configured, dict):
+        raise _invalid_role_value('codex.unix_sockets')
+    for worktree, paths in configured.items():
+        if (not isinstance(worktree, str) or not Path(worktree).is_absolute()
+                or not isinstance(paths, list)
+                or any(not isinstance(path, str) or not Path(path).is_absolute()
+                       or any(token in path for token in ('*', '?', '[', '\x00'))
+                       or '..' in Path(path).parts for path in paths)):
+            raise _invalid_role_value('codex.unix_sockets')
+    paths = configured.get(request['worktree_path'])
+    if paths is None:
+        return
+    config = request['session_parameters']['config']
+    profile = config['permissions'][config['default_permissions']]
+    network = profile.setdefault('network', {})
+    # Keep narrower existing external-network policy. No wildcard socket grant
+    # or permission to listen on arbitrary local addresses is introduced.
+    network.setdefault('enabled', True)
+    network.update(allow_local_binding=False, dangerously_allow_all_unix_sockets=False,
+                   dangerously_allow_non_loopback_proxy=False)
+    previous = network.get('unix_sockets', {})
+    network['unix_sockets'] = {**{path: 'deny' for path in previous},
+                               **{path: 'allow' for path in paths}}
+    config['features'] = {**config.get('features', {}), 'network_proxy': True}
+    arguments = request['arguments']
+    for key in ('permissions', 'features'):
+        for index in range(len(arguments) - 2, -1, -1):
+            if arguments[index] == '-c' and arguments[index + 1].startswith(key + '='):
+                del arguments[index:index + 2]
+        arguments[2:2] = ['-c', key + '=' + _toml_value(config[key])]
 
 
 def _validate_role_schema(document: Mapping[str, Any]) -> None:
@@ -1291,51 +1133,6 @@ def _invalid_role_value(field: str) -> CodexAdapterError:
 
 def _nonempty_string(value: Any) -> bool:
     return isinstance(value, str) and bool(value.strip())
-
-
-def _legacy_codex_api_key_env(base_url: str | None, name: str | None) -> str | None:
-    """Retain the legacy default key only for its official HTTPS API origin."""
-    from urllib.parse import urlsplit
-
-    if name is None and base_url is not None:
-        parsed = urlsplit(base_url)
-        if parsed.scheme == 'https' and parsed.netloc.lower() in {'api.openai.com', 'api.openai.com:443'}:
-            return 'OPENAI_API_KEY'
-    return name
-
-
-def _connection_environment(
-    base_url: str | None,
-    api_key_env: str | None,
-    runtime_home: str | None = None,
-) -> Mapping[str, str]:
-    """Resolve explicit credentials transiently; never fall back to official auth."""
-    from graphtraj.runtimes.runtime_adapter import credential_environment
-
-    if runtime_home is None:
-        api_key_env = _legacy_codex_api_key_env(base_url, api_key_env)
-    environment = dict(credential_environment(api_key_env))
-    if runtime_home is not None:
-        environment["CODEX_HOME"] = runtime_home
-        # Home-bound references carry routing in native per-Session provider
-        # settings. Do not create process-wide overrides inherited by children.
-        return environment
-    api_key = environment.get(api_key_env) if api_key_env is not None else None
-    if base_url is not None:
-        environment["OPENAI_BASE_URL"] = base_url
-        environment["OPENAI_API_KEY"] = ""
-    if api_key is not None:
-        environment["OPENAI_API_KEY"] = api_key
-    return environment
-
-
-def codex_connection_environment(
-    base_url: str | None,
-    api_key_env: str | None,
-    runtime_home: str | None = None,
-) -> Mapping[str, str]:
-    """Return transient overrides for the captured connection on resume."""
-    return _connection_environment(base_url, api_key_env, runtime_home)
 
 
 def _harness_native_skills(runtime_store: Path) -> Mapping[str, Any] | None:
@@ -1425,7 +1222,7 @@ def refresh_codex_report_paths(
     reports_only: bool = False,
     session_directory: Path | None = None,
 ) -> Dict[str, Any]:
-    """Refresh only exact report and direct-control permissions in one resume."""
+    """Refresh project reads and exact report grants without widening native writes."""
 
     arguments, request_worktree = _validate_launch_request(request)
     if request_worktree != worktree:
@@ -1478,6 +1275,11 @@ def refresh_codex_report_paths(
             "The durable Codex launch request has invalid report permissions.",
         )
     filesystem = profile["filesystem"]
+    if session_directory is not None:
+        from graphtraj.runtimes.codex.access import member_project_reads
+        from graphtraj.configuration.project_configuration import runner_project_root
+
+        filesystem.update(member_project_reads(runner_project_root(session_directory.parent.parent)))
     workspace_roots = filesystem.get(":workspace_roots")
     if reports_only:
         if not isinstance(workspace_roots, dict) or "." not in workspace_roots:
@@ -1587,36 +1389,6 @@ def _is_prior_report_path(
         ):
             return True
     return False
-
-
-def _toml_value(value: Any) -> str:
-    if isinstance(value, str):
-        return json.dumps(value, ensure_ascii=False)
-    if isinstance(value, bool):
-        return "true" if value else "false"
-    if isinstance(value, int):
-        return str(value)
-    if isinstance(value, list):
-        return "[{0}]".format(", ".join(_toml_value(item) for item in value))
-    if isinstance(value, dict):
-        pairs = (
-            "{0} = {1}".format(_toml_key(key), _toml_value(item))
-            for key, item in value.items()
-        )
-        return "{{ {0} }}".format(", ".join(pairs))
-    raise CodexAdapterError(
-        "ROLE_CONFIG_UNSUPPORTED",
-        "The configured Codex role contains a value that cannot be translated.",
-    )
-
-
-def _toml_key(value: Any) -> str:
-    if not isinstance(value, str):
-        raise CodexAdapterError(
-            "ROLE_CONFIG_UNSUPPORTED",
-            "The configured Codex role contains a non-string key.",
-        )
-    return value if BARE_TOML_KEY.fullmatch(value) else json.dumps(value)
 
 
 def _diagnostic_since(path: Path, offset: int) -> str:

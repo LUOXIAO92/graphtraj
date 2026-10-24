@@ -5,18 +5,24 @@ description: Use GraphTraj to plan task dependencies, coordinate execution and f
 
 # GraphTraj
 
-GraphTraj connects tasks through the results they need and retains the execution
-history. Use the `agents` MCP entry for cross-Runtime Agent control and `tasks`
-for GraphTraj task management and delivery. Discover the feature matching the
-current need, then describe it to obtain its readable guide reference;
-read the referenced file when needed. To request parameters, send describe with
-`schema: true`, which returns only that feature's input schema.
+Use MCP `agents` / `tasks` for every exposed Agent and Task operation.
+Use `agents` for Agent communication, hierarchy, execution and native permission
+handling, including members participating in Tasks. Use `tasks` for Task graphs,
+participation, scoped member queries and delivery. Independent Agent operations
+must work without GraphTraj Tasks or Worldline. Report an installed entry that
+violates this boundary as a defect; its presence does not establish ownership.
+Discover only the needed feature, describe it for its guide or input schema
+(`schema: true`), then execute through the entry that exposes it. Known
+operations need no repeated discovery.
 
-Execute an operation using its returned schema and the existing authorization.
-A method can provide guidance without an executable action. Previously known
-operations do not require a fresh discovery call before every use.
+Use the corresponding public CLI only when the needed MCP entry is unavailable
+or has an observed failure. Retain that failure and limit fallback to the
+affected operation, preserving caller identity and native permission checks.
+A permission refusal is not authority to switch channels. Return to MCP when
+it works; an earlier failure is not a standing CLI preference. Shell-running
+a CLI is not an MCP call. Obtain fallback syntax from its current `--help`.
 
-For CLI use, start with the relevant command's `--help`; its guide and parameter
-information come from the same feature definition. The host supplies the actual
-project and caller context for tools. Follow that project's task, resource and
-permission choices.
+A feature may provide guidance without an executable action. Read its selected
+guide and follow the project's requirements, roles, resources and authorization.
+The host supplies project and caller context. This workflow introduces no extra
+per-call approval role; native permission checks remain effective.

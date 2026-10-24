@@ -120,12 +120,15 @@ def _cli_document(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, stop: bool) -
     from click.testing import CliRunner
 
     from graphtraj.interfaces.cli import agent_runner
+    from graphtraj.interfaces import tools
+    from dataclasses import replace
 
     monkeypatch.setenv("CODEX_THREAD_ID", "thread-main")
     monkeypatch.delenv("GRAPHTRAJ_BUDGET_NOTICE_FD", raising=False)
     monkeypatch.delenv("GRAPHTRAJ_ROLE", raising=False)
 
-    def operation(alias: str, cwd: Path) -> dict:
+    def operation(arguments: dict, **context: object) -> tools.ToolResult:
+        """Sample a stop during a supported public Runner operation."""
         if stop:
             descriptor, owned = caller_notice_fd()
             assert descriptor is not None
@@ -134,11 +137,15 @@ def _cli_document(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, stop: bool) -
             finally:
                 if owned:
                     os.close(descriptor)
-        return {"alias": alias, "interrupt_status": "interrupted"}
+        return tools.ToolResult({"outcome": "idle"})
 
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr(agent_runner, "interrupt_session", operation)
-    result = CliRunner().invoke(agent_runner.main, ["interrupt", "engineer@e1"])
+    monkeypatch.setitem(tools.TOOLS, "submit_report", replace(
+        tools.TOOLS["submit_report"], handler=operation,
+    ))
+    result = CliRunner().invoke(agent_runner.main, [
+        "submit-report", "--name", "engineer.md", "--text", "Retained evidence",
+    ])
     assert result.exit_code == 0, result.output
     return yaml.safe_load(result.output)
 
@@ -171,7 +178,7 @@ def test_cli_ordinary_completion_carries_no_stop_text(
     """A normal result is unchanged even when a custom stop text is configured."""
     write_config(tmp_path, {"stop_instruction": CUSTOM_TEXT})
     document = _cli_document(tmp_path, monkeypatch, stop=False)
-    assert document["alias"] == "engineer@e1"
+    assert document["outcome"] == "idle"
     assert "stop_deliveries" not in document
 
 
@@ -197,7 +204,7 @@ def test_mcp_delivers_the_configured_stop_text_to_the_request_caller(
 
     monkeypatch.setitem(tools.TOOLS, "probe", tools.Tool("probe", "probe", {}, handler))
     response = mcp._tool_call_response(1, {
-        "name": "graphtraj",
+        "name": "tasks",
         "arguments": {"action": "execute", "feature": "probe", "arguments": {}},
         "_meta": {"threadId": "existing-caller"},
     })

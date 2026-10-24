@@ -16,9 +16,9 @@ from typing import Callable
 
 from agent_swarm import AgentControl, AgentsError, Caller, bind
 from agent_swarm.connection import agents_connection
-from agent_swarm.process import process_ancestors
-from graphtraj.runtimes.pi.driver import PiDriver
-from graphtraj.runtimes.pi.session_entry import current_connection, session_record, verify_main
+from agent_swarm.process import process_ancestors, process_arguments, process_executable
+from .driver import PiDriver
+from .session import current_connection, session_record, verify_main
 
 
 def verify_native_parent(executable: Path) -> None:
@@ -28,11 +28,9 @@ def verify_native_parent(executable: Path) -> None:
     they do not establish it. Reuse the existing kernel process readers and
     reject shell-launched or unrelated clients even with copied Session env.
     """
-    from graphtraj.execution.runner_process import process_executable, _process_arguments
-
     parent = os.getppid()
     actual = process_executable(parent)
-    arguments = _process_arguments(parent)
+    arguments = process_arguments(parent)
     expected = executable.resolve()
     selected_node = os.environ.get('AGENT_SWARM_PI_NODE')
     native_entry = os.environ.get('AGENT_SWARM_PI_ENTRY')

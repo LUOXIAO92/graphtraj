@@ -1,0 +1,59 @@
+{
+  "candidate": "0aca60ae9419589897a50c202ca583c6fd845312",
+  "shared_baseline": "ab619ea643f8de25f6b4fe84f168127418816579",
+  "meaning": "Engineering handoff, not Task344 acceptance. Existing accepted336/346/347 and E7 are reused; Engineer does not replace Leader acceptance or Main administration.",
+  "rows": [
+    {
+      "requirement": "agents owns ordinary and Task-member control; tasks owns graph, participation and delivery",
+      "development": "Retained migration checks, 65 boundary/projection cases, native authenticated host cases, current generic roles34 frozen cases and74 Codex/fork combination pass. Removed tasks/agent-runner routes are not restored.",
+      "actual_member": "Claude investigator4/engineer10 public agents/tasks discovery, native status, same-Session resumes; Engineer9 actual Agent-ID status resolves original Codex Session.",
+      "actual_main": "Reuse existing Main administrative agents/control and accepted E7/346 receipts; this Engineer has not executed a Main-context test.",
+      "CLI": "Installed controlled CLI dispatch and resume cases pass. Retained actual Leader7 CLI status/Unicode receipt remains attributable to its version.",
+      "MCP": "Current actual member calls and project history read retained in engineer9-public-member-status.json and engineer9-public-codex-history.json.",
+      "remaining_acceptance": "Leader consolidates retained ordinary-agent independent install/control and real Main control evidence against unchanged interface code; do not infer Main authority from member checks. Stage0aca not yet shared-adopted."
+    },
+    {
+      "requirement": "default status uses actual Main descendants/member subtree and actual parent; no unrelated historical errors",
+      "development": "Current status/current-seat/error-scope and faithful-parent checks retained; no graph membership rewritten.",
+      "actual_member": "Both Claude subjects and current Codex Engineer9 show only self with actual Leader9 parent. Agent-ID query and alias in returned record agree. Legitimate own previous result remains, with error:null.",
+      "actual_main": "Full current Main tree receipt must be supplied/confirmed by Leader from Main's existing public observations. Engineer9 member view cannot prove it.",
+      "CLI": "Retained Leader7 real CLI member scope; current controlled installed scope checks.",
+      "MCP": "Current member actual default and explicit-ID calls succeed.",
+      "remaining_acceptance": "Complete real Main-scope evidence reference is not in this Engineer's new evidence set; retain as Leader consolidation item, not a claimed pass."
+    },
+    {
+      "requirement": "original resources, project history and write isolation with native approvals",
+      "development": "Exact associated JSONL selection reads project association metadata only; no model/author/direct-parent gate. Resources remain denyWrite; sandbox home denyRead with exact file read exception, restricted native file scope and defaultMode preserved. ACK refusal prevents initial prompt.",
+      "Codex": "auto_review declared/current ordinary tools succeed, no DeepSeek override observed. Old request/new Worker projection checks pass; actual346 original diagnostic reads and345 same-Session original Worktree normal read/write recovery are retained with earlier failure/profile counterexamples. Engineer9 actual public MCP reads old Engineer7 Codex project Session page. No raw ~/.codex filesystem read performed against this Session's explicit deny.",
+      "Claude": "Actual dc89 four investigator rounds and three engineer10 rounds retained: both original roots nativeRead; old d896 history nativeRead; undeclared sibling restricted refusal; writable role history O_WRONLY EPERM without mutation; readonly own-tree test file O_WRONLY EPERM with unchanged hash/stat; normal sandbox Bash root head/wc succeeds. Original native Write+Read Unicode probe is retained.",
+      "Pi_DSH": "No production Pi/DSH source changed by these stages; prior accepted input remains. No new native Pi/DSH run is claimed or added as a new gate.",
+      "remaining_acceptance": "Do not rerun successful Claude cases. No generalized arbitrary-path write claim or credentials-body probe. Raw Codex filesystem history access is not newly proved by the public MCP page; Leader uses retained authorized scope/evidence and keeps explicit deny boundaries."
+    },
+    {
+      "requirement": "unified CLI caused-by-event-ids JSON array; MCP string array; readable Chinese and literal escapes",
+      "development": "65 current boundary/CLI-projection/Unicode cases pass; host-event/stop instruction fixtures use current routes. Old singular arguments survive only in retained library-test adapters, not public CLI compatibility routes.",
+      "actual_member": "Claude engineer10 native Write/Read preserves Chinese and literal backslashes in retained build probe; public reports and status Chinese readable.",
+      "CLI": "Actual installed CLI help succeeds on exact final pair; earlier real Leader7 Chinese task graph/status receipt reused. Controlled actual parser tests cover JSON-array validation.",
+      "MCP": "Actual current public reports/history calls render Chinese; typed feature schemas retained.",
+      "remaining_acceptance": "Leader maps valid retained public CLI list-input receipt to unchanged entry code; do not substitute a helper call for missing actual CLI identity evidence."
+    },
+    {
+      "requirement": "E5 whole-Task migration and regression responsibility",
+      "development": "engineer9-e5-ledger.json enumerates all87 old IDs, with before-first34476aecae/d582cf9 and first control migrationffe64cc anchors.32 corrected,1 current Claude-runner-covered, independent historical guard/fixture cases remain explicitly non-green. Additional access26 failure categories fixed, exact frozen34 pass. Codex explicit local pre-send closed handling fixed without unknown-delivery retry; erroneous2ef terminal-file hypothesis reverted.",
+      "retained_failures": "40 integrated recovery fixtures hit unchanged pre344 graph revision guard;6 task-definition fixtures omit current_definition;5 pre-runtime/Pi expectation fixtures;2 owner fixtures unchanged caller_alias/owner gate;1 outer30s timeout predates40s native interrupt response. Added budget codex-binding fixture selects WebSocket host with a stdio-only fake peer and fails JSON decoding before helper registration; actual source/diagnostic retained, not counted green.",
+      "remaining_acceptance": "No identified344 control migration failure remains in the frozen affected batch. This is not a full-suite green claim. Leader verifies classification without reopening accepted346/347 or adding unrelated old failures as gates."
+    },
+    {
+      "requirement": "public reports, existing24 attachments, stopped report-only delivery and cleanup",
+      "development": "Report access/migration and retention source preserved; public report snapshots captured without private state edits.",
+      "actual": "336 accepted24 attachments and cleanup,347 report-only completion and E7 real interruption/same-Session continuation are already completed per formal handoff; no repeated commit/acceptance generated. Current submit_report notify_parent receipts received.",
+      "remaining_acceptance": "Formal Engineer result must retain assigned reports, exact candidate and build/task344-validation-engineer10/native-write-probe.txt. Leader records decision/integration; report alone is not acceptance."
+    },
+    {
+      "requirement": "compatible final adoption and rollback",
+      "development": "0aca merges actual ab619 and retains dc89/367/dev. Only two Codex production files differ from ab619; checker dotted permissions preserved.178 package files+7 manuals source/wheel/isolated install match; exact ab619 rollback pair included.",
+      "actual": "Main shared currently ab619. No0aca shared installation performed by Engineer.",
+      "remaining_acceptance": "Main coordinates safe serial installation/refresh and returns version correspondence; Leader completes only genuinely missing public acceptance. Old pytest64695/67473 remain pending lawful host cleanup, no further signals attempted."
+    }
+  ]
+}

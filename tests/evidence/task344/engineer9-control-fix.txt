@@ -1,0 +1,13 @@
+...F                                                                     [100%]
+=================================== FAILURES ===================================
+_____ test_installed_alias_control_resumes_and_interrupts_one_team_session _____
+tests/test_session_alias_control.py:210: in test_installed_alias_control_resumes_and_interrupts_one_team_session
+    assert running_status == {
+E   AssertionError: assert {'aliases': [...ctive', ...}]} == {'aliases': [...'completed'}]}
+E     
+E     Differing items:
+E     {'aliases': [{'alias': '76-session_alias_control-handover0-team_leader@team_leader', 'activity': 'running', 'last_outcome': 'completed', 'state': 'active', ...}]} != {'aliases': [{'alias': '76-session_alias_control-handover0-team_leader@team_leader', 'activity': 'running', 'last_outcome': 'completed'}]}
+E     Use -v to get more diff
+=========================== short test summary info ============================
+FAILED tests/test_session_alias_control.py::test_installed_alias_control_resumes_and_interrupts_one_team_session
+1 failed, 3 passed in 23.68s

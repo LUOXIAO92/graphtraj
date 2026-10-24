@@ -5,6 +5,7 @@ The host supplies the business callback and kernel-PID authentication rule.
 """
 from __future__ import annotations
 
+import contextvars
 import ctypes
 import json
 import math
@@ -57,23 +58,45 @@ def worker_connection(
     if os.name == 'nt':
         raise AgentsError('authority-denied', 'Windows does not support the authenticated local control pipe.')
     stop = threading.Event()
+    closing = threading.Event()
     with tempfile.TemporaryDirectory(prefix='control-', dir=directory) as address:
         # Held for the host's lifetime; the kernel releases it if the host dies.
         host_lock = os.open(address, os.O_RDONLY | os.O_DIRECTORY)
         fcntl.flock(host_lock, fcntl.LOCK_EX)
 
+        accepted: dict[str, threading.Thread] = {}
+
+        def refuse_closed(request: dict) -> dict:
+            """Reject late requests without invoking the operation during close."""
+            raise AgentsError('request-not-accepted', 'The Session control channel is closing.')
+
+        def answer(name: str, descriptor: int) -> None:
+            """Answer one request in its own empty context, then release its slot."""
+            try:
+                _answer_request(descriptor, refuse_closed if closing.is_set() else operate, authenticate)
+            finally:
+                os.close(descriptor)
+                del accepted[name]
+
         def serve() -> None:
-            """Publish complete responses while native work continues on its own loop."""
+            """Answer each request on its own thread so a slow one cannot block others."""
             while not stop.is_set():
                 for entry in Path(address).iterdir():
+                    if entry.name in accepted:
+                        continue
                     try:
                         descriptor = os.open(entry, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
                     except OSError:
                         continue
                     try:
-                        _answer_request(descriptor, operate, authenticate)
-                    finally:
-                        os.close(descriptor)
+                        os.stat('request.json', dir_fd=descriptor, follow_symlinks=False)
+                    except OSError:
+                        os.close(descriptor)  # Not yet sent, or already answered.
+                        continue
+                    # A fresh Context keeps caller identity ContextVars per request.
+                    accepted[entry.name] = worker = threading.Thread(
+                        target=contextvars.Context().run, args=(answer, entry.name, descriptor), daemon=True)
+                    worker.start()
                 stop.wait(0.01)
 
         thread = threading.Thread(target=serve, daemon=True)
@@ -81,13 +104,19 @@ def worker_connection(
         try:
             yield address
         finally:
-            stop.set()
-            thread.join()
+            closing.set()
+            # Every request already taken finishes and publishes its reply.
+            for running in list(accepted.values()):
+                running.join()
             # A caller removes its request directory after consuming the reply.
             # Keep acknowledged results available across fast native completion.
             deadline = time.monotonic() + OPERATION_TIMEOUT_SECONDS
             while any(Path(address).iterdir()) and time.monotonic() < deadline:
                 time.sleep(0.01)
+            stop.set()
+            thread.join()
+            for running in list(accepted.values()):
+                running.join()
             os.close(host_lock)
 
 
@@ -171,6 +200,7 @@ def connection_operation(
     if os.name == 'nt':
         raise AgentsError('authority-denied', 'Windows does not support the authenticated local control pipe.')
 
+    published = False
     try:
         with tempfile.TemporaryDirectory(dir=address) as directory:
             request = Path(directory) / 'request.tmp'
@@ -180,6 +210,7 @@ def connection_operation(
                 stream.write(json.dumps(document))
                 stream.flush()
                 os.replace(request, request.with_suffix('.json'))
+                published = True
                 response_file = Path(directory) / 'response.json'
                 accepted_file = request.with_suffix('.json')
                 deadline = time.monotonic() + response_timeout
@@ -193,13 +224,21 @@ def connection_operation(
                             raise TimeoutError('The Session host closed before replying; '
                                                'the accepted operation is unconfirmed.')
                     elif time.monotonic() >= deadline:
-                        raise TimeoutError('Session control timed out; delivery is unconfirmed.')
+                        try:
+                            # Removing an unclaimed request wins admission:
+                            # the host must unlink it before calling operate.
+                            accepted_file.unlink()
+                        except FileNotFoundError:
+                            raise TimeoutError('Session control timed out; delivery is unconfirmed.')
+                        raise AgentsError('request-not-accepted', 'The Session host did not accept the request.')
                     time.sleep(0.01)
                 response = json.loads(response_file.read_text())
         if 'error' in response:
             raise AgentsError(response['error']['code'], response['error']['message'])
         return response
     except (OSError, ValueError, KeyError, TypeError) as error:
+        if not published and isinstance(error, FileNotFoundError):
+            raise AgentsError('request-not-accepted', 'The Session control channel closed before the request.') from error
         raise AgentsError(
             'operation-failed', 'The mapped Session owner did not acknowledge the operation: ' + str(error),
         ) from error

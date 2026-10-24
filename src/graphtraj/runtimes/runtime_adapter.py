@@ -6,13 +6,22 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Callable, Dict, Literal, Mapping, Protocol, Sequence, TypedDict
+from typing import TYPE_CHECKING, Any, Callable, Dict, Mapping, Protocol, Sequence
+
+# Keep existing consumer imports bound to the independent definitions.
+from agent_swarm.runtime import (
+    RuntimeAdapterError,
+    RuntimeContext,
+    RuntimeExecutionResult,
+    RuntimeTurn,
+    SessionStarted,
+    credential_environment,
+)
 
 if TYPE_CHECKING:
     from graphtraj.configuration.role_definitions import ResolvedChildRole
 
 
-SessionStarted = Callable[[str, int], None]
 NativeReplacement = Callable[[Sequence[str]], dict]
 _recovery_reviewer: ContextVar[Callable[[dict], dict] | None] = ContextVar('recovery_reviewer', default=None)
 _process_owner: ContextVar[Callable[[int, dict | None], None] | None] = ContextVar('process_owner', default=None)
@@ -24,6 +33,8 @@ class CheckUsage:
 
     Output includes reasoning where the Runtime counts it as output. Model
     requests require independent native evidence, not a tool or user-turn count.
+    Input sums every request of the check; the largest single request's input
+    is the one comparable to a context size.
     """
 
     input_tokens: int | None = None
@@ -32,6 +43,7 @@ class CheckUsage:
     reasoning_tokens: int | None = None
     tool_calls: int | None = None
     model_requests: int | None = None
+    largest_request_input_tokens: int | None = None
 
     def document(self) -> dict:
         """Return normalized facts with the whole-check cached/input ratio."""
@@ -45,7 +57,9 @@ class CheckUsage:
 
         Counters use thousands separators and stay explicitly unknown when
         unavailable. Cached input carries its hit rate, while reasoning is shown
-        as the part of output rather than a parallel total.
+        as the part of output rather than a parallel total. Input is the total
+        over all model requests, so the request count and the largest single
+        request's input are shown beside it rather than read as one context.
         """
         def count(value: int | None) -> str:
             """Keep unavailable counters distinct from measured zero."""
@@ -58,8 +72,12 @@ class CheckUsage:
             cached = f'Cached {count(self.cached_input_tokens)} (unknown)'
         else:
             cached = f'Cached {count(self.cached_input_tokens)} ({ratio:.1%})'
+        requests = f'Requests {count(self.model_requests)}'
+        if self.model_requests != 0:
+            requests += f' (largest input {count(self.largest_request_input_tokens)})'
         return ' · '.join((
-            f'Input {count(self.input_tokens)}',
+            f'Input {count(self.input_tokens)} total',
+            requests,
             cached,
             f'Output {count(self.output_tokens)} (Reasoning {count(self.reasoning_tokens)})',
             f'Tools {count(self.tool_calls)}',
@@ -102,72 +120,6 @@ def recovery_review(reviewer: Callable[[dict], dict] | None):
 def current_recovery_reviewer() -> Callable[[dict], dict] | None:
     """Return the reviewer bound by this call's owning host."""
     return _recovery_reviewer.get()
-
-
-class RuntimeExecutionResult(TypedDict):
-    """One terminal native result; failures use RuntimeAdapterError."""
-
-    outcome: Literal["completed", "interrupted"]
-    session_id: str
-    execution_id: str
-    last_agent_message: str | None
-
-
-class RuntimeAdapterError(Exception):
-    """A Runtime Adapter failed with a stable Runner-facing error."""
-
-    def __init__(
-        self,
-        code: str,
-        message: str,
-        *,
-        terminal_confirmed: bool = True,
-    ) -> None:
-        super().__init__(message)
-        self.code = code
-        self.message = message
-        self.terminal_confirmed = terminal_confirmed
-
-
-class RuntimeTurn(Protocol):
-    """One managed invocation, including native control and public identity."""
-
-    def run(self) -> Dict[str, Any]:
-        """Run the invocation until its Runtime reaches a terminal state."""
-
-    @property
-    def execution_id(self) -> str | None:
-        """Return the opaque execution ID, available before session_started."""
-
-    def operate(self, request: dict) -> dict:
-        """Control the exact Session/execution named by a Worker request."""
-
-    def terminate(self) -> bool:
-        """Retain a stop request; return whether native interruption was scheduled.
-
-        This is not terminal confirmation. run() retains ownership until the
-        Runtime stops, including a stop requested before Session creation.
-        """
-
-
-class RuntimeContext(Protocol):
-    """One immutable Adapter-owned launch, evidence, and recovery Context."""
-
-    @property
-    def runtime(self) -> str:
-        """Return the selected Runtime's stable name."""
-
-    def launch_document(self) -> Dict[str, Any]:
-        """Return a fresh durable document for launch and resume."""
-
-    def evidence_document(self) -> Dict[str, Any]:
-        """Return a fresh document of the effective Context facts."""
-
-    def session_document(self) -> Dict[str, Any]:
-        """Return fresh Adapter-owned configuration for native Session operations."""
-
-    def runtime_environment(self) -> Mapping[str, str]:
-        """Return non-persistent environment overrides for the Runtime connection."""
 
 
 class RuntimeContextPreflight(Protocol):
@@ -383,18 +335,3 @@ def native_replacement_approval(runtime: str | None) -> NativeReplacement | None
     if runtime is None:
         raise RuntimeAdapterError("RUNTIME_UNSUPPORTED", "The calling Runtime is unknown.")
     return select_runtime_adapter(runtime).native_replacement_approval()
-
-
-def credential_environment(name: str | None) -> dict[str, str]:
-    """Require a named execution credential without retaining or exposing its value."""
-    import os
-    import re
-
-    if name is None:
-        return {}
-    if not isinstance(name, str) or re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", name) is None:
-        raise RuntimeAdapterError('ROLE_CONFIG_INVALID', 'api_key_env must name an environment variable.')
-    value = os.environ.get(name)
-    if not value:
-        raise RuntimeAdapterError('RUNTIME_CREDENTIAL_MISSING', 'The configured api_key_env is missing or empty.')
-    return {name: value}

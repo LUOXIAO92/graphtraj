@@ -1,6 +1,7 @@
 """Subtree stopping through public control and the common managed Worker boundary."""
 
 import os
+import re
 import signal
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -58,26 +59,37 @@ def test_native_owner_retains_control_of_its_recorded_root(
     monkeypatch.setattr(runtime_adapter, 'current_host_connection', lambda: dict(connection))
     monkeypatch.setattr(finalize, 'proxy', lambda value: NativeMetadata())
 
-    def send(alias: str) -> dict:
-        """Use the public Tool, not a caller-selected identity parameter."""
-        return bind(root)({'action': 'execute', 'feature': 'send_instruction', 'arguments': {
-            'alias': alias, 'instruction': 'hold', 'caused_by_event_ids': [cause],
-        }}).document
+    def agents(feature: str, alias: str, **arguments: str):
+        """Use the public agents Tool, not a caller-selected identity parameter."""
+        return bind(root)({'action': 'execute', 'feature': 'agents', 'arguments': {
+            'action': feature, 'agent': alias, **arguments,
+        }})
 
-    assert send(target)['send_status'] == 'sent'
-    with pytest.raises(RunnerError, match='direct parent'):
-        send(child)
+    def send(alias: str) -> dict:
+        return agents('send', alias, message='hold').document
+
+    def refused(alias: str, pattern: str) -> None:
+        """The caller's identity check either raises or returns the refusal."""
+        try:
+            result = agents('send', alias, message='hold')
+        except RunnerError as error:
+            assert re.search(pattern, error.message), error.message
+            return
+        assert result.failed and re.search(pattern, str(result.document)), result.document
+
+    sent = send(target)
+    assert sent['agent'] == target and sent['result']['send_status'] == 'sent', sent
+    refused(child, 'direct parent')
+    # Another native identity gets no control of the recorded root.
+    other_owner = 'direct parent|association is unavailable|read-only agents access'
     connection['session'] = 'different-native-child'
-    with pytest.raises(RunnerError, match='direct parent|association is unavailable'):
-        send(target)
+    refused(target, other_owner)
     connection['session'] = 'external-owner'
     connection['codex_home'] = '/different-native-home'
-    with pytest.raises(RunnerError, match='direct parent|association is unavailable'):
-        send(target)
+    refused(target, other_owner)
     connection['codex_home'] = '/native-owner-home'
-    stopped = bind(root)({'action': 'execute', 'feature': 'interrupt',
-                         'arguments': {'alias': child}}).document
-    assert stopped['interrupt_status'] == 'interrupted'
+    stopped = agents('interrupt', child)
+    assert not stopped.failed, stopped.document
     assert mapping(root, target) == before
     assert not (root / '.graphtraj/runner/main-sessions').exists()
 
@@ -163,11 +175,11 @@ def test_native_root_owner_outlives_historical_checker_membership(
     # Use public retirement, which is also the last-child cleanup path. The
     # owning Main must still organize roles and dispatch after the active
     # mapping has moved into the Task's retained Trace.
-    stopped = tool({'action': 'execute', 'feature': 'interrupt',
-                    'arguments': {'alias': target}})
+    stopped = tool({'action': 'execute', 'feature': 'agents',
+                    'arguments': {'action': 'interrupt', 'agent': target}})
     assert not stopped.failed, stopped.document
-    retired = tool({'action': 'execute', 'feature': 'retire',
-                    'arguments': {'alias': target}})
+    retired = tool({'action': 'execute', 'feature': 'agents',
+                    'arguments': {'action': 'retire', 'agent': target}})
     assert not retired.failed, retired.document
     assert not list((root / '.graphtraj/runner/sessions').glob('*/mapping.yml'))
     retained_mapping = Path(original['trace_file']).parent / 'runner/session.yml'

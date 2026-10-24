@@ -69,7 +69,10 @@ def pi_event(event: dict, cwd: Path) -> dict:
     if source != 'main' or connection is None:
         raise ValueError('Unknown Pi Session source; Main was not associated.')
     connection.update(native_header=header, native_entries=entries)
-    bind_session(connection, cwd)
+    # Only a real start or resume continues Main; reload and fork do not.
+    reason = event['reason']
+    bind_session(connection, cwd, entry=(f'pi:session_start:{reason}'
+                                         if reason in {'startup', 'new', 'resume'} else None))
     return {'source': 'main'}
 
 
@@ -103,7 +106,8 @@ def dsh_event(event: dict, cwd: Path) -> dict:
     if source != 'main' or connection is None:
         raise ValueError('Unknown DSH Session source; Main was not associated.')
     connection['native_header'] = header
-    bind_session(connection, cwd)
+    bind_session(connection, cwd, entry=(None if event['source'] == 'compact'
+                                         else f"dsh:agent/created:{event['source']}"))
     return {'source': 'main'}
 
 

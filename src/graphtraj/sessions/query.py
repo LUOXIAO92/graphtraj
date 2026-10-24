@@ -4,12 +4,7 @@ from contextlib import ExitStack
 
 from graphtraj.configuration.project_configuration import load_project_configuration
 from graphtraj.execution.desktop_activity import human_observer
-from graphtraj.execution.runner_connection import current_parent_connection
-from graphtraj.execution.runner_models import RunnerError
-from graphtraj.execution.runner_status import (
-    NativeCaller, caller_alias, read_alias_mapping, runtime_caller_is_bound,
-)
-from graphtraj.runtimes.replacement import caller_runtime
+from graphtraj.execution.runner_status import project_redact, require_project_reader
 from graphtraj.sessions.storage import SessionStore, session_path
 from agent_swarm.sessions.archive import JsonlSessionStore, SessionArchive, archive_path
 from graphtraj.workspace.runner_project import discover_runner_directory
@@ -18,49 +13,52 @@ from graphtraj.workspace.runner_project import discover_runner_directory
 def read_session(cwd: Path, session_id: str, after: int = -1, limit: int = 200) -> dict:
     """Read final events and a recoverable draft under existing activity authority.
 
-    Human observers are bound to their project. A native Agent must have an
-    authenticated Runner mapping, and that mapping must match the archive's
-    retained native provenance. Agent IDs and Task IDs in content grant nothing.
-    No caller supplies a filesystem path or a claimed role.
+    Human observers are bound to their project. Any verified project caller,
+    including Main under its native identity, reads the project's linked
+    Sessions with credentials and control material redacted. Agent IDs and
+    Task IDs in content grant nothing; no caller supplies a filesystem path.
+    Native IDs select the latest linked project Session; explicit project IDs
+    continue to select their own retained history across native boundaries.
     """
     from graphtraj.interfaces.desktop_host import owns_project
 
     runner = discover_runner_directory(cwd)
     window = human_observer.get() and owns_project(cwd)
-    caller = None if window else caller_alias(runner)
-    own = None
-    if caller is not None and not isinstance(caller, NativeCaller):
-        own, _ = read_alias_mapping(runner, caller)
-    elif not window and (not human_observer.get() or runtime_caller_is_bound()
-                         or current_parent_connection() is not None
-                         or caller_runtime() is not None or caller is not None):
-        raise RunnerError('authority-denied', 'Session reads require a verified own Session or human project binding.')
+    # Project development history crosses Agents and models under the
+    # caller's real identity; an unknown native source is refused, never human.
+    if not window:
+        require_project_reader(runner)
 
     configuration = load_project_configuration(cwd)
     from graphtraj.interfaces.agents import swarm_root
 
-    normalized = archive_path(swarm_root(configuration.harness_root), session_id)
+    root = swarm_root(configuration.harness_root)
+    normalized = archive_path(root, session_id)
+    if not normalized.is_file():
+        # A native Session ID such as CODEX_THREAD_ID selects its retained archive.
+        archive = SessionArchive(root)
+        for runtime in ('codex', 'claude', 'pi', 'dsh'):
+            header = archive.native_header(runtime, session_id)
+            if header:
+                session_id = header['id']
+                normalized = archive_path(root, session_id)
+                break
     with ExitStack() as resources:
         if normalized.is_file():
-            # JSONL loads the body with its metadata; check the verified native
-            # identity before opening a different Agent's conversation.
-            if own is not None and session_id != SessionArchive(swarm_root(configuration.harness_root)).native_id(
-                own['runtime'], own['session'],
-            ):
-                raise RunnerError('authority-denied', 'Agent archive access is limited to its own verified native Session.')
             store = JsonlSessionStore(normalized)
         else:
             if (configuration.harness_root / '.graphtraj/core/config.yml').exists():
                 raise ValueError('Canonical JSONL Session is unavailable; legacy backups are not a query fallback.')
-            # Unmigrated history remains readable before the explicit partition.
-            store = resources.enter_context(SessionStore(session_path(configuration.state, session_id), readonly=True))
+            # Unmigrated history remains readable before the explicit partition;
+            # a bare native ID selects its one runtime-prefixed canonical archive.
+            if not session_path(configuration.state, session_id).exists():
+                prefixed = [runtime + ':' + session_id for runtime in ('codex', 'claude', 'pi', 'dsh')
+                            if session_path(configuration.state, runtime + ':' + session_id).exists()]
+                if len(prefixed) == 1:
+                    session_id = prefixed[0]
+            store =resources.enter_context(SessionStore(session_path(configuration.state, session_id), readonly=True))
             store.db.execute('BEGIN')
         header = store.header
-        native = header.get('graphtraj', {}).get('native', header.get('native', {}))
-        if own is not None and (native.get('runtime') != own['runtime']
-                                or native.get('sessionId') != own['session']
-                                or native.get('agentId') is not None):
-            raise RunnerError('authority-denied', 'Agent archive access is limited to its own verified native Session.')
         if header['id'] != session_id:
             raise ValueError('Session archive identity does not match its location.')
         page = store.page(after, limit)
@@ -70,5 +68,6 @@ def read_session(cwd: Path, session_id: str, after: int = -1, limit: int = 200) 
             legacy.update(events=retained[:limit], has_more=len(retained) > limit,
                           after=retained[min(len(retained), limit) - 1]['seq'] if retained else after,
                           native_order_verified=False)
-        return {'header': header, **page, 'pending': store.pending(),
-                **({'legacy': legacy} if legacy else {})}
+        result = {'header': header, **page, 'pending': store.pending(),
+                  **({'legacy': legacy} if legacy else {})}
+        return result if window else project_redact(result)

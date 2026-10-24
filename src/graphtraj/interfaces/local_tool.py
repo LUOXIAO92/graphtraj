@@ -211,7 +211,7 @@ def serve(
             reply = {"failed": True, "error": "Parse error"}
         else:
             reply = answer(request, cwd=cwd, allowed_features=allowed_features, desktop_observer=desktop_observer)
-        output_stream.write(json.dumps(reply) + "\n")
+        output_stream.write(json.dumps(reply, ensure_ascii=False) + "\n")
         output_stream.flush()
 
 

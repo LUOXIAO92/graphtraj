@@ -1,5 +1,6 @@
 """Coding Team delivery through the installed public Runner operations."""
 
+from conftest import runner_operation
 import json
 import os
 import shutil
@@ -65,7 +66,7 @@ def test_dispatch_depth_one_stops_before_registering_team_children(
     assert task["launch_status"] == "launched", task
     deadline = time.monotonic() + 10
     while time.monotonic() < deadline:
-        status = run_process([str(installed_commands.runner), 'status', task['alias']], cwd=root, env=environment)
+        status = run_process(runner_operation(installed_commands, 'status', task['alias']), cwd=root, env=environment)
         observed = yaml.safe_load(status.stdout)['aliases'][0]
         if observed['activity'] == 'idle':
             break
@@ -159,7 +160,7 @@ def test_public_team_phases_and_parent_capacity_transfer(
 
     def statuses(aliases: list[str]) -> list[dict]:
         """Query through the installed Runner with this test's Runtime environment."""
-        result = run_process([str(installed_commands.runner), 'status', *aliases],
+        result = run_process(runner_operation(installed_commands, 'status', *aliases),
                              cwd=root, env=environment)
         assert result.returncode == 0, result.stdout + result.stderr
         return yaml.safe_load(result.stdout)['aliases']

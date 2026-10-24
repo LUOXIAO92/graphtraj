@@ -1,0 +1,270 @@
+FF..............FFF........                                              [100%]
+=================================== FAILURES ===================================
+_____ test_native_interrupt_confirms_only_pre_runtime_allocations[absent] ______
+
+installed_commands = InstalledCommands(product=PosixPath('/private/tmp/claude-501/pytest-of-luoxiao/pytest-813/installed-environment0/venv/... runner=PosixPath('/private/tmp/claude-501/pytest-of-luoxiao/pytest-813/installed-environment0/venv/bin/agent-runner'))
+temporary_git_repository = PosixPath('/private/tmp/claude-501/pytest-of-luoxiao/pytest-813/test_native_interrupt_confirms0/target-project')
+fake_codex = FakeCodex(executable=PosixPath('/private/tmp/claude-501/pytest-of-luoxiao/pytest-813/test_native_interrupt_confirms0/f..._file=PosixPath('/private/tmp/claude-501/pytest-of-luoxiao/pytest-813/test_native_interrupt_confirms0/fake-codex.log'))
+tmp_path = PosixPath('/private/tmp/claude-501/pytest-of-luoxiao/pytest-813/test_native_interrupt_confirms0')
+worker_case = 'absent'
+
+    @pytest.mark.parametrize('worker_case', ['absent', 'waiting', 'foreign-group', 'runtime-artifact'])
+    def test_native_interrupt_confirms_only_pre_runtime_allocations(
+        installed_commands: InstalledCommands,
+        temporary_git_repository: Path,
+        fake_codex: FakeCodex,
+        tmp_path: Path,
+        worker_case: str,
+    ) -> None:
+        """Exact native process identity and the startup barrier precede cleanup."""
+        task = _deliver_task(installed_commands, temporary_git_repository, fake_codex,
+                                 tmp_path, integrate=True, terminal_failed_start=True)
+        sessions = task.root / '.graphtraj/runner/sessions'
+        original = sessions / task.failed_start_aliases[0]
+        launch = yaml.safe_load((original / 'launch.yml').read_text())
+        alias = '85-cleanup_integrated_task-handover0-failed_start@before_start'
+        directory = sessions / alias
+        directory.mkdir()
+        trace = task.task_directory / 'teams/1/traces' / alias / 'events.jsonl'
+        trace.parent.mkdir()
+        trace.touch()
+        launch['mapping'].update(alias=alias, trace_file=str(trace))
+        (directory / 'launch.yml').write_text(yaml.safe_dump(launch))
+        (directory / 'events.jsonl').write_text(
+            '{"type":"runtime","runtime":"codex"}\n{"type":"runner-execution-start"}\n')
+        (directory / 'worker-stderr.log').touch()
+        if worker_case == 'runtime-artifact':
+            (directory / 'owner-123.lock').touch()
+        before = {path.name: path.read_bytes() for path in directory.iterdir()}
+        worker = None
+        waiter = None
+        try:
+            if worker_case in {'waiting', 'foreign-group'}:
+                worker = subprocess.Popen(
+                    [str(installed_commands.runner.with_name('python')), '-I', '-m',
+                     'graphtraj.execution.runner_worker', str(directory / 'launch.yml')],
+                    stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                    env=task.environment, start_new_session=worker_case == 'waiting',
+                )
+                # The spawning parent reaps its own child while the public Runner
+                # confirms the recorded process group's exit.
+                waiter = threading.Thread(target=worker.wait)
+                waiter.start()
+            result = run_process(runner_operation(installed_commands, 'interrupt', alias),
+                                 cwd=task.root, env=task.environment, timeout=20)
+            if worker_case in {'foreign-group', 'runtime-artifact'}:
+                assert result.returncode == 1, result.stdout + result.stderr
+                assert {path.name: path.read_bytes() for path in directory.iterdir()} == before
+                if worker is not None:
+                    assert worker.poll() is None
+                return
+>           assert result.returncode == 0, result.stdout + result.stderr
+E           AssertionError: alias: 85-cleanup_integrated_task-handover0-failed_start@before_start
+E             error:
+E               code: operation-failed
+E               message: 'Pre-Runtime allocation stop could not be confirmed: Native process identity
+E                 is unavailable'
+E             Pre-Runtime allocation stop could not be confirmed: Native process identity is unavailable
+E             
+E           assert 1 == 0
+E            +  where 1 = CompletedProcess(args=['/private/tmp/claude-501/pytest-of-luoxiao/pytest-813/installed-environment0/venv/bin/python', ...unavailable'\n", stderr='Pre-Runtime allocation stop could not be confirmed: Native process identity is unavailable\n').returncode
+
+tests/test_agent_runner_cleanup.py:71: AssertionError
+_____ test_native_interrupt_confirms_only_pre_runtime_allocations[waiting] _____
+
+installed_commands = InstalledCommands(product=PosixPath('/private/tmp/claude-501/pytest-of-luoxiao/pytest-813/installed-environment0/venv/... runner=PosixPath('/private/tmp/claude-501/pytest-of-luoxiao/pytest-813/installed-environment0/venv/bin/agent-runner'))
+temporary_git_repository = PosixPath('/private/tmp/claude-501/pytest-of-luoxiao/pytest-813/test_native_interrupt_confirms1/target-project')
+fake_codex = FakeCodex(executable=PosixPath('/private/tmp/claude-501/pytest-of-luoxiao/pytest-813/test_native_interrupt_confirms1/f..._file=PosixPath('/private/tmp/claude-501/pytest-of-luoxiao/pytest-813/test_native_interrupt_confirms1/fake-codex.log'))
+tmp_path = PosixPath('/private/tmp/claude-501/pytest-of-luoxiao/pytest-813/test_native_interrupt_confirms1')
+worker_case = 'waiting'
+
+    @pytest.mark.parametrize('worker_case', ['absent', 'waiting', 'foreign-group', 'runtime-artifact'])
+    def test_native_interrupt_confirms_only_pre_runtime_allocations(
+        installed_commands: InstalledCommands,
+        temporary_git_repository: Path,
+        fake_codex: FakeCodex,
+        tmp_path: Path,
+        worker_case: str,
+    ) -> None:
+        """Exact native process identity and the startup barrier precede cleanup."""
+        task = _deliver_task(installed_commands, temporary_git_repository, fake_codex,
+                                 tmp_path, integrate=True, terminal_failed_start=True)
+        sessions = task.root / '.graphtraj/runner/sessions'
+        original = sessions / task.failed_start_aliases[0]
+        launch = yaml.safe_load((original / 'launch.yml').read_text())
+        alias = '85-cleanup_integrated_task-handover0-failed_start@before_start'
+        directory = sessions / alias
+        directory.mkdir()
+        trace = task.task_directory / 'teams/1/traces' / alias / 'events.jsonl'
+        trace.parent.mkdir()
+        trace.touch()
+        launch['mapping'].update(alias=alias, trace_file=str(trace))
+        (directory / 'launch.yml').write_text(yaml.safe_dump(launch))
+        (directory / 'events.jsonl').write_text(
+            '{"type":"runtime","runtime":"codex"}\n{"type":"runner-execution-start"}\n')
+        (directory / 'worker-stderr.log').touch()
+        if worker_case == 'runtime-artifact':
+            (directory / 'owner-123.lock').touch()
+        before = {path.name: path.read_bytes() for path in directory.iterdir()}
+        worker = None
+        waiter = None
+        try:
+            if worker_case in {'waiting', 'foreign-group'}:
+                worker = subprocess.Popen(
+                    [str(installed_commands.runner.with_name('python')), '-I', '-m',
+                     'graphtraj.execution.runner_worker', str(directory / 'launch.yml')],
+                    stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                    env=task.environment, start_new_session=worker_case == 'waiting',
+                )
+                # The spawning parent reaps its own child while the public Runner
+                # confirms the recorded process group's exit.
+                waiter = threading.Thread(target=worker.wait)
+                waiter.start()
+            result = run_process(runner_operation(installed_commands, 'interrupt', alias),
+                                 cwd=task.root, env=task.environment, timeout=20)
+            if worker_case in {'foreign-group', 'runtime-artifact'}:
+                assert result.returncode == 1, result.stdout + result.stderr
+                assert {path.name: path.read_bytes() for path in directory.iterdir()} == before
+                if worker is not None:
+                    assert worker.poll() is None
+                return
+>           assert result.returncode == 0, result.stdout + result.stderr
+E           AssertionError: alias: 85-cleanup_integrated_task-handover0-failed_start@before_start
+E             error:
+E               code: operation-failed
+E               message: 'Pre-Runtime allocation stop could not be confirmed: Native process identity
+E                 is unavailable'
+E             Pre-Runtime allocation stop could not be confirmed: Native process identity is unavailable
+E             
+E           assert 1 == 0
+E            +  where 1 = CompletedProcess(args=['/private/tmp/claude-501/pytest-of-luoxiao/pytest-813/installed-environment0/venv/bin/python', ...unavailable'\n", stderr='Pre-Runtime allocation stop could not be confirmed: Native process identity is unavailable\n').returncode
+
+tests/test_agent_runner_cleanup.py:71: AssertionError
+_____ test_pi_failed_creation_retains_owned_process_and_native_stop[False] _____
+
+installed_commands = InstalledCommands(product=PosixPath('/private/tmp/claude-501/pytest-of-luoxiao/pytest-813/installed-environment0/venv/... runner=PosixPath('/private/tmp/claude-501/pytest-of-luoxiao/pytest-813/installed-environment0/venv/bin/agent-runner'))
+temporary_git_repository = PosixPath('/private/tmp/claude-501/pytest-of-luoxiao/pytest-813/test_pi_failed_creation_retain0/target-project')
+fake_codex = FakeCodex(executable=PosixPath('/private/tmp/claude-501/pytest-of-luoxiao/pytest-813/test_pi_failed_creation_retain0/f..._file=PosixPath('/private/tmp/claude-501/pytest-of-luoxiao/pytest-813/test_pi_failed_creation_retain0/fake-codex.log'))
+tmp_path = PosixPath('/private/tmp/claude-501/pytest-of-luoxiao/pytest-813/test_pi_failed_creation_retain0')
+pi_environment = {'sandbox_python': '/tmp/claude-501/venv344/bin/python', 'sandbox_path': '/private/tmp/claude-501/pytest-of-luoxiao/py...o/bin', 'agent_dir': '/private/tmp/claude-501/pytest-of-luoxiao/pytest-813/test_pi_failed_creation_retain0/user-agent'}
+interrupt_startup = False
+
+    @pytest.mark.parametrize('interrupt_startup', (False, True))
+    def test_pi_failed_creation_retains_owned_process_and_native_stop(
+        installed_commands: InstalledCommands,
+        temporary_git_repository: Path,
+        fake_codex: FakeCodex,
+        tmp_path: Path,
+        pi_environment: dict,
+        interrupt_startup: bool,
+    ) -> None:
+        """Public Runner retains pre-Session process ownership and verified native shutdown."""
+        task = _deliver_task(installed_commands, temporary_git_repository, fake_codex, tmp_path,
+                                 integrate=True, terminal_failed_start=True, pi_startup=pi_environment,
+                                 pi_interrupt=interrupt_startup)
+        alias = task.failed_start_aliases[0]
+        directory = task.root / '.graphtraj/runner/sessions' / alias
+        heartbeat = yaml.safe_load((directory / 'heartbeat.yml').read_text())
+        failure = yaml.safe_load((directory / 'launch-error.yml').read_text())
+        assert heartbeat['runtime_pid'] > 0
+        assert heartbeat['execution_id']
+        assert heartbeat['control_directory']
+>       assert heartbeat['process_outcome'] == {'terminal_confirmed': True, 'runtime_exit_code': 0}
+E       AssertionError: assert {'terminal_co...d': True, ...} == {'terminal_co...exit_code': 0}
+E         
+E         Omitting 2 identical items, use -vv to show
+E         Left contains 6 more items:
+E         {'native_idle_confirmed': True,
+E          'native_session_bound': False,
+E          'owned_process_group_exited': True,
+E          'prompt_started': False,...
+E         
+E         ...Full output truncated (3 lines hidden), use '-vv' to show
+
+tests/test_agent_runner_cleanup.py:756: AssertionError
+_____ test_pi_failed_creation_retains_owned_process_and_native_stop[True] ______
+
+installed_commands = InstalledCommands(product=PosixPath('/private/tmp/claude-501/pytest-of-luoxiao/pytest-813/installed-environment0/venv/... runner=PosixPath('/private/tmp/claude-501/pytest-of-luoxiao/pytest-813/installed-environment0/venv/bin/agent-runner'))
+temporary_git_repository = PosixPath('/private/tmp/claude-501/pytest-of-luoxiao/pytest-813/test_pi_failed_creation_retain1/target-project')
+fake_codex = FakeCodex(executable=PosixPath('/private/tmp/claude-501/pytest-of-luoxiao/pytest-813/test_pi_failed_creation_retain1/f..._file=PosixPath('/private/tmp/claude-501/pytest-of-luoxiao/pytest-813/test_pi_failed_creation_retain1/fake-codex.log'))
+tmp_path = PosixPath('/private/tmp/claude-501/pytest-of-luoxiao/pytest-813/test_pi_failed_creation_retain1')
+pi_environment = {'sandbox_python': '/tmp/claude-501/venv344/bin/python', 'sandbox_path': '/private/tmp/claude-501/pytest-of-luoxiao/py...o/bin', 'agent_dir': '/private/tmp/claude-501/pytest-of-luoxiao/pytest-813/test_pi_failed_creation_retain1/user-agent'}
+interrupt_startup = True
+
+    @pytest.mark.parametrize('interrupt_startup', (False, True))
+    def test_pi_failed_creation_retains_owned_process_and_native_stop(
+        installed_commands: InstalledCommands,
+        temporary_git_repository: Path,
+        fake_codex: FakeCodex,
+        tmp_path: Path,
+        pi_environment: dict,
+        interrupt_startup: bool,
+    ) -> None:
+        """Public Runner retains pre-Session process ownership and verified native shutdown."""
+        task = _deliver_task(installed_commands, temporary_git_repository, fake_codex, tmp_path,
+                                 integrate=True, terminal_failed_start=True, pi_startup=pi_environment,
+                                 pi_interrupt=interrupt_startup)
+        alias = task.failed_start_aliases[0]
+        directory = task.root / '.graphtraj/runner/sessions' / alias
+        heartbeat = yaml.safe_load((directory / 'heartbeat.yml').read_text())
+        failure = yaml.safe_load((directory / 'launch-error.yml').read_text())
+        assert heartbeat['runtime_pid'] > 0
+        assert heartbeat['execution_id']
+        assert heartbeat['control_directory']
+>       assert heartbeat['process_outcome'] == {'terminal_confirmed': True, 'runtime_exit_code': 0}
+E       AssertionError: assert {'terminal_co...d': True, ...} == {'terminal_co...exit_code': 0}
+E         
+E         Omitting 2 identical items, use -vv to show
+E         Left contains 6 more items:
+E         {'native_idle_confirmed': True,
+E          'native_session_bound': False,
+E          'owned_process_group_exited': True,
+E          'prompt_started': False,...
+E         
+E         ...Full output truncated (3 lines hidden), use '-vv' to show
+
+tests/test_agent_runner_cleanup.py:756: AssertionError
+____ test_pi_crashed_creation_retains_binding_without_certifying_tool_stop _____
+
+installed_commands = InstalledCommands(product=PosixPath('/private/tmp/claude-501/pytest-of-luoxiao/pytest-813/installed-environment0/venv/... runner=PosixPath('/private/tmp/claude-501/pytest-of-luoxiao/pytest-813/installed-environment0/venv/bin/agent-runner'))
+temporary_git_repository = PosixPath('/private/tmp/claude-501/pytest-of-luoxiao/pytest-813/test_pi_crashed_creation_retai0/target-project')
+fake_codex = FakeCodex(executable=PosixPath('/private/tmp/claude-501/pytest-of-luoxiao/pytest-813/test_pi_crashed_creation_retai0/f..._file=PosixPath('/private/tmp/claude-501/pytest-of-luoxiao/pytest-813/test_pi_crashed_creation_retai0/fake-codex.log'))
+tmp_path = PosixPath('/private/tmp/claude-501/pytest-of-luoxiao/pytest-813/test_pi_crashed_creation_retai0')
+pi_environment = {'sandbox_python': '/tmp/claude-501/venv344/bin/python', 'sandbox_path': '/private/tmp/claude-501/pytest-of-luoxiao/py...o/bin', 'agent_dir': '/private/tmp/claude-501/pytest-of-luoxiao/pytest-813/test_pi_crashed_creation_retai0/user-agent'}
+
+    def test_pi_crashed_creation_retains_binding_without_certifying_tool_stop(
+        installed_commands: InstalledCommands,
+        temporary_git_repository: Path,
+        fake_codex: FakeCodex,
+        tmp_path: Path,
+        pi_environment: dict,
+    ) -> None:
+        """A reaped transport without native stop proof remains unconfirmed."""
+        task = _deliver_task(installed_commands, temporary_git_repository, fake_codex, tmp_path,
+                                 integrate=True, terminal_failed_start=True, pi_startup=pi_environment,
+                                 pi_crash=True)
+        alias = task.failed_start_aliases[0]
+        directory = task.root / '.graphtraj/runner/sessions' / alias
+        heartbeat = yaml.safe_load((directory / 'heartbeat.yml').read_text())
+        assert heartbeat['runtime_pid'] > 0
+>       assert heartbeat['process_outcome'] == {'terminal_confirmed': False, 'runtime_exit_code': 71}
+E       AssertionError: assert {'terminal_co...d': True, ...} == {'terminal_co...xit_code': 71}
+E         
+E         Omitting 2 identical items, use -vv to show
+E         Left contains 6 more items:
+E         {'native_idle_confirmed': False,
+E          'native_session_bound': False,
+E          'owned_process_group_exited': True,
+E          'prompt_started': False,...
+E         
+E         ...Full output truncated (3 lines hidden), use '-vv' to show
+
+tests/test_agent_runner_cleanup.py:788: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_agent_runner_cleanup.py::test_native_interrupt_confirms_only_pre_runtime_allocations[absent]
+FAILED tests/test_agent_runner_cleanup.py::test_native_interrupt_confirms_only_pre_runtime_allocations[waiting]
+FAILED tests/test_agent_runner_cleanup.py::test_pi_failed_creation_retains_owned_process_and_native_stop[False]
+FAILED tests/test_agent_runner_cleanup.py::test_pi_failed_creation_retains_owned_process_and_native_stop[True]
+FAILED tests/test_agent_runner_cleanup.py::test_pi_crashed_creation_retains_binding_without_certifying_tool_stop
+5 failed, 22 passed in 228.49s (0:03:48)
+rc=1

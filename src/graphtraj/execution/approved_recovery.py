@@ -84,7 +84,7 @@ def approved_recovery(arguments: dict, cwd: Path) -> dict:
     }
     _confirm_unconfirmed_target(project.runner_directory, alias)
     if _changes_execution(request) or before['mapping'] != after['mapping']:
-        require_stopped_subtree(project.runner_directory, alias)
+        require_stopped_subtree(project.runner_directory, alias, operation='recovery')
     if minutes:
         decision = review_proposal(proposal, cwd, project.runner_directory)
         if decision != {'decision': 'accept'}:
@@ -100,7 +100,7 @@ def _changes_execution(request: dict) -> bool:
     """Whether a recovery resumes the Session or reactivates its Task.
 
     Only these need the target subtree stopped. A budget increment without
-    either keeps running work, its stop facts and its original clock.
+    either keeps running work, Session stop facts and its original clock.
     """
     return request['resume'] or request.get('restore_active', False)
 
@@ -154,21 +154,25 @@ def _repair_snapshot(project: Any, before: dict, request: dict) -> dict:
     if minutes and before['budget'] is None:
         raise RunnerError('invalid-input', 'Time extension requires existing execution accounting.')
     if minutes:
+        # Approved minutes lift the Task's sampled budget stop, so newly
+        # dispatched members can start. A Session's explicit stop stays
+        # unless this recovery also resumes that Session.
         after['budget']['approved_minutes'] = after['budget'].get('approved_minutes', 0) + minutes
-        if resume:
-            after['budget']['stopped'] = False
+        after['budget']['stopped'] = False
     budget_stopped = after['budget'] is not None and after['budget'].get('stopped', False)
     # Administrative reopening grants neither execution permission nor more time.
     if resume and not budget_stopped and after['stop'] is not None:
         after['stop']['resumed'] = True
     if not after['task']['active'] or after['team']['status'] != 'active':
         raise RunnerError('team-not-active', 'This recovery needs restore_active to repair administrative state.')
-    if before['mapping'].get('parent') is None and caller_alias(project.runner_directory) is None:
+    if (before['mapping'].get('parent') is None and before['mapping'].get('parent_connection') is None
+            and caller_alias(project.runner_directory) is None):
         from graphtraj.execution.runner_connection import current_parent_connection
 
-        # An authenticated Main's recovery retains the Agent and native Session,
-        # but returns its notices to that Main's actual host. The event keeps
-        # the former connection; no model argument can choose a recipient.
+        # A root without any recorded host gets the authenticated Main's host
+        # so its notices are delivered at all. A recorded host is never
+        # rewritten: delivery follows the current Main (``route_notice``).
+        # No model argument can choose a recipient.
         host = current_parent_connection() or runtime_adapter.current_host_connection()
         if host is not None:
             after['mapping']['parent_connection'] = host
@@ -234,6 +238,16 @@ def _differences(expected: Any, actual: Any, prefix: str = '') -> list[dict]:
     return [] if expected == actual else [{'field': prefix, 'expected': expected, 'actual': actual}]
 
 
+def _repair_differences(before: dict, current: dict) -> list[dict]:
+    """Return state changes that make a reviewed repair stale.
+
+    Task, Team, budget, stop, mapping, Round and definition are compared
+    exactly. A later Task event alone, such as a parent's note or report
+    notice during review, changes none of them and does not stale the repair.
+    """
+    return _differences({**before, 'latest_task_event': current['latest_task_event']}, current)
+
+
 def _apply_recovery(proposal: dict, cwd: Path) -> dict:
     """Apply the authorized snapshot atomically with its Worldline fact.
 
@@ -281,11 +295,11 @@ def _apply_recovery(proposal: dict, cwd: Path) -> dict:
                                 and event.get('proposal_sha256') == digest), None)
                 if applied is None:
                     current, paths = _snapshot(project, alias, administrative=not request['resume'])
-                    differences = _differences(proposal['before'], current)
+                    differences = _repair_differences(proposal['before'], current)
                     if differences:
                         return {'recovery_status': 'stale', 'applied': False, 'differences': differences}
                     if _changes_execution(request) or proposal['before']['mapping'] != proposal['after']['mapping']:
-                        require_stopped_subtree(project.runner_directory, alias)
+                        require_stopped_subtree(project.runner_directory, alias, operation='recovery')
                     original = {key: path.read_bytes() if path.exists() else None
                                 for key, path in paths.items() if key != 'round'}
                     original_mode = paths['round'].stat().st_mode & 0o777
@@ -304,7 +318,7 @@ def _apply_recovery(proposal: dict, cwd: Path) -> dict:
                         current, _ = _snapshot(
                             project, alias, administrative=not request['resume'], worldline_locked=True,
                         )
-                        differences = _differences(proposal['before'], current)
+                        differences = _repair_differences(proposal['before'], current)
                         if differences:
                             raise RunnerError('recovery-stale', json.dumps(differences))
                         try:
@@ -404,9 +418,11 @@ def _resume_locked(project: Any, applied: dict, directory: Path) -> dict:
     if prior:
         return {**result, 'recovery_status': 'resumed', 'resumption': prior['resumption']}
     current, _ = _snapshot(project, alias)
-    expected = {**proposal['after'], 'latest_task_event': applied['event_id']}
-    if 'applied_budget' in applied:
-        expected['budget'] = applied['applied_budget']
+    # Later budget writes (another approved increment, sampled checks) and
+    # later Task events are ordinary progress, not a changed repair. Budget
+    # permission is rechecked when input is sent, and retry never adds time.
+    expected = {**proposal['after'], 'budget': current['budget'],
+                'latest_task_event': current['latest_task_event']}
     differences = _differences(expected, current)
     # Native startup replaces transport and clears the terminal summary before
     # turn admission. These changes do not alter Session ownership or authority.

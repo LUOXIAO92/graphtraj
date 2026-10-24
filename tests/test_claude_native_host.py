@@ -1,6 +1,7 @@
 """Current-context binding boundaries without launching a real Runtime."""
 from io import StringIO
 import json
+import os
 from pathlib import Path
 from uuid import uuid4
 
@@ -154,6 +155,32 @@ def test_adoption_material_is_the_plugin_layout_and_keeps_settings(tmp_path: Pat
     assert settings['env']['KEEP'] == '1' and 'GRAPHTRAJ_CLAUDE_HOST_CONFIG' in settings['env']
     assert settings['permissions'] == {'allow': []}
     assert list(json.loads((tmp_path / '.mcp.json').read_text())['mcpServers']) == ['agents']
+
+
+def test_generated_hook_context_accepts_the_project_host_configuration(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture,
+) -> None:
+    """The written hook's agent_swarm context entry reaches the project host's own channel."""
+    from agent_swarm.claude import host as native
+    from graphtraj.runtimes.claude.host import adoption_material, write_adoption
+
+    write_adoption(adoption_material(tmp_path, tmp_path / 'claude'))
+    hook = (tmp_path / '.claude/skills/graphtraj-claude-host/hooks/host_context.mjs').read_text()
+    assert "'-m', 'agent_swarm.claude.host'" in hook
+    config = tmp_path / '.graphtraj/claude-host/config.json'
+    endpoint = Path(json.loads(config.read_text())['channel_file'])
+    endpoint.parent.mkdir(parents=True)
+    endpoint.write_text(json.dumps({'parent': os.getppid(), 'executable': str(tmp_path / 'claude'),
+                                    'address': 'project-host-channel'}))
+    received = []
+    monkeypatch.setattr(native, 'native_parent', lambda executable, stage: os.getppid())
+    monkeypatch.setattr(native, 'connection_operation', lambda address, document, *, authenticate:
+                        received.append((address, document, authenticate)) or {'ended': True})
+    monkeypatch.setattr('sys.argv', ['host', 'context', '--config', str(config)])
+    monkeypatch.setattr('sys.stdin', StringIO('{"operation":"end"}'))
+    native.main()
+    assert json.loads(capsys.readouterr().out) == {'ended': True}
+    assert received == [('project-host-channel', {'operation': 'end'}, True)]
 
 
 def test_configured_launcher_survives_a_claude_update(tmp_path: Path, monkeypatch) -> None:

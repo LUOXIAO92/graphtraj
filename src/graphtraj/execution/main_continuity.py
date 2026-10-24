@@ -7,7 +7,7 @@ continues that state instead of starting an empty one. This module keeps the
 only continuity record and the single decision point for who may control it::
 
     <runner>/main-sessions/continuity.jsonl   append-only control claims
-    <runner>/main-sessions/inbox/<key>.jsonl  notices for the Claude Main host
+    <runner>/main-sessions/inbox/<key>.jsonl  notices for a pull-only Main host
 
 A claim is a new associated record. It never rewrites a historical parent,
 a member identity, a Session binding or a native log. Runtime entries supply
@@ -198,16 +198,18 @@ def route_notice(runner: Path, connection: Mapping[str, Any]) -> Mapping[str, An
 
     The recorded owner of a member is unchanged; only delivery follows the
     continuation. A connection that is not a Main Session is returned as is.
-    A current Main whose Runtime cannot receive host events yet (Pi, DSH)
-    keeps the existing delivery to the recorded owner, so nothing is lost.
+    A pull-only Main host (Claude Code, Pi, DSH) reads this project's queue,
+    so its address also names ``runner``.
     """
     current = current_main(runner)
     session = connection.get('session')
-    if (current is None or _same(current, connection.get('runtime'), session)
+    if not (current is None or _same(current, connection.get('runtime'), session)
             or current['runtime'] not in RECEIVING_RUNTIMES
             or session not in main_sessions(runner)):
-        return connection
-    return {**current['connection'], 'runtime': current['runtime'], 'session': current['session']}
+        connection = {**current['connection'], 'runtime': current['runtime'], 'session': current['session']}
+    if connection.get('runtime') in QUEUED_RUNTIMES:
+        connection = {**connection, 'runner': str(runner)}
+    return connection
 
 
 def recorded_by_main(runner: Path, recorded: Mapping[str, Any]) -> bool:
@@ -233,7 +235,11 @@ def owns_main_root(runner: Path, recorded: Mapping[str, Any], connection: Mappin
 
 
 # Main Runtimes whose Adapter delivers host events to a continuing Main.
-RECEIVING_RUNTIMES = frozenset({'codex', 'claude'})
+RECEIVING_RUNTIMES = frozenset({'codex', 'claude', 'pi', 'dsh'})
+
+# Main hosts without a push channel: their notices wait in the project's
+# durable queue until the host's own entry delivers and acknowledges them.
+QUEUED_RUNTIMES = frozenset({'claude', 'pi', 'dsh'})
 
 
 def _inbox(runner: Path, runtime: str, session: str) -> Path:
@@ -243,7 +249,7 @@ def _inbox(runner: Path, runtime: str, session: str) -> Path:
 
 
 def queue_notice(runner: Path, connection: Mapping[str, Any], event: Mapping[str, Any]) -> dict:
-    """Durably queue one notice for the Claude Main host, under the queue lock."""
+    """Durably queue one notice for a pull-only Main host, under the queue lock."""
     path = _inbox(runner, connection['runtime'], connection['session'])
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.with_suffix('.lock').open('a+b') as lock:
@@ -253,6 +259,27 @@ def queue_notice(runner: Path, connection: Mapping[str, Any], event: Mapping[str
             stream.flush()
             os.fsync(stream.fileno())
     return {'accepted': True, 'delivery': 'queued-for-main-host'}
+
+
+def queue_host_notice(connection: Mapping[str, Any], event: Mapping[str, Any]) -> dict:
+    """Queue a notice for the pull-only Main host whose address names its project.
+
+    This is the ``send_host_event`` of the Claude Code, Pi and DSH Adapters;
+    :func:`route_notice` adds ``runner`` to their addresses.
+    """
+    runner = connection.get('runner')
+    if not isinstance(runner, str) or not Path(runner).is_absolute():
+        raise RunnerError('operation-unavailable', 'The Main host connection has no project.')
+    return queue_notice(Path(runner), connection, event)
+
+
+def render_notices(notices: list[dict]) -> str:
+    """Return queued notices as one plain-text Main input, as the Claude host shows them."""
+    return '\n\n'.join(
+        f"[GraphTraj notice from {item['event'].get('alias', 'graphtraj')} · {item['event'].get('event', 'event')}]\n"
+        f"{item['event'].get('message', json.dumps(item['event'], ensure_ascii=False))}"
+        for item in notices
+    )
 
 
 def pending_notices(runner: Path, runtime: str, session: str) -> tuple[list[dict], int]:
@@ -287,11 +314,11 @@ def acknowledge_notices(runner: Path, runtime: str, session: str, position: int)
 def _transfer_notices(runner: Path, previous: Mapping[str, Any], current: Mapping[str, Any]) -> None:
     """Hand the earlier Main's undelivered queued notices to the continuing Main.
 
-    The queue exists only for a Claude Main. A continuing Claude Main receives
-    them in its own queue; another Runtime keeps them in the earlier queue,
-    readable as history (see the reported gap).
+    Only pull-only hosts (Claude Code, Pi, DSH) have a queue. A continuing
+    pull-only Main receives them in its own queue; a Codex Main keeps them in
+    the earlier queue, readable as history (see the reported gap).
     """
-    if previous['runtime'] != 'claude' or current['runtime'] != 'claude':
+    if previous['runtime'] not in QUEUED_RUNTIMES or current['runtime'] not in QUEUED_RUNTIMES:
         return
     notices, position = pending_notices(runner, previous['runtime'], previous['session'])
     for notice in notices:

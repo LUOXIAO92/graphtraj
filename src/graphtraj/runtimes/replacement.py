@@ -32,6 +32,10 @@ def caller_runtime() -> str | None:
                     argv = shlex.split(subprocess.check_output(
                         ["/bin/ps", "-p", str(pid), "-o", "args="], text=True,
                     ))
+                # Pi's official setupCli sets process.title ("pi", or "pi-rpc"
+                # for its RPC entry), which replaces the Node process's kernel argv.
+                if argv[:1] in (['pi'], ['pi-rpc']) and not any(argv[1:]):
+                    return "pi"
                 if len(argv) > 1 and str(Path(argv[1]).resolve()).endswith((
                     "/@mariozechner/pi-coding-agent/dist/cli.js",
                     "/@earendil-works/pi-coding-agent/dist/cli.js",

@@ -191,9 +191,10 @@ def test_notices_follow_the_current_main_without_rewriting_owners(tmp_path: Path
     assert route_notice(tmp_path, CODEX) == {**CLAUDE, 'runner': str(tmp_path)}
     stranger = {'runtime': 'codex', 'session': 'not-main', 'codex_home': '/x'}
     assert route_notice(tmp_path, stranger) == stranger
-    # A Pi Main cannot receive host events yet: delivery stays with the owner.
+    # A Pi Main's extension reads the project's queue, so its address names it.
     claim_main(tmp_path, {'runtime': 'pi', 'session': 'pi-main', 'session_file': '/s'}, 'pi:session_start:startup')
-    assert route_notice(tmp_path, CODEX) == CODEX
+    assert route_notice(tmp_path, CODEX) == {'runtime': 'pi', 'session': 'pi-main', 'session_file': '/s',
+                                             'runner': str(tmp_path)}
     claim_main(tmp_path, {**CLAUDE, 'runner': str(tmp_path)}, 'claude:first-control')
 
     assert owns_main_root(tmp_path, CODEX, CLAUDE)

@@ -79,8 +79,13 @@ class PiRuntimeAdapter:
     finalize_event = staticmethod(unsupported)
     check_main_finalize = staticmethod(unsupported)
     finalize_response = staticmethod(unsupported)
-    send_host_event = staticmethod(unsupported)
     parent_host_status = staticmethod(unsupported)
+
+    def send_host_event(self, connection: Mapping[str, Any], event: dict) -> dict:
+        """Queue a notice that the Main's native extension delivers into its Session."""
+        from graphtraj.execution.main_continuity import queue_host_notice
+
+        return queue_host_notice(connection, event)
 
     def current_host_connection(self) -> dict | None:
         """Read the association scoped by Pi's actual Session extension callback."""

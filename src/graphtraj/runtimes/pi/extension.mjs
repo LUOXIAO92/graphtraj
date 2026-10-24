@@ -68,6 +68,21 @@ export function startCollection(ctx, environment) {
   });
 }
 
+/**
+ * Deliver this Main's queued GraphTraj notices as one custom message that
+ * starts a turn when idle; acknowledge only after Pi took the message.
+ */
+export async function deliverNotices(pi, ctx, environment) {
+  const pending = await nativeEntry(ctx, environment, { event: 'notices' });
+  if (pending.error) throw new Error(pending.error);
+  if (!pending.notices) return 0;
+  pi.sendMessage({ customType: 'graphtraj:main-notice', content: pending.text, display: true },
+    { triggerTurn: true, deliverAs: 'followUp' });
+  const acknowledged = await nativeEntry(ctx, environment, { event: 'notices_ack', position: pending.position });
+  if (acknowledged.error) throw new Error(acknowledged.error);
+  return pending.notices;
+}
+
 /** Quote an environment value for the existing POSIX bash tool backend. */
 function quote(value) {
   return "'" + value.replaceAll("'", "'\\''") + "'";
@@ -78,9 +93,22 @@ export default function graphtraj(pi) {
   const collectors = new WeakMap();
   const agents = registerAgents(pi);
   const independent = agents.independent;
+  // One notice loop for the Session currently associated as Main; a later
+  // session_start or shutdown ends the earlier loop.
+  let noticeLoop = 0;
+  const pullNotices = (ctx, environment, loop = ++noticeLoop) => {
+    const timer = setTimeout(async () => {
+      if (loop !== noticeLoop) return;
+      try { await deliverNotices(pi, ctx, environment); }
+      catch (error) { ctx.ui.notify(`GraphTraj notice delivery failed: ${error.message}`, 'error'); }
+      if (loop === noticeLoop) pullNotices(ctx, environment, loop);
+    }, 5000);
+    timer.unref?.();
+  };
   pi.registerFlag('graphtraj-finish-check', { type: 'boolean', default: false,
     description: 'Check Main completion using the current native Session context.' });
   pi.on('session_start', async (event, ctx) => {
+    noticeLoop++;
     await collectors.get(ctx.sessionManager)?.close();
     collectors.delete(ctx.sessionManager);
     if (await agents.start(ctx)) return;
@@ -92,7 +120,10 @@ export default function graphtraj(pi) {
       entries: ctx.sessionManager.getEntries().filter(entry => entry.type === 'custom'),
     });
     if (result.error) ctx.ui.notify(result.error, 'error');
-    else if (result.source === 'main') ctx.ui.notify('GraphTraj Main Session associated.', 'info');
+    else if (result.source === 'main') {
+      ctx.ui.notify('GraphTraj Main Session associated.', 'info');
+      pullNotices(ctx, environment);
+    }
     if (!result.error && ['main', 'child'].includes(result.source)) {
       collectors.set(ctx.sessionManager, await startCollection(ctx, environment));
     }
@@ -110,6 +141,7 @@ export default function graphtraj(pi) {
     });
   }
   pi.on('session_shutdown', async (_event, ctx) => {
+    noticeLoop++;
     await agents.close();
     await collectors.get(ctx.sessionManager)?.write({type: 'session_shutdown', piNative: {
       entries: ctx.sessionManager.getEntries(), leafId: ctx.sessionManager.getLeafId(),

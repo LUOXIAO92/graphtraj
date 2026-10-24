@@ -264,9 +264,11 @@ each host process. Reads never take control. When another Main has continued
 the project, the earlier Session can still read status, but its control calls
 fail with `main-continued` naming the current Main. To continue Main there,
 start or resume it through its native entry; a Claude Code Session needs a new
-Claude Code process. Member events and results go to the current Main when its
-Runtime receives host events (Codex, Claude Code); a Pi or DSH Main keeps the
-existing delivery to each member's recorded owner.
+Claude Code process. Member events and results go to the current Main. A Codex
+Main receives them as host events; a Claude Code, Pi or DSH Main finds them in the
+project's durable notice queue, which its host integration delivers into the Main
+Session (the Pi extension as a custom message, the DSH plugin through the native
+inbox, within about five seconds) and acknowledges only after delivery.
 
 ### Claude Code as Main
 

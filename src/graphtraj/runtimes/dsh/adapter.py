@@ -239,8 +239,13 @@ class DshRuntimeAdapter:
         raise RuntimeAdapterError('RUNTIME_UNSUPPORTED', 'DSH completion uses its native plugin lifecycle.')
 
     def send_host_event(self, connection: Mapping[str, Any], event: dict) -> dict:
-        """Managed DSH children receive events through their existing Worker."""
-        raise RuntimeAdapterError('RUNTIME_UNSUPPORTED', 'DSH external host event delivery is unavailable.')
+        """Queue a notice that the Main's native plugin delivers into its Session.
+
+        Managed DSH children receive events through their existing Worker.
+        """
+        from graphtraj.execution.main_continuity import queue_host_notice
+
+        return queue_host_notice(connection, event)
 
     def parent_host_status(self, connection: Mapping[str, Any], timeout_seconds: float) -> dict:
         """There is no separately adopted DSH Main host to query."""

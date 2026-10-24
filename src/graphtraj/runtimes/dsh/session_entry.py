@@ -23,13 +23,22 @@ def session_source(header: dict) -> str:
 
 
 def current_connection() -> dict | None:
-    """Use DSH's rebuilt shell namespace, never inherited GraphTraj Main flags."""
+    """Use DSH's per-execution facts, never inherited GraphTraj Main flags.
+
+    A shell execution carries the GraphTraj plugin's rebuilt namespace
+    (``DSH_GRAPHTRAJ_*``). The ``agents`` MCP server of a native Agent carries
+    the agents plugin's ``DSH_SESSION_ID``/``DSH_AGENT_SOURCE`` instead; both
+    plugins derive them from the same native Session header.
+    """
     session = os.environ.get('DSH_SESSION_ID')
     if not session:
         return None
-    if os.environ.get('DSH_GRAPHTRAJ_SESSION') != session:
+    if 'DSH_GRAPHTRAJ_SESSION' not in os.environ and 'DSH_AGENT_SOURCE' in os.environ:
+        source = os.environ['DSH_AGENT_SOURCE']
+    elif os.environ.get('DSH_GRAPHTRAJ_SESSION') != session:
         raise RunnerError('authority-denied', 'The DSH native Session association is unavailable or stale.')
-    source = os.environ.get('DSH_GRAPHTRAJ_SOURCE')
+    else:
+        source = os.environ.get('DSH_GRAPHTRAJ_SOURCE')
     if source not in {'main', 'child'}:
         raise RunnerError('authority-denied', 'Unknown DSH Session source; Main was not associated.')
     return {'runtime': 'dsh', 'session': session, 'source': source}

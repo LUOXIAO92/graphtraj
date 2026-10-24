@@ -44,6 +44,25 @@ def check_event(event: dict, cwd: Path, connection: dict) -> dict:
     raise ValueError('Unknown native lifecycle event.')
 
 
+def main_notices(event: dict, runner: Path, connection: dict) -> dict:
+    """Hand a verified Main host its queued notices; acknowledge only after delivery.
+
+    ``notices`` reads without consuming and returns the rendered Main input
+    with the queue position. ``notices_ack`` records that position once the
+    host's native input took the text, so an interrupted delivery is offered again.
+    """
+    from graphtraj.execution.main_continuity import acknowledge_notices, pending_notices, render_notices
+
+    runtime, session = connection['runtime'], connection['session']
+    if event['event'] == 'notices':
+        notices, position = pending_notices(runner, runtime, session)
+        return {'notices': len(notices), 'text': render_notices(notices), 'position': position}
+    if type(event.get('position')) is not int:
+        raise ValueError('Expected the position returned by notices.')
+    acknowledge_notices(runner, runtime, session, event['position'])
+    return {'acknowledged': True}
+
+
 def pi_event(event: dict, cwd: Path) -> dict:
     """Consume Pi's session_start callback without model-authored identity inputs."""
     from graphtraj.runtimes.pi.session_entry import current_connection, session_source, verify_main
@@ -56,6 +75,8 @@ def pi_event(event: dict, cwd: Path) -> dict:
         if connection is None:
             raise ValueError('Pi native Session association is unavailable.')
         verify_main(connection)
+        if event.get('event') in {'notices', 'notices_ack'}:
+            return main_notices(event, runner, connection)
         return check_event(event, cwd, connection)
     if event.get('event') != 'session_start' or event.get('reason') not in {
         'startup', 'reload', 'new', 'resume', 'fork',
@@ -91,8 +112,11 @@ def dsh_event(event: dict, cwd: Path) -> dict:
     if event.get('event') != 'agent/created':
         from graphtraj.runtimes.dsh.session_entry import caller_identity
 
-        if connection is None or caller_identity(discover_runner_directory(cwd), connection) is not None:
-            raise ValueError('Only the current DSH Main can run its completion check.')
+        runner = discover_runner_directory(cwd)
+        if connection is None or caller_identity(runner, connection) is not None:
+            raise ValueError('Only the DSH Main can run its completion check or receive Main notices.')
+        if event.get('event') in {'notices', 'notices_ack'}:
+            return main_notices(event, runner, connection)
         return check_event(event, cwd, connection)
     if event.get('event') != 'agent/created' or event.get('source') not in {
         'startup', 'resume', 'clear', 'compact',

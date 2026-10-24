@@ -33,6 +33,8 @@ class CheckUsage:
 
     Output includes reasoning where the Runtime counts it as output. Model
     requests require independent native evidence, not a tool or user-turn count.
+    Input sums every request of the check; the largest single request's input
+    is the one comparable to a context size.
     """
 
     input_tokens: int | None = None
@@ -41,6 +43,7 @@ class CheckUsage:
     reasoning_tokens: int | None = None
     tool_calls: int | None = None
     model_requests: int | None = None
+    largest_request_input_tokens: int | None = None
 
     def document(self) -> dict:
         """Return normalized facts with the whole-check cached/input ratio."""
@@ -54,7 +57,9 @@ class CheckUsage:
 
         Counters use thousands separators and stay explicitly unknown when
         unavailable. Cached input carries its hit rate, while reasoning is shown
-        as the part of output rather than a parallel total.
+        as the part of output rather than a parallel total. Input is the total
+        over all model requests, so the request count and the largest single
+        request's input are shown beside it rather than read as one context.
         """
         def count(value: int | None) -> str:
             """Keep unavailable counters distinct from measured zero."""
@@ -67,8 +72,12 @@ class CheckUsage:
             cached = f'Cached {count(self.cached_input_tokens)} (unknown)'
         else:
             cached = f'Cached {count(self.cached_input_tokens)} ({ratio:.1%})'
+        requests = f'Requests {count(self.model_requests)}'
+        if self.model_requests != 0:
+            requests += f' (largest input {count(self.largest_request_input_tokens)})'
         return ' · '.join((
-            f'Input {count(self.input_tokens)}',
+            f'Input {count(self.input_tokens)} total',
+            requests,
             cached,
             f'Output {count(self.output_tokens)} (Reasoning {count(self.reasoning_tokens)})',
             f'Tools {count(self.tool_calls)}',

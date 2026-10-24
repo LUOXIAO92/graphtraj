@@ -40,26 +40,35 @@ def _terminal_confirmed(turn_file: Path) -> bool:
     return True
 
 
-def _owner_exited(agent: str, execution: dict) -> dict | None:
-    """Describe an unconfirmed swarm execution cutover may carry, or ``None``.
+def _carried_unconfirmed(execution: dict) -> bool:
+    """The single rule for which unconfirmed swarm end cutover may carry (user-approved scheme B).
 
-    Only agent_swarm's own owner-exited reconciliation qualifies, and only when
-    its recorded worker and Runtime processes are rechecked as gone now. The
-    execution keeps terminal_confirmed false; nothing here confirms its end.
+    Only agent_swarm's owner-exited reconciliation, with a recorded worker, and
+    its worker and Runtime processes rechecked as gone now. A process that
+    cannot be checked counts as alive. Widening the accepted ends changes only
+    this function.
     """
     from agent_swarm.control import _alive
 
     process = execution.get('process') or {}
-    worker, runtime = process.get('worker_pid'), process.get('runtime_pid')
-    if (execution.get('state') != 'ended' or execution.get('terminal_confirmed') is not False
-            or (execution.get('error') or {}).get('code') != 'owner-exited'
-            or not isinstance(worker, int) or isinstance(worker, bool) or worker <= 0):
+    worker = process.get('worker_pid')
+    return (execution.get('state') == 'ended' and execution.get('terminal_confirmed') is False
+            and (execution.get('error') or {}).get('code') == 'owner-exited'
+            and isinstance(worker, int) and not isinstance(worker, bool) and worker > 0
+            and not _alive(worker) and not _alive(process.get('runtime_pid')))
+
+
+def _owner_exited(agent: str, execution: dict) -> dict | None:
+    """Describe an unconfirmed swarm execution cutover carries, or ``None``.
+
+    The execution keeps terminal_confirmed false; nothing here confirms its end.
+    """
+    if not _carried_unconfirmed(execution):
         return None
-    worker_alive, runtime_alive = _alive(worker), _alive(runtime)
-    if worker_alive or runtime_alive:
-        return None
-    return {'agent': agent, 'execution': execution.get('id'), 'error_code': 'owner-exited',
-            'worker_pid': worker, 'runtime_pid': runtime, 'worker_alive': False, 'runtime_alive': False,
+    process = execution['process']
+    return {'agent': agent, 'execution': execution.get('id'), 'error_code': execution['error']['code'],
+            'worker_pid': process['worker_pid'], 'runtime_pid': process.get('runtime_pid'),
+            'worker_alive': False, 'runtime_alive': False,
             'terminal_confirmed': 'retained false; not confirmed by cutover'}
 
 

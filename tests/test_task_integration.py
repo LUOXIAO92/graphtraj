@@ -405,7 +405,7 @@ def test_configured_document_conflict_requires_common_result_and_validation(
     permissions = settings['permissions'][settings['default_permissions']]['filesystem']
     assert native['cwd'] == str(dev)
     assert permissions[':workspace_roots']['.'] == 'write'
-    assert permissions[str(state)] == 'none'
+    assert permissions[str(state)] == 'read'
     assert permissions[':workspace_roots']['docs'] == 'read'
     assert permissions.get(str(state / 'tasks/83-integration')) is None
     assigned_reports = [Path(path) for path, access in permissions.items()

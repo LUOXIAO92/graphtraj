@@ -205,6 +205,12 @@ class CodexManagedExecution:
             from graphtraj.workspace.runner_project import discover_project_root
 
             root = discover_project_root(Path(request['worktree_path']))
+            from graphtraj.runtimes.codex.access import member_project_reads
+
+            # A retained request may predate read-only project records. Apply
+            # the current member grants at the native owner on every resume.
+            profile = config['permissions'][config['default_permissions']]
+            profile['filesystem'].update(member_project_reads(root))
 
             def authorize(native: dict, _request: dict) -> tuple[str | None, set[str]]:
                 """Own-thread calls need no RPC or event-loop round trip."""

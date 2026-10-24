@@ -184,7 +184,7 @@ def test_pi_shared_process_environment_is_per_session(project: Path) -> None:
     node = shutil.which('node')
     if node is None:
         pytest.skip('Node is not installed')
-    extension = Path(__file__).resolve().parents[1] / 'src/graphtraj/runtimes/pi/extension.mjs'
+    extension = Path(__file__).resolve().parents[1] / 'src/agent_swarm/pi/extension.mjs'
     # Load the exact module bytes without asking Node to inspect denied parents
     # of an otherwise readable isolated Worktree.
     extension = Path(shutil.copy2(extension, project / 'extension.mjs'))
@@ -215,7 +215,8 @@ def test_installed_native_session_apis(project: Path, runtime: str) -> None:
     if node is None or executable is None:
         pytest.skip(f'{runtime} native library is not installed')
     package = Path(__file__).resolve().parents[1] / 'src/graphtraj/runtimes'
-    module = package / runtime / ('extension.mjs' if runtime == 'pi' else 'tool.mjs')
+    module = (package.parents[1] / 'agent_swarm/pi/extension.mjs' if runtime == 'pi'
+              else package / runtime / 'tool.mjs')
     module = Path(shutil.copy2(module, project / module.name))
     if runtime == 'dsh':
         shutil.copy2(package / runtime / 'collection.mjs', project / 'collection.mjs')

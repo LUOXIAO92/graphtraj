@@ -26,6 +26,9 @@ from agent_swarm.runtime import (
 from agent_swarm import AgentControl, Caller
 from agent_swarm.discovery import handle_request
 from agent_swarm import cli, mcp
+from agent_swarm.pi import PiDriver
+from agent_swarm.pi import execution, host, launch, session
+assert PiDriver({'worktree_path': '/w'}).prepare('pi', Caller('host', None))['cwd'] == '/w'
 error = RuntimeAdapterError('NATIVE_FAILURE', 'native failure', terminal_confirmed=False)
 assert (error.code, error.message, str(error), error.terminal_confirmed) == (
     'NATIVE_FAILURE', 'native failure', 'native failure', False)
@@ -63,6 +66,8 @@ def test_wheels_have_separate_owners(built_wheel: Path) -> None:
     assert 'agent_swarm/dsh/communication.mjs' in agents
     assert 'agent_swarm/dsh/package.json' in agents
     assert 'agent_swarm/claude/host_context.mjs' in agents
+    assert {'agent_swarm/pi/extension.mjs', 'agent_swarm/pi/launch.py', 'agent_swarm/pi/host.py'} <= agents
+    assert 'graphtraj/runtimes/pi/extension.mjs' in graphtraj
 
 
 def test_combined_native_values_and_adapters(installed_commands: InstalledCommands) -> None:
@@ -87,6 +92,9 @@ for runtime in ('codex', 'claude', 'pi', 'dsh'):
     consumer.select_runtime_adapter(runtime)
 from graphtraj.runtimes.claude import host
 from agent_swarm.dsh import DshDriver
+from agent_swarm.pi.execution import PiExecution
+from graphtraj.runtimes.pi.managed_session import PiManagedExecution
+assert issubclass(PiManagedExecution, PiExecution)
 '''
     completed = subprocess.run(
         [str(installed_commands.product.with_name('python')), '-I', '-c', script],

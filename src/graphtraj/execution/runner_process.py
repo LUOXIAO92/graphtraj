@@ -15,7 +15,8 @@ from pathlib import Path
 OPERATION_TIMEOUT_SECONDS = 10.0
 
 from agent_swarm.process import (
-    process_ancestors, _libproc, _PROC_PIDT_SHORTBSDINFO, _SHORTBSDINFO_BUFFER_SIZE,
+    process_ancestors, process_executable, _libproc, _PROC_PIDT_SHORTBSDINFO, _SHORTBSDINFO_BUFFER_SIZE,
+    process_arguments as _process_arguments,
 )
 
 
@@ -60,24 +61,6 @@ def _reap_worker(pid: int) -> bool:
     except OSError:
         return False
     return waited_pid == pid
-
-
-def process_executable(pid: int) -> Path | None:
-    """Read the kernel's executable path for a live process, without argv aliases."""
-    if sys.platform.startswith("linux"):
-        try:
-            return Path(os.readlink(f"/proc/{pid}/exe"))
-        except OSError:
-            return None
-    if sys.platform == "darwin":
-        library = _libproc()
-        if library is not None:
-            buffer = ctypes.create_string_buffer(4096)
-            library.proc_pidpath.argtypes = [ctypes.c_int, ctypes.c_void_p, ctypes.c_uint32]
-            library.proc_pidpath.restype = ctypes.c_int
-            if library.proc_pidpath(pid, buffer, len(buffer)) > 0:
-                return Path(os.fsdecode(buffer.value))
-    return None
 
 
 def unstarted_worker_processes(job_file: Path) -> list[int]:
@@ -140,30 +123,6 @@ def _current_user_processes() -> list[tuple[int, int, int]]:
         if values[3] != 5:  # SZOMB has exited and cannot execute.
             result.append(tuple(values[:3]))
     return result
-
-
-def _process_arguments(pid: int) -> list[str]:
-    """Read kernel argument boundaries rather than splitting formatted ps text."""
-    if sys.platform.startswith('linux'):
-        return [os.fsdecode(arg) for arg in Path(f'/proc/{pid}/cmdline').read_bytes().split(b'\0') if arg]
-    if sys.platform != 'darwin':
-        raise OSError('Exact process arguments are unavailable on this platform')
-    # Darwin KERN_PROCARGS2 contains argc, executable path, padding, then argv.
-    library = ctypes.CDLL(None, use_errno=True)
-    query = (ctypes.c_int * 3)(1, 49, pid)
-    buffer = ctypes.create_string_buffer(os.sysconf('SC_ARG_MAX'))
-    size = ctypes.c_size_t(len(buffer))
-    if library.sysctl(query, 3, buffer, ctypes.byref(size), None, 0) != 0:
-        raise OSError(ctypes.get_errno(), 'Process arguments are unavailable')
-    raw = buffer.raw[:size.value]
-    count = int.from_bytes(raw[:4], sys.byteorder)
-    start = raw.index(b'\0', 4) + 1
-    while start < len(raw) and raw[start] == 0:
-        start += 1
-    arguments = raw[start:].split(b'\0')[:count]
-    if len(arguments) != count or count < 1:
-        raise OSError('Process argument record is incomplete')
-    return [os.fsdecode(arg) for arg in arguments]
 
 
 def process_started_at(pid: int) -> float:

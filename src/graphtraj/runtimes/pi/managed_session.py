@@ -1,675 +1,81 @@
-"""Own Pi's persistent stdio transport for one Runner execution."""
+"""GraphTraj's Runner consumer of the independent Pi execution owner."""
 
 from __future__ import annotations
 
-from contextlib import ExitStack, nullcontext
-import copy
-import json
-import os
 from pathlib import Path
-import queue
-import re
-import signal
-import subprocess
-import sys
-import threading
-import time
-import uuid
 
-from graphtraj.execution.runner_io import write_yaml_durably
-from agent_swarm.runtime import RuntimeAdapterError, SessionStarted
+from agent_swarm.pi.execution import PiExecution
 from graphtraj.runtimes.runtime_adapter import record_runtime_process
 
 
-INFORMATION = {'notify', 'setStatus', 'setWidget', 'setTitle', 'set_editor_text'}
-DIALOGS = {'select', 'confirm', 'input', 'editor'}
+class PiManagedExecution(PiExecution):
+    """Add Runner connections, Task notices and archives to the native owner.
 
+    The Task-free agents driver sets ``independent`` and uses the inherited
+    native connection; Runner executions keep GraphTraj's hosted CLI.
+    """
 
-class PiManagedExecution:
-    """Keep native identity, input and queue-aware stopping on one owned pipe."""
-
-    def __init__(
-        self,
-        request: dict,
-        prompt: str,
-        directory: Path,
-        started: SessionStarted,
-        created: SessionStarted,
-        trace_file: Path,
-        expected_session: str | None,
-    ) -> None:
-        """Capture the retained Context without launching a process."""
-        self.request = copy.deepcopy(request)
-        self.prompt = prompt
-        self.directory = directory
-        self.started = started
-        self.created = created
-        self.trace = trace_file
-        self.expected = expected_session
-        self.session: str | None = None
-        self.bound = False
-        self._execution_id = uuid.uuid4().hex
-        self.proc: subprocess.Popen | None = None
-        self.events: queue.Queue = queue.Queue()
-        self.responses: dict[str, queue.Queue] = {}
-        self.pending: dict[str, dict] = {}
-        self.lock = threading.RLock()
-        self.write_lock = threading.Lock()
-        self.stopping = threading.Event()
-        self.done = threading.Event()
-        self.outcome: dict | None = None
-        self.transport_closed = threading.Event()
-        self.prompt_started = False
-        self.stderr_reader: threading.Thread | None = None
-        self.startup_terminal_confirmed = False
+    def __init__(self, *arguments) -> None:
+        """Default to a Runner execution that may read the GraphTraj package."""
+        super().__init__(*arguments)
         self.independent = False
-        self.archive = None
-        self.agent = None
-        self.parent_notice = None
-        self.agent_call = None
+        self.packages.append(str(Path(__file__).resolve().parents[2]))
 
-    @property
-    def execution_id(self) -> str:
-        """Return this invocation's correlated Pi prompt request ID."""
-        return self._execution_id
+    def _provider_domain(self, source: Path, provider: str) -> str:
+        """Resolve older captured requests from their retained native Home."""
+        from graphtraj.runtimes.model_discovery import pi_model_domain
 
-    def _send(self, document: dict) -> None:
-        """Serialize writes; no model arguments can address another pipe."""
-        with self.write_lock:
-            if self.proc is None or self.proc.poll() is not None:
-                raise RuntimeAdapterError('RUNTIME_TRANSPORT_FAILED', 'Pi transport is closed.')
-            try:
-                self.proc.stdin.write(json.dumps(document) + '\n')
-                self.proc.stdin.flush()
-            except (OSError, ValueError) as error:
-                raise RuntimeAdapterError('RUNTIME_TRANSPORT_FAILED', 'Pi input pipe failed.') from error
+        return pi_model_domain(str(source), provider, self.request['model'], self.request.get('api_key_env'))
 
-    def _rpc(self, kind: str, *, identity: str | None = None, **arguments: object) -> dict:
-        """Correlate receipt separately from task completion."""
-        if self.transport_closed.is_set():
-            raise RuntimeAdapterError('RUNTIME_TRANSPORT_FAILED', 'Pi transport closed before ' + kind + '.',
-                                      terminal_confirmed=False)
-        identity = identity or uuid.uuid4().hex
-        reply: queue.Queue = queue.Queue()
-        self.responses[identity] = reply
-        try:
-            self._send({'id': identity, 'type': kind, **arguments})
-            response = reply.get(timeout=30)
-            if not response.get('success'):
-                raise RuntimeAdapterError('RUNTIME_REQUEST_FAILED',
-                                          'Pi ' + kind + ' failed: ' + str(response.get('error', 'transport closed')))
-            return response.get('data', {})
-        except queue.Empty as error:
-            raise RuntimeAdapterError('RUNTIME_REQUEST_FAILED', 'Pi did not acknowledge ' + kind + '.') from error
-        finally:
-            self.responses.pop(identity, None)
-
-    def _read(self) -> None:
-        """Drain replies and native events continuously, including idle dialogs."""
-        assert self.proc is not None
-        try:
-            for line in self.proc.stdout:
-                try:
-                    event = json.loads(line)
-                except ValueError:
-                    self.events.put({'type': 'transport_error'})
-                    break
-                if not isinstance(event, dict):
-                    self.events.put({'type': 'transport_error'})
-                    break
-                if event.get('type') == 'extension_ui_request' and event.get('method') not in INFORMATION:
-                    self.events.put({'type': 'pi/dialog', 'event': event})
-                    if self.session is None:
-                        self.events.put({'type': 'startup_interaction', 'event': event})
-                        for target in list(self.responses.values()):
-                            target.put({'success': False, 'error': 'Pi needs a native startup interaction before Session binding.'})
-                    else:
-                        try:
-                            self._interaction(event)
-                        except RuntimeAdapterError as error:
-                            self.events.put({'type': 'interaction_error', 'error': error})
-                    continue
-                target = self.responses.get(event.get('id')) if event.get('type') == 'response' else None
-                if target is not None:
-                    target.put(event)
-                else:
-                    self.events.put(event)
-        finally:
-            self.transport_closed.set()
-            for target in list(self.responses.values()):
-                target.put({'success': False, 'error': 'transport closed'})
-            self.events.put({'type': 'transport_error'})
-
-    def _prepare(self, address: str | None) -> tuple[list[str], dict]:
-        """Project native asb fields and preserve user resources through references."""
-        request = self.request
-        from graphtraj.runtimes.runtime_adapter import credential_environment
-
-        credential_environment(request.get('api_key_env'))
-        worktree = Path(request['worktree_path']).resolve()
-        root = Path(request['harness_root']).resolve()
-        # This directory belongs to retained Trace evidence, not disposable Worker state.
-        native = self.trace.with_suffix('.pi')
-        native.mkdir(parents=True, exist_ok=True)
-        source = Path(request['agent_dir'])
-        agent = native / 'agent'
-        agent.mkdir(exist_ok=True)
-        read = [str(worktree), str(native), request['docs_directory'],
-                str(Path(sys.prefix).resolve()), str(Path(sys.base_prefix).resolve()),
-                str(Path(__file__).resolve().parents[2]), *request['resources']]
-        write = [str(native)]
-        if address is not None:
-            read.append(address)
-            write.append(address)
-        override = bool(request.get('base_url') or request.get('api_key_env'))
-        if override:
-            # Retained executions may contain links created by older versions.
-            # Unlink the private entry, never write through it into the native Home.
-            (agent / 'auth.json').unlink(missing_ok=True)
-            (agent / 'models.json').unlink(missing_ok=True)
-        for name in ('settings.json', 'models.json', 'auth.json', 'trust.json', 'keybindings.json', 'npm', 'extensions',
-                     'skills', 'prompts', 'themes', 'mcp.json', 'AGENTS.md',
-                     'AGENTS.override.md', 'AGENTS.MD', 'CLAUDE.md', 'CLAUDE.MD', 'SYSTEM.md', 'APPEND_SYSTEM.md'):
-            if (override and name == 'auth.json') or (request.get('base_url') and name == 'models.json'):
-                continue
-            original = source / name
-            link = agent / name
-            if original.exists():
-                if not link.exists() and not link.is_symlink():
-                    link.symlink_to(original)
-                read.append(str(original.resolve()))
-        provider = request['provider']
-        if request.get('base_url'):
-            # Only an explicit route needs a model overlay. Key-only overrides
-            # retain the native definitions and use Pi's higher-priority runtime key.
-            custom = {'baseUrl': request['base_url'], 'api': request['provider_api'],
-                      'apiKey': '$' + request['api_key_env'] if request.get('api_key_env') else 'local',
-                      'models': [{'id': request['model'],
-                                  'reasoning': request.get('reasoning_effort') not in {None, 'off'}}]}
-            (agent / 'models.json').write_text(json.dumps({'providers': {provider: custom}}), encoding='utf-8')
-        if request['worktree_access'] == 'write':
-            write.extend((str(worktree), request['git_common_directory']))
-        read.extend(request['reports'])
-        resources = (worktree / '.agents', worktree / 'AGENTS.md', worktree / 'CONTEXT.md', worktree / 'docs')
-        read.extend(str(p.resolve()) for p in resources if p.exists())
-        policy = {
-            'network': {'allowedDomains': ['api.deepseek.com', 'openrouter.ai'], 'deniedDomains': []},
-            'filesystem': {
-                'denyRead': [str(root / '.graphtraj'), str(root / '.codex'),
-                             str(Path.home() / '.codex'), str(source), request['state_directory']],
-                'allowRead': read,
-                'allowWrite': write,
-                'denyWrite': [str(source), str(root / '.graphtraj/config.yml'),
-                              str(root / '.graphtraj/roles.yml'),
-                              request['docs_directory'],
-                              str(Path(sys.prefix).resolve()), str(Path(__file__).resolve().parents[2]),
-                              str(Path(request['git_common_directory']) / 'config'),
-                              str(Path(request['git_common_directory']) / 'hooks'),
-                              *(str(p.resolve()) for p in resources if p.exists())],
-            },
-        }
+    def _connection(self):
+        """Serve Runner's hosted CLI unless the agents driver owns the call."""
         if self.independent:
-            # AgentControl places this owner at <root>/native/<agent>. The
-            # caller's cwd may contain that root under any name, not .graphtraj.
-            private = self.directory.parent.parent.resolve()
-            policy['filesystem']['denyRead'].append(str(private))
-            # srt applies write denials after grants: denying the whole root
-            # also denies this child's trace and MCP channel. Default-deny
-            # writes already protect the root when no broader grant covers it.
-            # The selected srt also grants these native log/scratch directories
-            # by default. Never place protected control records inside them.
-            default_write = ('/tmp/claude', '/private/tmp/claude',
-                             str(Path.home() / '.npm/_logs'), str(Path.home() / '.claude/debug'))
-            if any(private.is_relative_to(Path(path).resolve()) for path in (*write, *default_write)):
-                raise RuntimeAdapterError(
-                    'ROLE_CONFIG_UNSUPPORTED',
-                    'Pi independent data root overlaps a writable grant; '
-                    'retain a separate data root or a read-only worktree.')
-        if request.get('base_url'):
-            from urllib.parse import urlsplit
+            return super()._connection()
+        from graphtraj.interfaces.hosted_cli import cli_connection
+        from graphtraj.runtimes.codex.managed_session import native_operation_features
 
-            policy['network']['allowedDomains'].append(urlsplit(request['base_url']).hostname)
-        else:
-            from graphtraj.runtimes.model_discovery import pi_model_domain
+        return cli_connection(Path(self.request['harness_root']), self.directory.name, native_operation_features())
 
-            # Older captured requests have no destination yet. Resolve their
-            # retained native Home/model, never the current global connection.
-            domain = request.get('provider_domain') or pi_model_domain(
-                str(source), provider, request['model'], request.get('api_key_env'))
-            if domain not in policy['network']['allowedDomains']:
-                policy['network']['allowedDomains'].append(domain)
-        # Service access is opt-in for this Runtime and its descendants; keep
-        # the existing filesystem grants and denials independent of it.
-        for field, native_field in (
-            ('allow_mach_lookup', 'allowMachLookup'),
-            ('allow_mach_register', 'allowMachRegister'),
-            ('allow_local_binding', 'allowLocalBinding'),
-            ('allow_unix_sockets', 'allowUnixSockets'),
-        ):
-            if request.get(field):
-                policy['network'][native_field] = request[field]
-        # Grants are native filesystem rules, never a command/path-filter hook.
-        policy_file = self.directory / 'pi-policy.json'
-        policy_file.write_text(json.dumps(policy), encoding='utf-8')
-        instructions = native / 'role-instructions.txt'
-        instructions.write_text(request['instructions'], encoding='utf-8')
-        native_trace = native / 'session.jsonl'
-        if self.expected and not native_trace.is_file():
-            raise RuntimeAdapterError('RUNTIME_SESSION_NOT_RESUMABLE', 'Pi native Session file is missing.')
-        argv = [request['executable'], '--mode', 'rpc', '--provider', provider,
-                '--model', request['model'], '--session', str(native_trace),
-                '--append-system-prompt', str(instructions)]
-        if self.independent and address is not None:
-            argv += ['--extension', str(Path(__file__).with_name('extension.mjs'))]
-        if request.get('reasoning_effort'):
-            argv += ['--thinking', request['reasoning_effort']]
-        spec = self.directory / 'pi-process.json'
-        spec.write_text(json.dumps({'policy': str(policy_file), 'argv': argv,
-                                    'api_key_env': request.get('api_key_env'),
-                                    'unauthenticated': bool(request.get('base_url'))}), encoding='utf-8')
-        env = dict(os.environ)
-        # Do not forward Runner bookkeeping as model-declared authority. The only
-        # child operation address is authenticated by the existing hosted CLI.
-        for key in tuple(env):
-            if (key.startswith(('GRAPHTRAJ_', 'AGENT_SWARM_', 'AGENTS_'))
-                    or key in {'DSH_SESSION_ID', 'DSH_AGENT_SOURCE'}):
-                del env[key]
-        env.update(credential_environment(request.get('api_key_env')))
-        env.update({'PATH': str(Path(sys.executable).parent) + os.pathsep + request['sandbox_path'],
-                    'PI_CODING_AGENT_DIR': str(agent),
-                    'PI_ASB_NO_ALIAS_PROMPT': '1'})
-        if address is not None:
-            if self.independent:
-                env.update(AGENT_SWARM_CONNECTION=address, AGENT_SWARM_PYTHON=sys.executable)
-            else:
-                env.update(GRAPHTRAJ_CLI_CONNECTION=address, GRAPHTRAJ_HARNESS_ROOT=str(root))
-        # Pi's native find accepts an existing fd on PATH; do not download it or
-        # alter the user's installation to populate the isolated cache.
-        fd = source / 'bin/fd'
-        if fd.is_file():
-            env['PATH'] += os.pathsep + str(fd.parent)
-            policy['filesystem']['allowRead'].append(str(fd.resolve()))
-            policy_file.write_text(json.dumps(policy), encoding='utf-8')
-        self.native_trace = native_trace
-        return [request['sandbox_python'], str(Path(__file__).with_name('launch.py')), str(spec)], env
+    def _connection_environment(self, address: str, root: Path) -> dict:
+        """Name the hosted CLI for Runner executions."""
+        if self.independent:
+            return super()._connection_environment(address, root)
+        return {'GRAPHTRAJ_CLI_CONNECTION': address, 'GRAPHTRAJ_HARNESS_ROOT': str(root)}
 
-    def _retain_trace(self) -> None:
-        """Link the native file without normalizing timestamps or encrypted fields."""
-        if self.native_trace.is_file() and not self.trace.is_symlink():
-            self.trace.unlink(missing_ok=True)
-            self.trace.symlink_to(self.native_trace)
+    def _archive_collector(self, header: dict, native: dict):
+        """Archive Runner executions under their Task mapping in the project archive."""
+        from graphtraj.runtimes.pi.collection import PiArchive
 
-    def run(self) -> dict:
-        """Bind real Pi identity before task input, then observe native settlement."""
-        reader = None
-        collector = None
-        with ExitStack() as resources:
-            connection = nullcontext(None)
-            if not self.independent:
-                from graphtraj.interfaces.hosted_cli import cli_connection
-                from graphtraj.runtimes.codex.managed_session import native_operation_features
+        archive, agent, tasks, source = self.archive, self.agent, [], 'child'
+        if not self.independent:
+            import yaml
+            from agent_swarm import default_config
+            from graphtraj.interfaces.agents import swarm_root
+            from graphtraj.sessions.archive import SessionArchive
 
-                connection = cli_connection(
-                    Path(self.request['harness_root']), self.directory.name, native_operation_features())
-            if self.independent and self.agent_call is not None:
-                from agent_swarm.connection import agents_connection
-                from agent_swarm.process import authenticate_process
+            mapping_file = self.directory / 'mapping.yml'
+            mapping = yaml.safe_load(mapping_file.read_text()) if mapping_file.is_file() else {}
+            agent = mapping.get('alias', self.session)
+            tasks = [mapping['task_id']] if mapping.get('task_id') else []
+            source = 'member' if mapping else None
+            root = swarm_root(Path(self.request['harness_root']))
+            archive = SessionArchive(root, **default_config(root, save_normalized_sessions=True))
+        if archive is None:
+            return None
+        return PiArchive(
+            archive, header, agent=agent, project=self.request['harness_root'],
+            entries=native['entries'], leaf_id=native['leafId'], source=source, tasks=tasks,
+            attachment_root=Path(self.request['worktree_path']),
+        )
 
-                connection = agents_connection(
-                    self.directory / 'mcp', self.agent_call,
-                    lambda pid: authenticate_process(self.proc, pid),
-                )
-            address = resources.enter_context(connection)
-            argv, env = self._prepare(address)
-            stderr = resources.enter_context((self.directory / 'stderr.log').open('a', encoding='utf-8'))
-            stderr_offset = stderr.tell()
-            try:
-                self.proc = subprocess.Popen(argv, cwd=self.request['worktree_path'], env=env,
-                                             stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                                             text=True, bufsize=1, start_new_session=True)
-                record_runtime_process(self.proc.pid)
+    def _record_process(self, pid: int, outcome: dict | None = None) -> None:
+        """Publish through the Worker's bound process observer."""
+        record_runtime_process(pid, outcome)
 
-                def retain_stderr() -> None:
-                    """Keep private log files host-side; Node must be able to stat its stdio."""
-                    assert self.proc is not None
-                    for line in self.proc.stderr:
-                        stderr.write(line)
-                        stderr.flush()
+    def _notify_parent(self, message: str, details: dict) -> dict | None:
+        """Use the agents driver's notice, else Runner's direct parent."""
+        if self.parent_notice is not None:
+            return self.parent_notice(message, details)
+        from graphtraj.execution.runner_control import notify_direct_parent
 
-                self.stderr_reader = threading.Thread(target=retain_stderr, daemon=True)
-                self.stderr_reader.start()
-                reader = threading.Thread(target=self._read, daemon=True)
-                reader.start()
-                state = self._rpc('get_state')
-                if self.stopping.is_set():
-                    raise RuntimeAdapterError('RUNTIME_EXECUTION_INTERRUPTED', 'Pi startup was interrupted.')
-                self.session = state.get('sessionId')
-                if not isinstance(self.session, str) or not self.session:
-                    raise RuntimeAdapterError('RUNTIME_SESSION_MISSING', 'Pi did not return a native Session.')
-                if self.expected and self.session != self.expected:
-                    raise RuntimeAdapterError('RUNTIME_SESSION_NOT_RESUMABLE', 'Pi resumed a different native Session.')
-                if state.get('sessionFile') != str(self.native_trace):
-                    raise RuntimeAdapterError('RUNTIME_SESSION_MISSING', 'Pi did not bind the requested native Session file.')
-                model = state.get('model', {})
-                if (model.get('provider'), model.get('id')) != (self.request['provider'], self.request['model']):
-                    raise RuntimeAdapterError('RUNTIME_REQUEST_FAILED', 'Pi selected a different provider/model.')
-                write_yaml_durably(self.directory / 'session.yml', {
-                    'session': self.session, 'rollout_path': str(self.native_trace), 'model': model,
-                    'runtime_version': self.request['version'],
-                })
-                self.created(self.session, self.proc.pid)
-                self.bound = True
-                from graphtraj.runtimes.pi.collection import PiArchive
-                import yaml
-
-                archive = self.archive
-                agent = self.agent
-                tasks = []
-                if self.independent:
-                    source = 'child'
-                else:
-                    from agent_swarm import default_config
-                    from graphtraj.interfaces.agents import swarm_root
-                    from graphtraj.sessions.archive import SessionArchive
-
-                    mapping_file = self.directory / 'mapping.yml'
-                    mapping = yaml.safe_load(mapping_file.read_text()) if mapping_file.is_file() else {}
-                    agent = mapping.get('alias', self.session)
-                    tasks = [mapping['task_id']] if mapping.get('task_id') else []
-                    source = 'member' if mapping else None
-                    root = swarm_root(Path(self.request['harness_root']))
-                    archive = SessionArchive(root, **default_config(root, save_normalized_sessions=True))
-                if archive is not None:
-                    native = self._rpc('get_entries')
-                    header = {'id': self.session, 'type': 'session'}
-                    if self.native_trace.is_file():
-                        with self.native_trace.open() as stream:
-                            header = json.loads(stream.readline())
-                    collector = PiArchive(
-                        archive, header, agent=agent, project=self.request['harness_root'],
-                        entries=native['entries'], leaf_id=native['leafId'], source=source, tasks=tasks,
-                        attachment_root=Path(self.request['worktree_path']),
-                    )
-                with self.lock:
-                    if self.stopping.is_set():
-                        return self._result('interrupted', None)
-                    self.started(self.session, self.proc.pid)
-                disposition = self._rpc('prompt', identity=self.execution_id, message=self.prompt)
-                if disposition.get('disposition') != 'started':
-                    raise RuntimeAdapterError('RUNTIME_REQUEST_FAILED', 'Pi task prompt did not start a run.')
-                self.prompt_started = True
-                if self.stopping.is_set():
-                    self._interrupt()
-                last = None
-                failure = None
-                native_aborted = False
-                while True:
-                    event = self.events.get()
-                    self._retain_trace()
-                    kind = event.get('type')
-                    if collector is not None and kind not in {'transport_error', 'interaction_error'}:
-                        collector.receive(event)
-                        if kind in {'turn_end', 'agent_settled'}:
-                            native = self._rpc('get_entries')
-                            header = None
-                            if self.native_trace.is_file():
-                                with self.native_trace.open() as stream:
-                                    header = json.loads(stream.readline())
-                            collector.sync(native['entries'], native['leafId'], header=header,
-                                           settled=kind == 'agent_settled')
-                    if kind == 'transport_error':
-                        raise RuntimeAdapterError('RUNTIME_TRANSPORT_FAILED', 'Pi closed before confirmed settlement.')
-                    if kind == 'interaction_error':
-                        raise event['error']
-                    if kind == 'extension_ui_request':
-                        self._interaction(event)
-                    if kind == 'message_end':
-                        message = event.get('message', {})
-                        if message.get('role') == 'assistant':
-                            last = '\n'.join(p.get('text', '') for p in message.get('content', [])
-                                             if isinstance(p, dict) and p.get('type') == 'text')
-                            if message.get('stopReason') == 'error':
-                                failure = str(message.get('errorMessage', 'Pi provider failed.'))
-                            else:
-                                failure = None
-                            native_aborted = message.get('stopReason') == 'aborted'
-                    if kind == 'agent_settled':
-                        with self.lock:
-                            state = self._rpc('get_state')
-                            if state.get('isStreaming') or state.get('isCompacting') or state.get('pendingMessageCount'):
-                                continue
-                            if failure and not self.stopping.is_set():
-                                raise RuntimeAdapterError('RUNTIME_PROVIDER_FAILED', failure)
-                            return self._result('interrupted' if self.stopping.is_set() or native_aborted else 'completed', last)
-            finally:
-                original_error = sys.exc_info()[1]
-                # Native abort owns tools/queues. Closing the transport and reaping
-                # this exact process follows it, and never targets another Session.
-                native_idle = self.outcome is not None
-                try:
-                    if self.proc is not None and self.proc.poll() is None:
-                        if not self.done.is_set():
-                            try:
-                                self._interrupt()
-                                state = self._rpc('get_state')
-                                if state.get('isStreaming') or state.get('isCompacting') or state.get('pendingMessageCount'):
-                                    raise RuntimeAdapterError('RUNTIME_SHUTDOWN_FAILED', 'Pi still has pending work.',
-                                                              terminal_confirmed=False)
-                                native_idle = True
-                            except RuntimeAdapterError:
-                                # Reap our transport below, but do not mistake that
-                                # for confirmation that detached tools have stopped.
-                                native_idle = False
-                        self.proc.stdin.close()
-                        try:
-                            self.proc.wait(timeout=5)
-                        except subprocess.TimeoutExpired:
-                            os.killpg(self.proc.pid, signal.SIGTERM)
-                            try:
-                                self.proc.wait(timeout=5)
-                            except subprocess.TimeoutExpired:
-                                os.killpg(self.proc.pid, signal.SIGKILL)
-                                self.proc.wait(timeout=5)
-                    if self.proc is not None and not native_idle:
-                        raise self._shutdown_failure(original_error, stderr_offset)
-                except (OSError, subprocess.TimeoutExpired) as error:
-                    raise self._shutdown_failure(original_error or error, stderr_offset) from error
-                finally:
-                    self.startup_terminal_confirmed = (
-                        native_idle and self.proc is not None and self.proc.poll() is not None
-                    )
-                    if self.proc is not None:
-                        record_runtime_process(self.proc.pid, self.process_exit_evidence(native_idle))
-                    if self.stderr_reader is not None:
-                        self.stderr_reader.join(timeout=5)
-                    if reader is not None:
-                        reader.join(timeout=5)
-                    try:
-                        if collector is not None:
-                            collector.close()
-                        if hasattr(self, 'native_trace'):
-                            self._retain_trace()
-                    finally:
-                        self.done.set()
-
-    def process_exit_evidence(self, native_idle: bool) -> dict:
-        """Report only facts observed while this owner still holds its Popen.
-
-        A reaped launcher and an absent owned process group do not prove that
-        detached native tools stopped. Keep native confirmation separate; an
-        unavailable group observation is unknown, never a successful stop.
-        """
-        if self.proc is None:
-            return {'terminal_confirmed': False, 'wrapper_exited': False,
-                    'native_idle_confirmed': bool(native_idle), 'owned_process_group_exited': None}
-        code = self.proc.poll()
-        group_exited = None
-        if code is not None:
-            try:
-                os.killpg(self.proc.pid, 0)
-            except ProcessLookupError:
-                group_exited = True
-            except OSError:
-                pass
-            else:
-                group_exited = False
-        return {
-            'terminal_confirmed': bool(native_idle and code is not None),
-            'runtime_exit_code': code,
-            'wrapper_exited': code is not None,
-            'owned_process_group_exited': group_exited,
-            'native_idle_confirmed': bool(native_idle),
-            'native_session_bound': self.bound,
-            'prompt_started': self.prompt_started,
-            'runtime_execution_id': self.execution_id,
-        }
-
-    def _shutdown_failure(self, cause: BaseException | None, stderr_offset: int) -> RuntimeAdapterError:
-        """Expose this launch's cause through Runner without certifying native stop."""
-        if self.stderr_reader is not None:
-            self.stderr_reader.join(timeout=5)
-        details = 'Pi native stop is unconfirmed.'
-        if cause is not None:
-            details += f' Original error [{getattr(cause, "code", type(cause).__name__)}]: {cause}'
-        if self.proc is not None:
-            details += f' Native process exit: {self.proc.poll()}.'
-        # Startup stderr is otherwise unreachable when no Session mapping could
-        # be bound. Do not expose older executions or task-generated stderr.
-        if not self.prompt_started:
-            try:
-                with (self.directory / 'stderr.log').open('rb') as stream:
-                    stream.seek(stderr_offset)
-                    diagnostic = stream.read(8192).decode('utf-8', errors='replace')
-                if diagnostic.strip():
-                    details += '\nStartup stderr: ' + diagnostic.strip()
-            except OSError:
-                details += ' Startup stderr unavailable.'
-        for name, value in os.environ.items():
-            if value and (name == self.request.get('api_key_env')
-                          or any(part in name.upper() for part in ('KEY', 'TOKEN', 'SECRET', 'PASSWORD', 'CREDENTIAL'))):
-                details = details.replace(value, '[REDACTED]')
-        details = re.sub(r'(?i)(bearer\s+)[^\s"\']+', r'\1[REDACTED]', details)
-        details = re.sub(r'(https?://)[^\s/@]+:[^\s/@]+@', r'\1[REDACTED]@', details)
-        details = re.sub(r'(https?://[^\s?]+)\?[^\s]+', r'\1?[REDACTED]', details)
-        return RuntimeAdapterError('RUNTIME_SHUTDOWN_FAILED', details, terminal_confirmed=False)
-
-    def _result(self, outcome: str, last: str | None) -> dict:
-        """Publish a terminal result only after native idle and empty queue."""
-        self.outcome = {'outcome': outcome, 'session_id': self.session,
-                        'execution_id': self.execution_id, 'last_agent_message': last}
-        self.done.set()
-        return self.outcome
-
-    def _interaction(self, event: dict) -> None:
-        """Retain information and route actual native dialogs to the direct parent."""
-        method = event.get('method')
-        if method in INFORMATION:
-            return
-        if method not in DIALOGS:
-            raise RuntimeAdapterError('RUNTIME_REQUEST_UNHANDLED', 'Unsupported Pi UI method: ' + str(method))
-        token = uuid.uuid4().hex
-        details = {'session': self.session, 'execution_id': self.execution_id,
-                   'request_id': event['id'], 'request_token': token,
-                   'method': 'pi/' + method, 'params': event}
-        self.pending[token] = details
-
-        def notify() -> None:
-            """Notify through the existing parent execution without granting consent.
-
-            A parent still closing its settled turn refuses input, so a
-            ``not-delivered`` receipt is retried while the dialog is pending,
-            as Codex, Claude and DSH do. The dialog is never answered here.
-            """
-            message = 'Pi child requires a native reply:\n' + json.dumps(details)
-            while True:
-                with self.lock:
-                    if token not in self.pending or self.stopping.is_set():
-                        return
-                try:
-                    if self.parent_notice is not None:
-                        receipt = self.parent_notice(message, details)
-                    else:
-                        from graphtraj.execution.runner_control import notify_direct_parent
-
-                        receipt = notify_direct_parent(self.directory, message, details)
-                except Exception:
-                    self.events.put({'type': 'interaction_error', 'error': RuntimeAdapterError(
-                        'RUNTIME_REQUEST_FAILED', 'Pi native dialog could not reach its direct parent.')})
-                    return
-                if receipt is None or receipt.get('delivery') in {'received', 'retained', 'no-direct-parent'}:
-                    return
-                time.sleep(1)
-
-        threading.Thread(target=notify, daemon=True).start()
-
-    def _interrupt(self) -> None:
-        """Clear pending work before abort; an ACK alone never publishes completion."""
-        with self.lock:
-            self.stopping.set()
-            for details in list(self.pending.values()):
-                self._send({'type': 'extension_ui_response', 'id': details['request_id'], 'cancelled': True})
-            self.pending.clear()
-            self._rpc('clear_queue')
-            self._rpc('abort')
-
-    def terminate(self) -> bool:
-        """Retain a stop even before Session startup; do not claim terminal state."""
-        self.stopping.set()
-        if self.proc is None or self.session is None:
-            return False
-
-        def stop() -> None:
-            """Request native cancellation while the owner keeps draining events."""
-            try:
-                self._interrupt()
-            except RuntimeAdapterError:
-                pass
-
-        threading.Thread(target=stop, daemon=True).start()
-        return True
-
-    def operate(self, request: dict) -> dict:
-        """Control only this bound Session/execution using Runner's existing server."""
-        with self.lock:
-            if (request.get('session'), request.get('execution_id')) != (
-                self.session if self.bound else None, self.execution_id,
-            ):
-                raise RuntimeAdapterError('operation-failed', 'Pi execution is not owned.')
-            operation = request.get('operation')
-            if operation == 'status':
-                return ({'activity': 'idle', 'last_outcome': self.outcome['outcome']} if self.outcome else
-                        {'activity': 'running', **({'waiting_for': 'runtime-request'} if self.pending else {})})
-            if operation == 'requests':
-                return {'requests': list(self.pending.values()) if not self.done.is_set() else []}
-            if self.done.is_set():
-                raise RuntimeAdapterError('operation-failed', 'Pi execution has ended.')
-            if operation == 'reply':
-                details = self.pending.get(request.get('request_token'))
-                response = request.get('response')
-                if details is None or not isinstance(response, dict) or not response or set(response) - {'value', 'confirmed', 'cancelled'}:
-                    raise RuntimeAdapterError('invalid-input', 'Supply an explicit reply to a pending Pi dialog.')
-                if (any(key in response and not isinstance(response[key], bool) for key in ('confirmed', 'cancelled'))
-                        or ('value' in response and not isinstance(response['value'], str))):
-                    raise RuntimeAdapterError('invalid-input', 'Pi dialog values must have their native types.')
-                self._send({'type': 'extension_ui_response', **response, 'id': details['request_id']})
-                del self.pending[request['request_token']]
-                return {'request_id': details['request_id'], 'reply_status': 'submitted'}
-            if operation == 'send':
-                if self.stopping.is_set():
-                    raise RuntimeAdapterError('operation-failed', 'Pi is stopping; input was not queued.')
-                if not self.prompt_started:
-                    raise RuntimeAdapterError('operation-failed', 'Pi is still accepting its initial prompt.')
-                # Native prompt queues during streaming and starts a run if Pi
-                # settled before Runner consumed its final event. Bare steer
-                # would leave an idle Session with an undelivered queue.
-                self._rpc('prompt', message=request['instruction'], streamingBehavior='steer')
-                return {}
-            if operation != 'interrupt':
-                raise RuntimeAdapterError('invalid-input', 'Unknown Pi operation.')
-        self._interrupt()
-        if not self.done.wait(timeout=30) or not (
-            self.startup_terminal_confirmed and not self.bound
-            or self.outcome and self.outcome['outcome'] == 'interrupted'
-        ):
-            raise RuntimeAdapterError('operation-failed', 'Pi interruption is not yet confirmed.', terminal_confirmed=False)
-        return {}
+        return notify_direct_parent(self.directory, message, details)

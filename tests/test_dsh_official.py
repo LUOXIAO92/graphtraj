@@ -212,7 +212,7 @@ def test_actual_pi_reply_resumes_standby_dsh() -> None:
     import time
     from agent_swarm import AgentControl, Caller, bind
     from agent_swarm.dsh import DshDriver
-    from graphtraj.runtimes.pi.driver import PiDriver
+    from agent_swarm.pi import PiDriver
 
     assert time.time() < float(os.environ['TASK334_UI_DEADLINE']), 'The authorized UI window has ended.'
     root = Path(os.environ['TASK334_CROSS_ROOT'])

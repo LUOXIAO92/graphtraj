@@ -128,11 +128,12 @@ class _CodexRole:
         filesystem = native_settings["permissions"][self.default_permissions][
             "filesystem"
         ]
-        from graphtraj.runtimes.codex.access import private_filesystem
+        from graphtraj.runtimes.codex.access import member_project_reads, private_filesystem
 
         # Control now runs on the private native callback, not through files
         # writable by an Agent or by a helper inheriting its tool permissions.
         filesystem.update(private_filesystem(runtime_store, self.runtime_home))
+        filesystem.update(member_project_reads(runtime_store.parent))
         if filesystem.get(":workspace_roots", {}).get(".") == "write":
             filesystem[str(git_common_directory)] = "write"
             filesystem[str(git_common_directory / 'config')] = "read"
@@ -1530,10 +1531,10 @@ def refresh_codex_report_paths(
         )
     filesystem = profile["filesystem"]
     if session_directory is not None:
-        from graphtraj.runtimes.codex.access import project_development_reads
+        from graphtraj.runtimes.codex.access import member_project_reads
         from graphtraj.configuration.project_configuration import runner_project_root
 
-        filesystem.update(project_development_reads(runner_project_root(session_directory.parent.parent)))
+        filesystem.update(member_project_reads(runner_project_root(session_directory.parent.parent)))
     workspace_roots = filesystem.get(":workspace_roots")
     if reports_only:
         if not isinstance(workspace_roots, dict) or "." not in workspace_roots:

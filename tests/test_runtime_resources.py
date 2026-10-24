@@ -762,7 +762,7 @@ def test_native_resource_configuration_is_forwarded_without_name_selection(
         filesystem = settings['permissions'][settings['default_permissions']]['filesystem']
         assert filesystem[str(harness / 'external/one')] == 'read'
         assert str(harness / 'external/two') not in filesystem
-        assert filesystem[str(harness / '.graphtraj')] == 'none'
+        assert filesystem[str(harness / '.graphtraj')] == 'read'
     else:
         assert 'skills' not in settings
     assert config.read_text() == configuration

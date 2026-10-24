@@ -1274,5 +1274,3 @@ class CodexAppServer:
                 'RUNTIME_TRACE_FAILED', 'The native Codex reply could not be retained.',
                 terminal_confirmed=False,
             ))
-
-

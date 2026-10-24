@@ -104,4 +104,3 @@ def _find_native_session(
         return next(sessions.rglob("*{0}.jsonl".format(session)), None)
     except OSError:
         return None
-

@@ -31,5 +31,3 @@ def redact(value: Any) -> Any:
     value = re.sub(r'\bsk-[A-Za-z0-9_-]{8,}', '[redacted]', value)
     value = re.sub(r'(https?://)[^/\s:@]+:[^/\s@]+@', r'\1[redacted]@', value)
     return _ASSIGNMENT.sub(r'\1"[redacted]"', value)
-
-

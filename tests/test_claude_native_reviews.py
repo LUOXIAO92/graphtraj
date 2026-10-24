@@ -9,6 +9,8 @@ from types import SimpleNamespace
 import pytest
 import yaml
 
+from agent_swarm import AgentsResult
+
 from graphtraj.execution import approved_recovery, runner_retirement, runner_status
 from graphtraj.execution.runner_status import runtime_caller
 from graphtraj.interfaces.gateway import handle_request as handle_task
@@ -17,8 +19,10 @@ from test_native_replacement import _record_direct_session
 from test_role_organization import project, roles_path
 
 
-def converse(root: Path, request: dict, decision: str, check: callable) -> tuple[list[dict], dict]:
-    """Serve one Claude ``tasks`` call as Main and answer its dialog with ``decision``.
+def converse(
+    root: Path, request: dict, decision: str, check: callable, tool: str = 'tasks',
+) -> tuple[list[dict], dict]:
+    """Serve one Claude ``tool`` call as Main and answer its dialog with ``decision``.
 
     Returns the elicitations observed and the call's structured result.
     ``check(params)`` runs while the dialog is open, before any answer.
@@ -30,7 +34,7 @@ def converse(root: Path, request: dict, decision: str, check: callable) -> tuple
                 {'jsonrpc': '2.0', 'id': 1, 'method': 'initialize',
                  'params': {'capabilities': {'elicitation': {}}}},
                 {'jsonrpc': '2.0', 'id': 2, 'method': 'tools/call',
-                 'params': {'name': 'tasks', 'arguments': request}},
+                 'params': {'name': tool, 'arguments': request}},
             ])
 
         def readline(self, size: int = -1) -> str:
@@ -59,6 +63,9 @@ def converse(root: Path, request: dict, decision: str, check: callable) -> tuple
     def native_call(arguments: dict, tool: str = 'agents') -> object:
         """Run the call as the verified Main host does: Runner caller ``None``."""
         with runtime_caller(root / '.graphtraj/runner', None):
+            if tool == 'agents':
+                # A Task member's agents retire uses the Runner retirement.
+                return AgentsResult(runner_retirement.retire_session(arguments['arguments']['agent'], root))
             return handle_task(arguments, cwd=root)
 
     serve(source, ClientOutput(), root, native_call=native_call)
@@ -156,8 +163,8 @@ def test_claude_main_retirement_review_uses_claude_dialog(
         assert summary['request'] == {'operation': 'retire', 'alias': parent}
 
     elicitations, result = converse(
-        tmp_path, {'action': 'execute', 'feature': 'retire', 'arguments': {'alias': parent}},
-        decision, check)
+        tmp_path, {'action': 'execute', 'feature': 'retire', 'arguments': {'agent': parent}},
+        decision, check, tool='agents')
     assert len(elicitations) == 1
     assert result['isError'] is (decision != 'accept'), result
     assert retired == ([parent] if decision == 'accept' else [])

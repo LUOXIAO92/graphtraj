@@ -299,6 +299,7 @@ def run_agents_feature(arguments: Mapping[str, Any], *, cwd: Path | None = None)
     refused rather than sharing one anonymous root scope with other callers.
     New Agents run in the call's working directory.
     """
+    from graphtraj.execution.runner_models import RunnerError
     from graphtraj.execution.runner_status import NativeCaller, caller_alias, runtime_caller_is_bound
     from graphtraj.interfaces.tools import ToolResult
     from graphtraj.workspace.runner_project import discover_project_root, discover_runner_directory
@@ -306,7 +307,19 @@ def run_agents_feature(arguments: Mapping[str, Any], *, cwd: Path | None = None)
     working = cwd or Path.cwd()
     root    = discover_project_root(working)
     runner  = discover_runner_directory(root)
-    alias   = caller_alias(runner)
+    try:
+        alias = caller_alias(runner)
+    except RunnerError as error:
+        if arguments.get('action') != 'status':
+            raise
+        # A status query keeps its structured caller verification failure:
+        # which stage failed for which requested Agent, never transport detail.
+        agent = arguments.get('agent')
+        return ToolResult({'action': 'status', 'error': error.as_document(), 'diagnostic': {
+            'feature': 'alias_status', 'stage': 'caller_identity',
+            'requested_aliases': [agent] if isinstance(agent, str) else None,
+            'native_error_code': error.code,
+        }}, failed=True)
     caller  = None
     if alias is None and not runtime_caller_is_bound():
         from graphtraj.runtimes.runtime_adapter import current_host_connection

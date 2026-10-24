@@ -1157,10 +1157,11 @@ def test_registered_pathless_checker_start_does_not_stop_inference(host: tuple[P
 
 @pytest.mark.parametrize('connection_fails', [False, True])
 def test_external_checker_cli_identity_needs_metadata_not_rollout(
-    host: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch, connection_fails: bool,
+    host: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture,
+    connection_fails: bool,
 ) -> None:
-    """The real CLI verifies its native thread before any target lookup, without history."""
-    from graphtraj.interfaces.cli.agent_runner import main as runner_cli
+    """The real agents CLI verifies its native thread before any target lookup, without history."""
+    from agent_swarm.cli import main as agents_cli
     from graphtraj.runtimes import runtime_adapter
     from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError
 
@@ -1179,10 +1180,15 @@ def test_external_checker_cli_identity_needs_metadata_not_rollout(
                                       'Codex WebSocket Upgrade failed: Connection lost')
         monkeypatch.setattr(finalize, 'proxy', failed_proxy)
     monkeypatch.chdir(root)
-    reply = CliRunner().invoke(runner_cli, ['status', 'requested-current-alias'])
-    assert reply.exit_code == 1
+    monkeypatch.delenv('AGENT_SWARM_CONNECTION', raising=False)
+    monkeypatch.setattr(sys, 'argv', ['agents', json.dumps({
+        'action': 'execute', 'feature': 'status', 'arguments': {'agent': 'requested-current-alias'},
+    })])
+    with pytest.raises(SystemExit) as exited:
+        agents_cli()
+    assert exited.value.code == 1
     # CLI keeps its structured stdout separate from any human stderr detail.
-    document = yaml.safe_load(reply.stdout)
+    document = json.loads(capsys.readouterr().out)
     if connection_fails:
         assert document['diagnostic'] == {
             'feature': 'alias_status', 'stage': 'caller_identity', 'entry': 'cli',
@@ -1192,8 +1198,9 @@ def test_external_checker_cli_identity_needs_metadata_not_rollout(
         assert 'Connection lost' in document['error']['message']
         assert 'aliases' not in document  # No target was queried or classified.
     else:
-        assert document['aliases'][0]['alias'] == 'requested-current-alias'
-        assert document['aliases'][0]['error']['code'] == 'alias-not-found'
+        aliases = document['result']['aliases']
+        assert aliases[0]['alias'] == 'requested-current-alias'
+        assert aliases[0]['error']['code'] == 'alias-not-found'
         wire = [json.loads(line) for line in (root / 'wire.jsonl').read_text().splitlines()]
         assert any(message.get('method') == 'thread/read' and message['params'] == {
             'threadId': 'checker', 'includeTurns': False,
@@ -1201,13 +1208,14 @@ def test_external_checker_cli_identity_needs_metadata_not_rollout(
 
 
 def test_checker_retains_only_structured_cli_status_failure(host: tuple[Path, Path]) -> None:
-    """Existing canonical command output carries bounded next-call error evidence."""
+    """The agents CLI's result document carries bounded next-call error evidence."""
     root, binding = host
-    output = yaml.safe_dump({
+    output = json.dumps({
+        'action': 'status',
         'error': {'code': 'operation-failed', 'message': 'private transport details'},
         'diagnostic': {'entry': 'cli', 'feature': 'alias_status', 'stage': 'caller_identity',
                        'requested_aliases': ['current-target']},
-    }, sort_keys=False)
+    }) + '\n'
     (root / 'options.json').write_text(json.dumps({'notifications': [{
         'method': 'item/completed', 'params': {'threadId': 'checker', 'turnId': 'check-turn',
             'item': {'id': 'status-command', 'type': 'commandExecution',

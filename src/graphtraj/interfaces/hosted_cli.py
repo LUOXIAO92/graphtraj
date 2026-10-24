@@ -147,7 +147,11 @@ def agents_host(cwd: Path) -> Callable[[dict], Any] | None:
             result = agents_dispatch(request, cwd)
         except (RunnerError, RuntimeAdapterError, ProjectConfigurationError) as error:
             raise AgentsError(getattr(error, 'code', 'operation-failed'), str(error)) from error
-        return AgentsResult(result.document, failed=result.failed)
+        document = result.document
+        if result.failed and isinstance(document.get('diagnostic'), dict):
+            # Name the entry so a checker can attribute a CLI status failure.
+            document = {**document, 'diagnostic': {**document['diagnostic'], 'entry': 'cli'}}
+        return AgentsResult(document, failed=result.failed)
 
     return dispatch
 

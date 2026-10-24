@@ -42,6 +42,68 @@ Running setup again preserves existing configuration and history. For a layout
 with a separate source repository, or other project conventions, see the
 [setup guide](manuals/setup-project/guide.md).
 
+## Independent Codex control
+
+Install only `agent-swarm` in a dedicated Python environment and authenticate
+Codex using its normal account setup. No GraphTraj installation, Task or Git
+repository is needed. The installed host reuses the same native execution
+implementation as GraphTraj:
+
+```sh
+python -m agent_swarm.codex.host --help
+python -m agent_swarm.codex.host --settings native-settings.json \
+  --directory /absolute/agent-state 'Use agents MCP to delegate a short question.'
+```
+
+`native-settings.json` supplies the existing native launch values. Replace the
+model and absolute working path with your choices:
+
+```json
+{
+  "adapter_request": {
+    "arguments": ["codex"],
+    "worktree_path": "/absolute/work",
+    "session_parameters": {
+      "cwd": "/absolute/work",
+      "model": "your-selected-model",
+      "developerInstructions": "",
+      "config": {
+        "default_permissions": "work",
+        "permissions": {
+          "work": {
+            "extends": ":workspace",
+            "filesystem": {":workspace_roots": {".": "write"}}
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+The settings can also retain native provider/reasoning/network options in
+`session_parameters.config`, and a `connection` with `runtime_home`, `base_url`
+or `api_key_env` (an environment variable name, never its secret value).
+Codex's native `auto_review` is the default; explicit native reviewer settings
+win. Existing sandbox, account and trust controls remain effective.
+
+The host owns the actual parent process and Session. It exposes only `agents`
+through MCP, authenticating requests by process ancestry and the bound native
+Session. Inside that same host, the authenticated CLI is also available:
+
+```sh
+python -m agent_swarm.cli '{"action":"discover"}'
+```
+
+CLI arguments cannot supply an identity. Child results return through the
+owning native parent connection; status does not repeat a body already sent as
+a notification. Native requests for the parent itself print to stderr and take
+an explicit native JSON response on stdin. Use `--resume` with the same directory
+to continue the retained parent Session. A closing host interrupts its active
+children, preserving their native Sessions. Normalized archiving is off; the
+existing optional archive integration remains a GraphTraj consumer capability
+until the separate archive extraction is delivered.
+
 ## Use it with your Agent
 
 Your main Agent runs in the host you already use. To delegate work, install and

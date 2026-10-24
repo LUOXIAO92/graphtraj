@@ -260,6 +260,10 @@ for line in incoming():
         # Alive, but never replies to this submission.
         Path(os.environ['PEER_SILENT_TURN_START']).write_text(str(os.getpid()))
         continue
+    elif method == 'turn/start' and 'toolOutput' in params and os.environ.get('PEER_DROP_HOST_REPLY'):
+        # A child body was submitted to this native host, but its acknowledgement
+        # is unavailable. The client must not present it again through status.
+        raise SystemExit(0)
     elif method == 'turn/start':
         sequence += 1
         thread_id = params['threadId']
@@ -328,6 +332,23 @@ for line in incoming():
                              'startedAtMs': 1000, 'command': 'printf approved'}})
         elif prompt == 'large-output':
             complete(thread_id, turn_id, 'x' * 100_000)
+        elif prompt == 'mcp-create-child':
+            def create_child(thread_id=thread_id):
+                """Issue one genuine bound MCP call from the controlled native host."""
+                server = sessions[thread_id]['config']['mcp_servers']['graphtraj']
+                environment = {key: value for key, value in os.environ.items()
+                               if key not in {'AGENT_SWARM_CONNECTION', 'GRAPHTRAJ_CLI_CONNECTION'}}
+                environment.update(server['env'])
+                request = {'jsonrpc': '2.0', 'id': 1, 'method': 'tools/call', 'params': {
+                    'name': 'agents', '_meta': {'threadId': thread_id},
+                    'arguments': {'action': 'execute', 'feature': 'create', 'arguments': {
+                        'runtime': 'codex', 'instruction': 'child body',
+                    }},
+                }}
+                subprocess.run([server['command'], *server['args']], cwd=server['cwd'],
+                               env=environment, text=True, capture_output=True, timeout=10,
+                               input=json.dumps(request) + '\n', check=True)
+            threading.Thread(target=create_child, daemon=True).start()
         elif prompt == 'mcp-requests':
             def run_mcp(thread_id=thread_id, turn_id=turn_id):
                 """Keep the peer available for concurrent native identity reads."""

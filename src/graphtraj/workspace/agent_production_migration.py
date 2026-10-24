@@ -8,6 +8,7 @@ from pathlib import Path
 import re
 import shutil
 import subprocess
+import tempfile
 import tomllib
 from uuid import uuid4
 
@@ -39,34 +40,94 @@ def _terminal_confirmed(turn_file: Path) -> bool:
     return True
 
 
-def _stopped(root: Path) -> list[dict]:
-    """Refuse a live or unconfirmed member; Main's stopped writes are operator-owned."""
+def _owner_exited(agent: str, execution: dict) -> dict | None:
+    """Describe an unconfirmed swarm execution cutover may carry, or ``None``.
+
+    Only agent_swarm's own owner-exited reconciliation qualifies, and only when
+    its recorded worker and Runtime processes are rechecked as gone now. The
+    execution keeps terminal_confirmed false; nothing here confirms its end.
+    """
+    from agent_swarm.control import _alive
+
+    process = execution.get('process') or {}
+    worker, runtime = process.get('worker_pid'), process.get('runtime_pid')
+    if (execution.get('state') != 'ended' or execution.get('terminal_confirmed') is not False
+            or (execution.get('error') or {}).get('code') != 'owner-exited'
+            or not isinstance(worker, int) or isinstance(worker, bool) or worker <= 0):
+        return None
+    worker_alive, runtime_alive = _alive(worker), _alive(runtime)
+    if worker_alive or runtime_alive:
+        return None
+    return {'agent': agent, 'execution': execution.get('id'), 'error_code': 'owner-exited',
+            'worker_pid': worker, 'runtime_pid': runtime, 'worker_alive': False, 'runtime_alive': False,
+            'terminal_confirmed': 'retained false; not confirmed by cutover'}
+
+
+def stop_facts(root: Path) -> dict:
+    """Read every cutover stop blocker and accepted gap, without writing anything."""
     from graphtraj.execution.runner_status import is_session_mapping
 
     runner = runner_directory(root)
-    unavailable = []
-    for path in runner.glob('sessions/*/mapping.yml'):
+    blocking, unavailable, owner_exited = [], [], []
+    for path in sorted(runner.glob('sessions/*/mapping.yml')):
         mapping = yaml.safe_load(path.read_text())
+        alias = mapping.get('alias', path.parent.name)
         terminal_path = path.parent / 'execution.yml'
         terminal = yaml.safe_load(terminal_path.read_text()) if terminal_path.is_file() else {}
         held = ownership_is_held(path.parent, mapping.get('worker_pid', 0))
         if not terminal and not held and not mapping.get('execution_id') and not is_session_mapping(mapping):
-            unavailable.append({'alias': mapping.get('alias', path.parent.name),
+            unavailable.append({'alias': alias,
                                 'missing': 'Historical binding has no current execution schema; activity and continuation are not inferred.'})
             continue
         if (not terminal or terminal.get('outcome') not in {'completed', 'interrupted', 'runtime-error'}
                 or (mapping.get('execution_id') and terminal.get('execution_id') != mapping['execution_id'])
                 or held or not _terminal_confirmed(terminal_path)):
-            raise ValueError(
-                f"Stop and confirm the retained execution before cutover: {mapping.get('alias', path.parent.name)}. "
+            blocking.append({'runner': alias, 'message': (
+                f'Stop and confirm the retained execution before cutover: {alias}. '
                 'Its direct parent confirms an unconfirmed end through the public interrupt '
-                '(agents interrupt), which retains a terminal-confirmation receipt.')
-    for path in (root / '.graphtraj/swarm/control/agents').glob('*.json'):
+                '(agents interrupt), which retains a terminal-confirmation receipt.')})
+    for path in sorted((root / '.graphtraj/swarm/control/agents').glob('*.json')):
         record = json.loads(path.read_text())
-        if any(item.get('state') != 'ended' or item.get('terminal_confirmed') is False
-               for item in record.get('executions', [])):
-            raise ValueError(f"Stop and confirm the Agent before cutover: {record['agent']}")
-    return unavailable
+        for execution in record.get('executions', []):
+            if execution.get('state') == 'ended' and execution.get('terminal_confirmed') is not False:
+                continue
+            accepted = _owner_exited(record['agent'], execution)
+            if accepted is None:
+                blocking.append({'swarm': record['agent'], 'execution': execution.get('id'),
+                                 'message': f"Stop and confirm the Agent before cutover: {record['agent']}"})
+            else:
+                owner_exited.append(accepted)
+    return {'blocking': blocking, 'control_missing': unavailable, 'unconfirmed_swarm_executions': owner_exited}
+
+
+def _stopped(root: Path) -> dict:
+    """Refuse a live or unconfirmed member; Main's stopped writes are operator-owned."""
+    facts = stop_facts(root)
+    if facts['blocking']:
+        others = len(facts['blocking']) - 1
+        raise ValueError(facts['blocking'][0]['message']
+                         + (f' ({others} more; list them with migrate-agents --check-stopped).' if others else ''))
+    return facts
+
+
+def _relocate_owner_exited(swarm: Path, agent: str, settings: dict) -> None:
+    """Replace only the staged copy's settings for an Agent with an accepted owner-exited execution.
+
+    agent_swarm's configure_stopped rightly refuses unconfirmed executions and
+    stays unchanged. Cutover owns this staging copy, so it writes the settings
+    under the same per-Agent lock, atomic replacement and JSON form agent_swarm
+    uses; executions, including terminal_confirmed false and error, are kept.
+    """
+    from agent_swarm.locks import exclusive
+
+    path = swarm / 'control' / 'agents' / f'{agent}.json'
+    with exclusive(swarm / 'live' / 'agents' / f'{agent}.lock'):
+        record = json.loads(path.read_text(encoding='utf-8'))
+        record['settings'] = settings
+        descriptor, temporary = tempfile.mkstemp(dir=path.parent, prefix='.record-')
+        with os.fdopen(descriptor, 'w', encoding='utf-8') as stream:
+            stream.write(json.dumps(record, indent=2, sort_keys=True))
+        os.replace(temporary, path)
 
 
 def _facts(paths: list[Path]) -> dict:
@@ -368,7 +429,7 @@ def cutover_project(
     configuration = load_project_configuration(root)
     data = root / '.graphtraj'
     runner = runner_directory(root)
-    control_missing = _stopped(root)
+    stop = _stopped(root)
     old_paths = [configuration.state, runner, data / 'swarm', data / 'config.yml', data / 'roles.yml', data / 'cli']
     before = _facts(old_paths)
     git_before = _git(configuration.project_root, 'worktree', 'list', '--porcelain')
@@ -420,7 +481,10 @@ def cutover_project(
 
             settings['adapter_request']['native_directory'] = str(native_directory(
                 root, settings.get('alias', record['name']), record['runtime']))
-        control.configure_stopped(record['agent'], settings, Caller(record['host'], record['parent']))
+        if any(item['agent'] == record['agent'] for item in stop['unconfirmed_swarm_executions']):
+            _relocate_owner_exited(staged_swarm, record['agent'], settings)
+        else:
+            control.configure_stopped(record['agent'], settings, Caller(record['host'], record['parent']))
     original_config = yaml.safe_load((data / 'config.yml').read_text())
     original_config['paths']['state'] = '.graphtraj/core/state'
     original_config['paths']['agent_worktrees'] = '.graphtraj/core/worktrees'
@@ -503,7 +567,8 @@ def cutover_project(
             shutil.copy2(staging / 'cutover-config.yml', staged_core / 'config.yml')
     return {'cutover': 'installed', 'backup': str(backup), 'snapshot': str(snapshot),
             'worktrees': worktrees, 'identities': partitioned['agents'],
-            'control_missing': control_missing,
+            'control_missing': stop['control_missing'],
+            'unconfirmed_swarm_executions': stop['unconfirmed_swarm_executions'],
             'foreign_entries': foreign_entries(data / 'core/state/tasks'),
             'role_read_paths_to_update': _moved_role_grants(data / 'core/roles.yml', moves),
             'native_continuations': [{key: item[key] for key in ('runtime', 'session', 'old', 'new', 'status')}

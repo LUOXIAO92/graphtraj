@@ -600,3 +600,96 @@ def test_unconfirmed_failure_passes_cutover_only_with_a_valid_confirmation_recei
         return
     assert result.exit_code != 0 and 'Stop and confirm' in result.output and 'agents interrupt' in result.output
     assert not (tmp_path / 'input').exists() and (root / '.graphtraj/config.yml').is_file()
+
+
+def swarm_agent(root: Path, worktree: Path, agent: str, *, worker_pid: int, code: str = 'owner-exited') -> Path:
+    """Retain an independent Agent whose last execution agent_swarm ended as unconfirmed."""
+    from agent_swarm import AgentControl
+
+    settings = {'cwd': str(worktree), 'adapter_request': {'cwd': str(worktree), 'approval_policy': 'on-request'}}
+    execution = {'id': agent + '-run', 'state': 'ended', 'outcome': 'failed', 'terminal_confirmed': False,
+                 'last_message': None, 'ended_at': 1.0,
+                 'error': {'code': code, 'message': 'The process owning this execution exited before reporting its end.'},
+                 'process': {'worker_pid': worker_pid, 'runtime_pid': worker_pid + 1}}
+    AgentControl(root / '.graphtraj/swarm', {}).import_agent({
+        'agent': agent, 'name': agent, 'runtime': 'codex', 'host': 'agents-cli', 'parent': None,
+        'creator': {'host': 'agents-cli', 'agent': None, 'session': None}, 'session': agent + '-native',
+        'sessions': [agent + '-native'], 'settings': settings, 'created_at': 1.0, 'retired_at': None,
+        'executions': [execution]})
+    return root / '.graphtraj/swarm/control/agents' / (agent + '.json')
+
+
+# The largest pid_t is above every platform PID limit; this test process certainly exists.
+GONE_PID = 2**31 - 2
+
+
+def test_owner_exited_swarm_execution_moves_with_relocated_settings_and_unchanged_executions(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Cutover carries an owner-exited execution whose processes are gone, still unconfirmed."""
+    from agent_swarm import AgentControl, AgentsError, Caller
+
+    root = tmp_path / 'project'
+    worktree, _ = project(root)
+    path = swarm_agent(root, worktree, 'exited', worker_pid=GONE_PID)
+    before = json.loads(path.read_text())['executions']
+    # The public control keeps refusing to configure an unconfirmed execution.
+    shutil.copytree(root / '.graphtraj/swarm', tmp_path / 'public-swarm')
+    with pytest.raises(AgentsError) as refused:
+        AgentControl(tmp_path / 'public-swarm', {}).configure_stopped('exited', {}, Caller('agents-cli', None))
+    assert refused.value.code == 'turn-running'
+    monkeypatch.chdir(root)
+    result = CliRunner().invoke(main, ['migrate-agents', '--cutover', str(tmp_path / 'input'), '--writes-stopped'])
+    assert result.exit_code == 0, result.output
+    report = yaml.safe_load(result.output)
+    assert report['unconfirmed_swarm_executions'] == [{
+        'agent': 'exited', 'execution': 'exited-run', 'error_code': 'owner-exited', 'worker_pid': GONE_PID,
+        'runtime_pid': GONE_PID + 1, 'worker_alive': False, 'runtime_alive': False,
+        'terminal_confirmed': 'retained false; not confirmed by cutover'}]
+    installed = json.loads(path.read_text())
+    new = str(root / '.graphtraj/core/worktrees/member')
+    assert installed['settings'] == {'cwd': new, 'adapter_request': {'cwd': new, 'approval_policy': 'on-request'}}
+    assert json.dumps(installed['executions'], sort_keys=True) == json.dumps(before, sort_keys=True)
+    assert installed['executions'][0]['terminal_confirmed'] is False
+
+
+@pytest.mark.parametrize('case', ['alive', 'not-owner-exited'])
+def test_other_unconfirmed_swarm_executions_still_block_cutover(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, case: str,
+) -> None:
+    """A live owner or any other unconfirmed end is refused before any snapshot."""
+    import os
+
+    root = tmp_path / 'project'
+    worktree, _ = project(root)
+    swarm_agent(root, worktree, 'blocked', worker_pid=os.getpid() if case == 'alive' else GONE_PID,
+                code='owner-exited' if case == 'alive' else 'runtime-error')
+    monkeypatch.chdir(root)
+    result = CliRunner().invoke(main, ['migrate-agents', '--cutover', str(tmp_path / 'input'), '--writes-stopped'])
+    assert result.exit_code != 0 and 'Stop and confirm the Agent before cutover: blocked' in result.output
+    assert not (tmp_path / 'input').exists() and (root / '.graphtraj/config.yml').is_file()
+
+
+def test_check_stopped_lists_every_blocker_and_accepted_gap_without_writing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The read-only precheck uses the cutover stop facts and reports all of them."""
+    import os
+
+    root = tmp_path / 'project'
+    worktree, directory = project(root)
+    swarm_agent(root, worktree, 'exited', worker_pid=GONE_PID)
+    swarm_agent(root, worktree, 'live', worker_pid=os.getpid())
+    (directory / 'execution.yml').unlink()
+    tree = lambda: {str(path): (path.read_bytes() if path.is_file() and not path.is_symlink() else None)
+                    for path in tmp_path.rglob('*')}
+    before = tree()
+    monkeypatch.chdir(root)
+    result = CliRunner().invoke(main, ['migrate-agents', '--check-stopped'])
+    assert result.exit_code == 0, result.output
+    facts = yaml.safe_load(result.output)
+    assert [item.get('runner') or item.get('swarm') for item in facts['blocking']] == ['old@member', 'live']
+    assert [item['agent'] for item in facts['unconfirmed_swarm_executions']] == ['exited']
+    assert tree() == before
+    refused = CliRunner().invoke(main, ['migrate-agents', '--cutover', str(tmp_path / 'input'), '--writes-stopped'])
+    assert refused.exit_code != 0 and '1 more; list them with migrate-agents --check-stopped' in refused.output

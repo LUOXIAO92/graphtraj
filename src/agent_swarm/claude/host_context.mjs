@@ -57,7 +57,7 @@ async function context($, document) {
   const python = await $.env.get('GRAPHTRAJ_CLAUDE_HOST_PYTHON');
   const config = await $.env.get('GRAPHTRAJ_CLAUDE_HOST_CONFIG');
   if (!python || !config) throw new Error('Native agents host configuration is missing.');
-  const result = await $.process.run([python, '-m', 'graphtraj.runtimes.claude.host',
+  const result = await $.process.run([python, '-m', 'agent_swarm.claude.host',
     'context', '--config', config], {stdin: JSON.stringify(document)});
   if (result.exitCode !== 0) throw new Error('Native agents association failed: ' + result.stderr);
   return JSON.parse(result.stdout);

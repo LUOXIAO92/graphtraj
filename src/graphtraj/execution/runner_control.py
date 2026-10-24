@@ -51,8 +51,11 @@ from graphtraj.execution.runner_status import (
     session_occupied,
     require_descendant_authority,
     require_execution_allowed,
+    read_retired_legacy_hosted_mapping,
+    session_record_directory,
     _recorded_sessions,
     caller_alias,
+    _terminal_unestablished_launch,
 )
 from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError
 
@@ -383,13 +386,17 @@ def _owned_roots(runner_directory: Path, connection: Mapping[str, Any]) -> list[
     """Return the top-level Sessions whose recorded native owner is ``connection``.
 
     Ownership follows ``is_direct_owner``; the current Main also continues
-    roots of earlier Main Sessions. Any unreadable record raises.
+    roots of earlier Main Sessions. Any other unreadable record raises. A
+    retired hosted record or a launch that stopped before creating its Session
+    has no execution, request or result, so it is not unreadable evidence.
     """
     from graphtraj.execution.main_continuity import owns_main_root
 
     records, failures = _recorded_sessions(runner_directory)
-    if failures:
-        raise failures[0][1]
+    for alias, error in failures:
+        if (read_retired_legacy_hosted_mapping(runner_directory, alias) is None
+                and not _terminal_unestablished_launch(session_record_directory(runner_directory, alias))):
+            raise error
     return [
         (alias, mapping) for alias, mapping in sorted(records.items())
         if mapping.get('parent') is None and isinstance(mapping.get('parent_connection'), dict)

@@ -32,20 +32,21 @@ def serve(
     """Expose the lightweight entries; the actual host retains caller authority.
 
     ``native_call(request, tool)`` serves both ``agents`` and ``tasks`` for a
-    verified native Main host. That host's recovery needing review asks Claude
-    Code itself through MCP elicitation: its own dialog shows the exact repair,
-    and only its accept applies it in this same call.
+    verified native Main host. Every review that host's call needs (recovery,
+    role organization, retirement or replacement, Runtime connection save)
+    asks Claude Code itself through MCP elicitation: its own dialog shows the
+    exact change, and only its accept applies it in this same call.
     """
     capabilities: dict = {}
 
-    def review(proposal: dict, call_id: object) -> dict:
-        """Wait for Claude Code's own accept, decline or cancel of this repair."""
+    def review(proposal: dict, call_id: object, feature: object) -> dict:
+        """Wait for Claude Code's own accept, decline or cancel of this change."""
         from graphtraj.interfaces.mcp import elicit_review
 
         if not isinstance(capabilities.get('elicitation'), dict):
             raise RunnerError('native-approval-unavailable',
-                              'This Claude Code client offers no MCP elicitation for recovery approval.')
-        return elicit_review(input_stream, output_stream, proposal, call_id, 'approved_recovery',
+                              'This Claude Code client offers no MCP elicitation for approval.')
+        return elicit_review(input_stream, output_stream, proposal, call_id, feature,
                              lambda result: result.get('content') in (None, {}))
 
     def tasks(request: dict) -> AgentsResult:
@@ -79,9 +80,10 @@ def serve(
             return error_response(identity, -32602, 'Expected agents and object arguments.')
         try:
             arguments = params.get('arguments', {})
-            reviewer = (functools.partial(review, call_id=identity)
-                        if native_call is not None and params['name'] == 'tasks'
-                        and arguments.get('feature') == 'approved_recovery' else None)
+            # Only a verified native Main host's own call reaches this reviewer;
+            # an operation without review never invokes it.
+            reviewer = (functools.partial(review, call_id=identity, feature=arguments.get('feature'))
+                        if native_call is not None else None)
             with recovery_review(reviewer):
                 result = (tasks(arguments) if params['name'] == 'tasks' else
                           native_call(arguments) if native_call is not None else discover_agents(arguments, dispatch))

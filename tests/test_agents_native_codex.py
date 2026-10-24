@@ -2,6 +2,8 @@
 
 import asyncio
 import json
+import os
+import shutil
 from pathlib import Path
 
 import pytest
@@ -250,3 +252,38 @@ def test_resume_settings_are_live_without_history_backfill(
     assert len(settings) == 1
     assert settings[0]['payload']['thread_settings']['model'] == 'fixture-model'
     assert not store.pending()
+
+
+@pytest.mark.skipif(os.environ.get('CODEX_REAL_AUTO_REVIEW') != '1' or shutil.which('codex') is None,
+                    reason='Explicit real Codex default auto_review probe only')
+def test_real_codex_default_auto_review(tmp_path: Path) -> None:
+    """Observe the default reviewer with the user's own Codex home; no credential is copied."""
+    root = tmp_path / 'project'
+    cwd = root / 'scratch'
+    cwd.mkdir(parents=True)
+    (root / '.graphtraj').mkdir()
+    (root / '.graphtraj/config.yml').write_text(default_configuration_content(root, root))
+    (root / '.graphtraj/roles.yml').write_text(yaml.safe_dump({
+        'roles': {'codex': {'runtime': 'codex', 'model': os.environ['CODEX_REAL_MODEL']}},
+        'role_tree': {'codex': {}},
+    }))
+    call = agents_callback(root, Caller('task354-auto-review-probe', 'agent-owner'), cwd)
+    created = call({'action': 'create', 'runtime': 'codex',
+                    'instruction': 'Reply exactly TASK354-READY. Do not use tools.'})
+    assert not created.failed, created.document
+    agent = created.document['agent']
+    try:
+        done = call({'action': 'wait', 'agent': agent, 'timeout_seconds': 120})
+        records = [yaml.safe_load(path.read_text()) for path in root.glob('.graphtraj/**/session.yml')]
+        [permissions] = [record['permissions'] for record in records
+                         if isinstance(record, dict) and 'permissions' in record]
+        print(json.dumps({'project': str(root), 'agent': agent, 'session': created.document['session'],
+                          'permissions': permissions, 'state': done.document['result']['state'],
+                          'last_result': done.document['result'].get('last_result')}))
+        assert permissions['requested'] == 'auto_review' and permissions['source'] == 'default', permissions
+        assert permissions['observed'] == 'auto_review', permissions
+        assert permissions['observed_source'] == 'thread/start', permissions
+        assert permissions['matches_request'] is True, permissions
+    finally:
+        if call({'action': 'status', 'agent': agent}).document['result']['state'] == 'active':
+            call({'action': 'interrupt', 'agent': agent})

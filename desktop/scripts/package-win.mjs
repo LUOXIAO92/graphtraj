@@ -52,12 +52,14 @@ await fs.cp(pythonRoot, runtime, {
 });
 const wheels = path.join(output, 'wheels');
 await desktopHostManifest(path.join(bundle, 'GraphTraj.exe'), app, source);
-run(python, ['-m', 'pip', 'wheel', '--no-deps', '--no-build-isolation', '--wheel-dir', wheels, source]);
+run(python, ['-m', 'pip', 'wheel', '--no-deps', '--no-build-isolation', '--wheel-dir', wheels, path.join(source, 'src/agent_swarm'), source]);
 const wheel = (await fs.readdir(wheels)).find(name => name.startsWith('graphtraj-') && name.endsWith('.whl'));
 assert.ok(wheel);
+const agentsWheel = (await fs.readdir(wheels)).find(name => name.startsWith('agent_swarm-') && name.endsWith('.whl'));
+assert.ok(agentsWheel);
 const dependencies = ['click==8.1.8', 'PyYAML==6.0.2', 'websockets==15.0.1', 'colorama==0.4.6'];
 run(python, ['-m', 'pip', 'install', '--no-compile', '--no-deps', '--only-binary=:all:',
-  '--target', path.join(runtime, 'Lib/site-packages'), ...dependencies, path.join(wheels, wheel)]);
+  '--target', path.join(runtime, 'Lib/site-packages'), ...dependencies, path.join(wheels, agentsWheel), path.join(wheels, wheel)]);
 // pip's generated launchers refer to the build interpreter; the app uses the bundled interpreter directly.
 for (const directory of ['bin', 'Scripts']) {
   await fs.rm(path.join(runtime, 'Lib/site-packages', directory), { recursive: true, force: true });

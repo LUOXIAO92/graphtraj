@@ -153,9 +153,9 @@ def test_terminal_trace_link_failure_keeps_confirmed_execution_status(
 ) -> None:
     """A post-terminal Trace failure keeps the native execution confirmation."""
 
-    from graphtraj.runtimes.codex import codex_adapter
+    from agent_swarm.codex import trace
 
-    original_link = codex_adapter._link_native_trace
+    original_link = trace._link_native_trace
     failing = False
 
     def link_or_fail(trace_file: Path, rollout: Path) -> None:
@@ -163,7 +163,7 @@ def test_terminal_trace_link_failure_keeps_confirmed_execution_status(
             raise OSError(errno.ENOSPC, 'No space left on device')
         original_link(trace_file, rollout)
 
-    monkeypatch.setattr(codex_adapter, '_link_native_trace', link_or_fail)
+    monkeypatch.setattr(trace, '_link_native_trace', link_or_fail)
 
     async def exercise() -> None:
         nonlocal failing
@@ -1236,7 +1236,8 @@ def test_permission_request_feature_reaches_fresh_and_resumed_activation(
 
 @pytest.mark.parametrize(
     'selected, expected',
-    [('auto_review', 'auto_review'), (None, None), ('user', 'user')],
+    # Without an explicit selection, the child defaults to native auto review.
+    [('auto_review', 'auto_review'), (None, 'auto_review'), ('user', 'user')],
 )
 def test_harness_approvals_reviewer_reaches_create_and_resume(
     tmp_path: Path, peer: Path, selected: str | None, expected: str | None,
@@ -1302,6 +1303,9 @@ def test_parent_projection_keeps_control_files_private(
     )
     launch = _native_filesystem(resolved.launch_document()['adapter_request'])
     assert launch[str(root / '.graphtraj')] == 'read'
+    assert launch[str(root / '.graphtraj/cli')] == 'none'
+    assert launch[str(root / '.graphtraj/claude-host')] == 'none'
+    assert launch[str(root / '.codex')] == 'none'
     assert launch.get(str(worldline_lock)) != 'write'
     assert launch.get(str(capacity)) != 'write'
     # Direct child Sessions do not exist yet when this Session is created.
@@ -1383,6 +1387,7 @@ def test_role_assignments_survive_native_followup_permissions(
             assert filesystem[reports[index]] == 'read'
             assert reports[1 - index] not in filesystem
             assert filesystem[str(tmp_path / '.graphtraj')] == 'read'
+            # Project records are readable; another Session's report is not writable.
             assert not any(
                 filesystem.get(str(parent)) == 'write'
                 for parent in Path(reports[1 - index]).parents

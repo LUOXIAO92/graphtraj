@@ -18,12 +18,20 @@ commit and whose primary worktree is on `main`.
 Choose a tag or commit to install, replacing `<tag-or-commit>`:
 
 ```sh
-uv tool install "git+https://github.com/LUOXIAO92/graphtraj.git@<tag-or-commit>"
+uv tool install --with "agent-swarm @ git+https://github.com/LUOXIAO92/graphtraj.git@<tag-or-commit>#subdirectory=src/agent_swarm" \
+  "git+https://github.com/LUOXIAO92/graphtraj.git@<tag-or-commit>"
 cd /path/to/your-project
 graphtraj setup
 graphtraj doctor
 graphtraj task graph
 ```
+
+GraphTraj and `agent-swarm` are separate distributions built from the same
+revision. GraphTraj requires the same `agent-swarm` version; install the two
+matching artifacts together. From a checkout, build both with
+`python -m pip wheel --no-deps -w dist ./src/agent_swarm .`, then install both
+wheels in your dedicated environment. The independent distribution can also
+be installed on its own from `./src/agent_swarm`.
 
 Setup shows its plan and asks before creating the `dev` branch. It creates or
 registers a separate worktree for integration and stores configuration and task
@@ -33,6 +41,68 @@ project has no tasks or Agent roles yet, so its first graph is empty.
 Running setup again preserves existing configuration and history. For a layout
 with a separate source repository, or other project conventions, see the
 [setup guide](manuals/setup-project/guide.md).
+
+## Independent Codex control
+
+Install only `agent-swarm` in a dedicated Python environment and authenticate
+Codex using its normal account setup. No GraphTraj installation, Task or Git
+repository is needed. The installed host reuses the same native execution
+implementation as GraphTraj:
+
+```sh
+python -m agent_swarm.codex.host --help
+python -m agent_swarm.codex.host --settings native-settings.json \
+  --directory /absolute/agent-state 'Use agents MCP to delegate a short question.'
+```
+
+`native-settings.json` supplies the existing native launch values. Replace the
+model and absolute working path with your choices:
+
+```json
+{
+  "adapter_request": {
+    "arguments": ["codex"],
+    "worktree_path": "/absolute/work",
+    "session_parameters": {
+      "cwd": "/absolute/work",
+      "model": "your-selected-model",
+      "developerInstructions": "",
+      "config": {
+        "default_permissions": "work",
+        "permissions": {
+          "work": {
+            "extends": ":workspace",
+            "filesystem": {":workspace_roots": {".": "write"}}
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+The settings can also retain native provider/reasoning/network options in
+`session_parameters.config`, and a `connection` with `runtime_home`, `base_url`
+or `api_key_env` (an environment variable name, never its secret value).
+Codex's native `auto_review` is the default; explicit native reviewer settings
+win. Existing sandbox, account and trust controls remain effective.
+
+The host owns the actual parent process and Session. It exposes only `agents`
+through MCP, authenticating requests by process ancestry and the bound native
+Session. Inside that same host, the authenticated CLI is also available:
+
+```sh
+python -m agent_swarm.cli '{"action":"discover"}'
+```
+
+CLI arguments cannot supply an identity. Child results return through the
+owning native parent connection; status does not repeat a body already sent as
+a notification. Native requests for the parent itself print to stderr and take
+an explicit native JSON response on stdin. Use `--resume` with the same directory
+to continue the retained parent Session. A closing host interrupts its active
+children, preserving their native Sessions. Normalized archiving is off; the
+existing optional archive integration remains a GraphTraj consumer capability
+until the separate archive extraction is delivered.
 
 ## Use it with your Agent
 
@@ -280,8 +350,8 @@ It does not provide task execution controls.
 
 For Apple Silicon macOS, extract the ZIP and open `GraphTraj.app` from the
 extracted folder to try it; copying it to `/Applications` is optional. Electron
-is included, but Python is separate. Install the accompanying GraphTraj wheel
-in a Python environment, and make its `graphtraj-tool` available on the app's
+is included, but Python is separate. Install the accompanying GraphTraj and
+agent-swarm wheels in a Python environment, and make `graphtraj-tool` available on the app's
 launch `PATH` or set `GRAPHTRAJ_TOOL` to that executable. Use the matching CLI
 package rather than an older global installation. The macOS build is unsigned.
 
@@ -359,3 +429,32 @@ validate and select a project directly. Without it, the saved selection is used.
 - [Recovery](manuals/task-delivery/references/recovery.md): interruptions, failures and continuation.
 - [Research](manuals/research/guide.md) and [concept clarification](manuals/concept-clarification/guide.md): optional methods for your project.
 - [Coding Skill examples](examples/coding-skills/README.md): optional development methods, separate from the Runtime installation.
+
+### Independent Claude Code control
+
+The `agent-swarm` wheel includes `agent_swarm.claude.ClaudeDriver` and the
+native Claude host. No GraphTraj project, Git repository or Task is required.
+For a new isolated working directory, use the dedicated environment containing
+only `agent-swarm` and its dependencies:
+
+```sh
+python -m agent_swarm.claude.host configuration --project /absolute/working-directory \
+  --claude /absolute/path/to/claude --write
+```
+
+Start Claude Code normally in that directory and approve its ordinary project,
+plugin and MCP trust prompts. The existing native mod supplies the current
+Session identity for every `agents` MCP call; model arguments cannot choose it.
+The host exposes progressive `discover`, `describe`, and `execute` requests.
+`/agents-context` shows native binding and notice delivery. GraphTraj users
+continue to use the GraphTraj host, which also exposes `tasks`.
+
+The generated `.agents-control/claude-host.json` retains the native executable,
+working directory and explicit child `settings`. Child permissions default to
+Claude's native `auto` review; sandboxing and native permission replies remain
+in force. Optional settings include `model`, `reasoning_effort`, `runtime_home`,
+`instructions`, `read_paths`, `worktree_access`, `permission_mode`, `base_url`
+and `api_key_env` (an environment variable name, never its value). Existing
+login and trust are not copied. Session continuation uses the original child's
+captured settings. Normalized archiving is off by default; GraphTraj supplies
+its existing optional collector separately.

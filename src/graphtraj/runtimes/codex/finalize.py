@@ -216,13 +216,35 @@ async def _owned_request_result(binding: dict) -> dict | None:
     })}
 
 
-def completion_boundary(binding: dict, context: dict) -> dict[str, str] | None:
-    """Fingerprint exact context and the facts supporting a waiting conclusion.
+def _member_notice(payload: dict) -> bool:
+    """Whether a response item is a GraphTraj member notice delivered by the host.
 
-    Exact results remain bound to native history. Waiting can survive a later
-    turn containing only assistant explanation or native compaction: neither is
-    new external input. User/developer input and tool work still invalidate it.
-    Unreadable input or execution evidence never establishes a reusable result.
+    ``send_host_event`` starts the Main turn with tool output named
+    ``graphtraj``; Codex records it as a ``function_call_output`` without a
+    ``call_id``, whose output is exactly the notice document.
+    """
+    if (payload.get('type') != 'function_call_output' or payload.get('name') != 'graphtraj'
+            or 'call_id' in payload or not isinstance(payload.get('output'), str)):
+        return False
+    try:
+        notice = json.loads(payload['output'])
+    except json.JSONDecodeError:
+        return False
+    return (isinstance(notice, dict) and set(notice) == {'source', 'alias', 'event', 'message'}
+            and notice['source'] == 'graphtraj')
+
+
+def completion_boundary(binding: dict, context: dict) -> dict[str, str] | None:
+    """Fingerprint exact context and the facts supporting a release conclusion.
+
+    Actionable results remain bound to exact native history. A completed or
+    waiting release can survive a later turn containing only assistant
+    explanation, native compaction or a member notice: none is new external
+    input. The notice's state facts stay in the basis through Task facts,
+    deliveries and member activity; pending requests and undecided results are
+    checked before any reuse. User/developer input and tool work still
+    invalidate it. Unreadable input or execution evidence never establishes a
+    reusable result.
     """
     from graphtraj.configuration.project_configuration import load_project_configuration
     from graphtraj.graph.task_index import read_index
@@ -246,7 +268,8 @@ def completion_boundary(binding: dict, context: dict) -> dict[str, str] | None:
                 if record.get('type') == 'response_item':
                     if (payload.get('type') != 'reasoning'
                             and not (payload.get('type') == 'message'
-                                     and payload.get('role') == 'assistant')):
+                                     and payload.get('role') == 'assistant')
+                            and not _member_notice(payload)):
                         waiting.update(line.encode())
                 elif (record.get('type') == 'retained_context'
                       or (record.get('type') == 'compacted' and payload.get('replacement_history'))):
@@ -267,6 +290,10 @@ def completion_boundary(binding: dict, context: dict) -> dict[str, str] | None:
             'alias', 'parent', 'children', 'session', 'execution_id',
             'activity', 'last_outcome', 'retire_status',
         ) if key in agent} for agent in agents]
+        # A member's next execution that ends the same way leaves Main the same
+        # options; only its identifier changes with each notice-producing run.
+        member_facts = [{key: value for key, value in activity.items() if key != 'execution_id'}
+                        for activity in activities]
         settings = {key: value for key, value in context.get('settings', {}).items()
                     if key != 'check_usage_baseline'}
         digest.update(json.dumps({
@@ -280,13 +307,15 @@ def completion_boundary(binding: dict, context: dict) -> dict[str, str] | None:
         # Pending submissions/requests are checked separately before any reuse.
         facts = {key: {field: value for field, value in node.items() if field != 'stamp'}
                  for key, node in index['tasks'].items()}
+        # Turn identities and the per-turn access program (set on user turns,
+        # absent on notice turns) are not Main settings or Task facts.
         waiting.update(json.dumps({
             'model': context['model'],
             'settings': {key: value for key, value in settings.items()
-                         if key not in ('turn_id', 'timestamp')},
+                         if key not in ('turn_id', 'root_turn_id', 'timestamp', 'cyber_access_program')},
             'summary_issue': binding['summary_issue'], 'tasks': facts,
             'deliveries': index['deliveries'], 'revision': index['revision'],
-            'agents': activities, 'user_pause': binding.get('user_pause'),
+            'agents': member_facts, 'user_pause': binding.get('user_pause'),
         }, sort_keys=True).encode())
         return {'completion_boundary': digest.hexdigest(), 'waiting_boundary': waiting.hexdigest()}
     except (OSError, ValueError, KeyError, TypeError):
@@ -310,7 +339,8 @@ def previous_result(directory: Path, boundary: dict[str, str] | None) -> dict | 
             result = parse_check_result(native['output'])
         except (ValueError, KeyError, TypeError):
             continue
-        field = 'waiting_boundary' if result['status'] == 'waiting' else 'completion_boundary'
+        field = ('waiting_boundary' if result['status'] in ('completed', 'waiting')
+                 else 'completion_boundary')
         if result['status'] != 'error' and native.get(field) == boundary[field]:
             return result
     return None

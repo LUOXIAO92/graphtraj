@@ -233,14 +233,9 @@ def test_root_completion_after_entry_and_send_exit(
             original_alias = alias
             original_file = root / '.graphtraj/runner/sessions' / alias / 'mapping.yml'
             original_bytes = original_file.read_bytes()
-<<<<<<< HEAD
-            stopped = run_process(runner_operation(installed_commands, 'interrupt', alias),
-                                  cwd=root, env=environment, timeout=30)
-=======
             # Only the Main now in control may stop the original member.
-            stopped = run_process([str(installed_commands.runner), 'interrupt', alias],
+            stopped = run_process(runner_operation(installed_commands, 'interrupt', alias),
                                   cwd=root, env=changed, timeout=30)
->>>>>>> 9100a69 (fix(main): apply the confirmed single-controller rule and deliver notices to the current Main)
             assert stopped.returncode == 0, stopped.stdout + stopped.stderr
             # The CLI owns a notice channel and waits for the new execution.
             (tmp_path / 'release').touch()

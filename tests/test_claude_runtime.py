@@ -137,10 +137,12 @@ def test_claude_rejects_secret_configured_endpoint(
 def test_claude_permission_mode_configuration_and_resume(
     tmp_path: Path, claude_environment: None, mode: str | None,
 ) -> None:
-    """Pin explicit choices but leave restricted native defaults unmodified."""
+    """Pin explicit choices; without one, select native auto review by default."""
     result_project(tmp_path)
     config = {'permission_mode': mode} if mode is not None else {}
     _, prepared = context(tmp_path, claude=config)
+    assert prepared.evidence_document()['permission_mode_source'] == ('role' if mode else 'default')
+    mode = mode or 'auto'
     assert prepared.evidence_document()['permission_mode'] == mode
     session = None
     for prompt in ('first', 'resume'):
@@ -151,10 +153,7 @@ def test_claude_permission_mode_configuration_and_resume(
         launch = json.loads((tmp_path / 'native-permissions.json').read_text())
         assert launch['mode'] == mode
         permissions = launch['settings']['permissions']
-        if mode is None:
-            assert 'defaultMode' not in permissions
-        else:
-            assert permissions['defaultMode'] == mode
+        assert permissions['defaultMode'] == mode
         assert launch['restricted'] and launch['permission_handler'] == 'stdio'
         assert permissions['blockReadsOutsideWorkingDirectories'] is True
         assert permissions['deny']
@@ -164,7 +163,7 @@ def test_claude_permission_mode_configuration_and_resume(
         assert sandbox['autoAllowBashIfSandboxed'] is True
         assert sandbox['filesystem']['denyRead'] and sandbox['filesystem']['denyWrite']
         assert result['permissions']['requested'] == mode
-        assert result['permissions']['observed'] == (mode or 'unknown')
+        assert result['permissions']['observed'] == mode
 
 
 @pytest.mark.parametrize('observed', ['default', 'unknown'])
@@ -1004,7 +1003,7 @@ def test_permission_notice_is_retried_while_the_request_is_pending(
 @pytest.mark.parametrize(('mode', 'scrub'), [
     ('auto', None), ('default', None), (None, None),
     ('auto', '1'), ('auto', ' TRUE '), ('auto', 'yes'), ('auto', 'On'),
-    ('auto', '0'), ('auto', 'false'), ('auto', 'NO'), ('auto', ' off '),
+    ('auto', '0'), ('auto', 'false'), ('auto', 'NO'), ('auto', ' off '), (None, '1'),
     ('auto', ''), ('auto', 'unrecognized'), ('default', '0'), ('default', '1'),
 ])
 def test_scrub_choice_reaches_native_launch_without_mutating_host(
@@ -1022,7 +1021,9 @@ def test_scrub_choice_reaches_native_launch_without_mutating_host(
         monkeypatch.setenv(key, scrub)
     result_project(tmp_path)
     config = {} if mode is None else {'permission_mode': mode}
-    conflict = mode == 'auto' and scrub is not None and scrub.strip().lower() in {'1', 'true', 'yes', 'on'}
+    # The default auto selection follows the same SCRUB rule as an explicit one.
+    effective = mode or 'auto'
+    conflict = effective == 'auto' and scrub is not None and scrub.strip().lower() in {'1', 'true', 'yes', 'on'}
     with ExitStack() as stack:
         turn, _, _ = execution(tmp_path, stack, 'mode', claude=config)
         if conflict:
@@ -1033,8 +1034,9 @@ def test_scrub_choice_reaches_native_launch_without_mutating_host(
         else:
             result = turn.run()
             launch = json.loads((tmp_path / 'native-permissions.json').read_text())
-            assert launch['scrub'] == (scrub if scrub is not None else '0' if mode == 'auto' else '1')
-            assert result['permissions']['requested'] == mode
+            assert launch['scrub'] == (scrub if scrub is not None else '0' if effective == 'auto' else '1')
+            assert result['permissions']['requested'] == effective
+            assert result['permissions']['source'] == ('role' if mode else 'default')
             assert launch['settings']['sandbox']['failIfUnavailable']
             assert not launch['settings']['sandbox']['allowUnsandboxedCommands']
     assert os.environ.get(key) == scrub

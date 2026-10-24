@@ -70,6 +70,10 @@ class AdapterDriver:
         """Bind the project and the host-chosen working directory."""
         self.root = Path(root)
         self.cwd  = Path(cwd)
+        from agent_swarm.codex.driver import CodexDriver
+        from graphtraj.runtimes.codex.managed_session import CodexManagedExecution
+
+        self.codex = CodexDriver(execution=CodexManagedExecution)
 
     def prepare(self, runtime: str, caller: Caller, *, configuration: str | None = None) -> dict:
         """Resolve the Runtime's role preset and freeze its launch settings.
@@ -131,6 +135,9 @@ class AdapterDriver:
         A failure before that confirmation raises the Adapter's error; later
         failures are reported through ``run.events``.
         """
+        if run.runtime == 'codex':
+            self.codex.start(run)
+            return
         adapter = select_runtime_adapter(run.runtime)
         ready   = threading.Event()
         failure: list[AgentsError] = []
@@ -143,14 +150,6 @@ class AdapterDriver:
         try:
             owner = adapter.managed_execution
             options = {}
-            if run.runtime == 'codex':
-                from graphtraj.runtimes.codex.managed_session import CodexManagedExecution
-
-                owner = CodexManagedExecution
-                options['independent'] = True
-                options['archive'] = run.archive
-                options['connection'] = run.settings.get('connection', {})
-                options['agent_call'] = run.call
             turn = owner(
                 dict(run.settings["adapter_request"]), run.message, run.directory,
                 lambda session, pid: ready.set(), dict(run.settings["evidence"]),
@@ -233,18 +232,27 @@ class AdapterDriver:
 
     def deliver(self, run: Run, message: str) -> None:
         """Send input into the running native execution."""
+        if run.runtime == 'codex':
+            self.codex.deliver(run, message)
+            return
         self._operate(run, operation="send", instruction=message)
 
     def interrupt(self, run: Run) -> bool:
         """Request the native stop; ``run()`` keeps ownership until it ends."""
+        if run.runtime == 'codex':
+            return self.codex.interrupt(run)
         return self._turn(run).terminate()
 
     def requests(self, run: Run) -> list[dict]:
         """Return the native approval or input requests still pending."""
+        if run.runtime == 'codex':
+            return self.codex.requests(run)
         return self._operate(run, operation="requests")["requests"]
 
     def reply(self, run: Run, request: Mapping[str, Any], response: Mapping[str, Any]) -> dict:
         """Submit one explicit native allow/deny reply."""
+        if run.runtime == 'codex':
+            return self.codex.reply(run, request, response)
         return self._operate(run, operation="reply", request_token=request.get("request_token"),
                              response=dict(response))
 

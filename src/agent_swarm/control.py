@@ -239,7 +239,7 @@ class ExecutionEvents:
                 last_message=last_message, terminal_confirmed=terminal_confirmed,
                 error=dict(error) if error else None,
             )
-            notify = receiver is not None and bool(last_message) and record['parent'] is not None
+            notify = receiver is not None and bool(last_message)
             if notify:
                 current['notification'] = 'pending'
             # Keep the native receiver while this Agent is in standby so its

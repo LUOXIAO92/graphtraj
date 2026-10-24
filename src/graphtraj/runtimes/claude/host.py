@@ -23,6 +23,7 @@ import time
 from typing import Callable, TextIO
 from uuid import UUID
 
+from agent_swarm.claude import native_host
 from agent_swarm import AgentsError, AgentsResult, Caller, bind
 from agent_swarm.connection import connection_operation, worker_connection
 from agent_swarm.discovery import handle_request
@@ -32,43 +33,11 @@ from graphtraj.interfaces.agents import GraphTrajAgents, configured_archive
 from graphtraj.runtimes.claude.mcp import serve
 
 
-class NativeCalls:
-    """Consume one current native association exactly once, never a startup ID."""
+from agent_swarm.claude.native_host import NativeCalls as NativeCallsBase
 
-    def __init__(
-        self, make_call: Callable[[str, Path], Callable], cwd: Path, runner: Path | None = None,
-    ) -> None:
-        """Bind the backend factory, permitted native cwd and the notice queue's project."""
-        self.make_call = make_call
-        self.cwd = cwd.resolve()
-        self.runner = runner
-        self.pending: dict | None = None
-        self.lock = threading.Lock()
 
-    def context(self, document: dict) -> dict:
-        """Accept only authenticated mod facts; this is not a model tool."""
-        with self.lock:
-            operation = document.get('operation')
-            if operation == 'end':
-                self.pending = None
-                return {'ended': True}
-            if operation in {'notices', 'acknowledge'}:
-                return self.notices(document)
-            if operation != 'prepare' or set(document) != {'operation', 'tool', 'session', 'cwd', 'agent', 'request'}:
-                raise AgentsError('invalid-input', 'Expected one native per-call context.')
-            if document['tool'] not in {'agents', 'tasks'}:
-                raise AgentsError('invalid-input', 'Expected the agents or tasks entry.')
-            if document['agent'] is not None:
-                raise AgentsError('authority-denied', 'A native subagent cannot adopt the Main association.')
-            if (not isinstance(document['session'], str)
-                    or str(UUID(document['session'])) != document['session']
-                    or Path(document['cwd']).resolve() != self.cwd
-                    or not isinstance(document['request'], dict)):
-                raise AgentsError('authority-denied', 'Native Session/cwd/request is invalid.')
-            if self.pending is not None and self.pending != document:
-                raise AgentsError('authority-denied', 'A different native call is already pending.')
-            self.pending = copy.deepcopy(document)
-            return {'prepared': True}
+class NativeCalls(NativeCallsBase):
+    """Supply GraphTraj's durable Main notice queue to the native association."""
 
     def notices(self, document: dict) -> dict:
         """Let the mod push queued notices into the idle Main, acknowledging after submit.
@@ -88,14 +57,6 @@ class NativeCalls:
             raise AgentsError('invalid-input', 'Expected the position returned by notices.')
         acknowledge_notices(self.runner, 'claude', session, document['position'])
         return {'acknowledged': True}
-
-    def call(self, request: dict, tool: str = 'agents') -> AgentsResult:
-        """Match the MCP request before consuming its host-supplied association."""
-        with self.lock:
-            native, self.pending = self.pending, None
-        if native is None or native['request'] != request or native['tool'] != tool:
-            raise AgentsError('authority-denied', 'No matching current native call association.')
-        return self.make_call(native['session'], self.cwd)(tool, request)
 
 
 def native_parent(executable: Path, *, stage: str = 'serve') -> int:
@@ -227,7 +188,7 @@ def adoption_material(root: Path, claude: Path) -> dict[str, object]:
         },
         (plugin / 'hooks' / 'hooks.json').as_posix(): {'modules': ['./host_context.mjs']},
         (plugin / 'hooks' / 'host_context.mjs').as_posix():
-            Path(__file__).with_name('host_context.mjs').read_text(encoding='utf-8'),
+            Path(native_host.__file__).with_name('host_context.mjs').read_text(encoding='utf-8'),
     }
 
 

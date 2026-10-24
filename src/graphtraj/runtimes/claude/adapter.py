@@ -216,9 +216,9 @@ class ClaudeRuntimeAdapter:
             'api_key_env': settings.api_key_env, 'instructions': role.instructions,
             'worktree_access': settings.worktree_access, 'reports': reports, 'resources': resources,
             'settings_sources': 'managed settings and explicit Runner settings; restricted mode',
-            'permission_mode': config.get('permission_mode'),
-            'permission_mode_source': ('role' if 'permission_mode' in config else
-                                       'native restricted selection; user/project/local settings excluded'),
+            # Without a role selection, children use Claude's native auto review.
+            'permission_mode': config.get('permission_mode', 'auto'),
+            'permission_mode_source': 'role' if 'permission_mode' in config else 'default',
         }))
 
     def recovery_environment(self, connection: Mapping[str, Any]) -> Mapping[str, str]:

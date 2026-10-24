@@ -37,6 +37,26 @@ def rollout_record(line: str | bytes, path: Path, offset: int) -> dict:
     return record
 
 
+class NativeInputError(ValueError):
+    """Native hook input or rollout bytes that could not be read or parsed.
+
+    Only this failure class names a missing input rather than an identity
+    decision; identity and association refusals remain ordinary errors.
+    """
+
+
+def rollout_record(line: str | bytes, path: Path, offset: int) -> dict:
+    """Parse one native rollout line, naming its file and byte offset on failure."""
+    try:
+        record = json.loads(line)
+    except json.JSONDecodeError as error:
+        raise NativeInputError(f'Codex rollout {path} has no valid JSON record at byte {offset} '
+                               f'({len(line)} bytes read): {error}') from error
+    if not isinstance(record, dict):
+        raise NativeInputError(f'Codex rollout {path} has a non-object record at byte {offset}.')
+    return record
+
+
 def _content(blocks: list[dict]) -> list[dict]:
     """Map native text blocks and retain all other content without guessing."""
     return [{**block, 'type': 'text'} if block.get('type') in {'input_text', 'output_text'}

@@ -32,7 +32,7 @@ def test_boundaries_keep_identity_history_and_current_public_reads(tmp_path: Pat
     write_config(root, save_normalized_sessions=True, backfill_history=True)
     source = tmp_path / 'first.jsonl'
     records = [
-        {'type': 'session_meta', 'payload': {'id': 'native', 'source': 'cli'}},
+        {'type': 'session_meta', 'payload': {'id': 'native-research@x1', 'source': 'cli'}},
         {'type': 'response_item', 'payload': message('before')},
     ]
     ids = []
@@ -40,8 +40,8 @@ def test_boundaries_keep_identity_history_and_current_public_reads(tmp_path: Pat
 
     def collect(path: Path) -> JsonlSessionStore:
         """Restart the hook collector, as separate native invocations would."""
-        CodexJsonlArchive(ConfiguredSessionArchive(root), agent, 'native', path).collect(path)
-        identity = SessionArchive(root).native_id('codex', 'native')
+        CodexJsonlArchive(ConfiguredSessionArchive(root), agent, 'native-research@x1', path).collect(path)
+        identity = SessionArchive(root).native_id('codex', 'native-research@x1')
         return JsonlSessionStore(archive_path(root, identity))
 
     write(source, records)
@@ -56,7 +56,7 @@ def test_boundaries_keep_identity_history_and_current_public_reads(tmp_path: Pat
         write(source, records)
         store = collect(source)
         assert store.header['graphtraj']['previousSession'] == ids[-1]
-        assert store.header['graphtraj']['native']['sessionId'] == 'native'
+        assert store.header['graphtraj']['native']['sessionId'] == 'native-research@x1'
         assert store.header['graphtraj']['agentId'] == agent
         assert 'parentSession' not in store.header  # Continuation is not a native fork.
         assert store.messages()[0]['content'][0]['text'] == f'summary-{index}'
@@ -87,7 +87,7 @@ def test_boundaries_keep_identity_history_and_current_public_reads(tmp_path: Pat
         assert path.read_bytes() == before
 
     # Native reads select current; explicit project IDs retain their historical meaning.
-    request = {'action': 'execute', 'feature': 'session_read', 'arguments': {'session_id': 'native'}}
+    request = {'action': 'execute', 'feature': 'session_read', 'arguments': {'session_id': 'native-research@x1'}}
     with runtime_caller(runner, 'research@x1'):
         current = handle_request(request, cwd=tmp_path).document
         previous = handle_request({**request, 'arguments': {'session_id': ids[0]}}, cwd=tmp_path).document

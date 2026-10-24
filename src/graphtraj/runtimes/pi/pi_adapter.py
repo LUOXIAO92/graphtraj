@@ -54,6 +54,9 @@ class PiContext:
         return {'runtime': 'pi', 'model': request['model'], 'provider': request['provider'],
                 'version': request['version'], 'resources': request['resources'],
                 'worktree_access': request['worktree_access'],
+                # The default automatic review has no Pi equivalent; report it.
+                'auto_review': {'requested': 'default', 'native': 'unavailable',
+                                'reason': 'Pi has no native tool approval or automatic review mode.'},
                 **({'connection': request['connection'],
                     'connection_revision': request['connection_revision'],
                     'runtime_home': request['agent_dir']} if request.get('connection') else {})}

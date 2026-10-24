@@ -362,16 +362,19 @@ def test_pi_dialog_notice_is_retried_while_the_dialog_is_pending(
 
 
 def test_pi_child_cli_preserves_real_caller(tmp_path: Path, pi_environment: dict) -> None:
-    """A real child process uses the hosted CLI from its Worktree and cannot forge a sibling identity."""
+    """A real child process uses the hosted CLI from its Worktree and cannot forge a sibling identity.
+
+    The forged alias is ignored: the report is written as the child itself.
+    Reading the sibling's project reports is ordinary project read access.
+    """
     result_project(tmp_path)
     with ExitStack() as stack:
         turn, _, _ = execution(tmp_path, pi_environment, 'research@x1', 'cli', stack)
         result = turn.run()
-    assert 'authority-denied' in result['last_agent_message']
     receipt = json.loads(result['last_agent_message'])
     assert receipt['authorized_exit'] == 0, receipt
-    assert receipt['refused_exit'] == 1
-    assert yaml.safe_load(receipt['refused'])['error']['code'] == 'authority-denied'
+    assert yaml.safe_load(receipt['authorized'])['alias'] == 'research@x1'
+    assert receipt['refused_exit'] == 0, receipt
 
 
 @pytest.mark.parametrize('protected', ['.graphtraj', '.codex'])

@@ -690,12 +690,16 @@ def _require_read_denials(filesystem: dict) -> None:
     srt lets allowRead override denyRead, so a denied path inside a readable
     directory (for example ``<root>/.graphtraj`` in a worktree that is the
     project root) cannot be expressed. A protected path that does not exist
-    has no contents to expose.
+    has no contents to expose. A path the launching host itself may not
+    inspect is treated as existing, so a covering grant is still refused.
     """
     for denied in filesystem['denyRead']:
         protected = Path(denied).resolve()
-        if not protected.exists():
-            continue
+        try:
+            if not protected.exists():
+                continue
+        except PermissionError:
+            pass
         for allowed in filesystem['allowRead']:
             if protected.is_relative_to(Path(allowed).resolve()):
                 raise RuntimeAdapterError(

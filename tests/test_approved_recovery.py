@@ -1069,6 +1069,12 @@ def test_managed_user_recovery_waits_for_existing_reply_channel(
     request = {**arguments, 'alias': child['alias'], 'resume': False}
     before = (task / 'execution-budget.yml').read_bytes()
 
+    # Children default to native auto review; this host selects the user channel.
+    store = root / '.codex'
+    store.mkdir(exist_ok=True)
+    with (store / 'config.toml').open('a', encoding='utf-8') as config:
+        config.write('\napprovals_reviewer = "user"\n')
+
     async def exercise() -> None:
         """Enter the bound host callback and reply through public Runtime control."""
         resolved = context(root, peer)

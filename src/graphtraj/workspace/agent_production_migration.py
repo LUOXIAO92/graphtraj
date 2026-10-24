@@ -23,6 +23,22 @@ from graphtraj.workspace.migration_snapshot import MANIFEST, snapshot_project
 from graphtraj.workspace.task_migration import foreign_entries
 
 
+def _terminal_confirmed(turn_file: Path) -> bool:
+    """Accept the original terminal evidence or the Runner's retained confirmation receipt.
+
+    An unconfirmed failure is never rewritten; interrupt confirms its end in a
+    separate receipt, which the Runner's own stop check (read_terminal_outcome) accepts.
+    """
+    from graphtraj.execution.runner_models import RunnerError
+    from graphtraj.execution.runner_status import read_terminal_outcome
+
+    try:
+        read_terminal_outcome(turn_file)
+    except RunnerError:
+        return False
+    return True
+
+
 def _stopped(root: Path) -> list[dict]:
     """Refuse a live or unconfirmed member; Main's stopped writes are operator-owned."""
     from graphtraj.execution.runner_status import is_session_mapping
@@ -39,10 +55,12 @@ def _stopped(root: Path) -> list[dict]:
                                 'missing': 'Historical binding has no current execution schema; activity and continuation are not inferred.'})
             continue
         if (not terminal or terminal.get('outcome') not in {'completed', 'interrupted', 'runtime-error'}
-                or terminal.get('terminal_confirmed') is False
                 or (mapping.get('execution_id') and terminal.get('execution_id') != mapping['execution_id'])
-                or held):
-            raise ValueError(f"Stop and confirm the retained execution before cutover: {mapping.get('alias', path.parent.name)}")
+                or held or not _terminal_confirmed(terminal_path)):
+            raise ValueError(
+                f"Stop and confirm the retained execution before cutover: {mapping.get('alias', path.parent.name)}. "
+                'Its direct parent confirms an unconfirmed end through the public interrupt '
+                '(agents interrupt), which retains a terminal-confirmation receipt.')
     for path in (root / '.graphtraj/swarm/control/agents').glob('*.json'):
         record = json.loads(path.read_text())
         if any(item.get('state') != 'ended' or item.get('terminal_confirmed') is False
@@ -451,8 +469,9 @@ def cutover_project(
             replacement = _references(resolved, moves, 'path')
             link.unlink()
             link.symlink_to(os.path.relpath(replacement, link.parent))
-        # Claude Code finds a Session by its cwd; the moved worktree resumes it
-        # from an added copy, and the original native record stays in place.
+        # Claude Code resumes a Session by ID across project directories and
+        # prefers a copy under the current cwd: the copy keeps post-cutover
+        # history under the moved worktree and lets restore detect continuation.
         for item in planned_continuations:
             if 'status' in item:
                 continuations.append(item)

@@ -565,3 +565,38 @@ def test_main_session_must_be_the_current_continuity_claim(
     registrations = yaml.safe_load(result.output)['legacy_native_registrations']
     current = [entry for entry in registrations['sessions'] if entry['group'] == 'current_main']
     assert [(entry['runtime'], entry['session']) for entry in current] == [('claude', 'claude-main')]
+
+
+@pytest.mark.parametrize('receipt', ['valid', 'absent', 'stale'])
+def test_unconfirmed_failure_passes_cutover_only_with_a_valid_confirmation_receipt(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, receipt: str,
+) -> None:
+    """The original failure stays unconfirmed; only the Runner's matching receipt confirms its end."""
+    import hashlib
+
+    root = tmp_path / 'project'
+    _, fixture = project(root)
+    # The Runner resolves receipts by its real alias form.
+    alias = '1-fixture-handover0-engineer@engineer_4'
+    directory = fixture.rename(fixture.with_name(alias))
+    mapping = yaml.safe_load((directory / 'mapping.yml').read_text())
+    mapping.update(alias=alias, execution_id='run-1', worker_pid=41, runtime_pid=42)
+    (directory / 'mapping.yml').write_text(yaml.safe_dump(mapping))
+    execution = directory / 'execution.yml'
+    execution.write_text(yaml.safe_dump({'execution_id': 'run-1', 'outcome': 'runtime-error',
+                                         'terminal_confirmed': False, 'error': {'code': 'owner-exited'}}))
+    original = execution.read_bytes()
+    if receipt != 'absent':
+        digest = hashlib.sha256(original if receipt == 'valid' else b'another execution').hexdigest()
+        (directory / 'terminal-confirmation-run-1.yml').write_text(yaml.safe_dump({
+            **{key: mapping[key] for key in ('session', 'execution_id', 'worker_pid', 'runtime_pid')},
+            'execution_sha256': digest, 'terminal_confirmed': True}))
+    monkeypatch.chdir(root)
+    result = CliRunner().invoke(main, ['migrate-agents', '--cutover', str(tmp_path / 'input'), '--writes-stopped'])
+    if receipt == 'valid':
+        assert result.exit_code == 0, result.output
+        moved = root / '.graphtraj/core/runner/sessions' / alias / 'execution.yml'
+        assert moved.read_bytes() == original
+        return
+    assert result.exit_code != 0 and 'Stop and confirm' in result.output and 'agents interrupt' in result.output
+    assert not (tmp_path / 'input').exists() and (root / '.graphtraj/config.yml').is_file()

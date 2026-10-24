@@ -695,9 +695,38 @@ def managed_mcp(
             root=root, cause=cause, server=server, environment=environment
         )
         yield managed
-        for mapping in (root / ".graphtraj/runner/sessions").glob("*/mapping.yml"):
+        mappings = list((root / ".graphtraj/runner/sessions").glob("*/mapping.yml"))
+        for mapping in mappings:
             # Leave no controlled execution running behind the fixture.
             server.call('interrupt', {'agent': mapping.parent.name})
+        _stop_remaining_workers(mappings)
+
+
+def _stop_remaining_workers(mappings: list[Path]) -> None:
+    """Confirm each recorded worker exited; stop and report any that did not."""
+    import signal
+
+    def alive(pid: int) -> bool:
+        """Whether the recorded worker process still exists."""
+        try:
+            os.kill(pid, 0)
+        except ProcessLookupError:
+            return False
+        return True
+
+    workers = [pid for pid in (yaml.safe_load(mapping.read_text()).get('worker_pid') for mapping in mappings)
+               if isinstance(pid, int)]
+    deadline = time.monotonic() + 30
+    while any(alive(pid) for pid in workers) and time.monotonic() < deadline:
+        time.sleep(0.1)
+    remaining = [pid for pid in workers if alive(pid)]
+    for pid in remaining:
+        # The worker owns its native service in its own process group.
+        if os.getpgid(pid) == pid:
+            os.killpg(pid, signal.SIGTERM)
+        else:
+            os.kill(pid, signal.SIGTERM)
+    assert not remaining, f'managed workers survived the fixture interrupt: {remaining}'
 
 
 def test_installed_mcp_server_dispatches_and_controls_a_managed_child(

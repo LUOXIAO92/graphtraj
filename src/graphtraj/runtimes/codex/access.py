@@ -38,3 +38,26 @@ def private_filesystem(runtime_store: Path, runtime_home: str | None = None) -> 
     for path in (root / '.graphtraj/config.yml', root / '.graphtraj/roles.yml'):
         filesystem[str(path)] = 'read'
     return filesystem
+
+
+def member_project_reads(root: Path) -> dict[str, str]:
+    """Return read-only project record grants for one delegated Codex member.
+
+    Codex announces every ``none`` entry as a non-escalatable denied read, even
+    when a more specific grant covers the member's own Worktree beneath it, so
+    ``.graphtraj`` itself is read-only rather than denied. Write isolation comes
+    from the workspace-write sandbox: only the Worktree and the exact control
+    and Git grants added by the caller are writable, never state or Runner
+    records. Other Sessions' control channels and the Claude host channel stay
+    denied, as for Claude and Pi members; Runtime homes stay denied by
+    :func:`private_filesystem`. Codex Main does not use these grants.
+    """
+    private    = root / '.graphtraj'
+    filesystem = {
+        str(private): 'read',
+        str(private / 'cli'): 'none',
+        str(private / 'claude-host'): 'none',
+    }
+    if configuration_exists(root):
+        filesystem[str(load_project_configuration(root).state)] = 'read'
+    return filesystem

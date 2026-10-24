@@ -128,11 +128,12 @@ class _CodexRole:
         filesystem = native_settings["permissions"][self.default_permissions][
             "filesystem"
         ]
-        from graphtraj.runtimes.codex.access import private_filesystem
+        from graphtraj.runtimes.codex.access import member_project_reads, private_filesystem
 
         # Control now runs on the private native callback, not through files
         # writable by an Agent or by a helper inheriting its tool permissions.
         filesystem.update(private_filesystem(runtime_store, self.runtime_home))
+        filesystem.update(member_project_reads(runtime_store.parent))
         if filesystem.get(":workspace_roots", {}).get(".") == "write":
             filesystem[str(git_common_directory)] = "write"
             filesystem[str(git_common_directory / 'config')] = "read"

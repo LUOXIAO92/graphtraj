@@ -263,9 +263,13 @@ def test_managed_worker_grants_only_its_channel_and_closes_it(tmp_path: Path, pe
         config = next(item['params']['config'] for item in messages if item.get('method') == 'thread/start')
         address = config['shell_environment_policy']['set'][CONNECTION_ENV]
         filesystem = config['permissions'][config['default_permissions']]['filesystem']
-        assert filesystem[str(tmp_path / '.graphtraj')] == 'none'
+        # Project records are read-only; other Sessions' channels stay denied.
+        assert filesystem[str(tmp_path / '.graphtraj')] == 'read'
+        assert filesystem.get(str(tmp_path / '.graphtraj/state')) != 'write'
+        assert filesystem[str(tmp_path / '.graphtraj/cli')] == 'none'
+        assert filesystem[str(tmp_path / '.codex')] == 'none'
         assert filesystem[address] == 'write'
-        assert str(Path(address).parent) not in filesystem
+        assert filesystem.get(str(Path(address).parent)) in (None, 'none')
         result = cli(tmp_path, address, 'submit-result', '--commit', commit,
                      '--result-ref', 'result.md', '--completion', 'Native host adopted',
                      GRAPHTRAJ_NATIVE_RUNTIME='codex', CODEX_THREAD_ID=session)

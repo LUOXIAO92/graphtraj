@@ -1188,7 +1188,7 @@ def test_linked_worktree_git_permissions_reach_native_create_and_resume(
                 assert (fs.get(str(gitdir)) == 'write') is (access == 'write')
                 if access == 'write':
                     assert fs[str(common / 'config')] == fs[str(common / 'hooks')] == 'read'
-                assert fs[str(tmp_path / '.graphtraj')] == 'none'
+                assert fs[str(tmp_path / '.graphtraj')] == 'read'
                 assert _native_filesystem(request).get(str(gitdir)) == fs.get(str(gitdir))
 
     asyncio.run(exercise())
@@ -1290,7 +1290,10 @@ def test_parent_projection_keeps_control_files_private(
                                      allow_runtime_swarm=True, reasoning_effort='max', worktree_access='write')),
     )
     launch = _native_filesystem(resolved.launch_document()['adapter_request'])
-    assert launch[str(root / '.graphtraj')] == 'none'
+    assert launch[str(root / '.graphtraj')] == 'read'
+    assert launch[str(root / '.graphtraj/cli')] == 'none'
+    assert launch[str(root / '.graphtraj/claude-host')] == 'none'
+    assert launch[str(root / '.codex')] == 'none'
     assert launch.get(str(worldline_lock)) != 'write'
     assert launch.get(str(capacity)) != 'write'
     # Direct child Sessions do not exist yet when this Session is created.
@@ -1323,7 +1326,7 @@ def test_parent_projection_keeps_control_files_private(
     assert filesystem[str(root / 'evidence/teams/1/rounds/1/leader.md')] == 'read'
     assert resumed['session_parameters'].get('dynamicTools') == request['session_parameters'].get('dynamicTools')
     assert filesystem[':workspace_roots']['README.md'] == 'read'
-    assert filesystem[str(root / '.graphtraj')] == 'none'
+    assert filesystem[str(root / '.graphtraj')] == 'read'
     assert filesystem.get(str(worldline_lock)) != 'write'
     assert filesystem.get(str(capacity)) != 'write'
     assert resumed['session_parameters']['config']['agents']['enabled'] is True
@@ -1371,9 +1374,10 @@ def test_role_assignments_survive_native_followup_permissions(
             filesystem = config['permissions'][config['default_permissions']]['filesystem']
             assert filesystem[reports[index]] == 'read'
             assert reports[1 - index] not in filesystem
-            assert filesystem[str(tmp_path / '.graphtraj')] == 'none'
+            assert filesystem[str(tmp_path / '.graphtraj')] == 'read'
+            # Project records are readable; another Session's report is not writable.
             assert not any(
-                filesystem.get(str(parent)) in {'read', 'write'}
+                filesystem.get(str(parent)) == 'write'
                 for parent in Path(reports[1 - index]).parents
             )
             assert filesystem[':workspace_roots']['.'] == 'write'

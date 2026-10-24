@@ -246,6 +246,23 @@ def migrate_agents(
             'notice': 'Archive rehearsal only. Original state, identities and native sources are unchanged.'}
 
 
+def _retained_event(event: dict, by_seq: dict[int, dict]) -> dict:
+    """Return what an existing archive event must keep through import, in order.
+
+    A native event keeps its original record. Codex's graphtraj/history (a
+    replacement or rollback selection) has no record: it keeps its complete
+    content, with each selected seq named by that event's native identity,
+    since import may renumber seqs when it adds earlier native records.
+    """
+    native = event['graphtraj']['native']
+    if event['type'] != 'graphtraj/history':
+        return {'native': native, 'record': native_record(event)}
+    selected = [by_seq[seq].get('graphtraj', {}).get('native', {}) for seq in event['data']['eventSeqs']]
+    content = {key: value for key, value in event.items() if key not in {'seq', 'data'}}
+    return {'native': native, 'event': {**content, 'data': {**event['data'], 'eventSeqs': [
+        (item.get('runtime'), item.get('sessionId'), item.get('locator')) for item in selected]}}}
+
+
 def _verify_retained_swarm(root: Path, original: Path, manifest: dict) -> dict:
     """Compare copied tool-owned identities, native resources and existing JSONL.
 
@@ -276,14 +293,15 @@ def _verify_retained_swarm(root: Path, original: Path, manifest: dict) -> dict:
                 mismatches.append(relative.as_posix() + ':header')
             old_events, new_events = [], []
             for store, records in ((before, old_events), (after, new_events)):
-                cursor = -1
+                events, cursor = [], -1
                 while True:
                     page = store.page(after=cursor)
-                    records.extend({'native': event['graphtraj']['native'], 'record': native_record(event)}
-                                   for event in page['events'])
+                    events.extend(page['events'])
                     if not page['has_more']:
                         break
                     cursor = page['after']
+                by_seq = {event['seq']: event for event in events}
+                records.extend(_retained_event(event, by_seq) for event in events)
             old_keys = {(item['native']['runtime'], item['native']['sessionId'], item['native']['locator'])
                         for item in old_events}
             selected = [item for item in new_events

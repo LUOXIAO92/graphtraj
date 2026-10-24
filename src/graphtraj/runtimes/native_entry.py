@@ -74,6 +74,10 @@ def pi_event(event: dict, cwd: Path) -> dict:
     if event.get('event') != 'session_start':
         if connection is None:
             raise ValueError('Pi native Session association is unavailable.')
+        if event.get('event') == 'notices' and not Path(connection['session_file']).exists():
+            # Pi writes a new Session's file only with its first conversation
+            # message. Until then nothing is delivered; identity is unchanged.
+            return {'notices': 0, 'text': '', 'position': 0}
         verify_main(connection)
         if event.get('event') in {'notices', 'notices_ack'}:
             return main_notices(event, runner, connection)

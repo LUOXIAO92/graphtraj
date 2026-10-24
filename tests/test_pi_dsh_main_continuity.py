@@ -174,6 +174,14 @@ if (runtime === 'pi') {
   const ctx = { cwd };
   const environment = { GRAPHTRAJ_NATIVE_RUNTIME: 'pi', GRAPHTRAJ_NATIVE_SESSION: process.env.GRAPHTRAJ_NATIVE_SESSION,
     GRAPHTRAJ_NATIVE_SESSION_FILE: process.env.GRAPHTRAJ_NATIVE_SESSION_FILE };
+  // A fresh Pi Session has no file until its first conversation message:
+  // nothing is delivered and no error is raised; the notice stays queued.
+  const { renameSync } = await import('node:fs');
+  const file = environment.GRAPHTRAJ_NATIVE_SESSION_FILE;
+  renameSync(file, file + '.unwritten');
+  assert.equal(await deliverNotices(pi, ctx, environment), 0);
+  assert.equal(delivered.length, 0);
+  renameSync(file + '.unwritten', file);
   assert.equal(await deliverNotices(pi, ctx, environment), 1);
   assert.equal(await deliverNotices(pi, ctx, environment), 0);
   assert.equal(delivered[0].options.triggerTurn, true);

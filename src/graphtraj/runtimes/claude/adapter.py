@@ -121,12 +121,15 @@ class ClaudeRuntimeAdapter:
         The host has no push channel into an idle Main turn; the durable queue
         is read once by that Main Session's host (``main_continuity``).
         """
+        from graphtraj.configuration.project_configuration import runner_directory, runner_project_root
         from graphtraj.execution.main_continuity import queue_notice
 
         runner = connection.get('runner')
         if not isinstance(runner, str) or not Path(runner).is_absolute():
             raise RuntimeAdapterError('operation-unavailable', 'The Claude Main host connection has no project.')
-        return queue_notice(Path(runner), connection, event)
+        # A connection recorded before the core cutover names the legacy Runner;
+        # the queue follows the project's currently selected layout.
+        return queue_notice(runner_directory(runner_project_root(Path(runner))), connection, event)
 
     def native_replacement_approval(self) -> Any:
         """Claude has approvals; an unavailable host never means no mechanism."""

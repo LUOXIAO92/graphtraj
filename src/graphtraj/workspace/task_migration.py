@@ -110,7 +110,8 @@ def migrate_project(cwd: Path, *, preview: bool = False) -> dict[str, Any]:
     inventory = {
         "project": str(project), "harness": str(harness), "state": str(state),
         "snapshot": snapshot is not None,
-        "tasks": sorted(p.name for p in (state / "tickets").iterdir() if p.is_dir()),
+        "tasks": sorted(p.name for p in (state / "tickets").iterdir() if p.is_dir() and not p.name.startswith(".")),
+        "foreign_entries": foreign_entries(state / "tickets"),
         "missing_task_facts": missing, "sessions": sources,
         "notices": ["Unassociated Runtime histories are not searched or imported.",
                     "Preview does not read native transcript contents; apply validates native identity."],
@@ -210,6 +211,16 @@ def restore_project(cwd: Path, backup: Path) -> dict[str, str]:
     _restore(backup, configuration.state, runner, [Path(link) for link in links])
     restore_sources(backup, configuration.state, runner, allow_original=not snapshot)
     return {"restored": str(backup), "next": "Use the previous installed version before resuming writes."}
+
+
+def foreign_entries(tasks: Path) -> list[str]:
+    """Name hidden entries beside Task directories; they are kept, never Tasks.
+
+    ``.lock`` is the Task Graph's own lock file, not a foreign entry.
+    """
+    if not tasks.is_dir():
+        return []
+    return sorted(p.name for p in tasks.iterdir() if p.name.startswith(".") and p.name != ".lock")
 
 
 def _missing_parent_facts(tickets: Path) -> dict[str, list[str]]:

@@ -668,3 +668,16 @@ def test_generic_task_updates_cannot_unlock_dependents_without_integration(
     assert next(item for item in after["tasks"] if item["task_id"] == "2")[
         "ready"
     ] is False
+
+
+def test_hidden_runtime_marker_beside_tasks_is_not_a_task(tmp_path: Path) -> None:
+    """A Runtime's hidden write marker (``.claude/.cc-writes``) never breaks Task operations."""
+    from graphtraj.graph.task_graph import read_graph, register_task
+
+    state = tmp_path / "state"
+    register_task(state, tmp_path, _task("1", "first"))
+    (state / "tasks/.claude/.cc-writes").mkdir(parents=True)
+    register_task(state, tmp_path, _task("2", "second"))
+    graph = read_graph(state)
+    assert ".claude" not in str(graph)
+    assert (state / "tasks/.claude/.cc-writes").is_dir()

@@ -459,3 +459,15 @@ def test_migration_keeps_nested_trace_runtime_yaml_opaque(
     assert result.returncode == 0, result.stderr
     migrated = tmp_path / '.graphtraj/state/tasks' / relative.relative_to('tickets')
     assert migrated.read_bytes() == content
+
+
+def test_preview_lists_hidden_entries_as_foreign_not_tasks(tmp_path: Path) -> None:
+    """Old-layout inventories keep a hidden Runtime marker out of the Task list."""
+    from graphtraj.workspace.task_migration import foreign_entries
+
+    tickets = tmp_path / "tickets"
+    (tickets / "1-first").mkdir(parents=True)
+    (tickets / ".claude/.cc-writes").mkdir(parents=True)
+    (tickets / ".lock").write_bytes(b"")
+    assert foreign_entries(tickets) == [".claude"]
+    assert foreign_entries(tmp_path / "missing") == []

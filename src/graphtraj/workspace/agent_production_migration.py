@@ -19,6 +19,7 @@ from graphtraj.execution.runner_io import write_yaml_durably
 from graphtraj.workspace.agent_cutover import _references, _rewrite_records, partition_snapshot
 from graphtraj.workspace.agent_migration import migrate_agents
 from graphtraj.workspace.migration_snapshot import MANIFEST, snapshot_project
+from graphtraj.workspace.task_migration import foreign_entries
 
 
 def _stopped(root: Path) -> list[dict]:
@@ -176,6 +177,31 @@ def _restore_native_references(root: Path, manifest: dict, moves: dict[str, str]
             link.symlink_to(os.path.relpath(target, link.parent))
 
 
+def _moved_role_grants(roles: Path, moves: dict[str, str]) -> list[dict]:
+    """Name authored read grants that still point at moved project data.
+
+    roles.yml is authored configuration: cutover installs it unchanged and its
+    owner replaces these grants through role_organization before any Agent
+    using that role is started or resumed.
+    """
+    if not roles.is_file():
+        return []
+    found = []
+
+    def visit(value: object, location: list[str]) -> None:
+        if isinstance(value, dict):
+            for key, item in value.items():
+                visit(item, [*location, str(key)])
+        elif isinstance(value, list) and location[-1:] == ['read_paths']:
+            for path in value:
+                moved = _references(path, moves, 'path')
+                if moved != path:
+                    found.append({'field': '.'.join(location), 'old': path, 'new': moved})
+
+    visit(yaml.safe_load(roles.read_text(encoding='utf-8')), [])
+    return found
+
+
 def cutover_project(
     root: Path, snapshot: Path, *, writes_stopped: bool, main_session: str | None = None,
 ) -> dict:
@@ -318,6 +344,8 @@ def cutover_project(
     return {'cutover': 'installed', 'backup': str(backup), 'snapshot': str(snapshot),
             'worktrees': worktrees, 'identities': partitioned['agents'],
             'control_missing': control_missing,
+            'foreign_entries': foreign_entries(data / 'core/state/tasks'),
+            'role_read_paths_to_update': _moved_role_grants(data / 'core/roles.yml', moves),
             'native_missing': [item for item in imported['native_results'] if item.get('missing')],
             'native_resource_missing': native_missing,
             'missing_links': imported['missing_links'],

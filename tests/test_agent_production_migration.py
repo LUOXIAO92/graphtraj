@@ -265,3 +265,81 @@ def test_git_move_refusal_restores_original_directories(tmp_path: Path, monkeypa
     assert (directory / 'mapping.yml').read_bytes() == original
     assert worktree.is_dir() and (root / '.graphtraj/config.yml').is_file()
     assert (tmp_path / 'input/.graphtraj/migration-snapshot.yml').is_file()
+
+
+
+def test_cutover_keeps_claude_main_continuity_and_restores_it(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Main claims, queued notices and completion bindings move unchanged and come back."""
+    from graphtraj.configuration.project_configuration import runner_directory
+    from graphtraj.execution.main_continuity import current_main, main_sessions, pending_notices, queue_notice
+    from graphtraj.graph.task_graph import read_graph
+
+    root = tmp_path / 'project'
+    project(root)
+    legacy = root / '.graphtraj/runner'
+    records = legacy / 'main-sessions'
+    records.mkdir()
+    connection = {'runtime': 'claude', 'session': 'claude-main', 'runner': str(legacy)}
+    (records / 'continuity.jsonl').write_text(json.dumps({
+        'at': 1.0, 'connection': connection, 'entry': 'claude:first-control', 'previous': None,
+        'runtime': 'claude', 'session': 'claude-main'}, sort_keys=True) + '\n')
+    (records / 'continuity.lock').write_bytes(b'')
+    queue_notice(legacy, connection, {'kind': 'member-result', 'text': 'queued before cutover'})
+    binding = records / 'finalize_codex/session.yml'
+    binding.parent.mkdir()
+    binding.write_text(yaml.safe_dump({'runtime': 'codex', 'session': 'codex-earlier', 'cwd': str(root),
+                                       'connection': {'runtime': 'codex', 'session': 'codex-earlier',
+                                                      'codex_home': str(tmp_path / 'codex-home')}}))
+    (root / '.graphtraj/state/tasks/.claude/.cc-writes').mkdir(parents=True)
+    state_grant = str(root / '.graphtraj/state')
+    (root / '.graphtraj/roles.yml').write_text(yaml.safe_dump({'roles': {'team': {'engineer': {
+        'runtime': 'claude', 'claude': {'read_paths': [str(root / 'docs'), state_grant]}}}}}))
+    before = {path.relative_to(records): path.read_bytes() for path in records.rglob('*') if path.is_file()}
+    monkeypatch.chdir(root)
+    runner = CliRunner()
+    arguments = ['migrate-agents', '--cutover', str(tmp_path / 'input'), '--writes-stopped']
+    refused = runner.invoke(main, arguments)
+    assert refused.exit_code != 0 and '--main-session' in refused.output
+    # The refused attempt retains its snapshot as evidence; retry into a new one.
+    result = runner.invoke(main, ['migrate-agents', '--cutover', str(tmp_path / 'retry'), '--writes-stopped',
+                                  '--main-session', 'claude-main'])
+    assert result.exit_code == 0, result.output
+    report = yaml.safe_load(result.output)
+    assert report['foreign_entries'] == ['.claude']
+    # Authored roles are installed unchanged; the moved grant is named for its owner.
+    assert report['role_read_paths_to_update'] == [{'field': 'roles.team.engineer.claude.read_paths',
+                                                     'old': state_grant, 'new': str(root / '.graphtraj/core/state')}]
+    assert state_grant in (root / '.graphtraj/core/roles.yml').read_text()
+    moved = root / '.graphtraj/core/runner/main-sessions'
+    assert runner_directory(root) == moved.parent
+    assert {path.relative_to(moved): path.read_bytes() for path in moved.rglob('*') if path.is_file()} == before
+    assert current_main(moved.parent)['session'] == 'claude-main'
+    assert main_sessions(moved.parent) == {'claude-main', 'codex-earlier'}
+    notices, _ = pending_notices(moved.parent, 'claude', 'claude-main')
+    assert [notice['event']['text'] for notice in notices] == ['queued before cutover']
+    # Repetition never imports a second time over the installed layout.
+    again = runner.invoke(main, ['migrate-agents', '--cutover', str(tmp_path / 'again'), '--writes-stopped',
+                                 '--main-session', 'claude-main'])
+    assert again.exit_code != 0 and 'existing core destination' in again.output
+    restored = runner.invoke(main, ['migrate-agents', '--restore', report['backup'], '--writes-stopped'])
+    assert restored.exit_code == 0, restored.output
+    assert {path.relative_to(records): path.read_bytes() for path in records.rglob('*') if path.is_file()} == before
+    assert runner_directory(root) == legacy
+    read_graph(root / '.graphtraj/state')
+
+
+def test_claude_main_notice_follows_the_installed_core_runner(tmp_path: Path) -> None:
+    """A Main connection recorded before cutover queues into the current core Runner."""
+    from graphtraj.execution.main_continuity import pending_notices
+    from graphtraj.runtimes.claude.adapter import ClaudeRuntimeAdapter
+
+    core = tmp_path / '.graphtraj/core'
+    (core / 'runner').mkdir(parents=True)
+    (core / 'config.yml').write_text('paths: {}\n')
+    connection = {'runtime': 'claude', 'session': 'claude-main', 'runner': str(tmp_path / '.graphtraj/runner')}
+    ClaudeRuntimeAdapter().send_host_event(connection, {'kind': 'member-result'})
+    notices, _ = pending_notices(core / 'runner', 'claude', 'claude-main')
+    assert [notice['event'] for notice in notices] == [{'kind': 'member-result'}]
+    assert not (tmp_path / '.graphtraj/runner').exists()

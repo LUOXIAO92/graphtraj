@@ -18,8 +18,10 @@ from agent_swarm.sessions.archive import SessionArchive, JsonlSessionStore
 from agent_swarm.sessions.protocol import native_record
 from graphtraj.sessions.storage import SessionStore
 from graphtraj.configuration.project_configuration import load_project_configuration
+from graphtraj.execution.main_continuity import claims
 from graphtraj.workspace.migration_snapshot import MANIFEST, source_map
 from graphtraj.workspace.session_migration import _source_order
+from graphtraj.workspace.task_migration import foreign_entries
 
 
 def _legacy_registrations(
@@ -152,7 +154,11 @@ def migrate_agents(
     archives = sorted((configuration.state / 'sessions').glob('*/session.sqlite3'))
     root = cwd / '.graphtraj/swarm'
     sources = manifest['sources']
-    if main_session and not any(item.get('kind') == 'main' and item.get('session') == main_session for item in sources):
+    # A Claude/Pi/DSH Main has no Codex completion binding; its retained
+    # continuity claim is the Main record (main_continuity).
+    claimed = {record['session'] for record in claims(cwd / '.graphtraj/migration-runner')}
+    if main_session and main_session not in claimed and not any(
+            item.get('kind') == 'main' and item.get('session') == main_session for item in sources):
         raise ValueError('The supplied current Main identity has no retained Main binding in this snapshot.')
     if sessions:
         sources = [item for item in sources
@@ -171,6 +177,7 @@ def migrate_agents(
               'archive_root': str(root), 'sqlite_archives': len(archives),
               'sources': sources, 'missing_links': manifest.get('missing_links', []),
               'git_worktree_consistency': manifest.get('git_worktrees_unchanged'),
+              'foreign_entries': foreign_entries(configuration.state / 'tasks'),
               'legacy_native_registrations': _legacy_registrations(cwd, manifest, sources, available, main_session),
               'production_cutover': False}
     if preview:

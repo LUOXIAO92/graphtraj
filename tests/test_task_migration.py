@@ -78,11 +78,13 @@ def test_migration_converts_structure_and_keeps_text_and_identity(
     installed_commands: InstalledCommands, tmp_path: Path,
 ) -> None:
     paths  = _ticket_project(tmp_path)
+    (tmp_path / ".graphtraj/state/tickets/.claude/.cc-writes").mkdir(parents=True)
     before = _snapshot(tmp_path)
 
     result = _migrate(installed_commands, tmp_path)
     assert result.returncode == 0, result.stderr
     assert yaml.safe_load(result.stdout)["backup"].startswith(".graphtraj/backups/")
+    assert yaml.safe_load(result.stdout)["foreign_entries"] == [".claude"]
     assert _migrate(installed_commands, tmp_path).returncode != 0
 
     graph = run_process([str(installed_commands.product), "task", "graph", "--view", "full",

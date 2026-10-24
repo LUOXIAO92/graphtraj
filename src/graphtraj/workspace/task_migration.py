@@ -184,7 +184,8 @@ def migrate_project(cwd: Path, *, preview: bool = False) -> dict[str, Any]:
         _restore(backup, state, runner, links)
         raise
     return {"backup": backup.relative_to(harness).as_posix(), "converted": dict(counts),
-            "sessions": archived, "tasks": len(graph["tasks"]), "graph": graph}
+            "sessions": archived, "tasks": len(graph["tasks"]), "graph": graph,
+            "foreign_entries": foreign_entries(state / "tasks")}
 
 
 def restore_project(cwd: Path, backup: Path) -> dict[str, str]:

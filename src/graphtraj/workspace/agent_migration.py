@@ -18,7 +18,7 @@ from agent_swarm.sessions.archive import SessionArchive, JsonlSessionStore
 from agent_swarm.sessions.protocol import native_record
 from graphtraj.sessions.storage import SessionStore
 from graphtraj.configuration.project_configuration import load_project_configuration
-from graphtraj.execution.main_continuity import claims
+from graphtraj.execution.main_continuity import current_main
 from graphtraj.workspace.migration_snapshot import MANIFEST, source_map
 from graphtraj.workspace.session_migration import _source_order
 from graphtraj.workspace.task_migration import foreign_entries
@@ -30,6 +30,7 @@ def _legacy_registrations(
     sources: list[dict],
     available: dict[str, Path],
     main_session: str | None,
+    claimed_main: dict | None = None,
 ) -> dict:
     """Inventory associated headers and binding facts, without exposing bodies.
 
@@ -117,6 +118,16 @@ def _legacy_registrations(
             except (OSError, ValueError, TypeError):
                 entry['missing'] = 'Copied header unavailable, invalid, or identity does not match.'
         result.append(entry)
+    if claimed_main is not None and not any(entry['session'] == claimed_main['session'] for entry in result):
+        # The current Main known only by its continuity claim (no completion binding).
+        result.append({'runtime': claimed_main['runtime'], 'session': claimed_main['session'], 'agent': None,
+                       'group': 'current_main', 'bindings': [{'reference': 'main-sessions/continuity.jsonl',
+                                                              'agent': None, 'retired': False, 'current': True,
+                                                              'continuation_settings': False}],
+                       'tools': [], 'resume_prerequisites': False, 'duplicate_status': 'unknown',
+                       'confirmed_live_duplicate': False, 'retained_current_root_owners': [],
+                       'current_interactive_main': True,
+                       'missing': 'This Runtime does not retain its tool registry in the captured Session header.'})
     counts = {}
     for entry in result:
         key = entry['group']
@@ -154,10 +165,12 @@ def migrate_agents(
     archives = sorted((configuration.state / 'sessions').glob('*/session.sqlite3'))
     root = cwd / '.graphtraj/swarm'
     sources = manifest['sources']
-    # A Claude/Pi/DSH Main has no Codex completion binding; its retained
-    # continuity claim is the Main record (main_continuity).
-    claimed = {record['session'] for record in claims(cwd / '.graphtraj/migration-runner')}
-    if main_session and main_session not in claimed and not any(
+    # A Claude/Pi/DSH Main has no Codex completion binding; only the current
+    # continuity claim (main_continuity) identifies it as the current Main.
+    backup = cwd / '.graphtraj/core/backups/before-agent-partition/runner'
+    current = current_main(backup if backup.is_dir() else cwd / '.graphtraj/migration-runner')
+    claimed = current if current is not None and current['session'] == main_session else None
+    if main_session and claimed is None and not any(
             item.get('kind') == 'main' and item.get('session') == main_session for item in sources):
         raise ValueError('The supplied current Main identity has no retained Main binding in this snapshot.')
     if sessions:
@@ -178,7 +191,7 @@ def migrate_agents(
               'sources': sources, 'missing_links': manifest.get('missing_links', []),
               'git_worktree_consistency': manifest.get('git_worktrees_unchanged'),
               'foreign_entries': foreign_entries(configuration.state / 'tasks'),
-              'legacy_native_registrations': _legacy_registrations(cwd, manifest, sources, available, main_session),
+              'legacy_native_registrations': _legacy_registrations(cwd, manifest, sources, available, main_session, claimed),
               'production_cutover': False}
     if preview:
         return report

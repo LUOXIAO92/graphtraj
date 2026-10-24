@@ -188,6 +188,9 @@ def _claude_continuations(root: Path, worktrees: dict[str, str]) -> list[dict]:
 
     The native home is the one recorded for the Session's launch, else the
     same CLAUDE_CONFIG_DIR / ~/.claude default the Claude Adapter applies.
+    Both cwd spellings are compared by real path; the new cwd keeps Git's
+    registered spelling. A Claude record that cannot be planned is a listed gap.
+    Retired and handed-over trace records are not scanned; they are not resumed.
     """
     default = os.environ.get('CLAUDE_CONFIG_DIR', str(Path.home() / '.claude'))
     candidates = []
@@ -196,53 +199,85 @@ def _claude_continuations(root: Path, worktrees: dict[str, str]) -> list[dict]:
         launch_path = path.parent / 'launch.yml'
         launch = yaml.safe_load(launch_path.read_text()) if launch_path.is_file() else None
         request = (launch or {}).get('adapter_request') or {}
-        candidates.append((mapping.get('runtime'), [mapping.get('session')],
+        candidates.append((str(path), mapping.get('runtime'), [mapping.get('session')],
                            mapping.get('worktree_path') or request.get('worktree_path'), request.get('runtime_home')))
     for path in (root / '.graphtraj/swarm/control/agents').glob('*.json'):
         record = json.loads(path.read_text())
         settings = record.get('settings') or {}
         request = settings.get('adapter_request') or settings
-        candidates.append((record.get('runtime'), record.get('sessions') or [record.get('session')],
+        candidates.append((str(path), record.get('runtime'), record.get('sessions') or [record.get('session')],
                            settings.get('cwd') or request.get('worktree_path'), request.get('runtime_home')))
+    moved = {os.path.realpath(old): new for old, new in worktrees.items()}
     planned, seen = [], set()
-    for runtime, sessions, cwd, home in candidates:
-        if runtime != 'claude' or not isinstance(cwd, str):
+    for reference, runtime, sessions, cwd, home in candidates:
+        if runtime != 'claude':
             continue
-        for old, new in worktrees.items():
-            if cwd == old or cwd.startswith(old + '/'):
-                for session in sessions:
-                    key = (str(home or default), session, cwd)
-                    if isinstance(session, str) and session and key not in seen:
-                        seen.add(key)
-                        planned.append({'runtime': 'claude', 'session': session, 'home': key[0],
-                                        'old': cwd, 'new': new + cwd[len(old):]})
+        if not isinstance(cwd, str) or not cwd:
+            planned.append({'runtime': 'claude', 'session': next((item for item in sessions if item), None),
+                            'old': None, 'new': None, 'status': 'unplanned', 'record': reference,
+                            'reason': 'The Claude record has no cwd; its native continuation cannot be planned.'})
+            continue
+        real = os.path.realpath(cwd)
+        for old, new in moved.items():
+            if real != old and not real.startswith(old + '/'):
+                continue
+            target = new + real[len(old):]
+            if not any(isinstance(session, str) and session for session in sessions):
+                planned.append({'runtime': 'claude', 'session': None, 'old': cwd, 'new': target,
+                                'status': 'unplanned', 'record': reference,
+                                'reason': 'The Claude record has no native Session identity.'})
+            for session in sessions:
+                key = (str(home or default), session, cwd)
+                if isinstance(session, str) and session and key not in seen:
+                    seen.add(key)
+                    planned.append({'runtime': 'claude', 'session': session, 'home': key[0],
+                                    'old': cwd, 'new': target})
     return planned
 
 
-def _copy_continuation(item: dict) -> dict:
-    """Add the native Session under its new cwd; never replace or move the original."""
+def _digests(directory: Path, names: list[str]) -> dict[str, str]:
+    """Digest each regular file of these Session entries, keyed relative to the project directory."""
+    result = {}
+    for name in names:
+        entry = directory / name
+        for path in ([entry] if entry.is_file() else entry.rglob('*')):
+            if path.is_file() and not path.is_symlink():
+                with path.open('rb') as stream:
+                    result[path.relative_to(directory).as_posix()] = hashlib.file_digest(stream, 'sha256').hexdigest()
+    return result
+
+
+def _copy_continuation(item: dict, continuations: list[dict]) -> None:
+    """Add the native Session under its new cwd; never replace or move the original.
+
+    The entry is recorded before any write, so a failed copy or digest is
+    removed by the same rollback that removes completed copies.
+    """
     home = Path(item['home'])
-    source, target = _claude_project(home, item['old']), _claude_project(home, item['new'])
+    source = _claude_project(home, item['old'])
+    if not source.is_dir():
+        source = _claude_project(home, os.path.realpath(item['old']))
+    target = _claude_project(home, item['new'])
     names = [name for name in (item['session'] + '.jsonl', item['session']) if (source / name).exists()]
     if not names:
-        return {**item, 'status': 'missing', 'reason': 'No native transcript under the original cwd.'}
+        continuations.append({**item, 'status': 'missing', 'reason': 'No native transcript under the original cwd.'})
+        return
     if any((target / name).exists() for name in names):
-        return {**item, 'status': 'existing', 'reason': 'The new cwd already has this Session; nothing replaced.'}
-    created = [str(directory) for directory in (target.parent, target) if not directory.exists()]
+        same = _digests(source, names) == _digests(target, names)
+        continuations.append({**item, 'status': 'existing' if same else 'conflict', 'reason': (
+            'The new cwd already has this identical Session; nothing replaced.' if same else
+            'The new cwd has a different record for this Session; it was not replaced or verified.')})
+        return
+    entry = {**item, 'status': 'copied', 'copies': [str(target / name) for name in names], 'files': {},
+             'created': [str(directory) for directory in (target.parent, target) if not directory.exists()]}
+    continuations.append(entry)
     target.mkdir(parents=True, exist_ok=True)
-    copied = {}
     for name in names:
         if (source / name).is_dir():
             shutil.copytree(source / name, target / name, symlinks=True)
-            files = [path for path in (target / name).rglob('*') if path.is_file() and not path.is_symlink()]
         else:
             shutil.copy2(source / name, target / name)
-            files = [target / name]
-        for path in files:
-            with path.open('rb') as stream:
-                copied[str(path)] = hashlib.file_digest(stream, 'sha256').hexdigest()
-    return {**item, 'status': 'copied', 'copies': [str(target / name) for name in names],
-            'files': copied, 'created': created}
+    entry['files'] = {str(target / path): digest for path, digest in _digests(target, names).items()}
 
 
 def _changed_copies(continuations: list[dict]) -> list[str]:
@@ -251,30 +286,25 @@ def _changed_copies(continuations: list[dict]) -> list[str]:
     for item in continuations:
         if item.get('status') != 'copied':
             continue
-        current = {}
-        for copy in map(Path, item['copies']):
-            for path in ([copy] if copy.is_file() else copy.rglob('*')):
-                if path.is_file() and not path.is_symlink():
-                    with path.open('rb') as stream:
-                        current[str(path)] = hashlib.file_digest(stream, 'sha256').hexdigest()
+        target = Path(item['copies'][0]).parent
+        current = {str(target / path): digest
+                   for path, digest in _digests(target, [Path(copy).name for copy in item['copies']]).items()}
         changed += sorted(path for path in current.keys() | item['files'].keys()
                           if current.get(path) != item['files'].get(path))
     return changed
 
 
 def _remove_copies(continuations: list[dict]) -> None:
-    """Remove only this cutover's unchanged copies and the directories it created."""
-    for item in continuations:
-        if item.get('status') != 'copied':
-            continue
-        for copy in map(Path, item['copies']):
-            if copy.is_dir() and not copy.is_symlink():
-                shutil.rmtree(copy)
-            else:
-                copy.unlink(missing_ok=True)
-        for directory in map(Path, reversed(item['created'])):
-            if directory.is_dir() and not any(directory.iterdir()):
-                directory.rmdir()
+    """Remove only this cutover's copies, then the directories it created once empty."""
+    copied = [item for item in continuations if item.get('status') == 'copied']
+    for copy in (Path(copy) for item in copied for copy in item['copies']):
+        if copy.is_dir() and not copy.is_symlink():
+            shutil.rmtree(copy)
+        else:
+            copy.unlink(missing_ok=True)
+    for directory in sorted({Path(path) for item in copied for path in item['created']}, reverse=True):
+        if directory.is_dir() and not any(directory.iterdir()):
+            directory.rmdir()
 
 
 def _moved_role_grants(roles: Path, moves: dict[str, str]) -> list[dict]:
@@ -424,7 +454,10 @@ def cutover_project(
         # Claude Code finds a Session by its cwd; the moved worktree resumes it
         # from an added copy, and the original native record stays in place.
         for item in planned_continuations:
-            continuations.append(_copy_continuation(item))
+            if 'status' in item:
+                continuations.append(item)
+            else:
+                _copy_continuation(item, continuations)
         recovery['native_continuations'] = continuations
         shutil.copy2(staging / 'cutover-config.yml', data / 'core/config.yml')
         recovery['installed_facts'] = _facts([data / 'core/state', data / 'core/runner', data / 'swarm'])
@@ -456,12 +489,18 @@ def cutover_project(
             'role_read_paths_to_update': _moved_role_grants(data / 'core/roles.yml', moves),
             'native_continuations': [{key: item[key] for key in ('runtime', 'session', 'old', 'new', 'status')}
                                      for item in continuations],
+            'native_continuation_gaps': [{key: item.get(key) for key in ('session', 'old', 'status', 'reason')}
+                                         for item in continuations if item['status'] not in {'copied', 'existing'}],
             'native_missing': [item for item in imported['native_results'] if item.get('missing')],
             'native_resource_missing': native_missing,
             'missing_links': imported['missing_links'],
             'legacy_native_registrations': imported['legacy_native_registrations'],
             'legacy_codex_policy': 'Retained declarations remain visible; old calls fail and direct callers to MCP. Native history is unchanged and old business callbacks are not restored.',
-            'next': 'Use this same installed version. Native host trust and same-ID resume require their normal public entry; no host was started. Restore is available before new execution/state writes; afterward preserve and reconcile the new history.'}
+            'next': ('Use this same installed version. Every Main host already running before cutover, in any Runtime, '
+                     'must exit and enter again so it selects the core layout. Before starting or continuing any member, '
+                     'apply role_read_paths_to_update through role_organization. Native host trust and same-ID resume '
+                     'require their normal public entry; no host was started. Restore is available before new '
+                     'execution/state writes; afterward preserve and reconcile the new history.')}
 
 
 def restore_cutover(root: Path, backup: Path, *, writes_stopped: bool) -> dict:

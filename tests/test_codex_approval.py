@@ -439,7 +439,7 @@ def test_new_native_owner_refreshes_project_reads_from_old_request(
     assert permissions[str(history)] == 'read'
     assert permissions[str(native_home)] == 'none'
     assert str(unrelated) not in permissions
-    assert permissions[str(root / '.graphtraj')] == 'none'
+    assert permissions[str(root / '.graphtraj')] == 'read'
     assert permissions[':workspace_roots']['.'] == access
     assert actual['model_provider'] == config['model_provider']
 

@@ -170,7 +170,7 @@ def notify_direct_parent(
                 ),
             })
         elif mapping.get("parent_connection") is not None:
-            address = mapping["parent_connection"]
+            address = _current_main_address(runner_directory, mapping["parent_connection"])
             record["parent_connection"] = address
             # Once the parent's host takes the notice, await its own receipt:
             # a late receipt must not make retries forward the notice twice.
@@ -207,7 +207,8 @@ def deliver_execution_end(
     }, ensure_ascii=False)
     identity = {'type': terminal['outcome'], 'session': mapping['session'],
                 'execution_id': mapping.get('execution_id')}
-    if terminal['outcome'] == 'completed' and not parent_input and receipt_is_display_only(mapping):
+    if (terminal['outcome'] == 'completed' and not parent_input
+            and receipt_is_display_only(mapping, session_directory.parent.parent)):
         return retain_parent_receipt(session_directory, notice, identity)
     return deliver_parent_event(session_directory, notice, identity)
 
@@ -229,7 +230,8 @@ def retain_parent_receipt(
                               "event": identity["type"], "message": notice}, ensure_ascii=False),
     }
     if record["parent"] is None and mapping.get("parent_connection") is not None:
-        record["parent_connection"] = mapping["parent_connection"]
+        record["parent_connection"] = _current_main_address(
+            session_directory.parent.parent, mapping["parent_connection"])
     try:
         _append_notice_record(session_directory, record)
     except OSError:
@@ -237,15 +239,28 @@ def retain_parent_receipt(
     return record
 
 
-def receipt_is_display_only(mapping: Mapping[str, Any]) -> bool:
+def _current_main_address(runner_directory: Path, address: str | dict) -> str | dict:
+    """Deliver a root's notice to the Main now continuing its recorded Main.
+
+    The member's recorded ``parent_connection`` is never rewritten.
+    """
+    from graphtraj.execution.main_continuity import route_notice
+
+    return dict(route_notice(runner_directory, address)) if isinstance(address, dict) else address
+
+
+def receipt_is_display_only(mapping: Mapping[str, Any], runner_directory: Path) -> bool:
     """Whether an ordinary receipt to this Session's parent can be kept unsent.
 
     A Runner member parent sees it in the records and a Codex Main host shows
-    it at its next hook. Other hosts keep their current delivery.
+    it at its next hook. Other hosts keep their current delivery. A root's
+    receipt follows the Main now continuing it (``runner_directory``).
     """
     if isinstance(mapping.get("parent"), str):
         return True
     connection = mapping.get("parent_connection")
+    if isinstance(connection, Mapping):
+        connection = _current_main_address(runner_directory, dict(connection))
     return isinstance(connection, Mapping) and connection.get("runtime") == "codex"
 
 
@@ -367,16 +382,18 @@ def owned_root_undecided_results(harness_root: Path, connection: Mapping[str, An
 def _owned_roots(runner_directory: Path, connection: Mapping[str, Any]) -> list[tuple[str, dict]]:
     """Return the top-level Sessions whose recorded native owner is ``connection``.
 
-    Ownership follows ``is_direct_owner``; any unreadable record raises.
+    Ownership follows ``is_direct_owner``; the current Main also continues
+    roots of earlier Main Sessions. Any unreadable record raises.
     """
+    from graphtraj.execution.main_continuity import owns_main_root
+
     records, failures = _recorded_sessions(runner_directory)
     if failures:
         raise failures[0][1]
     return [
         (alias, mapping) for alias, mapping in sorted(records.items())
         if mapping.get('parent') is None and isinstance(mapping.get('parent_connection'), dict)
-        and all(mapping['parent_connection'].get(key) == connection.get(key)
-                for key in ('runtime', 'session', 'codex_home'))
+        and owns_main_root(runner_directory, mapping['parent_connection'], connection)
     ]
 
 

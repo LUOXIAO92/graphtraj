@@ -171,9 +171,70 @@ releasing the first prompt, and distinguishes an interrupt request from verified
 termination. Native helpers and background tasks are disabled for these children.
 Managed output and supported native Main hook records are collected into
 [project-local Session archives](examples/sessions/README.md#claude-collection).
-Collection does not install hooks or migrate existing history. Interactive
-Claude Main hosting and its replacement approval route are explicitly unavailable.
-Unknown approval capability fails closed.
+Collection does not install hooks or migrate existing history. Claude's native
+replacement approval route is explicitly unavailable. Unknown approval
+capability fails closed.
+
+### Continuing Main from any Runtime
+
+A project has one Main working state: the Main-owned root Agents and their
+hierarchy, pending notices and results, and the current summary scope. Each
+verified external Main Session, whether Codex, Claude Code, Pi or DSH, continues
+that state, so default `agents` status and `tasks` views show the existing members
+rather than an empty list. Continuation is a new associated record in
+`.graphtraj/runner/main-sessions/continuity.jsonl`; original Sessions, member
+identities and parents stay unchanged. Native subagents, GraphTraj members and
+completion checkers never become Main.
+
+Main is the one central dispatcher. A Main takes control at its native entry:
+a Codex `SessionStart` (startup, resume or clear), a Pi `session_start`
+(startup, new or resume) or a DSH `agent/created`; compaction, Pi `reload` and
+`fork` are not entries. Claude Code takes control at the first control call of
+each host process. Reads never take control. When another Main has continued
+the project, the earlier Session can still read status, but its control calls
+fail with `main-continued` naming the current Main. To continue Main there,
+start or resume it through its native entry; a Claude Code Session needs a new
+Claude Code process. Member events and results go to the current Main when its
+Runtime receives host events (Codex, Claude Code); a Pi or DSH Main keeps the
+existing delivery to each member's recorded owner.
+
+### Claude Code as Main
+
+The Claude Code host serves both `agents` and `tasks` from one project MCP
+server, with the same Agent view and control as a Codex Main (every Runtime,
+Task member Sessions) and Main authority for Task operations. A Claude Code
+plugin supplies each call's native Session. Print, or with `--write` write, the
+adoption material from the GraphTraj installation:
+
+```bash
+python -m graphtraj.runtimes.claude.host configuration --write \
+  --project /path/to/project --claude "$(command -v claude)"
+```
+
+It produces:
+
+- `.graphtraj/claude-host/config.json`: the host configuration naming the
+  Claude CLI that must launch the host directly;
+- `.mcp.json`: one `agents` server serving both tools (replace earlier
+  hand-made `graphtraj`/`agents` entries for this host);
+- `.claude/settings.local.json` `env`: `GRAPHTRAJ_CLAUDE_HOST_PYTHON` and
+  `GRAPHTRAJ_CLAUDE_HOST_CONFIG`;
+- the plugin `.claude/skills/graphtraj-claude-host/`, which Claude Code loads
+  at session start: `.claude-plugin/plugin.json`, `hooks/hooks.json`
+  (`{"modules": ["./host_context.mjs"]}`) and `hooks/host_context.mjs`.
+
+Check it with `claude plugin validate .claude/skills/graphtraj-claude-host`;
+`claude --plugin-dir <dir>` loads it for a temporary session. Claude Code's own
+project MCP approval and trust prompts decide adoption; GraphTraj trusts nothing
+itself. In a session, `/agents-context` shows the current Session, whether the
+`agents` and `tasks` entries are registered, and whether notice push is available.
+
+Member notices for this Main are appended to a durable per-Session queue in
+`.graphtraj/runner/main-sessions/inbox/`. The plugin submits them into the
+Main's turn or idle Session through Claude Code's prompt submission and
+acknowledges them only afterwards; until then they are also returned with the
+next `agents`/`tasks` result. Without prompt submission they arrive only with
+that next result.
 
 The execution host needs access to the chosen Runtime executable, credentials,
 project files and subprocess sandbox. Role permissions do not replace the

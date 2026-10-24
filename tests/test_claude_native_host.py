@@ -17,9 +17,9 @@ def test_progressive_mcp_consumes_current_context_once(tmp_path: Path) -> None:
 
     def bind(session: str, cwd: Path):
         """Record only the caller established outside the model request."""
-        def call(request: dict) -> AgentsResult:
-            invocations.append((session, cwd, request))
-            return AgentsResult({'native': session})
+        def call(tool: str, request: dict) -> AgentsResult:
+            invocations.append((tool, session, cwd, request))
+            return AgentsResult({'native': session, 'tool': tool})
         return call
 
     host = NativeCalls(bind, tmp_path)
@@ -27,14 +27,22 @@ def test_progressive_mcp_consumes_current_context_once(tmp_path: Path) -> None:
     with pytest.raises(AgentsError, match='No matching'):
         host.call(request)
     first, second = str(uuid4()), str(uuid4())
-    context = {'operation': 'prepare', 'session': first, 'cwd': str(tmp_path),
+    context = {'operation': 'prepare', 'tool': 'agents', 'session': first, 'cwd': str(tmp_path),
                'agent': None, 'request': request}
     host.context(context)
-    assert host.call(request).document == {'native': first}
+    assert host.call(request).document == {'native': first, 'tool': 'agents'}
     with pytest.raises(AgentsError, match='No matching'):
         host.call(request)
     host.context({**context, 'session': second})
-    assert host.call(request).document == {'native': second}
+    assert host.call(request).document == {'native': second, 'tool': 'agents'}
+    # One association serves only the entry it was prepared for.
+    host.context({**context, 'tool': 'tasks'})
+    with pytest.raises(AgentsError, match='No matching'):
+        host.call(request)
+    host.context({**context, 'tool': 'tasks'})
+    assert host.call(request, 'tasks').document == {'native': first, 'tool': 'tasks'}
+    with pytest.raises(AgentsError, match='agents or tasks'):
+        host.context({**context, 'tool': 'other'})
     host.context(context)
     with pytest.raises(AgentsError, match='No matching'):
         host.call({**request, 'arguments': {'caller': first}})
@@ -46,13 +54,13 @@ def test_progressive_mcp_consumes_current_context_once(tmp_path: Path) -> None:
     host.context({'operation': 'end'})
     with pytest.raises(AgentsError, match='No matching'):
         host.call(request)
-    assert len(invocations) == 2
+    assert len(invocations) == 3
 
     output = StringIO()
     serve(StringIO(json.dumps({'id': 1, 'method': 'tools/list'}) + '\n'), output,
           tmp_path, native_call=host.call)
     tools = json.loads(output.getvalue())['result']['tools']
-    assert [tool['name'] for tool in tools] == ['agents']
+    assert [tool['name'] for tool in tools] == ['agents', 'tasks']
     assert tools[0]['inputSchema']['properties']['action']['enum'] == ['discover', 'describe', 'execute']
     assert 'runtime' not in tools[0]['inputSchema']['properties']
 
@@ -110,3 +118,106 @@ def test_context_uses_owner_executable_when_launcher_updates(tmp_path: Path, mon
     with pytest.raises(AgentsError, match='observed_executable.*2.1.302'):
         host.main()
     assert len(received) == 1
+
+
+def test_mod_notice_operations_read_then_acknowledge(tmp_path: Path) -> None:
+    """The mod reads pending Main notices and acknowledges a position it was given."""
+    from graphtraj.execution.main_continuity import queue_notice
+
+    session = str(uuid4())
+    host = NativeCalls(lambda session, cwd: None, tmp_path, tmp_path)
+    queue_notice(tmp_path, {'runtime': 'claude', 'session': session}, {'alias': 'leader@l1'})
+    pending = host.context({'operation': 'notices', 'session': session})
+    assert [item['event']['alias'] for item in pending['notices']] == ['leader@l1']
+    assert host.context({'operation': 'notices', 'session': session})['notices'] == pending['notices']
+    host.context({'operation': 'acknowledge', 'session': session, 'position': pending['position']})
+    assert host.context({'operation': 'notices', 'session': session})['notices'] == []
+    with pytest.raises(AgentsError):
+        host.context({'operation': 'acknowledge', 'session': session, 'position': '1'})
+    with pytest.raises(ValueError):
+        host.context({'operation': 'notices', 'session': 'not-a-uuid'})
+
+
+def test_adoption_material_is_the_plugin_layout_and_keeps_settings(tmp_path: Path) -> None:
+    """configuration --write produces the plugin directory and merges existing JSON settings."""
+    from graphtraj.runtimes.claude.host import adoption_material, write_adoption
+
+    (tmp_path / '.claude').mkdir()
+    (tmp_path / '.claude/settings.local.json').write_text(json.dumps({'env': {'KEEP': '1'}, 'permissions': {'allow': []}}))
+    material = adoption_material(tmp_path, tmp_path / 'claude')
+    write_adoption(material)
+    plugin = tmp_path / '.claude/skills/graphtraj-claude-host'
+    assert json.loads((plugin / 'hooks/hooks.json').read_text()) == {'modules': ['./host_context.mjs']}
+    assert json.loads((plugin / '.claude-plugin/plugin.json').read_text())['name'] == 'graphtraj-claude-host'
+    assert 'export function register' in (plugin / 'hooks/host_context.mjs').read_text()
+    settings = json.loads((tmp_path / '.claude/settings.local.json').read_text())
+    assert settings['env']['KEEP'] == '1' and 'GRAPHTRAJ_CLAUDE_HOST_CONFIG' in settings['env']
+    assert settings['permissions'] == {'allow': []}
+    assert list(json.loads((tmp_path / '.mcp.json').read_text())['mcpServers']) == ['agents']
+
+
+def test_configured_launcher_survives_a_claude_update(tmp_path: Path, monkeypatch) -> None:
+    """The stored launcher is resolved at check time; other parents stay refused."""
+    from graphtraj.runtimes.claude import host
+
+    old, new, other = tmp_path / '2.1.306', tmp_path / '2.1.307', tmp_path / 'other-cli'
+    for path in (old, new, other):
+        path.touch()
+    launcher = tmp_path / 'claude'
+    launcher.symlink_to(old)
+    stored = Path(host.adoption_material(tmp_path, launcher)[str(tmp_path / '.graphtraj/claude-host/config.json')]['claude'])
+    assert stored == launcher
+
+    launcher.unlink()
+    launcher.symlink_to(new)  # Claude Code updated itself after configuration.
+    monkeypatch.setattr(host, 'process_executable', lambda pid: new)
+    assert host.native_parent(stored) > 1
+    monkeypatch.setattr(host, 'process_executable', lambda pid: other)
+    with pytest.raises(AgentsError, match='observed_executable.*other-cli'):
+        host.native_parent(stored)
+
+
+def test_host_survives_failing_task_operations(tmp_path: Path) -> None:
+    """A rejected or crashing operation is a tool error; later calls are still served."""
+    failures = iter([ValueError('Task 901 is already registered'), RuntimeError('boom')])
+
+    def call(request: dict, tool: str = 'agents') -> AgentsResult:
+        """Fail twice, then answer, like a Task write followed by a status read."""
+        failure = next(failures, None)
+        if failure is not None:
+            raise failure
+        return AgentsResult({'ok': tool})
+
+    request = {'action': 'execute', 'feature': 'task_register', 'arguments': {}}
+    lines = ''.join(json.dumps({'jsonrpc': '2.0', 'id': index, 'method': 'tools/call',
+                                'params': {'name': 'tasks', 'arguments': request}}) + '\n'
+                    for index in range(3))
+    output = StringIO()
+    serve(StringIO(lines), output, tmp_path, native_call=call)
+    replies = [json.loads(line)['result'] for line in output.getvalue().splitlines()]
+    assert [reply['isError'] for reply in replies] == [True, True, False]
+    assert replies[0]['structuredContent']['error'] == {'code': 'operation-failed',
+                                                       'message': 'Task 901 is already registered'}
+    assert replies[1]['structuredContent']['error']['code'] == 'internal-error'
+    assert replies[2]['structuredContent'] == {'ok': 'tasks'}
+
+
+def test_stray_output_never_reaches_the_mcp_channel(tmp_path: Path) -> None:
+    """Prints, subprocess output and stdin readers cannot touch the reserved MCP stdio."""
+    import subprocess
+    import sys
+
+    program = (
+        'import os, sys; from pathlib import Path\n'
+        'from graphtraj.runtimes.claude.host import isolate_stdio\n'
+        'mcp_in, mcp_out = isolate_stdio(Path(sys.argv[1]))\n'
+        'print("stray print"); os.system("echo stray subprocess; cat > /dev/null")\n'
+        'mcp_out.write(mcp_in.readline().upper()); mcp_out.flush()\n'
+    )
+    log = tmp_path / 'claude-host/host.log'
+    result = subprocess.run([sys.executable, '-c', program, str(log)], input='{"id": 1}\n',
+                            capture_output=True, text=True, timeout=20,
+                            env={**__import__('os').environ, 'PYTHONPATH': 'src'})
+    assert result.returncode == 0, result.stderr
+    assert result.stdout == '{"ID": 1}\n'
+    assert 'stray print' in log.read_text() and 'stray subprocess' in log.read_text()

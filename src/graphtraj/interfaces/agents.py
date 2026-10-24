@@ -93,10 +93,13 @@ class GraphTrajAgents:
     def __init__(self, root: Path, cwd: Path | None = None) -> None:
         """Bind the project, the core data root and the Adapter driver."""
         from graphtraj.execution.agent_driver import SUPPORTED_RUNTIMES, AdapterDriver
+        from graphtraj.execution.main_continuity import MainRoots
 
         self.root    = root
         driver       = AdapterDriver(root, cwd or root)
-        self.control = AgentControl(swarm_root(root), {name: driver for name in SUPPORTED_RUNTIMES})
+        # Every verified Main continues the roots of the project's Main.
+        self.control = AgentControl(swarm_root(root), {name: driver for name in SUPPORTED_RUNTIMES},
+                                    roots=MainRoots(root / ".graphtraj" / "runner"))
         default_config(swarm_root(root), save_normalized_sessions=True)
 
     def operate(self, action: str, arguments: Mapping[str, Any], binding: Binding) -> Outcome:
@@ -104,6 +107,10 @@ class GraphTrajAgents:
         agent = arguments.get("agent")
         try:
             member = self._member_alias(agent)
+            core = member is None and (action == "create" or (agent or "").startswith(AGENT_PREFIX))
+            if not core and action not in {"status", "wait"} and binding.caller.agent is None:
+                # A continued Main controls no Task member either.
+                self.control.roots.require_control(binding.caller)
             if member is not None:
                 # A Task member's core reference uses its existing Session controls.
                 outcome = self._operate(action, {**arguments, "agent": member})

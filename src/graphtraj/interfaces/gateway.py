@@ -107,6 +107,10 @@ def handle_request(
     except ValueError as error:
         return ToolResult({"feature": feature, "error": str(error)}, failed=True)
 
+    # One shared single-Main-controller check for every CLI/MCP host.
+    from graphtraj.execution.main_continuity import require_feature_control
+
+    require_feature_control(feature, cwd)
     if "cwd" in signature(tool.handler).parameters:
         return tool.handler(request["arguments"], cwd=cwd)
     return tool.handler(request["arguments"])

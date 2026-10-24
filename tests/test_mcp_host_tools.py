@@ -201,19 +201,30 @@ def _started_mcp(
 def _associate_native_mains(
     commands: InstalledCommands, root: Path, environment: dict[str, str],
 ) -> None:
-    """Enter the controlled Main peers through the real SessionStart carrier."""
-    for session in environment['PEER_MAIN_THREADS'].split(','):
-        rollout = root / (session + '.jsonl')
-        rollout.write_text(json.dumps({'type': 'session_meta', 'payload': {
-            'id': session, 'source': 'cli',
-        }}) + '\n')
-        result = subprocess.run([
-            str(commands.product.with_name('python')), '-m', 'graphtraj.runtimes.codex.stop_hook',
-        ], cwd=root, env=environment, input=json.dumps({
-            'hook_event_name': 'SessionStart', 'source': 'startup', 'cwd': str(root),
-            'session_id': session + '-hook', 'transcript_path': str(rollout),
-        }), capture_output=True, text=True, timeout=20)
-        assert result.returncode == 0 and 'continue' not in json.loads(result.stdout), result.stdout + result.stderr
+    """Enter the controlled Main peers through the real SessionStart carrier.
+
+    The first listed thread enters last, so it is the Main currently holding
+    control; the others remain verified Mains that may read.
+    """
+    for session in reversed(environment['PEER_MAIN_THREADS'].split(',')):
+        _enter_native_main(commands, root, environment, session)
+
+
+def _enter_native_main(
+    commands: InstalledCommands, root: Path, environment: dict[str, str], session: str,
+) -> None:
+    """Start or resume one controlled Main; it then continues the project's Main."""
+    rollout = root / (session + '.jsonl')
+    rollout.write_text(json.dumps({'type': 'session_meta', 'payload': {
+        'id': session, 'source': 'cli',
+    }}) + '\n')
+    result = subprocess.run([
+        str(commands.product.with_name('python')), '-m', 'graphtraj.runtimes.codex.stop_hook',
+    ], cwd=root, env=environment, input=json.dumps({
+        'hook_event_name': 'SessionStart', 'source': 'startup', 'cwd': str(root),
+        'session_id': session + '-hook', 'transcript_path': str(rollout),
+    }), capture_output=True, text=True, timeout=20)
+    assert result.returncode == 0 and 'continue' not in json.loads(result.stdout), result.stdout + result.stderr
 
 
 def _stable_event(document: dict) -> dict:
@@ -1671,7 +1682,10 @@ def test_installed_mcp_server_returns_each_caller_its_own_stop(
     fake_codex: FakeCodex,
     tmp_path: Path,
 ) -> None:
-    """Two request identities served by one server do not cross-deliver."""
+    """Two request identities served by one server do not cross-deliver.
+
+    Each Main enters before it dispatches, continuing the project's Main.
+    """
 
     from test_execution_budgets import _budget_body
     from test_session_alias_control import _register_ready_task
@@ -1714,6 +1728,7 @@ def test_installed_mcp_server_returns_each_caller_its_own_stop(
 
     with _started_mcp(mcp_executable, harness, mcp_environment) as server:
         for task_id, thread_id in (("76", "thread-one"), ("77", "thread-two")):
+            _enter_native_main(installed_commands, harness, mcp_environment, thread_id)
             stopped = server.call(
                 "swarm", {"tasks": [tasks[task_id]]}, thread_id=thread_id
             )["result"]

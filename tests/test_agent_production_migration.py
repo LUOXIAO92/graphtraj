@@ -1,6 +1,7 @@
 """Public stopped cutover/recovery with actual Git worktrees and synthetic identities."""
 import json
 from pathlib import Path
+import re
 import subprocess
 import tomllib
 
@@ -343,3 +344,81 @@ def test_claude_main_notice_follows_the_installed_core_runner(tmp_path: Path) ->
     notices, _ = pending_notices(core / 'runner', 'claude', 'claude-main')
     assert [notice['event'] for notice in notices] == [{'kind': 'member-result'}]
     assert not (tmp_path / '.graphtraj/runner').exists()
+
+
+def claude_member(root: Path, worktree: Path, home: Path) -> tuple[Path, Path]:
+    """Retain a stopped Claude member whose native Session lives under its worktree cwd."""
+    directory = root / '.graphtraj/runner/sessions/claude@member'
+    directory.mkdir(parents=True)
+    mapping = {'alias': 'claude@member', 'runtime': 'claude', 'session': 'claude-native',
+               'parent': 'original-parent', 'worker_pid': 0, 'worktree_path': str(worktree),
+               'task_id': '1', 'team_generation': 1, 'role': 'engineer', 'runtime_pid': 0,
+               'trace_file': str(directory / 'stdout.jsonl')}
+    (directory / 'mapping.yml').write_text(yaml.safe_dump(mapping))
+    # No recorded runtime_home: the Adapter's CLAUDE_CONFIG_DIR default applies.
+    (directory / 'launch.yml').write_text(yaml.safe_dump({'runtime': 'claude', 'adapter_request': {
+        'worktree_path': str(worktree), 'resources': [str(root / '.graphtraj/state')]}}))
+    (directory / 'execution.yml').write_text('outcome: completed\nterminal_confirmed: true\n')
+    project = home / 'projects' / re.sub(r'[^A-Za-z0-9]', '-', str(worktree))
+    (project / 'claude-native/subagents').mkdir(parents=True)
+    (project / 'claude-native.jsonl').write_text('{"sessionId": "claude-native"}\n')
+    (project / 'claude-native/subagents/agent.jsonl').write_text('{"sub": true}\n')
+    return project, home / 'projects' / re.sub(r'[^A-Za-z0-9]', '-', str(root / '.graphtraj/core/worktrees/member'))
+
+
+def test_cutover_copies_claude_native_session_for_the_moved_cwd_and_restore_removes_it(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Same-ID resume finds the Session under the new cwd; the original is never moved."""
+    root = tmp_path / 'project'
+    worktree, _ = project(root)
+    home = tmp_path / 'claude-home'
+    monkeypatch.setenv('CLAUDE_CONFIG_DIR', str(home))
+    old, new = claude_member(root, worktree, home)
+    original = {path: path.read_bytes() for path in old.rglob('*') if path.is_file()}
+    monkeypatch.chdir(root)
+    runner = CliRunner()
+    for attempt in ('first', 'repeat'):
+        result = runner.invoke(main, ['migrate-agents', '--cutover', str(tmp_path / attempt), '--writes-stopped'])
+        assert result.exit_code == 0, result.output
+        report = yaml.safe_load(result.output)
+        assert report['native_continuations'] == [{'runtime': 'claude', 'session': 'claude-native',
+                                                   'old': str(worktree), 'new': str(root / '.graphtraj/core/worktrees/member'),
+                                                   'status': 'copied'}]
+        assert (new / 'claude-native.jsonl').read_bytes() == original[old / 'claude-native.jsonl']
+        assert (new / 'claude-native/subagents/agent.jsonl').is_file()
+        assert {path: path.read_bytes() for path in old.rglob('*') if path.is_file()} == original
+        if attempt == 'first':
+            # A Session continued under the new cwd is new history: recovery refuses.
+            (new / 'claude-native.jsonl').write_text('{"resumed": true}\n')
+            refused = runner.invoke(main, ['migrate-agents', '--restore', report['backup'], '--writes-stopped'])
+            assert refused.exit_code != 0 and 'continued under its new cwd' in refused.output
+            assert (new / 'claude-native.jsonl').read_text() == '{"resumed": true}\n'
+            (new / 'claude-native.jsonl').write_bytes(original[old / 'claude-native.jsonl'])
+        restored = runner.invoke(main, ['migrate-agents', '--restore', report['backup'], '--writes-stopped'])
+        assert restored.exit_code == 0, restored.output
+        assert not new.exists()
+        assert {path: path.read_bytes() for path in old.rglob('*') if path.is_file()} == original
+
+
+def test_cutover_never_replaces_an_existing_native_session_under_the_new_cwd(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An existing native record at the destination is reported and kept, also by restore."""
+    root = tmp_path / 'project'
+    worktree, _ = project(root)
+    home = tmp_path / 'claude-home'
+    monkeypatch.setenv('CLAUDE_CONFIG_DIR', str(home))
+    _, new = claude_member(root, worktree, home)
+    new.mkdir(parents=True)
+    (new / 'claude-native.jsonl').write_text('already here\n')
+    monkeypatch.chdir(root)
+    result = CliRunner().invoke(main, ['migrate-agents', '--cutover', str(tmp_path / 'input'), '--writes-stopped'])
+    assert result.exit_code == 0, result.output
+    report = yaml.safe_load(result.output)
+    assert [item['status'] for item in report['native_continuations']] == ['existing']
+    assert (new / 'claude-native.jsonl').read_text() == 'already here\n'
+    assert not (new / 'claude-native').exists()
+    restored = CliRunner().invoke(main, ['migrate-agents', '--restore', report['backup'], '--writes-stopped'])
+    assert restored.exit_code == 0, restored.output
+    assert (new / 'claude-native.jsonl').read_text() == 'already here\n'

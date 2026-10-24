@@ -5,6 +5,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import tomllib
@@ -177,6 +178,105 @@ def _restore_native_references(root: Path, manifest: dict, moves: dict[str, str]
             link.symlink_to(os.path.relpath(target, link.parent))
 
 
+def _claude_project(home: Path, cwd: str) -> Path:
+    """Claude Code keeps a cwd's Sessions in one directory named by its encoded path."""
+    return home / 'projects' / re.sub(r'[^A-Za-z0-9]', '-', cwd)
+
+
+def _claude_continuations(root: Path, worktrees: dict[str, str]) -> list[dict]:
+    """Plan each Claude Session whose cwd a moved worktree carries.
+
+    The native home is the one recorded for the Session's launch, else the
+    same CLAUDE_CONFIG_DIR / ~/.claude default the Claude Adapter applies.
+    """
+    default = os.environ.get('CLAUDE_CONFIG_DIR', str(Path.home() / '.claude'))
+    candidates = []
+    for path in runner_directory(root).glob('sessions/*/mapping.yml'):
+        mapping = yaml.safe_load(path.read_text()) or {}
+        launch_path = path.parent / 'launch.yml'
+        launch = yaml.safe_load(launch_path.read_text()) if launch_path.is_file() else None
+        request = (launch or {}).get('adapter_request') or {}
+        candidates.append((mapping.get('runtime'), [mapping.get('session')],
+                           mapping.get('worktree_path') or request.get('worktree_path'), request.get('runtime_home')))
+    for path in (root / '.graphtraj/swarm/control/agents').glob('*.json'):
+        record = json.loads(path.read_text())
+        settings = record.get('settings') or {}
+        request = settings.get('adapter_request') or settings
+        candidates.append((record.get('runtime'), record.get('sessions') or [record.get('session')],
+                           settings.get('cwd') or request.get('worktree_path'), request.get('runtime_home')))
+    planned, seen = [], set()
+    for runtime, sessions, cwd, home in candidates:
+        if runtime != 'claude' or not isinstance(cwd, str):
+            continue
+        for old, new in worktrees.items():
+            if cwd == old or cwd.startswith(old + '/'):
+                for session in sessions:
+                    key = (str(home or default), session, cwd)
+                    if isinstance(session, str) and session and key not in seen:
+                        seen.add(key)
+                        planned.append({'runtime': 'claude', 'session': session, 'home': key[0],
+                                        'old': cwd, 'new': new + cwd[len(old):]})
+    return planned
+
+
+def _copy_continuation(item: dict) -> dict:
+    """Add the native Session under its new cwd; never replace or move the original."""
+    home = Path(item['home'])
+    source, target = _claude_project(home, item['old']), _claude_project(home, item['new'])
+    names = [name for name in (item['session'] + '.jsonl', item['session']) if (source / name).exists()]
+    if not names:
+        return {**item, 'status': 'missing', 'reason': 'No native transcript under the original cwd.'}
+    if any((target / name).exists() for name in names):
+        return {**item, 'status': 'existing', 'reason': 'The new cwd already has this Session; nothing replaced.'}
+    created = [str(directory) for directory in (target.parent, target) if not directory.exists()]
+    target.mkdir(parents=True, exist_ok=True)
+    copied = {}
+    for name in names:
+        if (source / name).is_dir():
+            shutil.copytree(source / name, target / name, symlinks=True)
+            files = [path for path in (target / name).rglob('*') if path.is_file() and not path.is_symlink()]
+        else:
+            shutil.copy2(source / name, target / name)
+            files = [target / name]
+        for path in files:
+            with path.open('rb') as stream:
+                copied[str(path)] = hashlib.file_digest(stream, 'sha256').hexdigest()
+    return {**item, 'status': 'copied', 'copies': [str(target / name) for name in names],
+            'files': copied, 'created': created}
+
+
+def _changed_copies(continuations: list[dict]) -> list[str]:
+    """Name copied native files that changed or appeared since cutover."""
+    changed = []
+    for item in continuations:
+        if item.get('status') != 'copied':
+            continue
+        current = {}
+        for copy in map(Path, item['copies']):
+            for path in ([copy] if copy.is_file() else copy.rglob('*')):
+                if path.is_file() and not path.is_symlink():
+                    with path.open('rb') as stream:
+                        current[str(path)] = hashlib.file_digest(stream, 'sha256').hexdigest()
+        changed += sorted(path for path in current.keys() | item['files'].keys()
+                          if current.get(path) != item['files'].get(path))
+    return changed
+
+
+def _remove_copies(continuations: list[dict]) -> None:
+    """Remove only this cutover's unchanged copies and the directories it created."""
+    for item in continuations:
+        if item.get('status') != 'copied':
+            continue
+        for copy in map(Path, item['copies']):
+            if copy.is_dir() and not copy.is_symlink():
+                shutil.rmtree(copy)
+            else:
+                copy.unlink(missing_ok=True)
+        for directory in map(Path, reversed(item['created'])):
+            if directory.is_dir() and not any(directory.iterdir()):
+                directory.rmdir()
+
+
 def _moved_role_grants(roles: Path, moves: dict[str, str]) -> list[dict]:
     """Name authored read grants that still point at moved project data.
 
@@ -235,6 +335,7 @@ def cutover_project(
     for path in configuration.agent_worktrees.glob('*'):
         if path.is_dir() and not any(Path(old).is_relative_to(path) for old in worktrees):
             raise ValueError(f'An unregistered worktree directory needs native reconciliation before cutover: {path}')
+    planned_continuations = _claude_continuations(root, worktrees)
     snapshot_project(root, snapshot)
     manifest = yaml.safe_load((snapshot / MANIFEST).read_text())
     staging = snapshot.with_name(snapshot.name + '-cutover')
@@ -299,6 +400,7 @@ def cutover_project(
     _captured_unchanged(manifest)
     moved = []
     installed = []
+    continuations = []
     try:
         for old, saved in retained.items():
             Path(old).rename(saved)
@@ -319,11 +421,17 @@ def cutover_project(
             replacement = _references(resolved, moves, 'path')
             link.unlink()
             link.symlink_to(os.path.relpath(replacement, link.parent))
+        # Claude Code finds a Session by its cwd; the moved worktree resumes it
+        # from an added copy, and the original native record stays in place.
+        for item in planned_continuations:
+            continuations.append(_copy_continuation(item))
+        recovery['native_continuations'] = continuations
         shutil.copy2(staging / 'cutover-config.yml', data / 'core/config.yml')
         recovery['installed_facts'] = _facts([data / 'core/state', data / 'core/runner', data / 'swarm'])
         write_yaml_durably(backup / 'migration.yml', recovery)
     except BaseException:
         # Recovery uses the same retained manifest; do not discard failed data.
+        _remove_copies(continuations)
         for old, new in reversed(list(worktrees.items())):
             if Path(new).exists() and not Path(old).exists():
                 _git(configuration.project_root, 'worktree', 'move', new, old)
@@ -346,6 +454,8 @@ def cutover_project(
             'control_missing': control_missing,
             'foreign_entries': foreign_entries(data / 'core/state/tasks'),
             'role_read_paths_to_update': _moved_role_grants(data / 'core/roles.yml', moves),
+            'native_continuations': [{key: item[key] for key in ('runtime', 'session', 'old', 'new', 'status')}
+                                     for item in continuations],
             'native_missing': [item for item in imported['native_results'] if item.get('missing')],
             'native_resource_missing': native_missing,
             'missing_links': imported['missing_links'],
@@ -374,6 +484,9 @@ def restore_cutover(root: Path, backup: Path, *, writes_stopped: bool) -> dict:
         raise ValueError('An original destination is occupied; preserve it before recovery.')
     if any((backup / ('after-' + name)).exists() for name in ('core', 'swarm')):
         raise ValueError('Recovery evidence already exists; preserve it for diagnosis.')
+    continuations = record.get('native_continuations', [])
+    if _changed_copies(continuations):
+        raise ValueError('A native Session continued under its new cwd. Preserve and reconcile the new history before recovery; nothing was restored.')
     source = Path(record['source_repository'])
     _move_worktrees(source, {new: old for old, new in record['worktrees'].items()})
     for old, new in record['worktrees'].items():
@@ -386,5 +499,6 @@ def restore_cutover(root: Path, backup: Path, *, writes_stopped: bool) -> dict:
         (root / '.graphtraj' / name).rename(backup / ('after-' + name))
     for old, saved in record['originals'].items():
         Path(saved).rename(old)
+    _remove_copies(continuations)
     return {'restored': str(backup), 'retained_after_cutover': str(backup / 'after-core'),
             'next': 'Keep writers stopped until the matching previous installation and native host entry are selected.'}

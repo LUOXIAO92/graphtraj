@@ -627,15 +627,20 @@ def swarm_agent(
 GONE_PID = 2**31 - 2
 
 
+@pytest.mark.parametrize('code', ['owner-exited', 'RUNTIME_WORKER_FAILED'])
 def test_owner_exited_swarm_execution_moves_with_relocated_settings_and_unchanged_executions(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, code: str,
 ) -> None:
-    """Cutover carries an owner-exited execution whose processes are gone, still unconfirmed."""
+    """Cutover carries an approved unconfirmed end whose processes are gone, still unconfirmed.
+
+    RUNTIME_WORKER_FAILED is the production shape (B+): a dead worker and no recorded Runtime.
+    """
     from agent_swarm import AgentControl, AgentsError, Caller
 
     root = tmp_path / 'project'
     worktree, _ = project(root)
-    path = swarm_agent(root, worktree, 'exited', worker_pid=GONE_PID)
+    failed = code == 'RUNTIME_WORKER_FAILED'
+    path = swarm_agent(root, worktree, 'exited', worker_pid=GONE_PID, code=code, runtime_pid=None if failed else -1)
     before = json.loads(path.read_text())['executions']
     # The public control keeps refusing to configure an unconfirmed execution.
     shutil.copytree(root / '.graphtraj/swarm', tmp_path / 'public-swarm')
@@ -646,10 +651,13 @@ def test_owner_exited_swarm_execution_moves_with_relocated_settings_and_unchange
     result = CliRunner().invoke(main, ['migrate-agents', '--cutover', str(tmp_path / 'input'), '--writes-stopped'])
     assert result.exit_code == 0, result.output
     report = yaml.safe_load(result.output)
-    assert report['unconfirmed_swarm_executions'] == [{
-        'agent': 'exited', 'execution': 'exited-run', 'error_code': 'owner-exited', 'worker_pid': GONE_PID,
-        'runtime_pid': GONE_PID + 1, 'worker_alive': False, 'runtime_alive': False,
-        'terminal_confirmed': 'retained false; not confirmed by cutover'}]
+    expected = {'agent': 'exited', 'execution': 'exited-run', 'error_code': code, 'worker_pid': GONE_PID,
+                'runtime_pid': GONE_PID + 1, 'worker_alive': False, 'runtime_alive': False,
+                'terminal_confirmed': 'retained false; not confirmed by cutover'}
+    if failed:
+        expected.update(runtime_pid=None, runtime_alive=None, runtime_note=(
+            'runtime_pid was never recorded; whether a Runtime started cannot be verified.'))
+    assert report['unconfirmed_swarm_executions'] == [expected]
     installed = json.loads(path.read_text())
     new = str(root / '.graphtraj/core/worktrees/member')
     assert installed['settings'] == {'cwd': new, 'adapter_request': {'cwd': new, 'approval_policy': 'on-request'}}
@@ -657,7 +665,7 @@ def test_owner_exited_swarm_execution_moves_with_relocated_settings_and_unchange
     assert installed['executions'][0]['terminal_confirmed'] is False
 
 
-@pytest.mark.parametrize('case', ['alive', 'not-owner-exited', 'worker-failed'])
+@pytest.mark.parametrize('case', ['alive', 'not-owner-exited', 'worker-failed-runtime-alive'])
 def test_other_unconfirmed_swarm_executions_still_block_cutover(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, case: str,
 ) -> None:
@@ -666,11 +674,11 @@ def test_other_unconfirmed_swarm_executions_still_block_cutover(
 
     root = tmp_path / 'project'
     worktree, _ = project(root)
-    # worker-failed is the production shape outside scheme B: dead worker, runtime_pid never recorded.
+    # Any other error code, or a recorded Runtime that is still alive, stays a blocker.
     swarm_agent(root, worktree, 'blocked', worker_pid=os.getpid() if case == 'alive' else GONE_PID,
                 code={'alive': 'owner-exited', 'not-owner-exited': 'runtime-error',
-                      'worker-failed': 'RUNTIME_WORKER_FAILED'}[case],
-                runtime_pid=None if case == 'worker-failed' else -1)
+                      'worker-failed-runtime-alive': 'RUNTIME_WORKER_FAILED'}[case],
+                runtime_pid=os.getpid() if case == 'worker-failed-runtime-alive' else -1)
     monkeypatch.chdir(root)
     result = CliRunner().invoke(main, ['migrate-agents', '--cutover', str(tmp_path / 'input'), '--writes-stopped'])
     assert result.exit_code != 0 and 'Stop and confirm the Agent before cutover: blocked' in result.output
@@ -696,8 +704,8 @@ def test_check_stopped_lists_every_blocker_and_accepted_gap_without_writing(
     result = CliRunner().invoke(main, ['migrate-agents', '--check-stopped'])
     assert result.exit_code == 0, result.output
     facts = yaml.safe_load(result.output)
-    assert [item.get('runner') or item.get('swarm') for item in facts['blocking']] == ['old@member', 'live', 'worker-failed']
-    assert [item['agent'] for item in facts['unconfirmed_swarm_executions']] == ['exited']
+    assert [item.get('runner') or item.get('swarm') for item in facts['blocking']] == ['old@member', 'live']
+    assert [item['agent'] for item in facts['unconfirmed_swarm_executions']] == ['exited', 'worker-failed']
     assert tree() == before
     refused = CliRunner().invoke(main, ['migrate-agents', '--cutover', str(tmp_path / 'input'), '--writes-stopped'])
-    assert refused.exit_code != 0 and '2 more; list them with migrate-agents --check-stopped' in refused.output
+    assert refused.exit_code != 0 and '1 more; list them with migrate-agents --check-stopped' in refused.output

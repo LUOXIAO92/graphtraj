@@ -40,20 +40,25 @@ def _terminal_confirmed(turn_file: Path) -> bool:
     return True
 
 
-def _carried_unconfirmed(execution: dict) -> bool:
-    """The single rule for which unconfirmed swarm end cutover may carry (user-approved scheme B).
+# agent_swarm ends whose owner or worker vanished without a recorded end
+# (user-approved scheme B: owner-exited; B+: RUNTIME_WORKER_FAILED).
+CARRIED_UNCONFIRMED_CODES = frozenset({'owner-exited', 'RUNTIME_WORKER_FAILED'})
 
-    Only agent_swarm's owner-exited reconciliation, with a recorded worker, and
-    its worker and Runtime processes rechecked as gone now. A process that
-    cannot be checked counts as alive. Widening the accepted ends changes only
-    this function.
+
+def _carried_unconfirmed(execution: dict) -> bool:
+    """The single rule for which unconfirmed swarm end cutover may carry.
+
+    The end must be one of the approved error codes with a recorded worker,
+    and the worker and any recorded Runtime process must be rechecked as gone
+    now. A process that cannot be checked counts as alive. A Runtime that was
+    never recorded cannot be checked; it is reported, not assumed to exist.
     """
     from agent_swarm.control import _alive
 
     process = execution.get('process') or {}
     worker = process.get('worker_pid')
     return (execution.get('state') == 'ended' and execution.get('terminal_confirmed') is False
-            and (execution.get('error') or {}).get('code') == 'owner-exited'
+            and (execution.get('error') or {}).get('code') in CARRIED_UNCONFIRMED_CODES
             and isinstance(worker, int) and not isinstance(worker, bool) and worker > 0
             and not _alive(worker) and not _alive(process.get('runtime_pid')))
 
@@ -66,10 +71,14 @@ def _owner_exited(agent: str, execution: dict) -> dict | None:
     if not _carried_unconfirmed(execution):
         return None
     process = execution['process']
-    return {'agent': agent, 'execution': execution.get('id'), 'error_code': execution['error']['code'],
-            'worker_pid': process['worker_pid'], 'runtime_pid': process.get('runtime_pid'),
-            'worker_alive': False, 'runtime_alive': False,
-            'terminal_confirmed': 'retained false; not confirmed by cutover'}
+    entry = {'agent': agent, 'execution': execution.get('id'), 'error_code': execution['error']['code'],
+             'worker_pid': process['worker_pid'], 'runtime_pid': process.get('runtime_pid'),
+             'worker_alive': False, 'runtime_alive': False,
+             'terminal_confirmed': 'retained false; not confirmed by cutover'}
+    if process.get('runtime_pid') is None:
+        entry['runtime_alive'] = None
+        entry['runtime_note'] = 'runtime_pid was never recorded; whether a Runtime started cannot be verified.'
+    return entry
 
 
 def stop_facts(root: Path) -> dict:

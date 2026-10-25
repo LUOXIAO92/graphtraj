@@ -92,14 +92,16 @@ class GraphTrajAgents:
 
     def __init__(self, root: Path, cwd: Path | None = None) -> None:
         """Bind the project, the core data root and the Adapter driver."""
+        from graphtraj.configuration.project_configuration import runner_directory
         from graphtraj.execution.agent_driver import SUPPORTED_RUNTIMES, AdapterDriver
         from graphtraj.execution.main_continuity import MainRoots
 
         self.root    = root
         driver       = AdapterDriver(root, cwd or root)
-        # Every verified Main continues the roots of the project's Main.
+        # Every verified Main continues the roots of the project's Main, whose
+        # claims live in the project's current Runner directory.
         self.control = AgentControl(swarm_root(root), {name: driver for name in SUPPORTED_RUNTIMES},
-                                    roots=MainRoots(root / ".graphtraj" / "runner"))
+                                    roots=MainRoots(runner_directory(root)))
         default_config(swarm_root(root), save_normalized_sessions=True)
 
     def operate(self, action: str, arguments: Mapping[str, Any], binding: Binding) -> Outcome:

@@ -392,12 +392,14 @@ def _decision_evidence(
     """Read the evidence a result decision may cite.
 
     A mapped decider may cite submitted or retained evidence, its own
-    reports, Task state records below ``tasks`` (member reports, integration
-    evidence and Main records) and files committed at the submitted
-    candidate. Any other path, such as Runner records, Session Trace
-    directories or uncommitted Worktree files, is refused. A caller without
-    a mapping (Main or the user) may cite any project file.
+    reports, project development records (Task state records below
+    ``tasks`` such as member reports, integration evidence and Main records,
+    the Project Worldline and Harness Project Documents) and files committed
+    at the submitted candidate. Any other path, such as Runner records,
+    Session Trace directories or uncommitted Worktree files, is refused. A
+    caller without a mapping (Main or the user) may cite any project file.
     """
+    from graphtraj.configuration.project_configuration import load_project_configuration
     from graphtraj.execution.runner_results import task_report_paths
 
     _validate_evidence(harness, references)
@@ -405,6 +407,7 @@ def _decision_evidence(
     mapping, _ = read_alias_mapping(runner, submission["alias"])
     worktree = Path(mapping["worktree_path"]).resolve()
     records  = tasks.resolve()
+    shared   = (tasks.parent.resolve() / "worldline", load_project_configuration(harness).docs.resolve())
     retained = [ref for event in events if event["event"] == "evidence-retained"
                 and event["caused_by_event_ids"] == [submission["event_id"]]
                 for ref in event["evidence_refs"]]
@@ -417,13 +420,14 @@ def _decision_evidence(
         path = (harness / reference).resolve()
         # Session Traces hold retained Runner records (settings, logs and
         # control files), which are not development records to cite.
-        record = (path.is_relative_to(records)
-                  and path.relative_to(records).parts[1:4:2] != ("teams", "traces"))
+        record = ((path.is_relative_to(records)
+                   and path.relative_to(records).parts[1:4:2] != ("teams", "traces"))
+                  or any(path.is_relative_to(directory) for directory in shared))
         if path in allowed or author is None or record:
             content = path.read_bytes()
         elif not path.is_relative_to(worktree):
             raise ValueError(
-                f'Decision evidence {reference} is neither a Task state record, '
+                f'Decision evidence {reference} is neither a project development record, '
                 f'submitted evidence nor a file of the submitted Worktree'
             )
         else:

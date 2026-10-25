@@ -453,6 +453,9 @@ def test_decision_cites_task_state_records_but_not_runner_or_unrelated_files(tmp
     runner_record.write_text('env: {}\n')
     (tmp_path / 'notes.txt').write_text('Unrelated\n')
     (tmp_path / 'worktrees/research/draft.md').write_text('Uncommitted\n')
+    (tmp_path / 'docs/specs').mkdir(parents=True)
+    (tmp_path / 'docs/specs/spec.md').write_text('Harness Project Document\n')
+    worldline = next((tmp_path / 'state/worldline').glob('*.jsonl'))
     decision = {'submission_id': submitted['event_id'], 'commit': commit,
                 'decision': 'rejected', 'reason': 'Needs a source comparison.'}
     before = read_worldline(tmp_path / 'state', tmp_path)
@@ -463,8 +466,12 @@ def test_decision_cites_task_state_records_but_not_runner_or_unrelated_files(tmp
                 tools.decide_result({**decision, 'evidence_refs': [
                     refused.relative_to(tmp_path).as_posix()]}, cwd=tmp_path)
             assert 'subpath' not in str(error.value)
+        with pytest.raises(ValueError, match='does not exist'):
+            tools.decide_result({**decision, 'evidence_refs': [
+                (task / 'integration-evidence').relative_to(tmp_path).as_posix()]}, cwd=tmp_path)
         assert read_worldline(tmp_path / 'state', tmp_path) == before
         cited = [Path(other.document['report']).relative_to(tmp_path).as_posix(),
-                 (task / 'integration-evidence/main-adoption.txt').relative_to(tmp_path).as_posix()]
+                 (task / 'integration-evidence/main-adoption.txt').relative_to(tmp_path).as_posix(),
+                 'docs/specs/spec.md', worldline.relative_to(tmp_path).as_posix()]
         decided = tools.decide_result({**decision, 'evidence_refs': cited}, cwd=tmp_path).document
     assert decided['event'] == 'team-round-implementation-rejected'

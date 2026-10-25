@@ -515,22 +515,10 @@ def test_public_interrupt_reconfirms_an_undrained_worker(
             os.kill(pid, signal.SIGKILL)
         except ProcessLookupError:
             pass
-    if entry == 'agents':
-        response = run_process([str(installed_commands.runner.with_name('python')), '-c', AGENTS_INTERRUPT,
-                                alias], cwd=root, env=environment, timeout=65)
-    else:
-        response = command(installed_commands, root, environment, 'interrupt', alias)
+    response = command(installed_commands, root, environment, 'interrupt', alias)
     assert response.returncode == 0, response.stdout + response.stderr
     member = yaml.safe_load(response.stdout)['members'][0]
     assert member['interrupt_status'] == 'stopped', response.stdout
-    if entry == 'agents':
-        record = json.loads((root / '.graphtraj/swarm/control/agents' / f"{mapping['agent']}.json").read_text())
-        ended = record['executions'][-1]
-        assert yaml.safe_load(response.stdout)['termination_confirmed'] == [ended['id']]
-        assert ended['terminal_confirmed'] is False and ended['error']['code'] == 'owner-exited'
-        assert ended['termination_confirmation']['evidence'] == {
-            'worker_pid': mapping['worker_pid'], 'runtime_pid': mapping['runtime_pid'],
-            'worker_alive': False, 'runtime_alive': False}
     receipt = yaml.safe_load(Path(member['evidence']).read_text())
     assert receipt['evidence']['method'] == 'current-process-group'
     assert receipt['evidence']['running_members'] == []

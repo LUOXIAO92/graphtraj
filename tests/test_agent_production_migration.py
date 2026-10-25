@@ -382,6 +382,9 @@ def test_cutover_copies_claude_native_session_for_the_moved_cwd_and_restore_remo
     original = {path: path.read_bytes() for path in old.rglob('*') if path.is_file()}
     monkeypatch.chdir(root)
     runner = CliRunner()
+    planned = yaml.safe_load(runner.invoke(main, ['migrate-agents', '--check-stopped']).output)['claude_continuations']
+    assert planned == [{'session': 'claude-native', 'old': str(worktree), 'new': str(root / '.graphtraj/core/worktrees/member'),
+                        'home': str(home), 'source_exists': True, 'target_exists': False}]
     for attempt in ('first', 'repeat'):
         result = runner.invoke(main, ['migrate-agents', '--cutover', str(tmp_path / attempt), '--writes-stopped'])
         assert result.exit_code == 0, result.output
@@ -736,21 +739,27 @@ def test_cutover_and_restore_move_a_nested_linked_worktree_with_its_outer_one(
     root = tmp_path / 'project'
     worktree, _ = project(root)
     nested = nested_worktree(root, worktree)
+    # A prunable worktree outside the moved root is left as it is.
+    outside = tmp_path / 'outside'
+    subprocess.run(['git', 'worktree', 'add', '-b', 'outside', str(outside)], cwd=root, check=True, capture_output=True)
+    shutil.rmtree(outside)
     new_outer = root / '.graphtraj/core/worktrees/member'
     new_nested = new_outer / 'build/nested'
     monkeypatch.chdir(root)
     runner = CliRunner()
     plan = yaml.safe_load(runner.invoke(main, ['migrate-agents', '--check-stopped']).output)['worktree_moves']
-    assert plan == [{'old': str(worktree), 'new': str(new_outer), 'git': 'worktree move'},
-                    {'old': str(nested), 'new': str(new_nested), 'git': 'repair after its outer worktree moves'}]
+    assert {entry['old']: (entry['action'], entry['new'], bool(entry['prunable'])) for entry in plan} == {
+        str(root): ('untouched', None, False), str(worktree): ('move', str(new_outer), False),
+        str(nested): ('repair', str(new_nested), False), str(outside): ('untouched', None, True)}
+    assert next(entry for entry in plan if entry['old'] == str(worktree))['links'] == {'.state': '../../state'}
     result = runner.invoke(main, ['migrate-agents', '--cutover', str(tmp_path / 'input'), '--writes-stopped'])
     assert result.exit_code == 0, result.output
-    assert registered(root) == {str(new_outer), str(new_nested)}
+    assert registered(root) == {str(new_outer), str(new_nested), str(outside)}
     assert clean(new_outer) and clean(new_nested)
     report = yaml.safe_load(result.output)
     restored = runner.invoke(main, ['migrate-agents', '--restore', report['backup'], '--writes-stopped'])
     assert restored.exit_code == 0, restored.output
-    assert registered(root) == {str(worktree), str(nested)}
+    assert registered(root) == {str(worktree), str(nested), str(outside)}
     assert clean(worktree) and clean(nested)
     assert (worktree / '.state').readlink() == Path('../../state')
 

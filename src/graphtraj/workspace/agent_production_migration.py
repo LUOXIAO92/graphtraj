@@ -116,17 +116,51 @@ def stop_facts(root: Path) -> dict:
             else:
                 owner_exited.append(accepted)
     configuration = load_project_configuration(root)
+    listing = _git(configuration.project_root, 'worktree', 'list', '--porcelain')
     try:
-        moves = _worktree_moves(configuration, root / '.graphtraj',
-                                _git(configuration.project_root, 'worktree', 'list', '--porcelain'))
+        moves = _worktree_moves(configuration, root / '.graphtraj', listing)
     except ValueError as error:
         blocking.append({'worktrees': str(configuration.agent_worktrees), 'message': str(error)})
         moves = {}
-    nested = _nested(moves)
-    plan = [{'old': old, 'new': new, 'git': 'repair after its outer worktree moves' if old in nested else 'worktree move'}
-            for old, new in moves.items()]
     return {'blocking': blocking, 'control_missing': unavailable, 'unconfirmed_swarm_executions': owner_exited,
-            'worktree_moves': plan}
+            'worktree_moves': _worktree_plan(listing, moves),
+            'claude_continuations': [_continuation_plan(item) for item in _claude_continuations(root, moves)]}
+
+
+def _worktree_plan(listing: str, moves: dict[str, str]) -> list[dict]:
+    """Show what cutover does to every registered worktree, read-only.
+
+    Worktrees outside the moved root (including prunable ones) stay untouched:
+    cutover never moves, repairs or prunes them.
+    """
+    nested = _nested(moves)
+    plan = []
+    for block in listing.strip().split('\n\n'):
+        lines = block.splitlines()
+        old = lines[0].removeprefix('worktree ')
+        prunable = next((line.removeprefix('prunable ') for line in lines if line.startswith('prunable')), False)
+        action = 'repair' if old in nested else 'move' if old in moves else 'untouched'
+        entry = {'old': old, 'new': moves.get(old), 'action': action, 'prunable': prunable}
+        if action != 'untouched':
+            entry['links'] = {name: os.readlink(Path(old) / name) for name in ('.state', 'CONTEXT.md', 'docs')
+                              if (Path(old) / name).is_symlink()}
+        plan.append(entry)
+    return plan
+
+
+def _continuation_plan(item: dict) -> dict:
+    """Show one planned Claude continuation copy and the files it would read and add."""
+    if 'status' in item:
+        return {key: item.get(key) for key in ('session', 'old', 'new', 'status', 'reason')}
+    home = Path(item['home'])
+    source = _claude_project(home, item['old'])
+    if not source.is_dir():
+        source = _claude_project(home, os.path.realpath(item['old']))
+    target = _claude_project(home, item['new'])
+    names = (item['session'] + '.jsonl', item['session'])
+    return {'session': item['session'], 'old': item['old'], 'new': item['new'], 'home': item['home'],
+            'source_exists': any((source / name).exists() for name in names),
+            'target_exists': any((target / name).exists() for name in names)}
 
 
 def _stopped(root: Path) -> dict:

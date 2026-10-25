@@ -250,7 +250,9 @@ def apply_delivery_state_request(
             submission, author, prior_acceptance = _validate_result_decision(
                 state_directory, harness_root, request, task, team_update, events,
             )
-            snapshots = _decision_evidence(harness_root, submission, author, request["evidence_refs"], events)
+            snapshots = _decision_evidence(
+                harness_root, tasks, submission, author, request["evidence_refs"], events,
+            )
             integration = task["status"] == "resolving-integration"
             if not integration:
                 task_update["current_candidate"] = submission["candidate"]
@@ -344,7 +346,11 @@ def apply_delivery_state_request(
                 (team_directory / "rounds" / str(round_ordinal + 1)).mkdir(parents=True)
             if close_round:
                 round_directory = team_directory / "rounds" / str(round_ordinal)
-                for path in ((*round_directory.iterdir(), round_directory) if round_directory.exists() else ()):
+                # Freeze the Round's reports. Hidden entries (a Runtime's
+                # ``.claude`` write marker) are foreign and stay untouched.
+                reports = ([path for path in round_directory.iterdir() if not path.name.startswith(".")]
+                           if round_directory.exists() else [])
+                for path in ((*reports, round_directory) if round_directory.exists() else ()):
                     previous_modes[path] = path.stat().st_mode & 0o777
                     path.chmod(0o444 if path != round_directory else 0o555)
         except Exception:
@@ -377,18 +383,28 @@ def apply_delivery_state_request(
 
 def _decision_evidence(
     harness: Path,
+    tasks: Path,
     submission: Mapping[str, Any],
     author: str | None,
     references: list[str],
     events: list[dict[str, Any]],
 ) -> list[tuple[str, bytes]]:
-    """Read only submitted or retained evidence, committed files, or the caller's own reports."""
+    """Read the evidence a result decision may cite.
+
+    A mapped decider may cite submitted or retained evidence, its own
+    reports, Task state records below ``tasks`` (member reports, integration
+    evidence and Main records) and files committed at the submitted
+    candidate. Any other path, such as Runner records, Session Trace
+    directories or uncommitted Worktree files, is refused. A caller without
+    a mapping (Main or the user) may cite any project file.
+    """
     from graphtraj.execution.runner_results import task_report_paths
 
     _validate_evidence(harness, references)
     runner = discover_runner_directory(harness)
     mapping, _ = read_alias_mapping(runner, submission["alias"])
     worktree = Path(mapping["worktree_path"]).resolve()
+    records  = tasks.resolve()
     retained = [ref for event in events if event["event"] == "evidence-retained"
                 and event["caused_by_event_ids"] == [submission["event_id"]]
                 for ref in event["evidence_refs"]]
@@ -399,8 +415,17 @@ def _decision_evidence(
     snapshots = []
     for reference in references:
         path = (harness / reference).resolve()
-        if path in allowed or author is None:
+        # Session Traces hold retained Runner records (settings, logs and
+        # control files), which are not development records to cite.
+        record = (path.is_relative_to(records)
+                  and path.relative_to(records).parts[1:4:2] != ("teams", "traces"))
+        if path in allowed or author is None or record:
             content = path.read_bytes()
+        elif not path.is_relative_to(worktree):
+            raise ValueError(
+                f'Decision evidence {reference} is neither a Task state record, '
+                f'submitted evidence nor a file of the submitted Worktree'
+            )
         else:
             relative = path.relative_to(worktree).as_posix()
             # Read committed bytes, so the evidence is tied to the judged version.

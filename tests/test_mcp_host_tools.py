@@ -697,14 +697,17 @@ def managed_mcp(
         yield managed
         mappings = list((root / ".graphtraj/runner/sessions").glob("*/mapping.yml"))
         for mapping in mappings:
-            # Leave no controlled execution running behind the fixture.
-            server.call('interrupt', {'agent': mapping.parent.name})
+            # Leave no controlled execution running behind the fixture. Only
+            # the direct parent may interrupt, so call as the dispatching Main.
+            managed.call('interrupt', {'agent': mapping.parent.name})
         _stop_remaining_workers(mappings)
 
 
 def _stop_remaining_workers(mappings: list[Path]) -> None:
-    """Confirm each recorded worker exited; stop and report any that did not."""
+    """Confirm each worker and Runtime exited in the stop window; stop and report others."""
     import signal
+
+    from graphtraj.execution.runner_process import OPERATION_TIMEOUT_SECONDS
 
     def alive(pid: int) -> bool:
         """Whether the recorded worker process still exists."""
@@ -714,18 +717,23 @@ def _stop_remaining_workers(mappings: list[Path]) -> None:
             return False
         return True
 
-    workers = [pid for pid in (yaml.safe_load(mapping.read_text()).get('worker_pid') for mapping in mappings)
+    records = [yaml.safe_load(mapping.read_text()) for mapping in mappings]
+    workers = [pid for record in records for pid in (record.get('worker_pid'), record.get('runtime_pid'))
                if isinstance(pid, int)]
-    deadline = time.monotonic() + 30
+    deadline = time.monotonic() + OPERATION_TIMEOUT_SECONDS
     while any(alive(pid) for pid in workers) and time.monotonic() < deadline:
         time.sleep(0.1)
     remaining = [pid for pid in workers if alive(pid)]
     for pid in remaining:
-        # The worker owns its native service in its own process group.
-        if os.getpgid(pid) == pid:
-            os.killpg(pid, signal.SIGTERM)
-        else:
-            os.kill(pid, signal.SIGTERM)
+        # The worker owns its native service in its own process group; stopping
+        # that group may already have ended a Runtime listed after it.
+        try:
+            if os.getpgid(pid) == pid:
+                os.killpg(pid, signal.SIGTERM)
+            else:
+                os.kill(pid, signal.SIGTERM)
+        except ProcessLookupError:
+            pass
     assert not remaining, f'managed workers survived the fixture interrupt: {remaining}'
 
 

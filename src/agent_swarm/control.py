@@ -282,6 +282,12 @@ def _unanswered(current: Mapping[str, Any]) -> int:
     return sum(_reply_key(request) not in current["replies"] for request in current["requests"])
 
 
+def _unconfirmed(execution: Mapping[str, Any]) -> bool:
+    """Whether an ended execution's end is neither native nor confirmed later."""
+    return (execution["state"] == "ended" and execution.get("terminal_confirmed") is False
+            and "termination_confirmation" not in execution)
+
+
 def _running(record: Mapping[str, Any]) -> dict | None:
     """Return the record's running execution, or ``None`` in standby."""
     executions = record["executions"]
@@ -344,6 +350,11 @@ class AgentControl:
         if action == "wait":
             return self.wait(agent, binding.caller, arguments["timeout_seconds"])
         if action == "interrupt":
+            # In standby the public stop confirms an end that was never
+            # confirmed, as confirm_ended describes; otherwise it interrupts.
+            with self._locked(agent) as record:
+                if _running(record) is None and any(map(_unconfirmed, record["executions"])):
+                    return self._confirm_ended(record, binding.caller)
             return self.interrupt(agent, binding.caller)
         if action == "requests":
             return self.requests(agent, binding.caller, arguments.get("execution"))
@@ -522,6 +533,58 @@ class AgentControl:
             record["retired_by"] = _scope(caller)
             return self._outcome(record, result={"retired": True})
 
+    def confirm_ended(self, agent: str, caller: Caller) -> Outcome:
+        """Confirm the unconfirmed ends of a standby Agent's executions.
+
+        An execution can end without a native termination event, for example
+        when :meth:`_reconcile` finds its owner gone (``terminal_confirmed``
+        false). Only the Agent's direct parent, or a root caller for a root
+        Agent under the host's control policy, may confirm it, and only after
+        the recorded ``worker_pid`` and ``runtime_pid`` are rechecked as gone
+        now. A running Agent, or an execution without both process facts,
+        is refused and nothing is written. Retired history may be confirmed
+        too, since nothing starts. The original end, including its
+        ``terminal_confirmed`` false and error, is kept; the confirmation is
+        appended to the execution as ``termination_confirmation``. An Agent
+        without an unconfirmed end returns an empty ``termination_confirmed``.
+        """
+        with self._locked(agent) as record:
+            if _running(record) is not None:
+                raise AgentsError("active", "The Agent is running; interrupt it and wait for standby.")
+            return self._confirm_ended(record, caller)
+
+    def _confirm_ended(self, record: dict, caller: Caller) -> Outcome:
+        """Implement :meth:`confirm_ended` for a standby record under the held lock."""
+        self._require_view(record, caller)
+        self._require_root_control(caller)
+        if record["parent"] != caller.agent:
+            raise AgentsError("authority-denied", "Only the direct parent can confirm an Agent's ended execution.")
+
+        pending = [execution for execution in record["executions"] if _unconfirmed(execution)]
+        evidence = {}
+        for execution in pending:
+            process = execution.get("process", {})
+            facts   = {name: process.get(name) for name in ("worker_pid", "runtime_pid")}
+            # A missing fact cannot be rechecked, and a live process (or a
+            # reused PID) may still run the native Session; both are refused.
+            if not all(isinstance(pid, int) and not isinstance(pid, bool) and pid > 0
+                       for pid in facts.values()):
+                raise AgentsError("termination-unconfirmed",
+                                  f"Execution {execution['id']} lacks a recorded worker or Runtime process; "
+                                  "its end cannot be verified.")
+            if any(_alive(pid) for pid in facts.values()):
+                raise AgentsError("termination-unconfirmed",
+                                  f"A recorded process of execution {execution['id']} is still running.")
+            evidence[execution["id"]] = {**facts, "worker_alive": False, "runtime_alive": False}
+
+        for execution in pending:
+            execution["termination_confirmation"] = {
+                "at": _now(), "by": _scope(caller), "terminal_confirmed": True,
+                "evidence": evidence[execution["id"]],
+            }
+        return self._outcome(record, result={"interrupt": "stopped",
+                                             "termination_confirmed": list(evidence)})
+
     def interrupt_owned(self) -> list[str]:
         """Request a stop of every execution this process owns; host shutdown only.
 
@@ -624,7 +687,7 @@ class AgentControl:
         with self._locked(agent) as record:
             if record['host'] != caller.host or record['parent'] != caller.agent:
                 raise AgentsError('not-found', 'Only the owning host and parent can configure this Agent.')
-            if any(item.get('state') != 'ended' or item.get('terminal_confirmed') is False
+            if any(item.get('state') != 'ended' or _unconfirmed(item)
                    for item in record['executions']):
                 raise AgentsError('turn-running', 'Only confirmed stopped Agents may be configured.')
             record['settings'] = deepcopy(dict(settings))
@@ -911,6 +974,8 @@ class AgentControl:
         if last is not None:
             document["last_result"] = {name: last.get(name) for name in (
                 "id", "outcome", "last_message", "error", "terminal_confirmed", "ended_at")}
+            if "termination_confirmation" in last:
+                document["last_result"]["termination_confirmation"] = deepcopy(last["termination_confirmation"])
             runtime_exit = last.get("process", {}).get("runtime_exit")
             if runtime_exit is not None:
                 document["last_result"]["runtime_exit"] = deepcopy(runtime_exit)

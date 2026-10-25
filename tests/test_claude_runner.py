@@ -476,10 +476,22 @@ def test_public_interrupt_reconfirms_an_undrained_worker(
             os.kill(pid, signal.SIGKILL)
         except ProcessLookupError:
             pass
-    response = command(installed_commands, root, environment, 'interrupt', alias)
+    if entry == 'agents':
+        response = run_process([str(installed_commands.runner.with_name('python')), '-c', AGENTS_INTERRUPT,
+                                alias], cwd=root, env=environment, timeout=65)
+    else:
+        response = command(installed_commands, root, environment, 'interrupt', alias)
     assert response.returncode == 0, response.stdout + response.stderr
     member = yaml.safe_load(response.stdout)['members'][0]
     assert member['interrupt_status'] == 'stopped', response.stdout
+    if entry == 'agents':
+        record = json.loads((root / '.graphtraj/swarm/control/agents' / f"{mapping['agent']}.json").read_text())
+        ended = record['executions'][-1]
+        assert yaml.safe_load(response.stdout)['termination_confirmed'] == [ended['id']]
+        assert ended['terminal_confirmed'] is False and ended['error']['code'] == 'owner-exited'
+        assert ended['termination_confirmation']['evidence'] == {
+            'worker_pid': mapping['worker_pid'], 'runtime_pid': mapping['runtime_pid'],
+            'worker_alive': False, 'runtime_alive': False}
     receipt = yaml.safe_load(Path(member['evidence']).read_text())
     assert receipt['evidence']['method'] == 'current-process-group'
     assert receipt['evidence']['running_members'] == []
@@ -801,13 +813,30 @@ def test_real_claude_archive_public_query(
     assert terminal['last_outcome'] == 'completed', terminal
 
 
+AGENTS_INTERRUPT = """
+import json, sys
+from pathlib import Path
+from agent_swarm import Binding, Caller
+from graphtraj.interfaces.agents import GraphTrajAgents
+# The agents action as the human caller that dispatched this root member.
+outcome = GraphTrajAgents(Path.cwd()).operate('interrupt', {'agent': sys.argv[1]}, Binding(Caller('graphtraj-gateway', None)))
+print(json.dumps(outcome.result))
+"""
+
+
+@pytest.mark.parametrize('entry', ['agent-runner', 'agents'])
 def test_public_interrupt_confirms_an_exited_owner_without_terminal_record(
     installed_commands: InstalledCommands,
     temporary_git_repository: Path,
     fake_codex: FakeCodex,
     tmp_path: Path,
+    entry: str,
 ) -> None:
-    """An owner and Runtime that both exited are confirmed stopped, not natively ended."""
+    """An owner and Runtime that both exited are confirmed stopped, not natively ended.
+
+    Through ``agents`` the member's core execution, ended as owner-exited, is
+    confirmed in the same call with a receipt that keeps its original end.
+    """
     from graphtraj.execution.runner_heartbeat import ownership_is_held
 
     root, environment = setup(installed_commands, temporary_git_repository, fake_codex, tmp_path)
@@ -834,10 +863,22 @@ def test_public_interrupt_confirms_an_exited_owner_without_terminal_record(
         shutil.rmtree(leftover, ignore_errors=True)
     assert not (directory / 'execution.yml').exists()
 
-    response = command(installed_commands, root, environment, 'interrupt', alias)
+    if entry == 'agents':
+        response = run_process([str(installed_commands.runner.with_name('python')), '-c', AGENTS_INTERRUPT,
+                                alias], cwd=root, env=environment, timeout=65)
+    else:
+        response = command(installed_commands, root, environment, 'interrupt', alias)
     assert response.returncode == 0, response.stdout + response.stderr
     member = yaml.safe_load(response.stdout)['members'][0]
     assert member['interrupt_status'] == 'stopped', response.stdout
+    if entry == 'agents':
+        record = json.loads((root / '.graphtraj/swarm/control/agents' / f"{mapping['agent']}.json").read_text())
+        ended = record['executions'][-1]
+        assert yaml.safe_load(response.stdout)['termination_confirmed'] == [ended['id']]
+        assert ended['terminal_confirmed'] is False and ended['error']['code'] == 'owner-exited'
+        assert ended['termination_confirmation']['evidence'] == {
+            'worker_pid': mapping['worker_pid'], 'runtime_pid': mapping['runtime_pid'],
+            'worker_alive': False, 'runtime_alive': False}
 
     # The owner exit stays an unconfirmed runtime error; the separate receipt
     # records only the current confirmation that the Runtime group is gone.

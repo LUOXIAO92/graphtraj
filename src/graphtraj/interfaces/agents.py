@@ -235,6 +235,9 @@ class GraphTrajAgents:
             result, failed = self._wait(agent, arguments["timeout_seconds"])
         elif action == "interrupt":
             result = interrupt_session(agent, self.root, ordinary=True)
+            if any(member.get("alias") == agent and member.get("interrupt_status") == "stopped"
+                   for member in result.get("members", [])):
+                result = {**result, **self._confirm_member_end(agent)}
         elif action == "requests":
             result = pending_requests(agent, self.root, execution_id=arguments.get("execution"))
         elif action == "reply":
@@ -242,6 +245,33 @@ class GraphTrajAgents:
         else:
             result = retire_session(agent, self.root)
         return Outcome(result, agent=agent, session=session, execution=execution, failed=failed)
+
+    def _confirm_member_end(self, alias: str) -> dict:
+        """Confirm unconfirmed ends of a stopped Task member's core executions.
+
+        The Runner's interrupt has already verified that the caller is the
+        member's direct parent and that its native execution stopped. The
+        core then rechecks each recorded process under the member's own
+        recorded parent, as the Worker records it (``begin_task_agent``).
+        Returns the confirmed executions, an error document when one cannot
+        be verified, or nothing when no end needs confirming.
+        """
+        import json
+
+        from graphtraj.execution.runner_status import read_alias_mapping
+        from graphtraj.execution.task_agents import TASK_HOST
+        from graphtraj.workspace.runner_project import discover_runner_directory
+
+        reference = read_alias_mapping(discover_runner_directory(self.root), alias)[0].get("agent")
+        if not isinstance(reference, str) or self._member_alias(reference) != alias:
+            return {}
+        parent = json.loads((swarm_root(self.root) / "control" / "agents" / f"{reference}.json")
+                            .read_text(encoding="utf-8"))["parent"]
+        try:
+            confirmed = self.control.confirm_ended(reference, Caller(TASK_HOST, parent)).result["termination_confirmed"]
+        except AgentsError as error:
+            return {"termination_confirmation_error": {"code": error.code, "message": error.message}}
+        return {"termination_confirmed": confirmed} if confirmed else {}
 
     def _wait(self, agent: str, timeout_seconds: float) -> tuple[dict, bool]:
         """Wait at most ``timeout_seconds`` for an idle member or a pending request."""

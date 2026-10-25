@@ -246,6 +246,9 @@ only for an actual conflict requiring a specialist.
 
 After successful integration use MCP `cleanup` with the Task ID and
 regenerate the task graph. These operations retain the original task evidence.
+If the Task Worktree is checked out on another branch that contains the accepted
+candidate, name it in `worktree_branch` (CLI `--worktree-branch`); the clean,
+integrated Worktree is removed and both branches are kept.
 
 For a retained integration conflict, select the permitted role explicitly:
 

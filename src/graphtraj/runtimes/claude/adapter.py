@@ -26,6 +26,12 @@ from graphtraj.runtimes.runtime_adapter import (
 
 
 MINIMUM_VERSION = (2, 1, 299)
+# Claude Code's own Bash safety check asks the parent before ``find`` searches a
+# relative path after ``cd``; no permission rule can allow it. Reads with
+# absolute paths or the file tools stay inside the configured grants.
+READ_GUIDANCE = ('To read project records in your configured read scope, give find, ls and grep '
+                 'absolute paths instead of cd, or use the Read, Glob and Grep tools. Claude Code '
+                 'asks your parent to approve find on a relative path after cd.')
 EFFORTS = ('low', 'medium', 'high', 'xhigh', 'max')
 
 
@@ -229,7 +235,8 @@ class ClaudeRuntimeAdapter:
             'base_url_source': base_url_source,
             'provider': settings.runtime_provider or 'native',
             'credential_source': 'api_key_env' if settings.api_key_env else 'native',
-            'api_key_env': settings.api_key_env, 'instructions': role.instructions,
+            'api_key_env': settings.api_key_env,
+            'instructions': '\n\n'.join(filter(None, (role.instructions, READ_GUIDANCE))),
             'worktree_access': settings.worktree_access, 'reports': reports, 'resources': resources,
             'settings_sources': 'managed settings and explicit Runner settings; restricted mode',
             # Without a role selection, children use Claude's native auto review.

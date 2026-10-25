@@ -709,3 +709,72 @@ def test_check_stopped_lists_every_blocker_and_accepted_gap_without_writing(
     assert tree() == before
     refused = CliRunner().invoke(main, ['migrate-agents', '--cutover', str(tmp_path / 'input'), '--writes-stopped'])
     assert refused.exit_code != 0 and '1 more; list them with migrate-agents --check-stopped' in refused.output
+
+
+def nested_worktree(root: Path, worktree: Path) -> Path:
+    """Add a linked worktree inside another linked worktree, as a build checkout does."""
+    nested = worktree / 'build/nested'
+    subprocess.run(['git', 'worktree', 'add', '-b', 'nested', str(nested)], cwd=root, check=True, capture_output=True)
+    return nested
+
+
+def registered(root: Path) -> set[str]:
+    """Return Git's registered linked worktree paths."""
+    listing = subprocess.check_output(['git', 'worktree', 'list', '--porcelain'], cwd=root, text=True)
+    return {line.removeprefix('worktree ') for line in listing.splitlines() if line.startswith('worktree ')} - {str(root)}
+
+
+def clean(path: Path) -> bool:
+    """Whether Git operates normally in this worktree."""
+    return subprocess.run(['git', 'status', '--porcelain'], cwd=path, capture_output=True).returncode == 0
+
+
+def test_cutover_and_restore_move_a_nested_linked_worktree_with_its_outer_one(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Only the outer worktree is moved; Git repairs the nested one at its new path, both ways."""
+    root = tmp_path / 'project'
+    worktree, _ = project(root)
+    nested = nested_worktree(root, worktree)
+    new_outer = root / '.graphtraj/core/worktrees/member'
+    new_nested = new_outer / 'build/nested'
+    monkeypatch.chdir(root)
+    runner = CliRunner()
+    plan = yaml.safe_load(runner.invoke(main, ['migrate-agents', '--check-stopped']).output)['worktree_moves']
+    assert plan == [{'old': str(worktree), 'new': str(new_outer), 'git': 'worktree move'},
+                    {'old': str(nested), 'new': str(new_nested), 'git': 'repair after its outer worktree moves'}]
+    result = runner.invoke(main, ['migrate-agents', '--cutover', str(tmp_path / 'input'), '--writes-stopped'])
+    assert result.exit_code == 0, result.output
+    assert registered(root) == {str(new_outer), str(new_nested)}
+    assert clean(new_outer) and clean(new_nested)
+    report = yaml.safe_load(result.output)
+    restored = runner.invoke(main, ['migrate-agents', '--restore', report['backup'], '--writes-stopped'])
+    assert restored.exit_code == 0, restored.output
+    assert registered(root) == {str(worktree), str(nested)}
+    assert clean(worktree) and clean(nested)
+    assert (worktree / '.state').readlink() == Path('../../state')
+
+
+def test_failed_install_returns_nested_and_outer_worktrees(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A failure after the Git moves restores both worktrees and the original layout."""
+    from graphtraj.workspace import agent_production_migration
+
+    root = tmp_path / 'project'
+    worktree, _ = project(root)
+    nested = nested_worktree(root, worktree)
+    write = agent_production_migration.write_yaml_durably
+
+    def failing(path, document):
+        """Fail when the installed facts are recorded, after every worktree has moved."""
+        if isinstance(document, dict) and 'installed_facts' in document:
+            raise OSError('injected install failure')
+        return write(path, document)
+
+    monkeypatch.setattr(agent_production_migration, 'write_yaml_durably', failing)
+    monkeypatch.chdir(root)
+    result = CliRunner().invoke(main, ['migrate-agents', '--cutover', str(tmp_path / 'input'), '--writes-stopped'])
+    assert result.exit_code != 0 and 'injected install failure' in result.output
+    assert registered(root) == {str(worktree), str(nested)}
+    assert clean(worktree) and clean(nested)
+    assert (worktree / '.state').readlink() == Path('../../state')
+    assert (root / '.graphtraj/config.yml').is_file() and not (root / '.graphtraj/core').exists()

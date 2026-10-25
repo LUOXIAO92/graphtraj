@@ -115,7 +115,18 @@ def stop_facts(root: Path) -> dict:
                                  'message': f"Stop and confirm the Agent before cutover: {record['agent']}"})
             else:
                 owner_exited.append(accepted)
-    return {'blocking': blocking, 'control_missing': unavailable, 'unconfirmed_swarm_executions': owner_exited}
+    configuration = load_project_configuration(root)
+    try:
+        moves = _worktree_moves(configuration, root / '.graphtraj',
+                                _git(configuration.project_root, 'worktree', 'list', '--porcelain'))
+    except ValueError as error:
+        blocking.append({'worktrees': str(configuration.agent_worktrees), 'message': str(error)})
+        moves = {}
+    nested = _nested(moves)
+    plan = [{'old': old, 'new': new, 'git': 'repair after its outer worktree moves' if old in nested else 'worktree move'}
+            for old, new in moves.items()]
+    return {'blocking': blocking, 'control_missing': unavailable, 'unconfirmed_swarm_executions': owner_exited,
+            'worktree_moves': plan}
 
 
 def _stopped(root: Path) -> dict:
@@ -204,19 +215,60 @@ def _launch_arguments(value: object, moves: dict[str, str]) -> object:
     return result
 
 
+def _nested(moves: dict[str, str]) -> dict[str, str]:
+    """Return the moved worktrees that lie inside another moved worktree.
+
+    Their directories travel with that outer worktree, so Git only needs its
+    administrative path repaired at the new location.
+    """
+    return {old: new for old, new in moves.items()
+            if any(old != other and Path(old).is_relative_to(other) for other in moves)}
+
+
 def _move_worktrees(source: Path, moves: dict[str, str]) -> list[tuple[str, str]]:
-    """Move each registered linked worktree with Git; undo completed moves on failure."""
+    """Move each outermost linked worktree with Git, then repair nested ones.
+
+    A failure moves completed outer worktrees back and repairs the nested
+    ones at their original paths again.
+    """
+    nested = _nested(moves)
     completed = []
     try:
         for old, new in moves.items():
+            if old in nested:
+                continue
             Path(new).parent.mkdir(parents=True, exist_ok=True)
             _git(source, 'worktree', 'move', old, new)
             completed.append((old, new))
+        if nested:
+            _git(source, 'worktree', 'repair', *nested.values())
     except BaseException:
-        for old, new in reversed(completed):
-            _git(source, 'worktree', 'move', new, old)
+        _return_worktrees(source, dict(completed), nested)
         raise
     return completed
+
+
+def _return_worktrees(source: Path, moves: dict[str, str], nested: dict[str, str]) -> None:
+    """Move outer worktrees that reached their new path back; repair nested ones there."""
+    for old, new in reversed(list(moves.items())):
+        if old not in nested and Path(new).exists() and not Path(old).exists():
+            _git(source, 'worktree', 'move', new, old)
+    present = [old for old in nested if Path(old).exists()]
+    if present:
+        _git(source, 'worktree', 'repair', *present)
+
+
+def _worktree_moves(configuration, data: Path, listing: str) -> dict[str, str]:
+    """Map every registered linked worktree under the worktree root to its core path."""
+    worktrees = {}
+    for line in listing.splitlines():
+        if line.startswith('worktree '):
+            path = Path(line.removeprefix('worktree '))
+            if path.is_relative_to(configuration.agent_worktrees):
+                if path == configuration.project_root:
+                    raise ValueError('The Source Repository must remain outside the worktree directory being moved.')
+                worktrees[str(path)] = str(data / 'core/worktrees' / path.relative_to(configuration.agent_worktrees))
+    return worktrees
 
 
 def _native_resources(staging: Path, root: Path, manifest: dict) -> tuple[dict[str, str], list[dict]]:
@@ -315,6 +367,7 @@ def _claude_continuations(root: Path, worktrees: dict[str, str]) -> list[dict]:
                             'reason': 'The Claude record has no cwd; its native continuation cannot be planned.'})
             continue
         real = os.path.realpath(cwd)
+        # A nested worktree also lies in its outer one; their mappings agree.
         for old, new in moved.items():
             if real != old and not real.startswith(old + '/'):
                 continue
@@ -329,6 +382,7 @@ def _claude_continuations(root: Path, worktrees: dict[str, str]) -> list[dict]:
                     seen.add(key)
                     planned.append({'runtime': 'claude', 'session': session, 'home': key[0],
                                     'old': cwd, 'new': target})
+            break
     return planned
 
 
@@ -451,14 +505,7 @@ def cutover_project(
     old_paths = [configuration.state, runner, data / 'swarm', data / 'config.yml', data / 'roles.yml', data / 'cli']
     before = _facts(old_paths)
     git_before = _git(configuration.project_root, 'worktree', 'list', '--porcelain')
-    worktrees = {}
-    for line in git_before.splitlines():
-        if line.startswith('worktree '):
-            path = Path(line.removeprefix('worktree '))
-            if path.is_relative_to(configuration.agent_worktrees):
-                if path == configuration.project_root:
-                    raise ValueError('The Source Repository must remain outside the worktree directory being moved.')
-                worktrees[str(path)] = str(data / 'core/worktrees' / path.relative_to(configuration.agent_worktrees))
+    worktrees = _worktree_moves(configuration, data, git_before)
     for path in configuration.agent_worktrees.glob('*'):
         if path.is_dir() and not any(Path(old).is_relative_to(path) for old in worktrees):
             raise ValueError(f'An unregistered worktree directory needs native reconciliation before cutover: {path}')
@@ -566,14 +613,13 @@ def cutover_project(
     except BaseException:
         # Recovery uses the same retained manifest; do not discard failed data.
         _remove_copies(continuations)
-        for old, new in reversed(list(worktrees.items())):
-            if Path(new).exists() and not Path(old).exists():
-                _git(configuration.project_root, 'worktree', 'move', new, old)
-                for path, target in link_targets.items():
-                    if Path(path).is_relative_to(new):
-                        link = Path(old) / Path(path).relative_to(new)
-                        link.unlink(missing_ok=True)
-                        link.symlink_to(target)
+        _return_worktrees(configuration.project_root, worktrees, _nested(worktrees))
+        for old, new in worktrees.items():
+            for path, target in link_targets.items():
+                if Path(path).is_relative_to(new) and Path(old).is_dir():
+                    link = Path(old) / Path(path).relative_to(new)
+                    link.unlink(missing_ok=True)
+                    link.symlink_to(target)
         for path in installed:
             if path.exists():
                 path.rename(backup / ('failed-' + path.name))

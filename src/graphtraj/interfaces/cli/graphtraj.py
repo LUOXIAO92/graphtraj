@@ -73,6 +73,7 @@ main.add_command(refresh_mcp_command)
 @click.option("--restore", type=click.Path(path_type=Path, exists=True), help="Restore this project's retained Agent cutover backup.")
 @click.option("--writes-stopped", is_flag=True, help="Confirm all writers, including Main hooks, remain stopped during cutover or recovery.")
 @click.option("--check-stopped", is_flag=True, help="Read-only: list every cutover stop blocker and accepted owner-exited gap; writes nothing.")
+@click.option("--repair-relocated-paths", is_flag=True, help="After an installed cutover, relocate Harness-relative Task/Team paths; with --preview only list them.")
 def migrate_agents_command(
     preview: bool,
     snapshot: Path | None,
@@ -85,12 +86,21 @@ def migrate_agents_command(
     restore: Path | None,
     writes_stopped: bool,
     check_stopped: bool,
+    repair_relocated_paths: bool,
 ) -> None:
     """Capture, verify, cut over or recover retained Agent and Session data."""
     from graphtraj.workspace.agent_migration import migrate_agents
     from graphtraj.workspace.migration_snapshot import snapshot_project
 
     try:
+        if repair_relocated_paths:
+            from graphtraj.workspace.agent_production_migration import repair_relocated_paths as repair
+
+            if (any((snapshot, sessions, partition, verify, main_session, against, cutover, restore, check_stopped))
+                    or preview == writes_stopped):
+                raise ValueError('Use --repair-relocated-paths with exactly one of --preview or --writes-stopped.')
+            click.echo(yaml.safe_dump(repair(Path.cwd(), write=writes_stopped), sort_keys=False), nl=False)
+            return
         if check_stopped:
             from graphtraj.workspace.agent_production_migration import stop_facts
 

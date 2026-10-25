@@ -18,7 +18,7 @@ from agent_swarm import AgentControl, Caller
 from graphtraj.configuration.project_configuration import load_project_configuration, runner_directory
 from graphtraj.execution.runner_heartbeat import ownership_is_held
 from graphtraj.execution.runner_io import write_yaml_durably
-from graphtraj.workspace.agent_cutover import _references, _rewrite_records, partition_snapshot
+from graphtraj.workspace.agent_cutover import _owned_metadata, _references, _rewrite_records, partition_snapshot
 from graphtraj.workspace.agent_migration import migrate_agents
 from graphtraj.workspace.migration_snapshot import MANIFEST, snapshot_project
 from graphtraj.workspace.task_migration import foreign_entries
@@ -565,6 +565,13 @@ def cutover_project(
              **worktrees, **native_moves}
     _rewrite_records(staged_core / 'state', moves)
     _rewrite_records(staged_core / 'runner', moves)
+    # Task and Team records also keep Harness-relative paths (task.yml worktree).
+    relative = _relative_moves(root, {str(configuration.state): str(data / 'core/state'),
+                                      str(runner): str(data / 'core/runner'),
+                                      str(configuration.agent_worktrees): str(data / 'core/worktrees'),
+                                      **worktrees})
+    for directory in (staged_core / 'state', staged_core / 'runner'):
+        relocate_relative_records(directory, relative, write=True)
     for directory in (staged_core / 'runner', staged_core / 'state'):
         for path in directory.rglob('launch.yml'):
             if not path.is_symlink():
@@ -683,6 +690,83 @@ def cutover_project(
                      'apply role_read_paths_to_update through role_organization. Native host trust and same-ID resume '
                      'require their normal public entry; no host was started. Restore is available before new '
                      'execution/state writes; afterward preserve and reconcile the new history.')}
+
+
+# GraphTraj metadata fields whose values are paths relative to the Harness root.
+RELATIVE_FIELDS = frozenset({'worktree', 'final_trace_ref', 'local_definition', 'mapping_source'})
+
+
+def _relative_moves(root: Path, moves: dict[str, str]) -> dict[str, str]:
+    """Express absolute moves inside the Harness as Harness-relative prefixes."""
+    return {os.path.relpath(old, root): os.path.relpath(new, root) for old, new in moves.items()
+            if Path(old).is_relative_to(root) and Path(new).is_relative_to(root)}
+
+
+def _relocate_relative(value: object, moves: dict[str, str], changes: list, field: str = '') -> object:
+    """Relocate Harness-relative path fields; absolute paths and other fields stay unchanged."""
+    if isinstance(value, dict):
+        return {key: _relocate_relative(item, moves, changes, key) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_relocate_relative(item, moves, changes, field) for item in value]
+    if isinstance(value, str) and field in RELATIVE_FIELDS and not os.path.isabs(value):
+        for old in sorted(moves, key=len, reverse=True):
+            if value == old or value.startswith(old + '/'):
+                changes.append({'field': field, 'old': value, 'new': moves[old] + value[len(old):]})
+                return moves[old] + value[len(old):]
+    return value
+
+
+def relocate_relative_records(directory: Path, moves: dict[str, str], *, write: bool) -> list[dict]:
+    """List, and optionally write, Harness-relative paths into moved locations.
+
+    Only GraphTraj metadata files are considered; native records, worldline
+    history and authored evidence keep their original text.
+    """
+    rewritten = []
+    for path in sorted(directory.rglob('*.yml')):
+        if path.is_symlink() or not _owned_metadata(path):
+            continue
+        document = yaml.safe_load(path.read_text(encoding='utf-8'))
+        changes = []
+        relocated = _relocate_relative(document, moves, changes)
+        if changes:
+            rewritten.append({'file': str(path), 'changes': changes})
+            if write:
+                write_yaml_durably(path, relocated)
+    return rewritten
+
+
+def repair_relocated_paths(root: Path, *, write: bool) -> dict:
+    """Relocate Harness-relative paths left by a cutover that did not rewrite them.
+
+    The moves come from this project's installed cutover record. Repeating the
+    repair finds nothing more to change. A repaired record is new post-cutover
+    data, so the cutover can no longer be restored afterwards.
+    """
+    root = root.resolve()
+    if not (root / '.graphtraj/core/config.yml').is_file():
+        raise ValueError('The project has no installed cutover.')
+    installed = [path for path in sorted((root / '.graphtraj/backups').glob('agents-*/migration.yml'))
+                 if 'installed_facts' in (yaml.safe_load(path.read_text()) or {})]
+    if len(installed) != 1:
+        raise ValueError('Exactly one installed cutover record is required: '
+                         + ', '.join(str(path.parent) for path in installed))
+    record = yaml.safe_load(installed[0].read_text())
+    data = root / '.graphtraj'
+    absolute = {old: str(data / 'core' / Path(saved).name) for old, saved in record['originals'].items()
+                if Path(saved).name in {'state', 'runner'}}
+    previous = Path(record['originals'].get(str(data / 'config.yml'), installed[0].parent / 'config.yml'))
+    if previous.is_file():
+        worktree_root = (yaml.safe_load(previous.read_text()) or {}).get('paths', {}).get('agent_worktrees')
+        if worktree_root:
+            absolute[str(root / worktree_root)] = str(data / 'core/worktrees')
+    absolute.update(record['worktrees'])
+    moves = _relative_moves(root, absolute)
+    changed = []
+    for name in ('state', 'runner'):
+        changed += relocate_relative_records(data / 'core' / name, moves, write=write)
+    return {'backup': str(installed[0].parent), 'moves': moves, 'written': write, 'files': changed,
+            'changes': sum(len(item['changes']) for item in changed)}
 
 
 def restore_cutover(root: Path, backup: Path, *, writes_stopped: bool) -> dict:

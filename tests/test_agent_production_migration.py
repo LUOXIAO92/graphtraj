@@ -787,3 +787,59 @@ def test_failed_install_returns_nested_and_outer_worktrees(tmp_path: Path, monke
     assert clean(worktree) and clean(nested)
     assert (worktree / '.state').readlink() == Path('../../state')
     assert (root / '.graphtraj/config.yml').is_file() and not (root / '.graphtraj/core').exists()
+
+
+def relative_worktree(root: Path, value: str | None = None) -> str:
+    """Read, or set, the Task's Harness-relative worktree as the Task Graph records it."""
+    path = next((root / '.graphtraj').glob('*/tasks/1-*/task.yml'), None) or next(
+        (root / '.graphtraj').glob('core/state/tasks/1-*/task.yml'))
+    record = yaml.safe_load(path.read_text())
+    if value is not None:
+        record['worktree'] = value
+        path.write_text(yaml.safe_dump(record, sort_keys=False))
+    return record['worktree']
+
+
+def test_cutover_relocates_the_task_worktree_relative_to_the_harness(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Cleanup, replacement and dispatch reuse locate harness_root / task.yml worktree."""
+    root = tmp_path / 'project'
+    project(root)
+    relative_worktree(root, '.graphtraj/.agent-worktrees/member')
+    monkeypatch.chdir(root)
+    result = CliRunner().invoke(main, ['migrate-agents', '--cutover', str(tmp_path / 'input'), '--writes-stopped'])
+    assert result.exit_code == 0, result.output
+    assert relative_worktree(root) == '.graphtraj/core/worktrees/member'
+    assert (root / relative_worktree(root)).is_dir()
+
+
+def test_repair_relocates_paths_left_by_an_earlier_cutover_once(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The public repair previews without writing, applies once and then finds nothing."""
+    root = tmp_path / 'project'
+    project(root)
+    monkeypatch.chdir(root)
+    runner = CliRunner()
+    assert runner.invoke(main, ['migrate-agents', '--cutover', str(tmp_path / 'input'), '--writes-stopped']).exit_code == 0
+    # An installation from before this fix left the old relative spelling.
+    relative_worktree(root, '.graphtraj/.agent-worktrees/member')
+    task = next((root / '.graphtraj/core/state/tasks').glob('1-*/task.yml'))
+    before = task.read_bytes()
+    preview = runner.invoke(main, ['migrate-agents', '--repair-relocated-paths', '--preview'])
+    assert preview.exit_code == 0, preview.output
+    planned = yaml.safe_load(preview.output)
+    assert planned['written'] is False and planned['changes'] == 1
+    assert planned['files'][0]['changes'] == [{'field': 'worktree', 'old': '.graphtraj/.agent-worktrees/member',
+                                               'new': '.graphtraj/core/worktrees/member'}]
+    assert task.read_bytes() == before
+    applied = runner.invoke(main, ['migrate-agents', '--repair-relocated-paths', '--writes-stopped'])
+    assert applied.exit_code == 0, applied.output
+    assert yaml.safe_load(applied.output)['changes'] == 1
+    assert relative_worktree(root) == '.graphtraj/core/worktrees/member'
+    assert (root / relative_worktree(root)).is_dir()
+    again = runner.invoke(main, ['migrate-agents', '--repair-relocated-paths', '--writes-stopped'])
+    assert again.exit_code == 0 and yaml.safe_load(again.output)['changes'] == 0
+    refused = runner.invoke(main, ['migrate-agents', '--repair-relocated-paths'])
+    assert refused.exit_code != 0 and 'exactly one of --preview or --writes-stopped' in refused.output

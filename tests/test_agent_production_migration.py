@@ -1,6 +1,8 @@
 """Public stopped cutover/recovery with actual Git worktrees and synthetic identities."""
 import json
 from pathlib import Path
+import re
+import shutil
 import subprocess
 import tomllib
 
@@ -265,3 +267,579 @@ def test_git_move_refusal_restores_original_directories(tmp_path: Path, monkeypa
     assert (directory / 'mapping.yml').read_bytes() == original
     assert worktree.is_dir() and (root / '.graphtraj/config.yml').is_file()
     assert (tmp_path / 'input/.graphtraj/migration-snapshot.yml').is_file()
+
+
+
+def test_cutover_keeps_claude_main_continuity_and_restores_it(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Main claims, queued notices and completion bindings move unchanged and come back."""
+    from graphtraj.configuration.project_configuration import runner_directory
+    from graphtraj.execution.main_continuity import current_main, main_sessions, pending_notices, queue_notice
+    from graphtraj.graph.task_graph import read_graph
+
+    root = tmp_path / 'project'
+    project(root)
+    legacy = root / '.graphtraj/runner'
+    records = legacy / 'main-sessions'
+    records.mkdir()
+    connection = {'runtime': 'claude', 'session': 'claude-main', 'runner': str(legacy)}
+    (records / 'continuity.jsonl').write_text(json.dumps({
+        'at': 1.0, 'connection': connection, 'entry': 'claude:first-control', 'previous': None,
+        'runtime': 'claude', 'session': 'claude-main'}, sort_keys=True) + '\n')
+    (records / 'continuity.lock').write_bytes(b'')
+    queue_notice(legacy, connection, {'kind': 'member-result', 'text': 'queued before cutover'})
+    binding = records / 'finalize_codex/session.yml'
+    binding.parent.mkdir()
+    binding.write_text(yaml.safe_dump({'runtime': 'codex', 'session': 'codex-earlier', 'cwd': str(root),
+                                       'connection': {'runtime': 'codex', 'session': 'codex-earlier',
+                                                      'codex_home': str(tmp_path / 'codex-home')}}))
+    (root / '.graphtraj/state/tasks/.claude/.cc-writes').mkdir(parents=True)
+    state_grant = str(root / '.graphtraj/state')
+    (root / '.graphtraj/roles.yml').write_text(yaml.safe_dump({'roles': {'team': {'engineer': {
+        'runtime': 'claude', 'claude': {'read_paths': [str(root / 'docs'), state_grant]}}}}}))
+    before = {path.relative_to(records): path.read_bytes() for path in records.rglob('*') if path.is_file()}
+    monkeypatch.chdir(root)
+    runner = CliRunner()
+    arguments = ['migrate-agents', '--cutover', str(tmp_path / 'input'), '--writes-stopped']
+    refused = runner.invoke(main, arguments)
+    assert refused.exit_code != 0 and '--main-session' in refused.output
+    # The refused attempt retains its snapshot as evidence; retry into a new one.
+    result = runner.invoke(main, ['migrate-agents', '--cutover', str(tmp_path / 'retry'), '--writes-stopped',
+                                  '--main-session', 'claude-main'])
+    assert result.exit_code == 0, result.output
+    report = yaml.safe_load(result.output)
+    assert report['foreign_entries'] == ['.claude']
+    # Authored roles are installed unchanged; the moved grant is named for its owner.
+    assert report['role_read_paths_to_update'] == [{'field': 'roles.team.engineer.claude.read_paths',
+                                                     'old': state_grant, 'new': str(root / '.graphtraj/core/state')}]
+    assert state_grant in (root / '.graphtraj/core/roles.yml').read_text()
+    moved = root / '.graphtraj/core/runner/main-sessions'
+    assert runner_directory(root) == moved.parent
+    assert {path.relative_to(moved): path.read_bytes() for path in moved.rglob('*') if path.is_file()} == before
+    assert current_main(moved.parent)['session'] == 'claude-main'
+    assert main_sessions(moved.parent) == {'claude-main', 'codex-earlier'}
+    notices, _ = pending_notices(moved.parent, 'claude', 'claude-main')
+    assert [notice['event']['text'] for notice in notices] == ['queued before cutover']
+    # Repetition never imports a second time over the installed layout.
+    again = runner.invoke(main, ['migrate-agents', '--cutover', str(tmp_path / 'again'), '--writes-stopped',
+                                 '--main-session', 'claude-main'])
+    assert again.exit_code != 0 and 'existing core destination' in again.output
+    restored = runner.invoke(main, ['migrate-agents', '--restore', report['backup'], '--writes-stopped'])
+    assert restored.exit_code == 0, restored.output
+    assert {path.relative_to(records): path.read_bytes() for path in records.rglob('*') if path.is_file()} == before
+    assert runner_directory(root) == legacy
+    read_graph(root / '.graphtraj/state')
+
+
+def test_claude_main_notice_follows_the_installed_core_runner(tmp_path: Path) -> None:
+    """A Main connection recorded before cutover queues into the current core Runner."""
+    from graphtraj.execution.main_continuity import pending_notices
+    from graphtraj.runtimes.claude.adapter import ClaudeRuntimeAdapter
+
+    core = tmp_path / '.graphtraj/core'
+    (core / 'runner').mkdir(parents=True)
+    (core / 'config.yml').write_text('paths: {}\n')
+    connection = {'runtime': 'claude', 'session': 'claude-main', 'runner': str(tmp_path / '.graphtraj/runner')}
+    ClaudeRuntimeAdapter().send_host_event(connection, {'kind': 'member-result'})
+    notices, _ = pending_notices(core / 'runner', 'claude', 'claude-main')
+    assert [notice['event'] for notice in notices] == [{'kind': 'member-result'}]
+    assert not (tmp_path / '.graphtraj/runner').exists()
+
+
+def claude_member(
+    root: Path, worktree: Path, home: Path, session: str = 'claude-native', cwd: str | None = None,
+) -> tuple[Path, Path]:
+    """Retain a stopped Claude member whose native Session lives under its worktree cwd."""
+    directory = root / '.graphtraj/runner/sessions' / (session + '@member')
+    directory.mkdir(parents=True)
+    cwd = str(worktree) if cwd is None else cwd
+    mapping = {'alias': session + '@member', 'runtime': 'claude', 'session': session,
+               'parent': 'original-parent', 'worker_pid': 0, 'worktree_path': cwd,
+               'task_id': '1', 'team_generation': 1, 'role': 'engineer', 'runtime_pid': 0,
+               'trace_file': str(directory / 'stdout.jsonl')}
+    (directory / 'mapping.yml').write_text(yaml.safe_dump(mapping))
+    # No recorded runtime_home: the Adapter's CLAUDE_CONFIG_DIR default applies.
+    (directory / 'launch.yml').write_text(yaml.safe_dump({'runtime': 'claude', 'adapter_request': {
+        'worktree_path': cwd, 'resources': [str(root / '.graphtraj/state')]}}))
+    (directory / 'execution.yml').write_text('outcome: completed\nterminal_confirmed: true\n')
+    project = home / 'projects' / re.sub(r'[^A-Za-z0-9]', '-', cwd)
+    (project / session / 'subagents').mkdir(parents=True)
+    (project / (session + '.jsonl')).write_text('{"sessionId": "%s"}\n' % session)
+    (project / session / 'subagents/agent.jsonl').write_text('{"sub": true}\n')
+    return project, home / 'projects' / re.sub(r'[^A-Za-z0-9]', '-', str(root / '.graphtraj/core/worktrees/member'))
+
+
+def test_cutover_copies_claude_native_session_for_the_moved_cwd_and_restore_removes_it(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Same-ID resume finds the Session under the new cwd; the original is never moved."""
+    root = tmp_path / 'project'
+    worktree, _ = project(root)
+    home = tmp_path / 'claude-home'
+    monkeypatch.setenv('CLAUDE_CONFIG_DIR', str(home))
+    old, new = claude_member(root, worktree, home)
+    original = {path: path.read_bytes() for path in old.rglob('*') if path.is_file()}
+    monkeypatch.chdir(root)
+    runner = CliRunner()
+    planned = yaml.safe_load(runner.invoke(main, ['migrate-agents', '--check-stopped']).output)['claude_continuations']
+    assert planned == [{'session': 'claude-native', 'old': str(worktree), 'new': str(root / '.graphtraj/core/worktrees/member'),
+                        'home': str(home), 'source_exists': True, 'target_exists': False}]
+    for attempt in ('first', 'repeat'):
+        result = runner.invoke(main, ['migrate-agents', '--cutover', str(tmp_path / attempt), '--writes-stopped'])
+        assert result.exit_code == 0, result.output
+        report = yaml.safe_load(result.output)
+        assert report['native_continuations'] == [{'runtime': 'claude', 'session': 'claude-native',
+                                                   'old': str(worktree), 'new': str(root / '.graphtraj/core/worktrees/member'),
+                                                   'status': 'copied'}]
+        assert (new / 'claude-native.jsonl').read_bytes() == original[old / 'claude-native.jsonl']
+        assert (new / 'claude-native/subagents/agent.jsonl').is_file()
+        assert {path: path.read_bytes() for path in old.rglob('*') if path.is_file()} == original
+        if attempt == 'first':
+            # A Session continued under the new cwd is new history: recovery refuses.
+            (new / 'claude-native.jsonl').write_text('{"resumed": true}\n')
+            refused = runner.invoke(main, ['migrate-agents', '--restore', report['backup'], '--writes-stopped'])
+            assert refused.exit_code != 0 and 'continued under its new cwd' in refused.output
+            assert (new / 'claude-native.jsonl').read_text() == '{"resumed": true}\n'
+            (new / 'claude-native.jsonl').write_bytes(original[old / 'claude-native.jsonl'])
+        restored = runner.invoke(main, ['migrate-agents', '--restore', report['backup'], '--writes-stopped'])
+        assert restored.exit_code == 0, restored.output
+        assert not new.exists()
+        assert {path: path.read_bytes() for path in old.rglob('*') if path.is_file()} == original
+
+
+def test_cutover_never_replaces_an_existing_native_session_under_the_new_cwd(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An existing native record at the destination is reported and kept, also by restore."""
+    root = tmp_path / 'project'
+    worktree, _ = project(root)
+    home = tmp_path / 'claude-home'
+    monkeypatch.setenv('CLAUDE_CONFIG_DIR', str(home))
+    _, new = claude_member(root, worktree, home)
+    new.mkdir(parents=True)
+    (new / 'claude-native.jsonl').write_text('already here\n')
+    monkeypatch.chdir(root)
+    result = CliRunner().invoke(main, ['migrate-agents', '--cutover', str(tmp_path / 'input'), '--writes-stopped'])
+    assert result.exit_code == 0, result.output
+    report = yaml.safe_load(result.output)
+    assert [item['status'] for item in report['native_continuations']] == ['conflict']
+    assert report['native_continuation_gaps'][0]['status'] == 'conflict'
+    assert (new / 'claude-native.jsonl').read_text() == 'already here\n'
+    assert not (new / 'claude-native').exists()
+    restored = CliRunner().invoke(main, ['migrate-agents', '--restore', report['backup'], '--writes-stopped'])
+    assert restored.exit_code == 0, restored.output
+    assert (new / 'claude-native.jsonl').read_text() == 'already here\n'
+
+
+def test_cutover_reports_an_identical_existing_session_without_replacing_it(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A destination identical to the original is ``existing`` and is not a gap."""
+    root = tmp_path / 'project'
+    worktree, _ = project(root)
+    home = tmp_path / 'claude-home'
+    monkeypatch.setenv('CLAUDE_CONFIG_DIR', str(home))
+    old, new = claude_member(root, worktree, home)
+    shutil.copytree(old, new)
+    monkeypatch.chdir(root)
+    result = CliRunner().invoke(main, ['migrate-agents', '--cutover', str(tmp_path / 'input'), '--writes-stopped'])
+    assert result.exit_code == 0, result.output
+    report = yaml.safe_load(result.output)
+    assert [item['status'] for item in report['native_continuations']] == ['existing']
+    assert report['native_continuation_gaps'] == []
+
+
+def test_failed_native_copy_leaves_no_partial_session_and_rolls_back(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A copy failing midway is removed with the rest of the cutover."""
+    root = tmp_path / 'project'
+    worktree, _ = project(root)
+    home = tmp_path / 'claude-home'
+    monkeypatch.setenv('CLAUDE_CONFIG_DIR', str(home))
+    _, new = claude_member(root, worktree, home)
+    copytree = shutil.copytree
+
+    def failing(source, destination, *args, **kwargs):
+        """Fail after a partial write, only for the native Session copy."""
+        if Path(destination).is_relative_to(home):
+            Path(destination).mkdir()
+            (Path(destination) / 'partial.jsonl').write_text('partial\n')
+            raise OSError('disk full')
+        return copytree(source, destination, *args, **kwargs)
+
+    monkeypatch.setattr(shutil, 'copytree', failing)
+    monkeypatch.chdir(root)
+    result = CliRunner().invoke(main, ['migrate-agents', '--cutover', str(tmp_path / 'input'), '--writes-stopped'])
+    assert result.exit_code != 0 and 'disk full' in result.output
+    assert not new.exists()
+    assert worktree.is_dir() and (root / '.graphtraj/config.yml').is_file()
+
+
+def test_claude_members_are_matched_by_real_path_and_unplannable_ones_are_gaps(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A symlinked cwd spelling still continues; a record without cwd is listed, not skipped."""
+    root = tmp_path / 'project'
+    worktree, _ = project(root)
+    home = tmp_path / 'claude-home'
+    monkeypatch.setenv('CLAUDE_CONFIG_DIR', str(home))
+    (tmp_path / 'alias').symlink_to(root)
+    spelled = str(tmp_path / 'alias/.graphtraj/.agent-worktrees/member')
+    claude_member(root, worktree, home, 'claude-alias', spelled)
+    missing = root / '.graphtraj/runner/sessions/no-cwd@member'
+    missing.mkdir()
+    (missing / 'mapping.yml').write_text(yaml.safe_dump({
+        'alias': 'no-cwd@member', 'runtime': 'claude', 'session': 'claude-no-cwd', 'task_id': '1',
+        'worker_pid': 0, 'execution_id': 'run-1'}))
+    (missing / 'execution.yml').write_text('execution_id: run-1\noutcome: completed\nterminal_confirmed: true\n')
+    monkeypatch.chdir(root)
+    result = CliRunner().invoke(main, ['migrate-agents', '--cutover', str(tmp_path / 'input'), '--writes-stopped'])
+    assert result.exit_code == 0, result.output
+    report = yaml.safe_load(result.output)
+    statuses = {item['session']: item for item in report['native_continuations']}
+    assert statuses['claude-alias']['status'] == 'copied'
+    assert statuses['claude-alias']['new'] == str(root / '.graphtraj/core/worktrees/member')
+    assert statuses['claude-no-cwd']['status'] == 'unplanned'
+    assert [gap['session'] for gap in report['native_continuation_gaps']] == ['claude-no-cwd']
+    assert 'role_organization' in report['next'] and 'Main host' in report['next']
+
+
+def test_restore_removes_a_shared_new_project_directory_for_two_sessions(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Two Sessions copied into one new cwd directory leave nothing behind after restore."""
+    root = tmp_path / 'project'
+    worktree, _ = project(root)
+    home = tmp_path / 'claude-home'
+    monkeypatch.setenv('CLAUDE_CONFIG_DIR', str(home))
+    _, new = claude_member(root, worktree, home, 'claude-first')
+    claude_member(root, worktree, home, 'claude-second')
+    monkeypatch.chdir(root)
+    runner = CliRunner()
+    result = runner.invoke(main, ['migrate-agents', '--cutover', str(tmp_path / 'input'), '--writes-stopped'])
+    assert result.exit_code == 0, result.output
+    report = yaml.safe_load(result.output)
+    assert sorted(item['status'] for item in report['native_continuations']) == ['copied', 'copied']
+    restored = runner.invoke(main, ['migrate-agents', '--restore', report['backup'], '--writes-stopped'])
+    assert restored.exit_code == 0, restored.output
+    assert not new.exists() and not (home / 'projects').joinpath(new.name).exists()
+
+
+def test_main_session_must_be_the_current_continuity_claim(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A superseded Claude Main is refused; the current one is reported as current_main, also after partition."""
+    from graphtraj.workspace.agent_migration import migrate_agents
+
+    root = tmp_path / 'project'
+    project(root)
+    records = root / '.graphtraj/runner/main-sessions'
+    records.mkdir()
+    lines = [{'at': 1.0, 'runtime': 'claude', 'session': 'claude-earlier', 'entry': 'claude:first-control',
+              'connection': {}, 'previous': None},
+             {'at': 2.0, 'runtime': 'claude', 'session': 'claude-main', 'entry': 'claude:first-control',
+              'connection': {}, 'previous': {'runtime': 'claude', 'session': 'claude-earlier'}}]
+    (records / 'continuity.jsonl').write_text(''.join(json.dumps(line) + '\n' for line in lines))
+    binding = records / 'finalize_codex/session.yml'
+    binding.parent.mkdir()
+    binding.write_text(yaml.safe_dump({'runtime': 'codex', 'session': 'codex-earlier', 'cwd': str(root),
+                                       'connection': {'runtime': 'codex', 'session': 'codex-earlier'}}))
+    monkeypatch.chdir(root)
+    runner = CliRunner()
+    # A partitioned public snapshot reads the claim from its retained backup Runner.
+    snapshot = tmp_path / 'rehearsal'
+    assert runner.invoke(main, ['migrate-agents', '--snapshot', str(snapshot)]).exit_code == 0
+    monkeypatch.chdir(snapshot)
+    imported = runner.invoke(main, ['migrate-agents', '--main-session', 'claude-main'])
+    assert imported.exit_code == 0, imported.output
+    partitioned = runner.invoke(main, ['migrate-agents', '--partition'])
+    assert partitioned.exit_code == 0, partitioned.output
+    preview = migrate_agents(snapshot, preview=True, main_session='claude-main')
+    assert any(entry['group'] == 'current_main' for entry in preview['legacy_native_registrations']['sessions'])
+    monkeypatch.chdir(root)
+    refused = runner.invoke(main, ['migrate-agents', '--cutover', str(tmp_path / 'old'), '--writes-stopped',
+                                   '--main-session', 'claude-earlier'])
+    assert refused.exit_code != 0 and 'no retained Main binding' in refused.output
+    result = runner.invoke(main, ['migrate-agents', '--cutover', str(tmp_path / 'input'), '--writes-stopped',
+                                  '--main-session', 'claude-main'])
+    assert result.exit_code == 0, result.output
+    registrations = yaml.safe_load(result.output)['legacy_native_registrations']
+    current = [entry for entry in registrations['sessions'] if entry['group'] == 'current_main']
+    assert [(entry['runtime'], entry['session']) for entry in current] == [('claude', 'claude-main')]
+
+
+@pytest.mark.parametrize('receipt', ['valid', 'absent', 'stale'])
+def test_unconfirmed_failure_passes_cutover_only_with_a_valid_confirmation_receipt(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, receipt: str,
+) -> None:
+    """The original failure stays unconfirmed; only the Runner's matching receipt confirms its end."""
+    import hashlib
+
+    root = tmp_path / 'project'
+    _, fixture = project(root)
+    # The Runner resolves receipts by its real alias form.
+    alias = '1-fixture-handover0-engineer@engineer_4'
+    directory = fixture.rename(fixture.with_name(alias))
+    mapping = yaml.safe_load((directory / 'mapping.yml').read_text())
+    mapping.update(alias=alias, execution_id='run-1', worker_pid=41, runtime_pid=42)
+    (directory / 'mapping.yml').write_text(yaml.safe_dump(mapping))
+    execution = directory / 'execution.yml'
+    execution.write_text(yaml.safe_dump({'execution_id': 'run-1', 'outcome': 'runtime-error',
+                                         'terminal_confirmed': False, 'error': {'code': 'owner-exited'}}))
+    original = execution.read_bytes()
+    if receipt != 'absent':
+        digest = hashlib.sha256(original if receipt == 'valid' else b'another execution').hexdigest()
+        (directory / 'terminal-confirmation-run-1.yml').write_text(yaml.safe_dump({
+            **{key: mapping[key] for key in ('session', 'execution_id', 'worker_pid', 'runtime_pid')},
+            'execution_sha256': digest, 'terminal_confirmed': True}))
+    monkeypatch.chdir(root)
+    result = CliRunner().invoke(main, ['migrate-agents', '--cutover', str(tmp_path / 'input'), '--writes-stopped'])
+    if receipt == 'valid':
+        assert result.exit_code == 0, result.output
+        moved = root / '.graphtraj/core/runner/sessions' / alias / 'execution.yml'
+        assert moved.read_bytes() == original
+        return
+    assert result.exit_code != 0 and 'Stop and confirm' in result.output and 'agents interrupt' in result.output
+    assert not (tmp_path / 'input').exists() and (root / '.graphtraj/config.yml').is_file()
+
+
+def swarm_agent(
+    root: Path, worktree: Path, agent: str, *, worker_pid: int, code: str = 'owner-exited',
+    runtime_pid: int | None = -1,
+) -> Path:
+    """Retain an independent Agent whose last execution agent_swarm ended as unconfirmed."""
+    from agent_swarm import AgentControl
+
+    settings = {'cwd': str(worktree), 'adapter_request': {'cwd': str(worktree), 'approval_policy': 'on-request'}}
+    execution = {'id': agent + '-run', 'state': 'ended', 'outcome': 'failed', 'terminal_confirmed': False,
+                 'last_message': None, 'ended_at': 1.0,
+                 'error': {'code': code, 'message': 'The process owning this execution exited before reporting its end.'},
+                 'process': {'worker_pid': worker_pid,
+                             'runtime_pid': worker_pid + 1 if runtime_pid == -1 else runtime_pid}}
+    AgentControl(root / '.graphtraj/swarm', {}).import_agent({
+        'agent': agent, 'name': agent, 'runtime': 'codex', 'host': 'agents-cli', 'parent': None,
+        'creator': {'host': 'agents-cli', 'agent': None, 'session': None}, 'session': agent + '-native',
+        'sessions': [agent + '-native'], 'settings': settings, 'created_at': 1.0, 'retired_at': None,
+        'executions': [execution]})
+    return root / '.graphtraj/swarm/control/agents' / (agent + '.json')
+
+
+# The largest pid_t is above every platform PID limit; this test process certainly exists.
+GONE_PID = 2**31 - 2
+
+
+@pytest.mark.parametrize('code', ['owner-exited', 'RUNTIME_WORKER_FAILED'])
+def test_owner_exited_swarm_execution_moves_with_relocated_settings_and_unchanged_executions(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, code: str,
+) -> None:
+    """Cutover carries an approved unconfirmed end whose processes are gone, still unconfirmed.
+
+    RUNTIME_WORKER_FAILED is the production shape (B+): a dead worker and no recorded Runtime.
+    """
+    from agent_swarm import AgentControl, AgentsError, Caller
+
+    root = tmp_path / 'project'
+    worktree, _ = project(root)
+    failed = code == 'RUNTIME_WORKER_FAILED'
+    path = swarm_agent(root, worktree, 'exited', worker_pid=GONE_PID, code=code, runtime_pid=None if failed else -1)
+    before = json.loads(path.read_text())['executions']
+    # The public control keeps refusing to configure an unconfirmed execution.
+    shutil.copytree(root / '.graphtraj/swarm', tmp_path / 'public-swarm')
+    with pytest.raises(AgentsError) as refused:
+        AgentControl(tmp_path / 'public-swarm', {}).configure_stopped('exited', {}, Caller('agents-cli', None))
+    assert refused.value.code == 'turn-running'
+    monkeypatch.chdir(root)
+    result = CliRunner().invoke(main, ['migrate-agents', '--cutover', str(tmp_path / 'input'), '--writes-stopped'])
+    assert result.exit_code == 0, result.output
+    report = yaml.safe_load(result.output)
+    expected = {'agent': 'exited', 'execution': 'exited-run', 'error_code': code, 'worker_pid': GONE_PID,
+                'runtime_pid': GONE_PID + 1, 'worker_alive': False, 'runtime_alive': False,
+                'terminal_confirmed': 'retained false; not confirmed by cutover'}
+    if failed:
+        expected.update(runtime_pid=None, runtime_alive=None, runtime_note=(
+            'runtime_pid was never recorded; whether a Runtime started cannot be verified.'))
+    assert report['unconfirmed_swarm_executions'] == [expected]
+    installed = json.loads(path.read_text())
+    new = str(root / '.graphtraj/core/worktrees/member')
+    assert installed['settings'] == {'cwd': new, 'adapter_request': {'cwd': new, 'approval_policy': 'on-request'}}
+    assert json.dumps(installed['executions'], sort_keys=True) == json.dumps(before, sort_keys=True)
+    assert installed['executions'][0]['terminal_confirmed'] is False
+
+
+@pytest.mark.parametrize('case', ['alive', 'not-owner-exited', 'worker-failed-runtime-alive'])
+def test_other_unconfirmed_swarm_executions_still_block_cutover(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, case: str,
+) -> None:
+    """A live owner or any other unconfirmed end is refused before any snapshot."""
+    import os
+
+    root = tmp_path / 'project'
+    worktree, _ = project(root)
+    # Any other error code, or a recorded Runtime that is still alive, stays a blocker.
+    swarm_agent(root, worktree, 'blocked', worker_pid=os.getpid() if case == 'alive' else GONE_PID,
+                code={'alive': 'owner-exited', 'not-owner-exited': 'runtime-error',
+                      'worker-failed-runtime-alive': 'RUNTIME_WORKER_FAILED'}[case],
+                runtime_pid=os.getpid() if case == 'worker-failed-runtime-alive' else -1)
+    monkeypatch.chdir(root)
+    result = CliRunner().invoke(main, ['migrate-agents', '--cutover', str(tmp_path / 'input'), '--writes-stopped'])
+    assert result.exit_code != 0 and 'Stop and confirm the Agent before cutover: blocked' in result.output
+    assert not (tmp_path / 'input').exists() and (root / '.graphtraj/config.yml').is_file()
+
+
+def test_check_stopped_lists_every_blocker_and_accepted_gap_without_writing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The read-only precheck uses the cutover stop facts and reports all of them."""
+    import os
+
+    root = tmp_path / 'project'
+    worktree, directory = project(root)
+    swarm_agent(root, worktree, 'exited', worker_pid=GONE_PID)
+    swarm_agent(root, worktree, 'live', worker_pid=os.getpid())
+    swarm_agent(root, worktree, 'worker-failed', worker_pid=GONE_PID, code='RUNTIME_WORKER_FAILED', runtime_pid=None)
+    (directory / 'execution.yml').unlink()
+    tree = lambda: {str(path): (path.read_bytes() if path.is_file() and not path.is_symlink() else None)
+                    for path in tmp_path.rglob('*')}
+    before = tree()
+    monkeypatch.chdir(root)
+    result = CliRunner().invoke(main, ['migrate-agents', '--check-stopped'])
+    assert result.exit_code == 0, result.output
+    facts = yaml.safe_load(result.output)
+    assert [item.get('runner') or item.get('swarm') for item in facts['blocking']] == ['old@member', 'live']
+    assert [item['agent'] for item in facts['unconfirmed_swarm_executions']] == ['exited', 'worker-failed']
+    assert tree() == before
+    refused = CliRunner().invoke(main, ['migrate-agents', '--cutover', str(tmp_path / 'input'), '--writes-stopped'])
+    assert refused.exit_code != 0 and '1 more; list them with migrate-agents --check-stopped' in refused.output
+
+
+def nested_worktree(root: Path, worktree: Path) -> Path:
+    """Add a linked worktree inside another linked worktree, as a build checkout does."""
+    nested = worktree / 'build/nested'
+    subprocess.run(['git', 'worktree', 'add', '-b', 'nested', str(nested)], cwd=root, check=True, capture_output=True)
+    return nested
+
+
+def registered(root: Path) -> set[str]:
+    """Return Git's registered linked worktree paths."""
+    listing = subprocess.check_output(['git', 'worktree', 'list', '--porcelain'], cwd=root, text=True)
+    return {line.removeprefix('worktree ') for line in listing.splitlines() if line.startswith('worktree ')} - {str(root)}
+
+
+def clean(path: Path) -> bool:
+    """Whether Git operates normally in this worktree."""
+    return subprocess.run(['git', 'status', '--porcelain'], cwd=path, capture_output=True).returncode == 0
+
+
+def test_cutover_and_restore_move_a_nested_linked_worktree_with_its_outer_one(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Only the outer worktree is moved; Git repairs the nested one at its new path, both ways."""
+    root = tmp_path / 'project'
+    worktree, _ = project(root)
+    nested = nested_worktree(root, worktree)
+    # A prunable worktree outside the moved root is left as it is.
+    outside = tmp_path / 'outside'
+    subprocess.run(['git', 'worktree', 'add', '-b', 'outside', str(outside)], cwd=root, check=True, capture_output=True)
+    shutil.rmtree(outside)
+    new_outer = root / '.graphtraj/core/worktrees/member'
+    new_nested = new_outer / 'build/nested'
+    monkeypatch.chdir(root)
+    runner = CliRunner()
+    plan = yaml.safe_load(runner.invoke(main, ['migrate-agents', '--check-stopped']).output)['worktree_moves']
+    assert {entry['old']: (entry['action'], entry['new'], bool(entry['prunable'])) for entry in plan} == {
+        str(root): ('untouched', None, False), str(worktree): ('move', str(new_outer), False),
+        str(nested): ('repair', str(new_nested), False), str(outside): ('untouched', None, True)}
+    assert next(entry for entry in plan if entry['old'] == str(worktree))['links'] == {'.state': '../../state'}
+    result = runner.invoke(main, ['migrate-agents', '--cutover', str(tmp_path / 'input'), '--writes-stopped'])
+    assert result.exit_code == 0, result.output
+    assert registered(root) == {str(new_outer), str(new_nested), str(outside)}
+    assert clean(new_outer) and clean(new_nested)
+    report = yaml.safe_load(result.output)
+    restored = runner.invoke(main, ['migrate-agents', '--restore', report['backup'], '--writes-stopped'])
+    assert restored.exit_code == 0, restored.output
+    assert registered(root) == {str(worktree), str(nested), str(outside)}
+    assert clean(worktree) and clean(nested)
+    assert (worktree / '.state').readlink() == Path('../../state')
+
+
+def test_failed_install_returns_nested_and_outer_worktrees(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A failure after the Git moves restores both worktrees and the original layout."""
+    from graphtraj.workspace import agent_production_migration
+
+    root = tmp_path / 'project'
+    worktree, _ = project(root)
+    nested = nested_worktree(root, worktree)
+    write = agent_production_migration.write_yaml_durably
+
+    def failing(path, document):
+        """Fail when the installed facts are recorded, after every worktree has moved."""
+        if isinstance(document, dict) and 'installed_facts' in document:
+            raise OSError('injected install failure')
+        return write(path, document)
+
+    monkeypatch.setattr(agent_production_migration, 'write_yaml_durably', failing)
+    monkeypatch.chdir(root)
+    result = CliRunner().invoke(main, ['migrate-agents', '--cutover', str(tmp_path / 'input'), '--writes-stopped'])
+    assert result.exit_code != 0 and 'injected install failure' in result.output
+    assert registered(root) == {str(worktree), str(nested)}
+    assert clean(worktree) and clean(nested)
+    assert (worktree / '.state').readlink() == Path('../../state')
+    assert (root / '.graphtraj/config.yml').is_file() and not (root / '.graphtraj/core').exists()
+
+
+def relative_worktree(root: Path, value: str | None = None) -> str:
+    """Read, or set, the Task's Harness-relative worktree as the Task Graph records it."""
+    path = next((root / '.graphtraj').glob('*/tasks/1-*/task.yml'), None) or next(
+        (root / '.graphtraj').glob('core/state/tasks/1-*/task.yml'))
+    record = yaml.safe_load(path.read_text())
+    if value is not None:
+        record['worktree'] = value
+        path.write_text(yaml.safe_dump(record, sort_keys=False))
+    return record['worktree']
+
+
+def test_cutover_relocates_the_task_worktree_relative_to_the_harness(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Cleanup, replacement and dispatch reuse locate harness_root / task.yml worktree."""
+    root = tmp_path / 'project'
+    project(root)
+    relative_worktree(root, '.graphtraj/.agent-worktrees/member')
+    monkeypatch.chdir(root)
+    result = CliRunner().invoke(main, ['migrate-agents', '--cutover', str(tmp_path / 'input'), '--writes-stopped'])
+    assert result.exit_code == 0, result.output
+    assert relative_worktree(root) == '.graphtraj/core/worktrees/member'
+    assert (root / relative_worktree(root)).is_dir()
+
+
+def test_repair_relocates_paths_left_by_an_earlier_cutover_once(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The public repair previews without writing, applies once and then finds nothing."""
+    root = tmp_path / 'project'
+    project(root)
+    monkeypatch.chdir(root)
+    runner = CliRunner()
+    assert runner.invoke(main, ['migrate-agents', '--cutover', str(tmp_path / 'input'), '--writes-stopped']).exit_code == 0
+    # An installation from before this fix left the old relative spelling.
+    relative_worktree(root, '.graphtraj/.agent-worktrees/member')
+    task = next((root / '.graphtraj/core/state/tasks').glob('1-*/task.yml'))
+    before = task.read_bytes()
+    preview = runner.invoke(main, ['migrate-agents', '--repair-relocated-paths', '--preview'])
+    assert preview.exit_code == 0, preview.output
+    planned = yaml.safe_load(preview.output)
+    assert planned['written'] is False and planned['changes'] == 1
+    assert planned['files'][0]['changes'] == [{'field': 'worktree', 'old': '.graphtraj/.agent-worktrees/member',
+                                               'new': '.graphtraj/core/worktrees/member'}]
+    assert task.read_bytes() == before
+    applied = runner.invoke(main, ['migrate-agents', '--repair-relocated-paths', '--writes-stopped'])
+    assert applied.exit_code == 0, applied.output
+    assert yaml.safe_load(applied.output)['changes'] == 1
+    assert relative_worktree(root) == '.graphtraj/core/worktrees/member'
+    assert (root / relative_worktree(root)).is_dir()
+    again = runner.invoke(main, ['migrate-agents', '--repair-relocated-paths', '--writes-stopped'])
+    assert again.exit_code == 0 and yaml.safe_load(again.output)['changes'] == 0
+    refused = runner.invoke(main, ['migrate-agents', '--repair-relocated-paths'])
+    assert refused.exit_code != 0 and 'exactly one of --preview or --writes-stopped' in refused.output

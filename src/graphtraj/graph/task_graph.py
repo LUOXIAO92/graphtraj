@@ -716,7 +716,9 @@ def _load_states(tasks: Path) -> dict[str, tuple[Path, dict[str, Any]]]:
         if task_id in states:
             raise ValueError("Task state is invalid")
         states[task_id] = (path.parent, record)
-    directories = {path for path in tasks.iterdir() if path.is_dir()}
+    # Hidden entries (for example a Runtime's ``.claude`` write marker) are
+    # foreign to the Task layout, never a Task or a corruption of one.
+    directories = {path for path in tasks.iterdir() if path.is_dir() and not path.name.startswith(".")}
     if directories != {directory for directory, _ in states.values()}:
         raise ValueError("Task state is invalid")
     return states

@@ -18,7 +18,7 @@ def session_sources(state: Path, runner: Path, project: Path) -> list[dict]:
     tasks = state / 'tickets'
     if not tasks.exists():
         tasks = state / 'tasks'
-    task_ids = {p.name.split('-', 1)[0] for p in tasks.iterdir()} if tasks.is_dir() else set()
+    task_ids = {p.name.split('-', 1)[0] for p in tasks.iterdir() if not p.name.startswith('.')} if tasks.is_dir() else set()
     paths = set(runner.glob('sessions/*/mapping.yml'))
     paths.update(tasks.glob('*/teams/*/traces/*/runner/session.yml'))
     paths.update(runner.glob('main-sessions/*/session.yml'))

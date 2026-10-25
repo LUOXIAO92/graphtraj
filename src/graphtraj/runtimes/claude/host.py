@@ -28,6 +28,7 @@ from agent_swarm import AgentsError, AgentsResult, Caller, bind
 from agent_swarm.connection import connection_operation, worker_connection
 from agent_swarm.discovery import handle_request
 from agent_swarm.process import process_ancestors
+from graphtraj.configuration.project_configuration import runner_directory
 from graphtraj.execution.runner_process import process_executable
 from graphtraj.interfaces.agents import GraphTrajAgents, configured_archive
 from graphtraj.runtimes.claude.mcp import serve
@@ -93,7 +94,7 @@ def main_calls(root: Path, backend: object, archive: object) -> Callable[[str, P
     from graphtraj.execution.runner_status import runtime_caller
     from graphtraj.interfaces.gateway import handle_request as handle_task
 
-    runner = root / '.graphtraj' / 'runner'
+    runner = runner_directory(root)
     callers: dict[str, Callable] = {}
     # Sessions that already entered as Main in this process.
     claimed: set[str] = set()
@@ -258,7 +259,7 @@ def main() -> None:
     agents = GraphTrajAgents(root, cwd)
     control = agents.control
     make_call = main_calls(root, agents, configured_archive(root))
-    calls = NativeCalls(make_call, cwd, root / '.graphtraj' / 'runner')
+    calls = NativeCalls(make_call, cwd, runner_directory(root))
 
     def authenticate(pid: int) -> None:
         """Require a live direct child of this same verified Claude process."""

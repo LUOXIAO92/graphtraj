@@ -18,8 +18,10 @@ from agent_swarm.sessions.archive import SessionArchive, JsonlSessionStore
 from agent_swarm.sessions.protocol import native_record
 from graphtraj.sessions.storage import SessionStore
 from graphtraj.configuration.project_configuration import load_project_configuration
+from graphtraj.execution.main_continuity import current_main
 from graphtraj.workspace.migration_snapshot import MANIFEST, source_map
 from graphtraj.workspace.session_migration import _source_order
+from graphtraj.workspace.task_migration import foreign_entries
 
 
 def _legacy_registrations(
@@ -28,6 +30,7 @@ def _legacy_registrations(
     sources: list[dict],
     available: dict[str, Path],
     main_session: str | None,
+    claimed_main: dict | None = None,
 ) -> dict:
     """Inventory associated headers and binding facts, without exposing bodies.
 
@@ -115,6 +118,16 @@ def _legacy_registrations(
             except (OSError, ValueError, TypeError):
                 entry['missing'] = 'Copied header unavailable, invalid, or identity does not match.'
         result.append(entry)
+    if claimed_main is not None and not any(entry['session'] == claimed_main['session'] for entry in result):
+        # The current Main known only by its continuity claim (no completion binding).
+        result.append({'runtime': claimed_main['runtime'], 'session': claimed_main['session'], 'agent': None,
+                       'group': 'current_main', 'bindings': [{'reference': 'main-sessions/continuity.jsonl',
+                                                              'agent': None, 'retired': False, 'current': True,
+                                                              'continuation_settings': False}],
+                       'tools': [], 'resume_prerequisites': False, 'duplicate_status': 'unknown',
+                       'confirmed_live_duplicate': False, 'retained_current_root_owners': [],
+                       'current_interactive_main': True,
+                       'missing': 'This Runtime does not retain its tool registry in the captured Session header.'})
     counts = {}
     for entry in result:
         key = entry['group']
@@ -152,7 +165,13 @@ def migrate_agents(
     archives = sorted((configuration.state / 'sessions').glob('*/session.sqlite3'))
     root = cwd / '.graphtraj/swarm'
     sources = manifest['sources']
-    if main_session and not any(item.get('kind') == 'main' and item.get('session') == main_session for item in sources):
+    # A Claude/Pi/DSH Main has no Codex completion binding; only the current
+    # continuity claim (main_continuity) identifies it as the current Main.
+    backup = cwd / '.graphtraj/core/backups/before-agent-partition/runner'
+    current = current_main(backup if backup.is_dir() else cwd / '.graphtraj/migration-runner')
+    claimed = current if current is not None and current['session'] == main_session else None
+    if main_session and claimed is None and not any(
+            item.get('kind') == 'main' and item.get('session') == main_session for item in sources):
         raise ValueError('The supplied current Main identity has no retained Main binding in this snapshot.')
     if sessions:
         sources = [item for item in sources
@@ -171,7 +190,8 @@ def migrate_agents(
               'archive_root': str(root), 'sqlite_archives': len(archives),
               'sources': sources, 'missing_links': manifest.get('missing_links', []),
               'git_worktree_consistency': manifest.get('git_worktrees_unchanged'),
-              'legacy_native_registrations': _legacy_registrations(cwd, manifest, sources, available, main_session),
+              'foreign_entries': foreign_entries(configuration.state / 'tasks'),
+              'legacy_native_registrations': _legacy_registrations(cwd, manifest, sources, available, main_session, claimed),
               'production_cutover': False}
     if preview:
         return report
@@ -226,6 +246,23 @@ def migrate_agents(
             'notice': 'Archive rehearsal only. Original state, identities and native sources are unchanged.'}
 
 
+def _retained_event(event: dict, by_seq: dict[int, dict]) -> dict:
+    """Return what an existing archive event must keep through import, in order.
+
+    A native event keeps its original record. Codex's graphtraj/history (a
+    replacement or rollback selection) has no record: it keeps its complete
+    content, with each selected seq named by that event's native identity,
+    since import may renumber seqs when it adds earlier native records.
+    """
+    native = event['graphtraj']['native']
+    if event['type'] != 'graphtraj/history':
+        return {'native': native, 'record': native_record(event)}
+    selected = [by_seq[seq].get('graphtraj', {}).get('native', {}) for seq in event['data']['eventSeqs']]
+    content = {key: value for key, value in event.items() if key not in {'seq', 'data'}}
+    return {'native': native, 'event': {**content, 'data': {**event['data'], 'eventSeqs': [
+        (item.get('runtime'), item.get('sessionId'), item.get('locator')) for item in selected]}}}
+
+
 def _verify_retained_swarm(root: Path, original: Path, manifest: dict) -> dict:
     """Compare copied tool-owned identities, native resources and existing JSONL.
 
@@ -256,14 +293,15 @@ def _verify_retained_swarm(root: Path, original: Path, manifest: dict) -> dict:
                 mismatches.append(relative.as_posix() + ':header')
             old_events, new_events = [], []
             for store, records in ((before, old_events), (after, new_events)):
-                cursor = -1
+                events, cursor = [], -1
                 while True:
                     page = store.page(after=cursor)
-                    records.extend({'native': event['graphtraj']['native'], 'record': native_record(event)}
-                                   for event in page['events'])
+                    events.extend(page['events'])
                     if not page['has_more']:
                         break
                     cursor = page['after']
+                by_seq = {event['seq']: event for event in events}
+                records.extend(_retained_event(event, by_seq) for event in events)
             old_keys = {(item['native']['runtime'], item['native']['sessionId'], item['native']['locator'])
                         for item in old_events}
             selected = [item for item in new_events

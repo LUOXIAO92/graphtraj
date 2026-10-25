@@ -5,8 +5,10 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import re
 import shutil
 import subprocess
+import tempfile
 import tomllib
 from uuid import uuid4
 
@@ -16,37 +18,179 @@ from agent_swarm import AgentControl, Caller
 from graphtraj.configuration.project_configuration import load_project_configuration, runner_directory
 from graphtraj.execution.runner_heartbeat import ownership_is_held
 from graphtraj.execution.runner_io import write_yaml_durably
-from graphtraj.workspace.agent_cutover import _references, _rewrite_records, partition_snapshot
+from graphtraj.workspace.agent_cutover import _owned_metadata, _references, _rewrite_records, partition_snapshot
 from graphtraj.workspace.agent_migration import migrate_agents
 from graphtraj.workspace.migration_snapshot import MANIFEST, snapshot_project
+from graphtraj.workspace.task_migration import foreign_entries
 
 
-def _stopped(root: Path) -> list[dict]:
-    """Refuse a live or unconfirmed member; Main's stopped writes are operator-owned."""
+def _terminal_confirmed(turn_file: Path) -> bool:
+    """Accept the original terminal evidence or the Runner's retained confirmation receipt.
+
+    An unconfirmed failure is never rewritten; interrupt confirms its end in a
+    separate receipt, which the Runner's own stop check (read_terminal_outcome) accepts.
+    """
+    from graphtraj.execution.runner_models import RunnerError
+    from graphtraj.execution.runner_status import read_terminal_outcome
+
+    try:
+        read_terminal_outcome(turn_file)
+    except RunnerError:
+        return False
+    return True
+
+
+# agent_swarm ends whose owner or worker vanished without a recorded end
+# (user-approved scheme B: owner-exited; B+: RUNTIME_WORKER_FAILED).
+CARRIED_UNCONFIRMED_CODES = frozenset({'owner-exited', 'RUNTIME_WORKER_FAILED'})
+
+
+def _carried_unconfirmed(execution: dict) -> bool:
+    """The single rule for which unconfirmed swarm end cutover may carry.
+
+    The end must be one of the approved error codes with a recorded worker,
+    and the worker and any recorded Runtime process must be rechecked as gone
+    now. A process that cannot be checked counts as alive. A Runtime that was
+    never recorded cannot be checked; it is reported, not assumed to exist.
+    """
+    from agent_swarm.control import _alive
+
+    process = execution.get('process') or {}
+    worker = process.get('worker_pid')
+    return (execution.get('state') == 'ended' and execution.get('terminal_confirmed') is False
+            and (execution.get('error') or {}).get('code') in CARRIED_UNCONFIRMED_CODES
+            and isinstance(worker, int) and not isinstance(worker, bool) and worker > 0
+            and not _alive(worker) and not _alive(process.get('runtime_pid')))
+
+
+def _owner_exited(agent: str, execution: dict) -> dict | None:
+    """Describe an unconfirmed swarm execution cutover carries, or ``None``.
+
+    The execution keeps terminal_confirmed false; nothing here confirms its end.
+    """
+    if not _carried_unconfirmed(execution):
+        return None
+    process = execution['process']
+    entry = {'agent': agent, 'execution': execution.get('id'), 'error_code': execution['error']['code'],
+             'worker_pid': process['worker_pid'], 'runtime_pid': process.get('runtime_pid'),
+             'worker_alive': False, 'runtime_alive': False,
+             'terminal_confirmed': 'retained false; not confirmed by cutover'}
+    if process.get('runtime_pid') is None:
+        entry['runtime_alive'] = None
+        entry['runtime_note'] = 'runtime_pid was never recorded; whether a Runtime started cannot be verified.'
+    return entry
+
+
+def stop_facts(root: Path) -> dict:
+    """Read every cutover stop blocker and accepted gap, without writing anything."""
     from graphtraj.execution.runner_status import is_session_mapping
 
     runner = runner_directory(root)
-    unavailable = []
-    for path in runner.glob('sessions/*/mapping.yml'):
+    blocking, unavailable, owner_exited = [], [], []
+    for path in sorted(runner.glob('sessions/*/mapping.yml')):
         mapping = yaml.safe_load(path.read_text())
+        alias = mapping.get('alias', path.parent.name)
         terminal_path = path.parent / 'execution.yml'
         terminal = yaml.safe_load(terminal_path.read_text()) if terminal_path.is_file() else {}
         held = ownership_is_held(path.parent, mapping.get('worker_pid', 0))
         if not terminal and not held and not mapping.get('execution_id') and not is_session_mapping(mapping):
-            unavailable.append({'alias': mapping.get('alias', path.parent.name),
+            unavailable.append({'alias': alias,
                                 'missing': 'Historical binding has no current execution schema; activity and continuation are not inferred.'})
             continue
         if (not terminal or terminal.get('outcome') not in {'completed', 'interrupted', 'runtime-error'}
-                or terminal.get('terminal_confirmed') is False
                 or (mapping.get('execution_id') and terminal.get('execution_id') != mapping['execution_id'])
-                or held):
-            raise ValueError(f"Stop and confirm the retained execution before cutover: {mapping.get('alias', path.parent.name)}")
-    for path in (root / '.graphtraj/swarm/control/agents').glob('*.json'):
+                or held or not _terminal_confirmed(terminal_path)):
+            blocking.append({'runner': alias, 'message': (
+                f'Stop and confirm the retained execution before cutover: {alias}. '
+                'Its direct parent confirms an unconfirmed end through the public interrupt '
+                '(agents interrupt), which retains a terminal-confirmation receipt.')})
+    for path in sorted((root / '.graphtraj/swarm/control/agents').glob('*.json')):
         record = json.loads(path.read_text())
-        if any(item.get('state') != 'ended' or item.get('terminal_confirmed') is False
-               for item in record.get('executions', [])):
-            raise ValueError(f"Stop and confirm the Agent before cutover: {record['agent']}")
-    return unavailable
+        for execution in record.get('executions', []):
+            if execution.get('state') == 'ended' and execution.get('terminal_confirmed') is not False:
+                continue
+            accepted = _owner_exited(record['agent'], execution)
+            if accepted is None:
+                blocking.append({'swarm': record['agent'], 'execution': execution.get('id'),
+                                 'message': f"Stop and confirm the Agent before cutover: {record['agent']}"})
+            else:
+                owner_exited.append(accepted)
+    configuration = load_project_configuration(root)
+    listing = _git(configuration.project_root, 'worktree', 'list', '--porcelain')
+    try:
+        moves = _worktree_moves(configuration, root / '.graphtraj', listing)
+    except ValueError as error:
+        blocking.append({'worktrees': str(configuration.agent_worktrees), 'message': str(error)})
+        moves = {}
+    return {'blocking': blocking, 'control_missing': unavailable, 'unconfirmed_swarm_executions': owner_exited,
+            'worktree_moves': _worktree_plan(listing, moves),
+            'claude_continuations': [_continuation_plan(item) for item in _claude_continuations(root, moves)]}
+
+
+def _worktree_plan(listing: str, moves: dict[str, str]) -> list[dict]:
+    """Show what cutover does to every registered worktree, read-only.
+
+    Worktrees outside the moved root (including prunable ones) stay untouched:
+    cutover never moves, repairs or prunes them.
+    """
+    nested = _nested(moves)
+    plan = []
+    for block in listing.strip().split('\n\n'):
+        lines = block.splitlines()
+        old = lines[0].removeprefix('worktree ')
+        prunable = next((line.removeprefix('prunable ') for line in lines if line.startswith('prunable')), False)
+        action = 'repair' if old in nested else 'move' if old in moves else 'untouched'
+        entry = {'old': old, 'new': moves.get(old), 'action': action, 'prunable': prunable}
+        if action != 'untouched':
+            entry['links'] = {name: os.readlink(Path(old) / name) for name in ('.state', 'CONTEXT.md', 'docs')
+                              if (Path(old) / name).is_symlink()}
+        plan.append(entry)
+    return plan
+
+
+def _continuation_plan(item: dict) -> dict:
+    """Show one planned Claude continuation copy and the files it would read and add."""
+    if 'status' in item:
+        return {key: item.get(key) for key in ('session', 'old', 'new', 'status', 'reason')}
+    home = Path(item['home'])
+    source = _claude_project(home, item['old'])
+    if not source.is_dir():
+        source = _claude_project(home, os.path.realpath(item['old']))
+    target = _claude_project(home, item['new'])
+    names = (item['session'] + '.jsonl', item['session'])
+    return {'session': item['session'], 'old': item['old'], 'new': item['new'], 'home': item['home'],
+            'source_exists': any((source / name).exists() for name in names),
+            'target_exists': any((target / name).exists() for name in names)}
+
+
+def _stopped(root: Path) -> dict:
+    """Refuse a live or unconfirmed member; Main's stopped writes are operator-owned."""
+    facts = stop_facts(root)
+    if facts['blocking']:
+        others = len(facts['blocking']) - 1
+        raise ValueError(facts['blocking'][0]['message']
+                         + (f' ({others} more; list them with migrate-agents --check-stopped).' if others else ''))
+    return facts
+
+
+def _relocate_owner_exited(swarm: Path, agent: str, settings: dict) -> None:
+    """Replace only the staged copy's settings for an Agent with an accepted owner-exited execution.
+
+    agent_swarm's configure_stopped rightly refuses unconfirmed executions and
+    stays unchanged. Cutover owns this staging copy, so it writes the settings
+    under the same per-Agent lock, atomic replacement and JSON form agent_swarm
+    uses; executions, including terminal_confirmed false and error, are kept.
+    """
+    from agent_swarm.locks import exclusive
+
+    path = swarm / 'control' / 'agents' / f'{agent}.json'
+    with exclusive(swarm / 'live' / 'agents' / f'{agent}.lock'):
+        record = json.loads(path.read_text(encoding='utf-8'))
+        record['settings'] = settings
+        descriptor, temporary = tempfile.mkstemp(dir=path.parent, prefix='.record-')
+        with os.fdopen(descriptor, 'w', encoding='utf-8') as stream:
+            stream.write(json.dumps(record, indent=2, sort_keys=True))
+        os.replace(temporary, path)
 
 
 def _facts(paths: list[Path]) -> dict:
@@ -105,19 +249,60 @@ def _launch_arguments(value: object, moves: dict[str, str]) -> object:
     return result
 
 
+def _nested(moves: dict[str, str]) -> dict[str, str]:
+    """Return the moved worktrees that lie inside another moved worktree.
+
+    Their directories travel with that outer worktree, so Git only needs its
+    administrative path repaired at the new location.
+    """
+    return {old: new for old, new in moves.items()
+            if any(old != other and Path(old).is_relative_to(other) for other in moves)}
+
+
 def _move_worktrees(source: Path, moves: dict[str, str]) -> list[tuple[str, str]]:
-    """Move each registered linked worktree with Git; undo completed moves on failure."""
+    """Move each outermost linked worktree with Git, then repair nested ones.
+
+    A failure moves completed outer worktrees back and repairs the nested
+    ones at their original paths again.
+    """
+    nested = _nested(moves)
     completed = []
     try:
         for old, new in moves.items():
+            if old in nested:
+                continue
             Path(new).parent.mkdir(parents=True, exist_ok=True)
             _git(source, 'worktree', 'move', old, new)
             completed.append((old, new))
+        if nested:
+            _git(source, 'worktree', 'repair', *nested.values())
     except BaseException:
-        for old, new in reversed(completed):
-            _git(source, 'worktree', 'move', new, old)
+        _return_worktrees(source, dict(completed), nested)
         raise
     return completed
+
+
+def _return_worktrees(source: Path, moves: dict[str, str], nested: dict[str, str]) -> None:
+    """Move outer worktrees that reached their new path back; repair nested ones there."""
+    for old, new in reversed(list(moves.items())):
+        if old not in nested and Path(new).exists() and not Path(old).exists():
+            _git(source, 'worktree', 'move', new, old)
+    present = [old for old in nested if Path(old).exists()]
+    if present:
+        _git(source, 'worktree', 'repair', *present)
+
+
+def _worktree_moves(configuration, data: Path, listing: str) -> dict[str, str]:
+    """Map every registered linked worktree under the worktree root to its core path."""
+    worktrees = {}
+    for line in listing.splitlines():
+        if line.startswith('worktree '):
+            path = Path(line.removeprefix('worktree '))
+            if path.is_relative_to(configuration.agent_worktrees):
+                if path == configuration.project_root:
+                    raise ValueError('The Source Repository must remain outside the worktree directory being moved.')
+                worktrees[str(path)] = str(data / 'core/worktrees' / path.relative_to(configuration.agent_worktrees))
+    return worktrees
 
 
 def _native_resources(staging: Path, root: Path, manifest: dict) -> tuple[dict[str, str], list[dict]]:
@@ -176,6 +361,162 @@ def _restore_native_references(root: Path, manifest: dict, moves: dict[str, str]
             link.symlink_to(os.path.relpath(target, link.parent))
 
 
+def _claude_project(home: Path, cwd: str) -> Path:
+    """Claude Code keeps a cwd's Sessions in one directory named by its encoded path."""
+    return home / 'projects' / re.sub(r'[^A-Za-z0-9]', '-', cwd)
+
+
+def _claude_continuations(root: Path, worktrees: dict[str, str]) -> list[dict]:
+    """Plan each Claude Session whose cwd a moved worktree carries.
+
+    The native home is the one recorded for the Session's launch, else the
+    same CLAUDE_CONFIG_DIR / ~/.claude default the Claude Adapter applies.
+    Both cwd spellings are compared by real path; the new cwd keeps Git's
+    registered spelling. A Claude record that cannot be planned is a listed gap.
+    Retired and handed-over trace records are not scanned; they are not resumed.
+    """
+    default = os.environ.get('CLAUDE_CONFIG_DIR', str(Path.home() / '.claude'))
+    candidates = []
+    for path in runner_directory(root).glob('sessions/*/mapping.yml'):
+        mapping = yaml.safe_load(path.read_text()) or {}
+        launch_path = path.parent / 'launch.yml'
+        launch = yaml.safe_load(launch_path.read_text()) if launch_path.is_file() else None
+        request = (launch or {}).get('adapter_request') or {}
+        candidates.append((str(path), mapping.get('runtime'), [mapping.get('session')],
+                           mapping.get('worktree_path') or request.get('worktree_path'), request.get('runtime_home')))
+    for path in (root / '.graphtraj/swarm/control/agents').glob('*.json'):
+        record = json.loads(path.read_text())
+        settings = record.get('settings') or {}
+        request = settings.get('adapter_request') or settings
+        candidates.append((str(path), record.get('runtime'), record.get('sessions') or [record.get('session')],
+                           settings.get('cwd') or request.get('worktree_path'), request.get('runtime_home')))
+    moved = {os.path.realpath(old): new for old, new in worktrees.items()}
+    planned, seen = [], set()
+    for reference, runtime, sessions, cwd, home in candidates:
+        if runtime != 'claude':
+            continue
+        if not isinstance(cwd, str) or not cwd:
+            planned.append({'runtime': 'claude', 'session': next((item for item in sessions if item), None),
+                            'old': None, 'new': None, 'status': 'unplanned', 'record': reference,
+                            'reason': 'The Claude record has no cwd; its native continuation cannot be planned.'})
+            continue
+        real = os.path.realpath(cwd)
+        # A nested worktree also lies in its outer one; their mappings agree.
+        for old, new in moved.items():
+            if real != old and not real.startswith(old + '/'):
+                continue
+            target = new + real[len(old):]
+            if not any(isinstance(session, str) and session for session in sessions):
+                planned.append({'runtime': 'claude', 'session': None, 'old': cwd, 'new': target,
+                                'status': 'unplanned', 'record': reference,
+                                'reason': 'The Claude record has no native Session identity.'})
+            for session in sessions:
+                key = (str(home or default), session, cwd)
+                if isinstance(session, str) and session and key not in seen:
+                    seen.add(key)
+                    planned.append({'runtime': 'claude', 'session': session, 'home': key[0],
+                                    'old': cwd, 'new': target})
+            break
+    return planned
+
+
+def _digests(directory: Path, names: list[str]) -> dict[str, str]:
+    """Digest each regular file of these Session entries, keyed relative to the project directory."""
+    result = {}
+    for name in names:
+        entry = directory / name
+        for path in ([entry] if entry.is_file() else entry.rglob('*')):
+            if path.is_file() and not path.is_symlink():
+                with path.open('rb') as stream:
+                    result[path.relative_to(directory).as_posix()] = hashlib.file_digest(stream, 'sha256').hexdigest()
+    return result
+
+
+def _copy_continuation(item: dict, continuations: list[dict]) -> None:
+    """Add the native Session under its new cwd; never replace or move the original.
+
+    The entry is recorded before any write, so a failed copy or digest is
+    removed by the same rollback that removes completed copies.
+    """
+    home = Path(item['home'])
+    source = _claude_project(home, item['old'])
+    if not source.is_dir():
+        source = _claude_project(home, os.path.realpath(item['old']))
+    target = _claude_project(home, item['new'])
+    names = [name for name in (item['session'] + '.jsonl', item['session']) if (source / name).exists()]
+    if not names:
+        continuations.append({**item, 'status': 'missing', 'reason': 'No native transcript under the original cwd.'})
+        return
+    if any((target / name).exists() for name in names):
+        same = _digests(source, names) == _digests(target, names)
+        continuations.append({**item, 'status': 'existing' if same else 'conflict', 'reason': (
+            'The new cwd already has this identical Session; nothing replaced.' if same else
+            'The new cwd has a different record for this Session; it was not replaced or verified.')})
+        return
+    entry = {**item, 'status': 'copied', 'copies': [str(target / name) for name in names], 'files': {},
+             'created': [str(directory) for directory in (target.parent, target) if not directory.exists()]}
+    continuations.append(entry)
+    target.mkdir(parents=True, exist_ok=True)
+    for name in names:
+        if (source / name).is_dir():
+            shutil.copytree(source / name, target / name, symlinks=True)
+        else:
+            shutil.copy2(source / name, target / name)
+    entry['files'] = {str(target / path): digest for path, digest in _digests(target, names).items()}
+
+
+def _changed_copies(continuations: list[dict]) -> list[str]:
+    """Name copied native files that changed or appeared since cutover."""
+    changed = []
+    for item in continuations:
+        if item.get('status') != 'copied':
+            continue
+        target = Path(item['copies'][0]).parent
+        current = {str(target / path): digest
+                   for path, digest in _digests(target, [Path(copy).name for copy in item['copies']]).items()}
+        changed += sorted(path for path in current.keys() | item['files'].keys()
+                          if current.get(path) != item['files'].get(path))
+    return changed
+
+
+def _remove_copies(continuations: list[dict]) -> None:
+    """Remove only this cutover's copies, then the directories it created once empty."""
+    copied = [item for item in continuations if item.get('status') == 'copied']
+    for copy in (Path(copy) for item in copied for copy in item['copies']):
+        if copy.is_dir() and not copy.is_symlink():
+            shutil.rmtree(copy)
+        else:
+            copy.unlink(missing_ok=True)
+    for directory in sorted({Path(path) for item in copied for path in item['created']}, reverse=True):
+        if directory.is_dir() and not any(directory.iterdir()):
+            directory.rmdir()
+
+
+def _moved_role_grants(roles: Path, moves: dict[str, str]) -> list[dict]:
+    """Name authored read grants that still point at moved project data.
+
+    roles.yml is authored configuration: cutover installs it unchanged and its
+    owner replaces these grants through role_organization before any Agent
+    using that role is started or resumed.
+    """
+    if not roles.is_file():
+        return []
+    found = []
+
+    def visit(value: object, location: list[str]) -> None:
+        if isinstance(value, dict):
+            for key, item in value.items():
+                visit(item, [*location, str(key)])
+        elif isinstance(value, list) and location[-1:] == ['read_paths']:
+            for path in value:
+                moved = _references(path, moves, 'path')
+                if moved != path:
+                    found.append({'field': '.'.join(location), 'old': path, 'new': moved})
+
+    visit(yaml.safe_load(roles.read_text(encoding='utf-8')), [])
+    return found
+
+
 def cutover_project(
     root: Path, snapshot: Path, *, writes_stopped: bool, main_session: str | None = None,
 ) -> dict:
@@ -194,21 +535,15 @@ def cutover_project(
     configuration = load_project_configuration(root)
     data = root / '.graphtraj'
     runner = runner_directory(root)
-    control_missing = _stopped(root)
+    stop = _stopped(root)
     old_paths = [configuration.state, runner, data / 'swarm', data / 'config.yml', data / 'roles.yml', data / 'cli']
     before = _facts(old_paths)
     git_before = _git(configuration.project_root, 'worktree', 'list', '--porcelain')
-    worktrees = {}
-    for line in git_before.splitlines():
-        if line.startswith('worktree '):
-            path = Path(line.removeprefix('worktree '))
-            if path.is_relative_to(configuration.agent_worktrees):
-                if path == configuration.project_root:
-                    raise ValueError('The Source Repository must remain outside the worktree directory being moved.')
-                worktrees[str(path)] = str(data / 'core/worktrees' / path.relative_to(configuration.agent_worktrees))
+    worktrees = _worktree_moves(configuration, data, git_before)
     for path in configuration.agent_worktrees.glob('*'):
         if path.is_dir() and not any(Path(old).is_relative_to(path) for old in worktrees):
             raise ValueError(f'An unregistered worktree directory needs native reconciliation before cutover: {path}')
+    planned_continuations = _claude_continuations(root, worktrees)
     snapshot_project(root, snapshot)
     manifest = yaml.safe_load((snapshot / MANIFEST).read_text())
     staging = snapshot.with_name(snapshot.name + '-cutover')
@@ -230,6 +565,13 @@ def cutover_project(
              **worktrees, **native_moves}
     _rewrite_records(staged_core / 'state', moves)
     _rewrite_records(staged_core / 'runner', moves)
+    # Task and Team records also keep Harness-relative paths (task.yml worktree).
+    relative = _relative_moves(root, {str(configuration.state): str(data / 'core/state'),
+                                      str(runner): str(data / 'core/runner'),
+                                      str(configuration.agent_worktrees): str(data / 'core/worktrees'),
+                                      **worktrees})
+    for directory in (staged_core / 'state', staged_core / 'runner'):
+        relocate_relative_records(directory, relative, write=True)
     for directory in (staged_core / 'runner', staged_core / 'state'):
         for path in directory.rglob('launch.yml'):
             if not path.is_symlink():
@@ -245,7 +587,10 @@ def cutover_project(
 
             settings['adapter_request']['native_directory'] = str(native_directory(
                 root, settings.get('alias', record['name']), record['runtime']))
-        control.configure_stopped(record['agent'], settings, Caller(record['host'], record['parent']))
+        if any(item['agent'] == record['agent'] for item in stop['unconfirmed_swarm_executions']):
+            _relocate_owner_exited(staged_swarm, record['agent'], settings)
+        else:
+            control.configure_stopped(record['agent'], settings, Caller(record['host'], record['parent']))
     original_config = yaml.safe_load((data / 'config.yml').read_text())
     original_config['paths']['state'] = '.graphtraj/core/state'
     original_config['paths']['agent_worktrees'] = '.graphtraj/core/worktrees'
@@ -273,6 +618,7 @@ def cutover_project(
     _captured_unchanged(manifest)
     moved = []
     installed = []
+    continuations = []
     try:
         for old, saved in retained.items():
             Path(old).rename(saved)
@@ -293,19 +639,28 @@ def cutover_project(
             replacement = _references(resolved, moves, 'path')
             link.unlink()
             link.symlink_to(os.path.relpath(replacement, link.parent))
+        # Claude Code resumes a Session by ID across project directories and
+        # prefers a copy under the current cwd: the copy keeps post-cutover
+        # history under the moved worktree and lets restore detect continuation.
+        for item in planned_continuations:
+            if 'status' in item:
+                continuations.append(item)
+            else:
+                _copy_continuation(item, continuations)
+        recovery['native_continuations'] = continuations
         shutil.copy2(staging / 'cutover-config.yml', data / 'core/config.yml')
         recovery['installed_facts'] = _facts([data / 'core/state', data / 'core/runner', data / 'swarm'])
         write_yaml_durably(backup / 'migration.yml', recovery)
     except BaseException:
         # Recovery uses the same retained manifest; do not discard failed data.
-        for old, new in reversed(list(worktrees.items())):
-            if Path(new).exists() and not Path(old).exists():
-                _git(configuration.project_root, 'worktree', 'move', new, old)
-                for path, target in link_targets.items():
-                    if Path(path).is_relative_to(new):
-                        link = Path(old) / Path(path).relative_to(new)
-                        link.unlink(missing_ok=True)
-                        link.symlink_to(target)
+        _remove_copies(continuations)
+        _return_worktrees(configuration.project_root, worktrees, _nested(worktrees))
+        for old, new in worktrees.items():
+            for path, target in link_targets.items():
+                if Path(path).is_relative_to(new) and Path(old).is_dir():
+                    link = Path(old) / Path(path).relative_to(new)
+                    link.unlink(missing_ok=True)
+                    link.symlink_to(target)
         for path in installed:
             if path.exists():
                 path.rename(backup / ('failed-' + path.name))
@@ -317,13 +672,101 @@ def cutover_project(
             shutil.copy2(staging / 'cutover-config.yml', staged_core / 'config.yml')
     return {'cutover': 'installed', 'backup': str(backup), 'snapshot': str(snapshot),
             'worktrees': worktrees, 'identities': partitioned['agents'],
-            'control_missing': control_missing,
+            'control_missing': stop['control_missing'],
+            'unconfirmed_swarm_executions': stop['unconfirmed_swarm_executions'],
+            'foreign_entries': foreign_entries(data / 'core/state/tasks'),
+            'role_read_paths_to_update': _moved_role_grants(data / 'core/roles.yml', moves),
+            'native_continuations': [{key: item[key] for key in ('runtime', 'session', 'old', 'new', 'status')}
+                                     for item in continuations],
+            'native_continuation_gaps': [{key: item.get(key) for key in ('session', 'old', 'status', 'reason')}
+                                         for item in continuations if item['status'] not in {'copied', 'existing'}],
             'native_missing': [item for item in imported['native_results'] if item.get('missing')],
             'native_resource_missing': native_missing,
             'missing_links': imported['missing_links'],
             'legacy_native_registrations': imported['legacy_native_registrations'],
             'legacy_codex_policy': 'Retained declarations remain visible; old calls fail and direct callers to MCP. Native history is unchanged and old business callbacks are not restored.',
-            'next': 'Use this same installed version. Native host trust and same-ID resume require their normal public entry; no host was started. Restore is available before new execution/state writes; afterward preserve and reconcile the new history.'}
+            'next': ('Use this same installed version. Every Main host already running before cutover, in any Runtime, '
+                     'must exit and enter again so it selects the core layout. Before starting or continuing any member, '
+                     'apply role_read_paths_to_update through role_organization. Native host trust and same-ID resume '
+                     'require their normal public entry; no host was started. Restore is available before new '
+                     'execution/state writes; afterward preserve and reconcile the new history.')}
+
+
+# GraphTraj metadata fields whose values are paths relative to the Harness root.
+RELATIVE_FIELDS = frozenset({'worktree', 'final_trace_ref', 'local_definition', 'mapping_source'})
+
+
+def _relative_moves(root: Path, moves: dict[str, str]) -> dict[str, str]:
+    """Express absolute moves inside the Harness as Harness-relative prefixes."""
+    return {os.path.relpath(old, root): os.path.relpath(new, root) for old, new in moves.items()
+            if Path(old).is_relative_to(root) and Path(new).is_relative_to(root)}
+
+
+def _relocate_relative(value: object, moves: dict[str, str], changes: list, field: str = '') -> object:
+    """Relocate Harness-relative path fields; absolute paths and other fields stay unchanged."""
+    if isinstance(value, dict):
+        return {key: _relocate_relative(item, moves, changes, key) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_relocate_relative(item, moves, changes, field) for item in value]
+    if isinstance(value, str) and field in RELATIVE_FIELDS and not os.path.isabs(value):
+        for old in sorted(moves, key=len, reverse=True):
+            if value == old or value.startswith(old + '/'):
+                changes.append({'field': field, 'old': value, 'new': moves[old] + value[len(old):]})
+                return moves[old] + value[len(old):]
+    return value
+
+
+def relocate_relative_records(directory: Path, moves: dict[str, str], *, write: bool) -> list[dict]:
+    """List, and optionally write, Harness-relative paths into moved locations.
+
+    Only GraphTraj metadata files are considered; native records, worldline
+    history and authored evidence keep their original text.
+    """
+    rewritten = []
+    for path in sorted(directory.rglob('*.yml')):
+        if path.is_symlink() or not _owned_metadata(path):
+            continue
+        document = yaml.safe_load(path.read_text(encoding='utf-8'))
+        changes = []
+        relocated = _relocate_relative(document, moves, changes)
+        if changes:
+            rewritten.append({'file': str(path), 'changes': changes})
+            if write:
+                write_yaml_durably(path, relocated)
+    return rewritten
+
+
+def repair_relocated_paths(root: Path, *, write: bool) -> dict:
+    """Relocate Harness-relative paths left by a cutover that did not rewrite them.
+
+    The moves come from this project's installed cutover record. Repeating the
+    repair finds nothing more to change. A repaired record is new post-cutover
+    data, so the cutover can no longer be restored afterwards.
+    """
+    root = root.resolve()
+    if not (root / '.graphtraj/core/config.yml').is_file():
+        raise ValueError('The project has no installed cutover.')
+    installed = [path for path in sorted((root / '.graphtraj/backups').glob('agents-*/migration.yml'))
+                 if 'installed_facts' in (yaml.safe_load(path.read_text()) or {})]
+    if len(installed) != 1:
+        raise ValueError('Exactly one installed cutover record is required: '
+                         + ', '.join(str(path.parent) for path in installed))
+    record = yaml.safe_load(installed[0].read_text())
+    data = root / '.graphtraj'
+    absolute = {old: str(data / 'core' / Path(saved).name) for old, saved in record['originals'].items()
+                if Path(saved).name in {'state', 'runner'}}
+    previous = Path(record['originals'].get(str(data / 'config.yml'), installed[0].parent / 'config.yml'))
+    if previous.is_file():
+        worktree_root = (yaml.safe_load(previous.read_text()) or {}).get('paths', {}).get('agent_worktrees')
+        if worktree_root:
+            absolute[str(root / worktree_root)] = str(data / 'core/worktrees')
+    absolute.update(record['worktrees'])
+    moves = _relative_moves(root, absolute)
+    changed = []
+    for name in ('state', 'runner'):
+        changed += relocate_relative_records(data / 'core' / name, moves, write=write)
+    return {'backup': str(installed[0].parent), 'moves': moves, 'written': write, 'files': changed,
+            'changes': sum(len(item['changes']) for item in changed)}
 
 
 def restore_cutover(root: Path, backup: Path, *, writes_stopped: bool) -> dict:
@@ -346,6 +789,9 @@ def restore_cutover(root: Path, backup: Path, *, writes_stopped: bool) -> dict:
         raise ValueError('An original destination is occupied; preserve it before recovery.')
     if any((backup / ('after-' + name)).exists() for name in ('core', 'swarm')):
         raise ValueError('Recovery evidence already exists; preserve it for diagnosis.')
+    continuations = record.get('native_continuations', [])
+    if _changed_copies(continuations):
+        raise ValueError('A native Session continued under its new cwd. Preserve and reconcile the new history before recovery; nothing was restored.')
     source = Path(record['source_repository'])
     _move_worktrees(source, {new: old for old, new in record['worktrees'].items()})
     for old, new in record['worktrees'].items():
@@ -358,5 +804,6 @@ def restore_cutover(root: Path, backup: Path, *, writes_stopped: bool) -> dict:
         (root / '.graphtraj' / name).rename(backup / ('after-' + name))
     for old, saved in record['originals'].items():
         Path(saved).rename(old)
+    _remove_copies(continuations)
     return {'restored': str(backup), 'retained_after_cutover': str(backup / 'after-core'),
             'next': 'Keep writers stopped until the matching previous installation and native host entry are selected.'}

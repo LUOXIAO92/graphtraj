@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 
 from agent_swarm import Caller, bind
+from graphtraj.configuration.project_configuration import runner_directory
 from graphtraj.execution.main_continuity import claim_main, claims, current_main, route_notice
 from graphtraj.execution.runner_connection import connection_operation
 from graphtraj.interfaces.agents import GraphTrajAgents
@@ -57,11 +58,19 @@ def released(driver: ScriptedDriver) -> None:
         release.set()
 
 
+@pytest.mark.parametrize('layout', ['legacy', 'core'])
 def test_pi_and_dsh_main_continue_control_and_receive_notices(
-    project: Path, monkeypatch: pytest.MonkeyPatch,  # noqa: F811
+    project: Path, monkeypatch: pytest.MonkeyPatch, layout: str,  # noqa: F811
 ) -> None:
-    """Codex seeds a root; Pi, then DSH continue it, control it and receive notices."""
-    runner = project / '.graphtraj/runner'
+    """Codex seeds a root; Pi, then DSH continue it, control it and receive notices.
+
+    The core layout keeps every Main record under ``.graphtraj/core/runner``.
+    """
+    if layout == 'core':
+        (project / '.graphtraj/core').mkdir()
+        (project / '.graphtraj/config.yml').rename(project / '.graphtraj/core/config.yml')
+    runner = runner_directory(project)
+    assert runner == project / ('.graphtraj/core/runner' if layout == 'core' else '.graphtraj/runner')
     driver = ScriptedDriver()
     monkeypatch.setattr('graphtraj.execution.agent_driver.AdapterDriver', lambda root, cwd: driver)
     claim_main(runner, CODEX, 'codex:SessionStart:startup')
@@ -121,6 +130,8 @@ def test_pi_and_dsh_main_continue_control_and_receive_notices(
     assert [(item['runtime'], item['session']) for item in claims(runner)] == [
         ('codex', 'codex-main'), ('pi', 'pi-main'), ('dsh', 'dsh-main')]
     assert len(driver.started) == 3
+    assert (runner / 'main-sessions/continuity.jsonl').is_file()
+    assert not (project / '.graphtraj/runner').exists() or layout == 'legacy'
 
 
 def test_dsh_mcp_source_must_be_known(monkeypatch: pytest.MonkeyPatch) -> None:

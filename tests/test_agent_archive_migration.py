@@ -401,3 +401,49 @@ def test_claude_native_hooks_keep_activation_boundary_between_processes(
     store = JsonlSessionStore(archive_path(tmp_path / '.graphtraj/swarm', 'claude:s'))
     assert [item['content'][0]['text'] for item in store.messages()] == ['created after activation']
     assert not (tmp_path / '.graphtraj/state/sessions').exists()
+
+
+def _history_archive(root: Path, events: list[tuple]) -> None:
+    """Publish native records and Codex graphtraj/history selections in the given order."""
+    from agent_swarm.sessions.codex import _response
+
+    store = JsonlSessionStore.create(archive_path(root / '.graphtraj/swarm', 'retained'), header('retained'))
+    published = []
+    for seq, (kind, value) in enumerate(events):
+        if kind == 'native':
+            record = {'type': 'response_item', 'payload': {
+                'type': 'message', 'role': 'user', 'content': [{'type': 'input_text', 'text': value}]}}
+            event = retain_native('codex', record, session_id='native-research@x1', locator=value, seq=seq, time=1)
+            published.append(_response(record, event, 'native-research@x1', value))
+        else:
+            published.append({'type': 'graphtraj/history', 'seq': seq, 'time': 1, 'data': {'eventSeqs': value[1]},
+                              'graphtraj': {'version': 1, 'native': {'runtime': 'codex', 'sessionId': 'native-research@x1',
+                                                                     'locator': value[0] + '/history'}}})
+    store.publish(published, source='native', position=0)
+    (root / '.graphtraj/migration-snapshot.yml').write_text('project: /retained/project\n')
+
+
+@pytest.mark.parametrize('change', [None, 'renumbered', 'rewritten', 'deleted', 'reordered'])
+def test_retained_codex_history_selections_keep_content_and_order(tmp_path: Path, change: str | None) -> None:
+    """A recordless graphtraj/history event is compared in full, by the native events it selects."""
+    from graphtraj.workspace.agent_migration import _verify_retained_swarm
+
+    original = [('native', 'native/0'), ('native', 'native/1'), ('history', ('native/1', [0]))]
+    imported = {
+        None: original,
+        # Import may add an earlier native record; selections then name the same events by new seqs.
+        'renumbered': [('native', 'native/-1'), ('native', 'native/0'), ('native', 'native/1'),
+                       ('history', ('native/1', [1]))],
+        'rewritten': [('native', 'native/0'), ('native', 'native/1'), ('history', ('native/1', [1]))],
+        'deleted': original[:2],
+        'reordered': [('native', 'native/1'), ('native', 'native/0'), ('history', ('native/1', [1]))],
+    }[change]
+    _history_archive(tmp_path / 'before', original)
+    _history_archive(tmp_path / 'after', imported)
+    result = _verify_retained_swarm(tmp_path / 'after', tmp_path / 'before', {'project': '/retained/project'})
+    reference = archive_path(tmp_path / 'after/.graphtraj/swarm', 'retained').relative_to(tmp_path / 'after/.graphtraj/swarm')
+    if change in {None, 'renumbered'}:
+        assert result['matches'], result
+        assert result['native_events'] == 3
+    else:
+        assert result['mismatches'] == [reference.as_posix() + ':native-records-or-order']

@@ -410,14 +410,6 @@ def read_graph(
     rendered = []
     for key in sorted(visible, key=int):
         record = {field: value for field, value in records[key].items() if field != "stamp"}
-        # Readiness is derived, never maintained by hand: ``ready`` holds
-        # exactly when a Task that has not started is active with complete
-        # dependencies. A retained ready status is shown as the pending it is.
-        ready = record["active"] and record["status"] in {"pending", "ready"} and all(
-            _result_complete(records, item) for item in record["dependencies"]
-        )
-        if record["status"] == "ready":
-            record["status"] = "pending"
         record.update(
             children=children[key],
             progress={
@@ -425,7 +417,9 @@ def read_graph(
                 "completed": sum(_result_complete(records, child) for child in children[key]),
             },
             delivery=delivery[key],
-            ready=ready,
+            # Dispatch follows this derived flag, not the stored pending/ready.
+            ready=record["active"] and record["status"] in {"pending", "ready"}
+            and all(_result_complete(records, item) for item in record["dependencies"]),
             outcome=_outcome(record),
         )
         rendered.append(record)

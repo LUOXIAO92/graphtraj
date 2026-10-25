@@ -574,13 +574,15 @@ def test_task_continuation_requires_active_ready_task_before_first_session(
     monkeypatch: pytest.MonkeyPatch,
     cancelled: bool,
 ) -> None:
-    """Neither pending nor cancelled work gains permission from a budget stop."""
+    """Neither unready nor cancelled work gains permission from a budget stop."""
     from graphtraj.execution import execution_budget as budgets
 
     root, _, _, env = configure_harness(
         installed_commands, temporary_git_repository, fake_codex, tmp_path,
     )
-    definition = _task('160', 'first-session')
+    # Readiness follows dependencies, so the uncancelled Task waits on one.
+    _register(installed_commands, root, _task('159', 'prerequisite'))
+    definition = _task('160', 'first-session', dependencies=[] if cancelled else ['159'])
     definition['body'] = BODY + definition['body']
     _register(installed_commands, root, definition)
     if cancelled:

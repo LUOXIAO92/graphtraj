@@ -152,7 +152,7 @@ def test_a_ready_task_with_an_unmet_dependency_is_neither_shown_nor_dispatched_a
     fake_codex: FakeCodex,
     tmp_path: Path,
 ) -> None:
-    """A retained ready status does not survive a dependency that is not complete."""
+    """A stored ready status neither shows as dispatchable nor dispatches with an unmet dependency."""
     from graphtraj.graph.task_graph import register_task, update_task_state
 
     root, _, _, environment = configure_harness(
@@ -178,7 +178,7 @@ def test_a_ready_task_with_an_unmet_dependency_is_neither_shown_nor_dispatched_a
 
     graph = yaml.safe_load(run_process([str(installed_commands.product), "task", "graph"], cwd=root).stdout)
     shown = {task["task_id"]: (task["status"], task["ready"]) for task in graph["tasks"]}
-    assert shown == {"113": ("pending", True), "114": ("pending", False)}
+    assert shown == {"113": ("pending", True), "114": ("ready", False)}
     task = _launch_leader(installed_commands, root, environment)
     assert task["launch_status"] == "failed", task
     assert task["error"] == {

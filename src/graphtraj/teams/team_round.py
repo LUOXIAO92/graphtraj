@@ -808,60 +808,68 @@ def _execute_agent(
         if owning is not None:
             raise session_occupied(alias, owning)
 
-    trace = traces / alias / "events.jsonl"
+    # A reserved Session directory stays empty until the launch request is
+    # written, so a refused preparation releases the alias it claimed.
+    try:
+        trace = traces / alias / "events.jsonl"
 
-    policy_role = _task_policy(task, role)
-    monitor = (
-        None
-        if reports_only
-        else execution_budget_monitor(evidence, task.task_id, task.task_name)
-    )
-    team_file = traces.parent / "team.yml"
-    ordinal = yaml.safe_load(team_file.read_text())["current_round"] if team_file.exists() else 1
-    if (new_session and team_file.exists()
-            and yaml.safe_load((evidence / "task.yml").read_text())["status"] == "resolving-integration"
-            and not (traces.parent / "rounds" / str(ordinal)).stat().st_mode & 0o200):
-        ordinal += 1
-    report_files: tuple[Path, ...] = ()
-    if expected_session is not None:
-        from graphtraj.execution.runner_control import _session_report_paths
-
-        report_files = tuple(
-            Path('.state') / path.relative_to(evidence)
-            for path in _session_report_paths(alias, project.harness_root)
+        policy_role = _task_policy(task, role)
+        monitor = (
+            None
+            if reports_only
+            else execution_budget_monitor(evidence, task.task_id, task.task_name)
         )
-    # The launched entity keeps its role name; the configured reference that
-    # selected its Runtime settings travels with this Session's records. A seat
-    # another identity occupies is selected by its own role, not by its batch's.
-    own_seat = task.role == role
-    reference = task.role_reference if own_seat and task.role_reference is not None else role
-    if expected_session is None:
-        try:
-            preset = (
-                task.inline_preset
-                if own_seat and task.inline_preset is not None
-                else project.roles.preset(reference)
+        team_file = traces.parent / "team.yml"
+        ordinal = yaml.safe_load(team_file.read_text())["current_round"] if team_file.exists() else 1
+        if (new_session and team_file.exists()
+                and yaml.safe_load((evidence / "task.yml").read_text())["status"] == "resolving-integration"
+                and not (traces.parent / "rounds" / str(ordinal)).stat().st_mode & 0o200):
+            ordinal += 1
+        report_files: tuple[Path, ...] = ()
+        if expected_session is not None:
+            from graphtraj.execution.runner_control import _session_report_paths
+
+            report_files = tuple(
+                Path('.state') / path.relative_to(evidence)
+                for path in _session_report_paths(alias, project.harness_root)
             )
-        except ProjectRolesError as error:
-            raise RunnerError("ROLE_NOT_CONFIGURED", str(error)) from error
-        report_files = _role_report_files(task, preset.reports, role, generation, ordinal, alias)
-        resolved_role = resolve_child_role(policy_role, preset, project.harness_root)
-        adapter = runtime_adapter.select_runtime_adapter(resolved_role.settings.runtime)
-        context = adapter.preflight_runtime_context(
-            harness_root=project.harness_root,
-            git_common_directory=project.common_directory,
-            role=resolved_role,
-            worktree=worktree,
-            evidence=evidence,
-            requested_skills=task.requested_skills,
-            report_files=report_files,
-        ).finalize()
+        # The launched entity keeps its role name; the configured reference that
+        # selected its Runtime settings travels with this Session's records. A seat
+        # another identity occupies is selected by its own role, not by its batch's.
+        own_seat = task.role == role
+        reference = task.role_reference if own_seat and task.role_reference is not None else role
+        if expected_session is None:
+            try:
+                preset = (
+                    task.inline_preset
+                    if own_seat and task.inline_preset is not None
+                    else project.roles.preset(reference)
+                )
+            except ProjectRolesError as error:
+                raise RunnerError("ROLE_NOT_CONFIGURED", str(error)) from error
+            report_files = _role_report_files(task, preset.reports, role, generation, ordinal, alias)
+            resolved_role = resolve_child_role(policy_role, preset, project.harness_root)
+            adapter = runtime_adapter.select_runtime_adapter(resolved_role.settings.runtime)
+            context = adapter.preflight_runtime_context(
+                harness_root=project.harness_root,
+                git_common_directory=project.common_directory,
+                role=resolved_role,
+                worktree=worktree,
+                evidence=evidence,
+                requested_skills=task.requested_skills,
+                report_files=report_files,
+            ).finalize()
 
-    if task.report_file is not None:
-        task = replace(task, report_file=report_files[0])
+        if task.report_file is not None:
+            task = replace(task, report_file=report_files[0])
 
-    # Validate Runtime inputs before publishing an allocation. Native creation
-    # still follows the atomic directory reservation and durable launch request.
+        # Validate Runtime inputs before publishing an allocation. Native creation
+        # still follows the atomic directory reservation and durable launch request.
+    except BaseException:
+        if new_session:
+            session_directory.rmdir()
+        raise
+
     if new_session:
         # One Session directory owns one Agent Entity and at most one live
         # execution; this create claimed its directory when choosing the alias.

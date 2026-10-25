@@ -28,8 +28,9 @@ _COMMIT = re.compile(r"[0-9a-f]{40}\Z")
 _STATUSES = frozenset(protocol.STATUSES)
 _STATE_CHANGE_FIELDS = frozenset(protocol.STATE_CHANGE_SCHEMA["properties"])
 _TRANSITIONS = {
-    "pending": {"ready", "blocked", "escalated"},
-    "ready": {"implementing", "blocked", "escalated"},
+    # Pending and ready both mean not started; dependencies decide readiness.
+    "pending": {"ready", "implementing", "blocked", "escalated"},
+    "ready": {"pending", "implementing", "blocked", "escalated"},
     "implementing": {"reviewing", "blocked", "escalated"},
     "reviewing": {"reworking", "awaiting-integration", "blocked", "escalated"},
     "reworking": {"implementing", "reviewing", "blocked", "escalated"},
@@ -409,6 +410,14 @@ def read_graph(
     rendered = []
     for key in sorted(visible, key=int):
         record = {field: value for field, value in records[key].items() if field != "stamp"}
+        # Readiness is derived, never maintained by hand: ``ready`` holds
+        # exactly when a Task that has not started is active with complete
+        # dependencies. A retained ready status is shown as the pending it is.
+        ready = record["active"] and record["status"] in {"pending", "ready"} and all(
+            _result_complete(records, item) for item in record["dependencies"]
+        )
+        if record["status"] == "ready":
+            record["status"] = "pending"
         record.update(
             children=children[key],
             progress={
@@ -416,8 +425,7 @@ def read_graph(
                 "completed": sum(_result_complete(records, child) for child in children[key]),
             },
             delivery=delivery[key],
-            ready=record["active"] and record["status"] in {"pending", "ready"}
-            and all(_result_complete(records, item) for item in record["dependencies"]),
+            ready=ready,
             outcome=_outcome(record),
         )
         rendered.append(record)

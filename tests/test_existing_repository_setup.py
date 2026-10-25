@@ -75,7 +75,7 @@ def test_setup_initializes_the_current_git_repository(
             "agent_worktrees": ".graphtraj/.agent-worktrees",
             "state": ".graphtraj/state",
         },
-        "agent_runner": {"dispatch_depth": 2, "max_concurrency": 18},
+        "agent_runner": {"max_concurrency": 18},
     }
     integration = repository / ".graphtraj" / ".agent-worktrees" / "dev"
     assert integration.is_dir()

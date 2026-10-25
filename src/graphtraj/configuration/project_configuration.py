@@ -22,7 +22,6 @@ paths:
   state: .graphtraj/state
 
 agent_runner:
-  dispatch_depth: 2
   max_concurrency: 18
 """
 
@@ -45,7 +44,6 @@ class ProjectConfiguration:
     docs: Path
     agent_worktrees: Path
     state: Path
-    dispatch_depth: int
     max_concurrency: int
     codex: Mapping[str, Any] | None = None
     stop_instruction: str | None = None
@@ -107,7 +105,7 @@ def default_configuration_content(harness_root: Path, project_root: Path) -> str
                 "agent_worktrees": ".graphtraj/.agent-worktrees",
                 "state": ".graphtraj/state",
             },
-            "agent_runner": {"dispatch_depth": 2, "max_concurrency": 18},
+            "agent_runner": {"max_concurrency": 18},
         },
         sort_keys=False,
     )
@@ -170,9 +168,11 @@ def _configuration_from_document(
         or not isinstance(paths, dict)
         or set(paths) != {"project_root", "docs", "agent_worktrees", "state"}
         or not isinstance(limits, dict)
-        or set(limits) - {"stop_instruction"} != {"dispatch_depth", "max_concurrency"}
+        or set(limits) - {"stop_instruction", "dispatch_depth"} != {"max_concurrency"}
     ):
         raise ProjectConfigurationError(invalid)
+    # The role_tree alone bounds dispatch depth. A retired dispatch_depth left
+    # in an existing project's configuration is accepted and has no effect.
 
     # An omitted instruction keeps the generic stop guidance; an empty string is
     # a deliberate request to deliver only the stop facts, so the two stay apart.
@@ -195,13 +195,9 @@ def _configuration_from_document(
     if not _is_supported_project_root(root, project_root):
         raise ProjectConfigurationError(invalid)
 
-    dispatch_depth = limits["dispatch_depth"]
     max_concurrency = limits["max_concurrency"]
     if (
-        isinstance(dispatch_depth, bool)
-        or not isinstance(dispatch_depth, int)
-        or dispatch_depth < 1
-        or isinstance(max_concurrency, bool)
+        isinstance(max_concurrency, bool)
         or not isinstance(max_concurrency, int)
         or max_concurrency < 1
     ):
@@ -214,7 +210,6 @@ def _configuration_from_document(
         docs=docs,
         agent_worktrees=agent_worktrees,
         state=state,
-        dispatch_depth=dispatch_depth,
         max_concurrency=max_concurrency,
         codex=document.get("codex"),
         stop_instruction=stop_instruction,

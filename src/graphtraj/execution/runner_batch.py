@@ -225,11 +225,13 @@ def parse_batch(document: object, *, retained: bool = False) -> Batch:
         _read_task(task_document, retained=retained)
         for task_document in tasks
     )
-    identities = [(task.task_id, task.role) for task in validated_tasks]
-    if len(identities) != len(set(identities)):
+    # Several members may share one Task and role; each becomes its own Agent.
+    # Repeating an identical task entry is the same dispatch submitted twice.
+    entries = [yaml.safe_dump(task, sort_keys=True) for task in tasks]
+    if len(entries) != len(set(entries)):
         raise RunnerError(
             "TASK_ID_DUPLICATE",
-            "A Batch cannot repeat the same Task, Team generation, and role.",
+            "A Batch cannot repeat the same task entry; give each member its own instruction.",
         )
     return Batch(
         tasks=validated_tasks,

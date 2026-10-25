@@ -29,6 +29,9 @@ from .diagnostics import (
     launch_projection, model_projection, native_projection, warning_projection,
 )
 
+# Claude Code's limit for a UserPromptSubmit hook callback reply.
+PROMPT_HOOK_LIMIT_SECONDS = 30
+
 
 class ClaudeExecution:
     """Keep native permissions, registration and terminal evidence on one pipe."""
@@ -83,6 +86,8 @@ class ClaudeExecution:
         self.stdout_eof = False
         self.stderr_eof = False
         self.task_released = False
+        # Wall seconds of the latest prompt hook reply that missed Claude's limit.
+        self.dropped_prompt_seconds: float | None = None
         self.independent = False
         self.archive: SessionArchive | None = None
         self.agents_callback: Callable[[dict], AgentsResult] | None = None
@@ -503,9 +508,15 @@ class ClaudeExecution:
                 self.task_released = True
                 # These are host observations, not native message timestamps.
                 # Keep the latest prompt's queue and handler costs separate.
+                replied_at = time.time()
+                # Claude abandons the prompt when this reply misses its limit,
+                # measured in wall time. The monotonic clock pauses in host
+                # sleep, so only wall time shows a reply delayed by sleep.
+                if replied_at - received_at > PROMPT_HOOK_LIMIT_SECONDS:
+                    self.dropped_prompt_seconds = replied_at - received_at
                 with self.lock:
                     self.diagnostics['prompt_hook'] = {
-                        'received_at': received_at, 'replied_at': time.time(),
+                        'received_at': received_at, 'replied_at': replied_at,
                         'queue_seconds': began - received,
                         'handler_seconds': time.monotonic() - began,
                     }
@@ -848,6 +859,15 @@ class ClaudeExecution:
                                                   or getattr(failure, 'code', None) == 'RUNTIME_ARCHIVE_FAILED'
                                                   else 'complete')
                 self._save_diagnostics()
+                if (failure is None and self.dropped_prompt_seconds is not None
+                        and not self.stopping.is_set()):
+                    failure = RuntimeAdapterError(
+                        'RUNTIME_PROVIDER_FAILED',
+                        'Claude did not receive the instruction: its UserPromptSubmit hook reply '
+                        f'came {self.dropped_prompt_seconds:.0f} s after the request (host wall '
+                        f'clock), past Claude\'s {PROMPT_HOOK_LIMIT_SECONDS} s limit; host sleep '
+                        'or suspension causes this. The Session is unchanged; resume it to send '
+                        'the instruction again.')
                 if failure is None and self.session is not None:
                     self.outcome = {'outcome': 'interrupted' if self.stopping.is_set() else 'completed',
                                     'terminal_confirmed': self.terminal_confirmed,

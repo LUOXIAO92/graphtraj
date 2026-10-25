@@ -22,13 +22,13 @@ from graphtraj.execution.execution_budget import (
     execution_budget_monitor,
 )
 from graphtraj.configuration.role_definitions import resolve_child_role
-from graphtraj.configuration.project_configuration import load_project_configuration
 from graphtraj.graph.delivery_worldline import append_project_worldline_event, read_worldline
 from graphtraj.configuration.project_roles import (
     ProjectRolesError,
     configured_role_name,
 )
 from graphtraj.execution.runner_batch import (
+    parse_batch,
     read_batch,
     read_session_task,
     retain_batch,
@@ -102,37 +102,32 @@ def register_child_batch(batch: Batch, cwd: Path, registration: Path) -> LaunchR
     _require_dispatch_roles(project, batch, parent)
     if any(task.task_id != parent_task for task in batch.tasks):
         raise RunnerError("authority-denied", "Children must belong to their parent's Task.")
-    limit = load_project_configuration(project.harness_root).dispatch_depth
-    depth = 1
-    parent_alias = caller
-    # Count retained Session ancestry, not Batches or resumptions.
-    while parent_alias is not None:
-        depth += 1
-        if depth > limit:
-            raise RunnerError(
-                "authority-denied",
-                f"The child Batch exceeds project dispatch_depth={limit}. No child registered.",
-            )
-        ancestor, _ = read_alias_mapping(project.runner_directory, parent_alias)
-        parent_alias = ancestor["parent"]
+    # The role_tree alone bounds how deep dispatch can go: every edge above
+    # was checked against it, so no separate depth limit applies.
     from graphtraj.teams.team_replacement import require_active_session
 
     require_active_session(project, caller)
-    children = [
-        {"task_id": task.task_id, "role": task.role,
-         "alias": _agent_alias(project, task, task.role, parent["team_generation"]),
-         "launch_status": "registered"}
-        for task in batch.tasks
-    ]
     try:
         with execution_start_lock(project.runner_directory):
             mapping = read_alias_mapping(project.runner_directory, caller)[0]
             require_execution_allowed(project.runner_directory, caller, mapping)
-            _withdraw_ended_registration(registration, mapping["execution_id"])
-            with registration.open("x", encoding="utf-8") as stream:
-                retained = retain_batch(project.state_directory, batch)
-                yaml.safe_dump({"execution_id": mapping["execution_id"],
-                                "retained_batch_file": str(retained), "tasks": children}, stream)
+            earlier = _withdraw_ended_registration(registration, mapping["execution_id"])
+            # A later dispatch in the same turn joins the pending child Batch,
+            # so all members start together when this turn completes.
+            entries = [*earlier["entries"], *yaml.safe_load(batch.source_bytes)["tasks"]]
+            combined = parse_batch({"tasks": entries})
+            taken = {child["alias"] for child in earlier["tasks"]}
+            children = list(earlier["tasks"])
+            for task in batch.tasks:
+                alias = _agent_alias(project, task, task.role, parent["team_generation"], taken)
+                taken.add(alias)
+                children.append({"task_id": task.task_id, "role": task.role,
+                                 "alias": alias, "launch_status": "registered"})
+            retained = retain_batch(project.state_directory, combined)
+            write_yaml_durably(registration, {
+                "execution_id": mapping["execution_id"],
+                "retained_batch_file": str(retained), "tasks": children,
+            })
     except (OSError, yaml.YAMLError) as error:
         raise RunnerError("BATCH_RETENTION_FAILED", "The parent worker could not register the child Batch.") from error
     return LaunchResponse(
@@ -215,7 +210,7 @@ def continue_stopped_task(
         # recovery. Use the same actual root caller identity as root dispatch.
         if caller_alias(project.runner_directory) is not None:
             raise RunnerError("authority-denied", "Only the root caller may continue this Task.")
-        if state["status"] != "ready" or any(
+        if state["status"] not in {"pending", "ready"} or any(
             not _result_complete({key: value for key, (_, value) in states.items()}, dependency)
             for dependency in state["dependencies"]
         ):
@@ -463,8 +458,10 @@ def _deliver_task(
             )
             reopened = cause is not None and cause["event"] == "task-graph-revised"
         if parent_alias is None and (generation is None or reopened):
-            if not reopened and state["status"] != "ready":
-                raise RunnerError("TASK_ALREADY_ACTIVE", "The selected Task is not ready.")
+            # Dependencies and disposition decide readiness above; a stored
+            # pending or ready status both mean the Task has not started.
+            if not reopened and state["status"] not in {"pending", "ready"}:
+                raise RunnerError("TASK_ALREADY_ACTIVE", "The selected Task has already started.")
             generation = generation or 1
             worktree = project.worktree_root / (task.task_id + "-" + task.task_name)
             branch = "agent/" + task.task_id + "-" + task.task_name
@@ -598,29 +595,32 @@ def _registered_execution(registration: Path) -> str | None:
     return yaml.safe_load(registration.read_text(encoding="utf-8")).get("execution_id")
 
 
-def _withdraw_ended_registration(registration: Path, execution_id: str) -> None:
-    """Clear a registration left by an ended execution before a new one.
+def _withdraw_ended_registration(registration: Path, execution_id: str) -> dict[str, list]:
+    """Return this execution's pending registration, clearing one an ended execution left.
 
     The caller holds the execution startup lock, so the live execution is
     ``execution_id`` and any other recorded owner has ended without starting
     its Batch. An unattributed registration is neither started nor discarded.
 
+    Returns
+    -------
+    dict
+        ``entries`` holds the task entries this execution already registered
+        and ``tasks`` their registered children; both are empty otherwise.
+
     Raises
     ------
     RunnerError
-        When this execution already registered a Batch, or the existing
-        registration records no owning execution.
+        When the existing registration records no owning execution.
     """
     if not registration.is_file():
-        return
+        return {"entries": [], "tasks": []}
     document = yaml.safe_load(registration.read_text(encoding="utf-8"))
     owner = document.get("execution_id")
     if owner == execution_id:
-        raise RunnerError(
-            "child-batch-registered",
-            "This execution already registered child Batch "
-            f"{document['retained_batch_file']}; Runner starts it when this turn completes.",
-        )
+        retained = Path(document["retained_batch_file"])
+        return {"entries": yaml.safe_load(retained.read_bytes())["tasks"],
+                "tasks": document["tasks"]}
     if owner is None:
         raise RunnerError(
             "child-registration-unowned",
@@ -630,6 +630,7 @@ def _withdraw_ended_registration(registration: Path, execution_id: str) -> None:
             "approved recovery resumes it.",
         )
     withdraw_child_registration(registration, f"Execution {owner} ended without starting it.")
+    return {"entries": [], "tasks": []}
 
 
 def withdraw_pending_children(directory: Path) -> None:
@@ -786,7 +787,12 @@ def _execute_agent(
     generation = int(traces.parent.name) if traces.parent.name.isdigit() else 1
     new_session = alias is None
     if new_session:
-        alias = _agent_alias(project, task, role, generation)
+        # Members started together may share a role. Claiming the Session
+        # directory under the startup lock gives each one its own alias.
+        with execution_start_lock(project.runner_directory):
+            alias = _agent_alias(project, task, role, generation)
+            session_directory = project.runner_directory / "sessions" / alias
+            session_directory.mkdir(parents=True)
     else:
         session_directory = project.runner_directory / "sessions" / alias
         if not session_directory.is_dir():
@@ -857,20 +863,8 @@ def _execute_agent(
     # Validate Runtime inputs before publishing an allocation. Native creation
     # still follows the atomic directory reservation and durable launch request.
     if new_session:
-        session_directory = project.runner_directory / "sessions" / alias
         # One Session directory owns one Agent Entity and at most one live
-        # execution, so this create claims a directory nothing records yet.
-        recorded = owning_execution(alias, session_directory, None)
-        if recorded is not None:
-            raise session_occupied(alias, recorded)
-        try:
-            session_directory.mkdir(parents=True, exist_ok=False)
-        except FileExistsError as error:
-            # A concurrent create claimed this alias after the scan, so this
-            # create is refused like any other request for an owned directory.
-            raise session_occupied(
-                alias, owning_execution(alias, session_directory, None)
-            ) from error
+        # execution; this create claimed its directory when choosing the alias.
         trace_directory = traces / alias
         trace_directory.mkdir()
         # The Trace entry later reads the Runtime-owned native Session record;
@@ -1256,13 +1250,20 @@ def _run_session_worker(
     )
 
 
-def _agent_alias(project: Any, task: Task, role: str, generation: int = 1) -> str:
+def _agent_alias(
+    project: Any,
+    task: Task,
+    role: str,
+    generation: int = 1,
+    taken: set[str] = frozenset(),
+) -> str:
     """Return a free Agent alias for one Session of this Team generation.
 
     The alias names the Task, the whole-Team handover generation counted from
     zero, the configured role and the entity. Word groups inside one component
     use '_'; the entity starts as the role name and takes a numbered successor
-    when that name is occupied, so no existing Session is overwritten.
+    when that name is occupied or in ``taken``, so no existing Session is
+    overwritten and members registered together get distinct aliases.
     """
     role_name = configured_role_name(role).replace("-", "_")
     prefix = "{0}-{1}-handover{2}-{3}@".format(
@@ -1274,7 +1275,8 @@ def _agent_alias(project: Any, task: Task, role: str, generation: int = 1) -> st
         alias = prefix + entity
         retained = (project.state_directory / "tasks" / (task.task_id + "-" + task.task_name)
                     / "teams" / str(generation) / "traces" / alias)
-        if not (project.runner_directory / "sessions" / alias).exists() and not retained.exists():
+        if (alias not in taken and not (project.runner_directory / "sessions" / alias).exists()
+                and not retained.exists()):
             return alias
         suffix += 1
 

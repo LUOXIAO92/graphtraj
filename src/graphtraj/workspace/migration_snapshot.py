@@ -327,8 +327,7 @@ def snapshot_project(cwd: Path, destination: Path) -> dict:
         # installed. This copy supports offline migration and Task graph queries.
         config = {'version': 1, 'paths': {'project_root': '.', 'docs': 'docs',
                   'state': '.graphtraj/state', 'agent_worktrees': '.graphtraj/worktrees'},
-                  'agent_runner': {'dispatch_depth': configuration.dispatch_depth,
-                                   'max_concurrency': configuration.max_concurrency}}
+                  'agent_runner': {'max_concurrency': configuration.max_concurrency}}
         (data / 'config.yml').write_text(yaml.safe_dump(config, sort_keys=False), encoding='utf-8')
         (destination / MANIFEST).write_text(yaml.safe_dump(manifest, sort_keys=False), encoding='utf-8')
         return {'snapshot': str(destination), 'project': str(project), 'sources': sources,

@@ -128,7 +128,7 @@ def apply_delivery_state_request(
 
     if phase == "start":
         if (
-            not replacing and (task["status"] != "ready"
+            not replacing and (task["status"] not in {"pending", "ready"}
             or task["active_team_ordinal"] is not None
             or task["current_candidate"] is not None)
             or team_file.exists()

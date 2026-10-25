@@ -278,7 +278,7 @@ def _render(
         "Backup of local GraphTraj Task {0} (`{1}`). The local Task is authoritative; "
         "remote edits are not imported.".format(task["task_id"], task["task_name"]),
         "",
-        "- Status: {0}".format(task["status"]),
+        "- Status: {0}".format(records[task["task_id"]]["status"]),
         "- Disposition: {0}".format(task["disposition"]),
         "- Parent: {0}".format(task["parent_id"] or "none"),
         "- Dependencies: {0}".format(", ".join(task["dependencies"]) or "none"),

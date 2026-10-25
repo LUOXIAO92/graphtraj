@@ -17,8 +17,12 @@ from runner_fixtures import configure_harness, wait_for_task_status
 from test_managed_sessions import CALL
 
 
-def ready_team(root: Path, body: str) -> Path:
-    """Register an isolated, ready Task using the public graph operations."""
+def ready_team(root: Path, body: str, *, mark_ready: bool = True) -> Path:
+    """Register an isolated Task using the public graph operations.
+
+    ``mark_ready`` additionally records the retained manual ready status that
+    earlier projects needed; readiness itself follows from the dependencies.
+    """
     from graphtraj.graph.task_graph import register_task, update_task_state
 
     state = root / ".graphtraj/state"
@@ -27,30 +31,18 @@ def ready_team(root: Path, body: str) -> Path:
         "source": "https://github.com/example/project/issues/114", "schema_version": 2, "parent_id": None, "disposition": "active", "replaced_by": [], "retirement_reason": None,
         "title": "Deliver a greeting", "body": body, "dependencies": [],
     })
-    (root / "readiness.md").write_text("This isolated Task is ready.\n")
-    update_task_state(state, root, {
-        "task_id": "114", "status": "ready", "active_team_ordinal": None,
-        "worktree": None, "branch": None, "current_candidate": None,
-        "caused_by_event_ids": [], "evidence_refs": ["readiness.md"],
-    })
+    if mark_ready:
+        (root / "readiness.md").write_text("This isolated Task is ready.\n")
+        update_task_state(state, root, {
+            "task_id": "114", "status": "ready", "active_team_ordinal": None,
+            "worktree": None, "branch": None, "current_candidate": None,
+            "caused_by_event_ids": [], "evidence_refs": ["readiness.md"],
+        })
     return directory
 
 
-def test_dispatch_depth_one_stops_before_registering_team_children(
-    installed_commands: InstalledCommands,
-    temporary_git_repository: Path,
-    fake_codex: FakeCodex,
-    tmp_path: Path,
-) -> None:
-    """A depth-one Leader cannot register or execute a depth-two Engineer."""
-    root, _, _, environment = configure_harness(
-        installed_commands, temporary_git_repository, fake_codex, tmp_path,
-    )
-    ready_team(root, "Deliver one complete Team Round.")
-    configuration_file = root / ".graphtraj/config.yml"
-    configuration = yaml.safe_load(configuration_file.read_text())
-    configuration["agent_runner"]["dispatch_depth"] = 1
-    configuration_file.write_text(yaml.safe_dump(configuration))
+def _launch_leader(installed_commands: InstalledCommands, root: Path, environment: dict) -> dict:
+    """Dispatch the Task's Leader through the installed public launch entry."""
     environment.update(
         FAKE_CODEX_LIFECYCLE_ACTION="complete-team-round",
         GRAPHTRAJ_AGENT_RUNNER=str(installed_commands.runner),
@@ -62,20 +54,138 @@ def test_dispatch_depth_one_stops_before_registering_team_children(
             "task_id": "114", "task_name": "small-team", "role": "team-leader",
         }]}]),
     ], cwd=root, env=environment, timeout=30)
-    task = json.loads(result.stdout)["tasks"][0]
+    return json.loads(result.stdout)["tasks"][0]
+
+
+def test_retired_dispatch_depth_loads_and_the_role_tree_alone_bounds_depth(
+    installed_commands: InstalledCommands,
+    temporary_git_repository: Path,
+    fake_codex: FakeCodex,
+    tmp_path: Path,
+) -> None:
+    """An existing dispatch_depth no longer limits the Leader's direct children.
+
+    The Task is never marked ready by hand: active with complete dependencies,
+    it is dispatchable as registered.
+    """
+    root, _, _, environment = configure_harness(
+        installed_commands, temporary_git_repository, fake_codex, tmp_path,
+    )
+    ready_team(root, "Deliver one complete Team Round.", mark_ready=False)
+    configuration_file = root / ".graphtraj/config.yml"
+    configuration = yaml.safe_load(configuration_file.read_text())
+    configuration["agent_runner"]["dispatch_depth"] = 1
+    configuration_file.write_text(yaml.safe_dump(configuration))
+    graph = yaml.safe_load(run_process([str(installed_commands.product), "task", "graph"], cwd=root).stdout)
+    assert [(task["status"], task["ready"]) for task in graph["tasks"]] == [("pending", True)]
+
+    task = _launch_leader(installed_commands, root, environment)
+
     assert task["launch_status"] == "launched", task
-    deadline = time.monotonic() + 10
-    while time.monotonic() < deadline:
-        status = run_process(runner_operation(installed_commands, 'status', task['alias']), cwd=root, env=environment)
-        observed = yaml.safe_load(status.stdout)['aliases'][0]
-        if observed['activity'] == 'idle':
-            break
-        time.sleep(.05)
-    assert observed['last_outcome'] == 'runtime-error', observed
-    assert len(list((root / ".graphtraj/state/batches").glob("*.yml"))) == 1
+    wait_for_task_status(installed_commands, root, "114", "awaiting-integration")
     mappings = [yaml.safe_load(path.read_text()) for path in
                 (root / ".graphtraj/runner/sessions").glob("*/mapping.yml")]
-    assert [mapping["role"] for mapping in mappings] == ["team-leader"]
+    assert {mapping["role"] for mapping in mappings} >= {"team-leader", "engineer"}
+
+
+def test_a_leader_dispatches_two_same_role_members_in_one_turn(
+    installed_commands: InstalledCommands,
+    temporary_git_repository: Path,
+    fake_codex: FakeCodex,
+    tmp_path: Path,
+) -> None:
+    """Two swarm calls in one turn start two engineers with their own identities.
+
+    Repeating a registered dispatch and dispatching outside the role_tree stay refused.
+    """
+    root, worktrees, _, environment = configure_harness(
+        installed_commands, temporary_git_repository, fake_codex, tmp_path,
+    )
+    directory = ready_team(root, "Deliver one complete Team Round.")
+    environment["FAKE_CODEX_PARALLEL_ENGINEERS"] = "1"
+
+    task = _launch_leader(installed_commands, root, environment)
+
+    assert task["launch_status"] == "launched", task
+    wait_for_task_status(installed_commands, root, "114", "awaiting-integration")
+    scratch = worktrees / "114-small-team" / ".scratch"
+    first, second, repeated = json.loads((scratch / "parallel-registrations.json").read_text())
+    prefix = "114-small_team-handover0-engineer@"
+    assert first["returncode"] == 0, first
+    assert [child["alias"] for child in yaml.safe_load(first["stdout"])["tasks"]] == [prefix + "engineer"]
+    assert second["returncode"] == 0, second
+    assert [child["alias"] for child in yaml.safe_load(second["stdout"])["tasks"]] == [
+        prefix + "engineer", prefix + "engineer_2",
+    ]
+    assert repeated["returncode"] != 0
+    assert yaml.safe_load(repeated["stdout"])["error"] == {
+        "code": "invalid-input",
+        "message": "A Batch cannot repeat the same task entry; give each member its own instruction.",
+    }
+
+    engineers = [yaml.safe_load(path.read_text()) for path in
+                 (root / ".graphtraj/runner/sessions").glob("*/mapping.yml")]
+    engineers = [mapping for mapping in engineers if mapping["role"] == "engineer"]
+    assert sorted(mapping["alias"] for mapping in engineers) == [prefix + "engineer", prefix + "engineer_2"]
+    assert len({mapping["session"] for mapping in engineers}) == 2
+    team = yaml.safe_load((directory / "teams/1/team.yml").read_text())
+    assert {member["session_ref"] for member in team["members"].values()} >= {
+        prefix + "engineer", prefix + "engineer_2",
+    }
+    for alias in (prefix + "engineer", prefix + "engineer_2"):
+        reports = yaml.safe_load(run_process(
+            [str(installed_commands.runner), "reports", alias], cwd=root, env=environment,
+        ).stdout)
+        assert len(reports["submissions"]) == 1, reports
+    round_directory = directory / "teams/1/rounds/1"
+    assert (round_directory / "engineer.md").is_file()
+    assert (round_directory / "engineer-engineer_2.md").is_file()
+    for name in ("nested.json", "nested-engineer_2.json"):
+        nested = json.loads((scratch / name).read_text())
+        assert nested["returncode"] != 0
+        assert yaml.safe_load(nested["stdout"])["error"]["code"] == "authority-denied"
+
+
+def test_a_ready_task_with_an_unmet_dependency_is_neither_shown_nor_dispatched_as_ready(
+    installed_commands: InstalledCommands,
+    temporary_git_repository: Path,
+    fake_codex: FakeCodex,
+    tmp_path: Path,
+) -> None:
+    """A retained ready status does not survive a dependency that is not complete."""
+    from graphtraj.graph.task_graph import register_task, update_task_state
+
+    root, _, _, environment = configure_harness(
+        installed_commands, temporary_git_repository, fake_codex, tmp_path,
+    )
+    state = root / ".graphtraj/state"
+    register_task(state, root, {
+        "task_id": "113", "task_name": "foundation",
+        "source": "https://github.com/example/project/issues/113", "schema_version": 2, "parent_id": None, "disposition": "active", "replaced_by": [], "retirement_reason": None,
+        "title": "Foundation", "body": "Deliver the foundation.", "dependencies": [],
+    })
+    register_task(state, root, {
+        "task_id": "114", "task_name": "small-team",
+        "source": "https://github.com/example/project/issues/114", "schema_version": 2, "parent_id": None, "disposition": "active", "replaced_by": [], "retirement_reason": None,
+        "title": "Deliver a greeting", "body": "Deliver one complete Team Round.", "dependencies": ["113"],
+    })
+    (root / "readiness.md").write_text("Marked ready by hand before this change.\n")
+    update_task_state(state, root, {
+        "task_id": "114", "status": "ready", "active_team_ordinal": None,
+        "worktree": None, "branch": None, "current_candidate": None,
+        "caused_by_event_ids": [], "evidence_refs": ["readiness.md"],
+    })
+
+    graph = yaml.safe_load(run_process([str(installed_commands.product), "task", "graph"], cwd=root).stdout)
+    shown = {task["task_id"]: (task["status"], task["ready"]) for task in graph["tasks"]}
+    assert shown == {"113": ("pending", True), "114": ("pending", False)}
+    task = _launch_leader(installed_commands, root, environment)
+    assert task["launch_status"] == "failed", task
+    assert task["error"] == {
+        "code": "operation-failed",
+        "message": "The Task needs active disposition and completed dependencies.",
+    }
+    assert not list((root / ".graphtraj/runner/sessions").glob("*/mapping.yml"))
 
 
 def test_a_projected_role_cannot_choose_the_launch_entry(

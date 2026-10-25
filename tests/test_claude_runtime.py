@@ -1040,3 +1040,33 @@ def test_scrub_choice_reaches_native_launch_without_mutating_host(
             assert launch['settings']['sandbox']['failIfUnavailable']
             assert not launch['settings']['sandbox']['allowUnsandboxedCommands']
     assert os.environ.get(key) == scrub
+
+
+def test_claude_prompt_hook_reply_after_host_sleep_is_a_retryable_failure(
+        tmp_path: Path, claude_environment: None, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A hook reply past Claude's limit reports the lost instruction instead of completion.
+
+    Host sleep pauses the monotonic clock while wall time keeps running, as in
+    the observed 892 s gap; only the execution's wall clock jumps here.
+    """
+    from types import SimpleNamespace
+
+    import agent_swarm.claude.execution as claude_execution
+
+    result_project(tmp_path)
+    with ExitStack() as stack:
+        turn, ready, _ = execution(tmp_path, stack, 'remember-363')
+        monkeypatch.setattr(claude_execution, 'time', SimpleNamespace(
+            monotonic=time.monotonic, sleep=time.sleep,
+            time=lambda: time.time() + (40 if turn.session is not None else 0)))
+        with pytest.raises(RuntimeAdapterError) as failure:
+            turn.run()
+    assert ready.is_set()
+    assert failure.value.code == 'RUNTIME_PROVIDER_FAILED'
+    assert 'did not receive the instruction' in str(failure.value)
+    assert 'resume it to send the instruction again' in str(failure.value)
+
+    monkeypatch.setattr(claude_execution, 'time', time)
+    with ExitStack() as stack:
+        resumed, _, _ = execution(tmp_path, stack, 'again', turn.session)
+        assert resumed.run()['outcome'] == 'completed'

@@ -40,6 +40,24 @@ def executable() -> str:
     return str(Path(found).resolve())
 
 
+def current_cli() -> tuple[str, str]:
+    """Return the current official CLI and its checked version.
+
+    The installed ``claude`` link names a versioned binary that a Claude Code
+    update replaces, so each launch and resume resolves it again.
+    """
+    binary = executable()
+    try:
+        version = subprocess.run([binary, '--version'], capture_output=True, text=True,
+                                 check=True, timeout=10).stdout.strip()
+        match = re.match(r'(\d+)\.(\d+)\.(\d+) \(Claude Code\)', version)
+        if match is None or tuple(map(int, match.groups())) < MINIMUM_VERSION:
+            raise ValueError('version')
+    except (OSError, ValueError, subprocess.SubprocessError) as error:
+        raise RuntimeAdapterError('RUNTIME_EXECUTABLE_INVALID', 'Claude Code 2.1.299 or later is required.') from error
+    return binary, version
+
+
 def unsupported(*args: object, **kwargs: object) -> Any:
     """Fail closed for interactive Main hosting, outside this child Adapter."""
     raise RuntimeAdapterError('RUNTIME_UNSUPPORTED', 'Claude Code interactive Main hosting is unavailable.')
@@ -184,15 +202,7 @@ class ClaudeRuntimeAdapter:
         if 'permission_mode' in config and config['permission_mode'] not in ('default', 'auto'):
             raise RuntimeAdapterError('ROLE_CONFIG_INVALID', 'claude.permission_mode must be default or auto.')
         credential_environment(settings.api_key_env)
-        binary = executable()
-        try:
-            version = subprocess.run([binary, '--version'], capture_output=True, text=True,
-                                     check=True, timeout=10).stdout.strip()
-            match = re.match(r'(\d+)\.(\d+)\.(\d+) \(Claude Code\)', version)
-            if match is None or tuple(map(int, match.groups())) < MINIMUM_VERSION:
-                raise ValueError('version')
-        except (OSError, ValueError, subprocess.SubprocessError) as error:
-            raise RuntimeAdapterError('RUNTIME_EXECUTABLE_INVALID', 'Claude Code 2.1.299 or later is required.') from error
+        binary, version = current_cli()
         reports = []
         for path in report_files:
             if path.is_absolute() or path.parts[:1] != ('.state',) or '..' in path.parts:
@@ -258,12 +268,15 @@ class ClaudeRuntimeAdapter:
         reports_only: bool = False,
         session_directory: Path | None = None,
     ) -> dict:
-        """Refresh reports and explicit resource grants for the original configured role.
+        """Refresh reports, resource grants and the CLI for the original configured role.
 
-        Model, connection and other captured permissions remain unchanged. An
-        inline or removed role has no current configured grants to import.
+        The resumed Session runs the current Claude Code executable, since an
+        update removes the launch's versioned binary. Model, connection and
+        other captured permissions remain unchanged. An inline or removed role
+        has no current configured grants to import.
         """
         refreshed = copy.deepcopy(dict(request))
+        refreshed['executable'], refreshed['version'] = current_cli()
         if refreshed.get('worktree_path') != str(worktree):
             raise RuntimeAdapterError('session-not-resumable', 'Claude Worktree changed during recovery.')
         if session_directory is not None:

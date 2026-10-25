@@ -9,7 +9,7 @@ from typing import Any, Callable, Mapping
 
 from agent_swarm import AgentsError, Caller, Run
 from .execution import ClaudeExecution
-from .settings import prepare
+from .settings import current_cli, prepare
 
 
 class ClaudeDriver:
@@ -52,7 +52,12 @@ class ClaudeDriver:
             run.events.session(session)
             run.events.process(runtime_pid=pid)
 
-        turn = ClaudeExecution(dict(run.settings), run.message, run.directory,
+        settings = dict(run.settings)
+        if run.session is not None:
+            # A resume runs the current CLI: an update removes the versioned
+            # binary that the first execution resolved.
+            settings['executable'], settings['version'] = current_cli(self.configuration.get('executable'))
+        turn = ClaudeExecution(settings, run.message, run.directory,
                             lambda session, pid: ready.set(), created,
                             run.directory / 'trace.jsonl', run.session)
         from .binding import bind_run

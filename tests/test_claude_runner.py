@@ -142,6 +142,45 @@ def test_claude_public_launch_resume_interrupt(
     assert not Path(task['worktree_path']).exists()
 
 
+def test_resume_after_a_claude_code_update_uses_the_current_cli(
+    installed_commands: InstalledCommands,
+    temporary_git_repository: Path,
+    fake_codex: FakeCodex,
+    tmp_path: Path,
+) -> None:
+    """An update replaces the versioned binary; the same Session resumes on the new one."""
+    root, environment = setup(installed_commands, temporary_git_repository, fake_codex, tmp_path)
+    link = fake_codex.executable.with_name('claude')
+    versions = tmp_path / 'claude-versions'
+    versions.mkdir()
+    old, new = versions / '2.1.302', versions / '2.1.310'
+    link.rename(old)
+    link.symlink_to(old)
+    batch = root / 'probe.yml'
+    batch.write_text(yaml.safe_dump({'tasks': [{'task_id': '320', 'role': 'researcher'}]}))
+    launched = command(installed_commands, root, environment, '--swarm-input', str(batch))
+    assert launched.returncode == 0, launched.stdout + launched.stderr
+    alias = yaml.safe_load(launched.stdout)['tasks'][0]['alias']
+    first = settled(installed_commands, root, environment, alias)
+    assert first['last_outcome'] == 'completed'
+
+    # The native updater installs a new version, moves the link and removes the old one.
+    shutil.copy2(old, new)
+    link.unlink()
+    link.symlink_to(new)
+    old.unlink()
+    sent = command(installed_commands, root, environment, 'send', alias, '--instruction', 'after-update',
+                   '--caused-by-event-id', events(root)[-1]['event_id'])
+    assert sent.returncode == 0, sent.stdout + sent.stderr
+
+    resumed = settled(installed_commands, root, environment, alias)
+    assert resumed['last_outcome'] == 'completed'
+    assert resumed['session'] == first['session']
+    assert resumed['execution_id'] != first['execution_id']
+    history = tmp_path / (first['session'].split(':')[-1] + '.json')
+    assert json.loads(history.read_text()).count('after-update') == 1
+
+
 def test_input_after_native_close_continues_same_session_once(
     installed_commands: InstalledCommands,
     temporary_git_repository: Path,

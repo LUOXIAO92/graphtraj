@@ -319,3 +319,48 @@ def test_runtime_observes_archive_policy_without_new_native_output(tmp_path: Pat
             assert path.read_bytes() == before
 
     asyncio.run(exercise())
+
+
+@pytest.mark.parametrize('boundary', ['compaction', 'rollback'])
+def test_referenced_fork_inherits_parent_history_selections(tmp_path: Path, boundary: str) -> None:
+    """A parent's recordless compaction/rollback selections keep naming the same inherited events."""
+    root = tmp_path / 'swarm'
+    write_config(root, save_normalized_sessions=True, backfill_history=True)
+    archive = ConfiguredSessionArchive(root)
+    keep, after, later = ({'type': 'message', 'role': 'user', 'content': [{'type': 'input_text', 'text': text}]}
+                          for text in ('keep', 'after', 'later'))
+    if boundary == 'compaction':
+        cut = [{'type': 'compacted', 'payload': {'replacement_history': [keep], 'window_number': 1,
+                                                'resume_metadata': {},
+                                                'replacement_history_metadata': [{'user_input_order': 1}]}}]
+    else:
+        cut = [{'type': 'response_item', 'payload': keep},
+               {'type': 'event_msg', 'payload': {'type': 'thread_rolled_back', 'num_turns': 1}}]
+    parent_records = history() + cut + [{'type': 'response_item', 'payload': item} for item in (after, later)]
+    for ordinal, record in enumerate(parent_records):
+        record['ordinal'] = ordinal
+    parent_path = tmp_path / 'parent.jsonl'
+    write(parent_path, parent_records[:-1])
+    end = parent_path.stat().st_size
+    write(parent_path, parent_records)
+    CodexJsonlArchive(archive, 'parent-agent', 'native', parent_path).collect(parent_path)
+    child_path = tmp_path / 'child.jsonl'
+    write(child_path, [
+        {'type': 'session_meta', 'ordinal': 0, 'payload': {'id': 'child', 'forked_from_id': 'native',
+            'history_base': {'thread_id': 'native', 'end_byte_offset': end,
+                             'end_ordinal_exclusive': len(parent_records) - 1}}},
+        {'type': 'response_item', 'ordinal': 1, 'payload': {'type': 'message', 'role': 'user',
+                                                         'content': [{'type': 'input_text', 'text': 'child'}]}},
+    ])
+    CodexJsonlArchive(archive, 'child-agent', 'child', child_path).collect(child_path)
+
+    parent = current(root)
+    child = JsonlSessionStore(archive_path(root, 'codex:child'))
+    assert child.messages()[:-1] == parent.messages()[:-1]
+    assert child.messages()[-1]['content'][0]['text'] == 'child'
+    parent_events = {event['seq']: event for event in parent.page()['events']}
+    selections = [event for event in child.page()['events'] if event['type'] == 'graphtraj/history']
+    assert selections
+    for selection in selections:
+        assert selection == parent_events[selection['seq']]
+        assert all(child.page()['events'][seq] == parent_events[seq] for seq in selection['data']['eventSeqs'])

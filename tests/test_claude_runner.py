@@ -860,7 +860,20 @@ print(json.dumps(outcome.result))
 """
 
 
-@pytest.mark.parametrize('entry', ['agent-runner', 'agents'])
+RETIRE_STOPPED = """
+from pathlib import Path
+import sys
+from graphtraj.execution.runner_heartbeat import execution_start_lock
+from graphtraj.execution.runner_retirement import retire_stopped_session
+from graphtraj.workspace.runner_project import discover_project
+# The step the reviewed public retirement applies: the record moves to its Trace.
+project = discover_project(Path.cwd(), require_clean_integration=False)
+with execution_start_lock(project.runner_directory):
+    retire_stopped_session(project, sys.argv[1])
+"""
+
+
+@pytest.mark.parametrize('entry', ['agent-runner', 'agents', 'agents-retired'])
 def test_public_interrupt_confirms_an_exited_owner_without_terminal_record(
     installed_commands: InstalledCommands,
     temporary_git_repository: Path,
@@ -899,7 +912,19 @@ def test_public_interrupt_confirms_an_exited_owner_without_terminal_record(
         shutil.rmtree(leftover, ignore_errors=True)
     assert not (directory / 'execution.yml').exists()
 
-    if entry == 'agents':
+    if entry == 'agents-retired':
+        # Production shape: the Runner already confirmed its own end, then the
+        # member was retired and its record lives only in its retained Trace.
+        stopped = command(installed_commands, root, environment, 'interrupt', alias)
+        assert stopped.returncode == 0, stopped.stdout + stopped.stderr
+        retired = run_process([str(installed_commands.runner.with_name('python')), '-c', RETIRE_STOPPED, alias],
+                              cwd=root, env=environment, timeout=65)
+        assert retired.returncode == 0, retired.stdout + retired.stderr
+        assert not directory.exists()
+        directory = Path(mapping['trace_file']).parent / 'runner'
+        response = run_process([str(installed_commands.runner.with_name('python')), '-c', AGENTS_INTERRUPT,
+                                alias], cwd=root, env=environment, timeout=65)
+    elif entry == 'agents':
         # The stopped member itself may interrupt its own subtree, but only its
         # direct parent may confirm its end; nothing is written for it.
         refused = run_process([str(installed_commands.runner.with_name('python')), '-c', AGENTS_INTERRUPT,
@@ -915,7 +940,7 @@ def test_public_interrupt_confirms_an_exited_owner_without_terminal_record(
     assert response.returncode == 0, response.stdout + response.stderr
     member = yaml.safe_load(response.stdout)['members'][0]
     assert member['interrupt_status'] == 'stopped', response.stdout
-    if entry == 'agents':
+    if entry != 'agent-runner':
         record = json.loads((root / '.graphtraj/swarm/control/agents' / f"{mapping['agent']}.json").read_text())
         ended = record['executions'][-1]
         assert yaml.safe_load(response.stdout)['termination_confirmed'] == [ended['id']]

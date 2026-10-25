@@ -1,13 +1,14 @@
 #!/bin/sh
 # Task 349 real-host kit: snapshot the isolated project's Main records after a step.
-#   sh build/349-real-host/collect.sh <step-label>
+#   /bin/bash build/349-real-host/collect.sh <step-label>
 # Reads only GraphTraj records under the isolated project and Pi Session files in
 # the kit's own session directory; prints no environment and copies no credentials.
 set -eu
 
 T=${T:-/private/tmp/graphtraj-349}
 P=$T/project
-R=$P/.graphtraj/runner
+# The Runner follows the project's selected layout (legacy .graphtraj/runner or core/runner).
+R=$("$T/venv/bin/python" -c 'import sys; from pathlib import Path; from graphtraj.configuration.project_configuration import runner_directory; print(runner_directory(Path(sys.argv[1])))' "$P")
 LABEL=${1:?step label required}
 OUT=$T/evidence/$LABEL
 mkdir -p "$OUT"
@@ -23,7 +24,7 @@ for directory in "$R"/sessions/*/; do
 done
 ps -Ao pid,ppid,command | grep -E 'graphtraj-(mcp|session)|/bin/(pi|dsh)|claude' | grep -v grep > "$OUT/processes.txt" || true
 
-"$T/venv/bin/python" - "$T" "$OUT" <<'PY' | tee "$OUT/summary.txt"
+"$T/venv/bin/python" - "$T" "$OUT" "$R" <<'PY' | tee "$OUT/summary.txt"
 """Print claims, queues, members and executions; check the claim record is append-only."""
 import hashlib
 import json
@@ -31,7 +32,7 @@ import sys
 from pathlib import Path
 
 T, OUT = Path(sys.argv[1]), Path(sys.argv[2])
-runner = T / 'project/.graphtraj/runner'
+runner = Path(sys.argv[3])
 claims_path = runner / 'main-sessions/continuity.jsonl'
 lines = claims_path.read_text().splitlines() if claims_path.exists() else []
 

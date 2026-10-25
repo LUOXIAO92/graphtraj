@@ -3,11 +3,11 @@
 #
 # Run from a plain user terminal (not inside a Codex/Claude/Pi/DSH Agent shell),
 # so no Agent connection or Main identity is inherited:
-#   sh build/349-real-host/setup.sh            # COMMIT defaults to this Worktree's HEAD
+#   /bin/bash build/349-real-host/setup.sh            # COMMIT defaults to this Worktree's HEAD
 # It never reads or copies credential files; Pi, DSH and Claude keep their own logins.
 set -eu
 
-C=${C:-/Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/.agent-worktrees/349-pi-dsh-main-continuity}
+C=${C:-/Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/349-pi-dsh-main-continuity}
 COMMIT=${COMMIT:-$(git -C "$C" rev-parse HEAD)}
 T=${T:-/private/tmp/graphtraj-349}
 P=$T/project

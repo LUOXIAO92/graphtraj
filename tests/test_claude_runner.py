@@ -843,10 +843,19 @@ def test_real_claude_archive_public_query(
 AGENTS_INTERRUPT = """
 import json, sys
 from pathlib import Path
-from agent_swarm import Binding, Caller
+from agent_swarm import AgentsError, Binding, Caller
+from graphtraj.execution.runner_status import runtime_caller
 from graphtraj.interfaces.agents import GraphTrajAgents
-# The agents action as the human caller that dispatched this root member.
-outcome = GraphTrajAgents(Path.cwd()).operate('interrupt', {'agent': sys.argv[1]}, Binding(Caller('graphtraj-gateway', None)))
+# The agents action as the human caller that dispatched this root member, or,
+# with a second argument, as that Runner identity on the fixture host binding.
+identity = sys.argv[2] if len(sys.argv) > 2 else None
+with runtime_caller(Path.cwd() / '.graphtraj/runner', identity):
+    try:
+        outcome = GraphTrajAgents(Path.cwd()).operate(
+            'interrupt', {'agent': sys.argv[1]}, Binding(Caller('graphtraj-gateway', identity)))
+    except AgentsError as error:
+        print(json.dumps({'error': {'code': error.code, 'message': error.message}}))
+        raise SystemExit(1)
 print(json.dumps(outcome.result))
 """
 
@@ -891,6 +900,14 @@ def test_public_interrupt_confirms_an_exited_owner_without_terminal_record(
     assert not (directory / 'execution.yml').exists()
 
     if entry == 'agents':
+        # The stopped member itself may interrupt its own subtree, but only its
+        # direct parent may confirm its end; nothing is written for it.
+        refused = run_process([str(installed_commands.runner.with_name('python')), '-c', AGENTS_INTERRUPT,
+                               alias, alias], cwd=root, env=environment, timeout=65)
+        assert refused.returncode == 1, refused.stdout + refused.stderr
+        assert json.loads(refused.stdout)['error']['code'] == 'authority-denied'
+        record = json.loads((root / '.graphtraj/swarm/control/agents' / f"{mapping['agent']}.json").read_text())
+        assert 'termination_confirmation' not in record['executions'][-1]
         response = run_process([str(installed_commands.runner.with_name('python')), '-c', AGENTS_INTERRUPT,
                                 alias], cwd=root, env=environment, timeout=65)
     else:
@@ -906,6 +923,8 @@ def test_public_interrupt_confirms_an_exited_owner_without_terminal_record(
         assert ended['termination_confirmation']['evidence'] == {
             'worker_pid': mapping['worker_pid'], 'runtime_pid': mapping['runtime_pid'],
             'worker_alive': False, 'runtime_alive': False}
+        assert ended['termination_confirmation']['by'] == {'host': 'graphtraj-gateway', 'agent': None,
+                                                            'session': None}
 
     # The owner exit stays an unconfirmed runtime error; the separate receipt
     # records only the current confirmation that the Runtime group is gone.

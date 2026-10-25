@@ -140,6 +140,20 @@ def _alive(pid: object) -> bool:
     return True
 
 
+def _group_alive(pid: int) -> bool:
+    """Return whether the process group led by Runtime ``pid`` still has a member.
+
+    The Runtime runs as a process-group leader, so its children may outlive it.
+    """
+    try:
+        os.killpg(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    return True
+
+
 def _scope(caller: Caller) -> dict[str, str | None]:
     """Return the verified identity a root record keeps as its creator."""
     return {"host": caller.host, "agent": caller.agent, "session": caller.session}
@@ -533,7 +547,15 @@ class AgentControl:
             record["retired_by"] = _scope(caller)
             return self._outcome(record, result={"retired": True})
 
-    def confirm_ended(self, agent: str, caller: Caller) -> Outcome:
+    def unconfirmed_ends(self, agent: str) -> list[str]:
+        """Return the ended executions of ``agent`` whose end is still unconfirmed.
+
+        This only reads; a host uses it to refuse a confirmation it may not make.
+        """
+        with self._locked(agent) as record:
+            return [execution["id"] for execution in record["executions"] if _unconfirmed(execution)]
+
+    def confirm_ended(self, agent: str, caller: Caller, *, by: Mapping[str, Any] | None = None) -> Outcome:
         """Confirm the unconfirmed ends of a standby Agent's executions.
 
         An execution can end without a native termination event, for example
@@ -547,13 +569,15 @@ class AgentControl:
         ``terminal_confirmed`` false and error, is kept; the confirmation is
         appended to the execution as ``termination_confirmation``. An Agent
         without an unconfirmed end returns an empty ``termination_confirmed``.
+        A host that has verified the real caller through its own direct-parent
+        check passes that caller's identity as ``by``; the receipt records it.
         """
         with self._locked(agent) as record:
             if _running(record) is not None:
                 raise AgentsError("active", "The Agent is running; interrupt it and wait for standby.")
-            return self._confirm_ended(record, caller)
+            return self._confirm_ended(record, caller, by)
 
-    def _confirm_ended(self, record: dict, caller: Caller) -> Outcome:
+    def _confirm_ended(self, record: dict, caller: Caller, by: Mapping[str, Any] | None = None) -> Outcome:
         """Implement :meth:`confirm_ended` for a standby record under the held lock."""
         self._require_view(record, caller)
         self._require_root_control(caller)
@@ -572,14 +596,14 @@ class AgentControl:
                 raise AgentsError("termination-unconfirmed",
                                   f"Execution {execution['id']} lacks a recorded worker or Runtime process; "
                                   "its end cannot be verified.")
-            if any(_alive(pid) for pid in facts.values()):
+            if any(_alive(pid) for pid in facts.values()) or _group_alive(facts["runtime_pid"]):
                 raise AgentsError("termination-unconfirmed",
                                   f"A recorded process of execution {execution['id']} is still running.")
             evidence[execution["id"]] = {**facts, "worker_alive": False, "runtime_alive": False}
 
         for execution in pending:
             execution["termination_confirmation"] = {
-                "at": _now(), "by": _scope(caller), "terminal_confirmed": True,
+                "at": _now(), "by": dict(by) if by is not None else _scope(caller), "terminal_confirmed": True,
                 "evidence": evidence[execution["id"]],
             }
         return self._outcome(record, result={"interrupt": "stopped",

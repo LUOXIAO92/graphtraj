@@ -402,3 +402,76 @@ def test_owner_retains_untracked_evidence_for_an_existing_submission(tmp_path: P
     assert [event['event_id'] for event in listed] == [submission['event_id'], retained['event_id']]
     with pytest.raises(ValueError, match='Unknown result submission'):
         tools.retain_evidence({**arguments, 'submission_id': 'absent'}, cwd=tmp_path)
+
+
+def test_runtime_write_markers_in_task_state_do_not_block_delivery(tmp_path: Path) -> None:
+    """A Runtime's hidden ``.claude/.cc-writes`` marker anywhere in Task state is foreign."""
+    from graphtraj.graph.task_graph import read_graph
+
+    runner, team, commit = result_project(tmp_path)
+    task = team.parent.parent.parent
+    markers = [parent / '.claude/.cc-writes' for parent in (
+        tmp_path / 'state', tmp_path / 'state/tasks', task, task / 'definitions', task / 'teams',
+        team.parent, team.parent / 'rounds', team.parent / 'rounds/1',
+    )]
+    for marker in markers:
+        marker.mkdir(parents=True, exist_ok=True)
+    with runtime_caller(runner, 'research@x1'):
+        report = tools.submit_report({'name': 'researcher-x1.md', 'text': 'Evidence'}, cwd=tmp_path)
+        submitted = tools.submit_result({
+            'commit': commit, 'result_refs': ['result.md'],
+            'evidence_refs': [report.document['report']], 'completion': 'Done',
+        }, cwd=tmp_path).document
+    with runtime_caller(runner, None):
+        decided = tools.decide_result({
+            'submission_id': submitted['event_id'], 'commit': commit, 'decision': 'accepted',
+            'reason': 'Meets the criteria.', 'evidence_refs': submitted['evidence_refs'],
+        }, cwd=tmp_path).document
+    assert decided['event'] == 'team-round-accepted'
+    assert [task['task_id'] for task in read_graph(tmp_path / 'state')['tasks']] == ['148']
+    assert all(marker.is_dir() for marker in markers)
+
+
+def test_decision_cites_task_state_records_but_not_runner_or_unrelated_files(tmp_path: Path) -> None:
+    """A mapped decider may cite member reports and integration evidence by Harness-relative path."""
+    from graphtraj.graph.delivery_worldline import read_worldline
+
+    runner, team, commit = result_project(tmp_path)
+    child = runner / 'sessions/research@x1/mapping.yml'
+    child.write_text(yaml.safe_dump({**yaml.safe_load(child.read_text()), 'parent': 'research@x3'}))
+    with runtime_caller(runner, 'research@x2'):
+        other = tools.submit_report({'name': 'researcher-x2.md', 'text': 'Other member'}, cwd=tmp_path)
+    with runtime_caller(runner, 'research@x1'):
+        submitted = tools.submit_result({
+            'commit': commit, 'result_refs': ['result.md'], 'completion': 'Done',
+        }, cwd=tmp_path).document
+    task = team.parent.parent.parent
+    (task / 'integration-evidence').mkdir()
+    (task / 'integration-evidence/main-adoption.txt').write_text('Main adoption record\n')
+    runner_record = team.parent / 'traces/research@x1/runner/claude-settings.yml'
+    runner_record.parent.mkdir(parents=True)
+    runner_record.write_text('env: {}\n')
+    (tmp_path / 'notes.txt').write_text('Unrelated\n')
+    (tmp_path / 'worktrees/research/draft.md').write_text('Uncommitted\n')
+    (tmp_path / 'docs/specs').mkdir(parents=True)
+    (tmp_path / 'docs/specs/spec.md').write_text('Harness Project Document\n')
+    worldline = next((tmp_path / 'state/worldline').glob('*.jsonl'))
+    decision = {'submission_id': submitted['event_id'], 'commit': commit,
+                'decision': 'rejected', 'reason': 'Needs a source comparison.'}
+    before = read_worldline(tmp_path / 'state', tmp_path)
+    with runtime_caller(runner, 'research@x3'):
+        for refused in (runner_record, runner / 'sessions/research@x1/mapping.yml',
+                        tmp_path / 'notes.txt', tmp_path / 'worktrees/research/draft.md'):
+            with pytest.raises(ValueError, match='Decision evidence') as error:
+                tools.decide_result({**decision, 'evidence_refs': [
+                    refused.relative_to(tmp_path).as_posix()]}, cwd=tmp_path)
+            assert 'subpath' not in str(error.value)
+        with pytest.raises(ValueError, match='does not exist'):
+            tools.decide_result({**decision, 'evidence_refs': [
+                (task / 'integration-evidence').relative_to(tmp_path).as_posix()]}, cwd=tmp_path)
+        assert read_worldline(tmp_path / 'state', tmp_path) == before
+        cited = [Path(other.document['report']).relative_to(tmp_path).as_posix(),
+                 (task / 'integration-evidence/main-adoption.txt').relative_to(tmp_path).as_posix(),
+                 'docs/specs/spec.md', worldline.relative_to(tmp_path).as_posix()]
+        decided = tools.decide_result({**decision, 'evidence_refs': cited}, cwd=tmp_path).document
+    assert decided['event'] == 'team-round-implementation-rejected'

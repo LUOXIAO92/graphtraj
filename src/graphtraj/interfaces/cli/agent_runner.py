@@ -317,7 +317,9 @@ def continue_task(
 
 @main.command(cls=OperationCommand, feature="cleanup")
 @click.option("--task-id")
-def cleanup(task_id: str | None) -> None:
+@click.option("--worktree-branch", help="Branch checked out in the Task Worktree when it differs "
+              "from the registered branch; both branches are kept.")
+def cleanup(task_id: str | None, worktree_branch: str | None) -> None:
     """Clean up one safely integrated task by stable identity."""
     if task_id is None:
         error = RunnerError(
@@ -326,7 +328,9 @@ def cleanup(task_id: str | None) -> None:
         )
         _fail(error)
     try:
-        response = invoke_tool("cleanup", {"task_id": task_id}, cwd=Path.cwd().resolve())
+        response = invoke_tool("cleanup", {"task_id": task_id, **(
+            {"worktree_branch": worktree_branch} if worktree_branch is not None else {})},
+            cwd=Path.cwd().resolve())
     except RunnerError as error:
         _fail(error)
     _emit_result(response.document)

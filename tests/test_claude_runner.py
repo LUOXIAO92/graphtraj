@@ -142,6 +142,45 @@ def test_claude_public_launch_resume_interrupt(
     assert not Path(task['worktree_path']).exists()
 
 
+def test_resume_after_a_claude_code_update_uses_the_current_cli(
+    installed_commands: InstalledCommands,
+    temporary_git_repository: Path,
+    fake_codex: FakeCodex,
+    tmp_path: Path,
+) -> None:
+    """An update replaces the versioned binary; the same Session resumes on the new one."""
+    root, environment = setup(installed_commands, temporary_git_repository, fake_codex, tmp_path)
+    link = fake_codex.executable.with_name('claude')
+    versions = tmp_path / 'claude-versions'
+    versions.mkdir()
+    old, new = versions / '2.1.302', versions / '2.1.310'
+    link.rename(old)
+    link.symlink_to(old)
+    batch = root / 'probe.yml'
+    batch.write_text(yaml.safe_dump({'tasks': [{'task_id': '320', 'role': 'researcher'}]}))
+    launched = command(installed_commands, root, environment, '--swarm-input', str(batch))
+    assert launched.returncode == 0, launched.stdout + launched.stderr
+    alias = yaml.safe_load(launched.stdout)['tasks'][0]['alias']
+    first = settled(installed_commands, root, environment, alias)
+    assert first['last_outcome'] == 'completed'
+
+    # The native updater installs a new version, moves the link and removes the old one.
+    shutil.copy2(old, new)
+    link.unlink()
+    link.symlink_to(new)
+    old.unlink()
+    sent = command(installed_commands, root, environment, 'send', alias, '--instruction', 'after-update',
+                   '--caused-by-event-id', events(root)[-1]['event_id'])
+    assert sent.returncode == 0, sent.stdout + sent.stderr
+
+    resumed = settled(installed_commands, root, environment, alias)
+    assert resumed['last_outcome'] == 'completed'
+    assert resumed['session'] == first['session']
+    assert resumed['execution_id'] != first['execution_id']
+    history = tmp_path / (first['session'].split(':')[-1] + '.json')
+    assert json.loads(history.read_text()).count('after-update') == 1
+
+
 def test_input_after_native_close_continues_same_session_once(
     installed_commands: InstalledCommands,
     temporary_git_repository: Path,
@@ -801,13 +840,52 @@ def test_real_claude_archive_public_query(
     assert terminal['last_outcome'] == 'completed', terminal
 
 
+AGENTS_INTERRUPT = """
+import json, sys
+from pathlib import Path
+from agent_swarm import AgentsError, Binding, Caller
+from graphtraj.execution.runner_status import runtime_caller
+from graphtraj.interfaces.agents import GraphTrajAgents
+# The agents action as the human caller that dispatched this root member, or,
+# with a second argument, as that Runner identity on the fixture host binding.
+identity = sys.argv[2] if len(sys.argv) > 2 else None
+with runtime_caller(Path.cwd() / '.graphtraj/runner', identity):
+    try:
+        outcome = GraphTrajAgents(Path.cwd()).operate(
+            'interrupt', {'agent': sys.argv[1]}, Binding(Caller('graphtraj-gateway', identity)))
+    except AgentsError as error:
+        print(json.dumps({'error': {'code': error.code, 'message': error.message}}))
+        raise SystemExit(1)
+print(json.dumps(outcome.result))
+"""
+
+
+RETIRE_STOPPED = """
+from pathlib import Path
+import sys
+from graphtraj.execution.runner_heartbeat import execution_start_lock
+from graphtraj.execution.runner_retirement import retire_stopped_session
+from graphtraj.workspace.runner_project import discover_project
+# The step the reviewed public retirement applies: the record moves to its Trace.
+project = discover_project(Path.cwd(), require_clean_integration=False)
+with execution_start_lock(project.runner_directory):
+    retire_stopped_session(project, sys.argv[1])
+"""
+
+
+@pytest.mark.parametrize('entry', ['agent-runner', 'agents', 'agents-retired'])
 def test_public_interrupt_confirms_an_exited_owner_without_terminal_record(
     installed_commands: InstalledCommands,
     temporary_git_repository: Path,
     fake_codex: FakeCodex,
     tmp_path: Path,
+    entry: str,
 ) -> None:
-    """An owner and Runtime that both exited are confirmed stopped, not natively ended."""
+    """An owner and Runtime that both exited are confirmed stopped, not natively ended.
+
+    Through ``agents`` the member's core execution, ended as owner-exited, is
+    confirmed in the same call with a receipt that keeps its original end.
+    """
     from graphtraj.execution.runner_heartbeat import ownership_is_held
 
     root, environment = setup(installed_commands, temporary_git_repository, fake_codex, tmp_path)
@@ -834,10 +912,44 @@ def test_public_interrupt_confirms_an_exited_owner_without_terminal_record(
         shutil.rmtree(leftover, ignore_errors=True)
     assert not (directory / 'execution.yml').exists()
 
-    response = command(installed_commands, root, environment, 'interrupt', alias)
+    if entry == 'agents-retired':
+        # Production shape: the Runner already confirmed its own end, then the
+        # member was retired and its record lives only in its retained Trace.
+        stopped = command(installed_commands, root, environment, 'interrupt', alias)
+        assert stopped.returncode == 0, stopped.stdout + stopped.stderr
+        retired = run_process([str(installed_commands.runner.with_name('python')), '-c', RETIRE_STOPPED, alias],
+                              cwd=root, env=environment, timeout=65)
+        assert retired.returncode == 0, retired.stdout + retired.stderr
+        assert not directory.exists()
+        directory = Path(mapping['trace_file']).parent / 'runner'
+        response = run_process([str(installed_commands.runner.with_name('python')), '-c', AGENTS_INTERRUPT,
+                                alias], cwd=root, env=environment, timeout=65)
+    elif entry == 'agents':
+        # The stopped member itself may interrupt its own subtree, but only its
+        # direct parent may confirm its end; nothing is written for it.
+        refused = run_process([str(installed_commands.runner.with_name('python')), '-c', AGENTS_INTERRUPT,
+                               alias, alias], cwd=root, env=environment, timeout=65)
+        assert refused.returncode == 1, refused.stdout + refused.stderr
+        assert json.loads(refused.stdout)['error']['code'] == 'authority-denied'
+        record = json.loads((root / '.graphtraj/swarm/control/agents' / f"{mapping['agent']}.json").read_text())
+        assert 'termination_confirmation' not in record['executions'][-1]
+        response = run_process([str(installed_commands.runner.with_name('python')), '-c', AGENTS_INTERRUPT,
+                                alias], cwd=root, env=environment, timeout=65)
+    else:
+        response = command(installed_commands, root, environment, 'interrupt', alias)
     assert response.returncode == 0, response.stdout + response.stderr
     member = yaml.safe_load(response.stdout)['members'][0]
     assert member['interrupt_status'] == 'stopped', response.stdout
+    if entry != 'agent-runner':
+        record = json.loads((root / '.graphtraj/swarm/control/agents' / f"{mapping['agent']}.json").read_text())
+        ended = record['executions'][-1]
+        assert yaml.safe_load(response.stdout)['termination_confirmed'] == [ended['id']]
+        assert ended['terminal_confirmed'] is False and ended['error']['code'] == 'owner-exited'
+        assert ended['termination_confirmation']['evidence'] == {
+            'worker_pid': mapping['worker_pid'], 'runtime_pid': mapping['runtime_pid'],
+            'worker_alive': False, 'runtime_alive': False}
+        assert ended['termination_confirmation']['by'] == {'host': 'graphtraj-gateway', 'agent': None,
+                                                            'session': None}
 
     # The owner exit stays an unconfirmed runtime error; the separate receipt
     # records only the current confirmation that the Runtime group is gone.

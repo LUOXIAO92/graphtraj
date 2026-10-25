@@ -1002,7 +1002,8 @@ def cleanup_task_execution(
     """Return the existing cleanup result without changing its safety checks."""
     from graphtraj.execution.runner_cleanup import cleanup_task
 
-    response = cleanup_task(cwd or Path.cwd(), _string_argument(arguments, "task_id"))
+    response = cleanup_task(cwd or Path.cwd(), _string_argument(arguments, "task_id"),
+                            _optional_string_argument(arguments, "worktree_branch"))
     return ToolResult(response.document, failed=not response.succeeded)
 
 
@@ -1050,8 +1051,11 @@ register_tool(
 )
 register_tool(
     "cleanup",
-    "Clean up one safely integrated task by stable identity.",
-    {"type": "object", "properties": {"task_id": {"type": "string"}},
+    "Clean up one safely integrated task by stable identity. When its Worktree is checked "
+    "out on another branch that contains the accepted candidate, name that branch in "
+    "worktree_branch; the Worktree is then removed and both branches are kept.",
+    {"type": "object", "properties": {"task_id": {"type": "string"},
+                                      "worktree_branch": {"type": "string"}},
      "required": ["task_id"], "additionalProperties": False},
     cleanup_task_execution,
     manual_ref="manuals/task-delivery/guide.md",

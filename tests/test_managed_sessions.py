@@ -469,6 +469,25 @@ def test_interrupt_is_targeted_and_terminal_before_service_exit(managed_project:
     observe(call, second['alias'], 'idle', 'completed')
 
 
+def test_interrupted_worker_and_runtime_exit_within_the_stop_window(managed_project: ManagedProject) -> None:
+    """A public interrupt ends the owning Worker and its Runtime within the stop window."""
+    from graphtraj.execution.runner_process import OPERATION_TIMEOUT_SECONDS, process_is_alive
+    from graphtraj.execution.runner_status import read_alias_mapping
+
+    root, _, call, _ = managed_project
+    alias = call('launch', launch_document())['tasks'][0]['alias']
+    observe(call, alias, 'running')
+    mapping, _ = read_alias_mapping(root / '.graphtraj/runner', alias)
+    processes = (mapping['worker_pid'], mapping['runtime_pid'])
+
+    assert call('interrupt', [alias])['interrupt_status'] == 'interrupted'
+    deadline = time.monotonic() + OPERATION_TIMEOUT_SECONDS
+    while any(map(process_is_alive, processes)) and time.monotonic() < deadline:
+        time.sleep(0.1)
+    assert not any(map(process_is_alive, processes))
+    assert call('status', [alias])['aliases'][0]['last_outcome'] == 'interrupted'
+
+
 def test_native_failure_is_distinct_from_interruption(managed_project: ManagedProject) -> None:
     """A failed native turn remains a runtime error while its service is alive."""
     root, cause, call, _ = managed_project

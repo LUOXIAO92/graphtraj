@@ -309,10 +309,10 @@ def test_failed_decision_append_restores_state_reports_and_evidence(tmp_path: Pa
         tools.submit_report({'name': 'researcher-x1.md', 'text': 'Still open'}, cwd=tmp_path)
 
 
-def test_parent_cannot_retain_an_unassigned_sibling_report(tmp_path: Path) -> None:
-    """Acceptance authority does not broaden the deciding Session's file access."""
+def test_parent_cites_a_sibling_task_report_without_gaining_write_access(tmp_path: Path) -> None:
+    """A sibling's Task-state report is project evidence; citing it grants no write over it."""
     import yaml
-    from graphtraj.graph.delivery_worldline import read_worldline
+    from graphtraj.execution.runner_models import RunnerError
 
     runner, _, commit = result_project(tmp_path)
     child = runner / 'sessions/research@x1/mapping.yml'
@@ -322,14 +322,20 @@ def test_parent_cannot_retain_an_unassigned_sibling_report(tmp_path: Path) -> No
         submitted = tools.submit_result({'commit': commit, 'result_refs': ['result.md'],
                                       'completion': 'Done'}, cwd=tmp_path).document
     with runtime_caller(runner, 'research@x2'):
-        report = tools.submit_report({'name': 'researcher-x2.md', 'text': 'Private sibling evidence'},
-                                   cwd=tmp_path).document['report']
-    before = read_worldline(tmp_path / 'state', tmp_path)
-    with runtime_caller(runner, 'research@x3'), pytest.raises(ValueError):
-        tools.decide_result({'submission_id': submitted['event_id'], 'commit': commit,
-                           'decision': 'accepted', 'reason': 'Done',
-                           'evidence_refs': [Path(report).relative_to(tmp_path).as_posix()]}, cwd=tmp_path)
-    assert read_worldline(tmp_path / 'state', tmp_path) == before
+        report = Path(tools.submit_report({'name': 'researcher-x2.md', 'text': 'Sibling evidence'},
+                                          cwd=tmp_path).document['report'])
+    cited = report.relative_to(tmp_path).as_posix()
+    with runtime_caller(runner, 'research@x3'):
+        decided = tools.decide_result({'submission_id': submitted['event_id'], 'commit': commit,
+                                     'decision': 'accepted', 'reason': 'Done',
+                                     'evidence_refs': [cited]}, cwd=tmp_path).document
+        # Reading authority is not authorship: the decider still cannot write the sibling's report.
+        with pytest.raises((ValueError, RunnerError)):
+            tools.submit_report({'name': 'researcher-x2.md', 'text': 'Overwritten'}, cwd=tmp_path)
+    assert decided['event'] == 'team-round-accepted'
+    retained = [tmp_path / ref for ref in decided['evidence_refs']]
+    assert [path.read_text() for path in retained] == ['Sibling evidence']
+    assert report.read_text() == 'Sibling evidence'
 
 
 def test_delivery_state_cli_cannot_bypass_actual_caller_authority(tmp_path: Path) -> None:

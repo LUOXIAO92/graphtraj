@@ -293,6 +293,27 @@ def test_claude_host_serves_agents_and_tasks_as_the_continuing_main(tmp_path: Pa
     assert len(driver.started) == 2
 
 
+def test_agents_reads_main_claims_from_the_core_layout_runner(tmp_path: Path) -> None:
+    """In the core layout a later Main Session sees and controls an earlier Main's root."""
+    from agent_swarm import Binding
+    from graphtraj.interfaces.agents import GraphTrajAgents, swarm_root
+
+    (tmp_path / '.graphtraj/core').mkdir(parents=True)
+    (tmp_path / '.graphtraj/core/config.yml').write_text('{}\n')
+    runner = tmp_path / '.graphtraj/core/runner'
+    claim_main(runner, CODEX, 'codex:SessionStart:startup')
+    driver  = ScriptedDriver()
+    earlier = AgentControl(swarm_root(tmp_path), {'claude': driver}, roots=MainRoots(runner))
+    agent   = bind(earlier, Caller('graphtraj-gateway', None, 'codex-main', 'codex'))(
+        {'action': 'create', 'runtime': 'claude', 'instruction': 'first'}).document['agent']
+    for release in list(driver.releases.values()):
+        release.set()
+
+    later  = Binding(Caller('graphtraj-gateway', None, 'claude-main', 'claude'))
+    status = GraphTrajAgents(tmp_path).operate('status', {'agent': agent}, later)
+    assert status.result['agent'] == agent and status.result['creator']['session'] == 'codex-main'
+
+
 def test_continued_main_cannot_control_task_members_through_agents(tmp_path: Path) -> None:
     """agents' Task member path applies the same single-controller decision (S2)."""
     from agent_swarm import Binding

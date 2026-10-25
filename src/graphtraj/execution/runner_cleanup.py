@@ -42,8 +42,15 @@ class CleanupTarget:
     candidate: str | None
 
 
-def cleanup_task(cwd: Path, task_id: str) -> CleanupResponse:
-    """Remove one integrated Task's disposable resources by Task identity."""
+def cleanup_task(cwd: Path, task_id: str, worktree_branch: str | None = None) -> CleanupResponse:
+    """Remove one integrated Task's disposable resources by Task identity.
+
+    ``worktree_branch`` names the branch actually checked out in the Task's
+    registered Worktree when it differs from the registered branch, for
+    example after an adoption merge on a new branch. That Worktree is removed
+    only when its branch head contains the accepted candidate and is
+    integrated into dev; both branches are kept.
+    """
 
     if not valid_task_id(task_id):
         raise RunnerError(
@@ -55,7 +62,7 @@ def cleanup_task(cwd: Path, task_id: str) -> CleanupResponse:
     if isinstance(target, CleanupResponse):
         return target
     try:
-        return _cleanup(target)
+        return _cleanup(target, worktree_branch)
     except RunnerError as error:
         return _refused(
             target,
@@ -114,7 +121,8 @@ def _target(project: Project, task_id: str) -> CleanupTarget | CleanupResponse:
     )
 
 
-def _cleanup(target: CleanupTarget) -> CleanupResponse:
+def _cleanup(target: CleanupTarget, worktree_branch: str | None = None) -> CleanupResponse:
+    """Verify and remove the Task's resources; see ``cleanup_task``."""
     if target.status != "integrated":
         return _refused(
             target,
@@ -141,7 +149,10 @@ def _cleanup(target: CleanupTarget) -> CleanupResponse:
             {"aliases": busy_aliases},
         )
 
-    expected_ref = "refs/heads/" + target.branch
+    # A named Worktree branch replaces the registered branch in every check
+    # below, and the removal keeps both branches.
+    mismatched   = worktree_branch is not None and worktree_branch != target.branch
+    expected_ref = "refs/heads/" + (worktree_branch if mismatched else target.branch)
     records = registered_worktrees(target.project.repository)
     path_records = [
         record for record in records if record.get("worktree") == str(target.worktree)
@@ -161,12 +172,13 @@ def _cleanup(target: CleanupTarget) -> CleanupResponse:
     # as standby Agents. Only unstarted allocations are disposable resources.
     unstarted = [directory for directory in mappings
                  if not (directory / "mapping.yml").is_file()]
-    if not branch_exists and not worktree_exists and not path_records and not branch_records:
+    if not worktree_exists and not path_records and (
+            mismatched or (not branch_exists and not branch_records)):
         return _already_cleaned(target)
     # Integration retains the exact accepted branch even after its Worktree and
     # mappings have been removed. Absence alone never authorizes ref deletion.
     branch_only = (
-        branch_exists and not worktree_exists and not path_records
+        not mismatched and branch_exists and not worktree_exists and not path_records
         and not branch_records and not unstarted and target.candidate is not None
         and run_git(target.project.repository, "rev-parse", expected_ref) == target.candidate
     )
@@ -197,7 +209,18 @@ def _cleanup(target: CleanupTarget) -> CleanupResponse:
             {"worktree_status": status},
         )
     task_commit = (target.candidate if branch_only else
-                     run_git(target.project.repository, "rev-parse", target.branch))
+                     run_git(target.project.repository, "rev-parse", expected_ref))
+    # Another branch belongs to this Task only when it carries the Task's
+    # accepted candidate; any other checkout stays a foreign Worktree.
+    if mismatched and (target.candidate is None or not git_succeeds(
+            target.project.repository, "merge-base", "--is-ancestor", target.candidate, task_commit)):
+        return _refused(
+            target,
+            "cleanup-ownership-mismatch",
+            "The Worktree branch does not contain the Task's accepted candidate.",
+            {"worktree_branch": worktree_branch, "task_commit": task_commit,
+             "candidate": target.candidate},
+        )
     content_integrated = None
     if not git_succeeds(
         target.project.repository,
@@ -247,8 +270,9 @@ def _cleanup(target: CleanupTarget) -> CleanupResponse:
                 if os.path.lexists(str(target.worktree)):
                     raise OSError("Task Worktree path still exists")
                 completed_actions.append("worktree-removed")
-            _delete_branch_if_dev_unchanged(target, task_commit)
-        completed_actions.append("branch-removed")
+            if not mismatched:
+                _delete_branch_if_dev_unchanged(target, task_commit)
+                completed_actions.append("branch-removed")
     except (OSError, RunnerError, shutil.Error) as error:
         return _refused(
             target,
@@ -271,6 +295,11 @@ def _cleanup(target: CleanupTarget) -> CleanupResponse:
                 "integration_commit": target.project.dev_commit,
                 "task_commit": task_commit,
                 **({"content_integrated": content_integrated} if content_integrated else {}),
+                **({"worktree_branch": worktree_branch, "branches_kept": [
+                    branch for branch in (target.branch, worktree_branch)
+                    if git_succeeds(target.project.repository, "show-ref", "--verify",
+                                    "--quiet", "refs/heads/" + branch)
+                ]} if mismatched else {}),
             },
         },
         succeeded=True,

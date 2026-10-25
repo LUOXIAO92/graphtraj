@@ -204,6 +204,34 @@ def test_driver_honors_archive_binding_and_native_transcript_on_resume(
     assert not (project / '.graphtraj/state/sessions').exists()
 
 
+def test_agents_resume_after_a_claude_code_update_uses_the_current_cli(
+    project: Path, tmp_path: Path, claude_environment: None,
+) -> None:
+    """The same Agent and Session continue after the launch's versioned binary is removed."""
+    link = tmp_path / 'bin/claude'
+    old, new = tmp_path / 'versions/2.1.302', tmp_path / 'versions/2.1.310'
+    old.parent.mkdir()
+    link.rename(old)
+    link.symlink_to(old)
+    created, failed = agents(project, project, 'main-a', action='create', runtime='claude',
+                             instruction='before-update')
+    assert not failed, created
+    done, failed = agents(project, project, 'main-a', action='wait', agent=created['agent'], timeout_seconds=20)
+    assert not failed, done
+
+    old.rename(new)
+    link.unlink()
+    link.symlink_to(new)
+    sent, failed = agents(project, project, 'main-a', action='send', agent=created['agent'],
+                          message='after-update')
+    assert not failed, sent
+    assert sent['session'] == created['session']
+    done, failed = agents(project, project, 'main-a', action='wait', agent=created['agent'], timeout_seconds=20)
+    assert not failed and done['result']['last_result']['outcome'] == 'completed', done
+    history = tmp_path / (created['session'] + '.json')
+    assert json.loads(history.read_text()) == ['before-update', 'after-update']
+
+
 def test_sdk_retransmission_creates_one_child_with_real_parent_binding(
     project: Path, claude_environment: None,
 ) -> None:

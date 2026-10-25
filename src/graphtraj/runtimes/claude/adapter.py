@@ -26,6 +26,12 @@ from graphtraj.runtimes.runtime_adapter import (
 
 
 MINIMUM_VERSION = (2, 1, 299)
+# Claude Code's own Bash safety check asks the parent before ``find`` searches a
+# relative path after ``cd``; no permission rule can allow it. Reads with
+# absolute paths or the file tools stay inside the configured grants.
+READ_GUIDANCE = ('To read project records in your configured read scope, give find, ls and grep '
+                 'absolute paths instead of cd, or use the Read, Glob and Grep tools. Claude Code '
+                 'asks your parent to approve find on a relative path after cd.')
 EFFORTS = ('low', 'medium', 'high', 'xhigh', 'max')
 
 
@@ -38,6 +44,24 @@ def executable() -> str:
     if found is None:
         raise RuntimeAdapterError('RUNTIME_EXECUTABLE_INVALID', 'Claude Code executable is unavailable.')
     return str(Path(found).resolve())
+
+
+def current_cli() -> tuple[str, str]:
+    """Return the current official CLI and its checked version.
+
+    The installed ``claude`` link names a versioned binary that a Claude Code
+    update replaces, so each launch and resume resolves it again.
+    """
+    binary = executable()
+    try:
+        version = subprocess.run([binary, '--version'], capture_output=True, text=True,
+                                 check=True, timeout=10).stdout.strip()
+        match = re.match(r'(\d+)\.(\d+)\.(\d+) \(Claude Code\)', version)
+        if match is None or tuple(map(int, match.groups())) < MINIMUM_VERSION:
+            raise ValueError('version')
+    except (OSError, ValueError, subprocess.SubprocessError) as error:
+        raise RuntimeAdapterError('RUNTIME_EXECUTABLE_INVALID', 'Claude Code 2.1.299 or later is required.') from error
+    return binary, version
 
 
 def unsupported(*args: object, **kwargs: object) -> Any:
@@ -184,15 +208,7 @@ class ClaudeRuntimeAdapter:
         if 'permission_mode' in config and config['permission_mode'] not in ('default', 'auto'):
             raise RuntimeAdapterError('ROLE_CONFIG_INVALID', 'claude.permission_mode must be default or auto.')
         credential_environment(settings.api_key_env)
-        binary = executable()
-        try:
-            version = subprocess.run([binary, '--version'], capture_output=True, text=True,
-                                     check=True, timeout=10).stdout.strip()
-            match = re.match(r'(\d+)\.(\d+)\.(\d+) \(Claude Code\)', version)
-            if match is None or tuple(map(int, match.groups())) < MINIMUM_VERSION:
-                raise ValueError('version')
-        except (OSError, ValueError, subprocess.SubprocessError) as error:
-            raise RuntimeAdapterError('RUNTIME_EXECUTABLE_INVALID', 'Claude Code 2.1.299 or later is required.') from error
+        binary, version = current_cli()
         reports = []
         for path in report_files:
             if path.is_absolute() or path.parts[:1] != ('.state',) or '..' in path.parts:
@@ -219,7 +235,8 @@ class ClaudeRuntimeAdapter:
             'base_url_source': base_url_source,
             'provider': settings.runtime_provider or 'native',
             'credential_source': 'api_key_env' if settings.api_key_env else 'native',
-            'api_key_env': settings.api_key_env, 'instructions': role.instructions,
+            'api_key_env': settings.api_key_env,
+            'instructions': '\n\n'.join(filter(None, (role.instructions, READ_GUIDANCE))),
             'worktree_access': settings.worktree_access, 'reports': reports, 'resources': resources,
             'settings_sources': 'managed settings and explicit Runner settings; restricted mode',
             # Without a role selection, children use Claude's native auto review.
@@ -258,12 +275,15 @@ class ClaudeRuntimeAdapter:
         reports_only: bool = False,
         session_directory: Path | None = None,
     ) -> dict:
-        """Refresh reports and explicit resource grants for the original configured role.
+        """Refresh reports, resource grants and the CLI for the original configured role.
 
-        Model, connection and other captured permissions remain unchanged. An
-        inline or removed role has no current configured grants to import.
+        The resumed Session runs the current Claude Code executable, since an
+        update removes the launch's versioned binary. Model, connection and
+        other captured permissions remain unchanged. An inline or removed role
+        has no current configured grants to import.
         """
         refreshed = copy.deepcopy(dict(request))
+        refreshed['executable'], refreshed['version'] = current_cli()
         if refreshed.get('worktree_path') != str(worktree):
             raise RuntimeAdapterError('session-not-resumable', 'Claude Worktree changed during recovery.')
         if session_directory is not None:

@@ -66,6 +66,59 @@ def test_progressive_mcp_consumes_current_context_once(tmp_path: Path) -> None:
     assert 'runtime' not in tools[0]['inputSchema']['properties']
 
 
+def test_call_queued_behind_a_running_call_keeps_its_own_association(tmp_path: Path) -> None:
+    """A call whose native call ended while an earlier one ran is still served as itself."""
+    import threading
+
+    release, invocations = threading.Event(), []
+
+    def bind(session: str, cwd: Path):
+        """Hold the first request open like a long agents wait."""
+        def call(tool: str, request: dict) -> AgentsResult:
+            invocations.append((session, request['feature']))
+            if request['feature'] == 'wait':
+                release.wait(10)
+            return AgentsResult({'native': session})
+        return call
+
+    host = NativeCalls(bind, tmp_path)
+    session, other = str(uuid4()), str(uuid4())
+
+    def prepare(feature: str, native: str = session) -> dict:
+        """Prepare one native call as the mod does during Claude's permission check."""
+        request = {'action': 'execute', 'feature': feature, 'arguments': {}}
+        host.context({'operation': 'prepare', 'tool': 'agents', 'session': native,
+                      'cwd': str(tmp_path), 'agent': None, 'request': request})
+        return request
+
+    waiting = prepare('wait')
+    running = threading.Thread(target=host.call, args=(waiting,))
+    running.start()
+    while not invocations:
+        pass
+    # Claude ends the next call's native window before the MCP entry reads it.
+    queued = prepare('status')
+    host.context({'operation': 'end'})
+    release.set()
+    running.join()
+    assert host.call(queued).document == {'native': session}
+
+    # Another Session's preparation drops an association it does not own.
+    release.clear()
+    running = threading.Thread(target=host.call, args=(prepare('wait'),))
+    running.start()
+    while len(invocations) < 3:
+        pass
+    queued = prepare('status')
+    host.context({'operation': 'end'})
+    prepare('requests', other)
+    release.set()
+    running.join()
+    with pytest.raises(AgentsError, match='No matching'):
+        host.call(queued)
+    assert invocations == [(session, 'wait'), (session, 'status'), (session, 'wait')]
+
+
 def test_native_host_does_not_trust_session_environment(tmp_path: Path, monkeypatch) -> None:
     """A shell-launched client with invented native env is not a Claude parent."""
     monkeypatch.setenv('CLAUDE_CODE_SESSION_ID', str(uuid4()))

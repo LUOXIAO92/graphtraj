@@ -2,9 +2,11 @@
 
 import json
 import os
+import signal
 import subprocess
 import sys
 import threading
+import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
@@ -349,6 +351,89 @@ def test_lost_owner_keeps_process_facts_and_blocks_duplicates(root: Path) -> Non
     kept = json.loads(path.read_text())['executions'][-1]['process']
     assert kept['worker_pid'] == int(dead) and kept['owned_at']
     driver.release(created['execution'])
+
+
+def test_direct_parent_confirms_an_ended_execution_whose_processes_are_gone(root: Path) -> None:
+    """Only a verified-gone owner and Runtime let the direct parent confirm the end."""
+    driver  = ScriptedDriver()
+    control = AgentControl(root, {'scripted': driver})
+    main    = Caller('test-host', None, session='host-session')
+    parent, _ = call(control, main, action='create', runtime='scripted', instruction='lead')
+    lead      = Caller('test-host', parent['agent'])
+    child, _  = call(control, lead, action='create', runtime='scripted', instruction='work')
+    unknown, _ = call(control, lead, action='create', runtime='scripted', instruction='work')
+    grouped, _ = call(control, lead, action='create', runtime='scripted', instruction='work')
+    path = root / 'control/agents' / f"{child['agent']}.json"
+
+    # The owner and Runtime are real processes that this test ends itself.
+    worker, runtime = (subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(60)'])
+                       for _ in range(2))
+    record = json.loads(path.read_text())
+    record['executions'][-1]['process'].update(worker_pid=worker.pid, runtime_pid=runtime.pid)
+    path.write_text(json.dumps(record))
+    for process in (worker, runtime):
+        refused, failed = call(control, lead, action='interrupt', agent=child['agent'])
+        assert failed and refused['error']['code'] == 'not-owned'
+        process.kill()
+        process.wait()
+
+    ended, _ = call(control, lead, action='status', agent=child['agent'])
+    assert ended['result']['state'] == 'standby'
+    assert ended['result']['last_result']['terminal_confirmed'] is False
+    with pytest.raises(AgentsError) as stopped:
+        control.configure_stopped(child['agent'], {'cwd': '/moved'}, lead)
+    assert stopped.value.code == 'turn-running'
+    denied, failed = call(control, main, action='interrupt', agent=child['agent'])
+    assert failed and denied['error']['code'] == 'authority-denied'
+
+    confirmed, failed = call(control, lead, action='interrupt', agent=child['agent'])
+    assert not failed and confirmed['result']['interrupt'] == 'stopped'
+    assert confirmed['result']['termination_confirmed'] == [child['execution']]
+    last = confirmed['result']['last_result']
+    assert last['terminal_confirmed'] is False and last['error']['code'] == 'owner-exited'
+    assert last['termination_confirmation']['evidence'] == {
+        'worker_pid': worker.pid, 'runtime_pid': runtime.pid,
+        'worker_alive': False, 'runtime_alive': False}
+    assert last['termination_confirmation']['by']['agent'] == parent['agent']
+    repeated, _ = call(control, lead, action='interrupt', agent=child['agent'])
+    assert repeated['result']['interrupt'] == 'not-running'
+
+    # The confirmed Agent is configured and continued under the normal rules.
+    control.configure_stopped(child['agent'], {'cwd': '/moved'}, lead)
+    resumed, failed = call(control, lead, action='resume', agent=child['agent'], message='again')
+    assert not failed and resumed['session'] == child['session']
+    driver.release(resumed['execution'])
+
+    # A Runtime group member that outlived the recorded Runtime blocks confirmation.
+    group  = subprocess.Popen([sys.executable, '-c', 'import subprocess, sys; subprocess.Popen('
+                               '[sys.executable, "-c", "import time; time.sleep(60)"])'], start_new_session=True)
+    group.wait()
+    path   = root / 'control/agents' / f"{grouped['agent']}.json"
+    record = json.loads(path.read_text())
+    record['executions'][-1]['process'].update(worker_pid=worker.pid, runtime_pid=group.pid)
+    path.write_text(json.dumps(record))
+    refused, failed = call(control, lead, action='interrupt', agent=grouped['agent'])
+    assert failed and refused['error']['code'] == 'termination-unconfirmed'
+    assert 'termination_confirmation' not in json.loads(path.read_text())['executions'][-1]
+    os.killpg(group.pid, signal.SIGKILL)
+    deadline = time.monotonic() + 10
+    while time.monotonic() < deadline:
+        try:
+            os.killpg(group.pid, 0)
+        except ProcessLookupError:
+            break
+        time.sleep(0.05)
+    confirmed, failed = call(control, lead, action='interrupt', agent=grouped['agent'])
+    assert not failed and confirmed['result']['interrupt'] == 'stopped'
+
+    # An execution without a recorded Runtime process cannot be verified.
+    path   = root / 'control/agents' / f"{unknown['agent']}.json"
+    record = json.loads(path.read_text())
+    record['executions'][-1]['process'].update(worker_pid=worker.pid, runtime_pid=None)
+    path.write_text(json.dumps(record))
+    refused, failed = call(control, lead, action='interrupt', agent=unknown['agent'])
+    assert failed and refused['error']['code'] == 'termination-unconfirmed'
+    assert 'termination_confirmation' not in json.loads(path.read_text())['executions'][-1]
 
 
 def test_config_is_owned_by_the_data_root(root: Path) -> None:

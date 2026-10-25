@@ -12,14 +12,14 @@ from agent_swarm import AgentsError
 from .support import credential_environment
 
 
-def prepare(configuration: Mapping[str, Any], cwd: Path) -> dict:
-    """Freeze native settings and credential references for the original Session."""
-    config = dict(configuration)
-    allowed = {'executable', 'model', 'reasoning_effort', 'runtime_home', 'base_url',
-               'api_key_env', 'instructions', 'worktree_access', 'read_paths', 'permission_mode'}
-    if set(config) - allowed:
-        raise AgentsError('invalid-config', 'Unknown Claude settings: ' + ', '.join(sorted(set(config) - allowed)))
-    executable = config.get('executable') or shutil.which('claude')
+def current_cli(executable: str | None = None) -> tuple[str, str]:
+    """Return the resolved Claude Code executable and its checked version.
+
+    Without an explicit ``executable``, ``claude`` on PATH or the native
+    install link is used. That link names a versioned binary which a Claude
+    Code update replaces, so a resume resolves it again.
+    """
+    executable = executable or shutil.which('claude')
     if executable is None:
         native = Path.home() / '.local/bin/claude'
         executable = str(native) if native.is_file() else None
@@ -33,6 +33,17 @@ def prepare(configuration: Mapping[str, Any], cwd: Path) -> dict:
             raise ValueError('version')
     except (OSError, ValueError, subprocess.SubprocessError) as error:
         raise AgentsError('RUNTIME_EXECUTABLE_INVALID', 'Claude Code 2.1.299 or later is required.') from error
+    return str(Path(executable).resolve()), version
+
+
+def prepare(configuration: Mapping[str, Any], cwd: Path) -> dict:
+    """Freeze native settings and credential references for the original Session."""
+    config = dict(configuration)
+    allowed = {'executable', 'model', 'reasoning_effort', 'runtime_home', 'base_url',
+               'api_key_env', 'instructions', 'worktree_access', 'read_paths', 'permission_mode'}
+    if set(config) - allowed:
+        raise AgentsError('invalid-config', 'Unknown Claude settings: ' + ', '.join(sorted(set(config) - allowed)))
+    executable, version = current_cli(config.get('executable'))
     mode = config.get('permission_mode', 'auto')
     effort = config.get('reasoning_effort')
     access = config.get('worktree_access', 'write')
@@ -59,7 +70,7 @@ def prepare(configuration: Mapping[str, Any], cwd: Path) -> dict:
             raise AgentsError('invalid-config', 'Claude Base URL must be credential-free HTTP(S).')
     credential_environment(config.get('api_key_env'))
     return {
-        'runtime': 'claude', 'executable': str(Path(executable).resolve()), 'version': version,
+        'runtime': 'claude', 'executable': executable, 'version': version,
         'worktree_path': str(cwd.resolve()), 'runtime_home': str(home),
         'explicit_runtime_home': bool(config.get('runtime_home') or os.environ.get('CLAUDE_CONFIG_DIR')),
         'model': model, 'reasoning_effort': effort, 'base_url': endpoint,

@@ -98,7 +98,8 @@ class GraphTrajAgents:
 
         self.root    = root
         driver       = AdapterDriver(root, cwd or root)
-        # Every verified Main continues the roots of the project's Main.
+        # Every verified Main continues the roots of the project's Main, whose
+        # claims live in the project's current Runner directory.
         self.control = AgentControl(swarm_root(root), {name: driver for name in SUPPORTED_RUNTIMES},
                                     roots=MainRoots(runner_directory(root)))
         default_config(swarm_root(root), save_normalized_sessions=True)
@@ -114,7 +115,7 @@ class GraphTrajAgents:
                 self.control.roots.require_control(binding.caller)
             if member is not None:
                 # A Task member's core reference uses its existing Session controls.
-                outcome = self._operate(action, {**arguments, "agent": member})
+                outcome = self._operate(action, {**arguments, "agent": member}, binding.caller)
                 return Outcome(outcome.result, agent=agent, session=outcome.session,
                                execution=outcome.execution, failed=outcome.failed)
             if action == "create" or (agent or "").startswith(AGENT_PREFIX):
@@ -123,7 +124,7 @@ class GraphTrajAgents:
                 return self.control.operate(action, arguments, binding)
             if action == "status" and agent is None:
                 return self._hierarchy(binding)
-            return self._operate(action, arguments)
+            return self._operate(action, arguments, binding.caller)
         except (RunnerError, RuntimeAdapterError) as error:
             raise AgentsError(error.code, error.message) from None
         except ValueError as error:
@@ -202,8 +203,11 @@ class GraphTrajAgents:
                 members |= _task_aliases(directory, task, runner, order)[1]
         return members
 
-    def _operate(self, action: str, arguments: Mapping[str, Any]) -> Outcome:
-        """Dispatch a Task member alias to its existing native Session control."""
+    def _operate(self, action: str, arguments: Mapping[str, Any], caller: Caller) -> Outcome:
+        """Dispatch a Task member alias to its existing native Session control.
+
+        ``caller`` is the verified caller; a confirmation receipt records it.
+        """
         from graphtraj.execution.runner_control import (
             continue_member,
             interrupt_session,
@@ -236,6 +240,9 @@ class GraphTrajAgents:
             result, failed = self._wait(agent, arguments["timeout_seconds"])
         elif action == "interrupt":
             result = interrupt_session(agent, self.root, ordinary=True)
+            if any(member.get("alias") == agent and member.get("interrupt_status") == "stopped"
+                   for member in result.get("members", [])):
+                result = {**result, **self._confirm_member_end(agent, caller)}
         elif action == "requests":
             result = pending_requests(agent, self.root, execution_id=arguments.get("execution"))
         elif action == "reply":
@@ -243,6 +250,42 @@ class GraphTrajAgents:
         else:
             result = retire_session(agent, self.root)
         return Outcome(result, agent=agent, session=session, execution=execution, failed=failed)
+
+    def _confirm_member_end(self, alias: str, caller: Caller) -> dict:
+        """Confirm unconfirmed ends of a stopped Task member's core executions.
+
+        The Runner's interrupt admits any ancestor, but only the member's
+        direct parent, or Main and the user for a top-level member, may confirm
+        (``is_direct_owner``); another caller is refused like the core path and
+        nothing is written. The core then rechecks each recorded process under
+        the member's recorded parent, as the Worker records it
+        (``begin_task_agent``), and the receipt records the verified caller.
+        Returns the confirmed executions, an error document when one cannot be
+        verified, or nothing when no end needs confirming.
+        """
+        import json
+
+        from agent_swarm.control import _scope
+        from graphtraj.execution.runner_status import caller_alias, is_direct_owner, read_alias_mapping
+        from graphtraj.execution.task_agents import TASK_HOST
+        from graphtraj.workspace.runner_project import discover_runner_directory
+
+        runner = discover_runner_directory(self.root)
+        mapping = read_alias_mapping(runner, alias)[0]
+        reference = mapping.get("agent")
+        if (not isinstance(reference, str) or self._member_alias(reference) != alias
+                or not self.control.unconfirmed_ends(reference)):
+            return {}
+        if not is_direct_owner(caller_alias(runner), mapping):
+            raise AgentsError("authority-denied", "Only the direct parent can confirm an Agent's ended execution.")
+        parent = json.loads((swarm_root(self.root) / "control" / "agents" / f"{reference}.json")
+                            .read_text(encoding="utf-8"))["parent"]
+        try:
+            confirmed = self.control.confirm_ended(reference, Caller(TASK_HOST, parent),
+                                                   by=_scope(caller)).result["termination_confirmed"]
+        except AgentsError as error:
+            return {"termination_confirmation_error": {"code": error.code, "message": error.message}}
+        return {"termination_confirmed": confirmed}
 
     def _wait(self, agent: str, timeout_seconds: float) -> tuple[dict, bool]:
         """Wait at most ``timeout_seconds`` for an idle member or a pending request."""

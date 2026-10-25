@@ -148,10 +148,17 @@ class AdapterDriver:
             run.events.process(runtime_pid=pid)
 
         try:
+            request = dict(run.settings["adapter_request"])
+            if run.runtime == 'claude' and run.session is not None:
+                from graphtraj.runtimes.claude.adapter import current_cli
+
+                # A resume runs the current CLI: an update removes the
+                # versioned binary that the first execution resolved.
+                request['executable'], request['version'] = current_cli()
             owner = adapter.managed_execution
             options = {}
             turn = owner(
-                dict(run.settings["adapter_request"]), run.message, run.directory,
+                request, run.message, run.directory,
                 lambda session, pid: ready.set(), dict(run.settings["evidence"]),
                 trace_file=run.directory / "trace.jsonl", expected_session=run.session,
                 session_created=created,

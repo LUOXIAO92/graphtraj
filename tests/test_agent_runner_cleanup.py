@@ -308,10 +308,10 @@ def integrated_task(
     )
 
 
-def _cleanup(task: DeliveredTask):
+def _cleanup(task: DeliveredTask, *arguments: str):
     """Exercise cleanup through the installed CLI in this isolated fixture."""
     return run_process(
-        [str(task.commands.runner), "cleanup", "--task-id", task.task_id],
+        [str(task.commands.runner), "cleanup", "--task-id", task.task_id, *arguments],
         cwd=task.root, env=task.environment, timeout=15,
     )
 
@@ -974,6 +974,47 @@ def test_installed_cleanup_refuses_noncanonical_task_resources_without_partial_c
         ["git", "show-ref", "--verify", "--quiet", "refs/heads/" + task.branch],
         cwd=task.repository,
     ).returncode == 0
+
+
+def test_installed_cleanup_removes_an_integrated_worktree_on_its_named_branch_and_keeps_both(
+    integrated_task: DeliveredTask,
+) -> None:
+    """A Worktree moved to an adoption branch is removed only by naming that branch."""
+    task = integrated_task
+    mappings = _task_mappings(task)
+
+    def branch_exists(name: str) -> bool:
+        return run_process(["git", "show-ref", "--verify", "--quiet", "refs/heads/" + name],
+                           cwd=task.repository).returncode == 0
+
+    def refusal(*arguments: str) -> str:
+        result = _cleanup(task, *arguments)
+        assert result.returncode == 1, result.stdout
+        assert task.worktree.is_dir()
+        return yaml.safe_load(result.stdout)["error"]["code"]
+
+    run_process(["git", "switch", "-c", "older-line", "HEAD~1"], cwd=task.worktree).check_returncode()
+    assert refusal("--worktree-branch", "older-line") == "cleanup-ownership-mismatch"
+    run_process(["git", "switch", "-c", "adoption-line", task.branch],
+                cwd=task.worktree).check_returncode()
+    assert refusal() == "cleanup-ownership-mismatch"
+    assert refusal("--worktree-branch", "older-line") == "cleanup-ownership-mismatch"
+    dirty = task.worktree / "unfinished.txt"
+    dirty.write_text("uncommitted work\n", encoding="utf-8")
+    assert refusal("--worktree-branch", "adoption-line") == "cleanup-dirty"
+    dirty.unlink()
+
+    cleaned = _cleanup(task, "--worktree-branch", "adoption-line")
+
+    assert cleaned.returncode == 0, cleaned.stderr
+    document = yaml.safe_load(cleaned.stdout)
+    assert document["cleanup_status"] == "cleaned"
+    assert document["evidence"]["branches_kept"] == [task.branch, "adoption-line"]
+    assert not task.worktree.exists()
+    assert branch_exists(task.branch) and branch_exists("adoption-line")
+    assert all((path / "mapping.yml").exists() for path in mappings)
+    repeated = _cleanup(task, "--worktree-branch", "adoption-line")
+    assert yaml.safe_load(repeated.stdout)["cleanup_status"] == "already-cleaned"
 
 
 def test_cleanup_preserves_shared_worktree_with_another_task_execution(

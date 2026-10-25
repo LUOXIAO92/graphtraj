@@ -83,8 +83,9 @@ TOOL_DESCRIPTION = (
     "Create child Agents on a Runtime and communicate with them. Actions: create "
     "(returns the new Agent reference without waiting for its work), send, status "
     "(omit agent for your visible hierarchy), wait (explicit finite timeout_seconds), "
-    "interrupt, resume, requests and reply for native approval or input requests, "
-    "and retire. Your identity comes from the host."
+    "interrupt (in standby, the direct parent confirms an ended execution whose "
+    "recorded processes are verified gone), resume, requests and reply for native "
+    "approval or input requests, and retire. Your identity comes from the host."
 )
 
 

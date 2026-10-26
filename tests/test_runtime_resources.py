@@ -551,7 +551,9 @@ def test_reviewer_send_refreshes_exact_replacement_report_permissions(
     filesystem = permissions["restricted"]["filesystem"]
     canonical = evidence / report_name
     view = worktree / report
-    assert filesystem[str(canonical)] == "write"
+    # 125df1a: reports are written through the authenticated owner (submit_report),
+    # so the native grant on the exact report is read-only.
+    assert filesystem[str(canonical)] == "read"
     assert str(view) not in filesystem
     assert not any(argument.startswith("hooks=") for argument in arguments)
     assert "--dangerously-bypass-hook-trust" not in arguments
@@ -647,14 +649,14 @@ def test_resume_preserves_captured_permissions_and_refreshes_reports(
         expected['config']['permissions'] = permissions
         assert refreshed['session_parameters'] == expected
     # Only the current report reference changes; every captured setting stays.
+    # 125df1a: the report is written through submit_report, never by a native grant.
     report_directory = evidence / "teams" / "1" / "rounds" / "1"
     assert {
         path
         for path, access in filesystem.items()
         if access == "write"
-    } == {
-        str(report_directory / "retained.md"),
-    }
+    } == set()
+    assert filesystem[str(report_directory / "retained.md")] == "read"
     assert not any(argument.startswith("hooks=") for argument in arguments)
     assert "--dangerously-bypass-hook-trust" not in arguments
 

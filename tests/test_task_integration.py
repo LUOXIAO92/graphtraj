@@ -994,9 +994,12 @@ def test_v2_file_delivery_keeps_acceptance_and_enables_summary_completion(
     result = run_process([str(installed_commands.product), "task", "complete",
                           "--completion-file", str(request)], cwd=root)
     assert result.returncode == 0, result.stderr
-    graph = run_process([str(installed_commands.product), "task", "graph"], cwd=root)
-    nodes = {node["task_id"]: node for node in yaml.safe_load(graph.stdout)["tasks"]}
+    graph = run_process([str(installed_commands.product), "task", "graph", "--details", "83"], cwd=root)
+    document = yaml.safe_load(graph.stdout)
+    nodes = {node["task_id"]: node for node in document["tasks"]}
     assert nodes["82"]["status"] == nodes["83"]["status"] == "integrated"
     assert nodes["82"]["current_candidate"] is None
     assert nodes["83"]["current_candidate"] == candidate
-    assert nodes["83"]["schema_version"] == 2 and nodes["83"]["parent_id"] == "82"
+    # caebb99: definition fields come from the requested Task detail, not the light index.
+    detail = document["details"]["83"]
+    assert detail["schema_version"] == 2 and detail["parent_id"] == "82"

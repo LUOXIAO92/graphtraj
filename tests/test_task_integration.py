@@ -465,12 +465,12 @@ def test_configured_document_conflict_requires_common_result_and_validation(
         assert checked.returncode == (0 if outcome == 'resolved' else 1), checked.stdout + checked.stderr
         assert yaml.safe_load(checked.stdout)['status'] == ('integrated' if outcome == 'resolved' else 'resolving-integration')
         if outcome == 'resolved':
+            from graphtraj.execution.runner_control import send_instruction
             from graphtraj.execution.runner_models import RunnerError
-            from graphtraj.interfaces import tools
 
+            # ffe64cc dropped the duplicate tasks send tool; its Runner operation remains.
             with pytest.raises(RunnerError, match='active conflict assignment'):
-                tools.send_session_instruction({'alias': alias, 'instruction': 'More work',
-                                             'caused_by_event_ids': [yaml.safe_load(checked.stdout)['event_id']]}, cwd=root)
+                send_instruction(alias, 'More work', root, (yaml.safe_load(checked.stdout)['event_id'],))
 
     graph = yaml.safe_load(run_process([str(installed_commands.product), 'task', 'graph'], cwd=root).stdout)
     assert any(item['ready'] for item in graph['tasks']) == (outcome == 'resolved')

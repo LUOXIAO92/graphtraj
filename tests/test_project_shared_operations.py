@@ -103,8 +103,10 @@ def test_worldline_write_rejection_matches_the_cli_without_side_effects(
     with pytest.raises(ValueError) as error:
         tools.TOOLS["worldline_append"].handler({"event": None})
     result = CliRunner().invoke(main, ["worldline", "append", "--event-file", str(not_a_mapping)])
-    assert result.exit_code == 1
-    assert str(error.value) in result.stderr
+    # Task 210: the CLI checks the shared-tool schema first; a violation is a usage error.
+    assert result.exit_code == 2
+    assert "arguments.event: expected object" in result.stderr
+    assert "mapping" in str(error.value)
     assert not (state / "worldline").exists()
 
 

@@ -449,8 +449,9 @@ def test_installed_runner_rejects_non_run_free_main_batch_fields(
             cwd=harness_root,
             env=environment,
         )
-        assert result.returncode == 1
-        assert yaml.safe_load(result.stdout)["error"]["code"] == "invalid-input"
+        # Task 210: fields outside the shared swarm schema are CLI usage errors.
+        assert result.returncode == 2, result.stdout + result.stderr
+        assert "unexpected parameter" in result.stderr
 
     assert not (harness_root / ".graphtraj" / "state" / "batches").exists()
 

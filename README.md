@@ -135,9 +135,10 @@ owning native parent connection; status does not repeat a body already sent as
 a notification. Native requests for the parent itself print to stderr and take
 an explicit native JSON response on stdin. Use `--resume` with the same directory
 to continue the retained parent Session. A closing host interrupts its active
-children, preserving their native Sessions. Normalized archiving is off by
-default; the tool's own switch is `save_normalized_sessions: true` in
-`<directory>/config.yml`, which has not yet been verified without GraphTraj.
+children, preserving their native Sessions. Normalized archiving is off. Do
+not set `save_normalized_sessions: true` in `<directory>/config.yml` for
+independent use: without GraphTraj's collector, every `create` then fails with
+`archive-unavailable`.
 
 ### Independent Claude Code host
 
@@ -168,9 +169,10 @@ in force. Optional settings include `model` (default `claude-opus-5-5`),
 environment variable name, never its value). These settings apply to every
 child of the host; edit them before starting Claude Code. Existing login and
 trust are not copied. Session continuation uses the original child's captured
-settings. Normalized archiving is off by default; the tool's own switch is
-`save_normalized_sessions: true` in `.agents-control/config.yml`, which has not
-yet been verified without GraphTraj.
+settings. Normalized archiving is off. Do not set
+`save_normalized_sessions: true` in `.agents-control/config.yml` for independent
+use: without GraphTraj's collector, every `create` then fails with
+`archive-unavailable`.
 
 The host checks that Claude Code runs in the configured directory. Start or
 resume the Session from that directory; otherwise the `agents` server exits and
@@ -194,9 +196,10 @@ independent host (see above), so their rows are not available independently.
 | `create`, `status`, `wait`, `send`, `interrupt`, `resume`, `retire` | Yes; `resume` continues the same child Session | Yes; `resume` continues the same child Session |
 | Choose the child Runtime | Only `claude`; `codex` returns `unsupported-runtime` | Only `codex`; `claude` returns `unsupported-runtime` |
 | Choose model or effort per child | No; one setting for all children, and a `model` argument is rejected | No; one setting for all children, and `configuration` returns `invalid-config` |
-| Completion notice to the Main | Yes: pushed into the Main Session, or attached as `main_notices` to the next `agents` result. Known defect: one completion of four arrived both ways | Yes: each completion is sent once to the parent Session as a host event |
-| Relay a child's native approval request | Not verified: the probe child stopped with `Claude changed the configured model.` | Not verified; native `auto_review` handles requests by default |
-| Native history and archive | Child native Sessions are retained under `.agents-control/native/` and continued by `resume`; normalized archive not verified | `--resume` continues the parent Session with its children; normalized archive not verified |
+| Completion notice to the Main | Yes: pushed into the Main Session, or attached as `main_notices` to the next `agents` result. Known defect: a completion already returned by `wait` can be pushed again | Yes: each completion is sent once to the parent Session as a host event |
+| Relay a child's native approval request | Yes, by polling: `wait` or `status` shows `pending_requests`, then `requests` and `reply` | No: native `auto_review` handles children's requests, and the parent shares the same settings |
+| Native history | Child native Sessions are retained under `.agents-control/native/` and continued by `resume` | `--resume` continues the parent Session with its children |
+| Normalized archive | No: with `save_normalized_sessions` on, `create` returns `archive-unavailable` | No: with `save_normalized_sessions` on, `create` returns `archive-unavailable` |
 | Children on another Runtime | No | No |
 
 ## Use it with your Agent

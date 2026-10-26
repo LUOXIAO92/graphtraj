@@ -48,9 +48,6 @@ def result_project(tmp_path: Path, *, multiple: bool = True) -> tuple[Path, Path
 
 def test_reports_expose_retained_terminal_diagnostics_only_to_owner(tmp_path: Path) -> None:
     """Expose stop evidence without inventing historical fields or widening access."""
-    import pytest
-    from graphtraj.execution.runner_models import RunnerError
-
     runner, _, _ = result_project(tmp_path)
     terminal = runner / 'sessions/research@x1/execution.yml'
     terminal.write_text(yaml.safe_dump({'outcome': 'interrupted', 'budget_stopped': True,
@@ -60,8 +57,11 @@ def test_reports_expose_retained_terminal_diagnostics_only_to_owner(tmp_path: Pa
     assert result['execution'] == {
         'outcome': 'interrupted', 'budget_stopped': True, 'terminal_confirmed': True,
     }
-    with runtime_caller(runner, 'research@x2'), pytest.raises(RunnerError):
-        tools.read_reports({'alias': 'research@x1'}, cwd=tmp_path)
+    # Spec independent-agents-and-tasks (project-owned reports are readable by
+    # other Agents; 3d88416): a sibling reads the same retained evidence.
+    with runtime_caller(runner, 'research@x2'):
+        sibling = tools.read_reports({'alias': 'research@x1'}, cwd=tmp_path).document
+    assert sibling['execution'] == result['execution']
     terminal.write_text(yaml.safe_dump({'outcome': 'interrupted'}))
     with runtime_caller(runner, None):
         result = tools.read_reports({'alias': 'research@x1'}, cwd=tmp_path).document

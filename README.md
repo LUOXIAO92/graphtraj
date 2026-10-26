@@ -191,12 +191,12 @@ independent host (see above), so their rows are not available independently.
 | Capability | Claude Code host | Codex host |
 | --- | --- | --- |
 | Attach as host | Yes, as above; `/agents-context` shows the binding | Yes; a headless parent runs one instruction per invocation |
-| `create`, `status`, `wait`, `send`, `interrupt`, `resume`, `retire` | Yes; `resume` continues the same child Session | `create`, `send` and `wait` verified; the others not yet verified with only the wheel |
-| Choose the child Runtime | Only `claude`; `codex` returns `unsupported-runtime` | Only `codex` |
-| Choose model or effort per child | No; one setting for all children, and a `model` argument is rejected | No; one setting for all children |
-| Completion notice to the Main | Yes: pushed into the Main Session, or attached as `main_notices` to the next `agents` result. Known defect: one completion of four arrived both ways | Not yet verified with only the wheel |
+| `create`, `status`, `wait`, `send`, `interrupt`, `resume`, `retire` | Yes; `resume` continues the same child Session | Yes; `resume` continues the same child Session |
+| Choose the child Runtime | Only `claude`; `codex` returns `unsupported-runtime` | Only `codex`; `claude` returns `unsupported-runtime` |
+| Choose model or effort per child | No; one setting for all children, and a `model` argument is rejected | No; one setting for all children, and `configuration` returns `invalid-config` |
+| Completion notice to the Main | Yes: pushed into the Main Session, or attached as `main_notices` to the next `agents` result. Known defect: one completion of four arrived both ways | Yes: each completion is sent once to the parent Session as a host event |
 | Relay a child's native approval request | Not verified: the probe child stopped with `Claude changed the configured model.` | Not verified; native `auto_review` handles requests by default |
-| Native history and archive | Child native Sessions are retained under `.agents-control/native/` and continued by `resume`; normalized archive not verified | Not yet verified with only the wheel |
+| Native history and archive | Child native Sessions are retained under `.agents-control/native/` and continued by `resume`; normalized archive not verified | `--resume` continues the parent Session with its children; normalized archive not verified |
 | Children on another Runtime | No | No |
 
 ## Use it with your Agent

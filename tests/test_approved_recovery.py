@@ -1928,3 +1928,41 @@ def test_time_grant_keeps_the_recorded_parent_and_notices_reach_the_current_main
     assert report['delivery'] == 'received'
     assert [address['session'] for address in delivered] == ['codex-main']
     assert yaml.safe_load(path.read_text())['parent_connection'] == claude
+
+
+def test_wrongly_integrated_task_returns_to_recovery_through_graph_revision(
+    target: tuple, installed_commands: InstalledCommands, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Task state is corrected by native graph revision; recovery then handles time and Session.
+
+    b069acf (Task 302) refuses reopening an integrated Task inside approved
+    recovery; Worldline 20261026T170007.653194+0900 keeps that guard and routes
+    the correction through the public task revise operation.
+    """
+    from graphtraj.graph.task_protocol import TASK_PROPERTIES
+    from graphtraj.interfaces import tools
+
+    root, task, mapping, arguments = target
+    with pytest.raises(RunnerError, match='require task-graph revision'):
+        invoke(root, arguments)
+    details = tools.read_current_graph({'details': ['83']}, cwd=root).document['details']['83']
+    definition = {key: details[key] for key in TASK_PROPERTIES} | {
+        'current_definition': details['current_definition']}
+    (root / 'reopen-evidence.md').write_text('The integrated candidate missed the authorized adoption.\n')
+    revision = root / 'reopen.yml'
+    revision.write_text(yaml.safe_dump({
+        'product_preserving': True, 'tasks': [definition], 'reopen_task_ids': ['83'],
+        'caused_by_event_ids': [read_worldline(task.parent.parent, root)[-1]['event_id']],
+        'evidence_refs': ['reopen-evidence.md'],
+    }))
+    revised = run_process([str(installed_commands.product), 'task', 'revise',
+                           '--revision-file', str(revision)], cwd=root)
+    assert revised.returncode == 0, revised.stdout + revised.stderr
+    assert yaml.safe_load((task / 'task.yml').read_text())['status'] == 'reworking'
+    adapter = NativeApproval(root, 'automatic')
+    monkeypatch.setattr(recovery.runtime_adapter, 'select_runtime_adapter', lambda runtime: adapter)
+    monkeypatch.setattr(recovery, '_send_session_locked', lambda *args, **kwargs: {'session': mapping['session']})
+    result = invoke(root, {**arguments, 'caused_by_event_ids': [yaml.safe_load(revised.stdout)['event_id']]})
+    assert result['recovery_status'] == 'resumed'
+    assert len(adapter.proposals) == 1
+    assert yaml.safe_load((task / 'task.yml').read_text())['status'] == 'reworking'

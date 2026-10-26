@@ -512,7 +512,7 @@ def test_agents_send_carries_an_explicit_reports_only_request(
     backend.root = tmp_path
     monkeypatch.setattr(backend, '_references', lambda agent: (None, None), raising=False)
     for arguments in ({'agent': 'member', 'message': 'Work.'}, request):
-        backend._operate('send', arguments)
+        backend._operate('send', arguments, None)  # 639352b: only end confirmation reads caller
     assert sent == [{'reports_only': False}, {'reports_only': True}]
     with pytest.raises(AgentsError):
         backend.operate('send', {**request, 'agent': 'agent-core'}, None)

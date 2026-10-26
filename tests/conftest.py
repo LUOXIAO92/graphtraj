@@ -102,6 +102,21 @@ def runner_command(commands: "InstalledCommands", *arguments: str) -> list[str]:
     return [str(commands.runner), *arguments]
 
 
+def unsupported_dsh() -> Optional[str]:
+    """Return why the installed DSH cannot back native tests, mirroring the product check."""
+    import json
+
+    dsh = shutil.which("dsh")
+    if dsh is None or shutil.which("node") is None:
+        return "Installed DSH and Node are required."
+    try:
+        version = json.loads((Path(dsh).resolve().parent.parent / "package.json").read_text())["version"]
+    except (OSError, ValueError, KeyError):
+        version = None
+    if version != "0.2.0-rc.2":
+        return "DSH 0.2.0-rc.2 is required (installed: {0}).".format(version)
+    return None
+
 def run_process(
     command: Sequence[str],
     *,

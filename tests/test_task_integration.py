@@ -465,12 +465,12 @@ def test_configured_document_conflict_requires_common_result_and_validation(
         assert checked.returncode == (0 if outcome == 'resolved' else 1), checked.stdout + checked.stderr
         assert yaml.safe_load(checked.stdout)['status'] == ('integrated' if outcome == 'resolved' else 'resolving-integration')
         if outcome == 'resolved':
+            from graphtraj.execution.runner_control import send_instruction
             from graphtraj.execution.runner_models import RunnerError
-            from graphtraj.interfaces import tools
 
+            # ffe64cc dropped the duplicate tasks send tool; its Runner operation remains.
             with pytest.raises(RunnerError, match='active conflict assignment'):
-                tools.send_session_instruction({'alias': alias, 'instruction': 'More work',
-                                             'caused_by_event_ids': [yaml.safe_load(checked.stdout)['event_id']]}, cwd=root)
+                send_instruction(alias, 'More work', root, (yaml.safe_load(checked.stdout)['event_id'],))
 
     graph = yaml.safe_load(run_process([str(installed_commands.product), 'task', 'graph'], cwd=root).stdout)
     assert any(item['ready'] for item in graph['tasks']) == (outcome == 'resolved')
@@ -994,9 +994,12 @@ def test_v2_file_delivery_keeps_acceptance_and_enables_summary_completion(
     result = run_process([str(installed_commands.product), "task", "complete",
                           "--completion-file", str(request)], cwd=root)
     assert result.returncode == 0, result.stderr
-    graph = run_process([str(installed_commands.product), "task", "graph"], cwd=root)
-    nodes = {node["task_id"]: node for node in yaml.safe_load(graph.stdout)["tasks"]}
+    graph = run_process([str(installed_commands.product), "task", "graph", "--details", "83"], cwd=root)
+    document = yaml.safe_load(graph.stdout)
+    nodes = {node["task_id"]: node for node in document["tasks"]}
     assert nodes["82"]["status"] == nodes["83"]["status"] == "integrated"
     assert nodes["82"]["current_candidate"] is None
     assert nodes["83"]["current_candidate"] == candidate
-    assert nodes["83"]["schema_version"] == 2 and nodes["83"]["parent_id"] == "82"
+    # caebb99: definition fields come from the requested Task detail, not the light index.
+    detail = document["details"]["83"]
+    assert detail["schema_version"] == 2 and detail["parent_id"] == "82"

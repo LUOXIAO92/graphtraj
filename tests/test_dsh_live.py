@@ -9,6 +9,7 @@ import subprocess
 import sys
 
 import pytest
+from conftest import unsupported_dsh
 
 from agent_swarm.sessions.dsh_live import DshLiveFrames
 from agent_swarm.sessions.protocol import snapshot_event
@@ -65,6 +66,8 @@ def test_installed_native_relay_without_duplicate_model_content() -> None:
     node, dsh = shutil.which('node'), shutil.which('dsh')
     if node is None or dsh is None:
         pytest.skip('Installed DSH and Node are required.')
+    if (reason := unsupported_dsh()) is not None:
+        pytest.skip(reason)
     root = Path(__file__).resolve().parents[1]
     result = subprocess.run([
         node, str(root / 'tests/fixtures/dsh_communication.mjs'), str(Path(dsh).resolve()),
@@ -87,6 +90,8 @@ def test_standalone_driver_with_only_independent_package(tmp_path: Path) -> None
     """Exercise explicit preparation and control without GraphTraj imports."""
     if shutil.which('dsh') is None:
         pytest.skip('Installed native DSH package metadata is required.')
+    if (reason := unsupported_dsh()) is not None:
+        pytest.skip(reason)
     root = Path(__file__).resolve().parents[1]
     modules = tmp_path / 'modules'
     shutil.copytree(root / 'src/agent_swarm', modules / 'agent_swarm')

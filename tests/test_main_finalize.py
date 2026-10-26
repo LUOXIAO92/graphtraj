@@ -28,6 +28,11 @@ from graphtraj.interfaces.agents import swarm_root
 
 def test_binding_description_delivers_manual(tmp_path: Path) -> None:
     """Describe the binding without Main authority or executing a native hook."""
+    from graphtraj.interfaces.gateway import delivered_manuals_root
+
+    if not delivered_manuals_root().is_dir():
+        pytest.skip('manuals are installed under share/graphtraj only by a wheel install; '
+                    'this interpreter has none (for example an editable install)')
     result = bind(tmp_path)({'action': 'describe', 'feature': 'bind_main_finalize'})
 
     assert not result.failed
@@ -1269,7 +1274,11 @@ def test_native_mcp_call_context_does_not_leak_between_sessions(
     from graphtraj.execution.runner_status import caller_alias
     from graphtraj.runtimes.codex.host_events import calling_session
     from graphtraj.workspace.runner_project import discover_runner_directory
+    from graphtraj.runtimes.replacement import caller_runtime
 
+    if caller_runtime() != 'codex':
+        pytest.skip('a CODEX_THREAD_ID caller is verified by Codex process ancestry '
+                    '(468b83f); this test process has no Codex ancestor')
     root, _ = host
     runner = discover_runner_directory(root)
     monkeypatch.setenv('CODEX_THREAD_ID', 'main')

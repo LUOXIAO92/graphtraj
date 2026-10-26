@@ -8,7 +8,6 @@ from pathlib import Path
 import pytest
 
 from graphtraj.configuration.project_configuration import default_configuration_content
-from graphtraj.execution.runner_models import RunnerError
 from graphtraj.execution.runner_status import status_aliases
 
 
@@ -39,10 +38,12 @@ def test_status_refuses_inaccessible_caller_records(
     monkeypatch.setattr(Path, "is_symlink", is_symlink)
     monkeypatch.setattr(os, "listdir", listdir)
 
-    with pytest.raises(RunnerError) as failure:
-        status_aliases((), tmp_path)
+    # Status reports the identity failure as a bounded diagnostic (d9593fc).
+    response = status_aliases((), tmp_path)
 
-    assert failure.value.code == "authority-denied"
+    assert not response.succeeded
+    assert [error.code for error in response.errors] == ["authority-denied"]
+    assert response.document["diagnostic"]["stage"] == "caller_identity"
 
 
 def test_status_still_allows_a_fresh_harness(tmp_path: Path) -> None:

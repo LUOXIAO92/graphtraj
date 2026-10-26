@@ -1,13 +1,31 @@
 """Administrative adoption over the installed proxy and an isolated native socket."""
 import asyncio
+import contextlib
 import json
 import os
 from pathlib import Path
 import shutil
+import socket
 import tempfile
+from typing import Iterator
 
 import pytest
 from conftest import InstalledCommands
+
+
+@contextlib.contextmanager
+def _socket_directory(prefix: str) -> Iterator[str]:
+    """Keep Unix socket paths short; skip where the host denies socket binding."""
+    try:
+        temporary = tempfile.TemporaryDirectory(prefix=prefix, dir='/private/tmp')
+    except PermissionError:
+        temporary = tempfile.TemporaryDirectory(prefix=prefix)
+    with temporary as path, socket.socket(socket.AF_UNIX) as probe:
+        try:
+            probe.bind(str(Path(path) / 'probe.sock'))
+        except PermissionError as error:
+            pytest.skip(f'Host denies Unix socket binding ({error}); the proxy transport cannot run')
+        yield path
 
 
 @pytest.mark.parametrize('observe_only', [False, True])
@@ -60,7 +78,7 @@ def test_installed_proxy_uses_websocket_for_public_refresh(
 
     async def check() -> None:
         """Keep the short Unix socket private; no production socket is discovered."""
-        with tempfile.TemporaryDirectory(prefix='g337-proxy-', dir='/private/tmp') as temporary:
+        with _socket_directory('g337-proxy-') as temporary:
             socket = Path(temporary) / 'control.sock'
             environment = {**os.environ, 'CODEX_HOME': str(Path(temporary) / 'empty-home')}
             environment.pop('PYTHONPATH', None)
@@ -115,7 +133,7 @@ def test_installed_proxy_does_not_convert_json_lines_to_websocket(tmp_path: Path
             writer.close()
             await writer.wait_closed()
 
-        with tempfile.TemporaryDirectory(prefix='g337-raw-', dir='/private/tmp') as temporary:
+        with _socket_directory('g337-raw-') as temporary:
             socket = Path(temporary) / 'control.sock'
             async with await asyncio.start_unix_server(capture, path=str(socket)):
                 process = await asyncio.create_subprocess_exec('codex', 'app-server', 'proxy', '--sock', str(socket),

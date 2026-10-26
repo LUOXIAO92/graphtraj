@@ -112,6 +112,8 @@ def test_installed_runtime_projects_enabled_external_skill_directories(
     unselected.write_text('---\nname: unselected\ndescription: Unselected.\n---\n')
     reference = harness_skill.parent.parent / 'ponytail' / 'tests.md'
     reference.write_text('Ponytail reference.\n', encoding='utf-8')
+    # Setup creates .codex only for Codex contexts (8081888, Task 220).
+    (harness / '.codex').mkdir(exist_ok=True)
     (harness / '.codex/config.toml').write_text(
         '\n'.join('[[skills.config]]\npath = ' + json.dumps(str(path)) + '\nenabled = true'
                   for path in (harness_skill, reference.parent / 'SKILL.md'))

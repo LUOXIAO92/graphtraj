@@ -60,7 +60,7 @@ class PublicProject:
         else:
             binary = self.commands.product.with_name("graphtraj-mcp")
             request = {"jsonrpc": "2.0", "id": 1, "method": "tools/call",
-                       "params": {"name": "graphtraj", "arguments": envelope}}
+                       "params": {"name": "tasks", "arguments": envelope}}
         import subprocess
 
         result = subprocess.run([str(binary)], input=json.dumps(request) + "\n",

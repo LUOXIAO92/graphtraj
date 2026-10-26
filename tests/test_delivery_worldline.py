@@ -199,7 +199,8 @@ def test_invalid_event_is_rejected_without_append(
         installed_commands, project, "append", "--event-file", str(event_file)
     )
 
-    assert result.returncode == 1
+    # Task 210: input that violates the shared-tool schema is a CLI usage error.
+    assert result.returncode == (2 if not isinstance(event, dict) else 1)
     assert not tuple((state / "worldline").glob("*.jsonl"))
 
 

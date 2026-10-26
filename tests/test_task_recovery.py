@@ -425,7 +425,10 @@ def test_cancelled_task_is_neither_recoverable_nor_cleanable(
         stopped = command(installed_commands, root, env, 'interrupt', alias)
         assert stopped.returncode == 0, stopped.stdout + stopped.stderr
         definition = _task('154', 'recovery')
-        definition.update(body=BODY + definition['body'], active=False, replaced_by=[])
+        # A revision names the definition it replaces and cancels through its
+        # disposition (b069acf, Task 302).
+        definition.update(body=BODY + definition['body'], disposition='cancelled', replaced_by=[],
+                          retirement_reason='Cancelled before recovery.', current_definition='task.md')
         revision = root / 'cancel.yml'
         revision.write_text(yaml.safe_dump({
             'product_preserving': True, 'tasks': [definition],
@@ -502,7 +505,7 @@ def test_failed_first_creation_can_continue_budget_before_ordinary_launch(
     before = yaml.safe_load((task_directory / 'execution-budget.yml').read_text())
     assert before['stopped'] and sum(before['sessions'].values()) == 0
 
-    definition.update(active=True, replaced_by=[])
+    definition.update(disposition='active', replaced_by=[], current_definition='task.md')
     definition['body'] = definition['body'].replace('total: 10', 'total: 35').replace(
         'execution_budget:\n',
         'execution_budget:\n  revision_reason: Authorized recovery after failed creation\n',
@@ -587,7 +590,8 @@ def test_task_continuation_requires_active_ready_task_before_first_session(
     _register(installed_commands, root, definition)
     if cancelled:
         _change_status(installed_commands, root, '160', 'ready')
-        definition.update(active=False, replaced_by=[])
+        definition.update(disposition='cancelled', replaced_by=[],
+                          retirement_reason='Cancelled before its first Session.', current_definition='task.md')
         revision = root / 'cancel.yml'
         revision.write_text(yaml.safe_dump({
             'product_preserving': True, 'tasks': [definition],

@@ -206,21 +206,24 @@ def test_explicit_reopening_of_integrated_file_task_requires_new_result_acceptan
     for args in [('worktree', 'add', '--detach', str(tmp_path / 'source')),
                  ('worktree', 'add', '-b', 'dev', str(tmp_path / 'worktrees/dev'))]:
         subprocess.run(['git', *args], cwd=worktree, check=True, capture_output=True)
-    old = tools.read_current_graph({}, cwd=tmp_path).document['tasks'][0]
+    # caebb99: graph nodes are a light index; the full Task definition is a requested detail.
+    task_id = tools.read_current_graph({}, cwd=tmp_path).document['tasks'][0]['task_id']
+    old = tools.read_current_graph({'details': [task_id]}, cwd=tmp_path).document['details'][task_id]
     definition = {key: old[key] for key in ('task_id', 'task_name', 'source', 'title', 'body', 'dependencies')}
     definition.update(schema_version=2, parent_id=None, disposition='active', replaced_by=[], retirement_reason=None,
                       current_definition=old['current_definition'])
     revision = {'product_preserving': True, 'caused_by_event_ids': [], 'evidence_refs': ['evidence.md'],
                 'tasks': [definition]}
-    with runtime_caller(runner, None):
-        tools.revise_current_tasks(revision)
+    if old.get('schema_version') != 2:  # an existing v2 definition needs no conversion
+        with runtime_caller(runner, None):
+            tools.revise_current_tasks(revision)
     integrate = ['task', 'integrate', '--task-id', '148', '--', sys.executable, '-c', 'pass']
     with runtime_caller(runner, 'research@x3'):
         integrated = CliRunner().invoke(main, integrate)
     assert integrated.exit_code == 0, integrated.output
     old_report = team.parent / 'rounds/1/researcher-x1.md'
     original = old_report.read_bytes()
-    current = tools.read_current_graph({}, cwd=tmp_path).document['tasks'][0]
+    current = tools.read_current_graph({'details': [task_id]}, cwd=tmp_path).document['details'][task_id]
     definition['current_definition'] = current['current_definition']
     revision.update(tasks=[definition, {**task('149', '148'), 'current_definition': None}],
                     reopen_task_ids=['148'])

@@ -51,6 +51,11 @@ def test_browser_tool_view_preserves_model_content(registration_order: str) -> N
     node, dsh = shutil.which('node'), shutil.which('dsh')
     if node is None or dsh is None:
         pytest.skip('Installed DSH slots and Node are required for the browser projection fixture.')
+    slots = subprocess.run([node, '-e', "require('module').createRequire(process.argv[1])"
+                            ".resolve('@deepseek-ai/dsh-client-ui-slots')", str(Path(dsh).resolve())],
+                           capture_output=True, text=True, timeout=10)
+    if slots.returncode != 0:
+        pytest.skip('Installed DSH does not provide @deepseek-ai/dsh-client-ui-slots.')
     root = Path(__file__).resolve().parents[1]
     result = subprocess.run([
         node, str(root / 'tests/fixtures/dsh_client_view.mjs'),

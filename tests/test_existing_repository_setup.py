@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from conftest import runner_operation
+from conftest import runner_command, runner_operation
 import subprocess
 from pathlib import Path
 
@@ -141,7 +141,8 @@ def test_setup_leaves_legacy_runtime_role_files_unmanaged(
     legacy_role = (
         temporary_git_repository / ".codex" / "agents" / "engineer-expert.toml"
     )
-    legacy_role.parent.mkdir()
+    # Setup creates .codex only for Codex contexts (8081888, Task 220).
+    legacy_role.parent.mkdir(parents=True)
     legacy_role.write_text("legacy role projection\n", encoding="utf-8")
     before = legacy_role.read_bytes()
 
@@ -490,14 +491,20 @@ def test_runner_status_discovers_the_graphtraj_configuration(
     command: str,
 ) -> None:
     """Queries reach configured Runner results without execution recovery setup."""
+    from graphtraj.runtimes.replacement import caller_runtime
+
+    if command == "status" and caller_runtime() != "codex":
+        pytest.skip("status verifies a CODEX_THREAD_ID caller by Codex process ancestry "
+                    "(468b83f); this test process has no Codex ancestor")
     repository = temporary_git_repository
     setup = run_setup(installed_commands, repository)
     monkeypatch.setenv("CODEX_THREAD_ID", "query-without-recovery-skill")
     assert not (repository / ".agents").exists()
     assert not (repository / ".agents/skills/retro/SKILL.md").exists()
 
+    # Task 344 removed the status/requests routes; their library operations remain.
     status = run_process(
-        [str(installed_commands.runner), command, "missing@e1"],
+        runner_command(installed_commands, command, "missing@e1"),
         cwd=repository,
     )
 

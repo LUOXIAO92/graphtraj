@@ -864,22 +864,29 @@ def test_public_json_cli_uses_host_identity_and_report_checks(tmp_path: Path) ->
 
     runner, _, _ = result_project(tmp_path)
     directory = own_process(runner)
-    with hold_ownership(directory, os.getpid()), cli_connection(
-        tmp_path, 'research@x1', native_operation_features(),
-    ) as address:
+    def execute(address: str, feature: str, arguments: dict) -> dict:
         result = subprocess.run(
             [sys.executable, '-c', 'from graphtraj.interfaces.local_tool import main; main()'],
             cwd=tmp_path, env={**os.environ, CONNECTION_ENV: address,
                               'GRAPHTRAJ_CALLER_ALIAS': 'research@x2',
                               'PYTHONPATH': str(Path(__file__).resolve().parents[1] / 'src')},
-            input=json.dumps({'action': 'execute', 'feature': 'session_reports',
-                              'arguments': {'alias': 'research@x2'}}) + '\n',
+            input=json.dumps({'action': 'execute', 'feature': feature,
+                              'arguments': arguments}) + '\n',
             text=True, capture_output=True, timeout=20,
         )
-    assert result.returncode == 0
-    document = json.loads(result.stdout)
-    assert document['failed']
-    assert document.get('error') and 'reports' not in document
+        assert result.returncode == 0
+        return json.loads(result.stdout)
+
+    with hold_ownership(directory, os.getpid()), cli_connection(
+        tmp_path, 'research@x1', native_operation_features(),
+    ) as address:
+        # Spec independent-agents-and-tasks (3d88416): a sibling's reports are readable.
+        read = execute(address, 'session_reports', {'alias': 'research@x2'})
+        written = execute(address, 'submit_report', {'name': 'researcher-x2.md', 'text': 'Impersonated'})
+    assert not read['failed'] and read['result']['alias'] == 'research@x2'
+    # Writes stay with the host identity: the env alias cannot write x2's report.
+    assert written['failed'] and written.get('error')
+    assert not any(Path(path).exists() for path in read['result']['missing_reports'])
 
 
 def test_dsh_own_channel_is_projected_inside_the_session_worktree(

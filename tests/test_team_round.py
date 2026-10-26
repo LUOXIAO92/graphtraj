@@ -288,6 +288,7 @@ def test_installed_runner_obeys_the_explicit_leader_decision_for_a_run_free_team
     roles_file.write_text(yaml.safe_dump(roles))
     policy_log = tmp_path / 'policy.jsonl'
     main_config = root / '.codex/config.toml'
+    main_config.parent.mkdir(exist_ok=True)  # setup leaves Main configuration to the user
     main_config.write_text('developer_instructions = "User-owned Main instructions."\n')
     main_before = main_config.read_bytes()
     _register_ready_inline_task(root, installed_commands.product)
@@ -449,8 +450,9 @@ def test_installed_runner_rejects_non_run_free_main_batch_fields(
             cwd=harness_root,
             env=environment,
         )
-        assert result.returncode == 1
-        assert yaml.safe_load(result.stdout)["error"]["code"] == "invalid-input"
+        # Task 210: fields outside the shared swarm schema are CLI usage errors.
+        assert result.returncode == 2, result.stdout + result.stderr
+        assert "unexpected parameter" in result.stderr
 
     assert not (harness_root / ".graphtraj" / "state" / "batches").exists()
 

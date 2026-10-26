@@ -17,6 +17,10 @@ from test_task_graph import _change_status, _register, _task
 from test_task_recovery import installed_commands
 from test_pi_runtime import pi_environment
 
+# Pi's structured termination facts for a startup that never bound or prompted (291882a).
+PI_STARTUP_FACTS = {'wrapper_exited': True, 'owned_process_group_exited': True,
+                    'native_session_bound': False, 'prompt_started': False}
+
 
 @pytest.mark.parametrize('worker_case', ['absent', 'waiting', 'foreign-group', 'runtime-artifact'])
 def test_native_interrupt_confirms_only_pre_runtime_allocations(
@@ -753,7 +757,11 @@ def test_pi_failed_creation_retains_owned_process_and_native_stop(
     assert heartbeat['runtime_pid'] > 0
     assert heartbeat['execution_id']
     assert heartbeat['control_directory']
-    assert heartbeat['process_outcome'] == {'terminal_confirmed': True, 'runtime_exit_code': 0}
+    # The outcome also carries Pi's structured termination facts (291882a).
+    outcome = dict(heartbeat['process_outcome'])
+    outcome.pop('runtime_execution_id')
+    assert outcome == {'terminal_confirmed': True, 'runtime_exit_code': 0, 'native_idle_confirmed': True,
+                       **PI_STARTUP_FACTS}
     assert failure['code'] == ('RUNTIME_EXECUTION_INTERRUPTED' if interrupt_startup else 'RUNTIME_SESSION_MISSING')
     assert failure['terminal_confirmed'] is True
     assert not (directory / 'mapping.yml').exists()
@@ -785,7 +793,10 @@ def test_pi_crashed_creation_retains_binding_without_certifying_tool_stop(
     directory = task.root / '.graphtraj/runner/sessions' / alias
     heartbeat = yaml.safe_load((directory / 'heartbeat.yml').read_text())
     assert heartbeat['runtime_pid'] > 0
-    assert heartbeat['process_outcome'] == {'terminal_confirmed': False, 'runtime_exit_code': 71}
+    outcome = dict(heartbeat['process_outcome'])
+    outcome.pop('runtime_execution_id')
+    assert outcome == {'terminal_confirmed': False, 'runtime_exit_code': 71, 'native_idle_confirmed': False,
+                       **PI_STARTUP_FACTS}
     original_failure = (directory / 'launch-error.yml').read_bytes()
     assert yaml.safe_load(original_failure)['terminal_confirmed'] is False
     stopped = run_process(runner_operation(task.commands, 'interrupt', alias),

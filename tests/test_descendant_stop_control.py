@@ -276,7 +276,11 @@ def test_unresponsive_parent_does_not_prevent_descendant_interrupt(managed_proje
     owner = mapping(root, parent)
     os.kill(owner['worker_pid'], signal.SIGSTOP)
     try:
-        result = call('interrupt', [parent], timeout=30)
+        # The stopped owner is unconfirmed only after the Runner's own interrupt
+        # reply deadline, 30s plus the Worker's close time (37a2f4d).
+        from graphtraj.execution.runner_control import INTERRUPT_RESPONSE_SECONDS
+
+        result = call('interrupt', [parent], timeout=INTERRUPT_RESPONSE_SECONDS + 20)
         assert result['interrupt_status'] == 'incomplete'
         members = {item['alias']: item for item in result['members']}
         assert members[parent]['interrupt_status'] == 'unconfirmed'

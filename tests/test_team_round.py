@@ -288,6 +288,7 @@ def test_installed_runner_obeys_the_explicit_leader_decision_for_a_run_free_team
     roles_file.write_text(yaml.safe_dump(roles))
     policy_log = tmp_path / 'policy.jsonl'
     main_config = root / '.codex/config.toml'
+    main_config.parent.mkdir(exist_ok=True)  # setup leaves Main configuration to the user
     main_config.write_text('developer_instructions = "User-owned Main instructions."\n')
     main_before = main_config.read_bytes()
     _register_ready_inline_task(root, installed_commands.product)

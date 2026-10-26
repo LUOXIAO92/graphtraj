@@ -74,6 +74,7 @@ def test_runtime_executes_explicit_native_resource_outside_worktree(
     harness = temporary_git_repository.parent
     monkeypatch.setenv("HOME", str(tmp_path / "operator-home"))
     plan_project_setup(harness, temporary_git_repository).apply()
+    (harness / ".codex").mkdir(exist_ok=True)  # setup leaves Main configuration to the user
     (harness / ".codex/config.toml").write_text(
         '[[skills.config]]\npath = "../.agents/skills/research/SKILL.md"\nenabled = true\n'
     )

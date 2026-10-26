@@ -37,6 +37,12 @@ def test_unavailable_host_has_no_capture(
     """Inherited native flags cannot turn an unknown caller into a Codex host."""
     monkeypatch.setenv('CODEX_THREAD_ID', 'unrelated-inherited-thread')
     monkeypatch.setattr(replacement, 'caller_runtime', lambda: runtime)
+    if runtime is None:
+        # An unverifiable native locator is refused, not read as no host (468b83f).
+        with pytest.raises(runtime_adapter.RuntimeAdapterError) as refused:
+            runtime_adapter.current_host_connection()
+        assert refused.value.code == 'authority-unavailable'
+        return
     assert runtime_adapter.current_host_connection() is None
 
 

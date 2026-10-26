@@ -217,9 +217,10 @@ def test_installed_native_session_apis(project: Path, runtime: str) -> None:
     package = Path(__file__).resolve().parents[1] / 'src/graphtraj/runtimes'
     module = (package.parents[1] / 'agent_swarm/pi/extension.mjs' if runtime == 'pi'
               else package / runtime / 'tool.mjs')
-    module = Path(shutil.copy2(module, project / module.name))
-    if runtime == 'dsh':
-        shutil.copy2(package / runtime / 'collection.mjs', project / 'collection.mjs')
+    # DSH tool.mjs imports its sibling collection and agent_swarm plugin by
+    # relative path (5debbf4), so it is loaded in place rather than copied.
+    if runtime == 'pi':
+        module = Path(shutil.copy2(module, project / module.name))
     environment = {**os.environ, 'GRAPHTRAJ_DSH_PACKAGE': str(Path(executable).resolve())}
     script = '''
 import assert from 'node:assert/strict';

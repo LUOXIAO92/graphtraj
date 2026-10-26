@@ -84,6 +84,8 @@ class IndependentCalls(NativeCalls):
         """Own one independent backend; no project configuration is discovered."""
         self.queue: dict[str, list[dict]] = {}
         self.acknowledged: dict[str, int] = {}
+        # Sessions whose notices the mod read and has not yet submitted.
+        self.pushing: set[str] = set()
         self.callers: dict[str, object] = {}
         self.control = AgentControl(root, {'claude': ClaudeDriver(cwd, settings)},
                                     event_receiver=self.receive)
@@ -100,7 +102,10 @@ class IndependentCalls(NativeCalls):
             result = handle_request(request, self.callers[session])
             # Reuse the native host's next-result delivery when prompt push is
             # unavailable (notably print mode); the mod renders this same fact.
+            # Notices a push holds are delivered by that push or after its release.
             with self.lock:
+                if session in self.pushing:
+                    return result
                 queue = self.queue.get(session, [])
                 notices = queue[self.acknowledged.get(session, 0):]
                 if not notices:
@@ -123,7 +128,11 @@ class IndependentCalls(NativeCalls):
         return False
 
     def notices(self, document: dict) -> dict:
-        """Return then acknowledge queued notices using the existing mod protocol."""
+        """Return then acknowledge or release queued notices using the existing mod protocol.
+
+        Read notices stay out of results until the mod acknowledges them after
+        its submission, or releases them when submission failed.
+        """
         session = document.get('session')
         if (not isinstance(session, str) or str(UUID(session)) != session
                 or set(document) - {'operation', 'session', 'position'}):
@@ -131,11 +140,17 @@ class IndependentCalls(NativeCalls):
         queue = self.queue.get(session, [])
         acknowledged = self.acknowledged.get(session, 0)
         if document['operation'] == 'notices':
+            if queue[acknowledged:]:
+                self.pushing.add(session)
             return {'notices': queue[acknowledged:], 'position': len(queue)}
+        if document['operation'] == 'release':
+            self.pushing.discard(session)
+            return {'released': True}
         position = document.get('position')
         if type(position) is not int or not acknowledged <= position <= len(queue):
             raise AgentsError('invalid-input', 'Expected the position returned by notices.')
         self.acknowledged[session] = position
+        self.pushing.discard(session)
         return {'acknowledged': True}
 
 

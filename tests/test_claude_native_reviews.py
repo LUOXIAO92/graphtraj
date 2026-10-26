@@ -87,7 +87,7 @@ def test_claude_main_role_organization_uses_claude_dialog(
     def check(params: dict) -> None:
         """The dialog names the role change while nothing is written."""
         assert path.read_bytes() == before
-        assert params['message'].startswith('Save only the reviewed child-role configuration change.')
+        assert 'roles.coding_team.engineer.codex' in params['message'].rsplit('\n', 1)[0]
 
     elicitations, result = converse(
         project, {'action': 'execute', 'feature': 'role_organization', 'arguments': {'change': change}},
@@ -118,8 +118,8 @@ def test_claude_main_connection_save_uses_claude_dialog(
     def check(params: dict) -> None:
         """The dialog shows the catalog change while nothing is written."""
         assert not path.exists()
-        assert params['message'].startswith('Save only the reviewed user Runtime connection change.')
-        summary = json.loads(params['message'].split('\n', 1)[1])
+        assert str(path) in params['message'].rsplit('\n', 1)[0]
+        summary = json.loads(params['message'].rsplit('\n', 1)[1])
         assert summary['request'] == {'scope': 'user', 'path': str(path)}
         assert summary['changes']
 
@@ -158,8 +158,8 @@ def test_claude_main_retirement_review_uses_claude_dialog(
     def check(params: dict) -> None:
         """The dialog names the retirement before anything is applied."""
         assert not retired
-        assert params['message'].startswith('Retire only the shown stopped Agent;')
-        summary = json.loads(params['message'].split('\n', 1)[1])
+        assert parent in params['message'].rsplit('\n', 1)[0]
+        summary = json.loads(params['message'].rsplit('\n', 1)[1])
         assert summary['request'] == {'operation': 'retire', 'alias': parent}
 
     elicitations, result = converse(

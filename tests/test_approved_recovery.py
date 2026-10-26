@@ -1732,7 +1732,7 @@ def test_mcp_recovery_waits_for_strict_native_review(
                     assert params['_meta']['codex_strict_auto_review'] is True
                     assert params['_meta']['codex_sensitive_action'] is True
                     assert params['_meta']['tool_params']['arguments'] == arguments
-                    summary = json.loads(params['message'].split('\n', 1)[1])
+                    summary = json.loads(params['message'].rsplit('\n', 1)[1])
                     assert summary['request'] == arguments
                     assert {'field': 'budget.approved_minutes', 'expected': None, 'actual': 7} in summary['changes']
                     reply = {'jsonrpc': '2.0', 'id': message['id'], 'result': {
@@ -1860,7 +1860,7 @@ def test_claude_main_recovery_is_decided_by_claude_code_elicitation(
             observed.append(message)
             if message.get('method') == 'elicitation/create':
                 assert yaml.safe_load(budget.read_text()) == before
-                summary = json.loads(message['params']['message'].split('\n', 1)[1])
+                summary = json.loads(message['params']['message'].rsplit('\n', 1)[1])
                 assert summary['request']['additional_minutes'] == 7
                 if decision == 'cancel':
                     reply = {'jsonrpc': '2.0', 'method': 'notifications/cancelled',

@@ -86,7 +86,14 @@ async function pushNotices($, state) {
       const session = await $.session.id();
       const pending = await context($, {operation: 'notices', session});
       if (pending.notices?.length) {
-        await $.prompt.submit({text: noticePrompt(pending.notices)});
+        // The host holds read notices out of tool results until this push
+        // acknowledges them; a failed submission releases them back.
+        try {
+          await $.prompt.submit({text: noticePrompt(pending.notices)});
+        } catch (error) {
+          await context($, {operation: 'release', session});
+          throw error;
+        }
         state.pushed = true;
         state.pushError = null;
         await context($, {operation: 'acknowledge', session, position: pending.position});

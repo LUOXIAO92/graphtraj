@@ -37,27 +37,89 @@ from graphtraj.runtimes.claude.mcp import serve
 from agent_swarm.claude.native_host import NativeCalls as NativeCallsBase
 
 
+class MainNotices:
+    """Deliver each queued Main notice through one channel of this host process.
+
+    The mod's prompt push and the next ``agents``/``tasks`` result both read
+    the same durable queue. While a push holds notices it read, a result does
+    not attach them; the push then acknowledges after Claude accepted its
+    submission, or releases them when submission failed, so the next push or
+    result delivers them instead.
+    """
+
+    def __init__(self, runner: Path) -> None:
+        """Serve the durable queue of the project whose Runner is ``runner``."""
+        self.runner  = runner
+        self.lock    = threading.Lock()
+        # Sessions whose read notices await the mod's submission outcome.
+        self.pushing: set[str] = set()
+
+    def attach(self, session: str, result: AgentsResult) -> AgentsResult:
+        """Return ``result`` with this Session's undelivered notices, acknowledged once built.
+
+        A pickup failure is reported beside the result and never fails the
+        executed call; unacknowledged notices are offered again.
+        """
+        from graphtraj.execution.main_continuity import acknowledge_notices, pending_notices
+
+        with self.lock:
+            if session in self.pushing:
+                return result
+            try:
+                notices, position = pending_notices(self.runner, 'claude', session)
+            except Exception as error:
+                return AgentsResult({**result.document, 'main_notices_error': str(error)}, failed=result.failed)
+            if not notices:
+                return result
+            result = AgentsResult({**result.document, 'main_notices': notices}, failed=result.failed)
+            try:
+                acknowledge_notices(self.runner, 'claude', session, position)
+            except Exception as error:
+                result.document['main_notices_error'] = str(error)
+            return result
+
+    def push(self, document: dict) -> dict:
+        """Serve the mod's ``notices``, ``acknowledge`` and ``release`` operations."""
+        from graphtraj.execution.main_continuity import acknowledge_notices, pending_notices
+
+        session = document.get('session')
+        if (not isinstance(session, str) or str(UUID(session)) != session
+                or set(document) - {'operation', 'session', 'position'}):
+            raise AgentsError('invalid-input', 'Expected one native notice operation.')
+        with self.lock:
+            if document['operation'] == 'notices':
+                notices, position = pending_notices(self.runner, 'claude', session)
+                if notices:
+                    self.pushing.add(session)
+                return {'notices': notices, 'position': position}
+            if document['operation'] == 'release':
+                self.pushing.discard(session)
+                return {'released': True}
+            if type(document.get('position')) is not int:
+                raise AgentsError('invalid-input', 'Expected the position returned by notices.')
+            acknowledge_notices(self.runner, 'claude', session, document['position'])
+            self.pushing.discard(session)
+            return {'acknowledged': True}
+
+
 class NativeCalls(NativeCallsBase):
     """Supply GraphTraj's durable Main notice queue to the native association."""
+
+    def __init__(
+        self, make_call: Callable[[str, Path], Callable], cwd: Path, notices: MainNotices | None = None,
+    ) -> None:
+        """Bind the association; ``notices`` is the queue shared with ``main_calls``."""
+        super().__init__(make_call, cwd, notices.runner if notices is not None else None)
+        self.main_notices = notices
 
     def notices(self, document: dict) -> dict:
         """Let the mod push queued notices into the idle Main, acknowledging after submit.
 
         Only the authenticated mod of this same Claude process reaches this.
         """
-        from graphtraj.execution.main_continuity import acknowledge_notices, pending_notices
-
-        session = document.get('session')
-        if (self.runner is None or not isinstance(session, str) or str(UUID(session)) != session
-                or set(document) - {'operation', 'session', 'position'}):
+        if self.main_notices is None:
             raise AgentsError('invalid-input', 'Expected one native notice operation.')
-        if document['operation'] == 'notices':
-            notices, position = pending_notices(self.runner, 'claude', session)
-            return {'notices': notices, 'position': position}
-        if type(document.get('position')) is not int:
-            raise AgentsError('invalid-input', 'Expected the position returned by notices.')
-        acknowledge_notices(self.runner, 'claude', session, document['position'])
-        return {'acknowledged': True}
+        return self.main_notices.push(document)
 
 
 def native_parent(executable: Path, *, stage: str = 'serve') -> int:
@@ -76,7 +138,9 @@ def native_parent(executable: Path, *, stage: str = 'serve') -> int:
     return parent
 
 
-def main_calls(root: Path, backend: object, archive: object) -> Callable[[str, Path], Callable]:
+def main_calls(
+    root: Path, backend: object, archive: object, notices: MainNotices | None = None,
+) -> Callable[[str, Path], Callable]:
     """Return the per-Session factory serving one verified Main's agents and tasks calls.
 
     Each call runs as Main (Runner caller ``None``) with this Session's host
@@ -85,16 +149,17 @@ def main_calls(root: Path, backend: object, archive: object) -> Callable[[str, P
     another Main continues the project, its control calls are refused until a
     new host process. ``backend`` is the same ``agents`` backend the Codex Main
     uses (``GraphTrajAgents``: every Runtime driver and Task member Sessions).
-    Queued member notices not yet delivered are returned with each result and
-    acknowledged only once that result is built; a pickup failure is reported
-    beside the result and never fails the executed call.
+    Queued member notices not yet delivered are returned with each result
+    through ``notices`` (see :class:`MainNotices`), which the host shares
+    with its mod's prompt push.
     """
-    from graphtraj.execution.main_continuity import acknowledge_notices, claimable, pending_notices
+    from graphtraj.execution.main_continuity import claimable
     from graphtraj.execution.runner_connection import parent_connection
     from graphtraj.execution.runner_status import runtime_caller
     from graphtraj.interfaces.gateway import handle_request as handle_task
 
-    runner = runner_directory(root)
+    runner  = runner_directory(root)
+    notices = notices if notices is not None else MainNotices(runner)
     callers: dict[str, Callable] = {}
     # Sessions that already entered as Main in this process.
     claimed: set[str] = set()
@@ -113,19 +178,7 @@ def main_calls(root: Path, backend: object, archive: object) -> Callable[[str, P
                     result = handle_request(request, callers[session])
                 else:
                     result = handle_task(request, cwd=root)
-            try:
-                notices, position = pending_notices(runner, 'claude', session)
-            except Exception as error:
-                return AgentsResult({**result.document, 'main_notices_error': str(error)}, failed=result.failed)
-            if not notices:
-                return result
-            result = AgentsResult({**result.document, 'main_notices': notices}, failed=result.failed)
-            try:
-                acknowledge_notices(runner, 'claude', session, position)
-            except Exception as error:
-                # Unacknowledged notices are offered again; never fail the call.
-                result.document['main_notices_error'] = str(error)
-            return result
+            return notices.attach(session, result)
 
         return call
 
@@ -258,8 +311,9 @@ def main() -> None:
     # continued Main roots (MainRoots) and Task member Sessions.
     agents = GraphTrajAgents(root, cwd)
     control = agents.control
-    make_call = main_calls(root, agents, configured_archive(root))
-    calls = NativeCalls(make_call, cwd, runner_directory(root))
+    notices   = MainNotices(runner_directory(root))
+    make_call = main_calls(root, agents, configured_archive(root), notices)
+    calls     = NativeCalls(make_call, cwd, notices)
 
     def authenticate(pid: int) -> None:
         """Require a live direct child of this same verified Claude process."""

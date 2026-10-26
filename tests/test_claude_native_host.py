@@ -8,7 +8,7 @@ from uuid import uuid4
 import pytest
 
 from agent_swarm import AgentsError, AgentsResult
-from graphtraj.runtimes.claude.host import NativeCalls, native_parent
+from graphtraj.runtimes.claude.host import MainNotices, NativeCalls, native_parent
 from graphtraj.runtimes.claude.mcp import serve
 
 
@@ -179,7 +179,7 @@ def test_mod_notice_operations_read_then_acknowledge(tmp_path: Path) -> None:
     from graphtraj.execution.main_continuity import queue_notice
 
     session = str(uuid4())
-    host = NativeCalls(lambda session, cwd: None, tmp_path, tmp_path)
+    host = NativeCalls(lambda session, cwd: None, tmp_path, MainNotices(tmp_path))
     queue_notice(tmp_path, {'runtime': 'claude', 'session': session}, {'alias': 'leader@l1'})
     pending = host.context({'operation': 'notices', 'session': session})
     assert [item['event']['alias'] for item in pending['notices']] == ['leader@l1']

@@ -66,7 +66,7 @@ def test_role_save_uses_strict_native_review(
                 assert params['_meta']['tool_params'] == {
                     'action': 'execute', 'feature': 'role_organization', 'arguments': arguments,
                 }
-                summary = json.loads(params['message'].split('\n', 1)[1])
+                summary = json.loads(params['message'].rsplit('\n', 1)[1])
                 assert summary['changes'] == [{
                     'field': 'roles.coding_team.engineer.codex', 'expected': None,
                     'actual': {'unix_sockets': sockets},

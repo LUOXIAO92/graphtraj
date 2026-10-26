@@ -196,7 +196,7 @@ def _respond(message: Mapping[str, Any]) -> dict[str, Any] | None:
 # operation has (action, change summary, what Accept applies) kept short.
 REVIEW_TEXT = {
     'en': {
-        'approved_recovery':   ('add execution time to', 'add {minutes} minutes{resume}{restore}',
+        'approved_recovery':   ('add execution time to', 'add {minutes} min of execution time{resume}{restore}',
                                 'apply the added time and repair'),
         'role_organization':   ('change child roles in', 'remove {removed}, add {added}, change {changed}: {fields}',
                                 'save this change'),

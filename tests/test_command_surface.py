@@ -32,8 +32,11 @@ def test_fresh_install_exposes_graphtraj_and_separate_agent_runner_interfaces(
         "you-are-a-product-architect"
     ).exists()
     assert runner_help.returncode == 0, runner_help.stderr
-    for command in ("status", "send", "interrupt", "replace", "continue", "cleanup"):
+    for command in ("replace", "continue", "cleanup"):
         assert command in runner_help.stdout
+    # Task 344 moved status/send/interrupt control to the agents interface.
+    for command in ("status", "send", "interrupt"):
+        assert "\n  {0} ".format(command) not in runner_help.stdout
 
 
 def test_installed_commands_load_the_cli_package(

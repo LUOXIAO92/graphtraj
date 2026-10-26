@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from conftest import app_server_peer, run_process
+from conftest import app_server_peer, run_process, runner_command
 from test_project_setup import install_user_skills, run_setup, setup_environment
 from test_task_graph import _change_status, _register, _revised, _task
 
@@ -102,7 +102,7 @@ def test_installed_delivery_corrects_a_split_and_delivers_the_current_graph(
         return yaml.safe_load(result.stdout)
 
     def runner(*arguments):
-        result = run_process([str(installed_commands.runner), *arguments], cwd=root, env=environment, timeout=45)
+        result = run_process(runner_command(installed_commands, *arguments), cwd=root, env=environment, timeout=45)
         assert result.returncode == 0, result.stdout + result.stderr
         return yaml.safe_load(result.stdout)
 

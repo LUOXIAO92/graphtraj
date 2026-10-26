@@ -12,6 +12,7 @@ Harness Project Root from its own working directory, exactly like the CLI.
 
 from __future__ import annotations
 
+import copy
 import os
 import sys
 import hashlib
@@ -190,69 +191,57 @@ def _respond(message: Mapping[str, Any]) -> dict[str, Any] | None:
     return respond(message, _tool_documents, _tool_call_response, SERVER_INFO)
 
 
-# Native dialog text for each reviewed operation, by language. Each entry is
-# (action, what the change does, what Accept applies). Hosts may hide the
-# dialog title, so the message itself repeats these.
+# Native dialog text for each reviewed operation, by language. Claude Code
+# shows only the first three message lines before folding the rest, so each
+# operation has (action, change summary, what Accept applies) kept short.
 REVIEW_TEXT = {
     'en': {
-        'approved_recovery':   ('add Task execution time',
-                                'add {minutes} minutes of execution time{resume}{restore}',
-                                'the added time and the shown repair apply to the original Task and Session'),
-        'role_organization':   ('change child-role configuration',
-                                'change {fields}',
-                                'only the reviewed child-role configuration change is saved'),
-        'runtime_connections': ('save Runtime connections',
-                                'change {fields}',
-                                'only the reviewed user Runtime connection change is saved'),
-        'retire':              ('retire an Agent',
-                                'retire the shown stopped Agent; its Session, Trace, parent relationships '
-                                'and Worktree are kept',
-                                'the Agent is retired and remains only as history'),
-        'replace':             ('replace an Agent',
-                                'retire the shown stopped Agent for {replacement}; its Session, Trace, '
-                                'parent relationships and Worktree are kept',
-                                'the Agent is retired and its replacement continues its seat'),
-        'labels':              {'heading': 'GraphTraj review: ', 'requester': 'Requested by: ',
-                                'target': 'Target: ', 'change': 'Change: ', 'accept': 'Accept: ',
-                                'decline': 'Decline: ', 'full': 'Full request (authoritative):'},
-        'main':                'the current Main session',
+        'approved_recovery':   ('add execution time to', 'add {minutes} minutes{resume}{restore}',
+                                'apply the added time and repair'),
+        'role_organization':   ('change child roles in', 'remove {removed}, add {added}, change {changed}: {fields}',
+                                'save this change'),
+        'runtime_connections': ('save Runtime connections in',
+                                'models: remove {removed}, add {added}, change {changed}; other settings: {other}',
+                                'save this file'),
+        'retire':              ('retire', 'stopped Agent becomes history; Session, Trace and Worktree are kept',
+                                'retire it now'),
+        'replace':             ('replace', '{replacement} takes over; Session, Trace and Worktree are kept',
+                                'retire and replace it now'),
+        'heading':             'GraphTraj review: {action} {target} (requested by {requester})',
+        'choices':             'Accept: {accept}. Decline: nothing is written.',
+        'requester':           'Requested by: ',
+        'target':              'Target: ',
+        'full':                'Full request (authoritative):',
+        'main':                'Main',
         'parent':              ' (parent {0})',
-        'resume':              ', then resume its Session',
-        'restore':             ', and reactivate its Task',
-        'roles':               'this project\'s child-role configuration (roles.yml)',
-        'connections':         'the user Runtime connection file {0}',
-        'replacement':         'Task {task_id} Team {team_ordinal} {role} seat {member}',
-        'more':                ' and {0} more',
-        'declined':            'nothing is written and the call returns a refusal',
+        'resume':              ', resume its Session',
+        'restore':             ', reactivate its Task',
+        'roles':               'roles.yml',
+        'replacement':         'the {role} seat {member} of Task {task_id} Team {team_ordinal}',
     },
     'zh': {
-        'approved_recovery':   ('追加 Task 执行时间',
-                                '追加 {minutes} 分钟执行时间{resume}{restore}',
-                                '对原 Task 和 Session 应用所示的追加时间与修复'),
-        'role_organization':   ('修改子角色配置',
-                                '修改 {fields}',
-                                '只保存所示的子角色配置变更'),
+        'approved_recovery':   ('追加执行时间', '追加 {minutes} 分钟{resume}{restore}',
+                                '应用追加时间与修复'),
+        'role_organization':   ('修改子角色配置', '删除 {removed} 项、新增 {added} 项、修改 {changed} 项：{fields}',
+                                '保存此变更'),
         'runtime_connections': ('保存 Runtime 连接',
-                                '修改 {fields}',
-                                '只保存所示的用户 Runtime 连接变更'),
-        'retire':              ('清退 Agent',
-                                '清退所示已停止的 Agent；其 Session、Trace、父子关系和 Worktree 保留',
-                                '该 Agent 被清退，只作为历史记录保留'),
-        'replace':             ('替换 Agent',
-                                '清退所示已停止的 Agent，由{replacement}接替；其 Session、Trace、父子关系和 Worktree 保留',
-                                '该 Agent 被清退，由替换者继续其席位'),
-        'labels':              {'heading': 'GraphTraj 审查：', 'requester': '请求者：',
-                                'target': '对象：', 'change': '内容：', 'accept': '接受（Accept）：',
-                                'decline': '拒绝（Decline）：', 'full': '完整请求（以此为准）：'},
-        'main':                '当前 Main 会话',
+                                '模型删除 {removed} 个、新增 {added} 个、修改 {changed} 个；其他设置 {other} 项',
+                                '保存此文件'),
+        'retire':              ('清退 Agent', '已停止的 Agent 变为历史记录；Session、Trace、Worktree 保留',
+                                '立即清退'),
+        'replace':             ('替换 Agent', '由 Task {task_id} 第 {team_ordinal} 组 {role} 席位 {member} 接替；'
+                                'Session、Trace、Worktree 保留', '立即清退并替换'),
+        'heading':             'GraphTraj 审查：{action} {target}（{requester} 请求）',
+        'choices':             'Accept：{accept}；Decline：不写入任何变更',
+        'requester':           '请求者：',
+        'target':              '对象：',
+        'full':                '完整请求（以此为准）：',
+        'main':                'Main',
         'parent':              '（父级 {0}）',
         'resume':              '，并恢复其 Session',
         'restore':             '，并重新激活其 Task',
-        'roles':               '本项目的子角色配置（roles.yml）',
-        'connections':         '用户 Runtime 连接文件 {0}',
-        'replacement':         ' Task {task_id} 第 {team_ordinal} 组 {role} 席位 {member} ',
-        'more':                ' 等 {0} 项',
-        'declined':            '不写入任何变更，本次调用返回拒绝',
+        'roles':               'roles.yml',
+        'replacement':         'Task {task_id} 第 {team_ordinal} 组 {role} 席位 {member}',
     },
 }
 
@@ -272,49 +261,98 @@ def review_language() -> str:
     return 'en'
 
 
+def _short(alias: str) -> str:
+    """Shorten a long alias to its Task prefix and final seat for the first line.
+
+    ``364-readable_review-handover0-engineer@engineer`` becomes
+    ``364-…-engineer@engineer``; the full alias follows on a later line.
+    """
+    if len(alias) <= 32 or '-' not in alias:
+        return alias
+    return alias.split('-', 1)[0] + '-…-' + alias.rsplit('-', 1)[1]
+
+
+def _models(catalog: Any) -> dict[tuple, Any]:
+    """Return a connection catalog's models keyed by (entry, provider, model)."""
+    found = {}
+    for entry, runtime in ((catalog or {}).get('runtimes') or {}).items():
+        for provider, settings in ((runtime or {}).get('providers') or {}).items():
+            for model, value in ((settings or {}).get('models') or {}).items():
+                found[(entry, provider, model)] = value
+    return found
+
+
+def _without_models(catalog: Any) -> Any:
+    """Return a connection catalog copy whose providers list no models."""
+    copied = copy.deepcopy(catalog or {})
+    for runtime in (copied.get('runtimes') or {}).values():
+        for settings in ((runtime or {}).get('providers') or {}).values():
+            if isinstance(settings, dict):
+                settings.pop('models', None)
+    return copied
+
+
 def review_message(proposal: dict, operation: str, summary: dict) -> tuple[str, str]:
     """Return the dialog heading and the message a host shows for one review.
 
-    The message names the requester, the operation, its target and what
-    Accept and Decline each do, in the user's language, before the full
-    reviewed request on its last line. A host that truncates the message
-    still shows the readable lines first.
+    Lines 1-3 name the operation, target and requester, summarize the change
+    with what it removes, and state what Accept and Decline do; a host that
+    folds the rest still shows them. The full requester, the full target and
+    the authoritative reviewed request follow.
     """
+    from graphtraj.execution.approved_recovery import _differences
+
     text = REVIEW_TEXT[review_language()]
     action, change, accept = text[operation]
-    labels  = text['labels']
-    request = summary['request']
-    fields  = [item['field'] for item in summary['changes']]
-    listed  = ', '.join(fields[:5]) + (text['more'].format(len(fields) - 5) if len(fields) > 5 else '')
+    request   = summary['request']
+    requester = proposal.get('caller') or text['main']
 
-    # Each operation names its own target and change detail.
-    if operation in ('retire', 'replace'):
-        target = request['alias'] + (text['parent'].format(proposal['parent']) if proposal.get('parent') else '')
-    elif operation == 'approved_recovery':
+    # Each operation names its own target; long aliases are shortened on line 1.
+    if operation in ('retire', 'replace', 'approved_recovery'):
         target = request.get('alias', '')
+        short  = _short(target)
+        if proposal.get('parent'):
+            target += text['parent'].format(proposal['parent'])
     elif operation == 'role_organization':
-        target = text['roles']
+        target = short = text['roles']
     else:
-        target = text['connections'].format(request.get('path'))
+        target = request.get('path') or ''
+        short  = Path(target).name
+
+    # Count what the change removes, adds and modifies.
+    if operation == 'runtime_connections':
+        before, after = _models(proposal['before']), _models(proposal['after'])
+        counts = {'removed': len(before.keys() - after.keys()), 'added': len(after.keys() - before.keys()),
+                  'changed': sum(before[key] != after[key] for key in before.keys() & after.keys()),
+                  'other':   len(_differences(_without_models(proposal['before']),
+                                              _without_models(proposal['after'])))}
+    else:
+        changes = summary['changes']
+        fields  = [item['field'] for item in changes]
+        counts  = {'removed': sum(item['actual'] is None for item in changes),
+                   'added':   sum(item['expected'] is None for item in changes),
+                   'changed': sum(item['expected'] is not None and item['actual'] is not None for item in changes),
+                   'other':   0,
+                   'fields':  ', '.join(fields[:2]) + (', …' if len(fields) > 2 else '')}
+    registration = request.get('registration') or {}
     change = change.format(
         minutes     = request.get('additional_minutes', 0),
         resume      = text['resume'] if request.get('resume') else '',
         restore     = text['restore'] if request.get('restore_active') else '',
-        fields      = listed,
-        replacement = (text['replacement'].format_map({key: request['registration'].get(key)
-                       for key in ('task_id', 'team_ordinal', 'role', 'member')})
-                       if 'registration' in request else ''),
+        replacement = text['replacement'].format_map({key: registration.get(key)
+                      for key in ('task_id', 'team_ordinal', 'role', 'member')}),
+        **{key: registration.get(key) for key in ('task_id', 'team_ordinal', 'role', 'member')},
+        **{'fields': '', **counts},
     )
 
-    heading = labels['heading'] + action
+    heading = text['heading'].format(action=action, target=short, requester=_short(requester))
     lines   = [
         heading,
-        labels['requester'] + (proposal.get('caller') or text['main']),
-        labels['target'] + target,
-        labels['change'] + change,
-        labels['accept'] + accept,
-        labels['decline'] + text['declined'],
-        labels['full'],
+        change,
+        text['choices'].format(accept=accept),
+        text['requester'] + requester,
+        text['target'] + target,
+        text['full'],
         json.dumps(summary, ensure_ascii=False),
     ]
     return heading, '\n'.join(lines)

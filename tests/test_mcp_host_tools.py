@@ -30,6 +30,18 @@ MCP_TOOL_NAME = "tasks"
 AGENT_ACTIONS = frozenset({'status', 'send', 'interrupt', 'requests', 'reply'})
 
 
+def _codex_caller() -> bool:
+    from graphtraj.runtimes.replacement import caller_runtime
+
+    return caller_runtime() == "codex"
+
+
+# A CODEX_THREAD_ID locator is trusted only from Codex process ancestry (468b83f).
+_REQUIRES_CODEX_CALLER = pytest.mark.skipif(
+    not _codex_caller(), reason="CODEX_THREAD_ID caller needs a Codex process ancestor; none here",
+)
+
+
 def operation_document(result: dict, action: str) -> dict:
     """Unwrap agents metadata when comparing its result to the Runner operation."""
     if action in AGENT_ACTIONS and 'result' in result.get('structuredContent', {}):
@@ -737,6 +749,7 @@ def _stop_remaining_workers(mappings: list[Path]) -> None:
     assert not remaining, f'managed workers survived the fixture interrupt: {remaining}'
 
 
+@_REQUIRES_CODEX_CALLER
 def test_installed_mcp_server_dispatches_and_controls_a_managed_child(
     installed_commands: InstalledCommands, managed_mcp: ManagedMcp
 ) -> None:
@@ -850,6 +863,7 @@ def test_installed_mcp_server_dispatches_and_controls_a_managed_child(
     assert repeated['members'] == [{'alias': alias, 'interrupt_status': 'stopped'}]
 
 
+@_REQUIRES_CODEX_CALLER
 def test_installed_mcp_server_rejects_execution_input_like_the_cli(
     installed_commands: InstalledCommands, managed_mcp: ManagedMcp
 ) -> None:
@@ -1660,6 +1674,7 @@ def test_installed_mcp_server_returns_a_budget_stop_to_the_request_caller(
         assert _native_queue_submissions(protocol) == []
 
 
+@_REQUIRES_CODEX_CALLER
 def test_installed_runner_returns_after_launch_and_delivers_a_native_budget_stop(
     installed_commands: InstalledCommands,
     temporary_git_repository: Path,

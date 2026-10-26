@@ -798,7 +798,7 @@ def test_host_operation_os_error_keeps_reply_and_logs_traceback(tmp_path, capsys
     import json
     import os
 
-    from graphtraj.execution import runner_connection
+    from agent_swarm import connection  # e1e3e3a moved the request answerer here
 
     (tmp_path / 'request.json').write_text(json.dumps({'operation': 'recover'}))
 
@@ -808,7 +808,7 @@ def test_host_operation_os_error_keeps_reply_and_logs_traceback(tmp_path, capsys
 
     directory = os.open(tmp_path, os.O_RDONLY)
     try:
-        runner_connection._answer_request(directory, failing_operation, None)
+        connection._answer_request(directory, failing_operation, None)
     finally:
         os.close(directory)
     assert json.loads((tmp_path / 'response.json').read_text()) == {

@@ -10,6 +10,7 @@ import sys
 
 from click.testing import CliRunner
 import pytest
+from conftest import unsupported_dsh
 
 from graphtraj.configuration.project_configuration import default_configuration_content
 from graphtraj.execution.main_finalize import session_binding
@@ -181,6 +182,8 @@ def test_installed_dsh_append_flush_and_resume(project: Path) -> None:
     node, dsh = shutil.which('node'), shutil.which('dsh')
     if node is None or dsh is None:
         pytest.skip('Installed DSH and Node are required for native API evidence.')
+    if (reason := unsupported_dsh()) is not None:
+        pytest.skip(reason)
     root = Path(__file__).resolve().parents[1]
     environment = {**os.environ, 'PYTHONPATH': str(root / 'src')}
     environment.pop('GRAPHTRAJ_ROLE', None)

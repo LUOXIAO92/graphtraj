@@ -72,12 +72,16 @@ function startPush($, state) {
   schedulePush($, state);
 }
 
-function schedulePush($, state) {
+function later($, fn, milliseconds) {
   try {
-    $.clock.setTimeout(() => pushNotices($, state), 5000);
+    $.clock.setTimeout(fn, milliseconds);
   } catch {
-    setTimeout(() => pushNotices($, state), 5000);
+    setTimeout(fn, milliseconds);
   }
+}
+
+function schedulePush($, state) {
+  later($, () => pushNotices($, state), 5000);
 }
 
 async function pushNotices($, state) {
@@ -86,17 +90,25 @@ async function pushNotices($, state) {
       const session = await $.session.id();
       const pending = await context($, {operation: 'notices', session});
       if (pending.notices?.length) {
-        // The host holds read notices out of tool results until this push
-        // acknowledges them; a failed submission releases them back.
-        try {
-          await $.prompt.submit({text: noticePrompt(pending.notices)});
-        } catch (error) {
-          await context($, {operation: 'release', session});
-          throw error;
-        }
-        state.pushed = true;
-        state.pushError = null;
-        await context($, {operation: 'acknowledge', session, position: pending.position});
+        // The host claimed these notices for this push, so no result repeats
+        // them. A refused submission hands them back for the next push or
+        // result. Claude may hold a submission made during a turn until that
+        // turn ends; stop waiting after a while so later notices still wake
+        // the Main, and report the held one whenever it settles.
+        const claim = {session, position: pending.position};
+        const submitted = Promise.resolve()
+          .then(() => $.prompt.submit({text: noticePrompt(pending.notices)}))
+          .then(async () => {
+            state.pushed = true;
+            state.pushError = null;
+            await context($, {operation: 'acknowledge', ...claim});
+          }, async (error) => {
+            await context($, {operation: 'release', ...claim});
+            throw error;
+          });
+        const waited = await Promise.race([submitted.then(() => true),
+          new Promise((resolve) => later($, () => resolve(false), 10000))]);
+        if (!waited) submitted.catch((error) => { state.pushError = String(error); });
       }
     }
   } catch (error) {

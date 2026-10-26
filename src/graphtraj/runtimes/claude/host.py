@@ -41,18 +41,19 @@ class MainNotices:
     """Deliver each queued Main notice through one channel of this host process.
 
     The mod's prompt push and the next ``agents``/``tasks`` result both read
-    the same durable queue. While a push holds notices it read, a result does
-    not attach them; the push then acknowledges after Claude accepted its
-    submission, or releases them when submission failed, so the next push or
-    result delivers them instead.
+    the same durable queue, each reading and acknowledging under one lock, so
+    a notice goes to exactly one of them. The push claims what it read: its
+    ``release`` queues a batch Claude refused again, for the next push or
+    result, and ``acknowledge`` forgets a submitted batch. Nothing is held
+    while a submission is pending, so later notices still reach the Main.
     """
 
     def __init__(self, runner: Path) -> None:
         """Serve the durable queue of the project whose Runner is ``runner``."""
         self.runner  = runner
         self.lock    = threading.Lock()
-        # Sessions whose read notices await the mod's submission outcome.
-        self.pushing: set[str] = set()
+        # Batches the push claimed and has not yet reported, by (Session, position).
+        self.claimed: dict[tuple[str, int], list[dict]] = {}
 
     def attach(self, session: str, result: AgentsResult) -> AgentsResult:
         """Return ``result`` with this Session's undelivered notices, acknowledged once built.
@@ -63,8 +64,6 @@ class MainNotices:
         from graphtraj.execution.main_continuity import acknowledge_notices, pending_notices
 
         with self.lock:
-            if session in self.pushing:
-                return result
             try:
                 notices, position = pending_notices(self.runner, 'claude', session)
             except Exception as error:
@@ -79,8 +78,8 @@ class MainNotices:
             return result
 
     def push(self, document: dict) -> dict:
-        """Serve the mod's ``notices``, ``acknowledge`` and ``release`` operations."""
-        from graphtraj.execution.main_continuity import acknowledge_notices, pending_notices
+        """Serve the mod's ``notices`` claim and its ``acknowledge`` or ``release`` report."""
+        from graphtraj.execution.main_continuity import acknowledge_notices, pending_notices, queue_notice
 
         session = document.get('session')
         if (not isinstance(session, str) or str(UUID(session)) != session
@@ -90,15 +89,16 @@ class MainNotices:
             if document['operation'] == 'notices':
                 notices, position = pending_notices(self.runner, 'claude', session)
                 if notices:
-                    self.pushing.add(session)
+                    acknowledge_notices(self.runner, 'claude', session, position)
+                    self.claimed[(session, position)] = notices
                 return {'notices': notices, 'position': position}
-            if document['operation'] == 'release':
-                self.pushing.discard(session)
-                return {'released': True}
             if type(document.get('position')) is not int:
                 raise AgentsError('invalid-input', 'Expected the position returned by notices.')
-            acknowledge_notices(self.runner, 'claude', session, document['position'])
-            self.pushing.discard(session)
+            batch = self.claimed.pop((session, document['position']), [])
+            if document['operation'] == 'release':
+                for notice in batch:
+                    queue_notice(self.runner, {'runtime': 'claude', 'session': session}, notice['event'])
+                return {'released': True}
             return {'acknowledged': True}
 
 

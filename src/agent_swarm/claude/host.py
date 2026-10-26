@@ -84,8 +84,8 @@ class IndependentCalls(NativeCalls):
         """Own one independent backend; no project configuration is discovered."""
         self.queue: dict[str, list[dict]] = {}
         self.acknowledged: dict[str, int] = {}
-        # Sessions whose notices the mod read and has not yet submitted.
-        self.pushing: set[str] = set()
+        # Batches the mod claimed and has not yet reported, by (Session, position).
+        self.claimed: dict[tuple[str, int], list[dict]] = {}
         self.callers: dict[str, object] = {}
         self.control = AgentControl(root, {'claude': ClaudeDriver(cwd, settings)},
                                     event_receiver=self.receive)
@@ -102,10 +102,7 @@ class IndependentCalls(NativeCalls):
             result = handle_request(request, self.callers[session])
             # Reuse the native host's next-result delivery when prompt push is
             # unavailable (notably print mode); the mod renders this same fact.
-            # Notices a push holds are delivered by that push or after its release.
             with self.lock:
-                if session in self.pushing:
-                    return result
                 queue = self.queue.get(session, [])
                 notices = queue[self.acknowledged.get(session, 0):]
                 if not notices:
@@ -128,29 +125,29 @@ class IndependentCalls(NativeCalls):
         return False
 
     def notices(self, document: dict) -> dict:
-        """Return then acknowledge or release queued notices using the existing mod protocol.
+        """Claim queued notices for the mod's push; take back the batches Claude refused.
 
-        Read notices stay out of results until the mod acknowledges them after
-        its submission, or releases them when submission failed.
+        A claimed batch never reaches a result; ``release`` queues it again
+        for the next push or result and ``acknowledge`` forgets it.
         """
         session = document.get('session')
         if (not isinstance(session, str) or str(UUID(session)) != session
                 or set(document) - {'operation', 'session', 'position'}):
             raise AgentsError('invalid-input', 'Expected one native notice operation.')
-        queue = self.queue.get(session, [])
-        acknowledged = self.acknowledged.get(session, 0)
+        queue = self.queue.setdefault(session, [])
         if document['operation'] == 'notices':
-            if queue[acknowledged:]:
-                self.pushing.add(session)
-            return {'notices': queue[acknowledged:], 'position': len(queue)}
-        if document['operation'] == 'release':
-            self.pushing.discard(session)
-            return {'released': True}
+            notices = queue[self.acknowledged.get(session, 0):]
+            if notices:
+                self.acknowledged[session] = len(queue)
+                self.claimed[(session, len(queue))] = notices
+            return {'notices': notices, 'position': len(queue)}
         position = document.get('position')
-        if type(position) is not int or not acknowledged <= position <= len(queue):
+        if type(position) is not int:
             raise AgentsError('invalid-input', 'Expected the position returned by notices.')
-        self.acknowledged[session] = position
-        self.pushing.discard(session)
+        batch = self.claimed.pop((session, position), [])
+        if document['operation'] == 'release':
+            queue.extend(batch)
+            return {'released': True}
         return {'acknowledged': True}
 
 

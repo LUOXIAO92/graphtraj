@@ -25,14 +25,31 @@ from test_codex_app_server import peer
 
 
 @pytest.fixture
-def target(accepted_task: tuple, installed_commands: InstalledCommands, monkeypatch: pytest.MonkeyPatch) -> tuple:
-    """Use a real accepted task and original native Session, then integrate it."""
+def target(accepted_task: tuple, monkeypatch: pytest.MonkeyPatch) -> tuple:
+    """Use a real accepted, not yet integrated task and its original native Session.
+
+    Approved recovery handles time and Session only; an integrated Task is
+    reopened by graph revision first (b069acf, Worldline 20261026T170007.653194+0900).
+    """
+    root, worktrees, state, candidate = accepted_task
+    return _recovery_target(root, state, monkeypatch)
+
+
+@pytest.fixture
+def integrated_target(accepted_task: tuple, installed_commands: InstalledCommands,
+                      monkeypatch: pytest.MonkeyPatch) -> tuple:
+    """Use the same accepted task after it has been integrated."""
     root, worktrees, state, candidate = accepted_task
     integrated = run_process(
         [str(installed_commands.product), 'task', 'integrate', '--task-id', '83', '--',
          sys.executable, '-c', 'print("accepted development fixture")'], cwd=root,
     )
     assert integrated.returncode == 0, integrated.stderr
+    return _recovery_target(root, state, monkeypatch)
+
+
+def _recovery_target(root: Path, state: Path, monkeypatch: pytest.MonkeyPatch) -> tuple:
+    """Return Task 83's root Session and a complete recovery request for it."""
     mappings = [yaml.safe_load(path.read_text())
                 for path in (root / '.graphtraj/runner/sessions').glob('*/mapping.yml')]
     mapping = next(value for value in mappings if value['task_id'] == '83' and value['parent'] is None)
@@ -283,7 +300,8 @@ def test_recovered_unchanged_result_returns_to_integration(
     assert yaml.safe_load((task / 'execution-budget.yml').read_text()) == applied_proposal(root, recovered)['after']['budget']
 
     assert all((root / ref).read_bytes() == content for ref, content in original_evidence.items())
-    assert subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=dev, text=True).strip() == dev_commit
+    # The target is not yet integrated (b069acf), so this is its first integration into dev.
+    assert subprocess.run(['git', 'merge-base', '--is-ancestor', candidate, 'HEAD'], cwd=dev).returncode == 0
     stop = applied_proposal(root, recovered)['before']['stop']
     assert stop is not None
     assert yaml.safe_load((runner / 'sessions' / mapping['alias'] / 'stop.yml').read_text()) == {**stop, 'resumed': True}
@@ -552,7 +570,7 @@ def test_postapproval_race_returns_exact_differences(target: tuple, monkeypatch:
     result = invoke(root, arguments)
     assert result['recovery_status'] == 'stale'
     assert result['applied'] is False
-    assert {'field': 'task.status', 'expected': 'integrated', 'actual': 'blocked'} in result['differences']
+    assert {'field': 'task.status', 'expected': 'awaiting-integration', 'actual': 'blocked'} in result['differences']
     assert 'approved_minutes' not in yaml.safe_load((task / 'execution-budget.yml').read_text())
 
 
@@ -1931,7 +1949,7 @@ def test_time_grant_keeps_the_recorded_parent_and_notices_reach_the_current_main
 
 
 def test_wrongly_integrated_task_returns_to_recovery_through_graph_revision(
-    target: tuple, installed_commands: InstalledCommands, monkeypatch: pytest.MonkeyPatch,
+    integrated_target: tuple, installed_commands: InstalledCommands, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Task state is corrected by native graph revision; recovery then handles time and Session.
 
@@ -1942,7 +1960,7 @@ def test_wrongly_integrated_task_returns_to_recovery_through_graph_revision(
     from graphtraj.graph.task_protocol import TASK_PROPERTIES
     from graphtraj.interfaces import tools
 
-    root, task, mapping, arguments = target
+    root, task, mapping, arguments = integrated_target
     with pytest.raises(RunnerError, match='require task-graph revision'):
         invoke(root, arguments)
     details = tools.read_current_graph({'details': ['83']}, cwd=root).document['details']['83']

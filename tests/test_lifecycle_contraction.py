@@ -27,8 +27,9 @@ def test_installed_commands_reject_delivery_run_inputs(
         [str(installed_commands.runner), "--swarm-input", str(batch)],
         cwd=root, env=setup_environment(home, fake_codex),
     )
-    assert launch.returncode != 0, launch.stdout
-    assert yaml.safe_load(launch.stdout)["error"]["code"] == "invalid-input"
+    # Task 210: fields outside the shared swarm schema are CLI usage errors.
+    assert launch.returncode == 2, launch.stdout + launch.stderr
+    assert "unexpected parameter" in launch.stderr
     assert not fake_codex.log_file.exists()
     for command in (
         [str(installed_commands.product), "worldline", "project", "--run-root", str(root)],

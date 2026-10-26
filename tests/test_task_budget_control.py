@@ -434,6 +434,11 @@ def test_integration_helper_stops_and_returns_notice_to_its_caller(
     caller: str,
 ) -> None:
     """The synchronous integration helper interrupts instead of waiting on model work."""
+    from graphtraj.runtimes.replacement import caller_runtime
+
+    if caller == 'codex-binding' and caller_runtime() != 'codex':
+        pytest.skip('a CODEX_THREAD_ID caller is verified by Codex process ancestry '
+                    '(468b83f); this test process has no Codex ancestor')
     root, worktrees, state, _ = accepted_task
     dev = worktrees / 'dev'
     (dev / 'TEAM_ROUND_DELIVERED.txt').write_text('conflicting integration work\n')

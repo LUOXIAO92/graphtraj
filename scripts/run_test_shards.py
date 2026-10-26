@@ -32,7 +32,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 _OUTCOME = re.compile(r"(\d+) (failed|passed|skipped|xfailed|xpassed|errors?|deselected)\b")
-_SUMMARY = re.compile(r"^=+ .*\bin [\d.]+s\b.* =+$")
+_SUMMARY = re.compile(r"^=*\s*\d+ (failed|passed|skipped|xfailed|xpassed|errors?|deselected)\b.* in [\d.]+s\b")
 _PROBLEM = re.compile(r"^(FAILED|ERROR) (\S+)")
 
 

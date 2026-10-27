@@ -58,6 +58,9 @@ def isolate_stdio(log: Path) -> tuple[TextIO, TextIO]:
     return mcp_in, mcp_out
 
 
+REFUSAL_FILE = 'host-refusal.json'
+
+
 def serve_until_ended(mcp_in: TextIO, mcp_out: TextIO, responder) -> None:
     """Serve MCP; Claude Code ending the session (SIGINT) is a stop, not a crash."""
     try:
@@ -80,6 +83,9 @@ def serve_refusal(error: Exception, log: Path) -> None:
     print(reason['message'], file=sys.stderr, flush=True)
     mcp_in, mcp_out = isolate_stdio(log)
     print(time.strftime('%Y-%m-%dT%H:%M:%S%z'), json.dumps(reason, ensure_ascii=False), flush=True)
+    # The native mod's context step reads this instead of a missing channel.
+    record = log.with_name(REFUSAL_FILE)
+    record.write_text(json.dumps(reason, ensure_ascii=False), encoding='utf-8')
 
     def call(identity: object, params: dict) -> dict:
         """Answer each call with the startup reason; nothing is executed."""
@@ -87,8 +93,11 @@ def serve_refusal(error: Exception, log: Path) -> None:
         return result_response(identity, {'content': [{'type': 'text', 'text': json.dumps(document, ensure_ascii=False)}],
                                           'structuredContent': document, 'isError': True})
 
-    serve_until_ended(mcp_in, mcp_out, lambda message: respond(
-        message, tool_documents, call, {'name': 'agents', 'version': '0.1.0'}))
+    try:
+        serve_until_ended(mcp_in, mcp_out, lambda message: respond(
+            message, tool_documents, call, {'name': 'agents', 'version': '0.1.0'}))
+    finally:
+        record.unlink(missing_ok=True)
 
 
 def write_adoption(material: dict[str, object]) -> None:
@@ -232,6 +241,16 @@ def main() -> None:
         serve_refusal(ValueError(f'{options.config}: {error}'), log)
         return
     if options.operation == 'context':
+        if not channel_file.exists():
+            # No connection exists; report the refusal in one line, never a traceback.
+            record = channel_file.parent.parent / REFUSAL_FILE
+            try:
+                reason = json.loads(record.read_text(encoding='utf-8'))
+                print(f"{reason['code']}: {reason['message']}", file=sys.stderr)
+            except (OSError, ValueError, KeyError, TypeError):
+                print('The agents host for this project is not running; see '
+                      f"{channel_file.parent.parent / 'host.log'}.", file=sys.stderr)
+            raise SystemExit(1)
         endpoint = json.loads(channel_file.read_text())
         parent = native_parent(Path(endpoint['executable']), stage='context')
         if endpoint['parent'] != parent:
@@ -277,6 +296,7 @@ def main() -> None:
                                           'structuredContent': result.document, 'isError': result.failed})
 
     directory.mkdir(parents=True, exist_ok=True)
+    (directory.parent / REFUSAL_FILE).unlink(missing_ok=True)
     try:
         with worker_connection(directory, calls.context, authenticate=authenticate) as address:
             with channel_file.open('x') as stream:

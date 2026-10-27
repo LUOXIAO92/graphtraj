@@ -95,19 +95,16 @@ async function pushNotices($, state) {
     const pending = await context($, {operation: 'notices', session});
     claimed = pending.notices ?? [];
     if (claimed.length) {
-      if (typeof $.prompt?.submit !== 'function') {
-        // Only a missing interface stops pushing; notices go with the next result.
-        state.stopped = true;
-        throw new TypeError('prompt.submit is not a function');
-      }
       await $.prompt.submit({text: noticePrompt(claimed)});
       claimed = [];
       state.pushed = true;
       state.pushError = null;
     }
   } catch (error) {
-    // A host error (HooksError) is retried on the next tick.
     state.pushError = String(error);
+    // Only a missing interface stops pushing; notices then go with the next
+    // result. A host error (HooksError) is retried on the next tick.
+    if (error?.name === 'TypeError' && /not a function|undefined/.test(error.message)) state.stopped = true;
   } finally {
     if (claimed.length && session) {
       const ids = claimed.map((notice) => notice.id).filter((id) => typeof id === 'string');

@@ -1,5 +1,6 @@
 """Native mod contract checks; actual load and screen evidence stay separate."""
 from pathlib import Path
+import re
 import subprocess
 
 
@@ -145,6 +146,55 @@ assert.ok(submitted[0].includes('leader@l1') && submitted[0].includes('done'));
 assert.deepEqual(operations.at(-1), {operation: 'notices', session: 'main-session'});
 assert.equal(timers.length, 1);
 '''
+    result = subprocess.run(['node', '--input-type=module', '-e', program, module.as_uri()],
+                            capture_output=True, text=True, timeout=20)
+    assert result.returncode == 0, result.stderr
+
+
+# Claude Code's plugin validator accepts a ``$`` noun only at a call site:
+# ``$.noun.event(...)``. Reading one as a value refuses the whole mod.
+DOLLAR_VALUE = re.compile(r'\$\.[A-Za-z_]+\b(?!\.[A-Za-z_]+\()')
+
+
+def test_mod_spells_every_host_noun_at_its_call_site() -> None:
+    """The validator's ``$.noun`` rule holds for the shipped mod; a value probe is caught."""
+    text = Path('src/agent_swarm/claude/host_context.mjs').read_text()
+    assert DOLLAR_VALUE.findall(text) == []
+    assert DOLLAR_VALUE.findall("if (typeof $.prompt?.submit !== 'function') {}") == ['$.prompt']
+    assert DOLLAR_VALUE.findall("await $.prompt.submit({text});") == []
+
+
+def test_mod_stops_pushing_only_when_prompt_submission_is_missing(tmp_path: Path) -> None:
+    """Without prompt.submit the claimed notices are requeued and the push stops for good."""
+    module = tmp_path / 'host_context.mjs'
+    module.write_text(Path('src/agent_swarm/claude/host_context.mjs').read_text())
+    program = r"""
+import assert from 'node:assert/strict';
+const {register} = await import(process.argv[1]);
+const handlers = new Map();
+register((name, matcher, fn) => {handlers.set(fn && matcher.tool ? `${name}:${matcher.tool}` : name, fn ?? matcher); return {catch() {}};});
+const operations = [], timers = [];
+const pending = {notices: [{at: 1, id: 'e1:completed', event: {alias: 'a', event: 'completed', message: 'done'}}], position: 0};
+const host = {
+ session: {id: async () => 'main-session', cwd: async () => '/p'},
+ command: {register: async () => {}},
+ env: {get: async key => key.endsWith('PYTHON') ? '/venv/python' : '/host/config'},
+ process: {run: async (argv, options) => {
+   const document = JSON.parse(options.stdin);
+   operations.push(document);
+   return {exitCode: 0, stdout: JSON.stringify(document.operation === 'notices' ? pending : {requeued: 1}), stderr: ''};
+ }},
+ prompt: {},
+ clock: {setTimeout: (fn) => timers.push(fn)},
+ ui: {log: () => {}},
+};
+await handlers.get('session.start')(host, {}, async () => 'started');
+await timers.shift()();
+assert.deepEqual(operations.at(-1), {operation: 'requeue', session: 'main-session', ids: ['e1:completed']});
+const count = operations.length;
+await timers.shift()();
+assert.equal(operations.length, count);
+"""
     result = subprocess.run(['node', '--input-type=module', '-e', program, module.as_uri()],
                             capture_output=True, text=True, timeout=20)
     assert result.returncode == 0, result.stderr

@@ -132,17 +132,16 @@ const host = {
  clock: {setTimeout: (fn) => timers.push(fn)},
  ui: {log: () => {}},
 };
-const tick = async () => { for (const fn of timers.splice(0)) await fn(); };
 await handlers.get('session.start')(host, {}, async () => 'started');
-await tick();
+await timers.shift()();
 assert.equal(submitted.length, 0);
 assert.ok(!operations.some(item => item.operation === 'acknowledge'));
 fail = false;
-await tick();
+await timers.shift()();
 assert.equal(submitted.length, 1);
 assert.ok(submitted[0].includes('leader@l1') && submitted[0].includes('done'));
 assert.deepEqual(operations.at(-1), {operation: 'acknowledge', session: 'main-session', position: 1});
-assert.ok(timers.length >= 1);
+assert.equal(timers.length, 1);
 '''
     result = subprocess.run(['node', '--input-type=module', '-e', program, module.as_uri()],
                             capture_output=True, text=True, timeout=20)

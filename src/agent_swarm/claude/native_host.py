@@ -41,7 +41,7 @@ class NativeCalls:
                     self.queued.append(self.pending)
                 self.pending = None
                 return {'ended': True}
-            if operation in {'notices', 'acknowledge', 'release'}:
+            if operation in {'notices', 'acknowledge'}:
                 return self.notices(document)
             if operation != 'prepare' or set(document) != {'operation', 'tool', 'session', 'cwd', 'agent', 'request'}:
                 raise AgentsError('invalid-input', 'Expected one native per-call context.')

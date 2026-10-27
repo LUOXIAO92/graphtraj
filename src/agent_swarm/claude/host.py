@@ -84,8 +84,6 @@ class IndependentCalls(NativeCalls):
         """Own one independent backend; no project configuration is discovered."""
         self.queue: dict[str, list[dict]] = {}
         self.acknowledged: dict[str, int] = {}
-        # Batches the mod claimed and has not yet reported, by (Session, position).
-        self.claimed: dict[tuple[str, int], list[dict]] = {}
         self.callers: dict[str, object] = {}
         self.control = AgentControl(root, {'claude': ClaudeDriver(cwd, settings)},
                                     event_receiver=self.receive)
@@ -125,29 +123,19 @@ class IndependentCalls(NativeCalls):
         return False
 
     def notices(self, document: dict) -> dict:
-        """Claim queued notices for the mod's push; take back the batches Claude refused.
-
-        A claimed batch never reaches a result; ``release`` queues it again
-        for the next push or result and ``acknowledge`` forgets it.
-        """
+        """Return then acknowledge queued notices using the existing mod protocol."""
         session = document.get('session')
         if (not isinstance(session, str) or str(UUID(session)) != session
                 or set(document) - {'operation', 'session', 'position'}):
             raise AgentsError('invalid-input', 'Expected one native notice operation.')
-        queue = self.queue.setdefault(session, [])
+        queue = self.queue.get(session, [])
+        acknowledged = self.acknowledged.get(session, 0)
         if document['operation'] == 'notices':
-            notices = queue[self.acknowledged.get(session, 0):]
-            if notices:
-                self.acknowledged[session] = len(queue)
-                self.claimed[(session, len(queue))] = notices
-            return {'notices': notices, 'position': len(queue)}
+            return {'notices': queue[acknowledged:], 'position': len(queue)}
         position = document.get('position')
-        if type(position) is not int:
+        if type(position) is not int or not acknowledged <= position <= len(queue):
             raise AgentsError('invalid-input', 'Expected the position returned by notices.')
-        batch = self.claimed.pop((session, position), [])
-        if document['operation'] == 'release':
-            queue.extend(batch)
-            return {'released': True}
+        self.acknowledged[session] = position
         return {'acknowledged': True}
 
 

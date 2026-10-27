@@ -8,7 +8,7 @@ from uuid import uuid4
 import pytest
 
 from agent_swarm import AgentsError, AgentsResult
-from graphtraj.runtimes.claude.host import MainNotices, NativeCalls, native_parent
+from graphtraj.runtimes.claude.host import NativeCalls, native_parent
 from graphtraj.runtimes.claude.mcp import serve
 
 
@@ -175,16 +175,15 @@ def test_context_uses_owner_executable_when_launcher_updates(tmp_path: Path, mon
 
 
 def test_mod_notice_operations_read_then_acknowledge(tmp_path: Path) -> None:
-    """The mod claims pending Main notices and acknowledges a position it was given."""
+    """The mod reads pending Main notices and acknowledges a position it was given."""
     from graphtraj.execution.main_continuity import queue_notice
 
     session = str(uuid4())
-    host = NativeCalls(lambda session, cwd: None, tmp_path, MainNotices(tmp_path))
+    host = NativeCalls(lambda session, cwd: None, tmp_path, tmp_path)
     queue_notice(tmp_path, {'runtime': 'claude', 'session': session}, {'alias': 'leader@l1'})
     pending = host.context({'operation': 'notices', 'session': session})
     assert [item['event']['alias'] for item in pending['notices']] == ['leader@l1']
-    # The read claimed them: neither a second read nor a result repeats them.
-    assert host.context({'operation': 'notices', 'session': session})['notices'] == []
+    assert host.context({'operation': 'notices', 'session': session})['notices'] == pending['notices']
     host.context({'operation': 'acknowledge', 'session': session, 'position': pending['position']})
     assert host.context({'operation': 'notices', 'session': session})['notices'] == []
     with pytest.raises(AgentsError):

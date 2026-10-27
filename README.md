@@ -191,8 +191,9 @@ by the configured `claude` are refused the same way with their own reason.
 configured directory. A child stopped because Claude switched its model
 (for example a safeguard fallback) ends `failed` with `RUNTIME_REQUEST_FAILED`;
 its `last_result.error` names the requested model, the observed model and the
-Runtime's reason, or says that none was provided. A failed child sends no
-completion notice; read the reason with `wait` or `status`.
+Runtime's reason, or says that none was provided. A failed or interrupted
+child also notifies the Main with that reason, unless a `wait` or `status`
+already showed it.
 
 ### Pi and DSH
 
@@ -212,7 +213,7 @@ independent host (see above), so their rows are not available independently.
 | `create`, `status`, `wait`, `send`, `interrupt`, `resume`, `retire` | Yes; `resume` continues the same child Session | Yes; `resume` continues the same child Session |
 | Choose the child Runtime | Only `claude`; `codex` returns `unsupported-runtime` | Only `codex`; `claude` returns `unsupported-runtime` |
 | Choose model or effort per child | No; one setting for all children, and a `model` argument is rejected | No; one setting for all children, and `configuration` returns `invalid-config` |
-| Completion notice to the Main | Yes: pushed into the Main Session, or attached as `main_notices` to the next `agents` result. Known defect: a completion already returned by `wait` can be pushed again | Yes: each completion is sent once to the parent Session as a host event |
+| Completion notice to the Main | Yes, once: pushed into the Main Session, or attached as `main_notices` to the next `agents` result; a completion already returned by `wait` or `status` is not pushed again | Yes: each completion is sent once to the parent Session as a host event |
 | Relay a child's native approval request | Yes, by polling: `wait` or `status` shows `pending_requests`, then `requests` and `reply` | No: native `auto_review` handles children's requests, and the parent shares the same settings |
 | Native history | Child native Sessions are retained under `.agents-control/native/` and continued by `resume` | `--resume` continues the parent Session with its children |
 | Normalized archive | No: with `save_normalized_sessions` on, every `agents` call returns `archive-unavailable` naming the setting | No: with `save_normalized_sessions` on, the host exits with `archive-unavailable` naming the setting |

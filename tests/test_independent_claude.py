@@ -154,8 +154,11 @@ def test_model_change_failure_names_both_models_and_reason(
     record = json.loads((tmp_path / 'agents' / 'control' / 'agents'
                          / f"{created.document['agent']}.json").read_text())
     assert record['executions'][-1]['error'] == last['error']
-    # Today a failure without a last message sends no notice (control.py finished).
-    assert notices == [] and record['executions'][-1].get('notification') is None
+    # A failure needs the parent even without a last message (Task 367 result 3(d)):
+    # the host receives one notice carrying the persisted error.
+    assert [(notice['outcome'], notice['body'], notice['error']) for notice in notices] == [
+        ('failed', None, last['error'])]
+    assert record['executions'][-1]['notification'] == 'delivered'
 
 
 @pytest.mark.parametrize('case', ['elsewhere', 'archive'])

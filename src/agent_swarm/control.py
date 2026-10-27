@@ -55,6 +55,7 @@ from typing import Any, Callable, Iterator, Mapping, Protocol
 
 from agent_swarm.config import read_config
 from agent_swarm.locks import exclusive
+from agent_swarm.notices import needs_parent
 from agent_swarm.tool import AgentsError, AgentsResult, Binding, Caller, Outcome, SessionArchive, bind
 
 
@@ -244,16 +245,22 @@ class ExecutionEvents:
             current = _running(record)
             if current is None or current['id'] != self._execution:
                 return
-            receiver = self._control._receivers.get(record['parent'], (None, self._control.event_receiver))[1]
+            native = self._control._receivers.get(record['parent'])
+            receiver = native[1] if native is not None else self._control.event_receiver
             notice = {'parent': record['parent'], 'agent': record['agent'],
                       'session': current['session'], 'execution': current['id'],
-                      'body': last_message, 'outcome': outcome}
+                      'body': last_message, 'outcome': outcome,
+                      'creator': dict(record['creator']),
+                      'error': dict(error) if error else None}
             current.update(
                 state="ended", ended_at=_now(), outcome=outcome,
                 last_message=last_message, terminal_confirmed=terminal_confirmed,
                 error=dict(error) if error else None,
             )
-            notify = receiver is not None and bool(last_message)
+            # A native parent continues with the child's reply, so it needs a
+            # body; a host receiver also announces ends without one.
+            notify = (receiver is not None and (bool(last_message) or native is None)
+                      and needs_parent(outcome, active_members=self._control._active_children(self._agent)))
             if notify:
                 current['notification'] = 'pending'
             # Keep the native receiver while this Agent is in standby so its
@@ -263,7 +270,12 @@ class ExecutionEvents:
         # and repeated finished() cannot invoke the receiver a second time.
         if notify:
             try:
-                delivery = 'delivered' if receiver(notice) is True else 'unavailable'
+                # A receiver that only queued the notice for its host returns
+                # 'queued': the body stays readable, and wait/status showing it
+                # acknowledges the queued notice instead of hiding the result.
+                accepted = receiver(notice)
+                delivery = ('queued' if accepted == 'queued'
+                            else 'delivered' if accepted is True else 'unavailable')
             except Exception:
                 # Delivery may have happened before the transport failed. Do not
                 # re-inject the body through wait/status or retry automatically.
@@ -717,6 +729,18 @@ class AgentControl:
             record['settings'] = deepcopy(dict(settings))
             return self._document(record)
 
+    def _active_children(self, agent: str) -> int:
+        """Count this Agent's direct children that still have a running execution."""
+        count = 0
+        for path in (self.root / 'control' / 'agents').glob('*.json'):
+            try:
+                record = json.loads(path.read_text(encoding='utf-8'))
+            except (OSError, ValueError):
+                continue
+            if record.get('parent') == agent and _running(record) is not None:
+                count += 1
+        return count
+
     def _load(self, agent: str) -> dict | None:
         """Read one record without the lock, or ``None`` when absent."""
         try:
@@ -1005,7 +1029,7 @@ class AgentControl:
                 document["last_result"]["runtime_exit"] = deepcopy(runtime_exit)
             if last.get('notification'):
                 document['last_result']['notification'] = last['notification']
-                if last['notification'] != 'unavailable':
+                if last['notification'] not in ('unavailable', 'queued'):
                     document['last_result']['last_message'] = None
         if record["retired_at"] is not None:
             document["retired_at"] = record["retired_at"]

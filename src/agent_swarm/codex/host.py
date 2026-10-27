@@ -111,8 +111,8 @@ class CodexHost(CodexManagedExecution):
             return False
         # The backend calls this only after retaining the child's native outcome.
         # No model-provided string or Session ID selects the recipient.
-        event = {'source': 'agents', 'alias': notice['agent'], 'event': 'completed',
-                 'message': notice['body']}
+        event = {'source': 'agents', 'alias': notice['agent'], 'event': notice['outcome'],
+                 'message': notice['body'] or (notice.get('error') or {}).get('message') or notice['outcome']}
         # Once submitted, a lost acknowledgement is unconfirmed, not unavailable.
         # Let the existing backend retain that distinction and suppress duplicates.
         asyncio.run_coroutine_threadsafe(

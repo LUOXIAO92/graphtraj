@@ -64,7 +64,8 @@ async function context($, document) {
 }
 
 // Deliver member events into the Main's turn or its idle Session through
-// Claude's own prompt submission; acknowledge only after it was accepted.
+// Claude's own prompt submission. Reading claims the notices, so a tool result
+// never shows them again; a failed submission returns them to the queue.
 // Without that host capability the notices stay queued for the next result.
 function startPush($, state) {
   if (state.pushing) return;
@@ -73,37 +74,53 @@ function startPush($, state) {
 }
 
 function schedulePush($, state) {
+  const run = () => pushNotices($, state).finally(() => schedulePush($, state));
   try {
-    $.clock.setTimeout(() => pushNotices($, state), 5000);
+    $.clock.setTimeout(run, 5000);
   } catch {
-    setTimeout(() => pushNotices($, state), 5000);
+    setTimeout(run, 5000);
   }
 }
 
+// One push at a time per process: the timer and the re-check after each
+// agents/tasks call share it, so a resumed Session or an overlapping
+// completion never starts a second loop.
 async function pushNotices($, state) {
+  if (state.inflight || state.busy || state.stopped) return;
+  state.inflight = true;
+  let claimed = [];
+  let session;
   try {
-    if (!state.busy) {
-      const session = await $.session.id();
-      const pending = await context($, {operation: 'notices', session});
-      if (pending.notices?.length) {
-        await $.prompt.submit({text: noticePrompt(pending.notices)});
-        state.pushed = true;
-        state.pushError = null;
-        await context($, {operation: 'acknowledge', session, position: pending.position});
+    session = await $.session.id();
+    const pending = await context($, {operation: 'notices', session});
+    claimed = pending.notices ?? [];
+    if (claimed.length) {
+      if (typeof $.prompt?.submit !== 'function') {
+        // Only a missing interface stops pushing; notices go with the next result.
+        state.stopped = true;
+        throw new TypeError('prompt.submit is not a function');
       }
+      await $.prompt.submit({text: noticePrompt(claimed)});
+      claimed = [];
+      state.pushed = true;
+      state.pushError = null;
     }
   } catch (error) {
+    // A host error (HooksError) is retried on the next tick.
     state.pushError = String(error);
-    // Only a missing interface stops the loop; a host error (HooksError) is
-    // retried, and the notices stay queued until a submit succeeds.
-    if (error?.name === 'TypeError' && /not a function|undefined/.test(error.message)) return;
+  } finally {
+    if (claimed.length && session) {
+      const ids = claimed.map((notice) => notice.id).filter((id) => typeof id === 'string');
+      try { await context($, {operation: 'requeue', session, ids}); }
+      catch (error) { state.pushError = String(error); }
+    }
+    state.inflight = false;
   }
-  schedulePush($, state);
 }
 
 export function register(on) {
   const displayed = new Set();
-  const state = {busy: false, pushing: false, pushed: false, pushError: null};
+  const state = {busy: false, pushing: false, inflight: false, stopped: false, pushed: false, pushError: null};
 
   on('session.start', async ($, event, next) => {
     await $.command.register({name: 'agents-context',
@@ -151,6 +168,8 @@ export function register(on) {
         try { await context($, {operation: 'end'}); }
         catch (error) { $.ui.log('agents context cleanup failed: ' + String(error)); }
         state.busy = false;
+        // Re-check at once: a notice queued during the call need not wait a tick.
+        if (state.pushing) pushNotices($, state);
       }
     }).catch(async ($, event, next) => next.called ? next(event)
       : {deny: 'The native agents context hook failed; no call was authorized.'});

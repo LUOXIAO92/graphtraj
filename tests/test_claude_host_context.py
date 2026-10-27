@@ -102,7 +102,7 @@ assert.deepEqual(contexts.at(-1), {operation: 'end'});
 
 
 def test_queued_notices_are_pushed_into_main_then_acknowledged(tmp_path: Path) -> None:
-    """With prompt submission the mod delivers pending notices and acknowledges only after it."""
+    """The mod claims pending notices, submits them once and returns them on a failed submit."""
     module = tmp_path / 'host_context.mjs'
     module.write_text(Path('src/agent_swarm/claude/host_context.mjs').read_text())
     program = r'''
@@ -112,7 +112,7 @@ const handlers = new Map();
 register((name, matcher, fn) => {handlers.set(fn && matcher.tool ? `${name}:${matcher.tool}` : name, fn ?? matcher); return {catch() {}};});
 const operations = [], submitted = [], timers = [];
 let fail = true;
-const pending = {notices: [{at: 1, event: {source: 'graphtraj', alias: 'leader@l1', event: 'completed', message: 'done'}}], position: 1};
+const pending = {notices: [{at: 1, id: 'e1:completed', event: {source: 'graphtraj', alias: 'leader@l1', event: 'completed', message: 'done'}}], position: 0};
 const host = {
  session: {id: async () => 'main-session', cwd: async () => '/p'},
  command: {register: async () => {}},
@@ -120,7 +120,7 @@ const host = {
  process: {run: async (argv, options) => {
    const document = JSON.parse(options.stdin);
    operations.push(document);
-   const reply = document.operation === 'notices' ? pending : {acknowledged: true};
+   const reply = document.operation === 'notices' ? pending : {requeued: 1};
    return {exitCode: 0, stdout: JSON.stringify(reply), stderr: ''};
  }},
  prompt: {submit: async input => {
@@ -135,12 +135,14 @@ const host = {
 await handlers.get('session.start')(host, {}, async () => 'started');
 await timers.shift()();
 assert.equal(submitted.length, 0);
-assert.ok(!operations.some(item => item.operation === 'acknowledge'));
+// A failed submission returns the claimed notices; the loop keeps running.
+assert.deepEqual(operations.at(-1), {operation: 'requeue', session: 'main-session', ids: ['e1:completed']});
+assert.equal(timers.length, 1);
 fail = false;
 await timers.shift()();
 assert.equal(submitted.length, 1);
 assert.ok(submitted[0].includes('leader@l1') && submitted[0].includes('done'));
-assert.deepEqual(operations.at(-1), {operation: 'acknowledge', session: 'main-session', position: 1});
+assert.deepEqual(operations.at(-1), {operation: 'notices', session: 'main-session'});
 assert.equal(timers.length, 1);
 '''
     result = subprocess.run(['node', '--input-type=module', '-e', program, module.as_uri()],

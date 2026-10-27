@@ -101,8 +101,32 @@ class GraphTrajAgents:
         # Every verified Main continues the roots of the project's Main, whose
         # claims live in the project's current Runner directory.
         self.control = AgentControl(swarm_root(root), {name: driver for name in SUPPORTED_RUNTIMES},
-                                    roots=MainRoots(runner_directory(root)))
+                                    roots=MainRoots(runner_directory(root)),
+                                    event_receiver=self._main_notice)
         default_config(swarm_root(root), save_normalized_sessions=True)
+
+    def _main_notice(self, notice: dict) -> bool | str:
+        """Queue the end of a Main-created root Agent for the Main now in control.
+
+        The core calls this only for an end its parent must handle. The notice
+        takes the same Runtime Adapter path as a Task member's, so it follows
+        Main continuity and is shown once.
+        """
+        from graphtraj.configuration.project_configuration import runner_directory
+        from graphtraj.execution.main_continuity import current_main, recorded_by_main, route_notice
+        from graphtraj.runtimes.runtime_adapter import select_runtime_adapter
+
+        runner = runner_directory(self.root)
+        current = current_main(runner)
+        if notice['parent'] is not None or current is None or not recorded_by_main(runner, notice['creator']):
+            return False
+        address = route_notice(runner, {**current['connection'], 'runtime': current['runtime'],
+                                        'session': current['session']})
+        message = notice['body'] or (notice.get('error') or {}).get('message') or notice['outcome']
+        select_runtime_adapter(current['runtime']).send_host_event(address, {
+            'source': 'agents', 'alias': notice['agent'], 'event': notice['outcome'],
+            'message': message, 'execution': notice['execution']})
+        return 'queued'
 
     def operate(self, action: str, arguments: Mapping[str, Any], binding: Binding) -> Outcome:
         """Perform one validated action, translating GraphTraj rejections."""
@@ -288,10 +312,31 @@ class GraphTrajAgents:
         return {"termination_confirmed": confirmed}
 
     def _wait(self, agent: str, timeout_seconds: float) -> tuple[dict, bool]:
-        """Wait at most ``timeout_seconds`` for an idle member or a pending request."""
-        from graphtraj.execution.runner_control import pending_requests
-        from graphtraj.execution.runner_status import status_aliases
+        """Wait at most ``timeout_seconds`` for an idle member or a pending request.
 
+        While it waits, and briefly after it returns, the member's end is shown
+        by this wait, so the Runner keeps that end notice in the records
+        instead of also sending it to the waiting parent.
+        """
+        from graphtraj.execution.runner_control import AWAIT_GRACE_SECONDS, mark_awaited, pending_requests
+        from graphtraj.execution.runner_status import read_alias_mapping, status_aliases
+        from graphtraj.workspace.runner_project import discover_runner_directory
+
+        try:
+            directory = read_alias_mapping(discover_runner_directory(self.root), agent)[1]
+        except RunnerError:
+            directory = None
+        if directory is not None:
+            mark_awaited(directory, time.time() + timeout_seconds + AWAIT_GRACE_SECONDS)
+        try:
+            return self._wait_idle(agent, timeout_seconds, pending_requests, status_aliases)
+        finally:
+            if directory is not None:
+                mark_awaited(directory, time.time() + AWAIT_GRACE_SECONDS)
+
+    def _wait_idle(self, agent: str, timeout_seconds: float, pending_requests: Callable,
+                   status_aliases: Callable) -> tuple[dict, bool]:
+        """Poll the member until it is idle, has a pending request or the wait ends."""
         deadline = time.monotonic() + timeout_seconds
         while True:
             response = status_aliases([agent], self.root)

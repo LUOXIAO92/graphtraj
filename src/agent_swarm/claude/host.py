@@ -16,6 +16,7 @@ from agent_swarm.connection import connection_operation, worker_connection
 from agent_swarm.discovery import handle_request
 from agent_swarm.process import process_ancestors, process_executable
 from agent_swarm.mcp import serve, respond, tool_documents, result_response, error_response
+from agent_swarm.notices import END_EVENTS, notice_id
 from .native_host import NativeCalls
 from .driver import ClaudeDriver
 
@@ -78,12 +79,13 @@ def write_adoption(material: dict[str, object]) -> None:
 
 
 class IndependentCalls(NativeCalls):
-    """Bind the verified native Main and retain its execution notices until ACK."""
+    """Bind the verified native Main and hold its execution notices until one reader claims them."""
 
     def __init__(self, root: Path, cwd: Path, settings: dict) -> None:
         """Own one independent backend; no project configuration is discovered."""
         self.queue: dict[str, list[dict]] = {}
-        self.acknowledged: dict[str, int] = {}
+        self.claimed: dict[str, dict[str, dict]] = {}
+        self.ended: dict[str, set[str]] = {}
         self.callers: dict[str, object] = {}
         self.control = AgentControl(root, {'claude': ClaudeDriver(cwd, settings)},
                                     event_receiver=self.receive)
@@ -101,42 +103,66 @@ class IndependentCalls(NativeCalls):
             # Reuse the native host's next-result delivery when prompt push is
             # unavailable (notably print mode); the mod renders this same fact.
             with self.lock:
-                queue = self.queue.get(session, [])
-                notices = queue[self.acknowledged.get(session, 0):]
-                if not notices:
-                    return result
-                result = AgentsResult({**result.document, 'main_notices': notices}, failed=result.failed)
-                self.acknowledged[session] = len(queue)
-            return result
+                if not result.failed:
+                    self.ended.setdefault(session, set()).update(seen_ends(request, result.document))
+                notices = self.claim(session)
+            if not notices:
+                return result
+            return AgentsResult({**result.document, 'main_notices': notices}, failed=result.failed)
         return call
 
-    def receive(self, event: dict) -> bool:
-        """Queue the same completion fact for the native mod's prompt submission."""
-        for session, caller in list(self.callers.items()):
-            result = caller({'action': 'status', 'agent': event['agent']})
-            if result.failed:
-                continue
-            with self.lock:
-                self.queue.setdefault(session, []).append({'event': {
-                    'alias': event['agent'], 'event': event['outcome'], 'message': event['body']}})
-            return True
-        return False
+    def receive(self, event: dict) -> bool | str:
+        """Queue an end its creating Main must handle for that Main's mod to submit."""
+        session = (event.get('creator') or {}).get('session')
+        if event['parent'] is not None or session not in self.callers:
+            return False
+        message = event['body'] or (event.get('error') or {}).get('message') or event['outcome']
+        with self.lock:
+            self.queue.setdefault(session, []).append({
+                'id': notice_id(event['execution'], event['outcome']),
+                'event': {'alias': event['agent'], 'event': event['outcome'],
+                          'message': message, 'execution': event['execution']}})
+        return 'queued'
+
+    def claim(self, session: str) -> list[dict]:
+        """Take this Session's queued notices once; an end already shown is skipped. Hold the lock."""
+        taken, self.queue[session] = self.queue.get(session, []), []
+        ended = self.ended.get(session, set())
+        taken = [notice for notice in taken if not (notice['event']['execution'] in ended
+                                                    and notice['event']['event'] in END_EVENTS)]
+        self.claimed.setdefault(session, {}).update((notice['id'], notice) for notice in taken)
+        return taken
 
     def notices(self, document: dict) -> dict:
-        """Return then acknowledge queued notices using the existing mod protocol."""
+        """Serve the mod's claim/requeue protocol; the caller holds the lock."""
         session = document.get('session')
         if (not isinstance(session, str) or str(UUID(session)) != session
-                or set(document) - {'operation', 'session', 'position'}):
+                or set(document) - {'operation', 'session', 'position', 'ids'}):
             raise AgentsError('invalid-input', 'Expected one native notice operation.')
-        queue = self.queue.get(session, [])
-        acknowledged = self.acknowledged.get(session, 0)
         if document['operation'] == 'notices':
-            return {'notices': queue[acknowledged:], 'position': len(queue)}
-        position = document.get('position')
-        if type(position) is not int or not acknowledged <= position <= len(queue):
+            return {'notices': self.claim(session), 'position': 0}
+        if document['operation'] == 'requeue':
+            ids = document.get('ids')
+            if not isinstance(ids, list) or not all(isinstance(item, str) for item in ids):
+                raise AgentsError('invalid-input', 'Expected the notice ids to queue again.')
+            claimed = self.claimed.get(session, {})
+            waiting = {notice['id'] for notice in self.queue.get(session, [])}
+            again = [claimed[item] for item in ids if item in claimed and item not in waiting]
+            self.queue.setdefault(session, []).extend(again)
+            return {'requeued': len(again)}
+        if type(document.get('position')) is not int:
             raise AgentsError('invalid-input', 'Expected the position returned by notices.')
-        self.acknowledged[session] = position
         return {'acknowledged': True}
+
+
+def seen_ends(request: dict, document: dict) -> list[str]:
+    """Executions whose end one ``wait`` or ``status`` result showed the Main."""
+    result = document.get('result')
+    if (request.get('action') != 'execute' or request.get('feature') not in {'wait', 'status'}
+            or not isinstance(result, dict) or result.get('state') != 'standby'
+            or not isinstance(result.get('last_result'), dict)):
+        return []
+    return [result['last_result'].get('id')]
 
 
 def adoption_material(root: Path, claude: Path) -> dict[str, object]:

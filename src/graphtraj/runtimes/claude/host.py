@@ -20,7 +20,7 @@ from pathlib import Path
 import sys
 import threading
 import time
-from typing import Callable, TextIO
+from typing import Callable, Mapping, TextIO
 from uuid import UUID
 
 from agent_swarm.claude import native_host
@@ -41,23 +41,60 @@ class NativeCalls(NativeCallsBase):
     """Supply GraphTraj's durable Main notice queue to the native association."""
 
     def notices(self, document: dict) -> dict:
-        """Let the mod push queued notices into the idle Main, acknowledging after submit.
+        """Let the mod push queued notices into the idle Main.
 
-        Only the authenticated mod of this same Claude process reaches this.
+        ``notices`` claims them, so a tool result cannot attach them again;
+        ``requeue`` returns those whose prompt submission failed. Only the
+        authenticated mod of this same Claude process reaches this.
         """
-        from graphtraj.execution.main_continuity import acknowledge_notices, pending_notices
+        from graphtraj.execution.main_continuity import claim_notices, requeue_notices
 
-        session = document.get('session')
-        if (self.runner is None or not isinstance(session, str) or str(UUID(session)) != session
-                or set(document) - {'operation', 'session', 'position'}):
-            raise AgentsError('invalid-input', 'Expected one native notice operation.')
-        if document['operation'] == 'notices':
-            notices, position = pending_notices(self.runner, 'claude', session)
-            return {'notices': notices, 'position': position}
-        if type(document.get('position')) is not int:
-            raise AgentsError('invalid-input', 'Expected the position returned by notices.')
-        acknowledge_notices(self.runner, 'claude', session, document['position'])
-        return {'acknowledged': True}
+        return notice_operation(document, self.runner is not None,
+                                lambda session: claim_notices(self.runner, 'claude', session),
+                                lambda session, ids: requeue_notices(self.runner, 'claude', session, ids))
+
+
+def notice_operation(document: dict, available: bool, claim: Callable, requeue: Callable) -> dict:
+    """Serve the mod's notice protocol over one claiming queue.
+
+    ``acknowledge`` remains accepted from an earlier mod; claiming already
+    took the notices, so it changes nothing.
+    """
+    session = document.get('session')
+    if (not available or not isinstance(session, str) or str(UUID(session)) != session
+            or set(document) - {'operation', 'session', 'position', 'ids'}):
+        raise AgentsError('invalid-input', 'Expected one native notice operation.')
+    if document['operation'] == 'notices':
+        return {'notices': claim(session), 'position': 0}
+    if document['operation'] == 'requeue':
+        ids = document.get('ids')
+        if not isinstance(ids, list) or not all(isinstance(item, str) for item in ids):
+            raise AgentsError('invalid-input', 'Expected the notice ids to queue again.')
+        return {'requeued': requeue(session, ids)}
+    if type(document.get('position')) is not int:
+        raise AgentsError('invalid-input', 'Expected the position returned by notices.')
+    return {'acknowledged': True}
+
+
+def seen_ends(tool: str, request: Mapping, document: Mapping) -> list[str]:
+    """Executions whose end one agents ``wait`` or ``status`` result showed the Main.
+
+    A core Agent in standby shows its last result; an idle Task member names
+    its last execution. A running execution's end is not shown yet.
+    """
+    if (tool != 'agents' or request.get('action') != 'execute'
+            or request.get('feature') not in {'wait', 'status'}):
+        return []
+    result = document.get('result')
+    if not isinstance(result, Mapping) or not isinstance(document.get('agent'), str):
+        return []
+    aliases = result.get('aliases')
+    member = aliases[0] if isinstance(aliases, list) and aliases else result
+    if isinstance(result.get('last_result'), Mapping) and result.get('state') == 'standby':
+        return [result['last_result'].get('id')]
+    if isinstance(member, Mapping) and member.get('activity') == 'idle':
+        return [member.get('execution_id')]
+    return []
 
 
 def native_parent(executable: Path, *, stage: str = 'serve') -> int:
@@ -85,11 +122,12 @@ def main_calls(root: Path, backend: object, archive: object) -> Callable[[str, P
     another Main continues the project, its control calls are refused until a
     new host process. ``backend`` is the same ``agents`` backend the Codex Main
     uses (``GraphTrajAgents``: every Runtime driver and Task member Sessions).
-    Queued member notices not yet delivered are returned with each result and
-    acknowledged only once that result is built; a pickup failure is reported
-    beside the result and never fails the executed call.
+    Queued member notices not yet delivered are claimed and returned with each
+    result; a pickup failure is reported beside the result and never fails the
+    executed call. An end the result itself shows (``wait``/``status``) is
+    acknowledged, so the same end is not pushed as a notice as well.
     """
-    from graphtraj.execution.main_continuity import acknowledge_notices, claimable, pending_notices
+    from graphtraj.execution.main_continuity import acknowledge_ends, claim_notices, claimable
     from graphtraj.execution.runner_connection import parent_connection
     from graphtraj.execution.runner_status import runtime_caller
     from graphtraj.interfaces.gateway import handle_request as handle_task
@@ -114,18 +152,15 @@ def main_calls(root: Path, backend: object, archive: object) -> Callable[[str, P
                 else:
                     result = handle_task(request, cwd=root)
             try:
-                notices, position = pending_notices(runner, 'claude', session)
+                if not result.failed:
+                    acknowledge_ends(runner, 'claude', session, seen_ends(tool, request, result.document))
+                notices = claim_notices(runner, 'claude', session)
             except Exception as error:
+                # Unclaimed notices are offered again; never fail the call.
                 return AgentsResult({**result.document, 'main_notices_error': str(error)}, failed=result.failed)
             if not notices:
                 return result
-            result = AgentsResult({**result.document, 'main_notices': notices}, failed=result.failed)
-            try:
-                acknowledge_notices(runner, 'claude', session, position)
-            except Exception as error:
-                # Unacknowledged notices are offered again; never fail the call.
-                result.document['main_notices_error'] = str(error)
-            return result
+            return AgentsResult({**result.document, 'main_notices': notices}, failed=result.failed)
 
         return call
 

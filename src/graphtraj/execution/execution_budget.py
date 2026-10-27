@@ -129,7 +129,10 @@ def execution_budget_monitor_from_environment(
         or not task_name
     ):
         return None
-    return execution_budget_monitor(Path(evidence), task_id, task_name)
+    monitor = execution_budget_monitor(Path(evidence), task_id, task_name)
+    if monitor is not None and isinstance(mapping.get("alias"), str):
+        monitor.observer = mapping["alias"]
+    return monitor
 
 
 _NOTICE_OUTPUT: ContextVar[int | None] = ContextVar("budget_notice_output", default=None)
@@ -185,6 +188,9 @@ class ExecutionBudgetMonitor:
         self.task_directory = task_directory
         self.task_id = task_id
         self.task_name = task_name
+        # The timed Session whose observation crosses a threshold; only it
+        # delivers that notice, to its own direct parent.
+        self.observer: str | None = None
 
     def record_session(self, role: str, stage: str) -> None:
         """Count one created Session against the shared Task budget."""
@@ -245,7 +251,8 @@ class ExecutionBudgetMonitor:
         """Deliver once to the task's recorded parent, outside the budget lock.
 
         The notifying Session uses its own direct parent, including while that
-        parent's Driver waits for children. A caller-channel write records
+        parent's Driver waits for children. A notice another timed Session
+        observed is left for that Session (or its successor under the alias). A caller-channel write records
         transport only and never claims that an Agent received the notice.
         """
         from graphtraj.execution.runner_control import notify_direct_parent
@@ -264,6 +271,9 @@ class ExecutionBudgetMonitor:
             """Return only notice keys acknowledged by the actual parent."""
             received = []
             for notice in pending:
+                if notice.get("observer", session_directory.name) != session_directory.name:
+                    # Another timed Session observed it; its parent is the recipient.
+                    continue
                 if isinstance(mapping.get("parent"), str) or mapping.get("parent_connection") is not None:
                     receipt = notify_direct_parent(
                         directory, notice["message"],
@@ -406,6 +416,7 @@ class ExecutionBudgetMonitor:
                             "delivered": False,
                             "event": {key: value for key, value in notice.items()
                                       if key != "notification_key"},
+                            **({"observer": self.observer} if self.observer else {}),
                         }
                         for notice in notices
                     )
@@ -536,10 +547,11 @@ def _read_usage(
         or any(
             not isinstance(value, dict)
             or not {"key", "message", "delivered"} <= set(value) <= {
-                "key", "message", "delivered", "event", "channel_written",
+                "key", "message", "delivered", "event", "channel_written", "observer",
             }
             or ("event" in value and not isinstance(value["event"], dict))
             or ("channel_written" in value and type(value["channel_written"]) is not bool)
+            or ("observer" in value and not _text(value["observer"]))
             or not _text(value["key"])
             or not _text(value["message"])
             or type(value["delivered"]) is not bool

@@ -63,7 +63,11 @@ def test_standalone_native_permission(tmp_path: Path, claude_environment: None, 
 
 
 def test_native_main_notice_is_scoped_and_acknowledged(tmp_path: Path, claude_environment: None) -> None:
-    """The mod consumes one root's completion; another Session sees no notice."""
+    """A root's end is shown once: by the creating Session's wait, never pushed again.
+
+    Task 367 result 2: an end that a wait already returned is not also pushed.
+    Without a wait the mod claims it once; another Session never sees it.
+    """
     host = IndependentCalls(tmp_path / 'agents', tmp_path, {})
     session = str(uuid4())
     request = {'action': 'execute', 'feature': 'create',
@@ -75,11 +79,22 @@ def test_native_main_notice_is_scoped_and_acknowledged(tmp_path: Path, claude_en
     wait = host.make_call(session, tmp_path)('agents', {'action': 'execute', 'feature': 'wait',
         'arguments': {'agent': created.document['agent'], 'timeout_seconds': 20}})
     assert not wait.failed
+    assert wait.document['result']['last_result']['last_message'] == 'hello'
     pending = host.context({'operation': 'notices', 'session': session})
-    delivered = wait.document.get('main_notices', []) + pending['notices']
-    assert [item['event']['message'] for item in delivered] == ['hello']
+    assert wait.document.get('main_notices', []) + pending['notices'] == []
     assert host.context({'operation': 'notices', 'session': str(uuid4())})['notices'] == []
-    host.context({'operation': 'acknowledge', 'session': session, 'position': pending['position']})
+
+    second = {**request, 'arguments': {'runtime': 'claude', 'instruction': 'again'}}
+    host.context({'operation': 'prepare', 'tool': 'agents', 'session': session,
+                  'cwd': str(tmp_path), 'agent': None, 'request': second})
+    assert not host.call(second).failed
+    import time
+    deadline, claimed = time.monotonic() + 20, []
+    while not claimed and time.monotonic() < deadline:
+        claimed = host.context({'operation': 'notices', 'session': session})['notices']
+        time.sleep(0.05)
+    assert [item['event']['message'] for item in claimed] == ['again']
+    assert host.context({'operation': 'notices', 'session': str(uuid4())})['notices'] == []
     assert host.context({'operation': 'notices', 'session': session})['notices'] == []
 
 
@@ -97,11 +112,14 @@ def test_native_print_result_delivers_queued_notice_once(tmp_path: Path, claude_
     replies = [call('agents', {'action': 'execute', 'feature': 'wait',
         'arguments': {'agent': agent, 'timeout_seconds': 20}}).document]
     deadline = time.monotonic() + 5
-    while not any(reply.get('main_notices') for reply in replies) and time.monotonic() < deadline:
+    while time.monotonic() < deadline - 4.5:
         replies.append(call('agents', {'action': 'execute', 'feature': 'status',
                                       'arguments': {'agent': agent}}).document)
         time.sleep(0.01)
+    # The wait returned the end, so the queued notice is not delivered again (367 result 2).
     notices = [notice for reply in replies for notice in reply.get('main_notices', [])]
-    assert [notice['event']['message'] for notice in notices] == ['remembered352']
+    shown = [reply['result']['last_result']['last_message'] for reply in replies
+             if reply.get('result', {}).get('last_result')]
+    assert notices == [] and shown[0] == 'remembered352'
     assert 'main_notices' not in call('agents', {'action': 'discover'}).document
     assert host.context({'operation': 'notices', 'session': session})['notices'] == []

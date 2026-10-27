@@ -177,11 +177,19 @@ def notify_direct_parent(
             record["parent_connection"] = address
             # Once the parent's host takes the notice, await its own receipt:
             # a late receipt must not make retries forward the notice twice.
-            connection_operation(address, json.loads(message), await_accepted=True)
+            event = json.loads(message)
+            if isinstance(address, Mapping) and address.get("runner") and (identity or {}).get("execution_id"):
+                # A queued Main host identifies one execution's notice by it.
+                event["execution"] = identity["execution_id"]
+            connection_operation(address, event, await_accepted=True)
             record["delivery"] = "received"
     except RunnerError as error:
         record["delivery"] = "not-delivered"
         record["error"] = {"code": error.code, "message": error.message}
+    except Exception as error:
+        # Every failed attempt is retained, whatever failed.
+        record["delivery"] = "not-delivered"
+        record["error"] = {"code": "operation-failed", "message": f"{type(error).__name__}: {error}"}
     try:
         _append_notice_record(session_directory, record)
     except OSError:
@@ -198,22 +206,78 @@ def deliver_execution_end(
     *,
     parent_input: bool,
 ) -> Dict[str, Any]:
-    """Tell the direct parent that one execution ended.
+    """Tell the direct parent that one execution ended, when it must handle it.
 
-    An ordinary receipt, a ``completed`` end of an execution the parent did
-    not start (``parent_input`` false), is kept for display without a parent
-    turn where the parent can see it that way (:func:`receipt_is_display_only`).
-    Every other end is delivered as before.
+    A ``completed`` round is kept in the records without a parent turn
+    (:func:`retain_parent_receipt`) while members under this Session still
+    execute or are registered to start (:func:`agent_swarm.notices.needs_parent`),
+    while the parent's ``wait`` on this Session returns it (:func:`awaited`),
+    and as an ordinary receipt of an execution the parent did not start
+    (``parent_input`` false) where the parent can see it that way
+    (:func:`receipt_is_display_only`). Every other end is delivered.
     """
+    from agent_swarm.notices import needs_parent
+
+    runner = session_directory.parent.parent
     notice = 'Session execution ended:\n' + json.dumps({
         'session': mapping['session'], 'execution_id': mapping.get('execution_id'), **terminal,
     }, ensure_ascii=False)
     identity = {'type': terminal['outcome'], 'session': mapping['session'],
                 'execution_id': mapping.get('execution_id')}
-    if (terminal['outcome'] == 'completed' and not parent_input
-            and receipt_is_display_only(mapping, session_directory.parent.parent)):
+    if terminal['outcome'] == 'completed' and (
+            not needs_parent('completed', active_members=active_members(runner, session_directory.name))
+            or awaited(session_directory)
+            or not parent_input and receipt_is_display_only(mapping, runner)):
         return retain_parent_receipt(session_directory, notice, identity)
     return deliver_parent_event(session_directory, notice, identity)
+
+
+# How long after a parent's wait returned an end of this Session still counts
+# as that wait having shown it.
+AWAIT_GRACE_SECONDS = 5.0
+
+
+def mark_awaited(session_directory: Path, until: float) -> None:
+    """Record that the direct parent's ``wait`` shows this Session's ends until ``until``."""
+    try:
+        (session_directory / 'awaited.json').write_text(json.dumps({'until': until}), encoding='utf-8')
+    except OSError:
+        pass
+
+
+def awaited(session_directory: Path) -> bool:
+    """Whether a parent's ``wait`` on this Session is returning its end now."""
+    try:
+        until = json.loads((session_directory / 'awaited.json').read_text(encoding='utf-8'))['until']
+    except (OSError, ValueError, KeyError, TypeError):
+        return False
+    return isinstance(until, (int, float)) and time.time() <= until
+
+
+def active_members(runner_directory: Path, alias: str) -> int:
+    """Count members under ``alias`` still executing or registered to start.
+
+    A registered child Batch starts after this Session's round ends; an
+    admitted child without a native Session yet counts as starting.
+    """
+    from graphtraj.execution.runner_status import _status_session
+
+    sessions = runner_directory / 'sessions'
+    count = int((sessions / alias / 'child-registration.yml').is_file())
+    for directory in sessions.iterdir() if sessions.is_dir() else ():
+        try:
+            if (directory / 'mapping.yml').is_file():
+                child, _ = read_alias_mapping(runner_directory, directory.name)
+                if child.get('parent') == alias and _status_session(
+                        child, directory, directory.name, respond_to_abnormal=False)['activity'] != 'idle':
+                    count += 1
+            elif (directory / 'launch.yml').is_file():
+                launch = yaml.safe_load((directory / 'launch.yml').read_text(encoding='utf-8'))
+                if launch['mapping'].get('parent') == alias:
+                    count += 1
+        except (RunnerError, OSError, ValueError, KeyError, TypeError, AttributeError, yaml.YAMLError):
+            continue
+    return count
 
 
 def retain_parent_receipt(

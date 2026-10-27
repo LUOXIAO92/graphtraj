@@ -20,6 +20,7 @@ import hashlib
 import json
 import os
 import time
+import uuid
 from contextlib import contextmanager
 from contextvars import ContextVar
 from pathlib import Path
@@ -248,17 +249,120 @@ def _inbox(runner: Path, runtime: str, session: str) -> Path:
     return _directory(runner) / 'inbox' / (key + '.jsonl')
 
 
+def _write_cursor(cursor: Path, position: int) -> None:
+    """Atomically replace one queue cursor."""
+    temporary = cursor.with_suffix('.cursor-new')
+    temporary.write_text(str(position))
+    os.replace(temporary, cursor)
+
+
+def _ended(path: Path) -> set[str]:
+    """Executions whose end this Main already saw in a wait or status result."""
+    try:
+        return set(path.with_suffix('.ended').read_text(encoding='utf-8').split())
+    except FileNotFoundError:
+        return set()
+
+
 def queue_notice(runner: Path, connection: Mapping[str, Any], event: Mapping[str, Any]) -> dict:
-    """Durably queue one notice for a pull-only Main host, under the queue lock."""
+    """Durably queue one notice for a pull-only Main host, under the queue lock.
+
+    A notice with a stable ``id`` (execution and event) is queued once: a
+    retried delivery of the same event adds nothing.
+    """
+    from agent_swarm.notices import notice_id
+
     path = _inbox(runner, connection['runtime'], connection['session'])
     path.parent.mkdir(parents=True, exist_ok=True)
+    identity = event.get('id') or notice_id(event.get('execution'), event.get('event'))
     with path.with_suffix('.lock').open('a+b') as lock:
         file_lock.flock(lock, file_lock.LOCK_EX)
+        if identity is not None and path.exists() and any(
+                json.loads(line).get('id') == identity
+                for line in path.read_text(encoding='utf-8').splitlines() if line.strip()):
+            return {'accepted': True, 'delivery': 'queued-for-main-host'}
+        # Every queued notice has an id, so a failed push can return it.
+        record = {'at': time.time(), 'event': dict(event), 'id': identity or uuid.uuid4().hex}
         with path.open('a', encoding='utf-8') as stream:
-            stream.write(json.dumps({'at': time.time(), 'event': dict(event)}, sort_keys=True) + '\n')
+            stream.write(json.dumps(record, sort_keys=True) + '\n')
             stream.flush()
             os.fsync(stream.fileno())
     return {'accepted': True, 'delivery': 'queued-for-main-host'}
+
+
+def claim_notices(runner: Path, runtime: str, session: str) -> list[dict]:
+    """Atomically take this Main Session's undelivered notices.
+
+    Every reader (a tool result, the host's push, a native entry) claims under
+    the queue lock, so one notice is handed to one reader only. An end the
+    Main already saw through ``wait`` or ``status`` is skipped. A reader that
+    could not deliver returns its notices with :func:`requeue_notices`.
+    """
+    from agent_swarm.notices import END_EVENTS
+
+    path = _inbox(runner, runtime, session)
+    if not path.exists():
+        return []
+    with path.with_suffix('.lock').open('a+b') as lock:
+        file_lock.flock(lock, file_lock.LOCK_EX)
+        lines = path.read_text(encoding='utf-8').splitlines()
+        cursor = path.with_suffix('.cursor')
+        seen = int(cursor.read_text()) if cursor.exists() else 0
+        if seen >= len(lines):
+            return []
+        ended = _ended(path)
+        _write_cursor(cursor, len(lines))
+    notices = [json.loads(line) for line in lines[seen:]]
+    return [notice for notice in notices
+            if not (notice['event'].get('execution') in ended
+                    and notice['event'].get('event') in END_EVENTS)]
+
+
+def requeue_notices(runner: Path, runtime: str, session: str, identities: list[str]) -> int:
+    """Queue again claimed notices that did not reach the Main; return how many.
+
+    Only notices already in this queue are re-added, by their stable ``id``,
+    and one still waiting is never added twice.
+    """
+    path = _inbox(runner, runtime, session)
+    if not path.exists() or not identities:
+        return 0
+    with path.with_suffix('.lock').open('a+b') as lock:
+        file_lock.flock(lock, file_lock.LOCK_EX)
+        lines = path.read_text(encoding='utf-8').splitlines()
+        cursor = path.with_suffix('.cursor')
+        seen = int(cursor.read_text()) if cursor.exists() else 0
+        waiting = {json.loads(line).get('id') for line in lines[seen:]}
+        found: dict[str, dict] = {}
+        for line in lines[:seen]:
+            record = json.loads(line)
+            if record.get('id') in identities and record['id'] not in waiting:
+                found[record['id']] = record
+        with path.open('a', encoding='utf-8') as stream:
+            for identity in identities:
+                if identity in found:
+                    stream.write(json.dumps({**found[identity], 'at': time.time()}, sort_keys=True) + '\n')
+            stream.flush()
+            os.fsync(stream.fileno())
+    return sum(identity in found for identity in identities)
+
+
+def acknowledge_ends(runner: Path, runtime: str, session: str, executions: list[str]) -> None:
+    """Record that this Main saw these executions' ends in a ``wait`` or ``status`` result.
+
+    Their end notices, queued before or after, are no longer pushed.
+    """
+    executions = [item for item in executions if isinstance(item, str) and item]
+    if not executions:
+        return
+    path = _inbox(runner, runtime, session)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.with_suffix('.lock').open('a+b') as lock:
+        file_lock.flock(lock, file_lock.LOCK_EX)
+        new = [item for item in executions if item not in _ended(path)]
+        if new:
+            with path.with_suffix('.ended').open('a', encoding='utf-8') as stream:
+                stream.write(''.join(item + '\n' for item in new))
 
 
 def queue_host_notice(connection: Mapping[str, Any], event: Mapping[str, Any]) -> dict:
@@ -306,9 +410,7 @@ def acknowledge_notices(runner: Path, runtime: str, session: str, position: int)
         file_lock.flock(lock, file_lock.LOCK_EX)
         cursor = path.with_suffix('.cursor')
         if position > (int(cursor.read_text()) if cursor.exists() else 0):
-            temporary = cursor.with_suffix('.cursor-new')
-            temporary.write_text(str(position))
-            os.replace(temporary, cursor)
+            _write_cursor(cursor, position)
 
 
 def _transfer_notices(runner: Path, previous: Mapping[str, Any], current: Mapping[str, Any]) -> None:

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 from uuid import uuid4
 
@@ -210,3 +211,27 @@ def test_a_failed_parent_notice_attempt_is_always_recorded(
     assert record['delivery'] == 'not-delivered'
     lines = (directory / 'parent-notices.jsonl').read_text().splitlines()
     assert json.loads(lines[-1])['delivery'] == 'not-delivered'
+
+
+def test_a_failed_host_queue_keeps_the_end_readable(tmp_path: Path) -> None:
+    """A host receiver that raises never hides the body from wait/status."""
+    from agent_swarm import AgentControl
+
+    def broken(notice: dict) -> bool:
+        raise OSError('queue unavailable')
+
+    control = AgentControl(tmp_path, {}, event_receiver=broken)
+    record = {'agent': 'agent-a', 'name': 'a', 'runtime': 'claude', 'host': 'h', 'parent': None,
+              'creator': {'host': 'h', 'agent': None, 'session': 's'}, 'session': 'n', 'sessions': ['n'],
+              'settings': {}, 'created_at': 0.0, 'retired_at': None, 'executions': [{
+                  'id': 'e1', 'state': 'running', 'session': 'n', 'requests': [],
+                  'process': {'worker_pid': os.getpid()},
+                  'replies': {}}]}
+    path = tmp_path / 'control' / 'agents' / 'agent-a.json'
+    path.parent.mkdir(parents=True)
+    path.write_text(json.dumps(record))
+    from agent_swarm.control import ExecutionEvents
+    ExecutionEvents(control, 'agent-a', 'e1').finished('completed', last_message='PONG')
+    document = control._document(json.loads(path.read_text()))
+    assert document['last_result']['notification'] == 'unavailable'
+    assert document['last_result']['last_message'] == 'PONG'

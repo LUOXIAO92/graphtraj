@@ -264,7 +264,8 @@ class ExecutionEvents:
             notify = (receiver is not None and (bool(last_message) or native is None)
                       and needs_parent(outcome, active_members=self._control._active_children(self._agent)))
             if notify:
-                current['notification'] = 'pending'
+                # Only a native parent's pending reply hides the body meanwhile.
+                current['notification'] = 'pending' if native is not None else 'queueing'
             # Keep the native receiver while this Agent is in standby so its
             # children can continue the retained Session after this turn ends.
 
@@ -279,9 +280,10 @@ class ExecutionEvents:
                 delivery = ('queued' if accepted == 'queued'
                             else 'delivered' if accepted is True else 'unavailable')
             except Exception:
-                # Delivery may have happened before the transport failed. Do not
-                # re-inject the body through wait/status or retry automatically.
-                delivery = 'unconfirmed'
+                # A native parent may have received the body before its transport
+                # failed: do not re-inject it through wait/status. A host queue
+                # that failed keeps the body readable there instead.
+                delivery = 'unconfirmed' if native is not None else 'unavailable'
             with self._control._locked(self._agent) as record:
                 for ended in record['executions']:
                     if ended['id'] == self._execution:
@@ -1031,7 +1033,7 @@ class AgentControl:
                 document["last_result"]["runtime_exit"] = deepcopy(runtime_exit)
             if last.get('notification'):
                 document['last_result']['notification'] = last['notification']
-                if last['notification'] not in ('unavailable', 'queued'):
+                if last['notification'] in ('pending', 'delivered', 'unconfirmed'):
                     document['last_result']['last_message'] = None
         if record["retired_at"] is not None:
             document["retired_at"] = record["retired_at"]

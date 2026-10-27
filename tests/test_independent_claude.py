@@ -114,7 +114,11 @@ def test_native_print_result_delivers_queued_notice_once(tmp_path: Path, claude_
 def test_model_change_failure_names_both_models_and_reason(
         tmp_path: Path, claude_environment: None, instruction: str, reason: str) -> None:
     """The unchanged strict model check states what was requested, observed and why."""
-    control = AgentControl(tmp_path / 'agents', {'claude': ClaudeDriver(tmp_path, {})})
+    import json
+
+    notices = []
+    control = AgentControl(tmp_path / 'agents', {'claude': ClaudeDriver(tmp_path, {})},
+                           event_receiver=lambda event: notices.append(event) or True)
     call = bind(control, Caller('controlled-native-host', None, str(uuid4()), 'claude'))
     created = call({'action': 'create', 'runtime': 'claude', 'instruction': instruction})
     assert not created.failed, created.document
@@ -128,6 +132,12 @@ def test_model_change_failure_names_both_models_and_reason(
     assert reason in message
     if instruction == 'fallback':
         assert 'fallbackModel=claude-opus-4-8' in message
+    # The persisted execution error is the one any later notice is built from.
+    record = json.loads((tmp_path / 'agents' / 'control' / 'agents'
+                         / f"{created.document['agent']}.json").read_text())
+    assert record['executions'][-1]['error'] == last['error']
+    # Today a failure without a last message sends no notice (control.py finished).
+    assert notices == [] and record['executions'][-1].get('notification') is None
 
 
 @pytest.mark.parametrize('case', ['elsewhere', 'archive'])

@@ -185,7 +185,8 @@ configured for <expected>.` The same line is appended to
 start Claude Code again from the configured directory. A child stopped because Claude switched its model
 (for example a safeguard fallback) ends `failed` with `RUNTIME_REQUEST_FAILED`;
 its `last_result.error` names the requested model, the observed model and the
-Runtime's reason, or says that none was provided.
+Runtime's reason, or says that none was provided. A failed child sends no
+completion notice; read the reason with `wait` or `status`.
 
 ### Pi and DSH
 

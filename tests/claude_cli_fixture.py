@@ -218,7 +218,8 @@ def prompt(message: dict) -> None:
         assert tool('submit_result', submission) == submitted
         result(json.dumps(submitted))
     elif text.startswith('fallback'):
-        # A native model fallback, with or without the Runtime's explanation.
+        # A native model fallback, with or without the Runtime's explanation. Field names
+        # follow the native transcript record of a real fallback (system/model_refusal_fallback).
         if text == 'fallback':
             emit({'type': 'system', 'subtype': 'model_refusal_fallback', 'session_id': session,
                   'content': "Opus 5.5's safeguards flagged this session. Opus 4.8 is answering instead.",

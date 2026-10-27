@@ -174,15 +174,21 @@ settings. Normalized archiving is off and needs GraphTraj's collector; the host
 refuses to start while `.agents-control/config.yml` sets
 `save_normalized_sessions: true`. Set it to `false` or delete the line.
 
-Start or resume Claude Code from the configured directory. When a startup check
-fails (another directory, the archive setting above, an `agents` host already
-running for the project, or a host not launched by the configured `claude`), the
-`agents` server still connects but starts no control and no child. Every
-`agents` call then returns that error, for example `host-unavailable: The agents
-host did not start: Claude Code was started in <actual>, but this host is
-configured for <expected>.` The same line is appended to
-`.agents-control/host.log` and written to the server's stderr. Fix the cause, then
-start Claude Code again from the configured directory. A child stopped because Claude switched its model
+Start or resume Claude Code from the configured directory. Claude Code reads
+`.mcp.json` from its start directory and the directories above it. Started or
+resumed in an unrelated directory, it does not load this project's `agents`
+server, and `/mcp` does not list it; an `agents` server listed there comes from
+that directory's own configuration. Started in a subdirectory of the project, or
+given this project's `.mcp.json` explicitly, the host starts but refuses: it
+connects, starts no control and no child, and every `agents` call returns
+`host-unavailable: The agents host did not start: Claude Code was started in
+<actual>, but this host is configured for <expected>. ...`. The archive setting
+above, an `agents` host already running for the project, or a host not launched
+by the configured `claude` are refused the same way with their own reason.
+`.agents-control/host.log` records the refusal as one timestamped JSON line
+(search for `did not start`) and the end of each session as one
+`agents host stopped` line. Fix the cause, then start Claude Code again from the
+configured directory. A child stopped because Claude switched its model
 (for example a safeguard fallback) ends `failed` with `RUNTIME_REQUEST_FAILED`;
 its `last_result.error` names the requested model, the observed model and the
 Runtime's reason, or says that none was provided. A failed child sends no

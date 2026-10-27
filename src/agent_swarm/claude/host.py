@@ -58,6 +58,15 @@ def isolate_stdio(log: Path) -> tuple[TextIO, TextIO]:
     return mcp_in, mcp_out
 
 
+def serve_until_ended(mcp_in: TextIO, mcp_out: TextIO, responder) -> None:
+    """Serve MCP; Claude Code ending the session (SIGINT) is a stop, not a crash."""
+    try:
+        serve(mcp_in, mcp_out, responder)
+    except KeyboardInterrupt:
+        print(time.strftime('%Y-%m-%dT%H:%M:%S%z'),
+              'agents host stopped: Claude Code ended the session (SIGINT).', flush=True)
+
+
 def serve_refusal(error: Exception, log: Path) -> None:
     """Keep a refused start readable instead of exiting before the MCP handshake.
 
@@ -78,7 +87,7 @@ def serve_refusal(error: Exception, log: Path) -> None:
         return result_response(identity, {'content': [{'type': 'text', 'text': json.dumps(document, ensure_ascii=False)}],
                                           'structuredContent': document, 'isError': True})
 
-    serve(mcp_in, mcp_out, lambda message: respond(
+    serve_until_ended(mcp_in, mcp_out, lambda message: respond(
         message, tool_documents, call, {'name': 'agents', 'version': '0.1.0'}))
 
 
@@ -274,7 +283,7 @@ def main() -> None:
                 json.dump({'parent': parent, 'executable': str(executable), 'address': address}, stream)
             try:
                 mcp_in, mcp_out = isolate_stdio(directory.parent / 'host.log')
-                serve(mcp_in, mcp_out, lambda message: respond(
+                serve_until_ended(mcp_in, mcp_out, lambda message: respond(
                     message, tool_documents, call, {'name': 'agents', 'version': '0.1.0'}))
             finally:
                 channel_file.unlink()

@@ -188,3 +188,47 @@ def test_refused_host_start_is_readable_in_calls_and_log(tmp_path: Path, case: s
     assert error['message'] in finished.stderr
     assert error['message'] in (root / 'host.log').read_text()
     assert not (root / 'control').exists() and not (root / 'live').exists()
+
+
+@pytest.mark.parametrize('case', ['refused', 'serving'])
+def test_session_end_is_logged_as_a_stop_not_a_traceback(tmp_path: Path, case: str) -> None:
+    """Claude Code ends a session with SIGINT; the log keeps one stop line and no traceback."""
+    import json
+    import os
+    import subprocess
+    import sys
+
+    import agent_swarm
+
+    project, elsewhere = tmp_path / 'project', tmp_path / 'elsewhere'
+    root = project / '.agents-control'
+    root.mkdir(parents=True)
+    elsewhere.mkdir()
+    channel = root / 'live' / 'channel.json'
+    config = root / 'claude-host.json'
+    config.write_text(json.dumps({'root': str(root), 'cwd': str(project), 'claude': sys.executable,
+                                  'channel_file': str(channel), 'settings': {}}))
+    # The launcher is the verified native parent; it interrupts the host like Claude Code.
+    launcher = ('import json, signal, subprocess, sys\n'
+                'host = subprocess.Popen([sys.executable, "-m", "agent_swarm.claude.host", "serve", "--config",'
+                ' sys.argv[1]], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)\n'
+                'host.stdin.write(json.dumps({"jsonrpc": "2.0", "id": 1, "method": "initialize",'
+                ' "params": {}}) + "\\n"); host.stdin.flush()\n'
+                'print(host.stdout.readline().strip())\n'
+                'host.send_signal(signal.SIGINT)\n'
+                'print(host.wait(timeout=30))\n')
+    source = str(Path(agent_swarm.__file__).parents[1])
+    finished = subprocess.run(
+        [sys.executable, '-c', launcher, str(config)], cwd=elsewhere if case == 'refused' else project,
+        capture_output=True, text=True, timeout=60,
+        env={**os.environ, 'PYTHONPATH': source + os.pathsep + os.environ.get('PYTHONPATH', '')})
+    reply, returncode = finished.stdout.splitlines()
+    assert json.loads(reply)['result']['serverInfo']['name'] == 'agents'
+    assert returncode == '0', finished.stderr
+    log = (root / 'host.log').read_text()
+    assert 'Traceback' not in log and 'KeyboardInterrupt' not in log
+    assert 'agents host stopped: Claude Code ended the session (SIGINT).' in log
+    if case == 'refused':
+        assert 'The agents host did not start: Claude Code was started in' in log
+    else:
+        assert 'did not start' not in log and not channel.exists()

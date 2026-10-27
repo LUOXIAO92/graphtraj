@@ -298,8 +298,6 @@ def claim_notices(runner: Path, runtime: str, session: str) -> list[dict]:
     Main already saw through ``wait`` or ``status`` is skipped. A reader that
     could not deliver returns its notices with :func:`requeue_notices`.
     """
-    from agent_swarm.notices import END_EVENTS
-
     path = _inbox(runner, runtime, session)
     if not path.exists():
         return []
@@ -312,10 +310,29 @@ def claim_notices(runner: Path, runtime: str, session: str) -> list[dict]:
             return []
         ended = _ended(path)
         _write_cursor(cursor, len(lines))
-    notices = [json.loads(line) for line in lines[seen:]]
-    return [notice for notice in notices
-            if not (notice['event'].get('execution') in ended
-                    and notice['event'].get('event') in END_EVENTS)]
+    return [notice for notice in map(json.loads, lines[seen:]) if not _shown(notice, ended)]
+
+
+def _shown(notice: Mapping[str, Any], ended: set[str]) -> bool:
+    """Whether a queued end notice names an end the Main already saw."""
+    from agent_swarm.notices import END_EVENTS
+
+    return notice['event'].get('execution') in ended and notice['event'].get('event') in END_EVENTS
+
+
+def shown_ends(result: Mapping[str, Any]) -> list[str]:
+    """Executions whose end one ``agents`` wait or status result shows.
+
+    A core Agent in standby shows its last result; an idle Task member names
+    its last execution. A running execution's end is not shown yet.
+    """
+    aliases = result.get('aliases')
+    member = aliases[0] if isinstance(aliases, list) and aliases else result
+    if isinstance(result.get('last_result'), Mapping) and result.get('state') == 'standby':
+        return [result['last_result'].get('id')]
+    if isinstance(member, Mapping) and member.get('activity') == 'idle':
+        return [member.get('execution_id')]
+    return []
 
 
 def requeue_notices(runner: Path, runtime: str, session: str, identities: list[str]) -> int:
@@ -400,7 +417,9 @@ def pending_notices(runner: Path, runtime: str, session: str) -> tuple[list[dict
         lines = path.read_text(encoding='utf-8').splitlines()
         cursor = path.with_suffix('.cursor')
         seen = int(cursor.read_text()) if cursor.exists() else 0
-    return [json.loads(line) for line in lines[seen:]], len(lines)
+        ended = _ended(path)
+    return [notice for notice in map(json.loads, lines[seen:])
+            if not _shown(notice, ended)], len(lines)
 
 
 def acknowledge_notices(runner: Path, runtime: str, session: str, position: int) -> None:

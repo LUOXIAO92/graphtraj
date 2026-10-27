@@ -129,6 +129,19 @@ class GraphTrajAgents:
         return 'queued'
 
     def operate(self, action: str, arguments: Mapping[str, Any], binding: Binding) -> Outcome:
+        """Perform one validated action; an end a Main's wait/status shows is not pushed again."""
+        from graphtraj.configuration.project_configuration import runner_directory
+        from graphtraj.execution.main_continuity import QUEUED_RUNTIMES, acknowledge_ends, shown_ends
+
+        outcome = self._operate_action(action, arguments, binding)
+        caller = binding.caller
+        if (action in {"wait", "status"} and arguments.get("agent") is not None and not outcome.failed
+                and caller.agent is None and caller.runtime in QUEUED_RUNTIMES and caller.session):
+            acknowledge_ends(runner_directory(self.root), caller.runtime, caller.session,
+                             shown_ends(outcome.result))
+        return outcome
+
+    def _operate_action(self, action: str, arguments: Mapping[str, Any], binding: Binding) -> Outcome:
         """Perform one validated action, translating GraphTraj rejections."""
         agent = arguments.get("agent")
         try:
@@ -323,16 +336,18 @@ class GraphTrajAgents:
         from graphtraj.workspace.runner_project import discover_runner_directory
 
         try:
-            directory = read_alias_mapping(discover_runner_directory(self.root), agent)[1]
+            mapping, directory = read_alias_mapping(discover_runner_directory(self.root), agent)
         except RunnerError:
-            directory = None
+            mapping, directory = {}, None
+        execution = mapping.get("execution_id")
         if directory is not None:
-            mark_awaited(directory, time.time() + timeout_seconds + AWAIT_GRACE_SECONDS)
-        try:
-            return self._wait_idle(agent, timeout_seconds, pending_requests, status_aliases)
-        finally:
-            if directory is not None:
-                mark_awaited(directory, time.time() + AWAIT_GRACE_SECONDS)
+            mark_awaited(directory, execution, time.time() + timeout_seconds + AWAIT_GRACE_SECONDS)
+        result, failed = self._wait_idle(agent, timeout_seconds, pending_requests, status_aliases)
+        if directory is not None:
+            # Only the execution this wait returned stays covered, and briefly.
+            returned = result.get("execution_id") if result.get("activity") == "idle" else execution
+            mark_awaited(directory, returned, time.time() + AWAIT_GRACE_SECONDS)
+        return result, failed
 
     def _wait_idle(self, agent: str, timeout_seconds: float, pending_requests: Callable,
                    status_aliases: Callable) -> tuple[dict, bool]:

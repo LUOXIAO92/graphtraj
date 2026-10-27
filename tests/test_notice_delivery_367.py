@@ -124,19 +124,15 @@ def test_an_end_returned_by_wait_is_not_pushed(tmp_path: Path) -> None:
 
 
 def test_wait_and_status_results_name_the_end_they_show() -> None:
-    from graphtraj.runtimes.claude.host import seen_ends
-
-    wait = {'action': 'execute', 'feature': 'wait', 'arguments': {'agent': 'a'}}
-    core = {'agent': 'a', 'result': {'state': 'standby', 'last_result': {'id': 'e1'}}}
-    member = {'agent': 'leader', 'result': {'activity': 'idle', 'execution_id': 'e2'}}
-    status = {'agent': 'leader', 'result': {'aliases': [{'activity': 'idle', 'execution_id': 'e3'}]}}
-    running = {'agent': 'a', 'result': {'state': 'active', 'last_result': {'id': 'e0'}}}
-    assert seen_ends('agents', wait, core) == ['e1']
-    assert seen_ends('agents', wait, member) == ['e2']
-    assert seen_ends('agents', {**wait, 'feature': 'status'}, status) == ['e3']
-    assert seen_ends('agents', wait, running) == []
-    assert seen_ends('agents', {**wait, 'feature': 'send'}, core) == []
-    assert seen_ends('tasks', wait, core) == []
+    core = {'state': 'standby', 'last_result': {'id': 'e1'}}
+    member = {'activity': 'idle', 'execution_id': 'e2'}
+    status = {'aliases': [{'activity': 'idle', 'execution_id': 'e3'}]}
+    running = {'state': 'active', 'last_result': {'id': 'e0'}}
+    assert mc.shown_ends(core) == ['e1']
+    assert mc.shown_ends(member) == ['e2']
+    assert mc.shown_ends(status) == ['e3']
+    assert mc.shown_ends(running) == []
+    assert mc.shown_ends({'activity': 'running', 'execution_id': 'e4'}) == []
 
 
 def test_runner_end_waits_for_registered_or_running_members(tmp_path: Path) -> None:
@@ -160,11 +156,12 @@ def test_a_waiting_parent_keeps_the_end_it_is_returning(tmp_path: Path) -> None:
 
     from graphtraj.execution.runner_control import awaited, mark_awaited
 
-    assert not awaited(tmp_path)
-    mark_awaited(tmp_path, time.time() + 5)
-    assert awaited(tmp_path)
-    mark_awaited(tmp_path, time.time() - 1)
-    assert not awaited(tmp_path)
+    assert not awaited(tmp_path, 'e1')
+    mark_awaited(tmp_path, 'e1', time.time() + 5)
+    assert awaited(tmp_path, 'e1')
+    assert not awaited(tmp_path, 'e2')          # a later execution's end is still delivered
+    mark_awaited(tmp_path, 'e1', time.time() - 1)
+    assert not awaited(tmp_path, 'e1')
 
 
 def test_budget_notice_goes_only_to_the_observing_sessions_parent(

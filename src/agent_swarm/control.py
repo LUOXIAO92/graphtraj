@@ -249,9 +249,11 @@ class ExecutionEvents:
             receiver = native[1] if native is not None else self._control.event_receiver
             notice = {'parent': record['parent'], 'agent': record['agent'],
                       'session': current['session'], 'execution': current['id'],
-                      'body': last_message, 'outcome': outcome,
-                      'creator': dict(record['creator']),
-                      'error': dict(error) if error else None}
+                      'body': last_message, 'outcome': outcome}
+            if native is None:
+                # A host receiver addresses the creating Main and may announce
+                # an end without a body.
+                notice.update(creator=dict(record['creator']), error=dict(error) if error else None)
             current.update(
                 state="ended", ended_at=_now(), outcome=outcome,
                 last_message=last_message, terminal_confirmed=terminal_confirmed,

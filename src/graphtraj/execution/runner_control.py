@@ -226,32 +226,35 @@ def deliver_execution_end(
                 'execution_id': mapping.get('execution_id')}
     if terminal['outcome'] == 'completed' and (
             not needs_parent('completed', active_members=active_members(runner, session_directory.name))
-            or awaited(session_directory)
+            or awaited(session_directory, mapping.get('execution_id'))
             or not parent_input and receipt_is_display_only(mapping, runner)):
         return retain_parent_receipt(session_directory, notice, identity)
     return deliver_parent_event(session_directory, notice, identity)
 
 
-# How long after a parent's wait returned an end of this Session still counts
-# as that wait having shown it.
+# How long after a parent's wait returned an execution's end that end still
+# counts as shown by the wait.
 AWAIT_GRACE_SECONDS = 5.0
 
 
-def mark_awaited(session_directory: Path, until: float) -> None:
-    """Record that the direct parent's ``wait`` shows this Session's ends until ``until``."""
+def mark_awaited(session_directory: Path, execution_id: str | None, until: float) -> None:
+    """Record that the direct parent's ``wait`` shows this execution's end until ``until``."""
     try:
-        (session_directory / 'awaited.json').write_text(json.dumps({'until': until}), encoding='utf-8')
+        (session_directory / 'awaited.json').write_text(
+            json.dumps({'execution_id': execution_id, 'until': until}), encoding='utf-8')
     except OSError:
         pass
 
 
-def awaited(session_directory: Path) -> bool:
-    """Whether a parent's ``wait`` on this Session is returning its end now."""
+def awaited(session_directory: Path, execution_id: str | None) -> bool:
+    """Whether a parent's ``wait`` on this Session is returning this execution's end now."""
     try:
-        until = json.loads((session_directory / 'awaited.json').read_text(encoding='utf-8'))['until']
-    except (OSError, ValueError, KeyError, TypeError):
+        marker = json.loads((session_directory / 'awaited.json').read_text(encoding='utf-8'))
+    except (OSError, ValueError):
         return False
-    return isinstance(until, (int, float)) and time.time() <= until
+    until = marker.get('until') if isinstance(marker, dict) else None
+    return (execution_id is not None and marker.get('execution_id') == execution_id
+            and isinstance(until, (int, float)) and time.time() <= until)
 
 
 def active_members(runner_directory: Path, alias: str) -> int:

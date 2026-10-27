@@ -171,7 +171,9 @@ async def main():
                 document = await launched
                 assert not actions, actions
             (scratch/'initial-release').touch()
-            await until(lambda:any(a['event']['event']=='completed' for a in actions))
+            # A waiting call returns the end itself, so only the result is sent (Task 367 result 2).
+            ended = 'result-submitted' if os.environ['HOST_WAIT']=='1' else 'completed'
+            await until(lambda:any(a['event']['event']==ended for a in actions))
             document = await launched
             alias = document['tasks'][0]['alias']
             assert any(a['event']['event']=='result-submitted' for a in actions)
@@ -192,7 +194,8 @@ async def main():
                 await asyncio.to_thread(other.close)
             assert ack['send_status']=='sent',ack
             await until(lambda:(scratch/'later-ready').exists())
-            assert len(actions)==2,actions
+            before = 1 if os.environ['HOST_WAIT']=='1' else 2
+            assert len(actions)==before,actions
             if os.environ['HOST_MODE']=='stop':
                 from graphtraj.execution.execution_budget import execution_budget_monitor
                 from unittest.mock import patch
@@ -205,7 +208,7 @@ async def main():
             else:
                 (scratch/'later-release').touch()
                 expected='runtime-error' if os.environ['HOST_FAIL']=='1' else 'completed'
-            await until(lambda:any(a['event']['event']==expected and ack['execution_id'] in a['event']['message'] for a in actions[2:]))
+            await until(lambda:any(a['event']['event']==expected and ack['execution_id'] in a['event']['message'] for a in actions[before:]))
             if os.environ['HOST_MODE']=='stop':
                 assert refused
                 assert any(a['event']['event']=='execution-budget-exceeded' for a in actions)

@@ -20,7 +20,7 @@ from pathlib import Path
 import sys
 import threading
 import time
-from typing import Callable, Mapping, TextIO
+from typing import Callable, TextIO
 from uuid import UUID
 
 from agent_swarm.claude import native_host
@@ -76,27 +76,6 @@ def notice_operation(document: dict, available: bool, claim: Callable, requeue: 
     return {'acknowledged': True}
 
 
-def seen_ends(tool: str, request: Mapping, document: Mapping) -> list[str]:
-    """Executions whose end one agents ``wait`` or ``status`` result showed the Main.
-
-    A core Agent in standby shows its last result; an idle Task member names
-    its last execution. A running execution's end is not shown yet.
-    """
-    if (tool != 'agents' or request.get('action') != 'execute'
-            or request.get('feature') not in {'wait', 'status'}):
-        return []
-    result = document.get('result')
-    if not isinstance(result, Mapping) or not isinstance(document.get('agent'), str):
-        return []
-    aliases = result.get('aliases')
-    member = aliases[0] if isinstance(aliases, list) and aliases else result
-    if isinstance(result.get('last_result'), Mapping) and result.get('state') == 'standby':
-        return [result['last_result'].get('id')]
-    if isinstance(member, Mapping) and member.get('activity') == 'idle':
-        return [member.get('execution_id')]
-    return []
-
-
 def native_parent(executable: Path, *, stage: str = 'serve') -> int:
     """Verify the actual native parent, not an environment assertion or PID flag."""
     parent = os.getppid()
@@ -124,10 +103,10 @@ def main_calls(root: Path, backend: object, archive: object) -> Callable[[str, P
     uses (``GraphTrajAgents``: every Runtime driver and Task member Sessions).
     Queued member notices not yet delivered are claimed and returned with each
     result; a pickup failure is reported beside the result and never fails the
-    executed call. An end the result itself shows (``wait``/``status``) is
-    acknowledged, so the same end is not pushed as a notice as well.
+    executed call. An end the result itself shows (``wait``/``status``) was
+    acknowledged by the backend, so it is not attached or pushed again.
     """
-    from graphtraj.execution.main_continuity import acknowledge_ends, claim_notices, claimable
+    from graphtraj.execution.main_continuity import claim_notices, claimable
     from graphtraj.execution.runner_connection import parent_connection
     from graphtraj.execution.runner_status import runtime_caller
     from graphtraj.interfaces.gateway import handle_request as handle_task
@@ -152,8 +131,6 @@ def main_calls(root: Path, backend: object, archive: object) -> Callable[[str, P
                 else:
                     result = handle_task(request, cwd=root)
             try:
-                if not result.failed:
-                    acknowledge_ends(runner, 'claude', session, seen_ends(tool, request, result.document))
                 notices = claim_notices(runner, 'claude', session)
             except Exception as error:
                 # Unclaimed notices are offered again; never fail the call.

@@ -12,6 +12,7 @@ Harness Project Root from its own working directory, exactly like the CLI.
 
 from __future__ import annotations
 
+import copy
 import os
 import sys
 import hashlib
@@ -190,20 +191,171 @@ def _respond(message: Mapping[str, Any]) -> dict[str, Any] | None:
     return respond(message, _tool_documents, _tool_call_response, SERVER_INFO)
 
 
-# Native dialog title and description for each reviewed operation.
+# Native dialog text for each reviewed operation, by language. Claude Code
+# shows only the first three message lines before folding the rest, so each
+# operation has (action, change summary, what Accept applies) kept short.
 REVIEW_TEXT = {
-    'approved_recovery':   ('Approve Task recovery',
-                            'Add only the requested execution time and apply the shown repair to the original Task and Session.'),
-    'role_organization':   ('Approve child-role configuration',
-                            'Save only the reviewed child-role configuration change.'),
-    'runtime_connections': ('Approve Runtime connections',
-                            'Save only the reviewed user Runtime connection change.'),
-    'retire':              ('Approve Agent retirement',
-                            'Retire only the shown stopped Agent; its Session, Trace, parent relationships and Worktree are kept.'),
-    'replace':             ('Approve Agent replacement',
-                            'Retire only the shown stopped Agent for the shown replacement; '
-                            'its Session, Trace, parent relationships and Worktree are kept.'),
+    'en': {
+        'approved_recovery':   ('add execution time to', 'add {minutes} min of execution time{resume}{restore}',
+                                'apply the added time and repair'),
+        'role_organization':   ('change child roles in', 'remove {removed}, add {added}, change {changed}: {fields}',
+                                'save this change'),
+        'runtime_connections': ('save Runtime connections in',
+                                'models: remove {removed}, add {added}, change {changed}; other settings: {other}',
+                                'save this file'),
+        'retire':              ('retire', 'stopped Agent becomes history; Session, Trace and Worktree are kept',
+                                'retire it now'),
+        'replace':             ('replace', '{replacement} takes over; Session, Trace and Worktree are kept',
+                                'retire and replace it now'),
+        'heading':             'GraphTraj review: {action} {target} (requested by {requester})',
+        'choices':             'Accept: {accept}. Decline: nothing is written.',
+        'requester':           'Requested by: ',
+        'target':              'Target: ',
+        'full':                'Full request (authoritative):',
+        'main':                'Main',
+        'parent':              ' (parent {0})',
+        'resume':              ', resume its Session',
+        'restore':             ', reactivate its Task',
+        'roles':               'roles.yml',
+        'replacement':         'the {role} seat {member} of Task {task_id} Team {team_ordinal}',
+    },
+    'zh': {
+        'approved_recovery':   ('追加执行时间', '追加 {minutes} 分钟{resume}{restore}',
+                                '应用追加时间与修复'),
+        'role_organization':   ('修改子角色配置', '删除 {removed} 项、新增 {added} 项、修改 {changed} 项：{fields}',
+                                '保存此变更'),
+        'runtime_connections': ('保存 Runtime 连接',
+                                '模型删除 {removed} 个、新增 {added} 个、修改 {changed} 个；其他设置 {other} 项',
+                                '保存此文件'),
+        'retire':              ('清退 Agent', '已停止的 Agent 变为历史记录；Session、Trace、Worktree 保留',
+                                '立即清退'),
+        'replace':             ('替换 Agent', '由 Task {task_id} 第 {team_ordinal} 组 {role} 席位 {member} 接替；'
+                                'Session、Trace、Worktree 保留', '立即清退并替换'),
+        'heading':             'GraphTraj 审查：{action} {target}（{requester} 请求）',
+        'choices':             'Accept：{accept}；Decline：不写入任何变更',
+        'requester':           '请求者：',
+        'target':              '对象：',
+        'full':                '完整请求（以此为准）：',
+        'main':                'Main',
+        'parent':              '（父级 {0}）',
+        'resume':              '，并恢复其 Session',
+        'restore':             '，并重新激活其 Task',
+        'roles':               'roles.yml',
+        'replacement':         'Task {task_id} 第 {team_ordinal} 组 {role} 席位 {member}',
+    },
 }
+
+
+def review_language() -> str:
+    """Return the review dialog language from the user's message locale.
+
+    The first nonempty of ``LANGUAGE`` (its first entry), ``LC_ALL``,
+    ``LC_MESSAGES`` and ``LANG`` decides, as in gettext. Chinese locales
+    (``zh``, ``zh_CN`` ...) select ``'zh'``; every other value, or none,
+    selects the default ``'en'``.
+    """
+    for name in ('LANGUAGE', 'LC_ALL', 'LC_MESSAGES', 'LANG'):
+        value = os.environ.get(name, '').split(':')[0]
+        if value:
+            return 'zh' if value.lower().startswith('zh') else 'en'
+    return 'en'
+
+
+def _short(alias: str) -> str:
+    """Shorten a long alias to its Task prefix and final seat for the first line.
+
+    ``364-readable_review-handover0-engineer@engineer`` becomes
+    ``364-…-engineer@engineer``; the full alias follows on a later line.
+    """
+    if len(alias) <= 32 or '-' not in alias:
+        return alias
+    return alias.split('-', 1)[0] + '-…-' + alias.rsplit('-', 1)[1]
+
+
+def _models(catalog: Any) -> dict[tuple, Any]:
+    """Return a connection catalog's models keyed by (entry, provider, model)."""
+    found = {}
+    for entry, runtime in ((catalog or {}).get('runtimes') or {}).items():
+        for provider, settings in ((runtime or {}).get('providers') or {}).items():
+            for model, value in ((settings or {}).get('models') or {}).items():
+                found[(entry, provider, model)] = value
+    return found
+
+
+def _without_models(catalog: Any) -> Any:
+    """Return a connection catalog copy whose providers list no models."""
+    copied = copy.deepcopy(catalog or {})
+    for runtime in (copied.get('runtimes') or {}).values():
+        for settings in ((runtime or {}).get('providers') or {}).values():
+            if isinstance(settings, dict):
+                settings.pop('models', None)
+    return copied
+
+
+def review_message(proposal: dict, operation: str, summary: dict) -> tuple[str, str]:
+    """Return the dialog heading and the message a host shows for one review.
+
+    Lines 1-3 name the operation, target and requester, summarize the change
+    with what it removes, and state what Accept and Decline do; a host that
+    folds the rest still shows them. The full requester, the full target and
+    the authoritative reviewed request follow.
+    """
+    from graphtraj.execution.approved_recovery import _differences
+
+    text = REVIEW_TEXT[review_language()]
+    action, change, accept = text[operation]
+    request   = summary['request']
+    requester = proposal.get('caller') or text['main']
+
+    # Each operation names its own target; long aliases are shortened on line 1.
+    if operation in ('retire', 'replace', 'approved_recovery'):
+        target = request.get('alias', '')
+        short  = _short(target)
+        if proposal.get('parent'):
+            target += text['parent'].format(proposal['parent'])
+    elif operation == 'role_organization':
+        target = short = text['roles']
+    else:
+        target = request.get('path') or ''
+        short  = Path(target).name
+
+    # Count what the change removes, adds and modifies.
+    if operation == 'runtime_connections':
+        before, after = _models(proposal['before']), _models(proposal['after'])
+        counts = {'removed': len(before.keys() - after.keys()), 'added': len(after.keys() - before.keys()),
+                  'changed': sum(before[key] != after[key] for key in before.keys() & after.keys()),
+                  'other':   len(_differences(_without_models(proposal['before']),
+                                              _without_models(proposal['after'])))}
+    else:
+        changes = summary['changes']
+        fields  = [item['field'] for item in changes]
+        counts  = {'removed': sum(item['actual'] is None for item in changes),
+                   'added':   sum(item['expected'] is None for item in changes),
+                   'changed': sum(item['expected'] is not None and item['actual'] is not None for item in changes),
+                   'other':   0,
+                   'fields':  ', '.join(fields[:2]) + (', …' if len(fields) > 2 else '')}
+    registration = request.get('registration') or {}
+    change = change.format(
+        minutes     = request.get('additional_minutes', 0),
+        resume      = text['resume'] if request.get('resume') else '',
+        restore     = text['restore'] if request.get('restore_active') else '',
+        replacement = text['replacement'].format_map({key: registration.get(key)
+                      for key in ('task_id', 'team_ordinal', 'role', 'member')}),
+        **{key: registration.get(key) for key in ('task_id', 'team_ordinal', 'role', 'member')},
+        **{'fields': '', **counts},
+    )
+
+    heading = text['heading'].format(action=action, target=short, requester=_short(requester))
+    lines   = [
+        heading,
+        change,
+        text['choices'].format(accept=accept),
+        text['requester'] + requester,
+        text['target'] + target,
+        text['full'],
+        json.dumps(summary, ensure_ascii=False),
+    ]
+    return heading, '\n'.join(lines)
 
 
 def elicit_review(
@@ -227,13 +379,16 @@ def elicit_review(
                  'changes': _differences(proposal['before'], proposal['after']),
                  **({'authority': proposal['authority']} if 'authority' in proposal else {})}
     operation = reviewed.get('operation')
-    title, description = REVIEW_TEXT.get(operation if operation in ('retire', 'replace') else feature,
-                                         REVIEW_TEXT['approved_recovery'])
+    title, message = review_message(
+        proposal,
+        operation if operation in ('retire', 'replace')
+        else feature if feature in ('role_organization', 'runtime_connections') else 'approved_recovery',
+        summary,
+    )
     request = {'jsonrpc': '2.0', 'id': request_id, 'method': 'elicitation/create',
                'params': {
                    'mode': 'form',
-                   'message': description + '\n'
-                              + json.dumps(summary, ensure_ascii=False),
+                   'message': message,
                    'requestedSchema': {'type': 'object', 'properties': {}},
                    '_meta': {
                        'codex_request_type': 'approval_request',
@@ -242,7 +397,7 @@ def elicit_review(
                        'codex_sensitive_action': True,
                        'tool_name': 'tasks',
                        'tool_title': title,
-                       'tool_description': description + '\n' + json.dumps(summary, ensure_ascii=False),
+                       'tool_description': message,
                        'tool_params': {'action': 'execute', 'feature': feature,
                                        'arguments': reviewed},
                    },

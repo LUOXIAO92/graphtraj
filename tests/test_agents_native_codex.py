@@ -287,3 +287,24 @@ def test_real_codex_default_auto_review(tmp_path: Path) -> None:
     finally:
         if call({'action': 'status', 'agent': agent}).document['result']['state'] == 'active':
             call({'action': 'interrupt', 'agent': agent})
+
+
+def test_independent_codex_host_refuses_archive_without_collector(tmp_path: Path) -> None:
+    """The CLI host rejects the setting at start instead of failing every create."""
+    import subprocess
+    import sys
+
+    (tmp_path / 'config.yml').write_text('save_normalized_sessions: true\n')
+    settings = tmp_path / 'settings.json'
+    settings.write_text('{}')
+    import agent_swarm
+
+    source = str(Path(agent_swarm.__file__).parents[1])
+    finished = subprocess.run([sys.executable, '-m', 'agent_swarm.codex.host', '--settings', str(settings),
+                               '--directory', str(tmp_path), 'hi'], capture_output=True, text=True, timeout=60,
+                              env={**os.environ, 'PYTHONPATH': source})
+    assert finished.returncode == 1
+    error = json.loads(finished.stdout)['error']
+    assert error['code'] == 'archive-unavailable'
+    assert f"{tmp_path.resolve() / 'config.yml'}: save_normalized_sessions: true" in error['message']
+    assert not (tmp_path / 'host').exists()

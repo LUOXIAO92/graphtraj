@@ -23,6 +23,7 @@ import sys
 import yaml
 
 from agent_swarm import AgentControl, AgentsError, Caller, bind
+from agent_swarm.config import reject_archive_without_collector
 from agent_swarm.runtime import RuntimeAdapterError
 from .app_server import CodexServerRequest
 from .driver import CodexDriver
@@ -35,6 +36,7 @@ class CodexHost(CodexManagedExecution):
     def __init__(self, settings: dict, directory: Path, instruction: str, resume: bool = False) -> None:
         """Restore parent identity only from this host's retained native result."""
         directory.mkdir(parents=True, exist_ok=True)
+        reject_archive_without_collector(directory)
         native = directory / 'host'
         native.mkdir(exist_ok=True)
         driver = CodexDriver(settings)

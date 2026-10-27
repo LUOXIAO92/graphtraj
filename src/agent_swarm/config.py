@@ -23,6 +23,7 @@ import tempfile
 from pathlib import Path
 
 from agent_swarm.locks import exclusive
+from agent_swarm.tool import AgentsError
 
 
 CONFIG_FILE = "config.yml"
@@ -64,6 +65,21 @@ def explicit_choices(root: Path) -> dict[str, bool]:
 def read_config(root: Path) -> dict[str, bool]:
     """Return effective settings: explicit choices over standalone defaults."""
     return {**CONFIG_DEFAULTS, **explicit_choices(root)}
+
+
+def reject_archive_without_collector(root: Path) -> None:
+    """Refuse ``save_normalized_sessions: true`` where no session collector exists.
+
+    Independent hosts have no collector, so an enabled archive would fail every
+    create. A consumer that binds a collector (GraphTraj) does not call this.
+    """
+    if read_config(root)["save_normalized_sessions"]:
+        raise AgentsError(
+            "archive-unavailable",
+            f"{Path(root) / CONFIG_FILE}: save_normalized_sessions: true is not available here. "
+            "Archiving needs a session collector, which GraphTraj provides and an independent "
+            "host does not have. Set it to false (or delete the line) and start the host again.",
+        )
 
 
 def write_config(root: Path, **choices: bool) -> dict[str, bool]:

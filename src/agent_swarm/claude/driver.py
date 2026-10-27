@@ -67,7 +67,8 @@ class ClaudeDriver:
         if self.configure is not None:
             self.configure(turn, run)
         if run.archive is not None and turn.collector is None:
-            raise AgentsError('archive-unavailable', 'Bind the Claude collector for the supplied archive.')
+            raise AgentsError('archive-unavailable', 'Bind the Claude collector for the supplied archive.'
+                              ' Without one, set save_normalized_sessions to false in config.yml.')
         with self.lock:
             self.turns[run.execution] = turn
 

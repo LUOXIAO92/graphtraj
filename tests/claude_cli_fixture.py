@@ -217,6 +217,17 @@ def prompt(message: dict) -> None:
         submitted = tool('submit_result', submission)
         assert tool('submit_result', submission) == submitted
         result(json.dumps(submitted))
+    elif text.startswith('fallback'):
+        # A native model fallback, with or without the Runtime's explanation. Field names
+        # follow the native transcript record of a real fallback (system/model_refusal_fallback).
+        if text == 'fallback':
+            emit({'type': 'system', 'subtype': 'model_refusal_fallback', 'session_id': session,
+                  'content': "Opus 5.5's safeguards flagged this session. Opus 4.8 is answering instead.",
+                  'trigger': 'refusal', 'originalModel': model, 'fallbackModel': 'claude-opus-4-8',
+                  'apiRefusalCategory': 'cyber'})
+        emit({'type': 'assistant', 'session_id': session, 'message': {
+            'role': 'assistant', 'model': 'claude-opus-4-8', 'content': [{'type': 'text', 'text': 'fallback'}]}})
+        result('fallback')
     elif text.startswith('register'):
         # Register one direct helper child, then answer with the tool outcome.
         result(json.dumps(call('swarm', {'tasks': [{'role': 'helper'}]})), text == 'register-error')

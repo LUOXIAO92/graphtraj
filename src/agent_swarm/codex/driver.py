@@ -71,7 +71,8 @@ class CodexDriver:
         if self.execution is not CodexManagedExecution:
             options.update(independent=True, archive=run.archive)
         elif run.archive is not None:
-            raise AgentsError('archive-unavailable', 'Bind the existing Codex collector for the supplied archive.')
+            raise AgentsError('archive-unavailable', 'Bind the existing Codex collector for the supplied archive.'
+                              ' Without one, set save_normalized_sessions to false in config.yml.')
         turn = self.execution(dict(run.settings['adapter_request']), run.message, run.directory,
                               lambda session, pid: ready.set(), dict(run.settings.get('evidence', {})),
                               trace_file=run.directory / 'trace.jsonl', expected_session=run.session,

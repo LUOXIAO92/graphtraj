@@ -123,3 +123,181 @@ def test_native_print_result_delivers_queued_notice_once(tmp_path: Path, claude_
     assert notices == [] and shown[0] == 'remembered352'
     assert 'main_notices' not in call('agents', {'action': 'discover'}).document
     assert host.context({'operation': 'notices', 'session': session})['notices'] == []
+
+
+@pytest.mark.parametrize('instruction, reason', [
+    ('fallback', "Runtime reason: model_refusal_fallback: Opus 5.5's safeguards flagged this session."),
+    ('fallback-unexplained', 'Runtime reason: not provided in the native stream.'),
+])
+def test_model_change_failure_names_both_models_and_reason(
+        tmp_path: Path, claude_environment: None, instruction: str, reason: str) -> None:
+    """The unchanged strict model check states what was requested, observed and why."""
+    import json
+
+    notices = []
+    control = AgentControl(tmp_path / 'agents', {'claude': ClaudeDriver(tmp_path, {})},
+                           event_receiver=lambda event: notices.append(event) or True)
+    call = bind(control, Caller('controlled-native-host', None, str(uuid4()), 'claude'))
+    created = call({'action': 'create', 'runtime': 'claude', 'instruction': instruction})
+    assert not created.failed, created.document
+    done = call({'action': 'wait', 'agent': created.document['agent'], 'timeout_seconds': 20})
+    last = done.document['result']['last_result']
+    assert last['outcome'] == 'failed'
+    assert last['error']['code'] == 'RUNTIME_REQUEST_FAILED'
+    message = last['error']['message']
+    assert message.startswith('Claude changed the configured model: requested model ')
+    assert 'observed model claude-opus-4-8' in message
+    assert reason in message
+    if instruction == 'fallback':
+        assert 'fallbackModel=claude-opus-4-8' in message
+    # The persisted execution error is the one any later notice is built from.
+    record = json.loads((tmp_path / 'agents' / 'control' / 'agents'
+                         / f"{created.document['agent']}.json").read_text())
+    assert record['executions'][-1]['error'] == last['error']
+    # Today a failure without a last message sends no notice (control.py finished).
+    assert notices == [] and record['executions'][-1].get('notification') is None
+
+
+@pytest.mark.parametrize('case', ['elsewhere', 'archive'])
+def test_refused_host_start_is_readable_in_calls_and_log(tmp_path: Path, case: str) -> None:
+    """A refused start completes the MCP handshake and reports why; it binds no control."""
+    import json
+    import os
+    import subprocess
+    import sys
+
+    import agent_swarm
+
+    project, elsewhere = tmp_path / 'project', tmp_path / 'elsewhere'
+    root = project / '.agents-control'
+    root.mkdir(parents=True)
+    elsewhere.mkdir()
+    config = root / 'claude-host.json'
+    # The verified native parent is this launcher, so it is the configured CLI.
+    config.write_text(json.dumps({'root': str(root), 'cwd': str(project), 'claude': sys.executable,
+                                  'channel_file': str(root / 'live' / 'channel.json'), 'settings': {}}))
+    if case == 'archive':
+        (root / 'config.yml').write_text('save_normalized_sessions: true\n')
+    messages = [{'jsonrpc': '2.0', 'id': 1, 'method': 'initialize', 'params': {}},
+                {'jsonrpc': '2.0', 'id': 2, 'method': 'tools/call',
+                 'params': {'name': 'agents', 'arguments': {'action': 'discover'}}}]
+    launcher = ('import subprocess, sys\n'
+                'done = subprocess.run([sys.executable, "-m", "agent_swarm.claude.host", "serve", "--config",'
+                ' sys.argv[1]], input=sys.stdin.read(), capture_output=True, text=True, timeout=30)\n'
+                'sys.stdout.write(done.stdout); sys.stderr.write(done.stderr)\n')
+    source = str(Path(agent_swarm.__file__).parents[1])
+    finished = subprocess.run(
+        [sys.executable, '-c', launcher, str(config)], cwd=elsewhere if case == 'elsewhere' else project,
+        input=''.join(json.dumps(message) + '\n' for message in messages), capture_output=True, text=True,
+        timeout=60, env={**os.environ, 'PYTHONPATH': source + os.pathsep + os.environ.get('PYTHONPATH', '')})
+    replies = [json.loads(line) for line in finished.stdout.splitlines()]
+    assert replies[0]['result']['serverInfo']['name'] == 'agents'
+    called = replies[1]['result']
+    assert called['isError'] is True
+    error = called['structuredContent']['error']
+    if case == 'elsewhere':
+        assert error['code'] == 'host-unavailable'
+        assert f'started in {elsewhere.resolve()}' in error['message']
+        assert f'configured for {project.resolve()}' in error['message']
+    else:
+        assert error['code'] == 'archive-unavailable'
+        assert 'save_normalized_sessions: true is not available here' in error['message']
+        assert 'set it to false' in error['message'].lower()
+    assert error['message'] in finished.stderr
+    assert error['message'] in (root / 'host.log').read_text()
+    assert not (root / 'control').exists() and not (root / 'live').exists()
+
+
+@pytest.mark.parametrize('case', ['refused', 'serving'])
+def test_session_end_is_logged_as_a_stop_not_a_traceback(tmp_path: Path, case: str) -> None:
+    """Claude Code ends a session with SIGINT; the log keeps one stop line and no traceback."""
+    import json
+    import os
+    import subprocess
+    import sys
+
+    import agent_swarm
+
+    project, elsewhere = tmp_path / 'project', tmp_path / 'elsewhere'
+    root = project / '.agents-control'
+    root.mkdir(parents=True)
+    elsewhere.mkdir()
+    channel = root / 'live' / 'channel.json'
+    config = root / 'claude-host.json'
+    config.write_text(json.dumps({'root': str(root), 'cwd': str(project), 'claude': sys.executable,
+                                  'channel_file': str(channel), 'settings': {}}))
+    # The launcher is the verified native parent; it interrupts the host like Claude Code.
+    launcher = ('import json, signal, subprocess, sys\n'
+                'host = subprocess.Popen([sys.executable, "-m", "agent_swarm.claude.host", "serve", "--config",'
+                ' sys.argv[1]], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)\n'
+                'host.stdin.write(json.dumps({"jsonrpc": "2.0", "id": 1, "method": "initialize",'
+                ' "params": {}}) + "\\n"); host.stdin.flush()\n'
+                'print(host.stdout.readline().strip())\n'
+                'host.send_signal(signal.SIGINT)\n'
+                'print(host.wait(timeout=30))\n')
+    source = str(Path(agent_swarm.__file__).parents[1])
+    finished = subprocess.run(
+        [sys.executable, '-c', launcher, str(config)], cwd=elsewhere if case == 'refused' else project,
+        capture_output=True, text=True, timeout=60,
+        env={**os.environ, 'PYTHONPATH': source + os.pathsep + os.environ.get('PYTHONPATH', '')})
+    reply, returncode = finished.stdout.splitlines()
+    assert json.loads(reply)['result']['serverInfo']['name'] == 'agents'
+    assert returncode == '0', finished.stderr
+    log = (root / 'host.log').read_text()
+    assert 'Traceback' not in log and 'KeyboardInterrupt' not in log
+    assert 'agents host stopped: Claude Code ended the session (SIGINT).' in log
+    if case == 'refused':
+        assert 'The agents host did not start: Claude Code was started in' in log
+    else:
+        assert 'did not start' not in log and not channel.exists()
+
+
+def test_context_reports_a_refused_host_in_one_line(tmp_path: Path) -> None:
+    """The mod's context step shows the refusal reason, not a missing-channel traceback."""
+    import json
+    import os
+    import subprocess
+    import sys
+
+    import agent_swarm
+
+    project = tmp_path / 'project'
+    root = project / '.agents-control'
+    root.mkdir(parents=True)
+    (root / 'config.yml').write_text('save_normalized_sessions: true\n')
+    config = root / 'claude-host.json'
+    config.write_text(json.dumps({'root': str(root), 'cwd': str(project), 'claude': sys.executable,
+                                  'channel_file': str(root / 'live' / 'channel.json'), 'settings': {}}))
+    env = {**os.environ, 'PYTHONPATH': str(Path(agent_swarm.__file__).parents[1]) + os.pathsep
+           + os.environ.get('PYTHONPATH', '')}
+
+    def context() -> subprocess.CompletedProcess:
+        """Run the mod's context entry as the hook does, with one request on stdin."""
+        return subprocess.run([sys.executable, '-m', 'agent_swarm.claude.host', 'context', '--config', str(config)],
+                              input='{}', capture_output=True, text=True, timeout=30, env=env)
+
+    idle = context()
+    assert idle.returncode == 1 and 'Traceback' not in idle.stderr
+    assert idle.stderr.splitlines() == [f"The agents host for this project is not running; see {root / 'host.log'}."]
+    launcher = ('import json, signal, subprocess, sys\n'
+                'host = subprocess.Popen([sys.executable, "-m", "agent_swarm.claude.host", "serve", "--config",'
+                ' sys.argv[1]], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)\n'
+                'host.stdin.write(json.dumps({"jsonrpc": "2.0", "id": 1, "method": "initialize",'
+                ' "params": {}}) + "\\n"); host.stdin.flush()\n'
+                'print(host.stdout.readline().strip()); sys.stdout.flush()\n'
+                'sys.stdin.readline()\n'
+                'host.send_signal(signal.SIGINT)\n'
+                'print(host.wait(timeout=30))\n')
+    host = subprocess.Popen([sys.executable, '-c', launcher, str(config)], cwd=project, env=env,
+                            stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
+    assert json.loads(host.stdout.readline())['result']['serverInfo']['name'] == 'agents'
+    refused = context()
+    host.stdin.write('stop\n')
+    host.stdin.flush()
+    assert host.stdout.readline().strip() == '0'
+    host.wait(timeout=30)
+    assert refused.returncode == 1 and 'Traceback' not in refused.stderr
+    [line] = refused.stderr.splitlines()
+    assert line.startswith('archive-unavailable: The agents host did not start: ')
+    assert 'save_normalized_sessions: true is not available here' in line and 'Set it to false' in line
+    assert not (root / 'host-refusal.json').exists() and not (root / 'live').exists()

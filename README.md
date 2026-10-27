@@ -135,10 +135,11 @@ owning native parent connection; status does not repeat a body already sent as
 a notification. Native requests for the parent itself print to stderr and take
 an explicit native JSON response on stdin. Use `--resume` with the same directory
 to continue the retained parent Session. A closing host interrupts its active
-children, preserving their native Sessions. Normalized archiving is off. Do
-not set `save_normalized_sessions: true` in `<directory>/config.yml` for
-independent use: without GraphTraj's collector, every `create` then fails with
-`archive-unavailable`.
+children, preserving their native Sessions. Normalized archiving is off and
+needs GraphTraj's collector. If `<directory>/config.yml` sets
+`save_normalized_sessions: true`, the host refuses to start: it prints an
+`archive-unavailable` error naming that file and setting and exits with status
+1. Set it to `false` or delete the line.
 
 ### Independent Claude Code host
 
@@ -169,14 +170,29 @@ in force. Optional settings include `model` (default `claude-opus-5-5`),
 environment variable name, never its value). These settings apply to every
 child of the host; edit them before starting Claude Code. Existing login and
 trust are not copied. Session continuation uses the original child's captured
-settings. Normalized archiving is off. Do not set
-`save_normalized_sessions: true` in `.agents-control/config.yml` for independent
-use: without GraphTraj's collector, every `create` then fails with
-`archive-unavailable`.
+settings. Normalized archiving is off and needs GraphTraj's collector; the host
+refuses to start while `.agents-control/config.yml` sets
+`save_normalized_sessions: true`. Set it to `false` or delete the line.
 
-The host checks that Claude Code runs in the configured directory. Start or
-resume the Session from that directory; otherwise the `agents` server exits and
-Claude Code reports only `CONNECTION_CLOSED`.
+Start or resume Claude Code from the configured directory. Claude Code reads
+`.mcp.json` from its start directory and the directories above it. Started or
+resumed in an unrelated directory, it does not load this project's `agents`
+server, and `/mcp` does not list it; an `agents` server listed there comes from
+that directory's own configuration. Started in a subdirectory of the project, or
+given this project's `.mcp.json` explicitly, the host starts but refuses: it
+connects, starts no control and no child, and every `agents` call returns
+`host-unavailable: The agents host did not start: Claude Code was started in
+<actual>, but this host is configured for <expected>. ...`. The archive setting
+above, an `agents` host already running for the project, or a host not launched
+by the configured `claude` are refused the same way with their own reason.
+`.agents-control/host.log` records the refusal as one timestamped JSON line
+(search for `did not start`) and the end of each session as one
+`agents host stopped` line. Fix the cause, then start Claude Code again from the
+configured directory. A child stopped because Claude switched its model
+(for example a safeguard fallback) ends `failed` with `RUNTIME_REQUEST_FAILED`;
+its `last_result.error` names the requested model, the observed model and the
+Runtime's reason, or says that none was provided. A failed child sends no
+completion notice; read the reason with `wait` or `status`.
 
 ### Pi and DSH
 
@@ -199,7 +215,7 @@ independent host (see above), so their rows are not available independently.
 | Completion notice to the Main | Yes: pushed into the Main Session, or attached as `main_notices` to the next `agents` result. Known defect: a completion already returned by `wait` can be pushed again | Yes: each completion is sent once to the parent Session as a host event |
 | Relay a child's native approval request | Yes, by polling: `wait` or `status` shows `pending_requests`, then `requests` and `reply` | No: native `auto_review` handles children's requests, and the parent shares the same settings |
 | Native history | Child native Sessions are retained under `.agents-control/native/` and continued by `resume` | `--resume` continues the parent Session with its children |
-| Normalized archive | No: with `save_normalized_sessions` on, `create` returns `archive-unavailable` | No: with `save_normalized_sessions` on, `create` returns `archive-unavailable` |
+| Normalized archive | No: with `save_normalized_sessions` on, every `agents` call returns `archive-unavailable` naming the setting | No: with `save_normalized_sessions` on, the host exits with `archive-unavailable` naming the setting |
 | Children on another Runtime | No | No |
 
 ## Use it with your Agent

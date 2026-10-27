@@ -12,6 +12,7 @@ from typing import TextIO
 from uuid import UUID
 
 from agent_swarm import AgentControl, AgentsError, AgentsResult, Caller, bind
+from agent_swarm.config import reject_archive_without_collector
 from agent_swarm.connection import connection_operation, worker_connection
 from agent_swarm.discovery import handle_request
 from agent_swarm.process import process_ancestors, process_executable
@@ -55,6 +56,30 @@ def isolate_stdio(log: Path) -> tuple[TextIO, TextIO]:
     sys.stdout = sys.stderr = sink
     faulthandler.enable(sink)
     return mcp_in, mcp_out
+
+
+def serve_refusal(error: Exception, log: Path) -> None:
+    """Keep a refused start readable instead of exiting before the MCP handshake.
+
+    Claude Code reports only CONNECTION_CLOSED for a server that exits before
+    it answers. The reason goes to ``log`` and to stderr, and the server then
+    answers every agents call with it. No control, channel or Agent is created,
+    so every startup check remains in force.
+    """
+    reason = {'code': getattr(error, 'code', 'host-unavailable'),
+              'message': f'The agents host did not start: {error}'}
+    print(reason['message'], file=sys.stderr, flush=True)
+    mcp_in, mcp_out = isolate_stdio(log)
+    print(time.strftime('%Y-%m-%dT%H:%M:%S%z'), json.dumps(reason, ensure_ascii=False), flush=True)
+
+    def call(identity: object, params: dict) -> dict:
+        """Answer each call with the startup reason; nothing is executed."""
+        document = {'error': reason}
+        return result_response(identity, {'content': [{'type': 'text', 'text': json.dumps(document, ensure_ascii=False)}],
+                                          'structuredContent': document, 'isError': True})
+
+    serve(mcp_in, mcp_out, lambda message: respond(
+        message, tool_documents, call, {'name': 'agents', 'version': '0.1.0'}))
 
 
 def write_adoption(material: dict[str, object]) -> None:
@@ -182,13 +207,21 @@ def main() -> None:
         return
     if options.config is None:
         parser.error('serve/context requires --config')
-    configuration = json.loads(options.config.read_text())
-    if set(configuration) - {'root', 'cwd', 'claude', 'channel_file', 'settings'}:
-        raise ValueError('Unknown native host configuration fields.')
-    root, cwd, executable, channel_file = (Path(configuration[key])
-                                          for key in ('root', 'cwd', 'claude', 'channel_file'))
-    if not all(p.is_absolute() for p in (root, cwd, executable, channel_file)):
-        raise ValueError('Native host paths must be absolute.')
+    # Until the configuration names the channel, a refusal is logged beside it.
+    log = options.config.absolute().parent / 'host.log'
+    try:
+        configuration = json.loads(options.config.read_text())
+        if set(configuration) - {'root', 'cwd', 'claude', 'channel_file', 'settings'}:
+            raise ValueError('Unknown native host configuration fields.')
+        root, cwd, executable, channel_file = (Path(configuration[key])
+                                              for key in ('root', 'cwd', 'claude', 'channel_file'))
+        if not all(p.is_absolute() for p in (root, cwd, executable, channel_file)):
+            raise ValueError('Native host paths must be absolute.')
+    except Exception as error:
+        if options.operation == 'context':
+            raise
+        serve_refusal(ValueError(f'{options.config}: {error}'), log)
+        return
     if options.operation == 'context':
         endpoint = json.loads(channel_file.read_text())
         parent = native_parent(Path(endpoint['executable']), stage='context')
@@ -197,11 +230,22 @@ def main() -> None:
         print(json.dumps(connection_operation(endpoint['address'], json.load(sys.stdin), authenticate=True)))
         return
     executable = executable.resolve()
-    parent = native_parent(executable)
-    if 'AGENT_SWARM_CONNECTION' in os.environ or 'GRAPHTRAJ_CLI_CONNECTION' in os.environ:
-        raise AgentsError('authority-denied', 'A bound child must use its existing owner.')
-    if Path.cwd().resolve() != cwd.resolve():
-        raise ValueError('The native host cwd differs from the configured cwd.')
+    directory = channel_file.parent
+    try:
+        parent = native_parent(executable)
+        if 'AGENT_SWARM_CONNECTION' in os.environ or 'GRAPHTRAJ_CLI_CONNECTION' in os.environ:
+            raise AgentsError('authority-denied', 'A bound child must use its existing owner.')
+        if Path.cwd().resolve() != cwd.resolve():
+            raise ValueError(f'Claude Code was started in {Path.cwd().resolve()}, but this host is configured '
+                             f'for {cwd.resolve()}. Start or resume Claude Code from {cwd.resolve()}.')
+        if channel_file.exists():
+            raise AgentsError('host-busy', f'{channel_file} exists: another agents host for this project is '
+                              'running, or a previous one was killed. Close the other Claude Code session; '
+                              'if none is running, delete the file.')
+        reject_archive_without_collector(root)
+    except Exception as error:
+        serve_refusal(error, directory.parent / 'host.log')
+        return
     calls = IndependentCalls(root, cwd, configuration.get('settings', {}))
 
     def authenticate(pid: int) -> None:
@@ -223,7 +267,6 @@ def main() -> None:
         return result_response(identity, {'content': [{'type': 'text', 'text': json.dumps(result.document, ensure_ascii=False)}],
                                           'structuredContent': result.document, 'isError': result.failed})
 
-    directory = channel_file.parent
     directory.mkdir(parents=True, exist_ok=True)
     try:
         with worker_connection(directory, calls.context, authenticate=authenticate) as address:

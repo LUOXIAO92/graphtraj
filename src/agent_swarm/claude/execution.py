@@ -628,6 +628,7 @@ class ClaudeExecution:
                 stop_deadline = None
                 last_echo = last_result = 0
                 queued_turns = None
+                model_reason = None
                 answered: set[int] = set()
                 while True:
                     if self.stopping.is_set() and stop_deadline is None:
@@ -661,6 +662,8 @@ class ClaudeExecution:
                     if event.get('type') != 'eof' and collector is not None:
                         self.collection.put(('event', event, source_position))
                     kind = event.get('type')
+                    if kind == 'system' and event.get('subtype') not in ('init', 'session_state_changed'):
+                        model_reason = native_model_reason(event) or model_reason
                     if kind in ('warning', 'error') or (
                             kind == 'system' and event.get('subtype') in ('warning', 'error')):
                         self._diagnostic_warning('native_event', event.get('message'))
@@ -704,7 +707,9 @@ class ClaudeExecution:
                             self._control_event(event)
                     elif kind == 'system' and event.get('subtype') == 'init':
                         if event.get('session_id') != self.native_id or event.get('model') != self.request['model']:
-                            raise RuntimeAdapterError('RUNTIME_REQUEST_FAILED', 'Claude selected a different Session or model.')
+                            raise RuntimeAdapterError('RUNTIME_REQUEST_FAILED', model_change_message(
+                                'Claude selected a different Session or model', self.request['model'],
+                                event.get('model'), model_reason))
                         if self.independent and (not self.sdk_tools_listed
                                 or 'mcp__agents__agents' not in event.get('tools', [])):
                             raise RuntimeAdapterError('RUNTIME_REQUEST_FAILED',
@@ -740,7 +745,8 @@ class ClaudeExecution:
                     elif kind == 'assistant' and event.get('parent_tool_use_id') is None:
                         model = event.get('message', {}).get('model')
                         if model is not None and model != '<synthetic>' and not event.get('error') and model != self.request['model']:
-                            raise RuntimeAdapterError('RUNTIME_REQUEST_FAILED', 'Claude changed the configured model.')
+                            raise RuntimeAdapterError('RUNTIME_REQUEST_FAILED', model_change_message(
+                                'Claude changed the configured model', self.request['model'], model, model_reason))
                         last = '\n'.join(block.get('text', '') for block in event.get('message', {}).get('content', [])
                                          if block.get('type') == 'text') or last
                     elif kind == 'user' and event.get('isReplay') is True:
@@ -1004,6 +1010,23 @@ class ClaudeExecution:
         if not self.termination_checked.wait(timeout=30) or not self.terminal_confirmed:
             raise RuntimeAdapterError('operation-failed', 'Claude interruption is not yet confirmed.', terminal_confirmed=False)
         return {}
+
+
+def native_model_reason(event: dict) -> str | None:
+    """Return the explanation a native system event gives, such as a model fallback."""
+    facts = ', '.join(f'{key}={event[key]}' for key in
+                      ('trigger', 'apiRefusalCategory', 'originalModel', 'fallbackModel')
+                      if event.get(key) is not None)
+    text = ' '.join(event['content'].split())[:400] if isinstance(event.get('content'), str) else ''
+    if not (text or facts):
+        return None
+    return redact(f"{event.get('subtype')}: {text}" + (f' ({facts})' if facts else ''))
+
+
+def model_change_message(summary: str, requested: object, observed: object, reason: str | None) -> str:
+    """State both models and the Runtime's reason so a stopped child is diagnosable."""
+    return (f'{summary}: requested model {requested}, observed model {observed}; Runtime reason: '
+            + (reason or 'not provided in the native stream') + '.')
 
 
 def yaml_document(path: Path) -> dict:

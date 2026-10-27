@@ -105,3 +105,76 @@ def test_native_print_result_delivers_queued_notice_once(tmp_path: Path, claude_
     assert [notice['event']['message'] for notice in notices] == ['remembered352']
     assert 'main_notices' not in call('agents', {'action': 'discover'}).document
     assert host.context({'operation': 'notices', 'session': session})['notices'] == []
+
+
+@pytest.mark.parametrize('instruction, reason', [
+    ('fallback', "Runtime reason: model_refusal_fallback: Opus 5.5's safeguards flagged this session."),
+    ('fallback-unexplained', 'Runtime reason: not provided in the native stream.'),
+])
+def test_model_change_failure_names_both_models_and_reason(
+        tmp_path: Path, claude_environment: None, instruction: str, reason: str) -> None:
+    """The unchanged strict model check states what was requested, observed and why."""
+    control = AgentControl(tmp_path / 'agents', {'claude': ClaudeDriver(tmp_path, {})})
+    call = bind(control, Caller('controlled-native-host', None, str(uuid4()), 'claude'))
+    created = call({'action': 'create', 'runtime': 'claude', 'instruction': instruction})
+    assert not created.failed, created.document
+    done = call({'action': 'wait', 'agent': created.document['agent'], 'timeout_seconds': 20})
+    last = done.document['result']['last_result']
+    assert last['outcome'] == 'failed'
+    assert last['error']['code'] == 'RUNTIME_REQUEST_FAILED'
+    message = last['error']['message']
+    assert message.startswith('Claude changed the configured model: requested model ')
+    assert 'observed model claude-opus-4-8' in message
+    assert reason in message
+    if instruction == 'fallback':
+        assert 'fallbackModel=claude-opus-4-8' in message
+
+
+@pytest.mark.parametrize('case', ['elsewhere', 'archive'])
+def test_refused_host_start_is_readable_in_calls_and_log(tmp_path: Path, case: str) -> None:
+    """A refused start completes the MCP handshake and reports why; it binds no control."""
+    import json
+    import os
+    import subprocess
+    import sys
+
+    import agent_swarm
+
+    project, elsewhere = tmp_path / 'project', tmp_path / 'elsewhere'
+    root = project / '.agents-control'
+    root.mkdir(parents=True)
+    elsewhere.mkdir()
+    config = root / 'claude-host.json'
+    # The verified native parent is this launcher, so it is the configured CLI.
+    config.write_text(json.dumps({'root': str(root), 'cwd': str(project), 'claude': sys.executable,
+                                  'channel_file': str(root / 'live' / 'channel.json'), 'settings': {}}))
+    if case == 'archive':
+        (root / 'config.yml').write_text('save_normalized_sessions: true\n')
+    messages = [{'jsonrpc': '2.0', 'id': 1, 'method': 'initialize', 'params': {}},
+                {'jsonrpc': '2.0', 'id': 2, 'method': 'tools/call',
+                 'params': {'name': 'agents', 'arguments': {'action': 'discover'}}}]
+    launcher = ('import subprocess, sys\n'
+                'done = subprocess.run([sys.executable, "-m", "agent_swarm.claude.host", "serve", "--config",'
+                ' sys.argv[1]], input=sys.stdin.read(), capture_output=True, text=True, timeout=30)\n'
+                'sys.stdout.write(done.stdout); sys.stderr.write(done.stderr)\n')
+    source = str(Path(agent_swarm.__file__).parents[1])
+    finished = subprocess.run(
+        [sys.executable, '-c', launcher, str(config)], cwd=elsewhere if case == 'elsewhere' else project,
+        input=''.join(json.dumps(message) + '\n' for message in messages), capture_output=True, text=True,
+        timeout=60, env={**os.environ, 'PYTHONPATH': source + os.pathsep + os.environ.get('PYTHONPATH', '')})
+    replies = [json.loads(line) for line in finished.stdout.splitlines()]
+    assert replies[0]['result']['serverInfo']['name'] == 'agents'
+    called = replies[1]['result']
+    assert called['isError'] is True
+    error = called['structuredContent']['error']
+    if case == 'elsewhere':
+        assert error['code'] == 'host-unavailable'
+        assert f'started in {elsewhere.resolve()}' in error['message']
+        assert f'configured for {project.resolve()}' in error['message']
+    else:
+        assert error['code'] == 'archive-unavailable'
+        assert 'save_normalized_sessions: true is not available here' in error['message']
+        assert 'set it to false' in error['message'].lower()
+    assert error['message'] in finished.stderr
+    assert error['message'] in (root / 'host.log').read_text()
+    assert not (root / 'control').exists() and not (root / 'live').exists()

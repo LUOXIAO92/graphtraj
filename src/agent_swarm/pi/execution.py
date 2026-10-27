@@ -320,7 +320,8 @@ class PiExecution:
         if self.archive is None:
             return None
         if self.collector is None:
-            raise RuntimeAdapterError('archive-unavailable', 'Bind the Pi collector for the supplied archive.')
+            raise RuntimeAdapterError('archive-unavailable', 'Bind the Pi collector for the supplied archive.'
+                                      ' Without one, set save_normalized_sessions to false in config.yml.')
         return self.collector(header, native['entries'], native['leafId'], 'child')
 
     def _record_process(self, pid: int, outcome: dict | None = None) -> None:

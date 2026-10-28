@@ -230,9 +230,12 @@ def test_session_end_is_logged_as_a_stop_not_a_traceback(tmp_path: Path, case: s
     config.write_text(json.dumps({'root': str(root), 'cwd': str(project), 'claude': sys.executable,
                                   'channel_file': str(channel), 'settings': {}}))
     # The launcher is the verified native parent; it interrupts the host like Claude Code.
+    # Like Claude Code it starts the host with the default SIGINT disposition: a
+    # suite run as a background job would otherwise pass SIGINT ignored (372).
     launcher = ('import json, signal, subprocess, sys\n'
                 'host = subprocess.Popen([sys.executable, "-m", "agent_swarm.claude.host", "serve", "--config",'
-                ' sys.argv[1]], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)\n'
+                ' sys.argv[1]], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True,'
+                ' preexec_fn=lambda: signal.signal(signal.SIGINT, signal.SIG_DFL))\n'
                 'host.stdin.write(json.dumps({"jsonrpc": "2.0", "id": 1, "method": "initialize",'
                 ' "params": {}}) + "\\n"); host.stdin.flush()\n'
                 'print(host.stdout.readline().strip())\n'
@@ -284,7 +287,8 @@ def test_context_reports_a_refused_host_in_one_line(tmp_path: Path) -> None:
     assert idle.stderr.splitlines() == [f"The agents host for this project is not running; see {root / 'host.log'}."]
     launcher = ('import json, signal, subprocess, sys\n'
                 'host = subprocess.Popen([sys.executable, "-m", "agent_swarm.claude.host", "serve", "--config",'
-                ' sys.argv[1]], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)\n'
+                ' sys.argv[1]], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True,'
+                ' preexec_fn=lambda: signal.signal(signal.SIGINT, signal.SIG_DFL))\n'
                 'host.stdin.write(json.dumps({"jsonrpc": "2.0", "id": 1, "method": "initialize",'
                 ' "params": {}}) + "\\n"); host.stdin.flush()\n'
                 'print(host.stdout.readline().strip()); sys.stdout.flush()\n'

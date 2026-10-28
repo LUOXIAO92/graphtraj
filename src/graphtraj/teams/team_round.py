@@ -1246,18 +1246,27 @@ def _run_session_worker(
                 return mapping["session"], "running"
             own: dict[str, Any] = {}
 
+            def registered_own(current: object) -> bool:
+                """Whether a mapping is this Worker's registered execution.
+
+                The Worker first writes a mapping with only its pid, before the
+                native execution exists (runner_worker record_created).
+                """
+                return (isinstance(current, dict) and current.get("worker_pid") == worker.pid
+                        and bool(current.get("execution_id")))
+
             def observe_own() -> None:
                 """Retain this Worker's mapping, then its terminal, before a successor."""
                 try:
                     if "mapping" not in own:
                         current = yaml.safe_load((session_directory / "mapping.yml").read_text(encoding="utf-8"))
-                        if isinstance(current, dict) and current.get("worker_pid") == worker.pid:
+                        if registered_own(current):
                             own["mapping"] = current
                     if "mapping" in own and "terminal" not in own:
                         terminal = yaml.safe_load(execution.read_text(encoding="utf-8"))
                         current = yaml.safe_load((session_directory / "mapping.yml").read_text(encoding="utf-8"))
-                        if isinstance(current, dict) and current.get("worker_pid") == worker.pid:
-                            own["terminal"] = terminal
+                        if registered_own(current):
+                            own["mapping"], own["terminal"] = current, terminal
                 except (OSError, UnicodeError, yaml.YAMLError):
                     pass
 

@@ -313,3 +313,57 @@ def test_a_resumed_non_root_parent_gets_its_childrens_held_ends_once(
     send()                                         # a second resume
     assert len(DELIVERED) == 2 and sent == ['continue'] * 4
     assert runner_control.held_ends(runner, 'engineer') == []
+
+
+def test_a_launch_ignores_its_workers_early_pid_only_mapping(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """F1: the Worker first writes a mapping with only its pid, before its execution exists.
+
+    That early record must not stand for the launch, or its result would fall
+    back to the alias's current mapping, which a successor may already own.
+    """
+    import io
+    import subprocess
+
+    from graphtraj.teams import team_round
+
+    monkeypatch.delenv('GRAPHTRAJ_BUDGET_NOTICE_FD', raising=False)
+    session = tmp_path / 'sessions' / 'engineer'
+    session.mkdir(parents=True)
+    steps = [
+        lambda: (session / 'mapping.yml').write_text(yaml.safe_dump(        # record_created
+            {'session': 's1', 'worker_pid': 4242})),
+        lambda: (session / 'mapping.yml').write_text(yaml.safe_dump(        # record_session
+            {'session': 's1', 'worker_pid': 4242, 'execution_id': 'e1'})),
+        lambda: (session / 'execution.yml').write_text(yaml.safe_dump({'outcome': 'completed'})),
+    ]
+
+    class Worker:
+        """Each poll is one Worker step; after them a successor registers as it exits."""
+        pid = 4242
+        returncode = None
+
+        def __init__(self, *_: object, **__: object) -> None:
+            self.stdin = io.StringIO()
+
+        def poll(self) -> int | None:
+            if steps:
+                steps.pop(0)()
+            else:
+                (session / 'execution.yml').unlink()
+                (session / 'mapping.yml').write_text(yaml.safe_dump(
+                    {'session': 's1', 'worker_pid': 5151, 'execution_id': 'e2'}))
+                self.returncode = 0
+            return self.returncode
+
+        def wait(self, timeout: float | None = None) -> int:
+            if self.returncode is None:
+                raise subprocess.TimeoutExpired('worker', timeout)
+            return self.returncode
+
+    monkeypatch.setattr(team_round.subprocess, 'Popen', Worker)
+    registered: dict = {}
+    assert team_round._run_session_worker(
+        session, session / 'launch.yml', tmp_path, 'prompt', {}, 3, None, True, registered,
+    ) == ('s1', 'completed')
+    assert registered == {'execution_id': 'e1'}

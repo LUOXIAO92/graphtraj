@@ -319,6 +319,11 @@ def run(job_file: Path) -> int:
                 }
                 if budget_stopped.is_set() and error.code == "RUNTIME_EXECUTION_INTERRUPTED":
                     terminal.update(outcome="interrupted", terminal_confirmed=True, budget_stopped=True)
+                elif error.code == "subtree-stopped" and error.terminal_confirmed:
+                    # The registration check saw the stop its publisher recorded
+                    # and ended the execution, the same interruption the
+                    # publisher would otherwise deliver (372 6d).
+                    terminal["outcome"] = "interrupted"
             else:
                 _write_worker_error(
                     session_directory,
@@ -357,7 +362,9 @@ def run(job_file: Path) -> int:
                 # A successor may already own mapping.yml. This notice belongs
                 # to the native execution that produced this terminal result.
                 deliver_execution_end(session_directory, execution_mapping, terminal,
-                                      parent_input=job.get('parent_input') is not False)
+                                      parent_input=job.get('parent_input') is not False,
+                                      driver_reports_end=operation == "launch"
+                                      and job.get("driver_reports_end") is True)
             return 0
     finally:
         if startup_lock is not None:
@@ -545,6 +552,8 @@ def _monitor_execution_budget(
     assert isinstance(role, str)
     delivery: threading.Thread | None = None
     retry_at = 0.0
+    # Only this Session's own notices keep its delivery going (372 6c).
+    observer = session_directory.name
 
     def deliver() -> None:
         """Retry transient native failures within the existing cleanup window.
@@ -555,10 +564,11 @@ def _monitor_execution_budget(
         deadline = time.monotonic() + OPERATION_TIMEOUT_SECONDS
         while True:
             try:
-                monitor.deliver_parent_notices(session_directory)
+                if monitor.deliver_parent_notices(session_directory):
+                    return  # Held for the stopped parent's continuation.
             except (RunnerError, OSError, ValueError, yaml.YAMLError):
                 pass
-            if (mapping.get("parent") is None and not mapping.get("parent_connection")) or not monitor.pending_parent_notices():
+            if (mapping.get("parent") is None and not mapping.get("parent_connection")) or not monitor.pending_parent_notices(observer):
                 return
             remaining = deadline - time.monotonic()
             if remaining <= 0:
@@ -573,7 +583,7 @@ def _monitor_execution_budget(
             budget_stopped.set()
             terminate()
         if (session_directory / "launch.yml").is_file():
-            pending = {notice["key"] for notice in monitor.pending_parent_notices()}
+            pending = {notice["key"] for notice in monitor.pending_parent_notices(observer)}
             if pending and time.monotonic() >= retry_at and (delivery is None or not delivery.is_alive()):
                 retry_at = time.monotonic() + 1
                 delivery = threading.Thread(target=deliver, daemon=True)

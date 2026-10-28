@@ -18,7 +18,10 @@ from pathlib import Path
 import pytest
 import yaml
 
-from conftest import FakeCodex, InstalledCommands, run_process, wait_for_file
+from conftest import (
+    _RUNNER_OPERATION, REMOVED_RUNNER_OPERATIONS, FakeCodex, InstalledCommands, run_process,
+    wait_for_file,
+)
 from runner_fixtures import configure_harness
 from test_managed_sessions import managed_project
 from test_session_alias_control import _register_ready_task
@@ -31,6 +34,8 @@ from pathlib import Path
 
 import yaml
 
+REMOVED = set(json.loads(os.environ['REMOVED_RUNNER_OPERATIONS']))
+
 
 def retain(record):
     """Keep one scenario step in the parent-side evidence log."""
@@ -39,9 +44,16 @@ def retain(record):
 
 
 def call(*arguments):
-    """Call one public Runner entry from this Session's own process tree."""
+    """Call one public Runner entry from this Session's own process tree.
+
+    Operations whose CLI route was removed run the retained library replica
+    from the same process tree (conftest ``runner_operation``).
+    """
+    runner = os.environ['GRAPHTRAJ_AGENT_RUNNER']
+    command = ([str(Path(runner).with_name('python')), '-c', os.environ['RUNNER_OPERATION']]
+               if arguments[0] in REMOVED else [runner])
     completed = subprocess.run(
-        [os.environ['GRAPHTRAJ_AGENT_RUNNER'], *arguments],
+        [*command, *arguments],
         cwd=os.environ['GRAPHTRAJ_HARNESS_ROOT'],
         capture_output=True, text=True,
     )
@@ -316,6 +328,8 @@ def test_parent_consumes_notices_and_replies_while_driver_waits(
     environment.pop("PYTHONPATH", None)
     environment.update({
         "GRAPHTRAJ_AGENT_RUNNER": str(installed_commands.runner),
+        "RUNNER_OPERATION": _RUNNER_OPERATION,
+        "REMOVED_RUNNER_OPERATIONS": json.dumps(sorted(REMOVED_RUNNER_OPERATIONS)),
         "FAKE_CODEX_LIFECYCLE_ACTION": "complete-team-round",
         "MANAGED_NATIVE_ROOT": str(tmp_path / "native"),
         "CODEX_HOME": str(tmp_path / "codex-home"),

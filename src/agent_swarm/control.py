@@ -276,8 +276,11 @@ class ExecutionEvents:
                 # A receiver that only queued the notice for its host returns
                 # 'queued': the body stays readable, and wait/status showing it
                 # acknowledges the queued notice instead of hiding the result.
+                # A receiver that submitted the body natively but lost the
+                # acknowledgement returns 'unconfirmed', so it is not shown again.
                 accepted = receiver(notice)
                 delivery = ('queued' if accepted == 'queued'
+                            else 'unconfirmed' if accepted == 'unconfirmed'
                             else 'delivered' if accepted is True else 'unavailable')
             except Exception:
                 # A native parent may have received the body before its transport

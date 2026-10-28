@@ -208,6 +208,7 @@ def deliver_execution_end(
     terminal: Mapping[str, Any],
     *,
     parent_input: bool,
+    driver_reports_end: bool = False,
 ) -> Dict[str, Any]:
     """Tell the direct parent that one execution ended, when it must handle it.
 
@@ -217,7 +218,11 @@ def deliver_execution_end(
     while the parent's ``wait`` on this Session returns it (:func:`awaited`),
     and as an ordinary receipt of an execution the parent did not start
     (``parent_input`` false) where the parent can see it that way
-    (:func:`receipt_is_display_only`). Every other end is delivered.
+    (:func:`receipt_is_display_only`). Any end is kept the same way when the
+    parent's Driver returns it in its "Direct child execution results" turn
+    (``driver_reports_end``), and when a budget stop of this Task also stopped
+    the parent Session, which a notice must not resume. Every other end is
+    delivered.
     """
     from agent_swarm.notices import needs_parent
 
@@ -227,12 +232,112 @@ def deliver_execution_end(
     }, ensure_ascii=False)
     identity = {'type': terminal['outcome'], 'session': mapping['session'],
                 'execution_id': mapping.get('execution_id')}
+    if terminal.get('budget_stopped') and _same_task_parent(runner, mapping):
+        return retain_parent_receipt(session_directory, notice, identity, held='budget-stop')
+    if driver_reports_end:
+        return retain_parent_receipt(session_directory, notice, identity, held='driver')
     if terminal['outcome'] == 'completed' and (
             not needs_parent('completed', active_members=active_members(runner, session_directory.name))
             or awaited(session_directory, mapping.get('execution_id'))
             or not parent_input and receipt_is_display_only(mapping, runner)):
         return retain_parent_receipt(session_directory, notice, identity)
     return deliver_parent_event(session_directory, notice, identity)
+
+
+def held_ends(
+    runner_directory: Path, parent: str, kinds: frozenset[str] | None = None,
+) -> list[tuple[Path, Dict[str, Any]]]:
+    """Return each direct child's held end that ``parent`` has not yet been shown.
+
+    An end is shown once a later record of the same execution says the parent
+    received it or the parent's Driver returned it (``delivery: aggregated``).
+    The latest hold of an end names its kind; ``kinds`` selects among them.
+    """
+    found = []
+    sessions = runner_directory / "sessions"
+    for directory in sorted(sessions.iterdir()) if sessions.is_dir() else ():
+        try:
+            if not (directory / "parent-notices.jsonl").is_file():
+                continue
+            mapping, _ = read_alias_mapping(runner_directory, directory.name)
+            if mapping.get("parent") != parent:
+                continue
+            records = [json.loads(line) for line in
+                       (directory / "parent-notices.jsonl").read_text(encoding="utf-8").splitlines()]
+        except (RunnerError, OSError, ValueError):
+            continue
+        for index, record in enumerate(records):
+            identity = record.get("identity") or {}
+            later = [item for item in records[index + 1:]
+                     if (item.get("identity") or {}).get("execution_id") == identity.get("execution_id")
+                     and (item.get("identity") or {}).get("type") == identity.get("type")]
+            if (record.get("held") and (kinds is None or record["held"] in kinds)
+                    and not any(item.get("held") or item.get("delivery") in {"received", "aggregated"}
+                                for item in later)):
+                found.append((directory, record))
+    return found
+
+
+def rehold_ends(held: list[tuple[Path, Dict[str, Any]]], kind: str) -> None:
+    """Hold these ends again under ``kind``, e.g. when their Driver turn is withheld."""
+    for directory, record in held:
+        try:
+            _append_notice_record(directory, {**record, "at": time.time(), "held": kind})
+        except OSError:
+            pass
+
+
+def batch_ends(
+    held: list[tuple[Path, Dict[str, Any]]], retained_batch: Path,
+) -> list[tuple[Path, Dict[str, Any]]]:
+    """Keep the held ends of children launched from ``retained_batch`` only.
+
+    A Driver's results turn returns exactly that Batch's children, failed ones
+    included, whose entries carry no execution id. Another child's held end
+    stays held for its own delivery.
+    """
+    selected = []
+    for directory, record in held:
+        try:
+            launch = yaml.safe_load((directory / "launch.yml").read_text(encoding="utf-8"))
+            source = launch["mapping"]["retained_batch_file"]
+            if Path(source).resolve() == Path(retained_batch).resolve():
+                selected.append((directory, record))
+        except (OSError, UnicodeError, yaml.YAMLError, KeyError, TypeError):
+            continue
+    return selected
+
+
+def mark_ends_aggregated(held: list[tuple[Path, Dict[str, Any]]]) -> None:
+    """Record that the parent's Driver turn returned these held ends."""
+    for directory, record in held:
+        try:
+            _append_notice_record(directory, {"at": time.time(), "identity": record["identity"],
+                                              "delivery": "aggregated", "parent": record.get("parent")})
+        except OSError:
+            pass
+
+
+def deliver_held_ends(held: list[tuple[Path, Dict[str, Any]]]) -> None:
+    """Deliver held ends once through the ordinary event path; failures stay held."""
+    for directory, record in held:
+        try:
+            message = json.loads(record["notice"])["message"]
+            deliver_parent_event(directory, message, record["identity"])
+        except (RunnerError, OSError, ValueError, KeyError, TypeError):
+            continue
+
+
+def _same_task_parent(runner_directory: Path, mapping: Mapping[str, Any]) -> bool:
+    """Whether the direct parent is a Session of this Session's own Task."""
+    parent = mapping.get('parent')
+    if not isinstance(parent, str):
+        return False
+    try:
+        parent_mapping, _ = read_alias_mapping(runner_directory, parent)
+    except RunnerError:
+        return False
+    return parent_mapping.get('task_id') == mapping.get('task_id')
 
 
 # How long after a parent's wait returned an execution's end that end still
@@ -288,16 +393,19 @@ def active_members(runner_directory: Path, alias: str) -> int:
 
 def retain_parent_receipt(
     session_directory: Path, notice: str, identity: Mapping[str, Any],
+    *, held: str | None = None,
 ) -> Dict[str, Any]:
     """Keep an ordinary end notice in the existing record without resuming the parent.
 
     The record has the same message and parent fields as a delivered notice,
     with ``delivery: retained``. People see it in the Session's records, and a
-    Codex Main host shows it once at its next native hook.
+    Codex Main host shows it once at its next native hook. ``held`` names why
+    an end the parent must still see was kept (:func:`deliver_held_ends`).
     """
     mapping, _ = read_alias_mapping(session_directory.parent.parent, session_directory.name)
     record: Dict[str, Any] = {
         "at": time.time(), "identity": dict(identity), "delivery": "retained",
+        **({"held": held} if held is not None else {}),
         "parent": mapping.get("parent") if isinstance(mapping.get("parent"), str) else None,
         "notice": json.dumps({"source": "graphtraj", "alias": mapping["alias"],
                               "event": identity["type"], "message": notice}, ensure_ascii=False),
@@ -875,7 +983,7 @@ def _send_session(
                         worktree.mkdir()
                     restored = True
         try:
-            return _send_session_locked(
+            receipt = _send_session_locked(
                 alias, instruction, session_directory, mapping, caused_by_event_ids, cwd,
                 capacity_fd=capacity_fd, reports_only=reports_only,
                 system_notice=system_notice,
@@ -887,6 +995,13 @@ def _send_session(
             if restored:
                 _remove_restored_cwd(session_directory, worktree)
             raise
+    if parent_input and not system_notice:
+        # Its parent's own input now runs this Session again, so the ends its
+        # children held while the Task was budget-stopped reach it once here;
+        # a continuation reaches only roots. A notice or Driver turn is not
+        # such input. Delivery takes this input lock, released above.
+        deliver_held_ends(held_ends(session_directory.parent.parent, alias, frozenset({"budget-stop"})))
+    return receipt
 
 
 def _remove_restored_cwd(session_directory: Path, worktree: Path) -> None:
@@ -1307,6 +1422,8 @@ def _stop_before_runtime(directory: Path, mapping: dict) -> dict:
 # at most 30 seconds for that (claude/execution.py:647, pi/managed_session.py:552).
 # The ordinary control deadline covers the remaining round trip.
 INTERRUPT_RESPONSE_SECONDS = 30 + OPERATION_TIMEOUT_SECONDS
+# How long a failed interrupt waits for an owner ending the execution itself.
+OWNER_END_SECONDS = 5.0
 
 
 def _interrupt_session(
@@ -1332,6 +1449,27 @@ def _interrupt_session(
         if owning is None:
             return {"alias": alias, "interrupt_status": "stopped"}
         if owning["activity"] != "abnormal":
+            # A Worker that just registered may end this execution itself on
+            # the stop recorded above, closing the connection under this
+            # request. Its own confirmed interruption is this stop (372 6d).
+            # Such an owner records it at once; an unresponsive one is not
+            # waited for again beyond this short bound.
+            deadline = time.monotonic() + OWNER_END_SECONDS
+            while (time.monotonic() < deadline and not os.path.lexists(str(execution_file))
+                   and ownership_is_held(session_directory, mapping["worker_pid"])):
+                time.sleep(0.05)
+            try:
+                ended = read_execution_result(execution_file)
+                # A successor unlinks the terminal when it registers, so one
+                # read while this mapping is current is this execution's own.
+                current, _ = read_alias_mapping(session_directory.parent.parent, alias)
+            except (RunnerError, OSError, ValueError, yaml.YAMLError):
+                ended, current = {}, None
+            if (current == mapping
+                    and ended.get("execution_id", mapping["execution_id"]) == mapping["execution_id"]
+                    and ended.get("outcome") == "interrupted"
+                    and ended.get("terminal_confirmed") is not False):
+                return {"alias": alias, "interrupt_status": "interrupted"}
             raise
         # The owner released its lock without a terminal record. Retain that
         # exit as an unconfirmed outcome; only the Runtime's own termination

@@ -174,8 +174,12 @@ def test_context_uses_owner_executable_when_launcher_updates(tmp_path: Path, mon
     assert len(received) == 1
 
 
-def test_mod_notice_operations_read_then_acknowledge(tmp_path: Path) -> None:
-    """The mod reads pending Main notices and acknowledges a position it was given."""
+def test_mod_notice_operations_claim_then_requeue(tmp_path: Path) -> None:
+    """The mod claims pending Main notices once and queues back the ones it could not submit.
+
+    Since 3a6f351 ``notices`` is an atomic claim, so a second reader gets
+    nothing; ``acknowledge`` from an earlier mod is accepted and changes nothing.
+    """
     from graphtraj.execution.main_continuity import queue_notice
 
     session = str(uuid4())
@@ -183,11 +187,21 @@ def test_mod_notice_operations_read_then_acknowledge(tmp_path: Path) -> None:
     queue_notice(tmp_path, {'runtime': 'claude', 'session': session}, {'alias': 'leader@l1'})
     pending = host.context({'operation': 'notices', 'session': session})
     assert [item['event']['alias'] for item in pending['notices']] == ['leader@l1']
-    assert host.context({'operation': 'notices', 'session': session})['notices'] == pending['notices']
-    host.context({'operation': 'acknowledge', 'session': session, 'position': pending['position']})
+    assert host.context({'operation': 'notices', 'session': session})['notices'] == []
+    assert host.context({'operation': 'acknowledge', 'session': session,
+                         'position': pending['position']}) == {'acknowledged': True}
+    assert host.context({'operation': 'notices', 'session': session})['notices'] == []
+    ids = [item['id'] for item in pending['notices']]
+    assert host.context({'operation': 'requeue', 'session': session, 'ids': ids}) == {'requeued': 1}
+    assert host.context({'operation': 'requeue', 'session': session, 'ids': ids}) == {'requeued': 0}
+    again = host.context({'operation': 'notices', 'session': session})['notices']
+    assert [(item['id'], item['event']) for item in again] == [
+        (item['id'], item['event']) for item in pending['notices']]
     assert host.context({'operation': 'notices', 'session': session})['notices'] == []
     with pytest.raises(AgentsError):
         host.context({'operation': 'acknowledge', 'session': session, 'position': '1'})
+    with pytest.raises(AgentsError):
+        host.context({'operation': 'requeue', 'session': session, 'ids': 'not-a-list'})
     with pytest.raises(ValueError):
         host.context({'operation': 'notices', 'session': 'not-a-uuid'})
 
@@ -393,9 +407,13 @@ def test_graphtraj_session_end_is_one_stop_line(tmp_path: Path, case: str) -> No
     channel = config.parent / 'live' / 'channel.json'
     stale = config.parent / 'host-refusal.json'
     stale.write_text('{"code": "old", "message": "old"}')
+    # Like Claude Code, the launcher starts the host with the default SIGINT
+    # disposition: a suite run as a background job would otherwise pass SIGINT
+    # ignored (372, as in test_independent_claude 4003528).
     launcher = ('import json, signal, subprocess, sys\n'
                 'host = subprocess.Popen([sys.executable, "-m", "graphtraj.runtimes.claude.host", "serve", "--config",'
-                ' sys.argv[1]], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)\n'
+                ' sys.argv[1]], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True,'
+                ' preexec_fn=lambda: signal.signal(signal.SIGINT, signal.SIG_DFL))\n'
                 'host.stdin.write(json.dumps({"jsonrpc": "2.0", "id": 1, "method": "initialize",'
                 ' "params": {}}) + "\\n"); host.stdin.flush()\n'
                 'print(host.stdout.readline().strip())\n'
@@ -435,9 +453,13 @@ def test_graphtraj_context_reports_a_refused_host_in_one_line(tmp_path: Path, mo
     assert idle.returncode == 1 and 'Traceback' not in idle.stderr
     assert idle.stderr.splitlines() == [
         f"The agents host for this project is not running; see {config.parent / 'host.log'}."]
+    # Like Claude Code, the launcher starts the host with the default SIGINT
+    # disposition: a suite run as a background job would otherwise pass SIGINT
+    # ignored (372, as in test_independent_claude 4003528).
     launcher = ('import json, signal, subprocess, sys\n'
                 'host = subprocess.Popen([sys.executable, "-m", "graphtraj.runtimes.claude.host", "serve", "--config",'
-                ' sys.argv[1]], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)\n'
+                ' sys.argv[1]], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True,'
+                ' preexec_fn=lambda: signal.signal(signal.SIGINT, signal.SIG_DFL))\n'
                 'host.stdin.write(json.dumps({"jsonrpc": "2.0", "id": 1, "method": "initialize",'
                 ' "params": {}}) + "\\n"); host.stdin.flush()\n'
                 'print(host.stdout.readline().strip()); sys.stdout.flush()\n'

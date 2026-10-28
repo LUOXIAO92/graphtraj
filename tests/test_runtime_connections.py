@@ -358,6 +358,14 @@ def test_dsh_reference_home_and_overrides_survive_resume(
             observed.append((environment['DSH_HOME'], route))
             assert 'route-secret' not in patch.read_text()
             super().__init__(executable, cwd, {**environment, 'DSH_HOME': str(patch.parents[2])})
+            # Real DSH gives each fresh Session its own id; both profiles share
+            # this home, and the normalized archive is keyed by native id (372 U3).
+            self.session = 'native-dsh-' + route['apiKeyEnv'].lower()
+            self.log = self.log.parent.parent / self.session / 'v4.jsonl'
+            self.log.parent.mkdir(parents=True, exist_ok=True)
+            if not self.log.exists():
+                self.log.write_text(json.dumps({'type': 'session', 'version': 4, 'id': self.session,
+                                                'createdAt': 1, 'isSeeded': False}) + '\n')
             self.frames.append('turn/end')
 
     monkeypatch.setattr(execution, 'DshService', Peer)

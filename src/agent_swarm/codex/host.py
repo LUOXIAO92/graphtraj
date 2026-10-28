@@ -105,7 +105,7 @@ class CodexHost(CodexManagedExecution):
                            'parent_session': self.native_session, 'result': result.document})
         return result
 
-    def _receive_child(self, notice: dict) -> bool:
+    def _receive_child(self, notice: dict) -> bool | str:
         """Forward one genuine completion to this still-owned external parent."""
         if notice['parent'] is not None or self.native_session is None or self.loop is None:
             return False
@@ -117,9 +117,12 @@ class CodexHost(CodexManagedExecution):
                  'message': notice['body'] or (notice.get('error') or {}).get('message') or notice['outcome']}
         # Once submitted, a lost acknowledgement is unconfirmed, not unavailable.
         # Let the existing backend retain that distinction and suppress duplicates.
-        asyncio.run_coroutine_threadsafe(
-            self.adapter.send_host_event(self.native_session, event), self.loop,
-        ).result()
+        try:
+            asyncio.run_coroutine_threadsafe(
+                self.adapter.send_host_event(self.native_session, event), self.loop,
+            ).result()
+        except Exception:
+            return 'unconfirmed'
         self._display(notice['agent'], self.native_session, notice['body'])
         self.deliveries.append({'agent': notice['agent'], 'parent_session': self.native_session,
                                 'body': notice['body'], 'accepted': True})

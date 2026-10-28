@@ -111,6 +111,8 @@ PROBES = {
 def main() -> None:
     """Run one probe set and append its results to the probe log."""
     runner = os.environ["GRAPHTRAJ_AGENT_RUNNER"]
+    library = json.loads(os.environ["DIRECT_CONTROL_RUNNER_LIBRARY"])
+    removed = set(json.loads(os.environ["DIRECT_CONTROL_REMOVED_OPERATIONS"]))
     harness_root = os.environ["GRAPHTRAJ_HARNESS_ROOT"]
     environment = dict(os.environ)
     values = {
@@ -150,8 +152,11 @@ def main() -> None:
                     for key, value in projection.get("set", {}).items()
                 }
             )
+        # Task 344 removed these agent-runner routes; their retained library
+        # operation runs from this same process tree.
+        command = ([*library, *argv] if argv and argv[0] in removed else [runner, *argv])
         completed = subprocess.run(
-            [runner, *argv], cwd=harness_root, env=probe_environment,
+            command, cwd=harness_root, env=probe_environment,
             text=True, capture_output=True, timeout=30,
         )
         document = (

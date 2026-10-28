@@ -334,6 +334,21 @@ def continue_stopped_task(
         )
         for alias in roots if not budget_only
     ]
+    if not budget_only:
+        # Ends and notices held while their parent was stopped now reach the
+        # resumed tree once. A budget-only continuation resumes no parent.
+        from graphtraj.execution.runner_control import deliver_held_ends, held_ends
+
+        for alias in roots:
+            deliver_held_ends(held_ends(project.runner_directory, alias))
+        observers = {notice.get("observer") for notice in monitor.pending_parent_notices()}
+        for observer in sorted(name for name in observers if isinstance(name, str)):
+            directory = project.runner_directory / "sessions" / observer
+            if directory.is_dir():
+                try:
+                    monitor.deliver_parent_notices(directory)
+                except (RunnerError, OSError, ValueError, yaml.YAMLError):
+                    pass  # Still pending; the observer's next delivery retries.
     return {"task_id": task_id, "continuation_event_id": continuation["event_id"],
             "tasks": resumed}
 
@@ -499,16 +514,21 @@ def _deliver_task(
     traces = evidence / "teams" / str(generation) / "traces"
     traces.mkdir(parents=True, exist_ok=True)
     (traces.parent / "rounds/1").mkdir(parents=True, exist_ok=True)
+    registered: dict[str, Any] = {}
     alias, session = _run_agent(
         project, task, task.role, worktree, evidence, traces, None, None,
         None, parent_alias, retained_batch, prompt, capacity_fd=capacity_fd,
         register_member=True, wait_for_completion=parent_alias is not None or prompt is not None,
+        driver_reports_end=parent_alias is not None, registered=registered,
     )
     if parent_alias is not None:
         _run_registered_children(project, task, alias, session, retained_batch, capacity_fd)
     return {"task_id": task.task_id, "task_name": task.task_name,
             "role": task.role, "alias": alias, "session": session,
-            "execution_id": read_alias_mapping(project.runner_directory, alias)[0]["execution_id"],
+            # This launch's own execution: a parent's send may already have
+            # started a successor under the alias (372).
+            "execution_id": registered.get("execution_id")
+            or read_alias_mapping(project.runner_directory, alias)[0]["execution_id"],
             "worktree_path": str(worktree),
             "launch_status": "completed" if parent_alias is not None or prompt is not None else "launched"}
 
@@ -537,7 +557,9 @@ def _run_registered_children(
     capacity_fd: int,
 ) -> None:
     """Execute registered children, then deliver their outcomes to their parent."""
-    from graphtraj.execution.runner_control import _send_session
+    from graphtraj.execution.runner_control import (
+        _send_session, batch_ends, deliver_held_ends, held_ends, mark_ends_aggregated, rehold_ends,
+    )
 
     directory = project.runner_directory / "sessions" / alias
     registration = directory / "child-registration.yml"
@@ -555,11 +577,27 @@ def _run_registered_children(
                 require_execution_allowed(project.runner_directory, alias, mapping)
                 batch, retained = _registered_batch(registration, Path(mapping["worktree_path"]))
         children = _run_batch_workers(project, batch, retained, alias, capacity_fd)
-        _send_session(
-            alias, "Direct child execution results:\n" + yaml.safe_dump(children.document, allow_unicode=True),
-            directory, mapping, (), project.harness_root, capacity_fd=capacity_fd,
-            retain_notice_channel=True, parent_input=False,
+        monitor = execution_budget_monitor(
+            project.state_directory / "tasks" / (task.task_id + "-" + task.task_name),
+            task.task_id, task.task_name,
         )
+        if monitor is not None and monitor.is_stopped():
+            # A budget stop stopped this parent too; its results must not resume it.
+            # Their held ends reach it once when it is continued or resumed.
+            rehold_ends(held_ends(project.runner_directory, alias, frozenset({"driver"})), "budget-stop")
+            raise RunnerError("EXECUTION_BUDGET_STOPPED", "Runner stopped the parent's Task.")
+        # Each child's own end was held for this turn (Q7): it is shown once here.
+        held = batch_ends(held_ends(project.runner_directory, alias), retained)
+        try:
+            _send_session(
+                alias, "Direct child execution results:\n" + yaml.safe_dump(children.document, allow_unicode=True),
+                directory, mapping, (), project.harness_root, capacity_fd=capacity_fd,
+                retain_notice_channel=True, parent_input=False,
+            )
+        except RunnerError:
+            deliver_held_ends(held)  # Not shown by this turn; deliver each end itself.
+            raise
+        mark_ends_aggregated(held)
         # Input acknowledgement is not completion. Each Driver retains its
         # results until the parent finishes any further registration.
         while True:
@@ -738,6 +776,8 @@ def _run_agent(
     task_environment: dict[str, str] | None = None,
     register_member: bool = False,
     replaces_alias: str | None = None,
+    driver_reports_end: bool = False,
+    registered: dict[str, Any] | None = None,
 ) -> tuple[str, str]:
     team_file = traces.parent / "team.yml"
     if team_file.exists():
@@ -752,6 +792,7 @@ def _run_agent(
             wait_for_completion=wait_for_completion,
             task_environment=task_environment,
             register_member=register_member, replaces_alias=replaces_alias,
+            driver_reports_end=driver_reports_end, registered=registered,
         )
 
 
@@ -775,8 +816,14 @@ def _execute_agent(
     task_environment: dict[str, str] | None = None,
     register_member: bool = False,
     replaces_alias: str | None = None,
+    driver_reports_end: bool = False,
+    registered: dict[str, Any] | None = None,
 ) -> tuple[str, str]:
-    """Prepare a permitted execution; the Worker checks again at native startup."""
+    """Prepare a permitted execution; the Worker checks again at native startup.
+
+    ``driver_reports_end`` marks a registered child whose end the parent's
+    Driver returns in its "Direct child execution results" turn.
+    """
     with execution_start_lock(project.runner_directory):
         requested = (
             read_alias_mapping(project.runner_directory, alias)[0]
@@ -889,6 +936,7 @@ def _execute_agent(
                 "context_evidence": context.evidence_document(),
                 "operation": "launch",
                 "drive_children": not wait_for_completion,
+                "driver_reports_end": driver_reports_end,
                 "monitor_execution_budget": monitor is not None,
                 "member_registration": ({"member": configured_role_name(role).replace("-", "_"), "replaces": replaces_alias}
                                         if register_member else None),
@@ -973,7 +1021,7 @@ def _execute_agent(
     environment["GRAPHTRAJ_PARENT_REGISTRATION"] = str(session_directory / "child-registration.yml")
     session_id, outcome = _run_session_worker(
         session_directory, job_file, worktree, task_prompt, environment,
-        capacity_fd, input_delivered, wait_for_completion,
+        capacity_fd, input_delivered, wait_for_completion, registered,
     )
     if outcome == "budget-stopped":
         raise RunnerError(
@@ -1136,8 +1184,13 @@ def _run_session_worker(
     capacity_fd: int,
     input_delivered: threading.Event | None,
     wait_for_completion: bool = True,
+    registered: dict[str, Any] | None = None,
 ) -> tuple[str, str]:
     """Run a native Worker, retaining a needed caller notice channel until it exits.
+
+    ``registered`` receives this Worker's own ``execution_id``. Its mapping and
+    terminal are read while they are still its own: once it has ended, a
+    parent's send may start a successor that replaces both.
 
     A root Worker still drives its own registered children. Without
     ``wait_for_completion`` the call returns once the Worker's registration is
@@ -1191,8 +1244,35 @@ def _run_session_worker(
                 _await_session_resume(worker, session_directory, error, None)
                 mapping, _ = read_alias_mapping(session_directory.parent.parent, session_directory.name)
                 return mapping["session"], "running"
+            own: dict[str, Any] = {}
+
+            def registered_own(current: object) -> bool:
+                """Whether a mapping is this Worker's registered execution.
+
+                The Worker first writes a mapping with only its pid, before the
+                native execution exists (runner_worker record_created).
+                """
+                return (isinstance(current, dict) and current.get("worker_pid") == worker.pid
+                        and bool(current.get("execution_id")))
+
+            def observe_own() -> None:
+                """Retain this Worker's mapping, then its terminal, before a successor."""
+                try:
+                    if "mapping" not in own:
+                        current = yaml.safe_load((session_directory / "mapping.yml").read_text(encoding="utf-8"))
+                        if registered_own(current):
+                            own["mapping"] = current
+                    if "mapping" in own and "terminal" not in own:
+                        terminal = yaml.safe_load(execution.read_text(encoding="utf-8"))
+                        current = yaml.safe_load((session_directory / "mapping.yml").read_text(encoding="utf-8"))
+                        if registered_own(current):
+                            own["mapping"], own["terminal"] = current, terminal
+                except (OSError, UnicodeError, yaml.YAMLError):
+                    pass
+
             try:
                 while worker.poll() is None:
+                    observe_own()
                     if input_delivered is not None and not input_delivered.is_set():
                         try:
                             current_mapping = yaml.safe_load(
@@ -1227,6 +1307,7 @@ def _run_session_worker(
                     ):
                         input_delivered.set()
                 exit_code = worker.returncode
+                observe_own()
             except BaseException:
                 worker.terminate()
                 worker.wait()
@@ -1236,10 +1317,13 @@ def _run_session_worker(
                 failure = yaml.safe_load(error.read_text())
                 raise RunnerError(failure["code"], failure["message"])
             raise OSError("Session worker failed")
-        mapping = yaml.safe_load(
-            (session_directory / "mapping.yml").read_text(encoding="utf-8")
-        )
-        terminal = yaml.safe_load(execution.read_text(encoding="utf-8"))
+        if "terminal" in own:
+            mapping, terminal = own["mapping"], own["terminal"]
+        else:
+            mapping = yaml.safe_load(
+                (session_directory / "mapping.yml").read_text(encoding="utf-8")
+            )
+            terminal = yaml.safe_load(execution.read_text(encoding="utf-8"))
     except (OSError, UnicodeError, yaml.YAMLError) as failure:
         raise RunnerError("RUNTIME_WORKER_FAILED", "The Runtime Session could not be started.") from failure
     finally:
@@ -1253,6 +1337,8 @@ def _run_session_worker(
         or terminal.get("outcome") not in {"completed", "interrupted", "runtime-error"}
     ):
         raise RunnerError("RUNTIME_WORKER_FAILED", "The Runtime Session could not be started.")
+    if registered is not None:
+        registered["execution_id"] = mapping.get("execution_id")
     return mapping["session"], (
         "budget-stopped" if terminal.get("budget_stopped") else terminal["outcome"]
     )

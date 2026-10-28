@@ -941,10 +941,15 @@ def test_unestablished_resolver_retry_does_not_restart_stopped_budget(
         stopped = run_process(runner_operation(installed_commands, 'interrupt', original_root),
                               cwd=root, env=environment)
         assert stopped.returncode == 0, stopped.stdout + stopped.stderr
-        refused = run_process(continue_command + ['--budget-only'], cwd=root, env=environment)
-        assert refused.returncode == 1 and 'subtree-stopped' in refused.stdout
-        assert yaml.safe_load((task / 'execution-budget.yml').read_text()) == after
+        # dd9e3c4: a budget-only continuation resumes no root, so the old root's
+        # explicit stop no longer refuses it; that stop stays bound to the root.
+        continued = run_process(continue_command + ['--budget-only'], cwd=root, env=environment)
+        assert continued.returncode == 0, continued.stdout + continued.stderr
+        assert yaml.safe_load(continued.stdout)['tasks'] == []
+        assert yaml.safe_load((task / 'execution-budget.yml').read_text()) == dict(after, stopped=False)
         assert fake_codex.log_file.read_bytes() == runtime
+        assert (allocation.parent / original_root / 'stop.yml').is_file()
+        assert (task / 'task.yml').read_bytes() == before_task
         return
     continued = run_process(continue_command + ['--budget-only'], cwd=root, env=environment)
     assert continued.returncode == 0, continued.stdout + continued.stderr

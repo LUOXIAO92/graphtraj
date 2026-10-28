@@ -98,11 +98,13 @@ def test_installed_runner_applies_inline_settings_to_an_existing_preset(
         }
     )
 
+    # A harness safety limit, not a product deadline: the same launch elsewhere
+    # in this file allows 45 s, and 10 s timed out under suite load (366).
     launched = run_process(
         [str(installed_commands.runner), "--swarm-input", str(batch)],
         cwd=harness_root,
         env=environment,
-        timeout=10,
+        timeout=45,
     )
 
     assert launched.returncode == 0, launched.stderr

@@ -526,9 +526,17 @@ def test_administrative_recovery_routes_reports_to_the_actual_current_host(
         # continuation, rather than rejecting the retained original launch.
         monkeypatch.setenv('PATH', str(fake_codex.executable.parent) + os.pathsep + os.environ['PATH'])
         monkeypatch.setenv('FAKE_CODEX_LOG', str(fake_codex.log_file))
-        continued = host({'action': 'execute', 'feature': 'agents', 'arguments': {
-            'action': 'send', 'agent': original['alias'], 'message': 'Return the retained validation result.',
-        }}).document['result']
+        # agents needs a verified caller since 9c0a208: present this host as the
+        # verified Main Session at the gateway's caller seam.
+        from graphtraj.execution import runner_status
+        from graphtraj.runtimes import runtime_adapter
+        with monkeypatch.context() as verified:
+            verified.setattr(runner_status, 'caller_alias', lambda directory: None)
+            verified.setattr(runtime_adapter, 'current_host_connection',
+                             lambda: {'runtime': 'codex', 'session': 'current-main'})
+            continued = host({'action': 'execute', 'feature': 'agents', 'arguments': {
+                'action': 'send', 'agent': original['alias'], 'message': 'Return the retained validation result.',
+            }}).document['result']
         assert continued['send_status'] == 'sent'
         assert continued['session'] == original['session']
         assert continued['execution_id'] != original['execution_id']

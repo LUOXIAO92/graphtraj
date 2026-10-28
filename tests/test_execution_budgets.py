@@ -62,6 +62,91 @@ def _notices(path: Path) -> list[dict[str, object]]:
     return _stderr_notices(path.read_text(encoding="utf-8"))
 
 
+def _parent_received_notices(
+    harness: Path, task: str, alias: str, keys: list[str], timeout: float = 10,
+) -> list[dict[str, object]]:
+    """Return the budget events the timed Session ``alias`` delivered to its parent.
+
+    Since 3a6f351 only the Session that observed a threshold delivers its
+    notice, natively to its own direct parent; a CLI caller's stream receives
+    none. Each key must have a ``received`` record in that Session's
+    parent-notices with its recorded parent, and be retained as delivered by
+    that observer. Events are returned in delivery order.
+    """
+    session = harness / ".graphtraj/runner/sessions" / alias
+    usage_file = harness / ".graphtraj/state/tasks" / task / "execution-budget.yml"
+    deadline = time.monotonic() + timeout
+    while True:
+        records = [
+            json.loads(line) for line in
+            (session / "parent-notices.jsonl").read_text(encoding="utf-8").splitlines()
+        ] if (session / "parent-notices.jsonl").is_file() else []
+        received = [
+            record for record in records
+            if record["delivery"] == "received"
+            and record["identity"].get("type") == "execution-budget-exceeded"
+        ]
+        usage = {
+            notice["key"]: notice for notice in
+            yaml.safe_load(usage_file.read_text(encoding="utf-8"))["parent_notices"]
+        }
+        if ([record["identity"]["key"] for record in received] == keys
+                and all(usage[key]["delivered"] for key in keys)) or time.monotonic() >= deadline:
+            break
+        time.sleep(0.02)
+    assert [record["identity"]["key"] for record in received] == keys, records
+    parent = yaml.safe_load((session / "mapping.yml").read_text(encoding="utf-8"))["parent"]
+    events = []
+    for record in received:
+        notice = usage[record["identity"]["key"]]
+        assert notice["observer"] == alias and notice["delivered"] is True, notice
+        assert record["parent"] == parent
+        assert json.loads(record["notice"]) == {
+            "source": "graphtraj", "alias": alias,
+            "event": "execution-budget-exceeded", "message": notice["message"],
+        }
+        events.append(notice["event"])
+    return events
+
+
+def _retained_root_notices(
+    harness: Path, task: str, alias: str, keys: list[str], timeout: float = 10,
+) -> list[dict[str, object]]:
+    """Return the budget events a root Session without a parent observed and retained.
+
+    ``send`` returns after its ownership ACK and the resumed Worker does not
+    inherit the caller's channel (5066353); later events go to the recorded
+    parent. A root with no parent or Main keeps them in the Task's budget
+    record, observed by that root (3a6f351), neither delivered nor written.
+    """
+    usage_file = harness / ".graphtraj/state/tasks" / task / "execution-budget.yml"
+    deadline = time.monotonic() + timeout
+    while True:
+        notices = yaml.safe_load(usage_file.read_text(encoding="utf-8"))["parent_notices"]
+        if [notice["key"] for notice in notices] == keys or time.monotonic() >= deadline:
+            break
+        time.sleep(0.02)
+    assert [notice["key"] for notice in notices] == keys, notices
+    for notice in notices:
+        assert notice["observer"] == alias, notice
+        assert notice["delivered"] is False and not notice.get("channel_written", False), notice
+    assert not (harness / ".graphtraj/runner/sessions" / alias / "parent-notices.jsonl").is_file() or not any(
+        json.loads(line)["identity"].get("type") == "execution-budget-exceeded"
+        for line in (harness / ".graphtraj/runner/sessions" / alias / "parent-notices.jsonl")
+        .read_text(encoding="utf-8").splitlines()
+    )
+    return [notice["event"] for notice in notices]
+
+
+def _role_inputs(log_file: Path, role: str) -> list[str]:
+    """Return each native input the controlled Runtime received for ``role``."""
+    return [
+        json.loads(line)["stdin"]
+        for line in log_file.read_text(encoding="utf-8").splitlines()
+        if json.loads(line).get("role") == role and "stdin" in json.loads(line)
+    ]
+
+
 def _stderr_notices(output: str) -> list[dict[str, object]]:
     notices = []
     for line in output.splitlines():
@@ -116,17 +201,23 @@ def test_installed_runner_notifies_its_nested_caller_before_the_worker_finishes(
         body=_budget_body(total=0.01),
     ) as (alias, _, probe_environment):
         clock.write_text(str(started + 0.0105 * 60), encoding="utf-8")
-        output = harness / "probe-output.log"
-        deadline = time.monotonic() + 5
-        notices = _notices(output)
-        while not notices and time.monotonic() < deadline:
-            time.sleep(0.02)
-            notices = _notices(output)
-
-        notice = next(
-            item for item in notices
-            if item["threshold"] == {"kind": "elapsed_minutes", "limit": 0.01}
+        # The Engineer observed the threshold, so its nested caller, the Team
+        # Leader, receives the notice natively; the top-level CLI gets none.
+        [notice] = _parent_received_notices(
+            harness, "82-adapter-probe", alias, ["elapsed_minutes:0.01"],
         )
+        assert notice["threshold"] == {"kind": "elapsed_minutes", "limit": 0.01}
+        deadline = time.monotonic() + 10
+        while True:
+            received = [
+                json.loads(text) for text in _role_inputs(fake_codex.log_file, "team-leader")
+                if text.startswith("{") and json.loads(text)["event"] == "execution-budget-exceeded"
+            ]
+            if received or time.monotonic() >= deadline:
+                break
+            time.sleep(0.02)
+        assert [(item["alias"], item["message"]) for item in received] == [(alias, notice["message"])]
+        assert _notices(harness / "probe-output.log") == []
         assert notice["task"] == {
             "task_id": "82",
             "task_name": "adapter-probe",
@@ -212,23 +303,19 @@ def test_installed_runner_delivers_sampled_stop_to_leader_before_engineer_stops(
             harness
             / ".graphtraj/state/tasks/82-adapter-probe/execution-budget.yml"
         )
+        # The Engineer observes each threshold and delivers it to its direct
+        # parent, the Team Leader, while the Engineer still runs (3a6f351).
         clock.write_text(str(started + 0.61), encoding="utf-8")
-        deadline = time.monotonic() + 10
-        while time.monotonic() < deadline:
-            usage = yaml.safe_load(usage_file.read_text(encoding="utf-8"))
-            if len(usage["parent_notices"]) == 1 and usage["parent_notices"][0].get("channel_written", False):
-                break
-            time.sleep(0.02)
+        _parent_received_notices(harness, "82-adapter-probe", alias, ["elapsed_minutes:0.01"])
         assert draws.read_text(encoding="utf-8") == "0"
         clock.write_text(str(started + 0.67), encoding="utf-8")
-        deadline = time.monotonic() + 10
-        while time.monotonic() < deadline:
-            usage = yaml.safe_load(usage_file.read_text(encoding="utf-8"))
-            if len(usage["parent_notices"]) == 2 and all(
-                notice.get("channel_written", False) for notice in usage["parent_notices"]
-            ):
-                break
-            time.sleep(0.02)
+        delivered = _parent_received_notices(
+            harness, "82-adapter-probe", alias,
+            ["elapsed_minutes:0.01", "additional_allowance:0.001"],
+        )
+        assert [event["threshold"]["kind"] for event in delivered] == [
+            "elapsed_minutes", "additional_allowance",
+        ]
         assert draws.read_text(encoding="utf-8") == "0"
         clock.write_text(str(started + 120.67), encoding="utf-8")
         deadline = time.monotonic() + 10
@@ -243,9 +330,7 @@ def test_installed_runner_delivers_sampled_stop_to_leader_before_engineer_stops(
         deadline = time.monotonic() + 10
         while time.monotonic() < deadline:
             usage = yaml.safe_load(usage_file.read_text(encoding="utf-8"))
-            if usage["stopped"] and all(
-                notice.get("channel_written", False) for notice in usage["parent_notices"]
-            ):
+            if usage["stopped"] and len(usage["parent_notices"]) == 3:
                 break
             time.sleep(0.02)
         release.touch()
@@ -259,11 +344,8 @@ def test_installed_runner_delivers_sampled_stop_to_leader_before_engineer_stops(
             "additional_allowance:0.001",
             "stochastic_stop:4",
         ]
-        notices = _notices(harness / "probe-output.log")
-        assert [notice["threshold"]["kind"] for notice in notices] == [
-            "elapsed_minutes", "additional_allowance", "stochastic_stop",
-        ]
-        assert all(not notice["delivered"] for notice in usage["parent_notices"])
+        assert usage["parent_notices"][2]["event"]["threshold"]["kind"] == "stochastic_stop"
+        assert _notices(harness / "probe-output.log") == []
         deadline = time.monotonic() + 10
         while time.monotonic() < deadline:
             status = run_process(
@@ -276,6 +358,19 @@ def test_installed_runner_delivers_sampled_stop_to_leader_before_engineer_stops(
             time.sleep(0.02)
         assert yaml.safe_load(status.stdout)["aliases"][0]["activity"] == "idle"
         execution_file = harness / ".graphtraj/runner/sessions" / alias / "execution.yml"
+        # The stop also stopped the Team Leader, a Session of this Task, so the
+        # stop notice is held for its continuation instead of starting its
+        # turn (372 U1); only the two earlier notices reached it.
+        _parent_received_notices(
+            harness, "82-adapter-probe", alias,
+            ["elapsed_minutes:0.01", "additional_allowance:0.001"],
+        )
+        usage = yaml.safe_load(usage_file.read_text(encoding="utf-8"))
+        held = usage["parent_notices"][2]
+        assert held["key"] == "stochastic_stop:4"
+        assert held["observer"] == alias and held["delivered"] is False
+        assert not any(held["message"] in text
+                       for text in _role_inputs(fake_codex.log_file, "team-leader"))
 
     # A confirmed stop remains terminal until the actual parent requests
     # report collection or continuation; no role-specific auto-resume runs.
@@ -731,7 +826,7 @@ def test_installed_runner_uses_a_revised_budget_while_its_worker_is_running(
         fake_codex,
         environment,
         body=_budget_body(total=5),
-    ) as (_, _, _):
+    ) as (engineer, _, _):
         evidence = harness / "budget-revision.md"
         evidence.write_text("Caller approved the revised elapsed budget.\n", encoding="utf-8")
         revision = harness / "budget-revision.yml"
@@ -789,23 +884,25 @@ def test_installed_runner_uses_a_revised_budget_while_its_worker_is_running(
         )
         assert revised_result.returncode == 0, revised_result.stderr
 
-        output = harness / "probe-output.log"
-        deadline = time.monotonic() + 5
-        notices = _notices(output)
-        while not notices and time.monotonic() < deadline:
-            time.sleep(0.02)
-            notices = _notices(output)
-
-        assert len(notices) == 1
-        assert notices[0]["threshold"] == {"kind": "elapsed_minutes", "limit": 0.01}
+        # The running Engineer observed the revised threshold and delivered
+        # it to its direct parent, the Team Leader (3a6f351).
+        [notice] = _parent_received_notices(
+            harness, "82-adapter-probe", engineer, ["elapsed_minutes:0.01"],
+        )
+        assert notice["threshold"] == {"kind": "elapsed_minutes", "limit": 0.01}
+        assert _notices(harness / "probe-output.log") == []
         task = harness / ".graphtraj/state/tasks/82-adapter-probe"
         state = yaml.safe_load((task / "task.yml").read_text(encoding="utf-8"))
         assert state["current_definition"].startswith("definitions/")
-        assert (task / "task.md").read_text(encoding="utf-8").startswith(
+        # Each definition keeps the native task envelope before the authored
+        # body (b069acf); the authored body keeps its budget front matter.
+        assert (task / "task.md").read_text(encoding="utf-8").split("---\n", 2)[2].startswith(
             _budget_body(total=5).split("\n\n", 1)[0]
         )
         current = task / state["current_definition"]
-        assert current.read_text(encoding="utf-8").startswith(revised.split("\n\n", 1)[0])
+        assert current.read_text(encoding="utf-8").split("---\n", 2)[2].startswith(
+            revised.split("\n\n", 1)[0]
+        )
         usage = yaml.safe_load((task / "execution-budget.yml").read_text(encoding="utf-8"))
         assert usage["budget"]["execution_budget"]["revision_reason"] == (
             "Caller approved the observed Runtime wait before dispatch continued"
@@ -963,17 +1060,16 @@ def test_installed_send_notifies_its_caller_while_a_budgeted_resume_runs(
                 "execution_id": resumed_mapping["execution_id"],
                 "send_status": "sent",
             }
-            deadline = time.monotonic() + 5
-            notices = _notices(stderr)
-            while not notices and time.monotonic() < deadline:
-                time.sleep(0.02)
-                notices = _notices(stderr)
-
-            assert len(notices) == 1
-            assert notices[0]["threshold"] == {
+            # The resumed root Leader observes the revised threshold while it
+            # runs; with no recorded parent it retains the notice (5066353).
+            [notice] = _retained_root_notices(
+                harness, "76-session-alias-control", mapping["alias"], ["elapsed_minutes:0.01"],
+            )
+            assert notice["threshold"] == {
                 "kind": "elapsed_minutes",
                 "limit": 0.01,
             }
+            assert _notices(stderr) == [] and _notices(stdout) == []
             deadline = time.monotonic() + 5
             while True:
                 running = run_process(
@@ -1069,7 +1165,6 @@ def test_installed_send_notifies_its_caller_while_a_budgeted_resume_runs(
         execution_file = mapping_file.parent / "execution.yml"
         if (
             usage["stopped"]
-            and all(notice.get("channel_written", False) for notice in usage["parent_notices"])
             and execution_file.is_file()
             and yaml.safe_load(execution_file.read_text(encoding="utf-8"))[
                 "outcome"
@@ -1089,7 +1184,12 @@ def test_installed_send_notifies_its_caller_while_a_budgeted_resume_runs(
     ]
     assert "Execution was stopped by Runner" in leader_inputs[-1]
     usage = yaml.safe_load(usage_file.read_text(encoding="utf-8"))
-    assert all(notice.get("channel_written", False) for notice in usage["parent_notices"])
+    assert usage["stopped"] is True
+    # No caller channel outlives a send, and the root has no parent: every
+    # notice, the stop included, stays retained rather than claimed delivered.
+    assert usage["parent_notices"] and not any(
+        notice["delivered"] or notice.get("channel_written", False) for notice in usage["parent_notices"]
+    )
     assert (task / "teams/1/rounds/2/leader.md").is_file()
 
 
@@ -1189,19 +1289,17 @@ def test_installed_send_delivers_elapsed_notices_to_the_resumed_leader(
         assert sent.wait(timeout=10) == 0
     clock.write_text(str(started + 67), encoding="utf-8")
     try:
-        deadline = time.monotonic() + 10
-        while time.monotonic() < deadline:
-            usage = yaml.safe_load(usage_file.read_text(encoding="utf-8"))
-            notices = _notices(stderr)
-            if len(notices) == 2:
-                break
-            time.sleep(0.02)
+        # The resumed root Leader observes both thresholds while it still
+        # runs and, with no recorded parent, retains them (5066353, 3a6f351).
+        notices = _retained_root_notices(
+            harness, "76-session-alias-control", alias,
+            ["elapsed_minutes:1", "additional_allowance:0.1"],
+        )
         assert not release.exists()
-        assert len(usage["parent_notices"]) == 2
-        assert all(not notice["delivered"] for notice in usage["parent_notices"])
         assert [notice["threshold"]["kind"] for notice in notices] == [
             "elapsed_minutes", "additional_allowance",
         ]
+        assert _notices(stderr) == [] and _notices(stdout) == []
     finally:
         release.touch()
 

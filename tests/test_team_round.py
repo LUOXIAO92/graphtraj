@@ -609,12 +609,17 @@ def test_installed_runner_runs_a_main_inline_specialist_without_creating_a_prese
     permissions = tomllib.loads(next(
         argument for argument in runtime['argv'] if argument.startswith('permissions=')
     ))['permissions']
-    assert all(
-        access != 'write'
+    # The only absolute write is the member's own control channel, which
+    # managed Codex Sessions grant since 125df1a.
+    absolute_writes = [
+        Path(path)
         for profile in permissions.values()
         for path, access in profile['filesystem'].items()
-        if Path(path).is_absolute()
-    )
+        if Path(path).is_absolute() and access == 'write'
+    ]
+    assert len(absolute_writes) == 1
+    assert absolute_writes[0].parent.resolve() == (harness_root / ".graphtraj" / "cli").resolve()
+    assert absolute_writes[0].name.startswith("control-")
     assert "Investigate the accepted Task." in runtime["stdin"]
     assert "Inspect the Task in its assigned Worktree." in runtime["stdin"]
     assert runtime["connection"]["base_url"] is None
@@ -720,6 +725,15 @@ def test_installed_runner_uses_generic_instructions_for_new_inline_roles(
     assert "hooks" not in policy["settings"]
 
 
+def _is_graphtraj_notice(prompt: str) -> bool:
+    """Recognize a delivered parent notice the way the fake Leader does."""
+    try:
+        notice = json.loads(prompt)
+    except ValueError:
+        return False
+    return isinstance(notice, dict) and notice.get("source") == "graphtraj"
+
+
 @pytest.mark.parametrize(
     ("specialist_environment", "specialist_role", "serial"),
     (
@@ -767,6 +781,7 @@ def test_installed_runner_registers_a_selected_inline_specialist_as_a_child(
             "GRAPHTRAJ_AGENT_RUNNER": str(installed_commands.runner),
             "FAKE_CODEX_CAPTURE_ROLE": "1",
             "FAKE_CODEX_APPEND_LOG": "1",
+            "FAKE_CODEX_CAPTURE_STDIN": "1",
         }
     )
 
@@ -837,7 +852,11 @@ def test_installed_runner_registers_a_selected_inline_specialist_as_a_child(
     wait_for_task_status(installed_commands, harness_root, "75", "awaiting-integration")
     records = [json.loads(line) for line in fake_codex.log_file.read_text().splitlines()]
     leader_records = [record for record in records if record["role"] == "team-leader"]
-    assert len(leader_records) == (5 if serial else 4)
+    # Each direct child's end that needs handling also reaches the Leader as
+    # its own graphtraj notice turn (367 result 3); like the fake Leader
+    # (6970a75), count only the turns that advance the team phases.
+    phase_records = [record for record in leader_records if not _is_graphtraj_notice(record["stdin"])]
+    assert len(phase_records) == (5 if serial else 4)
     assert all("resume" in record["argv"] for record in leader_records[1:])
 
 

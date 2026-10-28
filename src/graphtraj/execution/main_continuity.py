@@ -267,14 +267,15 @@ def _ended(path: Path) -> set[str]:
 def queue_notice(runner: Path, connection: Mapping[str, Any], event: Mapping[str, Any]) -> dict:
     """Durably queue one notice for a pull-only Main host, under the queue lock.
 
-    A notice with a stable ``id`` (execution and event) is queued once: a
-    retried delivery of the same event adds nothing.
+    A notice with a stable ``id`` (execution, event and any request) is
+    queued once: a retried delivery of the same event adds nothing.
     """
     from agent_swarm.notices import notice_id
 
     path = _inbox(runner, connection['runtime'], connection['session'])
     path.parent.mkdir(parents=True, exist_ok=True)
-    identity = event.get('id') or notice_id(event.get('execution'), event.get('event'))
+    identity = event.get('id') or notice_id(
+        event.get('execution'), event.get('event'), event.get('request_id'))
     with path.with_suffix('.lock').open('a+b') as lock:
         file_lock.flock(lock, file_lock.LOCK_EX)
         if identity is not None and path.exists() and any(

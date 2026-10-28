@@ -179,8 +179,11 @@ def notify_direct_parent(
             # a late receipt must not make retries forward the notice twice.
             event = json.loads(message)
             if isinstance(address, Mapping) and address.get("runner") and (identity or {}).get("execution_id"):
-                # A queued Main host identifies one execution's notice by it.
+                # A queued Main host identifies one execution's notice by it,
+                # and one native request's notice also by that request.
                 event["execution"] = identity["execution_id"]
+                if identity.get("request_id") is not None:
+                    event["request_id"] = identity["request_id"]
             connection_operation(address, event, await_accepted=True)
             record["delivery"] = "received"
     except RunnerError as error:

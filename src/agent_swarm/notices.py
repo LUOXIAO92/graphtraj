@@ -29,8 +29,12 @@ def needs_parent(
             or active_members == 0)
 
 
-def notice_id(execution: object, event: object) -> str | None:
-    """Return the stable identity of one execution's notice, if it has one."""
+def notice_id(execution: object, event: object, request: object = None) -> str | None:
+    """Return the stable identity of one execution's notice, if it has one.
+
+    A notice announcing a native request also names that request, so two
+    requests of one execution are two notices.
+    """
     if isinstance(execution, str) and execution and isinstance(event, str) and event:
-        return f'{execution}:{event}'
+        return f'{execution}:{event}' if request is None else f'{execution}:{event}:{request}'
     return None

@@ -1403,6 +1403,25 @@ def _interrupt_session(
         if owning is None:
             return {"alias": alias, "interrupt_status": "stopped"}
         if owning["activity"] != "abnormal":
+            # A Worker that just registered may end this execution itself on
+            # the stop recorded above, closing the connection under this
+            # request. Its own confirmed interruption is this stop (372 6d).
+            deadline = time.monotonic() + INTERRUPT_RESPONSE_SECONDS
+            while (time.monotonic() < deadline and not os.path.lexists(str(execution_file))
+                   and ownership_is_held(session_directory, mapping["worker_pid"])):
+                time.sleep(0.05)
+            try:
+                ended = read_execution_result(execution_file)
+                # A successor unlinks the terminal when it registers, so one
+                # read while this mapping is current is this execution's own.
+                current, _ = read_alias_mapping(session_directory.parent.parent, alias)
+            except (RunnerError, OSError, ValueError, yaml.YAMLError):
+                ended, current = {}, None
+            if (current == mapping
+                    and ended.get("execution_id", mapping["execution_id"]) == mapping["execution_id"]
+                    and ended.get("outcome") == "interrupted"
+                    and ended.get("terminal_confirmed") is not False):
+                return {"alias": alias, "interrupt_status": "interrupted"}
             raise
         # The owner released its lock without a terminal record. Retain that
         # exit as an unconfirmed outcome; only the Runtime's own termination

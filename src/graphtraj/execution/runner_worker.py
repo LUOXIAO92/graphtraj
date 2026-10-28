@@ -319,6 +319,11 @@ def run(job_file: Path) -> int:
                 }
                 if budget_stopped.is_set() and error.code == "RUNTIME_EXECUTION_INTERRUPTED":
                     terminal.update(outcome="interrupted", terminal_confirmed=True, budget_stopped=True)
+                elif error.code == "subtree-stopped" and error.terminal_confirmed:
+                    # The registration check saw the stop its publisher recorded
+                    # and ended the execution, the same interruption the
+                    # publisher would otherwise deliver (372 6d).
+                    terminal["outcome"] = "interrupted"
             else:
                 _write_worker_error(
                     session_directory,

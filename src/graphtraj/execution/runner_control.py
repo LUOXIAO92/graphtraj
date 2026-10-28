@@ -1378,6 +1378,8 @@ def _stop_before_runtime(directory: Path, mapping: dict) -> dict:
 # at most 30 seconds for that (claude/execution.py:647, pi/managed_session.py:552).
 # The ordinary control deadline covers the remaining round trip.
 INTERRUPT_RESPONSE_SECONDS = 30 + OPERATION_TIMEOUT_SECONDS
+# How long a failed interrupt waits for an owner ending the execution itself.
+OWNER_END_SECONDS = 5.0
 
 
 def _interrupt_session(
@@ -1406,7 +1408,9 @@ def _interrupt_session(
             # A Worker that just registered may end this execution itself on
             # the stop recorded above, closing the connection under this
             # request. Its own confirmed interruption is this stop (372 6d).
-            deadline = time.monotonic() + INTERRUPT_RESPONSE_SECONDS
+            # Such an owner records it at once; an unresponsive one is not
+            # waited for again beyond this short bound.
+            deadline = time.monotonic() + OWNER_END_SECONDS
             while (time.monotonic() < deadline and not os.path.lexists(str(execution_file))
                    and ownership_is_held(session_directory, mapping["worker_pid"])):
                 time.sleep(0.05)

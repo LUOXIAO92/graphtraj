@@ -393,8 +393,11 @@ def test_completed_stop_refreshes_pathless_usage_and_cli_projection(
 def test_parent_wait_does_not_invent_idle(host_peer: Path, mode: str, outcome: str) -> None:
     """Inconsistent state, a closed proxy and wrong identity cannot prove idle."""
     (host_peer / 'mode').write_text(mode)
+    # The deadline also bounds starting the proxy (about 0.3 s here), so 0.5 s
+    # could expire before the first read (372). An error returns as soon as it
+    # is observed; a stale host must still wait out its deadline.
     result = bind(host_peer)({'action':'execute', 'feature':'parent_status',
-                              'arguments':{'timeout_seconds':0.5}})
+                              'arguments':{'timeout_seconds':3 if mode == 'stale' else 30}})
     assert result.failed
     assert result.document['outcome'] == outcome
     if mode == 'stale':

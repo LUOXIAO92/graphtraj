@@ -341,8 +341,12 @@ class ExecutionBudgetMonitor:
             finally:
                 file_lock.flock(lock.fileno(), file_lock.LOCK_UN)
 
-    def pending_parent_notices(self) -> list[dict[str, Any]]:
-        """Return retained notices without confirmed parent receipt."""
+    def pending_parent_notices(self, observer: str | None = None) -> list[dict[str, Any]]:
+        """Return retained notices without confirmed parent receipt.
+
+        With ``observer``, only the notices that Session delivers: another
+        timed Session's notices are its own to deliver.
+        """
         lock_path = self.task_directory / ".execution-budget.lock"
         with lock_path.open("a+", encoding="utf-8") as lock:
             file_lock.flock(lock.fileno(), file_lock.LOCK_EX)
@@ -355,6 +359,7 @@ class ExecutionBudgetMonitor:
                     dict(notice)
                     for notice in state["parent_notices"]
                     if not notice["delivered"]
+                    and (observer is None or notice.get("observer", observer) == observer)
                 ]
             finally:
                 file_lock.flock(lock.fileno(), file_lock.LOCK_UN)

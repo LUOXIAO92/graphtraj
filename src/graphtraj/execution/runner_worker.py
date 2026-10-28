@@ -547,6 +547,8 @@ def _monitor_execution_budget(
     assert isinstance(role, str)
     delivery: threading.Thread | None = None
     retry_at = 0.0
+    # Only this Session's own notices keep its delivery going (372 6c).
+    observer = session_directory.name
 
     def deliver() -> None:
         """Retry transient native failures within the existing cleanup window.
@@ -561,7 +563,7 @@ def _monitor_execution_budget(
                     return  # Held for the stopped parent's continuation.
             except (RunnerError, OSError, ValueError, yaml.YAMLError):
                 pass
-            if (mapping.get("parent") is None and not mapping.get("parent_connection")) or not monitor.pending_parent_notices():
+            if (mapping.get("parent") is None and not mapping.get("parent_connection")) or not monitor.pending_parent_notices(observer):
                 return
             remaining = deadline - time.monotonic()
             if remaining <= 0:
@@ -576,7 +578,7 @@ def _monitor_execution_budget(
             budget_stopped.set()
             terminate()
         if (session_directory / "launch.yml").is_file():
-            pending = {notice["key"] for notice in monitor.pending_parent_notices()}
+            pending = {notice["key"] for notice in monitor.pending_parent_notices(observer)}
             if pending and time.monotonic() >= retry_at and (delivery is None or not delivery.is_alive()):
                 retry_at = time.monotonic() + 1
                 delivery = threading.Thread(target=deliver, daemon=True)

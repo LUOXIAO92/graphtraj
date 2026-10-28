@@ -173,3 +173,16 @@ def test_an_unheld_end_is_delivered_as_before(runner: Path, monkeypatch: pytest.
         {'outcome': 'failed', 'error': {'code': 'X', 'message': 'broke'}}, parent_input=True)
     assert receipt['delivery'] == 'received'
     assert [(alias, kind) for alias, kind, _ in DELIVERED] == [('engineer', 'failed')]
+
+
+def test_a_session_waits_only_for_the_notices_it_delivers(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """6c: another timed Session's undelivered notice never keeps this Worker's delivery open."""
+    monitor = stopped_monitor(tmp_path, monkeypatch)              # observed by 'engineer'
+    keys = [notice['key'] for notice in monitor.pending_parent_notices()]
+    assert [notice['key'] for notice in monitor.pending_parent_notices('engineer')] == keys
+    assert monitor.pending_parent_notices('leader') == []
+    state = yaml.safe_load((monitor.task_directory / 'execution-budget.yml').read_text())
+    state['parent_notices'][0].pop('observer')                    # a record from before observers
+    (monitor.task_directory / 'execution-budget.yml').write_text(yaml.safe_dump(state))
+    assert [notice['key'] for notice in monitor.pending_parent_notices('leader')] == keys[:1]

@@ -12,14 +12,18 @@ import fcntl
 import json
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 import pytest
 import yaml
 
-from conftest import FakeCodex, InstalledCommands, app_server_peer, run_process, wait_for_file
+from conftest import (
+    _RUNNER_OPERATION, REMOVED_RUNNER_OPERATIONS, FakeCodex, InstalledCommands, app_server_peer,
+    run_process, wait_for_file,
+)
 from runner_fixtures import configure_harness
-from test_parent_permission_notice import _await_records, _last_worldline_event, _mapping_for_role
+from test_parent_permission_notice import _await_records, _last_worldline_event, _mapping_for_role, _records
 from test_session_alias_control import _register_ready_task
 from test_task_budget_control import BODY
 
@@ -29,6 +33,8 @@ import json, os, subprocess, sys, time
 from pathlib import Path
 import yaml
 
+REMOVED = set(json.loads(os.environ['REMOVED_RUNNER_OPERATIONS']))
+
 
 def record(value):
     """Record a model-side action separately from the native protocol."""
@@ -37,8 +43,15 @@ def record(value):
 
 
 def call(*args):
-    """Act through the Runner as the real parent/child process."""
-    result = subprocess.run([os.environ['GRAPHTRAJ_AGENT_RUNNER'], *args],
+    """Act through the Runner as the real parent/child process.
+
+    Operations whose CLI route was removed run the retained library replica
+    from this same process tree (conftest ``runner_operation``).
+    """
+    runner = os.environ['GRAPHTRAJ_AGENT_RUNNER']
+    command = ([str(Path(runner).with_name('python')), '-c', os.environ['RUNNER_OPERATION']]
+               if args[0] in REMOVED else [runner])
+    result = subprocess.run([*command, *args],
                             capture_output=True, text=True,
                             cwd=os.environ['GRAPHTRAJ_HARNESS_ROOT'])
     assert result.returncode == 0, (args, result.stdout, result.stderr)
@@ -92,10 +105,22 @@ if role == 'team-leader':
             time.sleep(.02)
         assert not waiting, waiting
     elif prompt == 'race':
+        # Under 372 Q7 a Driver-launched child's end reaches this parent only
+        # in the Driver's aggregate, so the parent watches the child's status
+        # and starts a successor once it is idle, racing that aggregate.
         Path(os.environ['LIFECYCLE_PARENT_READY']).touch()
+        child = Path(os.environ['LIFECYCLE_CHILD']).read_text()
+        sent = aggregated = False
         seen = set()
-        deadline = time.monotonic() + 20
-        while time.monotonic() < deadline:
+        deadline = time.monotonic() + 30
+        while time.monotonic() < deadline and not (sent and aggregated):
+            if not sent and Path(os.environ['LIFECYCLE_INITIAL_RELEASE']).exists():
+                if call('status', child)['aliases'][0]['activity'] == 'idle':
+                    receipt = call('send', child, '--instruction', 'later',
+                                   '--caused-by-event-id', os.environ['LIFECYCLE_CAUSE'])
+                    record({'send_ack': receipt})
+                    Path(os.environ['LIFECYCLE_RACE_ACK']).touch()
+                    sent = True
             path = Path(os.environ['LIFECYCLE_INPUT'])
             for line in path.read_text().splitlines() if path.exists() else []:
                 request = json.loads(line)
@@ -106,16 +131,13 @@ if role == 'team-leader':
                     continue
                 seen.add(text)
                 if text.startswith('{'):
-                    notice = consume(text)
-                    receipt = call('send', notice['alias'], '--instruction', 'later',
-                                   '--caused-by-event-id', os.environ['LIFECYCLE_CAUSE'])
-                    record({'send_ack': receipt})
-                    Path(os.environ['LIFECYCLE_RACE_ACK']).touch()
+                    record({'notice': json.loads(text)})
                 elif text.startswith('Direct child execution results:'):
                     record({'aggregate': text})
-                    raise SystemExit(0)
+                    aggregated = True
             time.sleep(.02)
-        raise SystemExit('original Driver never aggregated')
+        if not (sent and aggregated):
+            raise SystemExit('original Driver never aggregated around the successor')
     elif prompt == 'followup':
         child = Path(os.environ['LIFECYCLE_CHILD']).read_text()
         receipt = call('send', child, '--instruction', 'later',
@@ -156,6 +178,12 @@ elif os.environ.get('LIFECYCLE_RACE') == '1':
     while not Path(os.environ['LIFECYCLE_INITIAL_RELEASE']).exists():
         time.sleep(.02)
 '''
+
+
+def removed_operations() -> dict[str, str]:
+    """Let a scenario reach operations whose CLI route was removed."""
+    return {'RUNNER_OPERATION': _RUNNER_OPERATION,
+            'REMOVED_RUNNER_OPERATIONS': json.dumps(sorted(REMOVED_RUNNER_OPERATIONS))}
 
 
 def lifecycle_peer(fake_codex: FakeCodex) -> None:
@@ -238,6 +266,7 @@ def test_send_returned_before_result_parent_consumes_and_acts(
     environment.pop('PYTHONPATH', None)
     environment.update({
         'GRAPHTRAJ_AGENT_RUNNER': str(installed_commands.runner),
+        **removed_operations(),
         'CODEX_HOME': str(tmp_path / 'native-home'),
         'LIFECYCLE_LOG': str(log), 'LIFECYCLE_BATCH': str(batch),
         'LIFECYCLE_INPUT': str(tmp_path / 'inputs.jsonl'),
@@ -289,25 +318,38 @@ def test_send_returned_before_result_parent_consumes_and_acts(
                 assert terminal['outcome'] == 'interrupted' and terminal['budget_stopped']
             assert yaml.safe_load((evidence / 'execution-budget.yml').read_text())['started_at'] == before['started_at']
         release.touch()
-        expected = 'interrupted' if stop else 'runtime-error' if failure else 'completed'
-        actions = _await_records(log, lambda rows: any(
-            r.get('acted', {}).get('event') == expected
-            and r.get('details', {}).get('execution_id') == receipt['execution_id']
-            for r in rows
-        ))
-        action = next(r for r in actions if r.get('details', {}).get('execution_id') == receipt['execution_id']
-                      and r['acted']['event'] == expected)
-        assert action['acted']['alias'] == child['alias']
-        assert action['details']['session'] == child['session']
-        assert action['report']['alias'] == parent['alias']
         if stop:
-            actions = _await_records(log, lambda rows: any(
-                r.get('acted', {}).get('event') == 'execution-budget-exceeded' for r in rows
-            ))
+            # The sampled stop also stopped the Leader, a Session of this Task.
+            # The child's budget-stopped end and the budget notice are held for
+            # the Leader's continuation instead of starting its turn (372 U1);
+            # their delivery after continuation is tested in test_notice_delivery_372.
             notices = runner / 'sessions' / child['alias'] / 'parent-notices.jsonl'
-            retained = [json.loads(line) for line in notices.read_text().splitlines()]
-            assert any('temporary event refusal' in r.get('error', {}).get('message', '') for r in retained)
-            assert any(r['delivery'] == 'received' and r['identity'].get('type') == 'execution-budget-exceeded' for r in retained)
+            records = _await_records(notices, lambda rows: any(
+                r['identity'].get('execution_id') == receipt['execution_id'] for r in rows))
+            held, = [r for r in records if r['identity'].get('execution_id') == receipt['execution_id']]
+            assert held['identity']['type'] == 'interrupted'
+            assert held['delivery'] == 'retained' and held['held'] == 'budget-stop'
+            assert held['parent'] == parent['alias']
+            assert json.loads(held['notice'])['alias'] == child['alias']
+            time.sleep(3)
+            assert not any(r['identity'].get('type') == 'execution-budget-exceeded' for r in _records(notices))
+            budget = yaml.safe_load((evidence / 'execution-budget.yml').read_text())
+            assert budget['stopped'] and budget['parent_notices']
+            assert not any(notice['delivered'] for notice in budget['parent_notices'])
+            assert not any(r.get('acted', {}).get('event') in {'interrupted', 'execution-budget-exceeded'}
+                           for r in _records(log))
+        else:
+            expected = 'runtime-error' if failure else 'completed'
+            actions = _await_records(log, lambda rows: any(
+                r.get('acted', {}).get('event') == expected
+                and r.get('details', {}).get('execution_id') == receipt['execution_id']
+                for r in rows
+            ))
+            action = next(r for r in actions if r.get('details', {}).get('execution_id') == receipt['execution_id']
+                          and r['acted']['event'] == expected)
+            assert action['acted']['alias'] == child['alias']
+            assert action['details']['session'] == child['session']
+            assert action['report']['alias'] == parent['alias']
         if submit:
             submitted = next(r for r in actions if r.get('acted', {}).get('event') == 'result-submitted')
             assert submitted['details']['completion'] == 'Controlled result ready'
@@ -341,15 +383,18 @@ def test_original_driver_keeps_its_result_when_parent_starts_successor(
     initial.write_text(yaml.safe_dump({'tasks': [{'task_id': '76', 'role': 'team-leader'}]}))
     log = tmp_path / 'actions.jsonl'
     release = tmp_path / 'release'
+    child_file = tmp_path / 'child-alias'
     ready = tmp_path / 'ready'
     initial_release = tmp_path / 'initial-release'
     environment.pop('PYTHONPATH', None)
     environment.update({
         'GRAPHTRAJ_AGENT_RUNNER': str(installed_commands.runner),
+        **removed_operations(),
         'CODEX_HOME': str(tmp_path / 'native-home'),
         'LIFECYCLE_LOG': str(log), 'LIFECYCLE_BATCH': str(child_batch),
         'LIFECYCLE_INPUT': str(tmp_path / 'inputs.jsonl'),
         'LIFECYCLE_RELEASE': str(release), 'LIFECYCLE_RACE': '1',
+        'LIFECYCLE_CHILD': str(child_file),
         'LIFECYCLE_CAUSE': _last_worldline_event(root),
         'LIFECYCLE_PARENT_READY': str(ready),
         'LIFECYCLE_RACE_ACK': str(tmp_path / 'race-ack'),
@@ -365,6 +410,7 @@ def test_original_driver_keeps_its_result_when_parent_starts_successor(
         try:
             parent = _mapping_for_role(runner, 'team-leader')
             child = _mapping_for_role(runner, 'engineer')
+            child_file.write_text(child['alias'])
             sent = run_process(runner_operation(
                 installed_commands,
                 'send',
@@ -377,14 +423,38 @@ def test_original_driver_keeps_its_result_when_parent_starts_successor(
             assert sent.returncode == 0, sent.stdout + sent.stderr
             wait_for_file(ready)
             initial_release.touch()
-            actions = _await_records(log, lambda rows: any('aggregate' in r for r in rows))
+            actions = _await_records(log, lambda rows: any('aggregate' in r for r in rows)
+                                     and any('send_ack' in r for r in rows))
+            # Either order is valid; the log keeps the order this parent saw.
+            order = [next(key for key in ('send_ack', 'aggregate') if key in r)
+                     for r in actions if 'send_ack' in r or 'aggregate' in r]
+            (tmp_path / 'race-order').write_text(' '.join(order))
             acknowledgement = next(r['send_ack'] for r in actions if 'send_ack' in r)
-            aggregate = next(yaml.safe_load(r['aggregate'].split('\n', 1)[1]) for r in actions if 'aggregate' in r)
+            [aggregate] = [yaml.safe_load(r['aggregate'].split('\n', 1)[1]) for r in actions if 'aggregate' in r]
             original = aggregate['tasks'][0]
             assert original['launch_status'] == 'completed', aggregate
             assert original['execution_id'] == child['execution_id']
             assert acknowledgement['execution_id'] != child['execution_id']
             assert acknowledgement['session'] == child['session']
+            assert acknowledgement['execution_id'] not in {task['execution_id'] for task in aggregate['tasks']}
+            # The parent receives the original end once, in the aggregate only.
+            notices = runner / 'sessions' / child['alias'] / 'parent-notices.jsonl'
+            original_records = [r for r in _records(notices)
+                                if r['identity'].get('execution_id') == child['execution_id']]
+            assert original_records and original_records[0]['delivery'] == 'retained'
+            assert original_records[0]['held'] == 'driver'
+            assert not any(r['delivery'] == 'received' for r in original_records)
+            assert not any(child['execution_id'] in json.dumps(r) for r in actions if 'aggregate' not in r)
+            # The successor the parent started reports its own end to the
+            # parent as before (367): a leaf child's end notifies.
+            release.touch()
+            actions = _await_records(log, lambda rows: any(
+                r.get('acted', {}).get('event') == 'completed'
+                and r.get('details', {}).get('execution_id') == acknowledgement['execution_id']
+                for r in rows))
+            assert any(r['delivery'] == 'received' and r['identity'].get('execution_id') == acknowledgement['execution_id']
+                       for r in _records(notices))
+            assert not any(child['execution_id'] in json.dumps(r) for r in actions if 'aggregate' not in r)
         finally:
             initial_release.touch()
             release.touch()

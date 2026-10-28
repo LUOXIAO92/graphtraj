@@ -174,8 +174,12 @@ def test_context_uses_owner_executable_when_launcher_updates(tmp_path: Path, mon
     assert len(received) == 1
 
 
-def test_mod_notice_operations_read_then_acknowledge(tmp_path: Path) -> None:
-    """The mod reads pending Main notices and acknowledges a position it was given."""
+def test_mod_notice_operations_claim_then_requeue(tmp_path: Path) -> None:
+    """The mod claims pending Main notices once and queues back the ones it could not submit.
+
+    Since 3a6f351 ``notices`` is an atomic claim, so a second reader gets
+    nothing; ``acknowledge`` from an earlier mod is accepted and changes nothing.
+    """
     from graphtraj.execution.main_continuity import queue_notice
 
     session = str(uuid4())
@@ -183,11 +187,21 @@ def test_mod_notice_operations_read_then_acknowledge(tmp_path: Path) -> None:
     queue_notice(tmp_path, {'runtime': 'claude', 'session': session}, {'alias': 'leader@l1'})
     pending = host.context({'operation': 'notices', 'session': session})
     assert [item['event']['alias'] for item in pending['notices']] == ['leader@l1']
-    assert host.context({'operation': 'notices', 'session': session})['notices'] == pending['notices']
-    host.context({'operation': 'acknowledge', 'session': session, 'position': pending['position']})
+    assert host.context({'operation': 'notices', 'session': session})['notices'] == []
+    assert host.context({'operation': 'acknowledge', 'session': session,
+                         'position': pending['position']}) == {'acknowledged': True}
+    assert host.context({'operation': 'notices', 'session': session})['notices'] == []
+    ids = [item['id'] for item in pending['notices']]
+    assert host.context({'operation': 'requeue', 'session': session, 'ids': ids}) == {'requeued': 1}
+    assert host.context({'operation': 'requeue', 'session': session, 'ids': ids}) == {'requeued': 0}
+    again = host.context({'operation': 'notices', 'session': session})['notices']
+    assert [(item['id'], item['event']) for item in again] == [
+        (item['id'], item['event']) for item in pending['notices']]
     assert host.context({'operation': 'notices', 'session': session})['notices'] == []
     with pytest.raises(AgentsError):
         host.context({'operation': 'acknowledge', 'session': session, 'position': '1'})
+    with pytest.raises(AgentsError):
+        host.context({'operation': 'requeue', 'session': session, 'ids': 'not-a-list'})
     with pytest.raises(ValueError):
         host.context({'operation': 'notices', 'session': 'not-a-uuid'})
 

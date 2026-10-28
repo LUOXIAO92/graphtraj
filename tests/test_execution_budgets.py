@@ -1373,6 +1373,12 @@ def test_installed_send_retains_a_late_stop_without_an_awaiting_call(
     delivery stays retained in the Task's budget state instead of being
     queued into Main's native input.
     """
+    import pytest
+    from graphtraj.runtimes.replacement import caller_runtime
+
+    if caller_runtime() != 'codex':
+        pytest.skip('a CODEX_THREAD_ID caller is verified by Codex process ancestry '
+                    '(468b83f); this test process has no Codex ancestor')
 
     harness, _, _, environment = configure_harness(
         installed_commands, temporary_git_repository, fake_codex, tmp_path

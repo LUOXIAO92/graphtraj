@@ -407,9 +407,13 @@ def test_graphtraj_session_end_is_one_stop_line(tmp_path: Path, case: str) -> No
     channel = config.parent / 'live' / 'channel.json'
     stale = config.parent / 'host-refusal.json'
     stale.write_text('{"code": "old", "message": "old"}')
+    # Like Claude Code, the launcher starts the host with the default SIGINT
+    # disposition: a suite run as a background job would otherwise pass SIGINT
+    # ignored (372, as in test_independent_claude 4003528).
     launcher = ('import json, signal, subprocess, sys\n'
                 'host = subprocess.Popen([sys.executable, "-m", "graphtraj.runtimes.claude.host", "serve", "--config",'
-                ' sys.argv[1]], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)\n'
+                ' sys.argv[1]], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True,'
+                ' preexec_fn=lambda: signal.signal(signal.SIGINT, signal.SIG_DFL))\n'
                 'host.stdin.write(json.dumps({"jsonrpc": "2.0", "id": 1, "method": "initialize",'
                 ' "params": {}}) + "\\n"); host.stdin.flush()\n'
                 'print(host.stdout.readline().strip())\n'
@@ -449,9 +453,13 @@ def test_graphtraj_context_reports_a_refused_host_in_one_line(tmp_path: Path, mo
     assert idle.returncode == 1 and 'Traceback' not in idle.stderr
     assert idle.stderr.splitlines() == [
         f"The agents host for this project is not running; see {config.parent / 'host.log'}."]
+    # Like Claude Code, the launcher starts the host with the default SIGINT
+    # disposition: a suite run as a background job would otherwise pass SIGINT
+    # ignored (372, as in test_independent_claude 4003528).
     launcher = ('import json, signal, subprocess, sys\n'
                 'host = subprocess.Popen([sys.executable, "-m", "graphtraj.runtimes.claude.host", "serve", "--config",'
-                ' sys.argv[1]], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)\n'
+                ' sys.argv[1]], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True,'
+                ' preexec_fn=lambda: signal.signal(signal.SIGINT, signal.SIG_DFL))\n'
                 'host.stdin.write(json.dumps({"jsonrpc": "2.0", "id": 1, "method": "initialize",'
                 ' "params": {}}) + "\\n"); host.stdin.flush()\n'
                 'print(host.stdout.readline().strip()); sys.stdout.flush()\n'

@@ -38,6 +38,12 @@ registers a separate worktree for integration and stores configuration and task
 history under `.graphtraj/`. Your primary worktree stays on `main`. A new
 project has no tasks or Agent roles yet, so its first graph is empty.
 
+Once setup is done, you can ask your Agent, for example:
+
+- Use GraphTraj to show which tasks are ready and which are still blocked.
+- Use GraphTraj to break this goal into tasks with their dependencies, and show
+  me the graph before dispatching anything.
+
 Running setup again preserves existing configuration and history. For a layout
 with a separate source repository, or other project conventions, see the
 [setup guide](manuals/setup-project/guide.md).

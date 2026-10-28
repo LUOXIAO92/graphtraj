@@ -283,8 +283,11 @@ def rehold_ends(held: list[tuple[Path, Dict[str, Any]]], kind: str) -> None:
     """Hold these ends again under ``kind``, e.g. when their Driver turn is withheld."""
     for directory, record in held:
         try:
-            _append_notice_record(directory, {**record, "at": time.time(), "held": kind})
-        except OSError:
+            with (directory / "parent-notices.jsonl").open("rb") as lock:
+                file_lock.flock(lock, file_lock.LOCK_EX)
+                if _latest_hold(directory, record["identity"]) == record:  # Not shown meanwhile.
+                    _append_notice_record(directory, {**record, "at": time.time(), "held": kind})
+        except (OSError, ValueError, KeyError, TypeError):
             pass
 
 
@@ -320,13 +323,98 @@ def mark_ends_aggregated(held: list[tuple[Path, Dict[str, Any]]]) -> None:
 
 
 def deliver_held_ends(held: list[tuple[Path, Dict[str, Any]]]) -> None:
-    """Deliver held ends once through the ordinary event path; failures stay held."""
+    """Deliver held ends once through the ordinary event path; failures stay held.
+
+    Each end is checked again under its Session's notice-record lock, so two
+    concurrent sends, or a send and a Driver's fallback, deliver it once.
+    """
     for directory, record in held:
         try:
-            message = json.loads(record["notice"])["message"]
-            deliver_parent_event(directory, message, record["identity"])
+            with (directory / "parent-notices.jsonl").open("rb") as lock:
+                file_lock.flock(lock, file_lock.LOCK_EX)
+                if _latest_hold(directory, record["identity"]) != record:
+                    continue  # Shown, or held again, since it was found.
+                message = json.loads(record["notice"])["message"]
+                deliver_parent_event(directory, message, record["identity"])
         except (RunnerError, OSError, ValueError, KeyError, TypeError):
             continue
+
+
+def _latest_hold(directory: Path, identity: Mapping[str, Any]) -> Dict[str, Any] | None:
+    """Return the latest hold or showing of one end, as :func:`held_ends` reads it."""
+    latest = None
+    for line in (directory / "parent-notices.jsonl").read_text(encoding="utf-8").splitlines():
+        item = json.loads(line)
+        same = item.get("identity") or {}
+        if (same.get("execution_id") == identity.get("execution_id")
+                and same.get("type") == identity.get("type")
+                and (item.get("held") or item.get("delivery") in {"received", "aggregated"})):
+            latest = item
+    return latest
+
+
+def release_held_to_parent(
+    runner_directory: Path, alias: str, mapping: Mapping[str, Any], cwd: Path,
+) -> None:
+    """Deliver once what children held for ``alias`` while its Task was budget-stopped.
+
+    Its parent's own input runs ``alias`` again. While the Task is still
+    stopped, that input is a report-only turn, not continuation, so the held
+    ends and budget notices keep waiting (U1). Afterwards both reach it here,
+    including notices a budget-only continuation left held.
+    """
+    from graphtraj.teams.team_round import deliver_released_ends
+
+    monitor = _task_budget_monitor(mapping, cwd)
+    if monitor is not None and monitor.is_stopped():
+        return
+    deliver_released_ends(runner_directory, alias, frozenset({"budget-stop"}))
+    if monitor is None:
+        return
+    observers = {notice.get("observer") for notice in monitor.pending_parent_notices()}
+    for observer in sorted(name for name in observers if isinstance(name, str)):
+        try:
+            observed, _ = read_alias_mapping(runner_directory, observer)
+            if observed.get("parent") == alias:
+                monitor.deliver_parent_notices(runner_directory / "sessions" / observer)
+        except (RunnerError, OSError, ValueError, yaml.YAMLError):
+            continue  # Still pending; a later delivery retries.
+
+
+def release_late_hold(session_directory: Path, mapping: Mapping[str, Any]) -> None:
+    """Deliver a budget-stop hold written after its parent's continuation scanned.
+
+    A continuation clears the stop and resumes the parent before it scans
+    the held ends, so a hold that finds both done may have been missed;
+    deliver it now. Otherwise it waits for the continuation or parent input.
+    """
+    runner = session_directory.parent.parent
+    parent = mapping.get("parent")
+    if not isinstance(parent, str):
+        return
+    try:
+        monitor = _task_budget_monitor(mapping, runner_project_root(runner))
+        if monitor is None or monitor.is_stopped():
+            return
+        parent_mapping, parent_directory = read_alias_mapping(runner, parent)
+        owning = owning_execution(parent, parent_directory, parent_mapping)
+    except (RunnerError, OSError, ValueError, yaml.YAMLError):
+        return
+    if owning is None or owning["activity"] != "running":
+        return
+    deliver_held_ends([item for item in held_ends(runner, parent, frozenset({"budget-stop"}))
+                       if item[0] == session_directory])
+
+
+def _task_budget_monitor(mapping: Mapping[str, Any], cwd: Path):
+    """Return the budget monitor of the Session's Task, or None without one."""
+    try:
+        environment = _team_runtime_environment(dict(mapping), cwd)
+        return execution_budget_monitor(
+            Path(environment["GRAPHTRAJ_EVIDENCE"]), mapping["task_id"],
+            environment["GRAPHTRAJ_TASK_NAME"])
+    except (RunnerError, KeyError, TypeError):
+        return None
 
 
 def _same_task_parent(runner_directory: Path, mapping: Mapping[str, Any]) -> bool:
@@ -947,6 +1035,7 @@ def _send_session(
     system_notice: bool = False,
     retain_notice_channel: bool = False,
     parent_input: bool = True,
+    require_budget_permission: bool = False,
 ) -> Dict[str, str]:
     """Serialize alias changes so two idle sends cannot create competing owners.
 
@@ -989,6 +1078,7 @@ def _send_session(
                 capacity_fd=capacity_fd, reports_only=reports_only,
                 system_notice=system_notice,
                 retain_notice_channel=retain_notice_channel,
+                require_budget_permission=require_budget_permission,
                 restored_cwd=restored,
                 parent_input=parent_input and not system_notice,
             )
@@ -1001,7 +1091,7 @@ def _send_session(
         # children held while the Task was budget-stopped reach it once here;
         # a continuation reaches only roots. A notice or Driver turn is not
         # such input. Delivery takes this input lock, released above.
-        deliver_held_ends(held_ends(session_directory.parent.parent, alias, frozenset({"budget-stop"})))
+        release_held_to_parent(session_directory.parent.parent, alias, mapping, cwd)
     return receipt
 
 

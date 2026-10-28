@@ -258,6 +258,9 @@ class ExecutionBudgetMonitor:
         While this Task is stopped, a parent Session of the same Task is
         stopped too; sending would start its turn. Such notices stay retained
         for that parent's continuation, and True reports that they are held.
+        So do notices for a parent the stop ended and nothing resumed since,
+        such as a non-root parent a continuation left stopped: its own
+        parent's input delivers them.
         """
         from graphtraj.execution.runner_control import notify_direct_parent
         from graphtraj.execution.runner_status import read_alias_mapping
@@ -270,16 +273,13 @@ class ExecutionBudgetMonitor:
             # also available when admission stops before a native Session exists.
             mapping = yaml.safe_load((session_directory / "launch.yml").read_text())["mapping"]
             directory = session_directory
-        if (
-            isinstance(mapping.get("parent"), str)
-            and mapping.get("task_id") == self.task_id
-            and self.is_stopped()
-        ):
+        if isinstance(mapping.get("parent"), str) and mapping.get("task_id") == self.task_id:
             try:
-                parent, _ = read_alias_mapping(runner, mapping["parent"])
+                parent, parent_directory = read_alias_mapping(runner, mapping["parent"])
             except RunnerError:
-                parent = {}
-            if parent.get("task_id") == self.task_id:
+                parent, parent_directory = {}, None
+            if parent.get("task_id") == self.task_id and (
+                    self.is_stopped() or _ended_by_budget_stop(parent_directory)):
                 return True
 
         def deliver(pending: list[dict[str, Any]]) -> list[str]:
@@ -449,6 +449,15 @@ class ExecutionBudgetMonitor:
             finally:
                 file_lock.flock(lock.fileno(), file_lock.LOCK_UN)
         return state["stopped"]
+
+
+def _ended_by_budget_stop(session_directory: Path | None) -> bool:
+    """Whether the Session's last execution ended in a budget stop and none followed."""
+    try:
+        terminal = yaml.safe_load((session_directory / "execution.yml").read_text(encoding="utf-8"))
+    except (TypeError, OSError, UnicodeError, yaml.YAMLError):
+        return False
+    return isinstance(terminal, dict) and terminal.get("budget_stopped") is True
 
 
 def _current_budget(task_directory: Path) -> ExecutionBudget | None:

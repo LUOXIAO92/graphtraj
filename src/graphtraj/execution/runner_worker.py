@@ -361,10 +361,14 @@ def run(job_file: Path) -> int:
 
                 # A successor may already own mapping.yml. This notice belongs
                 # to the native execution that produced this terminal result.
-                deliver_execution_end(session_directory, execution_mapping, terminal,
-                                      parent_input=job.get('parent_input') is not False,
-                                      driver_reports_end=operation == "launch"
-                                      and job.get("driver_reports_end") is True)
+                ended = deliver_execution_end(session_directory, execution_mapping, terminal,
+                                              parent_input=job.get('parent_input') is not False,
+                                              driver_reports_end=operation == "launch"
+                                              and job.get("driver_reports_end") is True)
+                if ended.get("held") == "budget-stop":
+                    from graphtraj.execution.runner_control import release_late_hold
+
+                    release_late_hold(session_directory, execution_mapping)
             return 0
     finally:
         if startup_lock is not None:

@@ -12,7 +12,10 @@ from pathlib import Path
 import pytest
 import yaml
 
-from conftest import FakeCodex, InstalledCommands, run_process
+from conftest import (
+    REMOVED_RUNNER_OPERATIONS, FakeCodex, InstalledCommands, run_process, runner_command,
+    runner_operation,
+)
 from graphtraj.execution import runner_status
 from graphtraj.execution.runner_models import RunnerError
 from runner_fixtures import configure_harness
@@ -63,7 +66,9 @@ def _controlled_codex(fake_codex: FakeCodex) -> None:
         " and 'Run the direct control probes' in runtime_prompt):\n"
         "    child = {key: value for key, value in os.environ.items()"
         " if key != 'DIRECT_CONTROL_FORWARD_TO'}\n"
-        "    forwarded = subprocess.run([os.environ['GRAPHTRAJ_AGENT_RUNNER'], 'send',"
+        # Task 344 removed agent-runner send; the retained library operation\n"
+        # runs from this Session's own process tree, so authority is unchanged.\n"
+        "    forwarded = subprocess.run([*json.loads(os.environ['DIRECT_CONTROL_RUNNER_LIBRARY']), 'send',"
         " os.environ['DIRECT_CONTROL_FORWARD_TO'], '--instruction', 'Run the direct control probes now.',"
         " '--caused-by-event-id', os.environ['DIRECT_CONTROL_CAUSE']],"
         " cwd=os.environ['GRAPHTRAJ_HARNESS_ROOT'], env=child, capture_output=True, text=True)\n"
@@ -111,7 +116,7 @@ def _cause(root: Path) -> str:
 def _status(commands: InstalledCommands, root: Path, environment: dict, alias: str) -> dict:
     """Read one alias status document through the installed command."""
     completed = run_process(
-        [str(commands.runner), "status", alias], cwd=root, env=environment, timeout=30,
+        runner_command(commands, "status", alias), cwd=root, env=environment, timeout=30,
     )
     assert completed.returncode == 0, completed.stdout + completed.stderr
     return yaml.safe_load(completed.stdout)["aliases"][0]
@@ -193,7 +198,7 @@ def _probe(
     log.unlink(missing_ok=True)
     completed = run_process(
         [
-            str(commands.runner), "send", alias,
+            *runner_command(commands, "send", alias),
             "--instruction", PROBE_INSTRUCTION,
             "--caused-by-event-id", _cause(root),
         ],
@@ -205,6 +210,8 @@ def _probe(
             "DIRECT_CONTROL_TARGETS": json.dumps(targets),
             "DIRECT_CONTROL_CAUSE": _cause(root),
             "DIRECT_CONTROL_BATCH": str(batch),
+            "DIRECT_CONTROL_RUNNER_LIBRARY": json.dumps(runner_operation(commands)),
+            "DIRECT_CONTROL_REMOVED_OPERATIONS": json.dumps(sorted(REMOVED_RUNNER_OPERATIONS)),
             "FAKE_CODEX_CAPTURE_STDIN": "1",
             "FAKE_CODEX_APPEND_LOG": "1",
             **(
@@ -370,6 +377,10 @@ def test_control_entries_follow_recorded_direct_ownership(
         "HOLD_FILE_INVESTIGATION_SPECIALIST": str(hold),
         "GRAPHTRAJ_AGENT_RUNNER": str(installed_commands.runner),
         "DIRECT_CONTROL_PROBE_FILE": str(PROBE_FILE),
+        # Probes reach operations Task 344 removed from agent-runner through
+        # the same retained library operation (conftest.runner_operation).
+        "DIRECT_CONTROL_RUNNER_LIBRARY": json.dumps(runner_operation(installed_commands)),
+        "DIRECT_CONTROL_REMOVED_OPERATIONS": json.dumps(sorted(REMOVED_RUNNER_OPERATIONS)),
     }
     with (tmp_path / "authority-team.log").open("w", encoding="utf-8") as output:
         launched = subprocess.Popen(
@@ -528,7 +539,7 @@ def test_control_entries_follow_recorded_direct_ownership(
          "--response", '{"decision": "accept"}'],
     ):
         refused = run_process(
-            [str(installed_commands.runner), *arguments],
+            runner_command(installed_commands, *arguments),
             cwd=root, env=control_environment, timeout=30,
         )
         assert refused.returncode == 1, refused.stdout + refused.stderr

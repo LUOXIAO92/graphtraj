@@ -186,3 +186,55 @@ def test_a_session_waits_only_for_the_notices_it_delivers(
     state['parent_notices'][0].pop('observer')                    # a record from before observers
     (monitor.task_directory / 'execution-budget.yml').write_text(yaml.safe_dump(state))
     assert [notice['key'] for notice in monitor.pending_parent_notices('leader')] == keys[:1]
+
+
+def test_a_launch_reports_its_own_end_when_a_successor_already_replaced_it(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """B: a parent's send may start a successor between the launch's end and its result.
+
+    The successor's Worker unlinks execution.yml and rewrites mapping.yml at
+    registration (runner_worker). The launch still reports its own execution
+    and outcome, never the successor's, and is not misreported as unstarted.
+    """
+    import io
+    import subprocess
+
+    from graphtraj.teams import team_round
+
+    monkeypatch.delenv('GRAPHTRAJ_BUDGET_NOTICE_FD', raising=False)
+    session = tmp_path / 'sessions' / 'engineer'
+    session.mkdir(parents=True)
+
+    class Worker:
+        """The launch Worker registers, ends, and exits as a successor registers."""
+        pid = 4242
+        returncode = None
+
+        def __init__(self, *_: object, **__: object) -> None:
+            self.stdin, self.ticks = io.StringIO(), 0
+
+        def poll(self) -> int | None:
+            self.ticks += 1
+            if self.ticks == 1:
+                (session / 'mapping.yml').write_text(yaml.safe_dump(
+                    {'session': 's1', 'worker_pid': self.pid, 'execution_id': 'e1'}))
+            elif self.ticks == 2:
+                (session / 'execution.yml').write_text(yaml.safe_dump({'outcome': 'completed'}))
+            else:
+                (session / 'execution.yml').unlink()
+                (session / 'mapping.yml').write_text(yaml.safe_dump(
+                    {'session': 's1', 'worker_pid': 5151, 'execution_id': 'e2'}))
+                self.returncode = 0
+            return self.returncode
+
+        def wait(self, timeout: float | None = None) -> int:
+            if self.returncode is None:
+                raise subprocess.TimeoutExpired('worker', timeout)
+            return self.returncode
+
+    monkeypatch.setattr(team_round.subprocess, 'Popen', Worker)
+    registered: dict = {}
+    assert team_round._run_session_worker(
+        session, session / 'launch.yml', tmp_path, 'prompt', {}, 3, None, True, registered,
+    ) == ('s1', 'completed')
+    assert registered == {'execution_id': 'e1'}

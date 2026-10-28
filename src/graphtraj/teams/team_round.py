@@ -514,17 +514,21 @@ def _deliver_task(
     traces = evidence / "teams" / str(generation) / "traces"
     traces.mkdir(parents=True, exist_ok=True)
     (traces.parent / "rounds/1").mkdir(parents=True, exist_ok=True)
+    registered: dict[str, Any] = {}
     alias, session = _run_agent(
         project, task, task.role, worktree, evidence, traces, None, None,
         None, parent_alias, retained_batch, prompt, capacity_fd=capacity_fd,
         register_member=True, wait_for_completion=parent_alias is not None or prompt is not None,
-        driver_reports_end=parent_alias is not None,
+        driver_reports_end=parent_alias is not None, registered=registered,
     )
     if parent_alias is not None:
         _run_registered_children(project, task, alias, session, retained_batch, capacity_fd)
     return {"task_id": task.task_id, "task_name": task.task_name,
             "role": task.role, "alias": alias, "session": session,
-            "execution_id": read_alias_mapping(project.runner_directory, alias)[0]["execution_id"],
+            # This launch's own execution: a parent's send may already have
+            # started a successor under the alias (372).
+            "execution_id": registered.get("execution_id")
+            or read_alias_mapping(project.runner_directory, alias)[0]["execution_id"],
             "worktree_path": str(worktree),
             "launch_status": "completed" if parent_alias is not None or prompt is not None else "launched"}
 
@@ -772,6 +776,7 @@ def _run_agent(
     register_member: bool = False,
     replaces_alias: str | None = None,
     driver_reports_end: bool = False,
+    registered: dict[str, Any] | None = None,
 ) -> tuple[str, str]:
     team_file = traces.parent / "team.yml"
     if team_file.exists():
@@ -786,7 +791,7 @@ def _run_agent(
             wait_for_completion=wait_for_completion,
             task_environment=task_environment,
             register_member=register_member, replaces_alias=replaces_alias,
-            driver_reports_end=driver_reports_end,
+            driver_reports_end=driver_reports_end, registered=registered,
         )
 
 
@@ -811,6 +816,7 @@ def _execute_agent(
     register_member: bool = False,
     replaces_alias: str | None = None,
     driver_reports_end: bool = False,
+    registered: dict[str, Any] | None = None,
 ) -> tuple[str, str]:
     """Prepare a permitted execution; the Worker checks again at native startup.
 
@@ -1014,7 +1020,7 @@ def _execute_agent(
     environment["GRAPHTRAJ_PARENT_REGISTRATION"] = str(session_directory / "child-registration.yml")
     session_id, outcome = _run_session_worker(
         session_directory, job_file, worktree, task_prompt, environment,
-        capacity_fd, input_delivered, wait_for_completion,
+        capacity_fd, input_delivered, wait_for_completion, registered,
     )
     if outcome == "budget-stopped":
         raise RunnerError(
@@ -1177,8 +1183,13 @@ def _run_session_worker(
     capacity_fd: int,
     input_delivered: threading.Event | None,
     wait_for_completion: bool = True,
+    registered: dict[str, Any] | None = None,
 ) -> tuple[str, str]:
     """Run a native Worker, retaining a needed caller notice channel until it exits.
+
+    ``registered`` receives this Worker's own ``execution_id``. Its mapping and
+    terminal are read while they are still its own: once it has ended, a
+    parent's send may start a successor that replaces both.
 
     A root Worker still drives its own registered children. Without
     ``wait_for_completion`` the call returns once the Worker's registration is
@@ -1232,8 +1243,26 @@ def _run_session_worker(
                 _await_session_resume(worker, session_directory, error, None)
                 mapping, _ = read_alias_mapping(session_directory.parent.parent, session_directory.name)
                 return mapping["session"], "running"
+            own: dict[str, Any] = {}
+
+            def observe_own() -> None:
+                """Retain this Worker's mapping, then its terminal, before a successor."""
+                try:
+                    if "mapping" not in own:
+                        current = yaml.safe_load((session_directory / "mapping.yml").read_text(encoding="utf-8"))
+                        if isinstance(current, dict) and current.get("worker_pid") == worker.pid:
+                            own["mapping"] = current
+                    if "mapping" in own and "terminal" not in own:
+                        terminal = yaml.safe_load(execution.read_text(encoding="utf-8"))
+                        current = yaml.safe_load((session_directory / "mapping.yml").read_text(encoding="utf-8"))
+                        if isinstance(current, dict) and current.get("worker_pid") == worker.pid:
+                            own["terminal"] = terminal
+                except (OSError, UnicodeError, yaml.YAMLError):
+                    pass
+
             try:
                 while worker.poll() is None:
+                    observe_own()
                     if input_delivered is not None and not input_delivered.is_set():
                         try:
                             current_mapping = yaml.safe_load(
@@ -1268,6 +1297,7 @@ def _run_session_worker(
                     ):
                         input_delivered.set()
                 exit_code = worker.returncode
+                observe_own()
             except BaseException:
                 worker.terminate()
                 worker.wait()
@@ -1277,10 +1307,13 @@ def _run_session_worker(
                 failure = yaml.safe_load(error.read_text())
                 raise RunnerError(failure["code"], failure["message"])
             raise OSError("Session worker failed")
-        mapping = yaml.safe_load(
-            (session_directory / "mapping.yml").read_text(encoding="utf-8")
-        )
-        terminal = yaml.safe_load(execution.read_text(encoding="utf-8"))
+        if "terminal" in own:
+            mapping, terminal = own["mapping"], own["terminal"]
+        else:
+            mapping = yaml.safe_load(
+                (session_directory / "mapping.yml").read_text(encoding="utf-8")
+            )
+            terminal = yaml.safe_load(execution.read_text(encoding="utf-8"))
     except (OSError, UnicodeError, yaml.YAMLError) as failure:
         raise RunnerError("RUNTIME_WORKER_FAILED", "The Runtime Session could not be started.") from failure
     finally:
@@ -1294,6 +1327,8 @@ def _run_session_worker(
         or terminal.get("outcome") not in {"completed", "interrupted", "runtime-error"}
     ):
         raise RunnerError("RUNTIME_WORKER_FAILED", "The Runtime Session could not be started.")
+    if registered is not None:
+        registered["execution_id"] = mapping.get("execution_id")
     return mapping["session"], (
         "budget-stopped" if terminal.get("budget_stopped") else terminal["outcome"]
     )

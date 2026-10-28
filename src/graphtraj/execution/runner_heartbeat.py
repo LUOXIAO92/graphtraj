@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import tempfile
 import time
 from pathlib import Path
 from typing import IO, Any
@@ -10,7 +11,6 @@ from typing import IO, Any
 import yaml
 
 from graphtraj import file_lock
-from graphtraj.execution.runner_io import write_yaml_durably
 
 
 HEARTBEAT_FILE_NAME = "heartbeat.yml"
@@ -47,14 +47,24 @@ def write_heartbeat(directory: Path, record: dict[str, Any]) -> None:
         Ownership facts: ``alias``, optional ``execution_id`` and
         ``worker_pid``. The publication time is added as ``updated_at``.
     """
-    if not directory.is_dir():
-        # Retirement moved the record into its Trace; recreating the active
-        # directory would hide that retained record from ownership lookups.
+    # Retirement may move the record into its Trace at any moment; recreating
+    # the active directory would hide that retained record from ownership
+    # lookups. So never create it: write and replace inside it, or stop.
+    try:
+        descriptor, name = tempfile.mkstemp(dir=str(directory), prefix=".heartbeat.yml.", suffix=".tmp")
+    except FileNotFoundError:
         return
-    write_yaml_durably(
-        directory / HEARTBEAT_FILE_NAME,
-        {**record, "updated_at": time.time()},
-    )
+    temporary = Path(name)
+    try:
+        with os.fdopen(descriptor, "w", encoding="utf-8") as stream:
+            yaml.safe_dump({**record, "updated_at": time.time()}, stream, sort_keys=False)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary, directory / HEARTBEAT_FILE_NAME)
+    except FileNotFoundError:
+        return  # Moved while writing; the retained record keeps its last heartbeat.
+    finally:
+        temporary.unlink(missing_ok=True)
 
 
 def read_heartbeat(directory: Path) -> dict[str, Any] | None:

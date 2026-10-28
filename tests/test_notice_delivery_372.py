@@ -238,3 +238,29 @@ def test_a_launch_reports_its_own_end_when_a_successor_already_replaced_it(
         session, session / 'launch.yml', tmp_path, 'prompt', {}, 3, None, True, registered,
     ) == ('s1', 'completed')
     assert registered == {'execution_id': 'e1'}
+
+
+def test_a_late_heartbeat_never_recreates_a_retired_session_directory(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """8: retirement may move the directory between any two steps of the write."""
+    import os
+
+    from graphtraj.execution import runner_heartbeat
+
+    active, retained = tmp_path / 'sessions' / 'engineer', tmp_path / 'trace' / 'engineer'
+    active.mkdir(parents=True)
+    retained.parent.mkdir()
+    runner_heartbeat.write_heartbeat(active, {'alias': 'engineer', 'worker_pid': 1})
+    assert yaml.safe_load((active / 'heartbeat.yml').read_text())['worker_pid'] == 1
+    replace = os.replace
+
+    def retire_then_replace(source: object, target: object) -> None:
+        active.rename(retained)                       # retirement wins the race here
+        replace(source, target)
+
+    monkeypatch.setattr(runner_heartbeat.os, 'replace', retire_then_replace)
+    runner_heartbeat.write_heartbeat(active, {'alias': 'engineer', 'worker_pid': 2})
+    monkeypatch.setattr(runner_heartbeat.os, 'replace', replace)
+    runner_heartbeat.write_heartbeat(active, {'alias': 'engineer', 'worker_pid': 3})
+    assert not active.exists()
+    assert yaml.safe_load((retained / 'heartbeat.yml').read_text())['worker_pid'] == 1

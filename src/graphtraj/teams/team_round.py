@@ -337,10 +337,9 @@ def continue_stopped_task(
     if not budget_only:
         # Ends and notices held while their parent was stopped now reach the
         # resumed tree once. A budget-only continuation resumes no parent.
-        from graphtraj.execution.runner_control import deliver_held_ends, held_ends
-
         for alias in roots:
-            deliver_held_ends(held_ends(project.runner_directory, alias))
+            # A live Driver still shows its own children's 'driver' holds (F3).
+            deliver_released_ends(project.runner_directory, alias, frozenset({"budget-stop"}))
         observers = {notice.get("observer") for notice in monitor.pending_parent_notices()}
         for observer in sorted(name for name in observers if isinstance(name, str)):
             directory = project.runner_directory / "sessions" / observer
@@ -408,11 +407,41 @@ def _run_batch_workers(
             os.close(notice_fd)
 
 
-def _failed_task(task: Task, error: RunnerError) -> dict[str, Any]:
-    return {
-        "task_id": task.task_id, "task_name": task.task_name,
-        "role": task.role, "launch_status": "failed", "error": error.as_document(),
+def _failed_task(
+    task: Task, error: RunnerError, launched: dict[str, Any] | None = None,
+    runner_directory: Path | None = None,
+) -> dict[str, Any]:
+    """Name a failed launch's child, if it started, by its alias and execution id.
+
+    A child's failed, interrupted or erroring end already reached the parent
+    when it happened (375 F10). Its entry then only refers to that delivered
+    end, ``end: delivered``, and keeps the error code without repeating it.
+    """
+    entry: dict[str, Any] = {
+        "task_id": task.task_id, "task_name": task.task_name, "role": task.role,
+        **{key: launched[key] for key in ("alias", "execution_id") if (launched or {}).get(key)},
+        "launch_status": "failed", "error": error.as_document(),
     }
+    if runner_directory is not None and _end_delivered(runner_directory, entry.get("alias"),
+                                                         entry.get("execution_id")):
+        entry["end"] = "delivered"
+        entry["error"] = {"code": entry["error"]["code"]}
+    return entry
+
+
+def _end_delivered(runner_directory: Path, alias: str | None, execution_id: str | None) -> bool:
+    """Whether this execution's end notice was received by the child's parent."""
+    if not alias or not execution_id:
+        return False
+    try:
+        lines = (runner_directory / "sessions" / alias / "parent-notices.jsonl").read_text(
+            encoding="utf-8").splitlines()
+        return any(record.get("delivery") == "received"
+                   and (record.get("identity") or {}).get("execution_id") == execution_id
+                   and (record.get("identity") or {}).get("type") in {"failed", "interrupted", "runtime-error"}
+                   for record in map(json.loads, lines))
+    except (OSError, ValueError, AttributeError):
+        return False
 
 
 def _registered_batch_task(project: Any, requested: Task) -> Task:
@@ -438,8 +467,11 @@ def _deliver_task(
     retained_batch: Path,
     capacity_fd: int,
     parent_alias: str | None = None,
+    registered: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Prepare a Task workspace and run exactly the selected actual member.
+
+    ``registered`` receives the member's alias and own execution id once known.
 
     The existing native Worker creates, binds and registers the Session before
     its first turn. Execution completion does not decide task acceptance.
@@ -514,7 +546,7 @@ def _deliver_task(
     traces = evidence / "teams" / str(generation) / "traces"
     traces.mkdir(parents=True, exist_ok=True)
     (traces.parent / "rounds/1").mkdir(parents=True, exist_ok=True)
-    registered: dict[str, Any] = {}
+    registered = {} if registered is None else registered
     alias, session = _run_agent(
         project, task, task.role, worktree, evidence, traces, None, None,
         None, parent_alias, retained_batch, prompt, capacity_fd=capacity_fd,
@@ -556,7 +588,72 @@ def _run_registered_children(
     retained_batch: Path,
     capacity_fd: int,
 ) -> None:
-    """Execute registered children, then deliver their outcomes to their parent."""
+    """Execute registered children, then deliver their outcomes to their parent.
+
+    The Driver keeps a shared lock on ``driver.lock`` while it may still show
+    its children's held ends; :func:`release_orphaned_driver_ends` reads a
+    free lock as a Driver that ended before its results turn.
+    """
+    lock_file = project.runner_directory / "sessions" / alias / "driver.lock"
+    with lock_file.open("ab") as lock:
+        file_lock.flock(lock, file_lock.LOCK_SH)
+        _drive_registered_children(project, task, alias, session, retained_batch, capacity_fd)
+
+
+def release_orphaned_driver_ends(runner_directory: Path, alias: str) -> None:
+    """Hold again as ``driver-ended`` the 'driver' holds no live Driver will show (gap a).
+
+    A Driver that died between a child's end and its results turn leaves its
+    children's completed ends held for a turn that never comes. With no
+    Driver holding the lock, each such end is held for its own delivery once,
+    which a continuation or a later delivery of held ends performs.
+    """
+    from graphtraj.execution.runner_control import held_ends, rehold_ends
+
+    try:
+        lock = (runner_directory / "sessions" / alias / "driver.lock").open("ab")
+    except OSError:
+        return
+    with lock:
+        try:
+            file_lock.flock(lock, file_lock.LOCK_EX | file_lock.LOCK_NB)
+        except OSError:
+            return                      # a live Driver still shows them
+        rehold_ends(held_ends(runner_directory, alias, frozenset({"driver"})), "driver-ended")
+
+
+def deliver_released_ends(
+    runner_directory: Path, alias: str, kinds: frozenset[str] = frozenset(),
+) -> None:
+    """Deliver once the held ends of ``kinds`` and those no live Driver will show."""
+    from graphtraj.execution.runner_control import deliver_held_ends, held_ends
+
+    release_orphaned_driver_ends(runner_directory, alias)
+    deliver_held_ends(held_ends(runner_directory, alias, kinds | {"driver-ended"}))
+
+
+def _batch_aliases(runner_directory: Path, retained_batch: Path) -> list[str]:
+    """Return the aliases of the Sessions launched from ``retained_batch``."""
+    aliases = []
+    sessions = runner_directory / "sessions"
+    for directory in sorted(sessions.iterdir()) if sessions.is_dir() else ():
+        try:
+            launch = yaml.safe_load((directory / "launch.yml").read_text(encoding="utf-8"))
+            if Path(launch["mapping"]["retained_batch_file"]).resolve() == Path(retained_batch).resolve():
+                aliases.append(directory.name)
+        except (OSError, UnicodeError, yaml.YAMLError, KeyError, TypeError):
+            continue
+    return aliases
+
+
+def _drive_registered_children(
+    project: Any,
+    task: Task,
+    alias: str,
+    session: str,
+    retained_batch: Path,
+    capacity_fd: int,
+) -> None:
     from graphtraj.execution.runner_control import (
         _send_session, batch_ends, deliver_held_ends, held_ends, mark_ends_aggregated, rehold_ends,
     )
@@ -586,6 +683,10 @@ def _run_registered_children(
             # Their held ends reach it once when it is continued or resumed.
             rehold_ends(held_ends(project.runner_directory, alias, frozenset({"driver"})), "budget-stop")
             raise RunnerError("EXECUTION_BUDGET_STOPPED", "Runner stopped the parent's Task.")
+        # Each child's Worker, and the Driver inside it, has now ended, so the
+        # ends a dead Driver left for its results turn reach that child (gap a).
+        for child in _batch_aliases(project.runner_directory, retained):
+            deliver_released_ends(project.runner_directory, child)
         # Each child's own end was held for this turn (Q7): it is shown once here.
         held = batch_ends(held_ends(project.runner_directory, alias), retained)
         try:
@@ -1019,6 +1120,8 @@ def _execute_agent(
     # The recorded entity, never its role spelling, identifies the caller.
     environment["GRAPHTRAJ_PARENT_ALIAS"] = alias
     environment["GRAPHTRAJ_PARENT_REGISTRATION"] = str(session_directory / "child-registration.yml")
+    if registered is not None:
+        registered["alias"] = alias
     session_id, outcome = _run_session_worker(
         session_directory, job_file, worktree, task_prompt, environment,
         capacity_fd, input_delivered, wait_for_completion, registered,
@@ -1428,12 +1531,15 @@ def _worker_main() -> None:
     signal.signal(signal.SIGTERM, stop)
     retained = Path(sys.argv[1])
     task = read_batch(retained, Path.cwd()).tasks[int(sys.argv[2])]
+    launched: dict[str, Any] = {}
+    project = None
     try:
         project = discover_project(Path.cwd(), require_clean_integration=False)
         capacity_fd = int(sys.argv[3])
-        result = _deliver_task(project, task, retained, capacity_fd, sys.argv[4] or None)
+        result = _deliver_task(project, task, retained, capacity_fd, sys.argv[4] or None, launched)
     except (RunnerError, RuntimeAdapterError) as error:
-        result = _failed_task(task, RunnerError(error.code, error.message))
+        result = _failed_task(task, RunnerError(error.code, error.message), launched,
+                              project.runner_directory if project is not None else None)
         if error.code in {"EXECUTION_BUDGET_STOPPED", "subtree-stopped"}:
             result["launch_status"] = "stopped"
     print(yaml.safe_dump(result, sort_keys=False, allow_unicode=True), end="")

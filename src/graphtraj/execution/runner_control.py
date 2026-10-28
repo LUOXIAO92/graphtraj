@@ -791,6 +791,8 @@ def _add_closed_round_report(path: Path, text: str) -> Path:
     for this one exclusive creation; its mode is restored afterwards.
     """
     directory = path.parent
+    # A member that wrote no report before closure has no Round directory yet.
+    directory.mkdir(parents=True, exist_ok=True)
     mode      = directory.stat().st_mode & 0o7777
     directory.chmod(mode | 0o200)
     try:

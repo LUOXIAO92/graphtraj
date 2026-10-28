@@ -1,5 +1,6 @@
 """Recovery and cleanup through public commands and controlled native Sessions."""
 
+import copy
 import json
 import os
 import shutil
@@ -118,6 +119,28 @@ def prepare(
     return root, env, task
 
 
+def _without_history_reads(parameters: dict, root: Path) -> dict:
+    """Drop only the exact native history reads a resume adds (3d88416).
+
+    A retained native history exists only after the first turn, so a resume
+    grants it read access; every other captured parameter must be unchanged.
+    """
+    histories = set()
+    for path in (root / '.graphtraj/runner/sessions').glob('*/session.yml'):
+        record = yaml.safe_load(path.read_text()) or {}
+        source = record.get('rollout_path') or record.get('activity', {}).get('trace_file')
+        if isinstance(source, str) and source.endswith('.jsonl'):
+            histories.add(str(Path(source).resolve()))
+    result = copy.deepcopy(parameters)
+    for profile in result.get('config', {}).get('permissions', {}).values():
+        filesystem = profile.get('filesystem', {})
+        added = {path for path in filesystem if path in histories}
+        assert all(filesystem[path] == 'read' for path in added)
+        for path in added:
+            del filesystem[path]
+    return result
+
+
 @pytest.mark.parametrize('operation', ['send', 'replace'])
 @pytest.mark.parametrize('historical', [False, True])
 def test_external_inline_resources_survive_recovery(
@@ -194,7 +217,7 @@ def test_external_inline_resources_survive_recovery(
         if operation == 'send':
             assert current['session'] == original['session']
             assert current['report_files'] == original['report_files']
-            assert params == captured
+            assert _without_history_reads(params, root) == captured
             assert record['context_evidence'] == launch['context_evidence']
         else:
             assert current['session'] != original['session']
@@ -401,7 +424,7 @@ def test_sampled_stop_continues_original_researcher_with_unchanged_accounting(
         assert context['monitor_execution_budget'] and context['drive_children']
         assert (directory / 'launch.yml').read_bytes() == original_launch
         assert Path(original['retained_batch_file']).read_bytes() == original_batch
-        assert context['adapter_request']['session_parameters'] == yaml.safe_load(
+        assert _without_history_reads(context['adapter_request']['session_parameters'], root) == yaml.safe_load(
             original_launch)['adapter_request']['session_parameters']
         result = yaml.safe_load(command(installed_commands, root, env, 'reports', alias).stdout)
         assert len(result['submissions']) == 1
@@ -640,10 +663,12 @@ def test_budget_only_continuation_leaves_old_subtree_for_new_configured_root(
     directories = [runner / 'sessions' / member for member in (alias, child)]
     cause = events(root)[-1]['event_id']
     try:
-        # The child is really executing; budget-only must not bypass subtree checks.
+        # The child is really executing. Since dd9e3c4 budget-only skips the old
+        # roots' subtree checks, so the unsampled Task itself refuses it.
         busy = command(installed_commands, root, env, 'continue', '--task-id', '154',
                        '--budget-only', '--caused-by-event-id', cause)
-        assert busy.returncode == 1 and 'replacement-not-stopped' in busy.stdout
+        assert busy.returncode == 1
+        assert 'Explicit continuation requires a sampled stopped Task.' in busy.stdout
         monitor = budgets.execution_budget_monitor(task_directory, '154', 'recovery')
         sample_stop(monitor, monkeypatch)
         for directory in directories:

@@ -1,0 +1,129 @@
+"""Task 372: a stopped parent is not resumed by its children (U1); one end per parent (Q7)."""
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+import pytest
+import yaml
+
+from graphtraj.execution import execution_budget as budgets
+from graphtraj.execution import runner_control, runner_status
+
+
+BODY = '''---
+difficulty: medium
+difficulty_reason: Research and evidence
+execution_budget:
+  estimated_minutes: {research: 9, total: 10}
+  planned_sessions: {researcher: 1}
+  correction_rounds: 1
+  estimation_note: One actual author
+  on_exceed: Notify the parent
+---
+'''
+MAPPINGS = {
+    'leader': {'alias': 'leader', 'task_id': '153', 'parent': None, 'parent_connection': None},
+    'engineer': {'alias': 'engineer', 'task_id': '153', 'parent': 'leader', 'session': 's-e',
+                 'execution_id': 'e1'},
+    'analyst': {'alias': 'analyst', 'task_id': '153', 'parent': 'leader', 'session': 's-a',
+                'execution_id': 'a1'},
+}
+
+
+@pytest.fixture
+def runner(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """Session records of one Task: a root Leader and two direct children."""
+    runner = tmp_path / 'runner'
+    for alias, mapping in MAPPINGS.items():
+        (runner / 'sessions' / alias).mkdir(parents=True)
+        (runner / 'sessions' / alias / 'launch.yml').write_text(
+            yaml.safe_dump({'operation': 'launch', 'mapping': mapping}))
+
+    def read(directory: Path, alias: str) -> tuple[dict, Path]:
+        return dict(MAPPINGS[alias]), directory / 'sessions' / alias
+
+    monkeypatch.setattr(runner_status, 'read_alias_mapping', read)
+    monkeypatch.setattr(runner_control, 'read_alias_mapping', read)
+    return runner
+
+
+def stopped_monitor(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> budgets.ExecutionBudgetMonitor:
+    path = tmp_path / 'task'
+    path.mkdir()
+    (path / 'task.yml').write_text('current_definition: task.md\n')
+    (path / 'task.md').write_text(BODY)
+    monitor = budgets.execution_budget_monitor(path, '153', 'research')
+    monitor.record_session('researcher', 'researcher')
+    monitor.observer = 'engineer'
+    before = yaml.safe_load((path / 'execution-budget.yml').read_text())
+    with monkeypatch.context() as patch:
+        patch.setattr(budgets.time, 'time', lambda: before['started_at'] + 20 * 60)
+        patch.setattr(budgets.random, 'random', lambda: .999)
+        assert monitor.check('researcher', 'researcher')
+    return monitor
+
+
+def records(directory: Path) -> list[dict]:
+    path = directory / 'parent-notices.jsonl'
+    return [json.loads(line) for line in path.read_text().splitlines()] if path.is_file() else []
+
+
+def test_stopped_parent_gets_held_budget_notices_once_after_continuation(
+        tmp_path: Path, runner: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """U1: no send while the Task is stopped; each notice exactly once after it continues."""
+    sent: list[str] = []
+
+    def notify(directory: Path, message: str, identity: dict, **_: object) -> dict:
+        sent.append(identity['key'])
+        return {'delivery': 'received'}
+
+    monkeypatch.setattr(runner_control, 'notify_direct_parent', notify)
+    monitor = stopped_monitor(tmp_path, monkeypatch)
+    keys = [notice['key'] for notice in monitor.pending_parent_notices()]
+    assert keys
+    engineer = runner / 'sessions' / 'engineer'
+    assert monitor.deliver_parent_notices(engineer) is True     # held, the Worker stops retrying
+    assert sent == []
+    assert [notice['key'] for notice in monitor.pending_parent_notices()] == keys
+    monitor.continue_after_stop()
+    assert monitor.deliver_parent_notices(engineer) is False
+    monitor.deliver_parent_notices(engineer)                    # a repeated or retried delivery
+    assert sent == keys
+    assert monitor.pending_parent_notices() == []
+
+
+def test_a_parent_of_another_task_still_gets_the_notice_while_stopped(
+        tmp_path: Path, runner: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """The hold covers only a parent this same budget stop stopped."""
+    sent: list[str] = []
+    monkeypatch.setitem(MAPPINGS, 'leader', dict(MAPPINGS['leader'], task_id='other'))
+    monkeypatch.setattr(runner_control, 'notify_direct_parent',
+                        lambda directory, message, identity, **_: sent.append(identity['key'])
+                        or {'delivery': 'received'})
+    monitor = stopped_monitor(tmp_path, monkeypatch)
+    assert monitor.deliver_parent_notices(runner / 'sessions' / 'engineer') is False
+    assert sent and monitor.pending_parent_notices() == []
+
+
+def _deliver_received(directory: Path, message: str, identity: dict) -> dict:
+    """The ordinary event path, acknowledged, with its existing record."""
+    record = {'at': 0, 'identity': dict(identity), 'delivery': 'received', 'parent': 'leader',
+              'notice': json.dumps({'message': message})}
+    runner_control._append_notice_record(directory, record)
+    DELIVERED.append((directory.name, identity['type'], message))
+    return record
+
+
+DELIVERED: list[tuple[str, str, str]] = []
+
+
+def test_an_unheld_end_is_delivered_as_before(runner: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A non-Driver child's failure, not caused by a budget stop, still reaches its parent."""
+    DELIVERED.clear()
+    monkeypatch.setattr(runner_control, 'deliver_parent_event', _deliver_received)
+    receipt = runner_control.deliver_execution_end(
+        runner / 'sessions' / 'engineer', MAPPINGS['engineer'],
+        {'outcome': 'failed', 'error': {'code': 'X', 'message': 'broke'}}, parent_input=True)
+    assert receipt['delivery'] == 'received'
+    assert [(alias, kind) for alias, kind, _ in DELIVERED] == [('engineer', 'failed')]

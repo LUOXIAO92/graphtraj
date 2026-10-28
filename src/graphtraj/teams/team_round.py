@@ -334,6 +334,21 @@ def continue_stopped_task(
         )
         for alias in roots if not budget_only
     ]
+    if not budget_only:
+        # Ends and notices held while their parent was stopped now reach the
+        # resumed tree once. A budget-only continuation resumes no parent.
+        from graphtraj.execution.runner_control import deliver_held_ends, held_ends
+
+        for alias in roots:
+            deliver_held_ends(held_ends(project.runner_directory, alias))
+        observers = {notice.get("observer") for notice in monitor.pending_parent_notices()}
+        for observer in sorted(name for name in observers if isinstance(name, str)):
+            directory = project.runner_directory / "sessions" / observer
+            if directory.is_dir():
+                try:
+                    monitor.deliver_parent_notices(directory)
+                except (RunnerError, OSError, ValueError, yaml.YAMLError):
+                    pass  # Still pending; the observer's next delivery retries.
     return {"task_id": task_id, "continuation_event_id": continuation["event_id"],
             "tasks": resumed}
 
@@ -555,6 +570,14 @@ def _run_registered_children(
                 require_execution_allowed(project.runner_directory, alias, mapping)
                 batch, retained = _registered_batch(registration, Path(mapping["worktree_path"]))
         children = _run_batch_workers(project, batch, retained, alias, capacity_fd)
+        monitor = execution_budget_monitor(
+            project.state_directory / "tasks" / (task.task_id + "-" + task.task_name),
+            task.task_id, task.task_name,
+        )
+        if monitor is not None and monitor.is_stopped():
+            # A budget stop stopped this parent too; its results must not resume it.
+            # Their held ends reach it once on continuation (continue_stopped_task).
+            raise RunnerError("EXECUTION_BUDGET_STOPPED", "Runner stopped the parent's Task.")
         _send_session(
             alias, "Direct child execution results:\n" + yaml.safe_dump(children.document, allow_unicode=True),
             directory, mapping, (), project.harness_root, capacity_fd=capacity_fd,

@@ -214,7 +214,9 @@ def deliver_execution_end(
     while the parent's ``wait`` on this Session returns it (:func:`awaited`),
     and as an ordinary receipt of an execution the parent did not start
     (``parent_input`` false) where the parent can see it that way
-    (:func:`receipt_is_display_only`). Every other end is delivered.
+    (:func:`receipt_is_display_only`). Any end is kept the same way when a
+    budget stop of this Task also stopped the parent Session, which a notice
+    must not resume. Every other end is delivered.
     """
     from agent_swarm.notices import needs_parent
 
@@ -224,12 +226,66 @@ def deliver_execution_end(
     }, ensure_ascii=False)
     identity = {'type': terminal['outcome'], 'session': mapping['session'],
                 'execution_id': mapping.get('execution_id')}
+    if terminal.get('budget_stopped') and _same_task_parent(runner, mapping):
+        return retain_parent_receipt(session_directory, notice, identity, held='budget-stop')
     if terminal['outcome'] == 'completed' and (
             not needs_parent('completed', active_members=active_members(runner, session_directory.name))
             or awaited(session_directory, mapping.get('execution_id'))
             or not parent_input and receipt_is_display_only(mapping, runner)):
         return retain_parent_receipt(session_directory, notice, identity)
     return deliver_parent_event(session_directory, notice, identity)
+
+
+def held_ends(runner_directory: Path, parent: str) -> list[tuple[Path, Dict[str, Any]]]:
+    """Return each direct child's held end that ``parent`` has not yet been shown.
+
+    An end is shown once a later record of the same execution says the parent
+    received it.
+    """
+    found = []
+    sessions = runner_directory / "sessions"
+    for directory in sorted(sessions.iterdir()) if sessions.is_dir() else ():
+        try:
+            if not (directory / "parent-notices.jsonl").is_file():
+                continue
+            mapping, _ = read_alias_mapping(runner_directory, directory.name)
+            if mapping.get("parent") != parent:
+                continue
+            records = [json.loads(line) for line in
+                       (directory / "parent-notices.jsonl").read_text(encoding="utf-8").splitlines()]
+        except (RunnerError, OSError, ValueError):
+            continue
+        for index, record in enumerate(records):
+            identity = record.get("identity") or {}
+            if record.get("held") and not any(
+                    (later.get("identity") or {}).get("execution_id") == identity.get("execution_id")
+                    and (later.get("identity") or {}).get("type") == identity.get("type")
+                    and later.get("delivery") == "received"
+                    for later in records[index + 1:]):
+                found.append((directory, record))
+    return found
+
+
+def deliver_held_ends(held: list[tuple[Path, Dict[str, Any]]]) -> None:
+    """Deliver held ends once through the ordinary event path; failures stay held."""
+    for directory, record in held:
+        try:
+            message = json.loads(record["notice"])["message"]
+            deliver_parent_event(directory, message, record["identity"])
+        except (RunnerError, OSError, ValueError, KeyError, TypeError):
+            continue
+
+
+def _same_task_parent(runner_directory: Path, mapping: Mapping[str, Any]) -> bool:
+    """Whether the direct parent is a Session of this Session's own Task."""
+    parent = mapping.get('parent')
+    if not isinstance(parent, str):
+        return False
+    try:
+        parent_mapping, _ = read_alias_mapping(runner_directory, parent)
+    except RunnerError:
+        return False
+    return parent_mapping.get('task_id') == mapping.get('task_id')
 
 
 # How long after a parent's wait returned an execution's end that end still
@@ -285,16 +341,19 @@ def active_members(runner_directory: Path, alias: str) -> int:
 
 def retain_parent_receipt(
     session_directory: Path, notice: str, identity: Mapping[str, Any],
+    *, held: str | None = None,
 ) -> Dict[str, Any]:
     """Keep an ordinary end notice in the existing record without resuming the parent.
 
     The record has the same message and parent fields as a delivered notice,
     with ``delivery: retained``. People see it in the Session's records, and a
-    Codex Main host shows it once at its next native hook.
+    Codex Main host shows it once at its next native hook. ``held`` names why
+    an end the parent must still see was kept (:func:`deliver_held_ends`).
     """
     mapping, _ = read_alias_mapping(session_directory.parent.parent, session_directory.name)
     record: Dict[str, Any] = {
         "at": time.time(), "identity": dict(identity), "delivery": "retained",
+        **({"held": held} if held is not None else {}),
         "parent": mapping.get("parent") if isinstance(mapping.get("parent"), str) else None,
         "notice": json.dumps({"source": "graphtraj", "alias": mapping["alias"],
                               "event": identity["type"], "message": notice}, ensure_ascii=False),

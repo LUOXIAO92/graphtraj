@@ -555,7 +555,8 @@ def _monitor_execution_budget(
         deadline = time.monotonic() + OPERATION_TIMEOUT_SECONDS
         while True:
             try:
-                monitor.deliver_parent_notices(session_directory)
+                if monitor.deliver_parent_notices(session_directory):
+                    return  # Held for the stopped parent's continuation.
             except (RunnerError, OSError, ValueError, yaml.YAMLError):
                 pass
             if (mapping.get("parent") is None and not mapping.get("parent_connection")) or not monitor.pending_parent_notices():

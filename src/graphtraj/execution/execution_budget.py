@@ -247,13 +247,17 @@ class ExecutionBudgetMonitor:
             finally:
                 file_lock.flock(lock.fileno(), file_lock.LOCK_UN)
 
-    def deliver_parent_notices(self, session_directory: Path) -> None:
+    def deliver_parent_notices(self, session_directory: Path) -> bool:
         """Deliver once to the task's recorded parent, outside the budget lock.
 
         The notifying Session uses its own direct parent, including while that
         parent's Driver waits for children. A notice another timed Session
         observed is left for that Session (or its successor under the alias). A caller-channel write records
         transport only and never claims that an Agent received the notice.
+
+        While this Task is stopped, a parent Session of the same Task is
+        stopped too; sending would start its turn. Such notices stay retained
+        for that parent's continuation, and True reports that they are held.
         """
         from graphtraj.execution.runner_control import notify_direct_parent
         from graphtraj.execution.runner_status import read_alias_mapping
@@ -266,6 +270,17 @@ class ExecutionBudgetMonitor:
             # also available when admission stops before a native Session exists.
             mapping = yaml.safe_load((session_directory / "launch.yml").read_text())["mapping"]
             directory = session_directory
+        if (
+            isinstance(mapping.get("parent"), str)
+            and mapping.get("task_id") == self.task_id
+            and self.is_stopped()
+        ):
+            try:
+                parent, _ = read_alias_mapping(runner, mapping["parent"])
+            except RunnerError:
+                parent = {}
+            if parent.get("task_id") == self.task_id:
+                return True
 
         def deliver(pending: list[dict[str, Any]]) -> list[str]:
             """Return only notice keys acknowledged by the actual parent."""
@@ -289,6 +304,7 @@ class ExecutionBudgetMonitor:
             return received
 
         self.deliver_notices(deliver)
+        return False
 
     def _mark_channel_written(self, key: str) -> None:
         """Retain a caller-channel write without asserting native receipt."""

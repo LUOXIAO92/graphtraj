@@ -121,8 +121,10 @@ class CodexHost(CodexManagedExecution):
             asyncio.run_coroutine_threadsafe(
                 self.adapter.send_host_event(self.native_session, event), self.loop,
             ).result()
-        except Exception:
-            return 'unconfirmed'
+        except Exception as error:
+            # Only a written request can have shown the body; any earlier
+            # failure leaves it readable through wait/status.
+            return 'unconfirmed' if getattr(error, 'request_written', False) else False
         self._display(notice['agent'], self.native_session, notice['body'])
         self.deliveries.append({'agent': notice['agent'], 'parent_session': self.native_session,
                                 'body': notice['body'], 'accepted': True})

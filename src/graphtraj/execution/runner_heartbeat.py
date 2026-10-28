@@ -50,21 +50,33 @@ def write_heartbeat(directory: Path, record: dict[str, Any]) -> None:
     # Retirement may move the record into its Trace at any moment; recreating
     # the active directory would hide that retained record from ownership
     # lookups. So never create it: write and replace inside it, or stop.
+    # The directory handle follows a move, so cleanup removes the temporary
+    # file from wherever the directory now is.
     try:
-        descriptor, name = tempfile.mkstemp(dir=str(directory), prefix=".heartbeat.yml.", suffix=".tmp")
+        handle = os.open(directory, os.O_RDONLY | os.O_DIRECTORY)
     except FileNotFoundError:
         return
-    temporary = Path(name)
     try:
-        with os.fdopen(descriptor, "w", encoding="utf-8") as stream:
-            yaml.safe_dump({**record, "updated_at": time.time()}, stream, sort_keys=False)
-            stream.flush()
-            os.fsync(stream.fileno())
-        os.replace(temporary, directory / HEARTBEAT_FILE_NAME)
-    except FileNotFoundError:
-        return  # Moved while writing; the retained record keeps its last heartbeat.
+        try:
+            descriptor, name = tempfile.mkstemp(dir=str(directory), prefix=".heartbeat.yml.", suffix=".tmp")
+        except FileNotFoundError:
+            return
+        temporary = Path(name)
+        try:
+            with os.fdopen(descriptor, "w", encoding="utf-8") as stream:
+                yaml.safe_dump({**record, "updated_at": time.time()}, stream, sort_keys=False)
+                stream.flush()
+                os.fsync(stream.fileno())
+            os.replace(temporary, directory / HEARTBEAT_FILE_NAME)
+        except FileNotFoundError:
+            return  # Moved while writing; the retained record keeps its last heartbeat.
+        finally:
+            try:
+                os.unlink(temporary.name, dir_fd=handle)
+            except FileNotFoundError:
+                pass
     finally:
-        temporary.unlink(missing_ok=True)
+        os.close(handle)
 
 
 def read_heartbeat(directory: Path) -> dict[str, Any] | None:

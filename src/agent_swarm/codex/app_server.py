@@ -582,7 +582,9 @@ class CodexAppServer:
         try:
             _native_turn(result.get('turn'))
         except ValueError as error:
-            raise self._protocol_failure(f'turn/start: {error}') from error
+            failure = self._protocol_failure(f'turn/start: {error}')
+            failure.request_written = True  # The host replied, so it received the event.
+            raise failure from error
         return result
 
     async def send_input(self, execution: CodexExecution, prompt: str) -> None:

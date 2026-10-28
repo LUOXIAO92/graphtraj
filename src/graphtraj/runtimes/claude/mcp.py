@@ -23,6 +23,17 @@ from graphtraj.interfaces.hosted_cli import agents_dispatch, forward_request
 from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError, recovery_review
 
 
+SERVER = {'name': 'agents', 'version': '1'}
+
+
+def descriptors() -> list[dict]:
+    """Expose agents and the GraphTraj tasks entry."""
+    return tool_documents() + [{
+        'name': 'tasks', 'description': 'Discover, describe, or execute Task features.',
+        'inputSchema': INPUT_SCHEMA,
+    }]
+
+
 def serve(
     input_stream: TextIO,
     output_stream: TextIO,
@@ -63,13 +74,6 @@ def serve(
                                 if item['feature'] != 'agents']}, failed=answer.failed)
         return answer
 
-    def descriptors() -> list[dict]:
-        """Expose agents and the GraphTraj tasks entry."""
-        return tool_documents() + [{
-            'name': 'tasks', 'description': 'Discover, describe, or execute Task features.',
-            'inputSchema': INPUT_SCHEMA,
-        }]
-
     def dispatch(request: dict) -> AgentsResult:
         """Use the already-bound gateway; never manufacture an anonymous Main."""
         return agents_dispatch(request, cwd)
@@ -108,7 +112,7 @@ def serve(
         params = message.get('params')
         if message.get('method') == 'initialize' and isinstance(params, dict):
             capabilities.update(params.get('capabilities') or {})
-        return respond(message, descriptors, call, {'name': 'agents', 'version': '1'})
+        return respond(message, descriptors, call, SERVER)
 
     serve_stdio(input_stream, output_stream, answer)
 

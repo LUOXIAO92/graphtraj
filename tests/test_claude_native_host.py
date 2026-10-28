@@ -301,3 +301,159 @@ def test_stray_output_never_reaches_the_mcp_channel(tmp_path: Path) -> None:
     assert result.returncode == 0, result.stderr
     assert result.stdout == '{"ID": 1}\n'
     assert 'stray print' in log.read_text() and 'stray subprocess' in log.read_text()
+
+
+def _host_project(tmp_path: Path) -> tuple[Path, Path, Path]:
+    """Write a GraphTraj host configuration whose verified CLI is this Python's launcher."""
+    import sys
+
+    project, elsewhere = tmp_path / 'project', tmp_path / 'elsewhere'
+    elsewhere.mkdir()
+    config = project / '.graphtraj' / 'claude-host' / 'config.json'
+    config.parent.mkdir(parents=True)
+    config.write_text(json.dumps({'root': str(project), 'cwd': str(project), 'claude': sys.executable,
+                                  'channel_file': str(config.parent / 'live' / 'channel.json')}))
+    return project, elsewhere, config
+
+
+def _source_env(**extra: str) -> dict:
+    """Run the host from this checkout."""
+    import graphtraj
+
+    source = str(Path(graphtraj.__file__).parents[1])
+    return {**os.environ, 'PYTHONPATH': source + os.pathsep + os.environ.get('PYTHONPATH', ''), **extra}
+
+
+@pytest.mark.parametrize('case', ['elsewhere', 'bound-child', 'stale-channel', 'bad-config'])
+def test_refused_graphtraj_host_answers_both_tools_with_the_reason(tmp_path: Path, case: str) -> None:
+    """A refused start completes the handshake and every agents and tasks call names why; no Main is bound."""
+    import subprocess
+    import sys
+
+    project, elsewhere, config = _host_project(tmp_path)
+    host = config.parent
+    channel = host / 'live' / 'channel.json'
+    if case == 'stale-channel':
+        channel.parent.mkdir()
+        channel.write_text('{"parent": 1}')
+    if case == 'bad-config':
+        config.write_text(json.dumps({**json.loads(config.read_text()), 'extra': 1}))
+    messages = [{'jsonrpc': '2.0', 'id': 1, 'method': 'initialize', 'params': {}},
+                {'jsonrpc': '2.0', 'id': 2, 'method': 'tools/list', 'params': {}},
+                {'jsonrpc': '2.0', 'id': 3, 'method': 'tools/call',
+                 'params': {'name': 'agents', 'arguments': {'action': 'discover'}}},
+                {'jsonrpc': '2.0', 'id': 4, 'method': 'tools/call',
+                 'params': {'name': 'tasks', 'arguments': {'action': 'discover'}}}]
+    launcher = ('import subprocess, sys\n'
+                'done = subprocess.run([sys.executable, "-m", "graphtraj.runtimes.claude.host", "serve", "--config",'
+                ' sys.argv[1]], input=sys.stdin.read(), capture_output=True, text=True, timeout=30)\n'
+                'sys.stdout.write(done.stdout); sys.stderr.write(done.stderr)\n')
+    env = _source_env(**({'AGENT_SWARM_CONNECTION': 'bound'} if case == 'bound-child' else {}))
+    finished = subprocess.run([sys.executable, '-c', launcher, str(config)],
+                              cwd=elsewhere if case == 'elsewhere' else project,
+                              input=''.join(json.dumps(message) + '\n' for message in messages),
+                              capture_output=True, text=True, timeout=60, env=env)
+    replies = [json.loads(line) for line in finished.stdout.splitlines()]
+    assert replies[0]['result']['serverInfo'] == {'name': 'agents', 'version': '1'}
+    assert [tool['name'] for tool in replies[1]['result']['tools']] == ['agents', 'tasks']
+    errors = []
+    for reply in replies[2:]:
+        assert reply['result']['isError'] is True
+        errors.append(reply['result']['structuredContent']['error'])
+    assert errors[0] == errors[1]
+    error = errors[0]
+    assert error['message'].startswith('The agents host did not start: ')
+    expected = {'elsewhere': ('host-unavailable', [f'started in {elsewhere.resolve()}',
+                                                   f'configured for {project.resolve()}',
+                                                   f'Start or resume Claude Code from {project.resolve()}']),
+                'bound-child': ('authority-denied', ['bound child']),
+                'stale-channel': ('host-busy', [f'{channel} exists', 'delete the file']),
+                'bad-config': ('host-unavailable', [str(config), 'Expected root, cwd, claude and channel_file'])}
+    code, parts = expected[case]
+    assert error['code'] == code and all(part in error['message'] for part in parts), error
+    assert error['message'] in finished.stderr
+    log = (host / 'host.log').read_text()
+    assert error['message'] in log and 'Traceback' not in log
+    # No control, channel, archive configuration or Main claim was made.
+    assert not (project / '.graphtraj' / 'swarm').exists()
+    assert not list(project.rglob('main-sessions')) and not (host / 'host-refusal.json').exists()
+    assert sorted(path.name for path in (host / 'live').glob('*')) == (
+        ['channel.json'] if case == 'stale-channel' else [])
+    if case == 'stale-channel':
+        assert channel.read_text() == '{"parent": 1}'
+
+
+@pytest.mark.parametrize('case', ['refused', 'serving'])
+def test_graphtraj_session_end_is_one_stop_line(tmp_path: Path, case: str) -> None:
+    """Claude Code's SIGINT at session end leaves one stop line and no traceback in host.log."""
+    import subprocess
+    import sys
+
+    project, elsewhere, config = _host_project(tmp_path)
+    channel = config.parent / 'live' / 'channel.json'
+    stale = config.parent / 'host-refusal.json'
+    stale.write_text('{"code": "old", "message": "old"}')
+    launcher = ('import json, signal, subprocess, sys\n'
+                'host = subprocess.Popen([sys.executable, "-m", "graphtraj.runtimes.claude.host", "serve", "--config",'
+                ' sys.argv[1]], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)\n'
+                'host.stdin.write(json.dumps({"jsonrpc": "2.0", "id": 1, "method": "initialize",'
+                ' "params": {}}) + "\\n"); host.stdin.flush()\n'
+                'print(host.stdout.readline().strip())\n'
+                'host.send_signal(signal.SIGINT)\n'
+                'print(host.wait(timeout=30))\n')
+    finished = subprocess.run([sys.executable, '-c', launcher, str(config)],
+                              cwd=elsewhere if case == 'refused' else project,
+                              capture_output=True, text=True, timeout=60, env=_source_env())
+    reply, returncode = finished.stdout.splitlines()
+    assert json.loads(reply)['result']['serverInfo']['name'] == 'agents'
+    assert returncode == '0', finished.stderr
+    log = (config.parent / 'host.log').read_text()
+    assert 'Traceback' not in log and 'KeyboardInterrupt' not in log
+    assert log.count('agents host stopped: Claude Code ended the session (SIGINT).') == 1
+    assert not channel.exists() and not stale.exists()
+    if case == 'refused':
+        assert 'The agents host did not start: Claude Code was started in' in log
+    else:
+        assert 'did not start' not in log
+
+
+@pytest.mark.parametrize('module', ['graphtraj.runtimes.claude.host', 'agent_swarm.claude.host'])
+def test_graphtraj_context_reports_a_refused_host_in_one_line(tmp_path: Path, module: str) -> None:
+    """Both mod context entries report a GraphTraj host's absence or refusal in one line."""
+    import subprocess
+    import sys
+
+    project, elsewhere, config = _host_project(tmp_path)
+    env = _source_env()
+
+    def context() -> subprocess.CompletedProcess:
+        """Run the mod's context entry as the hook does, with one request on stdin."""
+        return subprocess.run([sys.executable, '-m', module, 'context', '--config', str(config)],
+                              input='{}', capture_output=True, text=True, timeout=30, env=env)
+
+    idle = context()
+    assert idle.returncode == 1 and 'Traceback' not in idle.stderr
+    assert idle.stderr.splitlines() == [
+        f"The agents host for this project is not running; see {config.parent / 'host.log'}."]
+    launcher = ('import json, signal, subprocess, sys\n'
+                'host = subprocess.Popen([sys.executable, "-m", "graphtraj.runtimes.claude.host", "serve", "--config",'
+                ' sys.argv[1]], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)\n'
+                'host.stdin.write(json.dumps({"jsonrpc": "2.0", "id": 1, "method": "initialize",'
+                ' "params": {}}) + "\\n"); host.stdin.flush()\n'
+                'print(host.stdout.readline().strip()); sys.stdout.flush()\n'
+                'sys.stdin.readline()\n'
+                'host.send_signal(signal.SIGINT)\n'
+                'print(host.wait(timeout=30))\n')
+    host = subprocess.Popen([sys.executable, '-c', launcher, str(config)], cwd=elsewhere, env=env,
+                            stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
+    assert json.loads(host.stdout.readline())['result']['serverInfo']['name'] == 'agents'
+    refused = context()
+    host.stdin.write('stop\n')
+    host.stdin.flush()
+    assert host.stdout.readline().strip() == '0'
+    host.wait(timeout=30)
+    assert refused.returncode == 1 and 'Traceback' not in refused.stderr
+    [line] = refused.stderr.splitlines()
+    assert line.startswith('host-unavailable: The agents host did not start: Claude Code was started in ')
+    assert f'configured for {project.resolve()}' in line
+    assert not (config.parent / 'host-refusal.json').exists()

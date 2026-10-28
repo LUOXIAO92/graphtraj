@@ -1,6 +1,7 @@
 """Independent Claude Main entry using native mod identity and agents MCP."""
 from __future__ import annotations
 import argparse
+from contextlib import contextmanager
 import faulthandler
 import json
 import os
@@ -62,22 +63,42 @@ def isolate_stdio(log: Path) -> tuple[TextIO, TextIO]:
 REFUSAL_FILE = 'host-refusal.json'
 
 
-def serve_until_ended(mcp_in: TextIO, mcp_out: TextIO, responder) -> None:
-    """Serve MCP; Claude Code ending the session (SIGINT) is a stop, not a crash."""
+@contextmanager
+def ended_by_claude():
+    """Log Claude Code ending the session (SIGINT) as one stop line, not a crash."""
     try:
-        serve(mcp_in, mcp_out, responder)
+        yield
     except KeyboardInterrupt:
         print(time.strftime('%Y-%m-%dT%H:%M:%S%z'),
               'agents host stopped: Claude Code ended the session (SIGINT).', flush=True)
 
 
-def serve_refusal(error: Exception, log: Path) -> None:
+def serve_until_ended(mcp_in: TextIO, mcp_out: TextIO, responder) -> None:
+    """Serve MCP; Claude Code ending the session (SIGINT) is a stop, not a crash."""
+    with ended_by_claude():
+        serve(mcp_in, mcp_out, responder)
+
+
+def report_missing_host(channel_file: Path) -> None:
+    """Exit the mod's context step with the refusal reason in one line, never a traceback."""
+    record = channel_file.parent.parent / REFUSAL_FILE
+    try:
+        reason = json.loads(record.read_text(encoding='utf-8'))
+        print(f"{reason['code']}: {reason['message']}", file=sys.stderr)
+    except (OSError, ValueError, KeyError, TypeError):
+        print('The agents host for this project is not running; see '
+              f"{channel_file.parent.parent / 'host.log'}.", file=sys.stderr)
+    raise SystemExit(1)
+
+
+def serve_refusal(error: Exception, log: Path, descriptors=tool_documents,
+                  server: dict | None = None) -> None:
     """Keep a refused start readable instead of exiting before the MCP handshake.
 
     Claude Code reports only CONNECTION_CLOSED for a server that exits before
     it answers. The reason goes to ``log`` and to stderr, and the server then
-    answers every agents call with it. No control, channel or Agent is created,
-    so every startup check remains in force.
+    answers every call of the ``descriptors`` tools with it. No control,
+    channel or Agent is created, so every startup check remains in force.
     """
     reason = {'code': getattr(error, 'code', 'host-unavailable'),
               'message': f'The agents host did not start: {error}'}
@@ -96,7 +117,7 @@ def serve_refusal(error: Exception, log: Path) -> None:
 
     try:
         serve_until_ended(mcp_in, mcp_out, lambda message: respond(
-            message, tool_documents, call, {'name': 'agents', 'version': '0.1.0'}))
+            message, descriptors, call, server or {'name': 'agents', 'version': '0.1.0'}))
     finally:
         record.unlink(missing_ok=True)
 
@@ -268,15 +289,7 @@ def main() -> None:
         return
     if options.operation == 'context':
         if not channel_file.exists():
-            # No connection exists; report the refusal in one line, never a traceback.
-            record = channel_file.parent.parent / REFUSAL_FILE
-            try:
-                reason = json.loads(record.read_text(encoding='utf-8'))
-                print(f"{reason['code']}: {reason['message']}", file=sys.stderr)
-            except (OSError, ValueError, KeyError, TypeError):
-                print('The agents host for this project is not running; see '
-                      f"{channel_file.parent.parent / 'host.log'}.", file=sys.stderr)
-            raise SystemExit(1)
+            report_missing_host(channel_file)
         endpoint = json.loads(channel_file.read_text())
         parent = native_parent(Path(endpoint['executable']), stage='context')
         if endpoint['parent'] != parent:

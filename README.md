@@ -416,6 +416,24 @@ project MCP approval and trust prompts decide adoption; GraphTraj trusts nothing
 itself. In a session, `/agents-context` shows the current Session, whether the
 `agents` and `tasks` entries are registered, and whether notice push is available.
 
+Start or resume Claude Code from the project directory. Claude Code reads
+`.mcp.json` from its start directory and the directories above it, so in an
+unrelated directory it loads that directory's own servers, not this project's
+`agents`. Started in a subdirectory, or given this project's `.mcp.json`
+explicitly, the host connects but refuses: it binds no control, Agent or Main,
+and every `agents` and `tasks` call returns `host-unavailable: The agents host
+did not start: Claude Code was started in <actual>, but this host is configured
+for <expected>. Start or resume Claude Code from <expected>.` A host already
+running for the project (`host-busy`, naming
+`.graphtraj/claude-host/live/channel.json`), a bound child, a host not launched
+by the configured `claude`, or an unreadable configuration are refused the same
+way with their own reason. The reason also goes to
+`.graphtraj/claude-host/host.log` as one timestamped JSON line (search for
+`did not start`) and, while that host runs, to the plugin's context failures.
+When Claude Code ends the session (SIGINT) the log gets one
+`agents host stopped: Claude Code ended the session (SIGINT).` line, not a
+traceback. Fix the cause, then start Claude Code again from the project.
+
 Member notices for this Main are appended to a durable per-Session queue in
 `.graphtraj/runner/main-sessions/inbox/`. The plugin submits them into the
 Main's turn or idle Session through Claude Code's prompt submission and

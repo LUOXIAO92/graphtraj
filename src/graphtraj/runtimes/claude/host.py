@@ -24,6 +24,7 @@ from typing import Callable, TextIO
 from uuid import UUID
 
 from agent_swarm.claude import native_host
+from agent_swarm.claude.host import REFUSAL_FILE, ended_by_claude, report_missing_host, serve_refusal
 from agent_swarm import AgentsError, AgentsResult, Caller, bind
 from agent_swarm.connection import connection_operation, worker_connection
 from agent_swarm.discovery import handle_request
@@ -31,7 +32,7 @@ from agent_swarm.process import process_ancestors
 from graphtraj.configuration.project_configuration import runner_directory
 from graphtraj.execution.runner_process import process_executable
 from graphtraj.interfaces.agents import GraphTrajAgents, configured_archive
-from graphtraj.runtimes.claude.mcp import serve
+from graphtraj.runtimes.claude.mcp import SERVER, descriptors, serve
 
 
 from agent_swarm.claude.native_host import NativeCalls as NativeCallsBase
@@ -224,8 +225,18 @@ def write_adoption(material: dict[str, object]) -> None:
                           encoding='utf-8')
 
 
+def refuse(error: Exception, log: Path) -> None:
+    """Answer every agents and tasks call with why this host did not start."""
+    serve_refusal(error, log, descriptors, SERVER)
+
+
 def main() -> None:
-    """Serve MCP, send one native mod context, or print adoption material."""
+    """Serve MCP, send one native mod context, or print adoption material.
+
+    A refused ``serve`` still completes the MCP handshake and answers each
+    call with its reason (also in ``host.log`` and ``host-refusal.json``
+    beside the configuration), so Claude Code shows more than CONNECTION_CLOSED.
+    """
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('operation', choices=['serve', 'context', 'configuration'])
     parser.add_argument('--write', action='store_true', help='Write the configuration material.')
@@ -243,14 +254,24 @@ def main() -> None:
         return
     if options.config is None:
         parser.error(f'{options.operation} requires --config')
-    configuration = json.loads(options.config.read_text())
-    if set(configuration) != {'root', 'cwd', 'claude', 'channel_file'}:
-        raise ValueError('Expected root, cwd, claude and channel_file in the trusted host configuration.')
-    root, cwd, executable, channel_file = (Path(configuration[key])
-                                          for key in ('root', 'cwd', 'claude', 'channel_file'))
-    if not all(path.is_absolute() for path in (root, cwd, executable, channel_file)):
-        raise ValueError('Native host configuration paths must be absolute.')
+    # Until the configuration names the channel, a refusal is logged beside it.
+    log = options.config.absolute().parent / 'host.log'
+    try:
+        configuration = json.loads(options.config.read_text())
+        if set(configuration) != {'root', 'cwd', 'claude', 'channel_file'}:
+            raise ValueError('Expected root, cwd, claude and channel_file in the trusted host configuration.')
+        root, cwd, executable, channel_file = (Path(configuration[key])
+                                              for key in ('root', 'cwd', 'claude', 'channel_file'))
+        if not all(path.is_absolute() for path in (root, cwd, executable, channel_file)):
+            raise ValueError('Native host configuration paths must be absolute.')
+    except Exception as error:
+        if options.operation == 'context':
+            raise
+        refuse(ValueError(f'{options.config}: {error}'), log)
+        return
     if options.operation == 'context':
+        if not channel_file.exists():
+            report_missing_host(channel_file)
         endpoint = json.loads(channel_file.read_text())
         # The owner already verified its CLI at startup. A launcher symlink
         # may move during an update while that same native process is alive.
@@ -261,16 +282,27 @@ def main() -> None:
         print(json.dumps(connection_operation(endpoint['address'], json.load(sys.stdin), authenticate=True)))
         return
     executable = executable.resolve()
-    parent = native_parent(executable)
-    if 'AGENT_SWARM_CONNECTION' in os.environ or 'GRAPHTRAJ_CLI_CONNECTION' in os.environ:
-        raise AgentsError('authority-denied', 'A bound child must use its existing owner, not adopt Main.')
-    if Path.cwd().resolve() != cwd.resolve():
-        raise ValueError('The native host cwd differs from the configured cwd.')
-    # The same agents view and control as the Codex Main: every Runtime driver,
-    # continued Main roots (MainRoots) and Task member Sessions.
-    agents = GraphTrajAgents(root, cwd)
+    directory = channel_file.parent
+    try:
+        parent = native_parent(executable)
+        if 'AGENT_SWARM_CONNECTION' in os.environ or 'GRAPHTRAJ_CLI_CONNECTION' in os.environ:
+            raise AgentsError('authority-denied', 'A bound child must use its existing owner, not adopt Main.')
+        if Path.cwd().resolve() != cwd.resolve():
+            raise ValueError(f'Claude Code was started in {Path.cwd().resolve()}, but this host is configured '
+                             f'for {cwd.resolve()}. Start or resume Claude Code from {cwd.resolve()}.')
+        if channel_file.exists():
+            raise AgentsError('host-busy', f'{channel_file} exists: another agents host for this project is '
+                              'running, or a previous one was killed. Close the other Claude Code session; '
+                              'if none is running, delete the file.')
+        archive = configured_archive(root)
+        # The same agents view and control as the Codex Main: every Runtime driver,
+        # continued Main roots (MainRoots) and Task member Sessions.
+        agents = GraphTrajAgents(root, cwd)
+    except Exception as error:
+        refuse(error, directory.parent / 'host.log')
+        return
     control = agents.control
-    make_call = main_calls(root, agents, configured_archive(root))
+    make_call = main_calls(root, agents, archive)
     calls = NativeCalls(make_call, cwd, runner_directory(root))
 
     def authenticate(pid: int) -> None:
@@ -280,8 +312,8 @@ def main() -> None:
                 or process_executable(parent) != executable):
             raise AgentsError('authority-denied', 'The context sender is not owned by this native Claude host.')
 
-    directory = channel_file.parent
     directory.mkdir(parents=True, exist_ok=True)
+    (directory.parent / REFUSAL_FILE).unlink(missing_ok=True)
     try:
         with worker_connection(directory, calls.context, authenticate=authenticate) as address:
             # Exclusive creation prevents a second MCP owner replacing a live
@@ -290,7 +322,8 @@ def main() -> None:
                 json.dump({'parent': parent, 'executable': str(executable), 'address': address}, stream)
             try:
                 mcp_in, mcp_out = isolate_stdio(directory.parent / 'host.log')
-                serve(mcp_in, mcp_out, cwd, native_call=calls.call)
+                with ended_by_claude():
+                    serve(mcp_in, mcp_out, cwd, native_call=calls.call)
             finally:
                 channel_file.unlink()
     finally:

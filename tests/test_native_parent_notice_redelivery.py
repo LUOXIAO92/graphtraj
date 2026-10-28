@@ -195,8 +195,11 @@ def test_stop_signal_ends_a_waiting_production_sender_and_closes_its_proxy(tmp_p
     import time
 
     marks = tmp_path / 'marks'
+    # A CLI run from a terminal has the default SIGINT disposition. A suite run
+    # as a background job inherits SIGINT ignored, which Python keeps (372).
     sender = subprocess.Popen([sys.executable, '-c', SENDER, str(marks)], cwd=tmp_path,
-                              stderr=subprocess.PIPE, text=True)
+                              stderr=subprocess.PIPE, text=True,
+                              preexec_fn=lambda: signal.signal(signal.SIGINT, signal.SIG_DFL))
     deadline = time.monotonic() + 5
     while 'written' not in (marks.read_text() if marks.exists() else ''):
         assert time.monotonic() < deadline and sender.poll() is None, sender.stderr.read()

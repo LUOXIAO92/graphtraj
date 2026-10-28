@@ -558,7 +558,7 @@ def _run_registered_children(
 ) -> None:
     """Execute registered children, then deliver their outcomes to their parent."""
     from graphtraj.execution.runner_control import (
-        _send_session, deliver_held_ends, held_ends, mark_ends_aggregated, rehold_ends,
+        _send_session, batch_ends, deliver_held_ends, held_ends, mark_ends_aggregated, rehold_ends,
     )
 
     directory = project.runner_directory / "sessions" / alias
@@ -587,7 +587,7 @@ def _run_registered_children(
             rehold_ends(held_ends(project.runner_directory, alias, frozenset({"driver"})), "budget-stop")
             raise RunnerError("EXECUTION_BUDGET_STOPPED", "Runner stopped the parent's Task.")
         # Each child's own end was held for this turn (Q7): it is shown once here.
-        held = held_ends(project.runner_directory, alias)
+        held = batch_ends(held_ends(project.runner_directory, alias), retained)
         try:
             _send_session(
                 alias, "Direct child execution results:\n" + yaml.safe_dump(children.document, allow_unicode=True),

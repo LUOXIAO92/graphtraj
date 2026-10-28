@@ -284,6 +284,27 @@ def rehold_ends(held: list[tuple[Path, Dict[str, Any]]], kind: str) -> None:
             pass
 
 
+def batch_ends(
+    held: list[tuple[Path, Dict[str, Any]]], retained_batch: Path,
+) -> list[tuple[Path, Dict[str, Any]]]:
+    """Keep the held ends of children launched from ``retained_batch`` only.
+
+    A Driver's results turn returns exactly that Batch's children, failed ones
+    included, whose entries carry no execution id. Another child's held end
+    stays held for its own delivery.
+    """
+    selected = []
+    for directory, record in held:
+        try:
+            launch = yaml.safe_load((directory / "launch.yml").read_text(encoding="utf-8"))
+            source = launch["mapping"]["retained_batch_file"]
+            if Path(source).resolve() == Path(retained_batch).resolve():
+                selected.append((directory, record))
+        except (OSError, UnicodeError, yaml.YAMLError, KeyError, TypeError):
+            continue
+    return selected
+
+
 def mark_ends_aggregated(held: list[tuple[Path, Dict[str, Any]]]) -> None:
     """Record that the parent's Driver turn returned these held ends."""
     for directory, record in held:

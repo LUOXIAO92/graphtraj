@@ -367,3 +367,31 @@ def test_a_launch_ignores_its_workers_early_pid_only_mapping(
         session, session / 'launch.yml', tmp_path, 'prompt', {}, 3, None, True, registered,
     ) == ('s1', 'completed')
     assert registered == {'execution_id': 'e1'}
+
+
+def test_a_driver_turn_marks_only_its_own_batchs_ends(
+        tmp_path: Path, runner: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """F6: marking another Batch's held end as aggregated would lose it.
+
+    The results turn returns exactly the children launched from its Batch,
+    failed ones included (their entries carry no execution id).
+    """
+    DELIVERED.clear()
+    monkeypatch.setattr(runner_control, 'deliver_parent_event', _deliver_received)
+    first, second = tmp_path / 'batch-1.yml', tmp_path / 'batch-2.yml'
+    for alias, batch in (('engineer', first), ('analyst', second)):
+        (runner / 'sessions' / alias / 'launch.yml').write_text(yaml.safe_dump({'operation': 'launch',
+            'mapping': dict(MAPPINGS[alias], retained_batch_file=str(batch))}))
+    runner_control.deliver_execution_end(
+        runner / 'sessions' / 'engineer', MAPPINGS['engineer'],
+        {'outcome': 'failed', 'error': {'code': 'X', 'message': 'broke'}},
+        parent_input=True, driver_reports_end=True)
+    runner_control.deliver_execution_end(
+        runner / 'sessions' / 'analyst', MAPPINGS['analyst'], {'outcome': 'completed'},
+        parent_input=True, driver_reports_end=True)
+    held = runner_control.held_ends(runner, 'leader')
+    own = runner_control.batch_ends(held, first)
+    assert [directory.name for directory, _ in own] == ['engineer']
+    runner_control.mark_ends_aggregated(own)              # the first Batch's turn was taken
+    assert [directory.name for directory, _ in runner_control.held_ends(runner, 'leader')] == ['analyst']
+    assert DELIVERED == []

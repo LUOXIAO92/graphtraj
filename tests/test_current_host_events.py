@@ -23,7 +23,7 @@ from test_task_budget_control import BODY
 PROXY = r'''
 import json, os, sys
 from pathlib import Path
-if sys.argv[1:] == ['app-server', 'proxy']:
+if sys.argv[1:3] == ['app-server', 'proxy']:
     from websockets.server import ServerProtocol
     from websockets.http11 import Request
     from websockets.frames import Frame, Opcode
@@ -140,6 +140,11 @@ def test_root_completion_after_entry_and_send_exit(
     capture_host: bool,
 ) -> None:
     """Steering and replacement retain the original host after its entry exits."""
+    from graphtraj.runtimes.replacement import caller_runtime
+
+    if caller_runtime() != 'codex':
+        pytest.skip('a CODEX_THREAD_ID caller is verified by Codex process ancestry '
+                    '(468b83f); this test process has no Codex ancestor')
     root, _, _, environment = configure_harness(
         installed_commands, temporary_git_repository, fake_codex, tmp_path,
     )

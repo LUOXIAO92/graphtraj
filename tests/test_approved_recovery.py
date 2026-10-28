@@ -1327,8 +1327,14 @@ def test_unrelated_task_event_during_review_does_not_stale_the_repair(
         })
 
     adapter.before_apply = note
+    # Like the other stub-adapter cases, observe the approved resume at its
+    # seam; the real send also attests and refreshes through the Adapter (473614e).
+    resumed = []
+    monkeypatch.setattr(recovery, '_send_session_locked',
+                        lambda *args, **kwargs: resumed.append(args[0]) or {'session': mapping['session']})
     result = invoke(root, arguments)
     assert result['applied'] is True, result
+    assert resumed == [mapping['alias']]
     assert yaml.safe_load((task / 'execution-budget.yml').read_text())['approved_minutes'] == 7
 
 

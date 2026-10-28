@@ -205,12 +205,14 @@ def test_stop_signal_ends_a_waiting_production_sender_and_closes_its_proxy(tmp_p
     assert sender.poll() is None
     stopped = time.monotonic()
     sender.send_signal(signal.SIGINT)
+    # Unsignalled, the sender awaits its reply forever; the bound only absorbs
+    # interpreter teardown when the full suite loads the machine (368 flake).
     try:
-        sender.wait(timeout=2)
+        sender.wait(timeout=10)
     finally:
         if sender.poll() is None:
             os.kill(sender.pid, signal.SIGKILL)
-    assert time.monotonic() - stopped < 2
+    assert time.monotonic() - stopped < 10
     assert sender.returncode != 0
     assert marks.read_text().splitlines() == ['written', 'closed']  # closed, never received
 

@@ -526,9 +526,17 @@ def test_administrative_recovery_routes_reports_to_the_actual_current_host(
         # continuation, rather than rejecting the retained original launch.
         monkeypatch.setenv('PATH', str(fake_codex.executable.parent) + os.pathsep + os.environ['PATH'])
         monkeypatch.setenv('FAKE_CODEX_LOG', str(fake_codex.log_file))
-        continued = host({'action': 'execute', 'feature': 'agents', 'arguments': {
-            'action': 'send', 'agent': original['alias'], 'message': 'Return the retained validation result.',
-        }}).document['result']
+        # agents needs a verified caller since 9c0a208: present this host as the
+        # verified Main Session at the gateway's caller seam.
+        from graphtraj.execution import runner_status
+        from graphtraj.runtimes import runtime_adapter
+        with monkeypatch.context() as verified:
+            verified.setattr(runner_status, 'caller_alias', lambda directory: None)
+            verified.setattr(runtime_adapter, 'current_host_connection',
+                             lambda: {'runtime': 'codex', 'session': 'current-main'})
+            continued = host({'action': 'execute', 'feature': 'agents', 'arguments': {
+                'action': 'send', 'agent': original['alias'], 'message': 'Return the retained validation result.',
+            }}).document['result']
         assert continued['send_status'] == 'sent'
         assert continued['session'] == original['session']
         assert continued['execution_id'] != original['execution_id']
@@ -1327,8 +1335,14 @@ def test_unrelated_task_event_during_review_does_not_stale_the_repair(
         })
 
     adapter.before_apply = note
+    # Like the other stub-adapter cases, observe the approved resume at its
+    # seam; the real send also attests and refreshes through the Adapter (473614e).
+    resumed = []
+    monkeypatch.setattr(recovery, '_send_session_locked',
+                        lambda *args, **kwargs: resumed.append(args[0]) or {'session': mapping['session']})
     result = invoke(root, arguments)
     assert result['applied'] is True, result
+    assert resumed == [mapping['alias']]
     assert yaml.safe_load((task / 'execution-budget.yml').read_text())['approved_minutes'] == 7
 
 

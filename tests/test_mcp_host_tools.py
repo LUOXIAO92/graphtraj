@@ -1477,7 +1477,8 @@ def _assert_native_budget_stop(
 ) -> list[dict]:
     """Check one retained stop and its receipt on the actual parent's native route."""
     # The awaited stop can return before the separate parent receipt is retained.
-    deadline = time.monotonic() + 10
+    # A poll, not a latency claim: the full suite's load delayed it past 10 s (368).
+    deadline = time.monotonic() + 30
     while True:
         usage = yaml.safe_load((task_directory / "execution-budget.yml").read_text())
         if all(notice["delivered"] for notice in usage["parent_notices"]):

@@ -104,19 +104,52 @@ def test_registered_replacement_preserves_real_parent_qualification(
         executed.append((alias, label, causes, cwd))
         return {'replacement_alias': 'successor'}
 
-    monkeypatch.setattr(team_replacement, '_replace_stopped_session', stopped)
-    monkeypatch.delenv('CODEX_ESCALATE_SOCKET', raising=False)
-    with runtime_caller(runner, caller):
-        result = tools.TOOLS['replace'].handler(
-            {'alias': 'child@s1', 'actor': actor, 'caused_by_event_ids': ['cause']}, cwd=tmp_path,
-        )
     if caller == 'parent@s1':
+        monkeypatch.setattr(team_replacement, '_replace_stopped_session', stopped)
+        with runtime_caller(runner, caller):
+            result = tools.TOOLS['replace'].handler(
+                {'alias': 'child@s1', 'actor': actor, 'caused_by_event_ids': ['cause']}, cwd=tmp_path,
+            )
         assert result.document == {'replacement_alias': 'successor'}
         assert executed == [('child@s1', actor, ('cause',), tmp_path)]
-    else:
-        assert result.document['replacement_status'] == 'requires-native-approval'
-        assert result.document['native_execution']['arguments']['sandbox_permissions'] == 'require_escalated'
-        assert not executed
+        return
+
+    # Since ac37198 a non-direct caller's replacement is decided by the selected
+    # host's review inside retirement, not by a returned native-execution request.
+    from graphtraj.execution import runner_retirement
+    from graphtraj.runtimes.runtime_adapter import recovery_review
+
+    for name in ('session.yml', 'launch.yml'):
+        (runner / 'sessions' / 'child@s1' / name).write_text('{}\n', encoding='utf-8')
+    monkeypatch.setattr(runner_retirement, 'discover_project',
+                        lambda *a, **k: SimpleNamespace(runner_directory=runner))
+    monkeypatch.setattr(runner_retirement, 'require_stopped_subtree', lambda *a, **k: None)
+    monkeypatch.setattr(runner_retirement, '_retire_session',
+                        lambda alias, cwd: executed.append((alias, 'retired')))
+
+    def member(alias: str, causes: tuple[str, ...], cwd: Path) -> dict:
+        """Reach the retirement authority as the real replacement does."""
+        team_replacement.retire_session(alias, cwd)
+        executed.append((alias, actor, causes, cwd))
+        return {'replacement_alias': 'successor'}
+
+    monkeypatch.setattr(team_replacement, '_replace_member', member)
+    monkeypatch.setattr(team_replacement, 'require_stopped_subtree', lambda *a, **k: None)
+    reviewed = []
+
+    def decline(proposal: dict) -> dict:
+        """Act as the selected host reviewer and refuse."""
+        reviewed.append(proposal)
+        return {'decision': 'decline'}
+
+    with runtime_caller(runner, caller), recovery_review(decline):
+        with pytest.raises(RunnerError) as error:
+            tools.TOOLS['replace'].handler(
+                {'alias': 'child@s1', 'actor': actor, 'caused_by_event_ids': ['cause']}, cwd=tmp_path,
+            )
+    assert error.value.code == 'retirement-denied'
+    assert [(proposal['caller'], proposal['parent']) for proposal in reviewed] == [(caller, 'parent@s1')]
+    assert not executed
 
 
 def test_main_requires_host_transport_and_cli_runs_existing_native_peer(

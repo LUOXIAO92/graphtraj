@@ -33,13 +33,14 @@ if (os.environ.get('RECOVERY_CHILD') and role == 'researcher'
         print(json.dumps({'type': 'item.completed', 'item': {'type': 'agent_message', 'text': 'Child registered'}}))
         raise SystemExit(0)
     if entity != role.replace('-', '_') and os.environ['RECOVERY_CHILD'] != 'replacement':
+        from graphtraj.execution.runner_control import send_instruction
         from graphtraj.execution.runner_models import RunnerError
         shard = next((root / '.graphtraj/state/worldline').glob('*.jsonl'))
         cause = json.loads(shard.read_text().splitlines()[0])['event_id']
         try:
-            tools.send_session_instruction({'alias': json.loads(child.read_text())['alias'],
-                                         'instruction': 'Old child remains with its original parent',
-                                         'caused_by_event_ids': [cause]}, cwd=root)
+            # ffe64cc dropped the duplicate tasks send; the retained control is send_instruction.
+            send_instruction(json.loads(child.read_text())['alias'],
+                             'Old child remains with its original parent', root, (cause,))
         except RunnerError as error:
             assert error.code == 'authority-denied'
         else:

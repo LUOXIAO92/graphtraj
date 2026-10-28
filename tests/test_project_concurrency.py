@@ -60,6 +60,15 @@ if os.environ.get('FAIL_TASK') == os.environ['GRAPHTRAJ_TASK_ID']:
     environment.update(CAPACITY_PROBE=str(root), FAKE_CODEX_LIFECYCLE_ACTION="complete-team-round")
 
 
+def is_graphtraj_notice(prompt):
+    """Recognize a delivered parent notice the way the fake Leader does."""
+    try:
+        notice = json.loads(prompt)
+    except ValueError:
+        return False
+    return isinstance(notice, dict) and notice.get("source") == "graphtraj"
+
+
 def starts(root, count):
     deadline = time.monotonic() + 15
     while time.monotonic() < deadline:
@@ -230,7 +239,8 @@ def test_one_position_completes_one_round_with_sequential_reviewers(
     installed_commands, temporary_git_repository, fake_codex, tmp_path,
 ):
     root, _, _, environment = configure_harness(installed_commands, temporary_git_repository, fake_codex, tmp_path)
-    environment.update(GRAPHTRAJ_AGENT_RUNNER=str(installed_commands.runner), FAKE_CODEX_SERIAL_TEAM="1")
+    environment.update(GRAPHTRAJ_AGENT_RUNNER=str(installed_commands.runner), FAKE_CODEX_SERIAL_TEAM="1",
+                       FAKE_CODEX_APPEND_LOG="1", FAKE_CODEX_CAPTURE_ROLE="1", FAKE_CODEX_CAPTURE_STDIN="1")
     config_file = root / ".graphtraj" / "config.yml"
     config = yaml.safe_load(config_file.read_text())
     config["agent_runner"]["max_concurrency"] = 1
@@ -253,7 +263,15 @@ def test_one_position_completes_one_round_with_sequential_reviewers(
             active.remove(event["pid"])
         assert len(active) <= 1
     assert not active
-    assert [role for role in roles if role != "delivery-state"] == [
+    # A direct child's end that needs handling also reaches the Leader as its
+    # own graphtraj notice turn (367 result 3). Like the fake Leader (6970a75),
+    # the phase order counts only the turns that advance the team.
+    records = [json.loads(line) for line in fake_codex.log_file.read_text().splitlines()]
+    assert [record["role"] for record in records] == roles
+    assert [
+        record["role"] for record in records
+        if record["role"] != "delivery-state" and not is_graphtraj_notice(record["stdin"])
+    ] == [
         "team-leader", "engineer", "team-leader",
         "standards-reviewer", "team-leader", "spec-reviewer", "team-leader",
     ]

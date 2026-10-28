@@ -184,6 +184,22 @@ def test_single_role_launch_registers_and_executes_without_placeholder_members(
     assert len(reports['submissions']) == 2
 
 
+# Exactly the start failure seen under full-suite load (366 at da848d5 shard log).
+RUNTIME_START_FAILURE = {'code': 'launch-failed', 'message': 'The Runtime Session could not be started.'}
+
+
+def _xfail_on_runtime_start_failure(document: object) -> None:
+    """Mark only the observed intermittent Runtime start failure; any other fails."""
+    tasks = document.get('tasks') if isinstance(document, dict) else None
+    for task in tasks if isinstance(tasks, list) else ():
+        if task.get('launch_status') == 'failed' and task.get('error') == RUNTIME_START_FAILURE:
+            pytest.xfail('366/363: Runtime start intermittently fails under suite load: '
+                         + RUNTIME_START_FAILURE['message'])
+
+
+# Under full-suite load (366 at da848d5, 363) varying parametrisations failed in
+# the 10 s summary polls (now 30 s) or with the Runtime start failure above;
+# only that start failure is marked, every authority assertion still fails.
 @pytest.mark.parametrize('surface', ['cli', 'mcp'])
 @pytest.mark.parametrize('parent_role, child_role, historical', [
     ('researcher', 'analyst', False), ('team-leader', 'analyst', False),
@@ -243,6 +259,11 @@ def test_configured_parent_dispatch_and_ordinary_resume_keep_actual_authority(
             batch.write_text(yaml.safe_dump(request))
             result = run_process([str(installed_commands.runner), '--swarm-input', str(batch)],
                                  cwd=root, env=env, timeout=30)
+            if result.returncode != 0:
+                try:
+                    _xfail_on_runtime_start_failure(yaml.safe_load(result.stdout))
+                except yaml.YAMLError:
+                    pass
             assert result.returncode == 0, result.stdout + result.stderr
             document = yaml.safe_load(result.stdout)
         else:
@@ -251,11 +272,13 @@ def test_configured_parent_dispatch_and_ordinary_resume_keep_actual_authority(
                     patch.setenv(key, value)
                 patch.setattr(sys, 'executable', str(installed_commands.runner.with_name('python')))
                 result = tools.launch_swarm_tool(request, cwd=root)
+            if result.failed:
+                _xfail_on_runtime_start_failure(result.document)
             assert not result.failed, result.document
             document = result.document
         parent = document['tasks'][0]
         worktree = Path(parent['worktree_path'])
-        for _ in range(200):
+        for _ in range(600):
             summaries = worktree / 'parent-batch-summaries.txt'
             if summaries.exists() and int(summaries.read_text()) >= 1:
                 break
@@ -305,7 +328,7 @@ def test_configured_parent_dispatch_and_ordinary_resume_keep_actual_authority(
     ),
                        cwd=root, env=env, timeout=20)
     assert sent.returncode == 0, sent.stdout + sent.stderr
-    for _ in range(200):
+    for _ in range(600):
         if int((worktree / 'parent-batch-summaries.txt').read_text()) >= 2:
             break
         time.sleep(.05)

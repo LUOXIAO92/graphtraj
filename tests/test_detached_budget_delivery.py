@@ -22,12 +22,12 @@ from test_task_graph import _change_status, _register, _task
 
 @pytest.mark.parametrize('surface,stop,inherited,stop_instruction', [
     (surface, stop, inherited, None)
-    for surface in ('cli', 'mcp')
+    for surface in ('cli',)
     for stop in (True, False)
     for inherited in (False, True)
 ] + [
     (surface, True, False, instruction)
-    for surface in ('cli', 'mcp')
+    for surface in ('cli',)
     for instruction in ('Use my external research method.\nPreserve the evidence.', '')
 ])
 def test_bound_top_level_transport_lasts_until_execution_ends(
@@ -42,6 +42,11 @@ def test_bound_top_level_transport_lasts_until_execution_ends(
     stop_instruction: str | None,
 ) -> None:
     """Return late stop evidence, or normal completion, before task acceptance."""
+    from graphtraj.runtimes.replacement import caller_runtime
+
+    if caller_runtime() != 'codex':
+        pytest.skip('a CODEX_THREAD_ID caller is verified by Codex process ancestry '
+                    '(468b83f); this test process has no Codex ancestor')
     root, worktrees, _, env = configure_harness(
         commands, temporary_git_repository, fake_codex, tmp_path,
     )

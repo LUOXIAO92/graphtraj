@@ -271,8 +271,14 @@ def test_changed_worktree_and_closed_submission_cannot_be_accepted_again(tmp_pat
     with runtime_caller(runner, 'research@x1'):
         with pytest.raises(ValueError):
             tools.submit_result(arguments, cwd=tmp_path)
-        with pytest.raises(ValueError):
-            tools.submit_report({'name': 'researcher-x1.md', 'text': 'After closure'}, cwd=tmp_path)
+        # e2df9c5: after closure the member adds its own report in the closed
+        # Round instead of being refused; acceptance itself stays closed.
+        report = Path(tools.submit_report({'name': 'researcher-x1.md', 'text': 'After closure'},
+                                          cwd=tmp_path).document['report'])
+    assert report.name == 'researcher-x1.md'
+    assert report.read_text(encoding='utf-8') == 'After closure'
+    assert report.parent == tmp_path / 'state/tasks/148-research/teams/1/rounds/1'
+    assert read_worldline(tmp_path / 'state', tmp_path)[:len(decided)] == decided
 
 
 def test_failed_decision_append_restores_state_reports_and_evidence(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

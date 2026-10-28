@@ -22,6 +22,23 @@ PI_STARTUP_FACTS = {'wrapper_exited': True, 'owned_process_group_exited': True,
                     'native_session_bound': False, 'prompt_started': False}
 
 
+def _process_identity_unavailable() -> str | None:
+    """Name why this host cannot read every current-user process identity.
+
+    A sandboxed host (for example macOS Seatbelt) refuses proc_pidinfo for live
+    processes outside the sandbox, so confirming a pre-Runtime stop is
+    impossible there (366 Engineer A; 6b2ae7d). It depends on which processes
+    exist, hence the earlier intermittent passes.
+    """
+    from graphtraj.execution.runner_process import _current_user_processes
+
+    try:
+        _current_user_processes()
+    except OSError as error:
+        return str(error)
+    return None
+
+
 @pytest.mark.parametrize('worker_case', ['absent', 'waiting', 'foreign-group', 'runtime-artifact'])
 def test_native_interrupt_confirms_only_pre_runtime_allocations(
     installed_commands: InstalledCommands,
@@ -31,6 +48,8 @@ def test_native_interrupt_confirms_only_pre_runtime_allocations(
     worker_case: str,
 ) -> None:
     """Exact native process identity and the startup barrier precede cleanup."""
+    if worker_case in {'absent', 'waiting'} and (reason := _process_identity_unavailable()):
+        pytest.skip('Host denies current-user process identity: ' + reason)
     task = _deliver_task(installed_commands, temporary_git_repository, fake_codex,
                              tmp_path, integrate=True, terminal_failed_start=True)
     sessions = task.root / '.graphtraj/runner/sessions'

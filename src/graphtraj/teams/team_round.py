@@ -518,6 +518,7 @@ def _deliver_task(
         project, task, task.role, worktree, evidence, traces, None, None,
         None, parent_alias, retained_batch, prompt, capacity_fd=capacity_fd,
         register_member=True, wait_for_completion=parent_alias is not None or prompt is not None,
+        driver_reports_end=parent_alias is not None,
     )
     if parent_alias is not None:
         _run_registered_children(project, task, alias, session, retained_batch, capacity_fd)
@@ -552,7 +553,9 @@ def _run_registered_children(
     capacity_fd: int,
 ) -> None:
     """Execute registered children, then deliver their outcomes to their parent."""
-    from graphtraj.execution.runner_control import _send_session
+    from graphtraj.execution.runner_control import (
+        _send_session, deliver_held_ends, held_ends, mark_ends_aggregated,
+    )
 
     directory = project.runner_directory / "sessions" / alias
     registration = directory / "child-registration.yml"
@@ -578,11 +581,18 @@ def _run_registered_children(
             # A budget stop stopped this parent too; its results must not resume it.
             # Their held ends reach it once on continuation (continue_stopped_task).
             raise RunnerError("EXECUTION_BUDGET_STOPPED", "Runner stopped the parent's Task.")
-        _send_session(
-            alias, "Direct child execution results:\n" + yaml.safe_dump(children.document, allow_unicode=True),
-            directory, mapping, (), project.harness_root, capacity_fd=capacity_fd,
-            retain_notice_channel=True, parent_input=False,
-        )
+        # Each child's own end was held for this turn (Q7): it is shown once here.
+        held = held_ends(project.runner_directory, alias)
+        try:
+            _send_session(
+                alias, "Direct child execution results:\n" + yaml.safe_dump(children.document, allow_unicode=True),
+                directory, mapping, (), project.harness_root, capacity_fd=capacity_fd,
+                retain_notice_channel=True, parent_input=False,
+            )
+        except RunnerError:
+            deliver_held_ends(held)  # Not shown by this turn; deliver each end itself.
+            raise
+        mark_ends_aggregated(held)
         # Input acknowledgement is not completion. Each Driver retains its
         # results until the parent finishes any further registration.
         while True:
@@ -761,6 +771,7 @@ def _run_agent(
     task_environment: dict[str, str] | None = None,
     register_member: bool = False,
     replaces_alias: str | None = None,
+    driver_reports_end: bool = False,
 ) -> tuple[str, str]:
     team_file = traces.parent / "team.yml"
     if team_file.exists():
@@ -775,6 +786,7 @@ def _run_agent(
             wait_for_completion=wait_for_completion,
             task_environment=task_environment,
             register_member=register_member, replaces_alias=replaces_alias,
+            driver_reports_end=driver_reports_end,
         )
 
 
@@ -798,8 +810,13 @@ def _execute_agent(
     task_environment: dict[str, str] | None = None,
     register_member: bool = False,
     replaces_alias: str | None = None,
+    driver_reports_end: bool = False,
 ) -> tuple[str, str]:
-    """Prepare a permitted execution; the Worker checks again at native startup."""
+    """Prepare a permitted execution; the Worker checks again at native startup.
+
+    ``driver_reports_end`` marks a registered child whose end the parent's
+    Driver returns in its "Direct child execution results" turn.
+    """
     with execution_start_lock(project.runner_directory):
         requested = (
             read_alias_mapping(project.runner_directory, alias)[0]
@@ -912,6 +929,7 @@ def _execute_agent(
                 "context_evidence": context.evidence_document(),
                 "operation": "launch",
                 "drive_children": not wait_for_completion,
+                "driver_reports_end": driver_reports_end,
                 "monitor_execution_budget": monitor is not None,
                 "member_registration": ({"member": configured_role_name(role).replace("-", "_"), "replaces": replaces_alias}
                                         if register_member else None),

@@ -118,6 +118,52 @@ def _deliver_received(directory: Path, message: str, identity: dict) -> dict:
 DELIVERED: list[tuple[str, str, str]] = []
 
 
+@pytest.mark.parametrize('terminal', [
+    {'outcome': 'completed'},
+    {'outcome': 'failed', 'error': {'code': 'X', 'message': 'broke'}},
+    {'outcome': 'interrupted', 'budget_stopped': True},
+])
+def test_a_driver_reported_end_appears_once_on_the_parent(
+        runner: Path, monkeypatch: pytest.MonkeyPatch, terminal: dict) -> None:
+    """Q7: the Driver's aggregate keeps the end; the child's own notice is held, not pushed."""
+    DELIVERED.clear()
+    monkeypatch.setattr(runner_control, 'deliver_parent_event', _deliver_received)
+    engineer = runner / 'sessions' / 'engineer'
+    receipt = runner_control.deliver_execution_end(
+        engineer, MAPPINGS['engineer'], terminal, parent_input=True, driver_reports_end=True)
+    assert receipt['delivery'] == 'retained' and receipt['held'] == 'driver'
+    assert DELIVERED == []
+    held = runner_control.held_ends(runner, 'leader')
+    assert [(directory.name, record['identity']['execution_id']) for directory, record in held] == [
+        ('engineer', 'e1')]
+    runner_control.mark_ends_aggregated(held)       # the aggregate turn was taken
+    assert runner_control.held_ends(runner, 'leader') == []
+    runner_control.deliver_held_ends(runner_control.held_ends(runner, 'leader'))
+    assert DELIVERED == []                          # nothing is shown a second time
+
+
+def test_a_failed_aggregate_or_continuation_delivers_each_held_end_once(
+        runner: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """No held end is lost: its own delivery follows, and a retry repeats nothing."""
+    DELIVERED.clear()
+    monkeypatch.setattr(runner_control, 'deliver_parent_event', _deliver_received)
+    runner_control.deliver_execution_end(
+        runner / 'sessions' / 'engineer', MAPPINGS['engineer'], {'outcome': 'completed'},
+        parent_input=True, driver_reports_end=True)
+    # A budget-stopped child of a same-Task parent is held without a Driver.
+    runner_control.deliver_execution_end(
+        runner / 'sessions' / 'analyst', MAPPINGS['analyst'],
+        {'outcome': 'interrupted', 'budget_stopped': True}, parent_input=True)
+    assert [record['held'] for _, record in runner_control.held_ends(runner, 'leader')] == [
+        'budget-stop', 'driver']
+    assert DELIVERED == []
+    runner_control.deliver_held_ends(runner_control.held_ends(runner, 'leader'))
+    runner_control.deliver_held_ends(runner_control.held_ends(runner, 'leader'))   # repeated
+    assert sorted((alias, kind) for alias, kind, _ in DELIVERED) == [
+        ('analyst', 'interrupted'), ('engineer', 'completed')]
+    assert all(message.startswith('Session execution ended:') for _, _, message in DELIVERED)
+
+
 def test_an_unheld_end_is_delivered_as_before(runner: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """A non-Driver child's failure, not caused by a budget stop, still reaches its parent."""
     DELIVERED.clear()

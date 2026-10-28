@@ -205,6 +205,7 @@ def deliver_execution_end(
     terminal: Mapping[str, Any],
     *,
     parent_input: bool,
+    driver_reports_end: bool = False,
 ) -> Dict[str, Any]:
     """Tell the direct parent that one execution ended, when it must handle it.
 
@@ -214,9 +215,11 @@ def deliver_execution_end(
     while the parent's ``wait`` on this Session returns it (:func:`awaited`),
     and as an ordinary receipt of an execution the parent did not start
     (``parent_input`` false) where the parent can see it that way
-    (:func:`receipt_is_display_only`). Any end is kept the same way when a
-    budget stop of this Task also stopped the parent Session, which a notice
-    must not resume. Every other end is delivered.
+    (:func:`receipt_is_display_only`). Any end is kept the same way when the
+    parent's Driver returns it in its "Direct child execution results" turn
+    (``driver_reports_end``), and when a budget stop of this Task also stopped
+    the parent Session, which a notice must not resume. Every other end is
+    delivered.
     """
     from agent_swarm.notices import needs_parent
 
@@ -226,6 +229,8 @@ def deliver_execution_end(
     }, ensure_ascii=False)
     identity = {'type': terminal['outcome'], 'session': mapping['session'],
                 'execution_id': mapping.get('execution_id')}
+    if driver_reports_end:
+        return retain_parent_receipt(session_directory, notice, identity, held='driver')
     if terminal.get('budget_stopped') and _same_task_parent(runner, mapping):
         return retain_parent_receipt(session_directory, notice, identity, held='budget-stop')
     if terminal['outcome'] == 'completed' and (
@@ -240,7 +245,7 @@ def held_ends(runner_directory: Path, parent: str) -> list[tuple[Path, Dict[str,
     """Return each direct child's held end that ``parent`` has not yet been shown.
 
     An end is shown once a later record of the same execution says the parent
-    received it.
+    received it or the parent's Driver returned it (``delivery: aggregated``).
     """
     found = []
     sessions = runner_directory / "sessions"
@@ -260,10 +265,20 @@ def held_ends(runner_directory: Path, parent: str) -> list[tuple[Path, Dict[str,
             if record.get("held") and not any(
                     (later.get("identity") or {}).get("execution_id") == identity.get("execution_id")
                     and (later.get("identity") or {}).get("type") == identity.get("type")
-                    and later.get("delivery") == "received"
+                    and later.get("delivery") in {"received", "aggregated"}
                     for later in records[index + 1:]):
                 found.append((directory, record))
     return found
+
+
+def mark_ends_aggregated(held: list[tuple[Path, Dict[str, Any]]]) -> None:
+    """Record that the parent's Driver turn returned these held ends."""
+    for directory, record in held:
+        try:
+            _append_notice_record(directory, {"at": time.time(), "identity": record["identity"],
+                                              "delivery": "aggregated", "parent": record.get("parent")})
+        except OSError:
+            pass
 
 
 def deliver_held_ends(held: list[tuple[Path, Dict[str, Any]]]) -> None:

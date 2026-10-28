@@ -195,3 +195,62 @@ def test_a_stop_landing_before_the_results_turn_withholds_it(
     assert stopped.value.code == 'EXECUTION_BUDGET_STOPPED'
     assert resumed == [] and DELIVERED == []
     assert [record['held'] for _, record in runner_control.held_ends(runner, 'leader')] == ['budget-stop']
+
+
+def test_continue_stopped_task_leaves_a_live_drivers_held_end_to_its_aggregate(
+        tmp_path: Path, runner: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """F3 through the continuation itself: the root's Driver is still alive and later aggregates."""
+    from types import SimpleNamespace
+
+    import yaml
+
+    from graphtraj import file_lock
+    from graphtraj.teams import team_round
+
+    DELIVERED.clear()
+    monkeypatch.setattr(runner_control, 'deliver_parent_event', _deliver_received)
+    _hold_completed_end(runner)
+    task_directory = tmp_path / 'tasks' / '153-research'
+    (task_directory / 'teams' / '1').mkdir(parents=True)
+    (task_directory / 'teams' / '1' / 'team.yml').write_text(yaml.safe_dump({
+        'status': 'active', 'current_round': 1,
+        'members': {'leader': {'session_ref': 'leader'}, 'engineer': {'session_ref': 'engineer'}}}))
+    resumed: list[str] = []
+    monkeypatch.setattr(team_round, 'discover_project', lambda *_, **__: SimpleNamespace(
+        state_directory=tmp_path, harness_root=tmp_path, runner_directory=runner))
+    monkeypatch.setattr(team_round, '_load_states', lambda _: {'153': (task_directory, {
+        'active_team_ordinal': 1, 'active': True, 'status': 'implementing', 'task_name': 'research'})})
+    monkeypatch.setattr(team_round, 'read_alias_mapping',
+                        lambda _, alias: (dict(MAPPINGS[alias], team_generation=1), runner / 'sessions' / alias))
+    for name in ('require_direct_authority', 'require_stopped_subtree', 'require_execution_allowed'):
+        monkeypatch.setattr(team_round, name, lambda *_, **__: None)
+    monkeypatch.setattr(team_round, 'execution_budget_monitor', lambda *_: SimpleNamespace(
+        is_stopped=lambda: True, continue_after_stop=lambda: None, pending_parent_notices=lambda: []))
+    monkeypatch.setattr(team_round, 'read_worldline', lambda *_: [{'event_id': 'd1', 'evidence_refs': []}])
+    monkeypatch.setattr(team_round, 'append_project_worldline_event', lambda *_: {'event_id': 'c1'})
+    monkeypatch.setattr(runner_control, 'send_instruction', lambda alias, *_: resumed.append(alias) or {})
+    with (runner / 'sessions' / 'leader' / 'driver.lock').open('ab') as driver:
+        file_lock.flock(driver, file_lock.LOCK_SH)               # the root's Driver is alive
+        team_round.continue_stopped_task('153', ('d1',), tmp_path)
+        assert resumed == ['leader'] and DELIVERED == []
+        held = runner_control.held_ends(runner, 'leader')
+        assert [record['held'] for _, record in held] == ['driver']
+        runner_control.mark_ends_aggregated(held)                # that Driver's results turn
+    assert runner_control.held_ends(runner, 'leader') == [] and DELIVERED == []
+
+
+def test_a_dead_drivers_held_end_reaches_the_root_on_its_parents_next_input(
+        tmp_path: Path, runner: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Gap (a) through the ordinary send: with no live Driver the held end is delivered once."""
+    DELIVERED.clear()
+    monkeypatch.setitem(MAPPINGS, 'leader', dict(MAPPINGS['leader'], session='s-l', execution_id='l1',
+                                                 worktree_path=str(tmp_path)))
+    monkeypatch.setattr(runner_control, 'deliver_parent_event', _deliver_received)
+    monkeypatch.setattr(runner_control, 'require_execution_allowed', lambda *_, **__: None)
+    monkeypatch.setattr(runner_control, '_send_session_locked', lambda *_, **__: {'send_status': 'sent'})
+    _hold_completed_end(runner)                                  # its Driver then died
+    leader = runner / 'sessions' / 'leader'
+    for _ in range(2):                                           # Main's input, then another
+        runner_control._send_session('leader', 'continue', leader, MAPPINGS['leader'], (), tmp_path)
+    assert [(alias, kind) for alias, kind, _ in DELIVERED] == [('engineer', 'completed')]
+    assert runner_control.held_ends(runner, 'leader') == []

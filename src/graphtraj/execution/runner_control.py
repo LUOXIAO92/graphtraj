@@ -229,10 +229,10 @@ def deliver_execution_end(
     }, ensure_ascii=False)
     identity = {'type': terminal['outcome'], 'session': mapping['session'],
                 'execution_id': mapping.get('execution_id')}
-    if driver_reports_end:
-        return retain_parent_receipt(session_directory, notice, identity, held='driver')
     if terminal.get('budget_stopped') and _same_task_parent(runner, mapping):
         return retain_parent_receipt(session_directory, notice, identity, held='budget-stop')
+    if driver_reports_end:
+        return retain_parent_receipt(session_directory, notice, identity, held='driver')
     if terminal['outcome'] == 'completed' and (
             not needs_parent('completed', active_members=active_members(runner, session_directory.name))
             or awaited(session_directory, mapping.get('execution_id'))
@@ -241,11 +241,14 @@ def deliver_execution_end(
     return deliver_parent_event(session_directory, notice, identity)
 
 
-def held_ends(runner_directory: Path, parent: str) -> list[tuple[Path, Dict[str, Any]]]:
+def held_ends(
+    runner_directory: Path, parent: str, kinds: frozenset[str] | None = None,
+) -> list[tuple[Path, Dict[str, Any]]]:
     """Return each direct child's held end that ``parent`` has not yet been shown.
 
     An end is shown once a later record of the same execution says the parent
     received it or the parent's Driver returned it (``delivery: aggregated``).
+    The latest hold of an end names its kind; ``kinds`` selects among them.
     """
     found = []
     sessions = runner_directory / "sessions"
@@ -262,13 +265,23 @@ def held_ends(runner_directory: Path, parent: str) -> list[tuple[Path, Dict[str,
             continue
         for index, record in enumerate(records):
             identity = record.get("identity") or {}
-            if record.get("held") and not any(
-                    (later.get("identity") or {}).get("execution_id") == identity.get("execution_id")
-                    and (later.get("identity") or {}).get("type") == identity.get("type")
-                    and later.get("delivery") in {"received", "aggregated"}
-                    for later in records[index + 1:]):
+            later = [item for item in records[index + 1:]
+                     if (item.get("identity") or {}).get("execution_id") == identity.get("execution_id")
+                     and (item.get("identity") or {}).get("type") == identity.get("type")]
+            if (record.get("held") and (kinds is None or record["held"] in kinds)
+                    and not any(item.get("held") or item.get("delivery") in {"received", "aggregated"}
+                                for item in later)):
                 found.append((directory, record))
     return found
+
+
+def rehold_ends(held: list[tuple[Path, Dict[str, Any]]], kind: str) -> None:
+    """Hold these ends again under ``kind``, e.g. when their Driver turn is withheld."""
+    for directory, record in held:
+        try:
+            _append_notice_record(directory, {**record, "at": time.time(), "held": kind})
+        except OSError:
+            pass
 
 
 def mark_ends_aggregated(held: list[tuple[Path, Dict[str, Any]]]) -> None:
@@ -946,7 +959,7 @@ def _send_session(
                         worktree.mkdir()
                     restored = True
         try:
-            return _send_session_locked(
+            receipt = _send_session_locked(
                 alias, instruction, session_directory, mapping, caused_by_event_ids, cwd,
                 capacity_fd=capacity_fd, reports_only=reports_only,
                 system_notice=system_notice,
@@ -958,6 +971,13 @@ def _send_session(
             if restored:
                 _remove_restored_cwd(session_directory, worktree)
             raise
+    if parent_input and not system_notice:
+        # Its parent's own input now runs this Session again, so the ends its
+        # children held while the Task was budget-stopped reach it once here;
+        # a continuation reaches only roots. A notice or Driver turn is not
+        # such input. Delivery takes this input lock, released above.
+        deliver_held_ends(held_ends(session_directory.parent.parent, alias, frozenset({"budget-stop"})))
+    return receipt
 
 
 def _remove_restored_cwd(session_directory: Path, worktree: Path) -> None:

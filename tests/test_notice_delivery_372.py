@@ -131,7 +131,9 @@ def test_a_driver_reported_end_appears_once_on_the_parent(
     engineer = runner / 'sessions' / 'engineer'
     receipt = runner_control.deliver_execution_end(
         engineer, MAPPINGS['engineer'], terminal, parent_input=True, driver_reports_end=True)
-    assert receipt['delivery'] == 'retained' and receipt['held'] == 'driver'
+    # A budget stop also withholds the Driver's turn, so that end waits for the stop.
+    assert receipt['delivery'] == 'retained'
+    assert receipt['held'] == ('budget-stop' if terminal.get('budget_stopped') else 'driver')
     assert DELIVERED == []
     held = runner_control.held_ends(runner, 'leader')
     assert [(directory.name, record['identity']['execution_id']) for directory, record in held] == [
@@ -264,3 +266,50 @@ def test_a_late_heartbeat_never_recreates_a_retired_session_directory(
     runner_heartbeat.write_heartbeat(active, {'alias': 'engineer', 'worker_pid': 3})
     assert not active.exists()
     assert yaml.safe_load((retained / 'heartbeat.yml').read_text())['worker_pid'] == 1
+
+
+def test_a_resumed_non_root_parent_gets_its_childrens_held_ends_once(
+        tmp_path: Path, runner: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """(b): a stopped non-root parent's held child ends reach it when its parent resumes it.
+
+    A continuation resumes only Task roots. The ends a Driver withheld for the
+    stop are held again for the stop, so the parent's next own input delivers
+    each held end exactly once; a notice, a Driver turn or a later input delivers nothing.
+    """
+    DELIVERED.clear()
+    monkeypatch.setitem(MAPPINGS, 'engineer', dict(MAPPINGS['engineer'], worktree_path=str(tmp_path)))
+    monkeypatch.setitem(MAPPINGS, 'analyst', dict(MAPPINGS['analyst'], parent='engineer'))
+    monkeypatch.setitem(MAPPINGS, 'reviewer', {'alias': 'reviewer', 'task_id': '153', 'parent': 'engineer',
+                                               'session': 's-r', 'execution_id': 'r1'})
+    (runner / 'sessions' / 'reviewer').mkdir()
+    monkeypatch.setattr(runner_control, 'deliver_parent_event', _deliver_received)
+    monkeypatch.setattr(runner_control, 'require_execution_allowed', lambda *_, **__: None)
+    sent: list[str] = []
+    monkeypatch.setattr(runner_control, '_send_session_locked',
+                        lambda alias, instruction, *_, **__: sent.append(instruction) or {'send_status': 'sent'})
+    analyst, reviewer = runner / 'sessions' / 'analyst', runner / 'sessions' / 'reviewer'
+    runner_control.deliver_execution_end(          # stopped by the budget
+        analyst, MAPPINGS['analyst'], {'outcome': 'interrupted', 'budget_stopped': True},
+        parent_input=True, driver_reports_end=True)
+    runner_control.deliver_execution_end(          # completed before the stop
+        reviewer, MAPPINGS['reviewer'], {'outcome': 'completed'}, parent_input=True,
+        driver_reports_end=True)
+    # The engineer's Driver then withholds its turn for the stop.
+    runner_control.rehold_ends(runner_control.held_ends(runner, 'engineer', frozenset({'driver'})),
+                               'budget-stop')
+    assert DELIVERED == []
+    engineer = runner / 'sessions' / 'engineer'
+
+    def send(**options: object) -> None:
+        runner_control._send_session('engineer', 'continue', engineer, MAPPINGS['engineer'], (),
+                                     tmp_path, **options)
+
+    send(system_notice=True)                       # a notice is not its parent's input
+    send(parent_input=False)                       # nor a Driver results turn
+    assert DELIVERED == []
+    send()                                         # resumed by its own parent
+    assert sorted((alias, kind) for alias, kind, _ in DELIVERED) == [
+        ('analyst', 'interrupted'), ('reviewer', 'completed')]
+    send()                                         # a second resume
+    assert len(DELIVERED) == 2 and sent == ['continue'] * 4
+    assert runner_control.held_ends(runner, 'engineer') == []

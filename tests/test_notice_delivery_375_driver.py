@@ -133,3 +133,65 @@ def test_a_dead_drivers_held_end_reaches_its_parent_exactly_once(
     team_round.deliver_released_ends(runner, 'leader')           # e.g. the next Driver, repeated
     assert [(alias, kind) for alias, kind, _ in DELIVERED] == [('engineer', 'completed')]
     assert runner_control.held_ends(runner, 'leader') == []
+
+
+def test_a_stop_landing_before_the_results_turn_withholds_it(
+        tmp_path: Path, runner: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """F7(c): a budget stop between the Driver's is_stopped() check and its send.
+
+    The send checks the stop again under the parent's input lock; the Driver
+    then withholds its results turn and holds its Batch's ends for the stop.
+    """
+    from contextlib import nullcontext
+    from types import SimpleNamespace
+
+    import yaml
+
+    from graphtraj.teams import team_round
+    from graphtraj.execution.runner_models import RunnerError
+
+    import inspect
+
+    # The real send performs that check; this test replaces it below.
+    assert 'require_budget_permission' in inspect.signature(runner_control._send_session).parameters
+    DELIVERED.clear()
+    monkeypatch.setattr(runner_control, 'deliver_parent_event', _deliver_received)
+    retained = tmp_path / 'batch-1.yml'
+    (runner / 'sessions' / 'engineer' / 'launch.yml').write_text(yaml.safe_dump({
+        'operation': 'launch', 'mapping': dict(MAPPINGS['engineer'], retained_batch_file=str(retained))}))
+    leader = runner / 'sessions' / 'leader'
+    (leader / 'execution.yml').write_text('outcome: completed\n')
+    registrations = iter(['l1'])
+
+    def run_children(*_: object, **__: object) -> SimpleNamespace:
+        _hold_completed_end(runner)
+        return SimpleNamespace(document={'retained_batch_file': str(retained), 'tasks': []})
+
+    resumed: list[str] = []
+
+    def send(alias: str, instruction: str, *_: object, **options: object) -> dict:
+        if options.get('require_budget_permission'):         # the stop has landed
+            raise RunnerError('execution-budget-stopped', 'The Task stopped again.')
+        resumed.append(instruction)                           # a turn of the stopped parent
+        return {'send_status': 'sent'}
+
+    monkeypatch.setattr(team_round, 'read_alias_mapping',
+                        lambda _, alias: (dict(MAPPINGS[alias], execution_id='l1', worktree_path=str(tmp_path)),
+                                          runner / 'sessions' / alias))
+    monkeypatch.setattr(team_round, '_registered_execution', lambda _: next(registrations, None))
+    monkeypatch.setattr(team_round, 'read_terminal_outcome', lambda _: 'completed')
+    monkeypatch.setattr(team_round, 'require_execution_allowed', lambda *_, **__: None)
+    monkeypatch.setattr(team_round, 'execution_start_lock', lambda _: nullcontext())
+    monkeypatch.setattr(team_round, '_registered_batch', lambda *_: (None, retained))
+    monkeypatch.setattr(team_round, '_run_batch_workers', run_children)
+    monkeypatch.setattr(team_round, 'execution_budget_monitor',
+                        lambda *_: SimpleNamespace(is_stopped=lambda: False))    # not yet stopped
+    monkeypatch.setattr(team_round, 'ownership_is_held', lambda *_: True)
+    monkeypatch.setattr(runner_control, '_send_session', send)
+    project = SimpleNamespace(runner_directory=runner, state_directory=tmp_path, harness_root=tmp_path)
+    task = SimpleNamespace(task_id='153', task_name='research')
+    with pytest.raises(RunnerError) as stopped:
+        team_round._run_registered_children(project, task, 'leader', 's-l', retained, 0)
+    assert stopped.value.code == 'EXECUTION_BUDGET_STOPPED'
+    assert resumed == [] and DELIVERED == []
+    assert [record['held'] for _, record in runner_control.held_ends(runner, 'leader')] == ['budget-stop']

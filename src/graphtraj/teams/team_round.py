@@ -690,12 +690,16 @@ def _drive_registered_children(
         # Each child's own end was held for this turn (Q7): it is shown once here.
         held = batch_ends(held_ends(project.runner_directory, alias), retained)
         try:
+            # The stop is checked again under the parent's input lock (F7c).
             _send_session(
                 alias, "Direct child execution results:\n" + yaml.safe_dump(children.document, allow_unicode=True),
                 directory, mapping, (), project.harness_root, capacity_fd=capacity_fd,
-                retain_notice_channel=True, parent_input=False,
+                retain_notice_channel=True, parent_input=False, require_budget_permission=True,
             )
-        except RunnerError:
+        except RunnerError as error:
+            if error.code == "execution-budget-stopped":
+                rehold_ends(held, "budget-stop")
+                raise RunnerError("EXECUTION_BUDGET_STOPPED", "Runner stopped the parent's Task.") from error
             deliver_held_ends(held)  # Not shown by this turn; deliver each end itself.
             raise
         mark_ends_aggregated(held)

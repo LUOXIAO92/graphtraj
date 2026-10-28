@@ -120,7 +120,7 @@ DELIVERED: list[tuple[str, str, str]] = []
 
 @pytest.mark.parametrize('terminal', [
     {'outcome': 'completed'},
-    {'outcome': 'failed', 'error': {'code': 'X', 'message': 'broke'}},
+    # A failed end reaches the parent at once (375 F10), see test_notice_delivery_375_driver.
     {'outcome': 'interrupted', 'budget_stopped': True},
 ])
 def test_a_driver_reported_end_appears_once_on_the_parent(
@@ -383,8 +383,7 @@ def test_a_driver_turn_marks_only_its_own_batchs_ends(
         (runner / 'sessions' / alias / 'launch.yml').write_text(yaml.safe_dump({'operation': 'launch',
             'mapping': dict(MAPPINGS[alias], retained_batch_file=str(batch))}))
     runner_control.deliver_execution_end(
-        runner / 'sessions' / 'engineer', MAPPINGS['engineer'],
-        {'outcome': 'failed', 'error': {'code': 'X', 'message': 'broke'}},
+        runner / 'sessions' / 'engineer', MAPPINGS['engineer'], {'outcome': 'completed'},
         parent_input=True, driver_reports_end=True)
     runner_control.deliver_execution_end(
         runner / 'sessions' / 'analyst', MAPPINGS['analyst'], {'outcome': 'completed'},

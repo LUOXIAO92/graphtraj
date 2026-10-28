@@ -218,11 +218,12 @@ def deliver_execution_end(
     while the parent's ``wait`` on this Session returns it (:func:`awaited`),
     and as an ordinary receipt of an execution the parent did not start
     (``parent_input`` false) where the parent can see it that way
-    (:func:`receipt_is_display_only`). Any end is kept the same way when the
-    parent's Driver returns it in its "Direct child execution results" turn
-    (``driver_reports_end``), and when a budget stop of this Task also stopped
-    the parent Session, which a notice must not resume. Every other end is
-    delivered.
+    (:func:`receipt_is_display_only`). A ``completed`` end is kept the same
+    way when the parent's Driver returns it in its "Direct child execution
+    results" turn (``driver_reports_end``); a failed, interrupted or erroring
+    one reaches the parent at once, and that turn only refers to it (375).
+    Any end is kept when a budget stop of this Task also stopped the parent
+    Session, which a notice must not resume. Every other end is delivered.
     """
     from agent_swarm.notices import needs_parent
 
@@ -234,7 +235,7 @@ def deliver_execution_end(
                 'execution_id': mapping.get('execution_id')}
     if terminal.get('budget_stopped') and _same_task_parent(runner, mapping):
         return retain_parent_receipt(session_directory, notice, identity, held='budget-stop')
-    if driver_reports_end:
+    if driver_reports_end and terminal['outcome'] == 'completed':
         return retain_parent_receipt(session_directory, notice, identity, held='driver')
     if terminal['outcome'] == 'completed' and (
             not needs_parent('completed', active_members=active_members(runner, session_directory.name))

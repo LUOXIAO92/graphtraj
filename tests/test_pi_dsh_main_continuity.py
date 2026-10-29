@@ -213,6 +213,8 @@ if (runtime === 'pi') {
   assert.equal(await deliverNotices(agent, entry), 1);
   assert.equal(await deliverNotices(agent, entry), 0);
   assert.equal(delivered[0].queue, 'next-step');
+  // The wake flag is what lets an idle (long-lived) DSH Main start a turn for the notice.
+  assert.equal(delivered[0].wake, true);
   assert.equal(delivered[0].message.source.kind, 'agent-message');
   assert.match(delivered[0].message.content[0].text, /leader@l1[\\s\\S]*done-host/);
 }

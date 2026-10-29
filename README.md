@@ -390,6 +390,13 @@ Main receives them as host events; a Claude Code, Pi or DSH Main finds them in t
 project's durable notice queue, which its host integration delivers into the Main
 Session (the Pi extension as a custom message, the DSH plugin through the native
 inbox, within about five seconds) and acknowledges only after delivery.
+Delivery needs the Main's host process to be running. A DSH Main in a
+long-lived profile (TUI, web, ACP or SDK) receives a notice while idle, and the
+plugin's native send starts a turn for it. A headless DSH Main
+(`dsh --profile headless`) answers one task and exits, so a notice arriving
+after that stays queued until the Session is resumed with `--session-id`, or
+until a Claude Code, Pi or DSH Main continues Main and takes the queue over.
+GraphTraj never starts or resumes a DSH process by itself.
 
 ### Claude Code as Main
 

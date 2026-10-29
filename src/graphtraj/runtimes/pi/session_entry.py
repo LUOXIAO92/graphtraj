@@ -4,10 +4,25 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+from typing import Mapping
 
-from agent_swarm.pi.session import current_connection, session_record, session_source, verify_main
+from agent_swarm.pi import session as native
+from agent_swarm.pi.session import current_connection, session_record
 
 __all__ = ['caller_identity', 'current_connection', 'session_record', 'session_source', 'verify_main']
+
+# The custom entry GraphTraj's Pi extension appends to a completion checker fork.
+CHECKER_ENTRY = 'graphtraj:completion-checker'
+
+
+def session_source(header: dict, entries: list[dict], environment: Mapping[str, str]) -> str:
+    """Read the native origin, treating GraphTraj's completion checker as a child."""
+    return native.session_source(header, entries, environment, (CHECKER_ENTRY,))
+
+
+def verify_main(connection: dict) -> str:
+    """Associate only a native root, never a plugin child or completion checker."""
+    return native.verify_main(connection, (CHECKER_ENTRY,))
 
 
 def caller_identity(runner: Path, connection: dict) -> str | None:

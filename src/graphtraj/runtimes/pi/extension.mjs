@@ -111,6 +111,16 @@ export default function graphtraj(pi) {
     noticeLoop++;
     await collectors.get(ctx.sessionManager)?.close();
     collectors.delete(ctx.sessionManager);
+    // A GraphTraj-bound Session keeps its GraphTraj owner: it adopts neither
+    // an inherited independent connection nor a standalone agents host.
+    if (Object.hasOwn(process.env, 'GRAPHTRAJ_CLI_CONNECTION')) {
+      if (Object.hasOwn(process.env, 'AGENT_SWARM_CONNECTION')) {
+        throw new Error('Conflicting existing Agent connections; no identity was adopted.');
+      }
+      if (pi.getFlag?.('agents-config')) {
+        throw new Error('Standalone agents config cannot replace an existing managed Agent context; retain its owning connection.');
+      }
+    }
     if (await agents.start(ctx)) return;
     const environment = sessionEnvironment(ctx, process.env);
     sessions.set(ctx.sessionManager, environment);

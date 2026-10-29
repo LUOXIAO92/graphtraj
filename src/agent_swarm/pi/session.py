@@ -9,14 +9,22 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
-from typing import Mapping
+from typing import Collection, Mapping
 
 
-def session_source(header: dict, entries: list[dict], environment: Mapping[str, str]) -> str:
+def session_source(
+    header: dict,
+    entries: list[dict],
+    environment: Mapping[str, str],
+    child_entry_types: Collection[str] = (),
+) -> str:
     """Read origin from the native Session and the plugins' startup markers.
 
     A copied delegation entry belongs only to its containing childSessionId.
     parentSession is history lineage, so a user fork is not itself delegation.
+    ``child_entry_types`` are the caller's own custom entry types marking a
+    child: such an entry whose ``data.session`` is this Session's id makes it
+    a child.
     """
     if environment.get('PI_SUBAGENT_CHILD') == '1':
         return 'child'
@@ -29,7 +37,7 @@ def session_source(header: dict, entries: list[dict], environment: Mapping[str, 
     if header.get('parentSessionId') or header.get('depth', 0) > 0:
         return 'child'
     for entry in entries:
-        if entry.get('type') == 'custom' and entry.get('customType') == 'graphtraj:completion-checker':
+        if entry.get('type') == 'custom' and entry.get('customType') in child_entry_types:
             if entry.get('data', {}).get('session') == header.get('id'):
                 return 'child'
         if entry.get('type') == 'custom' and entry.get('customType') == 'pi-subagent:delegation':
@@ -66,12 +74,15 @@ def current_connection() -> dict | None:
     return {'runtime': 'pi', 'session': session, 'session_file': path}
 
 
-def verify_main(connection: dict) -> str:
-    """Associate only a native start/resume root, never a supported plugin child."""
+def verify_main(connection: dict, child_entry_types: Collection[str] = ()) -> str:
+    """Associate only a native start/resume root, never a supported plugin child.
+
+    ``child_entry_types`` is passed to :func:`session_source`.
+    """
     header = connection.pop('native_header', None)
     entries = connection.pop('native_entries', [])
     if header is None:
         header, entries = session_record(Path(connection['session_file']), connection['session'])
-    if header.get('id') != connection['session'] or session_source(header, entries, os.environ) != 'main':
+    if header.get('id') != connection['session'] or session_source(header, entries, os.environ, child_entry_types) != 'main':
         raise ValueError('A child or unknown Pi source cannot associate Main.')
     return connection['session']

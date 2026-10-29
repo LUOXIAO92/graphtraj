@@ -168,10 +168,16 @@ def forward_cli(feature: str, arguments: dict, cwd: Path) -> ToolResult | None:
 def forward_request(
     request: Mapping[str, Any], cwd: Path, *, native_context: dict | None = None,
 ) -> ToolResult | None:
-    """Forward the public discovery/operation envelope over the same bound channel."""
+    """Forward the public discovery/operation envelope over the same bound channel.
+
+    A process that also carries an independent agents connection is refused:
+    which owner it belongs to is ambiguous.
+    """
     address = os.environ.get(CONNECTION_ENV)
     if address is None:
         return None
+    if 'AGENT_SWARM_CONNECTION' in os.environ:
+        raise RunnerError('authority-denied', 'Both independent and GraphTraj connections are present.')
     if not address:
         raise RunnerError('operation-unavailable', 'The Session CLI host connection is unavailable.')
     # The host removes a request when it accepts it. Reads, status, interrupt,

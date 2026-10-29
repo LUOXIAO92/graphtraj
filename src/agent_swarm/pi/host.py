@@ -81,8 +81,7 @@ def main() -> None:
     parser.add_argument('--config', required=True, type=Path)
     options = parser.parse_args()
     if any(name in os.environ for name in (
-        'AGENT_SWARM_CONNECTION', 'GRAPHTRAJ_CLI_CONNECTION',
-        'DSH_SESSION_ID', 'DSH_AGENT_SOURCE',
+        'AGENT_SWARM_CONNECTION', 'DSH_SESSION_ID', 'DSH_AGENT_SOURCE',
     )):
         raise ValueError('An already-bound child must use its existing connection, not adopt Main.')
     configuration = json.loads(options.config.read_text(encoding='utf-8'))

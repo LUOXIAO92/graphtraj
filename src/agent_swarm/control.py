@@ -56,7 +56,7 @@ from typing import Any, Callable, Iterator, Mapping, Protocol
 from agent_swarm.config import read_config
 from agent_swarm.locks import exclusive
 from agent_swarm.notices import needs_parent
-from agent_swarm.tool import AgentsError, AgentsResult, Binding, Caller, Outcome, SessionArchive, bind
+from agent_swarm.tool import AgentsError, AgentsResult, Binding, Caller, Outcome, SessionArchive, bind, unavailable
 
 
 ACTIVE  = "active"
@@ -386,6 +386,9 @@ class AgentControl:
         if action == "status":
             return self._outcome(self._authorized(agent, binding.caller))
         if action == "send":
+            if arguments.get("reports_only") is True:
+                # This backend cannot keep an Agent to results it already holds.
+                raise unavailable("reports_only", "this backend cannot deliver a message without starting new work")
             return self.send(agent, arguments["message"], binding)
         if action == "resume":
             return self.resume(agent, binding, arguments.get("message"))

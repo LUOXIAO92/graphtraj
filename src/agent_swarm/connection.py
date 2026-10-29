@@ -34,10 +34,8 @@ def call_owner(request: dict, *, metadata: dict | None = None) -> AgentsResult:
 
     The environment locates the channel; its owner verifies the kernel PID
     and any native Session assertions before invoking the existing callback.
-    Missing or conflicting connections never create a caller or controller.
+    A missing connection never creates a caller or controller.
     """
-    if CONNECTION_ENV in os.environ and 'GRAPHTRAJ_CLI_CONNECTION' in os.environ:
-        raise AgentsError('authority-denied', 'Both independent and GraphTraj connections are present.')
     address = os.environ.get(CONNECTION_ENV)
     if not address:
         raise AgentsError('authority-denied', 'The owning Agent connection is unavailable.')

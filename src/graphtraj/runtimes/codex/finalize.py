@@ -455,7 +455,8 @@ def check(
                     return None  # Already displayed; no second verdict or wakeup.
                 return {'outcome': 'completed', 'decided_before_fork': True,
                         'usage': CheckUsage(0, 0, 0, 0, 0, 0), 'output': json.dumps(reused)}
-            child = await client.fork_session(parent)
+            child = await client.fork_session(parent, network_profile=CHECKER_PERMISSION_PROFILE,
+                                              unix_socket=parent['control_socket'])
             child_id = child.thread_id
             created(child_id)
             from graphtraj.configuration.project_configuration import load_project_configuration

@@ -99,6 +99,14 @@ An unknown argument, a missing required one or an empty string is rejected.
 Identity, permissions, working directory and parentage always come from the
 host, never from arguments.
 
+`send`'s `reports_only` (boolean, default false): `true` delivers the message
+only to collect results the Agent already holds; the Agent starts no new work.
+A host or backend that cannot keep this limit rejects the request with
+`not-implemented` instead of sending an ordinary message. agents' own backend
+(`AgentControl`) cannot keep it and always rejects `true`; `false` or an
+absent field is an ordinary `send`. A host that serves `reports_only` applies
+its own rules for which Agents it accepts.
+
 **Result document** of `execute`:
 
 ```json
@@ -149,9 +157,11 @@ An execution that fails natively keeps the Runtime's own code and message in
 `last_result.error` (for example `RUNTIME_REQUEST_FAILED`). Those codes belong
 to the Runtime driver; the ones the README documents are public.
 
-Known inconsistency: envelope validation errors in `discover`/`describe`/
-`execute` currently return `{"error": "<text>"}` without a code. Unassigned,
-needs Main.
+Envelope validation errors in `discover`, `describe` and `execute`
+(malformed envelope, unknown feature, `arguments` failing the feature's
+schema) use the same structure, with `action` set to the envelope's `action`
+and code `invalid-input`. Before 388 they returned `{"error": "<text>"}`
+without a code; the change is a fix under 7.
 
 ### 1.3 Python names
 
@@ -389,6 +399,15 @@ this document.
 
 Consumers must ignore result fields and archive fields they do not know.
 
+Recorded classifications:
+
+- 388: `send` with `reports_only: true` is rejected with `not-implemented` by
+  agents' own backend, which used to ignore the field and start new work. This
+  is a fix (compatible): the silent ignore contradicted the field's only
+  documented meaning, "starts no new work". No version-range change.
+- 388: envelope validation errors gained `action` and a coded `error` object
+  (see 1.2). A fix that makes them match the documented error structure.
+
 While the major version is `0`, an incompatible change raises the minor
 version (`0.1.x` → `0.2.0`), and compatible additions and fixes raise the
 patch version. From `1.0.0` the usual rule applies: major for incompatible,
@@ -409,17 +428,17 @@ or be renamed. Numbers refer to the subtraction list in
 | --- | --- | --- | --- |
 | 1 | Codex managed Session MCP server named `graphtraj`; legacy `graphtraj`/`graphtraj_*` tool names refused | `codex/managed_session.py` (`mcp_servers['graphtraj']`, legacy tool check); `pi/extension.mjs` (accepts server `graphtraj`) | 394 |
 | 2 | Codex `clientInfo.name` and `toolOutput.name` `graphtraj`; logger `graphtraj.codex.local` | `codex/app_server.py` | 394 |
-| 3 | Completion checker profile `graphtraj_checker` and its permission override | `codex/app_server.py` (`CHECKER_PERMISSION_PROFILE`) | 388 |
-| 3 | Pi completion checker entry `graphtraj:completion-checker` | `pi/session.py` | 388 (behaviour), 394 (name) |
+| 3 | Completion checker profile `graphtraj_checker` and its permission override | Done in 388: `CodexAppServer.fork_session` takes `network_profile` and `unix_socket` from the caller; agents keeps no profile name. GraphTraj owns `CHECKER_PERMISSION_PROFILE` (`graphtraj/runtimes/codex/app_server.py`) and passes it from `finalize.py` | 388 (done) |
+| 3 | Pi completion checker entry `graphtraj:completion-checker` | Done in 388: `pi/session.py` `session_source`/`verify_main` take caller-supplied `child_entry_types`; GraphTraj's `runtimes/pi/session_entry.py` passes its own entry type (name unchanged) | 388 (done), 394 (name) |
 | 4 | `GRAPHTRAJ_*` variables: `GRAPHTRAJ_CLI_CONNECTION`, `GRAPHTRAJ_NATIVE_RUNTIME`, `GRAPHTRAJ_NATIVE_SESSION`, `GRAPHTRAJ_NATIVE_SESSION_FILE`, `GRAPHTRAJ_CLAUDE_HOST_PYTHON`, `GRAPHTRAJ_CLAUDE_HOST_CONFIG`, `GRAPHTRAJ_DSH_PACKAGE` | `connection.py`, `claude/host.py`, `claude/host_context.mjs`, `claude/execution.py`, `codex/managed_session.py`, `pi/extension.mjs`, `pi/session.py`, `pi/host.py`, `pi/execution.py`, `dsh/plugin.mjs`, `dsh/execution.py` | 394 |
-| 4 | Host exclusion check refusing both the independent and the GraphTraj connection | `connection.py` (`call_owner`), `claude/host.py` (`serve`), `pi/extension.mjs` | 388 |
+| 4 | Host exclusion check refusing both the independent and the GraphTraj connection | Done in 388: removed from `connection.py` (`call_owner`), `claude/host.py` (`serve`), `pi/extension.mjs` (both branches) and `pi/host.py`; agents keeps only its own `AGENT_SWARM_CONNECTION` checks. GraphTraj refuses the combination in `interfaces/hosted_cli.py` (`forward_request`), `runtimes/claude/host.py` (`serve`) and `runtimes/pi/extension.mjs` (before starting agents) | 388 (done) |
 | 5 | Archive header extension `graphtraj` with `projectId`, `agentId`, `taskIds` | `sessions/protocol.py`, `sessions/archive.py`, `sessions/claude.py`, `sessions/codex.py`, `sessions/codex_history.py`, `sessions/pi.py` | 384 |
 | 5+ | Core archive facts kept under the `graphtraj` name: event `graphtraj.native` provenance (required for every archived event), `graphtraj.missing`, header `previousSession`/`boundary`, types `graphtraj/native`, `graphtraj/history`, `graphtraj/text-run`, `graphtraj/encrypted`, `graphtraj/collection-pending` and the other `graphtraj/*` types. These are core meaning, so they cannot simply move into `extra_fields.graphtraj` | `sessions/protocol.py`, `sessions/archive.py`, `sessions/migration.py`, all `sessions/*` mappers | 384 for structure, 394 for names; larger than spec item 5, Main to confirm |
 | 6 | Pi custom message type `graphtraj:agent-communication` | `pi/extension.mjs` | 394 |
 | 7 | Pi execution's GraphTraj Task fields and fixed `.graphtraj` deny-read and deny-write paths | `pi/execution.py`, `pi/host.py` | 382 |
 | 8 | No independent DSH host | `dsh/` | 383 |
 | 9 | Notice title `GraphTraj notice from …` and default sender `graphtraj` | `claude/host_context.mjs` | 394 |
-| 10 | `send`'s `reports_only` and its "Task member" description | `tool.py` (`ACTION_FIELDS`, `INPUT_SCHEMA`) | 388 |
+| 10 | `send`'s `reports_only` and its "Task member" description | Done in 388: generic meaning in `tool.py` and 1.2; `AgentControl` rejects `true` with `not-implemented` (fix, see 7). GraphTraj's Task member handling is unchanged | 388 (done) |
 | 12 | Archiving refused without GraphTraj's collector | `config.py` (`reject_archive_without_collector`), `claude/host.py`, `codex/host.py` | 384 |
 | — | Claude host plugin also handles GraphTraj's `tasks` tool (`mcp__agents__tasks`) | `claude/host_context.mjs` | unassigned, needs Main |
 | — | Claude control-protocol hook IDs `graphtraj_start`, `graphtraj_collect_child`, `graphtraj_agents_display`, and the event key `graphtraj_direction` | `claude/execution.py`, `sessions/claude.py` | unassigned, needs Main (closest: 394) |

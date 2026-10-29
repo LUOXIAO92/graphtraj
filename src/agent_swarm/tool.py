@@ -66,8 +66,9 @@ INPUT_SCHEMA: dict[str, Any] = {
         "name": {"type": "string", "description": "Readable name; grants no identity."},
         "message": {"type": "string", "description": "Plain-text message for the Agent."},
         "reports_only": {"type": "boolean",
-                         "description": "Direct parent only: ask a stopped Task member for reports it "
-                                        "already holds; it starts no new work."},
+                         "description": "Deliver the message only to collect results the Agent already "
+                                        "holds; it starts no new work. A host that cannot keep this "
+                                        "limit rejects the request with not-implemented."},
         "timeout_seconds": {"type": "number",
                             "description": "Explicit finite wait in seconds, above 0."},
         "execution": {"type": "string",

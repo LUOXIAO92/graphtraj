@@ -40,7 +40,7 @@ def test_interrupted_stream_replay_and_native_final_link() -> None:
                  'outcome': {'kind': 'committed', 'eventType': 'assistant/attempt', 'seq': 7}})
     assert links == [(('dsh', 's', 'live/execution-1/s:0'), ('dsh', 's', 'event/7'))]
     assert saved[-1][0]['data']['stream'] == partial['data']['stream']
-    assert saved[-1][0]['graphtraj']['native']['record']['outcome']['seq'] == 7
+    assert saved[-1][0]['native']['record']['outcome']['seq'] == 7
 
 
 def test_reconnect_baseline_and_abandoned_attempt() -> None:
@@ -56,7 +56,7 @@ def test_reconnect_baseline_and_abandoned_attempt() -> None:
                  'outcome': {'kind': 'abandoned'}})
     assert not links
     assert saved[-1]['data']['stream'][0]['texts'] == ['kept']
-    assert saved[-1]['graphtraj']['native']['locator'] == 'live/execution-2/s:0'
+    assert saved[-1]['native']['locator'] == 'live/execution-2/s:0'
     with pytest.raises(ValueError, match='revision'):
         live.accept({'type': 'start', 'revision': 9})
 

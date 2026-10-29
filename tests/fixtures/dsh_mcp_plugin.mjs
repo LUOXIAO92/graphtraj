@@ -34,7 +34,7 @@ try {
   await ctx.plugin(DeepSeekLlmApiExtensionRegistry).await();
   await ctx.plugin(inventory, {}).await();
   const extension = await ctx.deepseekLlmApiExtensions.prepare({ body: {}, signal: new AbortController().signal });
-  assert.ok(extension.fields.dsh_plugin_packages.packages.some(item => item.name === 'agents-dsh' && item.version === '0.1.0'));
+  assert.ok(extension.fields.dsh_plugin_packages.packages.some(item => item.name === 'agents-dsh' && item.version === '0.2.0'));
   await ctx.plugin(ClientModuleRegistry).await();
   const entry = ctx.clientModules.graph().entries.find(row => row.id === 'agents-dsh');
   assert.ok(entry);

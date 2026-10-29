@@ -71,7 +71,7 @@ def test_retained_official_trace_messages(tmp_path: Path) -> None:
         str(Path(shutil.which('dsh')).resolve()), str(trace),
     ], capture_output=True, text=True, check=True, timeout=10)
     assert store.messages() == json.loads(native.stdout)
-    assert [row['graphtraj']['native']['record'] for row in store.page(limit=1000)['events']] == events
+    assert [row['native']['record'] for row in store.page(limit=1000)['events']] == events
     print(json.dumps({'native_session': header['id'], 'events': len(events),
                       'messages': len(store.messages()), 'native_projection_equal': True}))
 

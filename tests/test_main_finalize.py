@@ -912,11 +912,11 @@ def test_native_start_resume_and_stop_need_no_main_binding_input(host: tuple[Pat
     assert [native_record(event) for event in archive.page()['events']] == [
         json.loads(line) for line in (root / 'rollout.jsonl').read_text().splitlines()
     ]
-    assert archive.header['graphtraj']['agentId'] == 'main'
+    assert archive.header['extra_fields']['graphtraj']['agentId'] == 'main'
     archive = JsonlSessionStore(archive_path(swarm_root(root), 'codex:checker'))
     events = archive.page()['events']
     assert archive.header['parentSession'] == 'codex:main'
-    assert archive.header['graphtraj']['agentId'] == 'checker:checker'
+    assert archive.header['extra_fields']['graphtraj']['agentId'] == 'checker:checker'
     assert any(native_record(event).get('method') == 'item/completed' for event in events)
     assert any(native_record(event).get('method') == 'thread/items/list' for event in events)
 
@@ -1024,7 +1024,7 @@ def test_stop_checks_after_the_session_moves_to_a_new_rollout(host: tuple[Path, 
 
     archive = SessionArchive(swarm_root(root))
     store = JsonlSessionStore(archive_path(archive.root, archive.native_id('codex', 'main')))
-    assert store.header['graphtraj']['previousSession'] == 'codex:main'
+    assert store.header['previousSession'] == 'codex:main'
     assert [native_record(event) for event in store.page()['events']] == [meta, turn, done]
     original = JsonlSessionStore(archive_path(archive.root, 'codex:main'))
     assert [native_record(event) for event in original.page()['events']] == [
@@ -2041,7 +2041,7 @@ def test_ephemeral_fork_excluded_history_is_unknown_not_an_empty_seed(
     assert archive.header['isSeeded'] is False
     assert archive.header['parentSession'] == 'codex:main'
     assert any(item['path'] == 'history' and item['reason']
-               for item in archive.header['graphtraj']['missing'])
+               for item in archive.header['missing'])
     events = archive.page()['events']
     assert not any(event['type'] == 'session/end-seed' for event in events)
     assert native_record(events[0])['pages'][0]['data'] == []  # backfill is off

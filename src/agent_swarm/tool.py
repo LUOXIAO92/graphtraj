@@ -43,7 +43,7 @@ TOOL_NAME = "agents"
 # from the host binding, so no action accepts them.
 ACTION_FIELDS: dict[str, tuple[frozenset[str], frozenset[str]]] = {
     "create":    (frozenset({"runtime", "instruction"}),
-                  frozenset({"name", "configuration", "preset", "model", "reasoning_effort"})),
+                  frozenset({"name", "configuration", "preset", "model", "reasoning_effort", "workspace"})),
     "send":      (frozenset({"agent", "message"}), frozenset({"reports_only"})),
     "status":    (frozenset(), frozenset({"agent"})),
     "wait":      (frozenset({"agent", "timeout_seconds"}), frozenset()),
@@ -52,6 +52,7 @@ ACTION_FIELDS: dict[str, tuple[frozenset[str], frozenset[str]]] = {
     "requests":  (frozenset({"agent"}), frozenset({"execution"})),
     "reply":     (frozenset({"agent", "request", "response"}), frozenset()),
     "retire":    (frozenset({"agent"}), frozenset()),
+    "ask_parent": (frozenset({"kind", "question", "timeout_seconds"}), frozenset()),
 }
 
 INPUT_SCHEMA: dict[str, Any] = {
@@ -70,6 +71,14 @@ INPUT_SCHEMA: dict[str, Any] = {
                   "description": "Model id among the Runtime connection's candidates; never replaced by another."},
         "reasoning_effort": {"type": "string",
                              "description": "Reasoning effort the chosen model supports."},
+        "workspace": {"type": "string",
+                      "description": "Existing absolute directory inside your own workspace, assigned to the "
+                                     "new Agent as its working directory. It only narrows access."},
+        "kind": {"type": "string", "enum": ["decision", "resources"],
+                 "description": "decision: ask your direct parent to decide; resources: ask for more "
+                                "time, scope or other resources."},
+        "question": {"type": "string",
+                     "description": "What you ask your direct parent, with what you need and why."},
         "instruction": {"type": "string", "description": "First message for the new Agent."},
         "name": {"type": "string", "description": "Readable name; grants no identity."},
         "message": {"type": "string", "description": "Plain-text message for the Agent."},
@@ -78,7 +87,8 @@ INPUT_SCHEMA: dict[str, Any] = {
                                         "holds; it starts no new work. A host that cannot keep this "
                                         "limit rejects the request with not-implemented."},
         "timeout_seconds": {"type": "number",
-                            "description": "Explicit finite wait in seconds, above 0."},
+                            "description": "Explicit finite wait in seconds, above 0. For ask_parent, no "
+                                           "answer within it returns answer null: nothing is granted."},
         "execution": {"type": "string",
                       "description": "Reject requests from a different execution."},
         "request": {"type": "object", "description": "One request document returned by requests."},
@@ -94,7 +104,8 @@ TOOL_DESCRIPTION = (
     "(omit agent for your visible hierarchy), wait (explicit finite timeout_seconds), "
     "interrupt (in standby, the direct parent confirms an ended execution whose "
     "recorded processes are verified gone), resume, requests and reply for native "
-    "approval or input requests, and retire. Your identity comes from the host."
+    "approval or input requests, retire, and ask_parent to ask your own direct parent for a "
+    "decision or resources and wait for its answer. Your identity comes from the host."
 )
 
 
@@ -242,7 +253,7 @@ def validate_request(request: Any) -> tuple[str, dict[str, Any]]:
         if isinstance(value, str) and not value.strip():
             raise AgentsError("invalid-input", f"request.{name}: must not be empty")
 
-    if action == "wait":
+    if action in ("wait", "ask_parent"):
         timeout = arguments["timeout_seconds"]
         if not (math.isfinite(timeout) and timeout > 0):
             raise AgentsError("invalid-input", "request.timeout_seconds: must be finite and above 0")

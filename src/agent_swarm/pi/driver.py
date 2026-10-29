@@ -10,7 +10,7 @@ import threading
 from typing import Any, Mapping
 
 from agent_swarm import AgentsError, Caller, Run
-from agent_swarm.control import require_available
+from agent_swarm.control import require_available, within_workspace
 from agent_swarm.runtime import RuntimeAdapterError
 from .execution import PiExecution
 
@@ -64,15 +64,20 @@ class PiDriver:
         self.turns: dict[str, PiExecution] = {}
         self.lock = threading.Lock()
 
-    def prepare(self, runtime: str, caller: Caller, *, selection: Mapping[str, Any] | None = None) -> dict:
+    def prepare(self, runtime: str, caller: Caller, *, selection: Mapping[str, Any] | None = None,
+                workspace: Path | None = None) -> dict:
         """Return the chosen native configuration without reading project state.
 
         ``selection`` is the create's resolved connection, model and effort.
+        ``workspace`` replaces the host worktree as cwd and sandbox grant root;
+        every other read, write and network grant stays as resolved.
         """
         if runtime != 'pi':
             raise AgentsError('unsupported-runtime', 'PiDriver only runs Pi.')
         request = deepcopy(self.request) if selection is None else selected(self.request, selection)
-        return {'adapter_request': request, 'evidence': {}, 'cwd': self.request['worktree_path']}
+        if workspace is not None:
+            request['worktree_path'] = str(within_workspace(workspace, self.request['worktree_path']))
+        return {'adapter_request': request, 'evidence': {}, 'cwd': request['worktree_path']}
 
     def require_available(self, connection: Mapping[str, Any]) -> None:
         """Refuse a connection whose Pi is not installed or not logged in."""

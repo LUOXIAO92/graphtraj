@@ -62,6 +62,7 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any, Callable, Iterator, Mapping, Protocol
 
+from agent_swarm.approval import DECISION_METHOD, check_reply, high_risk
 from agent_swarm.config import CONFIG_FILE, read_config, read_connections
 from agent_swarm.locks import exclusive
 from agent_swarm.notices import needs_parent
@@ -455,7 +456,11 @@ class AgentControl:
                                binding, name=arguments.get("name"),
                                configuration=arguments.get("configuration"),
                                preset=arguments.get("preset"), model=arguments.get("model"),
-                               reasoning_effort=arguments.get("reasoning_effort"))
+                               reasoning_effort=arguments.get("reasoning_effort"),
+                               workspace=arguments.get("workspace"))
+        if action == "ask_parent":
+            return self.ask_parent(binding.caller, arguments["kind"], arguments["question"],
+                                   arguments["timeout_seconds"])
         if action == "status" and "agent" not in arguments:
             return Outcome({"agents": self.hierarchy(binding.caller)})
         try:
@@ -508,12 +513,15 @@ class AgentControl:
         preset: str | None = None,
         model: str | None = None,
         reasoning_effort: str | None = None,
+        workspace: str | None = None,
     ) -> Outcome:
         """Register a new Agent under the caller and start its first execution.
 
         Returns once the driver has started native work; it never waits for
         the Agent's result. ``preset``, ``model`` and ``reasoning_effort`` are
-        resolved by :meth:`select`.
+        resolved by :meth:`select`. ``workspace`` (layer 1) must lie inside
+        the calling Agent's own workspace, which a child without one inherits;
+        the driver checks it against the host's cwd as ``prepare(workspace=)``.
         """
         driver = self.drivers.get(runtime)
         if driver is None:
@@ -529,6 +537,15 @@ class AgentControl:
                 raise AgentsError("invalid-config", f"This host's {runtime} driver cannot run a selected "
                                                     "connection, preset, model or reasoning effort.")
             options["selection"] = selection
+        inherited = (self._load(caller.agent) or {}).get("workspace") if caller.agent else None
+        if workspace is not None and inherited is not None:
+            workspace = str(within_workspace(workspace, inherited))
+        workspace = workspace if workspace is not None else inherited
+        if workspace is not None:
+            # A driver that cannot narrow the cwd must not run the child wider.
+            if not _accepts(driver.prepare, "workspace"):
+                raise unavailable("create", f"this host's {runtime} driver cannot assign a workspace")
+            options["workspace"] = Path(workspace)
         # Keep the original call shape for drivers whose users select defaults.
         settings = driver.prepare(runtime, caller, **options)
         json.dumps(settings)
@@ -546,6 +563,7 @@ class AgentControl:
             "settings":   settings,
             "selection":  {name: (selection or {}).get(name) for name in
                            ("preset", "connection", "model", "reasoning_effort")},
+            "workspace":  str(Path(workspace).resolve()) if workspace is not None else None,
             "created_at": _now(),
             "retired_at": None,
             "executions": [],
@@ -758,9 +776,19 @@ class AgentControl:
         with self._locked(agent) as record:
             self._require_control(record, caller)
             current = self._require_execution(record, execution)
-            pending = self._driver(record).requests(self._run(record, current, "", None))
-            documents = [{**request, "execution": current["id"]} for request in pending]
+            documents = []
+            for request in self._pending(record, current):
+                risk = high_risk(request)
+                documents.append({**request, "execution": current["id"],
+                                  **({"high_risk": risk} if risk is not None else {})})
             return self._outcome(record, result={"requests": documents})
+
+    def _pending(self, record: dict, current: dict) -> list[dict]:
+        """Return the Runtime's pending requests, then the child's own unanswered ones."""
+        native = self._driver(record).requests(self._run(record, current, "", None))
+        own = [request for request in current["requests"] if request.get("method") == DECISION_METHOD
+               and _reply_key(request) not in current["replies"]]
+        return [*native, *own]
 
     def reply(
         self,
@@ -769,17 +797,69 @@ class AgentControl:
         request: Mapping[str, Any],
         response: Mapping[str, Any],
     ) -> Outcome:
-        """Answer one native request once; a repeat returns the first receipt."""
+        """Answer one pending request once; a repeat returns the first receipt.
+
+        The reply is checked against the request as the Runtime (or the child)
+        reported it, not the caller's copy: :func:`agent_swarm.approval.check_reply`
+        refuses an approval of a high-risk request, or one granting more than
+        asked, before any driver sees it. A child's decision request is
+        answered here and never reaches the driver.
+        """
         with self._locked(agent) as record:
             self._require_control(record, caller)
             current = self._require_execution(record, request.get("execution"))
             key = _reply_key(request)
             if key in current["replies"]:
                 return self._outcome(record, result={**current["replies"][key], "duplicate": True})
-            native = {name: value for name, value in request.items() if name != "execution"}
-            receipt = self._driver(record).reply(self._run(record, current, "", None), native, response)
+            reported = next((item for item in self._pending(record, current) if _reply_key(item) == key), None)
+            if reported is None:
+                raise AgentsError("invalid-input", "request.request: no such request is pending")
+            check_reply(reported, response)
+            if reported.get("method") == DECISION_METHOD:
+                receipt = {"request_id": None, "reply_status": "answered", "answer": response["answer"]}
+            else:
+                native = {name: value for name, value in request.items() if name not in ("execution", "high_risk")}
+                receipt = self._driver(record).reply(self._run(record, current, "", None), native, response)
             current["replies"][key] = {"at": _now(), **receipt}
             return self._outcome(record, result=current["replies"][key])
+
+    def ask_parent(self, caller: Caller, kind: str, question: str, timeout_seconds: float) -> Outcome:
+        """Ask the calling Agent's direct parent for a decision or resources.
+
+        This is the permission-request kind of parent-child traffic, not a
+        call for attention: the request is retained on the caller's running
+        execution, so the parent's ``wait`` ends early, the document shows
+        ``pending_requests``, and the parent answers once through ``reply``
+        with ``{"answer": ...}``. Waits at most ``timeout_seconds``; without an
+        answer the result is ``answer: null, timed_out: true``, which grants
+        nothing. Asking the same ``kind`` and ``question`` again in the same
+        execution continues waiting for (or returns) the same request.
+        """
+        if caller.agent is None:
+            raise AgentsError("authority-denied", "Only a child Agent can ask its parent; this caller has none.")
+        params = {"kind": kind, "question": question}
+        with self._locked(caller.agent) as record:
+            current = _running(record)
+            if current is None:
+                raise AgentsError("not-running", "Ask from a running execution of this Agent.")
+            request = next((item for item in current["requests"] if item.get("method") == DECISION_METHOD
+                            and item["params"] == params), None)
+            if request is None:
+                request = {"session": current["session"], "execution_id": current["id"], "request_id": None,
+                           "request_token": uuid.uuid4().hex, "method": DECISION_METHOD, "params": params}
+                current["requests"].append(request)
+        deadline = time.monotonic() + timeout_seconds
+        while True:
+            with self._locked(caller.agent) as record:
+                current = _running(record)
+                if current is None or current["id"] != request["execution_id"]:
+                    raise AgentsError("stale-execution", "The asking execution has ended; its request was withdrawn.")
+                reply = current["replies"].get(request["request_token"])
+                answer = reply.get("answer") if reply is not None else None
+                if reply is not None or time.monotonic() >= deadline:
+                    return self._outcome(record, result={"request": dict(request), "answer": answer,
+                                                         "timed_out": reply is None})
+            time.sleep(min(WAIT_INTERVAL_SECONDS, max(deadline - time.monotonic(), 0)))
 
     def retire(self, agent: str, caller: Caller) -> Outcome:
         """Hide a standby Agent from listings; its record and Session stay."""
@@ -1254,6 +1334,7 @@ class AgentControl:
             "runtime": record["runtime"],
             **{name: (record.get("selection") or {}).get(name)
                for name in ("preset", "connection", "model", "reasoning_effort")},
+            "workspace": record.get("workspace"),
             "state":   ACTIVE if current is not None else STANDBY,
             "parent":  record["parent"],
             "creator": dict(record["creator"]),

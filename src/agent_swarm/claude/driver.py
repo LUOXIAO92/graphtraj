@@ -10,7 +10,7 @@ import threading
 from typing import Any, Callable, Mapping
 
 from agent_swarm import AgentsError, Caller, Run
-from agent_swarm.control import require_available
+from agent_swarm.control import require_available, within_workspace
 from .execution import ClaudeExecution
 from .settings import current_cli, prepare
 
@@ -68,17 +68,19 @@ class ClaudeDriver:
         self.lock = threading.Lock()
 
     def prepare(self, runtime: str, caller: Caller, *, configuration: str | None = None,
-                selection: Mapping[str, Any] | None = None) -> dict:
+                selection: Mapping[str, Any] | None = None, workspace: Path | None = None) -> dict:
         """Validate explicit Claude configuration, independently of caller roles.
 
         ``selection`` is the create's resolved connection, model and effort.
+        ``workspace`` replaces the host cwd, and with it the native sandbox's
+        working directory; every other grant stays as configured.
         """
         if configuration is not None:
             raise AgentsError('invalid-config', 'This host uses its explicitly supplied Claude configuration.')
         if runtime != 'claude':
             raise AgentsError('unsupported-runtime', 'This driver runs Claude only.')
         config = self.configuration if selection is None else selected(self.configuration, selection)
-        return prepare(config, self.cwd)
+        return prepare(config, self.cwd if workspace is None else within_workspace(workspace, self.cwd))
 
     def require_available(self, connection: Mapping[str, Any]) -> None:
         """Refuse a connection whose Claude Code is not installed or not logged in."""

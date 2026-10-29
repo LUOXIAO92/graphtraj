@@ -45,8 +45,6 @@ def test_an_interpreter_without_this_checkout_is_named_with_both_fixes(tmp_path:
     interpreter = tmp_path / "python"
     interpreter.write_text('#!/bin/sh\nexec "{0}" -S "$@"\n'.format(sys.executable))
     interpreter.chmod(0o755)
-    from conftest import _checkout_import_problem
-
     source = (PROJECT_ROOT / "src").resolve()
     problem = subprocess.run(
         [sys.executable, "-c", "import sys; sys.path.insert(0, 'tests'); import conftest; "
@@ -58,10 +56,12 @@ def test_an_interpreter_without_this_checkout_is_named_with_both_fixes(tmp_path:
     assert problem.returncode == 0, problem.stderr
     assert problem.stdout.strip() == (
         "Test subprocesses would not import this checkout: {0} from a neutral directory resolves "
-        "graphtraj -> None, agent_swarm -> None; expected both under {1}. Install this checkout "
-        "editable into that venv (pip install -e {2}/src/agent_swarm -e {2}) or set PYTHONPATH={1}."
+        "subprocesses: graphtraj -> None, agent_swarm -> None; "
+        "-I Workers: graphtraj -> None, agent_swarm -> None; expected both under {1}. "
+        "Use a venv whose site-packages resolves this checkout: install it editable "
+        "(pip install -e {2}/src/agent_swarm -e {2}) or add a .pth naming {1}. "
+        "PYTHONPATH={1} serves only the subprocesses that do not run -I."
     ).format(interpreter, source, PROJECT_ROOT)
-    assert _checkout_import_problem(tmp_path) is None
 
 
 def test_a_suite_whose_subprocesses_import_another_tree_stops_at_start(tmp_path: Path) -> None:
@@ -75,8 +75,9 @@ def test_a_suite_whose_subprocesses_import_another_tree_stops_at_start(tmp_path:
         capture_output=True, text=True, timeout=120,
     )
     assert session.returncode == pytest.ExitCode.USAGE_ERROR, session.stdout + session.stderr
-    assert "graphtraj -> {0}".format(decoy / "graphtraj" / "__init__.py") in session.stdout + session.stderr
-    assert "or set PYTHONPATH={0}.".format((PROJECT_ROOT / "src").resolve()) in session.stdout + session.stderr
+    output = session.stdout + session.stderr
+    assert "subprocesses: graphtraj -> {0}".format(decoy / "graphtraj" / "__init__.py") in output
+    assert "PYTHONPATH={0} serves only".format((PROJECT_ROOT / "src").resolve()) in output
     assert "passed" not in session.stdout
 
 

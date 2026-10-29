@@ -5,11 +5,12 @@ Usage::
 
     python scripts/run_test_shards.py [--shards N] [--log-dir DIR] [-- PYTEST-ARGS...]
 
-Run it with the Python of an environment that imports this checkout: a venv
-with this checkout installed in editable mode, or a ``PYTHONPATH`` (absolute
-or relative to the repository root, where shards start) naming its ``src``. Otherwise each
-shard stops at start with one message naming the interpreter, what it imports
-and both fixes. Each shard runs
+Run it with the Python of a venv whose site-packages imports this checkout:
+installed in editable mode, or a ``.pth`` file naming its ``src``. Workers run
+``python -I``, which ignores ``PYTHONPATH``, so a ``PYTHONPATH`` (absolute or
+relative to the repository root, where shards start) serves only the other
+subprocesses. Otherwise each shard stops at start with one message naming the
+interpreter, what it imports and the fixes. Each shard runs
 ``<python> -m pytest -p no:cacheprovider -q -rfEs <files>`` from the
 repository root. ``tests/test_*.py`` files are split into ``N`` shards
 (default 4) by file size, largest first, so shards finish at similar times.

@@ -37,22 +37,31 @@ _ORIGINS = (
 
 
 def _checkout_import_problem(cwd: Path, executable: str = sys.executable) -> Optional[str]:
-    """Say why subprocesses started from cwd would not import this checkout."""
+    """Say why subprocesses started from cwd would not import this checkout.
+
+    Fake Runtimes inherit PYTHONPATH; Workers run ``-I``, which ignores it, so
+    only the venv's site-packages can give them this checkout.
+    """
     source = (PROJECT_ROOT / "src").resolve()
-    probe = subprocess.run([executable, "-c", _ORIGINS], cwd=cwd, capture_output=True, text=True, timeout=60)
-    origins = probe.stdout.splitlines() if probe.returncode == 0 else []
-    if len(origins) == 2 and all(
-        origin != "None" and Path(origin).resolve().is_relative_to(source) for origin in origins
-    ):
+    resolved = []
+    for form, flags in (("subprocesses", ()), ("-I Workers", ("-I",))):
+        probe = subprocess.run([executable, *flags, "-c", _ORIGINS], cwd=cwd,
+                               capture_output=True, text=True, timeout=60)
+        origins = probe.stdout.splitlines() if probe.returncode == 0 else []
+        if len(origins) == 2 and all(
+            origin != "None" and Path(origin).resolve().is_relative_to(source) for origin in origins
+        ):
+            continue
+        found = ", ".join("{0} -> {1}".format(*pair) for pair in zip(("graphtraj", "agent_swarm"), origins))
+        resolved.append("{0}: {1}".format(form, found or "probe failed: " + probe.stderr.strip()[-300:]))
+    if not resolved:
         return None
-    found = ", ".join("{0} -> {1}".format(*pair) for pair in zip(("graphtraj", "agent_swarm"), origins)) or (
-        "probe failed: " + probe.stderr.strip()[-300:]
-    )
     return (
         "Test subprocesses would not import this checkout: {0} from a neutral directory resolves {1}; "
-        "expected both under {2}. Install this checkout editable into that venv "
-        "(pip install -e {3}/src/agent_swarm -e {3}) or set PYTHONPATH={2}."
-    ).format(executable, found, source, PROJECT_ROOT)
+        "expected both under {2}. Use a venv whose site-packages resolves this checkout: install it "
+        "editable (pip install -e {3}/src/agent_swarm -e {3}) or add a .pth naming {2}. "
+        "PYTHONPATH={2} serves only the subprocesses that do not run -I."
+    ).format(executable, "; ".join(resolved), source, PROJECT_ROOT)
 
 
 def pytest_sessionstart(session: pytest.Session) -> None:

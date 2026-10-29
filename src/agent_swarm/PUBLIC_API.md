@@ -351,9 +351,10 @@ The header and any event may carry an `extra_fields` container:
   never reads a namespace. An extension field never changes the meaning of a
   core field, and never affects messages, order or identity.
 - Header fields are attached when the archive is created, through the
-  collectors' `extra_fields` argument, which hosts fill from `create`
-  arguments or configuration. The first writer's header is kept: reopening
-  with a different header is refused.
+  collectors' `extra_fields` argument, which hosts fill from `create`'s
+  `extra_fields` argument (or `AgentControl.create(..., extra_fields=)` in
+  programmatic construction); configuration is not a source today. The first
+  writer's header is kept: reopening with a different header is refused.
 - Event fields are written only by programmatic extensions:
   `SessionArchive(..., event_fields=callable)`. The callable receives a copy
   of each event about to be written (newly published events and drafts) and

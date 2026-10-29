@@ -23,7 +23,7 @@ setopt err_exit pipe_fail no_unset
 WT=/Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/381-claude-codex-hosts-cross-runtime
 # The code under test; later commits may change only this script's directory.
 # Whoever integrates further code commits sets COMMIT to the new code commit.
-COMMIT=047eab0e56d9e35ffbbcd5ceb11b5c4a9be1a6c4
+COMMIT=047eab0c8d878273ba9404fb2f2bd52d2bb25c45
 P=/Users/luoxiao/agents-381-realhost/claude-host
 PY=/Users/luoxiao/miniconda3/bin/python3.13
 CHILD_EFFORT=low

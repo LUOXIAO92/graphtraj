@@ -358,7 +358,8 @@ def test_dsh_discovery_uses_only_the_host_catalog(
     project: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Native provider failures stay unknown and no Session/prompt method is called."""
-    from graphtraj.runtimes.dsh import service
+    # Discovery reaches DSH through agents' native service.
+    from agent_swarm.dsh import service
 
     calls = []
 

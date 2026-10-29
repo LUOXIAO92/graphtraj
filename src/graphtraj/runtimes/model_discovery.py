@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import json
 import os
 from pathlib import Path
@@ -11,55 +10,29 @@ import tempfile
 
 
 def discover_models(runtime: dict) -> dict:
-    """Query native catalogs without creating a turn or testing account access.
+    """Query native catalogs through agents without a turn or an account check.
 
-    Native diagnostics may contain endpoint credentials, so failures disclose
-    only capability and a stable instruction to check the original client.
-    DSH uses its host catalog endpoint without creating a Session.
+    ``runtime`` is one entry of the user connections catalog; only its
+    ``runtime`` and ``home`` select the native catalog, as before. The agents
+    result is projected onto GraphTraj's existing document: models and the
+    whole catalog are marked ``native`` and account access stays unknown.
     """
-    result = {'runtime': runtime['runtime'], 'source': 'native', 'account_access': 'unknown',
-              'models': [], 'supported_efforts': 'unknown', 'catalog_scope': 'runtime'}
-    try:
-        # No project resources, extensions or task prompt enter a discovery query.
-        with tempfile.TemporaryDirectory(prefix='graphtraj-models-') as directory:
-            if runtime['runtime'] == 'codex':
-                metadata = {'models': asyncio.run(_codex(runtime, Path(directory)))}
-            elif runtime['runtime'] == 'claude':
-                metadata = _claude(runtime, Path(directory))
-            elif runtime['runtime'] == 'pi':
-                metadata = {'models': [{
-                    'id': model['id'], 'alias': model.get('name') or model['id'],
-                    'provider': model['provider'], 'source': 'native',
-                    # A reasoning boolean is not an effort enumeration.
-                    'supported_efforts': None,
-                } for model in _pi(runtime, Path(directory))]}
-            else:
-                metadata = _dsh(runtime, Path(directory))
-        return {**result, 'status': 'available', **metadata,
-                'message': 'Native catalog metadata does not establish account calling permission.'}
-    except Exception:
-        return {**result, 'status': 'unknown',
-                'message': 'Native metadata query failed. Check installation/login in the original Runtime client and refresh.'}
+    from agent_swarm import discover_models as agents_discover_models
 
+    # The catalog's provider/model entries are GraphTraj's manual records and
+    # must not replace the native query, so no ``models`` key is passed.
+    connection = {'runtime': runtime['runtime']}
+    if runtime.get('home'):
+        connection['home'] = runtime['home']
+    found = agents_discover_models(connection)
 
-async def _codex(runtime: dict, cwd: Path) -> list[dict]:
-    """Read native configuration and every model/list page from the selected Home."""
-    from graphtraj.runtimes.codex.app_server import CodexAppServer
-    from graphtraj.workspace.runner_project import runtime_executable
-
-    environment = {'CODEX_HOME': runtime['home']} if runtime.get('home') else {}
-    async with CodexAppServer(
-        cwd=cwd, command=(str(runtime_executable('codex')), 'app-server', '--listen', 'stdio://'),
-        environment=environment,
-    ) as server:
-        config = await server.read_configuration(cwd)
-        provider = config.get('model_provider') or 'openai'
-        models = await server.list_models()
-    return [{
-        'id': item['model'], 'alias': item.get('displayName') or item['model'],
-        'provider': provider, 'source': 'native',
-        'supported_efforts': [effort['reasoningEffort'] for effort in item.get('supportedReasoningEfforts', [])],
-    } for item in models]
+    document = {'runtime': found['runtime'], 'source': 'native', 'account_access': 'unknown',
+                'models': [{**model, 'source': 'native'} for model in found['models']],
+                'supported_efforts': 'unknown', 'catalog_scope': 'runtime',
+                'status': found['status']}
+    if 'provider_status' in found:
+        document['provider_status'] = found['provider_status']
+    return {**document, 'message': found['message']}
 
 
 def _pi(runtime: dict, cwd: Path) -> list[dict]:
@@ -114,60 +87,3 @@ def pi_model_domain(home: str, provider: str, model: str, api_key_env: str | Non
             'ROLE_CONFIG_UNSUPPORTED',
             'Pi did not expose a supported native destination for the selected provider/model.',
         ) from None
-
-
-def _dsh(runtime: dict, cwd: Path) -> dict:
-    """Read the public host-generation catalog; never create or prompt a Session."""
-    from graphtraj.runtimes.dsh.service import DshService
-    import shutil
-
-    environment = dict(os.environ)
-    if runtime.get('home'):
-        environment['DSH_HOME'] = runtime['home']
-    executable = shutil.which('dsh')
-    if executable is None:
-        raise ValueError('DSH is unavailable.')
-    service = DshService(executable, cwd, environment)
-    try:
-        service.start()
-        catalog = service.rpc('session/modelCatalog')
-        models = [{
-            'id': model['id'], 'alias': model.get('name') or model['id'],
-            'provider': group['id'], 'source': 'native',
-            'supported_efforts': ([effort['id'] for effort in model['reasoning']['efforts']]
-                                  if model.get('reasoning') is not None else None),
-        } for group in catalog['groups'] for model in group['models']]
-        providers = {group['id']: 'available' for group in catalog['groups']}
-        providers.update({failure['id']: 'unknown' for failure in catalog.get('failures', [])})
-        return {'models': models, 'provider_status': providers,
-                'status': 'available' if models or not catalog.get('failures') else 'unknown'}
-    finally:
-        service.close()
-
-
-def _claude(runtime: dict, cwd: Path) -> dict:
-    """Read the official initialization model catalog without sending user input."""
-    from graphtraj.runtimes.claude.adapter import executable
-
-    environment = dict(os.environ)
-    if runtime.get('home'):
-        environment['CLAUDE_CONFIG_DIR'] = runtime['home']
-    command = [executable(), '--print', '--verbose', '--input-format', 'stream-json',
-               '--output-format', 'stream-json', '--restricted', '--tools', '',
-               '--strict-mcp-config', '--mcp-config', '{"mcpServers":{}}']
-    query = {'type': 'control_request', 'request_id': 'catalog',
-             'request': {'subtype': 'initialize'}}
-    response = subprocess.run(command, input=json.dumps(query) + '\n', text=True,
-                              capture_output=True, timeout=30, env=environment, cwd=cwd, check=True)
-    for line in response.stdout.splitlines():
-        event = json.loads(line)
-        reply = event.get('response', {})
-        if event.get('type') == 'control_response' and reply.get('request_id') == 'catalog':
-            if reply.get('subtype') != 'success':
-                raise ValueError('Claude initialization failed.')
-            models = reply['response']['models']
-            return {'models': [{'id': item['value'], 'alias': item.get('displayName', item['value']),
-                                'provider': 'anthropic', 'source': 'native',
-                                'supported_efforts': item.get('supportedEffortLevels')}
-                               for item in models]}
-    raise ValueError('Claude did not expose a model catalog.')

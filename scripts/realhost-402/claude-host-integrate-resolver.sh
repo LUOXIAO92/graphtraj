@@ -146,16 +146,29 @@ for i in {1..180}; do
     $EVIDENCE/step2-reports.yml && break
   sleep 5
 done
-$VENV/bin/python - $EVIDENCE/step2-reports.yml > $P/decide.args <<'EOF'
-import sys, yaml
-submissions = (yaml.safe_load(open(sys.argv[1])) or {}).get('submissions') or []
+# decide-result needs at least one evidence ref; the writer's submission may carry none.
+# writer-decision.md (untracked, Harness-relative) records the script's own check.
+$VENV/bin/python - $EVIDENCE/step2-reports.yml $EVIDENCE/step2-swarm.yml $WORK/writer-decision.md > $P/decide.args <<'EOF'
+import subprocess, sys, yaml
+reports, swarm, decision = sys.argv[1:4]
+submissions = (yaml.safe_load(open(reports)) or {}).get('submissions') or []
 if not submissions:
     sys.exit('the writer submitted nothing within 15 minutes; see the writer Trace')
 latest = submissions[-1]
-print('--submission-id', latest['event_id'], '--commit', latest['candidate'])
-for ref in latest['evidence_refs']:
+worktree = yaml.safe_load(open(swarm))['tasks'][0]['worktree_path']
+shown = subprocess.run(['git', '-C', worktree, 'show', latest['candidate'] + ':article.md'],
+                       capture_output=True, text=True)
+exact = shown.returncode == 0 and shown.stdout.strip() == 'WRITER LINE'
+open(decision, 'w').write(f"Submission {latest['event_id']} candidate {latest['candidate']}: "
+                          f"git show <candidate>:article.md is exactly 'WRITER LINE': {'yes' if exact else 'no'}\n")
+if not exact:
+    sys.exit(f'article.md at {latest["candidate"]} is not exactly WRITER LINE; see {decision}')
+print('--submission-id', latest['event_id'], '--commit', latest['candidate'], '--evidence-ref', 'writer-decision.md')
+for ref in latest.get('evidence_refs') or []:
     print('--evidence-ref', ref)
 EOF
+cat $WORK/writer-decision.md
+cp $WORK/writer-decision.md $EVIDENCE/
 (cd $WORK && $RUNNER decide-result ${(z)"$(<$P/decide.args)"} --decision accepted --reason "Writer line committed") \
   | tee $EVIDENCE/step2-decision.yml
 
@@ -180,6 +193,8 @@ say "step 5: Claude Main integrates through the resolver (native dialog: none)"
 print -r -- "Print mode; the agents and tasks tools are pre-allowed. The resolver's permission"
 print -r -- "requests (its Edit and its Bash git command) go to Main, which answers each with reply;"
 print -r -- "you do not see a dialog for them."
+# decide_result needs at least one evidence ref; the resolver's submission may carry none.
+print -r -- "Main decision evidence for the 402 real-host resolver check" > $WORK/resolver-decision.md
 U=$(uuidgen | tr A-Z a-z)
 print -r -- "Claude Main Session: $U"
 VJSON=$($VENV/bin/python -c 'import json, sys; print(json.dumps(sys.argv[1:]))' $VALIDATE)
@@ -193,7 +208,7 @@ print each raw result text verbatim right after it returns:
 5. Repeat 2, 3 and 4 until the result of 2 shows the Agent idle and 3 lists no pending request;
    answer each pending request in requests exactly once, as in 4.
 6. tasks: {\"action\":\"execute\",\"feature\":\"session_reports\",\"arguments\":{\"alias\":\"<same alias>\"}}
-7. tasks: {\"action\":\"execute\",\"feature\":\"decide_result\",\"arguments\":{\"submission_id\":\"<last submissions[].event_id>\",\"commit\":\"<its candidate>\",\"decision\":\"accepted\",\"reason\":\"Both lines kept\",\"evidence_refs\":<its evidence_refs>}}
+7. tasks: {\"action\":\"execute\",\"feature\":\"decide_result\",\"arguments\":{\"submission_id\":\"<last submissions[].event_id>\",\"commit\":\"<its candidate>\",\"decision\":\"accepted\",\"reason\":\"Both lines kept\",\"evidence_refs\":<its evidence_refs plus \"resolver-decision.md\"; never an empty list>}}
 8. tasks: {\"action\":\"execute\",\"feature\":\"task_integrate\",\"arguments\":{\"task_id\":\"1\",\"validation_command\":$VJSON}}
 Then print one line ALIAS=<alias> and stop."
 (cd $WORK && print -r -- "$ASK5" | $CLAUDE -p --session-id $U --output-format stream-json --verbose \

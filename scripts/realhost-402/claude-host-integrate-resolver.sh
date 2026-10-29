@@ -1,6 +1,7 @@
 #!/bin/zsh
 # Task 402 real-host check: Main on the GraphTraj Claude Code host runs task_integrate with
-# resolve_conflict; the merge resolver needs one native permission that Main answers with reply.
+# resolve_conflict; the merge resolver asks Main for native permissions (its Edit and its Bash
+# git command) and Main answers each with reply.
 #
 # Run in a plain macOS Terminal, outside any sandbox:
 #   zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/402-integrate-resolver-approval-deadlock/scripts/realhost-402/claude-host-integrate-resolver.sh
@@ -10,9 +11,10 @@
 #   1 scratch project: git repository, graphtraj setup, roles, Task 1 (no dialog)
 #   2 the writer role delivers article.md; the script decides its submission (no dialog)
 #   3 a conflicting dev commit and a failed first integration retain the conflict (no dialog)
-#   4 folder trust: one interactive Claude Code start, then /exit (one dialog)
+#   4 folder trust: one interactive Claude Code start, then /exit (one dialog);
+#     only then the host configuration is written (no dialog)
 #   5 Claude Main (print mode) calls task_integrate with resolve_conflict, answers the
-#     resolver's permission request with reply, decides its submission and integrates (no dialog)
+#     resolver's permission requests with reply, decides its submission and integrates (no dialog)
 #   6 the script checks the retained records and prints PASS/FAIL per criterion
 #
 # Not verified before hand-off: this script was written in the team's sandbox, which can
@@ -92,8 +94,8 @@ roles:
   merge_resolver:
     runtime: claude
     model: $MODEL
-    # File edits in its Worktree are accepted; its Bash git command asks its parent (Main).
-    claude: {permission_mode: acceptEdits}
+    # Its Edit and its Bash git command each ask its parent (Main), which answers with reply.
+    claude: {permission_mode: default}
 role_tree:
   writer: {}
   merge_resolver: {}
@@ -128,6 +130,10 @@ caused_by_event_ids: []
 evidence_refs: [delivery-evidence.md]
 EOF
 (cd $WORK && $GT task update --state-file $P/ready.yml)
+STATUS=$($VENV/bin/python -c 'import sys, yaml; print(yaml.safe_load(open(sys.argv[1]))["status"])' \
+  $WORK/.graphtraj/state/tasks/1-article/task.yml)
+print -r -- "Task 1 status: $STATUS"
+[[ $STATUS == ready ]] || fail "Task 1 is $STATUS, not ready; see $WORK/.graphtraj/state/tasks/1-article/task.yml"
 
 say "step 2: the writer delivers article.md (native dialog: none)"
 print -r -- "tasks: [{task_id: '1', task_name: article, role: writer}]" > $P/batch.yml
@@ -161,19 +167,19 @@ git -C $DEV add article.md && git -C $DEV commit -qm "Conflicting dev line"
 grep -q 'status: integrating\|task-integration-failed\|status: escalated' $EVIDENCE/step3-integrate.yml \
   || print -r -- "note: check $EVIDENCE/step3-integrate.yml for the retained conflict"
 
-say "step 4: folder trust (one dialog)"
-print -r -- "Writing the GraphTraj Claude host configuration (no dialog)."
-(cd $WORK && $VENV/bin/python -m graphtraj.runtimes.claude.host configuration --project $WORK --claude $CLAUDE --write)
+say "step 4: folder trust (one dialog), then the host configuration (no dialog)"
+# Trust comes first: no .mcp.json or .claude/ exists yet, so only the trust dialog can appear.
 print -r -- "Claude Code now starts once in $WORK."
 print -r -- "Dialog: 'Do you trust the files in this folder?' -> choose 'Yes, proceed'."
-print -r -- "Then type /exit and press Enter. Send no message. Any other dialog (for example the"
-print -r -- "project MCP server question): press Esc and tell Main its title; step 5 passes the"
-print -r -- "server explicitly, so it does not need that approval."
+print -r -- "Then type /exit and press Enter. Send no message. Any other dialog: press Esc and tell Main its title."
 (cd $WORK && $CLAUDE)
+print -r -- "Writing the GraphTraj Claude host configuration (no dialog)."
+(cd $WORK && $VENV/bin/python -m graphtraj.runtimes.claude.host configuration --project $WORK --claude $CLAUDE --write)
 
 say "step 5: Claude Main integrates through the resolver (native dialog: none)"
-print -r -- "Print mode; the agents and tasks tools are pre-allowed. The resolver's Bash permission"
-print -r -- "request goes to Main, which answers it with reply; you do not see a dialog for it."
+print -r -- "Print mode; the agents and tasks tools are pre-allowed. The resolver's permission"
+print -r -- "requests (its Edit and its Bash git command) go to Main, which answers each with reply;"
+print -r -- "you do not see a dialog for them."
 U=$(uuidgen | tr A-Z a-z)
 print -r -- "Claude Main Session: $U"
 VJSON=$($VENV/bin/python -c 'import json, sys; print(json.dumps(sys.argv[1:]))' $VALIDATE)
@@ -182,9 +188,10 @@ print each raw result text verbatim right after it returns:
 1. tasks: {\"action\":\"execute\",\"feature\":\"task_integrate\",\"arguments\":{\"task_id\":\"1\",\"validation_command\":$VJSON,\"resolve_conflict\":\"article.md conflicts: keep both lines, WRITER LINE first, then DEV LINE. Finish the merge with one Bash command: git add article.md && git commit --no-edit. Then submit_result with that commit, result_refs [article.md].\",\"role\":\"merge_resolver\"}}
 2. agents: {\"action\":\"execute\",\"feature\":\"wait\",\"arguments\":{\"agent\":\"<resolution.alias from 1>\",\"timeout_seconds\":300}}
 3. agents: {\"action\":\"execute\",\"feature\":\"requests\",\"arguments\":{\"agent\":\"<same alias>\"}}
-4. For each request from 3: agents {\"action\":\"execute\",\"feature\":\"reply\",\"arguments\":{\"agent\":\"<same alias>\",\"request\":<that request document>,\"response\":{\"behavior\":\"allow\"}}}
+4. Answer each pending request listed by 3, one reply per request: agents {\"action\":\"execute\",\"feature\":\"reply\",\"arguments\":{\"agent\":\"<same alias>\",\"request\":<that request document>,\"response\":{\"behavior\":\"allow\"}}}
    If 3 has no request, repeat 2 and 3 once more first.
-5. Repeat 2 until the result shows the Agent idle; answer any further request as in 4.
+5. Repeat 2, 3 and 4 until the result of 2 shows the Agent idle and 3 lists no pending request;
+   answer each pending request in requests exactly once, as in 4.
 6. tasks: {\"action\":\"execute\",\"feature\":\"session_reports\",\"arguments\":{\"alias\":\"<same alias>\"}}
 7. tasks: {\"action\":\"execute\",\"feature\":\"decide_result\",\"arguments\":{\"submission_id\":\"<last submissions[].event_id>\",\"commit\":\"<its candidate>\",\"decision\":\"accepted\",\"reason\":\"Both lines kept\",\"evidence_refs\":<its evidence_refs>}}
 8. tasks: {\"action\":\"execute\",\"feature\":\"task_integrate\",\"arguments\":{\"task_id\":\"1\",\"validation_command\":$VJSON}}

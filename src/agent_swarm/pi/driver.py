@@ -11,6 +11,7 @@ from typing import Any, Mapping
 
 from agent_swarm import AgentsError, Caller, Run
 from agent_swarm.control import require_available
+from agent_swarm.models import pi_destination
 from agent_swarm.runtime import RuntimeAdapterError
 from .execution import PiExecution
 
@@ -21,24 +22,30 @@ EFFORTS = ('off', 'minimal', 'low', 'medium', 'high', 'xhigh')
 def selected(request: Mapping[str, Any], selection: Mapping[str, Any]) -> dict:
     """Apply one create selection to the host's Pi launch request.
 
-    The host resolved the network destination for its own provider, so
-    another provider, or an endpoint without a provider API, is refused here
-    rather than launched under the wrong grants.
+    A selected connection or another provider replaces the host's endpoint
+    and key, so a host key never reaches another provider. When the provider,
+    model, home or key changes, the network destination is read again from
+    Pi's catalog in the selected home; a model without a plain http(s)
+    destination is refused rather than launched under the wrong grants.
     """
+    host = request
     request = deepcopy(dict(request))
-    if selection.get('provider') not in (None, request['provider']):
-        raise AgentsError('invalid-config', f"This Pi host resolved provider {request['provider']!r}; "
-                                            f"it cannot launch provider {selection['provider']!r}.")
     connection = selection.get('settings')
+    if connection is not None and 'base_url' in connection:
+        raise AgentsError('invalid-config', 'A Pi connection takes no base_url: config.yml has no provider API. '
+                                            "Declare the endpoint as a provider in Pi's own models.json in the "
+                                            "connection's home and select that provider and model.")
+    provider = selection.get('provider')
+    if connection is not None or provider not in (None, request['provider']):
+        for field in ('api_key_env', 'base_url', 'provider_api'):
+            request.pop(field, None)
     if connection is not None:
-        if 'base_url' in connection:
-            raise AgentsError('invalid-config', 'A Pi connection cannot set base_url here; '
-                                                "declare the endpoint in Pi's own models.json.")
-        request.pop('api_key_env', None)
         if 'api_key_env' in connection:
             request['api_key_env'] = connection['api_key_env']
         if 'home' in connection:
             request['agent_dir'] = connection['home']
+    if provider is not None:
+        request['provider'] = provider
     if selection.get('model') is not None:
         request['model'] = selection['model']
     effort = selection.get('reasoning_effort')
@@ -47,6 +54,15 @@ def selected(request: Mapping[str, Any], selection: Mapping[str, Any]) -> dict:
             raise AgentsError('invalid-reasoning-effort',
                               f'Pi takes reasoning_effort {list(EFFORTS)}, not {effort!r}.')
         request['reasoning_effort'] = effort
+    chosen = ('provider', 'model', 'agent_dir', 'api_key_env')
+    if not request.get('base_url') and any(request.get(field) != host.get(field) for field in chosen):
+        try:
+            request['provider_domain'] = pi_destination(
+                request['executable'], request['agent_dir'], request['provider'], request['model'],
+                request.get('api_key_env'))
+        except RuntimeAdapterError as error:
+            raise AgentsError('invalid-config', f"{error.message} Provider {request['provider']!r}, "
+                                                f"model {request['model']!r}.") from None
     return request
 
 

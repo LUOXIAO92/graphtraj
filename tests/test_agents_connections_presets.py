@@ -456,23 +456,52 @@ def test_codex_driver_applies_connection_model_and_effort(tmp_path: Path) -> Non
     assert driver.prepare('codex', CALLER)['adapter_request']['session_parameters']['model'] == 'host-model'
 
 
-def test_pi_driver_applies_model_and_effort_and_refuses_another_provider(tmp_path: Path) -> None:
-    request = {'worktree_path': str(tmp_path), 'provider': 'anthropic', 'model': 'host', 'api_key_env': 'HOST_KEY',
-               'agent_dir': '/host/pi'}
+def test_pi_driver_applies_model_and_effort_and_resolves_another_provider(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A changed provider/model/home re-reads the destination; the host key and endpoint stay behind."""
+    from agent_swarm.runtime import RuntimeAdapterError
+
+    catalog = {('/native/pi', 'anthropic', 'claude-opus-5-5'): 'api.anthropic.com',
+               ('/host/pi', 'openai', 'host'): 'api.openai.com'}
+    asked = []
+
+    def destination(executable, home, provider, model, api_key_env=None):
+        asked.append((executable, home, provider, model, api_key_env))
+        if (home, provider, model) not in catalog:
+            raise RuntimeAdapterError('ROLE_CONFIG_UNSUPPORTED', 'Pi did not expose a supported native destination '
+                                                                 'for the selected provider/model.')
+        return catalog[home, provider, model]
+
+    monkeypatch.setattr('agent_swarm.pi.driver.pi_destination', destination)
+    request = {'executable': '/bin/pi', 'worktree_path': str(tmp_path), 'provider': 'anthropic', 'model': 'host',
+               'api_key_env': 'HOST_KEY', 'agent_dir': '/host/pi', 'provider_domain': 'host.example'}
     driver = PiDriver(request)
     settings = driver.prepare('pi', CALLER, selection={
         'settings': {'name': 'c', 'runtime': 'pi', 'home': '/native/pi'}, 'model': 'claude-opus-5-5',
         'reasoning_effort': 'xhigh', 'provider': 'anthropic'})
     chosen = settings['adapter_request']
-    assert (chosen['model'], chosen['reasoning_effort'], chosen['agent_dir'], chosen.get('api_key_env')) == (
-        'claude-opus-5-5', 'xhigh', '/native/pi', None)
+    assert (chosen['model'], chosen['reasoning_effort'], chosen['agent_dir'], chosen.get('api_key_env'),
+            chosen['provider_domain']) == ('claude-opus-5-5', 'xhigh', '/native/pi', None, 'api.anthropic.com')
     assert request['model'] == 'host'
-    for selection, code in (({'provider': 'openai'}, 'invalid-config'),
-                            ({'settings': {'runtime': 'pi', 'base_url': 'https://x/'}}, 'invalid-config'),
-                            ({'reasoning_effort': 'max'}, 'invalid-reasoning-effort')):
+    # Another provider of the host's own login: its key never follows.
+    other = driver.prepare('pi', CALLER, selection={'provider': 'openai'})['adapter_request']
+    assert (other['provider'], other['provider_domain'], other.get('api_key_env')) == (
+        'openai', 'api.openai.com', None)
+    assert asked == [('/bin/pi', '/native/pi', 'anthropic', 'claude-opus-5-5', None),
+                     ('/bin/pi', '/host/pi', 'openai', 'host', None)]
+    # Effort alone keeps the host's resolved destination without a query.
+    assert driver.prepare('pi', CALLER, selection={'reasoning_effort': 'low'})['adapter_request'][
+        'provider_domain'] == 'host.example'
+    assert len(asked) == 2
+    for selection, code, message in (
+        ({'provider': 'unlisted'}, 'invalid-config', 'supported native destination'),
+        ({'settings': {'runtime': 'pi', 'base_url': 'https://x/'}}, 'invalid-config', 'models.json'),
+        ({'reasoning_effort': 'max'}, 'invalid-reasoning-effort', 'reasoning_effort'),
+    ):
         with pytest.raises(AgentsError) as caught:
             driver.prepare('pi', CALLER, selection=selection)
-        assert caught.value.code == code
+        assert caught.value.code == code and message in caught.value.message
 
 
 def test_dsh_driver_applies_connection_model_and_effort(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

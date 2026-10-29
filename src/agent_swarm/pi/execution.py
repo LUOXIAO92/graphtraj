@@ -28,6 +28,14 @@ from agent_swarm.runtime import RuntimeAdapterError, SessionStarted, credential_
 INFORMATION = {'notify', 'setStatus', 'setWidget', 'setTitle', 'set_editor_text'}
 DIALOGS = {'select', 'confirm', 'input', 'editor'}
 
+# The launch request a host prepares. Other fields are kept for subclasses.
+REQUIRED = ('executable', 'provider', 'model', 'worktree_path', 'agent_dir', 'instructions',
+            'sandbox_python', 'sandbox_path', 'worktree_access')
+# Absolute paths the host adds to this owner's own grants and denials.
+PATH_LISTS = ('read_paths', 'write_paths', 'deny_read', 'deny_write')
+OPTIONAL_TEXT = ('provider_domain', 'base_url', 'provider_api', 'api_key_env', 'reasoning_effort',
+                 'native_directory', 'git_common_directory')
+
 
 class PiExecution:
     """Keep native identity, input and queue-aware stopping on one owned pipe."""
@@ -149,20 +157,24 @@ class PiExecution:
             self.events.put({'type': 'transport_error'})
 
     def _prepare(self, address: str | None) -> tuple[list[str], dict]:
-        """Project native asb fields and preserve user resources through references."""
+        """Project native asb fields and preserve user resources through references.
+
+        The request takes ``REQUIRED``, ``PATH_LISTS``, ``OPTIONAL_TEXT``,
+        ``allowed_domains`` and the ``allow_*`` service fields; the caller's
+        paths and hostnames add to this owner's own grants and denials.
+        """
         request = self.request
+        _validate(request)
         credential_environment(request.get('api_key_env'))
         worktree = Path(request['worktree_path']).resolve()
-        root = Path(request['harness_root']).resolve()
         # Migrated hosts retain native files separately from Task Trace views.
         native = Path(request['native_directory']) if request.get('native_directory') else self.trace.with_suffix('.pi')
         native.mkdir(parents=True, exist_ok=True)
         source = Path(request['agent_dir'])
         agent = native / 'agent'
         agent.mkdir(exist_ok=True)
-        read = [str(worktree), str(native), request['docs_directory'],
-                str(Path(sys.prefix).resolve()), str(Path(sys.base_prefix).resolve()),
-                *self.packages, *request['resources']]
+        read = [str(worktree), str(native),
+                str(Path(sys.prefix).resolve()), str(Path(sys.base_prefix).resolve()), *self.packages]
         write = [str(native)]
         if address is not None:
             read.append(address)
@@ -193,28 +205,22 @@ class PiExecution:
                       'models': [{'id': request['model'],
                                   'reasoning': request.get('reasoning_effort') not in {None, 'off'}}]}
             (agent / 'models.json').write_text(json.dumps({'providers': {provider: custom}}), encoding='utf-8')
+        git = request.get('git_common_directory')
         if request['worktree_access'] == 'write':
-            write.extend((str(worktree), request['git_common_directory']))
-        read.extend(request['reports'])
-        resources = (worktree / '.agents', worktree / 'AGENTS.md', worktree / 'CONTEXT.md', worktree / 'docs')
-        read.extend(str(p.resolve()) for p in resources if p.exists())
+            write.extend((str(worktree), git))
+        write.extend(request.get('write_paths', ()))
+        read.extend(request.get('read_paths', ()))
+        protected = [str(source), str(Path(sys.prefix).resolve()), *self.packages]
+        if git:
+            # A writable worktree must not rewrite Git's own config or hooks.
+            protected += [str(Path(git) / 'config'), str(Path(git) / 'hooks')]
         policy = {
-            'network': {'allowedDomains': ['api.deepseek.com', 'openrouter.ai'], 'deniedDomains': []},
+            'network': {'allowedDomains': list(request.get('allowed_domains', ())), 'deniedDomains': []},
             'filesystem': {
-                'denyRead': [str(root / '.graphtraj'), str(root / '.codex'),
-                             str(Path.home() / '.codex'), str(source), request['state_directory']],
+                'denyRead': [*request.get('deny_read', ()), str(source)],
                 'allowRead': read,
                 'allowWrite': write,
-                'denyWrite': [str(source), str(root / '.graphtraj/config.yml'),
-                              str(root / '.graphtraj/roles.yml'),
-                              # The migrated project layout keeps both under core.
-                              str(root / '.graphtraj/core/config.yml'),
-                              str(root / '.graphtraj/core/roles.yml'),
-                              request['docs_directory'],
-                              str(Path(sys.prefix).resolve()), *self.packages,
-                              str(Path(request['git_common_directory']) / 'config'),
-                              str(Path(request['git_common_directory']) / 'hooks'),
-                              *(str(p.resolve()) for p in resources if p.exists())],
+                'denyWrite': [*protected, *request.get('deny_write', ())],
             },
         }
         if self.independent:
@@ -284,7 +290,7 @@ class PiExecution:
                     'PI_CODING_AGENT_DIR': str(agent),
                     'PI_ASB_NO_ALIAS_PROMPT': '1'})
         if address is not None:
-            env.update(self._connection_environment(address, root))
+            env.update(self._connection_environment(address))
         # Pi's native find accepts an existing fd on PATH; do not download it or
         # alter the user's installation to populate the isolated cache.
         fd = source / 'bin/fd'
@@ -296,8 +302,11 @@ class PiExecution:
         return [request['sandbox_python'], str(Path(__file__).with_name('launch.py')), str(spec)], env
 
     def _provider_domain(self, source: Path, provider: str) -> str:
-        """Require the host-resolved destination; this owner does not discover models."""
-        raise RuntimeAdapterError('ROLE_CONFIG_INVALID', 'The prepared Pi request lacks provider_domain.')
+        """Read the selected model's destination from Pi's own catalog in ``source``."""
+        from agent_swarm.models import pi_destination
+
+        return pi_destination(self.request['executable'], str(source), provider, self.request['model'],
+                              self.request.get('api_key_env'))
 
     def _connection(self):
         """Serve the existing agents connection to this owned native process."""
@@ -311,7 +320,7 @@ class PiExecution:
             lambda pid: authenticate_process(self.proc, pid),
         )
 
-    def _connection_environment(self, address: str, root: Path) -> dict:
+    def _connection_environment(self, address: str) -> dict:
         """Name the existing connection for the extension's MCP client."""
         return {'AGENT_SWARM_CONNECTION': address, 'AGENT_SWARM_PYTHON': sys.executable}
 
@@ -380,7 +389,7 @@ class PiExecution:
                     raise RuntimeAdapterError('RUNTIME_REQUEST_FAILED', 'Pi selected a different provider/model.')
                 _write_yaml(self.directory / 'session.yml', {
                     'session': self.session, 'rollout_path': str(self.native_trace), 'model': model,
-                    'runtime_version': self.request['version'],
+                    'runtime_version': self.request.get('version'),
                 })
                 self.created(self.session, self.proc.pid)
                 self.bound = True
@@ -683,6 +692,36 @@ def _write_yaml(path: Path, document: dict) -> None:
     except BaseException:
         Path(temporary).unlink(missing_ok=True)
         raise
+
+
+def _validate(request: dict) -> None:
+    """Refuse a launch request whose fields have the wrong type, naming the field."""
+    def invalid(field: str, expected: str) -> RuntimeAdapterError:
+        return RuntimeAdapterError('ROLE_CONFIG_INVALID', f'Pi request field {field} must be {expected}.')
+
+    for field in REQUIRED:
+        # Instructions and the sandbox PATH may be empty; names and paths may not.
+        if not isinstance(request.get(field), str) or not (request[field] or field in {'instructions', 'sandbox_path'}):
+            raise invalid(field, 'a nonempty string')
+    if request['worktree_access'] not in {'read', 'write'}:
+        raise invalid('worktree_access', "'read' or 'write'")
+    for field in OPTIONAL_TEXT:
+        if request.get(field) is not None and not isinstance(request[field], str):
+            raise invalid(field, 'a string when given')
+    for field in PATH_LISTS:
+        paths = request.get(field, [])
+        if not isinstance(paths, list) or any(not isinstance(p, str) or not Path(p).is_absolute() for p in paths):
+            raise invalid(field, 'a list of absolute paths')
+    for field in ('allowed_domains', 'allow_mach_lookup', 'allow_mach_register', 'allow_unix_sockets'):
+        values = request.get(field, [])
+        if not isinstance(values, list) or any(not isinstance(v, str) or not v for v in values):
+            raise invalid(field, 'a list of nonempty strings')
+    if not isinstance(request.get('allow_local_binding', False), bool):
+        raise invalid('allow_local_binding', 'a boolean')
+    if request['worktree_access'] == 'write' and not request.get('git_common_directory'):
+        raise invalid('git_common_directory', 'given for write access')
+    if request.get('base_url') and not request.get('provider_api'):
+        raise invalid('provider_api', 'given with base_url')
 
 
 def _require_read_denials(filesystem: dict) -> None:

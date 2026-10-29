@@ -18,13 +18,36 @@ import sqlite3
 from typing import Iterator
 
 from agent_swarm.sessions.protocol import (
-    INITIAL_COLLECTION_TYPE, append_stream_record, snapshot_event, validate_header, validate_session,
+    INITIAL_COLLECTION_TYPE, LEGACY_BLOCK_TYPES, append_stream_record, snapshot_event, upgrade_event, upgrade_header,
+    validate_header, validate_session,
 )
 
 
 def _json(value: object) -> str:
     """Encode compact lossless JSON; protocol validation precedes storage."""
     return json.dumps(value, ensure_ascii=False, allow_nan=False, separators=(',', ':'))
+
+
+def _event(text: str) -> dict:
+    """Decode a stored event in v5 form; archives written before v5 hold v4 values."""
+    event = upgrade_event(json.loads(text))
+    if event['type'] == INITIAL_COLLECTION_TYPE:
+        for observation in event['data']['observations']:
+            observation['event'] = upgrade_event(observation['event'])
+        if 'initialHeader' in event:
+            event['initialHeader'] = upgrade_header(event['initialHeader'])
+    return event
+
+
+def archive_owner(header: dict) -> dict:
+    """Return a v5 header's GraphTraj association with its core ``native`` and ``source``.
+
+    The association (``projectId``, ``agentId``, ``taskIds``) lives in
+    ``extra_fields.graphtraj``; an absent namespace reads as empty.
+    """
+    owner = dict(header.get('extra_fields', {}).get('graphtraj', {}))
+    owner.update({key: header[key] for key in ('native', 'source') if key in header})
+    return owner
 
 
 def session_path(state: Path, session_id: str) -> Path:
@@ -60,8 +83,11 @@ class SessionStore:
 
     @classmethod
     def create(cls, path: Path, header: dict) -> SessionStore:
-        """Create an archive, or reopen exactly the same immutable header."""
-        validate_header(header)
+        """Create an archive, or reopen exactly the same immutable header.
+
+        A version 4 header is upgraded first; the archive only stores v5.
+        """
+        header = upgrade_header(header)
         path = Path(path)
         path.parent.mkdir(parents=True, exist_ok=True)
         db = sqlite3.connect(path)
@@ -80,7 +106,7 @@ class SessionStore:
             ):
                 db.execute(statement)
             row = db.execute('SELECT value FROM header').fetchone()
-            if row and json.loads(row[0]) != header:
+            if row and upgrade_header(json.loads(row[0])) != header:
                 raise ValueError('Session header already exists with different metadata.')
             if row is None:
                 db.execute('INSERT INTO header VALUES (1, ?)', (_json(header),))
@@ -116,7 +142,7 @@ class SessionStore:
     @property
     def header(self) -> dict:
         """Return detached metadata; initial ancestry can be confirmed before publication."""
-        return json.loads(self.db.execute('SELECT value FROM header').fetchone()[0])
+        return upgrade_header(json.loads(self.db.execute('SELECT value FROM header').fetchone()[0]))
 
     @property
     def next_seq(self) -> int:
@@ -141,13 +167,13 @@ class SessionStore:
 
     def _insert(self, event: dict) -> int:
         """Append a semantic event; identical native provenance is idempotent."""
-        event = snapshot_event(event)
-        native = event.get('graphtraj', {}).get('native')
+        event = snapshot_event(upgrade_event(event))
+        native = event.get('native')
         key = _json([native[k] for k in ('runtime', 'sessionId', 'locator')]) if native else None
         if key is not None:
             row = self.db.execute('SELECT seq, value FROM events WHERE native=?', (key,)).fetchone()
             if row:
-                original = json.loads(row[1])
+                original = _event(row[1])
                 event['seq'] = original['seq']
                 if event != original:
                     raise ValueError('Native event identity was reused with different content.')
@@ -187,7 +213,7 @@ class SessionStore:
     def pending(self) -> dict | None:
         """Return the latest durable unfinished output separately from final events."""
         row = self.db.execute('SELECT source, value FROM draft').fetchone()
-        return {'source': row[0], 'event': json.loads(row[1])} if row else None
+        return {'source': row[0], 'event': _event(row[1])} if row else None
 
     def stage_initial_observation(self, event: dict, *, source: str, position: int) -> bool:
         """Persist raw observations and cursors before ancestry/order are known.
@@ -218,14 +244,13 @@ class SessionStore:
                 source, position = observation['source'], observation['position']
                 if not self._fresh(source, position):
                     continue
-                event = snapshot_event(observation['event'])
+                event = snapshot_event(upgrade_event(observation['event']))
                 if draft is None:
                     draft = {
                         'type': INITIAL_COLLECTION_TYPE, 'seq': 0, 'time': event['time'],
-                        'data': {'observations': []}, 'graphtraj': {
-                            'version': 1, 'initialHeader': self.header,
-                            'missing': [{'path': 'parentSession/isSeeded',
-                                         'reason': 'Native ancestry and inherited cut not yet confirmed.'}]}}
+                        'data': {'observations': []}, 'initialHeader': self.header,
+                        'missing': [{'path': 'parentSession/isSeeded',
+                                     'reason': 'Native ancestry and inherited cut not yet confirmed.'}]}
                 fresh.append({'source': source, 'position': position, 'event': event})
                 self._advance(source, position)
                 added += 1
@@ -270,7 +295,7 @@ class SessionStore:
                      if (o['source'], o['position']) not in inherited_keys]
             if not local:
                 raise ValueError('Retain a local collection observation for the original header.')
-            local[0].setdefault('graphtraj', {'version': 1})['initialHeader'] = pending['event']['graphtraj']['initialHeader']
+            local[0]['initialHeader'] = pending['event']['initialHeader']
             events.extend(local)
             header = self.header
             header['isSeeded'] = bool(inherited)
@@ -296,7 +321,7 @@ class SessionStore:
             raise ValueError('Use after >= -1 and a limit between 1 and 1000.')
         rows = self.db.execute('SELECT seq, value FROM events WHERE seq>? ORDER BY seq LIMIT ?',
                                (after, limit + 1)).fetchall()
-        events = [json.loads(row[1]) for row in rows[:limit]]
+        events = [_event(row[1]) for row in rows[:limit]]
         return {'events': events, 'after': events[-1]['seq'] if events else after,
                 'has_more': len(rows) > limit}
 
@@ -337,7 +362,7 @@ class SessionStore:
 
     def validate(self) -> None:
         """Explicitly validate full-log references; ordinary pages never load the log."""
-        events = [json.loads(row[0]) for row in self.db.execute('SELECT value FROM events ORDER BY seq')]
+        events = [_event(row[0]) for row in self.db.execute('SELECT value FROM events ORDER BY seq')]
         validate_session(self.header, events)
 
 
@@ -371,7 +396,9 @@ class StreamWriter:
             event = pending['event']
         if event is None:
             raise ValueError('An event template is required for a new stream.')
-        self.event = snapshot_event(event)
+        # A version 4 template is held in its v5 spelling, like every stored draft.
+        self.event = snapshot_event(upgrade_event(event))
+        event = self.event
         if event['type'] not in {'assistant/message', 'assistant/attempt'} or event['seq'] != store.next_seq:
             raise ValueError('A stream must use the next assistant event sequence.')
         self.position = store.position(source)
@@ -393,6 +420,8 @@ class StreamWriter:
         self.store._fresh(self.source, position)
         if position <= self.position:
             return False
+        if record.get('type') in LEGACY_BLOCK_TYPES:
+            record = {**record, 'type': LEGACY_BLOCK_TYPES[record['type']]}
         record = append_stream_record(self.event['data']['stream'], record, cumulative=cumulative)
         self.position = position
         self.buffered += len(_json(record).encode())
@@ -447,7 +476,7 @@ class StreamWriter:
             if content is None:
                 content = deepcopy(event['data']['message']['content'])
                 for record in event['data']['stream']:
-                    if record['type'] == 'graphtraj/text-run':
+                    if record['type'] == 'text-run':
                         index = record['index']
                         if index > len(content):
                             raise ValueError('Map intervening non-text blocks explicitly before finishing.')

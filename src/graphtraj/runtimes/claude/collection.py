@@ -12,12 +12,13 @@ import json
 from pathlib import Path
 import time
 
-from agent_swarm.sessions.protocol import retain_native
+from agent_swarm.sessions.protocol import SESSION_FORMAT_VERSION, retain_native
 from graphtraj.sessions.storage import SessionStore, StreamWriter, session_path
 
 
 from agent_swarm.sessions.claude import timestamp
 from agent_swarm.claude.collection import collect_hook_event, hook_source
+from graphtraj.interfaces.agents import graphtraj_fields
 
 
 def open_archive(
@@ -38,21 +39,21 @@ def open_archive(
     if path.exists():
         return SessionStore(path)
     origin = project_identity if project_identity is not None else str(project.resolve())
-    header = {'version': 4, 'id': identity, 'createdAt': int(time.time() * 1000),
-              'isSeeded': False, 'cwd': origin, 'graphtraj': {
-                  'version': 1, 'projectId': origin, 'agentId': agent_id,
-                  'taskIds': task_ids or [], 'native': {'runtime': 'claude', 'sessionId': native_id,
-                                           'locator': 'collection', 'source': source},
-                  'missing': [{'path': 'createdAt', 'reason': 'Collection creation time; native creation time unavailable.'},
-                              {'path': 'taskIds', 'reason': 'No Task association supplied by native source.'}]}}
+    header = {'version': SESSION_FORMAT_VERSION, 'id': identity, 'createdAt': int(time.time() * 1000),
+              'isSeeded': False, 'cwd': origin,
+              'native': {'runtime': 'claude', 'sessionId': native_id,
+                         'locator': 'collection', 'source': source},
+              'missing': [{'path': 'createdAt', 'reason': 'Collection creation time; native creation time unavailable.'},
+                          {'path': 'taskIds', 'reason': 'No Task association supplied by native source.'}],
+              'extra_fields': graphtraj_fields(origin, agent_id, task_ids or [])}
     if task_ids:
-        header['graphtraj']['missing'] = header['graphtraj']['missing'][:1]
+        header['missing'] = header['missing'][:1]
     if fork_parent and not child_id:
         header.update(parentSession='claude:' + fork_parent, isSeeded=True)
     if child_id:
         header['origin'] = 'subagent'
-        header['graphtraj']['native']['agentId'] = child_id
-        header['graphtraj']['native']['parentNativeSessionId'] = native_id
+        header['native']['agentId'] = child_id
+        header['native']['parentNativeSessionId'] = native_id
     return SessionStore.create(path, header)
 
 
@@ -66,14 +67,14 @@ def has_logprobs(value: object) -> bool:
 def native_event(store: SessionStore, record: dict, locator: str) -> dict:
     """Retain every JSON field, with missing capabilities scoped to this record."""
     when, missing = timestamp(record)
-    event = retain_native('claude', record, session_id=store.header['graphtraj']['native']['sessionId'],
+    event = retain_native('claude', record, session_id=store.header['native']['sessionId'],
                           locator=locator, seq=store.next_seq, time=when)
-    event['graphtraj']['receivedAtMs'] = int(time.time() * 1000)
-    event['graphtraj']['missing'] = missing + [
+    event['receivedAtMs'] = int(time.time() * 1000)
+    event['missing'] = missing + [
         {'path': 'hiddenReasoning', 'reason': 'Only native exposed thinking/signatures are available; no decryption.'},
     ]
     if not has_logprobs(record):
-        event['graphtraj']['missing'].append({
+        event['missing'].append({
             'path': 'logprobs', 'reason': 'Not exposed in this record; no probabilities inferred.'})
     message = record.get('message')
     content = message.get('content', []) if isinstance(message, dict) else []
@@ -87,11 +88,11 @@ def native_event(store: SessionStore, record: dict, locator: str) -> dict:
         if source.get('type') == 'base64':
             try:
                 reference = store.put_attachment(base64.b64decode(source['data'], validate=True))
-                event['graphtraj'].setdefault('attachments', []).append({'nativePath': location, **reference})
+                event.setdefault('attachments', []).append({'nativePath': location, **reference})
             except (ValueError, KeyError, TypeError):
-                event['graphtraj']['missing'].append({'path': location, 'reason': 'Native base64 bytes could not be decoded; original value retained.'})
+                event['missing'].append({'path': location, 'reason': 'Native base64 bytes could not be decoded; original value retained.'})
         elif source.get('type') == 'url':
-            event['graphtraj']['missing'].append({'path': location, 'reason': 'External URL content not supplied by Runtime; URL retained without fetching.'})
+            event['missing'].append({'path': location, 'reason': 'External URL content not supplied by Runtime; URL retained without fetching.'})
     return event
 
 
@@ -130,7 +131,7 @@ def collect_transcript(
             record = json.loads(line)
             if not isinstance(record, dict):
                 raise ValueError('Claude transcript records must be objects.')
-            provenance = store.header['graphtraj']['native']
+            provenance = store.header['native']
             native = provenance.get('parentNativeSessionId', provenance['sessionId'])
             if record.get('sessionId', native) != native:
                 raise ValueError('Transcript belongs to another native Session.')
@@ -237,9 +238,9 @@ def collect_hook(event: dict, cwd: Path) -> dict:
         position = store.position(hook_channel) + 1
         retained = native_event(store, event, f'hook:{position}')
         if unavailable:
-            retained['graphtraj']['missing'].append(unavailable)
+            retained['missing'].append(unavailable)
         if kind == 'SessionStart' and event.get('source') == 'fork':
-            retained['graphtraj']['missing'].append({
+            retained['missing'].append({
                 'path': 'parentSession', 'reason': 'SessionStart reports fork but supplies no parent identity or inherited cut.'})
         if store.next_seq:
             store.append(retained, source=hook_channel, position=position)
@@ -268,7 +269,7 @@ class StreamCollector:
             message = self.writer.event['data'].get('message', {})
             self.observed_model = message.get('source', {}).get('model')
             self.message_id = next((item['messageId'] for item in self.writer.event['data']['stream']
-                                    if item['type'] == 'graphtraj/text-run'), source)
+                                    if item['type'] == 'text-run'), source)
 
     def accept(self, record: dict, position: int) -> None:
         """Commit opaque facts or checkpoint compact text with its source position."""
@@ -287,23 +288,23 @@ class StreamCollector:
                 template = {'type': 'assistant/attempt', 'seq': self.store.next_seq,
                             'time': 0,
                             'data': {'turn': 0, 'step': 0, 'stream': []},
-                            'graphtraj': {'version': 1, 'requestedModel': self.requested_model,
-                                          'receivedAtMs': int(time.time() * 1000),
-                                          'missing': [
-                                    {'path': 'turn/step', 'reason': 'Local collection coordinates, not native turn numbers.'},
-                                    {'path': 'requestId/attemptId', 'reason': 'Collection message/execution coordinates; native request identity unavailable.'},
-                                    {'path': 'time', 'reason': 'Native timestamp unavailable; zero is a protocol placeholder.'}]}}
+                            'requestedModel': self.requested_model,
+                            'receivedAtMs': int(time.time() * 1000),
+                            'missing': [
+                                {'path': 'turn/step', 'reason': 'Local collection coordinates, not native turn numbers.'},
+                                {'path': 'requestId/attemptId', 'reason': 'Collection message/execution coordinates; native request identity unavailable.'},
+                                {'path': 'time', 'reason': 'Native timestamp unavailable; zero is a protocol placeholder.'}]}
                 if self.observed_model:
                     template.update(type='assistant/message', surfaceOp='append')
                     template['data']['message'] = self.message(self.observed_model)
                 else:
-                    template['graphtraj']['missing'].append({
+                    template['missing'].append({
                         'path': 'model', 'reason': 'Native model not observed; configured model is only a request.'})
                 # ponytail: stdout cannot replay after a Worker crash, so commit
                 # each received fragment to the replaceable SQLite draft. Batch
                 # checkpoints only if the native transport gains durable replay.
                 self.writer = StreamWriter(self.store, self.source, template, checkpoint_bytes=1)
-            self.writer.feed({'type': 'graphtraj/text-run', 'requestId': self.message_id,
+            self.writer.feed({'type': 'text-run', 'requestId': self.message_id,
                               'attemptId': self.source, 'messageId': self.message_id,
                               'index': event['index'], 'blockType': 'text' if 'text' in delta else 'reasoning',
                               'text': delta.get('text', delta.get('thinking'))}, position)
@@ -323,8 +324,8 @@ class StreamCollector:
                 if self.observed_model:
                     self.writer.event.update(type='assistant/message', surfaceOp='append')
                     self.writer.event['data']['message'] = self.message(self.observed_model)
-                    self.writer.event['graphtraj']['missing'] = [
-                        item for item in self.writer.event['graphtraj']['missing'] if item['path'] != 'model']
+                    self.writer.event['missing'] = [
+                        item for item in self.writer.event['missing'] if item['path'] != 'model']
                 else:
                     self.writer.event['type'] = 'assistant/attempt'
                     self.writer.event.pop('surfaceOp', None)
@@ -335,14 +336,18 @@ class StreamCollector:
                         content.append({**block, 'type': 'reasoning', 'text': block['thinking']})
                     else:
                         content.append(block)
-                retained['graphtraj']['missing'].extend(
-                    item for item in self.writer.event['graphtraj']['missing'] if item['path'] != 'time')
-                retained['graphtraj']['firstReceivedAtMs'] = self.writer.event['graphtraj'].get('receivedAtMs')
+                retained['missing'].extend(
+                    item for item in self.writer.event['missing'] if item['path'] != 'time')
+                retained['firstReceivedAtMs'] = self.writer.event.get('receivedAtMs')
                 # Final native time describes the completed record. The first
                 # fragment's observation clock is separate provenance only.
                 self.writer.event['time'] = retained['time']
-                self.writer.event['graphtraj'] = retained['graphtraj']
-                self.writer.event['graphtraj']['native']['record'] = record
+                # The completed record's archive facts replace the draft's.
+                for key in ('requestedModel', 'receivedAtMs', 'missing'):
+                    self.writer.event.pop(key, None)
+                self.writer.event.update({key: value for key, value in retained.items()
+                                          if key not in ('type', 'seq', 'time', 'data')})
+                self.writer.event['native']['record'] = record
                 self.writer.finish(content=content)
             else:
                 # Permission, error, cancellation and tool boundaries cannot be

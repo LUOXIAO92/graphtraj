@@ -364,7 +364,7 @@ def adopt_prefix_chain(cwd: Path, session: str, manifest: Path) -> dict:
     unchanged. Retrying an identical successful prefix is idempotent.
     """
     from datetime import timezone
-    from graphtraj.sessions.storage import SessionStore, session_path
+    from graphtraj.sessions.storage import SessionStore, archive_owner, session_path
     from graphtraj.runtimes.codex.session_archive import CodexSessionArchive
 
     configuration = load_project_configuration(cwd)
@@ -420,7 +420,8 @@ def adopt_prefix_chain(cwd: Path, session: str, manifest: Path) -> dict:
     backup = configuration.harness_root / '.graphtraj/backups' / ('session-prefix-' + stamp)
     with SessionStore(archive, readonly=True) as store:
         header = store.header
-        if header['graphtraj']['projectId'] != project or header['graphtraj']['agentId'] != chain['agent']:
+        owner = archive_owner(header)
+        if owner.get('projectId') != project or owner.get('agentId') != chain['agent']:
             raise ValueError('Captured chain does not match the retained real Agent/project identity.')
         backup.mkdir(parents=True, mode=0o700)
         store.export(backup / 'session.sqlite3')

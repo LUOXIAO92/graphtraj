@@ -10,7 +10,7 @@ from pathlib import Path
 
 import yaml
 
-from graphtraj.sessions.storage import SessionStore, session_path
+from graphtraj.sessions.storage import SessionStore, archive_owner, session_path
 
 
 def session_sources(state: Path, runner: Path, project: Path) -> list[dict]:
@@ -29,7 +29,7 @@ def session_sources(state: Path, runner: Path, project: Path) -> list[dict]:
     archives = {}
     for archive_file in sorted((state / 'sessions').glob('*/session.sqlite3')):
         with SessionStore(archive_file, readonly=True) as archive_store:
-            native = archive_store.header.get('graphtraj', {}).get('native', {})
+            native = archive_store.header.get('native', {})
             key = (native.get('runtime'), native.get('sessionId'), native.get('agentId'))
             if key in archives:
                 raise ValueError('Native Session maps to multiple canonical archive IDs.')
@@ -86,7 +86,7 @@ def session_sources(state: Path, runner: Path, project: Path) -> list[dict]:
         archived = archives.get((runtime, session, None), session_path(state, runtime + ':' + session))
         if archived.exists():
             with SessionStore(archived, readonly=True) as store:
-                owner = store.header['graphtraj']
+                owner = archive_owner(store.header)
                 if owner['projectId'] != str(project):
                     item['identity_conflicts'] = ['Archived Session belongs to another project.']
                 if (not main and not checker and agent != owner['agentId']
@@ -191,7 +191,7 @@ def session_sources(state: Path, runner: Path, project: Path) -> list[dict]:
         if str(path) in known_archives:
             continue
         with SessionStore(path, readonly=True) as store:
-            owner = store.header['graphtraj']
+            owner = archive_owner(store.header)
             if owner['projectId'] != str(project):
                 continue
             item = {
@@ -333,7 +333,7 @@ def archive_sources(
                 origin, tasks = item['kind'], item['task_ids']
                 if item.get('archive'):
                     with SessionStore(session_path(state, runtime + ':' + session), readonly=True) as store:
-                        owner = store.header['graphtraj']
+                        owner = archive_owner(store.header)
                         origin, tasks = owner['source'], owner['taskIds']
                 collect(state, header, records, project_id=str(project), agent_id=item['agent'],
                         task_ids=tasks, source=origin)

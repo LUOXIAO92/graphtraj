@@ -214,12 +214,12 @@ def test_preview_and_native_session_migration_preserve_sources(
             continue
         with SessionStore(session_path(state, item['runtime'] + ':' + item['session']), readonly=True) as store:
             assert store.attachment(item['original_bytes']['sha256']) == Path(item['source']).read_bytes()
-            assert store.header['graphtraj']['agentId'] == item['agent']
+            assert store.header['extra_fields']['graphtraj']['agentId'] == item['agent']
             assert store.next_seq > 0
             assert store.pending() is None
             if item['runtime'] == 'pi':
                 assert store.header['isSeeded'] is False
-                assert any(gap['path'] == 'parentSession' for gap in store.header['graphtraj']['missing'])
+                assert any(gap['path'] == 'parentSession' for gap in store.header['missing'])
         mapping = runner / 'sessions' / item['runtime'] / 'mapping.yml'
         assert yaml.safe_load(mapping.read_text())['task_id'] == '2'
     assert (state / 'tasks/2-child/teams/1/traces/old/events.jsonl').read_bytes() == before[
@@ -300,7 +300,7 @@ def test_retired_main_and_existing_archive_keep_native_identity(
     assert sessions['child-session']['agent'] == 'retired'
     with SessionStore(session_path(state, 'codex:main-session'), readonly=True) as store:
         assert store.next_seq == 1
-        assert store.header['graphtraj']['agentId'] == 'main'
+        assert store.header['extra_fields']['graphtraj']['agentId'] == 'main'
 
 
 def test_wrong_native_identity_rolls_back_without_losing_links(

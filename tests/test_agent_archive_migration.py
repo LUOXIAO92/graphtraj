@@ -194,7 +194,7 @@ def test_snapshot_captures_swarm_configuration_and_can_clone(tmp_path: Path, mon
     assert (comparison['controls'], comparison['jsonl_archives'], comparison['attachments']) == (1, 1, 1)
 
     # Identical provenance cannot conceal changed opaque native payload bytes.
-    changed = JsonlSessionStore.create(archive_path(tmp_path / 'different', 'retained'), header('retained'))
+    changed = JsonlSessionStore.create(archive_path(tmp_path / 'different', 'retained'), upgrade_header(header('retained')))
     changed.publish([retain_native('codex', {'ciphertext': 'changed'},
         session_id='native-research@x1', locator='native/0', seq=0, time=1)], source='native', position=0)
     shutil.copyfile(changed.path, archive_path(target / '.graphtraj/swarm', 'retained'))
@@ -379,7 +379,8 @@ def test_legacy_import_preserves_an_already_current_jsonl_header(tmp_path: Path)
     import_sqlite(native, root)
     migrated = JsonlSessionStore(archive_path(root, retained['id']))
     assert migrated.header == current
-    assert migrated.legacy()['header'] == retained
+    # SQLite stores keep what they were written with; new writes are v5.
+    assert migrated.legacy()['header'] == upgrade_header(retained)
 
 
 def test_claude_native_hooks_keep_activation_boundary_between_processes(

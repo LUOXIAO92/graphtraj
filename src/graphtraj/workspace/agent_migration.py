@@ -18,6 +18,7 @@ from agent_swarm.sessions.archive import SessionArchive, JsonlSessionStore
 from agent_swarm.sessions.protocol import native_record
 from graphtraj.sessions.storage import SessionStore
 from graphtraj.configuration.project_configuration import load_project_configuration
+from graphtraj.interfaces.agents import graphtraj_fields
 from graphtraj.execution.main_continuity import current_main
 from graphtraj.workspace.migration_snapshot import MANIFEST, source_map
 from graphtraj.workspace.session_migration import _source_order
@@ -182,7 +183,7 @@ def migrate_agents(
         selected = []
         for path in archives:
             with SessionStore(path, readonly=True) as store:
-                native = store.header.get('graphtraj', {}).get('native', {})
+                native = store.header.get('native', {})
                 if native.get('runtime', '') + ':' + native.get('sessionId', '') in sessions:
                     selected.append(path)
         archives = selected
@@ -237,7 +238,8 @@ def migrate_agents(
             continue
         try:
             result = import_native(root, item['runtime'], item['session'], source,
-                                   agent=item['agent'], project=manifest['project'], child_id=item.get('native_agent'), archive=archive)
+                                   project=manifest['project'], child_id=item.get('native_agent'), archive=archive,
+                                   extra_fields=graphtraj_fields(manifest['project'], item['agent']))
             results.append({**result, 'source': item['source']})
         except (OSError, ValueError, KeyError, TypeError) as error:
             results.append({**item, 'missing': str(error)})
@@ -249,15 +251,15 @@ def migrate_agents(
 def _retained_event(event: dict, by_seq: dict[int, dict]) -> dict:
     """Return what an existing archive event must keep through import, in order.
 
-    A native event keeps its original record. Codex's graphtraj/history (a
+    A native event keeps its original record. Codex's history event (a
     replacement or rollback selection) has no record: it keeps its complete
     content, with each selected seq named by that event's native identity,
     since import may renumber seqs when it adds earlier native records.
     """
-    native = event['graphtraj']['native']
-    if event['type'] != 'graphtraj/history':
+    native = event['native']
+    if event['type'] != 'history':
         return {'native': native, 'record': native_record(event)}
-    selected = [by_seq[seq].get('graphtraj', {}).get('native', {}) for seq in event['data']['eventSeqs']]
+    selected = [by_seq[seq].get('native', {}) for seq in event['data']['eventSeqs']]
     content = {key: value for key, value in event.items() if key not in {'seq', 'data'}}
     return {'native': native, 'event': {**content, 'data': {**event['data'], 'eventSeqs': [
         (item.get('runtime'), item.get('sessionId'), item.get('locator')) for item in selected]}}}

@@ -77,7 +77,8 @@ def collect_session(event: dict, cwd: Path) -> dict:
     from graphtraj.configuration.project_configuration import load_project_configuration
     from graphtraj.execution.runner_status import process_caller_alias, read_alias_mapping
     from agent_swarm.sessions.dsh import DshArchive
-    from graphtraj.interfaces.agents import configured_archive
+    from agent_swarm.sessions.protocol import upgrade_header
+    from graphtraj.interfaces.agents import configured_archive, graphtraj_fields
     from graphtraj.workspace.runner_project import discover_runner_directory
 
     connection = current_connection()
@@ -107,16 +108,15 @@ def collect_session(event: dict, cwd: Path) -> dict:
     configuration = load_project_configuration(cwd)
     archive = configured_archive(configuration.harness_root)
     if archive.native_header('dsh', header['id']) is None:
-        archived = deepcopy(header)
+        # The native DSH header is Session v4; the archive copy is written as v5.
+        archived = upgrade_header(header)
         archived['id'] = archive.native_id('dsh', header['id'])
         if header.get('parentSession'):
             archived['parentSession'] = archive.native_id('dsh', header['parentSession'])
-        archived['graphtraj'] = {
-            'version': 1, 'projectId': str(configuration.harness_root),
-            'agentId': agent_id, 'taskIds': task_ids, 'source': source,
-            'native': {'runtime': 'dsh', 'sessionId': header['id'],
-                       'locator': 'header', 'record': deepcopy(header)},
-        }
+        archived.update(source=source,
+                        native={'runtime': 'dsh', 'sessionId': header['id'],
+                                'locator': 'header', 'record': deepcopy(header)},
+                        extra_fields=graphtraj_fields(str(configuration.harness_root), agent_id, task_ids))
         archive.map_session(archived)
     boundary = event.get('history_boundary', -1)
     if type(boundary) is not int or boundary < -1:

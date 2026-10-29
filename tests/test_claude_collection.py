@@ -276,8 +276,7 @@ def test_late_fork_and_interleaved_metadata(tmp_path: Path, monkeypatch: pytest.
     assert data['events'][2]['data']['inherited'] is True
     assert all(e['data'].get('record', {}).get('hook_event_name') is None
                for e in data['events'][:2])
-    original = [e['initialHeader'] for e in data['events']
-                if 'initialHeader' in e.get('graphtraj', {})]
+    original = [e['initialHeader'] for e in data['events'] if 'initialHeader' in e]
     assert original == [before]
     assert any(e['data'].get('record') == event for e in data['events'][3:])
     hook(tmp_path, {**event, 'source': 'resume'}, monkeypatch)

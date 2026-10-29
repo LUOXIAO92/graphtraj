@@ -76,8 +76,28 @@ export function sessionEnvironment(ctx, environment) {
   };
 }
 
-/** Own the independent core until native shutdown; MCP only connects to it. */
-export function startAgentHost(ctx, config) {
+/**
+ * Inject one host notice (a child's answer or a failed/interrupted end) into
+ * this Pi Session through Pi's native custom-message API: an idle Session
+ * starts a turn with it, a streaming one receives it as a follow-up.
+ */
+export function deliverNotice(pi, notice, session) {
+  const {id, alias, agent, event, message, execution} = notice;
+  pi.sendMessage({
+    customType: 'graphtraj:agent-communication',
+    content: `[agents notice from ${alias} · ${event}]\n${message}`, display: true,
+    details: {fact: `notice:${id}`, sender: alias, recipient: session, body: message,
+      agent, execution, event, source: 'agents'},
+  }, {triggerTurn: true, deliverAs: 'followUp'});
+}
+
+/**
+ * Own the independent core until native shutdown; MCP only connects to it.
+ * After the connection line, each host stdout line is one notice for
+ * ``onNotice``; it is acknowledged once handled. After ``close`` starts, a
+ * notice is neither injected nor acknowledged, so the host records it.
+ */
+export function startAgentHost(ctx, config, onNotice = () => {}) {
   return new Promise((resolve, reject) => {
     const child = spawn(process.env.AGENT_SWARM_PYTHON,
       ['-I', '-m', 'agent_swarm.pi.host', '--config', config], {
@@ -88,7 +108,7 @@ export function startAgentHost(ctx, config) {
           AGENT_SWARM_PI_MODEL: ctx.model?.id || '',
           AGENT_SWARM_PI_PROVIDER: ctx.model?.provider || ''},
       });
-    let diagnostic = '', output = '', failure, ready = false;
+    let diagnostic = '', output = '', failure, ready = false, closing = false;
     child.stdout.setEncoding('utf8');
     child.stderr.setEncoding('utf8');
     child.stderr.on('data', value => { diagnostic = (diagnostic + value).slice(-8192); });
@@ -101,19 +121,44 @@ export function startAgentHost(ctx, config) {
     child.stdin.on('error', error => { failure = error; });
     child.stdin.write(JSON.stringify({header: ctx.sessionManager.getHeader(),
       entries: ctx.sessionManager.getEntries().filter(entry => entry.type === 'custom')}) + '\n');
+    const notice = line => {
+      if (closing) return;
+      let document;
+      try {
+        document = JSON.parse(line).notice;
+        if (typeof document?.id !== 'string') throw new Error('not a notice');
+        onNotice(document);
+      } catch (error) {
+        // The host keeps a notice that was not shown readable through status.
+        diagnostic = (diagnostic + `\nNotice delivery failed: ${error.message}`).slice(-8192);
+        if (typeof document?.id === 'string') child.stdin.write(JSON.stringify({ack: document.id, shown: false}) + '\n');
+        return;
+      }
+      child.stdin.write(JSON.stringify({ack: document.id, shown: true}) + '\n');
+    };
     child.stdout.on('data', value => {
       output += value;
-      if (ready || !output.includes('\n')) return;
-      try {
-        const {connection} = JSON.parse(output.slice(0, output.indexOf('\n')));
-        if (typeof connection !== 'string' || !connection) throw new Error('No independent host connection.');
-        ready = true;
-        resolve({connection, async close() {
-          child.stdin.end();
-          await ended;
-          if (failure) throw failure;
-        }});
-      } catch (error) { child.stdin.end(); reject(error); }
+      if (!ready) {
+        if (!output.includes('\n')) return;
+        try {
+          const {connection} = JSON.parse(output.slice(0, output.indexOf('\n')));
+          if (typeof connection !== 'string' || !connection) throw new Error('No independent host connection.');
+          ready = true;
+          output = output.slice(output.indexOf('\n') + 1);
+          resolve({connection, async close() {
+            closing = true;
+            child.stdin.end();
+            await ended;
+            if (failure) throw failure;
+          }});
+        } catch (error) { child.stdin.end(); reject(error); return; }
+      }
+      let end;
+      while ((end = output.indexOf('\n')) >= 0) {
+        const line = output.slice(0, end);
+        output = output.slice(end + 1);
+        notice(line);
+      }
     });
   });
 }
@@ -127,7 +172,7 @@ export function registerAgents(pi) {
   let agentHost;
   let displayRegistered = false;
   pi.registerFlag('agents-config', { type: 'string',
-    description: 'Explicit independent agents host configuration with preflighted Pi settings.' });
+    description: 'Independent agents host configuration: data root and optional per-Runtime settings.' });
   return {
     independent,
     async start(ctx) {
@@ -156,7 +201,8 @@ export function registerAgents(pi) {
         }
         if (!process.env.AGENT_SWARM_PYTHON) throw new Error('Independent agents requires its selected Python installation.');
         independent.add(ctx.sessionManager);
-        agentHost = await startAgentHost(ctx, agentsConfig);
+        const session = ctx.sessionManager.getSessionId();
+        agentHost = await startAgentHost(ctx, agentsConfig, notice => deliverNotice(pi, notice, session));
         try {
           pi.registerMcpServer('agents', {
             command: process.env.AGENT_SWARM_PYTHON,

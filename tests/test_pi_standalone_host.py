@@ -291,6 +291,30 @@ def test_notice_waiting_at_shutdown_is_unavailable_and_later_ones_are_not_writte
     assert len(pipe.lines) == 1
 
 
+def test_a_body_being_pushed_is_hidden_from_wait_and_status() -> None:
+    """While this host pushes an end, wait/status do not show its body a second time."""
+    sender, _ = notices()
+
+    def agent(notification: str, ended_at: float, parent=None, children=()) -> dict:
+        return {'parent': parent, 'children': list(children), 'last_result': {
+            'notification': notification, 'ended_at': ended_at, 'last_message': 'answer'}}
+
+    now = time.time()
+    pushing, older, member = agent('queueing', now), agent('queueing', sender.started - 60), agent(
+        'queueing', now, parent='agent-1')
+    shown = agent('unavailable', now, children=[member])
+    for document in (pushing, older, shown):
+        sender.hide_pushed(document)
+    assert pushing['last_result']['last_message'] is None
+    assert older['last_result']['last_message'] == 'answer'
+    assert shown['last_result']['last_message'] == 'answer'
+    assert member['last_result']['last_message'] == 'answer'
+    sender.close()
+    closing = agent('queueing', time.time())
+    sender.hide_pushed(closing)
+    assert closing['last_result']['last_message'] == 'answer'
+
+
 def last_result(call, agent: str) -> dict:
     """Read the Agent's last result once it has one."""
     return wait_until(lambda: (call({'action': 'status', 'agent': agent}).document['result']

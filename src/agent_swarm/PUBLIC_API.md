@@ -476,9 +476,13 @@ What the parent sees today:
   notice is `delivered` once the extension acknowledges the injection,
   `unconfirmed` without an acknowledgement within 10 seconds, and
   `unavailable` (body readable through `status` and `wait`) when it could not
-  be written or injected. Permission requests are not pushed: `wait` ends
-  early and the parent uses `requests` and `reply`.
-- **Pi Session shutdown** (Pi's `session_shutdown`: quit, reload, new, resume or fork):
+  be written or injected. While a notice is on its way (`notification:
+  queueing`), `wait` and `status` also show `last_message: null`, so a
+  `wait` that ends with the child does not repeat the body the notice
+  carries. Permission requests are not pushed: `wait` ends early and the
+  parent uses `requests` and `reply`.
+- **Pi Session shutdown** (Pi's `session_shutdown`: quit, reload, new, resume
+  or fork):
   the extension stops injecting and closes the host's pipe. The host stops
   pushing, then interrupts every running child, descendants first, and
   waits up to 10 seconds for each. The ends this causes, and any notice not

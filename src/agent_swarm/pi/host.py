@@ -19,9 +19,10 @@ from pathlib import Path
 import subprocess
 import sys
 import threading
+import time
 from typing import Any, Callable, Mapping, TextIO
 
-from agent_swarm import AgentControl, AgentsError, Caller, bind
+from agent_swarm import AgentControl, AgentsError, AgentsResult, Caller, bind
 from agent_swarm.claude.driver import ClaudeDriver
 from agent_swarm.codex.driver import CodexDriver
 from agent_swarm.config import reject_archive_without_collector
@@ -210,6 +211,7 @@ class Notices:
         self.lock = threading.Lock()
         self.waiting: dict[str, list] = {}
         self.closing = False
+        self.started = time.time()
 
     def write(self, document: dict) -> None:
         """Write one protocol line; serialized with notice writes."""
@@ -252,6 +254,23 @@ class Notices:
             slot[1] = shown
             slot[0].set()
 
+    def hide_pushed(self, document: Mapping[str, Any]) -> None:
+        """Hide a body this host is about to push, so the Main receives it once.
+
+        AgentControl marks such an end ``queueing`` before calling the
+        receiver, so a concurrent ``wait`` or ``status`` would otherwise show
+        the body and the notice would repeat it. Ends of earlier host
+        processes, and any end once shutdown began, keep their body.
+        """
+        pending = [document]
+        while pending:
+            agent = pending.pop()
+            last = agent.get('last_result') or {}
+            if (not self.closing and agent.get('parent') is None and last.get('notification') == 'queueing'
+                    and (last.get('ended_at') or 0) >= self.started):
+                last['last_message'] = None
+            pending.extend(agent.get('children', []))
+
     def close(self) -> None:
         """Stop pushing at native shutdown; unacknowledged notices become unavailable."""
         with self.lock:
@@ -283,7 +302,17 @@ def start(config: Path) -> tuple[Path, Notices, Callable]:
     # Fail at start, not mid-turn, when config.yml declares a connection
     # this machine cannot run; create re-checks the selected one.
     control.require_connections()
-    return root, notices, call
+
+    def operate(request: dict) -> AgentsResult:
+        """Serve one action; a body this host is pushing is hidden from its result."""
+        result = call(request)
+        found = result.document.get('result')
+        if isinstance(found, dict):
+            for agent in found.get('agents', [found]):
+                notices.hide_pushed(agent)
+        return result
+
+    return root, notices, operate
 
 
 def main() -> None:

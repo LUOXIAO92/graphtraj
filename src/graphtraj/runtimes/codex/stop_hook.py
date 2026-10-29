@@ -77,7 +77,7 @@ def native_event(event: dict, project_root: Path | None = None) -> dict:
         bind_session(connection, root, activity_source=event.get('transcript_path'),
                      entry=None if native == 'compact' else f'codex:SessionStart:{native}')
         _archive(root, session, event['transcript_path'], new_session=event.get('source') == 'startup')
-        return {'systemMessage': 'GraphTraj Main Session associated.'}
+        return {'systemMessage': 'GraphTraj Main Session associated.', **_handed_over_notices(runner, session)}
     if not binding.is_file():
         if not owns_native_root(runner, connection):
             raise ValueError('Main Session association is unavailable; no established native root ownership.')
@@ -99,6 +99,21 @@ def native_event(event: dict, project_root: Path | None = None) -> dict:
         field = next((key for key in ('systemMessage', 'reason', 'stopReason') if key in result), 'systemMessage')
         result[field] = result.get(field, '') + '\nMain activity source could not be retained.'
     return result
+
+
+def _handed_over_notices(runner: Path, session: str) -> dict:
+    """Give this Codex Main the notices an earlier Main left undelivered, once.
+
+    Notices for a Codex Main are pushed when they happen; only a handover
+    queues them (``main_continuity``). They are taken from the queue here and
+    become this Session's starting context, without starting a turn.
+    """
+    from graphtraj.execution.main_continuity import claim_notices, render_notices
+
+    notices = claim_notices(runner, 'codex', session)
+    if not notices:
+        return {}
+    return {'hookSpecificOutput': {'hookEventName': 'SessionStart', 'additionalContext': render_notices(notices)}}
 
 
 def _archive(root: Path, session: str, transcript: str, *, new_session: bool = False) -> None:

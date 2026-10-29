@@ -11,6 +11,7 @@ import hashlib
 import json
 from pathlib import Path
 import sys
+from typing import Callable
 
 import yaml
 
@@ -23,54 +24,66 @@ def display(event: dict, state_directory: Path) -> dict:
 
     Besides the agents call itself, any PostToolUse or Stop shows the Session's
     retained ordinary receipts once: completed child executions that this
-    Codex Main did not start, kept without a model turn.
+    Codex Main did not start, kept without a model turn. The project records
+    how far this Session's own receipts were shown, so a continuing Main is
+    handed only the rest.
     """
     session = event.get('session_id')
     if event.get('hook_event_name') not in {'PostToolUse', 'Stop'} or not isinstance(session, str) or not session:
         return {}
-    facts = _agents_facts(event, session) + _receipt_facts(event, session)
+    receipts, settle = _receipt_facts(event, session)
+    facts = _agents_facts(event, session) + receipts
     if not facts:
         return {}
-    return _show(facts, session, state_directory)
+    shown = _show(facts, session, state_directory)
+    settle()
+    return shown
 
 
-def _receipt_facts(event: dict, session: str) -> list[tuple[str, str, str, str]]:
-    """Read retained ordinary receipts addressed to this Codex Session's host."""
-    from graphtraj.execution.main_continuity import owns_main_root
+def _receipt_facts(event: dict, session: str) -> tuple[list[tuple[str, str, str, str]], Callable[[], None]]:
+    """Read retained ordinary receipts addressed to this Codex Session's host.
+
+    Also returns how to record, once they are shown, that this Session's own
+    receipts reached it.
+    """
+    from graphtraj.execution.main_continuity import owns_main_root, receipts_shown, retained_receipts, show_receipts
     from graphtraj.execution.runner_models import RunnerError
     from graphtraj.workspace.runner_project import discover_runner_directory
 
     # The native event names the Main's own working directory; without it there is no project.
     cwd = event.get('cwd')
     if not isinstance(cwd, str) or not cwd:
-        return []
+        return [], lambda: None
     try:
         runner = discover_runner_directory(Path(cwd))
-        paths = sorted((runner / 'sessions').glob('*/parent-notices.jsonl'))
+        receipts = retained_receipts(runner)
     except (RunnerError, OSError, ValueError):
-        return []
-    facts = []
-    for path in paths:
-        try:
-            lines = path.read_text(encoding='utf-8').splitlines()
-        except OSError:
+        return [], lambda: None
+    facts, own, shown = [], [], {}
+    for record, notice in receipts:
+        connection = record['parent_connection']
+        # A continuing Main also shows receipts retained for an earlier Main,
+        # except those already shown to or handed over from that Main.
+        if (connection.get('session') != session
+                and not owns_main_root(runner, connection, {'runtime': 'codex', 'session': session})):
             continue
-        for line in lines:
-            try:
-                record = json.loads(line)
-                notice = json.loads(record['notice'])
-            except (ValueError, KeyError, TypeError):
-                continue
-            connection = record.get('parent_connection')
-            # A continuing Main also shows receipts retained for an earlier Main.
-            if (record.get('delivery') != 'retained' or not isinstance(connection, dict)
-                    or (connection.get('session') != session
-                        and not owns_main_root(runner, connection, {'runtime': 'codex', 'session': session}))):
-                continue
-            identity = record.get('identity', {})
-            facts.append((f"receipt:{notice.get('alias')}:{identity.get('execution_id')}",
-                          str(notice.get('alias')), f'Codex session {session}', str(notice.get('message'))))
-    return facts
+        addressee = (connection.get('runtime'), connection.get('session'))
+        if addressee not in shown:
+            shown[addressee] = receipts_shown(runner, *addressee)
+        if record['at'] <= shown[addressee]:
+            continue
+        if addressee == ('codex', session):
+            own.append(record['at'])
+        identity = record.get('identity', {})
+        facts.append((f"receipt:{notice.get('alias')}:{identity.get('execution_id')}",
+                      str(notice.get('alias')), f'Codex session {session}', str(notice.get('message'))))
+
+    def settle() -> None:
+        """Record that this Session's own receipts read here were shown."""
+        if own:
+            show_receipts(runner, 'codex', session, max(own))
+
+    return facts, settle
 
 
 def _agents_facts(event: dict, session: str) -> list[tuple[str, str, str, str]]:

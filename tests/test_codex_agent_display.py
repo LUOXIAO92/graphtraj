@@ -94,3 +94,41 @@ def test_retained_ordinary_receipt_is_shown_once_at_the_next_hook(tmp_path: Path
     assert 'Session execution ended' in shown['systemMessage']
     assert invoke(stop, tmp_path / 'display') == {}
     assert invoke({**stop, 'session_id': 'other-main'}, tmp_path / 'display') == {}
+
+
+def test_unshown_receipts_of_a_codex_main_reach_a_continuing_claude_main_once(tmp_path: Path) -> None:
+    """Codex -> Claude: a receipt the Codex hook showed stays shown; the rest move to Claude once."""
+    import yaml
+
+    from graphtraj.execution.main_continuity import claim_main, claim_notices
+    from graphtraj.execution.runner_control import retain_parent_receipt
+    from test_result_submission import result_project
+
+    runner, _, _ = result_project(tmp_path)
+    child = runner / 'sessions/research@x1'
+    codex = {'runtime': 'codex', 'session': 'main-session', 'codex_home': str(tmp_path)}
+    mapping = yaml.safe_load((child / 'mapping.yml').read_text())
+    (child / 'mapping.yml').write_text(yaml.safe_dump({**mapping, 'parent_connection': codex}))
+    claim_main(runner, codex, 'codex:SessionStart:startup')
+
+    def receipt(execution: str) -> None:
+        retain_parent_receipt(child, f'Session execution ended:\n{{"execution_id": "{execution}"}}',
+                              {'type': 'completed', 'session': 'native-research@x1', 'execution_id': execution})
+
+    stop = {'hook_event_name': 'Stop', 'session_id': 'main-session', 'cwd': str(tmp_path)}
+    receipt('shown-before')
+    assert '"shown-before"' in invoke(stop, tmp_path / 'display')['systemMessage']
+    receipt('pending-at-handover')
+
+    claude = {'runtime': 'claude', 'session': 'claude-main', 'runner': str(runner)}
+    claim_main(runner, claude, 'claude:first-control')
+    notices = claim_notices(runner, 'claude', 'claude-main')
+    assert [(item['event']['alias'], item['event']['execution']) for item in notices] == [
+        ('research@x1', 'pending-at-handover')]
+    assert '"pending-at-handover"' in notices[0]['event']['message']
+    assert claim_notices(runner, 'claude', 'claude-main') == []
+    # The earlier Codex Main no longer shows what Claude received.
+    assert invoke(stop, tmp_path / 'display') == {}
+    # A later Codex Main does not show either receipt again.
+    claim_main(runner, {**codex, 'session': 'next-codex'}, 'codex:SessionStart:resume')
+    assert invoke({**stop, 'session_id': 'next-codex'}, tmp_path / 'display') == {}

@@ -7,7 +7,10 @@ continues that state instead of starting an empty one. This module keeps the
 only continuity record and the single decision point for who may control it::
 
     <runner>/main-sessions/continuity.jsonl   append-only control claims
-    <runner>/main-sessions/inbox/<key>.jsonl  notices for a pull-only Main host
+    <runner>/main-sessions/inbox/<key>.jsonl  notices for a pull-only Main host,
+                                              or handed over to a Codex Main
+    <runner>/main-sessions/inbox/<key>.receipts  time up to which a Codex Main's
+                                              retained receipts were shown
 
 A claim is a new associated record. It never rewrites a historical parent,
 a member identity, a Session binding or a native log. Runtime entries supply
@@ -434,19 +437,66 @@ def acknowledge_notices(runner: Path, runtime: str, session: str, position: int)
 
 
 def _transfer_notices(runner: Path, previous: Mapping[str, Any], current: Mapping[str, Any]) -> None:
-    """Hand the earlier Main's undelivered queued notices to the continuing Main.
+    """Hand the earlier Main's undelivered notices to the continuing Main, once.
 
-    Only pull-only hosts (Claude Code, Pi, DSH) have a queue. A continuing
-    pull-only Main receives them in its own queue; a Codex Main keeps them in
-    the earlier queue, readable as history (see the reported gap).
+    Notices still in the earlier Main's queue are claimed from it and queued
+    for the continuing Main, whichever Runtime: a Codex Main takes its queue
+    at its SessionStart. A Codex Main's retained ordinary receipts its hook
+    has not shown yet go to a continuing pull-only Main's queue; a continuing
+    Codex Main shows them at its own hook. Either way the earlier Main no
+    longer receives them.
     """
-    if previous['runtime'] not in QUEUED_RUNTIMES or current['runtime'] not in QUEUED_RUNTIMES:
-        return
-    notices, position = pending_notices(runner, previous['runtime'], previous['session'])
-    for notice in notices:
+    for notice in claim_notices(runner, previous['runtime'], previous['session']):
         queue_notice(runner, current, notice['event'])
-    if notices:
-        acknowledge_notices(runner, previous['runtime'], previous['session'], position)
+    if previous['runtime'] != 'codex' or current['runtime'] not in QUEUED_RUNTIMES:
+        return
+    shown = max(receipts_shown(runner, 'codex', previous['session']), previous['at'])
+    receipts = [(record, notice) for record, notice in retained_receipts(runner)
+                if not record.get('held') and record['at'] > shown
+                and _same(record['parent_connection'], 'codex', previous['session'])]
+    for record, notice in receipts:
+        queue_notice(runner, current, {**notice, 'execution': record.get('identity', {}).get('execution_id')})
+    if receipts:
+        show_receipts(runner, 'codex', previous['session'], max(record['at'] for record, _ in receipts))
+
+
+def retained_receipts(runner: Path) -> list[tuple[dict, dict]]:
+    """Return every retained ordinary receipt addressed to a Main host, with its notice."""
+    receipts = []
+    for path in sorted((runner / 'sessions').glob('*/parent-notices.jsonl')):
+        try:
+            lines = path.read_text(encoding='utf-8').splitlines()
+        except OSError:
+            continue
+        for line in lines:
+            try:
+                record = json.loads(line)
+                notice = json.loads(record['notice'])
+            except (ValueError, KeyError, TypeError):
+                continue
+            address = record.get('parent_connection')
+            if (record.get('delivery') == 'retained' and isinstance(address, dict)
+                    and isinstance(address.get('runtime'), str) and isinstance(address.get('session'), str)):
+                receipts.append((record, notice))
+    return receipts
+
+
+def receipts_shown(runner: Path, runtime: str, session: str) -> float:
+    """Return the time up to which this Main's retained receipts were shown or handed over."""
+    try:
+        return float(_inbox(runner, runtime, session).with_suffix('.receipts').read_text())
+    except FileNotFoundError:
+        return 0.0
+
+
+def show_receipts(runner: Path, runtime: str, session: str, through: float) -> None:
+    """Record that this Main's retained receipts up to ``through`` reached a Main."""
+    path = _inbox(runner, runtime, session)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.with_suffix('.lock').open('a+b') as lock:
+        file_lock.flock(lock, file_lock.LOCK_EX)
+        if through > receipts_shown(runner, runtime, session):
+            _write_cursor(path.with_suffix('.receipts'), through)
 
 
 class MainRoots:

@@ -129,12 +129,16 @@ class Fake:
 def fakes(monkeypatch: pytest.MonkeyPatch) -> dict:
     """Replace the four public driver constructors inside the host."""
     made: dict = {}
-    for runtime, name in (('pi', 'PiDriver'), ('claude', 'ClaudeDriver'),
-                          ('codex', 'CodexDriver'), ('dsh', 'DshDriver')):
+    for runtime, name, module in (('pi', 'PiDriver', host), ('claude', 'ClaudeDriver', 'agent_swarm.claude.driver'),
+                                  ('codex', 'CodexDriver', 'agent_swarm.codex.driver'),
+                                  ('dsh', 'DshDriver', 'agent_swarm.dsh.driver')):
         def factory(*arguments, runtime=runtime):
             made[runtime] = Fake(runtime, *arguments)
             return made[runtime]
-        monkeypatch.setattr(host, name, factory)
+        if isinstance(module, str):
+            monkeypatch.setattr(f'{module}.{name}', factory)
+        else:
+            monkeypatch.setattr(module, name, factory)
     return made
 
 

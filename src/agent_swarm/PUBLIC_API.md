@@ -281,9 +281,17 @@ verified native parent; `pi` may set any of these fields except
 | `sandbox_path` | the host's `PATH` (it must reach `srt` and `node`) |
 | `worktree_access` | `read`; `write` also resolves `git_common_directory` with Git unless given |
 | `read_paths`, `write_paths`, `deny_read`, `deny_write` | none (absolute path lists) |
-| `allowed_domains`, `provider_domain`, `base_url`, `provider_api`, `api_key_env`, `reasoning_effort`, `native_directory`, `allow_mach_lookup`, `allow_mach_register`, `allow_local_binding`, `allow_unix_sockets` | none |
+| `provider_domain` | the selected model's host from Pi's catalog in `agent_dir` (`agent_swarm.models.pi_destination`); refused with `ROLE_CONFIG_UNSUPPORTED` without a plain http(s) destination |
+| `allowed_domains`, `base_url`, `provider_api`, `api_key_env`, `reasoning_effort`, `native_directory`, `allow_mach_lookup`, `allow_mach_register`, `allow_local_binding`, `allow_unix_sockets` | none |
 
-No other path, domain or write grant is added. Claude children default to
+Besides these, the Pi owner always reads the worktree, its native Session
+directory, the running Python and installed packages and the linked native
+Home files; writes only its native directory, the connection socket and (for
+`write`) the worktree and Git common directory; denies reading `agent_dir` and
+the agents data root, and writing `agent_dir`, the Python prefix, the
+packages and `<git_common_directory>/config` and `hooks`. The only domains are
+`allowed_domains` plus the `base_url` host or `provider_domain`. A field of the
+wrong type fails with `ROLE_CONFIG_INVALID` naming the field. Claude children default to
 `worktree_access: read` and DSH children to `sandbox: read-only` unless
 their section says otherwise. Without `codex`, a Codex `create` fails with
 `invalid-config`.
@@ -363,9 +371,14 @@ reaches another endpoint. A driver whose `prepare` does not accept
 `selection` makes such a create fail with `invalid-config`. The agents
 drivers apply `model` and `reasoning_effort` for all four Runtimes; current
 limits, each failing with `invalid-config`: the DSH driver runs the
-`deepseek-official` provider only; the Pi driver keeps the host's resolved
-provider and takes no `base_url`. Claude has no native provider setting, so
-a Claude connection's `provider` only names its models.
+`deepseek-official` provider only; the Pi driver takes no `base_url`;
+declare such an endpoint as a provider in Pi's own `models.json` in the
+connection's home. When a Pi selection changes the provider, model, home or
+key, the driver reads the model's network destination from Pi's catalog in
+the selected home and fails with `invalid-config` if Pi exposes no plain
+http(s) destination; another provider or a selected connection drops the
+host's `api_key_env`, `base_url` and `provider_api`. Claude has no native
+provider setting, so a Claude connection's `provider` only names its models.
 
 **Several Runtimes in one host.** A host registers one driver per Runtime in
 `AgentControl(root, {runtime: driver, ...})`; `create` routes by `runtime`.
@@ -636,7 +649,7 @@ or be renamed. Numbers refer to the subtraction list in
 | 5 | Archive header extension `graphtraj` with `projectId`, `agentId`, `taskIds` | `sessions/protocol.py`, `sessions/archive.py`, `sessions/claude.py`, `sessions/codex.py`, `sessions/codex_history.py`, `sessions/pi.py` | 384 |
 | 5+ | Core archive facts kept under the `graphtraj` name: event `graphtraj.native` provenance (required for every archived event), `graphtraj.missing`, header `previousSession`/`boundary`, types `graphtraj/native`, `graphtraj/history`, `graphtraj/text-run`, `graphtraj/encrypted`, `graphtraj/collection-pending` and the other `graphtraj/*` types. These are core meaning, so they cannot simply move into `extra_fields.graphtraj` | `sessions/protocol.py`, `sessions/archive.py`, `sessions/migration.py`, all `sessions/*` mappers | 384 for structure, 394 for names; larger than spec item 5, Main to confirm |
 | 6 | Pi custom message type `graphtraj:agent-communication`, used for display entries and, since 382, for the Pi host's injected notices | `pi/extension.mjs` | 394 |
-| 7 | Pi execution's GraphTraj Task fields and fixed `.graphtraj` deny-read and deny-write paths | Done in 382: `pi/host.py` takes a Task-free configuration and builds the Pi request from the native parent (1.6); `pi/execution.py` takes the generic request fields (section 2) | 382 (done) |
+| 7 | Pi execution's GraphTraj Task fields and fixed `.graphtraj` deny-read and deny-write paths | Done in 382: `pi/host.py` takes a Task-free configuration and builds the Pi request from the native parent (1.6); `pi/execution.py` takes the generic request fields (section 2); GraphTraj supplies its former paths and domains in `graphtraj/runtimes/pi/pi_adapter.py:member_policy` | 382 (done) |
 | 8 | No independent DSH host | `dsh/` | 383 |
 | 9 | Notice title `GraphTraj notice from …` and default sender `graphtraj` | `claude/host_context.mjs` | 394 |
 | 10 | `send`'s `reports_only` and its "Task member" description | Done in 388: generic meaning in `tool.py` and 1.2; `AgentControl` rejects `true` with `not-implemented` (fix, see 7). GraphTraj's Task member handling is unchanged | 388 (done) |

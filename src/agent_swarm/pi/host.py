@@ -23,11 +23,8 @@ import time
 from typing import Any, Callable, Mapping, TextIO
 
 from agent_swarm import AgentControl, AgentsError, AgentsResult, Caller, bind
-from agent_swarm.claude.driver import ClaudeDriver
-from agent_swarm.codex.driver import CodexDriver
 from agent_swarm.config import reject_archive_without_collector
 from agent_swarm.connection import agents_connection
-from agent_swarm.dsh.driver import DshDriver
 from agent_swarm.notices import notice_id
 from agent_swarm.process import process_ancestors, process_arguments, process_executable
 from .driver import PiDriver
@@ -182,7 +179,12 @@ def runtime_drivers(cwd: Path, request: Mapping[str, Any], settings: Mapping[str
     Claude defaults to read access and DSH to its read-only sandbox, like Pi;
     Codex needs its captured ``Run.settings`` (as ``agent_swarm.codex.host
     --settings`` takes), else its create fails with ``invalid-config``.
+    Imported here so this module stays importable without their dependencies.
     """
+    from agent_swarm.claude.driver import ClaudeDriver
+    from agent_swarm.codex.driver import CodexDriver
+    from agent_swarm.dsh.driver import DshDriver
+
     return {
         'pi': PiDriver(dict(request)),
         'claude': ClaudeDriver(cwd, {'worktree_access': 'read', **settings.get('claude', {})}),

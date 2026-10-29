@@ -163,7 +163,10 @@ class GraphTrajAgents:
                 return self._hierarchy(binding)
             return self._operate(action, arguments, binding.caller)
         except (RunnerError, RuntimeAdapterError) as error:
-            raise AgentsError(error.code, error.message) from None
+            message = error.message
+            if error.code == "alias-not-found" and agent is not None:
+                message += " " + self.control.reference_hint(agent, binding.caller)
+            raise AgentsError(error.code, message) from None
         except ValueError as error:
             raise AgentsError("invalid-input", str(error)) from None
 

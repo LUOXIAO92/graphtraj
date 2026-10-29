@@ -34,6 +34,20 @@ DESCRIPTIONS = {
     'retire': 'Remove an Agent from the active list while retaining its history.',
 }
 
+# Intent words a caller may use instead of the action name; discovery matches them too.
+INTENTS = {
+    'create': 'start launch spawn new run begin',
+    'send': 'message tell',
+    'status': 'list show',
+    'interrupt': 'stop cancel',
+    'requests': 'approvals pending',
+    'reply': 'answer approve respond',
+    'retire': 'remove delete archive',
+}
+
+# Words that carry no intent; they would otherwise match nearly every description.
+FILLER = frozenset({'a', 'an', 'the', 'to', 'of', 'for', 'my', 'one', 'please'})
+
 
 def validate_envelope(request: dict) -> str:
     """Validate the shared discover/describe/execute envelope, returning its action."""
@@ -75,11 +89,11 @@ def handle_request(request: dict, execute: Callable[[dict], AgentsResult]) -> Ag
     try:
         action = validate_envelope(request)
         if action == 'discover':
-            terms = request.get('query', '').casefold().split()
+            terms = [term for term in request.get('query', '').casefold().split() if term not in FILLER]
             return AgentsResult({'features': [
                 {'feature': name, 'description': description}
                 for name, description in DESCRIPTIONS.items()
-                if all(term in f'{name} {description}'.casefold() for term in terms)
+                if all(term in f'{name} {INTENTS.get(name, "")} {description}'.casefold() for term in terms)
             ], 'describe': {'action': 'describe', 'feature': '<feature>'}})
         feature = request['feature']
         if feature not in ACTION_FIELDS:

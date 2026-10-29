@@ -64,12 +64,47 @@ def _checkout_import_problem(cwd: Path, executable: str = sys.executable) -> Opt
     ).format(executable, "; ".join(resolved), source, PROJECT_ROOT)
 
 
+_HOSTS = (
+    "import importlib.metadata, importlib.util\n"
+    "for entry in importlib.metadata.entry_points(group='agent_swarm.hosts', name='graphtraj'):\n"
+    "    print(getattr(importlib.util.find_spec(entry.module), 'origin', None))\n"
+)
+
+
+def _installation_problem(executable: str = sys.executable, scripts: Optional[Path] = None) -> Optional[str]:
+    """Say what installed metadata or command the suite's interpreter lacks.
+
+    Hosted agents find GraphTraj through the ``agent_swarm.hosts`` entry point,
+    and fixtures run ``graphtraj-session`` beside the interpreter; a .pth that
+    only puts the checkout on sys.path gives neither.
+    """
+    source = (PROJECT_ROOT / "src").resolve()
+    scripts = Path(executable).parent if scripts is None else scripts
+    missing = []
+    probe = subprocess.run([executable, "-I", "-c", _HOSTS], capture_output=True, text=True, timeout=60)
+    origins = probe.stdout.splitlines() if probe.returncode == 0 else []
+    if not any(origin != "None" and Path(origin).resolve().is_relative_to(source) for origin in origins):
+        found = ", ".join(origins) or "no graphtraj entry" if probe.returncode == 0 else (
+            "probe failed: " + probe.stderr.strip()[-300:])
+        missing.append("the graphtraj distribution metadata (entry point agent_swarm.hosts: graphtraj "
+                       "under {0}; found {1})".format(source, found))
+    if not (scripts / "graphtraj-session").is_file():
+        missing.append("the graphtraj-session command in {0}".format(scripts))
+    if not missing:
+        return None
+    return (
+        "The test interpreter {0} lacks {1}. Install this checkout editable in a dedicated venv: "
+        "pip install -e {2}/src/agent_swarm -e {2}; a .pth alone gives neither."
+    ).format(executable, " and ".join(missing), PROJECT_ROOT)
+
+
 def pytest_sessionstart(session: pytest.Session) -> None:
-    """Stop at once, with one cause, when subprocesses would import another tree."""
+    """Stop at once, with one cause, when subprocesses would import another tree
+    or the interpreter lacks the installed metadata and commands."""
     import tempfile
 
     with tempfile.TemporaryDirectory() as neutral:
-        problem = _checkout_import_problem(Path(neutral))
+        problem = _checkout_import_problem(Path(neutral)) or _installation_problem()
     if problem:
         pytest.exit(problem, returncode=pytest.ExitCode.USAGE_ERROR)
 

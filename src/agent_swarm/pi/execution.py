@@ -68,8 +68,10 @@ class PiExecution:
         self.startup_terminal_confirmed = False
         self.independent = True
         self.archive = None
-        # Build an archive collector from (header, entries, leaf_id, source).
-        self.collector = None
+        # Header ``extra_fields`` for a Session this execution archives first.
+        self.extra_fields: dict | None = None
+        # Header ``source`` of a Session this execution archives first.
+        self.archive_source: str | None = 'child'
         # Installed control code the sandboxed child reads but never rewrites.
         self.packages = [str(Path(__file__).resolve().parents[1])]
         self.agent = None
@@ -316,13 +318,18 @@ class PiExecution:
         return {'AGENT_SWARM_CONNECTION': address, 'AGENT_SWARM_PYTHON': sys.executable}
 
     def _archive_collector(self, header: dict, native: dict):
-        """Collect into the supplied archive through the host's collector."""
+        """Collect the native Session into the bound archive; without one, archive nothing."""
         if self.archive is None:
             return None
-        if self.collector is None:
-            raise RuntimeAdapterError('archive-unavailable', 'Bind the Pi collector for the supplied archive.'
-                                      ' Without one, set save_normalized_sessions to false in config.yml.')
-        return self.collector(header, native['entries'], native['leafId'], 'child')
+        from agent_swarm.sessions.pi import PiArchive
+
+        # The project root bounds relative attachment paths and private state;
+        # a request without one uses its working tree.
+        return PiArchive(
+            self.archive, header, project=self.request.get('harness_root') or self.request['worktree_path'],
+            entries=native['entries'], leaf_id=native['leafId'], source=self.archive_source,
+            attachment_root=Path(self.request['worktree_path']), extra_fields=self.extra_fields,
+        )
 
     def _record_process(self, pid: int, outcome: dict | None = None) -> None:
         """Publish owned process facts; the host binds the observer."""

@@ -90,6 +90,8 @@ class ClaudeExecution:
         self.dropped_prompt_seconds: float | None = None
         self.independent = False
         self.archive: SessionArchive | None = None
+        # Header ``extra_fields`` for a Session this execution archives first.
+        self.extra_fields: dict | None = None
         self.agents_callback: Callable[[dict], AgentsResult] | None = None
         self.collector = None
         # Exact read-only resource settings applied before the first prompt.
@@ -108,8 +110,21 @@ class ClaudeExecution:
         """Let the owning consumer retain process lifecycle observations."""
 
     def _collector(self, resources: ExitStack):
-        """Use an explicitly supplied collector; plain control needs no archive."""
-        return self.collector
+        """Collect into the bound archive; without one, plain control archives nothing.
+
+        A consumer may still supply its own ``collector`` before ``run()``.
+        """
+        if self.collector is not None or self.archive is None:
+            return self.collector
+        from agent_swarm.sessions.claude import ClaudeJsonlCollector
+
+        provider = self.request.get('provider', 'native')
+        if provider == 'native' and not self.request.get('base_url'):
+            provider = 'anthropic'
+        return ClaudeJsonlCollector(self.archive, self.native_id,
+                                    Path(self.request['worktree_path']), self.execution_id,
+                                    provider=provider, resumed=self.expected is not None,
+                                    extra_fields=self.extra_fields)
 
     def _connection(self, resources: ExitStack) -> str | None:
         """Expose CLI calls only through the native owner's PID-bound channel."""
@@ -119,7 +134,13 @@ class ClaudeExecution:
         return resources.enter_context(self.host_connection(directory))
 
     def _collect_child(self, event: dict) -> None:
-        """Native helper collection belongs to the optional archive consumer."""
+        """Archive a finished native helper's own transcript beside its parent Session."""
+        if self.archive is None:
+            return
+        from .collection import collect_hook_event
+
+        collect_hook_event(self.archive, event, Path(self.request['worktree_path']),
+                           extra_fields=self.extra_fields)
 
     def _parent_notice(self, message: str, details: dict) -> dict:
         """Require the owning host to bind native permission delivery."""
@@ -165,12 +186,17 @@ class ClaudeExecution:
         *,
         archive: SessionArchive | None,
         agents_callback: Callable[[dict], AgentsResult],
+        extra_fields: dict | None = None,
     ) -> None:
-        """Bind the core's archive choice and verified caller before starting."""
+        """Bind the core's archive choice and verified caller before starting.
+
+        ``extra_fields`` goes to the header of a Session first archived here.
+        """
         if self.proc is not None:
             raise ValueError('Claude execution is already started.')
         self.independent = True
         self.archive = archive
+        self.extra_fields = extra_fields
         self.agents_callback = agents_callback
 
     def _sdk_message(self, event: dict) -> None:

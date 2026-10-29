@@ -131,7 +131,7 @@ def test_connection_only_role_preserves_configuration_and_archive_policy(
     path = archive_path(swarm_root(root), 'codex:' + created.document['session'])
     assert path.exists() is saving
     if saving:
-        assert JsonlSessionStore(path).header['graphtraj']['agentId'] == created.document['agent']
+        assert JsonlSessionStore(path).header['extra_fields']['graphtraj']['agentId'] == created.document['agent']
     assert read_config(swarm_root(root))['backfill_history'] is True
     assert read_config(swarm_root(root))['save_normalized_sessions'] is saving
 

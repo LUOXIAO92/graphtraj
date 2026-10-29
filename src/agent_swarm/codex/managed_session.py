@@ -36,8 +36,14 @@ class CodexManagedExecution:
         *,
         connection: dict[str, str] | None = None,
         agent_call: Callable | None = None,
+        archive: object | None = None,
+        extra_fields: dict | None = None,
     ) -> None:
-        """Capture immutable task configuration for one Worker execution."""
+        """Capture immutable task configuration for one Worker execution.
+
+        ``archive`` is the bound :class:`SessionArchive`, or ``None`` to archive
+        nothing; ``extra_fields`` goes to the header of a Session first archived here.
+        """
         self.context = restore_codex_context(request, context_evidence)
         self.connection_environment = recovery_environment(connection or {})
         request = self.context.launch_document()['adapter_request']
@@ -55,6 +61,8 @@ class CodexManagedExecution:
         self.started = session_started
         self.created = session_created
         self.agent_call = agent_call
+        self.archive = archive
+        self.extra_fields = extra_fields
         self.parent_notice: Callable[[str, dict], dict] | None = None
         self.expected_session = expected_session
         self.termination_requested = False
@@ -462,8 +470,14 @@ class CodexManagedExecution:
                 temporary.unlink(missing_ok=True)
 
     def _archive(self, session: object) -> object | None:
-        """No collector is required for native control; consumers bind their own."""
-        return None
+        """Collect the native rollout into the bound archive, if any."""
+        if self.archive is None:
+            return None
+        from agent_swarm.sessions.codex import CodexJsonlArchive
+
+        return CodexJsonlArchive(self.archive, session.thread_id, session.rollout_path,
+                                 new_session=self.expected_session is None,
+                                 extra_fields=self.extra_fields)
 
     def _bind_connection(self, connections: ExitStack, request: dict, cwd: Path) -> tuple:
         """Expose agents only to the owned native process and Session."""

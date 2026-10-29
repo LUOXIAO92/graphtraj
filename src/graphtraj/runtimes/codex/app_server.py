@@ -343,9 +343,12 @@ class CodexAppServer(NativeCodexAppServer):
     async def retain_ordered_history(self, session: CodexSession, archive: object, agent: str) -> None:
         """Construct the existing collector without making native control import it."""
         from agent_swarm.sessions.codex_history import CodexHistoryArchive
+        from graphtraj.interfaces.agents import graphtraj_fields
 
         await super().retain_ordered_history(
-            session, lambda: CodexHistoryArchive(archive, agent, session.inherited_history, self._call),
+            session, lambda: CodexHistoryArchive(
+                archive, session.inherited_history, self._call,
+                extra_fields=graphtraj_fields(str(archive.root), agent)),
         )
 
     async def refresh_mcp(self, thread_id: str, server: str, *, observe_only: bool = False) -> dict[str, Any]:

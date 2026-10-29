@@ -77,6 +77,8 @@ class Run:
     ``call`` is the owning core's execution-scoped business callback. Drivers
     expose it only after authenticating their actual native child process;
     request JSON cannot choose its caller. It expires with this execution.
+    ``extra_fields`` is the Agent's ``create`` header container: drivers pass
+    it to the collector, which writes it on a Session's first archived header.
     """
 
     agent: str
@@ -89,6 +91,7 @@ class Run:
     archive: SessionArchive | None
     events: "ExecutionEvents"
     call: Callable[[dict], AgentsResult] | None = None
+    extra_fields: Mapping[str, Any] | None = None
 
 
 class RuntimeDriver(Protocol):
@@ -369,7 +372,8 @@ class AgentControl:
         if action == "create":
             return self.create(arguments["runtime"], arguments["instruction"],
                                binding, name=arguments.get("name"),
-                               configuration=arguments.get("configuration"))
+                               configuration=arguments.get("configuration"),
+                               extra_fields=arguments.get("extra_fields"))
         if action == "status" and "agent" not in arguments:
             return Outcome({"agents": self.hierarchy(binding.caller)})
         try:
@@ -416,12 +420,23 @@ class AgentControl:
         *,
         name: str | None = None,
         configuration: str | None = None,
+        extra_fields: Mapping[str, Any] | None = None,
     ) -> Outcome:
         """Register a new Agent under the caller and start its first execution.
 
         Returns once the driver has started native work; it never waits for
-        the Agent's result.
+        the Agent's result. ``extra_fields`` is a normalized Session header
+        container keyed by namespace (``{"<namespace>": <JSON>}``); it is kept
+        with the Agent and written when its Session is first archived.
         """
+        if extra_fields is not None:
+            from agent_swarm.sessions.protocol import validate_extra_fields
+
+            try:
+                validate_extra_fields(extra_fields)
+            except ValueError:
+                raise AgentsError("invalid-input", "request.extra_fields: expected an object keyed by "
+                                                   "nonempty namespace names with JSON values") from None
         driver = self.drivers.get(runtime)
         if driver is None:
             raise AgentsError("unsupported-runtime", f"No driver is available for Runtime {runtime!r}.")
@@ -447,6 +462,8 @@ class AgentControl:
             "retired_at": None,
             "executions": [],
         }
+        if extra_fields is not None:
+            record["extra_fields"] = json.loads(json.dumps(extra_fields))
         with self._locked(agent, record) as current:
             run = self._begin(current, "create", instruction, binding)
         return self._launch(run)
@@ -952,7 +969,7 @@ class AgentControl:
             settings=record["settings"], message=message, session=current["resumed_session"],
             directory=directory, archive=archive,
             events=ExecutionEvents(self, record["agent"], current["id"]),
-            call=call,
+            call=call, extra_fields=record.get("extra_fields"),
         )
 
     def _begin(self, record: dict, operation: str, message: str, binding: Binding) -> Run:

@@ -42,7 +42,7 @@ TOOL_NAME = "agents"
 # Required and optional fields of each action. Identity and authority come
 # from the host binding, so no action accepts them.
 ACTION_FIELDS: dict[str, tuple[frozenset[str], frozenset[str]]] = {
-    "create":    (frozenset({"runtime", "instruction"}), frozenset({"name", "configuration"})),
+    "create":    (frozenset({"runtime", "instruction"}), frozenset({"name", "configuration", "extra_fields"})),
     "send":      (frozenset({"agent", "message"}), frozenset({"reports_only"})),
     "status":    (frozenset(), frozenset({"agent"})),
     "wait":      (frozenset({"agent", "timeout_seconds"}), frozenset()),
@@ -64,6 +64,9 @@ INPUT_SCHEMA: dict[str, Any] = {
                           "description": "Existing execution configuration reference resolved by the Runtime driver; grants no identity."},
         "instruction": {"type": "string", "description": "First message for the new Agent."},
         "name": {"type": "string", "description": "Readable name; grants no identity."},
+        "extra_fields": {"type": "object",
+                         "description": "Normalized Session header fields keyed by namespace, "
+                                        "for example {\"myapp\": {...}}; written only when archiving is on."},
         "message": {"type": "string", "description": "Plain-text message for the Agent."},
         "reports_only": {"type": "boolean",
                          "description": "Direct parent only: ask a stopped Task member for reports it "

@@ -81,6 +81,40 @@ def configured_archive(root: Path) -> ConfiguredSessionArchive:
     return ConfiguredSessionArchive(directory, **read_config(directory))
 
 
+# Version of GraphTraj's own ``extra_fields.graphtraj`` header namespace.
+EXTRA_FIELDS_VERSION = 1
+
+
+def graphtraj_fields(
+    project_id: str,
+    agent_id: str,
+    task_ids: list[str] | tuple[str, ...] = (),
+    extra_fields: Mapping[str, Any] | None = None,
+) -> dict:
+    """Return a header ``extra_fields`` container carrying GraphTraj's namespace.
+
+    Other namespaces in ``extra_fields`` are kept unchanged; GraphTraj's own
+    association replaces any ``graphtraj`` entry a caller supplied.
+
+    Examples
+    --------
+    >>> graphtraj_fields('/project', 'agent-1', ['42'])
+    {'graphtraj': {'version': 1, 'projectId': '/project', 'agentId': 'agent-1', 'taskIds': ['42']}}
+    """
+    return {**dict(extra_fields or {}),
+            'graphtraj': {'version': EXTRA_FIELDS_VERSION, 'projectId': project_id,
+                          'agentId': agent_id, 'taskIds': list(task_ids)}}
+
+
+def mapped_task_ids(directory: Path) -> list[str]:
+    """Return the Task a Runner execution directory's ``mapping.yml`` names, if any."""
+    import yaml
+
+    mapping_file = directory / 'mapping.yml'
+    mapping = yaml.safe_load(mapping_file.read_text()) if mapping_file.is_file() else None
+    return [mapping['task_id']] if isinstance(mapping, dict) and mapping.get('task_id') else []
+
+
 class GraphTrajAgents:
     """Run ``agents`` actions through the core, keeping Task member controls.
 

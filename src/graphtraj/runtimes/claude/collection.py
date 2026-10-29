@@ -17,6 +17,7 @@ from graphtraj.sessions.storage import SessionStore, StreamWriter, session_path
 
 
 from agent_swarm.sessions.claude import timestamp
+from agent_swarm.claude.collection import collect_hook_event, hook_source
 
 
 def open_archive(
@@ -194,57 +195,18 @@ def finish_transcript_collection(
                                         inherited=inherited)
 
 
-def hook_source(event: dict, cwd: Path) -> tuple[str, str, str | None, str]:
-    """Validate the exact native hook association without interpreting its history."""
-    kind = event.get('hook_event_name')
-    if kind not in {'SessionStart', 'Stop', 'StopFailure', 'SessionEnd', 'SubagentStop'}:
-        raise ValueError('Unsupported Claude collection hook.')
-    native_id = event.get('session_id')
-    if not isinstance(native_id, str) or not native_id:
-        raise ValueError('Native Session identity is required.')
-    child = event.get('agent_id')
-    if child is not None and (not isinstance(child, str) or not child):
-        raise ValueError('Native child identity must be a nonempty string.')
-    if kind == 'SubagentStop' and not child:
-        raise ValueError('Native child identity is required.')
-    path = event.get('agent_transcript_path' if child else 'transcript_path')
-    if not isinstance(path, str) or not Path(path).is_absolute():
-        raise ValueError('The native source must supply its own absolute transcript path.')
-    if child and event.get('transcript_path') and Path(path).resolve() == Path(event['transcript_path']).resolve():
-        raise ValueError('The parent transcript is not the child transcript.')
-    if event.get('cwd') and Path(event['cwd']).resolve() != cwd.resolve():
-        raise ValueError('Hook working directory differs from collection entry.')
-    return kind, native_id, child, path
-
-
 def collect_jsonl_hook(event: dict, cwd: Path) -> dict:
-    """Collect the native hook's associated transcript into the tool-owned archive."""
-    from agent_swarm.sessions.claude import ClaudeJsonlCollector
-    from agent_swarm.sessions.archive import JsonlSessionStore, archive_path
-    from graphtraj.interfaces.agents import configured_archive
+    """Collect the native hook's associated transcript into the project's tool-owned archive.
+
+    GraphTraj only chooses the archive and its ``extra_fields.graphtraj``; the
+    collection itself is the agents package's.
+    """
+    from graphtraj.interfaces.agents import configured_archive, graphtraj_fields
     from graphtraj.workspace.runner_project import discover_project_root
 
-    kind, native_id, child, path = hook_source(event, cwd)
-    archive = configured_archive(discover_project_root(cwd))
-    retained = archive.native_header('claude', native_id, agent_id=child)
-    history_count = None
-    if retained and kind != 'SessionStart':
-        previous = JsonlSessionStore(archive_path(archive.root, retained['id']))
-        boundary = previous.position('claude-hook-boundary')
-        history_count = boundary if boundary >= 0 else None
-    collector = ClaudeJsonlCollector(archive, native_id, 'claude-native:' + (child or native_id),
-                                    cwd, 'native-hook', child_id=child, history_count=history_count,
-                                    resumed=kind != 'SessionStart' or event.get('source') != 'startup')
-    collector.bind(Path(path))
-    store = archive.store(collector.identity) if collector.header is not None else None
-    if store is not None:
-        if kind == 'SessionStart':
-            store.mark_boundary('claude-hook-boundary', collector.history_count)
-        position = store.position('native-hook') + 1
-        collector.accept(event, position)
-        collector.close()
-    return {'session_id': collector.identity, 'source': 'child' if child else 'native-session',
-            'saved': store is not None}
+    _kind, native_id, child, _path = hook_source(event, cwd)
+    return collect_hook_event(configured_archive(discover_project_root(cwd)), event, cwd,
+                              extra_fields=graphtraj_fields(str(cwd), 'claude-native:' + (child or native_id)))
 
 
 def collect_hook(event: dict, cwd: Path) -> dict:

@@ -684,8 +684,13 @@ def test_explicit_read_access_is_enforced_by_native_sandbox(
     report = evidence / 'teams/1/rounds/1/findings.md'
     report.parent.mkdir(parents=True)
     report.write_text('owned evidence')
+    # Members read project records since 23ea86c; other Sessions' control
+    # channels under .graphtraj/cli stay denied.
     foreign = evidence / 'foreign.md'
-    foreign.write_text('private evidence')
+    foreign.write_text('project evidence')
+    channel = root / '.graphtraj/cli/other-session/control.yml'
+    channel.parent.mkdir(parents=True)
+    channel.write_text('private channel')
     name, preset = parse_inline_role({'auditor': {
         'runtime': 'codex', 'model': 'unused',
         'worktree_access': 'read', 'reports': ['findings.md'],
@@ -707,22 +712,24 @@ def test_explicit_read_access_is_enforced_by_native_sandbox(
     command.extend([sys.executable, '-c', '''
 from pathlib import Path
 import sys
-root, report, foreign = map(Path, sys.argv[1:])
+root, report, foreign, channel = map(Path, sys.argv[1:])
 assert (root / 'candidate.txt').read_text() == 'unchanged'
 assert report.read_text() == 'owned evidence'
-for path, action in [(root / 'candidate.txt', 'write'), (report, 'write'), (foreign, 'read')]:
+assert foreign.read_text() == 'project evidence'
+for path, action in [(root / 'candidate.txt', 'write'), (report, 'write'), (foreign, 'write'), (channel, 'read')]:
     try:
         path.write_text('forbidden') if action == 'write' else path.read_text()
     except PermissionError:
         continue
     raise AssertionError(f'{action} unexpectedly permitted for {path}')
-print('candidate/report writes and foreign report read denied')
-''', str(root), str(report), str(foreign)])
+print('candidate/report/record writes and control channel read denied')
+''', str(root), str(report), str(foreign), str(channel)])
     result = subprocess.run(command, text=True, capture_output=True)
     if 'sandbox_apply: Operation not permitted' in result.stderr:
         pytest.skip('Host prohibits nested Seatbelt sandbox creation')
     assert result.returncode == 0, result.stdout + result.stderr
     assert (root / 'candidate.txt').read_text() == 'unchanged'
+    assert foreign.read_text() == 'project evidence'
 
 
 @pytest.mark.parametrize('configuration', [

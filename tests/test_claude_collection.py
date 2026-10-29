@@ -183,10 +183,10 @@ def test_final_native_time_is_not_first_fragment_receipt(
         collector.accept(final, 2)
         [event] = store.page()['events']
         assert event['time'] == expected
-        assert event['graphtraj']['firstReceivedAtMs'] == 1900000000000
-        assert event['graphtraj']['receivedAtMs'] == 1900000010000
-        assert event['graphtraj']['native']['record'] == final
-        assert any(m['path'] == 'time' for m in event['graphtraj']['missing']) == (native_time is None)
+        assert event['firstReceivedAtMs'] == 1900000000000
+        assert event['receivedAtMs'] == 1900000010000
+        assert event['native']['record'] == final
+        assert any(m['path'] == 'time' for m in event['missing']) == (native_time is None)
         store.validate()
 
 
@@ -210,10 +210,10 @@ def test_attachment_bytes_and_child_query_scope(tmp_path: Path, monkeypatch: pyt
     result = hook(tmp_path, event, monkeypatch)
     with SessionStore(session_path(tmp_path / 'state', result['session_id'])) as store:
         item = store.page()['events'][0]
-        reference = item['graphtraj']['attachments'][0]
+        reference = item['attachments'][0]
         assert store.attachment(reference['sha256']) == b'\x00\xff'
-        assert any(m['path'] == '/message/content/1/source' for m in item['graphtraj']['missing'])
-        assert store.header['graphtraj']['native']['sessionId'] == 'native'
+        assert any(m['path'] == '/message/content/1/source' for m in item['missing'])
+        assert store.header['native']['sessionId'] == 'native'
     mapping_path = runner / 'sessions/research@x1/mapping.yml'
     mapping = yaml.safe_load(mapping_path.read_text())
     mapping.update(runtime='claude', session='native')
@@ -237,7 +237,7 @@ def test_claude_command_hook_output(tmp_path: Path, monkeypatch: pytest.MonkeyPa
 
     store = JsonlSessionStore(archive_path(tmp_path / '.graphtraj/swarm', 'claude:new'))
     assert store.page()['events'] == []
-    assert any(item['event']['graphtraj']['native'].get('record') == event
+    assert any(item['event']['native'].get('record') == event
                for item in store.pending() + store.observations())
     invalid = CliRunner().invoke(main, ['claude'], input=json.dumps({**event, 'session_id': ''}))
     assert invalid.exit_code == 1
@@ -267,7 +267,8 @@ def test_late_fork_and_interleaved_metadata(tmp_path: Path, monkeypatch: pytest.
     hook(tmp_path, {**event, 'hook_event_name': 'Stop'}, monkeypatch)
     data = query(tmp_path, result['session_id'])
     assert data['header']['id'] == before['id']
-    assert data['header']['graphtraj'] == before['graphtraj']
+    assert data['header'].get('extra_fields') == before.get('extra_fields')
+    assert data['header']['native'] == before['native']
     assert data['header']['parentSession'] == 'claude:parent'
     assert data['header']['isSeeded']
     assert [e['data']['record'] for e in data['events'][:2]] == [inherited, second]
@@ -275,7 +276,7 @@ def test_late_fork_and_interleaved_metadata(tmp_path: Path, monkeypatch: pytest.
     assert data['events'][2]['data']['inherited'] is True
     assert all(e['data'].get('record', {}).get('hook_event_name') is None
                for e in data['events'][:2])
-    original = [e['graphtraj']['initialHeader'] for e in data['events']
+    original = [e['initialHeader'] for e in data['events']
                 if 'initialHeader' in e.get('graphtraj', {})]
     assert original == [before]
     assert any(e['data'].get('record') == event for e in data['events'][3:])
@@ -317,7 +318,7 @@ def test_stream_model_is_observed_not_requested(tmp_path: Path, observed: str | 
             assert 'message' not in output['data'] and 'surfaceOp' not in output
         assert output['data']['stream'][0]['text'] == 'received'
         if finish:
-            assert output['graphtraj']['native']['record']['message'] == message
+            assert output['native']['record']['message'] == message
         else:
             assert output['data']['interrupted']
         store.validate()
@@ -338,7 +339,7 @@ def test_unknown_fork_stays_pending_after_terminal_and_source_loss(tmp_path: Pat
     data = query(tmp_path, result['session_id'])
     assert data['events'] == [] and 'parentSession' not in data['header']
     pending = data['pending']['event']
-    assert pending['graphtraj']['missing'][0]['path'] == 'parentSession/isSeeded'
+    assert pending['missing'][0]['path'] == 'parentSession/isSeeded'
     records = [o['event']['data']['record'] for o in pending['data']['observations']]
     assert records == [record, event, {**event, 'hook_event_name': 'Stop'}]
 

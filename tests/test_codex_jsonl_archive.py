@@ -49,7 +49,7 @@ def test_jsonl_native_order_content_ciphertext_and_partial_tail(tmp_path: Path) 
     write_config(root, save_normalized_sessions=True, backfill_history=True)
     source = tmp_path / 'rollout.jsonl'
     archive = ConfiguredSessionArchive(root)
-    collector = CodexJsonlArchive(archive, 'agent', 'native', source)
+    collector = CodexJsonlArchive(archive, 'native', source)
     records = history()
     write(source, records[:-1])
     tail = json.dumps(records[-1])
@@ -78,7 +78,7 @@ def test_save_and_backfill_choices_control_actual_collection(tmp_path: Path) -> 
     write(source, records[:-1])
     write_config(root, save_normalized_sessions=True, backfill_history=False)
     archive = ConfiguredSessionArchive(root)
-    collector = CodexJsonlArchive(archive, 'agent', 'native', source)
+    collector = CodexJsonlArchive(archive, 'native', source)
     write(source, records)
     collector.collect(source)
     path = archive_path(root, 'codex:native')
@@ -111,7 +111,7 @@ def test_empty_compaction_replaces_messages_without_losing_evidence(tmp_path: Pa
     source = tmp_path / 'rollout.jsonl'
     records = history() + [{'type': 'compacted', 'payload': {'replacement_history': []}}]
     write(source, records)
-    collector = CodexJsonlArchive(ConfiguredSessionArchive(root), 'agent', 'native', source)
+    collector = CodexJsonlArchive(ConfiguredSessionArchive(root), 'native', source)
     collector.collect(source)
     store = current(root)
     assert native_record(store.page()['events'][-2]) == records[-1]
@@ -134,13 +134,13 @@ def test_compaction_retained_context_and_rollback(tmp_path: Path) -> None:
         {'type': 'event_msg', 'payload': {'type': 'thread_rolled_back', 'num_turns': 1}},
     ]
     write(source, records)
-    collector = CodexJsonlArchive(ConfiguredSessionArchive(root), 'agent', 'native', source)
+    collector = CodexJsonlArchive(ConfiguredSessionArchive(root), 'native', source)
     collector.collect(source)
     collector.collect(source)
     store = current(root)
     assert [message['content'][0]['text'] for message in store.messages()] == ['keep']
     assert any(native_record(event) == records[-3] for event in store.page()['events']
-               if event['type'] != 'graphtraj/history')
+               if event['type'] != 'history')
 
 
 def test_rollback_restores_history_before_removed_legacy_compaction(tmp_path: Path) -> None:
@@ -161,7 +161,7 @@ def test_rollback_restores_history_before_removed_legacy_compaction(tmp_path: Pa
         {'type': 'event_msg', 'payload': {'type': 'thread_rolled_back', 'num_turns': 1}},
     ])
     write(source, records)
-    CodexJsonlArchive(ConfiguredSessionArchive(root), 'agent', 'native', source).collect(source)
+    CodexJsonlArchive(ConfiguredSessionArchive(root), 'native', source).collect(source)
     store = current(root)
     assert [message['content'][0]['text'] for message in store.messages()] == ['keep']
 
@@ -185,7 +185,7 @@ def test_rollback_keeps_persistent_developer_prefix_and_original_annotations(tmp
         {'type': 'event_msg', 'payload': {'type': 'thread_rolled_back', 'num_turns': 1}},
     ]
     write(source, records)
-    collector = CodexJsonlArchive(ConfiguredSessionArchive(root), 'agent', 'native', source)
+    collector = CodexJsonlArchive(ConfiguredSessionArchive(root), 'native', source)
     collector.collect(source)
     store = current(root)
     assert store.messages()[0]['content'] == [{'type': 'text', 'text': 'persistent'}]
@@ -207,7 +207,7 @@ def test_native_agent_communication_keeps_author_ciphertext_and_rollback_boundar
     }}
     records = history()[:2] + [communication]
     write(source, records)
-    collector = CodexJsonlArchive(ConfiguredSessionArchive(root), 'agent', 'native', source)
+    collector = CodexJsonlArchive(ConfiguredSessionArchive(root), 'native', source)
     collector.collect(source)
     store = current(root)
     message = store.messages()[-1]
@@ -232,7 +232,7 @@ def test_copied_fork_seeds_before_child_messages(tmp_path: Path) -> None:
                                             'content': [{'type': 'input_text', 'text': 'child'}]}},
     ]
     write(source, records)
-    collector = CodexJsonlArchive(ConfiguredSessionArchive(root), 'agent', 'native', source)
+    collector = CodexJsonlArchive(ConfiguredSessionArchive(root), 'native', source)
     collector.collect(source)
     store = current(root)
     assert store.header['parentSession'] == 'codex:parent'
@@ -259,7 +259,7 @@ def test_referenced_fork_waits_for_exact_parent_cut(tmp_path: Path) -> None:
                                                          'content': [{'type': 'input_text', 'text': 'child'}]}},
     ]
     write(child_path, child_records)
-    child = CodexJsonlArchive(archive, 'child-agent', 'child', child_path)
+    child = CodexJsonlArchive(archive, 'child', child_path)
     child.collect(child_path)
     path = archive_path(root, 'codex:child')
     assert JsonlSessionStore(path).pending()
@@ -267,7 +267,7 @@ def test_referenced_fork_waits_for_exact_parent_cut(tmp_path: Path) -> None:
         JsonlSessionStore(path).messages()
     before = child.collection_key()
     write(parent_path, parent_records)
-    CodexJsonlArchive(archive, 'parent-agent', 'native', parent_path).collect(parent_path)
+    CodexJsonlArchive(archive, 'native', parent_path).collect(parent_path)
     assert child.collection_key() != before
     child.collect(child_path)
     store = JsonlSessionStore(path)
@@ -282,7 +282,7 @@ def test_referenced_fork_waits_for_exact_parent_cut(tmp_path: Path) -> None:
             },
         }},
     ])
-    CodexJsonlArchive(archive, 'grandchild-agent', 'grandchild', grandchild_path).collect(grandchild_path)
+    CodexJsonlArchive(archive, 'grandchild', grandchild_path).collect(grandchild_path)
     grandchild = JsonlSessionStore(archive_path(root, 'codex:grandchild'))
     assert [message['content'][0]['text'] for message in grandchild.messages()] == ['both']
 
@@ -303,7 +303,7 @@ def test_runtime_observes_archive_policy_without_new_native_output(tmp_path: Pat
             records[0]['payload']['id'] = session.thread_id
             write(source, records)
             archive = ConfiguredSessionArchive(root)
-            collector = CodexJsonlArchive(archive, 'agent', session.thread_id, source)
+            collector = CodexJsonlArchive(archive, session.thread_id, source)
             adapter.retain_native_trace(session, tmp_path / 'trace.jsonl', archive=collector)
             path = archive_path(root, 'codex:' + session.thread_id)
             assert JsonlSessionStore(path).pending()
@@ -343,7 +343,7 @@ def test_referenced_fork_inherits_parent_history_selections(tmp_path: Path, boun
     write(parent_path, parent_records[:-1])
     end = parent_path.stat().st_size
     write(parent_path, parent_records)
-    CodexJsonlArchive(archive, 'parent-agent', 'native', parent_path).collect(parent_path)
+    CodexJsonlArchive(archive, 'native', parent_path).collect(parent_path)
     child_path = tmp_path / 'child.jsonl'
     write(child_path, [
         {'type': 'session_meta', 'ordinal': 0, 'payload': {'id': 'child', 'forked_from_id': 'native',
@@ -352,14 +352,14 @@ def test_referenced_fork_inherits_parent_history_selections(tmp_path: Path, boun
         {'type': 'response_item', 'ordinal': 1, 'payload': {'type': 'message', 'role': 'user',
                                                          'content': [{'type': 'input_text', 'text': 'child'}]}},
     ])
-    CodexJsonlArchive(archive, 'child-agent', 'child', child_path).collect(child_path)
+    CodexJsonlArchive(archive, 'child', child_path).collect(child_path)
 
     parent = current(root)
     child = JsonlSessionStore(archive_path(root, 'codex:child'))
     assert child.messages()[:-1] == parent.messages()[:-1]
     assert child.messages()[-1]['content'][0]['text'] == 'child'
     parent_events = {event['seq']: event for event in parent.page()['events']}
-    selections = [event for event in child.page()['events'] if event['type'] == 'graphtraj/history']
+    selections = [event for event in child.page()['events'] if event['type'] == 'history']
     assert selections
     for selection in selections:
         assert selection == parent_events[selection['seq']]

@@ -163,7 +163,11 @@ Public: `agent_swarm.__version__` and the names in `agent_swarm.__all__`:
 - the backend: `AgentControl`, `RuntimeDriver`, `Run`, `ExecutionEvents`,
   `ACTIVE`, `STANDBY`;
 - configuration: `CONFIG_DEFAULTS`, `default_config`, `explicit_choices`,
-  `read_config`, `write_config`.
+  `read_config`, `write_config`;
+- the normalized Session archive (section 1.5): `read_session(path)` returns
+  `{"header", "events"}` in version 5 form for version 4 and 5 files, and
+  `validate_extra_fields(value)` checks an `extra_fields` container (section 5).
+  `SessionArchive` takes the keyword `event_fields` (section 5).
 
 Every submodule (`agent_swarm.control`, `agent_swarm.claude.*`,
 `agent_swarm.sessions.*` and so on) is internal, even where a public name is
@@ -188,19 +192,45 @@ and, when archiving is on, one archive per Session at
 `sessions/<sha256 of the Session ID>/session.jsonl`. Everything else under the
 root is internal.
 
-The archive is JSONL: a header line, then events in native order. Today:
+The archive is JSONL: a metadata line holding the header, then events in
+native order.
 
-- `header.version` is `4`, the DeepSeek Harness Session v4 layout (see
-  `examples/sessions/README.md` in the repository);
-- an optional `graphtraj` object on the header and on events carries the
-  extension with its own `version` `1`: header `projectId`, `agentId`,
-  `taskIds`, `previousSession`, `boundary`; event `native` provenance and
-  `missing` facts;
-- extension event types `graphtraj/native`, `graphtraj/score`,
-  `graphtraj/logprobs`, `graphtraj/derived`, `graphtraj/history`, and the
-  content type `graphtraj/encrypted`.
+- `header.version` is `5`: the DeepSeek Harness Session v4 layout (see
+  `examples/sessions/README.md` in the repository) plus the product-neutral
+  archive fields below and `extra_fields` (section 5). Version 5 replaced
+  version 4 in agents 0.2.0.
+- Header fields: `native` (`runtime`, `sessionId`, `locator`, plus native
+  evidence), `missing` (`[{path, reason}]`), `previousSession` with its
+  `boundary` (`{kind, offset}`, kind `rollout`, `compaction` or `rollback`),
+  `source`.
+- Event fields: `native` provenance (required on every archived event) and
+  `missing`; Runtime evidence such as `attachments`, `usage`, `usageSource`,
+  `contextReplay`, `receivedAtMs`, `lastReceivedAtMs`, `collectionBoundary`.
+- Archive event types `native`, `history`, `score`, `logprobs`, `derived`;
+  `collection-pending` (drafts only, never canonical history); content type
+  `encrypted`; stream record type `text-run`.
 
-Independent hosts refuse archiving today (`archive-unavailable`); 384 adds it.
+Version 4 files stay readable. Every reader (`read_session`, the store,
+Session lookup) maps them on read; agents writes only version 5. An archive
+reopened from a version 4 file is rewritten whole, atomically, as version 5 on
+its next change, so one file never mixes versions. Version 4 to 5:
+
+| Version 4 | Version 5 |
+| --- | --- |
+| `header.version: 4` | `header.version: 5` |
+| header `graphtraj.version`, `projectId`, `agentId`, `taskIds` | `extra_fields.graphtraj.version`, `.projectId`, `.agentId`, `.taskIds` |
+| header `graphtraj.native`, `.missing`, `.previousSession`, `.boundary`, `.source` | header `native`, `missing`, `previousSession`, `boundary`, `source` |
+| event `graphtraj.native`, `.missing` | event `native`, `missing` |
+| event `graphtraj.attachments`, `.usage`, `.usageSource`, `.contextReplay`, `.receivedAtMs`, `.lastReceivedAtMs`, `.collectionBoundary` | the same names at the event's top level |
+| event `graphtraj.version` (always `1`) | dropped |
+| types `graphtraj/native`, `graphtraj/history`, `graphtraj/score`, `graphtraj/logprobs`, `graphtraj/derived`, `graphtraj/collection-pending` | `native`, `history`, `score`, `logprobs`, `derived`, `collection-pending` |
+| content `graphtraj/encrypted`, stream `graphtraj/text-run` | `encrypted`, `text-run` |
+
+Native records (`native.record`, `data.record`) are copied unchanged. A
+version 4 value whose `graphtraj` key would overwrite an existing top-level
+field is refused, not merged.
+
+Independent hosts write archives when `save_normalized_sessions` is on.
 
 ## 2. Creating a child: Runtime, preset, model, reasoning effort
 
@@ -301,27 +331,38 @@ Gaps, by owner:
 
 ## 5. `extra_fields` in the normalized Session
 
-**Planned (384).** The archive gains an `extra_fields` container on the
-header and on any event:
+The header and any event may carry an `extra_fields` container:
 
 - `extra_fields` is a JSON object. Keys are non-empty strings naming a
-  namespace (`extra_fields.<namespace>`); values are any JSON-serializable
-  value. agents validates only this container; each namespace validates its
-  own content.
+  namespace (`extra_fields.<namespace>`); values are any JSON value without
+  non-finite numbers. agents validates only this container
+  (`validate_extra_fields`); each namespace validates its own content.
 - Each namespace versions itself, for example `extra_fields.graphtraj =
   {"version", "projectId", "agentId", "taskIds"}`.
-- A reader that does not know a namespace ignores it safely. An extension
-  field never changes the meaning of a core field.
-- Header fields are attached at `create` through its arguments or
-  configuration. Event fields are written only by programmatic extensions
-  (hooks, plugins), never by model arguments.
-- Credential redaction applies to `extra_fields` as to every other field.
-- Old files: a top-level `graphtraj` key is read as
-  `extra_fields.graphtraj`. New files are written only in the new form.
-- The archive protocol version increases by one. Today the header carries
-  `version: 4` and the extension `graphtraj.version: 1`; 384 records here
-  which number carries the increase. Current readers refuse a header version
-  other than 4, so raising it is an incompatible change under section 7.
+- A reader that does not know a namespace ignores it safely; agents itself
+  never reads a namespace. An extension field never changes the meaning of a
+  core field, and never affects messages, order or identity.
+- Header fields are attached when the archive is created, through the
+  collectors' `extra_fields` argument, which hosts fill from `create`
+  arguments or configuration. The first writer's header is kept: reopening
+  with a different header is refused.
+- Event fields are written only by programmatic extensions:
+  `SessionArchive(..., event_fields=callable)`. The callable receives a copy
+  of each event about to be written (newly published events and drafts) and
+  returns an `extra_fields` object, merged by namespace, or `None`. A
+  published event keeps the fields it was first written with. Model arguments
+  never reach it.
+- Credential redaction applies to `extra_fields` in the header and in events
+  before they are written: credential-named keys and recognizable secrets
+  (bearer tokens, `sk-` keys, URL passwords, credential environment values)
+  become `[redacted]`. Native content is archived losslessly and is not
+  redacted.
+- Old files: a top-level `graphtraj` key is read as described in section 1.5:
+  its product keys become `extra_fields.graphtraj`, its core keys become core
+  fields. New files are written only in the new form.
+- The protocol version increase is carried by `header.version` (4 → 5).
+  Readers older than agents 0.2.0 refuse version 5, so this is an
+  incompatible change under section 7.
 
 All existing fidelity rules stay (native order, no reordering by notice
 time).
@@ -413,8 +454,8 @@ or be renamed. Numbers refer to the subtraction list in
 | 3 | Pi completion checker entry `graphtraj:completion-checker` | `pi/session.py` | 388 (behaviour), 394 (name) |
 | 4 | `GRAPHTRAJ_*` variables: `GRAPHTRAJ_CLI_CONNECTION`, `GRAPHTRAJ_NATIVE_RUNTIME`, `GRAPHTRAJ_NATIVE_SESSION`, `GRAPHTRAJ_NATIVE_SESSION_FILE`, `GRAPHTRAJ_CLAUDE_HOST_PYTHON`, `GRAPHTRAJ_CLAUDE_HOST_CONFIG`, `GRAPHTRAJ_DSH_PACKAGE` | `connection.py`, `claude/host.py`, `claude/host_context.mjs`, `claude/execution.py`, `codex/managed_session.py`, `pi/extension.mjs`, `pi/session.py`, `pi/host.py`, `pi/execution.py`, `dsh/plugin.mjs`, `dsh/execution.py` | 394 |
 | 4 | Host exclusion check refusing both the independent and the GraphTraj connection | `connection.py` (`call_owner`), `claude/host.py` (`serve`), `pi/extension.mjs` | 388 |
-| 5 | Archive header extension `graphtraj` with `projectId`, `agentId`, `taskIds` | `sessions/protocol.py`, `sessions/archive.py`, `sessions/claude.py`, `sessions/codex.py`, `sessions/codex_history.py`, `sessions/pi.py` | 384 |
-| 5+ | Core archive facts kept under the `graphtraj` name: event `graphtraj.native` provenance (required for every archived event), `graphtraj.missing`, header `previousSession`/`boundary`, types `graphtraj/native`, `graphtraj/history`, `graphtraj/text-run`, `graphtraj/encrypted`, `graphtraj/collection-pending` and the other `graphtraj/*` types. These are core meaning, so they cannot simply move into `extra_fields.graphtraj` | `sessions/protocol.py`, `sessions/archive.py`, `sessions/migration.py`, all `sessions/*` mappers | 384 for structure, 394 for names; larger than spec item 5, Main to confirm |
+| 5 | Archive header extension `graphtraj` with `projectId`, `agentId`, `taskIds` | Done in 384: agents writes no product fields; GraphTraj passes `extra_fields.graphtraj`. The `graphtraj` name remains only in the version 4 reader (`sessions/protocol.py`, `LEGACY_*`) | 384 |
+| 5+ | Core archive facts kept under the `graphtraj` name (event provenance, missing facts, header continuation, `graphtraj/*` types) | Done in 384: product-neutral core fields and types (section 1.5) | 384 |
 | 6 | Pi custom message type `graphtraj:agent-communication` | `pi/extension.mjs` | 394 |
 | 7 | Pi execution's GraphTraj Task fields and fixed `.graphtraj` deny-read and deny-write paths | `pi/execution.py`, `pi/host.py` | 382 |
 | 8 | No independent DSH host | `dsh/` | 383 |

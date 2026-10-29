@@ -32,7 +32,7 @@ NOTIFICATIONS = [('result-a', 300), ('answer', 300), ('result-b', None), ('calls
 
 def header(*, seeded: bool = False) -> dict:
     """Return a plain DSH header without requiring GraphTraj Task metadata."""
-    value = {'version': 4, 'id': 'canonical', 'createdAt': 100, 'isSeeded': seeded}
+    value = {'version': 5, 'id': 'canonical', 'createdAt': 100, 'isSeeded': seeded}
     if seeded:
         value['parentSession'] = 'parent'
     return value
@@ -55,7 +55,7 @@ def mapped(records: list[dict]) -> list[dict]:
         if role == 'tool':
             message['toolCallId'] = record['callId']
         if 'ciphertext' in record:
-            message['content'].append({'type': 'graphtraj/encrypted',
+            message['content'].append({'type': 'encrypted',
                                        'nativePath': 'ciphertext', 'value': record['ciphertext']})
         data = message if role == 'user' else {'turn': 0, 'step': 0, 'message': message}
         if role == 'assistant':
@@ -63,18 +63,17 @@ def mapped(records: list[dict]) -> list[dict]:
         event = {'type': 'tool/result' if role == 'tool' else role + '/message',
                  'seq': seq, 'time': record['created'] if record['created'] is not None else 0,
                  'surfaceOp': 'append', 'data': data,
-                 'graphtraj': {'version': 1, 'native': {
-                     'runtime': 'fixture', 'sessionId': 'native', 'locator': record['id'],
-                     'record': deepcopy(record)}}}
+                 'native': {'runtime': 'fixture', 'sessionId': 'native', 'locator': record['id'],
+                            'record': deepcopy(record)}}
         if record['created'] is None:
-            event['graphtraj']['missing'] = [{'path': 'time', 'reason': 'Native creation time unavailable'}]
+            event['missing'] = [{'path': 'time', 'reason': 'Native creation time unavailable'}]
         events.append(event)
     return events
 
 
 def run(text: str, *, message: str = 'answer', index: int = 0, **extra: object) -> dict:
     """Supply a semantic fragment whose identity includes message and block."""
-    return {'type': 'graphtraj/text-run', 'requestId': 'request', 'attemptId': 'attempt',
+    return {'type': 'text-run', 'requestId': 'request', 'attemptId': 'attempt',
             'messageId': message, 'index': index, 'blockType': 'text', 'text': text, **extra}
 
 
@@ -84,8 +83,8 @@ def test_native_history_not_notifications_defines_order_and_pagination(tmp_path:
     store = JsonlSessionStore.create(path, header())
     events = mapped(NATIVE)
     for position, (identity, notification_time) in enumerate(NOTIFICATIONS):
-        event = deepcopy(next(event for event in events if event['graphtraj']['native']['locator'] == identity))
-        event['graphtraj']['notificationTime'] = notification_time
+        event = deepcopy(next(event for event in events if event['native']['locator'] == identity))
+        event['notificationTime'] = notification_time
         store.checkpoint(event, source='notices', position=position)
     assert store.page()['events'] == []
     assert len(store.pending()) == 4
@@ -104,12 +103,12 @@ def test_native_history_not_notifications_defines_order_and_pagination(tmp_path:
             break
     assert [native_record(event) for event in collected] == NATIVE
     assert collected == events
-    assert [item['event']['graphtraj']['notificationTime'] for item in store.observations()] == [300, 300, None, 20]
+    assert [item['event']['notificationTime'] for item in store.observations()] == [300, 300, None, 20]
     messages = store.messages()
     assert [(m['id'], m['role'], m['content'][0]['text']) for m in messages] == [
         (record['id'], record['role'], record['text']) for record in NATIVE]
     assert [m['toolCallId'] for m in messages if m['role'] == 'tool'] == ['b', 'a']
-    assert collected[2]['time'] == 0 and collected[2]['graphtraj']['missing']
+    assert collected[2]['time'] == 0 and collected[2]['missing']
     assert collected[4]['data']['message']['content'][1]['value'] == 'opaque=='
     assert not store.publish(events, source='native-history', position=0)
     assert store.publish(events, source='backfill', position=0)
@@ -234,8 +233,7 @@ def test_attachments_portable_and_unknown_required_event_refuses_projection(tmp_
     events[0]['data']['content'].append({'type': 'file', 'attachment': ref})
     events.append({'type': 'future/native', 'seq': 5, 'time': -1,
                    'data': {'ciphertext': 'unknown==', 'opaque': [1, None]},
-                   'graphtraj': {'version': 1, 'native': {
-                       'runtime': 'fixture', 'sessionId': 'native', 'locator': 'future'}}})
+                   'native': {'runtime': 'fixture', 'sessionId': 'native', 'locator': 'future'}})
     store.publish(events, source='history', position=0)
     shutil.copytree(directory, tmp_path / 'copied')
     shutil.rmtree(directory)
@@ -259,18 +257,17 @@ def test_native_fork_chain_compaction_and_original_times(tmp_path: Path) -> None
     native_messages = [native_chain[-1]]
     events = mapped(native_chain[:2])
     for event in events:
-        event['graphtraj']['native']['sessionId'] = 'parent-native'
+        event['native']['sessionId'] = 'parent-native'
     events.append({'type': 'session/end-seed', 'seq': 2, 'time': 0,
-                   'data': {'inherited': True}, 'graphtraj': {'version': 1,
+                   'data': {'inherited': True},
                    'native': {'runtime': 'fixture', 'sessionId': 'child-native',
                               'locator': 'inherited-boundary'},
-                   'missing': [{'path': 'time', 'reason': 'Protocol marker, not a native event time'}]}})
+                   'missing': [{'path': 'time', 'reason': 'Protocol marker, not a native event time'}]})
     events.append({'type': 'compaction/summary', 'seq': 3, 'time': 12,
                    'data': {'compactionId': 'compact', 'summary': [{'type': 'text', 'text': 'summary'}],
                             'shadowedRange': {'start': 0, 'end': 1}, 'shadowedSeqs': [0, 1],
                             'shadowedTokenCount': 2, 'provider': 'fixture', 'model': 'fixture'},
-                   'graphtraj': {'version': 1, 'native': {
-                       'runtime': 'fixture', 'sessionId': 'child-native', 'locator': 'compact'}}})
+                   'native': {'runtime': 'fixture', 'sessionId': 'child-native', 'locator': 'compact'}})
     summary = mapped([native_chain[-1]])[0]
     summary.update(seq=4, sourceEventSeqs=[0, 1],
                    surfaceOp={'op': 'replace', 'startSeq': 0, 'endSeq': 1})
@@ -292,21 +289,20 @@ def test_score_probability_alignment_survives_jsonl_and_history_prefix(tmp_path:
     from test_session_protocol import observation
 
     metadata = header()
-    metadata['graphtraj'] = {'version': 1, 'projectId': 'fixture',
-                            'agentId': 'fixture', 'taskIds': []}
+    metadata['extra_fields'] = {'graphtraj': {'version': 1, 'projectId': 'fixture',
+                                              'agentId': 'fixture', 'taskIds': []}}
     current = mapped([{'id': 'probability-target', 'role': 'user', 'text': 'é', 'created': 10}])
-    for seq, kind in enumerate(('graphtraj/logprobs', 'graphtraj/score'), 1):
+    for seq, kind in enumerate(('logprobs', 'score'), 1):
         event = observation(kind)
         event['seq'] = seq
-        event['graphtraj'] = {'version': 1, 'native': {
-            'runtime': 'fixture', 'sessionId': 'native', 'locator': kind}}
+        event['native'] = {'runtime': 'fixture', 'sessionId': 'native', 'locator': kind}
         current.append(event)
     store = JsonlSessionStore.create(tmp_path / 'session.jsonl', metadata)
     store.publish(current, source='live', position=0)
     prefixed = mapped([NATIVE[0]]) + deepcopy(current)
     for event in prefixed[1:]:
         event['seq'] += 1
-        if event['type'].startswith('graphtraj/'):
+        if event['type'] in {'logprobs', 'score'}:
             event['data']['target']['eventSeq'] = 1
     store.publish(prefixed, source='backfill', position=0)
     retained = JsonlSessionStore(store.path).page()['events']
@@ -383,7 +379,7 @@ def test_messages_refuse_declared_content_history_or_identity_gaps(
     events = mapped([NATIVE[0]])
     if missing_path in {'data.content', '/data/content'}:
         events[0]['data']['content'] = []
-    events[0]['graphtraj']['missing'] = [
+    events[0]['missing'] = [
         {'path': missing_path, 'reason': 'Native message body or history unavailable'}]
     store = JsonlSessionStore.create(tmp_path / 'session.jsonl', header())
     assert store.publish(events, source='native', position=0)
@@ -397,9 +393,7 @@ def test_messages_refuse_declared_content_history_or_identity_gaps(
 def test_messages_refuse_header_history_gaps(tmp_path: Path, missing_path: str) -> None:
     """An unavailable inherited prefix cannot become an apparently complete root."""
     metadata = header()
-    metadata['graphtraj'] = {'version': 1, 'projectId': 'fixture', 'agentId': 'fixture',
-                            'taskIds': [], 'missing': [
-                                {'path': missing_path, 'reason': 'Native prefix unavailable'}]}
+    metadata['missing'] = [{'path': missing_path, 'reason': 'Native prefix unavailable'}]
     store = JsonlSessionStore.create(tmp_path / 'session.jsonl', metadata)
     events = mapped([NATIVE[0]])
     store.publish(events, source='native', position=0)
@@ -412,11 +406,9 @@ def test_messages_refuse_header_history_gaps(tmp_path: Path, missing_path: str) 
 def test_missing_optional_metadata_does_not_block_complete_messages(tmp_path: Path) -> None:
     """Creation times and probability/usage details do not alter native messages."""
     metadata = header()
-    metadata['graphtraj'] = {'version': 1, 'projectId': 'fixture', 'agentId': 'fixture',
-                            'taskIds': [], 'missing': [
-                                {'path': 'createdAt', 'reason': 'Native creation time unavailable'}]}
+    metadata['missing'] = [{'path': 'createdAt', 'reason': 'Native creation time unavailable'}]
     events = mapped(NATIVE)
-    events[0]['graphtraj']['missing'] = [
+    events[0]['missing'] = [
         {'path': path, 'reason': 'Optional native metadata unavailable'}
         for path in ('time', '/data/message/createdAt', 'logprobs',
                      'data.usage', 'probabilitySemantics', '/data/stream')]

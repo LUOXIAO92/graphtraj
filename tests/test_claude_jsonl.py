@@ -31,7 +31,7 @@ def collector(tmp_path: Path, records: list[dict], *, backfill: bool = True):
     write(path, records)
     archive = SessionArchive(tmp_path / 'swarm', save_normalized_sessions=True,
                              backfill_history=backfill)
-    result = ClaudeJsonlCollector(archive, 's', 'agent', tmp_path, 'execution')
+    result = ClaudeJsonlCollector(archive, 's', tmp_path, 'execution')
     result.bind(path)
     return result, path, archive
 
@@ -53,7 +53,7 @@ def test_parent_links_not_notification_or_file_arrival_define_messages(tmp_path:
     assert [m['id'] for m in result.messages()] == ['q', 'b', 'a', 'answer']
     events = result.page()['events']
     assert events[2]['time'] < events[1]['time']
-    assert events[3]['graphtraj']['native']['record'] == final
+    assert events[3]['native']['record'] == final
     before = deepcopy(events)
     c.collect()
     assert store(archive).page()['events'] == before
@@ -127,7 +127,7 @@ def test_disabled_archive_creates_nothing_and_retains_old_content(tmp_path: Path
     c.collect()
     c.accept({'type': 'assistant', 'uuid': 'new'}, 1)
     assert destination.read_bytes() == before
-    disabled = ClaudeJsonlCollector(None, 'disabled', 'agent', tmp_path, 'other')
+    disabled = ClaudeJsonlCollector(None, 'disabled', tmp_path, 'other')
     disabled.bind(tmp_path / 'missing')
     disabled.close()
     assert not archive_path(archive.root, 'claude:disabled').exists()
@@ -157,7 +157,7 @@ def test_live_final_transcript_resolve_once_by_native_identity(tmp_path: Path) -
     assert [m['id'] for m in result.messages()] == ['uuid']
     assert len(result.messages()[0]['content']) == 2
     stream, = [o for o in result.observations() if o['event']['type'] == 'assistant/attempt']
-    chunks = [r for r in stream['event']['data']['stream'] if r['type'] == 'graphtraj/text-run']
+    chunks = [r for r in stream['event']['data']['stream'] if r['type'] == 'text-run']
     assert [(r['index'], r['text']) for r in chunks] == [(0, 'hello'), (1, 'hello')]
     c.collect()
     assert store(archive).messages() == result.messages()
@@ -188,7 +188,7 @@ def test_incomplete_native_tail_is_retained_until_native_replay_completes(tmp_pa
     path.write_text(json.dumps(q) + '\n' + tail[:30])
     c.collect()
     pending = store(archive).pending()
-    assert pending[0]['event']['graphtraj']['native']['record']['unparsedTranscriptTail'] == tail[:30]
+    assert pending[0]['event']['native']['record']['unparsedTranscriptTail'] == tail[:30]
     with pytest.raises(ValueError, match='incomplete'):
         store(archive).messages()
     path.write_text(json.dumps(q) + '\n' + tail)
@@ -211,7 +211,7 @@ def test_jsonl_retains_native_ciphertext_attachments_and_completion(tmp_path: Pa
     assert second['content'][0]['signature'] == 'signature'
     assert second['content'][1]['value'] == 'opaque=='
     assert second['content'][2] == a['message']['content'][2]
-    assert result.page()['events'][1]['graphtraj']['native']['record'] == a
+    assert result.page()['events'][1]['native']['record'] == a
 
 
 def test_unknown_live_fields_and_tool_input_blocks_are_retained(tmp_path: Path) -> None:
@@ -235,15 +235,15 @@ def test_prebind_input_and_resume_cut_use_native_input_uuid(tmp_path: Path) -> N
     path = tmp_path / 'native.jsonl'
     write(path, [old, current])
     archive = SessionArchive(tmp_path / 'swarm', save_normalized_sessions=True, backfill_history=False)
-    c = ClaudeJsonlCollector(archive, 's', 'agent', tmp_path, 'execution', resumed=True)
+    c = ClaudeJsonlCollector(archive, 's', tmp_path, 'execution', resumed=True)
     sent = {'type': 'user', 'uuid': 'current', 'session_id': 's', 'graphtraj_direction': 'sent',
             'message': current['message']}
     c.accept(sent, 0)
     c.bind(path, {'current'})
     result = store(archive)
     assert [e['data']['id'] for e in result.page()['events'] if e['type'] == 'user/message'] == ['current']
-    assert any(o['event']['graphtraj']['native']['record'] == sent for o in result.observations())
-    assert any(p['event']['graphtraj']['native']['locator'] == 'history-gap' for p in result.pending())
+    assert any(o['event']['native']['record'] == sent for o in result.observations())
+    assert any(p['event']['native']['locator'] == 'history-gap' for p in result.pending())
 
 
 @pytest.mark.skipif(not os.environ.get('CLAUDE_SDK_MODULE'), reason='Explicit pinned official SDK comparison')
@@ -333,12 +333,11 @@ def test_assistant_first_context_change_replaces_surface_preserving_history(
         # A prior collector checkpoint remains an observation, never rewritten
         # as a successful original collection after upgrading the validator.
         gap = {'type': 'claude/observation', 'seq': 0, 'time': 0,
-               'data': {}, 'ignorable': True, 'graphtraj': {
-                   'version': 1, 'native': {
-                       'runtime': 'claude', 'sessionId': 's', 'locator': 'history-gap',
-                       'record': {'nativeContext': [replacement]}},
-                   'missing': [{'path': 'history', 'reason':
-                       'Archive protocol cannot replace context with an assistant-first chain.'}]}}
+               'data': {}, 'ignorable': True, 'native': {
+                   'runtime': 'claude', 'sessionId': 's', 'locator': 'history-gap',
+                   'record': {'nativeContext': [replacement]}},
+               'missing': [{'path': 'history', 'reason':
+                   'Archive protocol cannot replace context with an assistant-first chain.'}]}
         store(archive).checkpoint(gap, source='history-gap', position=0)
     c.collect()
     result = store(archive)
@@ -348,7 +347,7 @@ def test_assistant_first_context_change_replaces_surface_preserving_history(
     assert [(m['id'], m['role'], m['content']) for m in result.messages()] == [
         ('new', 'assistant', replacement['message']['content'])]
     published = next(e for e in events if e['type'] == 'assistant/message')
-    assert published['graphtraj']['native']['record'] == replacement
+    assert published['native']['record'] == replacement
     assert published['surfaceOp'] == {'op': 'replace', 'startSeq': 0, 'endSeq': 0}
     assert published['sourceEventSeqs'] == [0]
     if retained_gap:
@@ -363,10 +362,10 @@ def test_received_batch_preserves_fragments_boundaries_and_policy(tmp_path: Path
     opened = []
     initialize = JsonlSessionStore.__init__
 
-    def observe(self, path: Path) -> None:
+    def observe(self, path: Path, **options: object) -> None:
         """Count full archive reads, the long-Session cost under investigation."""
         opened.append(path)
-        initialize(self, path)
+        initialize(self, path, **options)
 
     monkeypatch.setattr(JsonlSessionStore, '__init__', observe)
     records = [{'type': 'stream_event', 'session_id': 's', 'event': {
@@ -380,9 +379,9 @@ def test_received_batch_preserves_fragments_boundaries_and_policy(tmp_path: Path
     assert len(opened) < 10  # No whole-archive read for each of the 100 fragments.
     retained = store(archive)
     draft = next(p['event'] for p in retained.pending()
-                 if p['event']['graphtraj']['native']['locator'] == 'stream:api')
+                 if p['event']['native']['locator'] == 'stream:api')
     assert draft['data']['stream'][1]['text'] == ''.join(str(i) + ',' for i in range(100))
-    assert any(p['event']['graphtraj']['native']['record'] == boundary for p in retained.pending())
+    assert any(p['event']['native']['record'] == boundary for p in retained.pending())
     before = retained.path.read_bytes()
     archive.save_normalized_sessions = False
     c.accept_batch([(boundary, len(records))])
@@ -410,5 +409,5 @@ def test_message_batch_reads_native_history_once(tmp_path: Path, monkeypatch: py
     assert len(reads) == 1
     retained = store(archive)
     assert [m['id'] for m in retained.messages()] == ['q', 'a']
-    observed = [o['event']['graphtraj']['native']['record'] for o in retained.observations()]
+    observed = [o['event']['native']['record'] for o in retained.observations()]
     assert all(record in observed for record in [*records, boundary])

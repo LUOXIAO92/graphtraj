@@ -10,7 +10,7 @@ from time import perf_counter
 import pytest
 
 from graphtraj.sessions.storage import SessionStore, StreamWriter, session_path
-from agent_swarm.sessions.protocol import retain_native
+from agent_swarm.sessions.protocol import retain_native, upgrade_header
 
 
 def header(session_id: str = 'canonical') -> dict:
@@ -242,7 +242,7 @@ def test_public_query_reads_jsonl_with_existing_native_authority(tmp_path: Path)
     runner, _, _ = result_project(tmp_path)
     identity = 'codex:native-research@x1'
     archive = SessionArchive(swarm_root(tmp_path), save_normalized_sessions=True)
-    archive.map_session(header(identity))
+    archive.map_session(upgrade_header(header(identity)))
     archive.collect(identity, [retain_native('codex', {'ciphertext': 'opaque'},
         session_id='native-research@x1', locator='byte:0', seq=0, time=1)], source='rollout', position=1)
     request = {'action': 'execute', 'feature': 'session_read', 'arguments': {'session_id': identity}}
@@ -267,8 +267,8 @@ def test_main_and_members_read_linked_project_sessions_without_secrets(tmp_path:
     thread = '01a15203-d14d-7bf3-8900-6a3a3b5e1031'
     identity = 'codex:' + thread
     archive = SessionArchive(swarm_root(tmp_path), save_normalized_sessions=True)
-    main_header = header(identity)
-    main_header['graphtraj']['native']['sessionId'] = thread
+    main_header = upgrade_header(header(identity))
+    main_header['native']['sessionId'] = thread
     archive.map_session(main_header)
     archive.collect(identity, [retain_native('codex', {
         'text': 'Main hook failed: Expecting value', 'request_token': 'private-request-token',
@@ -465,7 +465,7 @@ def test_initial_pending_cannot_be_validated_as_canonical_history() -> None:
 
     event = {'type': INITIAL_COLLECTION_TYPE, 'seq': 0, 'time': 1, 'data': {}}
     with pytest.raises(ValueError, match='pending-collection'):
-        validate_session(header(), [event])
+        validate_session(upgrade_header(header()), [event])
 
 
 def test_initial_batch_cursors_are_atomic_and_idempotent(tmp_path: Path) -> None:

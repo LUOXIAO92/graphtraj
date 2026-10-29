@@ -74,6 +74,9 @@ provenance to identify the provider rather than a Runtime's internal label.
 
 Read the current catalog and revision before editing, preview the complete
 draft, then save with that `expected_revision` through native host review.
+To change only some Runtime entries, send `changes` (`--changes-file`) instead
+of the complete catalog: each named entry is replaced whole, or removed by
+`null`, in the catalog at `expected_revision`.
 Denied review or a changed revision leaves the original catalog intact.
 Saving configuration does not start, stop or reconfigure existing Agents.
 

@@ -826,7 +826,14 @@ register_tool(
             'base_url, api_key_env (variable name), and Pi api. models maps reference keys '
             'to id, source (manual/native), optional alias and supported_efforts. '
             'Project roles select connection: runtime-name/provider-name/model-key.'},
-        'expected_revision': {'type': 'string', 'description': 'Exact revision returned by read; required to save.'},
+        'changes': {'type': 'object', 'description':
+            'Partial alternative to catalog for preview and save: {runtimes: {name: entry or null}}. '
+            'An entry replaces that whole Runtime entry (same shape as in catalog); null removes '
+            'an existing one; other entries stay unchanged. Applies to the catalog at '
+            'expected_revision, which is required; the result is validated as a complete catalog. '
+            'Do not send both catalog and changes.'},
+        'expected_revision': {'type': 'string', 'description':
+            'Exact revision returned by read; required to save and for changes.'},
         'runtime': {'type': 'string', 'description': 'Configured runtime entry name to query for discovery.'},
     }, 'additionalProperties': False},
     runtime_connections, manual_ref='manuals/setup-project/guide.md',
@@ -1126,7 +1133,8 @@ _CLI = {
     "decide_result": (("agent-runner", "decide-result"), {}),
     "retain_evidence": (("agent-runner", "retain-evidence"), {}),
     "replace": (("agent-runner", "replace"), _CAUSED_BY),
-    "runtime_connections": (("graphtraj", "connections"), {"catalog_file": ("catalog", "yaml")}),
+    "runtime_connections": (("graphtraj", "connections"), {"catalog_file": ("catalog", "yaml"),
+                                                                "changes_file": ("changes", "yaml")}),
     "role_organization": (("graphtraj", "roles", "organize"), {"change_file": ("change", "yaml")}),
     "cleanup": (("agent-runner", "cleanup"), {}),
     "main": (("agent-runner", "main"), {"instruction_file": ("instruction", "text")}),

@@ -27,7 +27,7 @@ setopt err_exit pipe_fail no_unset
 WT=/Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/402-integrate-resolver-approval-deadlock
 # The code under test; later commits may change only this script's directory.
 # Whoever integrates further code commits sets COMMIT to the new code commit.
-COMMIT=REPLACE_WITH_CODE_COMMIT
+COMMIT=4285fe994ba2333bda39ff28fbcd560fe2e56adc
 P=/Users/luoxiao/agents-402-realhost
 PY=/Users/luoxiao/miniconda3/bin/python3.13
 # Both Claude roles use this model; change it here if your login offers another.

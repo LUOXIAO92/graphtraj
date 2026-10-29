@@ -32,8 +32,8 @@ WT=/Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core
 COMMIT=4285fe994ba2333bda39ff28fbcd560fe2e56adc
 P=/Users/luoxiao/agents-402-realhost
 PY=/Users/luoxiao/miniconda3/bin/python3.13
-# Both Claude roles use this model; change it here if your login offers another.
-MODEL=claude-sonnet-5-5
+# Both Claude roles use this model; the Claude adapter accepts only claude-opus-5-5 unless the role names an explicit model connection.
+MODEL=claude-opus-5-5
 WORK=$P/project
 DEV=$WORK/.graphtraj/.agent-worktrees/dev
 EVIDENCE=$P/evidence

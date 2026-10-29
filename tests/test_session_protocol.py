@@ -15,9 +15,9 @@ EXAMPLES = Path(__file__).parents[1] / 'examples' / 'sessions'
 
 def header(*, seeded: bool = False) -> dict:
     """Return explicit test Session metadata, not a captured Runtime identity."""
-    return {'version': 4, 'id': 'test-session', 'createdAt': 1, 'isSeeded': seeded,
-            'graphtraj': {'version': 1, 'projectId': 'test-project',
-                         'agentId': 'test-agent', 'taskIds': ['311']}}
+    return {'version': 5, 'id': 'test-session', 'createdAt': 1, 'isSeeded': seeded,
+            'extra_fields': {'graphtraj': {'version': 1, 'projectId': 'test-project',
+                         'agentId': 'test-agent', 'taskIds': ['311']}}}
 
 
 def event(kind: str, data: dict, seq: int = 0, **fields: object) -> dict:
@@ -32,7 +32,7 @@ def user(text: str, seq: int = 0, **fields: object) -> dict:
                  seq, surfaceOp='append', **fields)
 
 
-def observation(kind: str = 'graphtraj/logprobs', *, source: str = 'native') -> dict:
+def observation(kind: str = 'logprobs', *, source: str = 'native') -> dict:
     """Supply explicitly synthetic probabilities, never claimed as observed data."""
     data = {'target': {'eventSeq': 0, 'requestId': 'request-1', 'attemptId': 'attempt-2',
                        'model': 'test-model', 'tokenizer': 'test-tokenizer'},
@@ -43,11 +43,11 @@ def observation(kind: str = 'graphtraj/logprobs', *, source: str = 'native') -> 
                        {'position': 2, 'logprob': None, 'missing': 'Provider withheld probability'}]}
     if source != 'native':
         data['source']['context'] = [{'sessionId': 'test-session', 'eventSeq': 0}]
-    if kind == 'graphtraj/score':
+    if kind == 'score':
         data = {key: data[key] for key in ('target', 'source')}
         data.update(name='test-score', rule='Synthetic rubric v1', value=0.75)
         data['target'].update(tokenPosition=3, blockIndex=0)
-    elif kind == 'graphtraj/derived':
+    elif kind == 'derived':
         data = {key: data[key] for key in ('target', 'source')}
         data['content'] = [{'type': 'reasoning', 'text': 'A later model hypothesis'}]
     return event(kind, data, 1)
@@ -66,7 +66,7 @@ def test_runtime_mapping_examples_preserve_native_records(runtime: str) -> None:
         recovered['new-field'] = 'local edit'
         assert native_record(mapped) == case['native']
         if runtime == 'dsh':
-            assert {k: v for k, v in mapped.items() if k != 'graphtraj'} == case['native']
+            assert {k: v for k, v in mapped.items() if k not in {'native', 'missing'}} == case['native']
     if runtime == 'codex':
         assert fixture['cases'][0]['event']['data']['content'][0]['text'] == fixture['cases'][0]['native']['payload']['content'][0]['text']
         assert fixture['cases'][2]['event']['data']['arguments'] == fixture['cases'][2]['native']['payload']['arguments']
@@ -83,7 +83,7 @@ def test_unknown_fields_ciphertext_and_missing_values_survive() -> None:
     """Native opaque retention never projects private content away or fills missing values."""
     record = {'type': 'future', 'encrypted_content': 'ciphertext', 'new': [None, {'x': 3}]}
     mapped = retain_native('codex', record, session_id='native', locator='line:3', seq=0, time=1)
-    mapped['graphtraj']['missing'] = [{'path': '/reasoning', 'reason': 'Not exposed'}]
+    mapped['missing'] = [{'path': '/reasoning', 'reason': 'Not exposed'}]
     record['encrypted_content'] = 'caller mutation'
     assert native_record(mapped)['encrypted_content'] == 'ciphertext'
     assert native_record(mapped)['new'][0] is None
@@ -106,7 +106,7 @@ def test_non_json_values_are_rejected(value: object) -> None:
         snapshot_event(event('unknown', {'value': value}))
 
 
-@pytest.mark.parametrize('field,value', [('version', 3), ('version', 5), ('createdAt', True),
+@pytest.mark.parametrize('field,value', [('version', 3), ('version', 4), ('version', 6), ('createdAt', True),
                                         ('createdAt', -1), ('createdAt', 2**53), ('isSeeded', 0)])
 def test_header_versions_and_safe_integers(field: str, value: object) -> None:
     """No automatic old-format fallback and no boolean/integer coercion."""
@@ -189,21 +189,21 @@ def test_dsh_stream_timing_and_unknown_extensions_are_preserved() -> None:
         validate_stream(stream)
 
 
-@pytest.mark.parametrize('kind,source', [('graphtraj/logprobs', 'native'),
-                                       ('graphtraj/logprobs', 'recomputed'),
-                                       ('graphtraj/score', 'native'),
-                                       ('graphtraj/derived', 'supplemented')])
+@pytest.mark.parametrize('kind,source', [('logprobs', 'native'),
+                                       ('logprobs', 'recomputed'),
+                                       ('score', 'native'),
+                                       ('derived', 'supplemented')])
 def test_append_only_rl_sources_and_alignment(kind: str, source: str) -> None:
     """Native, recomputed and supplemented records target history without replacing it."""
     encrypted = user('visible prefix')
-    encrypted['data']['content'].append({'type': 'graphtraj/encrypted', 'value': 'opaque',
+    encrypted['data']['content'].append({'type': 'encrypted', 'value': 'opaque',
                                         'nativePath': '/payload/encrypted_content'})
     saved = deepcopy(encrypted)
     value = observation(kind, source=source)
     validate_session(header(), [encrypted, value])
     assert encrypted == saved
     assert value['data']['target']['attemptId'] == 'attempt-2'
-    if kind == 'graphtraj/logprobs':
+    if kind == 'logprobs':
         assert value['data']['tokens'][1]['logprob'] is None
         assert value['data']['distribution'] == 'raw'
         assert 'sampled' not in value['data']
@@ -247,7 +247,7 @@ def test_semantic_run_is_independent_of_transport_chunk_size() -> None:
     text = 'é' * 1024
     records = []
     for fragments in ([text], list(text)):
-        run = {'type': 'graphtraj/text-run', 'requestId': 'r', 'attemptId': 'a',
+        run = {'type': 'text-run', 'requestId': 'r', 'attemptId': 'a',
                'messageId': 'm', 'index': 0, 'blockType': 'text', 'text': ''.join(fragments)}
         validate_stream([run])
         records.append(json.dumps(run))
@@ -273,7 +273,7 @@ def test_token_spans_cannot_claim_ciphertext_or_unreceived_output() -> None:
     with pytest.raises(ValueError, match='span.end'):
         validate_session(header(), [target, value])
     value['data']['tokens'][0]['span']['end'] = 2
-    target['data']['content'] = [{'type': 'graphtraj/encrypted', 'value': 'opaque', 'nativePath': '/ciphertext'}]
+    target['data']['content'] = [{'type': 'encrypted', 'value': 'opaque', 'nativePath': '/ciphertext'}]
     with pytest.raises(ValueError, match='opaque-content'):
         validate_session(header(), [target, value])
 
@@ -374,8 +374,8 @@ def test_jsonl_messages_consume_assistant_replacement(tmp_path: Path) -> None:
     store = JsonlSessionStore.create(tmp_path / 'session.jsonl', header())
     events = [user('first', 0), user('second', 1), replacement]
     for item in events:
-        item['graphtraj'] = {'version': 1, 'native': {
+        item['native'] = {
             'runtime': 'codex', 'sessionId': 'test-session', 'locator': f"fixture:{item['seq']}",
-        }}
+        }
     store.publish(events, source='test', position=3)
     assert JsonlSessionStore(store.path).messages() == [replacement['data']['message']]

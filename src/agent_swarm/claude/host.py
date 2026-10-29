@@ -13,7 +13,6 @@ from typing import TextIO
 from uuid import UUID
 
 from agent_swarm import AgentControl, AgentsError, AgentsResult, Caller, __version__, bind
-from agent_swarm.config import reject_archive_without_collector
 from agent_swarm.connection import connection_operation, worker_connection
 from agent_swarm.discovery import handle_request
 from agent_swarm.process import process_ancestors, process_executable
@@ -337,7 +336,6 @@ def main() -> None:
             raise AgentsError('host-busy', f'{channel_file} exists: another agents host for this project is '
                               'running, or a previous one was killed. Close the other Claude Code session; '
                               'if none is running, delete the file.')
-        reject_archive_without_collector(root)
         calls = IndependentCalls(root, cwd, configuration.get('settings', {}), configuration.get('runtimes'))
         calls.control.require_connections()
     except Exception as error:

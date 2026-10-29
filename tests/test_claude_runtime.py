@@ -462,7 +462,7 @@ def test_claude_prompt_during_original_long_history_collection(
         # output must remain pending instead of disappearing behind a result.
         drafts = [item['event'] for item in retained.pending()]
         assert len(drafts) == 1
-        assert drafts[0]['graphtraj']['native']['locator'] == 'stream:api-stream'
+        assert drafts[0]['native']['locator'] == 'stream:api-stream'
         assert ''.join(item.get('text', '') for item in drafts[0]['data']['stream']) == 'x' * 100
         with pytest.raises(ValueError, match='Unresolved observations'):
             retained.messages()

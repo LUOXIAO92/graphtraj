@@ -460,7 +460,7 @@ def check(
             child_id = child.thread_id
             created(child_id)
             from graphtraj.configuration.project_configuration import load_project_configuration
-            from graphtraj.interfaces.agents import configured_archive
+            from graphtraj.interfaces.agents import configured_archive, graphtraj_fields
             from agent_swarm.sessions.codex import CodexJsonlArchive
 
             project = load_project_configuration(Path(binding['cwd']))
@@ -468,7 +468,8 @@ def check(
             if child.rollout_path is not None:
                 trace = directory / 'checks' / hashlib.sha256(child_id.encode()).hexdigest() / 'events.jsonl'
                 client.retain_native_trace(child, trace, archive=CodexJsonlArchive(
-                    archive, 'checker:' + child_id, child_id, child.rollout_path, new_session=True,
+                    archive, child_id, child.rollout_path, new_session=True,
+                    extra_fields=graphtraj_fields(str(archive.root), 'checker:' + child_id),
                 ))
             else:
                 await client.retain_ordered_history(child, archive, 'checker:' + child_id)

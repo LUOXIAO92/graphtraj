@@ -100,12 +100,12 @@ def test_native_log_usage_resume_and_portable_attachments(
     stored = store.page()['events']
     assert [native_record(row) for row in stored] == rows
     assert [row['type'] for row in stored if 'surfaceOp' in row] == ['tool/result', 'assistant/message']
-    assert stored[1]['graphtraj']['usage'] == usage
-    assert stored[4]['graphtraj']['usage'] == {**usage, 'inputTokens': 17}
-    assert stored[4]['graphtraj']['usageSource'] == 'data/usage'
+    assert stored[1]['usage'] == usage
+    assert stored[4]['usage'] == {**usage, 'inputTokens': 17}
+    assert stored[4]['usageSource'] == 'data/usage'
     # Exactly one usage snapshot per attempt; stream and final are not summed.
-    assert sum(row.get('graphtraj', {}).get('usage', {}).get('inputTokens', 0) for row in stored) == 30
-    refs = stored[5]['graphtraj']['attachments']
+    assert sum(row.get('usage', {}).get('inputTokens', 0) for row in stored) == 30
+    refs = stored[5]['attachments']
     assert refs['$/data/lost']['missing']['reason'].startswith('AttachmentError:')
     shutil.copytree(source.parent, exported.parent)
     source.unlink()
@@ -157,8 +157,8 @@ def test_main_native_child_and_managed_member_sources(
     store = JsonlSessionStore(archive_path(project / '.graphtraj/swarm', 'dsh:child'))
     validate_session(store.header, store.page()['events'])
     assert store.header['parentSession'] == 'dsh:main'
-    assert store.header['graphtraj']['source'] == 'child'
-    assert store.header['graphtraj']['agentId'] != 'dsh:main'
+    assert store.header['source'] == 'child'
+    assert store.header['extra_fields']['graphtraj']['agentId'] != 'dsh:main'
 
     member = {**main_header, 'id': 'member'}
     monkeypatch.setenv('GRAPHTRAJ_ROLE', 'engineer')
@@ -171,9 +171,9 @@ def test_main_native_child_and_managed_member_sources(
         {'runtime': 'dsh', 'session': 'member', 'task_id': '315'}, project))
     assert collect(member, [])['position'] == -1
     store = JsonlSessionStore(archive_path(project / '.graphtraj/swarm', 'dsh:member'))
-    assert store.header['graphtraj']['source'] == 'member'
-    assert store.header['graphtraj']['agentId'] == 'owned-member'
-    assert store.header['graphtraj']['taskIds'] == ['315']
+    assert store.header['source'] == 'member'
+    assert store.header['extra_fields']['graphtraj']['agentId'] == 'owned-member'
+    assert store.header['extra_fields']['graphtraj']['taskIds'] == ['315']
     assert 'error' in collect(main_header, [])
 
 
@@ -367,5 +367,5 @@ def test_terminal_observation_survives_gap_and_later_backfill(tmp_path: Path) ->
                     'outcome': {'kind': 'abandoned'}})
     store = JsonlSessionStore(path)
     assert len(store.pending()) == 1
-    assert store.pending()[0]['event']['graphtraj']['native']['locator'] == 'live/new-execution/attempt'
+    assert store.pending()[0]['event']['native']['locator'] == 'live/new-execution/attempt'
     assert len(store.observations()) == 2

@@ -15,7 +15,7 @@ from typing import Awaitable, Callable
 
 from graphtraj import file_lock
 from agent_swarm.sessions.codex import CodexJsonlArchive
-from graphtraj.interfaces.agents import configured_archive
+from graphtraj.interfaces.agents import configured_archive, graphtraj_fields
 from graphtraj.configuration.project_configuration import load_project_configuration
 from graphtraj.execution.runner_models import RunnerError
 from graphtraj.execution.runner_status import caller_alias
@@ -147,9 +147,10 @@ async def run_main(
                 original = json.loads((record / 'session.yml').read_text())['session']
                 session = await adapter.resume_session(context, original)
             native_session = session.thread_id
+            archive = configured_archive(root)
             adapter.retain_native_trace(session, record / 'events.jsonl', archive=CodexJsonlArchive(
-                configured_archive(root), 'main', session.thread_id, session.rollout_path,
-                new_session=resume is None,
+                archive, session.thread_id, session.rollout_path, new_session=resume is None,
+                extra_fields=graphtraj_fields(str(archive.root), 'main'),
             ))
             execution = await adapter.start_execution(session, instruction)
             result = await adapter.wait(execution)

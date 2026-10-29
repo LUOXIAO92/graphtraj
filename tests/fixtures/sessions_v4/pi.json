@@ -1,0 +1,215 @@
+{
+  "runtime": "pi",
+  "fixtureKind": "redacted-structural-example-not-live-capture",
+  "sources": [
+    "https://github.com/badlogic/pi-mono/blob/b45e0ebcc5ae2fc42a6f2f23104d10e656e6bedb/packages/coding-agent/src/core/session-manager.ts"
+  ],
+  "cases": [
+    {
+      "note": "Mapping coordinates 1/1 are example-local. Pi entry id supplies normalized message identity. Pi input is uncached; all native cost/signature fields remain in native.record. Numbers are illustrative, not measurements.",
+      "native": {
+        "type": "message",
+        "id": "redacted-entry",
+        "parentId": null,
+        "timestamp": "2026-10-14T00:00:00.000Z",
+        "message": {
+          "role": "assistant",
+          "content": [
+            {
+              "type": "text",
+              "text": "Hello",
+              "textSignature": "redacted-signature"
+            }
+          ],
+          "api": "anthropic-messages",
+          "provider": "anthropic",
+          "model": "redacted-model",
+          "usage": {
+            "input": 12,
+            "output": 2,
+            "cacheRead": 3,
+            "cacheWrite": 0,
+            "totalTokens": 17,
+            "cost": {
+              "input": 0,
+              "output": 0,
+              "cacheRead": 0,
+              "cacheWrite": 0,
+              "total": 0
+            }
+          },
+          "stopReason": "stop",
+          "timestamp": 1791936000000
+        }
+      },
+      "event": {
+        "type": "assistant/message",
+        "seq": 0,
+        "time": 1791936000000,
+        "data": {
+          "turn": 1,
+          "step": 1,
+          "message": {
+            "id": "redacted-entry",
+            "role": "assistant",
+            "source": {
+              "kind": "model",
+              "provider": "anthropic",
+              "model": "redacted-model"
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "Hello"
+              }
+            ]
+          },
+          "stream": [],
+          "usage": {
+            "inputTokens": 12,
+            "outputTokens": 2,
+            "cacheReadTokens": 3,
+            "cacheWriteTokens": 0,
+            "totalTokens": 17
+          }
+        },
+        "surfaceOp": "append",
+        "graphtraj": {
+          "version": 1,
+          "native": {
+            "runtime": "pi",
+            "sessionId": "redacted-session",
+            "locator": "record:0",
+            "record": {
+              "type": "message",
+              "id": "redacted-entry",
+              "parentId": null,
+              "timestamp": "2026-10-14T00:00:00.000Z",
+              "message": {
+                "role": "assistant",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "Hello",
+                    "textSignature": "redacted-signature"
+                  }
+                ],
+                "api": "anthropic-messages",
+                "provider": "anthropic",
+                "model": "redacted-model",
+                "usage": {
+                  "input": 12,
+                  "output": 2,
+                  "cacheRead": 3,
+                  "cacheWrite": 0,
+                  "totalTokens": 17,
+                  "cost": {
+                    "input": 0,
+                    "output": 0,
+                    "cacheRead": 0,
+                    "cacheWrite": 0,
+                    "total": 0
+                  }
+                },
+                "stopReason": "stop",
+                "timestamp": 1791936000000
+              }
+            }
+          },
+          "missing": [
+            {
+              "path": "logprobs",
+              "reason": "Not exposed in this native record; no probabilities inferred."
+            },
+            {
+              "path": "/data/stream",
+              "reason": "This persisted Pi message contains no original stream; [] does not assert that no stream occurred."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "note": "Retain branch/compaction identity and native topology; do not turn parentId into Agent parentage or guess a DSH replacement range.",
+      "native": {
+        "type": "compaction",
+        "id": "redacted-boundary",
+        "parentId": "redacted-entry",
+        "timestamp": "2026-10-14T00:00:00.000Z",
+        "summary": "Redacted summary",
+        "firstKeptEntryId": "redacted-entry",
+        "tokensBefore": 200
+      },
+      "event": {
+        "type": "graphtraj/native",
+        "seq": 0,
+        "time": 1791936000000,
+        "data": {
+          "record": {
+            "type": "compaction",
+            "id": "redacted-boundary",
+            "parentId": "redacted-entry",
+            "timestamp": "2026-10-14T00:00:00.000Z",
+            "summary": "Redacted summary",
+            "firstKeptEntryId": "redacted-entry",
+            "tokensBefore": 200
+          }
+        },
+        "graphtraj": {
+          "version": 1,
+          "native": {
+            "runtime": "pi",
+            "sessionId": "redacted-session",
+            "locator": "record:0"
+          },
+          "missing": [
+            {
+              "path": "logprobs",
+              "reason": "Not exposed in this native record; no probabilities inferred."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "note": "Retain branch/compaction identity and native topology; do not turn parentId into Agent parentage or guess a DSH replacement range.",
+      "native": {
+        "type": "branch_summary",
+        "id": "redacted-boundary",
+        "parentId": "redacted-entry",
+        "timestamp": "2026-10-14T00:00:00.000Z",
+        "fromId": "redacted-branch",
+        "summary": "Redacted branch summary"
+      },
+      "event": {
+        "type": "graphtraj/native",
+        "seq": 0,
+        "time": 1791936000000,
+        "data": {
+          "record": {
+            "type": "branch_summary",
+            "id": "redacted-boundary",
+            "parentId": "redacted-entry",
+            "timestamp": "2026-10-14T00:00:00.000Z",
+            "fromId": "redacted-branch",
+            "summary": "Redacted branch summary"
+          }
+        },
+        "graphtraj": {
+          "version": 1,
+          "native": {
+            "runtime": "pi",
+            "sessionId": "redacted-session",
+            "locator": "record:0"
+          },
+          "missing": [
+            {
+              "path": "logprobs",
+              "reason": "Not exposed in this native record; no probabilities inferred."
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

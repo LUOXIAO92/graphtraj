@@ -8,7 +8,7 @@ import pytest
 from agent_swarm import write_config
 from agent_swarm.sessions.archive import JsonlSessionStore, SessionArchive, archive_path
 from agent_swarm.sessions.codex import CodexJsonlArchive
-from graphtraj.interfaces.agents import ConfiguredSessionArchive, swarm_root
+from graphtraj.interfaces.agents import ConfiguredSessionArchive, graphtraj_fields, swarm_root
 from graphtraj.interfaces.gateway import handle_request
 from graphtraj.execution.runner_status import runtime_caller
 from test_result_submission import result_project
@@ -40,7 +40,8 @@ def test_boundaries_keep_identity_history_and_current_public_reads(tmp_path: Pat
 
     def collect(path: Path) -> JsonlSessionStore:
         """Restart the hook collector, as separate native invocations would."""
-        CodexJsonlArchive(ConfiguredSessionArchive(root), agent, 'native-research@x1', path).collect(path)
+        CodexJsonlArchive(ConfiguredSessionArchive(root), 'native-research@x1', path,
+                          extra_fields=graphtraj_fields(str(root), agent)).collect(path)
         identity = SessionArchive(root).native_id('codex', 'native-research@x1')
         return JsonlSessionStore(archive_path(root, identity))
 
@@ -55,9 +56,9 @@ def test_boundaries_keep_identity_history_and_current_public_reads(tmp_path: Pat
         }})
         write(source, records)
         store = collect(source)
-        assert store.header['graphtraj']['previousSession'] == ids[-1]
-        assert store.header['graphtraj']['native']['sessionId'] == 'native-research@x1'
-        assert store.header['graphtraj']['agentId'] == agent
+        assert store.header['previousSession'] == ids[-1]
+        assert store.header['native']['sessionId'] == 'native-research@x1'
+        assert store.header['extra_fields']['graphtraj']['agentId'] == agent
         assert 'parentSession' not in store.header  # Continuation is not a native fork.
         assert store.messages()[0]['content'][0]['text'] == f'summary-{index}'
         ids.append(store.header['id'])
@@ -69,7 +70,7 @@ def test_boundaries_keep_identity_history_and_current_public_reads(tmp_path: Pat
     records.append({'type': 'event_msg', 'payload': {'type': 'thread_rolled_back', 'num_turns': 1}})
     write(source, records)
     store = collect(source)
-    assert store.header['graphtraj']['previousSession'] == ids[-1]
+    assert store.header['previousSession'] == ids[-1]
     assert store.messages()[0]['content'][0]['text'] == 'summary-1'
     ids.append(store.header['id'])
     assert len(set(ids)) == 4
@@ -77,7 +78,7 @@ def test_boundaries_keep_identity_history_and_current_public_reads(tmp_path: Pat
     moved = tmp_path / 'second.jsonl'
     write(moved, [records[0], {'type': 'response_item', 'payload': message('continued')}])
     store = collect(moved)
-    assert store.header['graphtraj']['previousSession'] == ids[-1]
+    assert store.header['previousSession'] == ids[-1]
     ids.append(store.header['id'])
     assert store.messages()[0]['content'][0]['text'] == 'continued'
     assert collect(moved).header == store.header
@@ -103,10 +104,10 @@ def test_a_genuinely_new_native_session_has_its_own_project_record(tmp_path: Pat
     for native in ('one', 'two'):
         source = tmp_path / f'{native}.jsonl'
         write(source, [{'type': 'session_meta', 'payload': {'id': native, 'source': 'cli'}}])
-        CodexJsonlArchive(archive, 'main', native, source).collect(source)
+        CodexJsonlArchive(archive, native, source, extra_fields=graphtraj_fields(str(archive.root), 'main')).collect(source)
     first, second = [archive.native_header('codex', native) for native in ('one', 'two')]
     assert first['id'] != second['id']
-    assert 'previousSession' not in second['graphtraj']
+    assert 'previousSession' not in second
 
 
 def test_backfill_resolves_excluded_history_across_retained_boundaries(tmp_path: Path) -> None:
@@ -119,7 +120,8 @@ def test_backfill_resolves_excluded_history_across_retained_boundaries(tmp_path:
         {'type': 'response_item', 'payload': message('old')},
     ]
     write(source, records)
-    collector = CodexJsonlArchive(ConfiguredSessionArchive(root), 'main', 'native', source)
+    collector = CodexJsonlArchive(ConfiguredSessionArchive(root), 'native', source,
+                                  extra_fields=graphtraj_fields(str(root), 'main'))
     records.append({'type': 'compacted', 'payload': {'replacement_history': [message('summary')]}})
     write(source, records)
     collector.collect(source)
@@ -150,12 +152,13 @@ def test_compaction_preserves_fork_ancestry_and_agent_ownership(tmp_path: Path) 
         {'type': 'compacted', 'payload': {'replacement_history': [message('summary')]}},
     ]
     write(source, records)
-    collector = CodexJsonlArchive(archive, 'actual-child', 'child', source)
+    collector = CodexJsonlArchive(archive, 'child', source,
+                                  extra_fields=graphtraj_fields(str(archive.root), 'actual-child'))
     collector.collect(source)
     store = JsonlSessionStore(archive_path(root, collector.id))
     assert store.header['parentSession'] == 'codex:parent'
-    assert store.header['graphtraj']['previousSession'] == 'codex:child'
-    assert store.header['graphtraj']['agentId'] == 'actual-child'
-    assert store.header['graphtraj']['native']['sessionId'] == 'child'
+    assert store.header['previousSession'] == 'codex:child'
+    assert store.header['extra_fields']['graphtraj']['agentId'] == 'actual-child'
+    assert store.header['native']['sessionId'] == 'child'
     assert store.messages()[0]['content'][0]['text'] == 'summary'
     assert any(event['type'] == 'session/end-seed' for event in store.page()['events'])

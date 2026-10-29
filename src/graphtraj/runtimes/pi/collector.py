@@ -15,7 +15,8 @@ import sys
 import time
 import uuid
 
-from agent_swarm.sessions.protocol import retain_native
+from agent_swarm.sessions.protocol import SESSION_FORMAT_VERSION, retain_native
+from graphtraj.interfaces.agents import graphtraj_fields
 from graphtraj.sessions.storage import SessionStore, StreamWriter, session_path
 from agent_swarm.sessions.pi_projection import native_time
 
@@ -75,11 +76,11 @@ def map_message(event: dict) -> dict:
             content.append({'type': 'tool-call', 'id': block['id'], 'name': block['name'],
                             'arguments': arguments if isinstance(arguments, str) else json.dumps(arguments)})
             if not isinstance(arguments, str):
-                event['graphtraj']['missing'].append({'path': 'toolArgumentsText',
+                event['missing'].append({'path': 'toolArgumentsText',
                     'reason': 'Pi supplied parsed arguments; JSON text is mapped, original lexical spelling unavailable.'})
         else:
             content.append({'type': 'pi/content', 'record': block})
-    message = {'id': record.get('id') or event['graphtraj']['native']['locator'],
+    message = {'id': record.get('id') or event['native']['locator'],
                'role': 'tool' if role == 'toolResult' else role, 'content': content,
                'source': {'kind': 'user'}}
     data = {'turn': event['seq'], 'step': 0, 'message': message}
@@ -94,7 +95,7 @@ def map_message(event: dict) -> dict:
             data['usage'] = {target: usage[source] for source, target in (
                 ('input', 'inputTokens'), ('output', 'outputTokens'), ('cacheRead', 'cacheReadTokens'),
                 ('cacheWrite', 'cacheWriteTokens'), ('totalTokens', 'totalTokens')) if source in usage}
-        event['graphtraj']['missing'].append({'path': '/data/stream',
+        event['missing'].append({'path': '/data/stream',
             'reason': 'Persisted Pi message has no transport stream; live attempts are retained separately when observed.'})
     elif role == 'toolResult':
         message.update(source={'kind': 'tool', 'callId': native['toolCallId']}, toolCallId=native['toolCallId'])
@@ -103,8 +104,8 @@ def map_message(event: dict) -> dict:
     event['type'] = 'tool/result' if role == 'toolResult' else role + '/message'
     event['data'] = message if role == 'user' else data
     event['surfaceOp'] = 'append'
-    event['graphtraj']['native']['record'] = record
-    event['graphtraj']['missing'].append({'path': 'coordinates',
+    event['native']['record'] = record
+    event['missing'].append({'path': 'coordinates',
         'reason': 'Turn/step and fallback message IDs are collector coordinates; native parentId retains branch topology.'})
     return event
 
@@ -176,18 +177,18 @@ class PiCollector:
         path = session_path(state, 'pi:' + session)
         if path.exists():
             self.store = SessionStore(path)
-            if self.store.header['graphtraj']['native']['sessionId'] != session:
+            if self.store.header['native']['sessionId'] != session:
                 raise ValueError('Pi archive identity does not match its source.')
         else:
             created, missing = timestamp(header)
             if header.get('type') != 'session':
                 missing.append({'path': 'nativeHeader', 'reason': 'Only verified RPC Session identity available; Pi has not persisted its header yet.'})
-            metadata = {'version': 1, 'projectId': project, 'agentId': agent,
-                        'taskIds': tasks or [], 'source': source,
+            metadata = {'source': source,
                         'native': {'runtime': 'pi', 'sessionId': session,
                                    'locator': 'header', 'record': header}, 'missing': missing}
-            canonical = {'version': 4, 'id': 'pi:' + session, 'createdAt': created,
-                         'isSeeded': False, 'graphtraj': metadata}
+            canonical = {'version': SESSION_FORMAT_VERSION, 'id': 'pi:' + session, 'createdAt': created,
+                         'isSeeded': False, **metadata,
+                         'extra_fields': graphtraj_fields(project, agent, tasks or [])}
             if header.get('cwd'):
                 canonical['cwd'] = header['cwd']
             if source in {'child', 'member'}:
@@ -212,7 +213,7 @@ class PiCollector:
             # A new transport cannot replay the old pipe. Preserve its durable
             # partial attempt before importing native final messages on resume.
             previous = StreamWriter(self.store, pending['source'])
-            previous.event['graphtraj']['missing'].append({
+            previous.event['missing'].append({
                 'path': 'transportTail', 'reason': 'Connection ended; bytes after its last checkpoint cannot be replayed by Pi RPC.'})
             self.writer = previous
             self._finish(True)
@@ -256,8 +257,8 @@ class PiCollector:
                     if 'missing' in reference:
                         missing.append({'path': location, 'reason': reference['missing']['reason']})
         if attachments:
-            event['graphtraj']['attachments'] = attachments
-        event['graphtraj']['missing'] = missing
+            event['attachments'] = attachments
+        event['missing'] = missing
         return map_message(event)
 
     def sync_native(self) -> None:
@@ -275,7 +276,7 @@ class PiCollector:
                 record = json.loads(line)
                 if start == 0 and record.get('id') != self.session:
                     raise ValueError('Pi collection source belongs to another Session.')
-                metadata = self.store.header['graphtraj']['native']
+                metadata = self.store.header['native']
                 # A known header already lives in the immutable archive header.
                 # Deferred native headers still need a log event when they arrive.
                 events = [] if start == 0 and metadata['record'].get('type') == 'session' else [
@@ -294,12 +295,12 @@ class PiCollector:
         seq = self.store.next_seq
         event = {'type': 'assistant/attempt', 'seq': seq, 'time': int(time.time() * 1000),
                  'data': {'turn': seq, 'step': 0, 'stream': []},
-                 'graphtraj': {'version': 1, 'native': {'runtime': 'pi', 'sessionId': self.session,
-                              'locator': self.source + ':attempt:' + str(seq)}, 'missing': [
+                 'native': {'runtime': 'pi', 'sessionId': self.session,
+                            'locator': self.source + ':attempt:' + str(seq)}, 'missing': [
                      {'path': 'coordinates', 'reason': 'Turn, step, request and message IDs are collector-local, not provider IDs.'},
                      {'path': 'timestamp', 'reason': 'Attempt time is receipt time; native message times remain in retained records.'},
                      {'path': 'transportTail', 'reason': 'Pi RPC has no replay cursor; a hard crash may lose bytes after the last checkpoint.'},
-                 ]}}
+                 ]}
         # Checkpoint only after all records mapped from one input have been
         # fed. A raw source record must never commit only its metadata prefix.
         self.writer = StreamWriter(self.store, self.source, event, checkpoint_bytes=sys.maxsize)
@@ -364,7 +365,7 @@ class PiCollector:
                 # Tool argument strings have their own message coordinate and a
                 # native toolcall_start/end boundary, never assistant prose.
                 message = str(self.writer.event['seq']) + (':tool-arguments' if part == 'toolcall_delta' else '')
-                self._feed({'type': 'graphtraj/text-run', 'requestId': self.source,
+                self._feed({'type': 'text-run', 'requestId': self.source,
                             'attemptId': str(self.writer.event['seq']), 'messageId': message,
                             'index': index, 'blockType': 'reasoning' if part == 'thinking_delta' else 'text',
                             'text': update['delta']})
@@ -378,7 +379,7 @@ class PiCollector:
                 # and retain a replacement only if the authoritative text differs.
                 if part in {'text_end', 'thinking_end'}:
                     text = ''.join(r['text'] for r in self.writer.event['data']['stream']
-                                   if r.get('type') == 'graphtraj/text-run'
+                                   if r.get('type') == 'text-run'
                                    and r['index'] == update.get('contentIndex')
                                    and r['blockType'] == ('reasoning' if part == 'thinking_end' else 'text'))
                     if update.get('content') == text:
@@ -421,7 +422,7 @@ class PiCollector:
                        'reason': 'Native probability fields retained; no raw/sampled distribution or tokenizer alignment inferred.'}
         else:
             missing = {'path': 'logprobs', 'reason': 'Not exposed in the observed Pi stream.'}
-        self.writer.event['graphtraj']['missing'].append(missing)
+        self.writer.event['missing'].append(missing)
         self.writer.finish(interrupted=interrupted)
         self.writer = None
 
@@ -475,9 +476,10 @@ def collect_stdio() -> None:
 
     root = swarm_root(configuration.harness_root)
     archive = SessionArchive(root, **default_config(root, save_normalized_sessions=True))
-    collector = PiArchive(archive, header, project=str(configuration.harness_root),
-                          agent='pi:' + connection['session'], source=source,
-                          entries=entries, leaf_id=initial.get('leafId'), attachment_root=cwd)
+    collector = PiArchive(archive, header, project=str(configuration.harness_root), source=source,
+                          entries=entries, leaf_id=initial.get('leafId'), attachment_root=cwd,
+                          extra_fields=graphtraj_fields(str(configuration.harness_root),
+                                                        'pi:' + connection['session']))
     print(json.dumps({'ready': True}), flush=True)
     try:
         for line in sys.stdin:

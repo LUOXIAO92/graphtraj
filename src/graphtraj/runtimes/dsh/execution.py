@@ -52,10 +52,12 @@ class DshExecution(NativeDshExecution):
         )
         self.parent_notice = lambda notice, details: notify_direct_parent(directory, notice, details)
         from agent_swarm.sessions.dsh import DshArchive
-        from graphtraj.interfaces.agents import configured_archive
+        from graphtraj.interfaces.agents import configured_archive, graphtraj_fields, mapped_task_ids
 
         self.archive = DshArchive(configured_archive(Path(request['harness_root'])),
-                                  resumed=expected_session is not None)
+                                  resumed=expected_session is not None,
+                                  extra_fields=graphtraj_fields(str(request['harness_root']), directory.name,
+                                                                mapped_task_ids(directory)))
 
     def _prepare(self) -> dict[str, str]:
         """Add GraphTraj's native plugin environment to the generic profile."""

@@ -5,7 +5,7 @@ import asyncio
 from typing import Awaitable, Callable
 
 from agent_swarm.sessions.archive import JsonlSessionStore, SessionArchive
-from agent_swarm.sessions.protocol import retain_native
+from agent_swarm.sessions.protocol import SESSION_FORMAT_VERSION, retain_native, validate_extra_fields
 
 
 def _events(store: JsonlSessionStore) -> list[dict]:
@@ -32,11 +32,17 @@ class CodexHistoryArchive:
     def __init__(
         self,
         archive: SessionArchive,
-        agent: str,
         thread: dict,
         call: Callable[[str, dict], Awaitable[dict]],
+        *,
+        extra_fields: dict | None = None,
     ) -> None:
-        """Bind only the child returned by the owning app-server connection."""
+        """Bind only the child returned by the owning app-server connection.
+
+        ``extra_fields`` is written verbatim (after redaction) to a new header.
+        """
+        if extra_fields is not None:
+            validate_extra_fields(extra_fields)
         self.archive = archive
         self.thread = deepcopy(thread)
         self.call = call
@@ -46,24 +52,24 @@ class CodexHistoryArchive:
         self.lock = asyncio.Lock()
         created = thread.get('createdAt')
         header = {
-            'version': 4, 'id': self.id, 'createdAt': created * 1000 if type(created) is int else 0,
-            'isSeeded': False, 'graphtraj': {
-                'version': 1, 'projectId': str(archive.root), 'agentId': agent, 'taskIds': [],
-                'native': {'runtime': 'codex', 'sessionId': thread['id'],
-                           'locator': 'thread/items/list', 'thread': {
-                               key: deepcopy(thread[key]) for key in (
-                                   'id', 'forkedFromId', 'ephemeral', 'historyMode',
-                                   'source', 'cliVersion', 'createdAt', 'updatedAt',
-                               ) if key in thread
-                           }},
-                'missing': [{'path': 'history', 'reason':
-                    'Codex ThreadItem projection does not expose exact model ResponseItems.'}],
-            },
+            'version': SESSION_FORMAT_VERSION, 'id': self.id,
+            'createdAt': created * 1000 if type(created) is int else 0, 'isSeeded': False,
+            'native': {'runtime': 'codex', 'sessionId': thread['id'],
+                       'locator': 'thread/items/list', 'thread': {
+                           key: deepcopy(thread[key]) for key in (
+                               'id', 'forkedFromId', 'ephemeral', 'historyMode',
+                               'source', 'cliVersion', 'createdAt', 'updatedAt',
+                           ) if key in thread
+                       }},
+            'missing': [{'path': 'history', 'reason':
+                'Codex ThreadItem projection does not expose exact model ResponseItems.'}],
         }
+        if extra_fields is not None:
+            header['extra_fields'] = deepcopy(extra_fields)
         if thread.get('forkedFromId'):
             header['parentSession'] = archive.native_id('codex', thread['forkedFromId'])
         if type(created) is not int:
-            header['graphtraj']['missing'].append({
+            header['missing'].append({
                 'path': 'createdAt', 'reason': 'Native thread creation time is unavailable; zero is a placeholder.',
             })
         header = archive.native_header('codex', thread['id']) or header
@@ -84,12 +90,12 @@ class CodexHistoryArchive:
                 return
             events = _events(store)
             position = len(events)
-            snapshot = sum(item['type'] == 'graphtraj/native' for item in events)
+            snapshot = sum(item['type'] == 'native' for item in events)
             event = retain_native('codex', {'collectionError': type(error).__name__,
                 'code': getattr(error, 'code', None), 'message': str(error),
                 'nativeError': getattr(error, 'native_error', None)}, session_id=self.thread['id'],
                 locator=f'ordered-history:{snapshot}', seq=position, time=0)
-            event['graphtraj']['missing'] = [{
+            event['missing'] = [{
                 'path': 'history', 'reason': 'Native ordered history request failed; retry required.',
             }]
             store.checkpoint(event, source='ordered-history', position=position + 1)
@@ -108,9 +114,9 @@ class CodexHistoryArchive:
         event = retain_native('codex', message, session_id=self.thread['id'],
                               locator=f'transport:{index}', seq=index, time=0)
         event.update(type='codex/transport', ignorable=True, data={})
-        event['graphtraj']['native']['record'] = deepcopy(message)
-        event['graphtraj']['native']['direction'] = 'outbound-attempt' if outbound else 'inbound'
-        event['graphtraj']['missing'] = [{'path': 'time', 'reason':
+        event['native']['record'] = deepcopy(message)
+        event['native']['direction'] = 'outbound-attempt' if outbound else 'inbound'
+        event['missing'] = [{'path': 'time', 'reason':
             'Transport observation has no item creation time; native emission fields are retained.'}]
         events.append(event)
         store.publish(events, source='transport', position=index + 1)
@@ -151,10 +157,10 @@ class CodexHistoryArchive:
             return
         events = _events(store)
         index = len(events)
-        snapshot_index = sum(item['type'] == 'graphtraj/native' for item in events)
+        snapshot_index = sum(item['type'] == 'native' for item in events)
         event = retain_native('codex', snapshot, session_id=self.thread['id'],
                               locator=f'ordered-history:{snapshot_index}', seq=index, time=0)
-        event['graphtraj']['missing'] = [{
+        event['missing'] = [{
             'path': 'time', 'reason': 'Snapshot has no creation time; item timestamps remain native.',
         }]
         events.append(event)

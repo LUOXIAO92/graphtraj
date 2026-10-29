@@ -66,7 +66,7 @@ def test_wheels_have_separate_owners(built_wheel: Path) -> None:
                           if line.startswith('Version: '))
     assert agents_version == agent_swarm.__version__
     assert requirement.specifier.contains(agents_version)
-    assert not requirement.specifier.contains('0.2.0')
+    assert not requirement.specifier.contains('0.3.0')
     assert 'Requires-Dist: graphtraj' not in agents_metadata
     for text in (metadata, agents_metadata):
         assert 'Requires-Dist: PyYAML' in text

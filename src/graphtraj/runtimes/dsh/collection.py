@@ -14,7 +14,8 @@ from copy import deepcopy
 import json
 from pathlib import Path
 
-from agent_swarm.sessions.protocol import validate_header, snapshot_event
+from agent_swarm.sessions.protocol import snapshot_event, upgrade_header
+from graphtraj.interfaces.agents import graphtraj_fields
 from graphtraj.sessions.storage import SessionStore, session_path
 from agent_swarm.sessions.archive import SessionArchive
 from agent_swarm.sessions.dsh_live import DshLiveFrames
@@ -68,18 +69,16 @@ def collect(
     commit before their event, so an interruption can only leave unreferenced
     content, never a committed reference to bytes that were not saved.
     """
-    validate_header(header)
+    # The native DSH header is Session v4; the archive copy is written as v5.
+    archived = upgrade_header(header)
     session_id = 'dsh:' + header['id']
-    archived = deepcopy(header)
     archived['id'] = session_id
     if 'parentSession' in header:
         archived['parentSession'] = 'dsh:' + header['parentSession']
-    archived['graphtraj'] = {
-        'version': 1, 'projectId': project_id, 'agentId': agent_id,
-        'taskIds': task_ids, 'source': source, 'upstream': UPSTREAM,
-        'native': {'runtime': 'dsh', 'sessionId': header['id'],
-                   'locator': 'header', 'record': deepcopy(header)},
-    }
+    archived.update(source=source, upstream=UPSTREAM,
+                    native={'runtime': 'dsh', 'sessionId': header['id'],
+                            'locator': 'header', 'record': deepcopy(header)},
+                    extra_fields=graphtraj_fields(project_id, agent_id, task_ids))
     with SessionStore.create(session_path(state, session_id), archived) as store:
         for record in records:
             native = record['event']
@@ -90,7 +89,6 @@ def collect(
             if seq != store.next_seq:
                 raise ValueError('DSH collection requires contiguous native event positions.')
             ext = {
-                'version': 1,
                 'native': {'runtime': 'dsh', 'sessionId': header['id'],
                            'locator': f'event/{seq}', 'record': deepcopy(native)},
             }
@@ -112,6 +110,6 @@ def collect(
                     attachments[path] = {'missing': {'path': path, 'reason': reason}}
             if attachments:
                 ext['attachments'] = attachments
-            event['graphtraj'] = ext
+            event.update(ext)
             store.append_many([event], source=SOURCE, position=seq)
         return {'session': session_id, 'position': store.position(SOURCE)}

@@ -116,9 +116,6 @@ class ClaudeDriver:
         turn.parent_notice = lambda message, details: (run.events.request(details), {'delivery': 'retained'})[1]
         if self.configure is not None:
             self.configure(turn, run)
-        if run.archive is not None and turn.collector is None:
-            raise AgentsError('archive-unavailable', 'Bind the Claude collector for the supplied archive.'
-                              ' Without one, set save_normalized_sessions to false in config.yml.')
         with self.lock:
             self.turns[run.execution] = turn
 

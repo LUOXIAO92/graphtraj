@@ -166,6 +166,8 @@ class AdapterDriver:
             )
         except RuntimeAdapterError as error:
             raise _native_error(error) from None
+        from graphtraj.interfaces.agents import graphtraj_fields
+
         if run.runtime == 'claude':
             from agent_swarm import AgentControl, bind
 
@@ -174,7 +176,10 @@ class AdapterDriver:
                                    {name: child_driver for name in SUPPORTED_RUNTIMES})
             callback = bind(control, Caller('claude-sdk', run.agent, turn.native_id, 'claude'),
                             archive=run.archive)
-            turn.configure_independent(archive=run.archive, agents_callback=callback)
+            turn.configure_independent(
+                archive=run.archive, agents_callback=callback,
+                extra_fields=graphtraj_fields(str(turn.request['worktree_path']), turn.directory.name,
+                                              extra_fields=run.extra_fields))
         if run.runtime == 'dsh':
             from graphtraj.runtimes.dsh.driver import bind_agents
 
@@ -192,6 +197,8 @@ class AdapterDriver:
                 turn.archive.save_normalized_sessions = choices['save_normalized_sessions']
                 turn.archive.backfill_history = choices['backfill_history']
             turn.agent = run.agent
+            turn.extra_fields = graphtraj_fields(str(turn.request['harness_root']), run.agent,
+                                                 extra_fields=run.extra_fields)
             turn.agent_call = getattr(run, 'call', None)
         turn.parent_notice = lambda message, details: (run.events.request(details),
                                                        {"delivery": "retained"})[1]

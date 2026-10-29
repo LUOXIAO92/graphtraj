@@ -49,7 +49,7 @@ def test_fork_activation_inside_a_record_starts_at_next_line(tmp_path: Path) -> 
     ]
     lines = [json.dumps(record) + '\n' for record in records]
     rollout.write_text(''.join(lines))
-    collector = CodexJsonlArchive(ConfiguredSessionArchive(root), 'main', 'fork', rollout)
+    collector = CodexJsonlArchive(ConfiguredSessionArchive(root), 'fork', rollout)
     collector.activation = len(lines[0]) + 5
     collector.collect(rollout)
     store = JsonlSessionStore(archive_path(root, 'codex:fork'))
@@ -74,7 +74,7 @@ def test_cursor_from_one_physical_rollout_is_not_read_in_another(tmp_path: Path)
         {'type': 'response_item', 'payload': {'type': 'function_call_output', 'id': 'fco', 'name': 'graphtraj',
                                               'output': 'notice'}}]))
     for rollout in (first, second):
-        collector = CodexJsonlArchive(ConfiguredSessionArchive(root), 'main', 's', rollout)
+        collector = CodexJsonlArchive(ConfiguredSessionArchive(root), 's', rollout)
         collector.activation = 0
         collector.collect(rollout)
 
@@ -86,8 +86,8 @@ def test_cursor_from_one_physical_rollout_is_not_read_in_another(tmp_path: Path)
     assert len(store.messages()) == 1
     current = SessionArchive(root).native_header('codex', 's')
     assert current['id'] != store.header['id']
-    previous = JsonlSessionStore(archive_path(root, current['graphtraj']['previousSession']))
-    assert previous.header['graphtraj']['previousSession'] == store.header['id']
+    previous = JsonlSessionStore(archive_path(root, current['previousSession']))
+    assert previous.header['previousSession'] == store.header['id']
     store = JsonlSessionStore(archive_path(root, current['id']))
     assert store.position('rollout') == second.stat().st_size
     records = [native_record(event) for event in store.page()['events']]

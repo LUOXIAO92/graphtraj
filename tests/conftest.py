@@ -750,6 +750,9 @@ def _build_wheel(build_root: Path) -> Path:
 def _install_commands(environment: Path, wheel: Path) -> InstalledCommands:
     """Install one built wheel into a fresh environment."""
 
+    # The agents wheel built beside GraphTraj carries the source checkout's version.
+    from agent_swarm import __version__ as agent_swarm_version
+
     subprocess.run(
         [
             sys.executable,
@@ -770,8 +773,7 @@ def _install_commands(environment: Path, wheel: Path) -> InstalledCommands:
             "install",
             "--disable-pip-version-check",
             "--no-deps",
-            # The agents wheel built beside it carries agent_swarm.__version__.
-            *map(str, wheel.parent.glob("agent_swarm-*-py3-none-any.whl")),
+            str(wheel.with_name(f"agent_swarm-{agent_swarm_version}-py3-none-any.whl")),
             str(wheel),
         ],
         cwd=wheel.parent,

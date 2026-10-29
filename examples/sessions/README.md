@@ -1,11 +1,11 @@
 # Session protocol and Runtime mapping examples
 
-Use these examples to map native conversations into GraphTraj's unified Session
-protocol. Each example preserves the native record alongside its interpretation
+Use these examples to map native conversations into the agents normalized
+Session protocol. Each example preserves the native record alongside its interpretation
 and identifies facts that the source did not expose. The field reference below
 covers the shared representation, provenance, RL observations and stream boundaries.
 
-`graphtraj.sessions.protocol` implements the value schema in Python.
+`agent_swarm.sessions.protocol` implements the value schema in Python.
 `validate_header`, `validate_content`, `validate_stream`, `validate_event` and
 `validate_session` raise `ValueError` for invalid values without mutating input.
 `snapshot_event` returns a detached validated copy; `retain_native` preserves a
@@ -33,23 +33,39 @@ The DSH definitions are translated from
   log, derived message surface, fork prefix, persistence separation.
 
 Copyright (c) 2026 DeepSeek. The upstream MIT license is retained and distributed
-in `src/graphtraj/sessions/DSH-LICENSE`. The Python implementation adds GraphTraj
-provenance and RL records; it does not claim the upstream defines these additions.
+in `src/graphtraj/sessions/DSH-LICENSE`. The Python implementation adds archive
+provenance, RL records and the `extra_fields` container; it does not claim the upstream defines these additions.
 
 ## Values and versions
 
-The base version is exactly DSH Session **4**. `version`, `id`, `createdAt`
-(epoch milliseconds), `isSeeded`, and optional `cwd`, `parentSession`, `origin`,
-`delegationDepth`, `agentPreset` retain DSH names and meanings. No automatic
-historical reader or fallback is provided. GraphTraj metadata uses a separate
-`graphtraj.version = 1`. A GraphTraj Header adds `projectId`, `agentId`, and
-`taskIds`; these are associations, not proof of authority. Native Session IDs
-remain independent of the canonical Session ID.
+The archive is version **5**: the DSH Session 4 layout plus the archive fields
+below. `version`, `id`, `createdAt` (epoch milliseconds), `isSeeded`, and
+optional `cwd`, `parentSession`, `origin`, `delegationDepth`, `agentPreset`
+retain DSH names and meanings. A header may add `native` provenance, `missing`
+facts, and `previousSession` with its `boundary` (`{kind, offset}`, kind
+`rollout`, `compaction` or `rollback`) when a continued native source starts a
+new archive. Native Session IDs remain independent of the canonical Session ID.
+
+Headers and events may carry `extra_fields`: an object keyed by nonempty
+namespace names whose values are any JSON. Core validates only this container,
+never reads a namespace, and readers ignore namespaces they do not know; an
+extension never changes a core field's meaning. Each namespace versions itself,
+for example `extra_fields.graphtraj = {version, projectId, agentId, taskIds}`.
+These are associations, not proof of authority. Credential redaction applies
+to `extra_fields`.
+
+Version 4 files remain readable (`upgrade_header`, `upgrade_event`,
+`read_session`): their top-level `graphtraj` object is split into the core
+fields of the same names and `extra_fields.graphtraj` (`version`, `projectId`,
+`agentId`, `taskIds`); `graphtraj/*` types lose the prefix. Only version 5 is
+written; a store reopened from a version 4 file rewrites it whole as version 5
+on its next change. `tests/fixtures/sessions_v4/` keeps these examples in their
+version 4 form.
 
 Events use `type`, contiguous zero-based `seq`, epoch-ms `time`, and `data`.
 The original fields, nulls and unknown JSON values survive snapshots. Unknown
 events may be archived; `validate_session(..., reconstruct=True)` refuses an
-unknown required type and refuses opaque `graphtraj/native` records until a
+unknown required type and refuses opaque `native` records until a
 Runtime-specific interpreter supplies their meaning. Only explicit
 `ignorable: true` permits skipping that event during interpretation. This flag
 never authorizes deleting its record.
@@ -62,7 +78,7 @@ Messages use DSH `id`, `role`, `source` and ordered `content`. Assistant model
 sources require provider and model; tool sources carry `callId`, also matched by
 `toolCallId`. Tool arguments stay the original JSON **string**, not a parsed and
 reserialized dictionary. Opaque replay data stays on the message source.
-`graphtraj/encrypted` content carries the exact `value` and its `nativePath`;
+`encrypted` content carries the exact `value` and its `nativePath`;
 other native encrypted/signature structures may stay in the preserved native
 record. Neither form claims plaintext exists.
 
@@ -95,15 +111,15 @@ replacement for that contract.
 
 ## Provenance, absent data and reversibility
 
-An Event's optional `graphtraj.native` contains `runtime`, `sessionId` and
+An Event's optional `native` contains `runtime`, `sessionId` and
 `locator` (native record ID or reading position). A normalized semantic event
-can retain the whole original JSON in `graphtraj.native.record`. An opaque
-`graphtraj/native` event instead stores it once in `data.record`. These values
+can retain the whole original JSON in `native.record`. An opaque
+`native` event instead stores it once in `data.record`. These values
 are copies, not references to the only existing external file. `native_record`
 returns the original JSON value, including unknown fields; this is structural
 reversibility, not whitespace or byte-for-byte JSON transport replay.
 
-`graphtraj.missing` is a list of `{path, reason}` entries. A JSON pointer can
+`missing` is a list of `{path, reason}` entries. A JSON pointer can
 identify a canonical or native field; names such as `logprobs` identify a
 capability not present anywhere in the input. Missing, inaccessible, redacted
 and not exposed must be described accurately. Do not insert false zero counts,
@@ -126,7 +142,7 @@ representations of the same attempt, never additive charges.
 
 ## RL in the same event history
 
-`graphtraj/score`, `graphtraj/logprobs`, and `graphtraj/derived` are log-only
+`score`, `logprobs`, and `derived` are log-only
 append events. All have `data.target` with earlier `eventSeq`, `requestId`,
 `attemptId`, `model`, and `tokenizer`. The last four may be null only with an
 explanation in `target.missing` under that field name. A score that does not
@@ -178,7 +194,7 @@ texts/args and timestamp gaps (`dt` length is member count minus one). A `chunk`
 record retains a single timed chunk. These types keep their upstream meaning.
 
 For Pi and other transports whose individual text deltas are not semantic
-facts, GraphTraj provides `graphtraj/text-run` in the assistant event's `stream`:
+facts, the archive provides `text-run` in the assistant event's `stream`:
 `requestId`, `attemptId`, `messageId`, `index`, `blockType` (`text` or `reasoning`),
 and one joined `text`. This deliberately does **not** promise recovery of
 individual transport fragmentation or timing. Do not encode every character
@@ -258,7 +274,7 @@ Existing source classification and managed ownership checks distinguish Main
 from children; a Header association alone does not grant access.
 
 Attachment references retain archived bytes or a specific missing reason.
-`graphtraj.usage` selects final usage, or the latest stream usage snapshot when
+The event's `usage` selects final usage, or the latest stream usage snapshot when
 the final value is absent, once per attempt; `usageSource` identifies the selected
 location. DSH's uncached and cached input counters remain distinct. Flush and
 disposal drain pending semantic records, with failed flushes available for retry.
@@ -293,7 +309,7 @@ Unavailable probability or hidden content carries a missing reason. Intermediate
 message usage and final result usage remain distinguishable, not additive charges.
 
 When ancestry is not yet known, `session_read.pending` can contain
-`graphtraj/collection-pending`: durable raw observations, not canonical history.
+`collection-pending`: durable raw observations, not canonical history.
 The store uses its existing draft and source checkpoints. Before any canonical
 event is published, `finish_initial_collection` confirms the ancestry and orders
 actual inherited records, their exact marker, then local observations in one

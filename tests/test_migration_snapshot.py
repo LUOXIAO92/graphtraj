@@ -67,9 +67,9 @@ def test_snapshot_migrates_without_original_project_or_sources(
     assert result.returncode == 0, result.stderr
     state = copy / '.graphtraj/state'
     with SessionStore(session_path(state, 'codex:owned'), readonly=True) as store:
-        assert store.header['graphtraj']['projectId'] == str(origin)
-        assert store.header['graphtraj']['agentId'] == 'member'
-        assert store.header['graphtraj']['native']['sourcePath'] == str(external)
+        assert store.header['extra_fields']['graphtraj']['projectId'] == str(origin)
+        assert store.header['extra_fields']['graphtraj']['agentId'] == 'member'
+        assert store.header['native']['sourcePath'] == str(external)
         assert store.page()['events'][1]['data']['record']['payload']['text'] == str(origin) + '/ticket.md'
         item = next(item for item in yaml.safe_load(result.stdout)['sessions'] if item.get('session') == 'owned')
         assert store.attachment(item['original_bytes']['sha256']) == content
@@ -185,20 +185,20 @@ def test_snapshot_preserves_pi_parent_attachments_and_other_runtime_cursors(
     state = copy / '.graphtraj/state'
     with SessionStore(session_path(state, 'pi:p2'), readonly=True) as store:
         assert store.header['parentSession'] == 'pi:p1'
-        assert store.header['graphtraj']['native']['record']['parentSession'] == str(parent)
+        assert store.header['native']['record']['parentSession'] == str(parent)
         attachments = [attachment for event in store.page()['events']
-                       for attachment in event.get('graphtraj', {}).get('attachments', [])]
+                       for attachment in event.get('attachments', [])]
         assert len(attachments) == 1
         assert store.attachment(attachments[0]['sha256']) == b'original-image-bytes'
     with SessionStore(session_path(state, 'claude:c1'), readonly=True) as store:
         assert store.next_seq == original_events
-        assert store.header['graphtraj']['projectId'] == str(origin)
+        assert store.header['extra_fields']['graphtraj']['projectId'] == str(origin)
     with SessionStore(session_path(state, 'dsh:d1'), readonly=True) as store:
         events = store.page()['events']
         assert events[0]['data']['content'][0]['text'] == 'dsh-original'
         assert events[1]['data']['delayMs'] == 488.02348886860193
-        assert events[1]['graphtraj']['native']['record'] == records[dsh][2]
-        assert store.header['graphtraj']['projectId'] == str(origin)
+        assert events[1]['native']['record'] == records[dsh][2]
+        assert store.header['extra_fields']['graphtraj']['projectId'] == str(origin)
 
 
 def test_referenced_forks_are_ordered_and_missing_parent_history_is_retained(
@@ -246,4 +246,4 @@ def test_referenced_forks_are_ordered_and_missing_parent_history_is_retained(
                 assert store.next_seq == 0
                 pending = store.pending()['event']['data']['observations']
                 assert [item['event']['data']['record'] for item in pending] == child_records
-                assert any(gap['path'] == 'history_base' for gap in pending[0]['event']['graphtraj']['missing'])
+                assert any(gap['path'] == 'history_base' for gap in pending[0]['event']['missing'])

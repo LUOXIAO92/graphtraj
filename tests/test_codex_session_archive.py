@@ -64,8 +64,8 @@ def test_resume_partial_line_and_cleanup_preserve_native_content(tmp_path: Path)
         events = store.page()['events']
         assert [native_record(item) for item in events] == values
         assert len([item for item in events if native_record(item)['type'] == 'event_msg']) == 1
-        assert store.header['graphtraj']['agentId'] == 'agent'
-        assert events[2]['graphtraj']['missing']
+        assert store.header['extra_fields']['graphtraj']['agentId'] == 'agent'
+        assert events[2]['missing']
         exported = tmp_path / 'standalone.sqlite3'
         store.export(exported)
     shutil.rmtree(state)
@@ -100,7 +100,7 @@ def test_native_identity_and_agent_identity_are_independent(tmp_path: Path) -> N
         archive = CodexSessionArchive(tmp_path, 'project', 'agent', session)
         archive.collect(rollout)
         with SessionStore(archive.path, readonly=True) as store:
-            assert store.header['graphtraj']['agentId'] == 'agent'
+            assert store.header['extra_fields']['graphtraj']['agentId'] == 'agent'
             assert store.header['id'] == 'codex:' + session
     with pytest.raises(ValueError, match='another project or Agent'):
         CodexSessionArchive(tmp_path, 'project', 'other', 'second').collect(rollout)
@@ -125,7 +125,7 @@ def test_inline_attachments_survive_and_unfetched_references_are_explicit(tmp_pa
     with SessionStore(archive.path, readonly=True) as store:
         event = store.page()['events'][1]
         assert native_record(event) == values[1]
-        inline, malformed, external = event['graphtraj']['attachments']
+        inline, malformed, external = event['attachments']
         assert store.attachment(inline['sha256']) == b'image'
         assert malformed['missing']['reason']
         assert malformed['missing']['path'] == '/payload/content/1/file_data'
@@ -171,10 +171,10 @@ def test_native_time_meanings_survive_fork_and_notifications(tmp_path: Path) -> 
         assert store.header['createdAt'] == 200000
         assert [event['time'] for event in events] == [10000, 0, 0, 0, 42, 0]
         assert native_record(events[0]) == thread['turns'][0]
-        assert events[1]['graphtraj']['missing']
+        assert events[1]['missing']
         assert native_record(events[-2]) == notice
-        assert events[-2]['graphtraj']['receivedAtMs'] > 42
-        assert events[-1]['graphtraj']['missing']
+        assert events[-2]['receivedAtMs'] > 42
+        assert events[-1]['missing']
 
 
 @pytest.mark.parametrize('interrupt_promotion', [False, True])
@@ -229,7 +229,7 @@ def test_persistent_copied_fork_uses_child_settings_boundary(
         assert [native_record(event) for event in events[:cut]] == inherited
         assert native_record(events[cut + 1]) == header
         native_events = [event for event in events if event['type'] != 'session/end-seed']
-        native_events.sort(key=lambda event: int(event['graphtraj']['native']['locator'].split(':')[1]))
+        native_events.sort(key=lambda event: int(event['native']['locator'].split(':')[1]))
         assert [native_record(event) for event in native_events] == values
         assert len(events) == len(values) + 1
         assert store.header['parentSession'] == 'codex:parent'
@@ -362,6 +362,6 @@ def test_missing_reference_promotes_once_when_owned_parent_arrives(tmp_path: Pat
         store.validate()
         events = store.page()['events']
         assert store.header['parentSession'] == 'codex:parent'
-        assert store.header['graphtraj']['agentId'] == 'child-agent'
+        assert store.header['extra_fields']['graphtraj']['agentId'] == 'child-agent'
         assert store.pending() is None and store.next_seq == 5
         assert [native_record(item) for item in events if item['type'] != 'session/end-seed'] == parent_records + child_records

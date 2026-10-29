@@ -125,7 +125,7 @@ def _archive(root: Path, session: str, transcript: str, *, new_session: bool = F
     Earlier bytes require explicit backfill, never a receipt-time approximation.
     """
     from graphtraj import file_lock
-    from graphtraj.interfaces.agents import configured_archive
+    from graphtraj.interfaces.agents import configured_archive, graphtraj_fields
     from agent_swarm.sessions.codex import CodexJsonlArchive
     from graphtraj.execution.runner_io import write_yaml_durably
 
@@ -146,7 +146,8 @@ def _archive(root: Path, session: str, transcript: str, *, new_session: bool = F
                 # still verifies its session_meta) continues the archived
                 # history from its first byte.
                 activation = saved['activation'] if saved['rollout'] == str(source) else 0
-        collector = CodexJsonlArchive(archive, 'main', session, source)
+        collector = CodexJsonlArchive(archive, session, source,
+                                      extra_fields=graphtraj_fields(str(archive.root), 'main'))
         collector.activation = activation
         collector.collect(source)
         write_yaml_durably(boundary, {

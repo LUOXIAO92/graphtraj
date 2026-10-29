@@ -113,7 +113,8 @@ class DshDriver:
         if run.archive is not None and turn.archive is None:
             from agent_swarm.sessions.dsh import DshArchive
 
-            turn.archive = DshArchive(run.archive, resumed=run.session is not None)
+            turn.archive = DshArchive(run.archive, resumed=run.session is not None,
+                                      extra_fields=run.extra_fields)
         with self.lock:
             self.turns[run.execution] = turn
 

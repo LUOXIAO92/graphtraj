@@ -13,8 +13,9 @@ from pathlib import Path
 import time
 from typing import BinaryIO
 
-from agent_swarm.sessions.protocol import native_record, retain_native
-from graphtraj.sessions.storage import SessionStore, StreamWriter, session_path
+from agent_swarm.sessions.protocol import SESSION_FORMAT_VERSION, native_record, retain_native
+from graphtraj.interfaces.agents import graphtraj_fields
+from graphtraj.sessions.storage import SessionStore, StreamWriter, archive_owner, session_path
 
 
 from agent_swarm.sessions.codex_values import _timestamp, _attachments
@@ -74,14 +75,12 @@ class CodexSessionArchive:
                 if history_excluded else 'Unknown: native fork response omitted history.'
             )})
         header = {
-            'version': 4, 'id': 'codex:' + self.session_id,
+            'version': SESSION_FORMAT_VERSION, 'id': 'codex:' + self.session_id,
             'createdAt': created if created is not None else 0,
             'isSeeded': seeded, 'parentSession': 'codex:' + thread['forkedFromId'],
-            'graphtraj': {'version': 1, 'projectId': self.project_id,
-                         'agentId': self.agent_id, 'taskIds': list(self.task_ids),
-                         'native': {'runtime': 'codex', 'sessionId': self.session_id,
-                                    'locator': 'thread/fork'}, 'missing': missing,
-                         'receivedAtMs': now},
+            'native': {'runtime': 'codex', 'sessionId': self.session_id, 'locator': 'thread/fork'},
+            'missing': missing, 'receivedAtMs': now,
+            'extra_fields': graphtraj_fields(self.project_id, self.agent_id, self.task_ids),
         }
         with SessionStore.create(self.path, header) as store:
             events = []
@@ -93,12 +92,12 @@ class CodexSessionArchive:
                                           locator=f'thread/fork/turns/{index}', seq=len(events),
                                           time=started if started is not None else 0)
                     if started is None:
-                        event['graphtraj']['missing'] = [{
+                        event['missing'] = [{
                             'path': 'time', 'reason': 'Native turn start unknown; zero is a placeholder.',
                         }]
                     else:
-                        event['graphtraj']['native']['timeField'] = 'startedAt (seconds)'
-                    event['graphtraj']['attachments'] = _attachments(store, turn)
+                        event['native']['timeField'] = 'startedAt (seconds)'
+                    event['attachments'] = _attachments(store, turn)
                     events.append(event)
                 events.append({'type': 'session/end-seed', 'seq': len(events), 'time': 0,
                                'data': {'inherited': True}})
@@ -106,14 +105,14 @@ class CodexSessionArchive:
             # turns are inherited; the response envelope is a local observation.
             event = retain_native('codex', thread, session_id=self.session_id,
                                   locator='thread/fork', seq=len(events), time=0)
-            event['graphtraj']['receivedAtMs'] = now
-            event['graphtraj']['missing'] = [{
+            event['receivedAtMs'] = now
+            event['missing'] = [{
                 'path': 'time', 'reason': 'Fork response has no native event time; zero is a placeholder.',
             }, {
                 'path': 'rawModelStream',
                 'reason': 'Unknown: public fork history is not the original model stream.',
             }]
-            event['graphtraj']['attachments'] = _attachments(store, thread)
+            event['attachments'] = _attachments(store, thread)
             events.append(event)
             store.append_many(events, source='thread/fork', position=0)
 
@@ -155,7 +154,7 @@ class CodexSessionArchive:
         template = {'method': method, 'params': {key: value for key, value in params.items() if key != 'delta'}}
         with SessionStore(self.path) as store:
             pending = store.pending()
-            if pending and pending['event']['graphtraj']['native'].get('deltaTemplate') != template:
+            if pending and pending['event']['native'].get('deltaTemplate') != template:
                 StreamWriter(store, 'connection').finish()
                 pending = None
             event = None
@@ -163,8 +162,8 @@ class CodexSessionArchive:
                 event = {'type': 'assistant/attempt', 'seq': store.next_seq,
                          'time': 0,
                          'data': {'turn': 0, 'step': 0, 'stream': []},
-                         'graphtraj': {'version': 1, 'direction': 'received',
-                                      'receivedAtMs': time.time_ns() // 1000000, 'native': {
+                         'direction': 'received',
+                         'receivedAtMs': time.time_ns() // 1000000, 'native': {
                              'runtime': 'codex', 'sessionId': self.session_id,
                              'locator': f"connection:{store.position('connection') + 1}",
                              'deltaTemplate': template}, 'missing': [
@@ -174,9 +173,9 @@ class CodexSessionArchive:
                                  {'path': 'time', 'reason': 'Native time unknown; zero is a placeholder.'},
                                  {'path': 'rawModelStream', 'reason': 'Unknown: semantic native text, not raw model bytes.'},
                                  {'path': 'logprobs', 'reason': 'Unknown: native text delta supplied no probabilities.'},
-                             ]}}
+                             ]}
             writer = StreamWriter(store, 'connection', event)
-            writer.feed({'type': 'graphtraj/text-run', 'requestId': params['turnId'],
+            writer.feed({'type': 'text-run', 'requestId': params['turnId'],
                          'attemptId': params['itemId'], 'messageId': params['itemId'],
                          'index': index, 'blockType': kind, 'text': params['delta']},
                         store.position('connection') + 1)
@@ -204,20 +203,20 @@ class CodexSessionArchive:
             event = retain_native('codex', message, session_id=self.session_id,
                                   locator=f'connection:{position}', seq=store.next_seq,
                                   time=emitted if emitted is not None else 0)
-            event['graphtraj']['direction'] = direction
+            event['direction'] = direction
             observation = 'receivedAtMs' if direction == 'received' else 'observedAtMs'
-            event['graphtraj'][observation] = time.time_ns() // 1000000
-            event['graphtraj']['missing'] = [
+            event[observation] = time.time_ns() // 1000000
+            event['missing'] = [
                 {'path': 'rawModelStream', 'reason': 'Unknown: native notifications are not a raw model stream.'},
                 {'path': 'logprobs', 'reason': 'Unknown unless explicitly present in the native notification.'},
             ]
             if emitted is None:
-                event['graphtraj']['missing'].append({
+                event['missing'].append({
                     'path': 'time', 'reason': 'Native time unknown; zero is a placeholder.',
                 })
             else:
-                event['graphtraj']['native']['timeField'] = 'emittedAtMs (server emission)'
-            event['graphtraj']['attachments'] = _attachments(store, message)
+                event['native']['timeField'] = 'emittedAtMs (server emission)'
+            event['attachments'] = _attachments(store, message)
             store.append_many([event], source='connection', position=position)
 
     def _seed_reference(self, store: SessionStore, base: dict) -> None:
@@ -234,7 +233,7 @@ class CodexSessionArchive:
         if not parent_path.is_file():
             raise HistoryUnavailable('Declared parent archive is unavailable in this project.')
         with SessionStore(parent_path, readonly=True) as parent:
-            owner = parent.header['graphtraj']
+            owner = archive_owner(parent.header)
             if owner['projectId'] != self.project_id:
                 raise ValueError('Native inherited history belongs to another project.')
             if parent.position('rollout') < base['end_byte_offset']:
@@ -256,7 +255,7 @@ class CodexSessionArchive:
                         raise HistoryUnavailable('Native inherited ordinal prefix is unavailable.')
                     if record['ordinal'] >= cutoff:
                         continue
-                    for attachment in event.get('graphtraj', {}).get('attachments', []):
+                    for attachment in event.get('attachments', []):
                         if attachment.get('storage') == 'session':
                             store.put_attachment(parent.attachment(attachment['sha256']))
                     events.append(event)
@@ -301,8 +300,8 @@ class CodexSessionArchive:
                    for field in ('rawModelStream', 'rawLogprobs', 'sampledLogprobs')]
         if native_time is None:
             missing.append({'path': 'time', 'reason': 'Native time unknown; zero is a placeholder.'})
-        event['graphtraj']['missing'] = missing
-        event['graphtraj']['attachments'] = _attachments(store, record)
+        event['missing'] = missing
+        event['attachments'] = _attachments(store, record)
         return event
 
     def _promote_copied_prefix(self, store: SessionStore, parent: str) -> bool:
@@ -321,7 +320,7 @@ class CodexSessionArchive:
                     and payload.get('thread_id') == self.session_id):
                 store.finish_initial_collection(parent_session='codex:' + parent, inherited=inherited)
                 return True
-            if event['graphtraj']['native']['locator'] != 'byte:0':
+            if event['native']['locator'] != 'byte:0':
                 inherited.append((item['source'], item['position']))
         return False
 
@@ -365,7 +364,7 @@ class CodexSessionArchive:
         import hashlib
 
         with SessionStore(self.path) as store:
-            owner = store.header['graphtraj']
+            owner = archive_owner(store.header)
             if owner['projectId'] != self.project_id or owner['agentId'] != self.agent_id:
                 raise ValueError('Captured prefix does not own this project/Agent archive.')
             if store.next_seq:
@@ -405,7 +404,7 @@ class CodexSessionArchive:
                         if not line.endswith(b'\n') or record.get('ordinal') != ordinal:
                             raise ValueError('Captured chain lacks a contiguous native ordinal range.')
                         event = self._rollout_event(store, record, start, 0)
-                        event['graphtraj']['native'].update(
+                        event['native'].update(
                             sessionId=segment['source_logical_session'],
                             locator=f"rollout:{segment['source_rollout']}:byte:{start}",
                             rolloutId=segment['source_rollout'], sourcePath=segment['source'])
@@ -418,7 +417,7 @@ class CodexSessionArchive:
                 raw = store.copy_attachment(prefix)
                 if raw['sha256'] != segment['sha256']:
                     raise ValueError('Captured source changed while importing its bytes.')
-                earlier[first_event]['event']['graphtraj']['attachments'].append({'nativePath': 'history_base', **raw})
+                earlier[first_event]['event']['attachments'].append({'nativePath': 'history_base', **raw})
             if len(earlier) != base['end_ordinal_exclusive']:
                 raise ValueError('Captured chain does not reach the current Main prefix boundary.')
             store.stage_initial_observations(earlier, before_existing=True)
@@ -459,20 +458,19 @@ class CodexSessionArchive:
                     'path': 'createdAt', 'reason': 'Native creation time unknown; zero is a placeholder.',
                 }]
                 header = {
-                    'version': 4, 'id': 'codex:' + self.session_id,
+                    'version': SESSION_FORMAT_VERSION, 'id': 'codex:' + self.session_id,
                     'createdAt': created if created is not None else 0,
                     'isSeeded': bool(parent and base),
-                    'graphtraj': {'version': 1, 'projectId': self.project_id,
-                                 'agentId': self.agent_id, 'taskIds': list(self.task_ids),
-                                 'native': {'runtime': 'codex', 'sessionId': self.session_id,
-                                            'locator': 'byte:0', 'sourcePath': provenance},
-                                 'missing': missing},
+                    'native': {'runtime': 'codex', 'sessionId': self.session_id,
+                               'locator': 'byte:0', 'sourcePath': provenance},
+                    'missing': missing,
+                    'extra_fields': graphtraj_fields(self.project_id, self.agent_id, self.task_ids),
                 }
                 if parent and base:
                     header['parentSession'] = 'codex:' + parent
                 store = SessionStore.create(self.path, header)
             with store:
-                header = store.header['graphtraj']
+                header = archive_owner(store.header)
                 if header['projectId'] != self.project_id or header['agentId'] != self.agent_id:
                     raise ValueError('Codex archive already belongs to another project or Agent.')
                 if metadata.get('forked_from_id') and metadata.get('history_base'):
@@ -489,7 +487,7 @@ class CodexSessionArchive:
                             if not line.endswith(b'\n'):
                                 break
                             event = self._rollout_event(store, json.loads(line), start, 0)
-                            event['graphtraj']['missing'].append({'path': 'history_base', 'reason': str(error)})
+                            event['missing'].append({'path': 'history_base', 'reason': str(error)})
                             observations.append({'event': event, 'source': 'rollout', 'position': stream.tell()})
                             if len(observations) >= 256:
                                 store.stage_initial_observations(observations)

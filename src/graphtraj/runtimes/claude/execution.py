@@ -18,7 +18,21 @@ from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError, record_runti
 
 
 class ClaudeExecution(NativeClaudeExecution):
-    """Supply project resources and Runner services to the same native transport."""
+    """Supply project resources and Runner services to the same native transport.
+
+    Archiving uses the shared owner's collector. A Runner execution binds the
+    project archive and GraphTraj's ``extra_fields.graphtraj`` here; the agents
+    driver path replaces both through ``configure_independent``.
+    """
+
+    def __init__(self, *arguments) -> None:
+        """Bind the project archive and its GraphTraj header fields to a Runner execution."""
+        super().__init__(*arguments)
+        from graphtraj.interfaces.agents import configured_archive, graphtraj_fields, mapped_task_ids
+
+        self.archive      = configured_archive(Path(self.request['harness_root']))
+        self.extra_fields = graphtraj_fields(str(self.request['worktree_path']), self.directory.name,
+                                             mapped_task_ids(self.directory))
 
     def record_process(self, pid: int, outcome: dict | None = None) -> None:
         """Publish native process evidence through the existing Runner binding."""
@@ -123,28 +137,6 @@ class ClaudeExecution(NativeClaudeExecution):
         from graphtraj.execution.runner_control import notify_direct_parent
 
         return notify_direct_parent(self.directory, message, details)
-
-    def _collect_child(self, event: dict) -> None:
-        """Collect native helpers only for the GraphTraj-managed archive path."""
-        if not self.independent:
-            from graphtraj.runtimes.claude.collection import collect_jsonl_hook
-
-            collect_jsonl_hook(event, Path(self.request['worktree_path']))
-
-    def _collector(self, resources: ExitStack):
-        """Provide the project's existing optional or managed collector."""
-        provider = self.request.get('provider', 'native')
-        if provider == 'native' and not self.request.get('base_url'):
-            provider = 'anthropic'
-        from agent_swarm.sessions.claude import ClaudeJsonlCollector
-
-        if not self.independent:
-            from graphtraj.interfaces.agents import configured_archive
-
-            self.archive = configured_archive(Path(self.request['harness_root']))
-        return ClaudeJsonlCollector(self.archive, self.native_id, self.directory.name,
-                                   Path(self.request['worktree_path']), self.execution_id,
-                                   provider=provider, resumed=self.expected is not None)
 
     def _connection(self, resources: ExitStack) -> str | None:
         """Bind Runner tools only for the GraphTraj-managed invocation."""

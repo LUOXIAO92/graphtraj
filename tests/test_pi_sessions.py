@@ -39,7 +39,7 @@ def test_rpc_fragmentation_and_partial_failures(tmp_path: Path, pi_environment: 
             observations = [item['event'] for item in store.observations() + store.pending()]
             attempt = [event for event in observations if event['type'] == 'assistant/attempt'][-1]
             stream = attempt['data']['stream']
-            runs = [record for record in stream if record['type'] == 'graphtraj/text-run']
+            runs = [record for record in stream if record['type'] == 'text-run']
             assert ''.join(record['text'] for record in runs if record['index'] == 1) == 'hello世界 ' * 1024
             assert ''.join(record['text'] for record in runs if record['index'] == 2) == '{"path":"/tmp/result"}'
             assert len(runs) == 3
@@ -49,7 +49,7 @@ def test_rpc_fragmentation_and_partial_failures(tmp_path: Path, pi_environment: 
             if prompt in {'stream-abort', 'stream-error', 'stream-crash'}:
                 assert attempt['data']['interrupted'] is True
             if prompt != 'stream-crash':
-                native = [native_record(event) for event in events if event['type'] == 'graphtraj/native']
+                native = [native_record(event) for event in events if event['type'] == 'native']
                 message = [record['message'] for record in native if record.get('message', {}).get('role') == 'assistant'][-1]
                 assert message['usage'] == {'input': 17, 'output': 4096, 'cacheRead': 3, 'cacheWrite': 0}
             if prompt == 'stream-ok':
@@ -133,12 +133,12 @@ def test_native_attachments_and_durable_interrupted_draft(tmp_path: Path) -> Non
     attachment.unlink()
     resumed = PiCollector(tmp_path / 'state', native, 's', **arguments)
     events = resumed.store.page()['events']
-    references = events[0]['graphtraj']['attachments']
+    references = events[0]['attachments']
     assert resumed.store.attachment(references[0]['sha256']) == b'original bytes\x00'
     assert references[1]['missing']['reason'] == 'FileNotFoundError'
     assert events[-1]['data']['interrupted'] is True
     assert events[-1]['data']['stream'][0]['text'] == 'durable partial'
-    assert any(item['path'] == 'transportTail' for item in events[-1]['graphtraj']['missing'])
+    assert any(item['path'] == 'transportTail' for item in events[-1]['missing'])
     assert resumed.store.pending() is None
     resumed.close()
 
@@ -203,7 +203,7 @@ await collector.close();
                        check=True, timeout=20, capture_output=True, text=True)
         path = archive_path(tmp_path / '.graphtraj/swarm', 'pi:' + session)
         with nullcontext(JsonlSessionStore(path)) as store:
-            assert store.header['graphtraj']['source'] == ('child' if child else 'main')
+            assert store.header['source'] == ('child' if child else 'main')
             attempt = next(item['event'] for item in store.pending()
                            if item['event']['type'] == 'assistant/attempt')
             assert ''.join(item.get('text', '') for item in attempt['data']['stream']) == 'from extension'
@@ -231,9 +231,9 @@ def test_retry_and_unknown_boundaries_do_not_join_attempts(tmp_path: Path) -> No
         assert len(attempts) == 2
         assert all(event['data']['interrupted'] for event in attempts)
         runs = [[record['text'] for record in event['data']['stream']
-                 if record['type'] == 'graphtraj/text-run'] for event in attempts]
+                 if record['type'] == 'text-run'] for event in attempts]
         assert runs == [['one', 'two'], ['new attempt']]
-        assert any(item['path'] == 'logprobs' for item in attempts[1]['graphtraj']['missing'])
+        assert any(item['path'] == 'logprobs' for item in attempts[1]['missing'])
         assert 'retry reason' in json.dumps(attempts[0])
         assert 'ciphertext' in json.dumps(attempts[0])
 
@@ -273,7 +273,7 @@ console.log(JSON.stringify({parent: manager.getSessionFile(), child: fork.getSes
         events = collector.store.page()['events']
         assert [store_record for event in events if event['type'] != 'session/end-seed'
                 for store_record in [native_record(event)]] == original[1:]
-        assert collector.store.header['graphtraj']['native']['record'] == original[0]
+        assert collector.store.header['native']['record'] == original[0]
         assert any(event['type'] == 'assistant/message' for event in events)
         assert any(native_record(event).get('type') == 'branch_summary' for event in events
                    if event['type'] != 'session/end-seed')

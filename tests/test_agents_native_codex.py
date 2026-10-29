@@ -131,7 +131,7 @@ def test_connection_only_role_preserves_configuration_and_archive_policy(
     path = archive_path(swarm_root(root), 'codex:' + created.document['session'])
     assert path.exists() is saving
     if saving:
-        assert JsonlSessionStore(path).header['graphtraj']['agentId'] == created.document['agent']
+        assert JsonlSessionStore(path).header['extra_fields']['graphtraj']['agentId'] == created.document['agent']
     assert read_config(swarm_root(root))['backfill_history'] is True
     assert read_config(swarm_root(root))['save_normalized_sessions'] is saving
 
@@ -289,8 +289,8 @@ def test_real_codex_default_auto_review(tmp_path: Path) -> None:
             call({'action': 'interrupt', 'agent': agent})
 
 
-def test_independent_codex_host_refuses_archive_without_collector(tmp_path: Path) -> None:
-    """The CLI host rejects the setting at start instead of failing every create."""
+def test_independent_codex_host_accepts_archiving(tmp_path: Path) -> None:
+    """384: save_normalized_sessions: true no longer refuses the CLI host at start."""
     import subprocess
     import sys
 
@@ -303,8 +303,6 @@ def test_independent_codex_host_refuses_archive_without_collector(tmp_path: Path
     finished = subprocess.run([sys.executable, '-m', 'agent_swarm.codex.host', '--settings', str(settings),
                                '--directory', str(tmp_path), 'hi'], capture_output=True, text=True, timeout=60,
                               env={**os.environ, 'PYTHONPATH': source})
-    assert finished.returncode == 1
-    error = json.loads(finished.stdout)['error']
-    assert error['code'] == 'archive-unavailable'
-    assert f"{tmp_path.resolve() / 'config.yml'}: save_normalized_sessions: true" in error['message']
-    assert not (tmp_path / 'host').exists()
+    # The empty settings still fail, but for their own reason, not archiving.
+    assert 'archive-unavailable' not in finished.stdout + finished.stderr
+    assert 'save_normalized_sessions' not in finished.stdout + finished.stderr

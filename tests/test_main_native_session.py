@@ -48,7 +48,7 @@ def test_main_start_and_resume_preserve_native_configuration(
     saved = [native_record(event) for event in archive.page()['events']]
     source = next((tmp_path / 'native').glob('*.jsonl'))
     assert saved == [json.loads(line) for line in source.read_text().splitlines()]
-    assert archive.header['graphtraj']['agentId'] == 'main'
+    assert archive.header['extra_fields']['graphtraj']['agentId'] == 'main'
     source.unlink()
     assert [native_record(event) for event in archive.page()['events']] == saved
     requests = [json.loads(line) for line in protocol.read_text().splitlines()]

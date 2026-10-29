@@ -13,7 +13,8 @@ def bind_run(turn: ClaudeExecution, run: Run) -> None:
     """Use the core's existing identity and exact native process ownership."""
     if run.call is None:
         raise ValueError('Claude needs its owning Agents callback.')
-    turn.configure_independent(archive=run.archive, agents_callback=run.call)
+    turn.configure_independent(archive=run.archive, agents_callback=run.call,
+                              extra_fields=run.extra_fields)
     if 'completion_message' in run.settings:
         notice = run.settings['completion_message']
         turn.prompt = f"[agents · {notice['agent']} → {run.agent}]\n{notice['body']}"

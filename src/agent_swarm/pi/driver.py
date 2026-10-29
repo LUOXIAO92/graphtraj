@@ -95,6 +95,7 @@ class PiDriver:
                            lambda session, pid: ready.set(), created,
                            run.directory / 'trace.jsonl', run.session)
         turn.archive = run.archive
+        turn.extra_fields = run.extra_fields
         turn.agent = run.agent
         turn.agent_call = run.call
         turn.parent_notice = lambda message, details: (run.events.request(details), {'delivery': 'retained'})[1]

@@ -27,7 +27,7 @@ graphtraj task graph
 ```
 
 GraphTraj and `agent-swarm` are separate distributions. GraphTraj declares the
-`agent-swarm` versions it supports (currently `>=0.1.0,<0.2`); building both
+`agent-swarm` versions it supports (currently `>=0.2.0,<0.3`); building both
 from the same revision always satisfies it. From a checkout, build both with
 `python -m pip wheel --no-deps -w dist ./src/agent_swarm .`, then install both
 wheels in your dedicated environment. The independent distribution can also
@@ -65,7 +65,7 @@ a matching wheel you were given, and install it alone in a dedicated Python
 ```sh
 python -m pip wheel --no-deps -w dist ./src/agent_swarm   # in a checkout
 python3 -m venv /absolute/agents-venv
-/absolute/agents-venv/bin/python -m pip install dist/agent_swarm-0.1.0-py3-none-any.whl
+/absolute/agents-venv/bin/python -m pip install dist/agent_swarm-0.2.0-py3-none-any.whl
 /absolute/agents-venv/bin/agents --help
 ```
 
@@ -143,11 +143,11 @@ owning native parent connection; status does not repeat a body already sent as
 a notification. Native requests for the parent itself print to stderr and take
 an explicit native JSON response on stdin. Use `--resume` with the same directory
 to continue the retained parent Session. A closing host interrupts its active
-children, preserving their native Sessions. Normalized archiving is off and
-needs GraphTraj's collector. If `<directory>/config.yml` sets
-`save_normalized_sessions: true`, the host refuses to start: it prints an
-`archive-unavailable` error naming that file and setting and exits with status
-1. Set it to `false` or delete the line.
+children, preserving their native Sessions. Normalized archiving is off by
+default. With `save_normalized_sessions: true` in `<directory>/config.yml`,
+each child execution writes its normalized Session to
+`<directory>/sessions/<sha256>/session.jsonl`; `false` stops later saves and
+keeps existing archives. `create` may pass `extra_fields` for the Session header.
 
 ### Independent Claude Code host
 
@@ -186,9 +186,9 @@ are refused at start until their hosts exist. At start the host also checks
 every connection in `.agents-control/config.yml` and refuses a Runtime it has
 no driver for, or one that is not installed or not logged in. Existing login and
 trust are not copied. Session continuation uses the original child's captured
-settings. Normalized archiving is off and needs GraphTraj's collector; the host
-refuses to start while `.agents-control/config.yml` sets
-`save_normalized_sessions: true`. Set it to `false` or delete the line.
+settings. Normalized archiving is off by default; with
+`save_normalized_sessions: true` in `.agents-control/config.yml`, each child
+execution writes its normalized Session under `.agents-control/sessions/`.
 
 Start or resume Claude Code from the configured directory. Claude Code reads
 `.mcp.json` from its start directory and the directories above it. Started or
@@ -232,7 +232,7 @@ independent host (see above), so their rows are not available independently.
 | Completion notice to the Main | Yes, once: pushed into the Main Session, or attached as `main_notices` to the next `agents` result; a completion already returned by `wait` or `status` is not pushed again | Yes: each completion is sent once to the parent Session as a host event |
 | Relay a child's native approval request | Yes, by polling: `wait` or `status` shows `pending_requests`, then `requests` and `reply` | No: native `auto_review` handles children's requests, and the parent shares the same settings |
 | Native history | Child native Sessions are retained under `.agents-control/native/` and continued by `resume` | `--resume` continues the parent Session with its children |
-| Normalized archive | No: with `save_normalized_sessions` on, every `agents` call returns `archive-unavailable` naming the setting | No: with `save_normalized_sessions` on, the host exits with `archive-unavailable` naming the setting |
+| Normalized archive | Since 0.2.0: with `save_normalized_sessions` on, each child's Session is written under the data root (not yet re-verified on a real host) | Since 0.2.0: with `save_normalized_sessions` on, each child's Session is written under `--directory` (not yet re-verified on a real host) |
 | Children on another Runtime | No | No |
 
 ## Use it with your Agent

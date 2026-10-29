@@ -12,7 +12,7 @@ import yaml
 
 from agent_swarm.sessions.archive import JsonlSessionStore, SessionArchive, archive_path
 from agent_swarm.sessions.migration import import_native, import_sqlite, verify_sqlite
-from agent_swarm.sessions.protocol import retain_native
+from agent_swarm.sessions.protocol import retain_native, upgrade_header
 from graphtraj.interfaces.cli.graphtraj import main
 from graphtraj.sessions.storage import SessionStore, session_path
 from test_session_storage import header
@@ -28,7 +28,7 @@ def test_sqlite_evidence_is_lossless_idempotent_and_not_native_order(tmp_path: P
                           session_id='native-research@x1', locator='notification/1', seq=0, time=9)
     with SessionStore.create(original, header()) as old:
         attachment = old.put_attachment(b'\x00\xfforiginal')
-        event['graphtraj']['attachments'] = [attachment]
+        event['attachments'] = [attachment]
         old.append(event, source='notification', position=1)
     before = original.read_bytes()
     root = tmp_path / 'swarm'
@@ -38,7 +38,7 @@ def test_sqlite_evidence_is_lossless_idempotent_and_not_native_order(tmp_path: P
     assert Path(imported['archive']).read_bytes() == first
     assert original.read_bytes() == before
     store = JsonlSessionStore(Path(imported['archive']))
-    assert store.header == header()
+    assert store.header == upgrade_header(header())
     assert store.legacy()['events'] == [event]
     assert store.legacy()['checkpoints'] == {'notification': 1}
     assert store.attachment(attachment['sha256']) == b'\x00\xfforiginal'
@@ -79,13 +79,13 @@ def test_native_import_keeps_non_native_header_id(runtime: str, tmp_path: Path) 
                              'content': [{'type': 'text', 'text': 'question'}]}}]
     source = tmp_path / 'native.jsonl'
     source.write_text(''.join(json.dumps(record) + '\n' for record in records))
-    result = import_native(root, runtime, 'native', source, agent='agent', project=str(tmp_path))
+    result = import_native(root, runtime, 'native', source, project=str(tmp_path))
     assert result['id'] == retained['id']
     assert result['missing'] is None, result
     store = JsonlSessionStore(archive_path(root, retained['id']))
-    assert store.header == retained
+    assert store.header == upgrade_header(retained)
     first = store.page()['events']
-    assert import_native(root, runtime, 'native', source, agent='agent', project=str(tmp_path)) == result
+    assert import_native(root, runtime, 'native', source, project=str(tmp_path)) == result
     assert JsonlSessionStore(store.path).page()['events'] == first
     assert not archive_path(root, runtime + ':native').exists()
     if runtime == 'claude':
@@ -157,7 +157,7 @@ def test_snapshot_captures_swarm_configuration_and_can_clone(tmp_path: Path, mon
     control.write_text(json.dumps({'agent': 'agent-old', 'runtime': 'dsh', 'session': None,
                                    'parent': 'agent-parent', 'retired_at': 'original-time'}))
     (swarm / 'config.yml').write_text('save_normalized_sessions: false\nbackfill_history: true\n')
-    retained = JsonlSessionStore.create(archive_path(swarm, 'retained'), header('retained'))
+    retained = JsonlSessionStore.create(archive_path(swarm, 'retained'), upgrade_header(header('retained')))
     retained.publish([retain_native('codex', {'ciphertext': 'opaque'},
         session_id='native-research@x1', locator='native/0', seq=0, time=1)], source='native', position=0)
     retained.put_attachment(b'original attachment')
@@ -194,7 +194,7 @@ def test_snapshot_captures_swarm_configuration_and_can_clone(tmp_path: Path, mon
     assert (comparison['controls'], comparison['jsonl_archives'], comparison['attachments']) == (1, 1, 1)
 
     # Identical provenance cannot conceal changed opaque native payload bytes.
-    changed = JsonlSessionStore.create(archive_path(tmp_path / 'different', 'retained'), header('retained'))
+    changed = JsonlSessionStore.create(archive_path(tmp_path / 'different', 'retained'), upgrade_header(header('retained')))
     changed.publish([retain_native('codex', {'ciphertext': 'changed'},
         session_id='native-research@x1', locator='native/0', seq=0, time=1)], source='native', position=0)
     shutil.copyfile(changed.path, archive_path(target / '.graphtraj/swarm', 'retained'))
@@ -223,7 +223,7 @@ from agent_swarm.sessions.dsh import collect_jsonl
 root = Path(sys.argv[1]) / 'data'
 write_config(root, save_normalized_sessions=True)
 archive = ConfiguredSessionArchive(root)
-header = {'version': 4, 'id': 'standalone', 'createdAt': 1, 'isSeeded': False}
+header = {'version': 5, 'id': 'standalone', 'createdAt': 1, 'isSeeded': False}
 archive.map_session(header)
 assert archive.store('standalone').header == header
 assert not any(name == 'graphtraj' or name.startswith('graphtraj.') for name in sys.modules)
@@ -372,14 +372,15 @@ def test_legacy_import_preserves_an_already_current_jsonl_header(tmp_path: Path)
     native = session_path(tmp_path / 'old', retained['id'])
     with SessionStore.create(native, retained):
         pass
-    current = deepcopy(retained)
-    current['graphtraj']['native']['locator'] = 'verified-new-source'
+    current = upgrade_header(retained)
+    current['native']['locator'] = 'verified-new-source'
     root = tmp_path / 'swarm'
     JsonlSessionStore.create(archive_path(root, retained['id']), current)
     import_sqlite(native, root)
     migrated = JsonlSessionStore(archive_path(root, retained['id']))
     assert migrated.header == current
-    assert migrated.legacy()['header'] == retained
+    # SQLite stores keep what they were written with; new writes are v5.
+    assert migrated.legacy()['header'] == upgrade_header(retained)
 
 
 def test_claude_native_hooks_keep_activation_boundary_between_processes(
@@ -407,7 +408,8 @@ def _history_archive(root: Path, events: list[tuple]) -> None:
     """Publish native records and Codex graphtraj/history selections in the given order."""
     from agent_swarm.sessions.codex import _response
 
-    store = JsonlSessionStore.create(archive_path(root / '.graphtraj/swarm', 'retained'), header('retained'))
+    store = JsonlSessionStore.create(archive_path(root / '.graphtraj/swarm', 'retained'),
+                                     upgrade_header(header('retained')))
     published = []
     for seq, (kind, value) in enumerate(events):
         if kind == 'native':
@@ -416,9 +418,9 @@ def _history_archive(root: Path, events: list[tuple]) -> None:
             event = retain_native('codex', record, session_id='native-research@x1', locator=value, seq=seq, time=1)
             published.append(_response(record, event, 'native-research@x1', value))
         else:
-            published.append({'type': 'graphtraj/history', 'seq': seq, 'time': 1, 'data': {'eventSeqs': value[1]},
-                              'graphtraj': {'version': 1, 'native': {'runtime': 'codex', 'sessionId': 'native-research@x1',
-                                                                     'locator': value[0] + '/history'}}})
+            published.append({'type': 'history', 'seq': seq, 'time': 1, 'data': {'eventSeqs': value[1]},
+                              'native': {'runtime': 'codex', 'sessionId': 'native-research@x1',
+                                         'locator': value[0] + '/history'}})
     store.publish(published, source='native', position=0)
     (root / '.graphtraj/migration-snapshot.yml').write_text('project: /retained/project\n')
 

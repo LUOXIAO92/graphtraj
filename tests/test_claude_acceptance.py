@@ -70,7 +70,7 @@ def test_real_progressive_mcp_memory_stop_and_projection(monkeypatch: pytest.Mon
         assert ready['result']['state'] == 'standby', ready
         assert ready['result']['last_result']['outcome'] == 'completed', ready
         store = JsonlSessionStore(archive_path(root, 'claude:' + session))
-        transcript = Path(store.header['graphtraj']['native']['locator'])
+        transcript = Path(store.header['native']['locator'])
         (destination / 'native-locator.json').write_text(json.dumps({
             'session': session, 'agent': agent, 'transcript': str(transcript),
             'project': str(project), 'requested_model': 'claude-opus-5-5', 'requested_effort': 'high',

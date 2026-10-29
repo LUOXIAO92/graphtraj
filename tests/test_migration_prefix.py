@@ -320,9 +320,9 @@ def test_chain_follows_only_owned_declared_segments_and_stops_cycles(tmp_path: P
         assert events[2]['type'] == 'session/end-seed'
         assert [native_record(event)['ordinal'] for event in events
                 if event['type'] != 'session/end-seed'] == list(range(6))
-        assert [event['graphtraj']['native']['sessionId'] for event in events[:2]] == [parent_id] * 2
+        assert [event['native']['sessionId'] for event in events[:2]] == [parent_id] * 2
         assert store.header['parentSession'] == 'codex:' + parent_id
-        assert store.header['graphtraj']['agentId'] == 'main'
+        assert store.header['extra_fields']['graphtraj']['agentId'] == 'main'
         assert store.attachment(report['segments'][1]['sha256']) == older
     assert not session_path(root / '.graphtraj/state', 'codex:' + second_id).exists()
     shutil.rmtree(destination)

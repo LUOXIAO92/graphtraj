@@ -10,7 +10,7 @@ from time import perf_counter
 import pytest
 
 from graphtraj.sessions.storage import SessionStore, StreamWriter, session_path
-from agent_swarm.sessions.protocol import retain_native
+from agent_swarm.sessions.protocol import retain_native, upgrade_header
 
 
 def header(session_id: str = 'canonical') -> dict:
@@ -32,7 +32,7 @@ def assistant(seq: int = 0) -> dict:
 
 def run(text: str, **extra: object) -> dict:
     """Represent a mapped text fragment, without transport timing or snapshots."""
-    return {'type': 'graphtraj/text-run', 'requestId': 'request', 'attemptId': 'attempt',
+    return {'type': 'text-run', 'requestId': 'request', 'attemptId': 'attempt',
             'messageId': 'message', 'index': 0, 'blockType': 'text', 'text': text, **extra}
 
 
@@ -158,7 +158,7 @@ def test_fork_and_four_runtime_records(tmp_path: Path) -> None:
             store.append(event, source='history', position=0)
             marker = {'type': 'session/end-seed', 'seq': 1, 'time': 1, 'data': {'inherited': True}}
             store.append(marker, source='history', position=1)
-            assert store.header['graphtraj']['agentId'] == 'agent'
+            assert store.header['extra_fields']['graphtraj']['agentId'] == 'agent'
             assert store.header['parentSession'] == 'source-fork'
             assert store.page()['events'][0]['data']['record'] == example
             store.validate()
@@ -242,7 +242,7 @@ def test_public_query_reads_jsonl_with_existing_native_authority(tmp_path: Path)
     runner, _, _ = result_project(tmp_path)
     identity = 'codex:native-research@x1'
     archive = SessionArchive(swarm_root(tmp_path), save_normalized_sessions=True)
-    archive.map_session(header(identity))
+    archive.map_session(upgrade_header(header(identity)))
     archive.collect(identity, [retain_native('codex', {'ciphertext': 'opaque'},
         session_id='native-research@x1', locator='byte:0', seq=0, time=1)], source='rollout', position=1)
     request = {'action': 'execute', 'feature': 'session_read', 'arguments': {'session_id': identity}}
@@ -267,8 +267,8 @@ def test_main_and_members_read_linked_project_sessions_without_secrets(tmp_path:
     thread = '01a15203-d14d-7bf3-8900-6a3a3b5e1031'
     identity = 'codex:' + thread
     archive = SessionArchive(swarm_root(tmp_path), save_normalized_sessions=True)
-    main_header = header(identity)
-    main_header['graphtraj']['native']['sessionId'] = thread
+    main_header = upgrade_header(header(identity))
+    main_header['native']['sessionId'] = thread
     archive.map_session(main_header)
     archive.collect(identity, [retain_native('codex', {
         'text': 'Main hook failed: Expecting value', 'request_token': 'private-request-token',
@@ -363,7 +363,7 @@ def test_fragment_size_equivalence_and_measurements(tmp_path: Path) -> None:
             usage = {'type': 'chunk', 'time': 2, 'chunk': {'type': 'usage',
                      'usage': {'inputTokens': 30, 'outputTokens': 4000, 'cacheReadTokens': 10}}}
             writer.feed(usage, position)
-            probability = {'type': 'graphtraj/logprobs', 'seq': 1, 'time': 3, 'data': {
+            probability = {'type': 'logprobs', 'seq': 1, 'time': 3, 'data': {
                 'target': {'eventSeq': 0, 'requestId': 'request', 'attemptId': 'attempt',
                            'model': 'test', 'tokenizer': 'test'},
                 'source': {'kind': 'native', 'producer': 'fixture', 'evidence': 'measured provider value'},
@@ -441,15 +441,16 @@ def test_pending_initial_ancestry_is_portable_atomic_and_one_way(tmp_path: Path)
         before = store.pending()
         with pytest.raises(ValueError):
             store.finish_initial_collection(parent_session='parent', inherited=[('file', 99)])
-        assert store.header == original and store.pending() == before
+        assert store.header == upgrade_header(original) and store.pending() == before
         assert store.position('file') == 12 and store.next_seq == 0
         store.finish_initial_collection(parent_session='parent', inherited=[('file', 12)])
         events = store.page()['events']
         assert events[0]['data']['record'] == {'inherited': 'actual'}
         assert events[1]['type'] == 'session/end-seed'
         assert events[2]['data']['record'] == {'hook': 'start'}
-        assert events[2]['graphtraj']['initialHeader'] == original
-        assert store.header['graphtraj'] == original['graphtraj']
+        assert events[2]['initialHeader'] == upgrade_header(original)
+        assert store.header['extra_fields'] == upgrade_header(original)['extra_fields']
+        assert store.header['native'] == upgrade_header(original)['native']
         assert store.header['parentSession'] == 'parent' and store.pending() is None
         store.validate()
         with pytest.raises(ValueError, match='already started'):
@@ -465,7 +466,7 @@ def test_initial_pending_cannot_be_validated_as_canonical_history() -> None:
 
     event = {'type': INITIAL_COLLECTION_TYPE, 'seq': 0, 'time': 1, 'data': {}}
     with pytest.raises(ValueError, match='pending-collection'):
-        validate_session(header(), [event])
+        validate_session(upgrade_header(header()), [event])
 
 
 def test_initial_batch_cursors_are_atomic_and_idempotent(tmp_path: Path) -> None:

@@ -1,0 +1,352 @@
+{
+  "runtime": "dsh",
+  "fixtureKind": "redacted-structural-example-not-live-capture",
+  "sources": [
+    "https://github.com/deepseek-ai/deepseek-harness/blob/d743267388641bc76f17c45ce8b4c231aed1d32c/packages/core/session/src/types.ts",
+    "https://github.com/deepseek-ai/deepseek-harness/blob/d743267388641bc76f17c45ce8b4c231aed1d32c/packages/llm/llm/src/assistant-stream.ts"
+  ],
+  "cases": [
+    {
+      "note": "DSH payload, surface operation and timed compact stream map identically; native provenance is added outside data. Counts are illustrative.",
+      "native": {
+        "type": "assistant/message",
+        "seq": 0,
+        "time": 1791936000000,
+        "data": {
+          "turn": 1,
+          "step": 1,
+          "message": {
+            "id": "redacted-message",
+            "role": "assistant",
+            "source": {
+              "kind": "model",
+              "provider": "deepseek",
+              "model": "redacted-model",
+              "replayState": {
+                "response": {
+                  "id": "redacted-response"
+                },
+                "blocks": [
+                  {
+                    "signature": "redacted-signature"
+                  }
+                ]
+              }
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "Hi"
+              }
+            ]
+          },
+          "stream": [
+            {
+              "type": "text-chunks",
+              "time0": 1791936000000,
+              "index": 0,
+              "dt": [
+                2
+              ],
+              "texts": [
+                "H",
+                "i"
+              ]
+            },
+            {
+              "type": "chunk",
+              "time": 1791936000003,
+              "chunk": {
+                "type": "finish",
+                "reason": {
+                  "kind": "stop"
+                }
+              }
+            }
+          ],
+          "usage": {
+            "inputTokens": 12,
+            "outputTokens": 1,
+            "cacheReadTokens": 4
+          }
+        },
+        "surfaceOp": "append"
+      },
+      "event": {
+        "type": "assistant/message",
+        "seq": 0,
+        "time": 1791936000000,
+        "data": {
+          "turn": 1,
+          "step": 1,
+          "message": {
+            "id": "redacted-message",
+            "role": "assistant",
+            "source": {
+              "kind": "model",
+              "provider": "deepseek",
+              "model": "redacted-model",
+              "replayState": {
+                "response": {
+                  "id": "redacted-response"
+                },
+                "blocks": [
+                  {
+                    "signature": "redacted-signature"
+                  }
+                ]
+              }
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "Hi"
+              }
+            ]
+          },
+          "stream": [
+            {
+              "type": "text-chunks",
+              "time0": 1791936000000,
+              "index": 0,
+              "dt": [
+                2
+              ],
+              "texts": [
+                "H",
+                "i"
+              ]
+            },
+            {
+              "type": "chunk",
+              "time": 1791936000003,
+              "chunk": {
+                "type": "finish",
+                "reason": {
+                  "kind": "stop"
+                }
+              }
+            }
+          ],
+          "usage": {
+            "inputTokens": 12,
+            "outputTokens": 1,
+            "cacheReadTokens": 4
+          }
+        },
+        "surfaceOp": "append",
+        "graphtraj": {
+          "version": 1,
+          "native": {
+            "runtime": "dsh",
+            "sessionId": "redacted-session",
+            "locator": "record:0",
+            "record": {
+              "type": "assistant/message",
+              "seq": 0,
+              "time": 1791936000000,
+              "data": {
+                "turn": 1,
+                "step": 1,
+                "message": {
+                  "id": "redacted-message",
+                  "role": "assistant",
+                  "source": {
+                    "kind": "model",
+                    "provider": "deepseek",
+                    "model": "redacted-model",
+                    "replayState": {
+                      "response": {
+                        "id": "redacted-response"
+                      },
+                      "blocks": [
+                        {
+                          "signature": "redacted-signature"
+                        }
+                      ]
+                    }
+                  },
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Hi"
+                    }
+                  ]
+                },
+                "stream": [
+                  {
+                    "type": "text-chunks",
+                    "time0": 1791936000000,
+                    "index": 0,
+                    "dt": [
+                      2
+                    ],
+                    "texts": [
+                      "H",
+                      "i"
+                    ]
+                  },
+                  {
+                    "type": "chunk",
+                    "time": 1791936000003,
+                    "chunk": {
+                      "type": "finish",
+                      "reason": {
+                        "kind": "stop"
+                      }
+                    }
+                  }
+                ],
+                "usage": {
+                  "inputTokens": 12,
+                  "outputTokens": 1,
+                  "cacheReadTokens": 4
+                }
+              },
+              "surfaceOp": "append"
+            }
+          },
+          "missing": [
+            {
+              "path": "logprobs",
+              "reason": "Not exposed in this native record; no probabilities inferred."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "note": "An unsuccessful attempt stays log-only; no assistant message is fabricated.",
+      "native": {
+        "type": "assistant/attempt",
+        "seq": 0,
+        "time": 1791936000000,
+        "data": {
+          "turn": 1,
+          "step": 1,
+          "stream": [
+            {
+              "type": "chunk",
+              "time": 1791936000000,
+              "chunk": {
+                "type": "finish",
+                "reason": {
+                  "kind": "error",
+                  "failure": {
+                    "message": "Redacted failure",
+                    "code": "RATE_LIMIT"
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "event": {
+        "type": "assistant/attempt",
+        "seq": 0,
+        "time": 1791936000000,
+        "data": {
+          "turn": 1,
+          "step": 1,
+          "stream": [
+            {
+              "type": "chunk",
+              "time": 1791936000000,
+              "chunk": {
+                "type": "finish",
+                "reason": {
+                  "kind": "error",
+                  "failure": {
+                    "message": "Redacted failure",
+                    "code": "RATE_LIMIT"
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "graphtraj": {
+          "version": 1,
+          "native": {
+            "runtime": "dsh",
+            "sessionId": "redacted-session",
+            "locator": "record:0",
+            "record": {
+              "type": "assistant/attempt",
+              "seq": 0,
+              "time": 1791936000000,
+              "data": {
+                "turn": 1,
+                "step": 1,
+                "stream": [
+                  {
+                    "type": "chunk",
+                    "time": 1791936000000,
+                    "chunk": {
+                      "type": "finish",
+                      "reason": {
+                        "kind": "error",
+                        "failure": {
+                          "message": "Redacted failure",
+                          "code": "RATE_LIMIT"
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          },
+          "missing": [
+            {
+              "path": "logprobs",
+              "reason": "Not exposed in this native record; no probabilities inferred."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "note": "Inherited prefix cut is seq=3; only a full seeded log can validate this boundary against its header.",
+      "native": {
+        "type": "session/end-seed",
+        "seq": 3,
+        "time": 1791936000000,
+        "data": {
+          "inherited": true
+        }
+      },
+      "event": {
+        "type": "session/end-seed",
+        "seq": 3,
+        "time": 1791936000000,
+        "data": {
+          "inherited": true
+        },
+        "graphtraj": {
+          "version": 1,
+          "native": {
+            "runtime": "dsh",
+            "sessionId": "redacted-session",
+            "locator": "record:0",
+            "record": {
+              "type": "session/end-seed",
+              "seq": 3,
+              "time": 1791936000000,
+              "data": {
+                "inherited": true
+              }
+            }
+          },
+          "missing": [
+            {
+              "path": "logprobs",
+              "reason": "Not exposed in this native record; no probabilities inferred."
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

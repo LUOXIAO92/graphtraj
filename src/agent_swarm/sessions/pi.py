@@ -12,7 +12,9 @@ from pathlib import Path
 import uuid
 
 from agent_swarm.sessions.archive import ArchiveStream, JsonlSessionStore, SessionArchive, archive_path
-from agent_swarm.sessions.protocol import append_stream_record, retain_native
+from agent_swarm.sessions.protocol import (
+    SESSION_FORMAT_VERSION, append_stream_record, retain_native, validate_extra_fields,
+)
 from .pi_projection import native_time, project_messages
 
 
@@ -40,13 +42,13 @@ def archive_messages(store: JsonlSessionStore) -> list[dict]:
         raise ValueError('Pi observations still lack an unambiguous native entry.')
     events = archive_events(store)
     if any(item['path'] != 'timestamp' for event in events
-           for item in event.get('graphtraj', {}).get('missing', [])):
+           for item in event.get('missing', [])):
         raise ValueError('Pi native content has explicitly missing attachments or fields.')
     projection = next((event['data'] for event in reversed(events) if event['type'] == 'pi/projection'), None)
     if projection is None:
         raise ValueError('Pi native projection boundary is unavailable.')
     return project_messages([event['data']['record'] for event in events
-                             if event['type'] == 'graphtraj/native'], projection['leafId'])
+                             if event['type'] == 'native'], projection['leafId'])
 
 
 class PiArchive:
@@ -57,15 +59,22 @@ class PiArchive:
         archive: SessionArchive,
         header: dict,
         *,
-        agent: str,
         project: str,
         entries: list[dict],
         leaf_id: str | None,
         source: str | None = None,
-        tasks: list[str] | None = None,
         attachment_root: Path | None = None,
+        extra_fields: dict | None = None,
     ) -> None:
-        """Bind a verified native header and the activation's history boundary."""
+        """Bind a verified native header and the activation's history boundary.
+
+        ``project`` is the workspace that resolves relative attachment paths
+        and whose private state is never copied; it is not written to the
+        archive. ``extra_fields`` is written verbatim (after redaction) to a
+        new header.
+        """
+        if extra_fields is not None:
+            validate_extra_fields(extra_fields)
         self.archive = archive
         self.session = header['id']
         self.key = archive.native_id('pi', self.session)
@@ -85,16 +94,16 @@ class PiArchive:
         self.project = Path(project).resolve()
         self.exclude = set() if archive.backfill_history else {entry['id'] for entry in entries}
         created = native_time(header)
-        canonical = {'version': 4, 'id': self.key, 'createdAt': created or 0,
+        canonical = {'version': SESSION_FORMAT_VERSION, 'id': self.key, 'createdAt': created or 0,
                      'isSeeded': False,
-                     'graphtraj': {'version': 1, 'projectId': project, 'agentId': agent,
-                                  'taskIds': tasks or [], 'native': {'runtime': 'pi',
-                                  'sessionId': self.session, 'locator': 'header',
-                                  'record': deepcopy(header)},
-                                  'missing': [] if created is not None else [
-                                      {'path': 'timestamp', 'reason': 'Native header time unavailable.'}]}}
+                     'native': {'runtime': 'pi', 'sessionId': self.session, 'locator': 'header',
+                                'record': deepcopy(header)},
+                     'missing': [] if created is not None else [
+                         {'path': 'timestamp', 'reason': 'Native header time unavailable.'}]}
+        if extra_fields is not None:
+            canonical['extra_fields'] = deepcopy(extra_fields)
         if source is not None:
-            canonical['graphtraj']['source'] = source
+            canonical['source'] = source
         if source in {'child', 'member'}:
             canonical['origin'] = 'subagent'
         # A fork contains copied native entries. Its header keeps parentSession
@@ -102,7 +111,7 @@ class PiArchive:
         path = archive_path(archive.root, self.key)
         if path.is_file():
             retained = JsonlSessionStore(path).header
-            if retained.get('graphtraj', {}).get('native', {}).get('sessionId') != self.session:
+            if retained.get('native', {}).get('sessionId') != self.session:
                 raise ValueError('Pi archive identity does not match its verified Session.')
             canonical = retained
         archive.map_session(canonical)
@@ -118,7 +127,7 @@ class PiArchive:
     def _known_entries(self) -> list[str]:
         """Return native identities already published, excluding collection markers."""
         return [event['data']['record']['id'] for event in self._events()
-                if event['type'] == 'graphtraj/native']
+                if event['type'] == 'native']
 
     def sync(
         self,
@@ -146,16 +155,16 @@ class PiArchive:
         old = self._events()
         # Pi can defer its header until the first message. Keep later native
         # header evidence without rewriting the original mapping's timestamp.
-        original_header = store.header['graphtraj']['native'].get('record', self.native_header)
+        original_header = store.header['native'].get('record', self.native_header)
         if self.native_header != original_header:
             entries = [self.native_header, *entries]
-        old_by_id = {event['data']['record']['id']: event for event in old if event['type'] == 'graphtraj/native'}
+        old_by_id = {event['data']['record']['id']: event for event in old if event['type'] == 'native'}
         pending = store.pending()
         claims = {}
         assistant_drafts = {}
         resolved = {tuple(item['final']) for item in store.observations()}
         resolved_ids = {identity for identity, event in old_by_id.items()
-                        if ('pi', self.session, event['graphtraj']['native']['locator']) in resolved}
+                        if ('pi', self.session, event['native']['locator']) in resolved}
         for draft in pending:
             observation = draft['event'].get('piObservation', {})
             boundary = set(observation['knownEntries']) | resolved_ids
@@ -196,13 +205,13 @@ class PiArchive:
                     break
                 locator = 'entry:' + identity
                 if len(claims.get(identity, [])) == 1:
-                    locator = claims[identity][0]['event']['graphtraj']['native']['locator']
+                    locator = claims[identity][0]['event']['native']['locator']
                 timestamp = native_time(entry)
                 event = retain_native('pi', deepcopy(entry), session_id=self.session,
                                       locator=locator, seq=len(events), time=timestamp or 0)
-                event['graphtraj']['native']['entryId'] = identity
+                event['native']['entryId'] = identity
                 if timestamp is None:
-                    event['graphtraj']['missing'] = [
+                    event['missing'] = [
                         {'path': 'timestamp', 'reason': 'Native entry time unavailable.'}]
                 self._attachments(event, store)
             events.append(event)
@@ -211,11 +220,11 @@ class PiArchive:
                       'lastEntryId': self.entries[-1]['id'] if self.entries else None}
         if not markers or markers[-1]['data'] != projection:
             markers.append({'type': 'pi/projection', 'ignorable': True, 'seq': 0, 'time': 0,
-                            'data': projection, 'graphtraj': {'version': 1,
+                            'data': projection,
                             'native': {'runtime': 'pi', 'sessionId': self.session,
                                        'locator': 'projection:' + str(len(markers)),
                                        'source': 'SessionManager entries/leafId'},
-                            'missing': [{'path': 'timestamp', 'reason': 'Native projection has no timestamp.'}]}})
+                            'missing': [{'path': 'timestamp', 'reason': 'Native projection has no timestamp.'}]})
         for marker in markers:
             marker['seq'] = len(events)
             events.append(marker)
@@ -273,9 +282,9 @@ class PiArchive:
                     reference = {'missing': {'path': location, 'reason': type(error).__name__}}
             references.append({'nativePath': location, **reference})
             if 'missing' in reference:
-                event['graphtraj'].setdefault('missing', []).append(reference['missing'])
+                event.setdefault('missing', []).append(reference['missing'])
         if references:
-            event['graphtraj']['attachments'] = references
+            event['attachments'] = references
 
     @staticmethod
     def _matches(observation: dict, stream: list[dict], message: dict) -> bool:
@@ -293,7 +302,7 @@ class PiArchive:
         content = message.get('content', [])
         runs = {}
         for record in stream:
-            if record.get('type') == 'graphtraj/text-run' and not record['messageId'].endswith(':tool'):
+            if record.get('type') == 'text-run' and not record['messageId'].endswith(':tool'):
                 key = record['index'], record['blockType']
                 runs[key] = runs.get(key, '') + record['text']
         for (index, kind), text in runs.items():
@@ -337,14 +346,13 @@ class PiArchive:
             self.tools[call] = {
                 'type': 'pi/tool-observation', 'seq': 0, 'time': native_time(event) or 0,
                 'data': {'stream': []},
-                'graphtraj': {'version': 1, 'native': {'runtime': 'pi',
-                              'sessionId': self.session, 'locator': locator},
-                              'missing': [{'path': 'nativeEntry', 'reason': 'Awaiting the native tool result.'}]},
+                'native': {'runtime': 'pi', 'sessionId': self.session, 'locator': locator},
+                'missing': [{'path': 'nativeEntry', 'reason': 'Awaiting the native tool result.'}],
                 'piObservation': {'knownEntries': self._known_entries(),
                                   'toolCallId': call},
             }
             if native_time(event) is None:
-                self.tools[call]['graphtraj']['missing'].append({
+                self.tools[call]['missing'].append({
                     'path': 'timestamp', 'reason': 'Native tool event time unavailable; zero is a placeholder.'})
             self.tool_buffers[call] = 0
         draft = self.tools[call]
@@ -364,7 +372,7 @@ class PiArchive:
                 delta = text
             if delta:
                 self.tool_buffers[call] += len(delta.encode())
-                append_stream_record(stream, {'type': 'graphtraj/text-run', 'requestId': self.source,
+                append_stream_record(stream, {'type': 'text-run', 'requestId': self.source,
                                              'attemptId': call, 'messageId': call, 'index': index,
                                              'blockType': 'text', 'text': delta})
             self.snapshots[slot] = text
@@ -401,17 +409,16 @@ class PiArchive:
             observed = native_time(message)
             draft = {'type': 'assistant/attempt', 'seq': 0, 'time': observed or 0,
                      'data': {'turn': 0, 'step': 0, 'stream': []},
-                     'graphtraj': {'version': 1, 'native': {'runtime': 'pi',
-                                   'sessionId': self.session, 'locator': locator},
-                                   'missing': [{'path': 'nativeEntry',
-                                                'reason': 'RPC has not supplied a persisted entry identity.'}]},
+                     'native': {'runtime': 'pi', 'sessionId': self.session, 'locator': locator},
+                     'missing': [{'path': 'nativeEntry',
+                                  'reason': 'RPC has not supplied a persisted entry identity.'}],
                      'piObservation': {'knownEntries': self._known_entries(),
                                        'messageOrdinal': self.position,
                                        'messageStart': deepcopy(message),
                                        'startFields': {key: deepcopy(value) for key, value in event.items()
                                                        if key not in {'type', 'message'}}}}
             if observed is None:
-                draft['graphtraj']['missing'].append({
+                draft['missing'].append({
                     'path': 'timestamp', 'reason': 'Native message time unavailable; zero is a placeholder.'})
             self.stream = ArchiveStream(store, self.source, draft)
             self.snapshots = {key: value for key, value in self.snapshots.items() if key.startswith('tool')}
@@ -437,9 +444,9 @@ class PiArchive:
             part = update.get('type')
             if part in {'text_delta', 'thinking_delta', 'toolcall_delta'}:
                 delta = update['delta']
-                self.stream.feed({'type': 'graphtraj/text-run', 'requestId': self.source,
+                self.stream.feed({'type': 'text-run', 'requestId': self.source,
                                   'attemptId': self.source,
-                                  'messageId': self.stream.event['graphtraj']['native']['locator']
+                                  'messageId': self.stream.event['native']['locator']
                                                + (':tool' if part == 'toolcall_delta' else ''),
                                   'index': update['contentIndex'],
                                   'blockType': 'reasoning' if part == 'thinking_delta' else 'text',

@@ -12,7 +12,7 @@ this file; anything it does not list is internal.
 
 # The only definition of the distribution version; packaging and every
 # runtime report (MCP serverInfo, Codex clientInfo) read it from here.
-__version__ = "0.1.2"
+__version__ = "0.2.0"
 
 from agent_swarm.config import (
     CONFIG_DEFAULTS,
@@ -47,6 +47,8 @@ from agent_swarm.tool import (
     unavailable,
     validate_request,
 )
+from agent_swarm.sessions.archive import read_session
+from agent_swarm.sessions.protocol import validate_extra_fields
 
 __all__ = [
     "__version__",
@@ -56,4 +58,5 @@ __all__ = [
     "ACTIVE", "STANDBY", "AgentControl", "ExecutionEvents", "Run", "RuntimeDriver",
     "CONFIG_DEFAULTS", "default_config", "explicit_choices", "read_config", "write_config",
     "discover_models", "read_connections",
+    "read_session", "validate_extra_fields",
 ]

@@ -116,11 +116,8 @@ class DshLiveFrames:
             'type': 'assistant/attempt', 'seq': 0, 'time': 0,
             'data': {'turn': attempt['turn'], 'step': attempt['step'],
                      'stream': deepcopy(attempt['stream'])},
-            'graphtraj': {
-                'version': 1,
-                'native': {'runtime': 'dsh', 'sessionId': self.session_id,
-                           'locator': self._key()[2], 'record': deepcopy(attempt)},
-                'missing': [{'path': 'time', 'reason': 'Live frames do not have a Session event creation time.'}],
-            },
+            'native': {'runtime': 'dsh', 'sessionId': self.session_id,
+                       'locator': self._key()[2], 'record': deepcopy(attempt)},
+            'missing': [{'path': 'time', 'reason': 'Live frames do not have a Session event creation time.'}],
         }
         self.checkpoint(event, self.revision)

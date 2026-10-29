@@ -33,7 +33,7 @@ setopt err_exit pipe_fail no_unset
 WT=/Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/383-dsh-standalone-host
 # The code under test; later commits may change only this script's directory.
 # Whoever integrates further code commits sets COMMIT to the new code commit.
-COMMIT=236a3a1ef369bdf68f662543732e0c28acf2c729
+COMMIT=289039fe375747c623b713c2feae19971007c5e2
 P=/Users/luoxiao/agents-383-realhost/a
 PY=/Users/luoxiao/miniconda3/bin/python3.13
 CHILD_MODEL=claude-sonnet-5-5

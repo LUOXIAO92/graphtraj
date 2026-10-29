@@ -85,7 +85,7 @@ Features and their arguments (`*` = required):
 
 | Feature | Arguments | Result fields added to the Agent document |
 | --- | --- | --- |
-| `create` | `runtime*`, `instruction*`, `name`, `configuration` | none; returns once the Agent is registered, never waits for its work |
+| `create` | `runtime*`, `instruction*`, `name`, `configuration`, `preset`, `model`, `reasoning_effort` (see 2) | none; returns once the Agent is registered, never waits for its work |
 | `send` | `agent*`, `message*`, `reports_only` | `delivery: {at, delivery: submitted\|rejected\|unknown, error?}` when the Agent runs; in standby it continues the Session |
 | `status` | `agent` | without `agent`: `{"agents": [document + "children": [...]]}`, the caller's visible hierarchy |
 | `wait` | `agent*`, `timeout_seconds*` (finite, > 0) | `timed_out`; also ends early on an unanswered native request |
@@ -117,8 +117,10 @@ its own rules for which Agents it accepts.
 `agent`, `session` and `execution` are stable references or `null`.
 `result` is the **Agent document** plus the feature's own fields:
 
-- `agent`, `name`, `runtime`, `state` (`active` or `standby`), `parent`,
-  `creator` (`host`, `agent`, `session`), `host`, `session`;
+- `agent`, `name`, `runtime`, `preset`, `connection`, `model`,
+  `reasoning_effort` (the choice made at `create`, see 2), `state` (`active`
+  or `standby`), `parent`, `creator` (`host`, `agent`, `session`), `host`,
+  `session`;
 - while running: `execution`, and when present `stopping`, `diagnostic`,
   `pending_requests` (count of unanswered native requests);
 - after an execution has ended: `last_result` with `id`, `outcome`
@@ -138,7 +140,12 @@ people and models and may change. Codes in use:
 | `invalid-input` | malformed request, unknown or missing field, empty value |
 | `authority-denied` | no owning host, or the caller may not do this |
 | `unsupported-runtime` | no driver for the requested Runtime in this host |
-| `invalid-config` | rejected driver configuration (today: any `configuration` in an independent host) |
+| `invalid-config` | rejected driver configuration (any `configuration` in an independent host), an invalid `config.yml`, or a driver that cannot run the selected connection |
+| `invalid-preset` | `preset` is not declared, or uses another Runtime than `runtime` |
+| `invalid-model` | `model` is not a candidate, cannot be verified, or contradicts the preset |
+| `invalid-reasoning-effort` | `reasoning_effort` is not supported by the model or Runtime, or contradicts the preset |
+| `ambiguous-connection` | several connections declare the Runtime and no preset selects one |
+| `runtime-unavailable` | the selected connection's Runtime is not installed or not logged in on this machine |
 | `not-found` | no such Agent visible to the caller |
 | `retired` | the Agent is retired |
 | `active` | the Agent must be in standby first |
@@ -173,7 +180,15 @@ Public: `agent_swarm.__version__` and the names in `agent_swarm.__all__`:
 - the backend: `AgentControl`, `RuntimeDriver`, `Run`, `ExecutionEvents`,
   `ACTIVE`, `STANDBY`;
 - configuration: `CONFIG_DEFAULTS`, `default_config`, `explicit_choices`,
-  `read_config`, `write_config`.
+  `read_config`, `write_config`, `read_connections` (section 3), and
+  `discover_models(connection)`. `discover_models` takes one `config.yml`
+  connection mapping (as `read_connections` returns it, or `{"runtime":
+  ...}` for the native default login) and returns `{"runtime", "status":
+  "available"|"unknown", "models": [{"id", "alias", "provider",
+  "supported_efforts"}], "message"}`; DSH may add `provider_status`.
+  `supported_efforts` is a list or `null` when the Runtime does not enumerate
+  them. A connection with `models` returns those without querying the
+  Runtime. It never runs an inference turn and never returns credentials.
 
 Every submodule (`agent_swarm.control`, `agent_swarm.claude.*`,
 `agent_swarm.sessions.*` and so on) is internal, even where a public name is
@@ -214,50 +229,128 @@ Independent hosts refuse archiving today (`archive-unavailable`); 384 adds it.
 
 ## 2. Creating a child: Runtime, preset, model, reasoning effort
 
-**Today.** `create` takes `runtime`, `instruction`, optional `name` and
-`configuration`. An independent host has one driver, so another Runtime
-returns `unsupported-runtime`. Its children all use the host's fixed settings:
-`configuration` returns `invalid-config`, and `model` or effort arguments are
-rejected as unknown fields.
+`create` takes `runtime` (required), `instruction` (required), optional
+`name`, `configuration`, and since 0.1.1 optional `preset`, `model` and
+`reasoning_effort` (non-empty strings).
 
-**Planned (380).** `create` keeps `runtime` and gains optional `preset`,
-`model` and `reasoning_effort` (strings).
+**Resolution.** agents resolves the choice against its own `config.yml`
+(section 3) before the driver prepares anything. A value is never silently
+replaced by another one.
 
-- A Runtime with no configured connection, a preset not in `config.yml`, a
-  model not among the Runtime's candidates (from configuration or the list
-  obtained at login) or an effort the model does not support is an explicit
-  error with a stable code naming that field. A value is never silently
-  replaced by another one.
-- The precedence between a preset and explicit arguments, and whether
-  `runtime` may be omitted when a preset names one, are decided by 380.
-  Contradicting values are an error, never a silent choice.
-- When the Runtime answers with a different model than requested (for example
-  a safeguard fallback), the child's result names the requested model, the
-  observed model and the Runtime's reason, as 369 does for Claude today.
-  381 carries this to every host and Runtime.
-- The Agent document reports the effective Runtime and model choice (field
-  names decided by 380).
+1. `runtime` must have a driver in this host, else `unsupported-runtime`.
+   `runtime` is always given, also with a preset.
+2. `preset` must be declared, else `invalid-preset`. Its Runtime (its own
+   `runtime`, or its connection's) must equal `runtime`, else
+   `invalid-preset`.
+3. Precedence: the preset fills `model` and `reasoning_effort` only when the
+   request omits them. An explicit value equal to the preset's is accepted;
+   a different one is a contradiction and fails with `invalid-model` or
+   `invalid-reasoning-effort`. Explicit arguments never override a preset.
+4. Connection: the preset's connection; else the only connection declared
+   for `runtime`; else none (the host's own settings and the Runtime's native
+   default login, exactly as before 0.1.1). Several connections for the
+   Runtime without a preset that selects one fail with
+   `ambiguous-connection`. A selected connection whose Runtime is not
+   installed or not logged in fails with `runtime-unavailable`, naming the
+   Runtime and connection.
+5. `model` (explicit or from the preset) must be the `id` of exactly one
+   candidate from `discover_models`: the connection's declared `models`,
+   else the native catalog (Pi and DSH catalogs filtered by the connection's
+   `provider`; Claude and Codex list their own configured provider's
+   models). Not a candidate, discovery `status: unknown`, or several
+   providers offering the id fail with `invalid-model`. Without `model`, the
+   host's or Runtime's default model applies and nothing is checked.
+   Discovery runs synchronously inside `create`: a native catalog query may
+   take up to about 30 seconds before `create` returns; declared `models`
+   avoid it.
+6. `reasoning_effort` must be in the chosen model's `supported_efforts` when
+   that is a list, else `invalid-reasoning-effort`. When it is unknown
+   (`null`, or no `model`), the driver checks it against the Runtime's own
+   values and fails with the same code (Claude `low`, `medium`, `high`,
+   `xhigh`, `max`; Codex `none`, `minimal`, `low`, `medium`, `high`,
+   `xhigh`; Pi `off`, `minimal`, `low`, `medium`, `high`, `xhigh`; DSH `off`,
+   `low`, `high`, `max`). A Runtime that rejects the value natively keeps its
+   own code (section 1.2).
+
+A request that selects nothing (no preset, model or effort, and no
+connection declared for the Runtime) reaches the driver exactly as before.
+`configuration` keeps its meaning and may be combined with the new arguments;
+independent hosts still refuse it with `invalid-config`.
+
+**Drivers.** The selection reaches the driver as
+`prepare(runtime, caller, selection={"preset", "connection", "model",
+"reasoning_effort", "provider", "settings"})`, where `settings` is the
+declared connection entry or `null`. A selected connection replaces the
+host's native home, endpoint and key variable together, so a host key never
+reaches another endpoint. A driver whose `prepare` does not accept
+`selection` makes such a create fail with `invalid-config`. The agents
+drivers apply `model` and `reasoning_effort` for all four Runtimes; current
+limits, each failing with `invalid-config`: the DSH driver runs the
+`deepseek-official` provider only; the Pi driver keeps the host's resolved
+provider and takes no `base_url`. Claude has no native provider setting, so
+a Claude connection's `provider` only names its models.
+
+**Several Runtimes in one host.** A host registers one driver per Runtime in
+`AgentControl(root, {runtime: driver, ...})`; `create` routes by `runtime`.
+At start a host may call `AgentControl.require_connections()`, which raises
+`unsupported-runtime` for a declared connection whose Runtime has no driver
+and `runtime-unavailable` for one that is not installed or not logged in.
+Login is checked by existence only: the connection's `api_key_env` variable
+is set, or the native login file exists in its home (Claude
+`.credentials.json` or the `.claude.json` account record, Codex and Pi
+`auth.json`). DSH's own login files are not inspected; without
+`api_key_env` its start reports a missing login. No credential is read,
+copied or returned. Wiring this into each host is 381–383.
+
+**Agent document.** Every Agent document carries `preset`, `connection`
+(the connection's name), `model` and `reasoning_effort` as chosen at
+`create`; `null` means not chosen (the host's or Runtime's default).
+Agents created before 0.1.1 show `null` for all four.
+
+**Fallback.** When the Runtime answers with a different model than
+requested (for example a safeguard fallback), the child's result names the
+requested model, the observed model and the Runtime's reason, as 369 does
+for Claude today. 381 carries this to every host and Runtime.
 
 ## 3. Standalone configuration: `<data root>/config.yml`
 
-**Today.** Two booleans, `save_normalized_sessions` and `backfill_history`,
-both default `false`. Blank lines and comments are allowed. Any other field,
-a repeated field or a non-boolean value is refused, not guessed.
+agents reads only its own `config.yml` and native Runtime login state; it
+never reads GraphTraj's `roles.yml` or any other product's configuration.
+GraphTraj passes its roles to agents through `create`'s public arguments and
+this file.
 
-**Planned (380).** The same file declares:
+```yaml
+save_normalized_sessions: false     # boolean, default false
+backfill_history: false             # boolean, default false
+connections:                        # optional
+  work-claude:                      # name: any non-empty string
+    runtime: claude                 # required: claude, codex, pi or dsh
+    home: /abs/native/home          # optional native home (absolute; ~ expanded)
+    provider: anthropic             # optional native provider
+    base_url: https://host/v1       # optional, http(s) without credentials, query or fragment
+    api_key_env: WORK_KEY           # optional: the NAME of an environment variable, never a key
+    models:                         # optional candidates; omitted: native discovery
+      - claude-opus-5-5             # an id, or
+      - id: claude-sonnet-5-5       # a mapping with id and optional alias,
+        supported_efforts: [low, high]   # provider, supported_efforts
+presets:                            # optional
+  reviewer:                         # selected by create's preset
+    connection: work-claude         # exactly one of connection or runtime
+    model: claude-sonnet-5-5        # optional
+    reasoning_effort: high          # optional
+```
 
-- **Runtime connections:** named entries saying which Runtime they run
-  (`claude`, `codex`, `pi`, `dsh`) and how to reach it (for example a native
-  home, base URL, or the name of an environment variable holding a key, never
-  the key itself);
-- **presets:** named entries giving a connection or Runtime, a model and a
-  reasoning effort, selectable by `create`'s `preset`.
-
-The exact keys are 380's. Reading stays strict: unknown fields fail with the
-file and line. agents reads only its own `config.yml` and native Runtime
-login state; it never reads GraphTraj's `roles.yml` or any other product's
-configuration. GraphTraj passes its roles to agents through `create`'s public
-arguments and this file.
+- The two booleans keep their meaning and defaults. A value must be exactly
+  `true` or `false`.
+- Blank lines and comments are allowed. Reading is strict: an unknown or
+  repeated field, a wrong type, a preset naming an undeclared connection, or
+  a preset with both or neither of `connection` and `runtime` fails with
+  `<file>:<line>: <field>: ...`; `create` reports it as `invalid-config`.
+- `read_connections(root)` returns `{"connections": {name: entry},
+  "presets": {name: entry}}`; each entry is the file's fields plus `name`.
+- `write_config` and `default_config` replace only the boolean lines and keep
+  every other line, including connections, presets and comments.
+- A file that holds only boolean lines is read exactly as before 0.1.1.
 
 ## 4. Parent-child traffic
 

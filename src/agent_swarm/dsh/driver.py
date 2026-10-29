@@ -3,13 +3,50 @@
 from __future__ import annotations
 
 from copy import deepcopy
+import os
 from pathlib import Path
+import shutil
 import threading
 from typing import Any, Callable, Mapping
 
 from agent_swarm import AgentsError, Caller, Run
+from agent_swarm.control import require_available
 from .execution import DshExecution
 from .settings import prepare
+
+# Native DSH effort levels; a model's own list may be narrower.
+EFFORTS = ('off', 'low', 'high', 'max')
+
+
+def selected(configuration: Mapping[str, Any], selection: Mapping[str, Any]) -> dict:
+    """Apply one create selection to the host's DSH settings.
+
+    A selected connection replaces the host's native home, endpoint and
+    credential reference together, so a key never reaches another endpoint.
+    """
+    config = dict(configuration)
+    if selection.get('provider') not in (None, 'deepseek-official'):
+        raise AgentsError('invalid-config', 'This DSH driver runs the deepseek-official provider only, '
+                                            f"not {selection['provider']!r}.")
+    connection = selection.get('settings')
+    if connection is not None:
+        for key in ('runtime_home', 'base_url', 'api_key_env', 'model_source'):
+            config.pop(key, None)
+        config.update({key: connection[name] for key, name in (
+            ('runtime_home', 'home'), ('base_url', 'base_url'), ('api_key_env', 'api_key_env'))
+            if name in connection})
+        if 'models' in connection:
+            # A declared model is announced to DSH rather than taken from its catalog.
+            config['model_source'] = 'manual'
+    if selection.get('model') is not None:
+        config['model'] = selection['model']
+    effort = selection.get('reasoning_effort')
+    if effort is not None:
+        if effort not in EFFORTS:
+            raise AgentsError('invalid-reasoning-effort',
+                              f'DSH takes reasoning_effort {list(EFFORTS)}, not {effort!r}.')
+        config['reasoning_effort'] = effort
+    return config
 
 
 class DshDriver:
@@ -34,11 +71,25 @@ class DshDriver:
         self.turns: dict[str, DshExecution] = {}
         self.lock = threading.Lock()
 
-    def prepare(self, runtime: str, caller: Caller) -> dict:
-        """Validate explicit DSH configuration, independently of caller roles."""
+    def prepare(self, runtime: str, caller: Caller, *, selection: Mapping[str, Any] | None = None) -> dict:
+        """Validate explicit DSH configuration, independently of caller roles.
+
+        ``selection`` is the create's resolved connection, model and effort.
+        """
         if runtime != 'dsh':
             raise AgentsError('unsupported-runtime', 'This driver runs DSH only.')
-        return prepare(self.configuration, self.cwd)
+        config = self.configuration if selection is None else selected(self.configuration, selection)
+        return prepare(config, self.cwd)
+
+    def require_available(self, connection: Mapping[str, Any]) -> None:
+        """Refuse a connection whose DSH is not installed, or whose named key is unset.
+
+        ponytail: DSH's own login files are not documented to agents, so a
+        connection without ``api_key_env`` leaves the login check to DSH's start.
+        """
+        home = Path(connection.get('home') or os.environ.get('DSH_HOME') or Path.home() / '.dsh')
+        require_available(connection, executable=self.configuration.get('executable') or shutil.which('dsh'),
+                          home=home, logins=None)
 
     def start(self, run: Run) -> None:
         """Return after native binding, retaining ownership until actual stop."""

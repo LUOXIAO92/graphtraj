@@ -1,5 +1,6 @@
 /** Exercise the delivered plugin in installed native scopes, without a model. */
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { pathToFileURL } from 'node:url';
 
@@ -34,7 +35,9 @@ try {
   await ctx.plugin(DeepSeekLlmApiExtensionRegistry).await();
   await ctx.plugin(inventory, {}).await();
   const extension = await ctx.deepseekLlmApiExtensions.prepare({ body: {}, signal: new AbortController().signal });
-  assert.ok(extension.fields.dsh_plugin_packages.packages.some(item => item.name === 'agents-dsh' && item.version === '0.1.0'));
+  // The manifest repeats agent_swarm.__version__ (test_mcp_server_version_is_the_single_package_version).
+  const { version } = JSON.parse(readFileSync(new URL('package.json', pathToFileURL(pluginPath)), 'utf8'));
+  assert.ok(extension.fields.dsh_plugin_packages.packages.some(item => item.name === 'agents-dsh' && item.version === version));
   await ctx.plugin(ClientModuleRegistry).await();
   const entry = ctx.clientModules.graph().entries.find(row => row.id === 'agents-dsh');
   assert.ok(entry);

@@ -43,7 +43,9 @@ def discover_models(connection: Mapping[str, Any]) -> dict:
         other connection keys (``base_url``, ``api_key_env``) concern
         execution and are not used to list models. A ``models`` list (strings or mappings with ``id`` and optional
         ``alias``, ``provider`` and ``supported_efforts``) is the candidate
-        list itself, and the Runtime is not queried.
+        list itself, and the Runtime is not queried. A ``provider`` filters
+        the Pi and DSH catalogs, which span providers; Claude and Codex list
+        the models of their own configured provider, unfiltered.
 
     Returns
     -------

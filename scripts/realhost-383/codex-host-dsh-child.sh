@@ -27,7 +27,7 @@ WT=/Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core
 # The code under test; later commits may change only this script's directory.
 # Whoever integrates further code commits sets COMMIT to the new code commit.
 COMMIT=236a3a1ef369bdf68f662543732e0c28acf2c729
-P=/Users/luoxiao/agents-383-realhost/b
+P=/Users/luoxiao/agents-383-realhost/b2
 PY=/Users/luoxiao/miniconda3/bin/python3.13
 CHILD_EFFORT=low
 DSH_MODEL=deepseek-flash
@@ -49,19 +49,29 @@ git -C $WT diff --quiet HEAD -- . ':!scripts/realhost-383' || fail "the Worktree
 [[ -e $P ]] && fail "$P exists from an earlier run; move it away (for example: mv $P $P.old) and run again"
 mkdir -p $WORK $STATE $EVIDENCE
 
-say "venv (isolated; Conda and system Python are not modified; agents only, no GraphTraj)"
-$PY -m venv --system-site-packages $VENV
-$VENV/bin/pip install -q --no-index --no-deps --no-build-isolation -e $WT/src/agent_swarm
-if ! $VENV/bin/python -c 'import websockets' 2>/dev/null; then
-  # One fixed source: the Harness's persistent runtime venv (websockets 16.1.1 when written).
-  SRC=/Users/luoxiao/workspace/you-are-a-product-architect-delivery/.venv-runtime/lib/python3.13/site-packages
-  DIST=($SRC/websockets-*.dist-info(N/))
-  [[ -d $SRC/websockets && ${#DIST} -eq 1 ]] \
-    || fail "websockets is missing; install it into the venv yourself: $VENV/bin/pip install websockets==16.1.1"
-  cp -R $SRC/websockets $DIST[1] $VENV/lib/python3.13/site-packages/
-  print -r -- "copied websockets ${${${DIST[1]:t}#websockets-}%.dist-info} from $SRC"
-fi
-$VENV/bin/python -c 'import agent_swarm, websockets; print("agent_swarm", agent_swarm.__version__, agent_swarm.__file__)'
+say "venv (isolated, agents only: no system or Conda site-packages, no GraphTraj; nothing is installed from PyPI)"
+# Conda base may carry graphtraj, so the venv does not see it (no --system-site-packages).
+$PY -m venv --without-pip $VENV
+SITE=$VENV/lib/python3.13/site-packages
+# One fixed source for the dependencies: the Harness's persistent runtime venv
+# (PyYAML 6.0.3 and websockets 16.1.1 when written; built for this python3.13).
+SRC=/Users/luoxiao/workspace/you-are-a-product-architect-delivery/.venv-runtime/lib/python3.13/site-packages
+for name in yaml websockets; do
+  [[ -d $SRC/$name ]] || fail "$SRC/$name is missing; this script copies dependencies only from there"
+  cp -R $SRC/$name $SITE/
+done
+[[ -d $SRC/_yaml ]] && cp -R $SRC/_yaml $SITE/
+DIST=($SRC/[Pp][Yy][Yy][Aa][Mm][Ll]-*.dist-info(N/) $SRC/websockets-*.dist-info(N/))
+[[ ${#DIST} -eq 2 ]] || fail "expected one PyYAML and one websockets dist-info in $SRC, found: ${DIST:-none}"
+cp -R $DIST $SITE/
+print -r -- "copied from $SRC: yaml, websockets$([[ -d $SRC/_yaml ]] && print -n ', _yaml'), ${(j:, :)${DIST[@]:t}}"
+# agent_swarm from this checkout without putting $WT/src (which holds graphtraj)
+# on sys.path: a .pth names a directory that holds only an agent_swarm symlink.
+mkdir -p $P/agents-only
+ln -s $WT/src/agent_swarm $P/agents-only/agent_swarm
+print -r -- $P/agents-only > $SITE/agents-only.pth
+$VENV/bin/python -c 'import yaml, websockets, agent_swarm; print("agent_swarm", agent_swarm.__version__, agent_swarm.__file__, "| yaml", yaml.__version__, "| websockets", websockets.__version__)' \
+  || fail "yaml, websockets or agent_swarm does not import in $VENV"
 $VENV/bin/python -c 'import importlib.util as u; s = u.find_spec("graphtraj"); print("graphtraj importable:", s is not None); raise SystemExit(s is not None)' \
   || fail "graphtraj is importable in $VENV; this check needs an agents-only venv"
 

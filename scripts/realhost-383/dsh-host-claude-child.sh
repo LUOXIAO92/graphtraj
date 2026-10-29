@@ -15,8 +15,9 @@
 #     second message, waits for PONG-2, then ends its task
 #   3 the parent resumes its own Session (`--session-id`), resumes the same child
 #     (PONG-3), waits, reads the child's status, and ends
-#   4 the script checks the public agents results and the DSH Session log and
-#     prints PASS/FAIL per criterion
+#   4 recheck-a.sh checks the public agents results and the DSH Session log
+#     (DSH's default zstd logs, decoded read only with Node's zlib) and prints
+#     PASS/FAIL per criterion
 #
 # DSH runs with its own home $P/dsh-home (DSH_HOME), as agent_swarm.dsh.execution
 # isolates its children; the user's ~/.dsh is neither read nor changed. The key
@@ -235,84 +236,14 @@ Then reply with the child's answer in one line and stop."
   || print -r -- "(dsh exit $?; continuing to collect evidence)"
 $VENV/bin/python $P/public.py $EVIDENCE/step3-events.jsonl $EVIDENCE/step3-agents.jsonl
 
-# The relay messages are native DSH Session records in the isolated home.
-$VENV/bin/python - $DSH_HOME $EVIDENCE/relay-messages.jsonl <<'EOF'
-import json, pathlib, sys
-
-def walk(value):
-    """Yield every native user/message event carrying an agents notice relay."""
-    if isinstance(value, dict):
-        source = (value.get('data') or {}).get('source') if value.get('type') == 'user/message' else None
-        if isinstance(source, dict) and str(source.get('communicationId', '')).startswith('agents-notice:'):
-            yield value
-            return
-        for item in value.values():
-            yield from walk(item)
-    elif isinstance(value, list):
-        for item in value:
-            yield from walk(item)
-
-with open(sys.argv[2], 'w') as output:
-    for path in sorted(pathlib.Path(sys.argv[1]).rglob('*.jsonl')):
-        for line in path.read_text(errors='replace').splitlines():
-            try:
-                record = json.loads(line)
-            except ValueError:
-                continue
-            for event in walk(record):
-                data = event['data']
-                output.write(json.dumps({'log': str(path), 'seq': event.get('seq'),
-                    'communicationId': data['source']['communicationId'],
-                    'text': ''.join(part.get('text', '') for part in data.get('content') or [])},
-                    ensure_ascii=False) + '\n')
-EOF
-
-say "step 4: public results and the native relay"
-$VENV/bin/python - $EVIDENCE/step2-agents.jsonl $EVIDENCE/step3-agents.jsonl $EVIDENCE/relay-messages.jsonl \
-    $CHILD_MODEL $SID $AGENT <<'EOF'
-import json, sys
-read = lambda path: [json.loads(line) for line in open(path) if line.strip()]
-two, three, relays = read(sys.argv[1]), read(sys.argv[2]), read(sys.argv[3])
-model, session, agent = sys.argv[4:7]
-mine = lambda documents, action: [d for d in documents if d['action'] == action and d.get('agent') == agent
-                                  and 'error' not in d]
-create = (mine(two, 'create') or [{}])[0].get('result') or {}
-status = (mine(three, 'status') or [{}])[-1].get('result') or {}
-waits2 = [d['result'] for d in mine(two, 'wait')]
-waits3 = [d['result'] for d in mine(three, 'wait')]
-relayed = {}
-for relay in relays:
-    relayed.setdefault(relay['communicationId'], []).append(relay['text'])
-answer = lambda wait: ((wait.get('last_result') or {}).get('last_message') or ''.join(
-    relayed.get(f"agents-notice:{(wait.get('last_result') or {}).get('id')}:completed", [])))
-said2, said3 = ' | '.join(map(answer, waits2)), ' | '.join(map(answer, waits3))
-delivered = [(w.get('last_result') or {}).get('id') for w in waits2 + waits3
-             if (w.get('last_result') or {}).get('notification') == 'delivered']
-native = {w.get('session') for w in waits2 + waits3 if w.get('session')}
-checks = [
-    ('create result: runtime == claude (a non-DSH child of the DSH host)', create.get('runtime') == 'claude'),
-    (f'create result: model == {model} (chosen at create)', create.get('model') == model),
-    ('create result: parent == null and creator.session == the DSH parent Session',
-     create.get('parent') is None and (create.get('creator') or {}).get('session') == session),
-    ('step 2 wait results or relays: PONG-1 then PONG-2 (round trip)', 'PONG-1' in said2 and 'PONG-2' in said2),
-    ('relay-messages.jsonl: each end the host pushed (notification delivered) is in the DSH Session once',
-     bool(delivered) and all(len(relayed.get(f'agents-notice:{e}:completed', [])) == 1 for e in delivered)),
-    ('step 3 wait result or relay: PONG-3 (child resumed)', 'PONG-3' in said3),
-    ('step 3 status result: same native Claude Session as the waits, standby, creator.session unchanged',
-     len(native) == 1 and status.get('session') in native and status.get('state') == 'standby'
-     and (status.get('creator') or {}).get('session') == session),
-]
-for name, ok in checks:
-    print(('PASS ' if ok else 'FAIL ') + name)
-print('answers step 2:', json.dumps(said2, ensure_ascii=False))
-print('answers step 3:', json.dumps(said3, ensure_ascii=False))
-print('pushed ends:', json.dumps(delivered), '| relay ids:', json.dumps(sorted(relayed)))
-print('status:', json.dumps({k: status.get(k) for k in ('runtime', 'model', 'state', 'session', 'parent')}))
-EOF
+say "step 4: public results and the native relay (no model calls)"
+# DSH keeps its default zstd Session logs; the recheck decodes them with
+# Node's zlib, read only, and writes only $P/recheck.
+zsh $WT/scripts/realhost-383/recheck-a.sh $P
 
 say "follow-up commands (copy as needed)"
 print -r -- "cd $WORK && env DSH_HOME=$DSH_HOME $UNSET ${HOSTENV[*]} $DSH --profile $PROFILE ${KEY[*]} ${PATCH[*]} --session-id $SID --json '$(call status "{\"agent\":\"$AGENT\"}") — call the agents tool once with exactly this and print the raw result.'"
-print -r -- "less $EVIDENCE/step2-agents.jsonl $EVIDENCE/step3-agents.jsonl $EVIDENCE/relay-messages.jsonl"
+print -r -- "less $EVIDENCE/step2-agents.jsonl $EVIDENCE/step3-agents.jsonl $P/recheck/relay-messages.jsonl $P/recheck/checks.txt"
 print -r -- "less $EVIDENCE/step2-events.jsonl $EVIDENCE/step3-events.jsonl $EVIDENCE/step2.stderr.txt $EVIDENCE/step3.stderr.txt"
 print -r -- "cat $EVIDENCE/step1-plugin-add.txt $EVIDENCE/step1-dump-config.txt"
 print -r -- "All DSH state of this run is in $DSH_HOME; remove $P when done."

@@ -16,24 +16,53 @@ import pytest
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 
-def _checkout_pythonpath(configured: Optional[str], cwd: Path) -> str:
-    """Put this checkout's src first and make every entry absolute.
+def _absolute_pythonpath(configured: str, cwd: Path) -> str:
+    """Resolve relative PYTHONPATH entries against the invocation directory.
 
     pyproject's pythonpath covers only this process. Subprocesses (fake Runtimes
     run by sys.executable, installed commands) start in other directories, where
-    a relative entry such as ``src`` names nothing and the venv's own installed
-    graphtraj, possibly another or a removed tree, would be imported instead.
+    a relative entry such as ``src`` would name nothing.
     """
-    entries = [str(PROJECT_ROOT / "src")]
-    for entry in (configured or "").split(os.pathsep):
-        if entry:
-            entry = str(cwd / entry)
-            if entry not in entries:
-                entries.append(entry)
-    return os.pathsep.join(entries)
+    return os.pathsep.join(str(cwd / entry) if entry else entry for entry in configured.split(os.pathsep))
 
 
-os.environ["PYTHONPATH"] = _checkout_pythonpath(os.environ.get("PYTHONPATH"), Path.cwd())
+if os.environ.get("PYTHONPATH"):
+    os.environ["PYTHONPATH"] = _absolute_pythonpath(os.environ["PYTHONPATH"], Path.cwd())
+
+_ORIGINS = (
+    "import importlib.util\n"
+    "for name in ('graphtraj', 'agent_swarm'):\n"
+    "    print(getattr(importlib.util.find_spec(name), 'origin', None))\n"
+)
+
+
+def _checkout_import_problem(cwd: Path, executable: str = sys.executable) -> Optional[str]:
+    """Say why subprocesses started from cwd would not import this checkout."""
+    source = (PROJECT_ROOT / "src").resolve()
+    probe = subprocess.run([executable, "-c", _ORIGINS], cwd=cwd, capture_output=True, text=True, timeout=60)
+    origins = probe.stdout.splitlines() if probe.returncode == 0 else []
+    if len(origins) == 2 and all(
+        origin != "None" and Path(origin).resolve().is_relative_to(source) for origin in origins
+    ):
+        return None
+    found = ", ".join("{0} -> {1}".format(*pair) for pair in zip(("graphtraj", "agent_swarm"), origins)) or (
+        "probe failed: " + probe.stderr.strip()[-300:]
+    )
+    return (
+        "Test subprocesses would not import this checkout: {0} from a neutral directory resolves {1}; "
+        "expected both under {2}. Install this checkout editable into that venv "
+        "(pip install -e {3}/src/agent_swarm -e {3}) or set PYTHONPATH={2}."
+    ).format(executable, found, source, PROJECT_ROOT)
+
+
+def pytest_sessionstart(session: pytest.Session) -> None:
+    """Stop at once, with one cause, when subprocesses would import another tree."""
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as neutral:
+        problem = _checkout_import_problem(Path(neutral))
+    if problem:
+        pytest.exit(problem, returncode=pytest.ExitCode.USAGE_ERROR)
 
 
 @dataclass(frozen=True)

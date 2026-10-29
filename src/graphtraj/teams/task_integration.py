@@ -221,7 +221,11 @@ def _integrate(
                 log.write(str(error) + "\n")
     evidence.chmod(0o444)
     evidence_refs = [evidence.relative_to(root).as_posix()]
-    if resolution and resolution.get("alias") and resolution.get("launch_status") != "registered":
+    # A failed or stopped launch names its child (c67b4b4) but may have no
+    # mapping: only an established resolver has a trace or a Session to cite.
+    established = bool(resolution and resolution.get("alias")
+                       and resolution.get("launch_status") not in {"failed", "stopped"})
+    if established and resolution.get("launch_status") != "registered":
         mapping, _ = read_alias_mapping(runner, resolution["alias"])
         evidence_refs.append(Path(mapping["trace_file"]).relative_to(root).as_posix())
         resolution["submissions"] = [event for event in read_worldline(state, root)
@@ -244,7 +248,7 @@ def _integrate(
         "dev_commit": before if resolution else _git(dev, "rev-parse", "HEAD"),
         "validation_command": list(validation_command),
         **({"conflict_kind": conflict_kind} if conflict_kind else {}),
-        **({"session_ref": resolution["alias"]} if resolution and resolution.get("alias") else {}),
+        **({"session_ref": resolution["alias"]} if established else {}),
     })
     unlocked = []
     if succeeded:

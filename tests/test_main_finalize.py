@@ -2674,3 +2674,31 @@ def test_user_pause_cli_and_managed_authority(host: tuple[Path, Path], monkeypat
     monkeypatch.setattr(main_finalize, 'caller_alias', lambda directory: 'managed@e1')
     with pytest.raises(RunnerError, match='Only the owning Main'):
         set_user_pause(root, True)
+
+
+def test_codex_session_start_takes_an_earlier_claude_mains_undelivered_notices(host: tuple[Path, Path]) -> None:
+    """Claude -> Codex: notices still queued for Claude become Codex's starting context once."""
+    from graphtraj.execution.main_continuity import claim_main, claim_notices, queue_notice
+
+    root, binding = host
+    binding.unlink()
+    runner = root / '.graphtraj/runner'
+    claude = {'runtime': 'claude', 'session': 'claude-main', 'runner': str(runner)}
+    claim_main(runner, claude, 'claude:first-control')
+    queue_notice(runner, claude, {'source': 'graphtraj', 'alias': 'delivered@l1', 'event': 'completed',
+                                  'message': 'Claude already saw this.', 'execution': 'e1'})
+    assert [item['event']['alias'] for item in claim_notices(runner, 'claude', 'claude-main')] == ['delivered@l1']
+    queue_notice(runner, claude, {'source': 'graphtraj', 'alias': 'pending@l1', 'event': 'failed',
+                                  'message': 'Queued before the handover.', 'execution': 'e2'})
+
+    rollout(root)
+    started = native_hook(root, 'SessionStart', source='resume')
+    assert 'associated' in started['systemMessage']
+    context = started['hookSpecificOutput']
+    assert context['hookEventName'] == 'SessionStart'
+    assert '[GraphTraj notice from pending@l1 · failed]' in context['additionalContext']
+    assert 'Queued before the handover.' in context['additionalContext']
+    assert 'delivered@l1' not in context['additionalContext']
+    # Delivered once: neither a later entry of this Main nor the earlier Main gets it again.
+    assert 'hookSpecificOutput' not in native_hook(root, 'SessionStart', source='compact')
+    assert claim_notices(runner, 'claude', 'claude-main') == []

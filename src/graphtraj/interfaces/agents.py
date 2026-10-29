@@ -110,10 +110,11 @@ class GraphTrajAgents:
 
         The core calls this only for an end its parent must handle. The notice
         takes the same Runtime Adapter path as a Task member's, so it follows
-        Main continuity and is shown once.
+        Main continuity and is shown once. A Main host with a push channel
+        (Codex) receives the parent event itself, so wait/status hide the body.
         """
         from graphtraj.configuration.project_configuration import runner_directory
-        from graphtraj.execution.main_continuity import current_main, recorded_by_main, route_notice
+        from graphtraj.execution.main_continuity import QUEUED_RUNTIMES, current_main, recorded_by_main, route_notice
         from graphtraj.runtimes.runtime_adapter import select_runtime_adapter
 
         runner = runner_directory(self.root)
@@ -123,7 +124,18 @@ class GraphTrajAgents:
         address = route_notice(runner, {**current['connection'], 'runtime': current['runtime'],
                                         'session': current['session']})
         message = notice['body'] or (notice.get('error') or {}).get('message') or notice['outcome']
-        select_runtime_adapter(current['runtime']).send_host_event(address, {
+        adapter = select_runtime_adapter(current['runtime'])
+        if current['runtime'] not in QUEUED_RUNTIMES:
+            # A push host accepts only the four-field parent event of a Task member's notice.
+            try:
+                adapter.send_host_event(address, {'source': 'graphtraj', 'alias': notice['agent'],
+                                                  'event': notice['outcome'], 'message': message})
+            except RuntimeAdapterError as error:
+                if error.code == 'delivery-unconfirmed':
+                    return 'unconfirmed'
+                raise
+            return True
+        adapter.send_host_event(address, {
             'source': 'agents', 'alias': notice['agent'], 'event': notice['outcome'],
             'message': message, 'execution': notice['execution']})
         return 'queued'

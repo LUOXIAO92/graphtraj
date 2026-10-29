@@ -834,7 +834,7 @@ def test_real_claude_archive_public_query(
         result = handle_request({'action': 'execute', 'feature': 'session_read',
                                  'arguments': {'session_id': 'claude:' + terminal['session']}}, cwd=root)
     data = result.document
-    assert data['header']['graphtraj']['native']['sessionId'] == terminal['session']
+    assert data['header']['native']['sessionId'] == terminal['session']
     assert any(e.get('data', {}).get('record', {}).get('type') == 'result' for e in data['events'])
     print('REAL_CLAUDE_321_QUERY=' + json.dumps(data, ensure_ascii=False))
     assert terminal['last_outcome'] == 'completed', terminal

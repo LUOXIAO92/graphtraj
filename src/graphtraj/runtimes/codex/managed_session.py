@@ -141,21 +141,19 @@ class CodexManagedExecution(NativeCodexExecution):
         ``extra_fields.graphtraj``. A Runner execution with a creation callback
         uses the project archive and its mapped Task.
         """
-        from graphtraj.interfaces.agents import configured_archive, graphtraj_fields, mapped_task_ids
+        from graphtraj.interfaces.agents import configured_archive, graphtraj_fields
 
         request = restore_codex_context(request, context_evidence).launch_document()['adapter_request']
         if expected_session and not independent:
             refresh_approval_route(request, session_directory)
-        tasks: list[str] = []
         if not independent:
             archive = None
             if session_created is not None:
                 from graphtraj.workspace.runner_project import discover_project_root
 
                 archive = configured_archive(discover_project_root(Path(request['worktree_path'])))
-                tasks   = mapped_task_ids(session_directory)
         if archive is not None:
-            extra_fields = graphtraj_fields(str(archive.root), session_directory.name, tasks, extra_fields)
+            extra_fields = graphtraj_fields(str(archive.root), session_directory.name, (), extra_fields)
         super().__init__(request, prompt, session_directory, session_started, context_evidence,
                          trace_file, expected_session, session_created,
                          connection=connection, agent_call=agent_call,
@@ -203,6 +201,14 @@ class CodexManagedExecution(NativeCodexExecution):
             native_context=native_context, native_authorizer=authorize,
         ))
         return address, CONNECTION_ENV, 'graphtraj.interfaces.mcp'
+
+    def _archive(self, session: object) -> object | None:
+        """Name a Runner execution's Task once its mapping exists, at native Session start."""
+        if not self.independent and self.extra_fields is not None:
+            from graphtraj.interfaces.agents import mapped_task_ids
+
+            self.extra_fields['graphtraj']['taskIds'] = mapped_task_ids(self.directory)
+        return super()._archive(session)
 
     def _review_recovery_sync(self, proposal: dict) -> dict:
         """Bridge the tool worker to this existing execution's selected reviewer."""

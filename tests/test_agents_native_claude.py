@@ -312,7 +312,7 @@ def test_real_claude_sdk_registration(
     done = call({'action': 'wait', 'agent': created.document['agent'], 'timeout_seconds': 30})
     assert not done.failed and done.document['result']['state'] == 'standby', done.document
     session = JsonlSessionStore(archive_path(root, 'claude:' + created.document['session']))
-    records = [item['event']['graphtraj']['native']['record']
+    records = [item['event']['native']['record']
                for item in [*session.pending(), *session.observations()]]
     native = next(r for r in records if r.get('type') == 'system' and r.get('subtype') == 'init')
     assert 'mcp__agents__agents' in native['tools']
@@ -363,7 +363,7 @@ def test_real_claude_auto_and_native_denial(project: Path, monkeypatch: pytest.M
         done = call({'action': 'wait', 'agent': agent, 'timeout_seconds': 60})
         outcome = done.document['result'].get('last_result') or {}
         session = JsonlSessionStore(archive_path(root, 'claude:' + created.document['session']))
-        records = [item['event']['graphtraj']['native']['record']
+        records = [item['event']['native']['record']
                    for item in [*session.pending(), *session.observations()]]
         native = next((r for r in records if r.get('type') == 'system' and r.get('subtype') == 'init'), {})
         print(json.dumps({'project': str(project), 'agent': agent, 'session': created.document['session'],
@@ -376,7 +376,7 @@ def test_real_claude_auto_and_native_denial(project: Path, monkeypatch: pytest.M
         assert native.get('permissionMode') == 'auto', native
         assert native.get('model') == 'claude-opus-5-5', native
         assert outcome['outcome'] == 'completed', outcome
-        transcript = Path(session.header['graphtraj']['native']['locator'])
+        transcript = Path(session.header['native']['locator'])
         entries = [json.loads(line) for line in transcript.read_text().splitlines()]
         blocks = [block for entry in entries for block in entry.get('message', {}).get('content', [])
                   if isinstance(block, dict)]

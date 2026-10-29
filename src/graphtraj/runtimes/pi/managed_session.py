@@ -25,19 +25,12 @@ class PiManagedExecution(PiExecution):
         self.independent = False
         self.packages.append(str(Path(__file__).resolve().parents[2]))
 
-        import yaml
         from agent_swarm import default_config
         from agent_swarm.sessions.archive import SessionArchive
-        from graphtraj.interfaces.agents import mapped_task_ids, swarm_root
+        from graphtraj.interfaces.agents import swarm_root
 
-        mapping_file = self.directory / 'mapping.yml'
-        mapping = yaml.safe_load(mapping_file.read_text()) if mapping_file.is_file() else {}
-        root    = swarm_root(Path(self.request['harness_root']))
-        self.archive       = SessionArchive(root, **default_config(root, save_normalized_sessions=True))
-        self.runner_mapped = bool(mapping)
-        # Without a mapping the Agent is named by its native Session, known at run().
-        self.runner_alias  = mapping.get('alias')
-        self.runner_tasks  = mapped_task_ids(self.directory)
+        root = swarm_root(Path(self.request['harness_root']))
+        self.archive = SessionArchive(root, **default_config(root, save_normalized_sessions=True))
 
     def _archive_collector(self, header: dict, native: dict):
         """Name a Runner execution's Agent and source once its native Session is known.
@@ -47,11 +40,17 @@ class PiManagedExecution(PiExecution):
         if self.independent:
             self.archive_source = 'child'
         else:
-            from graphtraj.interfaces.agents import graphtraj_fields
+            import yaml
+            from graphtraj.interfaces.agents import graphtraj_fields, mapped_task_ids
 
-            self.archive_source = 'member' if self.runner_mapped else None
+            # The Runner mapping exists by native Session start; without one the
+            # Agent is named by its native Session.
+            mapping_file = self.directory / 'mapping.yml'
+            mapping = yaml.safe_load(mapping_file.read_text()) if mapping_file.is_file() else {}
+            self.archive_source = 'member' if mapping else None
             self.extra_fields   = graphtraj_fields(self.request['harness_root'],
-                                                   self.runner_alias or self.session, self.runner_tasks)
+                                                   mapping.get('alias', self.session),
+                                                   mapped_task_ids(self.directory))
         return super()._archive_collector(header, native)
 
     def _record_process(self, pid: int, outcome: dict | None = None) -> None:

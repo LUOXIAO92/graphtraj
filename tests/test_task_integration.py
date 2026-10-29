@@ -388,10 +388,15 @@ def test_configured_document_conflict_requires_common_result_and_validation(
                        FAKE_CODEX_CAPTURE_STDIN='1')
     selection = 'editor' if conflict == 'textual' else yaml.safe_dump({'editor': {'runtime': 'codex', 'model': 'inline-document-model', 'reports': ['sources.md']}})
     result = run_process(command + ['--resolve-conflict', 'Preserve both document requirements', '--role', selection, '--', *validator], cwd=root, env=environment)
-    assert result.returncode == (1 if outcome == 'prose-only' else 0), result.stdout + result.stderr
+    assert result.returncode == 0, result.stdout + result.stderr
     output = yaml.safe_load(result.stdout)
-    assert output['status'] == ('escalated' if outcome == 'prose-only' else 'resolving-integration'), (root / output['evidence']).read_text()
+    # The call returns once the resolver is launched; it does not wait for its end (402).
+    assert output['status'] == 'resolving-integration', (root / output['evidence']).read_text()
+    assert output['resolution']['launch_status'] == 'launched'
     alias = output['resolution']['alias']
+    from test_generic_role_execution import wait_for_idle
+
+    wait_for_idle(installed_commands, root, environment, alias)
     mapping = yaml.safe_load((root / '.graphtraj/runner/sessions' / alias / 'mapping.yml').read_text())
     team = yaml.safe_load((state / 'tasks/83-integration/teams/1/team.yml').read_text())
     assert any(member['session_ref'] == alias for member in team['members'].values())
@@ -416,6 +421,9 @@ def test_configured_document_conflict_requires_common_result_and_validation(
     trace = Path(mapping['trace_file']).read_text()
     if outcome == 'prose-only':
         assert 'Decision: RESOLVED' in trace
+        # A resolver that ended without a submission escalates on the next call.
+        escalated = run_process(command + ['--', *validator], cwd=root)
+        assert escalated.returncode == 1 and yaml.safe_load(escalated.stdout)['status'] == 'escalated', escalated.stdout
         retained = fake_codex.log_file.read_bytes()
         retry = run_process(command + ['--resolve-conflict', 'Preserve both document requirements',
                                       '--role', selection, '--', *validator], cwd=root, env=environment)
@@ -434,7 +442,8 @@ def test_configured_document_conflict_requires_common_result_and_validation(
                 with pytest.raises(RunnerError, match='Integration Worktree'):
                     tools.submit_result({'commit': candidate, 'result_refs': ['article.md'],
                                        'completion': 'Original result is not a resolution'}, cwd=root)
-                submitted = output['resolution']['submissions'][-1]
+                submitted = yaml.safe_load(run_process([str(installed_commands.runner), 'reports', alias],
+                                                       cwd=root).stdout)['submissions'][-1]
                 with pytest.raises(RunnerError):
                     tools.decide_result({'submission_id': submitted['event_id'], 'commit': submitted['candidate'],
                                        'decision': 'accepted', 'reason': 'Same role is not the parent',
@@ -629,13 +638,20 @@ def stopped_committed_integration(
     validation = [sys.executable, str(validator)]
     failed = run_process(command + ['--', *validation], cwd=root)
     assert failed.returncode == 1, failed.stdout + failed.stderr
-    escalated = run_process(command + ['--resolve-conflict', 'Preserve both accepted lines', '--role', 'coding_team.merge_resolver', '--', *validation], cwd=root, env={
+    environment = {
         **os.environ, 'HOME': str(root / 'operator-home'),
         'PATH': str(fake_codex.executable.parent) + os.pathsep + os.environ['PATH'],
         'FAKE_CODEX_LOG': str(fake_codex.log_file),
         'FAKE_CODEX_LIFECYCLE_ACTION': 'resolve-integration',
         'FAKE_CODEX_RESOLUTION': 'escalated',
-    })
+    }
+    dispatched = run_process(command + ['--resolve-conflict', 'Preserve both accepted lines', '--role', 'coding_team.merge_resolver', '--', *validation], cwd=root, env=environment)
+    assert yaml.safe_load(dispatched.stdout)['status'] == 'resolving-integration', dispatched.stdout + dispatched.stderr
+    from test_generic_role_execution import wait_for_idle
+
+    wait_for_idle(installed_commands, root, environment, yaml.safe_load(dispatched.stdout)['resolution']['alias'])
+    # The resolver ended without a submission, so the next call escalates (402).
+    escalated = run_process(command + ['--', *validation], cwd=root)
     assert yaml.safe_load(escalated.stdout)['status'] == 'escalated', escalated.stdout + escalated.stderr
     task = state / 'tasks/83-integration'
     monitor = execution_budget.ExecutionBudgetMonitor(task, '83', 'integration')

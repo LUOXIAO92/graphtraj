@@ -9,7 +9,7 @@ import threading
 from typing import Any, Callable, Mapping
 
 from agent_swarm import AgentsError, Caller, Run
-from agent_swarm.control import require_available
+from agent_swarm.control import require_available, within_workspace
 from agent_swarm.runtime import RuntimeAdapterError
 from .context import restore_codex_context
 from .managed_session import CodexManagedExecution
@@ -67,10 +67,12 @@ class CodexDriver:
         self.execution = execution
 
     def prepare(self, runtime: str, caller: Caller, *, configuration: str | None = None,
-                selection: Mapping[str, Any] | None = None) -> dict:
+                selection: Mapping[str, Any] | None = None, workspace: Path | None = None) -> dict:
         """Validate retained native values, with native auto review as the default.
 
         ``selection`` is the create's resolved connection, model and effort.
+        ``workspace`` narrows the captured worktree to the child's cwd; the
+        permission profiles, approval settings and network stay as captured.
         """
         if runtime != 'codex':
             raise AgentsError('unsupported-runtime', 'This driver runs Codex only.')
@@ -81,6 +83,8 @@ class CodexDriver:
             context = restore_codex_context(settings['adapter_request'], settings.get('evidence', {}))
             request = context.launch_document()['adapter_request']
             parameters = request['session_parameters']
+            if workspace is not None:
+                request['worktree_path'] = parameters['cwd'] = str(within_workspace(workspace, request['worktree_path']))
             config = parameters['config']
             if 'approvalsReviewer' not in parameters and 'approvals_reviewer' not in config:
                 config['approvals_reviewer'] = 'auto_review'

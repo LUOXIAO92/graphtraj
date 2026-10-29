@@ -210,6 +210,23 @@ def require_available(
                                                  f"in {home}. Log in with the {runtime} client first.")
 
 
+def within_workspace(workspace: str | Path, boundary: str | Path) -> Path:
+    """Return ``workspace`` resolved, refusing a directory outside ``boundary``.
+
+    A child's workspace (layer 1) is its working directory and, where the
+    Runtime sandboxes by working directory, its sandbox root. It may only
+    narrow the parent's: it never adds a writable root, network or approval.
+    Links are resolved first, so a link inside ``boundary`` cannot point out.
+    """
+    path = Path(workspace)
+    if not path.is_absolute() or not path.is_dir():
+        raise AgentsError("invalid-input", f"request.workspace: {workspace} is not an existing absolute directory")
+    resolved, limit = path.resolve(), Path(boundary).resolve()
+    if not resolved.is_relative_to(limit):
+        raise AgentsError("workspace-denied", f"Workspace {resolved} lies outside the parent's workspace {limit}.")
+    return resolved
+
+
 def _accepts(method: Callable, name: str) -> bool:
     """Whether ``method`` takes keyword ``name``; older drivers do not."""
     import inspect

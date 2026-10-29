@@ -49,10 +49,16 @@ say "venv (isolated; Conda and system Python are not modified)"
 $PY -m venv --system-site-packages $VENV
 $VENV/bin/pip install -q --no-index --no-deps --no-build-isolation -e $WT/src/agent_swarm
 if ! $VENV/bin/python -c 'import websockets' 2>/dev/null; then
-  COPY=$(print -l /private/tmp/claude-501/*/lib/python3.13/site-packages/websockets(N/) | head -1)
-  [[ -n $COPY ]] || fail "websockets is missing; install it into the venv yourself: $VENV/bin/pip install websockets==16.1.1"
-  cp -R $COPY ${COPY%/websockets}/websockets-*.dist-info(N) $VENV/lib/python3.13/site-packages/
+  # One fixed source: the Harness's persistent runtime venv (websockets 16.1.1 when written).
+  SRC=/Users/luoxiao/workspace/you-are-a-product-architect-delivery/.venv-runtime/lib/python3.13/site-packages
+  DIST=($SRC/websockets-*.dist-info(N/))
+  [[ -d $SRC/websockets && ${#DIST} -eq 1 ]] \
+    || fail "websockets is missing; install it into the venv yourself: $VENV/bin/pip install websockets==16.1.1"
+  cp -R $SRC/websockets $DIST[1] $VENV/lib/python3.13/site-packages/
+  print -r -- "copied websockets ${${${DIST[1]:t}#websockets-}%.dist-info} from $SRC"
 fi
+$VENV/bin/python -c 'import websockets; print("websockets", websockets.__version__, websockets.__file__)' \
+  || fail "websockets does not import in $VENV"
 $VENV/bin/python -c 'import agent_swarm, websockets; print("agent_swarm", agent_swarm.__version__, agent_swarm.__file__)'
 
 say "step 0: preflight (native dialog: none; nothing to type)"

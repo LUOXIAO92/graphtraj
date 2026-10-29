@@ -127,6 +127,88 @@ def test_failed_review_does_not_create_a_catalog(project: Path) -> None:
     assert not Path(current['path']).exists()
 
 
+def refusal(project: Path, arguments: dict, reviewer: Callable[[dict], dict] | None = None) -> str:
+    """Return the error code of one refused public connection call."""
+    from graphtraj.execution.runner_models import RunnerError
+
+    with pytest.raises(RunnerError) as error:
+        operation(project, arguments, reviewer)
+    return error.value.code
+
+
+def test_denied_connection_save_reports_a_connection_code(project: Path) -> None:
+    """A reviewer's refusal is a denied connection change, not a role change."""
+    current = operation(project, {})
+    request = {'action': 'save', 'expected_revision': current['revision'], 'catalog': catalog(project)}
+    assert refusal(project, request, lambda proposal: {'decision': 'decline'}) == 'connection-change-denied'
+    assert not Path(current['path']).exists()
+
+
+def entry(project: Path, runtime: str = 'pi') -> dict:
+    """Return one complete Runtime entry for a partial change."""
+    return catalog(project, runtime)['runtimes']['shared']
+
+
+def test_partial_changes_set_replace_and_remove_one_entry(project: Path) -> None:
+    """Partial changes touch only the named entries of the catalog at the revision."""
+    accept = lambda proposal: {'decision': 'accept'}
+    first = save(project, catalog(project))
+    path = Path(first['path'])
+    before = path.read_bytes()
+    added = {'runtimes': {'other': entry(project)}}
+    preview = operation(project, {'action': 'preview', 'expected_revision': first['revision'], 'changes': added})
+    assert preview['applied'] is False and set(preview['catalog']['runtimes']) == {'shared', 'other'}
+    assert path.read_bytes() == before
+    second = operation(project, {'action': 'save', 'expected_revision': first['revision'], 'changes': added}, accept)
+    assert second['applied'] is True
+    assert second['catalog'] == {'version': 1, 'runtimes': {**first['catalog']['runtimes'], 'other': entry(project)}}
+    replaced = copy.deepcopy(entry(project, 'codex'))
+    del replaced['providers']['second']
+    third = operation(project, {'action': 'save', 'expected_revision': second['revision'],
+                                'changes': {'runtimes': {'shared': replaced}}}, accept)
+    assert third['catalog']['runtimes'] == {'shared': replaced, 'other': entry(project)}
+    fourth = operation(project, {'action': 'save', 'expected_revision': third['revision'],
+                                 'changes': {'runtimes': {'other': None}}}, accept)
+    assert fourth['catalog'] == {'version': 1, 'runtimes': {'shared': replaced}}
+    assert yaml.safe_load(path.read_text()) == fourth['catalog']
+
+
+def test_stale_ambiguous_denied_or_invalid_partial_changes_write_nothing(project: Path) -> None:
+    """Stale, ambiguous, denied and invalid partial changes all leave the file intact."""
+    accept = lambda proposal: {'decision': 'accept'}
+    first = save(project, catalog(project))
+    path = Path(first['path'])
+    second = operation(project, {'action': 'save', 'expected_revision': first['revision'],
+                                 'changes': {'runtimes': {'other': entry(project)}}}, accept)
+    before = path.read_bytes()
+    stale = {'expected_revision': first['revision'], 'changes': {'runtimes': {'other': None}}}
+    for action in ('preview', 'save'):
+        assert refusal(project, {'action': action, **stale}, accept) == 'configuration-conflict'
+    current = {'expected_revision': second['revision'], 'changes': {'runtimes': {'other': None}}}
+    for action in ('preview', 'save'):
+        assert refusal(project, {'action': action, **current, 'catalog': catalog(project)},
+                       accept) == 'invalid-input'
+    assert refusal(project, {'action': 'save', **current},
+                   lambda proposal: {'decision': 'decline'}) == 'connection-change-denied'
+    for changes in ({'runtimes': {'missing': None}}, {'runtimes': {}}, {'version': 1},
+                    {'runtimes': {'other': {**entry(project), 'credential': 'secret'}}}):
+        with pytest.raises(ValueError):
+            operation(project, {'action': 'save', 'expected_revision': second['revision'],
+                                'changes': changes}, accept)
+    assert path.read_bytes() == before
+
+
+def test_desktop_bridge_saves_partial_changes(project: Path) -> None:
+    """The desktop entry accepts the same partial form through the shared schema."""
+    from test_desktop_settings import call
+
+    current = call(project, {'scope': 'user', 'action': 'read'})[-1]['result']
+    result = call(project, {'scope': 'user', 'action': 'save', 'expected_revision': current['revision'],
+                            'changes': {'runtimes': {'shared': entry(project)}}})[-1]
+    assert not result['failed'], result
+    assert result['result']['catalog'] == {'version': 1, 'runtimes': {'shared': entry(project)}}
+
+
 @pytest.mark.parametrize('field,value', [
     ('api_key_env', 'secret-value!'), ('base_url', 'https://user:password@example.org'),
     ('base_url', 'https://example.org?key=secret'), ('credential', 'secret'),

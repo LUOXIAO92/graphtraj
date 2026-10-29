@@ -176,11 +176,14 @@ def migrate_tickets_command(preview: bool, restore: Path | None, snapshot: Path 
 @main.command("connections", cls=OperationCommand, feature="runtime_connections")
 @click.option("--action", type=click.Choice(["read", "preview", "save", "discover"]), default="read")
 @click.option("--catalog-file", type=click.Path(path_type=Path, exists=True, dir_okay=False))
+@click.option("--changes-file", type=click.Path(path_type=Path, exists=True, dir_okay=False),
+              help="YAML runtimes changes to apply at --expected-revision instead of a complete catalog.")
 @click.option("--expected-revision")
 @click.option("--runtime")
 def connections_command(
     action: str,
     catalog_file: Path | None,
+    changes_file: Path | None,
     expected_revision: str | None,
     runtime: str | None,
 ) -> None:
@@ -193,6 +196,8 @@ def connections_command(
     try:
         if catalog_file is not None:
             arguments["catalog"] = yaml.safe_load(catalog_file.read_text(encoding="utf-8"))
+        if changes_file is not None:
+            arguments["changes"] = yaml.safe_load(changes_file.read_text(encoding="utf-8"))
         result = invoke_tool("runtime_connections", arguments).document
     except (OSError, ValueError, yaml.YAMLError, RunnerError) as error:
         raise click.ClickException(str(error)) from error

@@ -112,6 +112,25 @@ def validate_catalog(document: object) -> dict:
     return copy.deepcopy(document)
 
 
+def apply_changes(catalog: dict, changes: object) -> dict:
+    """Set, replace or remove whole Runtime entries, then validate the result.
+
+    An entry value replaces that entry completely; null removes an existing one.
+    """
+    if (not isinstance(changes, dict) or set(changes) != {'runtimes'}
+            or not isinstance(changes['runtimes'], dict) or not changes['runtimes']):
+        raise ValueError('Changes require a nonempty runtimes mapping.')
+    document = copy.deepcopy(catalog)
+    for name, entry in changes['runtimes'].items():
+        if entry is not None:
+            document['runtimes'][name] = copy.deepcopy(entry)
+        elif name in document['runtimes']:
+            del document['runtimes'][name]
+        else:
+            raise ValueError('Only a configured Runtime entry can be removed.')
+    return validate_catalog(document)
+
+
 def read_catalog() -> tuple[dict, str]:
     """Read safe settings and the exact byte revision used for conflict checks."""
     from graphtraj.configuration.project_roles import _UniqueKeyLoader
@@ -171,7 +190,8 @@ def connection_context(cwd: Path) -> tuple[Path, Path]:
 def manage_connections(arguments: dict, *, cwd: Path) -> dict:
     """Read, preview, discover or atomically save a natively reviewed catalog.
 
-    Save requires the byte revision returned by read. Review runs before the
+    Save requires the byte revision returned by read. Partial changes apply to
+    the catalog at that revision, also when previewed. Review runs before the
     replacement lock; the reviewed bytes are compared again under that lock.
     Existing Sessions keep the resolved configuration captured at dispatch.
     """
@@ -209,7 +229,14 @@ def _manage_connections(arguments: dict, *, cwd: Path, review: bool) -> dict:
         return {**view, 'discovery': {
             'runtime_entry': arguments['runtime'], **discover_models(runtime),
         }}
-    after = validate_catalog(arguments.get('catalog'))
+    if 'changes' in arguments:
+        if 'catalog' in arguments:
+            raise RunnerError('invalid-input', 'Send either a complete catalog or changes, not both.')
+        if arguments.get('expected_revision') != revision:
+            raise RunnerError('configuration-conflict', 'Connections changed; reload before applying changes.')
+        after = apply_changes(before, arguments['changes'])
+    else:
+        after = validate_catalog(arguments.get('catalog'))
     if action == 'preview':
         return {**view, 'catalog': after, 'applied': False}
     if action != 'save':
@@ -224,7 +251,7 @@ def _manage_connections(arguments: dict, *, cwd: Path, review: bool) -> dict:
     if review:
         decision = review_proposal({'scope': 'user', 'path': str(path), 'before': before, 'after': after}, root, runner_directory)
         if not isinstance(decision, dict) or decision.get('decision') != 'accept':
-            raise RunnerError('role-change-denied', 'The selected reviewer did not approve this configuration change; nothing was written.')
+            raise RunnerError('connection-change-denied','The selected reviewer did not approve this configuration change; nothing was written.')
     path.parent.mkdir(parents=True, exist_ok=True)
     lock = path.with_suffix(".lock")
     lock.touch(exist_ok=True)

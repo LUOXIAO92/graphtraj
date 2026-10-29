@@ -372,7 +372,16 @@ class AgentControl:
                                configuration=arguments.get("configuration"))
         if action == "status" and "agent" not in arguments:
             return Outcome({"agents": self.hierarchy(binding.caller)})
+        try:
+            return self._operate_agent(action, arguments, binding)
+        except AgentsError as error:
+            if error.code != "not-found":
+                raise
+            raise AgentsError("not-found", error.message + " " + self.reference_hint(
+                arguments["agent"], binding.caller)) from None
 
+    def _operate_agent(self, action: str, arguments: Mapping[str, Any], binding: Binding) -> Outcome:
+        """Perform one action on the Agent ``arguments`` names."""
         agent = arguments["agent"]
         if action == "status":
             return self._outcome(self._authorized(agent, binding.caller))
@@ -652,6 +661,18 @@ class AgentControl:
         with self._locked(agent) as record:
             current = _running(record)
             return current is not None and current["process"].get("worker_pid") == os.getpid()
+
+    def reference_hint(self, name: str, caller: Caller) -> str:
+        """Explain that ``agent`` is a reference, listing visible Agents with that name.
+
+        The text does not depend on whether a hidden Agent has that reference.
+        """
+        named = sorted(record["agent"] for record in map(self._load, (
+            path.stem for path in (self.root / "control" / "agents").glob("*.json")))
+            if record is not None and record["name"] == name and record["retired_at"] is None
+            and self._can_view(record, caller))
+        hint = "`agent` takes the reference returned by create or status, not the readable name."
+        return hint + (f" Agents named {name!r}: {', '.join(named)}." if named else "")
 
     def hierarchy(self, caller: Caller) -> list[dict]:
         """Return the caller's visible descendants nested by true control parent.

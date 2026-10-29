@@ -55,7 +55,17 @@ with their documented flags:
 - `python -m agent_swarm.claude.host configuration --project <dir> --claude
   <path> [--write]` and `... serve --config <file>`. The written
   `.agents-control/claude-host.json` keys (`root`, `cwd`, `claude`,
-  `channel_file`, `settings`) and the documented `settings` keys are public.
+  `channel_file`, `settings`, and since 0.1.2 the optional `runtimes`) and
+  the documented `settings` keys are public. `settings` configures the
+  host's Claude children. `runtimes` maps another Runtime's name to its
+  driver settings: `codex` takes the document `agent_swarm.codex.host
+  --settings` takes (`adapter_request`, optional `evidence`, `connection`).
+  A Runtime without an entry has no driver (`create` fails with
+  `unsupported-runtime`). At start the host refuses a `pi` or `dsh` entry
+  (`unsupported-runtime`, not supported by this host yet), a `claude` entry
+  or a non-object value (`invalid-config`), invalid Codex settings
+  (`invalid-config`), and whatever `AgentControl.require_connections()`
+  refuses, each with its own code.
   The `context` operation is the plugin's private channel.
 - `python -m agent_swarm.codex.host --settings <file> --directory <dir>
   [--output <file>] [--resume] <instruction>`. On a startup error it prints
@@ -300,7 +310,10 @@ is set, or the native login file exists in its home (Claude
 `.credentials.json` or the `.claude.json` account record, Codex and Pi
 `auth.json`). DSH's own login files are not inspected; without
 `api_key_env` its start reports a missing login. No credential is read,
-copied or returned. Wiring this into each host is 381–383.
+copied or returned. The independent Claude Code host registers its Claude
+driver and one driver per `runtimes` entry (1.1) and calls
+`require_connections()` at start; a refusal answers every call with its
+code (1.1). Pi and DSH hosts follow in 382 and 383.
 
 **Agent document.** Every Agent document carries `preset`, `connection`
 (the connection's name), `model` and `reasoning_effort` as chosen at
@@ -310,7 +323,8 @@ Agents created before 0.1.1 show `null` for all four.
 **Fallback.** When the Runtime answers with a different model than
 requested (for example a safeguard fallback), the child's result names the
 requested model, the observed model and the Runtime's reason, as 369 does
-for Claude today. 381 carries this to every host and Runtime.
+for Claude. The report belongs to the driver, so a Claude child reports it
+the same way under any host that registers the Claude driver.
 
 ## 3. Standalone configuration: `<data root>/config.yml`
 
@@ -387,7 +401,9 @@ Delivery rules:
 What the parent sees today:
 
 - **Claude Code host:** each notice is `{"id": "<execution>:<event>",
-  "event": {"alias", "event", "message", "execution"}}`. The host plugin
+  "event": {"alias", "event", "message", "execution"}}`; a `request` notice's
+  id is `<execution>:request:<request>`. It enables `request_notices`, for
+  children of every Runtime it runs. The host plugin
   pushes it into the Main Session as `[GraphTraj notice from <alias> ·
   <event>]` followed by the message; otherwise it is attached as
   `main_notices` to the next `agents` result. An end already shown by `wait`
@@ -415,7 +431,7 @@ Gaps, by owner:
 
 | Gap | Owner |
 | --- | --- |
-| Independent hosts do not push a child's native permission request; the parent polls | 381 |
+| Independent hosts do not push a child's native permission request; the parent polls | Claude Code host: done in 381 |
 | Codex children's native approvals are handled by `auto_review` and not relayed to the parent | 385 |
 | Independent hosts do not hold notices while the parent is stopped: the Claude host's queue lives in its process, and the Codex host marks them `unavailable` (readable through `status`) | 381 (Claude, Codex), 382 (Pi), 383 (DSH) |
 | A child cannot ask its parent for a decision or more resources except through native approval requests | unassigned, needs Main (closest: 381) |

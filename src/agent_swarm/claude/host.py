@@ -141,18 +141,46 @@ def write_adoption(material: dict[str, object]) -> None:
                           encoding='utf-8')
 
 
+def codex_driver(settings: dict):
+    """Build a Codex driver from a ``codex.host --settings`` document; refuse it now if invalid."""
+    from agent_swarm.codex.driver import CodexDriver
+
+    driver = CodexDriver(settings)
+    driver.prepare('codex', Caller('claude-native', None))
+    return driver
+
+
+# Runtime name -> driver factory taking that Runtime's ``runtimes`` entry.
+# 382 and 383 add pi and dsh here.
+RUNTIME_DRIVERS = {'codex': codex_driver}
+
+
+def runtime_drivers(cwd: Path, settings: dict, runtimes: object) -> dict:
+    """Return the host's own Claude driver plus one driver per ``runtimes`` entry."""
+    if not isinstance(runtimes, dict) or not all(isinstance(entry, dict) for entry in runtimes.values()):
+        raise AgentsError('invalid-config', 'runtimes must map each Runtime name to its driver settings object.')
+    drivers = {'claude': ClaudeDriver(cwd, settings)}
+    for name, entry in runtimes.items():
+        if name == 'claude':
+            raise AgentsError('invalid-config', 'Claude children take the host settings, not runtimes.claude.')
+        if name not in RUNTIME_DRIVERS:
+            raise AgentsError('unsupported-runtime',
+                              f'The Claude Code host does not support Runtime {name!r} yet.')
+        drivers[name] = RUNTIME_DRIVERS[name](entry)
+    return drivers
+
 
 class IndependentCalls(NativeCalls):
     """Bind the verified native Main and hold its execution notices until one reader claims them."""
 
-    def __init__(self, root: Path, cwd: Path, settings: dict) -> None:
+    def __init__(self, root: Path, cwd: Path, settings: dict, runtimes: dict | None = None) -> None:
         """Own one independent backend; no project configuration is discovered."""
         self.queue: dict[str, list[dict]] = {}
         self.claimed: dict[str, dict[str, dict]] = {}
         self.ended: dict[str, set[str]] = {}
         self.callers: dict[str, object] = {}
-        self.control = AgentControl(root, {'claude': ClaudeDriver(cwd, settings)},
-                                    event_receiver=self.receive)
+        self.control = AgentControl(root, runtime_drivers(cwd, settings, {} if runtimes is None else runtimes),
+                                    event_receiver=self.receive, request_notices=True)
         super().__init__(self.make_call, cwd)
 
     def make_call(self, session: str, cwd: Path):
@@ -176,14 +204,14 @@ class IndependentCalls(NativeCalls):
         return call
 
     def receive(self, event: dict) -> bool | str:
-        """Queue an end its creating Main must handle for that Main's mod to submit."""
+        """Queue an end or native request its creating Main must handle for that Main's mod to submit."""
         session = (event.get('creator') or {}).get('session')
         if event['parent'] is not None or session not in self.callers:
             return False
         message = event['body'] or (event.get('error') or {}).get('message') or event['outcome']
         with self.lock:
             self.queue.setdefault(session, []).append({
-                'id': notice_id(event['execution'], event['outcome']),
+                'id': notice_id(event['execution'], event['outcome'], event.get('request')),
                 'event': {'alias': event['agent'], 'event': event['outcome'],
                           'message': message, 'execution': event['execution']}})
         return 'queued'
@@ -276,7 +304,7 @@ def main() -> None:
     log = options.config.absolute().parent / 'host.log'
     try:
         configuration = json.loads(options.config.read_text())
-        if set(configuration) - {'root', 'cwd', 'claude', 'channel_file', 'settings'}:
+        if set(configuration) - {'root', 'cwd', 'claude', 'channel_file', 'settings', 'runtimes'}:
             raise ValueError('Unknown native host configuration fields.')
         root, cwd, executable, channel_file = (Path(configuration[key])
                                               for key in ('root', 'cwd', 'claude', 'channel_file'))
@@ -310,10 +338,11 @@ def main() -> None:
                               'running, or a previous one was killed. Close the other Claude Code session; '
                               'if none is running, delete the file.')
         reject_archive_without_collector(root)
+        calls = IndependentCalls(root, cwd, configuration.get('settings', {}), configuration.get('runtimes'))
+        calls.control.require_connections()
     except Exception as error:
         serve_refusal(error, directory.parent / 'host.log')
         return
-    calls = IndependentCalls(root, cwd, configuration.get('settings', {}))
 
     def authenticate(pid: int) -> None:
         """Accept context only from the direct child of this same native process."""

@@ -176,7 +176,15 @@ in force. Optional settings include `model` (default `claude-opus-5-5`),
 `reasoning_effort`, `runtime_home`, `instructions`, `read_paths`,
 `worktree_access`, `permission_mode`, `base_url` and `api_key_env` (an
 environment variable name, never its value). These settings apply to every
-child of the host; edit them before starting Claude Code. Existing login and
+Claude child of the host; edit them before starting Claude Code. To let the
+Main also start Codex children, add an optional `runtimes` object, for example
+`"runtimes": {"codex": <settings>}`, where `<settings>` is the same document
+`python -m agent_swarm.codex.host --settings` reads. A child then chooses its
+Runtime, and optionally `model` and `reasoning_effort`, at `create`. A Runtime
+without an entry is refused with `unsupported-runtime`; `pi` and `dsh` entries
+are refused at start until their hosts exist. At start the host also checks
+every connection in `.agents-control/config.yml` and refuses a Runtime it has
+no driver for, or one that is not installed or not logged in. Existing login and
 trust are not copied. Session continuation uses the original child's captured
 settings. Normalized archiving is off and needs GraphTraj's collector; the host
 refuses to start while `.agents-control/config.yml` sets

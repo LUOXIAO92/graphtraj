@@ -10,18 +10,31 @@
 # root and one "outside" file the child is asked to change. Codex uses your
 # existing login; this script never reads, copies or prints a credential.
 #
-# Native review dialogs: none. The parent here is this script (a Python caller
-# of the public agents API), so no Claude/Codex approval dialog is shown to you.
+# Expected native review dialog: none. The parent is this script (a Python
+# caller of the public agents API), so no Claude or Codex dialog appears.
+#
+# It takes no argument and tests the current HEAD of the 385 branch in the
+# Worktree above; it stops if that Worktree has uncommitted changes, because
+# the venv imports the live tree. Written for macOS /bin/bash 3.2.
+#
+# Outcomes:
+#   CRITERION SHOWN     exit 0: the refusal reached the parent, which declined it once.
+#   NO RELAYED REQUEST  exit 1: auto review approved the write. Not a defect,
+#                       but the real-host criterion is then not shown.
 set -euo pipefail
 
 WORKTREE=/Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/385-approval-layers-native-and-fallback
 PYTHON=/Users/luoxiao/miniconda3/bin/python3.13
+BRANCH=agent/385-approval-layers-native-and-fallback
 # websockets is not in the base Python; reuse an existing local copy (no download).
-WEBSOCKETS_SOURCES=(/tmp/claude-501/v384a/lib/python3.13/site-packages/websockets
+# The persistent copy comes first; /tmp copies vanish on restart.
+WEBSOCKETS_SOURCES=(/Users/luoxiao/workspace/you-are-a-product-architect-delivery/.venv-runtime/lib/python3.13/site-packages/websockets
+                    /tmp/claude-501/v384a/lib/python3.13/site-packages/websockets
                     /tmp/claude-501/401-base-venv/lib/python3.13/site-packages/websockets
                     /tmp/claude-501/venv397/lib/python3.13/site-packages/websockets)
 
 COMMIT=$(git -C "$WORKTREE" rev-parse HEAD)
+EXPECTED_COMMIT=$(git -C "$WORKTREE" rev-parse "$BRANCH")
 CODEX=$(command -v codex)
 BASE=${TMPDIR:-/tmp}
 RUN=$(mktemp -d "${BASE%/}/agents-385-relay.XXXXXX")
@@ -33,9 +46,19 @@ mkdir -p "$WORK" "$DATA" "$OUTSIDE" "$RUN/deps"
 printf 'unchanged\n' > "$OUTSIDE/keep.txt"
 
 echo "== (a) preflight"
+echo "shell:         $BASH ($BASH_VERSION)"
 echo "run directory: $RUN"
 echo "worktree:      $WORKTREE"
-echo "commit:        $COMMIT"
+echo "HEAD:          $COMMIT"
+echo "$BRANCH: $EXPECTED_COMMIT"
+if [ "$COMMIT" != "$EXPECTED_COMMIT" ]; then
+  echo "STOP: the Worktree HEAD is not $BRANCH."
+  exit 2
+fi
+if [ -n "$(git -C "$WORKTREE" status --porcelain)" ]; then
+  echo "STOP: $WORKTREE has uncommitted changes; the venv would import them, not $COMMIT."
+  exit 2
+fi
 echo "codex:         $CODEX"
 "$CODEX" --version
 echo "login state:   $("$CODEX" login status 2>&1 | tail -1)"
@@ -50,13 +73,22 @@ echo "child host one-line self-report:"
 "$VENV/bin/python" -m pip install --quiet --disable-pip-version-check --no-index --no-deps \
   --no-build-isolation -e "$WORKTREE/src/agent_swarm" -e "$WORKTREE"
 if ! "$VENV/bin/python" -c 'import websockets' 2>/dev/null; then
+  echo "$RUN/deps" > "$VENV/lib/python3.13/site-packages/385-deps.pth"
   for source in "${WEBSOCKETS_SOURCES[@]}"; do
-    if [[ -d "$source" ]]; then
+    rm -f "$RUN/deps/websockets"
+    if [ -d "$source" ]; then
       ln -s "$source" "$RUN/deps/websockets"
-      echo "$RUN/deps" > "$VENV/lib/python3.13/site-packages/385-deps.pth"
-      break
+      if "$VENV/bin/python" -c 'import websockets' 2>/dev/null; then
+        echo "websockets:    $source"
+        break
+      fi
     fi
+    rm -f "$RUN/deps/websockets"
   done
+  if ! "$VENV/bin/python" -c 'import websockets' 2>/dev/null; then
+    echo "STOP: no importable websockets; tried: ${WEBSOCKETS_SOURCES[*]}"
+    exit 2
+  fi
 fi
 cd "$RUN"
 "$VENV/bin/python" - "$WORKTREE" <<'EOF'
@@ -161,5 +193,5 @@ fi
 echo "cat $RUN/requests.json"
 echo "cat $OUTSIDE/keep.txt"
 echo "ls $DATA"
-echo "== (f) native review dialogs shown to you: none"
+echo "== (f) expected native review dialog: none"
 exit $status

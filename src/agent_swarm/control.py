@@ -62,7 +62,7 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any, Callable, Iterator, Mapping, Protocol
 
-from agent_swarm.approval import DECISION_METHOD, check_reply, high_risk
+from agent_swarm.approval import DECISION_METHOD, check_reply
 from agent_swarm.config import CONFIG_FILE, read_config, read_connections
 from agent_swarm.locks import exclusive
 from agent_swarm.notices import needs_parent
@@ -776,11 +776,7 @@ class AgentControl:
         with self._locked(agent) as record:
             self._require_control(record, caller)
             current = self._require_execution(record, execution)
-            documents = []
-            for request in self._pending(record, current):
-                risk = high_risk(request)
-                documents.append({**request, "execution": current["id"],
-                                  **({"high_risk": risk} if risk is not None else {})})
+            documents = [{**request, "execution": current["id"]} for request in self._pending(record, current)]
             return self._outcome(record, result={"requests": documents})
 
     def _pending(self, record: dict, current: dict) -> list[dict]:
@@ -801,9 +797,9 @@ class AgentControl:
 
         The reply is checked against the request as the Runtime (or the child)
         reported it, not the caller's copy: :func:`agent_swarm.approval.check_reply`
-        refuses an approval of a high-risk request, or one granting more than
-        asked, before any driver sees it. A child's decision request is
-        answered here and never reaches the driver.
+        refuses an approval granting more than asked before any driver sees
+        it. A child's decision request is answered here and never reaches the
+        driver.
         """
         with self._locked(agent) as record:
             self._require_control(record, caller)
@@ -818,7 +814,7 @@ class AgentControl:
             if reported.get("method") == DECISION_METHOD:
                 receipt = {"request_id": None, "reply_status": "answered", "answer": response["answer"]}
             else:
-                native = {name: value for name, value in request.items() if name not in ("execution", "high_risk")}
+                native = {name: value for name, value in request.items() if name != "execution"}
                 receipt = self._driver(record).reply(self._run(record, current, "", None), native, response)
             current["replies"][key] = {"at": _now(), **receipt}
             return self._outcome(record, result=current["replies"][key])

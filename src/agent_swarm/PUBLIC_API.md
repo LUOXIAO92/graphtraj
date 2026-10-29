@@ -101,8 +101,7 @@ Identity, permissions, working directory and parentage always come from the
 host, never from arguments. `create`'s `workspace` only narrows the caller's
 own working directory (section 2).
 
-`requests` adds `high_risk: {"category", "class", "reason"}` to a request
-that falls in a high-risk class (section 6). `ask_parent` is called by a
+`ask_parent` is called by a
 child about itself; a caller without an Agent reference is refused with
 `authority-denied`.
 
@@ -154,7 +153,6 @@ people and models and may change. Codes in use:
 | `invalid-reasoning-effort` | `reasoning_effort` is not supported by the model or Runtime, or contradicts the preset |
 | `ambiguous-connection` | several connections declare the Runtime and no preset selects one |
 | `workspace-denied` | `workspace` lies outside the caller's own workspace (after resolving links) |
-| `high-risk` | a `reply` approves a request in a high-risk class (section 6); decline it instead |
 | `runtime-unavailable` | the selected connection's Runtime is not installed or not logged in on this machine |
 | `not-found` | no such Agent visible to the caller |
 | `retired` | the Agent is retired |
@@ -534,27 +532,30 @@ nothing else:
 ```json
 {"decision": "allow", "reason": "Reads a file inside the assigned workspace."}
 {"decision": "escalate", "reason": "Pushes to a remote; needs the parent."}
-{"decision": "deny", "reason": "Sends a token to an unknown host.", "category": "high-risk"}
+{"decision": "deny", "reason": "Deletes files outside the task."}
 ```
 
 | Field | Required | Values |
 | --- | --- | --- |
 | `decision` | yes | `allow`, `deny` or `escalate` |
 | `reason` | yes | non-empty string, shown to the parent and kept in the record |
-| `category` | no | `high-risk`: an operation no layer may release |
 
 Rules:
 
-- The document must be exactly one JSON object with these fields and types.
-  Any other field, value or shape, an empty answer, a timeout, a connection
-  failure or any reviewer error is a **failed review**: the call is refused
+- The document must be exactly one JSON object with these two fields and
+  types. Any other field (`category` included), value or shape, an empty
+  answer, a timeout, a connection failure or any reviewer error is a **failed review**: the call is refused
   and goes to the direct parent, with the failure as the reason.
 - `allow` lets the call run. It is the only decision that does.
 - `deny` and `escalate` refuse the call now and go to the direct parent, which
   may release it within its own authority. The root may refer it to a person.
-- `category: high-risk` always refuses, whatever `decision` says, and the
-  parent cannot release it either. agents also refuses an `allow` for a
-  request that falls in a high-risk class below, whatever the reviewer says.
+- The format is the same for every Runtime and every reviewer model. Adapters
+  translate it to their native hook; native fields never appear in it.
+
+agents applies no high-risk rule of its own to requests, reviews or replies:
+safety rests on workspace isolation (section 2), the Runtime's native
+sandbox and approval or auto review (4.1), the review plugin where native
+approval is missing (386, 387), and parent fallback below.
 
 **Parent fallback (layer 4).** A refused or failed review, and every native
 request the Runtime itself hands over, reaches the direct parent as a pending
@@ -565,8 +566,6 @@ used):
 - a declining reply (Claude `behavior: deny`, Codex `decline`/`cancel` or
   empty `permissions`, Pi `confirmed: false`/`cancelled`, DSH `reject`)
   always passes;
-- an approving reply to a high-risk request fails with `high-risk` and is not
-  forwarded; the request stays pending for a decline;
 - an approving reply may grant at most what was asked, else
   `authority-denied`: Claude may not replace the tool input; Codex may answer
   only `accept` (not `acceptForSession` or a policy amendment) and only the
@@ -577,36 +576,6 @@ The parent's own sandbox is not compared with the request; a parent should
 decline what it could not do itself. The root may refer a request to a
 person: the person answers in the root's own host (its native approval of
 the root's `reply` call, or the conversation), and the root then replies.
-Nothing a person says through agents releases a high-risk request.
-
-**High-risk class `credential-egress` (layer 5).** The trust boundary is this
-machine: loopback hosts are inside, all others outside. A request is high
-risk when its own content (command, tool input, arguments, reasons) names
-both a credential and a destination outside the boundary:
-
-- credential: a literal private key block, a token with a known prefix
-  (`sk-`, `ghp_`, `github_pat_`, `xox?-`, `AKIA`, `AIza`, `glpat-`), an
-  `Authorization` header with a literal value, a credential file (`.ssh/id_*`
-  and `*key`, `.aws/credentials`, `.netrc`, `.git-credentials`,
-  `.docker/config.json`, `.kube/config`, `.npmrc`, `.pypirc`, `gh/hosts.yml`,
-  gcloud credentials, `auth.json`, `.credentials.json`, `.env*`), a variable
-  whose name holds `TOKEN`, `SECRET`, `PASSWORD`, `API_KEY`, `ACCESS_KEY`,
-  `PRIVATE_KEY` or `CREDENTIAL`, or `env`/`printenv` piped onward;
-- destination: a URL with a non-loopback host, a remote `host:path` of
-  `scp`/`rsync`/`sftp`, a host argument of `nc`/`ncat`/`netcat`/`telnet`/
-  `ssh`, `socat TCP:host:port`, or `/dev/tcp/host/port`.
-
-Limits: the match is textual on one request. It misses a credential built,
-encoded or read at run time by a program the request does not show, and a
-destination named only by an alias (`git push origin`). It does not know a
-credential's issuer, so sending a key even to its own service is refused. An
-SSH identity passed with `-i` is not counted (it authenticates, it is not
-sent). It is a floor no layer may lower, not a replacement for the native
-sandbox. An approval a Runtime decides by itself (for example Codex
-`auto_review` approving, which is not relayed, see 4.1) never passes through
-agents and is not checked here.
-- The format is the same for every Runtime and every reviewer model. Adapters
-  translate it to their native hook; native fields never appear in it.
 
 The review request sent to the reviewer, the review connection settings and
 the startup connectivity check belong to 386.

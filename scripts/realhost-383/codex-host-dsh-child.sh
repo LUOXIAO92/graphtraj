@@ -27,7 +27,7 @@ WT=/Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core
 # The code under test; later commits may change only this script's directory.
 # Whoever integrates further code commits sets COMMIT to the new code commit.
 COMMIT=236a3a1ef369bdf68f662543732e0c28acf2c729
-P=/Users/luoxiao/agents-383-realhost/b2
+P=/Users/luoxiao/agents-383-realhost/b3
 PY=/Users/luoxiao/miniconda3/bin/python3.13
 CHILD_EFFORT=low
 DSH_MODEL=deepseek-flash
@@ -48,9 +48,13 @@ git -C $WT diff --quiet HEAD -- . ':!scripts/realhost-383' || fail "the Worktree
 
 [[ -e $P ]] && fail "$P exists from an earlier run; move it away (for example: mv $P $P.old) and run again"
 mkdir -p $WORK $STATE $EVIDENCE
+# Every later command, the host and its children (the MCP server, DSH) run in
+# $WORK. `python -c` puts its cwd first on sys.path, and a cwd holding a
+# graphtraj/ directory (for example the Harness root) would make graphtraj importable.
+cd $WORK
 
 say "venv (isolated, agents only: no system or Conda site-packages, no GraphTraj; nothing is installed from PyPI)"
-# Conda base may carry graphtraj, so the venv does not see it (no --system-site-packages).
+# No --system-site-packages: the venv sees only the stdlib and what is copied below.
 $PY -m venv --without-pip $VENV
 SITE=$VENV/lib/python3.13/site-packages
 # One fixed source for the dependencies: the Harness's persistent runtime venv
@@ -72,12 +76,19 @@ ln -s $WT/src/agent_swarm $P/agents-only/agent_swarm
 print -r -- $P/agents-only > $SITE/agents-only.pth
 $VENV/bin/python -c 'import yaml, websockets, agent_swarm; print("agent_swarm", agent_swarm.__version__, agent_swarm.__file__, "| yaml", yaml.__version__, "| websockets", websockets.__version__)' \
   || fail "yaml, websockets or agent_swarm does not import in $VENV"
-$VENV/bin/python -c 'import importlib.util as u; s = u.find_spec("graphtraj"); print("graphtraj importable:", s is not None); raise SystemExit(s is not None)' \
-  || fail "graphtraj is importable in $VENV; this check needs an agents-only venv"
+# Both views: isolated (-I, as the child's MCP server runs) and plain (cwd first on sys.path).
+AGENTS_ONLY='import importlib.util as u, os, sys
+s = u.find_spec("graphtraj")
+where = "" if s is None else " at " + str(s.origin or list(s.submodule_search_locations or []))
+print("graphtraj importable (" + sys.argv[1] + ", cwd " + os.getcwd() + "):", s is not None, where)
+raise SystemExit(s is not None)'
+$VENV/bin/python -I -c $AGENTS_ONLY 'python -I' || fail "graphtraj is importable in $VENV under -I; this check needs an agents-only venv"
+$VENV/bin/python -c $AGENTS_ONLY 'python' || fail "graphtraj is importable with cwd $PWD; this check needs an agents-only venv"
 
 say "step 0: preflight (native review dialog: none; nothing to type)"
 if [[ -z ${DEEPSEEK_API_KEY:-} ]]; then
   source ~/.zshrc >/dev/null 2>&1 || true
+  cd $WORK
 fi
 print -r -- "DEEPSEEK_API_KEY: ${${DEEPSEEK_API_KEY:+set}:-unset}"
 [[ -n ${DEEPSEEK_API_KEY:-} ]] || fail "DEEPSEEK_API_KEY is unset; export it (or add it to ~/.zshrc) and run again"

@@ -907,8 +907,18 @@ def _require_codex_permissions(executable: Path) -> None:
         raise CodexAdapterError(
             "ROLE_CONFIG_UNSUPPORTED", "Cannot verify Codex permission controls.",
         ) from error
+    if result.returncode:
+        # A probe that fails says nothing about the flag; name what failed.
+        lines = result.stderr.strip().splitlines()
+        raise CodexAdapterError(
+            "ROLE_CONFIG_UNSUPPORTED",
+            "Cannot verify Codex permission controls: '{0} exec --help' exited "
+            "with status {1}: {2}".format(
+                executable, result.returncode, lines[-1][:300] if lines else "no error output",
+            ),
+        )
     required = ("--sandbox",)
-    if result.returncode or any(flag not in result.stdout for flag in required):
+    if any(flag not in result.stdout for flag in required):
         raise CodexAdapterError(
             "ROLE_CONFIG_UNSUPPORTED",
             "Codex must support filesystem sandboxing.",

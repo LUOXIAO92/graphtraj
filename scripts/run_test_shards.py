@@ -5,8 +5,10 @@ Usage::
 
     python scripts/run_test_shards.py [--shards N] [--log-dir DIR] [-- PYTEST-ARGS...]
 
-Run it with the Python of the environment under test (for example a dedicated
-venv with this checkout installed in editable mode); each shard runs
+Run it with the Python of an environment that has the test dependencies (for
+example a dedicated venv). ``tests/conftest.py`` puts this checkout's ``src``
+first on an absolute ``PYTHONPATH``, so subprocesses import the checkout under
+test whatever graphtraj that venv has installed; each shard runs
 ``<python> -m pytest -p no:cacheprovider -q -rfEs <files>`` from the
 repository root. ``tests/test_*.py`` files are split into ``N`` shards
 (default 4) by file size, largest first, so shards finish at similar times.

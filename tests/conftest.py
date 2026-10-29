@@ -16,6 +16,26 @@ import pytest
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 
+def _checkout_pythonpath(configured: Optional[str], cwd: Path) -> str:
+    """Put this checkout's src first and make every entry absolute.
+
+    pyproject's pythonpath covers only this process. Subprocesses (fake Runtimes
+    run by sys.executable, installed commands) start in other directories, where
+    a relative entry such as ``src`` names nothing and the venv's own installed
+    graphtraj, possibly another or a removed tree, would be imported instead.
+    """
+    entries = [str(PROJECT_ROOT / "src")]
+    for entry in (configured or "").split(os.pathsep):
+        if entry:
+            entry = str(cwd / entry)
+            if entry not in entries:
+                entries.append(entry)
+    return os.pathsep.join(entries)
+
+
+os.environ["PYTHONPATH"] = _checkout_pythonpath(os.environ.get("PYTHONPATH"), Path.cwd())
+
+
 @dataclass(frozen=True)
 class InstalledCommands:
     product: Path

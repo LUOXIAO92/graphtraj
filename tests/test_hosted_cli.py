@@ -439,5 +439,7 @@ def test_agents_cli_uses_the_bound_task_channel(tmp_path: Path, monkeypatch: pyt
         result = run_cli('agent_swarm.cli', tmp_path, address, status)
         assert result.returncode == 0, result.stdout + result.stderr
         assert 'research@x1' in result.stdout
-        both = run_cli('agent_swarm.cli', tmp_path, address, status, **{AGENTS_CONNECTION: address})
-        assert json.loads(both.stdout)['error']['code'] == 'authority-denied'
+        # agents does not read GraphTraj's variable; GraphTraj's own CLI refuses both owners.
+        both = run_cli('graphtraj.interfaces.cli.graphtraj', tmp_path, address, 'task', 'members',
+                       **{AGENTS_CONNECTION: address})
+        assert both.returncode == 1 and not both.stdout, both  # refused before the host answers

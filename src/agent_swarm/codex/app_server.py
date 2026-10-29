@@ -21,8 +21,6 @@ from agent_swarm.codex.websocket import CodexWebSocket
 
 
 _DEFAULT_TIMEOUT = object()
-# A fork-only profile extending Main's with Codex managed network enabled.
-CHECKER_PERMISSION_PROFILE = 'graphtraj_checker'
 # Reported sandbox policy types and their thread/fork SandboxMode selections.
 _SANDBOX_MODES = {
     'readOnly': 'read-only', 'workspaceWrite': 'workspace-write', 'dangerFullAccess': 'danger-full-access',
@@ -851,13 +849,33 @@ class CodexAppServer:
             raise self._protocol_failure('Host activity is unavailable.')
         return {'session': thread_id, 'activity': status['type'], 'turn': turn}
 
-    async def fork_session(self, parent: dict[str, Any]) -> CodexSession:
+    async def fork_session(
+        self,
+        parent: dict[str, Any],
+        *,
+        network_profile: str | None = None,
+        unix_socket: str | None = None,
+    ) -> CodexSession:
         """Fork native history with the source's current model/provider unchanged.
 
         The caller binds the returned handle to its actual Main before starting
         execution. Fork lineage is checked, never represented as native parent
         metadata. No private rollout or replacement instructions are supplied.
+
+        Parameters
+        ----------
+        parent
+            Main's thread metadata with its ``configuration`` and ``turn_settings``.
+        network_profile, unix_socket
+            Supplied together, and only when Main selected a named permission
+            profile: the fork selects a profile of this name that extends Main's
+            with Codex managed network enabled and ``unix_socket`` allowed. The
+            reported ``networkAccess`` is then the only accepted difference
+            from Main's sandbox.
         """
+        if (network_profile is None) != (unix_socket is None):
+            raise CodexAdapterError('RUNTIME_REQUEST_INVALID',
+                                    'network_profile and unix_socket are supplied together.')
         if any(not isinstance(parent.get(k), str) or not parent[k]
                for k in ('id', 'model', 'modelProvider')):
             raise CodexAdapterError('RUNTIME_REQUEST_INVALID', 'Main model metadata is unavailable.')
@@ -878,18 +896,17 @@ class CodexAppServer:
         # profile or its sandbox mode (never both); the response is checked
         # against Main's full policy below.
         profile = configuration.get('activePermissionProfile')
-        socket = parent.get('control_socket')
-        if isinstance(profile, dict) and isinstance(profile.get('id'), str) and socket:
-            # Main's own profile with Codex managed network enabled for this
-            # check, so the checker's GraphTraj CLI can verify its caller
-            # natively. The socket entry is not a limit: other Unix sockets
-            # and loopback TCP stay reachable under managed network.
-            parameters['permissions'] = CHECKER_PERMISSION_PROFILE
+        if isinstance(profile, dict) and isinstance(profile.get('id'), str) and network_profile:
+            # Main's own profile with Codex managed network enabled, so the
+            # fork can reach the caller's socket. The socket entry is not a
+            # limit: other Unix sockets and loopback TCP stay reachable under
+            # managed network.
+            parameters['permissions'] = network_profile
             # A root permissions override replaces Main's named profiles.
-            # Override only the checker entry so its parent remains resolvable.
-            parameters['config'] = {'permissions.' + CHECKER_PERMISSION_PROFILE: {
+            # Override only the fork's entry so its parent remains resolvable.
+            parameters['config'] = {'permissions.' + network_profile: {
                 'extends': profile['id'],
-                'network': {'enabled': True, 'unix_sockets': {socket: 'allow'}},
+                'network': {'enabled': True, 'unix_sockets': {unix_socket: 'allow'}},
             }}
         elif isinstance(profile, dict) and isinstance(profile.get('id'), str):
             parameters['permissions'] = profile['id']
@@ -921,7 +938,8 @@ class CodexAppServer:
         # The effective policy decides; a profile name is checked only when
         # Main selected one, since an unnamed policy may be reported by name.
         # The only authorized difference is the managed network access.
-        ignored = {'networkAccess'} if parameters.get('permissions') == CHECKER_PERMISSION_PROFILE else set()
+        ignored = ({'networkAccess'} if network_profile and parameters.get('permissions') == network_profile
+                   else set())
         if 'sandbox' in configuration and (
                 not isinstance(response.get('sandbox'), dict)
                 or {k: v for k, v in response['sandbox'].items() if k not in ignored}

@@ -300,7 +300,7 @@ def main() -> None:
     directory = channel_file.parent
     try:
         parent = native_parent(executable)
-        if 'AGENT_SWARM_CONNECTION' in os.environ or 'GRAPHTRAJ_CLI_CONNECTION' in os.environ:
+        if 'AGENT_SWARM_CONNECTION' in os.environ:
             raise AgentsError('authority-denied', 'A bound child must use its existing owner.')
         if Path.cwd().resolve() != cwd.resolve():
             raise ValueError(f'Claude Code was started in {Path.cwd().resolve()}, but this host is configured '

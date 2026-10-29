@@ -107,4 +107,6 @@ def handle_request(request: dict, execute: Callable[[dict], AgentsResult]) -> Ag
         validate(request['arguments'], schema, 'arguments')
         return execute({'action': feature, **request['arguments']})
     except ValueError as error:
-        return AgentsResult({'error': str(error)}, failed=True)
+        action = request.get('action') if isinstance(request, dict) else None
+        return AgentsResult({'action': action, 'error': {'code': 'invalid-input', 'message': str(error)}},
+                            failed=True)

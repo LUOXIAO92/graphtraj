@@ -108,7 +108,8 @@ def test_dsh_native_assertions_constrain_the_existing_bound_caller(tmp_path: Pat
         try:
             result = exchange(child, {'jsonrpc': '2.0', 'id': 1, 'method': 'tools/call',
                 'params': {'name': 'agents', 'arguments': {'action': 'execute', 'feature': 'status', 'arguments': {}}}})['result']
-            if case == 'match':
+            if case in {'match', 'both-connections'}:
+                # Another host's connection variable does not concern agents.
                 assert result['structuredContent']['result']['bound_agent'] == 'actual-child'
                 assert calls == [{'action': 'status'}]
             else:

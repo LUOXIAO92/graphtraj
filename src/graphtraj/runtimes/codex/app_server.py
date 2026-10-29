@@ -13,8 +13,10 @@ from graphtraj.execution.execution_budget import _duration
 from agent_swarm.codex.context import CodexAdapterError
 from agent_swarm.codex.app_server import (
     CodexAppServer as NativeCodexAppServer, CodexSession, CodexExecution, CodexServerRequest, CodexRPCError,
-    CHECKER_PERMISSION_PROFILE,
 )
+
+# The completion checker's fork-only profile: Main's own with Codex managed network enabled.
+CHECKER_PERMISSION_PROFILE = 'graphtraj_checker'
 
 _DEFAULT_STOP_INSTRUCTION = (
     "The task has stopped because of its execution budget. "

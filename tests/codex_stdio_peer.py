@@ -220,6 +220,10 @@ for line in incoming():
                             'forkedFromId': params['threadId'], 'createdAt': 17,
                             'historyMode': 'paginated'},
                   'model': params['model'], 'modelProvider': params['modelProvider']}
+        # A test may report native fork facts and read the request it got.
+        result.update(json.loads(os.environ.get('PEER_FORK_RESULT', '{}')))
+        if os.environ.get('PEER_FORK_PARAMS'):
+            Path(os.environ['PEER_FORK_PARAMS']).write_text(json.dumps(params))
     elif method == 'thread/items/list':
         assert params['sortDirection'] == 'asc'
         pages = json.loads(Path(os.environ['PEER_HISTORY_PAGES']).read_text())

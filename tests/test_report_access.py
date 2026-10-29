@@ -514,8 +514,11 @@ def test_agents_send_carries_an_explicit_reports_only_request(
     for arguments in ({'agent': 'member', 'message': 'Work.'}, request):
         backend._operate('send', arguments, None)  # 639352b: only end confirmation reads caller
     assert sent == [{'reports_only': False}, {'reports_only': True}]
-    with pytest.raises(AgentsError):
+    # GraphTraj's own rule answers first; the core's not-implemented is never reached.
+    with pytest.raises(AgentsError) as rejected:
         backend.operate('send', {**request, 'agent': 'agent-core'}, None)
+    assert rejected.value.code == 'invalid-input'
+    assert 'only for a Task member' in rejected.value.message
 
 
 def test_agents_reports_only_reaches_a_stopped_member(

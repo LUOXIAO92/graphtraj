@@ -26,9 +26,9 @@ graphtraj doctor
 graphtraj task graph
 ```
 
-GraphTraj and `agent-swarm` are separate distributions built from the same
-revision. GraphTraj requires the same `agent-swarm` version; install the two
-matching artifacts together. From a checkout, build both with
+GraphTraj and `agent-swarm` are separate distributions. GraphTraj declares the
+`agent-swarm` versions it supports (currently `>=0.1.0,<0.2`); building both
+from the same revision always satisfies it. From a checkout, build both with
 `python -m pip wheel --no-deps -w dist ./src/agent_swarm .`, then install both
 wheels in your dedicated environment. The independent distribution can also
 be installed on its own from `./src/agent_swarm`.
@@ -52,7 +52,9 @@ with a separate source repository, or other project conventions, see the
 
 The `agent-swarm` distribution lets the Main Agent of a supported Runtime host
 create and control child Agents through one `agents` tool. No GraphTraj
-installation, project, Task or Git repository is needed.
+installation, project, Task or Git repository is needed. Its stable interface
+and version rules are in [`PUBLIC_API.md`](src/agent_swarm/PUBLIC_API.md),
+which the wheel also contains.
 
 ### Install
 

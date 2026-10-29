@@ -5,6 +5,7 @@ import json
 import sys
 from typing import Any, Callable, Mapping, TextIO
 
+from agent_swarm import __version__
 from agent_swarm.connection import call_owner
 from agent_swarm.discovery import INPUT_SCHEMA
 from agent_swarm.tool import AgentsError
@@ -94,7 +95,7 @@ def call(request_id: Any, params: Mapping) -> dict:
 def main() -> None:
     """Run one stdio MCP entry over the owning Runtime's authenticated channel."""
     serve(sys.stdin, sys.stdout, lambda message: respond(
-        message, tool_documents, call, {'name': 'agents', 'version': '0.1.0'}))
+        message, tool_documents, call, {'name': 'agents', 'version': __version__}))
 
 
 if __name__ == '__main__':

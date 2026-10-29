@@ -12,7 +12,7 @@ import time
 from typing import TextIO
 from uuid import UUID
 
-from agent_swarm import AgentControl, AgentsError, AgentsResult, Caller, bind
+from agent_swarm import AgentControl, AgentsError, AgentsResult, Caller, __version__, bind
 from agent_swarm.config import reject_archive_without_collector
 from agent_swarm.connection import connection_operation, worker_connection
 from agent_swarm.discovery import handle_request
@@ -117,7 +117,7 @@ def serve_refusal(error: Exception, log: Path, descriptors=tool_documents,
 
     try:
         serve_until_ended(mcp_in, mcp_out, lambda message: respond(
-            message, descriptors, call, server or {'name': 'agents', 'version': '0.1.0'}))
+            message, descriptors, call, server or {'name': 'agents', 'version': __version__}))
     finally:
         record.unlink(missing_ok=True)
 
@@ -343,7 +343,7 @@ def main() -> None:
             try:
                 mcp_in, mcp_out = isolate_stdio(directory.parent / 'host.log')
                 serve_until_ended(mcp_in, mcp_out, lambda message: respond(
-                    message, tool_documents, call, {'name': 'agents', 'version': '0.1.0'}))
+                    message, tool_documents, call, {'name': 'agents', 'version': __version__}))
             finally:
                 channel_file.unlink()
     finally:

@@ -15,6 +15,7 @@ from typing import Any, Awaitable, Callable, Mapping, Sequence
 
 from .context import CodexAdapterError, _reject_legacy_user_sandbox_config
 from .trace import CodexNativeTrace
+from agent_swarm import __version__
 from agent_swarm.runtime import RuntimeContext, RuntimeExecutionResult
 from agent_swarm.codex.websocket import CodexWebSocket
 
@@ -244,7 +245,7 @@ class CodexAppServer:
                     ) from error
             self._reader = asyncio.create_task(self._read())
             await self._call('initialize', {
-                'clientInfo': {'name': 'graphtraj', 'version': '0.1.0'},
+                'clientInfo': {'name': 'graphtraj', 'version': __version__},
                 'capabilities': {'experimentalApi': self._experimental_api},
             })
             await self._send({'method': 'initialized', 'params': {}})
@@ -290,7 +291,7 @@ class CodexAppServer:
             phase = 'native-identity'
             self._reader = asyncio.create_task(self._read())
             result = await self._call('initialize', {
-                'clientInfo': {'name': 'graphtraj', 'version': '0.1.0'},
+                'clientInfo': {'name': 'graphtraj', 'version': __version__},
                 'capabilities': {'experimentalApi': self._experimental_api},
             })
             if result.get('codexHome') != settings['codex_home']:

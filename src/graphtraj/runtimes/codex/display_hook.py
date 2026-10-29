@@ -25,8 +25,8 @@ def display(event: dict, state_directory: Path) -> dict:
     Besides the agents call itself, any PostToolUse or Stop shows the Session's
     retained ordinary receipts once: completed child executions that this
     Codex Main did not start, kept without a model turn. The project records
-    how far this Session's own receipts were shown, so a continuing Main is
-    handed only the rest.
+    how far each addressed Main's receipts were shown, so no later Main shows
+    or is handed them again.
     """
     session = event.get('session_id')
     if event.get('hook_event_name') not in {'PostToolUse', 'Stop'} or not isinstance(session, str) or not session:
@@ -43,8 +43,8 @@ def display(event: dict, state_directory: Path) -> dict:
 def _receipt_facts(event: dict, session: str) -> tuple[list[tuple[str, str, str, str]], Callable[[], None]]:
     """Read retained ordinary receipts addressed to this Codex Session's host.
 
-    Also returns how to record, once they are shown, that this Session's own
-    receipts reached it.
+    Also returns how to record, once they are shown, how far each addressed
+    Main's receipts were shown.
     """
     from graphtraj.execution.main_continuity import owns_main_root, receipts_shown, retained_receipts, show_receipts
     from graphtraj.execution.runner_models import RunnerError
@@ -59,7 +59,7 @@ def _receipt_facts(event: dict, session: str) -> tuple[list[tuple[str, str, str,
         receipts = retained_receipts(runner)
     except (RunnerError, OSError, ValueError):
         return [], lambda: None
-    facts, own, shown = [], [], {}
+    facts, shown, through = [], {}, {}
     for record, notice in receipts:
         connection = record['parent_connection']
         # A continuing Main also shows receipts retained for an earlier Main,
@@ -72,16 +72,15 @@ def _receipt_facts(event: dict, session: str) -> tuple[list[tuple[str, str, str,
             shown[addressee] = receipts_shown(runner, *addressee)
         if record['at'] <= shown[addressee]:
             continue
-        if addressee == ('codex', session):
-            own.append(record['at'])
+        through[addressee] = max(through.get(addressee, 0.0), record['at'])
         identity = record.get('identity', {})
         facts.append((f"receipt:{notice.get('alias')}:{identity.get('execution_id')}",
                       str(notice.get('alias')), f'Codex session {session}', str(notice.get('message'))))
 
     def settle() -> None:
-        """Record that this Session's own receipts read here were shown."""
-        if own:
-            show_receipts(runner, 'codex', session, max(own))
+        """Record that the receipts read here were shown, per addressed Main."""
+        for (runtime, addressed), at in through.items():
+            show_receipts(runner, runtime, addressed, at)
 
     return facts, settle
 

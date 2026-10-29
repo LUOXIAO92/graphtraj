@@ -441,23 +441,29 @@ def _transfer_notices(runner: Path, previous: Mapping[str, Any], current: Mappin
 
     Notices still in the earlier Main's queue are claimed from it and queued
     for the continuing Main, whichever Runtime: a Codex Main takes its queue
-    at its SessionStart. A Codex Main's retained ordinary receipts its hook
-    has not shown yet go to a continuing pull-only Main's queue; a continuing
-    Codex Main shows them at its own hook. Either way the earlier Main no
-    longer receives them.
+    at its SessionStart. Retained ordinary receipts no Codex hook has shown
+    yet, addressed to the earlier Codex Main or to any Codex Main whose roots
+    it continued, go to a continuing pull-only Main's queue; a continuing
+    Codex Main shows them at its own hook. Either way no earlier Main
+    receives them any more.
     """
     for notice in claim_notices(runner, previous['runtime'], previous['session']):
         queue_notice(runner, current, notice['event'])
     if previous['runtime'] != 'codex' or current['runtime'] not in QUEUED_RUNTIMES:
         return
-    shown = max(receipts_shown(runner, 'codex', previous['session']), previous['at'])
-    receipts = [(record, notice) for record, notice in retained_receipts(runner)
-                if not record.get('held') and record['at'] > shown
-                and _same(record['parent_connection'], 'codex', previous['session'])]
-    for record, notice in receipts:
+    # Each Codex Main's receipts since its latest claim, after its shown point.
+    claimed = {record['session']: record['at'] for record in claims(runner) if record['runtime'] == 'codex'}
+    shown = {session: max(receipts_shown(runner, 'codex', session), at) for session, at in claimed.items()}
+    handed: dict[str, float] = {}
+    for record, notice in retained_receipts(runner):
+        session = record['parent_connection']['session']
+        if (record.get('held') or record['parent_connection']['runtime'] != 'codex'
+                or session not in shown or record['at'] <= shown[session]):
+            continue
         queue_notice(runner, current, {**notice, 'execution': record.get('identity', {}).get('execution_id')})
-    if receipts:
-        show_receipts(runner, 'codex', previous['session'], max(record['at'] for record, _ in receipts))
+        handed[session] = max(handed.get(session, 0.0), record['at'])
+    for session, through in handed.items():
+        show_receipts(runner, 'codex', session, through)
 
 
 def retained_receipts(runner: Path) -> list[tuple[dict, dict]]:

@@ -48,7 +48,11 @@ def serve(
     asks Claude Code itself through MCP elicitation: its own dialog shows the
     exact change, and only its accept applies it in this same call.
     """
+    from graphtraj.interfaces.mcp import ReviewInput
+
     capabilities: dict = {}
+    # A timed-out review's unfinished read stays with the serve loop.
+    input_stream = ReviewInput(input_stream)
 
     def review(proposal: dict, call_id: object, feature: object) -> dict:
         """Wait for Claude Code's own accept, decline or cancel of this change."""

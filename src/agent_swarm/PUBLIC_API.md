@@ -68,7 +68,16 @@ with their documented flags:
   refuses, each with its own code.
   The `context` operation is the plugin's private channel.
 - `python -m agent_swarm.codex.host --settings <file> --directory <dir>
-  [--output <file>] [--resume] <instruction>`. On a startup error it prints
+  [--output <file>] [--resume] <instruction>`. Since 0.1.2 the settings file
+  may hold an optional top-level `runtimes` object: a Runtime name to that
+  driver's settings. The host removes it before reading its own Codex
+  settings. `claude` takes the documented Claude host `settings` keys, runs
+  in `adapter_request.worktree_path` and is checked at start. A Runtime
+  without an entry has no driver (`create` fails with
+  `unsupported-runtime`). At start the host refuses a `pi` or `dsh` entry
+  (`unsupported-runtime`, until 382 and 383), a `codex` entry or a
+  non-object value (`invalid-config`), and whatever
+  `AgentControl.require_connections()` refuses. On a startup error it prints
   `{"error": {"code", "message"}}` and exits `1`.
 - A refused Claude host start answers every call with `host-unavailable` (or
   the refusing check's own code) and writes one JSON line to
@@ -313,7 +322,9 @@ is set, or the native login file exists in its home (Claude
 copied or returned. The independent Claude Code host registers its Claude
 driver and one driver per `runtimes` entry (1.1) and calls
 `require_connections()` at start; a refusal answers every call with its
-code (1.1). Pi and DSH hosts follow in 382 and 383.
+code (1.1). The independent Codex host does the same with its own
+`runtimes` (1.1) and reports a refusal as its startup error. Pi and DSH
+hosts follow in 382 and 383.
 
 **Agent document.** Every Agent document carries `preset`, `connection`
 (the connection's name), `model` and `reasoning_effort` as chosen at
@@ -325,6 +336,16 @@ requested (for example a safeguard fallback), the child's result names the
 requested model, the observed model and the Runtime's reason, as 369 does
 for Claude. The report belongs to the driver, so a Claude child reports it
 the same way under any host that registers the Claude driver.
+
+Codex (since 0.1.2): a `thread/start` or `thread/resume` response whose
+`model` differs from the requested `model`, or a `model/rerouted`
+notification for the child's turn, ends the execution `failed` with
+`RUNTIME_REQUEST_FAILED`; a reroute interrupts the turn first. The message
+is `<summary>: requested model <requested>, observed model <observed>;
+Runtime reason: <reason, or "not provided in the native stream">.` For a
+reroute the reason is the notification's `reason`, and the requested model
+is its `fromModel` when none was requested. This holds under every host,
+GraphTraj included.
 
 ## 3. Standalone configuration: `<data root>/config.yml`
 
@@ -409,7 +430,12 @@ What the parent sees today:
   `main_notices` to the next `agents` result. An end already shown by `wait`
   or `status` is not pushed again.
 - **Codex host:** one host event per notice, `{"source": "agents", "alias",
-  "event", "message"}`, sent to the parent Session.
+  "event", "message"}`, sent to the parent Session while its turn runs. It
+  enables `request_notices`, for children of every Runtime it runs (Codex,
+  Claude). The `--output` document lists the notices in `deliveries`.
+- A grandchild's notices go to its own parent: a Claude parent Agent is
+  continued with them; a Codex parent Agent is not notified, whatever the
+  grandchild's Runtime, and reads them through `status`.
 - `event` is `completed`, `interrupted`, `failed` or `request`; `message` is
   the child's answer, else the error message, else the outcome. For
   `request` it is a short credential-free text naming the native method and
@@ -431,9 +457,10 @@ Gaps, by owner:
 
 | Gap | Owner |
 | --- | --- |
-| Independent hosts do not push a child's native permission request; the parent polls | Claude Code host: done in 381 |
+| Independent hosts do not push a child's native permission request; the parent polls | Claude Code and Codex hosts: done in 381 |
 | Codex children's native approvals are handled by `auto_review` and not relayed to the parent | 385 |
 | Independent hosts do not hold notices while the parent is stopped: the Claude host's queue lives in its process, and the Codex host marks them `unavailable` (readable through `status`) | 381 (Claude, Codex), 382 (Pi), 383 (DSH) |
+| A Codex child is not notified of its own children's ends or requests (it reads them through `status`); a Claude child is continued with them | unassigned, needs Main |
 | A child cannot ask its parent for a decision or more resources except through native approval requests | unassigned, needs Main (closest: 381) |
 | The notice title names GraphTraj | 394 |
 
@@ -535,6 +562,11 @@ Recorded classifications:
   documented meaning, "starts no new work". No version-range change.
 - 388: envelope validation errors gained `action` and a coded `error` object
   (see 1.2). A fix that makes them match the documented error structure.
+- 381 (0.1.2): a Codex model mismatch at `thread/start`/`thread/resume` or a
+  `model/rerouted` notification now ends the child `failed` with
+  `RUNTIME_REQUEST_FAILED` under every host, GraphTraj included (section 2).
+  A fix: the run used to continue on another model, contradicting the rule
+  that a chosen value is never silently replaced.
 - 381 (0.1.2): the notice event `request` and `AgentControl`'s optional
   `request_notices` argument (default off). Compatible: a new event for a new
   situation, behind a new optional argument with a default that keeps

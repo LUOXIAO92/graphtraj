@@ -29,7 +29,7 @@ setopt err_exit pipe_fail no_unset
 WT=/Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/402-integrate-resolver-approval-deadlock
 # The code under test; later commits may change only this script's directory.
 # Whoever integrates further code commits sets COMMIT to the new code commit.
-COMMIT=4285fe994ba2333bda39ff28fbcd560fe2e56adc
+COMMIT=d9fdb75f286e79c40db7cd31b6ae996e3b09bcb0
 P=/Users/luoxiao/agents-402-realhost
 PY=/Users/luoxiao/miniconda3/bin/python3.13
 # Both Claude roles use this model; the Claude adapter accepts only claude-opus-5-5 unless the role names an explicit model connection.
@@ -253,10 +253,29 @@ dispatch = results.get(next((entry[2] for entry in order if entry[:2] == ('resul
 replies = [results[entry[2]] for entry in order if entry[:2] == ('result', 'reply') and entry[2] in results]
 task = yaml.safe_load((evidence / 'task.yml').read_text())
 article = (evidence / 'dev-article.md').read_text() if (evidence / 'dev-article.md').exists() else ''
+try:
+    dispatched = json.loads(dispatch[1]) if dispatch is not None else {}
+except ValueError:
+    dispatched = {}
+dispatched = dispatched if isinstance(dispatched, dict) else {}
+resolution = dispatched.get('resolution') or {}
+alias = resolution.get('alias')
+events = [json.loads(line) for path in sorted((evidence / 'worldline').glob('*.jsonl'))
+          for line in path.read_text().splitlines() if line.strip()]
+integration = [event['event'] for event in events
+               if event.get('task_id') == '1' and event['event'].startswith('task-integration-')]
 checks = [
-    ('step5.jsonl: the first task_integrate result (resolving-integration, launched) came back before the first reply call',
-     integrate_returned is not None and reply_sent is not None and integrate_returned < reply_sent
-     and dispatch is not None and 'resolving-integration' in dispatch[1] and 'launched' in dispatch[1]),
+    ('step5.jsonl: the first task_integrate result has is_error false, status resolving-integration, '
+     'launch_status launched and the resolver alias',
+     dispatch is not None and dispatch[0] is False and dispatched.get('status') == 'resolving-integration'
+     and resolution.get('launch_status') == 'launched' and bool(alias)),
+    ('step5.jsonl: that task_integrate result came back before the first reply call',
+     integrate_returned is not None and reply_sent is not None and integrate_returned < reply_sent),
+    ('worldline: Task 1 has a task-integration-conflict-dispatched event naming the resolver',
+     any(event['event'] == 'task-integration-conflict-dispatched' and event.get('task_id') == '1'
+         and event.get('session_ref') == alias for event in events)),
+    ('worldline: the final task-integration event of Task 1 is task-integration-conflict-resolved',
+     bool(integration) and integration[-1] == 'task-integration-conflict-resolved'),
     ('step5.jsonl: a reply result came back without error', bool(replies) and not any(error for error, _ in replies)),
     ('task.yml: status == integrated', task.get('status') == 'integrated'),
     ('candidate-in-dev.txt == yes and dev-article.md keeps both lines without conflict markers',
@@ -266,6 +285,7 @@ checks = [
 for name, ok in checks:
     print(('PASS ' if ok else 'FAIL ') + name)
 print('tool order:', json.dumps([entry[:2] for entry in order]))
+print('Task 1 integration events:', json.dumps(integration))
 EOF
 
 say "follow-up commands (copy as needed)"

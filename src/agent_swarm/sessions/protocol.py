@@ -1,10 +1,12 @@
-"""Validate lossless Session v4 values, independently of storage and Runtime I/O.
+"""Validate lossless Session v5 values, independently of storage and Runtime I/O.
 
 Based on DeepSeek Harness d743267388641bc76f17c45ce8b4c231aed1d32c;
 see DSH-LICENSE and examples/sessions/README.md for provenance and semantics.
 Unknown JSON fields are retained, never normalized away. Validation does not
-claim an unknown required event can be replayed. GraphTraj extensions have
-independent version 1 and use the ``graphtraj`` field/event namespace.
+claim an unknown required event can be replayed. Version 5 is the DSH v4
+layout plus product-neutral archive fields (``native``, ``missing``, ...) and
+an ``extra_fields`` container whose namespaces core never interprets. Version 4
+files are read through ``upgrade_header``/``upgrade_event``; only v5 is written.
 """
 from __future__ import annotations
 
@@ -13,9 +15,9 @@ import math
 from pathlib import PurePosixPath, PureWindowsPath
 from typing import Any
 
-SESSION_FORMAT_VERSION = 4
-EXTENSION_VERSION = 1
-INITIAL_COLLECTION_TYPE = 'graphtraj/collection-pending'
+SESSION_FORMAT_VERSION = 5
+LEGACY_FORMAT_VERSION = 4
+INITIAL_COLLECTION_TYPE = 'collection-pending'
 MAX_SAFE_INTEGER = 2**53 - 1
 SURFACE_TYPES = frozenset({
     'user/message', 'assistant/message', 'system/message',
@@ -34,8 +36,12 @@ CORE_TYPES = SURFACE_TYPES | {
     'permission/preset', 'sandbox/mode', 'session/title',
     'session/title-llm-request', 'session-log-deepseek/delivery-accepted',
 }
-EXTENSION_TYPES = {'graphtraj/native', 'graphtraj/score', 'graphtraj/logprobs',
-                   'graphtraj/derived', 'graphtraj/history'}
+ARCHIVE_TYPES = {'native', 'score', 'logprobs', 'derived', 'history'}
+# Version 4 spelled archive types and these fields under the GraphTraj name.
+LEGACY_TYPES = {'graphtraj/' + kind: kind for kind in ARCHIVE_TYPES | {INITIAL_COLLECTION_TYPE}}
+LEGACY_BLOCK_TYPES = {'graphtraj/encrypted': 'encrypted', 'graphtraj/text-run': 'text-run'}
+LEGACY_NAMESPACE = 'graphtraj'
+LEGACY_NAMESPACE_KEYS = ('projectId', 'agentId', 'taskIds')
 
 
 def _require(condition: bool, path: str) -> None:
@@ -80,13 +86,43 @@ def _strings(value: dict, keys: tuple[str, ...], path: str) -> None:
             _require(type(value[key]) is str and bool(value[key]), f'{path}.{key}')
 
 
+def validate_extra_fields(value: Any, path: str = 'extra_fields') -> None:
+    """Check only the namespace container; each namespace validates its own content.
+
+    The container is a JSON object keyed by nonempty namespace names. Values
+    are any lossless JSON. Core never reads a namespace, so an unknown one is
+    accepted here and ignored by every core reader.
+    """
+    _require(type(value) is dict, path)
+    for key, item in value.items():
+        _require(type(key) is str and bool(key), path)
+        _json(item, f'{path}.{key}')
+
+
+def _core_fields(value: dict, path: str) -> None:
+    """Validate the archive fields shared by headers and events (v5 spelling)."""
+    _require(LEGACY_NAMESPACE not in value, f'{path}.{LEGACY_NAMESPACE} is version 4; upgrade first')
+    if 'extra_fields' in value:
+        validate_extra_fields(value['extra_fields'], f'{path}.extra_fields')
+    if 'native' in value:
+        native = value['native']
+        _fields(native, {'runtime': str, 'sessionId': str, 'locator': str}, f'{path}.native')
+        _strings(native, ('runtime', 'sessionId', 'locator'), f'{path}.native')
+    if 'missing' in value:
+        _fields(value, {'missing': list}, path)
+        for item in value['missing']:
+            _fields(item, {'path': str, 'reason': str}, f'{path}.missing')
+            _strings(item, ('path', 'reason'), f'{path}.missing')
+
+
 def validate_header(header: dict) -> None:
-    """Validate immutable DSH v4 metadata; callers own snapshots and persistence.
+    """Validate immutable v5 metadata; callers own snapshots and persistence.
 
     ``createdAt`` is epoch milliseconds. ``parentSession`` is fork lineage,
-    never Agent or Task parentage. Unknown versions are refused, not migrated.
-    A GraphTraj header extension binds projectId, agentId and taskIds; native
-    identifiers remain evidence, never authorization.
+    never Agent or Task parentage. Version 4 is refused here; read it through
+    ``upgrade_header``. ``previousSession`` links a continued native source
+    to its earlier archive and requires the ``boundary`` where it continues.
+    Native identifiers remain evidence, never authorization.
     """
     _json(header)
     _fields(header, {'version': int, 'id': str, 'createdAt': int, 'isSeeded': bool}, 'header')
@@ -100,21 +136,15 @@ def validate_header(header: dict) -> None:
         _integer(header['delegationDepth'], 'header.delegationDepth')
     if 'origin' in header:
         _require(header['origin'] == 'subagent', 'header.origin')
-    if 'graphtraj' in header:
-        ext = header['graphtraj']
-        _provenance(ext)
-        _fields(ext, {'version': int, 'projectId': str, 'agentId': str, 'taskIds': list}, 'header.graphtraj')
-        _require(ext['version'] == EXTENSION_VERSION, 'header.graphtraj.version')
-        _strings(ext, ('projectId', 'agentId'), 'header.graphtraj')
-        _require(all(type(item) is str and item for item in ext['taskIds']), 'header.graphtraj.taskIds')
-        if 'previousSession' in ext:
-            _strings(ext, ('previousSession',), 'header.graphtraj')
-            _require(ext['previousSession'] != header['id'], 'header.graphtraj.previousSession')
-            _fields(ext, {'boundary': dict}, 'header.graphtraj')
-            boundary = ext['boundary']
-            _fields(boundary, {'kind': str, 'offset': int}, 'header.graphtraj.boundary')
-            _require(boundary['kind'] in {'rollout', 'compaction', 'rollback'}, 'header.graphtraj.boundary.kind')
-            _integer(boundary['offset'], 'header.graphtraj.boundary.offset')
+    _core_fields(header, 'header')
+    if 'previousSession' in header:
+        _strings(header, ('previousSession',), 'header')
+        _require(header['previousSession'] != header['id'], 'header.previousSession')
+        _fields(header, {'boundary': dict}, 'header')
+        boundary = header['boundary']
+        _fields(boundary, {'kind': str, 'offset': int}, 'header.boundary')
+        _require(boundary['kind'] in {'rollout', 'compaction', 'rollback'}, 'header.boundary.kind')
+        _integer(boundary['offset'], 'header.boundary.offset')
 
 
 def validate_content(content: list) -> None:
@@ -132,7 +162,7 @@ def validate_content(content: list) -> None:
         elif kind in {'tool-addition', 'tool-removal'}:
             _fields(block, {'toolName': str}, 'content.tool-change')
             _require('tool' not in block, 'content.tool-change.tool')
-        elif kind == 'graphtraj/encrypted':
+        elif kind == 'encrypted':
             _fields(block, {'value': str, 'nativePath': str}, 'content.encrypted')
         _json(block)
 
@@ -172,10 +202,10 @@ def _failure(value: dict) -> None:
 
 
 def validate_stream(stream: list) -> None:
-    """Validate DSH compact runs and GraphTraj semantic text runs.
+    """Validate DSH compact runs and archive semantic text runs.
 
     DSH dt entries are signed gaps between consecutive epoch-ms timestamps;
-    len(dt) == len(texts/args)-1. GraphTraj runs intentionally discard transport
+    len(dt) == len(texts/args)-1. Text runs intentionally discard transport
     fragmentation, carry one joined text, and must not be called exact replay.
     Unknown records remain lossless JSON for inspection by their owner.
     """
@@ -221,26 +251,11 @@ def validate_stream(stream: list) -> None:
                     _failure(chunk['reason'].get('failure'))
             if 'index' in chunk:
                 _integer(chunk['index'], 'stream.index')
-        elif kind == 'graphtraj/text-run':
+        elif kind == 'text-run':
             _fields(record, {'requestId': str, 'attemptId': str, 'messageId': str,
                              'index': int, 'blockType': str, 'text': str}, 'stream.text-run')
             _require(record['blockType'] in {'text', 'reasoning'}, 'stream.blockType')
             _integer(record['index'], 'stream.index')
-
-
-def _provenance(ext: dict) -> None:
-    """Validate source identity and explicit unavailable-field explanations."""
-    _fields(ext, {'version': int}, 'graphtraj')
-    _require(ext['version'] == EXTENSION_VERSION, 'graphtraj.version')
-    if 'native' in ext:
-        native = ext['native']
-        _fields(native, {'runtime': str, 'sessionId': str, 'locator': str}, 'graphtraj.native')
-        _strings(native, ('runtime', 'sessionId', 'locator'), 'graphtraj.native')
-    if 'missing' in ext:
-        _fields(ext, {'missing': list}, 'graphtraj')
-        for item in ext['missing']:
-            _fields(item, {'path': str, 'reason': str}, 'graphtraj.missing')
-            _strings(item, ('path', 'reason'), 'graphtraj.missing')
 
 
 def _observation(data: dict, kind: str, seq: int) -> None:
@@ -284,10 +299,10 @@ def _observation(data: dict, kind: str, seq: int) -> None:
             _fields(context, {'sessionId': str, 'eventSeq': int}, 'observation.source.context')
             _integer(context['eventSeq'], 'observation.source.context.eventSeq')
 
-    if kind == 'graphtraj/score':
+    if kind == 'score':
         _fields(data, {'name': str, 'rule': str}, 'score')
         _require(type(data.get('value')) in (int, float), 'score.value')
-    elif kind == 'graphtraj/derived':
+    elif kind == 'derived':
         _require(source['kind'] == 'supplemented', 'derived.source')
         validate_content(data.get('content'))
     else:
@@ -353,10 +368,9 @@ def validate_event(event: dict) -> None:
     _require(bool(event['type']), 'event.type')
     if 'ignorable' in event:
         _require(event['ignorable'] is True, 'event.ignorable')
-    if 'graphtraj' in event:
-        _provenance(event['graphtraj'])
+    _core_fields(event, 'event')
     kind, data = event['type'], event['data']
-    if kind in CORE_TYPES | EXTENSION_TYPES:
+    if kind in CORE_TYPES | ARCHIVE_TYPES:
         _fields(data, {}, 'event.data')
     if kind in SURFACE_TYPES:
         op = event.get('surfaceOp')
@@ -376,7 +390,7 @@ def validate_event(event: dict) -> None:
             _require(len(refs) == len(set(refs)), 'sourceEventSeqs.duplicate')
         role = 'tool' if kind == 'tool/result' else kind.split('/')[0]
         _message(data if kind == 'user/message' else data.get('message'), role)
-    elif kind in CORE_TYPES | EXTENSION_TYPES:
+    elif kind in CORE_TYPES | ARCHIVE_TYPES:
         _require('surfaceOp' not in event and 'sourceEventSeqs' not in event, 'event.surface')
 
     if kind in {'turn/start', 'turn/end', 'step/start', 'step/end',
@@ -465,16 +479,16 @@ def validate_event(event: dict) -> None:
                 validate_content(data['rawOutput'])
             if 'llmStreamCall' in data:
                 _require(data['llmStreamCall'] is True and 'rawOutput' in data, 'compaction.llmStreamCall')
-    elif kind == 'graphtraj/native':
+    elif kind == 'native':
         _require('record' in data, 'native.record')
-        _require('native' in event.get('graphtraj', {}), 'native.provenance')
-    elif kind == 'graphtraj/history':
+        _require('native' in event, 'native.provenance')
+    elif kind == 'history':
         _fields(data, {'eventSeqs': list}, 'history')
         for ref in data['eventSeqs']:
             _integer(ref, 'history.eventSeqs')
             _require(ref < event['seq'], 'history.eventSeqs')
         _require(len(data['eventSeqs']) == len(set(data['eventSeqs'])), 'history.duplicate')
-    elif kind in EXTENSION_TYPES:
+    elif kind in ARCHIVE_TYPES:
         _observation(data, kind, event['seq'])
     if kind in {'assistant/message', 'compaction/summary'} and 'usage' in data:
         _usage(data['usage'])
@@ -500,17 +514,15 @@ def validate_session(header: dict, events: list[dict], *, reconstruct: bool = Fa
         kind = event['type']
         _require(kind != INITIAL_COLLECTION_TYPE, 'event.pending-collection is not canonical history')
 
-        if kind in EXTENSION_TYPES:
-            _require('graphtraj' in header, 'header.graphtraj required for extensions')
-        if reconstruct and kind == 'graphtraj/native':
+        if reconstruct and kind == 'native':
             _require(False, 'event.opaque-native requires Runtime interpretation')
-        if reconstruct and kind not in CORE_TYPES | EXTENSION_TYPES:
+        if reconstruct and kind not in CORE_TYPES | ARCHIVE_TYPES:
             _require(event.get('ignorable') is True, 'event.unknown-required')
 
         if kind == 'session/end-seed' and event['data'].get('inherited') is True:
             inherited.append(seq)
 
-        if kind == 'graphtraj/history':
+        if kind == 'history':
             surface = event['data']['eventSeqs'][:]
             _require(all(events[ref]['type'] in SURFACE_TYPES for ref in surface), 'history.messages')
 
@@ -525,7 +537,7 @@ def validate_session(header: dict, events: list[dict], *, reconstruct: bool = Fa
                 _integer(ref, 'developer.headerSeq')
                 _require(ref < seq and events[ref]['type'] == 'request/header', 'developer.headerSeq')
 
-        if kind == 'graphtraj/logprobs':
+        if kind == 'logprobs':
             target = events[event['data']['target']['eventSeq']]
             for token in event['data']['tokens']:
                 if 'span' not in token:
@@ -581,20 +593,19 @@ def retain_native(
     deltas must be assembled before calling it; blindly retaining all RPC
     snapshots would preserve the known amplification bug. ``time`` is an
     observed receipt timestamp if native time is unavailable; record that fact
-    in graphtraj.missing rather than inventing a native timestamp.
+    in the event's ``missing`` rather than inventing a native timestamp.
     """
-    event = {'type': 'graphtraj/native', 'seq': seq, 'time': time,
-             'data': {'record': record}, 'graphtraj': {'version': EXTENSION_VERSION,
-             'native': {'runtime': runtime, 'sessionId': session_id, 'locator': locator}}}
+    event = {'type': 'native', 'seq': seq, 'time': time, 'data': {'record': record},
+             'native': {'runtime': runtime, 'sessionId': session_id, 'locator': locator}}
     return snapshot_event(event)
 
 
 def native_record(event: dict) -> dict:
     """Recover a detached original JSON record, without reversing lossy projections."""
     validate_event(event)
-    if event['type'] == 'graphtraj/native':
+    if event['type'] == 'native':
         return deepcopy(event['data']['record'])
-    native = event.get('graphtraj', {}).get('native', {})
+    native = event.get('native', {})
     _require('record' in native, 'native.record unavailable')
     return deepcopy(native['record'])
 
@@ -611,9 +622,9 @@ def append_stream_record(stream: list[dict], record: dict, *, cumulative: bool =
     validate_stream([record])
     record = deepcopy(record)
     keys = {'type', 'requestId', 'attemptId', 'messageId', 'index', 'blockType', 'text'}
-    plain = record['type'] == 'graphtraj/text-run' and set(record) == keys
+    plain = record['type'] == 'text-run' and set(record) == keys
     if cumulative:
-        if record['type'] != 'graphtraj/text-run':
+        if record['type'] != 'text-run':
             raise ValueError('Cumulative input requires a text run.')
         previous = ''.join(item['text'] for item in stream if item.get('type') == record['type']
                            and all(item.get(k) == record[k] for k in keys - {'text'}))
@@ -627,3 +638,73 @@ def append_stream_record(stream: list[dict], record: dict, *, cumulative: bool =
     else:
         stream.append(record)
     return record
+
+
+def _upgrade_blocks(blocks: Any) -> None:
+    """Rename v4 content and stream block types in place; other blocks stay exact."""
+    if type(blocks) is list:
+        for block in blocks:
+            if type(block) is dict and block.get('type') in LEGACY_BLOCK_TYPES:
+                block['type'] = LEGACY_BLOCK_TYPES[block['type']]
+
+
+def _upgrade_fields(value: dict, path: str, *, header: bool) -> dict:
+    """Move a v4 ``graphtraj`` object to v5 core fields and ``extra_fields.graphtraj``.
+
+    Product associations (projectId, agentId, taskIds) and the header's
+    namespace version become ``extra_fields.graphtraj``. The per-event
+    extension version carried no information (it could only be 1) and is
+    dropped. Every other key is a core archive fact and keeps its name at the
+    top level; a name already present there is refused rather than overwritten.
+    """
+    value = deepcopy(value)
+    _require(type(value) is dict, path)
+    ext = value.pop(LEGACY_NAMESPACE, None)
+    if ext is None:
+        return value
+    _require(type(ext) is dict, f'{path}.{LEGACY_NAMESPACE}')
+    version = ext.pop('version', None)
+    namespace = {key: ext.pop(key) for key in LEGACY_NAMESPACE_KEYS if key in ext}
+    if namespace or (header and version is not None):
+        extra = value.setdefault('extra_fields', {})
+        _require(type(extra) is dict and LEGACY_NAMESPACE not in extra, f'{path}.extra_fields')
+        extra[LEGACY_NAMESPACE] = ({'version': version} if version is not None else {}) | namespace
+    for key, item in ext.items():
+        _require(key not in value, f'{path}.{key} collision')
+        value[key] = item
+    return value
+
+
+def upgrade_header(header: dict) -> dict:
+    """Return a detached v5 header for a v4 or v5 header; other versions refuse."""
+    _require(type(header) is dict, 'header')
+    if header.get('version') == LEGACY_FORMAT_VERSION:
+        header = _upgrade_fields(header, 'header', header=True)
+        header['version'] = SESSION_FORMAT_VERSION
+    validate_header(header)
+    return deepcopy(header)
+
+
+def upgrade_event(event: dict) -> dict:
+    """Return a detached v5 spelling of an event read from a version 4 file.
+
+    Archive type names lose their ``graphtraj/`` prefix; content and stream
+    block types inside the event's own data follow. Native records (``data.record``
+    of a native event and ``native.record``) are copied untouched.
+    """
+    event = _upgrade_fields(event, 'event', header=False)
+    if event.get('type') in LEGACY_TYPES:
+        event['type'] = LEGACY_TYPES[event['type']]
+    data = event.get('data')
+    if event.get('type') != 'native' and type(data) is dict:
+        for message in (data, data.get('message')):
+            if type(message) is dict:
+                _upgrade_blocks(message.get('content'))
+        for key in ('summary', 'rawOutput'):
+            _upgrade_blocks(data.get(key))
+        stream = data.get('stream')
+        _upgrade_blocks(stream)
+        for record in stream if type(stream) is list else []:
+            if type(record) is dict and type(record.get('chunk')) is dict:
+                _upgrade_blocks([record['chunk'].get('block')])
+    return event

@@ -14,7 +14,9 @@ from pathlib import Path
 import time
 
 from agent_swarm.sessions.archive import JsonlSessionStore, SessionArchive, archive_path
-from agent_swarm.sessions.protocol import SURFACE_TYPES, append_stream_record
+from agent_swarm.sessions.protocol import (
+    SESSION_FORMAT_VERSION, SURFACE_TYPES, append_stream_record, validate_extra_fields,
+)
 from datetime import datetime
 
 def timestamp(record: dict) -> tuple[int, list[dict]]:
@@ -71,7 +73,6 @@ class ClaudeJsonlCollector:
         self,
         archive: SessionArchive | None,
         session: str,
-        agent: str,
         cwd: Path,
         execution: str,
         *,
@@ -79,13 +80,19 @@ class ClaudeJsonlCollector:
         resumed: bool | None = None,
         child_id: str | None = None,
         history_count: int | None = None,
+        extra_fields: dict | None = None,
     ) -> None:
-        """Capture policy without creating files when collection is disabled."""
+        """Capture policy without creating files when collection is disabled.
+
+        ``extra_fields`` is written verbatim (after redaction) to a new header.
+        """
+        if extra_fields is not None:
+            validate_extra_fields(extra_fields)
+        self.extra_fields = deepcopy(extra_fields)
         self.archive = archive
         self.session = session
         self.identity = archive.native_id('claude', session, agent_id=child_id) if archive else 'claude:' + session
         self.child_id = child_id
-        self.agent = agent
         self.cwd = cwd
         self.execution = execution
         self.provider = provider
@@ -133,19 +140,19 @@ class ClaudeJsonlCollector:
             if len(parents) > 1:
                 raise ValueError('Claude fork ancestry is ambiguous.')
             self.header = {
-                'version': 4, 'id': self.identity, 'createdAt': 0, 'isSeeded': bool(parents),
-                'cwd': str(self.cwd), 'graphtraj': {
-                    'version': 1, 'projectId': str(self.cwd), 'agentId': self.agent, 'taskIds': [],
-                    'native': {'runtime': 'claude', 'sessionId': self.session,
-                               'locator': str(path), 'source': 'managed'},
-                    'missing': [{'path': 'createdAt', 'reason': 'Native Session creation time unavailable.'}],
-                },
+                'version': SESSION_FORMAT_VERSION, 'id': self.identity, 'createdAt': 0,
+                'isSeeded': bool(parents), 'cwd': str(self.cwd),
+                'native': {'runtime': 'claude', 'sessionId': self.session,
+                           'locator': str(path), 'source': 'managed'},
+                'missing': [{'path': 'createdAt', 'reason': 'Native Session creation time unavailable.'}],
             }
+            if self.extra_fields is not None:
+                self.header['extra_fields'] = deepcopy(self.extra_fields)
             if parents:
                 self.header['parentSession'] = self.archive.native_id('claude', next(iter(parents)))
         if self.child_id and not destination.exists():
             self.header['origin'] = 'subagent'
-            self.header['graphtraj']['native'].update(agentId=self.child_id, parentNativeSessionId=self.session)
+            self.header['native'].update(agentId=self.child_id, parentNativeSessionId=self.session)
         self.archive.map_session(self.header)
         self.collect()
         pending, self.before_bind = self.before_bind, []
@@ -162,11 +169,10 @@ class ClaudeJsonlCollector:
         """Retain source fields and native time without assigning receipt order."""
         when, missing = timestamp(record)
         event = {'type': kind, 'seq': 0, 'time': when, 'data': {},
-                 'graphtraj': {'version': 1, 'native': {
-                     'runtime': 'claude', 'sessionId': self.session,
-                     'locator': locator, 'record': deepcopy(record)}}}
+                 'native': {'runtime': 'claude', 'sessionId': self.session,
+                            'locator': locator, 'record': deepcopy(record)}}
         if missing:
-            event['graphtraj']['missing'] = missing
+            event['missing'] = missing
         if kind.startswith('claude/'):
             event['ignorable'] = True
         return event
@@ -228,14 +234,14 @@ class ClaudeJsonlCollector:
             key = 'stream:' + api_id
             if key not in self.streams:
                 pending = next((p['event'] for p in store.pending()
-                                if p['event']['graphtraj']['native']['locator'] == key), None)
+                                if p['event']['native']['locator'] == key), None)
                 draft = pending or self._event(key, {}, 'assistant/attempt')
                 draft.setdefault('data', {}).update(turn=0, step=0)
                 draft['data'].setdefault('stream', [])
-                draft['graphtraj'].setdefault('receivedAtMs', received_at_ms)
+                draft.setdefault('receivedAtMs', received_at_ms)
                 self.streams[key] = draft
             draft = self.streams[key]
-            draft['graphtraj']['lastReceivedAtMs'] = received_at_ms
+            draft['lastReceivedAtMs'] = received_at_ms
             delta = event.get('delta', {})
             plain = (event.get('type') == 'content_block_delta'
                     and set(record) <= {'type', 'event', 'session_id', 'parent_tool_use_id', 'uuid'}
@@ -243,7 +249,7 @@ class ClaudeJsonlCollector:
             if (plain and set(delta) in ({'type', 'text'}, {'type', 'thinking'})
                     and delta.get('type') in {'text_delta', 'thinking_delta'}):
                 append_stream_record(draft['data']['stream'], {
-                    'type': 'graphtraj/text-run', 'requestId': api_id, 'attemptId': self.execution,
+                    'type': 'text-run', 'requestId': api_id, 'attemptId': self.execution,
                     'messageId': api_id, 'index': event['index'],
                     'blockType': 'text' if 'text' in delta else 'reasoning',
                     'text': delta.get('text', delta.get('thinking')),
@@ -272,7 +278,7 @@ class ClaudeJsonlCollector:
             store.checkpoint(draft, source=self.execution, position=position)
         elif main and record.get('type') == 'stream_event':
             draft = self._event(f'unidentified-stream:{self.execution}:{position}', record)
-            draft['graphtraj']['missing'] = [{'path': 'correspondence', 'reason': 'Native message_start identity was not received.'}]
+            draft['missing'] = [{'path': 'correspondence', 'reason': 'Native message_start identity was not received.'}]
             store.checkpoint(draft, source=self.execution, position=position)
         else:
             # Transport/permission/error facts are observations, not messages.
@@ -297,7 +303,7 @@ class ClaudeJsonlCollector:
             elif block.get('type') == 'tool_use':
                 block.update(type='tool-call', arguments=json.dumps(block.get('input', {}), ensure_ascii=False))
             elif block.get('type') == 'redacted_thinking':
-                block.update(type='graphtraj/encrypted', value=block['data'],
+                block.update(type='encrypted', value=block['data'],
                              nativePath=f'message.content[{index}].data')
             elif block.get('type') in {'image', 'document'}:
                 source = block.get('source', {})
@@ -313,7 +319,7 @@ class ClaudeJsonlCollector:
         event['surfaceOp'] = 'append'
         event['data'] = message if role == 'user' else {'turn': 0, 'step': 0, 'message': message, 'stream': []}
         if role == 'assistant' and not native.get('model'):
-            event['graphtraj'].setdefault('missing', []).append({'path': 'model', 'reason': 'Native model unavailable.'})
+            event.setdefault('missing', []).append({'path': 'model', 'reason': 'Native model unavailable.'})
         return event
 
     def collect(self) -> None:
@@ -328,26 +334,26 @@ class ClaudeJsonlCollector:
             raw = ({'unparsedTranscriptTail': error.doc} if isinstance(error, json.JSONDecodeError) else
                    {'unparsedBytes': base64.b64encode(error.object).decode()} if isinstance(error, UnicodeDecodeError) else {})
             gap = self._event('history-gap', raw)
-            gap['graphtraj']['missing'] = [{'path': 'history', 'reason': str(error)}]
+            gap['missing'] = [{'path': 'history', 'reason': str(error)}]
             store.checkpoint(gap, source='history-gap', position=store.position('history-gap') + 1)
             return
         old = _events(store)
         surface = _surface(old)
-        originals = {e['graphtraj']['native']['record']['uuid']: e['graphtraj']['native']['record']
+        originals = {e['native']['record']['uuid']: e['native']['record']
                      for e in old if e['type'] in SURFACE_TYPES}
         if any(r['uuid'] in originals and originals[r['uuid']] != r for r in desired):
             gap = self._event('history-gap', {})
-            gap['graphtraj']['missing'] = [{'path': 'history', 'reason': 'A published native UUID changed content.'}]
+            gap['missing'] = [{'path': 'history', 'reason': 'A published native UUID changed content.'}]
             store.checkpoint(gap, source='history-gap', position=store.position('history-gap') + 1)
             return
-        old_ids = [message_id(e['graphtraj']['native']['record']) for e in surface]
+        old_ids = [message_id(e['native']['record']) for e in surface]
         if not self.archive.backfill_history:
             desired = [r for r in desired if r['uuid'] not in self.excluded or message_id(r) in old_ids]
             if not self.cut_known:
                 desired = [r for r in desired if message_id(r) in self.live_ids or message_id(r) in old_ids]
         ids = [message_id(r) for r in desired]
         events = deepcopy(old)
-        locators = {e['graphtraj']['native']['locator'] for e in events}
+        locators = {e['native']['locator'] for e in events}
         same_prefix = ids[:len(old_ids)] == old_ids
         added = desired[len(old_ids):] if same_prefix else desired
         for index, record in enumerate(added):
@@ -361,8 +367,8 @@ class ClaudeJsonlCollector:
                 # Native compaction/fork changes the current context. Retain
                 # earlier log entries and replay the new native context through
                 # DSH replacement; consumers need no Claude-specific sorting.
-                event['graphtraj']['native']['locator'] += ':context:' + ids[-1]
-                event['graphtraj']['contextReplay'] = True
+                event['native']['locator'] += ':context:' + ids[-1]
+                event['contextReplay'] = True
                 if index == 0 and surface:
                     event['surfaceOp'] = {'op': 'replace', 'startSeq': surface[0]['seq'], 'endSeq': surface[-1]['seq']}
                     event['sourceEventSeqs'] = [e['seq'] for e in surface]
@@ -370,7 +376,7 @@ class ClaudeJsonlCollector:
             events.append(event)
         if old_ids and not ids:
             gap = self._event('history-gap', {})
-            gap['graphtraj']['missing'] = [{'path': 'history', 'reason': 'Native context removed every retained message.'}]
+            gap['missing'] = [{'path': 'history', 'reason': 'Native context removed every retained message.'}]
             store.checkpoint(gap, source='history-gap', position=store.position('history-gap') + 1)
             return
 
@@ -400,7 +406,7 @@ class ClaudeJsonlCollector:
                 responses.setdefault(record['message']['id'], []).append(record['uuid'])
         for pending in store.pending():
             draft = pending['event']
-            key = draft['graphtraj']['native']['locator']
+            key = draft['native']['locator']
             if key in locators:
                 continue
             target = None
@@ -414,7 +420,7 @@ class ClaudeJsonlCollector:
                 target = ids
             elif key.startswith('live:'):
                 target = []
-            if target is not None and key not in {e['graphtraj']['native']['locator'] for e in events}:
+            if target is not None and key not in {e['native']['locator'] for e in events}:
                 marker = self._event(key, {})
                 marker.update(seq=len(events), data={'nativeMessageUuids': target, 'observationResolved': True})
                 events.append(marker)
@@ -422,7 +428,7 @@ class ClaudeJsonlCollector:
         if (not self.archive.backfill_history
                 and (not self.cut_known or self.excluded and not set(self.excluded) <= set(originals))):
             gap = self._event('history-gap', {})
-            gap['graphtraj']['missing'] = [{'path': 'history', 'reason': 'History backfill is disabled; native prefix was not collected.'}]
+            gap['missing'] = [{'path': 'history', 'reason': 'History backfill is disabled; native prefix was not collected.'}]
             store.checkpoint(gap, source='history-gap', position=store.position('history-gap') + 1)
 
     def close(self) -> None:

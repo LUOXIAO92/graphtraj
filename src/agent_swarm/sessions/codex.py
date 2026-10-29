@@ -13,7 +13,9 @@ from pathlib import Path
 from typing import BinaryIO
 
 from agent_swarm.sessions.archive import JsonlSessionStore, SessionArchive, archive_path
-from agent_swarm.sessions.protocol import SURFACE_TYPES, native_record, retain_native
+from agent_swarm.sessions.protocol import (
+    SESSION_FORMAT_VERSION, SURFACE_TYPES, native_record, retain_native, validate_extra_fields,
+)
 from .codex_values import _attachments, _timestamp
 
 
@@ -100,7 +102,7 @@ def _response(record: dict, event: dict, session: str, locator: str) -> dict:
         content = [{'type': 'reasoning', 'text': block['text']}
                    for block in item.get('summary', []) if isinstance(block.get('text'), str)]
         if item.get('encrypted_content') is not None:
-            content.append({'type': 'graphtraj/encrypted', 'value': item['encrypted_content'],
+            content.append({'type': 'encrypted', 'value': item['encrypted_content'],
                             'nativePath': 'payload.encrypted_content'})
     elif kind == 'agent_message':
         role = 'assistant'
@@ -108,14 +110,14 @@ def _response(record: dict, event: dict, session: str, locator: str) -> dict:
     if content is None:
         return event
     if kind not in {'reasoning', 'compaction', 'context_compaction'} and item.get('encrypted_content') is not None:
-        content.append({'type': 'graphtraj/encrypted', 'value': item['encrypted_content'],
+        content.append({'type': 'encrypted', 'value': item['encrypted_content'],
                         'nativePath': 'payload.encrypted_content'})
     if role == 'assistant':
         source = {'kind': 'model', 'model': '', 'provider': ''}
         if kind == 'agent_message':
             source.update(author=item.get('author'), recipient=item.get('recipient'),
                           nativeType='agent_message')
-        event['graphtraj']['missing'].extend([
+        event['missing'].extend([
             {'path': 'model', 'reason': 'Response item does not identify the generating model.'},
             {'path': 'provider', 'reason': 'Response item does not identify the generating provider.'},
         ])
@@ -130,26 +132,24 @@ def _response(record: dict, event: dict, session: str, locator: str) -> dict:
         data['stream'] = []
     event.update(type='tool/result' if role == 'tool' else role + '/message',
                  surfaceOp='append', data=data)
-    event['graphtraj']['native']['record'] = deepcopy(record)
+    event['native']['record'] = deepcopy(record)
     return event
 
 
 def _select(events: list[dict], selected: list[int], source: dict) -> None:
     """Keep a native replacement/drop as references, retaining original events."""
-    native = source['graphtraj']['native']
-    events.append({'type': 'graphtraj/history', 'seq': len(events), 'time': source['time'],
-                   'data': {'eventSeqs': selected}, 'graphtraj': {
-                       'version': 1, 'native': {
-                           'runtime': 'codex', 'sessionId': native['sessionId'],
-                           'locator': native['locator'] + '/history',
-                       },
+    native = source['native']
+    events.append({'type': 'history', 'seq': len(events), 'time': source['time'],
+                   'data': {'eventSeqs': selected}, 'native': {
+                       'runtime': 'codex', 'sessionId': native['sessionId'],
+                       'locator': native['locator'] + '/history',
                    }})
 
 
 def _metadata(event: dict, record: dict) -> None:
     """Retain a non-message native record exactly, without putting it in messages."""
     event.update(type='codex/' + record['type'], ignorable=True, data={})
-    event['graphtraj']['native']['record'] = deepcopy(record)
+    event['native']['record'] = deepcopy(record)
 
 
 def _compaction(events: list[dict], event: dict, store: JsonlSessionStore) -> bool:
@@ -167,21 +167,21 @@ def _compaction(events: list[dict], event: dict, store: JsonlSessionStore) -> bo
     if metadata is not None and len(metadata) != len(replacement):
         raise ValueError('Native replacement history and metadata lengths differ.')
     _metadata(event, record)
-    event['graphtraj']['attachments'] = _attachments(store, record)
+    event['attachments'] = _attachments(store, record)
     events.append(event)
     selected = []
     for index, item in enumerate(replacement):
-        locator = event['graphtraj']['native']['locator'] + f'/replacement_history/{index}'
-        source = retain_native('codex', item, session_id=event['graphtraj']['native']['sessionId'],
+        locator = event['native']['locator'] + f'/replacement_history/{index}'
+        source = retain_native('codex', item, session_id=event['native']['sessionId'],
                                locator=locator, seq=len(events), time=0)
-        source['graphtraj']['missing'] = [{
+        source['missing'] = [{
             'path': 'time', 'reason': 'Inherited item creation time is not supplied by compaction.',
         }]
-        mapped = _response({'payload': item}, source, event['graphtraj']['native']['sessionId'], locator)
-        mapped['graphtraj']['native']['record'] = deepcopy(item)
+        mapped = _response({'payload': item}, source, event['native']['sessionId'], locator)
+        mapped['native']['record'] = deepcopy(item)
         if metadata is not None:
-            mapped['graphtraj']['native']['metadata'] = deepcopy(metadata[index])
-        mapped['graphtraj']['attachments'] = _attachments(store, item)
+            mapped['native']['metadata'] = deepcopy(metadata[index])
+        mapped['attachments'] = _attachments(store, item)
         if mapped['type'] in SURFACE_TYPES:
             selected.append(mapped['seq'])
         events.append(mapped)
@@ -221,7 +221,7 @@ _SUMMARY_PREFIX = (
 
 def _item(event: dict) -> dict:
     """Read the native response item, including one nested in a compaction."""
-    native = event.get('graphtraj', {}).get('native', {})
+    native = event.get('native', {})
     if 'modelItem' in native:
         return deepcopy(native['modelItem'])
     record = native_record(event)
@@ -290,7 +290,7 @@ def _drop_turns(events: list[dict], surface: list[int], count: int, cause: dict)
     if count and boundaries:
         cut = boundaries[max(0, len(boundaries) - count)]
         removed = events[surface[cut]]
-        native = removed['graphtraj']['native']
+        native = removed['native']
         metadata = native.get('metadata', native_record(removed).get('metadata', {})) or {}
         order = metadata.get('user_input_order')
         while cut > boundaries[0] and _contextual(_item(events[surface[cut - 1]])):
@@ -301,7 +301,7 @@ def _drop_turns(events: list[dict], surface: list[int], count: int, cause: dict)
             for ref in surface:
                 candidate = events[ref]
                 item = _item(candidate)
-                native = candidate['graphtraj']['native']
+                native = candidate['native']
                 metadata = native.get('metadata', native_record(candidate).get('metadata', {})) or {}
                 candidate_order = metadata.get('user_input_order')
                 if (item.get('role') == 'assistant' or item.get('type') == 'function_call') and (
@@ -337,19 +337,19 @@ def _drop_turns(events: list[dict], surface: list[int], count: int, cause: dict)
 def _retained_developer(events: list[dict], ref: int, item: dict, cause: dict) -> int:
     """Keep the native rollback's surviving developer fragments with provenance."""
     original = events[ref]
-    native = cause['graphtraj']['native']
-    locator = native['locator'] + '/retained_developer/' + original['graphtraj']['native']['locator']
+    native = cause['native']
+    locator = native['locator'] + '/retained_developer/' + original['native']['locator']
     existing = next((event['seq'] for event in events
-                     if event.get('graphtraj', {}).get('native', {}).get('locator') == locator
-                     and event['graphtraj']['native']['sessionId'] == native['sessionId']), None)
+                     if event.get('native', {}).get('locator') == locator
+                     and event['native']['sessionId'] == native['sessionId']), None)
     if existing is not None:
         return existing
     event = retain_native('codex', native_record(original), session_id=native['sessionId'],
                           locator=locator, seq=len(events), time=0)
-    event['graphtraj']['missing'] = [{'path': 'time', 'reason': 'Derived retained context has no new creation time.'}]
+    event['missing'] = [{'path': 'time', 'reason': 'Derived retained context has no new creation time.'}]
     event = _response({'payload': item}, event, native['sessionId'], locator)
-    event['graphtraj']['native'].update(record=native_record(original), modelItem=item,
-                                      derivedFrom=original['graphtraj']['native']['locator'])
+    event['native'].update(record=native_record(original), modelItem=item,
+                                      derivedFrom=original['native']['locator'])
     events.append(event)
     return event['seq']
 
@@ -363,11 +363,11 @@ def _rollback(events: list[dict], event: dict) -> None:
     """
     original = []
     for candidate in [*events, event]:
-        native = candidate.get('graphtraj', {}).get('native', {})
+        native = candidate.get('native', {})
         if ('/replacement_history/' in native.get('locator', '') or 'derivedFrom' in native
-                or candidate['type'] == 'graphtraj/history'):
+                or candidate['type'] == 'history'):
             continue
-        if candidate['type'] != 'graphtraj/native' and 'record' not in native:
+        if candidate['type'] != 'native' and 'record' not in native:
             continue
         record = native_record(candidate)
         if record.get('type') in {'session_meta', 'response_item', 'compacted', 'event_msg',
@@ -414,12 +414,12 @@ def _rollback(events: list[dict], event: dict) -> None:
                 checkpoint = segment_checkpoint
     surface = []
     if checkpoint is not None:
-        native = events[checkpoint]['graphtraj']['native']
+        native = events[checkpoint]['native']
         prefix = native['locator'] + '/replacement_history/'
         surface = [candidate['seq'] for candidate in events
                    if candidate['type'] in SURFACE_TYPES
-                   and candidate['graphtraj']['native']['sessionId'] == native['sessionId']
-                   and candidate['graphtraj']['native']['locator'].startswith(prefix)]
+                   and candidate['native']['sessionId'] == native['sessionId']
+                   and candidate['native']['locator'].startswith(prefix)]
     for candidate, record in original:
         if checkpoint is not None and candidate['seq'] <= checkpoint:
             continue
@@ -444,13 +444,13 @@ def _append_record(
     instant = _timestamp(record.get('timestamp'))
     event = retain_native('codex', record, session_id=session, locator=locator,
                           seq=len(events), time=instant if instant is not None else 0)
-    event['graphtraj']['missing'] = [] if instant is not None else [{
+    event['missing'] = [] if instant is not None else [{
         'path': 'time', 'reason': 'Unknown native time; zero is a placeholder.',
     }]
     if instant is not None:
-        event['graphtraj']['native']['timeField'] = 'timestamp (rollout record)'
+        event['native']['timeField'] = 'timestamp (rollout record)'
     if type(record.get('ordinal')) is int:
-        event['graphtraj']['native']['ordinal'] = record['ordinal']
+        event['native']['ordinal'] = record['ordinal']
     kind = record.get('type')
     if kind == 'response_item':
         item = record['payload']
@@ -476,7 +476,7 @@ def _append_record(
                 'content': content, 'internal_chat_message_metadata_passthrough':
                     communication.get('internal_chat_message_metadata_passthrough')}
         event = _response({'payload': item}, event, session, locator)
-        event['graphtraj']['native'].update(record=deepcopy(record), modelItem=item)
+        event['native'].update(record=deepcopy(record), modelItem=item)
     elif kind == 'compacted' and _compaction(events, event, store):
         return
     elif kind == 'event_msg' and record.get('payload', {}).get('type') == 'thread_rolled_back':
@@ -488,7 +488,7 @@ def _append_record(
         'realtime_item', 'event_msg',
     }:
         _metadata(event, record)
-    event['graphtraj']['attachments'] = _attachments(store, record)
+    event['attachments'] = _attachments(store, record)
     events.append(event)
 
 
@@ -503,19 +503,22 @@ class CodexJsonlArchive:
     def __init__(
         self,
         archive: SessionArchive,
-        agent: str,
         session: str,
         rollout: Path | None,
         *,
         new_session: bool = False,
-        task_ids: tuple[str, ...] = (),
+        extra_fields: dict | None = None,
     ) -> None:
-        """Capture the source boundary without reading any other native Session."""
+        """Capture the source boundary without reading any other native Session.
+
+        ``extra_fields`` is written verbatim (after redaction) to a new header.
+        """
+        if extra_fields is not None:
+            validate_extra_fields(extra_fields)
+        self.extra_fields = deepcopy(extra_fields)
         self.archive = archive
-        self.agent = agent
         self.session = session
         self.id = archive.native_id('codex', session)
-        self.task_ids = task_ids
         self.parent_archive: Path | None = None
         try:
             self.activation = rollout.stat().st_size if rollout is not None else 0
@@ -554,15 +557,15 @@ class CodexJsonlArchive:
         select the same record, including after an interrupted collection.
         """
         header = deepcopy(header)
-        native = header['graphtraj']['native']
+        native = header['native']
         coordinate = json.dumps([native['locator'], offset], ensure_ascii=False)
         header['id'] = 'codex:' + self.session + ':boundary:' + sha256(coordinate.encode()).hexdigest()
-        header['graphtraj']['previousSession'] = previous['id']
-        header['graphtraj']['boundary'] = {'kind': kind, 'offset': offset}
+        header['previousSession'] = previous['id']
+        header['boundary'] = {'kind': kind, 'offset': offset}
         created = _timestamp(record.get('timestamp'))
         header['createdAt'] = created if created is not None else 0
-        missing = [item for item in header['graphtraj'].get('missing', []) if item['path'] != 'createdAt']
-        header['graphtraj']['missing'] = missing + ([] if created is not None else [{
+        missing = [item for item in header.get('missing', []) if item['path'] != 'createdAt']
+        header['missing'] = missing + ([] if created is not None else [{
             'path': 'createdAt', 'reason': 'Native boundary time is unavailable.',
         }])
         return header
@@ -570,10 +573,10 @@ class CodexJsonlArchive:
     def _exclude_history(self, store: JsonlSessionStore, locator: str, prefix: str) -> None:
         """Retain a policy gap in every affected Session until explicit backfill."""
         gap = retain_native('codex', {}, session_id=self.session, locator=locator, seq=0, time=0)
-        gap['graphtraj']['missing'] = [{
+        gap['missing'] = [{
             'path': 'history', 'reason': 'Historical content excluded by collection policy.',
         }]
-        gap['graphtraj']['collectionBoundary'] = self.activation
+        gap['collectionBoundary'] = self.activation
         store.checkpoint(gap, source=f'{prefix}history-excluded', position=self.activation)
 
     def _seed(self, store: JsonlSessionStore, stream: BinaryIO, metadata: dict) -> tuple[list[dict], int] | None:
@@ -596,7 +599,7 @@ class CodexJsonlArchive:
             while not finished:
                 page = parent.page(after)
                 for original in page['events']:
-                    native = original['graphtraj']['native']
+                    native = original['native']
                     ordinal = native.get('ordinal') if native['sessionId'] == base['thread_id'] else None
                     if ordinal is not None and ordinal >= base['end_ordinal_exclusive']:
                         finished = True
@@ -604,7 +607,7 @@ class CodexJsonlArchive:
                     if ordinal is not None:
                         ordinals.add(ordinal)
                     events.append(deepcopy(original))
-                    for attachment in original.get('graphtraj', {}).get('attachments', []):
+                    for attachment in original.get('attachments', []):
                         if attachment.get('storage') == 'session':
                             store.put_attachment(parent.attachment(attachment['sha256']))
                 if not page['has_more']:
@@ -628,9 +631,8 @@ class CodexJsonlArchive:
                     break
                 _append_record(events, record, self.session, f'byte:{start}', store)
         events.append({'type': 'session/end-seed', 'seq': len(events), 'time': 0,
-                       'data': {'inherited': True}, 'graphtraj': {
-                           'version': 1, 'native': {'runtime': 'codex', 'sessionId': self.session,
-                                                  'locator': 'fork/end-seed'},
+                       'data': {'inherited': True}, 'native': {
+                           'runtime': 'codex', 'sessionId': self.session, 'locator': 'fork/end-seed',
                        }})
         if base is None:
             _append_record(events, rollout_record(first, Path(stream.name), 0), self.session, 'byte:0', store)
@@ -655,21 +657,22 @@ class CodexJsonlArchive:
             if self.header is None:
                 created = _timestamp(metadata.get('timestamp') or metadata_record.get('timestamp'))
                 self.header = {
-                    'version': 4, 'id': self.id, 'createdAt': created if created is not None else 0,
-                    'isSeeded': bool(metadata.get('forked_from_id')), 'graphtraj': {
-                        'version': 1, 'projectId': str(self.archive.root), 'agentId': self.agent,
-                        'taskIds': list(self.task_ids), 'native': {'runtime': 'codex', 'sessionId': self.session,
-                            'locator': str(rollout), 'source': metadata.get('source')},
-                        'missing': [] if created is not None else [{
-                            'path': 'createdAt', 'reason': 'Unknown native time; zero is a placeholder.',
-                        }],
-                    },
+                    'version': SESSION_FORMAT_VERSION, 'id': self.id,
+                    'createdAt': created if created is not None else 0,
+                    'isSeeded': bool(metadata.get('forked_from_id')),
+                    'native': {'runtime': 'codex', 'sessionId': self.session,
+                               'locator': str(rollout), 'source': metadata.get('source')},
+                    'missing': [] if created is not None else [{
+                        'path': 'createdAt', 'reason': 'Unknown native time; zero is a placeholder.',
+                    }],
                 }
+                if self.extra_fields is not None:
+                    self.header['extra_fields'] = deepcopy(self.extra_fields)
                 if metadata.get('forked_from_id'):
                     self.header['parentSession'] = self.archive.native_id('codex', metadata['forked_from_id'])
                 previous = self.archive.native_header('codex', self.session)
                 if previous is not None:
-                    if Path(previous['graphtraj']['native']['locator']).is_absolute():
+                    if Path(previous['native']['locator']).is_absolute():
                         self.header = self._continue_header(self.header, previous, 'rollout', 0, metadata_record)
                     else:
                         # Imported headers without a physical source do not
@@ -684,11 +687,11 @@ class CodexJsonlArchive:
             if self.archive.backfill_history and store.pending():
                 # Backfill starts at this file's first linked record so the
                 # same boundaries are replayed into their existing Sessions.
-                while self.header.get('graphtraj', {}).get('previousSession'):
+                while self.header.get('previousSession'):
                     previous = JsonlSessionStore(archive_path(
-                        self.archive.root, self.header['graphtraj']['previousSession'],
+                        self.archive.root, self.header['previousSession'],
                     ))
-                    if previous.header['graphtraj']['native']['locator'] != str(rollout):
+                    if previous.header['native']['locator'] != str(rollout):
                         break
                     self.header, self.id, store = previous.header, previous.header['id'], previous
 
@@ -696,7 +699,7 @@ class CodexJsonlArchive:
             # Codex can continue the same Session in a new file (for example
             # after "Conversation reverted"); that file keeps its own cursor
             # and file-qualified locators instead of the first file's offsets.
-            first_file = store.header['graphtraj']['native']['locator']
+            first_file = store.header['native']['locator']
             prefix     = '' if first_file == str(rollout) else f'{rollout.name}:'
 
             # The shared writer needs the retained projection, but only unseen
@@ -715,12 +718,12 @@ class CodexJsonlArchive:
             if self.archive.backfill_history and store.pending():
                 events = []
                 position = 0
-            boundary = self.header.get('graphtraj', {}).get('boundary', {})
+            boundary = self.header.get('boundary', {})
             if not events and boundary.get('kind') in {'compaction', 'rollback'}:
                 # Resume a collection interrupted after creating the successor
                 # header but before publishing its first native projection.
                 previous = JsonlSessionStore(archive_path(
-                    self.archive.root, self.header['graphtraj']['previousSession'],
+                    self.archive.root, self.header['previousSession'],
                 ))
                 after = -1
                 while True:
@@ -730,7 +733,7 @@ class CodexJsonlArchive:
                         break
                     after = page['after']
                 for original in events:
-                    for attachment in original.get('graphtraj', {}).get('attachments', []):
+                    for attachment in original.get('attachments', []):
                         if attachment.get('storage') == 'session':
                             store.put_attachment(previous.attachment(attachment['sha256']))
                 for pending in previous.pending():
@@ -741,7 +744,7 @@ class CodexJsonlArchive:
                 if seeded is None:
                     gap = retain_native('codex', metadata_record, session_id=self.session,
                                         locator='byte:0', seq=0, time=0)
-                    gap['graphtraj']['missing'] = [{
+                    gap['missing'] = [{
                         'path': 'inheritedPrefix', 'reason': 'Native inherited prefix is not yet collected.',
                     }]
                     store.checkpoint(gap, source='fork-prefix', position=rollout.stat().st_size)
@@ -781,7 +784,7 @@ class CodexJsonlArchive:
                 rolled_back = (kind == 'event_msg'
                                and record.get('payload', {}).get('type') == 'thread_rolled_back'
                                and record['payload'].get('num_turns', 0) > 0)
-                boundary = self.header.get('graphtraj', {}).get('boundary', {})
+                boundary = self.header.get('boundary', {})
                 if (kind == 'compacted' or rolled_back) and boundary.get('offset') != start:
                     source = f'{prefix}rollout:history' if self.archive.backfill_history else f'{prefix}rollout'
                     if excluded is not None:
@@ -800,7 +803,7 @@ class CodexJsonlArchive:
                     # the prior Session is retained at its boundary. Attachments
                     # and unresolved observations remain portable with it.
                     for original in events:
-                        for attachment in original.get('graphtraj', {}).get('attachments', []):
+                        for attachment in original.get('attachments', []):
                             if attachment.get('storage') == 'session':
                                 successor.put_attachment(store.attachment(attachment['sha256']))
                     for pending in store.pending():

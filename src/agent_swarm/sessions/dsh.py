@@ -4,11 +4,17 @@ import base64
 from copy import deepcopy
 from pathlib import Path
 import json
-from .protocol import validate_header, snapshot_event
+from .protocol import snapshot_event, upgrade_header, validate_extra_fields
 from .archive import SessionArchive
 from .dsh_live import DshLiveFrames
 
 SOURCE = 'dsh/session/event/v4'
+
+
+def _require_free(value: dict, fields) -> None:
+    """Refuse a native DSH value already using an archive field name; never overwrite it."""
+    if any(field in value for field in fields):
+        raise ValueError('Native DSH value already uses an archive field name.')
 
 def collect_jsonl(
     archive: SessionArchive,
@@ -16,6 +22,7 @@ def collect_jsonl(
     records: list[dict],
     *,
     historical: bool = False,
+    extra_fields: dict | None = None,
 ) -> dict:
     """Save a complete native prefix to an explicitly mapped optional archive.
 
@@ -23,15 +30,17 @@ def collect_jsonl(
     native seq order. Cursorless presentation frames are not Session records.
     This acknowledges the normalized copy only; native persistence still owns
     its separate awaited flush. No project configuration or global Session
-    directory is consulted.
+    directory is consulted. ``header`` is the native DSH v4 header; the archive
+    header is its v5 spelling plus provenance and the caller's ``extra_fields``.
     """
-    validate_header(header)
-    archived = deepcopy(header)
+    archived = upgrade_header(header)
+    _require_free(archived, ('native', 'extra_fields'))
     archived['id'] = archive.native_id('dsh', header['id'])
     if 'parentSession' in archived:
         archived['parentSession'] = archive.native_id('dsh', archived['parentSession'])
-    # The optional legacy GraphTraj header requires Project/Task metadata.
-    # A standalone native Session has none; retain its provenance directly.
+    if extra_fields is not None:
+        validate_extra_fields(extra_fields)
+        archived['extra_fields'] = deepcopy(extra_fields)
     archived['native'] = {'runtime': 'dsh', 'sessionId': header['id'],
                           'locator': 'header', 'record': deepcopy(header)}
     archived = archive.native_header('dsh', header['id']) or archived
@@ -54,7 +63,7 @@ def collect_jsonl(
         event = snapshot_event(native)
         if event['seq'] != seq:
             raise ValueError('DSH JSONL collection requires the complete native prefix in seq order.')
-        ext = {'version': 1, 'native': {
+        ext = {'native': {
             'runtime': 'dsh', 'sessionId': header['id'],
             'locator': f'event/{seq}', 'record': deepcopy(native),
         }}
@@ -70,12 +79,13 @@ def collect_jsonl(
                     raise ValueError('DSH attachment byte count does not match its reference.')
                 copied[path] = store.put_attachment(content)
             else:
-                previous = retained.get(seq, {}).get('graphtraj', {}).get('attachments', {}).get(path)
+                previous = retained.get(seq, {}).get('attachments', {}).get(path)
                 copied[path] = previous or {'missing': {'path': path, 'reason': supplied.get(
                     'missing', 'Native attachment bytes were not supplied.')}}
         if copied:
             ext['attachments'] = copied
-        event['graphtraj'] = ext
+        _require_free(event, ext)
+        event.update(ext)
         events.append(event)
     if events:
         store.publish(events, source=SOURCE, position=events[-1]['seq'])
@@ -91,8 +101,14 @@ class DshArchive:
     later resolves these exact native identities with the complete prefix.
     """
 
-    def __init__(self, archive: SessionArchive, *, resumed: bool) -> None:
-        """Bind the optional policy and whether an old Session is being resumed."""
+    def __init__(self, archive: SessionArchive, *, resumed: bool, extra_fields: dict | None = None) -> None:
+        """Bind the optional policy and whether an old Session is being resumed.
+
+        ``extra_fields`` is written verbatim (after redaction) to a new header.
+        """
+        if extra_fields is not None:
+            validate_extra_fields(extra_fields)
+        self.extra_fields = deepcopy(extra_fields)
         self.archive = archive
         self.resumed = resumed
         self.header: dict | None = None
@@ -106,14 +122,14 @@ class DshArchive:
         self.header = snapshot['header']
         self.boundary = snapshot['cursor']
         self.observed_cursor = self.boundary
-        collect_jsonl(self.archive, self.header, [])
+        collect_jsonl(self.archive, self.header, [], extra_fields=self.extra_fields)
         store = self.archive.store(self.archive.native_id('dsh', self.header['id']))
         if store is not None:
             after = -1
             while True:
                 page = store.page(after=after)
                 for row in page['events']:
-                    native = row['graphtraj']['native']['record']
+                    native = row['native']['record']
                     self.records[native['seq']] = {'event': native}
                 if not page['has_more']:
                     break
@@ -153,7 +169,7 @@ class DshArchive:
         if store is None:
             return
         for pending in store.pending():
-            native = pending['event'].get('graphtraj', {}).get('native', {})
+            native = pending['event'].get('native', {})
             outcome = native.get('record', {}).get('outcome', {})
             if (native.get('runtime') != 'dsh' or native.get('sessionId') != self.header['id']
                     or not native.get('locator', '').startswith('live/')
@@ -185,7 +201,8 @@ class DshArchive:
         # Native seq defines the log order. Notification timestamps never do.
         positions = sorted(self.records)
         if positions == list(range(positions[-1] + 1)):
-            collect_jsonl(self.archive, self.header, [self.records[n] for n in positions])
+            collect_jsonl(self.archive, self.header, [self.records[n] for n in positions],
+                          extra_fields=self.extra_fields)
             self._resolve_pending()
             return
         session = self.archive.native_id('dsh', self.header['id'])
@@ -193,11 +210,13 @@ class DshArchive:
             if seq <= self.boundary:
                 continue
             event = snapshot_event(self.records[seq]['event'])
-            event['graphtraj'] = {
-                'version': 1, 'native': {'runtime': 'dsh', 'sessionId': self.header['id'],
-                    'locator': f'event/{seq}', 'record': deepcopy(event)},
+            fields = {
+                'native': {'runtime': 'dsh', 'sessionId': self.header['id'],
+                           'locator': f'event/{seq}', 'record': deepcopy(event)},
                 'missing': [{'path': 'history', 'reason': 'Earlier native events are unavailable in this collection prefix.'}],
             }
+            _require_free(event, fields)
+            event.update(fields)
             self.archive.checkpoint(session, event, source=f'{SOURCE}/pending/{seq}', position=seq)
 
     def finish(self, trace: Path) -> None:

@@ -16,11 +16,17 @@ import json
 import os
 from pathlib import Path
 import tempfile
-from typing import Iterator
+from typing import Callable, Iterator
 
+from agent_swarm.codex.diagnostics import redact
 from agent_swarm.config import read_config
 
-from .protocol import SURFACE_TYPES, snapshot_event, validate_header, validate_session
+from .protocol import (
+    LEGACY_FORMAT_VERSION, SURFACE_TYPES, snapshot_event, upgrade_event, upgrade_header,
+    validate_extra_fields, validate_header, validate_session,
+)
+
+EventFields = Callable[[dict], 'dict | None']
 
 
 def archive_path(root: Path, session_id: str) -> Path:
@@ -37,7 +43,7 @@ def _key(event: dict) -> tuple[str, str, str]:
     locator, stable across live/final/backfill mapping. Protocol-only markers
     use a locator for their source boundary and retain their non-native type.
     """
-    native = event.get('graphtraj', {}).get('native', {})
+    native = event.get('native', {})
     values = tuple(native.get(k) for k in ('runtime', 'sessionId', 'locator'))
     if not all(isinstance(value, str) and value for value in values):
         raise ValueError('Every archived event needs stable native provenance.')
@@ -80,14 +86,14 @@ def _relocate(event: dict, indices: dict[int, int], session_id: str) -> dict:
     if 'sourceEventSeqs' in event:
         event['sourceEventSeqs'] = [indices[n] for n in event['sourceEventSeqs']]
     data = event['data']
-    if event['type'] == 'graphtraj/history':
+    if event['type'] == 'history':
         data['eventSeqs'] = [indices[n] for n in data['eventSeqs']]
     if event['type'] == 'developer/message' and 'headerSeq' in data:
         data['headerSeq'] = indices[data['headerSeq']]
     if event['type'] == 'compaction/summary':
         data['shadowedSeqs'] = [indices[n] for n in data['shadowedSeqs']]
         data['shadowedRange'] = {k: indices[v] for k, v in data['shadowedRange'].items()}
-    if event['type'] in {'graphtraj/score', 'graphtraj/logprobs', 'graphtraj/derived'}:
+    if event['type'] in {'score', 'logprobs', 'derived'}:
         data['target']['eventSeq'] = indices[data['target']['eventSeq']]
         for ref in data['source'].get('context', []):
             if ref['sessionId'] == session_id:
@@ -116,6 +122,48 @@ def _message_gap(path: str) -> bool:
     return not parts or parts[0] not in metadata
 
 
+def redact_extra_fields(value: dict) -> dict:
+    """Validate an ``extra_fields`` container and apply credential redaction to it.
+
+    Native content stays lossless; caller-attached namespaces are redacted
+    like diagnostics: credential-named keys and recognizable secrets.
+    """
+    validate_extra_fields(value)
+    return redact(deepcopy(value))
+
+
+def _redacted(value: dict) -> dict:
+    """Return a header or event whose ``extra_fields`` are redacted, if present."""
+    if 'extra_fields' not in value:
+        return value
+    return {**value, 'extra_fields': redact_extra_fields(value['extra_fields'])}
+
+
+def _upgrade(metadata: dict, events: list[dict]) -> tuple[dict, list[dict]]:
+    """Read a version 4 snapshot in v5 form; the next commit rewrites the whole file.
+
+    Drafts and resolved observations carry event templates and are upgraded
+    with the log. Retained legacy exports remain exact old evidence.
+    """
+    if metadata.get('header', {}).get('version') != LEGACY_FORMAT_VERSION:
+        return metadata, events
+    metadata = deepcopy(metadata)
+    metadata['header'] = upgrade_header(metadata['header'])
+    for draft in [*metadata.get('pending', []), *metadata.get('observations', [])]:
+        draft['event'] = upgrade_event(draft['event'])
+    return metadata, [upgrade_event(event) for event in events]
+
+
+def read_session(path: Path) -> dict:
+    """Read one archive as ``{'header', 'events'}`` in v5 form, for v4 or v5 files.
+
+    Events are the committed log in native order. Unfinished drafts and
+    collection observations are not part of it; use ``JsonlSessionStore``.
+    """
+    store = JsonlSessionStore(path)
+    return {'header': store.header, 'events': deepcopy(store._events)}
+
+
 class JsonlSessionStore:
     """Read and update one portable JSONL Session with adjacent attachments.
 
@@ -126,15 +174,27 @@ class JsonlSessionStore:
     File access authorization belongs to the owning host, not header identities.
     """
 
-    def __init__(self, path: Path) -> None:
-        """Open an existing archive without creating directories or files."""
+    def __init__(self, path: Path, *, event_fields: EventFields | None = None) -> None:
+        """Open an existing archive without creating directories or files.
+
+        ``event_fields`` is a programmatic extension: for each event about to
+        be written it receives a detached copy and returns an ``extra_fields``
+        container (merged by namespace) or ``None``. Published events keep the
+        fields they were first written with.
+        """
         self.path = Path(path)
+        self.event_fields = event_fields
         self._load()
 
     @classmethod
-    def create(cls, path: Path, header: dict) -> JsonlSessionStore:
-        """Create or reopen the same Session; never overwrite different metadata."""
+    def create(cls, path: Path, header: dict, *, event_fields: EventFields | None = None) -> JsonlSessionStore:
+        """Create or reopen the same Session; never overwrite different metadata.
+
+        A version 4 archive reopens in v5 form; its first change rewrites the
+        whole file as v5, so one file never mixes versions.
+        """
         validate_header(header)
+        header = _redacted(header)
         path = Path(path)
         path.parent.mkdir(parents=True, exist_ok=True)
         with path.with_suffix('.lock').open('a+b') as lock:
@@ -143,7 +203,7 @@ class JsonlSessionStore:
                 metadata = {'archiveVersion': 1, 'header': header, 'revision': 0,
                             'sources': {}, 'pending': [], 'observations': []}
                 _replace(path, (_encode(metadata) + '\n').encode())
-            store = cls(path)
+            store = cls(path, event_fields=event_fields)
             if store.header != header:
                 raise ValueError('Session header already exists with different metadata.')
         return store
@@ -151,8 +211,9 @@ class JsonlSessionStore:
     def _load(self) -> None:
         """Read one atomic snapshot and validate its protocol and identities."""
         with self.path.open(encoding='utf-8') as stream:
-            self._metadata = json.loads(next(stream))
-            self._events = [json.loads(line) for line in stream]
+            metadata = json.loads(next(stream))
+            events = [json.loads(line) for line in stream]
+        self._metadata, self._events = _upgrade(metadata, events)
         if self._metadata.get('archiveVersion') != 1:
             raise ValueError('Unsupported Session archive version.')
         validate_header(self._metadata['header'])
@@ -223,7 +284,7 @@ class JsonlSessionStore:
         Source positions identify replay progress, not native message order.
         Finalization may reuse the matching draft's last committed position.
         Event time is the mapper's declared native epoch-ms time; when absent,
-        use the protocol's integer placeholder with graphtraj.missing explaining
+        use the protocol's integer placeholder with the event's missing explaining
         it. Keep creation/completion/send/write/receipt times under their actual
         source names in native evidence, never substitute receipt for creation.
 
@@ -232,12 +293,18 @@ class JsonlSessionStore:
         exact final event and the observed partial content separately. Final
         content and time are never inferred from receipt time.
         """
-        events = deepcopy(events)
+        events = [_redacted(event) for event in deepcopy(events)]
         validate_session(self.header, events)
         keys = [_key(event) for event in events]
         if len(keys) != len(set(keys)):
             raise ValueError('Duplicate native event identity.')
         with self._update():
+            stored = {_key(event): event for event in self._events}
+            for key, event in zip(keys, events):
+                if key not in stored:
+                    self._extend(event)
+                elif 'extra_fields' in stored[key] and 'extra_fields' not in event:
+                    event['extra_fields'] = deepcopy(stored[key]['extra_fields'])
             fresh = self._fresh(source, position)
             completing = position == self.position(source) and any(
                 draft['source'] == source and _key(draft['event']) in keys
@@ -293,7 +360,8 @@ class JsonlSessionStore:
         and position, then replay input after that durable source position.
         Sources without replay must checkpoint before acknowledging input.
         """
-        event = snapshot_event(event)
+        event = _redacted(snapshot_event(event))
+        self._extend(event)
         key = _key(event)
         with self._update():
             if expected_position is not None and self.position(source) != expected_position:
@@ -316,6 +384,15 @@ class JsonlSessionStore:
                 pending.append(replacement)
             self._metadata['sources'][source] = position
         return True
+
+    def _extend(self, event: dict) -> None:
+        """Attach the host's event fields to an event about to be written."""
+        if self.event_fields is None:
+            return
+        fields = self.event_fields(deepcopy(event))
+        if fields is not None:
+            event['extra_fields'] = {**event.get('extra_fields', {}), **redact_extra_fields(fields)}
+            snapshot_event(event)
 
     def pending(self) -> list[dict]:
         """Return unfinished observations; list order is not native message order."""
@@ -407,11 +484,11 @@ class JsonlSessionStore:
         validate_session(self.header, self._events, reconstruct=True)
         for value in [self.header, *self._events]:
             if any(_message_gap(item['path'])
-                   for item in value.get('graphtraj', {}).get('missing', [])):
+                   for item in value.get('missing', [])):
                 raise ValueError('Missing native content, history or correspondence; messages are incomplete.')
         surface = []
         for event in self._events:
-            if event['type'] == 'graphtraj/history':
+            if event['type'] == 'history':
                 surface = [self._events[ref] for ref in event['data']['eventSeqs']]
                 continue
             if event['type'] not in SURFACE_TYPES:
@@ -465,10 +542,18 @@ class SessionArchive:
         *,
         save_normalized_sessions: bool = False,
         backfill_history: bool = False,
+        event_fields: EventFields | None = None,
     ) -> None:
-        """Set independent choices without opening or creating an archive."""
+        """Set independent choices without opening or creating an archive.
+
+        ``event_fields`` is the programmatic event extension described on
+        ``JsonlSessionStore``; it is never reachable from model arguments.
+        """
         if type(save_normalized_sessions) is not bool or type(backfill_history) is not bool:
             raise ValueError('Archive choices must be booleans.')
+        if event_fields is not None and not callable(event_fields):
+            raise ValueError('event_fields must be callable.')
+        self.event_fields = event_fields
         self.root = Path(root)
         self.save_normalized_sessions = save_normalized_sessions
         self.backfill_history = backfill_history
@@ -500,22 +585,21 @@ class SessionArchive:
                     metadata = json.loads(next(stream))
                 if metadata.get('archiveVersion') != 1:
                     raise ValueError('Unsupported Session archive version.')
-                header = metadata['header']
-                validate_header(header)
-                native = header.get('graphtraj', {}).get('native', header.get('native', {}))
+                header = upgrade_header(metadata['header'])
+                native = header.get('native', {})
                 key = (native.get('runtime'), native.get('sessionId'), native.get('agentId'))
                 headers.setdefault(key, {})[header['id']] = header
             self._native_headers, self._native_revision = headers, revision
         matches = dict(self._native_headers.get((runtime, native_id, agent_id), {}))
         for header in self._mapped.values():
-            native = header.get('graphtraj', {}).get('native', header.get('native', {}))
+            native = header.get('native', {})
             if (native.get('runtime') == runtime and native.get('sessionId') == native_id
                     and native.get('agentId') == agent_id):
                 matches[header['id']] = header
         if locator is not None:
             matches = {key: header for key, header in matches.items()
-                       if header.get('graphtraj', {}).get('native', {}).get('locator') == locator}
-        predecessors = {header.get('graphtraj', {}).get('previousSession') for header in matches.values()}
+                       if header.get('native', {}).get('locator') == locator}
+        predecessors = {header.get('previousSession') for header in matches.values()}
         latest = {key: header for key, header in matches.items() if key not in predecessors}
         if matches and len(latest) != 1:
             raise ValueError('Native Session maps to multiple canonical archive IDs.')
@@ -525,7 +609,7 @@ class SessionArchive:
             cursor = current
             while cursor['id'] not in visited:
                 visited.add(cursor['id'])
-                previous = cursor.get('graphtraj', {}).get('previousSession')
+                previous = cursor.get('previousSession')
                 if previous not in matches:
                     break
                 cursor = matches[previous]
@@ -542,10 +626,11 @@ class SessionArchive:
     def map_session(self, header: dict) -> None:
         """Register an already verified mapping supplied by the owning host.
 
-        The optional GraphTraj header extension is not required for plain DSH
-        sessions. This is an explicit source allowlist, not identity authority.
+        Header ``extra_fields`` are redacted before they are retained. This is
+        an explicit source allowlist, not identity authority.
         """
         validate_header(header)
+        header = _redacted(header)
         existing = self._mapped.get(header['id'])
         if existing is not None and existing != header:
             raise ValueError('Session mapping cannot change its retained header.')
@@ -563,7 +648,8 @@ class SessionArchive:
             raise ValueError('Only explicitly mapped Sessions may be collected.')
         if not self.save_normalized_sessions or (historical and not self.backfill_history):
             return None
-        return JsonlSessionStore.create(archive_path(self.root, session_id), self._mapped[session_id])
+        return JsonlSessionStore.create(archive_path(self.root, session_id), self._mapped[session_id],
+                                        event_fields=self.event_fields)
 
     def collect(
         self,
@@ -641,7 +727,7 @@ class ArchiveStream:
         self.store._fresh(self.source, position)
         if position <= self.position:
             return False
-        if record.get('type') == 'graphtraj/text-run':
+        if record.get('type') == 'text-run':
             message = self.event['data'].get('message')
             if message and record.get('messageId') != message['id']:
                 raise ValueError('A stream fragment belongs to another message.')

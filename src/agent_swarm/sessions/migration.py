@@ -12,6 +12,7 @@ import sqlite3
 import hashlib
 
 from .archive import JsonlSessionStore, SessionArchive, archive_path
+from .protocol import upgrade_header
 
 
 def verify_sqlite(source: Path, root: Path) -> dict:
@@ -66,17 +67,18 @@ def import_sqlite(source: Path, root: Path) -> dict:
                   for row in connection.execute('SELECT source, value FROM draft')]
         checkpoints = dict(connection.execute('SELECT source, position FROM checkpoints'))
         destination = archive_path(root, header['id'])
+        current = upgrade_header(header)
         if destination.exists():
             store = JsonlSessionStore(destination)
             previous = store.header
-            old_native = header.get('graphtraj', {}).get('native', header.get('native', {}))
-            new_native = previous.get('graphtraj', {}).get('native', previous.get('native', {}))
+            old_native = current.get('native', {})
+            new_native = previous.get('native', {})
             if any(old_native.get(key) != new_native.get(key) for key in ('runtime', 'sessionId', 'agentId')):
                 raise ValueError('Existing JSONL archive belongs to a different native Session.')
             # The current JSONL header remains authoritative. The exact old
             # header is retained below with its old observations, not discarded.
         else:
-            store = JsonlSessionStore.create(destination, header)
+            store = JsonlSessionStore.create(destination, current)
         attachments = []
         for digest, content in connection.execute('SELECT digest, content FROM attachments ORDER BY digest'):
             ref = store.put_attachment(content)
@@ -85,7 +87,7 @@ def import_sqlite(source: Path, root: Path) -> dict:
             attachments.append(ref)
         store.retain_legacy({'header': header, 'events': events, 'pending': drafts,
                              'checkpoints': checkpoints, 'attachments': attachments})
-        native = header.get('graphtraj', {}).get('native', header.get('native', {}))
+        native = current.get('native', {})
         return {'id': header['id'], 'native': native, 'archive': str(store.path),
                 'events': len(events), 'pending': len(drafts), 'attachments': len(attachments),
                 'missing': 'Legacy record order is not native message evidence; supply the associated native history.'}
@@ -99,14 +101,15 @@ def import_native(
     session: str,
     source: Path,
     *,
-    agent: str,
     project: str,
     child_id: str | None = None,
     archive: SessionArchive | None = None,
+    extra_fields: dict | None = None,
 ) -> dict:
     """Collect one explicitly associated native file through its Runtime mapper.
 
-    Original provenance and header IDs are preserved. Callers importing a fork
+    ``extra_fields`` is attached to a new archive header. Original provenance
+    and header IDs are preserved. Callers importing a fork
     supply its associated parent first. Unknown/missing native content remains
     explicit; this entry neither invents order nor searches for another source.
     """
@@ -114,12 +117,14 @@ def import_native(
     if runtime == 'codex':
         from .codex import CodexJsonlArchive
 
-        collector = CodexJsonlArchive(archive, agent, session, new_session=False, rollout=source)
+        collector = CodexJsonlArchive(archive, session, new_session=False, rollout=source,
+                                      extra_fields=extra_fields)
         collector.collect(source)
     elif runtime == 'claude':
         from .claude import ClaudeJsonlCollector
 
-        collector = ClaudeJsonlCollector(archive, session, agent, Path(project), 'migration', resumed=True, child_id=child_id)
+        collector = ClaudeJsonlCollector(archive, session, Path(project), 'migration', resumed=True,
+                                         child_id=child_id, extra_fields=extra_fields)
         collector.bind(source)
         collector.collect()
     elif runtime == 'pi':
@@ -135,8 +140,8 @@ def import_native(
         if header.get('id') != session:
             raise ValueError('Pi native history does not match the associated Session.')
         leaf = entries[-1].get('id') if entries else None
-        collector = PiArchive(archive, header, agent=agent, project=project,
-                              entries=entries, leaf_id=leaf)
+        collector = PiArchive(archive, header, project=project, entries=entries, leaf_id=leaf,
+                              extra_fields=extra_fields)
         collector.sync(entries, leaf, settled=True)
     elif runtime == 'dsh':
         from .dsh import collect_jsonl
@@ -146,7 +151,7 @@ def import_native(
             records = [{'event': json.loads(line)} for line in stream]
         if header.get('id') != session:
             raise ValueError('DSH native history does not match the associated Session.')
-        collect_jsonl(archive, header, records, historical=True)
+        collect_jsonl(archive, header, records, historical=True, extra_fields=extra_fields)
     else:
         raise ValueError('Unsupported native Runtime: ' + runtime)
     identity = archive.native_id(runtime, session, agent_id=child_id)

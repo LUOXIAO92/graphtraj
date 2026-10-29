@@ -17,6 +17,9 @@ import os
 import sys
 import hashlib
 import json
+import queue
+import threading
+import time
 import uuid
 from contextlib import contextmanager
 from pathlib import Path
@@ -41,6 +44,11 @@ _SERVICE = {'executable': sys.executable, 'module': __file__,
             'configuration_sha256': hashlib.sha256(Path(project_configuration.__file__).read_bytes()).hexdigest()}
 
 INVALID_PARAMS   = -32602
+
+# Seconds a pending change waits for the user's native review dialog. Only this
+# host sets it; no tool argument can extend it.
+NATIVE_REVIEW_TIMEOUT = 300
+_EXPIRED_REVIEWS: set[str] = set()
 
 
 def _tool_documents() -> list[dict[str, Any]]:
@@ -358,8 +366,45 @@ def review_message(proposal: dict, operation: str, summary: dict) -> tuple[str, 
     return heading, '\n'.join(lines)
 
 
+class ReviewInput:
+    """Read client lines; a timed-out review leaves its unfinished read for the next reader.
+
+    Without a timeout a line is read directly, as the serve loop always did.
+    A bounded read runs one ``readline`` in a thread, so no line is read ahead
+    and none is lost when the wait ends first.
+    """
+
+    def __init__(self, stream: TextIO) -> None:
+        self.stream  = stream
+        self.pending: queue.Queue | None = None
+
+    def readline(self, timeout: float | None = None) -> str:
+        """Return the next line; raise ``queue.Empty`` if ``timeout`` passes first."""
+        if self.pending is None:
+            if timeout is None:
+                return self.stream.readline()
+            self.pending = pending = queue.Queue(maxsize=1)
+
+            def read() -> None:
+                try:
+                    pending.put(self.stream.readline())
+                except BaseException as error:
+                    pending.put(error)
+
+            threading.Thread(target=read, daemon=True).start()
+        line = self.pending.get(timeout=timeout)
+        self.pending = None
+        if isinstance(line, BaseException):
+            raise line
+        return line
+
+    def __iter__(self) -> Iterator[str]:
+        while line := self.readline():
+            yield line
+
+
 def elicit_review(
-    input_stream: TextIO, output_stream: TextIO, proposal: dict, call_id: Any, feature: str,
+    input_stream: TextIO | ReviewInput, output_stream: TextIO, proposal: dict, call_id: Any, feature: str,
     accepted: Callable[[dict], bool],
 ) -> dict:
     """Keep the change pending until the client's strict native review response arrives.
@@ -367,6 +412,8 @@ def elicit_review(
     The client's own elicitation handling decides; ``accepted`` checks the
     accept result for what that client's native decision requires.
     Decline and cancel refuse; any other answer or a disconnect raises.
+    After ``NATIVE_REVIEW_TIMEOUT`` seconds the dialog is cancelled and nothing
+    is applied; a serve loop reading the same ``ReviewInput`` ignores its late answer.
     The dialog names the reviewed operation: a retirement or replacement
     proposal names itself, otherwise ``feature`` does.
     """
@@ -404,13 +451,31 @@ def elicit_review(
                }}
     output_stream.write(json.dumps(request, ensure_ascii=False) + '\n')
     output_stream.flush()
-    while line := input_stream.readline():
+    reader   = input_stream if isinstance(input_stream, ReviewInput) else ReviewInput(input_stream)
+    timeout  = NATIVE_REVIEW_TIMEOUT
+    deadline = time.monotonic() + timeout
+    while True:
+        try:
+            line = reader.readline(timeout=max(0.0, deadline - time.monotonic()))
+        except queue.Empty:
+            _EXPIRED_REVIEWS.add(request_id)
+            output_stream.write(json.dumps({'jsonrpc': '2.0', 'method': 'notifications/cancelled', 'params': {
+                'requestId': request_id, 'reason': 'Native review timed out.'}}) + '\n')
+            output_stream.flush()
+            raise RunnerError('native-approval-timeout', (
+                f"The change waited {timeout:g} s for the user's native review dialog without a decision; "
+                'nothing was applied. Repeating the same call shows the dialog again.')) from None
+        if not line:
+            break
         response = json.loads(line)
         if not isinstance(response, dict):
             raise RunnerError('native-approval-unavailable', 'Invalid native recovery response.')
         if response.get('method') == 'notifications/cancelled':
             if response.get('params', {}).get('requestId') in (call_id, request_id):
                 raise RunnerError('recovery-denied', 'Native recovery review was cancelled.')
+            continue
+        if 'method' not in response and response.get('id') in _EXPIRED_REVIEWS:
+            # A late answer to an earlier, timed-out dialog decides nothing.
             continue
         if 'method' in response:
             # Do not run another mutation while the reviewed snapshot waits.
@@ -442,6 +507,7 @@ def serve(input_stream: TextIO, output_stream: TextIO) -> None:
     from graphtraj.runtimes.runtime_adapter import recovery_review
 
     capabilities = {}
+    input_stream = ReviewInput(input_stream)
 
     def review(proposal: dict, call_id: Any, feature: str) -> dict:
         """Accept only Codex's actual auto_review decision."""

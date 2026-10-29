@@ -10,6 +10,7 @@ import time
 from pathlib import Path
 from uuid import uuid4
 
+import pytest
 import yaml
 
 from agent_swarm import AgentsResult
@@ -18,19 +19,25 @@ from test_task_graph import _task
 from test_task_integration import accepted_document  # noqa: F401  (fixture)
 
 
+@pytest.mark.parametrize('trace_written', [True, False])
 def test_host_serves_main_while_the_conflict_resolver_waits_for_its_reply(
     installed_commands: InstalledCommands,
     accepted_document: tuple,
     monkeypatch,
     tmp_path: Path,
+    trace_written: bool,
 ) -> None:
     """The reply, a status read and another Task call complete while the resolver waits.
 
     The resolver blocks after starting until its permission request is
     answered; Main's ``reply`` is the only call that answers it. Before 402
     ``task_integrate`` waited for the resolver's end, so the host never read
-    the reply that ends that wait.
+    the reply that ends that wait. Without ``trace_written`` the resolver's
+    trace is still a link to an unwritten transcript when the call returns,
+    as a just-started Claude resolver leaves it.
     """
+    from graphtraj.graph.delivery_worldline import read_worldline
+    from graphtraj.teams import task_integration
     from graphtraj.execution.runner_connection import parent_connection
     from graphtraj.execution.runner_status import runtime_caller
     from graphtraj.interfaces.gateway import handle_request as handle_task
@@ -55,6 +62,19 @@ def test_host_serves_main_while_the_conflict_resolver_waits_for_its_reply(
         monkeypatch.setenv(name, value)
     monkeypatch.chdir(root)
     runner = root / '.graphtraj/runner'
+    if not trace_written:
+        launch = task_integration._resolve
+
+        def launched_before_its_trace(*arguments):
+            """Leave the launched resolver's trace as Claude links it before its transcript exists."""
+            resolution = launch(*arguments)
+            trace = Path(yaml.safe_load((runner / 'sessions' / resolution['alias'] / 'mapping.yml')
+                                        .read_text())['trace_file'])
+            trace.unlink()
+            trace.symlink_to(tmp_path / 'transcript-not-yet-written.jsonl')
+            return resolution
+
+        monkeypatch.setattr(task_integration, '_resolve', launched_before_its_trace)
     connection = {'runtime': 'claude', 'session': str(uuid4()), 'runner': str(runner)}
 
     def native_call(request: dict, tool: str = 'agents') -> AgentsResult:
@@ -107,7 +127,10 @@ def test_host_serves_main_while_the_conflict_resolver_waits_for_its_reply(
     dispatched = received[1]['structuredContent']
     assert not received[1]['isError'], dispatched
     assert dispatched['status'] == 'resolving-integration'
-    assert dispatched['resolution']['launch_status'] == 'launched'
+    assert dispatched['resolution']['launch_status'] == 'launched' and dispatched['resolution']['alias']
+    events = [event for event in read_worldline(root / '.graphtraj/state', root) if event.get('task_id') == '83']
+    assert events[-1]['event'] == 'task-integration-conflict-dispatched'
+    assert events[-1]['session_ref'] == dispatched['resolution']['alias']
     assert received[2]['structuredContent'] == {'replied': True}
     assert not received[3]['isError'] and not received[4]['isError'], (received[3], received[4])
 
@@ -127,5 +150,8 @@ def test_host_serves_main_while_the_conflict_resolver_waits_for_its_reply(
     assert not decided.failed, decided.document
     integrated = handle_task({'action': 'execute', 'feature': 'task_integrate', 'arguments': integrate}, cwd=root)
     assert integrated.document['status'] == 'integrated', integrated.document
+    final = [event for event in read_worldline(root / '.graphtraj/state', root) if event.get('task_id') == '83'
+             and event['event'].startswith('task-integration')][-1]
+    assert final['event'] == 'task-integration-conflict-resolved'
     assert run_process(['git', 'merge-base', '--is-ancestor', candidate, 'HEAD'], cwd=dev).returncode == 0
     assert yaml.safe_load((root / '.graphtraj/state/tasks/83-integration/task.yml').read_text())['status'] == 'integrated'

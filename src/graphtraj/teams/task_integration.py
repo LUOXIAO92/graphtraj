@@ -230,7 +230,10 @@ def _integrate(
                        and resolution.get("launch_status") not in {"failed", "stopped"})
     if established and resolution.get("launch_status") != "registered":
         mapping, _ = read_alias_mapping(runner, resolution["alias"])
-        evidence_refs.append(Path(mapping["trace_file"]).relative_to(root).as_posix())
+        # A just-launched resolver may not have written its trace yet (Claude
+        # links it to a transcript created later); its session_ref still names it.
+        if Path(mapping["trace_file"]).is_file():
+            evidence_refs.append(Path(mapping["trace_file"]).relative_to(root).as_posix())
     if resolving and diagnosis is None:
         evidence_refs.extend(decision['evidence_refs'])
     if diagnosis is not None or recovering:

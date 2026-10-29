@@ -23,12 +23,12 @@ def selected(configuration: Mapping[str, Any], selection: Mapping[str, Any]) -> 
 
     A selected connection replaces the host's native home, endpoint and
     credential reference together, so a key never reaches another endpoint.
+    Claude has no native provider setting; a connection's ``provider`` only
+    names its models.
     """
     config = dict(configuration)
     connection = selection.get('settings')
     if connection is not None:
-        if connection.get('provider') not in (None, 'anthropic'):
-            raise AgentsError('invalid-config', 'A Claude connection has no provider other than anthropic.')
         for key in ('runtime_home', 'base_url', 'api_key_env'):
             config.pop(key, None)
         config.update({key: connection[name] for key, name in (

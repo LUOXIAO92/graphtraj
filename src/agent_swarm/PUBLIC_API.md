@@ -245,10 +245,14 @@ replaced by another one.
    Runtime and connection.
 5. `model` (explicit or from the preset) must be the `id` of exactly one
    candidate from `discover_models`: the connection's declared `models`,
-   else the native catalog (filtered by the connection's `provider`). Not a
-   candidate, discovery `status: unknown`, or several providers offering the
-   id fail with `invalid-model`. Without `model`, the host's or Runtime's
-   default model applies and nothing is checked.
+   else the native catalog (Pi and DSH catalogs filtered by the connection's
+   `provider`; Claude and Codex list their own configured provider's
+   models). Not a candidate, discovery `status: unknown`, or several
+   providers offering the id fail with `invalid-model`. Without `model`, the
+   host's or Runtime's default model applies and nothing is checked.
+   Discovery runs synchronously inside `create`: a native catalog query may
+   take up to about 30 seconds before `create` returns; declared `models`
+   avoid it.
 6. `reasoning_effort` must be in the chosen model's `supported_efforts` when
    that is a list, else `invalid-reasoning-effort`. When it is unknown
    (`null`, or no `model`), the driver checks it against the Runtime's own
@@ -271,9 +275,10 @@ host's native home, endpoint and key variable together, so a host key never
 reaches another endpoint. A driver whose `prepare` does not accept
 `selection` makes such a create fail with `invalid-config`. The agents
 drivers apply `model` and `reasoning_effort` for all four Runtimes; current
-limits, each failing with `invalid-config`: Claude takes no provider other
-than `anthropic`; the DSH driver runs the `deepseek-official` provider only;
-the Pi driver keeps the host's resolved provider and takes no `base_url`.
+limits, each failing with `invalid-config`: the DSH driver runs the
+`deepseek-official` provider only; the Pi driver keeps the host's resolved
+provider and takes no `base_url`. Claude has no native provider setting, so
+a Claude connection's `provider` only names its models.
 
 **Several Runtimes in one host.** A host registers one driver per Runtime in
 `AgentControl(root, {runtime: driver, ...})`; `create` routes by `runtime`.

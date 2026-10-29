@@ -510,3 +510,18 @@ def test_a_non_boolean_choice_beside_connections_is_refused(tmp_path: Path) -> N
     configured(tmp_path, 'backfill_history: yes\nconnections:\n  a:\n    runtime: pi\n')
     with pytest.raises(ValueError, match=r'config.yml:1: backfill_history: expected true or false'):
         explicit_choices(tmp_path)
+
+
+def test_a_third_party_named_claude_connection_keeps_its_models(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, catalog,
+) -> None:
+    """Claude has no native provider setting: ``provider`` names models, it neither filters nor refuses."""
+    root = configured(tmp_path / 'root', 'connections:\n  proxy:\n    runtime: claude\n    provider: openrouter\n'
+                                         '    models: [claude-opus-5-5]\n')
+    recording = RecordingDriver()
+    _, failed = create(AgentControl(root, {'claude': recording}), runtime='claude', model='claude-opus-5-5')
+    assert not failed and recording.prepared[0]['selection']['provider'] == 'openrouter'
+    claude = executable(tmp_path / 'bin', 'claude', '2.1.300 (Claude Code)')
+    settings = ClaudeDriver(tmp_path, {'executable': str(claude)}).prepare(
+        'claude', CALLER, selection=recording.prepared[0]['selection'])
+    assert settings['model'] == 'claude-opus-5-5'

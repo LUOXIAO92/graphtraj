@@ -21,6 +21,7 @@ from agent_swarm.config import (
     read_config,
     write_config,
 )
+from agent_swarm.models import discover_models
 from agent_swarm.control import (
     ACTIVE,
     STANDBY,
@@ -53,4 +54,5 @@ __all__ = [
     "SessionArchive", "bind", "tool_descriptor", "unavailable", "validate_request",
     "ACTIVE", "STANDBY", "AgentControl", "ExecutionEvents", "Run", "RuntimeDriver",
     "CONFIG_DEFAULTS", "default_config", "explicit_choices", "read_config", "write_config",
+    "discover_models",
 ]

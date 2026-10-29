@@ -209,7 +209,7 @@ for line in incoming():
                 'path': str(rollout) if rollout else '/native/' + thread_id + '.jsonl',
                 'turns': [],
             },
-            'model': params.get('model', 'runtime-default'),
+            'model': os.environ.get('PEER_OBSERVED_MODEL') or params.get('model', 'runtime-default'),
             'cwd': params['cwd'],
         }
         emit({'method': 'thread/started', 'params': {'thread': result['thread']}})
@@ -276,12 +276,22 @@ for line in incoming():
         thread_id = params['threadId']
         turn_id = f'turn-{sequence}'
         result = {'turn': {'id': turn_id, 'status': 'inProgress', 'items': [], 'error': None}}
+        held_turn = active.get(thread_id)
         active[thread_id] = turn_id
         if 'toolOutput' in params:
             assert params['input'] == []
             assert params['toolOutput']['name'] == 'graphtraj'
             prompt = params['toolOutput']['output']
-            assert json.loads(prompt)['source'] == 'graphtraj'
+            assert json.loads(prompt)['source'] in {'graphtraj', 'agents'}
+            if os.environ.get('PEER_HOST_EVENTS'):
+                with open(os.environ['PEER_HOST_EVENTS'], 'a') as stream:
+                    stream.write(prompt + '\n')
+                # Steer a held turn: the event ends at once and the held turn stays active.
+                if held_turn is not None:
+                    active[thread_id] = held_turn
+                emit({'id': message['id'], 'result': result})
+                complete(thread_id, turn_id, prompt)
+                continue
         else:
             prompt = params['input'][0]['text']
         if (
@@ -337,6 +347,12 @@ for line in incoming():
             emit({'id': request_id, 'method': prompt.removeprefix('request:'),
                   'params': {'threadId': thread_id, 'turnId': turn_id, 'itemId': 'command',
                              'startedAtMs': 1000, 'command': 'printf approved'}})
+        elif prompt == 'rerouted':
+            # Codex 0.164 ModelReroutedNotification, before the turn ends.
+            emit({'method': 'model/rerouted', 'params': {
+                'threadId': thread_id, 'turnId': turn_id, 'reason': 'highRiskCyberActivity',
+                'fromModel': sessions[thread_id].get('model', 'runtime-default'), 'toModel': 'safer-model'}})
+            complete(thread_id, turn_id, 'answer from the rerouted model')
         elif prompt == 'large-output':
             complete(thread_id, turn_id, 'x' * 100_000)
         elif prompt == 'mcp-create-child':

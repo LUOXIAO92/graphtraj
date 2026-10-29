@@ -8,6 +8,11 @@ worktree_path, session_parameters), optional evidence, and optional connection
 (base_url, api_key_env, runtime_home). Secrets remain in the native account or
 named environment variable. Settings are launch configuration, never identity.
 
+An optional ``runtimes`` object adds children on other Runtimes: Runtime name
+to that driver's settings (``claude``: the Claude host's ``settings`` keys,
+run in adapter_request's worktree_path). Without an entry, a create for that
+Runtime fails with ``unsupported-runtime``.
+
 The actual native service owns the parent. Its CLI/MCP descendants authenticate
 by kernel PID and the native Session returned by thread/start or thread/resume.
 No Task, Git repository, GraphTraj package or normalized archive is required.
@@ -30,6 +35,34 @@ from .driver import CodexDriver
 from .managed_session import CodexManagedExecution
 
 
+def _claude(settings: dict, cwd: Path) -> object:
+    """Check Claude settings at start, then drive Claude children in ``cwd``."""
+    from agent_swarm.claude.driver import ClaudeDriver
+    from agent_swarm.claude.settings import prepare
+
+    prepare(settings, cwd)
+    return ClaudeDriver(cwd, settings)
+
+
+# Runtimes this host can run as children besides Codex; 382 and 383 add pi and dsh.
+RUNTIMES = {'claude': _claude}
+
+
+def runtime_drivers(settings: dict) -> dict:
+    """Remove ``runtimes`` from the host settings and build one driver per entry."""
+    entries = settings.pop('runtimes', {})
+    if not isinstance(entries, dict) or any(not isinstance(value, dict) for value in entries.values()):
+        raise AgentsError('invalid-config', 'runtimes maps a Runtime name to its settings object.')
+    if 'codex' in entries:
+        raise AgentsError('invalid-config', 'Codex children use the host settings, not a runtimes entry.')
+    unsupported = sorted(set(entries) - set(RUNTIMES))
+    if unsupported:
+        raise AgentsError('unsupported-runtime', 'This Codex host does not support Runtime '
+                                                 + ', '.join(unsupported) + ' yet.')
+    cwd = Path(settings['adapter_request']['worktree_path'])
+    return {runtime: RUNTIMES[runtime](entry, cwd) for runtime, entry in entries.items()}
+
+
 class CodexHost(CodexManagedExecution):
     """Bind an actual owned native parent to the existing independent controller."""
 
@@ -39,6 +72,8 @@ class CodexHost(CodexManagedExecution):
         reject_archive_without_collector(directory)
         native = directory / 'host'
         native.mkdir(exist_ok=True)
+        settings = dict(settings)
+        others = runtime_drivers(settings)
         driver = CodexDriver(settings)
         settings = driver.prepare('codex', Caller('codex', None))
         expected = None
@@ -47,7 +82,9 @@ class CodexHost(CodexManagedExecution):
             expected = previous['session']
         elif (native / 'session.yml').exists():
             raise AgentsError('session-exists', 'Use --resume to continue this host Session.')
-        self.control = AgentControl(directory, {'codex': driver}, event_receiver=self._receive_child)
+        self.control = AgentControl(directory, {'codex': driver, **others}, event_receiver=self._receive_child,
+                                    request_notices=True)
+        self.control.require_connections()
         self.authentications: list[dict] = []
         self.calls: list[dict] = []
         self.deliveries: list[dict] = []
@@ -106,7 +143,7 @@ class CodexHost(CodexManagedExecution):
         return result
 
     def _receive_child(self, notice: dict) -> bool | str:
-        """Forward one genuine completion to this still-owned external parent."""
+        """Forward one genuine end or native request notice to this still-owned external parent."""
         if notice['parent'] is not None or self.native_session is None or self.loop is None:
             return False
         if self.loop.is_closed() or self.outcome is not None:

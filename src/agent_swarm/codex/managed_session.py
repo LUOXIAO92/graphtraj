@@ -20,6 +20,12 @@ from .app_server import CodexAppServer, CodexExecution, CodexServerRequest
 from .context import restore_codex_context, recovery_environment
 
 
+def model_change_message(summary: str, requested: object, observed: object, reason: str | None) -> str:
+    """State both models and the Runtime's reason so a stopped child is diagnosable (369)."""
+    return (f'{summary}: requested model {requested}, observed model {observed}; Runtime reason: '
+            + (reason or 'not provided in the native stream') + '.')
+
+
 class CodexManagedExecution:
     """Hold a connection until its execution and final Trace drain finish."""
 
@@ -159,6 +165,11 @@ class CodexManagedExecution:
                 if permissions['matches_request'] is False:
                     raise RuntimeAdapterError('RUNTIME_REQUEST_FAILED',
                                               'Codex did not confirm the requested approvals reviewer.')
+                requested = request['session_parameters'].get('model')
+                observed = session.configuration.get('model', requested)
+                if requested is not None and observed != requested:
+                    raise RuntimeAdapterError('RUNTIME_REQUEST_FAILED', model_change_message(
+                        f'Codex {phase} selected a different model', requested, observed, None))
                 archive = self._archive(session)
                 if archive is not None and resume_source is not None:
                     if session.rollout_path == resume_source[0]:
@@ -190,6 +201,11 @@ class CodexManagedExecution:
                 finally:
                     while self.operations:
                         await asyncio.sleep(0.01)
+                reroute = adapter.reroutes.get((session.thread_id, self.execution.turn_id))
+                if reroute is not None:
+                    raise RuntimeAdapterError('RUNTIME_REQUEST_FAILED', model_change_message(
+                        'Codex rerouted the turn to a different model', requested or reroute.get('fromModel'),
+                        reroute.get('toModel'), reroute.get('reason')))
             self.outcome = result
             return result
         except RuntimeAdapterError as error:
@@ -232,6 +248,10 @@ class CodexManagedExecution:
                     item = notification.get('params', {}).get('item', {})
                     if isinstance(item.get('id'), str):
                         self.approval_items[item['id']] = item
+                if (notification['method'] == 'model/rerouted' and self.execution is not None
+                        and notification['params'].get('turnId') == self.execution.turn_id):
+                    # Stop work on a model nobody requested; the result names both.
+                    self.terminate()
                 if notification['method'] == 'error':
                     with (self.directory / 'stderr.log').open('a', encoding='utf-8') as stream:
                         stream.write(json.dumps(notification, ensure_ascii=False) + '\n')

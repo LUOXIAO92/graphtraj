@@ -203,6 +203,9 @@ class CodexAppServer:
         self._fork_archives: dict[str, Any] = {}
         self._ordered_archives: dict[str, Any] = {}
         self._ordered_tasks: dict[str, asyncio.Task] = {}
+        # Native model/rerouted params by (thread, turn), recorded before the
+        # turn's own completion is read, so a result can name its reroute.
+        self.reroutes: dict[tuple[str, str], dict[str, Any]] = {}
 
     async def __aenter__(self) -> CodexAppServer:
         """Open stdio and perform initialize/initialized before Session operations."""
@@ -464,7 +467,9 @@ class CodexAppServer:
             if path is not None and (not isinstance(path, str) or not Path(path).is_absolute()):
                 raise ValueError('Invalid native rollout path')
             # Keep the native approval facts the Runtime reported at startup.
-            facts = {key: response[key] for key in ('approvalPolicy', 'approvalsReviewer') if key in response}
+            # Keep the model the Runtime selected, to compare with the requested one.
+            facts = {key: response[key] for key in ('approvalPolicy', 'approvalsReviewer', 'model')
+                     if key in response}
             session = CodexSession(returned_id, Path(path) if path else None, facts)
         except (KeyError, TypeError, ValueError, AttributeError) as error:
             raise self._protocol_failure(f'{method}: {error}') from error
@@ -1182,6 +1187,8 @@ class CodexAppServer:
                     if not isinstance(item['text'], str):
                         raise ValueError('Invalid native Agent message text')
                     state.last_message = item['text']
+            elif message['method'] == 'model/rerouted':
+                self.reroutes[(_native_id(params['threadId']), _native_id(params['turnId']))] = dict(params)
             elif message['method'] == 'turn/completed':
                 self._complete(_native_id(params['threadId']), _native_turn(params['turn']))
             elif message['method'] == 'thread/tokenUsage/updated':

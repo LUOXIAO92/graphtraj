@@ -32,6 +32,21 @@ def version_order(version: str) -> tuple:
     return release, (0, *((0, int(part), '') if part.isdigit() else (1, 0, part) for part in match[4].split('.')))
 
 
+def resumes_by_address(package: str | None) -> bool:
+    """Whether the installed DSH resumes a stored Session by addressing it.
+
+    DSH after 0.2.0-rc.2 mints a new Session from ``session/create`` once the
+    named one has a turn (dsh-api-session-controller lib/index.js:345-365) and
+    resumes a stored Session on any Session-addressed call (:160-213). An
+    unreadable version keeps the 0.2.0-rc.2 ``session/create`` path.
+    """
+    try:
+        version = json.loads(Path(package).read_text(encoding='utf-8'))['version']
+        return version_order(version) > version_order(MINIMUM_VERSION)
+    except (OSError, ValueError, KeyError, TypeError, AttributeError):
+        return False
+
+
 def credential_environment(name: str | None) -> dict[str, str]:
     """Read only the explicitly named credential, without retaining its value."""
     if name is None:

@@ -415,6 +415,17 @@ the Claude Code and Codex hosts call at start) refuses:
 - A missing `model` or `sandbox`: `ROLE_CONFIG_INVALID`.
 - An unset `api_key_env`: `RUNTIME_CREDENTIAL_MISSING`.
 
+Continuing a DSH child (`send` to a standby child, `resume`) reopens the
+same native Session. On DSH 0.2.0-rc.2 (and when the installed version cannot
+be read) the driver calls `session/create` with the stored `sessionId`. Later
+DSH mints a new Session there once the stored one has a turn
+(0.2.2-alpha.2 `dsh-api-session-controller/lib/index.js:345-365`, contract
+`typert.host.js:1993`), so the driver instead subscribes to the stored Session
+(`session/follow`), which DSH resolves by resuming it (`index.js:160-213`). It
+no longer passes `cwd` or an agent preset on that path; the resumed Session
+keeps its own. Another Session in the snapshot, or `session/not-found`, fails
+the execution with `RUNTIME_SESSION_NOT_RESUMABLE`.
+
 This is a floor, not a pin: no newer DSH is refused for its version. GraphTraj's
 own DSH members (`graphtraj.runtimes.dsh`) still require exactly 0.2.0-rc.2.
 

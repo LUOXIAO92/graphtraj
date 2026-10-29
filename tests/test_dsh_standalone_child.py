@@ -100,13 +100,54 @@ def check_round_trip(invoke) -> None:
     first_service, *continued = FakeDshService.instances
     assert len(continued) == 2
     for service in continued:
-        assert ('session/create', {'cwd': str(service.cwd), 'sessionId': first_service.session}) in service.calls
+        # DSH after 0.2.0-rc.2 resumes the stored Session by address, not by session/create.
+        assert service.session == first_service.session
+        assert not [call for call in service.calls if call[0] == 'session/create']
         assert selected(service)['model'] == 'deepseek-v5'
     assert [prompts(service) for service in FakeDshService.instances] == [
         ['first task'], ['second task'], ['third task']]
     [node] = invoke('status')['result']['agents']
     assert (node['agent'], node['runtime'], node['parent'], node['state']) == (agent, 'dsh', None, 'standby')
     assert KEY not in json.dumps(invoke('status', agent=agent))
+
+
+@pytest.mark.parametrize('version', ['0.2.0-rc.2', '0.2.1-alpha.5', '0.2.2-alpha.2'])
+def test_send_and_resume_continue_the_same_dsh_session(tmp_path: Path, dsh: dict, version: str) -> None:
+    """rc.2 resumes through session/create; later DSH mints there, so the driver addresses the Session."""
+    dsh = {**dsh, 'executable': str(install_dsh(tmp_path / f'dsh-{version}', version))}
+    host = IndependentCalls(tmp_path / 'agents', tmp_path, {}, {'dsh': dsh})
+    invoke, _, _ = claude_main(host, tmp_path)
+    try:
+        agent = invoke('create', runtime='dsh', instruction='one')['agent']
+        invoke('wait', agent=agent, timeout_seconds=10)
+        invoke('send', agent=agent, message='two')
+        assert invoke('wait', agent=agent, timeout_seconds=10)['result']['last_result']['last_message'] == 'dsh answer: two'
+        invoke('resume', agent=agent, message='three')
+        last = invoke('wait', agent=agent, timeout_seconds=10)['result']['last_result']
+        assert (last['outcome'], last['last_message']) == ('completed', 'dsh answer: three')
+        first, *continued = FakeDshService.instances
+        assert [service.session for service in continued] == [first.session, first.session]
+        creates = [[body for method, body in service.calls if method == 'session/create'] for service in continued]
+        expected = {'cwd': str(tmp_path), 'sessionId': first.session}
+        assert creates == ([[expected], [expected]] if version == '0.2.0-rc.2' else [[], []])
+        assert invoke('status', agent=agent)['result']['session'] == first.session
+    finally:
+        stop_owned(host.control)
+
+
+def test_a_missing_stored_dsh_session_is_not_resumable(tmp_path: Path, dsh: dict) -> None:
+    """Newer DSH answers session/not-found; the child reports RUNTIME_SESSION_NOT_RESUMABLE."""
+    host = IndependentCalls(tmp_path / 'agents', tmp_path, {}, {'dsh': dsh})
+    invoke, call, _ = claude_main(host, tmp_path)
+    agent = invoke('create', runtime='dsh', instruction='one')['agent']
+    invoke('wait', agent=agent, timeout_seconds=10)
+    for log in (FakeDshService.instances[0].logs / 'workspace').rglob('v4.jsonl'):
+        log.unlink()
+    result = call('agents', {'action': 'execute', 'feature': 'resume', 'arguments': {'agent': agent, 'message': 'two'}})
+    assert result.failed
+    error = json.dumps(result.document)
+    assert 'RUNTIME_SESSION_NOT_RESUMABLE' in error and 'session/not-found' in error, error
+    assert not [call for call in FakeDshService.instances[1].calls if call[0] == 'session/prompt']
 
 
 def check_connection_launch(service: FakeDshService, home: Path) -> None:

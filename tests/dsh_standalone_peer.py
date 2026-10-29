@@ -4,6 +4,12 @@ It answers the native service calls DshExecution makes, echoes each prompt as
 the assistant's answer, writes the native Session log DshExecution links as
 its Trace, and keeps every launch environment for inspection. No process,
 network or model is used.
+
+Session identity follows the installed version in DSH_AGENT_PACKAGE. On
+0.2.0-rc.2, ``session/create`` with a stored ``sessionId`` returns it. Later
+DSH (0.2.2-alpha.2: dsh-api-session-controller lib/index.js:345-365) mints a
+new Session when the named one already has a turn, and resumes a stored
+Session when a Session-addressed call (here ``follow``) names it (:160-213).
 """
 from __future__ import annotations
 
@@ -48,6 +54,8 @@ class FakeDshService:
         self.session: str | None = None
         self.seq = 0
         self.closed = False
+        version = json.loads(Path(environment['DSH_AGENT_PACKAGE']).read_text())['version']
+        self.mints = version != '0.2.0-rc.2'
         self.instances.append(self)
 
     def start(self) -> None:
@@ -61,6 +69,8 @@ class FakeDshService:
         self.calls.append((method, body))
         if method == 'session/create':
             self.session = body.get('sessionId') or f'dsh-session-{len(self.instances)}'
+            if self.mints and self._log().exists() and '"turn/start"' in self._log().read_text():
+                self.session = f'dsh-minted-{len(self.instances)}'
             log = self._log()
             log.parent.mkdir(parents=True, exist_ok=True)
             if not log.exists():
@@ -92,7 +102,12 @@ class FakeDshService:
                                            'data': {'turn': 0, 'step': 0, **data}}}
 
     def follow(self, session: str, *, assistant_stream: bool = False) -> dict:
-        """Return the opening cut of this exact Session."""
+        """Return the opening cut of this exact Session, resuming a stored one by address."""
+        if self.session is None:
+            self.session = session
+            if not self._log().exists():
+                from agent_swarm.dsh.errors import DshError
+                raise DshError('RUNTIME_REQUEST_FAILED', 'DSH session/follow failed (session/not-found).')
         header = json.loads(self._log().read_text().splitlines()[0])
         return {'type': 'snapshot', 'header': header, 'cursor': -1, 'hasMore': False, 'records': []}
 

@@ -16,7 +16,7 @@ import yaml
 
 from .service import DshService
 from .errors import DshError
-from .settings import credential_environment
+from .settings import credential_environment, resumes_by_address
 
 
 # DSH's shipped profile patches carry `!!js` expressions (for example the
@@ -431,16 +431,29 @@ class DshExecution:
         )
         try:
             self.service.start()
-            request = {'cwd': self.request['worktree_path']}
-            if self.session is not None:
-                request['sessionId'] = self.session
-            native = self.service.rpc('session/create', request)['sessionId']
-            if self.session is not None and self.session != native:
-                raise self.error_type('RUNTIME_SESSION_NOT_RESUMABLE', 'DSH returned another Session.')
+            addressed = self.session is not None and resumes_by_address(self.request.get('package'))
+            if addressed:
+                # Newer DSH resumes the stored Session when follow addresses it.
+                native = self.session
+            else:
+                request = {'cwd': self.request['worktree_path']}
+                if self.session is not None:
+                    request['sessionId'] = self.session
+                native = self.service.rpc('session/create', request)['sessionId']
+                if self.session is not None and self.session != native:
+                    raise self.error_type('RUNTIME_SESSION_NOT_RESUMABLE', 'DSH returned another Session.')
             self.session = native
             self.created(native, self.service.process.pid)
-            snapshot = (self.service.follow(native, assistant_stream=True)
-                        if self.archive is not None else self.service.follow(native))
+            try:
+                snapshot = (self.service.follow(native, assistant_stream=True)
+                            if self.archive is not None else self.service.follow(native))
+            except self.error_type as error:
+                if not addressed:
+                    raise
+                raise self.error_type('RUNTIME_SESSION_NOT_RESUMABLE',
+                                      f'DSH did not resume the stored Session: {error.message}') from error
+            if addressed and (snapshot.get('header') or {}).get('id') != native:
+                raise self.error_type('RUNTIME_SESSION_NOT_RESUMABLE', 'DSH resumed another Session.')
             self.native_header = snapshot.get('header')
             if self.archive is not None:
                 records = (self.service.history(snapshot)

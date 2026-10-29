@@ -85,7 +85,7 @@ Features and their arguments (`*` = required):
 
 | Feature | Arguments | Result fields added to the Agent document |
 | --- | --- | --- |
-| `create` | `runtime*`, `instruction*`, `name`, `configuration` | none; returns once the Agent is registered, never waits for its work |
+| `create` | `runtime*`, `instruction*`, `name`, `configuration`, `extra_fields` (object, section 5) | none; returns once the Agent is registered, never waits for its work |
 | `send` | `agent*`, `message*`, `reports_only` | `delivery: {at, delivery: submitted\|rejected\|unknown, error?}` when the Agent runs; in standby it continues the Session |
 | `status` | `agent` | without `agent`: `{"agents": [document + "children": [...]]}`, the caller's visible hierarchy |
 | `wait` | `agent*`, `timeout_seconds*` (finite, > 0) | `timed_out`; also ends early on an unanswered native request |
@@ -141,7 +141,7 @@ people and models and may change. Codes in use:
 | `termination-unconfirmed` | an ended execution's processes cannot be confirmed gone |
 | `not-implemented` | the host lacks this capability; the message names the gap |
 | `request-not-accepted` | the owner channel did not accept the request |
-| `archive-unavailable` | normalized archiving is on but unavailable in this host |
+| `archive-unavailable` | no longer returned since 0.2.0: every host archives when saving is on (384) |
 | `host-unavailable`, `host-busy`, `session-exists`, `turn-running` | host start and ownership refusals |
 | `start-failed`, `delivery-unknown` | a native start or delivery failed without a native code |
 
@@ -263,6 +263,14 @@ rejected as unknown fields.
 **Today.** Two booleans, `save_normalized_sessions` and `backfill_history`,
 both default `false`. Blank lines and comments are allowed. Any other field,
 a repeated field or a non-boolean value is refused, not guessed.
+
+With `save_normalized_sessions: true`, every execution of every Runtime
+(Claude, Codex, Pi, DSH) in any host writes its normalized Session to
+`<data root>/sessions/<sha256 of id>/session.jsonl`; no host refuses the
+setting. Switching it to `false` stops saving for later executions and keeps
+the archives already written. An execution that cannot archive fails with its
+own cause. Header `extra_fields` come from `create`'s `extra_fields`
+argument, not from this file.
 
 **Planned (380).** The same file declares:
 
@@ -436,7 +444,7 @@ patch version. From `1.0.0` the usual rule applies: major for incompatible,
 minor for additions, patch for fixes. A release that changes this document
 updates it in the same change.
 
-GraphTraj declares the range it supports (today `agent-swarm>=0.1.0,<0.2`)
+GraphTraj declares the range it supports (today `agent-swarm>=0.2.0,<0.3`, since the 0.2.0 archive version 5)
 and widens it in the same change that adopts an incompatible release.
 
 ## Appendix: Known GraphTraj-specific surfaces
@@ -461,7 +469,7 @@ or be renamed. Numbers refer to the subtraction list in
 | 8 | No independent DSH host | `dsh/` | 383 |
 | 9 | Notice title `GraphTraj notice from …` and default sender `graphtraj` | `claude/host_context.mjs` | 394 |
 | 10 | `send`'s `reports_only` and its "Task member" description | `tool.py` (`ACTION_FIELDS`, `INPUT_SCHEMA`) | 388 |
-| 12 | Archiving refused without GraphTraj's collector | `config.py` (`reject_archive_without_collector`), `claude/host.py`, `codex/host.py` | 384 |
+| 12 | Archiving refused without GraphTraj's collector | Done in 384: the refusal is removed; each Runtime execution builds its own collector from the bound archive (`claude/execution.py`, `claude/collection.py`, `codex/managed_session.py`, `pi/execution.py`, `dsh/driver.py`) | 384 |
 | — | Claude host plugin also handles GraphTraj's `tasks` tool (`mcp__agents__tasks`) | `claude/host_context.mjs` | unassigned, needs Main |
 | — | Claude control-protocol hook IDs `graphtraj_start`, `graphtraj_collect_child`, `graphtraj_agents_display`, and the event key `graphtraj_direction` | `claude/execution.py`, `sessions/claude.py` | unassigned, needs Main (closest: 394) |
 | — | GraphTraj imports internal modules and private names (`agent_swarm.control._scope`, `_alive`, `sessions.codex_values._timestamp`, and about 40 other internal modules) instead of only the names in 1.3. The version range does not protect these, because internal changes do not change the version | `src/graphtraj` (consumer side) | unassigned, needs Main |

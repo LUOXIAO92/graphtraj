@@ -397,10 +397,47 @@ Gaps, by owner:
 | Gap | Owner |
 | --- | --- |
 | Independent hosts do not push a child's native permission request; the parent polls | 381 |
-| Codex children's native approvals are handled by `auto_review` and not relayed to the parent | 385 |
 | Independent hosts do not hold notices while the parent is stopped: the Claude host's queue lives in its process, and the Codex host marks them `unavailable` (readable through `status`) | 381 (Claude, Codex), 382 (Pi), 383 (DSH) |
 | A child cannot ask its parent for a decision or more resources except through native approval requests | unassigned, needs Main (closest: 381) |
 | The notice title names GraphTraj | 394 |
+
+### 4.1 Native approval per Runtime
+
+agents uses each Runtime's own approval where it has one and never loosens
+its sandbox, network or write limits. A request the Runtime asks about is held
+for the direct parent as above.
+
+| Runtime | How native approval is enabled | Configuration agents writes |
+| --- | --- | --- |
+| Claude Code | The supplied `permission_mode`; Claude's permission prompts arrive through `can_use_tool` | Passes the mode as `--permission-mode` and `permissions.defaultMode`; nothing else |
+| Codex | `approvals_reviewer`, default `auto_review` (Codex's own reviewer decides) | Sets `approvals_reviewer = "auto_review"` when the settings name no reviewer, and `features.exec_permission_approvals = true`. `approval_policy`, sandbox, permissions and network stay as supplied |
+| Pi | Pi has no approval of its own; extension dialogs (`extension_ui_request`) are the requests | None |
+| DSH | The `permission` profile patch, approval `ask`, for the chosen sandbox mode | The `sandbox-policy` and `permission` patches; `dsh/approval-request` is the request |
+
+**Codex auto review relay.** Under `auto_review`, Codex decides approvals
+itself and reports the outcome only as an `item/autoApprovalReview/completed`
+notification (Codex 0.164 app-server). agents turns an outcome of `denied`
+(a refusal) or `timedOut`/`aborted` (the reviewer failed) into a request for
+the direct parent, with `method: "item/autoApprovalReview/completed"`,
+`request_id: "auto-review:<reviewId>"` and the notification as `params`.
+Approvals are not relayed. Codex 0.164 has no "escalate" outcome; an action
+Codex hands to the client as a server request is held like any native
+request.
+
+- The child's execution stays active until the parent answers, even if the
+  reviewed turn has ended. `reply` takes exactly `{"decision": "accept"}` or
+  `{"decision": "decline"}`.
+- `accept` after `denied` records Codex's one-retry approval
+  (`thread/approveGuardianDeniedAction`). After a reviewer failure no native
+  record is written. Either way the child is told it may retry once, and the
+  retry **goes through auto review again**: the parent cannot approve the
+  action itself, widen it, or skip the reviewer. If Codex refuses the
+  approval, `reply` fails and the request stays pending.
+- `decline` keeps the refusal; the child is told not to retry.
+- The answer reaches the child as input to its running turn; an accepted
+  answer after the turn ended starts one follow-up turn. A declined answer
+  after the turn ended starts nothing.
+- Interrupting the child drops its unanswered relays.
 
 ## 5. `extra_fields` in the normalized Session
 

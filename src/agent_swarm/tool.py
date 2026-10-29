@@ -42,7 +42,8 @@ TOOL_NAME = "agents"
 # Required and optional fields of each action. Identity and authority come
 # from the host binding, so no action accepts them.
 ACTION_FIELDS: dict[str, tuple[frozenset[str], frozenset[str]]] = {
-    "create":    (frozenset({"runtime", "instruction"}), frozenset({"name", "configuration"})),
+    "create":    (frozenset({"runtime", "instruction"}),
+                  frozenset({"name", "configuration", "preset", "model", "reasoning_effort"})),
     "send":      (frozenset({"agent", "message"}), frozenset({"reports_only"})),
     "status":    (frozenset(), frozenset({"agent"})),
     "wait":      (frozenset({"agent", "timeout_seconds"}), frozenset()),
@@ -62,6 +63,13 @@ INPUT_SCHEMA: dict[str, Any] = {
         "runtime": {"type": "string", "description": "Runtime that executes the new Agent."},
         "configuration": {"type": "string",
                           "description": "Existing execution configuration reference resolved by the Runtime driver; grants no identity."},
+        "preset": {"type": "string",
+                   "description": "Named preset from the agents config.yml; it must use the same runtime. "
+                                  "It fills model and reasoning_effort when they are omitted."},
+        "model": {"type": "string",
+                  "description": "Model id among the Runtime connection's candidates; never replaced by another."},
+        "reasoning_effort": {"type": "string",
+                             "description": "Reasoning effort the chosen model supports."},
         "instruction": {"type": "string", "description": "First message for the new Agent."},
         "name": {"type": "string", "description": "Readable name; grants no identity."},
         "message": {"type": "string", "description": "Plain-text message for the Agent."},

@@ -3,13 +3,46 @@
 from __future__ import annotations
 
 from copy import deepcopy
+import os
 from pathlib import Path
+import shutil
 import threading
 from typing import Any, Callable, Mapping
 
 from agent_swarm import AgentsError, Caller, Run
+from agent_swarm.control import require_available
 from .execution import ClaudeExecution
 from .settings import current_cli, prepare
+
+# Native Claude effort levels; a model's own list may be narrower.
+EFFORTS = ('low', 'medium', 'high', 'xhigh', 'max')
+
+
+def selected(configuration: Mapping[str, Any], selection: Mapping[str, Any]) -> dict:
+    """Apply one create selection to the host's Claude settings.
+
+    A selected connection replaces the host's native home, endpoint and
+    credential reference together, so a key never reaches another endpoint.
+    """
+    config = dict(configuration)
+    connection = selection.get('settings')
+    if connection is not None:
+        if connection.get('provider') not in (None, 'anthropic'):
+            raise AgentsError('invalid-config', 'A Claude connection has no provider other than anthropic.')
+        for key in ('runtime_home', 'base_url', 'api_key_env'):
+            config.pop(key, None)
+        config.update({key: connection[name] for key, name in (
+            ('runtime_home', 'home'), ('base_url', 'base_url'), ('api_key_env', 'api_key_env'))
+            if name in connection})
+    if selection.get('model') is not None:
+        config['model'] = selection['model']
+    effort = selection.get('reasoning_effort')
+    if effort is not None:
+        if effort not in EFFORTS:
+            raise AgentsError('invalid-reasoning-effort',
+                              f'Claude takes reasoning_effort {list(EFFORTS)}, not {effort!r}.')
+        config['reasoning_effort'] = effort
+    return config
 
 
 class ClaudeDriver:
@@ -34,13 +67,30 @@ class ClaudeDriver:
         self.turns: dict[str, ClaudeExecution] = {}
         self.lock = threading.Lock()
 
-    def prepare(self, runtime: str, caller: Caller, *, configuration: str | None = None) -> dict:
-        """Validate explicit Claude configuration, independently of caller roles."""
+    def prepare(self, runtime: str, caller: Caller, *, configuration: str | None = None,
+                selection: Mapping[str, Any] | None = None) -> dict:
+        """Validate explicit Claude configuration, independently of caller roles.
+
+        ``selection`` is the create's resolved connection, model and effort.
+        """
         if configuration is not None:
             raise AgentsError('invalid-config', 'This host uses its explicitly supplied Claude configuration.')
         if runtime != 'claude':
             raise AgentsError('unsupported-runtime', 'This driver runs Claude only.')
-        return prepare(self.configuration, self.cwd)
+        config = self.configuration if selection is None else selected(self.configuration, selection)
+        return prepare(config, self.cwd)
+
+    def require_available(self, connection: Mapping[str, Any]) -> None:
+        """Refuse a connection whose Claude Code is not installed or not logged in."""
+        executable = self.configuration.get('executable') or shutil.which('claude')
+        native = Path.home() / '.local/bin/claude'
+        if executable is None and native.is_file():
+            executable = str(native)
+        explicit = connection.get('home') or os.environ.get('CLAUDE_CONFIG_DIR')
+        home = Path(explicit or Path.home() / '.claude')
+        # The account record sits beside the default home; the token may be in a keychain.
+        logins = ('.credentials.json', '.claude.json') if explicit else ('.credentials.json', '../.claude.json')
+        require_available(connection, executable=executable, home=home, logins=logins)
 
     def start(self, run: Run) -> None:
         """Return after native binding, retaining ownership until actual stop."""

@@ -37,6 +37,15 @@ once native work is under way, reporting facts through the
 :class:`ExecutionEvents` of the :class:`Run`. The driver that started an
 execution controls it; another process gets ``not-owned`` instead of a
 second channel.
+
+Connections, presets and models
+-------------------------------
+One control may register drivers for several Runtimes. ``create`` resolves
+its Runtime, optional ``preset``, ``model`` and ``reasoning_effort`` against
+the connections and presets in ``config.yml`` (see :meth:`AgentControl.select`)
+and passes the result to the driver as ``prepare(..., selection=...)``. A
+create that selects nothing calls ``prepare`` exactly as before, so a Runtime
+without a declared connection keeps the host's own settings and native login.
 """
 
 from __future__ import annotations
@@ -53,7 +62,7 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any, Callable, Iterator, Mapping, Protocol
 
-from agent_swarm.config import read_config
+from agent_swarm.config import CONFIG_FILE, read_config, read_connections
 from agent_swarm.locks import exclusive
 from agent_swarm.notices import needs_parent
 from agent_swarm.tool import AgentsError, AgentsResult, Binding, Caller, Outcome, SessionArchive, bind
@@ -98,7 +107,14 @@ class RuntimeDriver(Protocol):
     """
 
     def prepare(self, runtime: str, caller: Caller, *, configuration: str | None = None) -> dict:
-        """Resolve an optional driver-owned reference into retained JSON settings."""
+        """Resolve an optional driver-owned reference into retained JSON settings.
+
+        A driver that runs selected connections, models or efforts also
+        accepts ``selection`` (see :meth:`AgentControl.select`); it is passed
+        only when ``create`` selected something. A driver may also define
+        ``require_available(connection)``, raising ``runtime-unavailable`` when
+        the Runtime is not installed or not logged in on this machine.
+        """
 
     def start(self, run: Run) -> None:
         """Begin native work and return without waiting for it to finish."""
@@ -153,6 +169,57 @@ def _group_alive(pid: int) -> bool:
     except PermissionError:
         return True
     return True
+
+
+def _discover_models(connection: Mapping[str, Any]) -> dict:
+    """Return the connection's native model candidates (``agent_swarm.models``)."""
+    from agent_swarm.models import discover_models
+
+    return discover_models(connection)
+
+
+def require_available(
+    connection: Mapping[str, Any],
+    *,
+    executable: str | None,
+    home: Path,
+    logins: tuple[str, ...] | None,
+) -> None:
+    """Raise ``runtime-unavailable`` unless the connection's Runtime can run here.
+
+    ``executable`` is the resolved native command, or ``None`` when it is not
+    installed. The Runtime counts as logged in when the connection's
+    ``api_key_env`` variable is set, or one of ``logins`` (native login files
+    relative to ``home``) exists; ``None`` means the Runtime's login state is
+    not inspectable and its own start reports it. Only existence is checked:
+    no credential is read, copied or returned.
+    """
+    runtime, name = connection["runtime"], connection.get("name")
+    where = f"Runtime {runtime!r}" + (f" (connection {name!r})" if name else "")
+    if executable is None:
+        raise AgentsError("runtime-unavailable", f"{where} is not installed on this machine: "
+                                                 f"no {runtime} executable was found.")
+    variable = connection.get("api_key_env")
+    if variable is not None:
+        if not os.environ.get(variable):
+            raise AgentsError("runtime-unavailable", f"{where} is not logged in: the environment "
+                                                     f"variable {variable} is unset or empty.")
+        return
+    if logins is not None and not any((home / login).is_file() for login in logins):
+        raise AgentsError("runtime-unavailable", f"{where} is not logged in: no native login was found "
+                                                 f"in {home}. Log in with the {runtime} client first.")
+
+
+def _accepts(method: Callable, name: str) -> bool:
+    """Whether ``method`` takes keyword ``name``; older drivers do not."""
+    import inspect
+
+    try:
+        parameters = inspect.signature(method).parameters
+    except (TypeError, ValueError):
+        return False
+    return name in parameters or any(item.kind is inspect.Parameter.VAR_KEYWORD
+                                     for item in parameters.values())
 
 
 def _scope(caller: Caller) -> dict[str, str | None]:
@@ -369,7 +436,9 @@ class AgentControl:
         if action == "create":
             return self.create(arguments["runtime"], arguments["instruction"],
                                binding, name=arguments.get("name"),
-                               configuration=arguments.get("configuration"))
+                               configuration=arguments.get("configuration"),
+                               preset=arguments.get("preset"), model=arguments.get("model"),
+                               reasoning_effort=arguments.get("reasoning_effort"))
         if action == "status" and "agent" not in arguments:
             return Outcome({"agents": self.hierarchy(binding.caller)})
         try:
@@ -416,20 +485,32 @@ class AgentControl:
         *,
         name: str | None = None,
         configuration: str | None = None,
+        preset: str | None = None,
+        model: str | None = None,
+        reasoning_effort: str | None = None,
     ) -> Outcome:
         """Register a new Agent under the caller and start its first execution.
 
         Returns once the driver has started native work; it never waits for
-        the Agent's result.
+        the Agent's result. ``preset``, ``model`` and ``reasoning_effort`` are
+        resolved by :meth:`select`.
         """
         driver = self.drivers.get(runtime)
         if driver is None:
             raise AgentsError("unsupported-runtime", f"No driver is available for Runtime {runtime!r}.")
         caller   = binding.caller
         self._require_root_control(caller)
+        selection = self.select(runtime, preset=preset, model=model, reasoning_effort=reasoning_effort)
+        options: dict[str, Any] = {}
+        if configuration is not None:
+            options["configuration"] = configuration
+        if selection is not None:
+            if not _accepts(driver.prepare, "selection"):
+                raise AgentsError("invalid-config", f"This host's {runtime} driver cannot run a selected "
+                                                    "connection, preset, model or reasoning effort.")
+            options["selection"] = selection
         # Keep the original call shape for drivers whose users select defaults.
-        settings = (driver.prepare(runtime, caller) if configuration is None else
-                    driver.prepare(runtime, caller, configuration=configuration))
+        settings = driver.prepare(runtime, caller, **options)
         json.dumps(settings)
 
         agent  = "agent-" + uuid.uuid4().hex
@@ -443,6 +524,8 @@ class AgentControl:
             "session":    None,
             "sessions":   [],
             "settings":   settings,
+            "selection":  {name: (selection or {}).get(name) for name in
+                           ("preset", "connection", "model", "reasoning_effort")},
             "created_at": _now(),
             "retired_at": None,
             "executions": [],
@@ -450,6 +533,122 @@ class AgentControl:
         with self._locked(agent, record) as current:
             run = self._begin(current, "create", instruction, binding)
         return self._launch(run)
+
+    def select(
+        self,
+        runtime: str,
+        *,
+        preset: str | None = None,
+        model: str | None = None,
+        reasoning_effort: str | None = None,
+    ) -> dict | None:
+        """Resolve ``create``'s choices against ``config.yml``; never substitute.
+
+        ``runtime`` is always given. A preset must use that Runtime; it fills
+        ``model`` and ``reasoning_effort`` when they are omitted, and an
+        explicit value that differs from the preset's is an error. The
+        connection is the preset's, else the only one declared for the
+        Runtime; several without a preset are ambiguous. A ``model`` must be
+        a candidate ``id`` from :func:`agent_swarm.models.discover_models` (the
+        connection's declared ``models``, else the native catalog); a model
+        that cannot be verified is an error.
+        A ``reasoning_effort`` must be among the model's ``supported_efforts``
+        when those are known; otherwise the driver checks it natively.
+
+        Returns ``None`` when nothing is selected (no preset, model, effort or
+        declared connection for the Runtime), else ``{"preset", "connection"
+        (its name), "model", "reasoning_effort", "provider", "settings" (the
+        declared connection entry or None)}``.
+        """
+        try:
+            declared = read_connections(self.root)
+        except ValueError as error:
+            raise AgentsError("invalid-config", str(error)) from None
+        connections = declared["connections"]
+        source      = self.root / CONFIG_FILE
+        chosen      = {"model": model, "reasoning_effort": reasoning_effort}
+        connection  = None
+        if preset is not None:
+            entry = declared["presets"].get(preset)
+            if entry is None:
+                raise AgentsError("invalid-preset", f"Preset {preset!r} is not declared in {source}; "
+                                                    f"declared: {sorted(declared['presets']) or 'none'}.")
+            connection = entry.get("connection")
+            uses = connections[connection]["runtime"] if connection else entry["runtime"]
+            if uses != runtime:
+                raise AgentsError("invalid-preset", f"Preset {preset!r} uses Runtime {uses!r}, "
+                                                    f"not the requested {runtime!r}.")
+            for field in chosen:
+                given, configured = chosen[field], entry.get(field)
+                if given is not None and configured is not None and given != configured:
+                    raise AgentsError("invalid-" + field.replace("_", "-"),
+                                      f"{field} {given!r} contradicts preset {preset!r}, "
+                                      f"which sets {configured!r}.")
+                chosen[field] = configured if given is None else given
+        if connection is None:
+            matches = sorted(name for name, entry in connections.items() if entry["runtime"] == runtime)
+            if len(matches) > 1:
+                raise AgentsError("ambiguous-connection",
+                                  f"{source} declares several {runtime} connections {matches}; "
+                                  "select one with a preset.")
+            connection = matches[0] if matches else None
+        settings = connections[connection] if connection else None
+        if preset is None and settings is None and model is None and reasoning_effort is None:
+            return None
+
+        driver = self.drivers[runtime]
+        if settings is not None and hasattr(driver, "require_available"):
+            driver.require_available(settings)
+        provider = (settings or {}).get("provider")
+        if chosen["model"] is not None:
+            candidate = self._candidate(runtime, settings, chosen["model"])
+            provider  = provider or candidate.get("provider")
+            supported = candidate.get("supported_efforts")
+            effort    = chosen["reasoning_effort"]
+            if effort is not None and supported is not None and effort not in supported:
+                raise AgentsError("invalid-reasoning-effort",
+                                  f"Model {chosen['model']!r} supports reasoning_effort {supported}, "
+                                  f"not {effort!r}.")
+        return {"preset": preset, "connection": connection, "provider": provider,
+                "settings": deepcopy(settings), **chosen}
+
+    def _candidate(self, runtime: str, settings: Mapping[str, Any] | None, model: str) -> dict:
+        """Return the one candidate whose ``id`` is ``model``, or raise ``invalid-model``."""
+        settings = settings or {"runtime": runtime}
+        where    = f"connection {settings['name']!r}" if "name" in settings else f"the native {runtime} login"
+        found    = _discover_models(settings)
+        if found.get("status") != "available":
+            raise AgentsError("invalid-model",
+                              f"Model {model!r} cannot be verified for {where}: {found.get('message')} "
+                              f"Declare the connection's models in {self.root / CONFIG_FILE} to choose "
+                              "without discovery.")
+        matches = [item for item in found["models"] if item["id"] == model]
+        if not matches:
+            raise AgentsError("invalid-model", f"Model {model!r} is not a candidate of {where}; candidates: "
+                                               f"{sorted({item['id'] for item in found['models']}) or 'none'}.")
+        if len({item.get("provider") for item in matches}) > 1:
+            raise AgentsError("invalid-model", f"Model {model!r} is offered by several providers of {where}; "
+                                               "set the connection's provider.")
+        return matches[0]
+
+    def require_connections(self) -> None:
+        """Check, at host start, every connection ``config.yml`` declares.
+
+        A declared Runtime without a registered driver is ``unsupported-runtime``;
+        a driver's ``require_available`` raises ``runtime-unavailable`` when
+        that Runtime is not installed or not logged in on this machine.
+        """
+        try:
+            connections = read_connections(self.root)["connections"]
+        except ValueError as error:
+            raise AgentsError("invalid-config", str(error)) from None
+        for name, settings in connections.items():
+            driver = self.drivers.get(settings["runtime"])
+            if driver is None:
+                raise AgentsError("unsupported-runtime", f"Connection {name!r} uses Runtime "
+                                                         f"{settings['runtime']!r}, which this host has no driver for.")
+            if hasattr(driver, "require_available"):
+                driver.require_available(settings)
 
     def send(self, agent: str, message: str, binding: Binding) -> Outcome:
         """Deliver to the running execution, or continue the Session in standby."""
@@ -1033,6 +1232,8 @@ class AgentControl:
             "agent":   record["agent"],
             "name":    record["name"],
             "runtime": record["runtime"],
+            **{name: (record.get("selection") or {}).get(name)
+               for name in ("preset", "connection", "model", "reasoning_effort")},
             "state":   ACTIVE if current is not None else STANDBY,
             "parent":  record["parent"],
             "creator": dict(record["creator"]),

@@ -770,7 +770,8 @@ def _install_commands(environment: Path, wheel: Path) -> InstalledCommands:
             "install",
             "--disable-pip-version-check",
             "--no-deps",
-            str(wheel.with_name("agent_swarm-0.1.0-py3-none-any.whl")),
+            # The agents wheel built beside it carries agent_swarm.__version__.
+            *map(str, wheel.parent.glob("agent_swarm-*-py3-none-any.whl")),
             str(wheel),
         ],
         cwd=wheel.parent,

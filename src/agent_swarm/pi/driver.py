@@ -3,12 +3,51 @@
 from __future__ import annotations
 
 from copy import deepcopy
+import os
+from pathlib import Path
+import shutil
 import threading
 from typing import Any, Mapping
 
 from agent_swarm import AgentsError, Caller, Run
+from agent_swarm.control import require_available
 from agent_swarm.runtime import RuntimeAdapterError
 from .execution import PiExecution
+
+# Native Pi thinking levels; a model's own list may be narrower.
+EFFORTS = ('off', 'minimal', 'low', 'medium', 'high', 'xhigh')
+
+
+def selected(request: Mapping[str, Any], selection: Mapping[str, Any]) -> dict:
+    """Apply one create selection to the host's Pi launch request.
+
+    The host resolved the network destination for its own provider, so
+    another provider, or an endpoint without a provider API, is refused here
+    rather than launched under the wrong grants.
+    """
+    request = deepcopy(dict(request))
+    if selection.get('provider') not in (None, request['provider']):
+        raise AgentsError('invalid-config', f"This Pi host resolved provider {request['provider']!r}; "
+                                            f"it cannot launch provider {selection['provider']!r}.")
+    connection = selection.get('settings')
+    if connection is not None:
+        if 'base_url' in connection:
+            raise AgentsError('invalid-config', 'A Pi connection cannot set base_url here; '
+                                                "declare the endpoint in Pi's own models.json.")
+        request.pop('api_key_env', None)
+        if 'api_key_env' in connection:
+            request['api_key_env'] = connection['api_key_env']
+        if 'home' in connection:
+            request['agent_dir'] = connection['home']
+    if selection.get('model') is not None:
+        request['model'] = selection['model']
+    effort = selection.get('reasoning_effort')
+    if effort is not None:
+        if effort not in EFFORTS:
+            raise AgentsError('invalid-reasoning-effort',
+                              f'Pi takes reasoning_effort {list(EFFORTS)}, not {effort!r}.')
+        request['reasoning_effort'] = effort
+    return request
 
 
 class PiDriver:
@@ -25,12 +64,22 @@ class PiDriver:
         self.turns: dict[str, PiExecution] = {}
         self.lock = threading.Lock()
 
-    def prepare(self, runtime: str, caller: Caller) -> dict:
-        """Return the chosen native configuration without reading project state."""
+    def prepare(self, runtime: str, caller: Caller, *, selection: Mapping[str, Any] | None = None) -> dict:
+        """Return the chosen native configuration without reading project state.
+
+        ``selection`` is the create's resolved connection, model and effort.
+        """
         if runtime != 'pi':
             raise AgentsError('unsupported-runtime', 'PiDriver only runs Pi.')
-        return {'adapter_request': deepcopy(self.request), 'evidence': {},
-                'cwd': self.request['worktree_path']}
+        request = deepcopy(self.request) if selection is None else selected(self.request, selection)
+        return {'adapter_request': request, 'evidence': {}, 'cwd': self.request['worktree_path']}
+
+    def require_available(self, connection: Mapping[str, Any]) -> None:
+        """Refuse a connection whose Pi is not installed or not logged in."""
+        home = Path(connection.get('home') or os.environ.get('PI_CODING_AGENT_DIR')
+                    or Path.home() / '.pi/agent')
+        require_available(connection, executable=self.request.get('executable') or shutil.which('pi'),
+                          home=home, logins=('auth.json',))
 
     def start(self, run: Run) -> None:
         """Return after native Session binding, retaining ownership until actual stop."""

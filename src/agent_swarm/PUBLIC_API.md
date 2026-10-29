@@ -9,9 +9,13 @@ may change in any release.
 Items marked **planned** are fixed here only as public semantics. The Task
 named after them implements them and records the final details in this file.
 
-The version is `agent_swarm.__version__`. It is defined once, in
-`agent_swarm/__init__.py`; the distribution metadata, the MCP `serverInfo`
-and the Codex `clientInfo` all read it.
+The version is `agent_swarm.__version__`, defined in
+`agent_swarm/__init__.py`. This is the single source: the distribution
+metadata, the MCP `serverInfo` and the Codex `clientInfo` read it. The DSH
+plugin manifest `agent_swarm/dsh/package.json` must repeat it, because an npm
+manifest cannot import Python; the test
+`test_mcp_server_version_is_the_single_package_version` fails when the two
+differ.
 
 ## 1. What is public
 

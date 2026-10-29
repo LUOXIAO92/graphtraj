@@ -9,6 +9,9 @@ import yaml
 
 from graphtraj.execution import execution_budget as budgets
 from graphtraj.execution import runner_control, runner_status
+# Bound here, before any test patches runner_status: team_round imports
+# read_alias_mapping by name, so a first import under the patch keeps the fake.
+from graphtraj.teams import team_round
 
 
 BODY = '''---
@@ -45,6 +48,7 @@ def runner(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 
     monkeypatch.setattr(runner_status, 'read_alias_mapping', read)
     monkeypatch.setattr(runner_control, 'read_alias_mapping', read)
+    monkeypatch.setattr(team_round, 'read_alias_mapping', read)
     return runner
 
 

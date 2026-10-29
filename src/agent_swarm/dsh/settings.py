@@ -12,6 +12,26 @@ from urllib.parse import urlsplit
 from .errors import DshError
 
 
+# Oldest native DSH whose service protocol the driver uses. GraphTraj's own
+# DSH members keep their exact 0.2.0-rc.2 pin in graphtraj.runtimes.dsh.
+MINIMUM_VERSION = '0.2.0-rc.2'
+
+
+def version_order(version: str) -> tuple:
+    """Return a semver sort key: release numbers, then prerelease identifiers.
+
+    A release sorts after its prereleases; numeric identifiers compare as
+    numbers and before alphanumeric ones (so alpha < beta < rc).
+    """
+    match = re.fullmatch(r'(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?(?:\+[0-9A-Za-z.-]+)?', version)
+    if match is None:
+        raise ValueError(f'Not a semantic version: {version!r}.')
+    release = tuple(int(part) for part in match.groups()[:3])
+    if match[4] is None:
+        return release, (1,)
+    return release, (0, *((0, int(part), '') if part.isdigit() else (1, 0, part) for part in match[4].split('.')))
+
+
 def credential_environment(name: str | None) -> dict[str, str]:
     """Read only the explicitly named credential, without retaining its value."""
     if name is None:
@@ -36,11 +56,14 @@ def prepare(configuration: Mapping[str, Any], cwd: Path) -> dict:
     if not executable:
         raise DshError('RUNTIME_UNAVAILABLE', 'Install the native DSH runtime first.')
     package = Path(executable).resolve().parent.parent / 'package.json'
+    installed = 'unknown'
     try:
-        if json.loads(package.read_text(encoding='utf-8'))['version'] != '0.2.0-rc.2':
+        installed = json.loads(package.read_text(encoding='utf-8'))['version']
+        if version_order(installed) < version_order(MINIMUM_VERSION):
             raise ValueError('version')
-    except (OSError, ValueError, KeyError) as error:
-        raise DshError('RUNTIME_UNSUPPORTED', 'DSH 0.2.0-rc.2 is required.') from error
+    except (OSError, ValueError, KeyError, TypeError, AttributeError) as error:
+        raise DshError('RUNTIME_UNSUPPORTED', f'DSH {MINIMUM_VERSION} or later is required '
+                                              f'(installed {installed}).') from error
     if not isinstance(settings.get('model'), str) or not settings['model']:
         raise DshError('ROLE_CONFIG_INVALID', 'Supply the actual native DSH model.')
     if settings.get('sandbox') not in {'read-only', 'workspace-write'}:

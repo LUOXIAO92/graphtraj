@@ -141,7 +141,7 @@ def write_adoption(material: dict[str, object]) -> None:
                           encoding='utf-8')
 
 
-def codex_driver(settings: dict):
+def codex_driver(settings: dict, cwd: Path):
     """Build a Codex driver from a ``codex.host --settings`` document; refuse it now if invalid."""
     from agent_swarm.codex.driver import CodexDriver
 
@@ -150,9 +150,18 @@ def codex_driver(settings: dict):
     return driver
 
 
-# Runtime name -> driver factory taking that Runtime's ``runtimes`` entry.
-# 382 and 383 add pi and dsh here.
-RUNTIME_DRIVERS = {'codex': codex_driver}
+def dsh_driver(settings: dict, cwd: Path):
+    """Build a DSH driver for children in ``cwd``; refuse missing or unsupported DSH now."""
+    from agent_swarm.dsh.driver import DshDriver
+
+    driver = DshDriver(cwd, settings)
+    driver.prepare('dsh', Caller('claude-native', None))
+    return driver
+
+
+# Runtime name -> driver factory taking that Runtime's ``runtimes`` entry and
+# the host's working directory. 382 adds pi here.
+RUNTIME_DRIVERS = {'codex': codex_driver, 'dsh': dsh_driver}
 
 
 def runtime_drivers(cwd: Path, settings: dict, runtimes: object) -> dict:
@@ -166,7 +175,7 @@ def runtime_drivers(cwd: Path, settings: dict, runtimes: object) -> dict:
         if name not in RUNTIME_DRIVERS:
             raise AgentsError('unsupported-runtime',
                               f'The Claude Code host does not support Runtime {name!r} yet.')
-        drivers[name] = RUNTIME_DRIVERS[name](entry)
+        drivers[name] = RUNTIME_DRIVERS[name](entry, cwd)
     return drivers
 
 

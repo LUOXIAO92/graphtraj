@@ -59,24 +59,28 @@ with their documented flags:
   the documented `settings` keys are public. `settings` configures the
   host's Claude children. `runtimes` maps another Runtime's name to its
   driver settings: `codex` takes the document `agent_swarm.codex.host
-  --settings` takes (`adapter_request`, optional `evidence`, `connection`).
-  A Runtime without an entry has no driver (`create` fails with
-  `unsupported-runtime`). At start the host refuses a `pi` or `dsh` entry
+  --settings` takes (`adapter_request`, optional `evidence`, `connection`);
+  since 383 `dsh` takes the DSH driver settings (section 2, DSH children)
+  and runs in `cwd`. A Runtime without an entry has no driver (`create`
+  fails with `unsupported-runtime`). At start the host refuses a `pi` entry
   (`unsupported-runtime`, not supported by this host yet), a `claude` entry
   or a non-object value (`invalid-config`), invalid Codex settings
-  (`invalid-config`), and whatever `AgentControl.require_connections()`
-  refuses, each with its own code.
+  (`invalid-config`), invalid DSH settings or a missing or unsupported DSH
+  (the DSH codes in section 2), and whatever
+  `AgentControl.require_connections()` refuses, each with its own code.
   The `context` operation is the plugin's private channel.
 - `python -m agent_swarm.codex.host --settings <file> --directory <dir>
   [--output <file>] [--resume] <instruction>`. Since 0.1.2 the settings file
   may hold an optional top-level `runtimes` object: a Runtime name to that
   driver's settings. The host removes it before reading its own Codex
-  settings. `claude` takes the documented Claude host `settings` keys, runs
-  in `adapter_request.worktree_path` and is checked at start. A Runtime
-  without an entry has no driver (`create` fails with
-  `unsupported-runtime`). At start the host refuses a `pi` or `dsh` entry
-  (`unsupported-runtime`, until 382 and 383), a `codex` entry or a
-  non-object value (`invalid-config`), and whatever
+  settings. `claude` takes the documented Claude host `settings` keys and,
+  since 383, `dsh` takes the DSH driver settings (section 2, DSH children);
+  both run in `adapter_request.worktree_path` and are checked at start. A
+  Runtime without an entry has no driver (`create` fails with
+  `unsupported-runtime`). At start the host refuses a `pi` entry
+  (`unsupported-runtime`, until 382), a `codex` entry or a non-object value
+  (`invalid-config`), invalid DSH settings or a missing or unsupported DSH
+  (the DSH codes in section 2), and whatever
   `AgentControl.require_connections()` refuses. On a startup error it prints
   `{"error": {"code", "message"}}` and exits `1`.
 - A refused Claude host start answers every call with `host-unavailable` (or
@@ -325,6 +329,27 @@ driver and one driver per `runtimes` entry (1.1) and calls
 code (1.1). The independent Codex host does the same with its own
 `runtimes` (1.1) and reports a refusal as its startup error. Pi and DSH
 hosts follow in 382 and 383.
+
+**DSH children (383).** Any host that registers `agent_swarm.dsh.DshDriver(cwd,
+settings)` starts DSH children without GraphTraj installed and without any
+`GRAPHTRAJ_*` variable. `settings` holds `model` (the default model, required),
+`sandbox` (`read-only` or `workspace-write`, required) and optionally
+`executable` (else `dsh` on `PATH`), `reasoning_effort`, `api_key_env`,
+`base_url`, `runtime_home` and `instructions`. A create's connection, `model`
+and `reasoning_effort` replace them for that child only. The child's MCP
+server is `<host python> -I -m agent_swarm.mcp`, loaded into DSH by the
+packaged `agent_swarm/dsh/plugin.mjs`. DSH receives `DSH_AGENT_PACKAGE` (the
+installed DSH `package.json`) and `AGENT_SWARM_CONNECTION`. `prepare` (which
+the Claude Code and Codex hosts call at start) refuses:
+- DSH not found: `RUNTIME_UNAVAILABLE`.
+- An installed DSH older than 0.2.0-rc.2 in semver order, or a version that
+  cannot be read: `RUNTIME_UNSUPPORTED`, message `DSH 0.2.0-rc.2 or later is
+  required (installed <version or unknown>).`.
+- A missing `model` or `sandbox`: `ROLE_CONFIG_INVALID`.
+- An unset `api_key_env`: `RUNTIME_CREDENTIAL_MISSING`.
+
+This is a floor, not a pin: no newer DSH is refused for its version. GraphTraj's
+own DSH members (`graphtraj.runtimes.dsh`) still require exactly 0.2.0-rc.2.
 
 **Agent document.** Every Agent document carries `preset`, `connection`
 (the connection's name), `model` and `reasoning_effort` as chosen at

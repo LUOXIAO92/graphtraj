@@ -9,8 +9,9 @@ worktree_path, session_parameters), optional evidence, and optional connection
 named environment variable. Settings are launch configuration, never identity.
 
 An optional ``runtimes`` object adds children on other Runtimes: Runtime name
-to that driver's settings (``claude``: the Claude host's ``settings`` keys,
-run in adapter_request's worktree_path). Without an entry, a create for that
+to that driver's settings (``claude``: the Claude host's ``settings`` keys;
+``dsh``: DshDriver settings such as executable, model, sandbox, api_key_env;
+both run in adapter_request's worktree_path). Without an entry, a create for that
 Runtime fails with ``unsupported-runtime``.
 
 The actual native service owns the parent. Its CLI/MCP descendants authenticate
@@ -44,8 +45,17 @@ def _claude(settings: dict, cwd: Path) -> object:
     return ClaudeDriver(cwd, settings)
 
 
-# Runtimes this host can run as children besides Codex; 382 and 383 add pi and dsh.
-RUNTIMES = {'claude': _claude}
+def _dsh(settings: dict, cwd: Path) -> object:
+    """Check DSH settings, executable and version at start, then drive DSH children in ``cwd``."""
+    from agent_swarm.dsh.driver import DshDriver
+
+    driver = DshDriver(cwd, settings)
+    driver.prepare('dsh', Caller('codex', None))
+    return driver
+
+
+# Runtimes this host can run as children besides Codex; 382 adds pi.
+RUNTIMES = {'claude': _claude, 'dsh': _dsh}
 
 
 def runtime_drivers(settings: dict) -> dict:

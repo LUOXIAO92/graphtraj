@@ -155,7 +155,6 @@ def test_without_a_runtimes_entry_codex_is_unsupported(tmp_path: Path) -> None:
 
 @pytest.mark.parametrize('runtimes, code, text', [
     ({'pi': {}}, 'unsupported-runtime', "does not support Runtime 'pi' yet"),
-    ({'dsh': {}}, 'unsupported-runtime', "does not support Runtime 'dsh' yet"),
     ({'claude': {}}, 'invalid-config', 'runtimes.claude'),
     ({'codex': {}}, 'invalid-config', ''),
     ({'codex': 'settings.json'}, 'invalid-config', 'driver settings object'),

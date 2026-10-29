@@ -34,7 +34,9 @@ if [[ -z "$MODEL" ]]; then
   exit 2
 fi
 
-RUN=$(mktemp -d /tmp/agents-384-real.XXXXXX)
+# Resolve once: /tmp is a symlink to /private/tmp, and every later path
+# (venv interpreter, agent_swarm.__file__) must use the same form.
+RUN=${$(mktemp -d /tmp/agents-384-real.XXXXXX):A}
 WORK=$RUN/work
 DATA=$RUN/data
 mkdir -p "$WORK" "$DATA" "$RUN/src"
@@ -89,7 +91,7 @@ EOF
 cd "$WORK"
 "$RUN/venv/bin/python" -m agent_swarm.codex.host --settings "$RUN/settings.json" --directory "$DATA" \
   --output "$RUN/parent-result.json" \
-  'Use the agents MCP tool. First call action "create" with runtime "codex", instruction "Reply with exactly: TASK384-CHILD-READY. Do not use tools.", and extra_fields {"realhost": {"task": "384"}}. Then call action "wait" for the returned agent with timeout_seconds 180. Finally reply with the child reply text only.' \
+  'Use the agents MCP tool, whose calls take {"action", "feature", "arguments"}. First call it with action "execute", feature "create" and arguments {"runtime": "codex", "instruction": "Reply with exactly: TASK384-CHILD-READY. Do not use tools.", "extra_fields": {"realhost": {"task": "384"}}}. Then call it with action "execute", feature "wait" and arguments {"agent": <the agent returned by create>, "timeout_seconds": 180}. Finally reply with the child reply text only.' \
   || print -u2 "The parent host exited with status $?; the archive check below still runs."
 
 print "\n--- normalized Sessions under $DATA/sessions ---"

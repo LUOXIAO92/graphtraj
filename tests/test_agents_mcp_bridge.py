@@ -1,6 +1,8 @@
 """Independent MCP uses the existing file transport and real kernel caller proof."""
 from __future__ import annotations
 
+import ast
+from importlib.metadata import version
 import json
 import os
 from pathlib import Path
@@ -9,6 +11,7 @@ import sys
 
 import pytest
 
+import agent_swarm
 from agent_swarm import AgentsError, AgentsResult
 from agent_swarm.connection import agents_connection
 from agent_swarm.process import authenticate_process
@@ -152,7 +155,7 @@ def test_codex_metadata_uses_the_shared_owner_connection(tmp_path: Path) -> None
 
 
 def test_independent_tool_runs_with_graphtraj_imports_blocked(tmp_path: Path) -> None:
-    """agents never imports GraphTraj, even when a GraphTraj host variable is present."""
+    """agents never imports GraphTraj at import time, in any subpackage, even with a GraphTraj host variable."""
     probe = tmp_path / 'probe.py'
     probe.write_text('''
 import importlib, io, json, pkgutil, sys
@@ -165,8 +168,13 @@ class Block:
 
 sys.meta_path.insert(0, Block())
 import agent_swarm
-for module in pkgutil.iter_modules(agent_swarm.__path__):
-    importlib.import_module('agent_swarm.' + module.name)
+def unimportable(name):
+    raise ImportError('Cannot walk ' + name)
+
+# Every module of every subpackage, not only the top level; walk_packages
+# would otherwise skip a subpackage whose import fails.
+for module in pkgutil.walk_packages(agent_swarm.__path__, 'agent_swarm.', onerror=unimportable):
+    importlib.import_module(module.name)
 from agent_swarm import mcp
 sys.stdin = io.StringIO(json.dumps({'jsonrpc': '2.0', 'id': 1, 'method': 'tools/list'}) + '\\n')
 mcp.main()
@@ -178,3 +186,68 @@ mcp.main()
                             capture_output=True, timeout=30)
     assert result.returncode == 0, result.stderr
     assert [tool['name'] for tool in json.loads(result.stdout)['result']['tools']] == ['agents']
+
+
+def graphtraj_imports(source: str) -> list[int]:
+    """Return the lines of one module that import GraphTraj, wherever they run.
+
+    Covers module, function-local and conditional ``import``/``from`` statements
+    and literal ``importlib.import_module``/``__import__`` names, none of which
+    an import-time probe sees until that code runs.
+    """
+    def graphtraj(name: object) -> bool:
+        """Match the graphtraj package and its submodules, not similar names."""
+        return isinstance(name, str) and (name == 'graphtraj' or name.startswith('graphtraj.'))
+
+    lines = []
+    for node in ast.walk(ast.parse(source)):
+        if isinstance(node, ast.Import) and any(graphtraj(alias.name) for alias in node.names):
+            lines.append(node.lineno)
+        elif isinstance(node, ast.ImportFrom) and node.level == 0 and graphtraj(node.module):
+            lines.append(node.lineno)
+        elif (isinstance(node, ast.Call) and node.args and isinstance(node.args[0], ast.Constant)
+              and graphtraj(node.args[0].value)
+              and (isinstance(node.func, ast.Name) and node.func.id in {'__import__', 'import_module'}
+                   or isinstance(node.func, ast.Attribute) and node.func.attr == 'import_module')):
+            lines.append(node.lineno)
+    return lines
+
+
+def test_no_agent_swarm_module_imports_graphtraj() -> None:
+    """No module in agent_swarm or any of its subpackages names a GraphTraj import."""
+    package = Path(agent_swarm.__file__).parent
+    modules = sorted(package.rglob('*.py'))
+    assert {'claude', 'codex', 'dsh', 'pi', 'sessions'} <= {path.parent.name for path in modules}
+    found = [f'{path.relative_to(package.parent)}:{line}' for path in modules
+             for line in graphtraj_imports(path.read_text(encoding='utf-8'))]
+    assert found == []
+
+
+def test_graphtraj_import_scan_sees_hidden_forms() -> None:
+    """The scan reports the forms an import-time probe misses, and nothing else."""
+    hidden = """
+def later():
+    import graphtraj.tasks
+    from graphtraj import interfaces
+    importlib.import_module('graphtraj.runtimes')
+    __import__('graphtraj')
+from . import graphtraj_named_sibling
+import graphtrajectory
+"""
+    assert graphtraj_imports(hidden) == [3, 4, 5, 6]
+
+
+def test_mcp_server_version_is_the_single_package_version(tmp_path: Path) -> None:
+    """MCP serverInfo reports agent_swarm.__version__, which the installed metadata matches."""
+    env = {**os.environ, 'PYTHONPATH': str(Path(__file__).resolve().parents[1] / 'src')}
+    env.pop('AGENT_SWARM_CONNECTION', None)
+    result = subprocess.run([sys.executable, '-m', 'agent_swarm.mcp'], env=env, text=True,
+                            input=json.dumps({'jsonrpc': '2.0', 'id': 1, 'method': 'initialize',
+                                              'params': {}}) + '\n',
+                            capture_output=True, timeout=30)
+    assert result.returncode == 0, result.stderr
+    server = json.loads(result.stdout)['result']['serverInfo']
+    assert server == {'name': 'agents', 'version': agent_swarm.__version__}
+    assert agent_swarm.__version__ == version('agent-swarm')
+    plugin = json.loads((Path(agent_swarm.__file__).parent / 'dsh' / 'package.json').read_text())
+    assert plugin['version'] == agent_swarm.__version__

@@ -7,6 +7,9 @@ import sys
 import zipfile
 from pathlib import Path
 
+from packaging.requirements import Requirement
+
+import agent_swarm
 from conftest import InstalledCommands
 
 
@@ -56,12 +59,20 @@ def test_wheels_have_separate_owners(built_wheel: Path) -> None:
         graphtraj = set(archive.namelist())
         metadata = archive.read(next(n for n in graphtraj if n.endswith('/METADATA'))).decode()
     assert not agents.intersection(graphtraj)
-    assert 'Requires-Dist: agent-swarm==0.1.0' in metadata
+    # GraphTraj declares a range of agents versions, not one pinned release.
+    requirement = Requirement(next(line.removeprefix('Requires-Dist: ') for line in metadata.splitlines()
+                                   if line.startswith('Requires-Dist: agent-swarm')))
+    agents_version = next(line.removeprefix('Version: ') for line in agents_metadata.splitlines()
+                          if line.startswith('Version: '))
+    assert agents_version == agent_swarm.__version__
+    assert requirement.specifier.contains(agents_version)
+    assert not requirement.specifier.contains('0.2.0')
     assert 'Requires-Dist: graphtraj' not in agents_metadata
     for text in (metadata, agents_metadata):
         assert 'Requires-Dist: PyYAML' in text
         assert 'Requires-Dist: websockets' in text
     assert 'agent_swarm/runtime.py' in agents
+    assert 'agent_swarm/PUBLIC_API.md' in agents
     assert 'agent_swarm/dsh/client.mjs' in agents
     assert 'agent_swarm/dsh/communication.mjs' in agents
     assert 'agent_swarm/dsh/package.json' in agents

@@ -5,7 +5,14 @@ Task-free control backend over a caller-chosen data root; Runtime drivers
 supply native execution. GraphTraj imports this package in one direction and
 never needs Tasks, Teams, Rounds, Worldline, budgets, reports or Worktrees
 to use it.
+
+The public interface and its version rules are in ``PUBLIC_API.md`` beside
+this file; anything it does not list is internal.
 """
+
+# The only definition of the distribution version; packaging and every
+# runtime report (MCP serverInfo, Codex clientInfo) read it from here.
+__version__ = "0.1.0"
 
 from agent_swarm.config import (
     CONFIG_DEFAULTS,
@@ -40,6 +47,7 @@ from agent_swarm.tool import (
 )
 
 __all__ = [
+    "__version__",
     "ACTION_FIELDS", "INPUT_SCHEMA", "TOOL_NAME",
     "AgentsError", "AgentsResult", "Backend", "Binding", "Caller", "Outcome",
     "SessionArchive", "bind", "tool_descriptor", "unavailable", "validate_request",

@@ -1,7 +1,7 @@
 /** Pi's session-local GraphTraj entry; loading this file is a native trust step. */
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-// The same-version agent-swarm distribution installs beside this package.
+// A supported agent-swarm distribution (the range in pyproject.toml) installs beside this package.
 import { loadHostSdk, registerAgents, sessionEnvironment } from '../../../agent_swarm/pi/extension.mjs';
 
 export { loadHostSdk, registerAgentDisplay, sessionEnvironment, startAgentHost } from '../../../agent_swarm/pi/extension.mjs';

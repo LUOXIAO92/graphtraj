@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "agent-swarm"
-version = "0.1.0"
+dynamic = ["version"]
 description = "Independent native Agent control and optional native Session archives."
 requires-python = ">=3.12"
 dependencies = [
@@ -21,5 +21,8 @@ packages = ["agent_swarm", "agent_swarm.dsh", "agent_swarm.claude", "agent_swarm
             "agent_swarm.sessions"]
 package-dir = {agent_swarm = "."}
 
+[tool.setuptools.dynamic]
+version = {attr = "agent_swarm.__version__"}
+
 [tool.setuptools.package-data]
-agent_swarm = ["dsh/*.mjs", "dsh/package.json", "claude/*.mjs", "pi/*.mjs", "sessions/DSH-LICENSE"]
+agent_swarm = ["PUBLIC_API.md", "dsh/*.mjs", "dsh/package.json", "claude/*.mjs", "pi/*.mjs", "sessions/DSH-LICENSE"]

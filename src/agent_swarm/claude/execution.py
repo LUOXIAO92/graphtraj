@@ -17,7 +17,7 @@ import time
 import uuid
 from typing import Callable
 
-from agent_swarm import AgentsResult
+from agent_swarm import AgentsResult, __version__
 from agent_swarm.discovery import handle_request as discover_agents
 from agent_swarm.mcp import tool_documents
 from agent_swarm import SessionArchive
@@ -187,7 +187,7 @@ class ClaudeExecution:
                 params = message.get('params', {})
                 if method == 'initialize':
                     result = {'protocolVersion': params.get('protocolVersion', '2025-06-18'),
-                              'capabilities': {'tools': {}}, 'serverInfo': {'name': 'agents', 'version': '1'}}
+                              'capabilities': {'tools': {}}, 'serverInfo': {'name': 'agents', 'version': __version__}}
                 elif method == 'tools/list':
                     result = {'tools': tool_documents()}
                     self.sdk_tools_listed = True

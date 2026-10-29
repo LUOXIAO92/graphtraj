@@ -12,7 +12,7 @@ this file; anything it does not list is internal.
 
 # The only definition of the distribution version; packaging and every
 # runtime report (MCP serverInfo, Codex clientInfo) read it from here.
-__version__ = "0.1.1"
+__version__ = "0.1.2"
 
 from agent_swarm.config import (
     CONFIG_DEFAULTS,

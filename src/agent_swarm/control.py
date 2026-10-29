@@ -259,8 +259,36 @@ class ExecutionEvents:
         self._apply(lambda record, current: current["process"].update(facts))
 
     def request(self, details: Mapping[str, Any]) -> None:
-        """Retain that a native request now waits for a reply."""
-        self._apply(lambda record, current: current["requests"].append(dict(details)))
+        """Retain that a native request now waits for a reply, and notify the parent once.
+
+        A repeated report of the same request (same token or native ID) is
+        ignored. With ``request_notices`` the parent's receiver (a parent
+        Agent's native receiver, else the host's ``event_receiver``) gets one
+        ``request`` notice; the parent still answers with ``requests`` and
+        ``reply``, and polling keeps working.
+        """
+        key = _reply_key(details)
+        with self._control._locked(self._agent) as record:
+            current = _running(record)
+            if (current is None or current["id"] != self._execution
+                    or any(_reply_key(item) == key for item in current["requests"])):
+                return
+            current["requests"].append(dict(details))
+            native = self._control._receivers.get(record["parent"])
+            receiver = native[1] if native is not None else self._control.event_receiver
+            if not self._control.request_notices or receiver is None:
+                return
+            notice = {"parent": record["parent"], "agent": record["agent"],
+                      "session": current["session"], "execution": current["id"],
+                      "body": _request_message(details), "outcome": "request", "request": key}
+            if native is None:
+                notice.update(creator=dict(record["creator"]), error=None)
+        # As for ends, no Agent lock spans the receiver's native I/O. A failed
+        # delivery leaves the request readable through status and requests.
+        try:
+            receiver(notice)
+        except Exception:
+            pass
 
     def receive_children(self, receiver: Callable[[dict], bool]) -> None:
         """Bind a host reply receiver to this actual active parent execution."""
@@ -373,6 +401,16 @@ def _reply_key(request: Mapping[str, Any]) -> str:
     return request.get("request_token") or json.dumps(request.get("request_id"))
 
 
+def _request_message(details: Mapping[str, Any]) -> str:
+    """Name a native request without its input, which may hold credentials."""
+    method = details.get("method") if isinstance(details.get("method"), str) else "a native request"
+    params = details.get("params")
+    tool = params.get("tool_name") if isinstance(params, Mapping) else None
+    named = f"{method} for {tool}" if isinstance(tool, str) and tool else method
+    return (f"Permission request {named} waits for your reply. Read it with requests "
+            "and answer once with reply.")
+
+
 def _unanswered(current: Mapping[str, Any]) -> int:
     """Count retained native requests of an execution that have no reply yet.
 
@@ -414,12 +452,17 @@ class AgentControl:
         ``roots.require_control(caller)`` raises :class:`AgentsError` when that
         caller may view but not control. Without it a root caller sees only
         roots it created with the same host and Session.
+    request_notices
+        Whether a child's native permission request also notifies its parent
+        once (event ``request``). Off by default, so existing hosts and
+        GraphTraj see only ends.
     """
 
     def __init__(
         self, root: Path, drivers: Mapping[str, RuntimeDriver], *,
         event_receiver: Callable[[dict], bool] | None = None,
         roots: Any = None,
+        request_notices: bool = False,
     ) -> None:
         """Bind the data root and the available Runtime drivers."""
         self.root    = Path(root)
@@ -427,6 +470,7 @@ class AgentControl:
         self._held   = threading.local()
         self.event_receiver = event_receiver
         self.roots   = roots
+        self.request_notices = request_notices
         self._receivers: dict[str, tuple[str, Callable[[dict], bool]]] = {}
 
     # -- Backend --------------------------------------------------------

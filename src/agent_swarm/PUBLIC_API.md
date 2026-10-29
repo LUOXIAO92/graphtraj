@@ -360,7 +360,7 @@ only these notify the parent:
 | Kind | Direction | Today |
 | --- | --- | --- |
 | Message | both ways | parent → child: `create` `instruction`, `send`, `resume`. Child → parent: the child's final answer when its round ends and it has no running members of its own |
-| Permission request (decision or resources) | child → parent, waits for a reply | native approval requests only: `wait` returns early, the Agent document shows `pending_requests`, the parent reads them with `requests` and answers once with `reply` |
+| Permission request (decision or resources) | child → parent, waits for a reply | native approval requests only: the parent is notified once per request (event `request`, see below), `wait` returns early, the Agent document shows `pending_requests`, the parent reads them with `requests` and answers once with `reply` |
 | System exception | system → parent | an execution ending `failed` or `interrupted`, with `last_result.error` |
 
 Delivery rules:
@@ -378,6 +378,11 @@ Delivery rules:
   resumes. A child Agent that is itself a parent is continued with its
   child's reply. Under GraphTraj this is the 367, 372 and 375 behaviour.
 - There is no separate "ask for attention" call and no parent watch switch.
+- A native permission request notifies the parent once per request when
+  the host enables it (since 0.1.2; see *Backend* below). A repeated report
+  of the same request notifies nobody again. The notice names the request's
+  method and tool only, never its input, and asks for `requests` and
+  `reply`; it never answers the request.
 
 What the parent sees today:
 
@@ -389,8 +394,22 @@ What the parent sees today:
   or `status` is not pushed again.
 - **Codex host:** one host event per notice, `{"source": "agents", "alias",
   "event", "message"}`, sent to the parent Session.
-- `event` is `completed`, `interrupted` or `failed`; `message` is the child's
-  answer, else the error message, else the outcome.
+- `event` is `completed`, `interrupted`, `failed` or `request`; `message` is
+  the child's answer, else the error message, else the outcome. For
+  `request` it is a short credential-free text naming the native method and
+  tool, for example `Permission request claude/can_use_tool for Bash waits
+  for your reply. Read it with requests and answer once with reply.`
+
+**Backend.** `AgentControl(root, drivers, event_receiver=..., request_notices=
+False)`. With `request_notices=True` (since 0.1.2), when a driver reports a
+new native request through `ExecutionEvents.request`, the core calls the
+parent's receiver once: a parent Agent's native receiver, else the host's
+`event_receiver` for a root. The notice is `{"parent", "agent", "session",
+"execution", "body", "outcome": "request", "request"}` (`request` is the
+request's token, else its native ID as JSON); a root's notice adds
+`"creator"` and `"error": null`, as an end notice does. A receiver error is
+ignored: the request stays readable through `status` and `requests`. The
+default `False` keeps a host's notices to ends only, as before 0.1.2.
 
 Gaps, by owner:
 
@@ -500,6 +519,10 @@ Recorded classifications:
   documented meaning, "starts no new work". No version-range change.
 - 388: envelope validation errors gained `action` and a coded `error` object
   (see 1.2). A fix that makes them match the documented error structure.
+- 381 (0.1.2): the notice event `request` and `AgentControl`'s optional
+  `request_notices` argument (default off). Compatible: a new event for a new
+  situation, behind a new optional argument with a default that keeps
+  current behaviour.
 
 While the major version is `0`, an incompatible change raises the minor
 version (`0.1.x` → `0.2.0`), and compatible additions and fixes raise the

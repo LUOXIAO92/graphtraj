@@ -163,7 +163,10 @@ def test_model_change_failure_names_both_models_and_reason(
 
 @pytest.mark.parametrize('case', ['elsewhere', 'archive'])
 def test_refused_host_start_is_readable_in_calls_and_log(tmp_path: Path, case: str) -> None:
-    """A refused start completes the MCP handshake and reports why; it binds no control."""
+    """A refused start completes the MCP handshake and reports why; it binds no control.
+
+    ``archive``: ``save_normalized_sessions: true`` is accepted since 384.
+    """
     import json
     import os
     import subprocess
@@ -196,16 +199,18 @@ def test_refused_host_start_is_readable_in_calls_and_log(tmp_path: Path, case: s
     replies = [json.loads(line) for line in finished.stdout.splitlines()]
     assert replies[0]['result']['serverInfo']['name'] == 'agents'
     called = replies[1]['result']
+    if case == 'archive':
+        # 384: archiving on no longer refuses the host at start. (This bare
+        # launcher has no native caller context, so the call itself is refused.)
+        text = json.dumps(called)
+        assert 'archive-unavailable' not in text and 'host-unavailable' not in text, called
+        assert 'did not start' not in (root / 'host.log').read_text()
+        return
     assert called['isError'] is True
     error = called['structuredContent']['error']
-    if case == 'elsewhere':
-        assert error['code'] == 'host-unavailable'
-        assert f'started in {elsewhere.resolve()}' in error['message']
-        assert f'configured for {project.resolve()}' in error['message']
-    else:
-        assert error['code'] == 'archive-unavailable'
-        assert 'save_normalized_sessions: true is not available here' in error['message']
-        assert 'set it to false' in error['message'].lower()
+    assert error['code'] == 'host-unavailable'
+    assert f'started in {elsewhere.resolve()}' in error['message']
+    assert f'configured for {project.resolve()}' in error['message']
     assert error['message'] in finished.stderr
     assert error['message'] in (root / 'host.log').read_text()
     assert not (root / 'control').exists() and not (root / 'live').exists()
@@ -267,10 +272,10 @@ def test_context_reports_a_refused_host_in_one_line(tmp_path: Path) -> None:
 
     import agent_swarm
 
-    project = tmp_path / 'project'
+    project, elsewhere = tmp_path / 'project', tmp_path / 'elsewhere'
     root = project / '.agents-control'
     root.mkdir(parents=True)
-    (root / 'config.yml').write_text('save_normalized_sessions: true\n')
+    elsewhere.mkdir()
     config = root / 'claude-host.json'
     config.write_text(json.dumps({'root': str(root), 'cwd': str(project), 'claude': sys.executable,
                                   'channel_file': str(root / 'live' / 'channel.json'), 'settings': {}}))
@@ -295,7 +300,7 @@ def test_context_reports_a_refused_host_in_one_line(tmp_path: Path) -> None:
                 'sys.stdin.readline()\n'
                 'host.send_signal(signal.SIGINT)\n'
                 'print(host.wait(timeout=30))\n')
-    host = subprocess.Popen([sys.executable, '-c', launcher, str(config)], cwd=project, env=env,
+    host = subprocess.Popen([sys.executable, '-c', launcher, str(config)], cwd=elsewhere, env=env,
                             stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
     assert json.loads(host.stdout.readline())['result']['serverInfo']['name'] == 'agents'
     refused = context()
@@ -305,6 +310,6 @@ def test_context_reports_a_refused_host_in_one_line(tmp_path: Path) -> None:
     host.wait(timeout=30)
     assert refused.returncode == 1 and 'Traceback' not in refused.stderr
     [line] = refused.stderr.splitlines()
-    assert line.startswith('archive-unavailable: The agents host did not start: ')
-    assert 'save_normalized_sessions: true is not available here' in line and 'Set it to false' in line
+    assert line.startswith('host-unavailable: The agents host did not start: ')
+    assert f'started in {elsewhere.resolve()}' in line
     assert not (root / 'host-refusal.json').exists() and not (root / 'live').exists()

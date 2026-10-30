@@ -18,6 +18,9 @@ const ctx = new Context();
 await ctx.plugin(SessionStore).await();
 await ctx.plugin(SessionQueryEngine).await();
 await ctx.plugin(TypertRegistry).await();
+// The Gateway needs Remote Access since DSH 0.2.2; an owner Peer calls it directly.
+const { RemoteAccessService } = await load('@deepseek-ai/dsh-api-remote-access');
+ctx.plugin(RemoteAccessService);
 await ctx.plugin(TypertGatewayService, {}).await();
 const session = ctx.sessions.create('receiver', { meta: { cwd: process.cwd() } });
 const inbox = { nextTurn: [], nextStep: [] };
@@ -33,7 +36,8 @@ await installCommunication(ctx, { TypertRemoteService, Remote, createUserMessage
 assert.equal(remoteMethods(ctx.agentMessages)[0].method, 'receive');
 const fact = { id: 'execution-result-1', sessionId: session.id,
   senderSessionId: 'actual-child-session', sender: 'child-agent', recipient: 'parent-agent', body: 'reply body' };
-const receive = request => ctx.typertGateway.invoke({ namespace: 'agentMessages', method: 'receive', args: { request } });
+const peer = { signal: new AbortController().signal, principal: { kind: 'owner' } };
+const receive = request => ctx.typertGateway.invoke({ namespace: 'agentMessages', method: 'receive', args: { request }, peer });
 await Promise.all([receive(fact), receive(fact)]);
 assert.equal(deliveries, 1);
 const message = inbox.nextStep.shift();

@@ -16,21 +16,21 @@ class CodexAdapterError(RuntimeAdapterError):
 
 
 @dataclass(frozen=True)
-class _CodexRuntimeContext:
+class CodexRuntimeContext:
     """Immutable native configuration, safe to retain and restore in a Worker."""
 
-    _launch: str
-    _evidence: str
-    _environment: Mapping[str, str]
+    launch: str
+    evidence: str
+    environment: Mapping[str, str]
     runtime: str = "codex"
 
     def launch_document(self) -> Dict[str, Any]:
         """Return the durable Adapter input for launch and resume."""
-        return json.loads(self._launch)
+        return json.loads(self.launch)
 
     def evidence_document(self) -> Dict[str, Any]:
         """Return the effective Context facts for mechanical evidence."""
-        return json.loads(self._evidence)
+        return json.loads(self.evidence)
 
     def session_document(self) -> Dict[str, Any]:
         """Return the resolved role and access as native thread parameters."""
@@ -41,14 +41,14 @@ class _CodexRuntimeContext:
 
     def runtime_environment(self) -> Mapping[str, str]:
         """Return ephemeral connection settings for the Runtime process."""
-        return dict(self._environment)
+        return dict(self.environment)
 
 
 def restore_codex_context(
     request: Mapping[str, Any], evidence: Mapping[str, Any],
 ) -> RuntimeContext:
     """Restore a Worker's resolved Context without consulting current role defaults."""
-    arguments, worktree = _validate_launch_request(request)
+    arguments, worktree = validate_codex_launch_request(request)
     params = request.get("session_parameters")
     if params is None:
         # Historical exec launches retain the actual settings in CLI overrides.
@@ -77,13 +77,13 @@ def restore_codex_context(
         or not isinstance(params.get("developerInstructions"), str)
     ):
         raise CodexAdapterError("RUNTIME_REQUEST_INVALID", "The native Session Context is invalid.")
-    return _CodexRuntimeContext(
+    return CodexRuntimeContext(
         json.dumps({"runtime": "codex", "adapter_request": request}),
         json.dumps(evidence), {},
     )
 
 
-def _validate_launch_request(
+def validate_codex_launch_request(
     request: Mapping[str, Any],
 ) -> Tuple[List[str], Path]:
     if (
@@ -116,7 +116,7 @@ def _validate_launch_request(
     return arguments, worktree
 
 
-def _reject_legacy_user_sandbox_config(codex_home: Path | None = None) -> None:
+def reject_legacy_sandbox_config(codex_home: Path | None = None) -> None:
     """Reject legacy sandbox settings in the selected service's configuration."""
     if codex_home is None:
         codex_home = Path(os.environ.get("CODEX_HOME", Path.home() / ".codex"))
@@ -187,7 +187,7 @@ def apply_unix_socket_access(request: dict, configured: Mapping[str, Any] | None
         arguments[2:2] = ['-c', key + '=' + _toml_value(config[key])]
 
 
-def _legacy_codex_api_key_env(base_url: str | None, name: str | None) -> str | None:
+def codex_api_key_env(base_url: str | None, name: str | None) -> str | None:
     """Retain the legacy default key only for its official HTTPS API origin."""
     from urllib.parse import urlsplit
 
@@ -206,7 +206,7 @@ def _connection_environment(
     """Resolve explicit credentials transiently; never fall back to official auth."""
 
     if runtime_home is None:
-        api_key_env = _legacy_codex_api_key_env(base_url, api_key_env)
+        api_key_env = codex_api_key_env(base_url, api_key_env)
     environment = dict(credential_environment(api_key_env))
     if runtime_home is not None:
         environment["CODEX_HOME"] = runtime_home

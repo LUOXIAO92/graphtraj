@@ -17,7 +17,7 @@ from uuid import uuid4
 
 import pytest
 
-from agent_swarm import AgentControl, Caller, ExecutionEvents, Run, bind
+from agent_swarm import AgentControl, Caller, DECISION_METHOD, ExecutionEvents, Run, bind
 from agent_swarm.calls import Call, current_call, on_discard, stop_requested
 from agent_swarm.claude.host import IndependentCalls
 from agent_swarm.codex.app_server import CodexAdapterError, CodexAppServer
@@ -266,6 +266,21 @@ def test_a_held_request_is_listed_only_while_it_waits(tmp_path: Path) -> None:
     events.finished('completed', last_message='answer')
     assert [notice['outcome'] for notice in control.held_notices(MAIN)] == ['completed']
     assert control.notice_open(held[1]) is False
+
+
+def test_decisions_only_holds_only_ask_parent_requests(tmp_path: Path) -> None:
+    """With ``request_notices="decisions"`` a native request is neither pushed nor held."""
+    driver = Driver()
+    received = []
+    control = AgentControl(tmp_path, {'fake': driver}, event_receiver=lambda notice: received.append(notice) or False,
+                           request_notices='decisions', hold_notices=True)
+    call = bind(control, MAIN)
+    agent = create(call)
+    driver.report(agent, request_details('native'))
+    driver.report(agent, {**request_details('decision'), 'method': DECISION_METHOD})
+
+    assert [notice['request'] for notice in received] == ['decision']
+    assert [notice['request'] for notice in control.held_notices(MAIN)] == ['decision']
 
 
 def test_settling_is_final_unless_reopened(tmp_path: Path) -> None:

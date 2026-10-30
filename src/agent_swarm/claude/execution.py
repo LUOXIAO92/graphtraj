@@ -143,7 +143,7 @@ class ClaudeExecution:
                                     provider=provider, resumed=self.expected is not None,
                                     extra_fields=self.extra_fields)
 
-    def _connection(self, resources: ExitStack) -> str | None:
+    def bind_connection(self, resources: ExitStack) -> str | None:
         """Expose CLI calls only through the native owner's PID-bound channel."""
         if self.host_connection is None:
             return None
@@ -163,7 +163,7 @@ class ClaudeExecution:
         """Require the owning host to bind native permission delivery."""
         raise RuntimeAdapterError('RUNTIME_REQUEST_UNHANDLED', 'No parent notice receiver is bound.')
 
-    def _settings(self, address: str | None) -> tuple[dict, dict]:
+    def native_settings(self, address: str | None) -> tuple[dict, dict]:
         """Keep native sandbox and read-only grants without project policy."""
         request = self.request
         cwd = Path(request['worktree_path']).resolve()
@@ -420,7 +420,7 @@ class ClaudeExecution:
         """Use native restricted mode and mandatory sandboxing without bypass flags."""
         request = self.request
         home = Path(request['runtime_home']).resolve()
-        settings, mcp = self._settings(address)
+        settings, mcp = self.native_settings(address)
         if request.get('permission_mode') is not None:
             settings['permissions']['defaultMode'] = request['permission_mode']
         argv = [request['executable'], '--print', '--verbose', '--input-format', 'stream-json',
@@ -792,7 +792,7 @@ class ClaudeExecution:
             collector = self._collector(resources)
             self.collector = collector
             source_position = 0
-            address = self._connection(resources)
+            address = self.bind_connection(resources)
             stderr = resources.enter_context((self.directory / 'stderr.log').open('a', encoding='utf-8'))
             try:
                 if collector is not None:
@@ -1187,7 +1187,7 @@ class ClaudeExecution:
             return True
 
     def operate(self, request: dict) -> dict:
-        """Apply Runner controls only to the bound native Session and invocation."""
+        """Apply controls only to the bound native Session and invocation."""
         with self.lock:
             if (request.get('session'), request.get('execution_id')) != (self.session, self.execution_id):
                 raise RuntimeAdapterError('operation-failed', 'Claude execution is not owned.')

@@ -25,11 +25,15 @@ from graphtraj.runtimes.codex.approval import approval_route, review_request
 from graphtraj.execution.runner_batch import read_session_task
 from graphtraj.execution.runner_control import notify_direct_parent
 from graphtraj.execution.runner_io import write_yaml_durably
-from agent_swarm.codex.app_server import CodexAppServer, CodexExecution, CodexServerRequest
-from agent_swarm.codex.managed_session import CodexManagedExecution as NativeCodexExecution
+from agent_swarm.codex import (
+    CodexAppServer,
+    CodexExecution,
+    CodexManagedExecution as NativeCodexExecution,
+    CodexServerRequest,
+)
 from graphtraj.runtimes.codex.codex_adapter import restore_codex_context
 from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError
-from agent_swarm.sessions.archive import SessionArchive
+from agent_swarm.sessions import SessionArchive
 
 
 def _approval_history_text(value: object) -> object:
@@ -163,20 +167,20 @@ class CodexManagedExecution(NativeCodexExecution):
         if not independent:
             self.parent_notice = lambda notice, identity: notify_direct_parent(self.directory, notice, identity)
 
-    def _uses_review(self) -> bool:
+    def uses_review(self) -> bool:
         """Keep the configured GraphTraj external review route."""
         return self.approval is not None
 
-    def _bind_connection(self, connections: ExitStack, request: dict, cwd: Path) -> tuple:
+    def bind_connection(self, connections: ExitStack, request: dict, cwd: Path) -> tuple:
         """Bind task tools for formal Workers, agents alone for Task-free consumers."""
         if self.independent:
-            return super()._bind_connection(connections, request, cwd)
+            return super().bind_connection(connections, request, cwd)
         if self.created is None:
             return None, None, None
         from graphtraj.interfaces.hosted_cli import CONNECTION_ENV, cli_connection
         from graphtraj.runtimes.codex.access import member_project_reads
         from graphtraj.workspace.runner_project import discover_project_root
-        from agent_swarm.connection import verify_native_context
+        from agent_swarm import verify_native_context
 
         root = discover_project_root(cwd)
         native_context = lambda: {'runtime': 'codex', 'session': self.native_session, 'cwd': str(cwd)}
@@ -202,13 +206,13 @@ class CodexManagedExecution(NativeCodexExecution):
         ))
         return address, CONNECTION_ENV, 'graphtraj.interfaces.mcp'
 
-    def _archive(self, session: object) -> object | None:
+    def session_archive(self, session: object) -> object | None:
         """Name a Runner execution's Task once its mapping exists, at native Session start."""
         if not self.independent and self.extra_fields is not None:
             from graphtraj.interfaces.agents import mapped_task_ids
 
             self.extra_fields['graphtraj']['taskIds'] = mapped_task_ids(self.directory)
-        return super()._archive(session)
+        return super().session_archive(session)
 
     def _review_recovery_sync(self, proposal: dict) -> dict:
         """Bridge the tool worker to this existing execution's selected reviewer."""
@@ -260,7 +264,7 @@ class CodexManagedExecution(NativeCodexExecution):
             if not response.done():
                 response.cancel()
 
-    async def _review_approval(self, request: CodexServerRequest) -> dict:
+    async def review_approval(self, request: CodexServerRequest) -> dict:
         """Review this request and return its native response without a separate log."""
         if request.method not in {
             'item/commandExecution/requestApproval', 'item/fileChange/requestApproval',
@@ -382,7 +386,7 @@ async def authorize_mcp_caller(
     the retained finish-check binding is required; fork lineage alone grants
     nothing. Returned identities use the existing Runner caller scope.
     """
-    from agent_swarm.connection import verify_native_context
+    from agent_swarm import verify_native_context
     from graphtraj.execution.runner_models import RunnerError
     from graphtraj.runtimes.codex.session_entry import is_bound_checker, session_source
     from graphtraj.workspace.runner_project import discover_runner_directory

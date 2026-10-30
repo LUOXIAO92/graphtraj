@@ -53,14 +53,25 @@ def _carried_unconfirmed(execution: dict) -> bool:
     now. A process that cannot be checked counts as alive. A Runtime that was
     never recorded cannot be checked; it is reported, not assumed to exist.
     """
-    from agent_swarm.control import _alive
-
     process = execution.get('process') or {}
     worker = process.get('worker_pid')
     return (execution.get('state') == 'ended' and execution.get('terminal_confirmed') is False
             and (execution.get('error') or {}).get('code') in CARRIED_UNCONFIRMED_CODES
             and isinstance(worker, int) and not isinstance(worker, bool) and worker > 0
-            and not _alive(worker) and not _alive(process.get('runtime_pid')))
+            and not _pid_alive(worker) and not _pid_alive(process.get('runtime_pid')))
+
+
+def _pid_alive(pid: object) -> bool:
+    """Return whether a recorded process identifier still resolves; unset means no process."""
+    if not isinstance(pid, int) or isinstance(pid, bool) or pid <= 0:
+        return False
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    return True
 
 
 def _owner_exited(agent: str, execution: dict) -> dict | None:
@@ -181,10 +192,10 @@ def _relocate_owner_exited(swarm: Path, agent: str, settings: dict) -> None:
     under the same per-Agent lock, atomic replacement and JSON form agent_swarm
     uses; executions, including terminal_confirmed false and error, are kept.
     """
-    from agent_swarm.locks import exclusive
+    from agent_swarm import exclusive_lock
 
     path = swarm / 'control' / 'agents' / f'{agent}.json'
-    with exclusive(swarm / 'live' / 'agents' / f'{agent}.lock'):
+    with exclusive_lock(swarm / 'live' / 'agents' / f'{agent}.lock'):
         record = json.loads(path.read_text(encoding='utf-8'))
         record['settings'] = settings
         descriptor, temporary = tempfile.mkstemp(dir=path.parent, prefix='.record-')

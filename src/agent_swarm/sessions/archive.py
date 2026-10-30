@@ -18,7 +18,6 @@ from pathlib import Path
 import tempfile
 from typing import Callable, Iterator
 
-from agent_swarm.codex.diagnostics import redact
 from agent_swarm.config import read_config
 
 from .protocol import (
@@ -27,6 +26,41 @@ from .protocol import (
 )
 
 EventFields = Callable[[dict], 'dict | None']
+
+
+def redact(value: object) -> object:
+    """Redact credentials; loaded late so ``import agent_swarm`` starts no Runtime package."""
+    from agent_swarm.codex.diagnostics import redact as redact_native
+
+    return redact_native(value)
+
+
+def native_session_files(root: Path) -> list[Path]:
+    """Return the native Session files the Agents under data root ``root`` recorded.
+
+    Each ``native/<agent>/session.yml`` may name one file. It counts only when
+    the record names a Session and the file is an existing ``.jsonl`` at an
+    absolute path. A record that cannot be read or has another shape is
+    skipped. Nothing is searched for in a Runtime's home, so the result is safe
+    to use as exact read grants. Returns resolved paths in sorted order.
+    """
+    import yaml
+
+    files = set()
+    for path in root.glob('native/*/session.yml'):
+        try:
+            record = yaml.safe_load(path.read_text(encoding='utf-8'))
+            if not isinstance(record, dict) or not record.get('session'):
+                continue
+            activity = record.get('activity')
+            source = record.get('rollout_path') or (activity.get('trace_file') if isinstance(activity, dict) else None)
+            if isinstance(source, str):
+                native = Path(source)
+                if native.is_absolute() and native.suffix == '.jsonl' and native.is_file():
+                    files.add(native.resolve())
+        except (OSError, ValueError, yaml.YAMLError):
+            continue
+    return sorted(files)
 
 
 def archive_path(root: Path, session_id: str) -> Path:

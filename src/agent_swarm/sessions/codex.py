@@ -16,7 +16,7 @@ from agent_swarm.sessions.archive import JsonlSessionStore, SessionArchive, arch
 from agent_swarm.sessions.protocol import (
     SESSION_FORMAT_VERSION, SURFACE_TYPES, native_record, retain_native, validate_extra_fields,
 )
-from .codex_values import _attachments, _timestamp
+from .codex_values import codex_attachments, _timestamp
 
 
 class NativeInputError(ValueError):
@@ -167,7 +167,7 @@ def _compaction(events: list[dict], event: dict, store: JsonlSessionStore) -> bo
     if metadata is not None and len(metadata) != len(replacement):
         raise ValueError('Native replacement history and metadata lengths differ.')
     _metadata(event, record)
-    event['attachments'] = _attachments(store, record)
+    event['attachments'] = codex_attachments(store, record)
     events.append(event)
     selected = []
     for index, item in enumerate(replacement):
@@ -181,7 +181,7 @@ def _compaction(events: list[dict], event: dict, store: JsonlSessionStore) -> bo
         mapped['native']['record'] = deepcopy(item)
         if metadata is not None:
             mapped['native']['metadata'] = deepcopy(metadata[index])
-        mapped['attachments'] = _attachments(store, item)
+        mapped['attachments'] = codex_attachments(store, item)
         if mapped['type'] in SURFACE_TYPES:
             selected.append(mapped['seq'])
         events.append(mapped)
@@ -488,7 +488,7 @@ def _append_record(
         'realtime_item', 'event_msg',
     }:
         _metadata(event, record)
-    event['attachments'] = _attachments(store, record)
+    event['attachments'] = codex_attachments(store, record)
     events.append(event)
 
 

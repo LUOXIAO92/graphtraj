@@ -14,10 +14,26 @@ from pathlib import Path
 
 OPERATION_TIMEOUT_SECONDS = 10.0
 
-from agent_swarm.process import (
-    process_ancestors, process_executable, _libproc, _PROC_PIDT_SHORTBSDINFO, _SHORTBSDINFO_BUFFER_SIZE,
-    process_arguments as _process_arguments,
-)
+from agent_swarm import process_ancestors, process_executable, process_arguments as _process_arguments
+
+# The Darwin kernel's process information interface (sys/proc_info.h).
+_PROC_PIDT_SHORTBSDINFO   = 13
+_SHORTBSDINFO_BUFFER_SIZE = 64
+
+
+def _libproc() -> ctypes.CDLL | None:
+    """Return the loaded libproc, loading and configuring it at most once."""
+    if not hasattr(_libproc, 'library'):
+        try:
+            library = ctypes.CDLL('/usr/lib/libproc.dylib', use_errno=True)
+            library.proc_pidinfo.restype = ctypes.c_int
+            library.proc_pidinfo.argtypes = [
+                ctypes.c_int, ctypes.c_int, ctypes.c_uint64, ctypes.c_void_p, ctypes.c_int,
+            ]
+        except (OSError, AttributeError):
+            library = None
+        _libproc.library = library
+    return _libproc.library
 
 
 def process_is_alive(pid: int) -> bool:

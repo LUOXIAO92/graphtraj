@@ -166,7 +166,7 @@ class DshExecution:
         self.logs = (self.native_directory / 'dsh-native' if request.get('native_directory')
                      else trace_file.parent / 'dsh-native')
 
-    def _prepare(self) -> dict[str, str]:
+    def prepare_launch(self) -> dict[str, str]:
         """Compose an isolated native profile, retaining defaults outside this Agent."""
         key = self.request.get('api_key_env')
         try:
@@ -418,7 +418,7 @@ class DshExecution:
                 'command': str(Path(sys.executable).absolute()),
                 'args': ['-I', '-m', 'agent_swarm.mcp'],
             })
-        environment = self._prepare()
+        environment = self.prepare_launch()
         for inherited in ('AGENTS_CONNECTION', 'AGENT_SWARM_CONNECTION', 'GRAPHTRAJ_CLI_CONNECTION'):
             environment.pop(inherited, None)
         if self.host_connection is not None:

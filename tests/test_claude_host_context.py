@@ -3,11 +3,20 @@ from pathlib import Path
 import re
 import subprocess
 
+from graphtraj.runtimes.claude.host import adoption_material
+
+
+def written_mod() -> str:
+    """The module GraphTraj's adoption writes, with its tasks tool declared."""
+    root = Path('/project').resolve()
+    return adoption_material(root, Path('/claude'))[
+        str(root / '.claude/skills/graphtraj-claude-host/hooks/host_context.mjs')]
+
 
 def test_native_context_is_per_call_and_permissions_are_unchanged(tmp_path: Path) -> None:
     """Current host facts bind each MCP call; rendering never adds model input."""
     module = tmp_path / 'host_context.mjs'
-    module.write_text(Path('src/agent_swarm/claude/host_context.mjs').read_text())
+    module.write_text(written_mod())
     program = r'''
 import assert from 'node:assert/strict';
 const {register} = await import(process.argv[1]);
@@ -108,7 +117,7 @@ assert.deepEqual(contexts.at(-1), {operation: 'end'});
 def test_queued_notices_are_pushed_into_main_then_acknowledged(tmp_path: Path) -> None:
     """The mod claims pending notices, submits them once and returns them on a failed submit."""
     module = tmp_path / 'host_context.mjs'
-    module.write_text(Path('src/agent_swarm/claude/host_context.mjs').read_text())
+    module.write_text(written_mod())
     program = r'''
 import assert from 'node:assert/strict';
 const {register} = await import(process.argv[1]);
@@ -170,7 +179,7 @@ def test_mod_spells_every_host_noun_at_its_call_site() -> None:
 def test_mod_stops_pushing_only_when_prompt_submission_is_missing(tmp_path: Path) -> None:
     """Without prompt.submit the claimed notices are requeued and the push stops for good."""
     module = tmp_path / 'host_context.mjs'
-    module.write_text(Path('src/agent_swarm/claude/host_context.mjs').read_text())
+    module.write_text(written_mod())
     program = r"""
 import assert from 'node:assert/strict';
 const {register} = await import(process.argv[1]);

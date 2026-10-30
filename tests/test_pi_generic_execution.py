@@ -89,7 +89,7 @@ def test_generic_execution_needs_no_graphtraj(tmp_path: Path) -> None:
                     'agent_dir': str(root / 'home'), 'instructions': '', 'sandbox_python': sys.executable,
                     'sandbox_path': '/usr/bin', 'worktree_access': 'read', 'provider_domain': 'p.example'}}
         turn = PiExecution(request, '', root, None, None, root / 'trace.jsonl', None)
-        turn._prepare(None)
+        turn.prepare_launch(None)
         assert not [name for name in sys.modules if name.split('.')[0] == 'graphtraj'], sorted(sys.modules)
         print('ok')
     ''')
@@ -118,7 +118,7 @@ def test_invalid_request_fields_are_named(
     request = generic(tmp_path, pi_environment, provider_domain='api.deepseek.com', **{field: value})
     turn = PiExecution(request, '', tmp_path, None, None, tmp_path / 'trace.jsonl', None)
     with pytest.raises(RuntimeAdapterError) as caught:
-        turn._prepare(None)
+        turn.prepare_launch(None)
     assert caught.value.code == 'ROLE_CONFIG_INVALID'
     assert caught.value.message == f'Pi request field {expected}.'
     assert not (tmp_path / 'trace.pi').exists()

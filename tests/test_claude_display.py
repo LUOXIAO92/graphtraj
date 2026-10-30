@@ -6,7 +6,7 @@ from pathlib import Path
 import subprocess
 import sys
 
-from graphtraj.runtimes.claude.display import display_response
+from agent_swarm.claude.display import display_response
 
 
 def event(action: str, text: str, execution: str = 'execution') -> dict:
@@ -49,7 +49,7 @@ def test_command_hook_uses_the_same_native_output_and_bounds_display() -> None:
     """The installable command returns native hook JSON, never a CLI print UI."""
     original = event('wait', 'x' * 20000)
     environment = {**os.environ, 'PYTHONPATH': str(Path(__file__).resolve().parents[1] / 'src')}
-    result = subprocess.run([sys.executable, '-m', 'graphtraj.runtimes.claude.display'],
+    result = subprocess.run([sys.executable, '-m', 'agent_swarm.claude.display'],
                             input=json.dumps(original), text=True, capture_output=True,
                             check=True, env=environment)
     display = json.loads(result.stdout)

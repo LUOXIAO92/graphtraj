@@ -10,9 +10,13 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Mapping
 from graphtraj.execution.execution_budget import _duration
-from agent_swarm.codex.context import CodexAdapterError
-from agent_swarm.codex.app_server import (
-    CodexAppServer as NativeCodexAppServer, CodexSession, CodexExecution, CodexServerRequest, CodexRPCError,
+from agent_swarm.codex import (
+    CodexAdapterError,
+    CodexAppServer as NativeCodexAppServer,
+    CodexExecution,
+    CodexRPCError,
+    CodexServerRequest,
+    CodexSession,
 )
 
 # The completion checker's fork-only profile: Main's own with Codex managed network enabled.
@@ -344,12 +348,12 @@ class CodexAppServer(NativeCodexAppServer):
 
     async def retain_ordered_history(self, session: CodexSession, archive: object, agent: str) -> None:
         """Construct the existing collector without making native control import it."""
-        from agent_swarm.sessions.codex_history import CodexHistoryArchive
+        from agent_swarm.sessions import CodexHistoryArchive
         from graphtraj.interfaces.agents import graphtraj_fields
 
         await super().retain_ordered_history(
             session, lambda: CodexHistoryArchive(
-                archive, session.inherited_history, self._call,
+                archive, session.inherited_history, self.call,
                 extra_fields=graphtraj_fields(str(archive.root), agent)),
         )
 
@@ -368,11 +372,11 @@ class CodexAppServer(NativeCodexAppServer):
         if session_source(thread) != 'main':
             raise CodexAdapterError('RUNTIME_REQUEST_INVALID', 'The selected Session is not a native Main.')
         if not observe_only:
-            await self._call('config/mcpServer/reload', None)
-        inventory = await self._call('mcpServerStatus/list', {
+            await self.call('config/mcpServer/reload', None)
+        inventory = await self.call('mcpServerStatus/list', {
             'threadId': thread_id, 'serverName': server, 'detail': 'toolsAndAuthOnly',
         })
-        discovery = await self._call('mcpServer/tool/call', {
+        discovery = await self.call('mcpServer/tool/call', {
             'threadId': thread_id, 'server': server, 'tool': 'tasks',
             'arguments': {'action': 'discover'}, '_meta': {'threadId': thread_id},
         })

@@ -13,12 +13,21 @@ from pathlib import Path
 import time
 from typing import BinaryIO
 
-from agent_swarm.sessions.protocol import SESSION_FORMAT_VERSION, native_record, retain_native
+from agent_swarm.sessions import SESSION_FORMAT_VERSION, codex_attachments, native_record, retain_native
 from graphtraj.interfaces.agents import graphtraj_fields
 from graphtraj.sessions.storage import SessionStore, StreamWriter, archive_owner, session_path
 
 
-from agent_swarm.sessions.codex_values import _timestamp, _attachments
+
+def _timestamp(value: object) -> int | None:
+    """Read native ISO timestamps without inventing missing creation times."""
+    if not isinstance(value, str):
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.replace('Z', '+00:00'))
+        return int(parsed.timestamp() * 1000) if parsed.tzinfo else None
+    except ValueError:
+        return None
 
 
 class HistoryUnavailable(ValueError):
@@ -97,7 +106,7 @@ class CodexSessionArchive:
                         }]
                     else:
                         event['native']['timeField'] = 'startedAt (seconds)'
-                    event['attachments'] = _attachments(store, turn)
+                    event['attachments'] = codex_attachments(store, turn)
                     events.append(event)
                 events.append({'type': 'session/end-seed', 'seq': len(events), 'time': 0,
                                'data': {'inherited': True}})
@@ -112,7 +121,7 @@ class CodexSessionArchive:
                 'path': 'rawModelStream',
                 'reason': 'Unknown: public fork history is not the original model stream.',
             }]
-            event['attachments'] = _attachments(store, thread)
+            event['attachments'] = codex_attachments(store, thread)
             events.append(event)
             store.append_many(events, source='thread/fork', position=0)
 
@@ -216,7 +225,7 @@ class CodexSessionArchive:
                 })
             else:
                 event['native']['timeField'] = 'emittedAtMs (server emission)'
-            event['attachments'] = _attachments(store, message)
+            event['attachments'] = codex_attachments(store, message)
             store.append_many([event], source='connection', position=position)
 
     def _seed_reference(self, store: SessionStore, base: dict) -> None:
@@ -301,7 +310,7 @@ class CodexSessionArchive:
         if native_time is None:
             missing.append({'path': 'time', 'reason': 'Native time unknown; zero is a placeholder.'})
         event['missing'] = missing
-        event['attachments'] = _attachments(store, record)
+        event['attachments'] = codex_attachments(store, record)
         return event
 
     def _promote_copied_prefix(self, store: SessionStore, parent: str) -> bool:

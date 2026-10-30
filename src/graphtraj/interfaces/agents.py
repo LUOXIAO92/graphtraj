@@ -21,22 +21,25 @@ from pathlib import Path
 from typing import Any, Callable, Mapping
 
 from agent_swarm import (
+    DECISION_METHOD,
     AgentControl,
     AgentsError,
     AgentsResult,
     Binding,
+    CallCancelled,
     Caller,
     Outcome,
     bind,
     default_config,
     explicit_choices,
+    pause,
     read_config,
+    unavailable,
 )
 
 from graphtraj.execution.runner_models import RunnerError
 from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError
-from agent_swarm.calls import CallCancelled, pause
-from agent_swarm.sessions.archive import ConfiguredSessionArchive
+from agent_swarm.sessions import ConfiguredSessionArchive
 
 
 # Core Agent references; anything else is a Runner alias of a Task member.
@@ -137,13 +140,14 @@ class GraphTrajAgents:
         # claims live in the project's current Runner directory.
         self.control = AgentControl(swarm_root(root), {name: driver for name in SUPPORTED_RUNTIMES},
                                     roots=MainRoots(runner_directory(root)),
-                                    event_receiver=self._main_notice)
+                                    event_receiver=self._main_notice, request_notices="decisions")
         default_config(swarm_root(root), save_normalized_sessions=True)
 
     def _main_notice(self, notice: dict) -> bool | str:
-        """Queue the end of a Main-created root Agent for the Main now in control.
+        """Queue a Main-created root Agent's end or question for the Main now in control.
 
-        The core calls this only for an end its parent must handle. The notice
+        The core calls this for an end its parent must handle and for a new
+        ``ask_parent`` request, whose body never holds the question. The notice
         takes the same Runtime Adapter path as a Task member's, so it follows
         Main continuity and is shown once. A Main host with a push channel
         (Codex) receives the parent event itself, so wait/status hide the body.
@@ -172,7 +176,8 @@ class GraphTrajAgents:
             return True
         adapter.send_host_event(address, {
             'source': 'agents', 'alias': notice['agent'], 'event': notice['outcome'],
-            'message': message, 'execution': notice['execution']})
+            'message': message, 'execution': notice['execution'],
+            **({'request_id': notice['request']} if notice.get('request') is not None else {})})
         return 'queued'
 
     def operate(self, action: str, arguments: Mapping[str, Any], binding: Binding) -> Outcome:
@@ -192,6 +197,8 @@ class GraphTrajAgents:
         """Perform one validated action, translating GraphTraj rejections."""
         agent = arguments.get("agent")
         try:
+            if action == "ask_parent":
+                return self._ask_parent(arguments, binding.caller)
             member = self._member_alias(agent)
             core = member is None and (action == "create" or (agent or "").startswith(AGENT_PREFIX))
             if not core and action not in {"status", "wait"} and binding.caller.agent is None:
@@ -217,6 +224,33 @@ class GraphTrajAgents:
         except ValueError as error:
             raise AgentsError("invalid-input", str(error)) from None
 
+    def _ask_parent(self, arguments: Mapping[str, Any], caller: Caller) -> Outcome:
+        """Ask the caller's own direct parent for a decision or resources.
+
+        A core Agent, or a caller without an Agent reference (refused), goes to
+        the core as it is. A Task member asks as its core Agent, which its
+        Worker owns, and its parent reads and answers the request through the
+        member's ordinary ``requests`` and ``reply``. An answer is information
+        for the member; it changes no budget, Round or permission.
+        """
+        from graphtraj.execution.runner_status import read_alias_mapping
+        from graphtraj.execution.task_agents import TASK_HOST, notify_parent_of_decision
+        from graphtraj.workspace.runner_project import discover_runner_directory
+
+        question = (arguments["kind"], arguments["question"], arguments["timeout_seconds"])
+        if caller.agent is None or caller.agent.startswith(AGENT_PREFIX):
+            return self.control.ask_parent(caller, *question)
+        try:
+            mapping, directory = read_alias_mapping(discover_runner_directory(self.root), caller.agent)
+        except RunnerError as error:
+            raise AgentsError("authority-denied", f"This caller is not a Task member: {error.message}") from None
+        reference = mapping.get("agent")
+        if self._member_alias(reference) != caller.agent:
+            raise unavailable("ask_parent", "this Task member has no core Agent record")
+        control = AgentControl(swarm_root(self.root), {}, request_notices=True, event_receiver=(
+            lambda notice: notify_parent_of_decision(directory, mapping, notice)))
+        return control.ask_parent(Caller(TASK_HOST, reference), *question)
+
     def _member_alias(self, agent: str | None) -> str | None:
         """Return the Runner alias a Task member's core Agent record retains.
 
@@ -224,19 +258,15 @@ class GraphTrajAgents:
         with its alias as the only driver setting; any other reference is not
         a Task member.
         """
-        import json
-
         from graphtraj.execution.task_agents import TASK_HOST
 
         if not (agent or "").startswith(AGENT_PREFIX) or "/" in agent:
             return None
-        record = swarm_root(self.root) / "control" / "agents" / f"{agent}.json"
-        try:
-            document = json.loads(record.read_text(encoding="utf-8"))
-        except (OSError, ValueError):
+        registration = AgentControl(swarm_root(self.root), {}).registration(agent)
+        if registration is None or registration["host"] != TASK_HOST:
             return None
-        alias = document.get("settings", {}).get("alias") if isinstance(document, dict) else None
-        return alias if document.get("host") == TASK_HOST and isinstance(alias, str) else None
+        alias = registration["settings"].get("alias")
+        return alias if isinstance(alias, str) else None
 
     def _hierarchy(self, binding: Binding) -> Outcome:
         """Return the caller's own Agents and its real Task member hierarchy.
@@ -333,10 +363,22 @@ class GraphTrajAgents:
         elif action == "requests":
             result = pending_requests(agent, self.root, execution_id=arguments.get("execution"))
         elif action == "reply":
+            if caller.agent == agent and self._own_decision(agent, arguments["request"]):
+                raise AgentsError("authority-denied", "Only the direct parent can answer a request to it.")
             result = reply_to_request(agent, arguments["request"], arguments["response"], self.root)
         else:
             result = retire_session(agent, self.root)
         return Outcome(result, agent=agent, session=session, execution=execution, failed=failed)
+
+    def _own_decision(self, alias: str, request: Mapping[str, Any]) -> bool:
+        """Whether ``request`` names an ``ask_parent`` request of the member itself.
+
+        The pending record decides, not the caller's copy of the request.
+        """
+        from graphtraj.execution.runner_control import pending_requests
+
+        return any(item.get("method") == DECISION_METHOD and item.get("request_token") == request.get("request_token")
+                   for item in pending_requests(alias, self.root)["requests"])
 
     def _confirm_member_end(self, alias: str, caller: Caller) -> dict:
         """Confirm unconfirmed ends of a stopped Task member's core executions.
@@ -350,9 +392,6 @@ class GraphTrajAgents:
         Returns the confirmed executions, an error document when one cannot be
         verified, or nothing when no end needs confirming.
         """
-        import json
-
-        from agent_swarm.control import _scope
         from graphtraj.execution.runner_status import caller_alias, is_direct_owner, read_alias_mapping
         from graphtraj.execution.task_agents import TASK_HOST
         from graphtraj.workspace.runner_project import discover_runner_directory
@@ -365,11 +404,11 @@ class GraphTrajAgents:
             return {}
         if not is_direct_owner(caller_alias(runner), mapping):
             raise AgentsError("authority-denied", "Only the direct parent can confirm an Agent's ended execution.")
-        parent = json.loads((swarm_root(self.root) / "control" / "agents" / f"{reference}.json")
-                            .read_text(encoding="utf-8"))["parent"]
+        parent = AgentControl(swarm_root(self.root), {}).registration(reference)["parent"]
+        by = {"host": caller.host, "agent": caller.agent, "session": caller.session}
         try:
             confirmed = self.control.confirm_ended(reference, Caller(TASK_HOST, parent),
-                                                   by=_scope(caller)).result["termination_confirmed"]
+                                                   by=by).result["termination_confirmed"]
         except AgentsError as error:
             return {"termination_confirmation_error": {"code": error.code, "message": error.message}}
         return {"termination_confirmed": confirmed}

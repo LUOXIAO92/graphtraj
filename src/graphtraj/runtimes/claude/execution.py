@@ -13,7 +13,7 @@ from pathlib import Path
 import sys
 import tempfile
 
-from agent_swarm.claude.execution import ClaudeExecution as NativeClaudeExecution
+from agent_swarm.claude import ClaudeExecution as NativeClaudeExecution
 from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError, record_runtime_process
 
 
@@ -33,12 +33,20 @@ class ClaudeExecution(NativeClaudeExecution):
         self.archive      = configured_archive(Path(self.request['harness_root']))
         self.extra_fields = graphtraj_fields(str(self.request['worktree_path']), self.directory.name,
                                              mapped_task_ids(self.directory))
+        # The agents driver path replaces this with its own receiver.
+        self.parent_notice = self._notify_direct_parent
+
+    def _notify_direct_parent(self, message: str, details: dict) -> dict:
+        """Deliver a native request to the Runner's actual direct parent."""
+        from graphtraj.execution.runner_control import notify_direct_parent
+
+        return notify_direct_parent(self.directory, message, details)
 
     def record_process(self, pid: int, outcome: dict | None = None) -> None:
         """Publish native process evidence through the existing Runner binding."""
         record_runtime_process(pid, outcome)
 
-    def _settings(self, address: str | None) -> tuple[dict, dict]:
+    def native_settings(self, address: str | None) -> tuple[dict, dict]:
         """Preserve the project's captured native resource and sandbox settings."""
         request = self.request
         worktree = Path(request['worktree_path']).resolve()
@@ -132,16 +140,10 @@ class ClaudeExecution(NativeClaudeExecution):
             self.resource_settings = {'permissions': permissions}
         return settings, {'mcpServers': {}} if self.independent else mcp
 
-    def _parent_notice(self, message: str, details: dict) -> dict:
-        """Deliver a native request to the Runner's actual direct parent."""
-        from graphtraj.execution.runner_control import notify_direct_parent
-
-        return notify_direct_parent(self.directory, message, details)
-
-    def _connection(self, resources: ExitStack) -> str | None:
+    def bind_connection(self, resources: ExitStack) -> str | None:
         """Bind Runner tools only for the GraphTraj-managed invocation."""
         if self.independent:
-            return super()._connection(resources)
+            return super().bind_connection(resources)
         from graphtraj.interfaces.hosted_cli import cli_connection
         from graphtraj.runtimes.codex.managed_session import native_operation_features
 

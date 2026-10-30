@@ -3,13 +3,7 @@
 from pathlib import Path
 from typing import Callable
 
-from agent_swarm.dsh.execution import (
-    DshExecution as NativeDshExecution,
-    _dump_profile_patches,
-    _load_installed_patches,
-    _deployment_agent_preset,
-    _PatchLoader,
-)
+from agent_swarm.dsh import DshExecution as NativeDshExecution
 from graphtraj.execution.runner_io import write_yaml_durably
 from graphtraj.runtimes.dsh.service import DshService
 from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError
@@ -36,7 +30,7 @@ class DshExecution(NativeDshExecution):
         from graphtraj.execution.runner_control import notify_direct_parent
         from graphtraj.interfaces.hosted_cli import cli_connection
         from graphtraj.runtimes.codex.managed_session import native_operation_features
-        from agent_swarm.dsh.binding import session_context
+        from agent_swarm.dsh import session_context
 
         def record_session(session: str, pid: int) -> None:
             """Retain GraphTraj's Session receipt before publishing its binding."""
@@ -51,7 +45,7 @@ class DshExecution(NativeDshExecution):
             native_context=lambda: session_context(self),
         )
         self.parent_notice = lambda notice, details: notify_direct_parent(directory, notice, details)
-        from agent_swarm.sessions.dsh import DshArchive
+        from agent_swarm.sessions import DshArchive
         from graphtraj.interfaces.agents import configured_archive, graphtraj_fields, mapped_task_ids
 
         self.archive = DshArchive(configured_archive(Path(request['harness_root'])),
@@ -59,9 +53,9 @@ class DshExecution(NativeDshExecution):
                                   extra_fields=graphtraj_fields(str(request['harness_root']), directory.name,
                                                                 mapped_task_ids(directory)))
 
-    def _prepare(self) -> dict[str, str]:
+    def prepare_launch(self) -> dict[str, str]:
         """Add GraphTraj's native plugin environment to the generic profile."""
-        environment = super()._prepare()
+        environment = super().prepare_launch()
         environment.update({
             'GRAPHTRAJ_DSH_PACKAGE': self.request['package'],
             'GRAPHTRAJ_DSH_TOOL': self.request['tool'],

@@ -18,7 +18,7 @@ import threading
 from pathlib import Path
 from typing import Any, Mapping
 
-from agent_swarm import AgentsError, Caller, Run
+from agent_swarm import AgentsError, AgentsResult, Caller, Run, within_workspace
 
 from graphtraj.runtimes.runtime_adapter import (
     RuntimeAdapterError,
@@ -70,17 +70,33 @@ class AdapterDriver:
         """Bind the project and the host-chosen working directory."""
         self.root = Path(root)
         self.cwd  = Path(cwd)
-        from agent_swarm.codex.driver import CodexDriver
+        from agent_swarm.codex import CodexDriver
         from graphtraj.runtimes.codex.managed_session import CodexManagedExecution
 
         self.codex = CodexDriver(execution=CodexManagedExecution)
 
-    def prepare(self, runtime: str, caller: Caller, *, configuration: str | None = None) -> dict:
+    def _own_directory(self, caller: Caller) -> Path:
+        """Return the directory ``caller`` works in: a Task member's Worktree, else this host's."""
+        from graphtraj.execution.runner_status import read_alias_mapping
+        from graphtraj.interfaces.agents import AGENT_PREFIX
+        from graphtraj.workspace.runner_project import discover_runner_directory
+
+        if caller.agent is None or caller.agent.startswith(AGENT_PREFIX):
+            return self.cwd
+        worktree = read_alias_mapping(discover_runner_directory(self.root), caller.agent)[0].get("worktree_path")
+        if not isinstance(worktree, str) or not worktree:
+            raise AgentsError("workspace-denied", f"Task member {caller.agent!r} has no recorded Worktree.")
+        return Path(worktree)
+
+    def prepare(self, runtime: str, caller: Caller, *, configuration: str | None = None,
+                workspace: Path | None = None) -> dict:
         """Resolve the Runtime's role preset and freeze its launch settings.
 
         An explicit configuration selects an existing preset, not an identity.
         Otherwise a preset named after the Runtime wins, or exactly one preset
         must use that Runtime. Only the selected preset's resources are loaded.
+        ``workspace`` replaces the working directory and must lie inside the
+        caller's own; every other role setting stays.
         """
         from graphtraj.configuration.project_roles import (
             ProjectRolesError, load_project_roles, resolve_preset,
@@ -89,6 +105,7 @@ class AdapterDriver:
 
         if runtime not in SUPPORTED_RUNTIMES:
             raise AgentsError("unsupported-runtime", f"The Task-free driver does not run {runtime!r} yet.")
+        cwd = self.cwd if workspace is None else within_workspace(workspace, self._own_directory(caller))
         try:
             roles = load_project_roles(self.root)
             if configuration is not None:
@@ -116,14 +133,14 @@ class AdapterDriver:
             role     = resolve_child_role(name, preset, self.root)
             adapter  = select_runtime_adapter(runtime)
             prepared = adapter.preflight_runtime_context(
-                harness_root=self.root, git_common_directory=_git_common_directory(self.cwd),
-                role=role, worktree=self.cwd, evidence=self.root, requested_skills=(),
+                harness_root=self.root, git_common_directory=_git_common_directory(cwd),
+                role=role, worktree=cwd, evidence=self.root, requested_skills=(),
             ).finalize()
         except RuntimeAdapterError as error:
             raise _native_error(error) from None
         return {
             "role":            name,
-            "cwd":             str(self.cwd),
+            "cwd":             str(cwd),
             "adapter_request": prepared.launch_document()["adapter_request"],
             "connection":      prepared.launch_document().get("connection", {}),
             "evidence":        prepared.evidence_document(),
@@ -174,8 +191,14 @@ class AdapterDriver:
             child_driver = AdapterDriver(self.root, Path(run.settings['cwd']))
             control = AgentControl(self.root / '.graphtraj/swarm',
                                    {name: child_driver for name in SUPPORTED_RUNTIMES})
-            callback = bind(control, Caller('claude-sdk', run.agent, turn.native_id, 'claude'),
-                            archive=run.archive)
+            bound = bind(control, Caller('claude-sdk', run.agent, turn.native_id, 'claude'),
+                         archive=run.archive)
+
+            def callback(request: Any) -> AgentsResult:
+                """Ask the parent through the control that holds this Agent's parent's receiver."""
+                asks = isinstance(request, dict) and request.get('action') == 'ask_parent'
+                return run.call(request) if asks and run.call is not None else bound(request)
+
             turn.configure_independent(
                 archive=run.archive, agents_callback=callback,
                 extra_fields=graphtraj_fields(str(turn.request['worktree_path']), turn.directory.name,
@@ -186,7 +209,7 @@ class AdapterDriver:
             bind_agents(turn, run, self)
         if run.runtime == 'pi':
             from agent_swarm import read_config
-            from agent_swarm.sessions.archive import SessionArchive
+            from agent_swarm.sessions import SessionArchive
 
             root = run.directory.parent.parent
             choices = read_config(root)

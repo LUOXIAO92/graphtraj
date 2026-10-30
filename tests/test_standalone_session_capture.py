@@ -145,7 +145,7 @@ def test_codex_capture_hook_rebuilds_native_messages(tmp_path: Path, usage: str)
     rollout = tmp_path / 'rollout.jsonl'
     expected = codex_rollout(rollout, 'thread-p0')
     owner = SimpleNamespace(archive=archive, extra_fields=fields, expected_session=None)
-    collector = CodexManagedExecution._archive(owner, SimpleNamespace(thread_id='thread-p0', rollout_path=rollout))
+    collector = CodexManagedExecution.session_archive(owner, SimpleNamespace(thread_id='thread-p0', rollout_path=rollout))
     collector.collect(rollout)
     collector.collect(rollout)  # A repeated notification adds nothing.
 
@@ -156,7 +156,7 @@ def test_codex_capture_hook_rebuilds_native_messages(tmp_path: Path, usage: str)
     if usage == 'graphtraj':
         assert header['extra_fields']['graphtraj']['taskIds'] == ['384']
     # Saving off: the hook binds nothing for a new execution.
-    assert CodexManagedExecution._archive(SimpleNamespace(archive=None), None) is None
+    assert CodexManagedExecution.session_archive(SimpleNamespace(archive=None), None) is None
 
 
 def pi_native(root: Path, agent: str) -> list[tuple[str, str]]:

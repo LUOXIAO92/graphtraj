@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Dict, Mapping, Protocol, Sequence
 
 # Keep existing consumer imports bound to the independent definitions.
-from agent_swarm.runtime import (
+from agent_swarm import (
     RuntimeAdapterError,
     RuntimeContext,
     RuntimeExecutionResult,

@@ -6,7 +6,7 @@ from graphtraj.configuration.project_configuration import load_project_configura
 from graphtraj.execution.desktop_activity import human_observer
 from graphtraj.execution.runner_status import project_redact, require_project_reader
 from graphtraj.sessions.storage import SessionStore, session_path
-from agent_swarm.sessions.archive import JsonlSessionStore, SessionArchive, archive_path
+from agent_swarm.sessions import JsonlSessionStore, SessionArchive, archive_path
 from graphtraj.workspace.runner_project import discover_runner_directory
 
 

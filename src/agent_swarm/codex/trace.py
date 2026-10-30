@@ -35,7 +35,7 @@ class CodexNativeTrace:
         """Archive new records and link the Trace when the native file exists."""
 
         if self._rollout is None:
-            discovered = _find_native_session(self._session, self._codex_home)
+            discovered = find_native_session(self._session, self._codex_home)
             if discovered is None:
                 return
             self._rollout = discovered
@@ -93,7 +93,7 @@ def _link_native_trace(trace_file: Path, rollout: Path) -> None:
     os.replace(pending, trace_file)
 
 
-def _find_native_session(
+def find_native_session(
     session: str,
     codex_home: Path | None = None,
 ) -> Optional[Path]:

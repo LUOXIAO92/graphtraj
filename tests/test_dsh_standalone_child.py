@@ -328,7 +328,7 @@ def test_require_connections_covers_a_declared_dsh_connection(tmp_path: Path, ds
     ('0.2.1-alpha.5', True), ('0.2.2-alpha.2', True), ('1.0.0', True),
 ])
 def test_the_standalone_dsh_gate_is_a_floor(tmp_path: Path, version: str, accepted: bool) -> None:
-    """0.2.0-rc.2 or later in semver order; GraphTraj's own DSH members keep their exact pin."""
+    """0.2.0-rc.2 or later in semver order; GraphTraj's own DSH members follow the same rule."""
     executable = install_dsh(tmp_path / 'dsh', version)
     settings = {'executable': str(executable), 'model': 'm', 'sandbox': 'read-only'}
     if accepted:

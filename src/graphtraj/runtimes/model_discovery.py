@@ -36,7 +36,7 @@ def pi_model_domain(home: str, provider: str, model: str, api_key_env: str | Non
     they must not be launched under an unrelated provider's network grants.
     The agents resolver reads the catalog of the Runtime this Runner selects.
     """
-    from agent_swarm.models import pi_destination
+    from agent_swarm.pi import pi_destination
     from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError
     from graphtraj.workspace.runner_project import runtime_executable
 

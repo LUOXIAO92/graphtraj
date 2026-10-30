@@ -17,10 +17,13 @@ from pathlib import Path
 import sqlite3
 from typing import Iterator
 
-from agent_swarm.sessions.protocol import (
-    INITIAL_COLLECTION_TYPE, LEGACY_BLOCK_TYPES, append_stream_record, snapshot_event, upgrade_event, upgrade_header,
+from agent_swarm.sessions import (
+    INITIAL_COLLECTION_TYPE, append_stream_record, snapshot_event, upgrade_event, upgrade_header,
     validate_header, validate_session,
 )
+
+# Block types of Sessions stored before archive version 5.
+LEGACY_BLOCK_TYPES = {'graphtraj/encrypted': 'encrypted', 'graphtraj/text-run': 'text-run'}
 
 
 def _json(value: object) -> str:

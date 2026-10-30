@@ -27,7 +27,6 @@ from urllib.parse import urlsplit
 from urllib.request import HTTPRedirectHandler, ProxyHandler, Request, build_opener
 
 from agent_swarm.approval import parse_decision, review_failed
-from agent_swarm.codex.diagnostics import redact
 from agent_swarm.config import is_loopback
 from agent_swarm.tool import AgentsError
 
@@ -81,6 +80,14 @@ def review_policy() -> str:
         "decision is escalate. `reason` is one short non-empty sentence for the direct parent; do "
         "not repeat credentials in it."
     )
+
+
+def redact(value: object) -> object:
+    """Redact credentials; loaded late so ``import agent_swarm`` starts no Runtime package."""
+    from agent_swarm.codex.diagnostics import redact as redact_native
+
+    return redact_native(value)
+
 
 
 def build_request(

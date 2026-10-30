@@ -7,12 +7,9 @@ from inspect import signature
 from pathlib import Path
 from typing import Any, Collection
 
-from agent_swarm.schema import validate as _validate
+from agent_swarm import ENVELOPE_SCHEMA as INPUT_SCHEMA, validate_envelope, validate_schema as _validate
 
 from graphtraj.interfaces.tools import TOOLS, ToolResult
-
-
-from agent_swarm.discovery import INPUT_SCHEMA, validate_envelope
 
 
 def delivered_manuals_root() -> Path:

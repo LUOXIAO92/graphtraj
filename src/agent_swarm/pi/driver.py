@@ -71,7 +71,7 @@ class PiDriver:
 
     The host resolves model/provider, resource references and native isolation
     before binding. This driver retains that exact request for continuation;
-    it does not discover GraphTraj configuration, Tasks, reports or Git.
+    it does not discover product configuration or Git.
     """
 
     def __init__(self, request: dict) -> None:
@@ -120,7 +120,7 @@ class PiDriver:
         turn.agent = run.agent
         turn.agent_call = run.call
         turn.parent_notice = lambda message, details: (run.events.request(details), {'delivery': 'retained'})[1]
-        turn._record_process = lambda pid, outcome=None: (
+        turn.record_process = lambda pid, outcome=None: (
             run.events.process(runtime_pid=pid) if outcome is None else run.events.process(runtime_exit=outcome))
         with self.lock:
             self.turns[run.execution] = turn

@@ -18,7 +18,7 @@ import hashlib
 import threading
 from typing import Any, Mapping
 
-from agent_swarm import AgentControl, AgentsError, Binding, Caller, Run
+from agent_swarm import DECISION_METHOD, AgentControl, AgentsError, Binding, Caller, Run
 
 from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError, RuntimeTurn
 
@@ -79,6 +79,14 @@ class WorkerDriver:
             raise AgentsError(error.code, error.message) from None
 
 
+class NoNativeRequests:
+    """Driver for reading a member's own requests; the turn reports the Runtime's."""
+
+    def requests(self, run: Run) -> list[dict]:
+        """Report none, so this read never waits on the native turn under the Agent lock."""
+        return []
+
+
 class TaskAgent:
     """The core execution of one Task member run by this Worker."""
 
@@ -87,9 +95,12 @@ class TaskAgent:
         from graphtraj.interfaces.agents import swarm_root
 
         self.control = AgentControl(swarm_root(root), {runtime: driver})
+        self.own_requests = AgentControl(swarm_root(root), {runtime: NoNativeRequests()})
         self.driver  = driver
         self.binding = Binding(caller)
         self.input_lock = threading.Lock()
+        # This execution's ask_parent requests already answered, for a repeated reply.
+        self.answered: set[str] = set()
 
     @property
     def run(self) -> Run:
@@ -102,7 +113,9 @@ class TaskAgent:
 
         Input and stops are the core's actions; the core's stop runs the
         owner's confirmed native interruption. Native requests and replies keep
-        the owner's exact one-time semantics and go to the turn directly.
+        the owner's exact one-time semantics and go to the turn directly. The
+        member's own ``ask_parent`` requests are the core's: they are listed
+        after the native ones and answered there, and no Runtime sees them.
         """
         operation = request.get("operation")
         agent     = self.run.agent
@@ -122,9 +135,39 @@ class TaskAgent:
                 if stopped == "requested":
                     return {}
                 # A repeated stop, or one after the end, keeps the owner's confirmation.
+            if operation == "reply" and self._is_decision(request.get("request_token")):
+                return self._answer(request["request_token"], request["response"])
         except AgentsError as error:
             raise RuntimeAdapterError(error.code, error.message) from None
-        return self.driver.turn.operate(dict(request))
+        answer = self.driver.turn.operate(dict(request))
+        if operation == "requests":
+            return {**answer, "requests": [*answer["requests"], *self._decisions()]}
+        return answer
+
+    def _decisions(self) -> list[dict]:
+        """Return the unanswered ``ask_parent`` requests as the Runner addresses them.
+
+        The Runner checks a reply against its own Session and execution
+        identifiers, so the core's execution ID is replaced by the turn's.
+        """
+        try:
+            pending = self.own_requests.requests(self.run.agent, self.binding.caller).result["requests"]
+        except AgentsError:
+            return []
+        return [{**{name: value for name, value in item.items() if name != "execution"},
+                 "session": self.driver.turn.session, "execution_id": self.driver.turn.execution_id}
+                for item in pending]
+
+    def _is_decision(self, token: object) -> bool:
+        """Whether ``token`` names one of this execution's ``ask_parent`` requests."""
+        return token in self.answered or any(item["request_token"] == token for item in self._decisions())
+
+    def _answer(self, token: str, response: Mapping[str, Any]) -> dict:
+        """Record the parent's answer once; a repeat returns the first receipt."""
+        result = self.own_requests.reply(self.run.agent, self.binding.caller, {"request_token": token}, response).result
+        self.answered.add(token)
+        return {name: result[name] for name in ("at", "request_id", "reply_status", "answer", "duplicate")
+                if name in result}
 
     def finished(self, terminal: Mapping[str, Any]) -> None:
         """Report the Runner's terminal record as the core execution's end."""
@@ -138,6 +181,22 @@ class TaskAgent:
                 error=dict(error) if isinstance(error, Mapping) else None,
                 terminal_confirmed=terminal.get("terminal_confirmed", True) is not False,
             )
+
+
+def notify_parent_of_decision(directory: Path, mapping: Mapping[str, Any], notice: Mapping[str, Any]) -> bool:
+    """Send one member ``ask_parent`` notice to its actual direct parent.
+
+    This is the path a member's native request takes, and it names the method
+    only, never the question. Delivery may start a stopped parent and retries a
+    busy one, so it runs beside the asking call and never takes from its wait.
+    An undelivered notice leaves the request readable through ``requests``.
+    """
+    from graphtraj.execution.runner_control import deliver_parent_event
+
+    identity = {"method": DECISION_METHOD, "session": notice["session"],
+                "execution_id": mapping.get("execution_id"), "request_id": notice["request"]}
+    threading.Thread(target=deliver_parent_event, args=(directory, notice["body"], identity), daemon=True).start()
+    return True
 
 
 def native_directory(root: Path, alias: str, runtime: str) -> Path:
@@ -195,8 +254,9 @@ def begin_task_agent(
 def core_status(runner_directory: Path, mapping: Mapping[str, Any]) -> dict[str, Any]:
     """Read a member's Agent through the core's public status.
 
-    Returns the ``agent`` reference, its ``state`` (``active`` or ``standby``)
-    and its ``last_result``; the Runner's own activity fields are unchanged.
+    Returns the ``agent`` reference, its ``state`` (``active`` or ``standby``),
+    its ``last_result`` and its unanswered ``ask_parent`` count
+    (``pending_requests``); the Runner's own activity fields are unchanged.
     """
     from graphtraj.interfaces.agents import swarm_root
 
@@ -207,4 +267,4 @@ def core_status(runner_directory: Path, mapping: Mapping[str, Any]) -> dict[str,
     except AgentsError as error:
         return {"agent": mapping["agent"], "agent_error": {"code": error.code, "message": error.message}}
     return {"agent": mapping["agent"], "state": outcome.result["state"],
-            **({"last_result": outcome.result["last_result"]} if "last_result" in outcome.result else {})}
+            **{name: outcome.result[name] for name in ("last_result", "pending_requests") if name in outcome.result}}

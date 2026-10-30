@@ -119,7 +119,7 @@ def validate_header(header: dict) -> None:
     """Validate immutable v5 metadata; callers own snapshots and persistence.
 
     ``createdAt`` is epoch milliseconds. ``parentSession`` is fork lineage,
-    never Agent or Task parentage. Version 4 is refused here; read it through
+    never Agent parentage. Version 4 is refused here; read it through
     ``upgrade_header``. ``previousSession`` links a continued native source
     to its earlier archive and requires the ``boundary`` where it continues.
     Native identifiers remain evidence, never authorization.

@@ -5,7 +5,7 @@ from pathlib import Path
 import sys
 import threading
 import time
-from typing import Callable
+from typing import Callable, Iterable
 from uuid import UUID
 from agent_swarm import AgentsError, AgentsResult
 
@@ -23,13 +23,19 @@ class NativeCalls:
     read. Such an association is kept for that request only while a call of
     the same native Session executes; a preparation from another Session drops
     it, so it never crosses Sessions.
+
+    ``tools`` names the MCP tools served beside ``agents``; the host's plugin
+    must declare the same names (``claude_host_plugin``). No other tool is
+    associated.
     """
 
     def __init__(
         self, make_call: Callable[[str, Path], Callable], cwd: Path, runner: Path | None = None,
+        tools: Iterable[str] = (),
     ) -> None:
-        """Bind the backend factory, permitted native cwd and the notice queue's project."""
+        """Bind the backend factory, permitted native cwd, the notice queue's project and added tools."""
         self.make_call = make_call
+        self.tools = frozenset({'agents', *tools})
         self.cwd = cwd.resolve()
         self.runner = runner
         self.prepared: list[dict] = []
@@ -48,8 +54,8 @@ class NativeCalls:
                 return self.notices(document)
             if operation != 'prepare' or set(document) != {'operation', 'tool', 'session', 'cwd', 'agent', 'request'}:
                 raise AgentsError('invalid-input', 'Expected one native per-call context.')
-            if document['tool'] not in {'agents', 'tasks'}:
-                raise AgentsError('invalid-input', 'Expected the agents or tasks entry.')
+            if document['tool'] not in self.tools:
+                raise AgentsError('invalid-input', f"Expected the {' or '.join(sorted(self.tools))} entry.")
             if document['agent'] is not None:
                 raise AgentsError('authority-denied', 'A native subagent cannot adopt the Main association.')
             if (not isinstance(document['session'], str)

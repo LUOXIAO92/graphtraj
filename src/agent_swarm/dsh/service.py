@@ -33,7 +33,7 @@ class DshService:
     """Keep launch tokens/cookies in memory and reap only our own service.
 
     One service per Agent preserves the existing CLI's process-based caller
-    identity. Sharing a service PID would alias different GraphTraj Agents.
+    identity. Sharing a service PID would alias different Agents.
     This is a Session worker resource, not a user-owned/global daemon.
     """
 

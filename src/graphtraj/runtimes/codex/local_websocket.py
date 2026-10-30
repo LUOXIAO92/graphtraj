@@ -1,7 +1,7 @@
 """Resolve the project-selected native connection."""
 from pathlib import Path
-from agent_swarm.runtime import RuntimeAdapterError
-from agent_swarm.codex.local_websocket import validate_connection, project_access
+from agent_swarm import RuntimeAdapterError
+from agent_swarm.codex import project_access, validate_connection
 
 def configured_connection(cwd: Path, home: str) -> dict | None:
     """Read the owning Harness configuration, never connection fields from events."""

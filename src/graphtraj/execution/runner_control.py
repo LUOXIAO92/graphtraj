@@ -214,7 +214,7 @@ def deliver_execution_end(
 
     A ``completed`` round is kept in the records without a parent turn
     (:func:`retain_parent_receipt`) while members under this Session still
-    execute or are registered to start (:func:`agent_swarm.notices.needs_parent`),
+    execute or are registered to start (:func:`agent_swarm.needs_parent`),
     while the parent's ``wait`` on this Session returns it (:func:`awaited`),
     and as an ordinary receipt of an execution the parent did not start
     (``parent_input`` false) where the parent can see it that way
@@ -225,7 +225,7 @@ def deliver_execution_end(
     Any end is kept when a budget stop of this Task also stopped the parent
     Session, which a notice must not resume. Every other end is delivered.
     """
-    from agent_swarm.notices import needs_parent
+    from agent_swarm import needs_parent
 
     runner = session_directory.parent.parent
     notice = 'Session execution ended:\n' + json.dumps({
@@ -596,7 +596,7 @@ def _execution_requests(mapping: Mapping[str, Any], directory: Path) -> list:
 
 
 def owned_root_requests(runner_directory: Path, connection: Mapping[str, Any]) -> list[tuple[dict, dict]]:
-    """Return pending native requests of the top-level Sessions a host Main owns.
+    """Return pending native and ``ask_parent`` requests of the top-level Sessions a host Main owns.
 
     The trusted host binding supplies ``connection``; ownership is the recorded
     native owner, as in ``is_direct_owner``. An unreadable record or owner

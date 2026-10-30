@@ -163,7 +163,7 @@ class PiExecution:
                 target.put({'success': False, 'error': 'transport closed'})
             self.events.put({'type': 'transport_error'})
 
-    def _prepare(self, address: str | None) -> tuple[list[str], dict]:
+    def prepare_launch(self, address: str | None) -> tuple[list[str], dict]:
         """Project native asb fields and preserve user resources through references.
 
         The request takes ``REQUIRED``, ``PATH_LISTS``, ``OPTIONAL_TEXT``,
@@ -252,7 +252,7 @@ class PiExecution:
 
             policy['network']['allowedDomains'].append(urlsplit(request['base_url']).hostname)
         else:
-            domain = request.get('provider_domain') or self._provider_domain(source, provider)
+            domain = request.get('provider_domain') or self.provider_domain(source, provider)
             if domain not in policy['network']['allowedDomains']:
                 policy['network']['allowedDomains'].append(domain)
         # Service access is opt-in for this Runtime and its descendants; keep
@@ -297,7 +297,7 @@ class PiExecution:
                     'PI_CODING_AGENT_DIR': str(agent),
                     'PI_ASB_NO_ALIAS_PROMPT': '1'})
         if address is not None:
-            env.update(self._connection_environment(address))
+            env.update(self.connection_environment(address))
         # Pi's native find accepts an existing fd on PATH; do not download it or
         # alter the user's installation to populate the isolated cache.
         fd = source / 'bin/fd'
@@ -308,14 +308,14 @@ class PiExecution:
         self.native_trace = native_trace
         return [request['sandbox_python'], str(Path(__file__).with_name('launch.py')), str(spec)], env
 
-    def _provider_domain(self, source: Path, provider: str) -> str:
+    def provider_domain(self, source: Path, provider: str) -> str:
         """Read the selected model's destination from Pi's own catalog in ``source``."""
         from agent_swarm.models import pi_destination
 
         return pi_destination(self.request['executable'], str(source), provider, self.request['model'],
                               self.request.get('api_key_env'))
 
-    def _connection(self):
+    def bind_connection(self):
         """Serve the existing agents connection to this owned native process."""
         if self.agent_call is None:
             return nullcontext(None)
@@ -327,11 +327,11 @@ class PiExecution:
             lambda pid: authenticate_process(self.proc, pid),
         )
 
-    def _connection_environment(self, address: str) -> dict:
+    def connection_environment(self, address: str) -> dict:
         """Name the existing connection for the extension's MCP client."""
         return {'AGENT_SWARM_CONNECTION': address, 'AGENT_SWARM_PYTHON': sys.executable}
 
-    def _archive_collector(self, header: dict, native: dict):
+    def archive_collector(self, header: dict, native: dict):
         """Collect the native Session into the bound archive; without one, archive nothing."""
         if self.archive is None:
             return None
@@ -345,7 +345,7 @@ class PiExecution:
             attachment_root=Path(self.request['worktree_path']), extra_fields=self.extra_fields,
         )
 
-    def _record_process(self, pid: int, outcome: dict | None = None) -> None:
+    def record_process(self, pid: int, outcome: dict | None = None) -> None:
         """Publish owned process facts; the host binds the observer."""
 
     def _notify_parent(self, message: str, details: dict) -> dict | None:
@@ -365,15 +365,15 @@ class PiExecution:
         reader = None
         collector = None
         with ExitStack() as resources:
-            address = resources.enter_context(self._connection())
-            argv, env = self._prepare(address)
+            address = resources.enter_context(self.bind_connection())
+            argv, env = self.prepare_launch(address)
             stderr = resources.enter_context((self.directory / 'stderr.log').open('a', encoding='utf-8'))
             stderr_offset = stderr.tell()
             try:
                 self.proc = subprocess.Popen(argv, cwd=self.request['worktree_path'], env=env,
                                              stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                              text=True, bufsize=1, start_new_session=True)
-                self._record_process(self.proc.pid)
+                self.record_process(self.proc.pid)
 
                 def retain_stderr() -> None:
                     """Keep private log files host-side; Node must be able to stat its stdio."""
@@ -409,7 +409,7 @@ class PiExecution:
                 if self.native_trace.is_file():
                     with self.native_trace.open() as stream:
                         header = json.loads(stream.readline())
-                collector = self._archive_collector(header, self._rpc('get_entries'))
+                collector = self.archive_collector(header, self._rpc('get_entries'))
                 with self.lock:
                     if self.stopping.is_set():
                         return self._result('interrupted', None)
@@ -499,7 +499,7 @@ class PiExecution:
                         native_idle and self.proc is not None and self.proc.poll() is not None
                     )
                     if self.proc is not None:
-                        self._record_process(self.proc.pid, self.process_exit_evidence(native_idle))
+                        self.record_process(self.proc.pid, self.process_exit_evidence(native_idle))
                     if self.stderr_reader is not None:
                         self.stderr_reader.join(timeout=5)
                     if reader is not None:
@@ -644,7 +644,7 @@ class PiExecution:
         return True
 
     def operate(self, request: dict) -> dict:
-        """Control only this bound Session/execution using Runner's existing server."""
+        """Control only this bound Session/execution using the existing server."""
         with self.lock:
             if (request.get('session'), request.get('execution_id')) != (
                 self.session if self.bound else None, self.execution_id,

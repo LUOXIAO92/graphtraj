@@ -311,7 +311,7 @@ def serve_concurrent(input_stream: TextIO, output_stream: TextIO,
 
 
 def tool_documents() -> list[dict]:
-    """Expose only the lightweight agents entry in a Task-free host."""
+    """Expose only the lightweight agents entry."""
     return [{'name': 'agents', 'description': 'Discover, describe, or execute an Agent feature.',
              'inputSchema': INPUT_SCHEMA}]
 

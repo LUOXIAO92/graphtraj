@@ -53,8 +53,8 @@ class DshDriver:
     """Native DSH control, with optional host function/collection binding.
 
     ``configure`` supplies host-owned capabilities to an invocation before it
-    starts. The native owner itself does not discover a Task, role, Git tree,
-    GraphTraj installation or archive. Plain control needs no configure hook.
+    starts. The native owner itself does not discover a role, Git tree
+    or archive. Plain control needs no configure hook.
     """
 
     def __init__(

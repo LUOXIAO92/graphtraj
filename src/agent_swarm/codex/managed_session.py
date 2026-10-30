@@ -165,7 +165,7 @@ class CodexManagedExecution:
         request = self.context.launch_document()['adapter_request']
         cwd = Path(request['worktree_path'])
         config = request['session_parameters']['config']
-        address, connection_env, entry = self._bind_connection(connections, request, cwd)
+        address, connection_env, entry = self.bind_connection(connections, request, cwd)
         if address is not None:
             profile = config['permissions'][config['default_permissions']]
             profile['filesystem'][address] = 'write'
@@ -248,7 +248,7 @@ class CodexManagedExecution:
                 if requested is not None and observed != requested:
                     raise RuntimeAdapterError('RUNTIME_REQUEST_FAILED', model_change_message(
                         f'Codex {phase} selected a different model', requested, observed, None))
-                archive = self._archive(session)
+                archive = self.session_archive(session)
                 if archive is not None and resume_source is not None:
                     if session.rollout_path == resume_source[0]:
                         archive.activation = resume_source[1]
@@ -432,8 +432,8 @@ class CodexManagedExecution:
             and isinstance(request.params.get('_meta'), dict)
             and request.params['_meta'].get('codex_approval_kind') == 'mcp_tool_call'
         )
-        if self._uses_review() and (request.method.endswith("/requestApproval") or mcp_approval):
-            return await self._review_approval(request)
+        if self.uses_review() and (request.method.endswith("/requestApproval") or mcp_approval):
+            return await self.review_approval(request)
         return await self._hold(request)
 
     async def _hold(self, request: CodexServerRequest) -> dict:
@@ -597,7 +597,7 @@ class CodexManagedExecution:
         return {
             'requested': requested,
             'source': ('review-plugin' if self.review is not None else
-                       'role' if self._uses_review() else selection.get('source', 'unknown')),
+                       'role' if self.uses_review() else selection.get('source', 'unknown')),
             'observed': actual if isinstance(actual, str) else 'unknown',
             'observed_source': 'thread/start' if isinstance(actual, str) else 'unknown',
             'approval_policy': observed.get('approvalPolicy'),
@@ -644,11 +644,11 @@ class CodexManagedExecution:
         self.loop.call_soon_threadsafe(lambda: asyncio.create_task(interrupt()))
         return True
 
-    def _uses_review(self) -> bool:
+    def uses_review(self) -> bool:
         """Native approval is handled by Codex unless a reviewer is selected or a consumer provides one."""
         return self.review is not None
 
-    async def _review_approval(self, request: CodexServerRequest) -> dict:
+    async def review_approval(self, request: CodexServerRequest) -> dict:
         """Judge one native approval with the review plugin before the call runs.
 
         ``allow`` accepts exactly this request. Anything else, including a
@@ -700,7 +700,7 @@ class CodexManagedExecution:
             if temporary is not None:
                 temporary.unlink(missing_ok=True)
 
-    def _archive(self, session: object) -> object | None:
+    def session_archive(self, session: object) -> object | None:
         """Collect the native rollout into the bound archive, if any."""
         if self.archive is None:
             return None
@@ -710,7 +710,7 @@ class CodexManagedExecution:
                                  new_session=self.expected_session is None,
                                  extra_fields=self.extra_fields)
 
-    def _bind_connection(self, connections: ExitStack, request: dict, cwd: Path) -> tuple:
+    def bind_connection(self, connections: ExitStack, request: dict, cwd: Path) -> tuple:
         """Expose agents only to the owned native process and Session."""
         from agent_swarm.connection import CONNECTION_ENV, agents_connection
 

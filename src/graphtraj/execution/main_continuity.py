@@ -273,7 +273,7 @@ def queue_notice(runner: Path, connection: Mapping[str, Any], event: Mapping[str
     A notice with a stable ``id`` (execution, event and any request) is
     queued once: a retried delivery of the same event adds nothing.
     """
-    from agent_swarm.notices import notice_id
+    from agent_swarm import notice_id
 
     path = _inbox(runner, connection['runtime'], connection['session'])
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -319,7 +319,7 @@ def claim_notices(runner: Path, runtime: str, session: str) -> list[dict]:
 
 def _shown(notice: Mapping[str, Any], ended: set[str]) -> bool:
     """Whether a queued end notice names an end the Main already saw."""
-    from agent_swarm.notices import END_EVENTS
+    from agent_swarm import END_EVENTS
 
     return notice['event'].get('execution') in ended and notice['event'].get('event') in END_EVENTS
 

@@ -14,9 +14,8 @@ from typing import Callable, TextIO
 
 import yaml
 
-from agent_swarm import AgentsError, AgentsResult
-from agent_swarm.discovery import handle_request as discover_agents
-from agent_swarm.mcp import ConcurrentServer, error_response, respond, result_response, tool_documents
+from agent_swarm import (AgentsError, AgentsResult, ConcurrentServer, handle_request as discover_agents,
+                         mcp_error_response, mcp_respond, mcp_result_response, mcp_tool_documents)
 from graphtraj.execution.runner_models import RunnerError
 from graphtraj.interfaces.gateway import handle_request, INPUT_SCHEMA
 from graphtraj.interfaces.hosted_cli import agents_dispatch, forward_request
@@ -28,7 +27,7 @@ SERVER = {'name': 'agents', 'version': '1'}
 
 def descriptors() -> list[dict]:
     """Expose agents and the GraphTraj tasks entry."""
-    return tool_documents() + [{
+    return mcp_tool_documents() + [{
         'name': 'tasks', 'description': 'Discover, describe, or execute Task features.',
         'inputSchema': INPUT_SCHEMA,
     }]
@@ -82,7 +81,7 @@ def serve(
     def call(identity: object, params: dict) -> dict:
         """Return shared discovery or execution without expanding the tool list."""
         if params.get('name') not in [item['name'] for item in descriptors()] or not isinstance(params.get('arguments', {}), dict):
-            return error_response(identity, -32602, 'Expected agents and object arguments.')
+            return mcp_error_response(identity, -32602, 'Expected agents and object arguments.')
         try:
             arguments = params.get('arguments', {})
             # Only a verified native Main host's own call reaches this reviewer;
@@ -103,7 +102,7 @@ def serve(
             traceback.print_exc(file=sys.stderr)
             result = AgentsResult({'error': {'code': 'internal-error',
                                              'message': f'{type(error).__name__}: {error}'}}, failed=True)
-        return result_response(identity, {
+        return mcp_result_response(identity, {
             'content': [{'type': 'text', 'text': json.dumps(result.document, ensure_ascii=False)}],
             'structuredContent': result.document, 'isError': result.failed,
         })
@@ -113,7 +112,7 @@ def serve(
         params = message.get('params')
         if message.get('method') == 'initialize' and isinstance(params, dict):
             capabilities.update(params.get('capabilities') or {})
-        return respond(message, descriptors, call, SERVER)
+        return mcp_respond(message, descriptors, call, SERVER)
 
     server.serve(answer)
 

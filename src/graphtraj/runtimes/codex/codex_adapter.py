@@ -19,7 +19,7 @@ from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence, Tuple
 import yaml
 
 from graphtraj.runtimes.codex.session_archive import CodexSessionArchive
-from agent_swarm.sessions.codex import CodexJsonlArchive
+from agent_swarm.sessions import CodexJsonlArchive
 
 from graphtraj.runtimes.runtime_adapter import (
     NativeReplacement,
@@ -37,25 +37,15 @@ from graphtraj.runtimes.codex.usage import tool_call_id
 from graphtraj.configuration.project_configuration import configuration_exists, load_project_configuration
 from graphtraj.configuration.role_definitions import ResolvedChildRole
 
-from agent_swarm.codex.context import (
+from agent_swarm.codex import (
     CodexAdapterError,
-    _CodexRuntimeContext,
-    restore_codex_context,
-    _validate_launch_request,
-    _reject_legacy_user_sandbox_config,
-    _legacy_codex_api_key_env,
-    _connection_environment,
+    CodexRuntimeContext,
+    codex_api_key_env,
     codex_connection_environment,
-    _toml_value,
-    _toml_key,
-    apply_unix_socket_access,
-)
-from agent_swarm.codex.trace import (
-    CodexNativeTrace,
-    _linked_to,
-    _retains_records,
-    _link_native_trace,
-    _find_native_session,
+    find_native_session,
+    reject_legacy_sandbox_config,
+    restore_codex_context,
+    validate_codex_launch_request,
 )
 
 
@@ -250,8 +240,8 @@ class _CodexRuntimePreflight:
             report_files=self._report_files,
             model=self._model,
         )
-        return _CodexRuntimeContext(
-            _launch=json.dumps({
+        return CodexRuntimeContext(
+            launch=json.dumps({
                 "runtime": "codex",
                 "adapter_request": request,
                 "connection": {
@@ -261,7 +251,7 @@ class _CodexRuntimePreflight:
                     ) if value is not None
                 },
             }),
-            _evidence=json.dumps({
+            evidence=json.dumps({
                 "runtime": "codex", "effective_role": self._role.name,
                 "model": self._model,
                 "model_reasoning_effort": self._role.reasoning_effort,
@@ -275,7 +265,7 @@ class _CodexRuntimePreflight:
                     "runtime_home": self._role.runtime_home}
                    if self._connection_reference else {}),
             }),
-            _environment=self._environment,
+            environment=self._environment,
         )
 
 
@@ -556,7 +546,7 @@ def preflight_runtime_context(
 ) -> RuntimeContextPreflight:
     """Prepare one Codex role without crossing role-specific boundaries."""
 
-    _reject_legacy_user_sandbox_config(Path(role.settings.runtime_home) if role.settings.runtime_home else None)
+    reject_legacy_sandbox_config(Path(role.settings.runtime_home) if role.settings.runtime_home else None)
     _require_codex_permissions(executable)
     resolved_role = _resolve_codex_role(role, runtime_store.parent)
     settings = role.settings
@@ -585,7 +575,7 @@ def preflight_runtime_context(
         _model=settings.model,
         _base_url=settings.base_url,
         _api_key_env=settings.api_key_env,
-        _environment=_connection_environment(settings.base_url, settings.api_key_env, settings.runtime_home),
+        _environment=codex_connection_environment(settings.base_url, settings.api_key_env, settings.runtime_home),
         _worktree=worktree,
         _evidence=evidence,
         _native_skills=native_skills,
@@ -616,8 +606,8 @@ class CodexTurn:
     def run(self) -> Dict[str, Any]:
         """Own the process and translate its private JSONL protocol."""
 
-        arguments, worktree = _validate_launch_request(self._request)
-        _reject_legacy_user_sandbox_config()
+        arguments, worktree = validate_codex_launch_request(self._request)
+        reject_legacy_sandbox_config()
         if self._expected_session is not None:
             arguments = _resume_arguments(arguments, self._expected_session)
         events_file = self._session_directory / "events.jsonl"
@@ -631,7 +621,7 @@ class CodexTurn:
                 self._session_directory, self._expected_session
             )
             if rollout is None:
-                rollout = _find_native_session(self._expected_session)
+                rollout = find_native_session(self._expected_session)
                 if rollout is not None:
                     position = rollout.stat().st_size
         try:
@@ -691,7 +681,7 @@ class CodexTurn:
                             _append_transport_event(events_file, line)
                     if session is not None:
                         if rollout is None:
-                            rollout = _find_native_session(session)
+                            rollout = find_native_session(session)
                         if rollout is not None:
                             position = _append_native_records(
                                 rollout, position, events_file,
@@ -702,7 +692,7 @@ class CodexTurn:
                 return_code = self._process.wait()
                 if session is not None:
                     if rollout is None:
-                        rollout = _find_native_session(session)
+                        rollout = find_native_session(session)
                     if rollout is not None:
                         _append_native_records(
                             rollout, position, events_file,
@@ -1030,7 +1020,7 @@ def _resolve_codex_role(role: ResolvedChildRole, harness_root: Path) -> _CodexRo
     ]["."] = role.settings.worktree_access
     api_key_env = role.settings.api_key_env
     if role.settings.connection is None:
-        api_key_env = _legacy_codex_api_key_env(role.settings.base_url, api_key_env)
+        api_key_env = codex_api_key_env(role.settings.base_url, api_key_env)
     if role.settings.runtime_provider is not None:
         document["model_provider"] = role.settings.runtime_provider
     if role.settings.base_url is not None or (role.settings.connection and role.settings.api_key_env):
@@ -1079,6 +1069,38 @@ def _resolve_codex_role(role: ResolvedChildRole, harness_root: Path) -> _CodexRo
             if key not in ADAPTER_ROLE_KEYS
         },
     )
+
+
+def _toml_value(value: Any) -> str:
+    """Write one role value as inline TOML for a native ``-c`` override."""
+    if isinstance(value, str):
+        return json.dumps(value, ensure_ascii=False)
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, int):
+        return str(value)
+    if isinstance(value, list):
+        return "[{0}]".format(", ".join(_toml_value(item) for item in value))
+    if isinstance(value, dict):
+        pairs = (
+            "{0} = {1}".format(_toml_key(key), _toml_value(item))
+            for key, item in value.items()
+        )
+        return "{{ {0} }}".format(", ".join(pairs))
+    raise CodexAdapterError(
+        "ROLE_CONFIG_UNSUPPORTED",
+        "The configured Codex role contains a value that cannot be translated.",
+    )
+
+
+def _toml_key(value: Any) -> str:
+    """Write one TOML key, quoting it unless it is a bare key."""
+    if not isinstance(value, str):
+        raise CodexAdapterError(
+            "ROLE_CONFIG_UNSUPPORTED",
+            "The configured Codex role contains a non-string key.",
+        )
+    return value if BARE_TOML_KEY.fullmatch(value) else json.dumps(value)
 
 
 def apply_unix_socket_access(request: dict, configured: Mapping[str, Any] | None) -> None:
@@ -1234,7 +1256,7 @@ def refresh_codex_report_paths(
 ) -> Dict[str, Any]:
     """Refresh project reads and exact report grants without widening native writes."""
 
-    arguments, request_worktree = _validate_launch_request(request)
+    arguments, request_worktree = validate_codex_launch_request(request)
     if request_worktree != worktree:
         raise CodexAdapterError(
             "RUNTIME_REQUEST_INVALID",

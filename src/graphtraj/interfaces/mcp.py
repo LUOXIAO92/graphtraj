@@ -27,7 +27,7 @@ from typing import TYPE_CHECKING, Any, Callable, Iterator, Mapping, TextIO
 
 import yaml
 
-from agent_swarm.mcp import error_response as _error_response, result_response as _result_response
+from agent_swarm import mcp_error_response as _error_response, mcp_result_response as _result_response
 
 from graphtraj.configuration.project_configuration import ProjectConfigurationError
 from graphtraj.configuration import project_configuration
@@ -38,7 +38,7 @@ from graphtraj.runtimes.codex.app_server import CodexMainRecovery
 from graphtraj.runtimes.codex.codex_adapter import CodexAdapterError
 
 if TYPE_CHECKING:
-    from agent_swarm.mcp import ConcurrentServer
+    from agent_swarm import ConcurrentServer
 
 
 SERVER_INFO      = {"name": "graphtraj", "version": "0.1.0"}
@@ -138,15 +138,15 @@ def _tool_call_response(
 
             def dispatch(request: dict) -> Any:
                 """Keep the existing host binding and shared business gateway."""
-                from agent_swarm.connection import client_native_context
+                from agent_swarm import client_native_context
 
                 result = forward_request(request, Path.cwd(), native_context=client_native_context(metadata))
                 return result if result is not None else gateway.handle_request(request, cwd=Path.cwd())
 
             if name == 'agents':
-                from agent_swarm.discovery import handle_request
+                from agent_swarm import handle_request
 
-                from agent_swarm.connection import client_native_context
+                from agent_swarm import client_native_context
                 from graphtraj.interfaces.hosted_cli import agents_dispatch
 
                 result = handle_request(arguments, lambda request: agents_dispatch(
@@ -197,9 +197,9 @@ def _tool_call_response(
 
 def _respond(message: Mapping[str, Any]) -> dict[str, Any] | None:
     """Use the shared MCP dispatcher with this host's existing caller binding."""
-    from agent_swarm.mcp import respond
+    from agent_swarm import mcp_respond
 
-    return respond(message, _tool_documents, _tool_call_response, SERVER_INFO)
+    return mcp_respond(message, _tool_documents, _tool_call_response, SERVER_INFO)
 
 
 # Native dialog text for each reviewed operation, by language. Claude Code
@@ -533,8 +533,7 @@ def elicit_routed(server: 'ConcurrentServer', proposal: dict, feature: str, acce
     Other calls keep running meanwhile, so what the review protects is rechecked
     by each reviewed operation when it applies. Decisions match ``elicit_review``.
     """
-    from agent_swarm.calls import CallCancelled
-    from agent_swarm.mcp import ClientGone
+    from agent_swarm import CallCancelled, ClientGone
 
     request_id, request = _review_request(proposal, feature)
     timeout = NATIVE_REVIEW_TIMEOUT
@@ -553,7 +552,7 @@ def elicit_routed(server: 'ConcurrentServer', proposal: dict, feature: str, acce
 
 def serve(input_stream: TextIO, output_stream: TextIO) -> None:
     """Serve tools and bind native review for recovery and child-role changes."""
-    from agent_swarm.mcp import serve as serve_stdio
+    from agent_swarm import mcp_serve as serve_stdio
     from graphtraj.runtimes.runtime_adapter import recovery_review
 
     capabilities = {}
@@ -591,7 +590,7 @@ def serve(input_stream: TextIO, output_stream: TextIO) -> None:
 
 def main() -> None:
     """Run the MCP stdio server installed as the ``graphtraj-mcp`` command."""
-    from agent_swarm.connection import client_native_context
+    from agent_swarm import client_native_context
 
     if 'GRAPHTRAJ_CLI_CONNECTION' in os.environ:
         # A DSH host names its native Session only through its own environment;

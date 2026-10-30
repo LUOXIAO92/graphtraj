@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from agent_swarm.pi.execution import PiExecution
+from agent_swarm.pi import PiExecution
 from graphtraj.runtimes.runtime_adapter import record_runtime_process
 
 
@@ -26,13 +26,15 @@ class PiManagedExecution(PiExecution):
         self.packages.append(str(Path(__file__).resolve().parents[2]))
 
         from agent_swarm import default_config
-        from agent_swarm.sessions.archive import SessionArchive
+        from agent_swarm.sessions import SessionArchive
         from graphtraj.interfaces.agents import swarm_root
 
         root = swarm_root(Path(self.request['harness_root']))
         self.archive = SessionArchive(root, **default_config(root, save_normalized_sessions=True))
+        # The agents driver path replaces this with its own receiver.
+        self.parent_notice = self._notify_direct_parent
 
-    def _prepare(self, address: str | None) -> tuple[list[str], dict]:
+    def prepare_launch(self, address: str | None) -> tuple[list[str], dict]:
         """Supply GraphTraj's paths and destinations through the generic request.
 
         Every captured member request, including one retained before the
@@ -41,31 +43,31 @@ class PiManagedExecution(PiExecution):
         from graphtraj.runtimes.pi.pi_adapter import member_policy
 
         self.request.update(member_policy(self.request))
-        return super()._prepare(address)
+        return super().prepare_launch(address)
 
-    def _provider_domain(self, source: Path, provider: str) -> str:
+    def provider_domain(self, source: Path, provider: str) -> str:
         """Resolve older captured requests from their retained native Home."""
         from graphtraj.runtimes.model_discovery import pi_model_domain
 
         return pi_model_domain(str(source), provider, self.request['model'], self.request.get('api_key_env'))
 
-    def _connection(self):
+    def bind_connection(self):
         """Serve Runner's hosted CLI unless the agents driver owns the call."""
         if self.independent:
-            return super()._connection()
+            return super().bind_connection()
         from graphtraj.interfaces.hosted_cli import cli_connection
         from graphtraj.runtimes.codex.managed_session import native_operation_features
 
         return cli_connection(Path(self.request['harness_root']), self.directory.name, native_operation_features())
 
-    def _connection_environment(self, address: str) -> dict:
+    def connection_environment(self, address: str) -> dict:
         """Name the hosted CLI for Runner executions."""
         if self.independent:
-            return super()._connection_environment(address)
+            return super().connection_environment(address)
         root = Path(self.request['harness_root']).resolve()
         return {'GRAPHTRAJ_CLI_CONNECTION': address, 'GRAPHTRAJ_HARNESS_ROOT': str(root)}
 
-    def _archive_collector(self, header: dict, native: dict):
+    def archive_collector(self, header: dict, native: dict):
         """Name a Runner execution's Agent and source once its native Session is known.
 
         The agents driver path keeps the fields it bound and archives as a child.
@@ -84,16 +86,14 @@ class PiManagedExecution(PiExecution):
             self.extra_fields   = graphtraj_fields(self.request['harness_root'],
                                                    mapping.get('alias', self.session),
                                                    mapped_task_ids(self.directory))
-        return super()._archive_collector(header, native)
+        return super().archive_collector(header, native)
 
-    def _record_process(self, pid: int, outcome: dict | None = None) -> None:
+    def record_process(self, pid: int, outcome: dict | None = None) -> None:
         """Publish through the Worker's bound process observer."""
         record_runtime_process(pid, outcome)
 
-    def _notify_parent(self, message: str, details: dict) -> dict | None:
-        """Use the agents driver's notice, else Runner's direct parent."""
-        if self.parent_notice is not None:
-            return self.parent_notice(message, details)
+    def _notify_direct_parent(self, message: str, details: dict) -> dict | None:
+        """Deliver a pending native dialog to Runner's direct parent."""
         from graphtraj.execution.runner_control import notify_direct_parent
 
         return notify_direct_parent(self.directory, message, details)

@@ -10,7 +10,7 @@ from typing import TextIO
 
 import yaml
 
-from agent_swarm.calls import CallCancelled, run_stoppable
+from agent_swarm import CallCancelled, run_stoppable
 from graphtraj import file_lock
 from graphtraj.execution.runner_models import Batch
 from graphtraj.execution.runner_status import caller_alias, read_alias_mapping, require_task_authority

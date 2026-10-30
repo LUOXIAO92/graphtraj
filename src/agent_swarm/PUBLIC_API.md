@@ -69,7 +69,9 @@ with their documented flags:
   (`invalid-config`), invalid DSH settings or a missing or unsupported DSH
   (the DSH codes in section 2), a `pi` entry as below, and whatever
   `AgentControl.require_connections()` refuses, each with its own code.
-  The `context` operation is the plugin's private channel.
+  The `context` operation is the plugin's private channel. The plugin this
+  `configuration` command writes associates and lists the `agents` tool only;
+  a package that adds its own tool writes its plugin as in 1.4.
 - `python -m agent_swarm.codex.host --settings <file> --directory <dir>
   [--output <file>] [--resume] <instruction>`. Since 0.1.2 the settings file
   may hold an optional top-level `runtimes` object: a Runtime name to that
@@ -279,9 +281,97 @@ Public: `agent_swarm.__version__` and the names in `agent_swarm.__all__`:
   `validate_extra_fields(value)` checks an `extra_fields` container (section 5).
   `SessionArchive` takes the keyword `event_fields` (section 5).
 
-Every submodule (`agent_swarm.control`, `agent_swarm.claude.*`,
-`agent_swarm.sessions.*` and so on) is internal, even where a public name is
-defined there; import public names from `agent_swarm`.
+Parts for building a host or a consumer on agents (since 0.2.2), also in
+`agent_swarm.__all__`. Each one's docstring states its arguments and results:
+
+- stoppable calls, for a host serving tool calls concurrently: `pause` and
+  `run_stoppable` wait, `stop_requested` asks, `on_discard` registers cleanup
+  and `CallCancelled` is raised when the caller cancels or goes away;
+- the owner connection, the authenticated local file transport of 1.1:
+  `worker_connection` serves it, `connection_operation` exchanges one document
+  over it, `record_lock_owner` proves a lock's owning process,
+  `client_native_context` reads the caller's native Session facts and
+  `verify_native_context` compares them with what the host expects;
+- the progressive envelope of 1.2: `ENVELOPE_SCHEMA`, `validate_envelope`,
+  `handle_request(request, execute)`, and `validate_schema(value, schema, path)`
+  for the JSON Schema vocabulary agents uses;
+- MCP server parts, the framing of `agents-mcp`: `ConcurrentServer`,
+  `ClientGone`, `mcp_serve`, `mcp_respond`, `mcp_result_response`,
+  `mcp_error_response`, `mcp_tool_documents`;
+- notices (section 4): `END_EVENTS`, `needs_parent`, `notice_id`;
+- processes and locks: `process_ancestors`, `process_executable`,
+  `process_arguments`, and `exclusive_lock(path)`, the lock agents takes on its
+  own record files;
+- `DECISION_METHOD`, the request method of `ask_parent` (section 4), and
+  `within_workspace`, the check on `create`'s `workspace` (section 2);
+- `native_session_files(root)`, the native Session files recorded under a data
+  root (1.5);
+- Runtime executions: `RuntimeAdapterError`, the protocols `RuntimeContext` and
+  `RuntimeTurn`, `RuntimeExecutionResult`, `SessionStarted`,
+  `credential_environment`.
+
+Parts for one Runtime or for the Session archive live in these packages, each
+with its own `__all__`:
+
+| Package | Names |
+| --- | --- |
+| `agent_swarm.claude` | `ClaudeDriver`, `ClaudeExecution`, `collect_hook_event`, `hook_source`, `NativeCalls`, `REFUSAL_FILE`, `claim_channel`, `context_endpoint`, `ended_by_claude`, `log_replaced_channel`, `require_free_channel`, `serve_refusal`, `claude_host_plugin` |
+| `agent_swarm.codex` | `CodexDriver`, `CodexManagedExecution`, `CodexAppServer`, `CodexExecution`, `CodexSession`, `CodexServerRequest`, `CodexRPCError`, `CodexAdapterError`, `CodexRuntimeContext`, `restore_codex_context`, `validate_codex_launch_request`, `reject_legacy_sandbox_config`, `codex_api_key_env`, `codex_connection_environment`, `find_native_session`, `project_access`, `validate_connection` |
+| `agent_swarm.pi` | `PiDriver`, `PiExecution`, `current_connection`, `session_record`, `session_source`, `verify_main`, `pi_destination` |
+| `agent_swarm.dsh` | `DshDriver`, `DshService`, `DshError`, `DshExecution`, `bind_run`, `session_context`, `dsh_version_refusal` |
+| `agent_swarm.sessions` | `SessionArchive` (the JSONL archive; `agent_swarm.SessionArchive` is the interface a backend expects), `ConfiguredSessionArchive`, `JsonlSessionStore`, `archive_path`, `SESSION_FORMAT_VERSION`, `INITIAL_COLLECTION_TYPE`, `append_stream_record`, `native_record`, `retain_native`, `snapshot_event`, `upgrade_event`, `upgrade_header`, `validate_header`, `validate_session`, `CodexJsonlArchive`, `CodexHistoryArchive`, `NativeInputError`, `rollout_record`, `codex_attachments`, `DshArchive`, `DshLiveFrames`, `attachment_refs`, `attempt_usage`, `collect_jsonl`, `PiArchive`, `import_native`, `import_sqlite`, `verify_sqlite` |
+
+`import agent_swarm` loads none of these Runtime packages; each name loads
+its code on first use. Every other submodule (`agent_swarm.control`,
+`agent_swarm.claude.host`, `agent_swarm.sessions.archive` and so on) is
+internal, even where a public name is defined there: import a public name from
+`agent_swarm` or from the package listed above. The test
+`test_every_public_name_is_listed_in_the_contract` keeps this list complete.
+
+**Extending an execution class.** A consumer may subclass a public execution
+class and replace these methods, keeping their arguments and results. Other
+underscore methods and attributes stay internal.
+
+| Class | Method | What it supplies |
+| --- | --- | --- |
+| `ClaudeExecution` | `native_settings(address)` | the native settings and MCP documents of the launch |
+| `ClaudeExecution` | `bind_connection(resources)` | the address of the owner connection, opened in the `ExitStack` |
+| `ClaudeExecution` | `record_process(pid, outcome=None)` | receives process facts |
+| `CodexManagedExecution` | `bind_connection(connections, request, cwd)` | `(address, environment variable, MCP module)`, or three `None` |
+| `CodexManagedExecution` | `session_archive(session)` | the collector for a started Session, or `None` |
+| `CodexManagedExecution` | `uses_review()`, `review_approval(request)` | whether the host judges approvals, and the native response for one |
+| `CodexAppServer` | `call(method, params, *, wait_for_session=False)` | sends one native JSON-RPC request (call it, not replace it) |
+| `PiExecution` | `prepare_launch(address)` | `(argv, environment)` of the launch |
+| `PiExecution` | `provider_domain(source, provider)` | the model's network destination from the catalog in `source` |
+| `PiExecution` | `bind_connection()`, `connection_environment(address)` | a context manager giving the address, and the variables that name it |
+| `PiExecution` | `archive_collector(header, native)` | the collector for a started Session, or `None` |
+| `PiExecution` | `record_process(pid, outcome=None)` | receives process facts |
+| `DshExecution` | `prepare_launch()` | the launch environment, with the profile written |
+
+A consumer may read and, before `run()`, set the attributes these classes
+declare without an underscore (for example `request`, `directory`, `archive`,
+`extra_fields`, `parent_notice`, `host_connection`, `independent`). A
+`parent_notice(message, details)` set this way receives native requests, and a
+driver binding an execution replaces it with its own.
+
+**`AgentControl` methods.** Besides `operate` (`bind`'s entry) a host may call
+`create`, `send`, `resume`, `interrupt`, `wait`, `requests`, `reply`,
+`ask_parent`, `retire`, `select`, `require_connections`, `hierarchy`,
+`reference_hint`, `interrupt_owned`, `owns_running`, `unconfirmed_ends`,
+`registration(agent)` (`{"host", "parent", "settings"}` of an Agent the host
+recorded, or `None` for a missing or unreadable record; it checks no caller),
+`confirm_ended(agent, caller, *, by=None)` (`by` is the identity recorded as
+confirming: `{"host", "agent", "session"}`), `import_agent(record)` and
+`configure_stopped(agent, settings, caller)`.
+
+**JavaScript files.** A package that places its own files beside the installed
+`agent_swarm` may import these exports. Everything else in these files, and
+every other `.mjs` file, is internal.
+
+| File | Exports |
+| --- | --- |
+| `agent_swarm/pi/extension.mjs` | `loadHostSdk`, `registerAgents`, `registerAgentDisplay`, `sessionEnvironment`, `startAgentHost` |
+| `agent_swarm/dsh/plugin.mjs` | `sessionEnvironment` |
 
 ### 1.4 Host plugins: the `agent_swarm.hosts` entry point
 
@@ -292,15 +382,43 @@ directory (`pathlib.Path`) and returning either `None` (this host does not own
 the directory) or a dispatch function. The dispatch function receives one
 validated action request (`{"action": <feature>, **arguments}`) and returns an
 `AgentsResult`. The first plugin that returns a dispatch function handles the
-call. This is the only extension point; GraphTraj uses it like any other
-package.
+call. GraphTraj uses it like any other package.
+
+**A tool beside `agents` in a Claude Code host (since 0.2.2).** A package whose
+own Claude Code host serves another tool on its MCP server named `agents` (so
+Claude Code calls it as `mcp__agents__<tool>`) declares that tool in two places.
+There are no other extension points; GraphTraj declares its `tasks` tool this
+way.
+
+- `claude_host_plugin(directory, name, description, tools=())` returns the host
+  plugin's files, keyed by absolute path, and writes nothing: `.claude-plugin/
+  plugin.json` and `hooks/hooks.json` as JSON values and `hooks/host_context.mjs`
+  as text. `directory` is the plugin's directory (`.claude/skills/<name>`), and
+  `tools` the added tool names. A name that is not letters, digits, `_` or `-`,
+  the name `agents`, or a repeated name raises `ValueError`.
+- `NativeCalls(make_call, cwd, runner=None, tools=())` associates each native
+  call with its Claude Session for the host. `make_call(session, cwd)` returns
+  `call(tool, request)`, which returns an `AgentsResult`. The host passes
+  `NativeCalls.context` as the receiver of its context channel and calls
+  `NativeCalls.call(request, tool)` when the MCP server receives `tools/call`.
+  Preparing a tool that was not declared fails with `invalid-input`.
+
+A declared tool gets the behaviour of `agents`, except the display: each native
+call has its own association, overlapping calls each end only their own, one
+notice push loop is shared and rechecked after the last running call, queued
+notices arrive with its results, and `/agents-context` lists it. No exchange
+between Agents is rendered for it. A host that declares nothing, such as the
+independent Claude Code host, associates and lists `agents` only.
 
 ### 1.5 Data root and normalized Session archive
 
 The caller chooses the data root. Public within it: `config.yml` (section 3)
 and, when archiving is on, one archive per Session at
 `sessions/<sha256 of the Session ID>/session.jsonl`. Everything else under the
-root is internal.
+root is internal; `native_session_files(root)` returns the native Session files
+its Agents recorded, for a host that grants exact read access to them. It
+returns resolved paths of existing `.jsonl` files named by absolute path, and
+skips a record it cannot read.
 
 The archive is JSONL: a metadata line holding the header, then events in
 native order.
@@ -392,7 +510,7 @@ verified native parent; `pi` may set any of these fields except
 | `sandbox_path` | the host's `PATH` (it must reach `srt` and `node`) |
 | `worktree_access` | `read`; `write` also resolves `git_common_directory` with Git unless given |
 | `read_paths`, `write_paths`, `deny_read`, `deny_write` | none (absolute path lists) |
-| `provider_domain` | the selected model's host from Pi's catalog in `agent_dir` (`agent_swarm.models.pi_destination`); refused with `ROLE_CONFIG_UNSUPPORTED` without a plain http(s) destination |
+| `provider_domain` | the selected model's host from Pi's catalog in `agent_dir` (`agent_swarm.pi.pi_destination`); refused with `ROLE_CONFIG_UNSUPPORTED` without a plain http(s) destination |
 | `allowed_domains`, `base_url`, `provider_api`, `api_key_env`, `reasoning_effort`, `native_directory`, `allow_mach_lookup`, `allow_mach_register`, `allow_local_binding`, `allow_unix_sockets` | none |
 
 Besides these, the Pi owner always reads the worktree, its native Session
@@ -605,8 +723,10 @@ no longer passes `cwd` or an agent preset on that path; the resumed Session
 keeps its own. Another Session in the snapshot, or `session/not-found`, fails
 the execution with `RUNTIME_SESSION_NOT_RESUMABLE`.
 
-This is a floor, not a pin: no newer DSH is refused for its version. GraphTraj's
-own DSH members (`graphtraj.runtimes.dsh`) still require exactly 0.2.0-rc.2.
+This is a floor, not a pin: no newer DSH is refused for its version.
+`dsh_version_refusal(package)` (since 0.2.2) applies the rule to a DSH
+`package.json` path: it returns the refusal message above, or `None` when that
+DSH can run. GraphTraj's own DSH members use it, so they follow the same rule.
 
 **Review plugin (approval layer 3).** A connection with `review` (section 3)
 runs under the review plugin. `create` refuses it with `invalid-config` when
@@ -948,6 +1068,9 @@ request's token, else its native ID as JSON); a root's notice adds
 `"creator"` and `"error": null`, as an end notice does. A receiver error is
 ignored: the request stays readable through `status` and `requests`. The
 default `False` keeps a host's notices to ends only, as before 0.1.2.
+`request_notices="decisions"` (since 0.2.2) applies this to `ask_parent` only,
+for a host that keeps its children's native requests to `wait` and `requests`.
+GraphTraj's own host does this.
 
 With `hold_notices=True` (since 0.2.0; the default `False` writes no new field or
 value) a notice its parent cannot receive now is kept in the record:
@@ -1284,6 +1407,11 @@ Recorded classifications:
   additions. The agents DSH gate became a floor (0.2.0-rc.2 or later in semver
   order), which accepts more than before. They ship in 0.2.0; 383 adds no bump
   of its own.
+- 400 (0.2.2): the public names and extension methods added to 1.3, and the
+  JavaScript exports listed there. Compatible: they only add names. Every
+  name they replace was internal, so renaming those is not an incompatible
+  change. `import agent_swarm` also stopped loading the `agent_swarm.codex`
+  package, which nothing public depended on.
 - 408: the `pi` entry of the Claude Code and Codex hosts' `runtimes`, refused
   at start with `unsupported-runtime` before, is accepted. Its refusals are
   compatible additions: new error situations for a configuration that could
@@ -1296,7 +1424,7 @@ patch version. From `1.0.0` the usual rule applies: major for incompatible,
 minor for additions, patch for fixes. A release that changes this document
 updates it in the same change.
 
-GraphTraj declares the range it supports (today `agent-swarm>=0.2.0,<0.3`, since the 0.2.0 archive version 5)
+GraphTraj declares the range it supports (today `agent-swarm>=0.2.2,<0.3`, since it imports the 0.2.2 names in 1.3)
 and widens it in the same change that adopts an incompatible release.
 
 ## Appendix: Known GraphTraj-specific surfaces
@@ -1322,7 +1450,7 @@ or be renamed. Numbers refer to the subtraction list in
 | 9 | Notice title `GraphTraj notice from …` and default sender `graphtraj` | `claude/host_context.mjs` | 394 |
 | 10 | `send`'s `reports_only` and its "Task member" description | Done in 388: generic meaning in `tool.py` and 1.2; `AgentControl` rejects `true` with `not-implemented` (fix, see 7). GraphTraj's Task member handling is unchanged | 388 (done) |
 | 12 | Archiving refused without GraphTraj's collector | Done in 384: the refusal is removed; each Runtime execution builds its own collector from the bound archive (`claude/execution.py`, `claude/collection.py`, `codex/managed_session.py`, `pi/execution.py`, `dsh/driver.py`) | 384 |
-| — | Claude host plugin also handles GraphTraj's `tasks` tool (`mcp__agents__tasks`) | `claude/host_context.mjs` | unassigned, needs Main |
+| — | Claude host plugin also handles GraphTraj's `tasks` tool (`mcp__agents__tasks`) | Done in 400: `claude_host_plugin` and `NativeCalls`' `tools` (1.4); GraphTraj declares `tasks` in `runtimes/claude/host.py` | 400 (done) |
 | — | Claude control-protocol hook IDs `graphtraj_start`, `graphtraj_collect_child`, `graphtraj_agents_display`, and the event key `graphtraj_direction` | `claude/execution.py`, `sessions/claude.py` | unassigned, needs Main (closest: 394) |
-| — | GraphTraj imports internal modules and private names (`agent_swarm.control._scope`, `_alive`, `sessions.codex_values._timestamp`, and about 40 other internal modules) instead of only the names in 1.3. The version range does not protect these, because internal changes do not change the version | `src/graphtraj` (consumer side) | unassigned, needs Main |
+| — | GraphTraj imports internal modules and private names | Done in 400: GraphTraj imports only the names in 1.3, and `tests/test_graphtraj_public_agents_api.py` fails on anything else | 400 (done) |
 | 11 | Plugin points and documentation examples that mention GraphTraj | `cli.py`, `config.py`, docstrings | kept by decision |

@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Awaitable, Callable
 
 from graphtraj import file_lock
-from agent_swarm.sessions.codex import CodexJsonlArchive
+from agent_swarm.sessions import CodexJsonlArchive
 from graphtraj.interfaces.agents import configured_archive, graphtraj_fields
 from graphtraj.configuration.project_configuration import load_project_configuration
 from graphtraj.execution.runner_models import RunnerError

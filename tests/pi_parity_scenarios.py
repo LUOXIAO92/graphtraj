@@ -95,7 +95,7 @@ def _scenario(root: Path, name: str) -> dict:
     trace.parent.mkdir(exist_ok=True)
     turn = PiManagedExecution(request, 'unused', directory, lambda *a: None, lambda *a: None, trace, None)
     turn.independent = independent
-    argv, env = turn._prepare(address)
+    argv, env = turn.prepare_launch(address)
     agent = trace.with_suffix('.pi') / 'agent'
     overlay = {}
     for entry in sorted(agent.iterdir()):

@@ -94,8 +94,7 @@ def cli_connection(
         if native_authorizer is not None:
             identity, features = native_authorizer(document.get('native'), document['request'])
         elif native_context is not None:
-            from agent_swarm.connection import verify_native_context
-            from agent_swarm import AgentsError
+            from agent_swarm import AgentsError, verify_native_context
 
             try:
                 verify_native_context(document['native'], native_context())
@@ -184,7 +183,7 @@ def forward_request(
     # recovery and writes have no fixed duration once accepted, so the owner's
     # own reply is awaited until it arrives or the host closes the channel.
     # Only a request the host never accepts ends at the ordinary deadline.
-    from agent_swarm.connection import client_native_context
+    from agent_swarm import client_native_context
 
     native = native_context if native_context is not None else client_native_context()
     response = connection_operation(address, {

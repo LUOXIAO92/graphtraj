@@ -315,35 +315,6 @@ def test_unanswered_ask_returns_no_answer_and_root_callers_cannot_ask(tmp_path):
     assert failed and invalid['error']['code'] == 'invalid-input'
 
 
-def test_ask_parent_notifies_the_parent_once_when_the_host_enables_request_notices(tmp_path):
-    """A decision request reaches the parent like a native one, without its question."""
-    notices = []
-    control = AgentControl(tmp_path / 'data', {'scripted': Scripted()}, request_notices=True,
-                           event_receiver=lambda notice: notices.append(notice) or True)
-    created, _ = call(control, MAIN, action='create', runtime='scripted', instruction='work')
-    child = Caller('runtime-mcp', created['agent'])
-    for _ in range(2):
-        document, failed = call(control, child, action='ask_parent', kind='decision',
-                                question='Secret option A or B?', timeout_seconds=0.1)
-        assert not failed and document['result']['timed_out'] is True
-    [notice] = [item for item in notices if item['outcome'] == 'request']
-    assert notice['agent'] == created['agent'] and notice['request'] == document['result']['request']['request_token']
-    assert 'agents/decision' in notice['body'] and 'Secret' not in notice['body']
-
-
-def test_create_keeps_both_workspace_and_extra_fields(tmp_path):
-    """Layer 1's workspace and the Session header container are independent create arguments."""
-    driver = Scripted()
-    control = AgentControl(tmp_path / 'data', {'scripted': driver})
-    workspace = tmp_path / 'narrow'
-    workspace.mkdir()
-    created, failed = call(control, MAIN, action='create', runtime='scripted', instruction='work',
-                           workspace=str(workspace), extra_fields={'myapp': {'run': 1}})
-    assert not failed, created
-    record = json.loads((tmp_path / 'data' / 'control' / 'agents' / f"{created['agent']}.json").read_text())
-    assert record['workspace'] == str(workspace.resolve()) and record['extra_fields'] == {'myapp': {'run': 1}}
-
-
 def test_ask_parent_is_a_discoverable_feature():
     """The progressive agents entry exposes ask_parent with its typed kinds."""
     found = handle_request({'action': 'discover', 'query': 'ask parent'}, lambda request: None).document

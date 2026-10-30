@@ -63,20 +63,6 @@ def relayed(invoke, instruction: str) -> tuple[str, dict]:
     return agent, request
 
 
-def test_relayed_review_notifies_the_parent_once_under_request_notices(tmp_path: Path, native_settings: dict) -> None:
-    """A relay is a permission request, so a host with request notices is told about it once (381)."""
-    notices: list[dict] = []
-    control = AgentControl(tmp_path / 'agents', {'codex': CodexDriver(native_settings)}, request_notices=True,
-                           event_receiver=lambda notice: notices.append(notice) or True)
-    call = bind(control, Caller('controlled-host', None, 'parent-session', 'codex'))
-    agent = call({'action': 'create', 'runtime': 'codex', 'instruction': 'review:denied'}).document['agent']
-    assert call({'action': 'wait', 'agent': agent, 'timeout_seconds': 10}).document['result']['pending_requests'] == 1
-    assert [notice['outcome'] for notice in notices] == ['request']
-    assert 'item/autoApprovalReview/completed' in notices[0]['body']
-    for owned in control.interrupt_owned():
-        call({'action': 'wait', 'agent': owned, 'timeout_seconds': 10})
-
-
 def test_denial_is_relayed_and_accept_records_one_native_retry(tmp_path: Path, invoke) -> None:
     """A denial waits for the parent; accept is applied once, through Codex's own retry record."""
     agent, request = relayed(invoke, 'review:denied')

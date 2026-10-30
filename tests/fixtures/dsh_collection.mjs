@@ -13,7 +13,8 @@ const { Context } = await load('@deepseek-ai/cordis');
 const { SessionStore, buildForkSeed } = await load('@deepseek-ai/dsh-session');
 const { SessionQueryEngine } = await load('@deepseek-ai/dsh-session-query');
 const { createUserMessage } = await load('@deepseek-ai/dsh-llm');
-const { default: JsonlPersistence } = await load('@deepseek-ai/dsh-session-persistence-jsonl');
+// Since DSH 0.2.2 this plugin module exports `apply` and has no default export.
+const JsonlPersistence = await load('@deepseek-ai/dsh-session-persistence-jsonl');
 const { installCollection } = await import(pathToFileURL(modulePath).href);
 const ctx = new Context();
 await ctx.plugin(SessionStore).await();

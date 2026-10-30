@@ -5,7 +5,10 @@
 #   1. the installer, once:
 #      /bin/bash /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/387-review-plugin-pi-dsh-adapters/scripts/real-host/install-pi-sandbox.sh
 #   2. then this script:
-#      bash /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/387-review-plugin-pi-dsh-adapters/scripts/real-host/387-review.sh
+#      bash /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/387-review-plugin-pi-dsh-adapters/scripts/real-host/387-review.sh [--only dsh|pi] [sandbox-location]
+# No --only runs everything. --only dsh runs the preflight and steps 2 and 3. --only pi
+# runs the preflight and steps 1 and 4, then 5 and 6 if step 4 passes. A scoped run says
+# in its summary what it did not run: its exit 0 covers that scope, not the whole criterion.
 #
 # Expected native review dialog: NONE. The parent is this script (a Python caller of
 # the public agents API), so no native dialog should appear. If one does, it is a
@@ -23,7 +26,7 @@
 #   5  Pi, reviewer allow, under the installed sandbox.
 #   6  Pi, back to the parent, under the installed sandbox.
 # Steps 4 to 6 need <location>/pi-sandbox.env from scripts/real-host/install-pi-sandbox.sh,
-# default location ~/agents-pi-sandbox, or the path in the first argument. Without it they
+# default location ~/agents-pi-sandbox, or the path given as an argument. Without it they
 # print SKIPPED with the command to run, and the exit status says Pi was not shown. If
 # step 4 fails, steps 5 and 6 are marked NOT RUN. This script never installs them.
 #
@@ -46,11 +49,28 @@ WORKTREE=/Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtra
 PYTHON=/Users/luoxiao/miniconda3/bin/python3.13
 BRANCH=agent/387-review-plugin-pi-dsh-adapters
 WEBSOCKETS=/Users/luoxiao/workspace/you-are-a-product-architect-delivery/.venv-runtime/lib/python3.13/site-packages/websockets
-SANDBOX_LOCATION=${1:-$HOME/agents-pi-sandbox}
+SCOPE=all
+SANDBOX_LOCATION=
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --only)
+      case "${2:-}" in
+        dsh|pi) SCOPE=$2; shift 2 ;;
+        *) echo "STOP: --only takes dsh or pi, got: ${2:-nothing}"; exit 2 ;;
+      esac ;;
+    -*) echo "STOP: expected [--only dsh|pi] [sandbox-location], got: $1"; exit 2 ;;
+    *)
+      if [ -n "$SANDBOX_LOCATION" ]; then echo "STOP: give one sandbox location, got also: $1"; exit 2; fi
+      SANDBOX_LOCATION=$1; shift ;;
+  esac
+done
+SANDBOX_LOCATION=${SANDBOX_LOCATION:-$HOME/agents-pi-sandbox}
 SANDBOX_ENV=$SANDBOX_LOCATION/pi-sandbox.env
 INSTALLER=$WORKTREE/scripts/real-host/install-pi-sandbox.sh
+# DSH takes this variable as its Messages root, and a child inherits this environment.
+unset DEEPSEEK_BASE_URL
 # The reviewer; checked against the endpoint's own list and replaced if it is not listed.
-DEEPSEEK_BASE_URL=https://api.deepseek.com
+REVIEWER_BASE_URL=https://api.deepseek.com
 DEEPSEEK_MODEL=deepseek-flash
 # The children's models, from each Runtime's own catalog (as Task 383's tests and `pi --list-models`).
 DSH_MODEL=deepseek-flash
@@ -87,6 +107,21 @@ echo "pi:            $PI ($("$PI" --version 2>&1 | head -1))"
 echo "dsh:           $DSH ($("$DSH" --version 2>&1 | head -1))"
 echo "node:          $(command -v node) ($(node --version 2>&1))"
 echo "python:        $("$PYTHON" --version 2>&1)"
+echo "scope:         $SCOPE"
+if [ -z "${DEEPSEEK_BASE_URL+set}" ]; then
+  echo "DEEPSEEK_BASE_URL: absent"
+else
+  echo "DEEPSEEK_BASE_URL: PRESENT, which should not happen"
+fi
+RG=$(command -v rg || true)
+if [ -z "$RG" ] && [ -x "$SANDBOX_LOCATION/bin/rg" ]; then RG=$SANDBOX_LOCATION/bin/rg; fi
+RG_DIR=
+if [ -n "$RG" ]; then
+  RG_DIR=$(cd "$(dirname "$RG")" && pwd)
+  echo "ripgrep:       $RG ($("$RG" --version 2>&1 | head -1)); its directory is added to sandbox_path for this run"
+else
+  echo "ripgrep:       absent, on PATH and at $SANDBOX_LOCATION/bin/rg; this script does not install it, and the srt pair step will fail with srt's own error"
+fi
 if [ -f "$SANDBOX_ENV" ]; then
   echo "pi sandbox:    $SANDBOX_ENV present"
 else
@@ -219,6 +254,9 @@ DEEPSEEK_MODEL = ENV['DEEPSEEK_MODEL']
 MODEL_PROBLEM: str | None = None
 # The reviewer's own variable, so a child's connection does not also name it.
 REVIEW_VARIABLE = 'AGENTS_387_REVIEW_KEY'
+SCOPE = ENV.get('SCOPE', 'all')
+OUT_OF_SCOPE = {'dsh': 'the Pi protocol probe, the srt pair and every Pi child step',
+                'pi': 'every DSH child step'}
 RESULTS: list[tuple[str, str]] = []
 FOLLOW_UPS: list[str] = []
 MISSING_SESSION = {'error': {'code': 'MissingSessionID', 'message': 'session id is required', 'type': 'invalid_request_error'}}
@@ -412,7 +450,26 @@ def diagnosis(child: Child) -> list[str]:
         tail = path.read_text(errors='replace').strip()[-1200:]
         if tail:
             lines.append(f'{path}: ...{tail}')
+    lines.extend(turn_errors(child.data))
     return lines
+
+
+def turn_errors(root: Path) -> list[str]:
+    """Return the error of each native log's last turn/end, which the driver's message drops."""
+    found = []
+    for path in root.rglob('session.v4.jsonl'):
+        last = None
+        for line in path.read_text(errors='replace').splitlines():
+            try:
+                event = json.loads(line)
+            except ValueError:
+                continue
+            if isinstance(event, dict) and event.get('type') == 'turn/end':
+                last = event
+        reason = ((last or {}).get('data') or {}).get('reason') or {}
+        if reason.get('error') is not None:
+            found.append(clean(f"last turn/end in {path.name}: {reason.get('kind')}: {json.dumps(reason['error'], ensure_ascii=False)[:800]}"))
+    return found
 
 
 def judge(child: Child, name: str, state: bool, *proof: object) -> None:
@@ -444,7 +501,7 @@ def pick_reviewer_model() -> None:
     if not KEY:
         print('    skipped: DEEPSEEK_API_KEY is unset')
         return
-    request = Request(ENV['DEEPSEEK_BASE_URL'].rstrip('/') + '/models', headers={'Authorization': 'Bearer ' + KEY})
+    request = Request(ENV['REVIEWER_BASE_URL'].rstrip('/') + '/models', headers={'Authorization': 'Bearer ' + KEY})
     try:
         # No redirect: the key stays on the configured endpoint.
         with build_opener(_NoRedirect()).open(request, timeout=30) as response:
@@ -484,7 +541,7 @@ def allow_step(step: str, runtime: str) -> None:
     child = None
     with child_keys():
         try:
-            child = Child(step, runtime, {'base_url': ENV['DEEPSEEK_BASE_URL'], 'model': DEEPSEEK_MODEL,
+            child = Child(step, runtime, {'base_url': ENV['REVIEWER_BASE_URL'], 'model': DEEPSEEK_MODEL,
                                           'api_key_env': REVIEW_VARIABLE, 'json_mode': True, 'timeout_seconds': 60})
             target = child.work / 'allowed.txt'
             created = child.create(target)
@@ -701,6 +758,11 @@ def read_sandbox() -> bool:
     for line in SANDBOX_ENV.read_text().splitlines():
         field, _, value = line.partition('=')
         SANDBOX[field] = value
+    # In memory only: pi-sandbox.env stays as the installer wrote it.
+    ripgrep = ENV.get('RG_DIR')
+    if ripgrep and ripgrep not in SANDBOX['sandbox_path'].split(os.pathsep):
+        SANDBOX['sandbox_path'] += os.pathsep + ripgrep
+    print('sandbox_path for this run:', SANDBOX['sandbox_path'])
     return True
 
 
@@ -764,15 +826,19 @@ def step_compatibility() -> bool:
 def main() -> int:
     """Run every step and report."""
     print('\nDEEPSEEK_API_KEY in this process before the steps:', 'present' if 'DEEPSEEK_API_KEY' in ENV else 'absent')
-    step_probe()
+    print('DEEPSEEK_BASE_URL in this process:', 'PRESENT' if 'DEEPSEEK_BASE_URL' in ENV else 'absent')
+    print('scope:', SCOPE)
+    if SCOPE != 'dsh':
+        step_probe()
     pick_reviewer_model()
-    for step in (lambda: allow_step('dsh-allow', 'dsh'), lambda: held_steps('dsh', 'dsh')):
-        try:
-            step()
-        except Exception:
-            print(clean(traceback.format_exc()))
-            verdict('a DSH step finished without an unexpected error', False)
-    if read_sandbox():
+    if SCOPE != 'pi':
+        for step in (lambda: allow_step('dsh-allow', 'dsh'), lambda: held_steps('dsh', 'dsh')):
+            try:
+                step()
+            except Exception:
+                print(clean(traceback.format_exc()))
+                verdict('a DSH step finished without an unexpected error', False)
+    if SCOPE != 'dsh' and read_sandbox():
         if step_compatibility():
             for step in (lambda: allow_step('pi-allow', 'pi'), lambda: held_steps('pi', 'pi')):
                 try:
@@ -787,6 +853,9 @@ def main() -> int:
     print('\n== Summary')
     for name, state in RESULTS:
         print(f'{state}: {name}')
+    if SCOPE in OUT_OF_SCOPE:
+        print(f'SCOPED RUN (--only {SCOPE}): not run: {OUT_OF_SCOPE[SCOPE]}. '
+              'A PASS above covers this scope only, not the whole criterion.')
     print('\n== Follow-up commands')
     for command in FOLLOW_UPS:
         print(command)
@@ -798,13 +867,16 @@ if __name__ == '__main__':
 PARENT_EOF
 
 PI_BIN="$PI" DSH_BIN="$DSH" DSH_MODEL="$DSH_MODEL" PI_PROVIDER="$PI_PROVIDER" PI_MODEL="$PI_MODEL" \
-  DEEPSEEK_BASE_URL="$DEEPSEEK_BASE_URL" DEEPSEEK_MODEL="$DEEPSEEK_MODEL" SANDBOX_ENV="$SANDBOX_ENV" \
-  INSTALLER="$INSTALLER" PROBE_SANDBOX="$RUN/probe_sandbox.py" \
+  REVIEWER_BASE_URL="$REVIEWER_BASE_URL" DEEPSEEK_MODEL="$DEEPSEEK_MODEL" SANDBOX_ENV="$SANDBOX_ENV" \
+  INSTALLER="$INSTALLER" PROBE_SANDBOX="$RUN/probe_sandbox.py" SCOPE="$SCOPE" RG_DIR="$RG_DIR" \
   "$VENV/bin/python" "$RUN/parent.py" "$RUN"
 STATUS=$?
 echo
 echo "== Run directory (kept): $RUN"
 echo "cat $RUN/output.log"
 echo "== Expected native review dialog: none"
+if [ "$SCOPE" != all ]; then
+  echo "scope: --only $SCOPE; this exit status covers that scope, not the whole criterion"
+fi
 echo "exit status: $STATUS"
 exit $STATUS

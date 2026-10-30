@@ -10,13 +10,16 @@
 #
 # Downloads, for this purpose only: agent-sandbox and what pip needs to build and run
 # it, from GitHub and PyPI; srt and its dependencies from the npm registry. The sources
-# are pinned below, in one place. It does not install ripgrep: it reports whether `rg`
-# is found and adds its directory to the child's PATH if so.
+# are pinned below, in one place. It does not install ripgrep: it looks for `rg` on PATH,
+# then at <location>/bin/rg, and adds its directory to the child's PATH if found. srt
+# cannot start without it, so without rg this script ends NOT VERIFIED.
 #
-# Safe to rerun: a complete install is verified and kept. --check verifies only and
-# changes nothing. <location>/pi-sandbox.env is written last, with paths only, so that
-# file existing means this script verified that install. Any failure stops before it
-# is written, and a normal run removes an older one first.
+# Safe to rerun: a complete install is verified and kept, not reinstalled. Verifying
+# includes starting the installed srt on a harmless command. --check verifies only and
+# changes nothing outside a temporary directory it removes, so an older
+# <location>/pi-sandbox.env does not make it claim success. That file is written last, with
+# paths only, so that file existing means this script verified that install. Any failure
+# stops before it is written, and a normal run removes an older one first.
 #
 # Exit status: 0 verified; 1 not verified; 2 wrong arguments or a refused location.
 # Written for macOS /bin/bash 3.2. Reusable by Task 392.
@@ -77,16 +80,34 @@ if [ -z "$NODE" ]; then
 fi
 NODE_DIR=$(cd "$(dirname "$NODE")" && pwd)
 RG=$(command -v rg || true)
+if [ -z "$RG" ] && [ -x "$LOCATION/bin/rg" ]; then RG=$LOCATION/bin/rg; fi
 if [ -n "$RG" ]; then
   RG_DIR=$(cd "$(dirname "$RG")" && pwd)
   echo "ripgrep: found at $RG; its directory is added to the child's PATH."
   SANDBOX_PATH=$SRT_DIR/node_modules/.bin:$NODE_DIR:$RG_DIR:/usr/bin:/bin:/usr/sbin:/sbin
 else
-  echo "ripgrep: rg was not found on this PATH. It is not installed by this script, because the approval does not cover it."
+  echo "ripgrep: rg was not found on this PATH or at $LOCATION/bin/rg. It is not installed by this script, because the approval does not cover it."
   SANDBOX_PATH=$SRT_DIR/node_modules/.bin:$NODE_DIR:/usr/bin:/bin:/usr/sbin:/sbin
 fi
 
-verify() {
+smoke() {
+  # Start the installed srt once: is_sandbox_available() can say yes while srt cannot start.
+  [ -x "$SRT" ] || { echo "FAIL: srt smoke check: no srt at $SRT"; return 1; }
+  local directory status=0 output
+  directory=$(mktemp -d "${TMPDIR:-/tmp}/pi-sandbox-smoke.XXXXXX") || { echo "FAIL: srt smoke check: no temporary directory"; return 1; }
+  printf '%s\n' '{"network":{"allowedDomains":[],"deniedDomains":[]},"filesystem":{"denyRead":[],"allowRead":[],"allowWrite":[],"denyWrite":[]}}' > "$directory/settings.json"
+  output=$(cd "$directory" && PATH=$SANDBOX_PATH perl -e 'alarm shift; exec @ARGV' 60 "$SRT" --settings "$directory/settings.json" -- /usr/bin/true 2>&1 </dev/null) || status=$?
+  rm -rf "$directory"
+  if [ "$status" -eq 0 ]; then
+    echo "PASS: srt smoke check: srt --settings <file> -- /usr/bin/true exited 0"
+    return 0
+  fi
+  echo "FAIL: srt smoke check: srt --settings <file> -- /usr/bin/true exited $status (142 is the 60 s limit)"
+  printf '%s\n' "$output" | sed 's/^/    /'
+  return 1
+}
+
+verify_packages() {
   # Print each fact and PASS/FAIL; return 0 only when all hold. Reads only.
   local failed=0
   if ! [ -x "$SANDBOX_PYTHON" ]; then
@@ -197,12 +218,17 @@ print_result() {
 
 if [ -n "$CHECK" ]; then
   echo "== Verify only (nothing is changed)"
-  if verify; then
+  packages=0
+  verify_packages || packages=1
+  if smoke && [ "$packages" -eq 0 ]; then
     echo "VERIFIED: $LOCATION"
     [ -f "$ENV_FILE" ] && echo "environment file present: $ENV_FILE" || echo "environment file absent; a normal run writes it."
     exit 0
   fi
   echo "NOT VERIFIED: $LOCATION"
+  if [ -f "$ENV_FILE" ]; then
+    echo "environment file $ENV_FILE exists from an earlier run and does not hold now; a normal run removes it."
+  fi
   exit 1
 fi
 
@@ -211,8 +237,8 @@ mkdir -p "$LOCATION" || exit 1
 rm -f "$ENV_FILE"
 
 echo "== Verify what is already here"
-if verify; then
-  echo "complete: keeping the existing install."
+if verify_packages; then
+  echo "packages complete: keeping the existing install."
 else
   echo "== Install"
   if ! [ -x "$SANDBOX_PYTHON" ]; then
@@ -226,10 +252,15 @@ else
   npm --prefix "$SRT_DIR" install --ignore-scripts --cache "$NPM_CACHE" --no-audit --no-fund --save-exact \
     "--registry=$SRT_REGISTRY" "$SRT_PACKAGE@$SRT_VERSION" || { echo "FAIL: npm install of $SRT_PACKAGE"; exit 1; }
   echo "== Verify the install"
-  if ! verify; then
+  if ! verify_packages; then
     echo "NOT VERIFIED: $ENV_FILE was not written. Nothing outside $LOCATION was changed."
     exit 1
   fi
+fi
+echo "== Start the installed srt"
+if ! smoke; then
+  echo "NOT VERIFIED: $ENV_FILE was not written. Nothing outside $LOCATION was changed."
+  exit 1
 fi
 
 TEMPORARY=$ENV_FILE.tmp.$$

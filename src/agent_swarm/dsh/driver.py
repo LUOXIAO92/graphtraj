@@ -21,8 +21,9 @@ EFFORTS = ('off', 'low', 'high', 'max')
 def selected(configuration: Mapping[str, Any], selection: Mapping[str, Any]) -> dict:
     """Apply one create selection to the host's DSH settings.
 
-    A selected connection replaces the host's native home, endpoint and
-    credential reference together, so a key never reaches another endpoint.
+    A selected connection replaces the host's native home, Messages endpoint
+    and credential reference together; DSH's web search keeps its own endpoint
+    (PUBLIC_API section 2).
     """
     config = dict(configuration)
     if selection.get('provider') not in (None, 'deepseek-official'):

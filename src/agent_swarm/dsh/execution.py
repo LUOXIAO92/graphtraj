@@ -64,10 +64,11 @@ def _load_installed_patches(path: Path) -> list:
     return document if isinstance(document, list) else []
 
 
-def _turn_failure(reason: dict, environment: dict[str, str]) -> str:
+def _turn_failure(reason: dict, environment: dict[str, str], key_env: str | None = None) -> str:
     """Describe a turn's native end for the parent, without launch credentials.
 
-    Values under six characters are left alone, as in Claude's redaction: they
+    The variable ``key_env`` names is removed whatever its name or length. Other
+    values under six characters are left alone, as in Claude's redaction: they
     are settings such as a ``*_TOKENS`` limit, and removing them garbles a code
     like ``HTTP_404``.
     """
@@ -77,6 +78,8 @@ def _turn_failure(reason: dict, environment: dict[str, str]) -> str:
     if not detail:
         return f"DSH turn ended with {reason.get('kind')}."
     secrets = [value for value in secret_values(environment) if len(value) >= 6]
+    if environment.get(key_env):
+        secrets = sorted({environment[key_env], *secrets}, key=len, reverse=True)
     return f"DSH turn ended with {reason.get('kind')}: {redact_native(detail, secrets)[:500]}."
 
 
@@ -548,7 +551,8 @@ class DshExecution:
                     if self.end is not None and not self.stopping.is_set() and self._settled():
                         reason = self.end.get('reason', {})
                         if reason.get('kind') != 'completed':
-                            raise self.error_type('RUNTIME_EXECUTION_FAILED', _turn_failure(reason, environment))
+                            raise self.error_type('RUNTIME_EXECUTION_FAILED', _turn_failure(
+                                reason, environment, self.request.get('api_key_env')))
                         # Close input admission atomically with quiescence so a
                         # racing send cannot get a receipt after work finished.
                         self.active = False

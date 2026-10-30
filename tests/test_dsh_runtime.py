@@ -192,7 +192,7 @@ def peer(monkeypatch: pytest.MonkeyPatch) -> list:
 def run_turn(
     tmp_path: Path, *, expected: str | None = None, trace_file: Path | None = None,
     instructions: str = 'Assigned responsibility', package: str | None = None,
-    native_directory: Path | None = None,
+    native_directory: Path | None = None, api_key_env: str | None = None,
 ) -> tuple:
     """Run the public RuntimeTurn asynchronously so controls overlap active work."""
     from graphtraj.configuration.project_configuration import default_configuration_content
@@ -204,6 +204,8 @@ def run_turn(
     settings = request(tmp_path, instructions, package or '/installed/dsh/package.json')
     if native_directory is not None:
         settings['native_directory'] = str(native_directory)
+    if api_key_env is not None:
+        settings['api_key_env'] = api_key_env
     turn = select_runtime_adapter('dsh').managed_execution(
         settings,
         'Original instruction', tmp_path,
@@ -650,6 +652,19 @@ def test_native_failure_text_is_redacted_and_bounded(tmp_path: Path, peer: list,
     log = (tmp_path / 'stderr.log').read_text()
     for secret in ('controlled-peer-key', 'another-fake-secret', 'ambient.invalid'):
         assert secret not in message and secret not in log
+
+
+@pytest.mark.parametrize('key', ['fake-connection-credential', 'abc'])
+def test_the_connections_key_is_redacted_under_any_name_and_length(key: str, tmp_path: Path, peer: list,
+                                                                   monkeypatch: pytest.MonkeyPatch) -> None:
+    """api_key_env can name any variable, so its value is removed without the name rule."""
+    monkeypatch.setenv('DS_CRED', key)
+    turn, thread, outcome = run_turn(tmp_path, api_key_env='DS_CRED')
+    end_turn(peer[0], {'kind': 'error', 'error': {'code': 'HTTP_401', 'message': f'rejected {key}'}})
+    thread.join(3)
+    message = 'DSH turn ended with error: HTTP_401: rejected [redacted].'
+    assert outcome['error'].message == message
+    assert (tmp_path / 'stderr.log').read_text() == f'RUNTIME_EXECUTION_FAILED: {message}\n'
 
 
 def test_non_approval_user_question_fails_explicitly_and_stops(tmp_path: Path, peer: list) -> None:

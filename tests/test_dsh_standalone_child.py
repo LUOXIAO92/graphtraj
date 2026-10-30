@@ -543,6 +543,12 @@ def test_a_partial_native_error_still_describes_the_end(reason: dict, message: s
     assert execution._turn_failure(reason, {}) == message
 
 
+def test_an_empty_named_key_redacts_nothing() -> None:
+    """An empty value would otherwise match between every character of the text."""
+    reason = {'kind': 'error', 'error': {'code': 'HTTP_401'}}
+    assert execution._turn_failure(reason, {'DS_CRED': ''}, 'DS_CRED') == 'DSH turn ended with error: HTTP_401.'
+
+
 @pytest.mark.parametrize(('base_url', 'expected'), [(None, OFFICIAL), (DECLARED, DECLARED)])
 def test_installed_dsh_resolves_only_the_connection_endpoint(tmp_path: Path, dsh: dict, monkeypatch: pytest.MonkeyPatch,
                                                              base_url: str | None, expected: str) -> None:

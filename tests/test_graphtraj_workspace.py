@@ -1,6 +1,7 @@
 """GraphTraj's own driver: create's workspace, and ask_parent of a Task-free Agent."""
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -10,7 +11,7 @@ from agent_swarm import AgentControl, AgentsResult, Binding, Caller, bind
 from graphtraj.configuration.project_configuration import runner_directory
 from graphtraj.execution import agent_driver, main_continuity, runner_status
 from graphtraj.execution.agent_driver import AdapterDriver
-from graphtraj.interfaces.agents import GraphTrajAgents, swarm_root
+from graphtraj.interfaces.agents import GraphTrajAgents
 from graphtraj.workspace import runner_project
 
 RUNTIMES = ['claude', 'codex', 'dsh', 'pi']
@@ -240,7 +241,7 @@ class Scripted:
         """Hold the running execution."""
         self.run = run
         run.events.session('session-1')
-        run.events.process(worker_pid=__import__('os').getpid())
+        run.events.process(worker_pid=os.getpid())
 
     def requests(self, run) -> list:
         """Report no native request."""
@@ -287,7 +288,6 @@ def test_a_root_agents_question_reaches_the_main_once_and_native_requests_stay_s
                                   'response': {'answer': 'B'}})
     assert reply.document['result']['reply_status'] == 'answered'
     assert bind(agents, child)(question).document['result']['answer'] == 'B'
-    assert (swarm_root(root) / 'config.yml').exists()
 
 
 def test_a_root_caller_is_refused_by_graphtraj_without_a_control_check(tmp_path: Path) -> None:

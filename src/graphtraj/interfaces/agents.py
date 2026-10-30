@@ -262,7 +262,7 @@ class GraphTrajAgents:
 
         if not (agent or "").startswith(AGENT_PREFIX) or "/" in agent:
             return None
-        registration = self.control.registration(agent)
+        registration = AgentControl(swarm_root(self.root), {}).registration(agent)
         if registration is None or registration["host"] != TASK_HOST:
             return None
         alias = registration["settings"].get("alias")
@@ -404,7 +404,7 @@ class GraphTrajAgents:
             return {}
         if not is_direct_owner(caller_alias(runner), mapping):
             raise AgentsError("authority-denied", "Only the direct parent can confirm an Agent's ended execution.")
-        parent = self.control.registration(reference)["parent"]
+        parent = AgentControl(swarm_root(self.root), {}).registration(reference)["parent"]
         by = {"host": caller.host, "agent": caller.agent, "session": caller.session}
         try:
             confirmed = self.control.confirm_ended(reference, Caller(TASK_HOST, parent),

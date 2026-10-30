@@ -6,9 +6,8 @@ import subprocess
 import pytest
 
 from agent_swarm import AgentsError, AgentsResult
+from agent_swarm.claude import NativeCalls, claude_host_plugin
 from agent_swarm.claude.host import adoption_material as agents_material
-from agent_swarm.claude.native_host import NativeCalls
-from agent_swarm.claude.plugin import claude_host_plugin
 from graphtraj.runtimes.claude.host import NativeCalls as GraphTrajCalls, adoption_material as graphtraj_material
 
 SESSION = '11111111-1111-4111-8111-111111111111'

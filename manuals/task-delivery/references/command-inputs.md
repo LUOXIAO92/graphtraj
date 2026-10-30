@@ -266,6 +266,16 @@ complete integration. If the member ends without submitting a result, that repea
 call escalates the integration instead. A Session's final message cannot accept a
 result.
 
+When the member ended before submitting, continue by the Task's state. See
+[recovery decisions](recovery.md#continue-after-a-conflict-resolver-ended):
+
+- `resolving-integration`: resume it with plain `approved_recovery`. To dispatch a
+  new member instead, first repeat the original call, which escalates.
+- `escalated`: resume it with `approved_recovery` and `restore_active`, or dispatch a
+  new member with `--resolve-conflict` and `--role`. The role and diagnosis may
+  change once every earlier member has ended.
+- `escalated` with a committed result: adopt it as below.
+
 To adopt an already committed escalated integration without starting work, inspect
 the changed contents and supply `--confirm-resolution <full-commit>` with the
 original validation command. This confirms that exact version under the caller's

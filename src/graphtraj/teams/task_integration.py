@@ -111,9 +111,11 @@ def _integrate(
     if repository.worktree_for_branch("dev") != dev or _git(dev, "branch", "--show-current") != "dev":
         raise ValueError("Integration requires the configured dev Integration Worktree")
     predecessor = next((event for event in reversed(events) if event.get("task_id") == task_id and event["event"].startswith("task-integration-")), acceptance)
-    if resolving and diagnosis is None and _ended_without_submission(runner, events, record, predecessor, validation_command):
+    ended = (_ended_without_submission(runner, events, record, predecessor, validation_command)
+             if resolving and diagnosis is None else None)
+    if ended is not None:
         # dev keeps whatever the resolver left, for adoption after escalation.
-        return _escalate_ended_resolution(configuration, directory, record, predecessor)
+        return _escalate_ended_resolution(configuration, directory, record, predecessor, ended)
     if diagnosis is None and (_git(dev, "status", "--porcelain")
                               or (dev / _git(dev, "rev-parse", "--git-path", "MERGE_HEAD")).exists()):
         raise ValueError("The dev Integration Worktree must be clean")
@@ -153,6 +155,7 @@ def _integrate(
             _git(dev, "merge-base", "--is-ancestor", predecessor["dev_commit"], before)
         except GitRepositoryError as error:
             raise ValueError("Recovery requires the accepted candidate and retained dev commit in HEAD") from error
+    superseded: list[str] = []
     if diagnosis is not None:
         if (not diagnosis.strip() or predecessor["event"] != (
                 "task-integration-escalated" if retrying else "task-integration-failed")
@@ -163,9 +166,9 @@ def _integrate(
         if predecessor["conflict_kind"] == "textual" and _git(dev, "rev-parse", "MERGE_HEAD") != candidate:
             raise ValueError("The retained merge must still target the fixed candidate")
         if retrying:
-            from graphtraj.teams.merge_resolution import require_unestablished_resolution
+            from graphtraj.teams.merge_resolution import require_resolver_redispatch
 
-            require_unestablished_resolution(configuration, record, events, batch.tasks[0], caller)
+            superseded = require_resolver_redispatch(configuration, record, events, batch.tasks[0], caller)
     started = _record(configuration, directory, record, "integrating" if diagnosis is None else "resolving-integration", {
         "event": "task-integration-started" if diagnosis is None else "task-integration-conflict-started",
         "caused_by_event_ids": [predecessor["event_id"]] + ([decision["event_id"]] if resolving and diagnosis is None else []),
@@ -179,6 +182,7 @@ def _integrate(
             "role_reference": batch.tasks[0].role_reference or batch.tasks[0].role,
             "instruction": batch.tasks[0].instruction, "parent": caller,
             "validation_command": list(validation_command)} if diagnosis is not None else {}),
+        **({"superseded_resolvers": superseded} if superseded else {}),
     })
     evidence = directory / "integration" / (started["event_id"] + ".log")
     evidence.parent.mkdir(exist_ok=True)
@@ -270,31 +274,48 @@ def _integrate(
     return {"task_id": task_id, "candidate": candidate, "status": status, **({"resolution": resolution} if resolution else {}), "event_id": integrated["event_id"], "evidence": evidence.relative_to(root).as_posix(), "unlocked_task_ids": unlocked}
 
 
+def _current_resolver(events: list[dict], record: dict, retained: dict) -> tuple[str | None, str | None]:
+    """Return this resolution's resolver and the event its submission must follow.
+
+    ``retained`` is the Task's latest integration event: the dispatch, or the
+    escalation that an approved recovery reopened for the same Session. That
+    escalation can lack a Session reference, so the reopening names the resolver.
+    """
+    if retained["event"] == "task-integration-conflict-dispatched":
+        return retained.get("session_ref"), retained["caused_by_event_ids"][0]
+    if retained["event"] == "task-integration-escalated":
+        reopened = next((event for event in reversed(events)
+                         if event["event"] == "recovery-applied" and event.get("task_id") == record["task_id"]
+                         and event["event_id"] > retained["event_id"]
+                         and event["proposal"]["after"]["task"]["status"] == "resolving-integration"), None)
+        if reopened is not None:
+            return reopened["alias"], reopened["event_id"]
+    return None, None
+
+
 def _ended_without_submission(
     runner: Path,
     events: list[dict],
     record: dict,
-    dispatched: dict,
+    retained: dict,
     validation_command: tuple[str, ...],
-) -> bool:
-    """Whether the dispatched resolver's execution ended with no submitted result.
+) -> str | None:
+    """Return the current resolver if its execution ended with no submitted result.
 
-    Only a launched resolver of this integration counts; a submission made
-    after its conflict started keeps the ordinary decision path.
+    Only a launched or reopened resolver of this integration counts; a
+    submission made after that keeps the ordinary decision path.
     """
     from graphtraj.execution.runner_status import owning_execution
 
-    alias = dispatched.get("session_ref")
-    if (dispatched["event"] != "task-integration-conflict-dispatched" or alias is None
-            or dispatched.get("validation_command") != list(validation_command)):
-        return False
-    started = dispatched["caused_by_event_ids"][0]
+    alias, started = _current_resolver(events, record, retained)
+    if alias is None or retained.get("validation_command") != list(validation_command):
+        return None
     if any(event["event"] == "result-submitted" and event.get("task_id") == record["task_id"]
            and event.get("team_ordinal") == record["active_team_ordinal"] and event["event_id"] > started
            for event in events):
-        return False
+        return None
     mapping, directory = read_alias_mapping(runner, alias)
-    return owning_execution(alias, directory, mapping) is None
+    return alias if owning_execution(alias, directory, mapping) is None else None
 
 
 def _escalate_ended_resolution(
@@ -302,6 +323,7 @@ def _escalate_ended_resolution(
     directory: Path,
     record: dict,
     dispatched: dict,
+    alias: str,
 ) -> dict:
     """Escalate a resolution whose resolver ended without submitting a result.
 
@@ -317,7 +339,7 @@ def _escalate_ended_resolution(
         "dev_commit": dispatched["dev_commit"],
         "validation_command": dispatched["validation_command"],
         "conflict_kind": dispatched["conflict_kind"],
-        "session_ref": dispatched["session_ref"],
+        "session_ref": alias,
     })
     return {"task_id": record["task_id"], "candidate": dispatched["candidate"], "status": "escalated",
             "event_id": escalated["event_id"], "evidence": dispatched["evidence_refs"][0],

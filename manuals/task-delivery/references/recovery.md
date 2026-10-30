@@ -165,6 +165,38 @@ Agent. If a new message is necessary, use `agents` within existing authority.
 Report collection grants no implementation window and
 does not bypass a manual subtree stop. Use the selected Runtime's actual notification channel and report a delivery failure through the caller.
 
+## Continue after a conflict resolver ended
+
+A resolver with a Session can end before submitting, through interruption, failure
+or a stop. Its staged work stays in dev. Repeating the original `task_integrate` call
+while it still runs changes nothing. Choose by the Task's state:
+
+| State | Continuation | Conditions and authorization |
+| --- | --- | --- |
+| `resolving-integration` | Plain `approved_recovery` on the resolver | The direct parent; the resolver's subtree has stopped; it was not replaced |
+| `resolving-integration`, new resolver wanted | Repeat the original `task_integrate` call, which escalates; then use the next row | The caller that may integrate; the resolver has ended without a submission |
+| `escalated`, new resolver | `task_integrate` with `resolve_conflict` and `role` | The conflict's original parent; every earlier resolver has confirmably ended; same candidate, dev commit and validation command; role_tree, Task authority and budget apply at launch |
+| `escalated`, same Session | `approved_recovery` with `restore_active` on the resolver | The direct parent; the resolver's subtree has stopped; it was not replaced |
+| `escalated`, committed result | `task_integrate` with `confirmed_commit` | The caller that may integrate; same validation command; no work starts |
+
+Resuming the resolver of an `escalated` integration without `restore_active` is
+refused and records nothing. `restore_active` reopens the conflict assignment only
+from these two states. The resumed Session keeps its identity and stop record, whose
+`resumed` flag records the authorized continuation. A parent's reply, native
+approvals, the stop checks and the budget still apply. `additional_minutes` still
+needs the selected reviewer.
+
+A new resolver is a new entity working on the staged merge. It may use another role
+and diagnosis. The earlier resolver keeps its Session, mapping, Team seat and stop
+record, but it loses the assignment once the dispatch is attempted, even if that
+launch fails: `send` and `approved_recovery` refuse it, including a budget-only
+recovery, which can use another member of the Task. Its parent can still collect its
+reports. A failed launch is continued by dispatching again.
+
+If the continued resolver also ends without submitting, repeating the original call
+escalates again with the same conflict facts. A submission and its acceptance
+complete through the ordinary path.
+
 ## Return an accepted artifact to integration after recovery
 
 When authorized recovery work leaves the committed artifact unchanged, the

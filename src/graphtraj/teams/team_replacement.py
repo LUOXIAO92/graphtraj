@@ -25,7 +25,9 @@ from graphtraj.teams.team_round import (
 )
 from graphtraj.graph.task_graph import _load_states
 from graphtraj.graph.delivery_state import read_team
+from graphtraj.graph.delivery_worldline import read_worldline
 from graphtraj.runtimes import runtime_adapter
+from graphtraj.teams.merge_resolution import SUPERSEDED_RESOLVER, superseded_resolvers
 
 
 def require_active_session(
@@ -41,9 +43,11 @@ def require_active_session(
         # A standby member of a finished Task may answer follow-up questions;
         # report-only continuation reopens no Task work, budget or result.
         return None
-    if (Path(mapping["worktree_path"]) == project.integration_worktree
-            and task["status"] != "resolving-integration" and not reports_only):
-        raise RunnerError("authority-denied", "Integration Worktree work requires an active conflict assignment.")
+    if Path(mapping["worktree_path"]) == project.integration_worktree and not reports_only:
+        if task["status"] != "resolving-integration":
+            raise RunnerError("authority-denied", "Integration Worktree work requires an active conflict assignment.")
+        if alias in superseded_resolvers(read_worldline(project.state_directory, project.harness_root), mapping["task_id"]):
+            raise RunnerError("authority-denied", SUPERSEDED_RESOLVER)
     team_file = directory / "teams" / str(mapping["team_generation"]) / "team.yml"
     # The newly launched parent Session registers its first Batch before Team start.
     if not team_file.exists():

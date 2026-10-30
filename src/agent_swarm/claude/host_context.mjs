@@ -82,11 +82,11 @@ function schedulePush($, state) {
   }
 }
 
-// One push at a time per process: the timer and the re-check after each
-// agents/tasks call share it, so a resumed Session or an overlapping
+// One push at a time per process: the timer and the re-check after the last
+// running agents/tasks call share it, so a resumed Session or an overlapping
 // completion never starts a second loop.
 async function pushNotices($, state) {
-  if (state.inflight || state.busy || state.stopped) return;
+  if (state.inflight || state.active > 0 || state.stopped) return;
   state.inflight = true;
   let claimed = [];
   let session;
@@ -115,9 +115,19 @@ async function pushNotices($, state) {
   }
 }
 
+// tool.call carries the request fields on the event, tool.check under input.
+function callRequest(event) {
+  if (event.input && typeof event.input === 'object') return event.input;
+  const request = {};
+  for (const key of ['action', 'query', 'feature', 'schema', 'arguments']) {
+    if (key in event) request[key] = event[key];
+  }
+  return request;
+}
+
 export function register(on) {
   const displayed = new Set();
-  const state = {busy: false, pushing: false, inflight: false, stopped: false, pushed: false, pushError: null};
+  const state = {active: 0, pushing: false, inflight: false, stopped: false, pushed: false, pushError: null};
 
   on('session.start', async ($, event, next) => {
     await $.command.register({name: 'agents-context',
@@ -143,29 +153,28 @@ export function register(on) {
   for (const [tool, name] of [['mcp__agents__agents', 'agents'], ['mcp__agents__tasks', 'tasks']]) {
     // Both entries share one association; tasks has no agents exchange to render.
     on('tool.call', {tool}, async ($, event, next) => {
-      // No association may overlap another native permission chain. A refused
-      // concurrent call never clears or consumes the first call's context.
-      if (state.busy) return {deny: 'Another agents call is pending; wait for its result.'};
-      state.busy = true;
+      // Calls may overlap. Each ends only its own association, named by the
+      // exact facts tool.check prepared; the host still consumes each once.
+      state.active += 1;
+      const ending = {operation: 'end', tool: name, request: callRequest(event)};
       try {
-        await context($, {operation: 'end'});
+        ending.session = await $.session.id();
         const result = await next(event);
-        const session = await $.session.id();
         const request = name === 'agents' && event.action === 'execute'
           ? {action: event.feature, ...event.arguments} : {};
         // Native ui.log is a single-line surface: embedded newlines become
         // replacement glyphs. Keep the same readable body, one native row each.
-        for (const frame of exchangeFrames(session, request, result, displayed)) {
+        for (const frame of exchangeFrames(ending.session, request, result, displayed)) {
           for (const line of frame.split(/\r?\n/)) await $.ui.log(line);
         }
         return result;
       } catch (error) {
         return {deny: String(error)};
       } finally {
-        try { await context($, {operation: 'end'}); }
+        try { if (ending.session) await context($, ending); }
         catch (error) { $.ui.log('agents context cleanup failed: ' + String(error)); }
-        state.busy = false;
-        // Re-check at once: a notice queued during the call need not wait a tick.
+        state.active -= 1;
+        // Re-check at once: a notice queued during the calls need not wait a tick.
         if (state.pushing) pushNotices($, state);
       }
     }).catch(async ($, event, next) => next.called ? next(event)

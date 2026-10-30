@@ -71,8 +71,11 @@ await handlers.get('tool.call:mcp__agents__agents')(host, {...event, feature: 's
 assert.equal(log.filter(line => line.includes('hello parent')).length, 0);
 const returned = await handlers.get('tool.call:mcp__agents__agents')(host, event, async received => {
  assert.equal(received, event);
- const concurrent = await handlers.get('tool.call:mcp__agents__agents')(host, event, async () => assert.fail('overlap'));
- assert.ok(concurrent.deny);
+ // Calls may overlap; one ending names only its own association.
+ const other = {tool: 'mcp__agents__agents', action: 'execute', feature: 'status', arguments: {}};
+ const before = contexts.length;
+ await handlers.get('tool.call:mcp__agents__agents')(host, other, async () => stale);
+ assert.deepEqual(contexts.slice(before).filter(item => item.operation === 'end'), [{operation: 'end', tool: 'agents', request: {action: 'execute', feature: 'status', arguments: {}}, session}]);
  return native;
 });
 assert.equal(returned, native);
@@ -83,7 +86,7 @@ assert.ok(log.includes('│ second line'));
 assert.equal(event.arguments.message, 'hello child\nsecond line');
 assert.ok(log.includes('│ hello parent'));
 assert.ok(log.every(line => !line.includes('\n') && !line.includes('\r')));
-assert.deepEqual(contexts.at(-1), {operation: 'end'});
+assert.deepEqual(contexts.at(-1), {operation: 'end', tool: 'agents', request: input, session});
 const replies = log.filter(line => line.includes('│ hello parent')).length;
 await handlers.get('tool.call:mcp__agents__agents')(host, {...event, feature: 'status', arguments: {}}, async () => native);
 assert.equal(log.filter(line => line.includes('│ hello parent')).length, replies);

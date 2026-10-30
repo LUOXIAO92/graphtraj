@@ -20,6 +20,7 @@ import traceback
 from contextlib import contextmanager
 from typing import Callable, Iterator
 
+from agent_swarm.calls import pause
 from agent_swarm.tool import AgentsError, AgentsResult
 
 if os.name != 'nt':
@@ -185,12 +186,14 @@ def connection_operation(
     authenticate: bool = False,
     response_timeout: float = OPERATION_TIMEOUT_SECONDS,
     await_accepted: bool = False,
+    stoppable: bool = False,
 ) -> dict:
     """Exchange one request, bounding its reply wait without changing ownership.
 
     Ordinary controls retain the default deadline. A caller hosting a finite
     observation may include that observation's duration in its response wait.
     This timeout neither cancels an accepted operation nor grants execution time.
+    ``stoppable`` lets the current call stop waiting; the owner still finishes.
     """
     if (type(response_timeout) not in (int, float)
             or not math.isfinite(response_timeout) or response_timeout <= 0):
@@ -229,7 +232,10 @@ def connection_operation(
                         except FileNotFoundError:
                             raise TimeoutError('Session control timed out; delivery is unconfirmed.')
                         raise AgentsError('request-not-accepted', 'The Session host did not accept the request.')
-                    time.sleep(0.01)
+                    if stoppable:
+                        pause(0.01)
+                    else:
+                        time.sleep(0.01)
                 response = json.loads(response_file.read_text())
         if 'error' in response:
             raise AgentsError(response['error']['code'], response['error']['message'])

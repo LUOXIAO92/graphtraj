@@ -10,6 +10,7 @@ from typing import TextIO
 
 import yaml
 
+from agent_swarm.calls import CallCancelled, run_stoppable
 from graphtraj import file_lock
 from graphtraj.execution.runner_models import Batch
 from graphtraj.execution.runner_status import caller_alias, read_alias_mapping, require_task_authority
@@ -198,10 +199,19 @@ def _integrate(
             log.write("Command: " + yaml.safe_dump(list(command), default_flow_style=True).strip() + "\n")
             log.flush()
             try:
-                completed = subprocess.run(command, cwd=dev, stdout=log, stderr=subprocess.STDOUT, check=False)
+                # The merge is a state change and always finishes. A cancelled
+                # validation leaves the Task as a stopped host does: "integrating",
+                # with no recorded result, for the same call to continue.
+                completed = (run_stoppable(command, cwd=dev, stdout=log, stderr=subprocess.STDOUT)
+                             if command == validation_command else
+                             subprocess.run(command, cwd=dev, stdout=log, stderr=subprocess.STDOUT, check=False))
             except OSError as error:
                 log.write(str(error) + "\n")
                 break
+            except CallCancelled:
+                log.write("Validation cancelled by the caller; nothing was recorded.\n")
+                evidence.chmod(0o444)
+                raise
             log.write(f"Exit status: {completed.returncode}\n")
             if completed.returncode:
                 if command == validation_command:

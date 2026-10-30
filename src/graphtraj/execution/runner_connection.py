@@ -87,6 +87,7 @@ def connection_operation(
     authenticate: bool = False,
     response_timeout: float = OPERATION_TIMEOUT_SECONDS,
     await_accepted: bool = False,
+    stoppable: bool = False,
 ) -> dict:
     """Exchange one request, bounding its reply wait without changing ownership.
 
@@ -110,7 +111,7 @@ def connection_operation(
 
     try:
         return exchange(address, document, authenticate=authenticate,
-                        response_timeout=response_timeout, await_accepted=await_accepted)
+                        response_timeout=response_timeout, await_accepted=await_accepted, stoppable=stoppable)
     except AgentsError as error:
         raise RunnerError(error.code, error.message) from error
 

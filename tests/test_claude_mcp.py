@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pytest
 
+from conftest import HeldInput
 from graphtraj.execution.runner_status import runtime_caller
 from graphtraj.runtimes.claude.mcp import serve
 from test_agents_native_claude import project, claude_environment  # noqa: F401
@@ -13,7 +14,9 @@ from test_agents_native_claude import project, claude_environment  # noqa: F401
 def exchange(project: Path, requests: list[dict]) -> list[dict]:
     """Exercise the public stdio server, including serialization and schemas."""
     output = StringIO()
-    serve(StringIO(''.join(json.dumps(r) + '\n' for r in requests)), output, project)
+    expected = sum('id' in request for request in requests)
+    serve(HeldInput([json.dumps(r) + '\n' for r in requests],
+                    lambda: output.getvalue().count('\n') >= expected), output, project)
     return [json.loads(line) for line in output.getvalue().splitlines()]
 
 

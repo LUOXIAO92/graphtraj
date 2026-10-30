@@ -16,7 +16,7 @@ import yaml
 
 from agent_swarm import AgentsError, AgentsResult
 from agent_swarm.discovery import handle_request as discover_agents
-from agent_swarm.mcp import error_response, respond, result_response, serve as serve_stdio, tool_documents
+from agent_swarm.mcp import ConcurrentServer, error_response, respond, result_response, tool_documents
 from graphtraj.execution.runner_models import RunnerError
 from graphtraj.interfaces.gateway import handle_request, INPUT_SCHEMA
 from graphtraj.interfaces.hosted_cli import agents_dispatch, forward_request
@@ -46,23 +46,20 @@ def serve(
     verified native Main host. Every review that host's call needs (recovery,
     role organization, retirement or replacement, Runtime connection save)
     asks Claude Code itself through MCP elicitation: its own dialog shows the
-    exact change, and only its accept applies it in this same call.
+    exact change, and only its accept applies it in this same call. Calls run
+    concurrently; while a review waits, other calls are still served.
     """
-    from graphtraj.interfaces.mcp import ReviewInput
-
     capabilities: dict = {}
-    # A timed-out review's unfinished read stays with the serve loop.
-    input_stream = ReviewInput(input_stream)
+    server = ConcurrentServer(input_stream, output_stream)
 
-    def review(proposal: dict, call_id: object, feature: object) -> dict:
+    def review(proposal: dict, feature: object) -> dict:
         """Wait for Claude Code's own accept, decline or cancel of this change."""
-        from graphtraj.interfaces.mcp import elicit_review
+        from graphtraj.interfaces.mcp import elicit_routed
 
         if not isinstance(capabilities.get('elicitation'), dict):
             raise RunnerError('native-approval-unavailable',
                               'This Claude Code client offers no MCP elicitation for approval.')
-        return elicit_review(input_stream, output_stream, proposal, call_id, feature,
-                             lambda result: result.get('content') in (None, {}))
+        return elicit_routed(server, proposal, feature, lambda result: result.get('content') in (None, {}))
 
     def tasks(request: dict) -> AgentsResult:
         """Reuse Task authority through the native host or its existing hosted channel."""
@@ -90,7 +87,7 @@ def serve(
             arguments = params.get('arguments', {})
             # Only a verified native Main host's own call reaches this reviewer;
             # an operation without review never invokes it.
-            reviewer = (functools.partial(review, call_id=identity, feature=arguments.get('feature'))
+            reviewer = (functools.partial(review, feature=arguments.get('feature'))
                         if native_call is not None else None)
             with recovery_review(reviewer):
                 result = (tasks(arguments) if params['name'] == 'tasks' else
@@ -118,7 +115,7 @@ def serve(
             capabilities.update(params.get('capabilities') or {})
         return respond(message, descriptors, call, SERVER)
 
-    serve_stdio(input_stream, output_stream, answer)
+    server.serve(answer)
 
 
 def main() -> None:

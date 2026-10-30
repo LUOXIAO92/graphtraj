@@ -45,6 +45,7 @@ def retire_session(alias: str, cwd: Path, *, replacement: dict | None = None) ->
         mapping, directory = read_alias_mapping(project.runner_directory, alias)
         require_stopped_subtree(project.runner_directory, alias)
     caller = caller_alias(project.runner_directory)
+    reviewed = None
     if not is_direct_owner(caller, mapping):
         from graphtraj.runtimes.replacement import caller_runtime
 
@@ -67,19 +68,28 @@ def retire_session(alias: str, cwd: Path, *, replacement: dict | None = None) ->
             }
             if review_proposal(proposal, cwd, project.runner_directory) != {'decision': 'accept'}:
                 raise RunnerError('retirement-denied', 'Retirement was not approved; no retirement was applied.')
+            reviewed = proposal['before']['mapping']
     if legacy is not None:
-        return _retire_legacy_session(alias, cwd)
-    return _retire_session(alias, cwd)
+        return _retire_legacy_session(alias, cwd, reviewed)
+    return _retire_session(alias, cwd, reviewed)
 
 
-def _retire_session(alias: str, cwd: Path) -> dict:
+def _require_reviewed(mapping: dict, reviewed: dict | None) -> None:
+    """Refuse a retirement whose Session changed after its review; nothing is applied."""
+    if reviewed is not None and mapping != reviewed:
+        raise RunnerError('retirement-stale', 'This Agent changed during its review; '
+                          'no retirement was applied. Repeating the same call shows the dialog again.')
+
+
+def _retire_session(alias: str, cwd: Path, reviewed: dict | None = None) -> dict:
     """Check the stopped subtree under the existing startup lock, then retire."""
     project = discover_project(cwd, require_clean_integration=False)
     with execution_start_lock(project.runner_directory):
+        _require_reviewed(read_alias_mapping(project.runner_directory, alias)[0], reviewed)
         return retire_stopped_session(project, alias)
 
 
-def _retire_legacy_session(alias: str, cwd: Path) -> dict:
+def _retire_legacy_session(alias: str, cwd: Path, reviewed: dict | None = None) -> dict:
     """Retire a withdrawn hosted record under the existing startup lock."""
     project = discover_project(cwd, require_clean_integration=False)
     mapping = read_active_legacy_hosted_mapping(project.runner_directory, alias)
@@ -88,6 +98,7 @@ def _retire_legacy_session(alias: str, cwd: Path) -> dict:
     if mapping is None:
         raise RunnerError('operation-failed', 'The requested Agent alias mapping is invalid.')
     with execution_start_lock(project.runner_directory):
+        _require_reviewed(mapping, reviewed)
         return retire_legacy_hosted_session(project, alias, mapping)
 
 

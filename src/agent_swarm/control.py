@@ -62,6 +62,7 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any, Callable, Iterator, Mapping, Protocol
 
+from agent_swarm.calls import pause
 from agent_swarm.config import CONFIG_FILE, read_config, read_connections
 from agent_swarm.locks import exclusive
 from agent_swarm.notices import needs_parent
@@ -795,7 +796,7 @@ class AgentControl:
             remaining = deadline - time.monotonic()
             if remaining <= 0:
                 return self._outcome(record, result={"timed_out": True})
-            time.sleep(min(WAIT_INTERVAL_SECONDS, remaining))
+            pause(min(WAIT_INTERVAL_SECONDS, remaining))
 
     def requests(self, agent: str, caller: Caller, execution: str | None = None) -> Outcome:
         """Return the running execution's pending native requests."""

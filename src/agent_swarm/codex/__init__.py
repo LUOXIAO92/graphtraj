@@ -14,7 +14,6 @@ __getattr__ = _lazy_names({
     'CodexSession': ('agent_swarm.codex.app_server', 'CodexSession'),
     'CodexAdapterError': ('agent_swarm.codex.context', 'CodexAdapterError'),
     'CodexRuntimeContext': ('agent_swarm.codex.context', 'CodexRuntimeContext'),
-    'apply_unix_socket_access': ('agent_swarm.codex.context', 'apply_unix_socket_access'),
     'codex_api_key_env': ('agent_swarm.codex.context', 'codex_api_key_env'),
     'codex_connection_environment': ('agent_swarm.codex.context', 'codex_connection_environment'),
     'reject_legacy_sandbox_config': ('agent_swarm.codex.context', 'reject_legacy_sandbox_config'),
@@ -28,7 +27,7 @@ __getattr__ = _lazy_names({
 __all__ = [
     'CodexDriver', 'CodexManagedExecution', 'CodexAppServer', 'CodexExecution',
     'CodexRPCError', 'CodexServerRequest', 'CodexSession', 'CodexAdapterError',
-    'CodexRuntimeContext', 'apply_unix_socket_access', 'codex_api_key_env',
+    'CodexRuntimeContext', 'codex_api_key_env',
     'codex_connection_environment', 'reject_legacy_sandbox_config',
     'restore_codex_context', 'validate_codex_launch_request',
     'find_native_session', 'project_access', 'validate_connection',

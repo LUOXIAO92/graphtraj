@@ -369,7 +369,8 @@ one line `{"error": {"code", "message"}}` on stderr and exits `1`; Pi shows it
 as the extension's error and the Session has no `agents` tool.
 
 **Routing.** The host registers the `pi`, `claude`, `codex` and `dsh`
-drivers in one `AgentControl`; `create`'s `runtime` selects one, and
+drivers in one `AgentControl` with `request_notices=True` and
+`hold_notices=True`; `create`'s `runtime` selects one, and
 `model`, `preset` and `reasoning_effort` are resolved per child (section 2).
 The model reaches the Pi Session through the MCP server `agents`.
 
@@ -435,7 +436,8 @@ line `{"error": {"code", "message"}}` on stderr and exits `1`; the plugin's
 `agents` tool.
 
 **Routing.** The host registers the `dsh`, `claude` and `codex` drivers (and
-`pi` when configured) in one `AgentControl` with `request_notices=True`;
+`pi` when configured) in one `AgentControl` with `request_notices=True` and
+`hold_notices=True`;
 `create`'s `runtime` selects one, and `model`, `preset`, `connection` and
 `reasoning_effort` are resolved per child (section 2).
 
@@ -721,42 +723,60 @@ What the parent sees today:
   "event", "message"}`, sent to the parent Session while its turn runs. It
   enables `request_notices`, for children of every Runtime it runs (Codex,
   Claude). The `--output` document lists the notices in `deliveries`.
-- **Pi host:** each notice is injected into the Pi Session with Pi's
-  `pi.sendMessage` as a displayed custom message (`customType`
+- **Pi host:** it enables `request_notices` and `hold_notices`, for children
+  of every Runtime it runs. Each notice is injected into the Pi Session with
+  Pi's `pi.sendMessage` as a displayed custom message (`customType`
   `graphtraj:agent-communication`, content `[agents notice from <alias> ·
-  <event>]` and the message, `details.fact` `notice:<execution>:<event>`),
-  with `triggerTurn: true, deliverAs: "followUp"`: an idle Session starts a
-  turn with it, a busy one receives it after the current turn's work. The
-  notice is `delivered` once the extension acknowledges the injection,
-  `unconfirmed` without an acknowledgement within 10 seconds, and
-  `unavailable` (body readable through `status` and `wait`) when it could not
-  be written or injected. While a notice is on its way (`notification:
+  <event>]` and the message, `details.fact` `notice:<id>`, the id as for
+  Claude above), with `triggerTurn: true, deliverAs: "followUp"`: an idle
+  Session starts a turn with it, a busy one receives it after the current
+  turn's work. The notice is `delivered` once the extension acknowledges the
+  injection, `unconfirmed` without an acknowledgement within 10 seconds (it may
+  have been shown, so it is never repeated), and `held` when it could not be
+  written or injected. While a notice is on its way (`notification:
   queueing`), `wait` and `status` also show `last_message: null`, so a
   `wait` that ends with the child does not repeat the body the notice
-  carries. This host leaves `request_notices` off, so permission and
-  `ask_parent` requests are not pushed: `wait` ends early and the parent uses
-  `requests` and `reply`.
+  carries. Before injecting, the extension looks for the same `details.fact`
+  among the Session's `custom_message` entries; when it is there (a crash
+  after injecting and before acknowledging), it acknowledges without
+  injecting again. A notice queued as a follow-up reaches the Session file
+  only when Pi delivers it (`dist/core/agent-session.js:760`), and it is
+  acknowledged when handed to Pi: a Pi process that dies with it still queued
+  loses that notice, which is already `delivered`. Sources are
+  `@earendil-works/pi-coding-agent` `1.4.0`.
 - **Pi Session shutdown** (Pi's `session_shutdown`: quit, reload, new, resume
   or fork):
   the extension stops injecting and closes the host's pipe. The host stops
   pushing, then interrupts every running child, descendants first, and
   waits up to 10 seconds for each. The ends this causes, and any notice not
-  yet acknowledged, are recorded `unavailable`, not held: they stay readable
-  through `status` when the same Pi Session is resumed with the same
-  configuration, and are not pushed then. Agents, Sessions and records are
-  kept.
-- **DSH host** (1.7): it enables `request_notices`, for children of every
-  Runtime it runs. Each notice `{"id", "agent", "session", "event",
+  yet acknowledged, are `held`, readable through `status`. Agents, Sessions
+  and records are kept.
+- **Pi Session resumed** with the same configuration: a new host process binds
+  the same Session and delivers each held notice once, in the order the
+  children ended. It starts when the Session's first turn starts
+  (`agent_start`), or two seconds after the start in a Session with a UI where
+  no turn has started, because a held notice starts a turn in an idle Session
+  and Pi refuses a prompt while one runs (`dist/core/agent-session.js:1667`;
+  print mode passes no queueing option, `dist/modes/print-mode.js:105`). A
+  notice refused then stays held for the next host process. A Session with no
+  UI and no turn delivers nothing and keeps them held. Held notices belong to
+  their Session: a new or forked Pi Session does not receive them.
+- **DSH host** (1.7): it enables `request_notices` and `hold_notices`, for
+  children of every Runtime it runs. Each notice `{"id", "agent", "session", "event",
   "message", "execution"}` (the id as for Claude above) goes to the plugin,
   which hands it to the existing `agentMessages.receive` relay
   (`dsh/communication.mjs`): one native `agent-message` relay message from
   the child's Agent and Session, text `[agents notice from <agent> ·
   <event>]` followed by the message, communication id `agents-notice:<id>`,
   placed in the Session's next-step inbox with a wake. The relay admits one
-  id once per Session, including across processes. Admitted is
+  id once per Session, including across processes, by looking for it in the
+  Session's persisted events and inbox (`communication.mjs` `deliver`); that is
+  the guard against showing a replayed notice twice. Admitted is
   `delivered`; refused (for example the Session is no longer active in that
-  DSH, `communication.mjs` `deliver`) is `unavailable`; no acknowledgement
-  within 10 seconds is `unconfirmed`.
+  DSH) is `held`; no acknowledgement within 10 seconds is `unconfirmed` (it may
+  have been admitted, so it is never repeated). A DSH parent Agent's request
+  notice has the relay id `<execution>:request:<request>`, and its end keeps
+  `<execution>`, so one execution's notices do not collide.
 
   When a DSH parent receives a notice depends on its state. Sources are the
   installed DSH `0.2.2-alpha.2` packages under
@@ -768,18 +788,27 @@ What the parent sees today:
   | Idle, host alive (a long-lived profile such as `web`, `tui`, `acp` or `sdk`, or `headless` before its runner leaves its loop) | The wake starts a new turn with the notice at once | `dsh-agent-loop/lib/index.js:564-569`, `:618-623` |
   | Idle during maintenance (for example compaction) or right after a cancel | The wake is latched and the turn starts when that activity ends | `dsh-agent-loop/lib/index.js:565-566`, `:619-621` |
   | `headless`, after the parent is idle with no native DSH subagents | The runner flushes and exits. agents children are not native subagents, so it does not wait for them; the host then stops with DSH (next row) | `dsh-headless/lib/index.js:369-373`, `:377-383` |
-  | Host or DSH process stopped (Session disposed, DSH exited) | No host runs. At the stop the plugin closes the host pipe; the host stops pushing, interrupts its active children (descendants first) and records their ends `unavailable`, readable through `status`. Nothing is held for later push | `dsh/plugin.mjs`, `dsh/host.py` |
-  | On resume (`dsh --profile headless --session-id <id> "<task>"`, or reopening the Session in a long-lived profile) | DSH announces the Session again and a new host binds the same Session. Earlier children are listed by `status` and continue with `resume`; ends recorded while stopped are not pushed again | `dsh-headless/lib/index.js:245-280` (`agents.resume` at `:263`) |
+  | Host or DSH process stopped (Session disposed, DSH exited) | No host runs. At the stop the plugin closes the host pipe; the host stops pushing, interrupts its active children (descendants first) and holds their ends, readable through `status` | `dsh/plugin.mjs`, `dsh/host.py` |
+  | On resume (`dsh --profile headless --session-id <id> "<task>"`, or reopening the Session in a long-lived profile) | DSH registers and announces the Session again and a new host binds the same Session. The plugin tells the host to begin when the Session's first turn begins, or two seconds after its `agents` tool attaches in a Session that starts no turn by itself: a relay message wakes an idle Session, and the `headless` runner applies its permission settings and hands over its task only after the announcement. The host then delivers each held notice once through the relay. A refused notice is tried again, at most six passes five seconds apart in that host's lifetime, and then stays held for a later host. Earlier children are listed by `status` and continue with `resume` | `dsh-agent/lib/index.js:655`, `:710`; `dsh-headless/lib/index.js:263`, `:344`, `:361` |
 
   Cases without immediate delivery: (1) a running parent receives a notice
   only at its next step, after the current model response or tool call;
   (2) during maintenance or right after a cancel, only when that activity
-  ends; (3) a `headless` parent whose task has ended never receives a later
-  notice: its children are interrupted when DSH exits, so a `headless`
-  parent that needs a child's answer calls `wait` for it before ending its
-  task; (4) while DSH or the Session is stopped, nothing is delivered or held;
-  (5) on resume, ends recorded while stopped are not pushed; the parent reads
-  them with `status`. Upstream DSH is not changed for any of these.
+  ends; (3) a `headless` parent whose task has ended receives a later notice
+  only when resumed: its children are interrupted when DSH exits and their ends
+  are held, so a later `dsh --profile headless --session-id <id> "<task>"`
+  delivers them in that task's turn, and a parent that needs a child's answer
+  within its task calls `wait` for it before ending that task;
+  (4) while DSH or the Session is stopped, nothing is delivered, and notices
+  are held; (5) on resume, each held notice is delivered once, unless the parent
+  read it through `status` or `wait` first.
+
+  One case stays open, because of how the `headless` runner leaves: a notice the
+  relay admits after the runner's last idle check
+  (`dsh-headless/lib/index.js:372`) and before its exit (`:383`) wakes a turn
+  that the exit ends, and the notice is already `delivered`. A flush begins with
+  the turn, so it reaches this window only when that whole turn ends before the
+  relay answers. Upstream DSH is not changed for any of these.
 - A grandchild's notices go to its own parent: a Claude parent Agent is
   continued with them; a Codex parent Agent is not notified, whatever the
   grandchild's Runtime, and reads them through `status`.
@@ -805,9 +834,8 @@ Gaps, by owner:
 
 | Gap | Owner |
 | --- | --- |
-| Independent hosts do not push a child's native permission request or `ask_parent` request; the parent polls | Claude Code and Codex hosts: done in 381 (`ask_parent`: since the 385 integration). DSH host: done in 383 (`ask_parent`: since the 383 integration). Pi host: open, unassigned, needs Main |
-| Independent hosts do not hold notices while the parent is stopped: the Claude host's queue lives in its process, and the Codex host marks them `unavailable` (readable through `status`). The Pi host records them `unavailable` as above (closed in 382 by recording, not holding). The DSH host stops with its DSH process, interrupts its children and records their ends `unavailable`; when a DSH parent receives notices, and every case without immediate delivery, is listed under *DSH host* above | 381 (Claude, Codex), 382 (Pi); DSH documented in 383, holding notices for a stopped DSH parent is unassigned, needs Main |
-| A Codex child is not notified of its own children's ends or requests (it reads them through `status`); a Claude child is continued with them | unassigned, needs Main |
+| A Pi follow-up acknowledged and then lost with its Pi process (*Pi host* above): Pi offers an extension no acknowledgement of persistence | Upstream Pi; not changed |
+| A notice admitted while the `headless` DSH runner is exiting (*DSH host* above): the relay answers before the turn takes it | Upstream DSH; not changed |
 | The notice title names GraphTraj | 394 |
 
 ### 4.1 Native approval per Runtime
@@ -995,6 +1023,17 @@ Recorded classifications:
   host section, the Pi package manifest, the Pi host's Runtime routing and
   its notices are compatible additions. They ship in 0.2.0, the version 384
   set; 382 adds no bump of its own.
+- 403 (0.2.0): `last_result.notification` gains the value `held`, for a notice
+  its parent cannot receive now, and `AgentControl` gains the optional
+  `hold_notices` argument (default off, which writes nothing new) with
+  `held_notices`, `settle_notice`, `settle_shown`, `notice_open` and
+  `close_notices`. Compatible: a new value for a new situation, behind a new
+  optional argument with a default that keeps current behaviour. All four hosts
+  enable it, so `held` replaces `unavailable` for a notice they could not
+  deliver; the Pi host also pushes each child request. The Pi and DSH hosts are
+  themselves new in 0.2.0. The Claude Code and Codex hosts shipped in 0.1.2, so
+  a consumer of theirs that reads `notification` sees the new value in 0.2.0,
+  the minor version 384 already raised; 403 adds no bump of its own.
 - 383: the DSH host section, the `agents-dsh` bundle, the `dsh` entries of the
   Claude Code and Codex hosts' `runtimes` and their DSH refusals are compatible
   additions. The agents DSH gate became a floor (0.2.0-rc.2 or later in semver

@@ -259,6 +259,8 @@ else
     || result "step 5: observed: channel.json still there 5 s after the first Claude Code ended: $(<$CHANNEL)"
 fi
 
+# On Claude Code 2.1.314 this step's --continue exited with `No conversation found to continue` before any
+# host started; interactive-restart.sh finishes the check.
 say "step 6: interactive restart, the incident's own path (expected native dialog: none; about 2 minutes)"
 print -r -- "Observable: host.log gains the replaced line, no host-busy line, and agents-call finished tool=agents outcome=ok."
 start_hold 6 $EVIDENCE/step6-before.jsonl

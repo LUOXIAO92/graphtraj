@@ -14,7 +14,7 @@ from contextlib import ExitStack
 
 import yaml
 
-from .service import DshService
+from .service import DshService, redact_native, secret_values
 from .errors import DshError
 from .settings import credential_environment, resumes_by_address
 
@@ -25,6 +25,9 @@ from .settings import credential_environment, resumes_by_address
 _JS_TAG = 'tag:yaml.org,2002:js'
 _WEB_APP_BUNDLE = Path('node_modules') / '@deepseek-ai' / 'dsh-web-app'
 _PERSONA_PLUGIN = '@deepseek-ai/dsh-persona'
+# DSH routes to these when its profile names no endpoint, so inheriting them
+# would send a connection's key wherever the parent's shell points (411).
+_AMBIENT_ENDPOINTS = ('DEEPSEEK_BASE_URL', 'DEEPSEEK_SEARCH_BASE_URL')
 
 
 class _JsExpression(str):
@@ -59,6 +62,22 @@ def _load_installed_patches(path: Path) -> list:
     except (OSError, UnicodeError, yaml.YAMLError):
         return []
     return document if isinstance(document, list) else []
+
+
+def _turn_failure(reason: dict, environment: dict[str, str]) -> str:
+    """Describe a turn's native end for the parent, without launch credentials.
+
+    Values under six characters are left alone, as in Claude's redaction: they
+    are settings such as a ``*_TOKENS`` limit, and removing them garbles a code
+    like ``HTTP_404``.
+    """
+    error = reason.get('error')
+    parts = [error.get('code'), error.get('message')] if isinstance(error, dict) else [error]
+    detail = ': '.join(str(part) for part in parts if part not in (None, ''))
+    if not detail:
+        return f"DSH turn ended with {reason.get('kind')}."
+    secrets = [value for value in secret_values(environment) if len(value) >= 6]
+    return f"DSH turn ended with {reason.get('kind')}: {redact_native(detail, secrets)[:500]}."
 
 
 def _deployment_agent_preset(install_root: Path, instructions: str) -> dict | None:
@@ -223,6 +242,8 @@ class DshExecution:
             'DSH_AGENT_PACKAGE': self.request['package'],
             'DSH_HOME': self.request.get('runtime_home') or str(home), 'DSH_PERMISSION_MODE': mode, 'NO_COLOR': '1',
         })
+        for ambient in _AMBIENT_ENDPOINTS:
+            environment.pop(ambient, None)
         return environment
 
     def _retain_trace(self) -> None:
@@ -525,9 +546,9 @@ class DshExecution:
                         self._forget_tool_call(data.get('callId'))
                 with self.lock:
                     if self.end is not None and not self.stopping.is_set() and self._settled():
-                        reason = self.end.get('reason', {}).get('kind')
-                        if reason != 'completed':
-                            raise self.error_type('RUNTIME_EXECUTION_FAILED', f'DSH turn ended with {reason}.')
+                        reason = self.end.get('reason', {})
+                        if reason.get('kind') != 'completed':
+                            raise self.error_type('RUNTIME_EXECUTION_FAILED', _turn_failure(reason, environment))
                         # Close input admission atomically with quiescence so a
                         # racing send cannot get a receipt after work finished.
                         self.active = False

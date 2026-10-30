@@ -13,11 +13,13 @@ from pathlib import Path
 import shutil
 import subprocess
 import sys
+import threading
 import time
 from typing import Callable, Sequence
 from uuid import uuid4
 
 import pytest
+import yaml
 
 from agent_swarm import AgentsError, Caller, bind
 from agent_swarm.claude.host import IndependentCalls
@@ -29,6 +31,9 @@ from test_codex_independent_control import native_settings  # noqa: F401 - pytes
 
 ROOT = Path(__file__).resolve().parents[1]
 KEY = 'never-shown-383-key'
+AMBIENT = {'DEEPSEEK_BASE_URL': 'https://ambient.invalid', 'DEEPSEEK_SEARCH_BASE_URL': 'https://ambient-search.invalid'}
+OFFICIAL = 'https://api.deepseek.com/anthropic'
+DECLARED = 'https://declared.invalid/anthropic'
 CONFIG = """connections:
   work-dsh:
     runtime: dsh
@@ -467,3 +472,102 @@ def test_delivered_plugin_loads_from_dsh_agent_package_alone(tmp_path: Path) -> 
     evidence = json.loads(result.stdout.strip().splitlines()[-1])
     assert evidence['childSourcePreserved']
     assert evidence['browserEntry'] == 'agents-dsh'
+
+
+@pytest.mark.parametrize('base_url', [None, DECLARED])
+def test_ambient_endpoints_do_not_route_a_dsh_child(tmp_path: Path, dsh: dict, monkeypatch: pytest.MonkeyPatch,
+                                                    base_url: str | None) -> None:
+    """Only the connection names the endpoint its key goes to; the parent's shell does not."""
+    for name, value in AMBIENT.items():
+        monkeypatch.setenv(name, value)
+    home = declare(tmp_path / 'agents', tmp_path)
+    if base_url is not None:
+        (tmp_path / 'agents/config.yml').write_text(
+            CONFIG.format(home=home).replace('    api_key_env:', f'    base_url: {base_url}\n    api_key_env:'))
+    host = IndependentCalls(tmp_path / 'agents', tmp_path, {}, {'dsh': dsh})
+    invoke, _, _ = claude_main(host, tmp_path)
+    try:
+        agent = invoke('create', runtime='dsh', instruction='one', model='deepseek-v5')['agent']
+        invoke('wait', agent=agent, timeout_seconds=10)
+        [service] = FakeDshService.instances
+        # Names only: a failing assertion must not print the launch environment.
+        inherited = [name for name in AMBIENT if name in service.environment]
+        assert inherited == []
+        assert 'DSH_383_KEY' in service.environment
+        llm = next(row['config'] for row in service.patches if row.get('id') == 'llm-deepseek')
+        assert llm.get('baseURL') == base_url
+    finally:
+        stop_owned(host.control)
+
+
+def test_a_native_failure_reaches_the_parent_with_its_reason(tmp_path: Path, dsh: dict,
+                                                             monkeypatch: pytest.MonkeyPatch) -> None:
+    """The native error reaches wait, status and stderr.log, without the connection's key."""
+    class HeldEnd(FakeDshService):
+        """End the turn only once create has returned, so the failure belongs to the execution."""
+        release = threading.Event()
+
+        def receive(self, timeout: float = 1) -> dict:
+            return super().receive(timeout) if self.release.wait(0.02) else {}
+
+    monkeypatch.setattr(execution.DshExecution, 'service_type', HeldEnd)
+    monkeypatch.setattr(FakeDshService, 'end_reason', {'kind': 'error', 'error': {
+        'message': f'DeepSeek Messages request failed (404) for {KEY}', 'code': 'HTTP_404', 'status': 404}})
+    host = IndependentCalls(tmp_path / 'agents', tmp_path, {}, {'dsh': dsh})
+    invoke, _, _ = claude_main(host, tmp_path)
+    try:
+        agent = invoke('create', runtime='dsh', instruction='one')['agent']
+        HeldEnd.release.set()
+        last = invoke('wait', agent=agent, timeout_seconds=10)['result']['last_result']
+        message = 'DSH turn ended with error: HTTP_404: DeepSeek Messages request failed (404) for [redacted].'
+        assert (last['outcome'], last['error']) == ('failed', {'code': 'RUNTIME_EXECUTION_FAILED', 'message': message})
+        status = invoke('status', agent=agent)
+        assert status['result']['last_result']['error']['message'] == message
+        assert KEY not in json.dumps(status)
+        [log] = (tmp_path / 'agents').rglob('stderr.log')
+        assert log.read_text() == f'RUNTIME_EXECUTION_FAILED: {message}\n'
+    finally:
+        stop_owned(host.control)
+
+
+@pytest.mark.parametrize(('reason', 'message'), [
+    ({'kind': 'error', 'error': {'code': 'HTTP_404'}}, 'DSH turn ended with error: HTTP_404.'),
+    ({'kind': 'error', 'error': {'message': 'Stream closed'}}, 'DSH turn ended with error: Stream closed.'),
+    ({'kind': 'error', 'error': 'Stream closed'}, 'DSH turn ended with error: Stream closed.'),
+    ({'kind': 'error', 'error': 429}, 'DSH turn ended with error: 429.'),
+    ({'kind': 'error', 'error': {}}, 'DSH turn ended with error.'),
+    ({'kind': 'error'}, 'DSH turn ended with error.'),
+])
+def test_a_partial_native_error_still_describes_the_end(reason: dict, message: str) -> None:
+    """Whatever part of the native error exists is used; describing it never raises."""
+    assert execution._turn_failure(reason, {}) == message
+
+
+@pytest.mark.parametrize(('base_url', 'expected'), [(None, OFFICIAL), (DECLARED, DECLARED)])
+def test_installed_dsh_resolves_only_the_connection_endpoint(tmp_path: Path, dsh: dict, monkeypatch: pytest.MonkeyPatch,
+                                                             base_url: str | None, expected: str) -> None:
+    """The installed DSH's own resolver, given what prepare_launch returned; no service and no network."""
+    node, installed = shutil.which('node'), shutil.which('dsh')
+    if node is None or installed is None:
+        pytest.skip('Installed DSH and Node are required for native endpoint evidence.')
+    for name, value in AMBIENT.items():
+        monkeypatch.setenv(name, value)
+    settings = prepare({**dsh, 'executable': installed, 'api_key_env': 'DSH_383_KEY',
+                        **({'base_url': base_url} if base_url else {})}, tmp_path)
+    turn = execution.DshExecution(settings, 'unused', tmp_path, lambda *_: None, lambda *_: None,
+                                  tmp_path / 'trace.jsonl', None)
+    environment = turn.prepare_launch()
+    patch = Path(environment['DSH_HOME']) / 'profiles/web/cordis.patch.yml'
+    row = next(row['config'] for row in yaml.load(patch.read_text(), Loader=execution._PatchLoader)
+               if row.get('id') == 'llm-deepseek')
+
+    def resolved(launch: dict) -> str:
+        result = subprocess.run([node, str(ROOT / 'tests/fixtures/dsh_resolve_endpoint.mjs'),
+                                 str(Path(installed).resolve().parent.parent), json.dumps(row)],
+                                cwd=tmp_path, env=launch, capture_output=True, text=True, timeout=30)
+        assert result.returncode == 0, result.stderr
+        return result.stdout.strip()
+
+    assert resolved(environment) == expected
+    # This DSH does honour the variable when it is left in: what the removal prevents.
+    assert resolved({**environment, **AMBIENT}) == (base_url or AMBIENT['DEEPSEEK_BASE_URL'])

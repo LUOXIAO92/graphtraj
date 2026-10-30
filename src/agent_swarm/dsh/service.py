@@ -16,6 +16,7 @@ import urllib.error
 import urllib.request
 import uuid
 from collections import deque
+from typing import Iterable, Mapping
 
 from websockets.sync.client import connect
 
@@ -27,6 +28,23 @@ from agent_swarm.dsh.errors import DshError
 APPROVAL_STREAM   = 'events'
 APPROVAL_ENDPOINT = '$events'
 APPROVAL_RESULT   = '$events/result'
+
+_SECRET_NAME = re.compile(r'KEY|TOKEN|SECRET|PASSWORD|COOKIE|AUTH', re.I)
+
+
+def secret_values(environment: Mapping[str, str]) -> list[str]:
+    """Return the values a launch environment holds under a secret's name, longest first."""
+    return sorted((value for key, value in environment.items() if value and _SECRET_NAME.search(key)),
+                  key=len, reverse=True)
+
+
+def redact_native(text: str, secrets: Iterable[str]) -> str:
+    """Remove credential values, URLs and labelled secrets from native output."""
+    for secret in secrets:
+        text = text.replace(secret, '[redacted]')
+    text = re.sub(r'(?:https?|wss?)://\S+', '[url redacted]', text)
+    return re.sub(r'(?i)((?:authorization|cookie|token|api[_-]?key|password)\s*[:=]\s*).*',
+                  r'\1[redacted]', text)
 
 
 class DshService:
@@ -65,8 +83,7 @@ class DshService:
         """Launch an owned Web backend and exchange its single-use launch token."""
         urls: queue.Queue[str | None] = queue.Queue()
         diagnostics: deque[str] = deque(maxlen=40)
-        secrets = [value for key, value in self.environment.items()
-                   if value and re.search(r'KEY|TOKEN|SECRET|PASSWORD|COOKIE|AUTH', key, re.I)]
+        secrets = secret_values(self.environment)
         try:
             argv = [self.executable, 'web']
             if self.profile_patch is not None:
@@ -92,12 +109,7 @@ class DshService:
                     continue
                 # Keep failures useful without retaining launch links or any
                 # inherited credential values. Output is bounded before storage.
-                for secret in secrets:
-                    clean = clean.replace(secret, '[redacted]')
-                clean = re.sub(r'(?:https?|wss?)://\S+', '[url redacted]', clean)
-                clean = re.sub(r'(?i)((?:authorization|cookie|token|api[_-]?key|password)\s*[:=]\s*).*',
-                               r'\1[redacted]', clean)
-                diagnostics.append(clean.strip()[:500])
+                diagnostics.append(redact_native(clean, secrets).strip()[:500])
             urls.put(None)
 
         threading.Thread(target=drain, daemon=True).start()

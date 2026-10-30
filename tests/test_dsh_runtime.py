@@ -613,6 +613,45 @@ def test_native_error_is_not_success(reason: str, tmp_path: Path, peer: list) ->
     assert peer[0].closed
 
 
+NATIVE_404 = {'message': 'DeepSeek Messages request failed (404)', 'code': 'HTTP_404', 'status': 404}
+
+
+def end_turn(service: NativePeer, reason: dict) -> None:
+    """Schedule a native turn/end carrying exactly this reason."""
+    service.running = False
+    service.frames.append({'type': 'event', 'event': {'type': 'turn/end', 'data': {'reason': reason}}})
+
+
+@pytest.mark.parametrize(('reason', 'message'), [
+    ({'kind': 'error', 'error': NATIVE_404},
+     'DSH turn ended with error: HTTP_404: DeepSeek Messages request failed (404).'),
+    ({'kind': 'cancelled'}, 'DSH turn ended with cancelled.'),
+])
+def test_a_native_failure_keeps_its_native_reason(reason: dict, message: str, tmp_path: Path, peer: list) -> None:
+    """A GraphTraj member's failure names the native error, in any shape, and logs it."""
+    turn, thread, outcome = run_turn(tmp_path)
+    end_turn(peer[0], reason)
+    thread.join(3)
+    assert (outcome['error'].code, outcome['error'].message) == ('RUNTIME_EXECUTION_FAILED', message)
+    assert f'RUNTIME_EXECUTION_FAILED: {message}\n' in (tmp_path / 'stderr.log').read_text()
+
+
+def test_native_failure_text_is_redacted_and_bounded(tmp_path: Path, peer: list, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Native text cannot carry launch secrets to the parent; a mere setting does not garble it."""
+    monkeypatch.setenv('DSH_TEST_SECRET', 'another-fake-secret')
+    monkeypatch.setenv('DSH_TEST_MAX_TOKENS', '4')
+    turn, thread, outcome = run_turn(tmp_path)
+    end_turn(peer[0], {'kind': 'error', 'error': {'code': 'HTTP_404', 'message': (
+        'failed with controlled-peer-key and another-fake-secret at https://ambient.invalid/v1 ' + 'x' * 2000)}})
+    thread.join(3)
+    message = outcome['error'].message
+    assert message.startswith('DSH turn ended with error: HTTP_404: failed with [redacted] and [redacted] at [url redacted]')
+    assert len(message) < 600
+    log = (tmp_path / 'stderr.log').read_text()
+    for secret in ('controlled-peer-key', 'another-fake-secret', 'ambient.invalid'):
+        assert secret not in message and secret not in log
+
+
 def test_non_approval_user_question_fails_explicitly_and_stops(tmp_path: Path, peer: list) -> None:
     """Unsupported non-approval interaction is never discarded as completion."""
     turn, thread, outcome = run_turn(tmp_path)
@@ -1113,3 +1152,45 @@ def test_dsh_role_projection_keeps_secrets_out_of_launch(
     assert launch['adapter_request']['base_url'] == 'https://api.deepseek.com/anthropic'
     assert 'never-persist-this-secret' not in json.dumps(launch)
     assert context.evidence_document()['native_read_isolation'] is False
+
+
+@pytest.mark.parametrize(('connection', 'base_url', 'expected'), [
+    ('work', None, None),
+    ('work', 'https://declared.invalid/anthropic', 'https://declared.invalid/anthropic'),
+    (None, None, 'https://api.deepseek.com/anthropic'),
+])
+def test_ambient_endpoints_do_not_route_a_graphtraj_member(
+    connection: str | None, base_url: str | None, expected: str | None, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """From role to launch: a connection role names its own endpoint, or leaves DSH's official one."""
+    import shutil
+    from graphtraj.configuration.project_configuration import default_configuration_content
+
+    monkeypatch.setenv('DEEPSEEK_BASE_URL', 'https://ambient.invalid')
+    monkeypatch.setenv('DEEPSEEK_SEARCH_BASE_URL', 'https://ambient-search.invalid')
+    package = tmp_path / 'dsh'
+    (package / 'lib').mkdir(parents=True)
+    (package / 'package.json').write_text('{"version":"0.2.2-alpha.2"}')
+    monkeypatch.setattr(shutil, 'which', lambda name: str(package / 'lib' / 'bin.js')
+                        if name == 'dsh' else '/installed/graphtraj-session')
+    config = tmp_path / '.graphtraj/config.yml'
+    config.parent.mkdir()
+    config.write_text(default_configuration_content(tmp_path, tmp_path))
+    role = ResolvedChildRole('author', 'Task responsibility', RolePreset(
+        runtime='dsh', model='deepseek-flash', base_url=base_url, api_key_env='DSH_TEST_KEY',
+        worktree_access='read', connection=connection,
+    ))
+    adapter = select_runtime_adapter('dsh')
+    launch = adapter.preflight_runtime_context(
+        harness_root=tmp_path, git_common_directory=tmp_path / '.git', role=role,
+        worktree=tmp_path / 'work', evidence=tmp_path / 'state', requested_skills=(),
+    ).finalize().launch_document()['adapter_request']
+    turn = adapter.managed_execution(launch, 'Original instruction', tmp_path, lambda *_: None, {},
+                                     trace_file=tmp_path / 'trace.jsonl', session_created=lambda *_: None)
+    environment = turn.prepare_launch()
+    # Names only: a failing assertion must not print the launch environment.
+    inherited = [name for name in ('DEEPSEEK_BASE_URL', 'DEEPSEEK_SEARCH_BASE_URL') if name in environment]
+    assert inherited == []
+    home = environment['DSH_HOME']
+    patch = yaml.load((Path(home) / 'profiles/web/cordis.patch.yml').read_text(), Loader=TaggedLoader)
+    assert next(row['config'] for row in patch if row.get('id') == 'llm-deepseek').get('baseURL') == expected

@@ -27,6 +27,7 @@ from agent_swarm import AgentControl, AgentsError, AgentsResult, Caller, bind
 from agent_swarm.connection import agents_connection
 from agent_swarm.notices import notice_id
 from agent_swarm.process import process_ancestors, process_arguments, process_executable
+from agent_swarm.shutdown import exit_if_unconfirmed, stop_children
 
 # Top-level host configuration keys; each Runtime key holds that driver's settings.
 CONFIG_KEYS = frozenset({'root', 'dsh', 'claude', 'codex', 'pi'})
@@ -287,25 +288,6 @@ def start(config: Path, launch: Mapping[str, Any]) -> tuple[Path, dict, Notices,
     return root, expected, notices, operate, call, control, caller
 
 
-def stop_children(call: Callable) -> None:
-    """Interrupt every active child, descendants first, through the public stop path."""
-    status = call({'action': 'status'})
-    if status.failed:
-        return
-    pending = list(status.document['result']['agents'])
-    owned = []
-    while pending:
-        agent = pending.pop()
-        owned.append(agent)
-        pending.extend(agent['children'])
-    for agent in reversed(owned):
-        if agent['state'] == 'active':
-            call({'action': 'interrupt', 'agent': agent['agent']})
-            result = call({'action': 'wait', 'agent': agent['agent'], 'timeout_seconds': 10})
-            if result.failed or result.document['result']['state'] == 'active':
-                raise RuntimeError('Native child stop was not confirmed before host shutdown.')
-
-
 def main() -> None:
     """Keep one control owner alive until the plugin closes its pipe."""
     parser = argparse.ArgumentParser(description=__doc__)
@@ -353,7 +335,7 @@ def main() -> None:
         notices.close()
         if flusher.ident is not None:
             flusher.join(10)
-        stop_children(call)
+        exit_if_unconfirmed(stop_children(call))
 
 
 if __name__ == '__main__':

@@ -30,6 +30,7 @@ from agent_swarm import AgentControl, AgentsError, AgentsResult, Caller, bind
 from agent_swarm.connection import agents_connection
 from agent_swarm.notices import notice_id
 from agent_swarm.process import process_ancestors, process_arguments, process_executable
+from agent_swarm.shutdown import exit_if_unconfirmed, stop_children
 from agent_swarm.runtime import RuntimeAdapterError
 from .driver import PiDriver
 from .execution import _validate, child_path
@@ -444,28 +445,6 @@ def start(config: Path) -> tuple[Path, Notices, Callable, Callable, AgentControl
     return root, notices, operate, call, control, Caller('pi-native', None, session=connection['session'], runtime='pi')
 
 
-def stop_children(call: Callable) -> None:
-    """Interrupt every active child, descendants first, through the public stop path.
-
-    No nested execution outlives the single control owner when its MCP pipe closes.
-    """
-    status = call({'action': 'status'})
-    if status.failed:
-        return
-    pending = list(status.document['result']['agents'])
-    owned = []
-    while pending:
-        agent = pending.pop()
-        owned.append(agent)
-        pending.extend(agent['children'])
-    for agent in reversed(owned):
-        if agent['state'] == 'active':
-            call({'action': 'interrupt', 'agent': agent['agent']})
-            result = call({'action': 'wait', 'agent': agent['agent'], 'timeout_seconds': 10})
-            if result.failed or result.document['result']['state'] == 'active':
-                raise RuntimeError('Native child stop was not confirmed before host shutdown.')
-
-
 def main() -> None:
     """Keep one control owner alive until the trusted extension closes its pipe."""
     parser = argparse.ArgumentParser(description=__doc__)
@@ -513,7 +492,7 @@ def main() -> None:
         if flusher.ident is not None:
             flusher.join(10)
         # Preserve identities and Sessions; use the same public stop path.
-        stop_children(call)
+        exit_if_unconfirmed(stop_children(call))
 
 
 if __name__ == '__main__':

@@ -16,6 +16,7 @@ import argparse
 import json
 import os
 from pathlib import Path
+import shutil
 import subprocess
 import sys
 import threading
@@ -26,7 +27,9 @@ from agent_swarm import AgentControl, AgentsError, AgentsResult, Caller, bind
 from agent_swarm.connection import agents_connection
 from agent_swarm.notices import notice_id
 from agent_swarm.process import process_ancestors, process_arguments, process_executable
+from agent_swarm.runtime import RuntimeAdapterError
 from .driver import PiDriver
+from .execution import _validate, child_path
 
 # Top-level host configuration keys; each Runtime key holds that driver's settings.
 CONFIG_KEYS = frozenset({'root', 'pi', 'claude', 'codex', 'dsh'})
@@ -118,7 +121,12 @@ def read_configuration(document: object) -> tuple[Path, dict]:
     for key, value in settings.items():
         if value is not None and not isinstance(value, dict):
             raise ValueError(f'"{key}" must be an object of {key} settings.')
-    pi = settings['pi']
+    check_pi_settings(settings['pi'])
+    return Path(root), settings
+
+
+def check_pi_settings(pi: Mapping[str, Any]) -> None:
+    """Raise ``ValueError`` naming an unknown or fixed Pi setting or a wrong field type."""
     unknown = set(pi) - PI_TEXT - PI_PATHS - PI_OTHER
     if unknown:
         raise ValueError(f'Unknown or fixed Pi settings: {sorted(unknown)} (worktree_path is always the cwd).')
@@ -131,7 +139,6 @@ def read_configuration(document: object) -> tuple[Path, dict]:
             raise ValueError(f'Pi setting {field} must list absolute paths.')
     if pi.get('worktree_access', 'read') not in {'read', 'write'}:
         raise ValueError("Pi setting worktree_access must be 'read' or 'write'.")
-    return Path(root), settings
 
 
 def pi_request(overrides: Mapping[str, Any], cwd: Path, environment: Mapping[str, str]) -> dict:
@@ -169,6 +176,76 @@ def pi_request(overrides: Mapping[str, Any], cwd: Path, environment: Mapping[str
                              'pi.git_common_directory.') from error
         request['git_common_directory'] = common
     return request
+
+
+def pi_child_driver(settings: Mapping[str, Any], cwd: Path, root: Path) -> PiDriver:
+    """Build the Pi driver of a host with no Pi parent, or refuse it at that host's start.
+
+    The Claude Code and Codex hosts pass their ``runtimes.pi`` entry, working
+    directory and data root. With no parent to inherit from, ``provider`` and
+    ``model`` are required and ``executable`` defaults to ``pi`` on this PATH;
+    the rest follows :func:`pi_request`. Only what would fail every child is
+    checked. A login or Pi's catalog is not: a provider can authenticate through
+    Pi's own models.json and a catalog query can take 30 seconds, so those
+    failures keep surfacing at ``create``.
+
+    Raises
+    ------
+    AgentsError
+        ``invalid-config`` for a wrong setting and ``runtime-unavailable`` for
+        a missing dependency, naming the field or the setting that fixes it.
+    """
+    try:
+        check_pi_settings(settings)
+    except ValueError as error:
+        raise AgentsError('invalid-config', str(error)) from None
+    for field in ('provider', 'model'):
+        if field not in settings:
+            raise AgentsError('invalid-config', f'runtimes.pi.{field} is required: '
+                                                'this host has no Pi parent to inherit it from.')
+
+    # The owner denies reading the data root and refuses a denied path inside
+    # a readable one (pi/execution.py), so this layout would fail every create.
+    worktree, data = cwd.resolve(), root.resolve()
+    if data.is_relative_to(worktree):
+        raise AgentsError('invalid-config', f'The agents data root {data} lies inside the Pi worktree {worktree}, '
+                                            'which a Pi child must be able to read. Move root outside it.')
+
+    executable = shutil.which(settings.get('executable', 'pi'))
+    if executable is None:
+        raise AgentsError('runtime-unavailable', f"The Pi executable {settings.get('executable', 'pi')} was not "
+                                                 'found. Install Pi or set runtimes.pi.executable.')
+    executable = os.path.abspath(executable)
+    try:
+        request = pi_request({**settings, 'executable': executable}, cwd,
+                             {**os.environ, 'AGENT_SWARM_PI_ENTRY': executable})
+        _validate(request)
+    except ValueError as error:
+        raise AgentsError('invalid-config', str(error)) from None
+    except RuntimeAdapterError as error:
+        raise AgentsError('invalid-config', error.message) from None
+
+    # Check what launch.py and srt will actually find: the child's PATH, and
+    # this directory as the import path launch.py gets as its script directory.
+    path = child_path(request['sandbox_path'])
+    python = request['sandbox_python']
+    try:
+        subprocess.run([python, '-c', 'import agent_sandbox'], cwd=Path(__file__).parent,
+                       env={**os.environ, 'PATH': path}, capture_output=True, check=True, timeout=30)
+    except (OSError, subprocess.SubprocessError):
+        raise AgentsError('runtime-unavailable',
+                          f'Pi children need agent_sandbox, but {python} cannot import it. '
+                          'Install agent-sandbox there or set runtimes.pi.sandbox_python.') from None
+    for tool in ('srt', 'node'):
+        if shutil.which(tool, path=path) is None:
+            raise AgentsError('runtime-unavailable', f"Pi children need {tool}, but it is not on the PATH they get "
+                                                     "(the host Python's directory, then sandbox_path). "
+                                                     'Install it or set runtimes.pi.sandbox_path.')
+    variable = settings.get('api_key_env')
+    if variable is not None and not os.environ.get(variable):
+        raise AgentsError('runtime-unavailable', f'The environment variable {variable} is unset or empty. '
+                                                 'Set it or change runtimes.pi.api_key_env.')
+    return PiDriver(request)
 
 
 def runtime_drivers(cwd: Path, request: Mapping[str, Any], settings: Mapping[str, Any]) -> dict:

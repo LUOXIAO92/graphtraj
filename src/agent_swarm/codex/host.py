@@ -11,8 +11,9 @@ named environment variable. Settings are launch configuration, never identity.
 An optional ``runtimes`` object adds children on other Runtimes: Runtime name
 to that driver's settings (``claude``: the Claude host's ``settings`` keys;
 ``dsh``: DshDriver settings such as executable, model, sandbox, api_key_env;
-both run in adapter_request's worktree_path). Without an entry, a create for that
-Runtime fails with ``unsupported-runtime``.
+``pi``: the Pi child settings of PUBLIC_API.md 1.1, which need --directory outside
+the worktree; all run in adapter_request's worktree_path). Without an entry, a
+create for that Runtime fails with ``unsupported-runtime``.
 
 The actual native service owns the parent. Its CLI/MCP descendants authenticate
 by kernel PID and the native Session returned by thread/start or thread/resume.
@@ -35,7 +36,7 @@ from .driver import CodexDriver
 from .managed_session import CodexManagedExecution
 
 
-def _claude(settings: dict, cwd: Path) -> object:
+def _claude(settings: dict, cwd: Path, root: Path) -> object:
     """Check Claude settings at start, then drive Claude children in ``cwd``."""
     from agent_swarm.claude.driver import ClaudeDriver
     from agent_swarm.claude.settings import prepare
@@ -44,7 +45,7 @@ def _claude(settings: dict, cwd: Path) -> object:
     return ClaudeDriver(cwd, settings)
 
 
-def _dsh(settings: dict, cwd: Path) -> object:
+def _dsh(settings: dict, cwd: Path, root: Path) -> object:
     """Check DSH settings, executable and version at start, then drive DSH children in ``cwd``."""
     from agent_swarm.dsh.driver import DshDriver
 
@@ -53,12 +54,19 @@ def _dsh(settings: dict, cwd: Path) -> object:
     return driver
 
 
-# Runtimes this host can run as children besides Codex; Pi is not supported yet.
-RUNTIMES = {'claude': _claude, 'dsh': _dsh}
+def _pi(settings: dict, cwd: Path, root: Path) -> object:
+    """Check Pi settings and dependencies at start, then drive Pi children in ``cwd``."""
+    from agent_swarm.pi.host import pi_child_driver
+
+    return pi_child_driver(settings, cwd, root)
 
 
-def runtime_drivers(settings: dict) -> dict:
-    """Remove ``runtimes`` from the host settings and build one driver per entry."""
+# Runtimes this host can run as children besides Codex.
+RUNTIMES = {'claude': _claude, 'dsh': _dsh, 'pi': _pi}
+
+
+def runtime_drivers(settings: dict, root: Path) -> dict:
+    """Remove ``runtimes`` from the host settings and build one driver per entry; ``root`` is the data root."""
     entries = settings.pop('runtimes', {})
     if not isinstance(entries, dict) or any(not isinstance(value, dict) for value in entries.values()):
         raise AgentsError('invalid-config', 'runtimes maps a Runtime name to its settings object.')
@@ -69,7 +77,7 @@ def runtime_drivers(settings: dict) -> dict:
         raise AgentsError('unsupported-runtime', 'This Codex host does not support Runtime '
                                                  + ', '.join(unsupported) + ' yet.')
     cwd = Path(settings['adapter_request']['worktree_path'])
-    return {runtime: RUNTIMES[runtime](entry, cwd) for runtime, entry in entries.items()}
+    return {runtime: RUNTIMES[runtime](entry, cwd, root) for runtime, entry in entries.items()}
 
 
 class CodexHost(CodexManagedExecution):
@@ -81,7 +89,7 @@ class CodexHost(CodexManagedExecution):
         native = directory / 'host'
         native.mkdir(exist_ok=True)
         settings = dict(settings)
-        others = runtime_drivers(settings)
+        others = runtime_drivers(settings, directory)
         driver = CodexDriver(settings)
         settings = driver.prepare('codex', Caller('codex', None))
         expected = None

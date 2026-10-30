@@ -37,6 +37,11 @@ OPTIONAL_TEXT = ('provider_domain', 'base_url', 'provider_api', 'api_key_env', '
                  'native_directory', 'git_common_directory')
 
 
+def child_path(sandbox_path: str) -> str:
+    """Return the PATH a Pi child gets: the host Python's directory, then ``sandbox_path``."""
+    return str(Path(sys.executable).parent) + os.pathsep + sandbox_path
+
+
 class PiExecution:
     """Keep native identity, input and queue-aware stopping on one owned pipe."""
 
@@ -288,7 +293,7 @@ class PiExecution:
                     or key in {'DSH_SESSION_ID', 'DSH_AGENT_SOURCE'}):
                 del env[key]
         env.update(credential_environment(request.get('api_key_env')))
-        env.update({'PATH': str(Path(sys.executable).parent) + os.pathsep + request['sandbox_path'],
+        env.update({'PATH': child_path(request['sandbox_path']),
                     'PI_CODING_AGENT_DIR': str(agent),
                     'PI_ASB_NO_ALIAS_PROMPT': '1'})
         if address is not None:

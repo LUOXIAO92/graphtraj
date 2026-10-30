@@ -167,7 +167,8 @@ def test_codex_children_keep_working_beside_claude(tmp_path: Path, host_settings
 
 
 @pytest.mark.parametrize(('runtimes', 'code'), [
-    ({'pi': {}}, 'unsupported-runtime'),
+    ({'pi': {}}, 'invalid-config'),
+    ({'gemini': {}}, 'unsupported-runtime'),
     ({'codex': {}}, 'invalid-config'),
     ({'claude': 'model'}, 'invalid-config'),
     ({'claude': {'colour': 'blue'}}, 'invalid-config'),

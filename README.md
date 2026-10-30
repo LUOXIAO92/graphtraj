@@ -181,8 +181,9 @@ Main also start Codex children, add an optional `runtimes` object, for example
 `"runtimes": {"codex": <settings>}`, where `<settings>` is the same document
 `python -m agent_swarm.codex.host --settings` reads. A child then chooses its
 Runtime, and optionally `model` and `reasoning_effort`, at `create`. A Runtime
-without an entry is refused with `unsupported-runtime`; `pi` and `dsh` entries
-are refused at start until their hosts exist. At start the host also checks
+without an entry is refused with `unsupported-runtime`. `dsh` and `pi` entries
+are accepted too; a `pi` entry needs `root` moved outside this directory (see
+`PUBLIC_API.md` 1.1). At start the host also checks
 every connection in `.agents-control/config.yml` and refuses a Runtime it has
 no driver for, or one that is not installed or not logged in. Existing login and
 trust are not copied. Session continuation uses the original child's captured

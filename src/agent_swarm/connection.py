@@ -119,12 +119,14 @@ def worker_connection(
             os.close(host_lock)
 
 
-def _host_alive(address: str) -> bool:
+def host_alive(address: str) -> bool:
     """Observe the serving host's channel lock without taking it over."""
     try:
         descriptor = os.open(address, os.O_RDONLY | os.O_DIRECTORY)
-    except OSError:
+    except (FileNotFoundError, NotADirectoryError):
         return False
+    except OSError:
+        return True  # Unobservable here: never take a live host for a dead one.
     try:
         fcntl.flock(descriptor, fcntl.LOCK_SH | fcntl.LOCK_NB)
     except BlockingIOError:
@@ -221,7 +223,7 @@ def connection_operation(
                         # long native operation is then awaited until its reply
                         # or until the host closes this channel.
                         if (not Path(directory).is_dir()
-                                or time.monotonic() >= deadline and not _host_alive(address)):
+                                or time.monotonic() >= deadline and not host_alive(address)):
                             raise TimeoutError('The Session host closed before replying; '
                                                'the accepted operation is unconfirmed.')
                     elif time.monotonic() >= deadline:

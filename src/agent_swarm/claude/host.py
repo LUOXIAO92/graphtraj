@@ -6,6 +6,7 @@ import faulthandler
 import json
 import os
 from pathlib import Path
+import shutil
 import sys
 import threading
 import time
@@ -13,7 +14,7 @@ from typing import TextIO
 from uuid import UUID
 
 from agent_swarm import AgentControl, AgentsError, AgentsResult, Caller, __version__, bind
-from agent_swarm.connection import connection_operation, worker_connection
+from agent_swarm.connection import connection_operation, host_alive, worker_connection
 from agent_swarm.discovery import handle_request
 from agent_swarm.process import process_ancestors, process_executable
 from agent_swarm.calls import on_discard, stop_requested
@@ -21,6 +22,10 @@ from agent_swarm.mcp import serve, serve_concurrent, respond, tool_documents, re
 from agent_swarm.notices import END_EVENTS, notice_id
 from .native_host import NativeCalls
 from .driver import ClaudeDriver
+
+if os.name != 'nt':
+    import fcntl
+
 
 def native_parent(executable: Path, *, stage: str = 'serve') -> int:
     """Verify the actual native parent, not an environment assertion or PID flag."""
@@ -79,16 +84,94 @@ def serve_until_ended(mcp_in: TextIO, mcp_out: TextIO, responder) -> None:
         serve(mcp_in, mcp_out, responder)
 
 
-def report_missing_host(channel_file: Path) -> None:
-    """Exit the mod's context step with the refusal reason in one line, never a traceback."""
+def report_missing_host(channel_file: Path, owner: dict | None = None) -> None:
+    """Exit the mod's context step with the refusal reason in one line, never a traceback.
+
+    ``owner`` is another Claude's live channel: this project's host is then running, not missing.
+    """
     record = channel_file.parent.parent / REFUSAL_FILE
     try:
         reason = json.loads(record.read_text(encoding='utf-8'))
         print(f"{reason['code']}: {reason['message']}", file=sys.stderr)
     except (OSError, ValueError, KeyError, TypeError):
-        print('The agents host for this project is not running; see '
-              f"{channel_file.parent.parent / 'host.log'}.", file=sys.stderr)
+        if owner is not None:
+            print("The agents host of another Claude Code session (Claude Code pid "
+                  f"{owner.get('parent')}) owns this project.", file=sys.stderr)
+        else:
+            print('The agents host for this project is not running; see '
+                  f"{channel_file.parent.parent / 'host.log'}.", file=sys.stderr)
     raise SystemExit(1)
+
+
+def live_channel(channel_file: Path) -> dict | None:
+    """Return the channel's record while its host is alive; anything else is stale.
+
+    A host holds the lock on its address for its whole life and the kernel
+    releases it when the host dies, so unlike a PID this stays right for a host
+    killed alone and for a PID reused after a reboot.
+    """
+    try:
+        endpoint = json.loads(channel_file.read_text(encoding='utf-8'))
+        return endpoint if host_alive(endpoint['address']) else None
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
+
+
+def context_endpoint(channel_file: Path) -> dict:
+    """Return the channel of this Claude process's live host, or exit reporting why there is none."""
+    endpoint = live_channel(channel_file)
+    if endpoint is None or endpoint.get('parent') != os.getppid():
+        report_missing_host(channel_file, endpoint)
+    return endpoint
+
+
+def require_free_channel(channel_file: Path) -> None:
+    """Refuse while another live host serves this channel; a stale file does not count."""
+    owner = live_channel(channel_file)
+    if owner is not None:
+        raise AgentsError('host-busy', f'{channel_file}: another agents host is serving this project for '
+                          f"Claude Code pid {owner.get('parent')}. Close that Claude Code session.")
+
+
+def remove_stale_channel(channel_file: Path) -> None:
+    """Remove a dead host's channel file and the control directory it names beside it."""
+    try:
+        address = Path(json.loads(channel_file.read_text(encoding='utf-8'))['address'])
+        beside = (address.name.startswith('control-')
+                  and address.parent.resolve() == channel_file.parent.resolve())
+    except (OSError, ValueError, KeyError, TypeError):
+        beside = False
+    channel_file.unlink()
+    if beside:
+        shutil.rmtree(address, ignore_errors=True)
+
+
+def claim_channel(channel_file: Path, endpoint: dict) -> bool:
+    """Publish this host's channel; return whether it replaced a dead host's file.
+
+    The directory lock makes check, removal and creation one step, so two hosts
+    starting over one stale file cannot both serve. Only starting hosts take it,
+    each for this one step. The loser sees the winner's live channel.
+    """
+    lock = os.open(channel_file.parent, os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        require_free_channel(channel_file)
+        replaced = os.path.lexists(channel_file)
+        if replaced:
+            remove_stale_channel(channel_file)
+        # Exclusive creation still stops a host that does not take this lock.
+        with channel_file.open('x') as stream:
+            json.dump(endpoint, stream)
+        return replaced
+    finally:
+        os.close(lock)
+
+
+def log_replaced_channel(channel_file: Path) -> None:
+    """Keep one line in host.log saying this start replaced a dead host's channel."""
+    print(time.strftime('%Y-%m-%dT%H:%M:%S%z'),
+          f'agents host replaced a stale channel of a dead host: {channel_file}', flush=True)
 
 
 def serve_refusal(error: Exception, log: Path, descriptors=tool_documents,
@@ -336,12 +419,8 @@ def main() -> None:
         serve_refusal(ValueError(f'{options.config}: {error}'), log)
         return
     if options.operation == 'context':
-        if not channel_file.exists():
-            report_missing_host(channel_file)
-        endpoint = json.loads(channel_file.read_text())
-        parent = native_parent(Path(endpoint['executable']), stage='context')
-        if endpoint['parent'] != parent:
-            raise AgentsError('authority-denied', 'The context belongs to another native host.')
+        endpoint = context_endpoint(channel_file)
+        native_parent(Path(endpoint['executable']), stage='context')
         print(json.dumps(connection_operation(endpoint['address'], json.load(sys.stdin), authenticate=True)))
         return
     executable = executable.resolve()
@@ -353,10 +432,7 @@ def main() -> None:
         if Path.cwd().resolve() != cwd.resolve():
             raise ValueError(f'Claude Code was started in {Path.cwd().resolve()}, but this host is configured '
                              f'for {cwd.resolve()}. Start or resume Claude Code from {cwd.resolve()}.')
-        if channel_file.exists():
-            raise AgentsError('host-busy', f'{channel_file} exists: another agents host for this project is '
-                              'running, or a previous one was killed. Close the other Claude Code session; '
-                              'if none is running, delete the file.')
+        require_free_channel(channel_file)
         calls = IndependentCalls(root, cwd, configuration.get('settings', {}), configuration.get('runtimes'))
         calls.control.require_connections()
     except Exception as error:
@@ -384,17 +460,24 @@ def main() -> None:
 
     directory.mkdir(parents=True, exist_ok=True)
     (directory.parent / REFUSAL_FILE).unlink(missing_ok=True)
+    refused = None
     try:
         with worker_connection(directory, calls.context, authenticate=authenticate) as address:
-            with channel_file.open('x') as stream:
-                json.dump({'parent': parent, 'executable': str(executable), 'address': address}, stream)
             try:
-                mcp_in, mcp_out = isolate_stdio(directory.parent / 'host.log')
-                with ended_by_claude():
-                    serve_concurrent(mcp_in, mcp_out, lambda message: respond(
-                        message, tool_documents, call, {'name': 'agents', 'version': __version__}))
-            finally:
-                channel_file.unlink()
+                replaced = claim_channel(channel_file, {'parent': parent, 'executable': str(executable),
+                                                        'address': address})
+            except (AgentsError, OSError) as error:
+                refused = error
+            else:
+                try:
+                    mcp_in, mcp_out = isolate_stdio(directory.parent / 'host.log')
+                    if replaced:
+                        log_replaced_channel(channel_file)
+                    with ended_by_claude():
+                        serve_concurrent(mcp_in, mcp_out, lambda message: respond(
+                            message, tool_documents, call, {'name': 'agents', 'version': __version__}))
+                finally:
+                    channel_file.unlink()
     finally:
         deadline = time.monotonic() + 10
         for agent in calls.control.interrupt_owned():
@@ -402,6 +485,8 @@ def main() -> None:
                 if time.monotonic() > deadline:
                     raise RuntimeError('Claude stop was not confirmed at MCP shutdown.')
                 time.sleep(0.05)
+    if refused is not None:
+        serve_refusal(refused, directory.parent / 'host.log')
 
 
 if __name__ == '__main__':

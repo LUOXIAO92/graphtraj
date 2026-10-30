@@ -185,8 +185,13 @@ class Notices:
             return 'unconfirmed'
         return True if slot[1] else 'held'
 
-    def flush(self, control: AgentControl, caller: Caller, attempts: int = FLUSH_ATTEMPTS,
-              pause: float = FLUSH_RETRY_SECONDS) -> None:
+    def flush(
+        self,
+        control: AgentControl,
+        caller: Caller,
+        attempts: int = FLUSH_ATTEMPTS,
+        pause: float = FLUSH_RETRY_SECONDS,
+    ) -> None:
         """Deliver the notices held for this Session, each once, from a new host process.
 
         Runs on its own thread: a delivery waits for an acknowledgement that

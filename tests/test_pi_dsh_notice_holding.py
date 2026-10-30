@@ -36,12 +36,14 @@ class Driver:
         self.finish: tuple[str, str | None, dict | None] | None = ('completed', 'the answer', None)
 
     def prepare(self, runtime, caller, **options):
+        """Accept any selection."""
         return {'runtime': runtime}
 
     def require_available(self, connection) -> None:
         """Every declared connection is installed and logged in here."""
 
     def start(self, run) -> None:
+        """Bind a Session, then end at once unless the test keeps it running."""
         run.events.session('native-' + run.agent[-6:])
         self.runs[run.agent] = run
         if self.finish is not None:
@@ -50,14 +52,17 @@ class Driver:
                              kwargs={'last_message': message, 'error': error}).start()
 
     def interrupt(self, run) -> bool:
+        """End the run as interrupted, with a body the next host can deliver."""
         threading.Thread(target=run.events.finished, args=('interrupted',),
                          kwargs={'last_message': 'partial work'}).start()
         return True
 
     def requests(self, run) -> list:
+        """The core keeps the reported requests itself."""
         return []
 
     def reply(self, run, request, response) -> dict:
+        """Record nothing; answer with a receipt."""
         return {'request_id': request.get('request_id'), 'reply_status': 'sent'}
 
 
@@ -65,12 +70,14 @@ class Pipe:
     """The extension or plugin side of a host's notice pipe."""
 
     def __init__(self, shown: bool | None = True) -> None:
+        """``shown`` is the acknowledgement to send; ``None`` sends none."""
         self.lines: list[dict] = []
         self.shown = shown
         self.notices = None
         self.on_write: Callable[[dict], None] | None = None
 
     def write(self, text: str) -> None:
+        """Record one notice line and acknowledge it the way the native side does."""
         document = json.loads(text)
         self.lines.append(document['notice'])
         if self.on_write is not None:
@@ -85,8 +92,16 @@ class Pipe:
 class Process:
     """One host process's state, built by that host's own ``start``."""
 
-    def __init__(self, kind: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, shown: bool | None,
-                 timeout: float, driver: Driver) -> None:
+    def __init__(
+        self,
+        kind: str,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        shown: bool | None,
+        timeout: float,
+        driver: Driver,
+    ) -> None:
+        """Start the host for the fixed Session ``main`` on this test's data root."""
         self.kind = kind
         self.driver = driver
         self.pipe = Pipe(shown)
@@ -121,11 +136,13 @@ class Process:
         return self.pipe.lines
 
     def create(self, instruction: str = 'work') -> str:
+        """Create one Claude child through the model-facing entry; return its Agent."""
         result = self.call({'action': 'create', 'runtime': 'claude', 'instruction': instruction})
         assert not result.failed, result.document
         return result.document['agent']
 
     def last(self, agent: str) -> dict:
+        """Read the Agent's last result once it has one."""
         return wait_until(lambda: self.call({'action': 'status', 'agent': agent}).document['result'].get('last_result'))
 
     def shutdown(self) -> None:
@@ -147,15 +164,16 @@ def wait_until(check, seconds: float = 5.0):
 
 
 @pytest.fixture(params=['pi', 'dsh'])
-def native_host(request, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+def native_host(request: pytest.FixtureRequest, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     """Build one host process of the Pi or DSH host for this test's Session."""
     def build(shown: bool | None = True, timeout: float = 2.0, driver: Driver | None = None) -> Process:
+        """One more host process for the same Session and data root."""
         return Process(request.param, tmp_path, monkeypatch, shown, timeout, driver or Driver())
 
     yield build
 
 
-def stopped_end(build) -> tuple[str, Driver]:
+def stopped_end(build: Callable) -> tuple[str, Driver]:
     """A child still running when its host shuts down: its end arrives while the parent is stopped."""
     driver = Driver()
     driver.finish = None
@@ -171,7 +189,7 @@ def read_record(tmp_path: Path, agent: str) -> dict:
     return json.loads((tmp_path / 'data' / 'control' / 'agents' / f'{agent}.json').read_text())
 
 
-def test_an_end_arriving_while_stopped_is_held_and_delivered_once_by_the_next_host(native_host, tmp_path) -> None:
+def test_an_end_arriving_while_stopped_is_held_and_delivered_once_by_the_next_host(native_host: Callable, tmp_path: Path) -> None:
     """Stopped: held, not pushed. New host: pushed once. A further restart: nothing."""
     agent, _ = stopped_end(native_host)
     assert read_record(tmp_path, agent)['executions'][-1]['notification'] == 'held'
@@ -187,7 +205,7 @@ def test_an_end_arriving_while_stopped_is_held_and_delivered_once_by_the_next_ho
     assert resumed.last(agent)['last_message'] is None
 
 
-def test_a_notice_refused_by_the_session_stays_held_for_the_next_host(native_host, tmp_path) -> None:
+def test_a_notice_refused_by_the_session_stays_held_for_the_next_host(native_host: Callable, tmp_path: Path) -> None:
     """``shown: false`` is not delivery: it stays held and readable, and a later host delivers it."""
     agent, _ = stopped_end(native_host)
     refused = native_host(shown=False)
@@ -199,7 +217,7 @@ def test_a_notice_refused_by_the_session_stays_held_for_the_next_host(native_hos
     assert read_record(tmp_path, agent)['executions'][-1]['notification'] == 'delivered'
 
 
-def test_an_unacknowledged_notice_is_unconfirmed_and_not_repeated(native_host, tmp_path) -> None:
+def test_an_unacknowledged_notice_is_unconfirmed_and_not_repeated(native_host: Callable, tmp_path: Path) -> None:
     """Written with no acknowledgement may have been shown: never repeated."""
     agent, _ = stopped_end(native_host)
     silent = native_host(shown=None, timeout=0.05)
@@ -208,7 +226,7 @@ def test_an_unacknowledged_notice_is_unconfirmed_and_not_repeated(native_host, t
     assert native_host().flush() == []
 
 
-def test_an_end_shown_by_status_is_not_pushed(native_host, tmp_path) -> None:
+def test_an_end_shown_by_status_is_not_pushed(native_host: Callable, tmp_path: Path) -> None:
     """A held end the Main already read through status or wait is settled, not pushed."""
     agent, _ = stopped_end(native_host)
     resumed = native_host()
@@ -218,7 +236,7 @@ def test_an_end_shown_by_status_is_not_pushed(native_host, tmp_path) -> None:
     assert resumed.flush() == []
 
 
-def test_a_hierarchy_status_settles_every_held_end_it_shows(native_host) -> None:
+def test_a_hierarchy_status_settles_every_held_end_it_shows(native_host: Callable) -> None:
     """The plain status lists all roots; what it shows is read, so nothing is pushed."""
     driver = Driver()
     driver.finish = None
@@ -230,7 +248,7 @@ def test_a_hierarchy_status_settles_every_held_end_it_shows(native_host) -> None
     assert resumed.flush() == []
 
 
-def test_a_body_shown_while_the_flush_runs_is_not_pushed(native_host) -> None:
+def test_a_body_shown_while_the_flush_runs_is_not_pushed(native_host: Callable) -> None:
     """Two held ends: reading the other one during the first's push keeps it from being pushed."""
     driver = Driver()
     driver.finish = None
@@ -243,7 +261,7 @@ def test_a_body_shown_while_the_flush_runs_is_not_pushed(native_host) -> None:
     assert len(resumed.flush()) == 1
 
 
-def test_a_held_end_being_flushed_is_hidden_and_not_settled_as_read(native_host, tmp_path) -> None:
+def test_a_held_end_being_flushed_is_hidden_and_not_settled_as_read(native_host: Callable, tmp_path: Path) -> None:
     """During the push a status shows no body and settles nothing; the push settles it."""
     agent, _ = stopped_end(native_host)
     resumed = native_host()
@@ -255,7 +273,7 @@ def test_a_held_end_being_flushed_is_hidden_and_not_settled_as_read(native_host,
     assert read_record(tmp_path, agent)['executions'][-1]['notification'] == 'delivered'
 
 
-def test_a_refused_flush_does_not_lose_a_body_read_during_it(native_host, tmp_path) -> None:
+def test_a_refused_flush_does_not_lose_a_body_read_during_it(native_host: Callable, tmp_path: Path) -> None:
     """Hidden during the push and then refused: the body is still readable afterwards."""
     agent, _ = stopped_end(native_host)
     resumed = native_host(shown=False)
@@ -264,7 +282,7 @@ def test_a_refused_flush_does_not_lose_a_body_read_during_it(native_host, tmp_pa
     assert resumed.last(agent)['last_message'] == 'partial work'
 
 
-def test_shutdowns_own_wait_does_not_settle_the_ends_it_causes(native_host, tmp_path) -> None:
+def test_shutdowns_own_wait_does_not_settle_the_ends_it_causes(native_host: Callable, tmp_path: Path) -> None:
     """The internal wait is not the Main reading: those ends stay held for the next host."""
     agent, _ = stopped_end(native_host)
     record = read_record(tmp_path, agent)['executions'][-1]
@@ -272,7 +290,7 @@ def test_shutdowns_own_wait_does_not_settle_the_ends_it_causes(native_host, tmp_
     assert native_host().flush()
 
 
-def test_a_live_end_is_pushed_once_with_the_host_up(native_host, tmp_path) -> None:
+def test_a_live_end_is_pushed_once_with_the_host_up(native_host: Callable, tmp_path: Path) -> None:
     """The ordinary path is unchanged: pushed once, then no flush repeats it."""
     process = native_host()
     agent = process.create()
@@ -282,7 +300,7 @@ def test_a_live_end_is_pushed_once_with_the_host_up(native_host, tmp_path) -> No
     assert native_host().flush() == []
 
 
-def test_a_refused_request_stays_held_while_it_waits_and_is_flushed_once(native_host, tmp_path) -> None:
+def test_a_refused_request_stays_held_while_it_waits_and_is_flushed_once(native_host: Callable, tmp_path: Path) -> None:
     """A request refused live is delivered by the host's flush, and then not again."""
     driver = Driver()
     driver.finish = None
@@ -301,7 +319,7 @@ def test_a_refused_request_stays_held_while_it_waits_and_is_flushed_once(native_
     assert process.call({'action': 'status', 'agent': agent}).document['result']['pending_requests'] == 1
 
 
-def requesting(build) -> tuple[Process, str, Any]:
+def requesting(build: Callable) -> tuple[Process, str, Any]:
     """A running child under a host that takes its notices."""
     driver = Driver()
     driver.finish = None
@@ -310,7 +328,7 @@ def requesting(build) -> tuple[Process, str, Any]:
     return process, agent, wait_until(lambda: driver.runs.get(agent))
 
 
-def test_each_native_request_notifies_once_with_its_own_identity(native_host) -> None:
+def test_each_native_request_notifies_once_with_its_own_identity(native_host: Callable) -> None:
     """Two requests are two notices; a repeated report notifies nobody."""
     process, _, run = requesting(native_host)
     for token in ('token-1', 'token-1', 'token-2', 'token-2'):
@@ -323,7 +341,7 @@ def test_each_native_request_notifies_once_with_its_own_identity(native_host) ->
     assert 'SECRET' not in json.dumps(process.pipe.lines)
 
 
-def test_ask_parent_notifies_once_without_its_question(native_host) -> None:
+def test_ask_parent_notifies_once_without_its_question(native_host: Callable) -> None:
     """A child's decision request reaches the Main like a native one; asking again is the same request."""
     process, agent, run = requesting(native_host)
     child = bind(process.control, Caller('runtime-mcp', agent))
@@ -335,7 +353,7 @@ def test_ask_parent_notifies_once_without_its_question(native_host) -> None:
     assert 'agents/decision' in process.pipe.lines[0]['message'] and 'Secret' not in process.pipe.lines[0]['message']
 
 
-def test_dsh_flush_retries_a_refusal_within_its_bound_without_spinning(tmp_path, monkeypatch) -> None:
+def test_dsh_flush_retries_a_refusal_within_its_bound_without_spinning(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """A Session not active yet refuses: retried with a pause, within the bound, then left held."""
     build = lambda **options: Process('dsh', tmp_path, monkeypatch, options.get('shown', True), 2.0,
                                       options.get('driver') or Driver())
@@ -346,6 +364,7 @@ def test_dsh_flush_retries_a_refusal_within_its_bound_without_spinning(tmp_path,
     real_wait = host.notices.closed.wait
 
     def counted(pause: float) -> bool:
+        """Record the pause without waiting for it."""
         pauses.append(pause)
         return real_wait(0)
 
@@ -365,7 +384,7 @@ def test_dsh_flush_retries_a_refusal_within_its_bound_without_spinning(tmp_path,
     assert dsh_host.FLUSH_ATTEMPTS == 6 and dsh_host.FLUSH_RETRY_SECONDS == 5.0
 
 
-def test_dsh_flush_retry_stops_at_shutdown(tmp_path, monkeypatch) -> None:
+def test_dsh_flush_retry_stops_at_shutdown(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Shutdown during the pause ends the flush at once, leaving the notice held."""
     build = lambda **options: Process('dsh', tmp_path, monkeypatch, options.get('shown', True), 2.0,
                                       options.get('driver') or Driver())
@@ -460,7 +479,7 @@ CALLERS = {'pi': Caller('pi-native', None, session='main', runtime='pi'),
 
 
 @pytest.mark.parametrize('kind', ['pi', 'dsh'])
-def test_a_real_host_process_flushes_once_after_ready_and_a_further_restart_delivers_nothing(tmp_path, kind) -> None:
+def test_a_real_host_process_flushes_once_after_ready_and_a_further_restart_delivers_nothing(tmp_path: Path, kind: str) -> None:
     """The real entry: connection first, nothing before ready, once after it, nothing on restart."""
     agent = seed_held(tmp_path, CALLERS[kind])
     outcome = run_native(tmp_path, kind)
@@ -475,7 +494,7 @@ def test_a_real_host_process_flushes_once_after_ready_and_a_further_restart_deli
 
 
 @pytest.mark.parametrize('kind', ['pi', 'dsh'])
-def test_a_real_host_process_that_is_never_told_ready_keeps_its_notices_held(tmp_path, kind) -> None:
+def test_a_real_host_process_that_is_never_told_ready_keeps_its_notices_held(tmp_path: Path, kind: str) -> None:
     """A Session that never takes a turn: nothing is written, and the next host still has it."""
     agent = seed_held(tmp_path, CALLERS[kind])
     outcome = run_native(tmp_path, kind, ready=False)
@@ -485,7 +504,7 @@ def test_a_real_host_process_that_is_never_told_ready_keeps_its_notices_held(tmp
     assert len(run_native(tmp_path, kind)['notices']) == 1
 
 
-def test_a_real_host_refused_notice_stays_held(tmp_path) -> None:
+def test_a_real_host_refused_notice_stays_held(tmp_path: Path) -> None:
     """The Pi host's flush is once per process: refused stays held for the next one."""
     agent = seed_held(tmp_path, CALLERS['pi'])
     outcome = run_native(tmp_path, 'pi', shown='false')
@@ -494,7 +513,7 @@ def test_a_real_host_refused_notice_stays_held(tmp_path) -> None:
     assert read_record(tmp_path, agent)['executions'][-1]['notification'] == 'held'
 
 
-def test_a_real_host_unacknowledged_notice_ends_as_held_at_shutdown_and_is_replayed(tmp_path) -> None:
+def test_a_real_host_unacknowledged_notice_ends_as_held_at_shutdown_and_is_replayed(tmp_path: Path) -> None:
     """Silence cut short by shutdown was never settled as shown: the next host replays it."""
     agent = seed_held(tmp_path, CALLERS['pi'])
     outcome = run_native(tmp_path, 'pi', shown='none')
@@ -570,7 +589,7 @@ def run_extension(tmp_path: Path, *, entries: list | None = None, ui: bool = Fal
     return json.loads(result.stdout), json.loads((tmp_path / 'log.json').read_text())
 
 
-def test_extension_does_not_inject_a_replayed_notice_and_acknowledges_it(tmp_path) -> None:
+def test_extension_does_not_inject_a_replayed_notice_and_acknowledges_it(tmp_path: Path) -> None:
     """A notice already in the Session's entries (crash before the ack) is shown, not injected again."""
     persisted = {'type': 'custom_message', 'customType': 'graphtraj:agent-communication', 'id': 'e1',
                  'content': 'x', 'display': True, 'details': {'fact': 'notice:exec-1:completed'}}
@@ -586,13 +605,13 @@ def test_extension_does_not_inject_a_replayed_notice_and_acknowledges_it(tmp_pat
     {'type': 'custom_message', 'customType': 'graphtraj:agent-communication', 'details': {'fact': 'notice:other'}},
     {'type': 'custom_message', 'customType': 'graphtraj:agent-communication'},
 ])
-def test_extension_dedupes_only_on_its_own_persisted_notice(tmp_path, entry) -> None:
+def test_extension_dedupes_only_on_its_own_persisted_notice(tmp_path: Path, entry: dict) -> None:
     """Display entries, other extensions' messages and other notices do not count as this notice."""
     sent, _ = run_extension(tmp_path, entries=[entry])
     assert len(sent) == 1
 
 
-def test_extension_says_ready_once_at_the_first_turn_and_not_before(tmp_path) -> None:
+def test_extension_says_ready_once_at_the_first_turn_and_not_before(tmp_path: Path) -> None:
     """In print mode the prompt must start first: ready follows agent_start, once."""
     _, received = run_extension(tmp_path, turn=True)
     assert received.count({'ready': True}) == 1
@@ -601,7 +620,7 @@ def test_extension_says_ready_once_at_the_first_turn_and_not_before(tmp_path) ->
     assert sent == [] and received == []  # no UI and no turn: nothing flushes
 
 
-def test_extension_with_a_ui_says_ready_after_its_grace_when_no_turn_starts(tmp_path) -> None:
+def test_extension_with_a_ui_says_ready_after_its_grace_when_no_turn_starts(tmp_path: Path) -> None:
     """An interactive Session with no prompt on its way takes held notices by itself."""
     sent, received = run_extension(tmp_path, ui=True, turn=False, run_ms=4000)
     assert received[0] == {'ready': True} and len(sent) == 1
@@ -646,7 +665,7 @@ console.log(JSON.stringify({ outcomes, sent: [first.sent.length, second.sent.len
 '''
 
 
-def test_the_dsh_relay_admits_one_id_once_across_processes_and_refuses_an_inactive_session(tmp_path) -> None:
+def test_the_dsh_relay_admits_one_id_once_across_processes_and_refuses_an_inactive_session(tmp_path: Path) -> None:
     """The once-only guard the DSH flush relies on: communication.mjs, the shipped file."""
     node = shutil.which('node')
     if not node:
@@ -663,7 +682,7 @@ def test_the_dsh_relay_admits_one_id_once_across_processes_and_refuses_an_inacti
     assert document['sent'] == [1, 0] and document['log'] == 1
 
 
-def test_a_nested_dsh_parent_gives_each_request_its_own_relay_id(tmp_path, monkeypatch) -> None:
+def test_a_nested_dsh_parent_gives_each_request_its_own_relay_id(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """The relay admits one id once: a second request, or the end after one, must not share it."""
     from agent_swarm.dsh import binding
 
@@ -671,18 +690,25 @@ def test_a_nested_dsh_parent_gives_each_request_its_own_relay_id(tmp_path, monke
     receivers: list = []
 
     class Turn:
+        """An active native turn: only what ``receive`` reads."""
+
         lock = threading.Lock()
         active, session, execution_id = True, 'parent-session', 'parent-exec'
         stopping = finished = threading.Event()
 
         def operate(self, request: dict) -> dict:
+            """Record the relay message; the relay admits it."""
             messages.append(request['message'])
             return {'accepted': True}
 
     class Events:
+        """Keep the receiver the binding registers."""
+
         receive_children = staticmethod(receivers.append)
 
     class Run:
+        """The parent execution's public fields the binding reads."""
+
         agent, call, archive, settings, events = 'parent', object(), None, {}, Events()
 
     binding.bind_run(Turn(), Run())
@@ -762,14 +788,14 @@ def run_plugin(tmp_path: Path, **environment: str) -> list:
     return json.loads((tmp_path / 'log.json').read_text())
 
 
-def test_plugin_says_ready_when_the_sessions_turn_begins_not_at_attach(tmp_path) -> None:
+def test_plugin_says_ready_when_the_sessions_turn_begins_not_at_attach(tmp_path: Path) -> None:
     """A wake before the runner's task would run ahead of its permission settings."""
     received = run_plugin(tmp_path, TEST_TURN_MS='400', TEST_RUN_MS='1500')
     assert [item['message'] for item in received] == [{'ready': True}]
     assert received[0]['after'] >= 0.3
 
 
-def test_plugin_says_ready_after_its_grace_in_a_session_with_no_turn(tmp_path) -> None:
+def test_plugin_says_ready_after_its_grace_in_a_session_with_no_turn(tmp_path: Path) -> None:
     """A long-lived profile starts no turn by itself: it takes held notices after the grace."""
     assert run_plugin(tmp_path, TEST_RUN_MS='500') == []
     (tmp_path / 'log.json').unlink()

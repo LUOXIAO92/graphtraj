@@ -1,5 +1,5 @@
 {
- "_provenance": "Captured by tests/pi_parity_scenarios.py run under a venv with graphtraj and agent_swarm installed editable from base commit 33c7adb (git worktree add --detach 33c7adb).",
+ "_provenance": "Captured by tests/pi_parity_scenarios.py run under a venv with graphtraj and agent_swarm installed editable from base commit 33c7adb (git worktree add --detach 33c7adb). Task 412 then removed api_key_env and unauthenticated from each process spec and added the name-only auth.json to the overlay of key routes; policies, argv and environments stay as captured.",
  "agents-member": {
   "argv": [
    "<python>",
@@ -92,7 +92,6 @@
    }
   },
   "spec": {
-   "api_key_env": null,
    "argv": [
     "<tmp>/agents-member/bin/pi",
     "--mode",
@@ -108,8 +107,7 @@
     "--extension",
     "<src>/agent_swarm/pi/extension.mjs"
    ],
-   "policy": "<tmp>/agents-member/data/native/agents-member/pi-policy.json",
-   "unauthenticated": false
+   "policy": "<tmp>/agents-member/data/native/agents-member/pi-policy.json"
   }
  },
  "base-url-unauthenticated": {
@@ -201,7 +199,6 @@
    }
   },
   "spec": {
-   "api_key_env": null,
    "argv": [
     "<tmp>/base-url-unauthenticated/bin/pi",
     "--mode",
@@ -215,8 +212,7 @@
     "--append-system-prompt",
     "<tmp>/base-url-unauthenticated/project/state/base-url-unauthenticated.pi/role-instructions.txt"
    ],
-   "policy": "<tmp>/base-url-unauthenticated/project/.graphtraj/runner/sessions/base-url-unauthenticated/pi-policy.json",
-   "unauthenticated": true
+   "policy": "<tmp>/base-url-unauthenticated/project/.graphtraj/runner/sessions/base-url-unauthenticated/pi-policy.json"
   }
  },
  "base-url-with-key": {
@@ -244,6 +240,7 @@
   "instructions": "Role instructions.",
   "overlay": {
    "AGENTS.md": "-> <tmp>/base-url-with-key/user-agent/AGENTS.md",
+   "auth.json": "{\"graphtraj-role\": {\"type\": \"api_key\", \"key\": \"$PARITY_KEY\"}}",
    "extensions": "-> <tmp>/base-url-with-key/user-agent/extensions",
    "models.json": "{\"providers\": {\"graphtraj-role\": {\"baseUrl\": \"http://localhost:8080/v1\", \"api\": \"openai-completions\", \"apiKey\": \"$PARITY_KEY\", \"models\": [{\"id\": \"local-model\", \"reasoning\": true}]}}}",
    "settings.json": "-> <tmp>/base-url-with-key/user-agent/settings.json"
@@ -310,7 +307,6 @@
    }
   },
   "spec": {
-   "api_key_env": "PARITY_KEY",
    "argv": [
     "<tmp>/base-url-with-key/bin/pi",
     "--mode",
@@ -326,8 +322,7 @@
     "--thinking",
     "high"
    ],
-   "policy": "<tmp>/base-url-with-key/project/.graphtraj/runner/sessions/base-url-with-key/pi-policy.json",
-   "unauthenticated": true
+   "policy": "<tmp>/base-url-with-key/project/.graphtraj/runner/sessions/base-url-with-key/pi-policy.json"
   }
  },
  "destinations": {
@@ -364,6 +359,7 @@
   "instructions": "Role instructions.",
   "overlay": {
    "AGENTS.md": "-> <tmp>/key-only/user-agent/AGENTS.md",
+   "auth.json": "{\"openrouter\": {\"type\": \"api_key\", \"key\": \"$PARITY_KEY\"}}",
    "extensions": "-> <tmp>/key-only/user-agent/extensions",
    "models.json": "-> <tmp>/key-only/user-agent/models.json",
    "settings.json": "-> <tmp>/key-only/user-agent/settings.json"
@@ -428,7 +424,6 @@
    }
   },
   "spec": {
-   "api_key_env": "PARITY_KEY",
    "argv": [
     "<tmp>/key-only/bin/pi",
     "--mode",
@@ -442,8 +437,7 @@
     "--append-system-prompt",
     "<tmp>/key-only/project/state/key-only.pi/role-instructions.txt"
    ],
-   "policy": "<tmp>/key-only/project/.graphtraj/runner/sessions/key-only/pi-policy.json",
-   "unauthenticated": false
+   "policy": "<tmp>/key-only/project/.graphtraj/runner/sessions/key-only/pi-policy.json"
   }
  },
  "native-services": {
@@ -547,7 +541,6 @@
    }
   },
   "spec": {
-   "api_key_env": null,
    "argv": [
     "<tmp>/native-services/bin/pi",
     "--mode",
@@ -561,8 +554,7 @@
     "--append-system-prompt",
     "<tmp>/native-services/project/state/native-services.pi/role-instructions.txt"
    ],
-   "policy": "<tmp>/native-services/project/.graphtraj/runner/sessions/native-services/pi-policy.json",
-   "unauthenticated": false
+   "policy": "<tmp>/native-services/project/.graphtraj/runner/sessions/native-services/pi-policy.json"
   }
  },
  "no-address": {
@@ -652,7 +644,6 @@
    }
   },
   "spec": {
-   "api_key_env": null,
    "argv": [
     "<tmp>/no-address/bin/pi",
     "--mode",
@@ -666,8 +657,7 @@
     "--append-system-prompt",
     "<tmp>/no-address/project/state/no-address.pi/role-instructions.txt"
    ],
-   "policy": "<tmp>/no-address/project/.graphtraj/runner/sessions/no-address/pi-policy.json",
-   "unauthenticated": false
+   "policy": "<tmp>/no-address/project/.graphtraj/runner/sessions/no-address/pi-policy.json"
   }
  },
  "read": {
@@ -761,7 +751,6 @@
    }
   },
   "spec": {
-   "api_key_env": null,
    "argv": [
     "<tmp>/read/bin/pi",
     "--mode",
@@ -775,8 +764,7 @@
     "--append-system-prompt",
     "<tmp>/read/project/state/read.pi/role-instructions.txt"
    ],
-   "policy": "<tmp>/read/project/.graphtraj/runner/sessions/read/pi-policy.json",
-   "unauthenticated": false
+   "policy": "<tmp>/read/project/.graphtraj/runner/sessions/read/pi-policy.json"
   }
  },
  "retained-old-format": {
@@ -871,7 +859,6 @@
    }
   },
   "spec": {
-   "api_key_env": null,
    "argv": [
     "<tmp>/retained-old-format/bin/pi",
     "--mode",
@@ -885,8 +872,7 @@
     "--append-system-prompt",
     "<tmp>/retained-old-format/project/state/retained-old-format.pi/role-instructions.txt"
    ],
-   "policy": "<tmp>/retained-old-format/project/.graphtraj/runner/sessions/retained-old-format/pi-policy.json",
-   "unauthenticated": false
+   "policy": "<tmp>/retained-old-format/project/.graphtraj/runner/sessions/retained-old-format/pi-policy.json"
   }
  },
  "write": {
@@ -982,7 +968,6 @@
    }
   },
   "spec": {
-   "api_key_env": null,
    "argv": [
     "<tmp>/write/bin/pi",
     "--mode",
@@ -996,8 +981,7 @@
     "--append-system-prompt",
     "<tmp>/write/project/state/write.pi/role-instructions.txt"
    ],
-   "policy": "<tmp>/write/project/.graphtraj/runner/sessions/write/pi-policy.json",
-   "unauthenticated": false
+   "policy": "<tmp>/write/project/.graphtraj/runner/sessions/write/pi-policy.json"
   }
  }
 }

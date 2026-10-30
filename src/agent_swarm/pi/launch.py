@@ -7,6 +7,7 @@ uses only its public wrapping API; it does not import GraphTraj or its state.
 import json
 import os
 from pathlib import Path
+import shlex
 import sys
 
 
@@ -31,15 +32,12 @@ def main() -> None:
         'ASB_PROFILE_JSON': Path(policy).read_text(encoding='utf-8'),
         'PI_ASB_NO_ALIAS_PROMPT': '1',
     })
-    argv = document['argv']
-    # Pi's documented runtime key wins over stored auth and native model keys.
-    # Resolve only in memory after loading the nonsecret retained process spec.
-    if document.get('api_key_env'):
-        argv += ['--api-key', environment[document['api_key_env']]]
-    elif document.get('unauthenticated'):
-        argv += ['--api-key', 'local']
-    command = wrap_command(argv, policy)
-    if command == document['argv']:
+    # srt joins its arguments with spaces for an inner shell, so hand it one
+    # word already quoted for that shell. A srt that stopped joining would fail
+    # to find this word as a command, which is closed rather than unsandboxed.
+    quoted = [shlex.join(document['argv'])]
+    command = wrap_command(quoted, policy)
+    if command == quoted:
         raise SystemExit('srt disappeared before launch; refusing unsandboxed execution.')
     os.execvpe(command[0], command, environment)
 

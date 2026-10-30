@@ -193,15 +193,42 @@ def _pi_models(connection: Mapping[str, Any], cwd: Path) -> list[dict]:
     raise ValueError('Pi did not return model metadata.')
 
 
+def write_key_reference(agent: Path, provider: str, api_key_env: str) -> None:
+    """Write Pi's private ``auth.json`` in ``agent``, naming the key's variable.
+
+    Pi resolves ``$NAME`` from its environment when it needs the key and prefers
+    stored auth to the keys of its model files, so the value is never on a
+    command line or in a file. Exclusive creation refuses a remaining entry,
+    so a link is never written through.
+    """
+    descriptor = os.open(agent / 'auth.json', os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    with os.fdopen(descriptor, 'w', encoding='utf-8') as stream:
+        json.dump({provider: {'type': 'api_key', 'key': '$' + api_key_env}}, stream)
+
+
+def _private_catalog(home: Path, agent: Path) -> None:
+    """Give ``agent`` what Pi's catalog reads from ``home``, besides the native login.
+
+    ``models.json`` may hold a key, so it stays a link. Pi rewrites
+    ``models-store.json`` in place when it refreshes, so a copy keeps ``home``
+    unwritten. ``settings.json`` feeds no catalog, and its packages would be
+    installed afresh into this empty directory.
+    """
+    if (home / 'models.json').exists():
+        (agent / 'models.json').symlink_to((home / 'models.json').resolve())
+    if (home / 'models-store.json').exists():
+        shutil.copy(home / 'models-store.json', agent)
+
+
 def pi_destination(executable: str, home: str, provider: str, model: str, api_key_env: str | None = None) -> str:
     """Return the hostname Pi sends ``provider``/``model`` requests to.
 
     Reads Pi's own ``get_available_models`` record for the selected model from
-    ``home``. With ``api_key_env`` the key is passed as Pi's runtime key, as a
-    launch does, so a model that only that key authenticates is listed.
-    Extension-only or unavailable models, and destinations that are not plain
-    http(s) hosts, are refused rather than launched under another provider's
-    network grants.
+    ``home``. With ``api_key_env`` Pi reads that catalog from a private agent
+    directory whose ``auth.json`` names the variable, as a launch does, so a
+    model that only that key authenticates is listed. Extension-only or
+    unavailable models, and destinations that are not plain http(s) hosts, are
+    refused rather than launched under another provider's network grants.
     """
     from urllib.parse import urlsplit
     from agent_swarm.runtime import RuntimeAdapterError, credential_environment
@@ -210,12 +237,17 @@ def pi_destination(executable: str, home: str, provider: str, model: str, api_ke
         command = [executable, '--mode', 'rpc', '--no-session', '--no-extensions', '--no-skills',
                    '--no-prompt-templates', '--no-themes', '--no-context-files',
                    '--provider', provider, '--model', model]
-        if api_key_env:
-            command += ['--api-key', credential_environment(api_key_env)[api_key_env]]
         with tempfile.TemporaryDirectory(prefix='agents-pi-destination-') as directory:
+            agent = home
+            if api_key_env:
+                credential_environment(api_key_env)
+                agent = Path(directory) / 'agent'
+                agent.mkdir()
+                write_key_reference(agent, provider, api_key_env)
+                _private_catalog(Path(home), agent)
             completed = subprocess.run(
                 command, input=json.dumps({'id': 'models', 'type': 'get_available_models'}) + '\n',
-                cwd=directory, env=_environment({'home': home}, 'PI_CODING_AGENT_DIR'),
+                cwd=directory, env=_environment({'home': agent}, 'PI_CODING_AGENT_DIR'),
                 capture_output=True, text=True, timeout=TIMEOUT, check=True,
             )
         replies = (json.loads(line) for line in completed.stdout.splitlines())

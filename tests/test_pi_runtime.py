@@ -6,6 +6,8 @@ import json
 import os
 from pathlib import Path
 import shutil
+import stat
+import subprocess
 import sys
 import threading
 import time
@@ -13,6 +15,8 @@ import time
 import pytest
 import yaml
 
+from agent_swarm.models import pi_destination
+from agent_swarm.pi import PiExecution
 from graphtraj.configuration.project_roles import RolePreset, parse_inline_role
 from graphtraj.configuration.role_definitions import resolve_child_role
 from graphtraj.execution.runner_heartbeat import hold_ownership
@@ -35,7 +39,10 @@ def pi_environment(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict:
                    'policy=json.load(open(sys.argv[sys.argv.index("--settings")+1]))\n'
                    'assert isinstance(policy["network"]["deniedDomains"],list)\n'
                    'if os.environ.get("PI_FIXTURE_POLICY"): json.dump(policy,open(os.environ["PI_FIXTURE_POLICY"],"w"))\n'
-                   'a=sys.argv[sys.argv.index("--")+1:]\nos.execv(a[0],a)\n')
+                   # As srt 0.0.49: the command words joined with spaces, parsed by an inner shell.
+                   'command=" ".join(sys.argv[sys.argv.index("--")+1:])\n'
+                   'if os.environ.get("PI_FIXTURE_SRT"): json.dump([sys.argv,command],open(os.environ["PI_FIXTURE_SRT"],"w"))\n'
+                   'os.execv("/bin/bash",["bash","-c",command])\n')
     srt.chmod(0o755)
     sandbox = tmp_path / 'agent_sandbox'
     sandbox.mkdir()
@@ -113,6 +120,136 @@ def wait_started(turn: PiManagedExecution, ready: threading.Event) -> None:
     while not turn.prompt_started and time.monotonic() < deadline:
         time.sleep(0.005)
     assert turn.prompt_started
+
+
+# Each would run or split a command if it reached the inner shell unquoted.
+SHELL_TEXT = "a b;$(touch canary)`touch canary`'q"
+FAKE_KEY = 'fake key;$(touch canary)`touch canary`\'q"!'
+
+
+def launcher(tmp_path: Path, pi_environment: dict, monkeypatch: pytest.MonkeyPatch, **fields) -> tuple[list[str], dict, dict]:
+    """Prepare a real launch of the Pi fixture; return its command, environment and request."""
+    worktree = tmp_path / 'worktree'
+    worktree.mkdir(exist_ok=True)
+    monkeypatch.setenv('PI_FIXTURE_ARGV', str(tmp_path / 'pi-argv.json'))
+    monkeypatch.setenv('PI_FIXTURE_SRT', str(tmp_path / 'srt-call.json'))
+    request = {'executable': shutil.which('pi'), 'provider': 'deepseek', 'model': 'deepseek-flash',
+               'worktree_path': str(worktree), 'agent_dir': pi_environment['agent_dir'], 'instructions': 'Be brief.',
+               'sandbox_python': pi_environment['sandbox_python'], 'sandbox_path': pi_environment['sandbox_path'],
+               'worktree_access': 'read', 'provider_domain': 'api.deepseek.com',
+               'native_directory': str(tmp_path / 'native'), **fields}
+    directory = tmp_path / 'data/native/one'
+    directory.mkdir(parents=True)
+    turn = PiExecution(request, 'unused', directory, lambda *a: None, lambda *a: None, tmp_path / 'trace.jsonl', None)
+    argv, env = turn.prepare_launch(None)
+    return argv, env, request
+
+
+def ask_state(argv: list[str], env: dict, request: dict) -> subprocess.CompletedProcess:
+    """Run the launcher to one native reply and its exit at end of input."""
+    return subprocess.run(argv, input=json.dumps({'id': 'state', 'type': 'get_state'}) + '\n', text=True,
+                          capture_output=True, cwd=request['worktree_path'], env=env, timeout=30)
+
+
+@pytest.mark.parametrize('route', [{}, {'provider': 'custom', 'base_url': 'http://localhost:8080/v1',
+                                        'provider_api': 'openai-completions'}], ids=['key-only', 'base-url'])
+def test_a_key_reaches_no_command_line_and_no_file(
+    tmp_path: Path, pi_environment: dict, monkeypatch: pytest.MonkeyPatch, route: dict,
+) -> None:
+    """Pi gets the key's name in a private auth.json and its value only by environment."""
+    monkeypatch.setenv('FAKE_412_KEY', FAKE_KEY)
+    argv, env, request = launcher(tmp_path, pi_environment, monkeypatch, api_key_env='FAKE_412_KEY', **route)
+    completed = ask_state(argv, env, request)
+    srt_argv, command = json.loads((tmp_path / 'srt-call.json').read_text())
+    assert FAKE_KEY not in srt_argv and FAKE_KEY not in command
+    assert not list(tmp_path.rglob('canary'))
+    assert completed.returncode == 0, completed.stderr
+    assert '--api-key' not in command
+    assert FAKE_KEY not in json.loads((tmp_path / 'pi-argv.json').read_text())
+    assert env['FAKE_412_KEY'] == FAKE_KEY
+    native = Path(request['native_directory'])
+    for root in (tmp_path / 'data', native):
+        for path in root.rglob('*'):
+            if path.is_file():
+                assert FAKE_KEY.encode() not in path.read_bytes(), path
+    auth = native / 'agent/auth.json'
+    assert not auth.is_symlink() and stat.S_IMODE(auth.stat().st_mode) == 0o600
+    assert json.loads(auth.read_text()) == {request['provider']: {'type': 'api_key', 'key': '$FAKE_412_KEY'}}
+
+
+def test_shell_text_in_paths_reaches_pi_intact(
+    tmp_path: Path, pi_environment: dict, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The inner shell parses srt's joined command back into Pi's exact arguments and runs nothing else."""
+    place = tmp_path / SHELL_TEXT
+    place.mkdir()
+    executable = place / 'pi'
+    executable.write_text(Path(shutil.which('pi')).read_text())
+    executable.chmod(0o755)
+    (place / 'work tree').mkdir()
+    argv, env, request = launcher(tmp_path, pi_environment, monkeypatch, executable=str(executable),
+                                  worktree_path=str(place / 'work tree'), native_directory=str(place / 'native'))
+    completed = ask_state(argv, env, request)
+    assert not list(tmp_path.rglob('canary'))
+    assert completed.returncode == 0, completed.stderr
+    received = json.loads((tmp_path / 'pi-argv.json').read_text())
+    session = str(place / 'native/session.jsonl')
+    assert received[1:] == json.loads((tmp_path / 'data/native/one/pi-process.json').read_text())['argv'][1:]
+    assert received[received.index('--session') + 1] == session
+    assert received[received.index('--append-system-prompt') + 1] == str(place / 'native/role-instructions.txt')
+    state = next(event for event in map(json.loads, completed.stdout.splitlines()) if event.get('id') == 'state')
+    assert state['data']['sessionFile'] == session
+
+
+def test_srt_gone_before_launch_is_refused(
+    tmp_path: Path, pi_environment: dict, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A wrapper that returns its input unchanged never starts Pi unsandboxed."""
+    sandbox = tmp_path / 'agent_sandbox/__init__.py'
+    sandbox.write_text(sandbox.read_text().replace('return ["srt", "--settings", profile, "--", *cmd]', 'return cmd'))
+    argv, env, request = launcher(tmp_path, pi_environment, monkeypatch)
+    completed = ask_state(argv, env, request)
+    assert completed.returncode != 0
+    assert 'srt disappeared' in completed.stderr
+    assert not (tmp_path / 'pi-argv.json').exists()
+
+
+def test_destination_query_keeps_the_key_off_its_command_line_and_home_unwritten(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A key-only model is listed from a private agent directory that holds only what the catalog reads."""
+    monkeypatch.setenv('FAKE_412_KEY', FAKE_KEY)
+    home = tmp_path / 'home'
+    home.mkdir()
+    native = {'models.json': '{"providers": {}}', 'models-store.json': '{"stored": true}',
+              'auth.json': '{"p": {"type": "api_key", "key": "stored-key"}}',
+              'settings.json': '{"packages": ["npm:must-not-install"]}'}
+    for name, content in native.items():
+        (home / name).write_text(content)
+    log = tmp_path / 'query.json'
+    peer = tmp_path / 'pi'
+    # Pi refreshes models-store.json in place; a query must not reach the Home's file through that.
+    peer.write_text(f"""#!{sys.executable}
+import json, os, sys
+agent = os.environ['PI_CODING_AGENT_DIR']
+entries = {{name: os.readlink(os.path.join(agent, name)) if os.path.islink(os.path.join(agent, name)) else None
+           for name in os.listdir(agent)}}
+auth = json.load(open(os.path.join(agent, 'auth.json')))
+json.dump({{'argv': sys.argv, 'agent': agent, 'entries': entries, 'auth': auth}}, open({str(log)!r}, 'w'))
+open(os.path.join(agent, 'models-store.json'), 'w').write('{{"refreshed": true}}')
+request = json.loads(sys.stdin.readline())
+models = [{{'provider': 'p', 'id': 'm', 'baseUrl': 'https://keyed.example/v1'}}]
+print(json.dumps({{'id': request['id'], 'success': True, 'data': {{'models': models}}}}))
+""")
+    peer.chmod(0o755)
+    assert pi_destination(str(peer), str(home), 'p', 'm', 'FAKE_412_KEY') == 'keyed.example'
+    query = json.loads(log.read_text())
+    assert FAKE_KEY not in query['argv'] and '--api-key' not in query['argv']
+    assert query['agent'] != str(home) and not Path(query['agent']).exists()
+    assert query['auth'] == {'p': {'type': 'api_key', 'key': '$FAKE_412_KEY'}}
+    assert query['entries'] == {'auth.json': None, 'models-store.json': None,
+                                'models.json': str((home / 'models.json').resolve())}
+    assert {path.name: path.read_text() for path in home.iterdir()} == native
 
 
 def test_pi_config_dependency_and_host_limits(tmp_path: Path, pi_environment: dict, monkeypatch: pytest.MonkeyPatch) -> None:

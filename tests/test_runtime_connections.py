@@ -13,6 +13,7 @@ from pathlib import Path
 import pytest
 import yaml
 
+from agent_swarm.models import pi_destination
 from graphtraj.configuration.project_roles import load_project_roles
 from graphtraj.configuration.role_definitions import resolve_child_role
 from graphtraj.interfaces.local_tool import bind
@@ -669,8 +670,9 @@ def test_pi_native_key_precedence_and_destination(
 
     monkeypatch.setattr(hosted_cli, 'cli_connection', lambda *args, **kwargs: nullcontext('/bound-channel'))
     monkeypatch.setenv('PATH', str(Path(NATIVE_PI).parent) + os.pathsep + os.environ['PATH'])
-    monkeypatch.setenv('CUSTOM_KEY', 'first-explicit-test-key')
-    monkeypatch.setenv('OTHER_KEY', 'second-explicit-test-key')
+    # Neither may run: Pi substitutes a variable's value once, as literal text.
+    monkeypatch.setenv('CUSTOM_KEY', 'first-explicit-test-key;$(touch canary)`touch canary`')
+    monkeypatch.setenv('OTHER_KEY', '!touch canary; second-explicit-test-key')
     monkeypatch.setenv('OPENAI_API_KEY', 'ambient-key-must-not-win')
     home = project.parent / 'native'
     (home / 'extensions').mkdir(parents=True)
@@ -768,6 +770,13 @@ export default function(pi) {
         assert (current.st_ino, current.st_mtime_ns, current.st_size) == (
             auth_stat.st_ino, auth_stat.st_mtime_ns, auth_stat.st_size)
         assert 'explicit-test-key' not in (directory / 'pi-process.json').read_text()
+        if index < 2:
+            assert json.loads((agent / 'auth.json').read_text()) == {
+                provider: {'type': 'api_key', 'key': '$' + ('CUSTOM_KEY', 'OTHER_KEY')[index]}}
+        for path in (*directory.rglob('*'), *trace.with_suffix('.pi').rglob('*')):
+            if path.is_file() and not path.is_symlink():
+                assert b'explicit-test-key' not in path.read_bytes(), path
+        assert not list(project.parent.rglob('canary'))
     print(f'pi: native {provider} model/key precedence and destination verified; no inference')
 
     save(project, {'version': 1, 'runtimes': {'shared': {
@@ -785,6 +794,34 @@ export default function(pi) {
             role=resolve_child_role('one', settings, project), worktree=worktree,
             evidence=project.parent / 'evidence', requested_skills=(),
         )
+
+
+@pytest.mark.skipif(not NATIVE_METADATA, reason='requires explicitly enabled native metadata checks')
+def test_pi_key_only_destination_installs_nothing_and_leaves_the_home_alone(
+    project: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Real Pi lists a model only the named key authenticates, without the Home's settings or login."""
+    assert NATIVE_PI is not None
+    monkeypatch.setenv('FAKE_412_KEY', 'fake;$(touch canary)!')
+    monkeypatch.delenv('FAKE_412_UNSET', raising=False)
+    home = project.parent / 'key-only-home'
+    home.mkdir()
+    native = {'models.json': json.dumps({'providers': {'keyonly': {
+        'baseUrl': 'https://keyonly.invalid/v1', 'api': 'openai-completions',
+        'apiKey': '$FAKE_412_UNSET', 'models': [{'id': 'keyed-model'}],
+    }}})}
+    (home / 'models.json').write_text(native['models.json'])
+    # A keyless query reads its Home directly, where Pi creates its own empty stores.
+    keyless = project.parent / 'keyless-home'
+    shutil.copytree(home, keyless)
+    with pytest.raises(RuntimeAdapterError, match='supported native destination'):
+        pi_destination(NATIVE_PI, str(keyless), 'keyonly', 'keyed-model')
+    # Pi would install a configured package into an agent directory lacking it.
+    native['settings.json'] = json.dumps({'packages': ['npm:agents-412-package-must-not-install']})
+    (home / 'settings.json').write_text(native['settings.json'])
+    assert pi_destination(NATIVE_PI, str(home), 'keyonly', 'keyed-model', 'FAKE_412_KEY') == 'keyonly.invalid'
+    assert {path.name: path.read_text() for path in home.iterdir()} == native
+    assert not list(project.parent.rglob('canary'))
 
 
 def test_pi_key_only_legacy_links_survive_resume(

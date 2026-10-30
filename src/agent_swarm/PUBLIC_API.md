@@ -520,7 +520,12 @@ Home files; writes only its native directory, the connection socket and (for
 the agents data root, and writing `agent_dir`, the Python prefix, the
 packages and `<git_common_directory>/config` and `hooks`. The only domains are
 `allowed_domains` plus the `base_url` host or `provider_domain`. A field of the
-wrong type fails with `ROLE_CONFIG_INVALID` naming the field. Claude children default to
+wrong type fails with `ROLE_CONFIG_INVALID` naming the field. An `api_key_env`
+variable stays in the child's environment, where same-account processes and the
+child's own tools can read it; Pi finds it through a private `auth.json` holding
+only its name, so the value is on no command line and in no file. Pi's command
+reaches `srt` as one shell-quoted word, because `srt` parses it with an inner
+shell. Claude children default to
 `worktree_access: read` and DSH children to `sandbox: read-only` unless
 their section says otherwise. Without `codex`, a Codex `create` fails with
 `invalid-config`.

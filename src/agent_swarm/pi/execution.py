@@ -22,6 +22,7 @@ import uuid
 
 import tempfile
 
+from agent_swarm.models import write_key_reference
 from agent_swarm.runtime import RuntimeAdapterError, SessionStarted, credential_environment
 
 
@@ -204,9 +205,11 @@ class PiExecution:
                     link.symlink_to(original)
                 read.append(str(original.resolve()))
         provider = request['provider']
+        if request.get('api_key_env'):
+            write_key_reference(agent, provider, request['api_key_env'])
         if request.get('base_url'):
             # Only an explicit route needs a model overlay. Key-only overrides
-            # retain the native definitions and use Pi's higher-priority runtime key.
+            # retain the native definitions; the private auth.json outranks their keys.
             custom = {'baseUrl': request['base_url'], 'api': request['provider_api'],
                       'apiKey': '$' + request['api_key_env'] if request.get('api_key_env') else 'local',
                       'models': [{'id': request['model'],
@@ -282,9 +285,7 @@ class PiExecution:
         if request.get('reasoning_effort'):
             argv += ['--thinking', request['reasoning_effort']]
         spec = self.directory / 'pi-process.json'
-        spec.write_text(json.dumps({'policy': str(policy_file), 'argv': argv,
-                                    'api_key_env': request.get('api_key_env'),
-                                    'unauthenticated': bool(request.get('base_url'))}), encoding='utf-8')
+        spec.write_text(json.dumps({'policy': str(policy_file), 'argv': argv}), encoding='utf-8')
         env = dict(os.environ)
         # Do not forward Runner bookkeeping as model-declared authority. The only
         # child operation address is authenticated by the existing hosted CLI.

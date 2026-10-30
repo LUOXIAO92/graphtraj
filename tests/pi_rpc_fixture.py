@@ -13,6 +13,8 @@ import uuid
 
 def main() -> None:
     """Serve documented Pi commands over real pipes with retained native history."""
+    if os.environ.get('PI_FIXTURE_ARGV'):
+        Path(os.environ['PI_FIXTURE_ARGV']).write_text(json.dumps(sys.argv))
     if '--version' in sys.argv:
         print('1.0.0-fixture')
         return

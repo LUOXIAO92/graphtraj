@@ -1000,9 +1000,18 @@ What the parent sees today:
   or fork):
   the extension stops injecting and closes the host's pipe. The host stops
   pushing, then interrupts every running child, descendants first, and
-  waits up to 10 seconds for each. The ends this causes, and any notice not
+  waits up to 10 seconds in total for all of them, whether or not they have
+  an unanswered request. The ends this causes, and any notice not
   yet acknowledged, are `held`, readable through `status`. Agents, Sessions
-  and records are kept.
+  and records are kept. An Agent still active at that deadline, or every
+  Agent when no `status` could be read, is not reported as stopped: the host
+  writes one `{"error": {"code": "stop-unconfirmed", "message"}}` line naming
+  it to stderr and exits non-zero, and the extension's `session_shutdown`
+  handler rejects with that text. In the next host's `status` that Agent is `active` with `stopping`
+  and the diagnostic `owner-exited; the Runtime process is still running` while
+  its Runtime lives; once that is gone, it is in standby with `last_result`
+  `outcome: failed`, `terminal_confirmed: false` and error `owner-exited`, and
+  that end is held.
 - **Pi Session resumed** with the same configuration: a new host process binds
   the same Session and delivers each held notice once, in the order the
   children ended. It starts when the Session's first turn starts
@@ -1040,7 +1049,7 @@ What the parent sees today:
   | Idle, host alive (a long-lived profile such as `web`, `tui`, `acp` or `sdk`, or `headless` before its runner leaves its loop) | The wake starts a new turn with the notice at once | `dsh-agent-loop/lib/index.js:564-569`, `:618-623` |
   | Idle during maintenance (for example compaction) or right after a cancel | The wake is latched and the turn starts when that activity ends | `dsh-agent-loop/lib/index.js:565-566`, `:619-621` |
   | `headless`, after the parent is idle with no native DSH subagents | The runner flushes and exits. agents children are not native subagents, so it does not wait for them; the host then stops with DSH (next row) | `dsh-headless/lib/index.js:369-373`, `:377-383` |
-  | Host or DSH process stopped (Session disposed, DSH exited) | No host runs. At the stop the plugin closes the host pipe; the host stops pushing, interrupts its active children (descendants first) and holds their ends, readable through `status` | `dsh/plugin.mjs`, `dsh/host.py` |
+  | Host or DSH process stopped (Session disposed, DSH exited) | No host runs. At the stop the plugin closes the host pipe; the host stops pushing, interrupts its active children (descendants first), waits up to 10 seconds in total for all of them and holds their ends, readable through `status`. An Agent it cannot confirm stopped is reported as for the Pi host above (`stop-unconfirmed` on stderr, non-zero exit, the same `status` in the next host); the plugin writes that text to the DSH logger | `dsh/plugin.mjs`, `agent_swarm/shutdown.py` |
   | On resume (`dsh --profile headless --session-id <id> "<task>"`, or reopening the Session in a long-lived profile) | DSH registers and announces the Session again and a new host binds the same Session. The plugin tells the host to begin when the Session's first turn begins, or two seconds after its `agents` tool attaches in a Session that starts no turn by itself: a relay message wakes an idle Session, and the `headless` runner applies its permission settings and hands over its task only after the announcement. The host then delivers each held notice once through the relay. A refused notice is tried again, at most six passes five seconds apart in that host's lifetime, and then stays held for a later host. Earlier children are listed by `status` and continue with `resume` | `dsh-agent/lib/index.js:655`, `:710`; `dsh-headless/lib/index.js:263`, `:344`, `:361` |
 
   Cases without immediate delivery: (1) a running parent receives a notice

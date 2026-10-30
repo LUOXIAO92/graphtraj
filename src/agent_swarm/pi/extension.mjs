@@ -223,8 +223,10 @@ export function registerAgents(pi) {
   });
   const closeHost = async () => {
     clearTimeout(readyTimer);
-    await agentHost?.close();
+    // Cleared first: a host that failed to close must not fail the next start too.
+    const host = agentHost;
     agentHost = undefined;
+    await host?.close();
   };
   return {
     independent,

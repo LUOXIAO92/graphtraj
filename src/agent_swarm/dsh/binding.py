@@ -21,7 +21,7 @@ def session_context(turn: DshExecution) -> dict | None:
 
 
 def bind_run(turn: DshExecution, run: Run) -> None:
-    """Use the existing core identity; no Task preparation or second controller."""
+    """Use the existing core identity; no preparation or second controller."""
     if run.call is None:
         raise ValueError('The DSH execution needs its owning Agents callback.')
     if 'completion_message' in run.settings:

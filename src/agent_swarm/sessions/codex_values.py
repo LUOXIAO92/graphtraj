@@ -15,7 +15,7 @@ def _timestamp(value: object) -> int | None:
         return None
 
 
-def _attachments(store: JsonlSessionStore, value: object, path: str = '') -> list[dict]:
+def codex_attachments(store: JsonlSessionStore, value: object, path: str = '') -> list[dict]:
     """Retain inline native input bytes without following arbitrary file/URL references.
 
     A transcript is content, not permission to read additional private files.
@@ -24,7 +24,7 @@ def _attachments(store: JsonlSessionStore, value: object, path: str = '') -> lis
     found = []
     if isinstance(value, list):
         for index, item in enumerate(value):
-            found.extend(_attachments(store, item, f'{path}/{index}'))
+            found.extend(codex_attachments(store, item, f'{path}/{index}'))
     elif isinstance(value, dict):
         kind = value.get('type')
         field = ({'input_image': 'image_url', 'input_file': 'file_data',
@@ -44,7 +44,7 @@ def _attachments(store: JsonlSessionStore, value: object, path: str = '') -> lis
             found.append({'nativePath': location, **attachment})
         for key, item in value.items():
             escaped = key.replace('~', '~0').replace('/', '~1')
-            found.extend(_attachments(store, item, f'{path}/{escaped}'))
+            found.extend(codex_attachments(store, item, f'{path}/{escaped}'))
     return found
 
 

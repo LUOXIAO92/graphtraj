@@ -76,8 +76,7 @@ def collect_session(event: dict, cwd: Path) -> dict:
     """
     from graphtraj.configuration.project_configuration import load_project_configuration
     from graphtraj.execution.runner_status import process_caller_alias, read_alias_mapping
-    from agent_swarm.sessions.dsh import DshArchive
-    from agent_swarm.sessions.protocol import upgrade_header
+    from agent_swarm.sessions import DshArchive, upgrade_header
     from graphtraj.interfaces.agents import configured_archive, graphtraj_fields
     from graphtraj.workspace.runner_project import discover_runner_directory
 

@@ -13,7 +13,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Awaitable, Callable, Mapping, Sequence
 
-from .context import CodexAdapterError, _reject_legacy_user_sandbox_config
+from .context import CodexAdapterError, reject_legacy_sandbox_config
 from .trace import CodexNativeTrace
 from agent_swarm import __version__
 from agent_swarm.runtime import RuntimeContext, RuntimeExecutionResult
@@ -96,7 +96,7 @@ class CodexServerRequest:
     """A native approval, tool, input or connection request routed to the caller.
 
     The handler returns the native response object. Request parameters and IDs
-    are preserved; handling a method does not imply GraphTraj has real-tested it.
+    are preserved; handling a method does not imply it has been real-tested.
     """
 
     request_id: int | str
@@ -218,7 +218,7 @@ class CodexAppServer:
         # A proxy does not launch or configure a service. Its existing host owns
         # configuration and permissions; do not read or override them here.
         if self._command[1:3] != ('app-server', 'proxy'):
-            _reject_legacy_user_sandbox_config(
+            reject_legacy_sandbox_config(
                 Path(self._environment.get('CODEX_HOME', Path.home() / '.codex'))
             )
         self._opened = True
@@ -1068,6 +1068,12 @@ class CodexAppServer:
         error = CodexAdapterError('RUNTIME_PROTOCOL_ERROR', message, terminal_confirmed=False)
         self._fail(error)
         return error
+
+    async def call(
+        self, method: str, params: dict[str, Any] | None, *, wait_for_session: bool = False,
+    ) -> dict[str, Any]:
+        """Send one native JSON-RPC request and return its result."""
+        return await self._call(method, params, wait_for_session=wait_for_session)
 
     async def _call(
         self, method: str, params: dict[str, Any] | None, *, wait_for_session: bool = False,

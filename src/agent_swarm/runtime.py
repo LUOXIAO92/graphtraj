@@ -21,7 +21,7 @@ class RuntimeExecutionResult(TypedDict):
 
 
 class RuntimeAdapterError(Exception):
-    """A Runtime Adapter failed with a stable Runner-facing error."""
+    """A Runtime Adapter failed with a stable error code."""
 
     def __init__(
         self,

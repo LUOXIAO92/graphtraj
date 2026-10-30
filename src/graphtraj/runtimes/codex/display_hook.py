@@ -15,7 +15,7 @@ from typing import Callable
 
 import yaml
 
-from agent_swarm.locks import exclusive
+from agent_swarm import exclusive_lock
 from graphtraj.execution.runner_io import write_yaml_durably
 
 
@@ -127,7 +127,7 @@ def _show(facts: list[tuple[str, str, str, str]], session: str, state_directory:
     # Native Session scope prevents another Session's matching IDs suppressing
     # its own display. This cache is optional UI state, not control authority.
     path = state_directory / (hashlib.sha256(session.encode()).hexdigest() + '.yml')
-    with exclusive(path.with_suffix('.lock')):
+    with exclusive_lock(path.with_suffix('.lock')):
         seen = set(yaml.safe_load(path.read_text()) or []) if path.exists() else set()
         boxes = []
         for identity, sender, recipient, body in facts:

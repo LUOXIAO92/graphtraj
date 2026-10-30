@@ -280,32 +280,41 @@ Public: `agent_swarm.__version__` and the names in `agent_swarm.__all__`:
   `SessionArchive` takes the keyword `event_fields` (section 5).
 
 Parts for building a host or a consumer on agents (since 0.2.2), also in
-`agent_swarm.__all__`:
+`agent_swarm.__all__`. Each one's docstring states its arguments and results:
 
-- stoppable calls: `CallCancelled`, `pause`, `run_stoppable`, `stop_requested`
-  and `on_discard` (1.8);
-- the owner connection: `worker_connection`, `connection_operation`,
-  `record_lock_owner`, `client_native_context`, `verify_native_context` (1.8);
-- the progressive envelope: `ENVELOPE_SCHEMA`, `validate_envelope`,
-  `handle_request`, and `validate_schema(value, schema, path)` for the schema
-  vocabulary agents uses;
-- MCP server parts: `ConcurrentServer`, `ClientGone`, `mcp_serve`, `mcp_respond`,
-  `mcp_result_response`, `mcp_error_response`, `mcp_tool_documents` (1.8);
-- notices: `END_EVENTS`, `needs_parent`, `notice_id` (1.8);
+- stoppable calls, for a host serving tool calls concurrently: `pause` and
+  `run_stoppable` wait, `stop_requested` asks, `on_discard` registers cleanup
+  and `CallCancelled` is raised when the caller cancels or goes away;
+- the owner connection, the authenticated local file transport of 1.1:
+  `worker_connection` serves it, `connection_operation` exchanges one document
+  over it, `record_lock_owner` proves a lock's owning process,
+  `client_native_context` reads the caller's native Session facts and
+  `verify_native_context` compares them with what the host expects;
+- the progressive envelope of 1.2: `ENVELOPE_SCHEMA`, `validate_envelope`,
+  `handle_request(request, execute)`, and `validate_schema(value, schema, path)`
+  for the JSON Schema vocabulary agents uses;
+- MCP server parts, the framing of `agents-mcp`: `ConcurrentServer`,
+  `ClientGone`, `mcp_serve`, `mcp_respond`, `mcp_result_response`,
+  `mcp_error_response`, `mcp_tool_documents`;
+- notices (section 4): `END_EVENTS`, `needs_parent`, `notice_id`;
 - processes and locks: `process_ancestors`, `process_executable`,
-  `process_arguments`, `exclusive_lock(path)`;
-- Runtime executions: `RuntimeAdapterError`, `RuntimeContext`, `RuntimeTurn`,
-  `RuntimeExecutionResult`, `SessionStarted`, `credential_environment`.
+  `process_arguments`, and `exclusive_lock(path)`, the lock agents takes on its
+  own record files;
+- `DECISION_METHOD`, the request method of `ask_parent` (section 4), and
+  `within_workspace`, the check on `create`'s `workspace` (section 2);
+- Runtime executions: `RuntimeAdapterError`, the protocols `RuntimeContext` and
+  `RuntimeTurn`, `RuntimeExecutionResult`, `SessionStarted`,
+  `credential_environment`.
 
 Parts for one Runtime or for the Session archive live in these packages, each
 with its own `__all__`:
 
 | Package | Names |
 | --- | --- |
-| `agent_swarm.claude` | `ClaudeDriver`, `ClaudeExecution`, `collect_hook_event`, `hook_source`, `NativeCalls`, `REFUSAL_FILE`, `claim_channel`, `context_endpoint`, `ended_by_claude`, `log_replaced_channel`, `require_free_channel`, `serve_refusal` |
+| `agent_swarm.claude` | `ClaudeDriver`, `ClaudeExecution`, `collect_hook_event`, `hook_source`, `NativeCalls`, `REFUSAL_FILE`, `claim_channel`, `context_endpoint`, `ended_by_claude`, `log_replaced_channel`, `require_free_channel`, `serve_refusal`, `claude_host_plugin` |
 | `agent_swarm.codex` | `CodexDriver`, `CodexManagedExecution`, `CodexAppServer`, `CodexExecution`, `CodexSession`, `CodexServerRequest`, `CodexRPCError`, `CodexAdapterError`, `CodexRuntimeContext`, `restore_codex_context`, `validate_codex_launch_request`, `reject_legacy_sandbox_config`, `apply_unix_socket_access`, `codex_api_key_env`, `codex_connection_environment`, `find_native_session`, `project_access`, `validate_connection` |
 | `agent_swarm.pi` | `PiDriver`, `PiExecution`, `current_connection`, `session_record`, `session_source`, `verify_main`, `pi_destination` |
-| `agent_swarm.dsh` | `DshDriver`, `DshService`, `DshError`, `DshExecution`, `bind_run`, `session_context` |
+| `agent_swarm.dsh` | `DshDriver`, `DshService`, `DshError`, `DshExecution`, `bind_run`, `session_context`, `dsh_version_refusal` |
 | `agent_swarm.sessions` | `SessionArchive` (the JSONL archive; `agent_swarm.SessionArchive` is the interface a backend expects), `ConfiguredSessionArchive`, `JsonlSessionStore`, `archive_path`, `SESSION_FORMAT_VERSION`, `INITIAL_COLLECTION_TYPE`, `append_stream_record`, `native_record`, `retain_native`, `snapshot_event`, `upgrade_event`, `upgrade_header`, `validate_header`, `validate_session`, `CodexJsonlArchive`, `CodexHistoryArchive`, `NativeInputError`, `rollout_record`, `codex_attachments`, `DshArchive`, `DshLiveFrames`, `attachment_refs`, `attempt_usage`, `collect_jsonl`, `PiArchive`, `import_native`, `import_sqlite`, `verify_sqlite` |
 
 `import agent_swarm` loads none of these Runtime packages; each name loads

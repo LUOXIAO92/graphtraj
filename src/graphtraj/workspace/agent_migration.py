@@ -13,9 +13,14 @@ import hashlib
 import yaml
 
 from agent_swarm import default_config
-from agent_swarm.sessions.migration import import_native, import_sqlite, verify_sqlite
-from agent_swarm.sessions.archive import SessionArchive, JsonlSessionStore
-from agent_swarm.sessions.protocol import native_record
+from agent_swarm.sessions import (
+    JsonlSessionStore,
+    SessionArchive,
+    import_native,
+    import_sqlite,
+    native_record,
+    verify_sqlite,
+)
 from graphtraj.sessions.storage import SessionStore
 from graphtraj.configuration.project_configuration import load_project_configuration
 from graphtraj.interfaces.agents import graphtraj_fields

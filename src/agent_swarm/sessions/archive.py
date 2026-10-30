@@ -18,7 +18,6 @@ from pathlib import Path
 import tempfile
 from typing import Callable, Iterator
 
-from agent_swarm.codex.diagnostics import redact
 from agent_swarm.config import read_config
 
 from .protocol import (
@@ -27,6 +26,13 @@ from .protocol import (
 )
 
 EventFields = Callable[[dict], 'dict | None']
+
+
+def redact(value: object) -> object:
+    """Redact credentials; loaded late so ``import agent_swarm`` starts no Runtime package."""
+    from agent_swarm.codex.diagnostics import redact as redact_native
+
+    return redact_native(value)
 
 
 def archive_path(root: Path, session_id: str) -> Path:

@@ -60,7 +60,7 @@ class CodexDriver:
 
     Settings contain the existing adapter_request, evidence and connection
     documents. The host resolves settings before binding this driver; no role,
-    Task, Git tree or GraphTraj installation is consulted. A consumer may
+    Git tree or product installation is consulted. A consumer may
     supply its existing execution subclass to bind optional archive/review policy.
     """
 

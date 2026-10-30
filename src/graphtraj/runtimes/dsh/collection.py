@@ -14,18 +14,22 @@ from copy import deepcopy
 import json
 from pathlib import Path
 
-from agent_swarm.sessions.protocol import snapshot_event, upgrade_header
 from graphtraj.interfaces.agents import graphtraj_fields
 from graphtraj.sessions.storage import SessionStore, session_path
-from agent_swarm.sessions.archive import SessionArchive
-from agent_swarm.sessions.dsh_live import DshLiveFrames
+from agent_swarm.sessions import (
+    DshArchive,
+    DshLiveFrames,
+    SessionArchive,
+    attachment_refs,
+    attempt_usage,
+    collect_jsonl,
+    snapshot_event,
+    upgrade_header,
+)
 
 
 UPSTREAM = 'd743267388641bc76f17c45ce8b4c231aed1d32c'
 SOURCE = 'dsh/session/event/v4'
-
-
-from agent_swarm.sessions.dsh import collect_jsonl, DshArchive, attachment_refs, attempt_usage
 
 
 def confirm_collection(state: Path, session_id: str, trace: Path) -> None:

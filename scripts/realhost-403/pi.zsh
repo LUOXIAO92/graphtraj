@@ -41,9 +41,38 @@ VENV=$P/venv
 SID=realhost-403-${RUN:t}
 
 say() { print -r -- ""; print -r -- "== $*"; }
-fail() { print -r -- "STOP: $*" >&2; exit 1; }
+fail() { print -r -- "STOP: $*" >&2; secret_scan; exit 1; }
 # A hung run must not hold the terminal for ever: the alarm survives exec.
 BOUNDED=(/usr/bin/perl -e 'alarm shift; exec @ARGV or die "exec: $!\n"' 600)
+
+# Look for the DeepSeek value in what run.zsh copies out; run.zsh copies nothing without this
+# result. It runs once before each exit: after `exit`, zsh loses a command's status inside the
+# EXIT trap, so a failed grep would look clean. The trap covers err_exit, where the status holds.
+SCAN_PENDING=
+secret_scan() {
+  [[ -n $SCAN_PENDING ]] || return 0
+  SCAN_PENDING=
+  setopt local_options no_err_exit
+  local found code=0 line scan=($EVIDENCE $RUN/logs(N/) $RUN/claude/evidence(N/) $RUN/codex/evidence(N/))
+  if [[ -z ${DEEPSEEK_API_KEY:-} ]]; then
+    : > $P/secret-matches
+    line="PASS Pi secret: no key was loaded, so nothing in this step ran with it"
+  else
+    # Through a pipe from a builtin, so the value is on no command line.
+    found=$(print -r -- "$DEEPSEEK_API_KEY" | grep -rlF -f /dev/stdin $scan 2>/dev/null) || code=$?
+    local matched=(${(f)found})
+    if (( code > 1 )); then
+      line="FAIL Pi secret: the scan did not finish (grep status $code); nothing is copied for Main"
+    elif (( ${#matched} > 0 )); then
+      print -rl -- $matched > $P/secret-matches
+      line="FAIL Pi secret: ${#matched} files contain the DeepSeek value; those are not copied for Main"
+    else
+      : > $P/secret-matches
+      line="PASS Pi secret: 0 files contain the DeepSeek value"
+    fi
+  fi
+  print -r -- $line | tee $P/secret-scan.txt
+}
 
 # A failing line of the user's ~/.zshrc must not stop this script, and only the key leaves it.
 load_key() {
@@ -72,6 +101,8 @@ fi
 CLAUDE=$(command -v claude) || fail "claude is not on PATH"
 [[ -e $P ]] && fail "$P exists from an earlier run; choose another AGENTS_403_RUN"
 mkdir -p $WORK $EVIDENCE $P/data $P/sessions $P/pi-home
+SCAN_PENDING=1
+trap secret_scan EXIT
 cd $WORK
 
 say "venv (isolated; Conda and system Python are not modified; agents only)"
@@ -234,6 +265,7 @@ Then reply with one line: the child's state, and stop."
   || print -r -- "(pi exit $?; continuing to collect evidence)"
 
 say "step 3: checks (no model calls)"
+cp $SESSION_FILE $EVIDENCE/pi-session.jsonl
 RESULT=0
 $VENV/bin/python $P/check.py $SESSION_FILE check $EVIDENCE/after-step1.json | tee $EVIDENCE/checks.txt || RESULT=1
 
@@ -242,5 +274,6 @@ print -r -- "grep -n 'notice:' ${(q)SESSION_FILE}"
 print -r -- "# With DEEPSEEK_API_KEY set in that shell, a further Pi host process for this Session:"
 print -r -- "cd ${(q)WORK} && env PI_CODING_AGENT_DIR=${(q)P}/pi-home AGENT_SWARM_PYTHON=${(q)VENV}/bin/python ${(q)PI_BIN} --mode json --session-dir ${(q)P}/sessions --session-id $SID --model $PI_MODEL -e ${(q)EXTENSION} --agents-config ${(q)P}/pi-host.json ${(qq)ASK2}"
 print -r -- "less ${(q)EVIDENCE}/step1-events.jsonl ${(q)EVIDENCE}/step2-events.jsonl ${(q)EVIDENCE}/step1.stderr.txt ${(q)EVIDENCE}/step2.stderr.txt"
-print -r -- "Evidence kept in $EVIDENCE; no secret is in it. Remove $RUN when done."
+print -r -- "Evidence kept in $EVIDENCE. Remove $RUN when done."
+secret_scan
 exit $RESULT

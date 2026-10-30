@@ -6,16 +6,17 @@
 # Preflight first (a short one-line answer from each host, with its configured model and login;
 # the commit under test against HEAD), then claude.zsh, codex.zsh and pi.zsh in this directory.
 # Each step states its own native review dialog and the choice to make. A failed step does not
-# stop the others. Everything is kept under one new directory, printed at the end with one
-# PASS/FAIL line per criterion. No credential is read beyond DEEPSEEK_API_KEY for the Pi step,
-# which stays in that step's own process and is reported only as set or unset.
+# stop the others. Everything is kept under one new directory. The end prints each step's checks
+# with their detail lines and copies the evidence and logs, without venvs, to a directory Main's
+# sandbox can read. No credential is read beyond DEEPSEEK_API_KEY for the Pi step, which stays in
+# that step's own process, is reported only as set or unset, and is looked for before that copy.
 setopt err_exit pipe_fail no_unset
 
 HERE=/Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/403-host-notice-holding-and-relay/scripts/realhost-403
 WT=/Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/403-host-notice-holding-and-relay
 # The code under test; later commits may change only this script's directory.
 # Whoever integrates further code commits sets COMMIT to the new code commit.
-COMMIT=REPLACE_WITH_CODE_COMMIT
+COMMIT=54d377490277d6f714df27ea9005398aaf37a106
 path=(/opt/homebrew/bin $HOME/.local/bin $path)
 # Outside $TMPDIR and /tmp, so a child's sandbox treats it as outside (385).
 export AGENTS_403_RUN=/Users/luoxiao/agents-403-realhost/run-$(date +%Y%m%dT%H%M%S)
@@ -59,16 +60,43 @@ done
 say "results"
 OVERALL=0
 for step in $STEPS; do
-  FOUND=(${(f)"$(tr -d '\r' < $AGENTS_403_RUN/logs/$step.log | grep -E '^(PASS|FAIL) ' || true)"})
+  CHECKS=$AGENTS_403_RUN/$step/evidence/checks.txt
+  FOUND=()
+  [[ -f $CHECKS ]] && FOUND=(${(f)"$(grep -E '^(PASS|FAIL) ' $CHECKS || true)"})
   if [[ ${#FOUND} -eq 0 ]]; then
     print -r -- "FAIL $step: stopped before its checks; see $AGENTS_403_RUN/logs/$step.log"
     OVERALL=1
     continue
   fi
-  print -rl -- $FOUND
+  cat $CHECKS
   [[ ${#${(M)FOUND:#FAIL *}} -eq 0 ]] || OVERALL=1
 done
+SCAN=$AGENTS_403_RUN/pi/secret-scan.txt
+if [[ -f $SCAN ]]; then
+  cat $SCAN
+  [[ $(<$SCAN) == PASS* ]] || OVERALL=1
+else
+  print -r -- "FAIL Pi secret: no finished scan"
+  OVERALL=1
+fi
+
+# Main's sandbox cannot read $AGENTS_403_RUN. Only evidence and logs go, so no venv does.
+DEST=/private/tmp/claude-501/403-realhost/${AGENTS_403_RUN:t}
+MATCHES=$AGENTS_403_RUN/pi/secret-matches
 print -r -- ""
-print -r -- "Retained evidence (no secret in it): $AGENTS_403_RUN"
-print -r -- "Send that path back to Main."
+if [[ -f $MATCHES ]]; then
+  SKIP=(${(f)"$(<$MATCHES)"})
+  COPY_FAILED=0
+  for file in $AGENTS_403_RUN/logs/*(.N) $AGENTS_403_RUN/*/evidence/**/*(.DN); do
+    (( ${SKIP[(Ie)$file]} )) && continue
+    TARGET=$DEST/${file#$AGENTS_403_RUN/}
+    mkdir -p ${TARGET:h} && cp -p $file $TARGET || COPY_FAILED=1
+  done
+  print -r -- "Evidence copied for Main (not copied: ${#SKIP} files): $DEST"
+  [[ $COPY_FAILED -eq 0 ]] || print -r -- "Some files could not be copied there; the originals stay in $AGENTS_403_RUN."
+else
+  print -r -- "Nothing copied for Main: the Pi step left no finished scan. The originals stay in $AGENTS_403_RUN."
+fi
+print -r -- "Local evidence: $AGENTS_403_RUN"
+print -r -- "Paste the terminal output from 'results' onward back to Main."
 exit $OVERALL

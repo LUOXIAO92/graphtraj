@@ -772,7 +772,11 @@ What the parent sees today:
   before the acknowledgement), it acknowledges without injecting again. A notice
   Pi took but never wrote, because the Session stopped or its turn failed to
   start, is delivered by the next host process for this Session; until then the
-  host hides its body. Sources are `@earendil-works/pi-coding-agent` `1.4.0`.
+  host hides its body. A notice to a Pi parent that is mid-turn is taken at the
+  end of that turn, so a permission-request notice can arrive after the parent
+  has already answered the request through `wait`, `requests` and `reply`; it
+  then costs one more model turn and is still delivered once (observed once on
+  the real host, 403). Sources are `@earendil-works/pi-coding-agent` `1.4.0`.
 - **Pi Session shutdown** (Pi's `session_shutdown`: quit, reload, new, resume
   or fork):
   the extension stops injecting and closes the host's pipe. The host stops
@@ -915,7 +919,7 @@ Gaps, by owner:
 | Gap | Owner |
 | --- | --- |
 | A notice admitted between the `headless` DSH runner's last Session flush and its exit (*DSH host* above; `dsh-headless/lib/index.js:377`, `:383`): the relay answers before that write | Upstream DSH; not changed |
-| A child Runtime that outlives a killed Claude host: Claude Code can kill the host before it stops its children (`mcp.py` `INTERRUPT_SECONDS`), so the execution stays `running` with no notice yet. The notice arrives on a later host process, or read it through `status` | Open, pending the 403 real-host result |
+| A child Runtime that outlives a killed Claude host: Claude Code can kill the host before it stops its children (`mcp.py` `INTERRUPT_SECONDS`), so the execution stays `running` with no notice yet. The notice arrives on a later host process, or read it through `status`. In the one real run (403), Claude Code 2.1.314's SIGINT left the host time to finish (`agents host recorded its children stopped.`, in all 3 Claude runs of that step), and the end arrived as `interrupted`. A kill was not observed, so the case stays possible by code | Unassigned, needs Main |
 | A parent Agent on a driver that binds no receiver (a Pi child that is itself a parent): the Pi driver registers no `receive_children`, so its children's notices stay `held` and readable through `status`, and are never pushed to it | Unassigned, needs Main |
 | The notice title names GraphTraj | 394 |
 

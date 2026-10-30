@@ -32,6 +32,39 @@ class PiManagedExecution(PiExecution):
         root = swarm_root(Path(self.request['harness_root']))
         self.archive = SessionArchive(root, **default_config(root, save_normalized_sessions=True))
 
+    def _prepare(self, address: str | None) -> tuple[list[str], dict]:
+        """Supply GraphTraj's paths and destinations through the generic request.
+
+        Every captured member request, including one retained before the
+        request became generic, carries the project fields they derive from.
+        """
+        from graphtraj.runtimes.pi.pi_adapter import member_policy
+
+        self.request.update(member_policy(self.request))
+        return super()._prepare(address)
+
+    def _provider_domain(self, source: Path, provider: str) -> str:
+        """Resolve older captured requests from their retained native Home."""
+        from graphtraj.runtimes.model_discovery import pi_model_domain
+
+        return pi_model_domain(str(source), provider, self.request['model'], self.request.get('api_key_env'))
+
+    def _connection(self):
+        """Serve Runner's hosted CLI unless the agents driver owns the call."""
+        if self.independent:
+            return super()._connection()
+        from graphtraj.interfaces.hosted_cli import cli_connection
+        from graphtraj.runtimes.codex.managed_session import native_operation_features
+
+        return cli_connection(Path(self.request['harness_root']), self.directory.name, native_operation_features())
+
+    def _connection_environment(self, address: str) -> dict:
+        """Name the hosted CLI for Runner executions."""
+        if self.independent:
+            return super()._connection_environment(address)
+        root = Path(self.request['harness_root']).resolve()
+        return {'GRAPHTRAJ_CLI_CONNECTION': address, 'GRAPHTRAJ_HARNESS_ROOT': str(root)}
+
     def _archive_collector(self, header: dict, native: dict):
         """Name a Runner execution's Agent and source once its native Session is known.
 

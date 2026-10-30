@@ -323,6 +323,30 @@ class PiRuntimeAdapter:
                                   session_created, trace_file, expected_session)
 
 
+def member_policy(request: Mapping[str, Any]) -> dict:
+    """Return GraphTraj's paths and destinations for a captured member request.
+
+    Computed at each launch from the request's project fields, as before the
+    agents request became generic: refreshed reports and the Worktree's
+    instruction files present at that launch are read-only, and the project's
+    private state, configuration and Codex homes stay unreadable.
+    """
+    root = Path(request['harness_root']).resolve()
+    worktree = Path(request['worktree_path']).resolve()
+    instructions = [str(p.resolve()) for p in (worktree / '.agents', worktree / 'AGENTS.md',
+                                               worktree / 'CONTEXT.md', worktree / 'docs') if p.exists()]
+    return {
+        'read_paths': [request['docs_directory'], *request['resources'], *request['reports'], *instructions],
+        'deny_read': [str(root / '.graphtraj'), str(root / '.codex'), str(Path.home() / '.codex'),
+                      request['state_directory']],
+        'deny_write': [str(root / '.graphtraj/config.yml'), str(root / '.graphtraj/roles.yml'),
+                       # The migrated project layout keeps both under core.
+                       str(root / '.graphtraj/core/config.yml'), str(root / '.graphtraj/core/roles.yml'),
+                       request['docs_directory'], *instructions],
+        'allowed_domains': ['api.deepseek.com', 'openrouter.ai'],
+    }
+
+
 def report_paths(paths: tuple[Path, ...], evidence: Path) -> list[str]:
     """Resolve Runner's Worktree-relative assignments to their retained evidence."""
     result = []

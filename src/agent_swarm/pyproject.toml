@@ -25,4 +25,4 @@ package-dir = {agent_swarm = "."}
 version = {attr = "agent_swarm.__version__"}
 
 [tool.setuptools.package-data]
-agent_swarm = ["PUBLIC_API.md", "dsh/*.mjs", "dsh/package.json", "claude/*.mjs", "pi/*.mjs", "sessions/DSH-LICENSE"]
+agent_swarm = ["PUBLIC_API.md", "dsh/*.mjs", "dsh/package.json", "claude/*.mjs", "pi/*.mjs", "pi/package.json", "sessions/DSH-LICENSE"]

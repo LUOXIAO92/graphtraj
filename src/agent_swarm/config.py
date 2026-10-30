@@ -252,6 +252,14 @@ def read_config(root: Path) -> dict[str, bool]:
     return {**CONFIG_DEFAULTS, **explicit_choices(root)}
 
 
+def reject_archive_without_collector(root: Path) -> None:
+    """Do nothing: since 0.2.0 every host has a collector (PUBLIC_API.md 1.2).
+
+    Only ``pi/host.py``, as integrated from Task 382, still calls this. Remove
+    it together with that import and call.
+    """
+
+
 def write_config(root: Path, **choices: bool) -> dict[str, bool]:
     """Record explicit choices and return the effective settings.
 

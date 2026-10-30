@@ -82,6 +82,10 @@ with their documented flags:
 - A refused Claude host start answers every call with `host-unavailable` (or
   the refusing check's own code) and writes one JSON line to
   `.agents-control/host.log`.
+- The Pi host: the agents Pi extension's `--agents-config <file>` flag and
+  that file's keys (1.6). The extension starts `python -I -m
+  agent_swarm.pi.host --config <file>` itself; its pipe protocol with the
+  extension is private.
 
 ### 1.2 The `agents` tool and its features
 
@@ -284,6 +288,86 @@ field is refused, not merged.
 
 Independent hosts write archives when `save_normalized_sessions` is on.
 
+### 1.6 Pi host: the agents Pi extension
+
+A Pi Session becomes an agents host (the parent of its children) by loading
+the extension `agent_swarm/pi/extension.mjs` and starting with
+`--agents-config <file>`.
+
+**Distribution.** The installed directory `agent_swarm/pi/` is a Pi package:
+its `package.json` declares `"pi": {"extensions": ["./extension.mjs"]}` and
+repeats `__version__` (tested like the DSH manifest). Install it with Pi's
+own package command, from the agents installation Pi should use:
+
+```sh
+PI_PACKAGE="$(<python> -c 'import agent_swarm.pi, pathlib; print(pathlib.Path(agent_swarm.pi.__file__).parent)')"
+pi install "$PI_PACKAGE"          # personal; add -l for this project only
+AGENT_SWARM_PYTHON=<python> pi --agents-config /abs/pi-host.json
+```
+
+`pi -e "$PI_PACKAGE/extension.mjs" --agents-config ...` loads it for one
+invocation without installing. `AGENT_SWARM_PYTHON` names the Python that has
+`agent-swarm` installed; without it the Session start fails. Pi child
+executions load the same file themselves, so a Pi child of any host needs no
+installation.
+
+**Configuration file** (JSON). Exactly these keys; any other key fails the
+start, including the pre-382 `adapter_request` form (that form was internal,
+see 7):
+
+| Key | Required | Content |
+| --- | --- | --- |
+| `root` | yes | absolute agents data root (its `config.yml` is section 3) |
+| `pi` | no | overrides of the Pi child request, below |
+| `claude` | no | Claude driver settings, the keys of the Claude host's `settings` |
+| `codex` | no | Codex `Run.settings`, the document `agent_swarm.codex.host --settings` takes |
+| `dsh` | no | DSH driver settings (`model` is required by DSH) |
+
+**Pi child defaults.** The host builds the Pi child request from its
+verified native parent; `pi` may set any of these fields except
+`worktree_path`:
+
+| Field | Default |
+| --- | --- |
+| `executable` | the verified Pi entry of the parent |
+| `provider`, `model` | the parent's current provider and model, as a default only; `create`'s `model`/`preset` choose another (section 2) |
+| `worktree_path` | the host's cwd (fixed) |
+| `agent_dir` | `PI_CODING_AGENT_DIR`, else `~/.pi/agent` |
+| `instructions` | empty |
+| `sandbox_python` | the host's Python (it must have `agent_sandbox`; set this to another Python otherwise) |
+| `sandbox_path` | the host's `PATH` (it must reach `srt` and `node`) |
+| `worktree_access` | `read`; `write` also resolves `git_common_directory` with Git unless given |
+| `read_paths`, `write_paths`, `deny_read`, `deny_write` | none (absolute path lists) |
+| `provider_domain` | the selected model's host from Pi's catalog in `agent_dir` (`agent_swarm.models.pi_destination`); refused with `ROLE_CONFIG_UNSUPPORTED` without a plain http(s) destination |
+| `allowed_domains`, `base_url`, `provider_api`, `api_key_env`, `reasoning_effort`, `native_directory`, `allow_mach_lookup`, `allow_mach_register`, `allow_local_binding`, `allow_unix_sockets` | none |
+
+Besides these, the Pi owner always reads the worktree, its native Session
+directory, the running Python and installed packages and the linked native
+Home files; writes only its native directory, the connection socket and (for
+`write`) the worktree and Git common directory; denies reading `agent_dir` and
+the agents data root, and writing `agent_dir`, the Python prefix, the
+packages and `<git_common_directory>/config` and `hooks`. The only domains are
+`allowed_domains` plus the `base_url` host or `provider_domain`. A field of the
+wrong type fails with `ROLE_CONFIG_INVALID` naming the field. Claude children default to
+`worktree_access: read` and DSH children to `sandbox: read-only` unless
+their section says otherwise. Without `codex`, a Codex `create` fails with
+`invalid-config`.
+
+**Start.** The host verifies that its parent process is the native Pi that
+loaded the extension and binds that Pi Session as root caller. It then
+calls `AgentControl.require_connections()` (section 2), so a `config.yml`
+connection this machine cannot run stops the start rather than a later
+turn; `create` checks the selected connection again. A refused start prints
+one line `{"error": {"code", "message"}}` on stderr and exits `1`; Pi shows it
+as the extension's error and the Session has no `agents` tool.
+
+**Routing.** The host registers the `pi`, `claude`, `codex` and `dsh`
+drivers in one `AgentControl`; `create`'s `runtime` selects one, and
+`model`, `preset` and `reasoning_effort` are resolved per child (section 2).
+The model reaches the Pi Session through the MCP server `agents`.
+
+**Notices and shutdown** are section 4.
+
 ## 2. Creating a child: Runtime, preset, model, reasoning effort
 
 `create` takes `runtime` (required), `instruction` (required), optional
@@ -343,9 +427,14 @@ reaches another endpoint. A driver whose `prepare` does not accept
 `selection` makes such a create fail with `invalid-config`. The agents
 drivers apply `model` and `reasoning_effort` for all four Runtimes; current
 limits, each failing with `invalid-config`: the DSH driver runs the
-`deepseek-official` provider only; the Pi driver keeps the host's resolved
-provider and takes no `base_url`. Claude has no native provider setting, so
-a Claude connection's `provider` only names its models.
+`deepseek-official` provider only; the Pi driver takes no `base_url`;
+declare such an endpoint as a provider in Pi's own `models.json` in the
+connection's home. When a Pi selection changes the provider, model, home or
+key, the driver reads the model's network destination from Pi's catalog in
+the selected home and fails with `invalid-config` if Pi exposes no plain
+http(s) destination; another provider or a selected connection drops the
+host's `api_key_env`, `base_url` and `provider_api`. Claude has no native
+provider setting, so a Claude connection's `provider` only names its models.
 
 **Several Runtimes in one host.** A host registers one driver per Runtime in
 `AgentControl(root, {runtime: driver, ...})`; `create` routes by `runtime`.
@@ -361,8 +450,8 @@ copied or returned. The independent Claude Code host registers its Claude
 driver and one driver per `runtimes` entry (1.1) and calls
 `require_connections()` at start; a refusal answers every call with its
 code (1.1). The independent Codex host does the same with its own
-`runtimes` (1.1) and reports a refusal as its startup error. Pi and DSH
-hosts follow in 382 and 383.
+`runtimes` (1.1) and reports a refusal as its startup error. The Pi host
+calls it at start (1.6). The DSH host follows in 383.
 
 **Agent document.** Every Agent document carries `preset`, `connection`
 (the connection's name), `model` and `reasoning_effort` as chosen at
@@ -527,6 +616,30 @@ What the parent sees today:
   "event", "message"}`, sent to the parent Session while its turn runs. It
   enables `request_notices`, for children of every Runtime it runs (Codex,
   Claude). The `--output` document lists the notices in `deliveries`.
+- **Pi host:** each notice is injected into the Pi Session with Pi's
+  `pi.sendMessage` as a displayed custom message (`customType`
+  `graphtraj:agent-communication`, content `[agents notice from <alias> ·
+  <event>]` and the message, `details.fact` `notice:<execution>:<event>`),
+  with `triggerTurn: true, deliverAs: "followUp"`: an idle Session starts a
+  turn with it, a busy one receives it after the current turn's work. The
+  notice is `delivered` once the extension acknowledges the injection,
+  `unconfirmed` without an acknowledgement within 10 seconds, and
+  `unavailable` (body readable through `status` and `wait`) when it could not
+  be written or injected. While a notice is on its way (`notification:
+  queueing`), `wait` and `status` also show `last_message: null`, so a
+  `wait` that ends with the child does not repeat the body the notice
+  carries. This host leaves `request_notices` off, so permission and
+  `ask_parent` requests are not pushed: `wait` ends early and the parent uses
+  `requests` and `reply`.
+- **Pi Session shutdown** (Pi's `session_shutdown`: quit, reload, new, resume
+  or fork):
+  the extension stops injecting and closes the host's pipe. The host stops
+  pushing, then interrupts every running child, descendants first, and
+  waits up to 10 seconds for each. The ends this causes, and any notice not
+  yet acknowledged, are recorded `unavailable`, not held: they stay readable
+  through `status` when the same Pi Session is resumed with the same
+  configuration, and are not pushed then. Agents, Sessions and records are
+  kept.
 - A grandchild's notices go to its own parent: a Claude parent Agent is
   continued with them; a Codex parent Agent is not notified, whatever the
   grandchild's Runtime, and reads them through `status`.
@@ -552,8 +665,8 @@ Gaps, by owner:
 
 | Gap | Owner |
 | --- | --- |
-| Independent hosts do not push a child's native permission request or `ask_parent` request; the parent polls | Claude Code and Codex hosts: done in 381 (`ask_parent`: since the 385 integration) |
-| Independent hosts do not hold notices while the parent is stopped: the Claude host's queue lives in its process, and the Codex host marks them `unavailable` (readable through `status`) | 381 (Claude, Codex), 382 (Pi), 383 (DSH) |
+| Independent hosts do not push a child's native permission request or `ask_parent` request; the parent polls | Claude Code and Codex hosts: done in 381 (`ask_parent`: since the 385 integration). Pi host: open, unassigned, needs Main |
+| Independent hosts do not hold notices while the parent is stopped: the Claude host's queue lives in its process, and the Codex host marks them `unavailable` (readable through `status`). The Pi host records them `unavailable` as above (closed in 382 by recording, not holding) | 381 (Claude, Codex), 383 (DSH) |
 | A Codex child is not notified of its own children's ends or requests (it reads them through `status`); a Claude child is continued with them | unassigned, needs Main |
 | The notice title names GraphTraj | 394 |
 
@@ -736,6 +849,12 @@ Recorded classifications:
   `request_notices` argument (default off). Compatible: a new event for a new
   situation, behind a new optional argument with a default that keeps
   current behaviour.
+- 382: the Pi host's configuration `{"root", "adapter_request"}` is refused
+  and replaced by 1.6. It was never listed as public (1.1 named only the
+  Claude and Codex hosts), so this is not an incompatible change. The Pi
+  host section, the Pi package manifest, the Pi host's Runtime routing and
+  its notices are compatible additions. They ship in 0.2.0, the version 384
+  set; 382 adds no bump of its own.
 
 While the major version is `0`, an incompatible change raises the minor
 version (`0.1.x` → `0.2.0`), and compatible additions and fixes raise the
@@ -763,8 +882,8 @@ or be renamed. Numbers refer to the subtraction list in
 | 4 | Host exclusion check refusing both the independent and the GraphTraj connection | Done in 388: removed from `connection.py` (`call_owner`), `claude/host.py` (`serve`), `pi/extension.mjs` (both branches) and `pi/host.py`; agents keeps only its own `AGENT_SWARM_CONNECTION` checks. GraphTraj refuses the combination in `interfaces/hosted_cli.py` (`forward_request`), `runtimes/claude/host.py` (`serve`) and `runtimes/pi/extension.mjs` (before starting agents) | 388 (done) |
 | 5 | Archive header extension `graphtraj` with `projectId`, `agentId`, `taskIds` | Done in 384: agents writes no product fields; GraphTraj passes `extra_fields.graphtraj`. The `graphtraj` name remains only in the version 4 reader (`sessions/protocol.py`, `LEGACY_*`) | 384 |
 | 5+ | Core archive facts kept under the `graphtraj` name (event provenance, missing facts, header continuation, `graphtraj/*` types) | Done in 384: product-neutral core fields and types (section 1.5) | 384 |
-| 6 | Pi custom message type `graphtraj:agent-communication` | `pi/extension.mjs` | 394 |
-| 7 | Pi execution's GraphTraj Task fields and fixed `.graphtraj` deny-read and deny-write paths | `pi/execution.py`, `pi/host.py` | 382 |
+| 6 | Pi custom message type `graphtraj:agent-communication`, used for display entries and, since 382, for the Pi host's injected notices | `pi/extension.mjs` | 394 |
+| 7 | Pi execution's GraphTraj Task fields and fixed `.graphtraj` deny-read and deny-write paths | Done in 382: `pi/host.py` takes a Task-free configuration and builds the Pi request from the native parent (1.6); `pi/execution.py` takes the generic request fields (section 2); GraphTraj supplies its former paths and domains in `graphtraj/runtimes/pi/pi_adapter.py:member_policy` | 382 (done) |
 | 8 | No independent DSH host | `dsh/` | 383 |
 | 9 | Notice title `GraphTraj notice from …` and default sender `graphtraj` | `claude/host_context.mjs` | 394 |
 | 10 | `send`'s `reports_only` and its "Task member" description | Done in 388: generic meaning in `tool.py` and 1.2; `AgentControl` rejects `true` with `not-implemented` (fix, see 7). GraphTraj's Task member handling is unchanged | 388 (done) |

@@ -381,17 +381,16 @@ def test_pi_child_cli_preserves_real_caller(tmp_path: Path, pi_environment: dict
 def test_pi_standalone_root_worktree_refuses_unexpressible_read_denial(
     tmp_path: Path, pi_environment: dict, monkeypatch: pytest.MonkeyPatch, protected: str,
 ) -> None:
-    """A project-root worktree cannot re-allow its own protected state to the child."""
+    """A project-root worktree cannot re-allow a path its host denies to the child."""
     from agent_swarm import AgentControl, Caller, bind
     from agent_swarm.pi import PiDriver
 
-    _, prepared = context(tmp_path, pi_environment)
     project = tmp_path / 'standalone'
     (project / 'docs').mkdir(parents=True)
-    request = {**prepared.launch_document()['adapter_request'],
-               'worktree_path': str(project), 'harness_root': str(project),
-               'git_common_directory': str(project / '.git'), 'docs_directory': str(project / 'docs'),
-               'worktree_access': 'read', 'reports': [], 'resources': []}
+    request = {'executable': shutil.which('pi'), 'provider': 'deepseek', 'model': 'deepseek-flash',
+               'worktree_path': str(project), 'agent_dir': pi_environment['agent_dir'], 'instructions': '',
+               'sandbox_python': pi_environment['sandbox_python'], 'sandbox_path': pi_environment['sandbox_path'],
+               'worktree_access': 'read', 'deny_read': [str(project / '.graphtraj'), str(project / '.codex')]}
     captured = tmp_path / 'native-policy.json'
     monkeypatch.setenv('PI_FIXTURE_POLICY', str(captured))
     call = bind(AgentControl(tmp_path / 'data', {'pi': PiDriver(request)}), Caller('standalone-host', None))

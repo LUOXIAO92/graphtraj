@@ -193,6 +193,47 @@ def _pi_models(connection: Mapping[str, Any], cwd: Path) -> list[dict]:
     raise ValueError('Pi did not return model metadata.')
 
 
+def pi_destination(executable: str, home: str, provider: str, model: str, api_key_env: str | None = None) -> str:
+    """Return the hostname Pi sends ``provider``/``model`` requests to.
+
+    Reads Pi's own ``get_available_models`` record for the selected model from
+    ``home``. With ``api_key_env`` the key is passed as Pi's runtime key, as a
+    launch does, so a model that only that key authenticates is listed.
+    Extension-only or unavailable models, and destinations that are not plain
+    http(s) hosts, are refused rather than launched under another provider's
+    network grants.
+    """
+    from urllib.parse import urlsplit
+    from agent_swarm.runtime import RuntimeAdapterError, credential_environment
+
+    try:
+        command = [executable, '--mode', 'rpc', '--no-session', '--no-extensions', '--no-skills',
+                   '--no-prompt-templates', '--no-themes', '--no-context-files',
+                   '--provider', provider, '--model', model]
+        if api_key_env:
+            command += ['--api-key', credential_environment(api_key_env)[api_key_env]]
+        with tempfile.TemporaryDirectory(prefix='agents-pi-destination-') as directory:
+            completed = subprocess.run(
+                command, input=json.dumps({'id': 'models', 'type': 'get_available_models'}) + '\n',
+                cwd=directory, env=_environment({'home': home}, 'PI_CODING_AGENT_DIR'),
+                capture_output=True, text=True, timeout=TIMEOUT, check=True,
+            )
+        replies = (json.loads(line) for line in completed.stdout.splitlines())
+        models = next(reply['data']['models'] for reply in replies
+                      if reply.get('id') == 'models' and reply.get('success'))
+        selected = next(item for item in models if (item['provider'], item['id']) == (provider, model))
+        destination = urlsplit(selected['baseUrl'])
+        if (destination.scheme not in {'http', 'https'} or not destination.hostname
+                or destination.username or destination.password):
+            raise ValueError('Unsupported destination')
+        return destination.hostname
+    except Exception:
+        raise RuntimeAdapterError(
+            'ROLE_CONFIG_UNSUPPORTED',
+            'Pi did not expose a supported native destination for the selected provider/model.',
+        ) from None
+
+
 def _pi_catalog(connection: Mapping[str, Any], cwd: Path) -> dict:
     """Project Pi's catalog; a reasoning boolean is not an effort enumeration."""
     return {'models': _filter(connection, [{

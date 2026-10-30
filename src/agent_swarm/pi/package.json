@@ -1,0 +1,8 @@
+{
+  "name": "agents-pi",
+  "version": "0.1.1",
+  "private": true,
+  "description": "agents for Pi: start child Agents on any configured Runtime from a Pi Session.",
+  "keywords": ["pi-package"],
+  "pi": { "extensions": ["./extension.mjs"] }
+}

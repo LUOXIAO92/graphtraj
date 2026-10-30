@@ -82,8 +82,9 @@ class ClientGone(Exception):
 # After input EOF, how long calls still running may finish before the host shuts
 # down anyway, so its channel file and owned Agents are not left behind for them.
 CLOSE_SECONDS = 10.0
-# After SIGINT only a moment: Claude Code is ending the session and its next signal kills.
-INTERRUPT_SECONDS = 1.0
+# After SIGINT only enough for a call polling every calls.POLL_SECONDS to end its
+# validation group: Claude Code's next signal kills the host before its channel unlink.
+INTERRUPT_SECONDS = 0.05
 # The stored answer of a client request the client itself cancelled.
 _ANSWER_CANCELLED = object()
 _LOG_LABEL = re.compile(r'[\w./-]{1,64}')

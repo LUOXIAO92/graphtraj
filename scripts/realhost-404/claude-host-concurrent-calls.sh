@@ -7,7 +7,8 @@
 #
 # The long call is task_integrate with a sleeping validation command. It needs no dialog and
 # no Agent, and its duration does not depend on a model. A failing validation keeps the Task
-# integrating, so the same Task serves steps 4 to 6; step 7 integrates it.
+# integrating, so the same Task serves steps 4 to 6; step 7 integrates it. Every PASS, FAIL
+# and observed line also goes to the evidence directory's results.txt.
 #
 #   0 preflight: zsh, versions, Claude flags, a one-line model/login answer (no dialog)
 #   1 scratch project, Task 1, proved ready (no dialog)
@@ -16,11 +17,13 @@
 #     then the host configuration, which copies the new mod (no dialog)
 #   4 two calls asked for in one response: a 40 s task_integrate and task_graph (no dialog)
 #   5 a 170 s task_integrate, past the client's 120 s foreground limit, then task_graph (no dialog)
+#   5b only if step 5 showed no overlap: the same prompt in interactive Claude Code; wait for
+#      DONE (about 3 minutes), then type /exit (no dialog expected)
 #   6 cancellation: SIGINT to claude -p while a 300 s task_integrate runs (no dialog)
 #   7 task_integrate with a passing validation reaches integrated (no dialog)
-#   8 summary of every PASS/FAIL, follow-up commands
+#   8 results.txt, follow-up commands, and a last line: CRITERION PASS or CRITERION NOT SHOWN
 #
-# Steps 4 and 5 report whether the client overlapped the calls. Whether this client sends two
+# Steps 4, 5 and 5b report whether the client overlapped the calls. Whether this client sends two
 # non-read-only MCP calls in parallel is unproven; a FAIL that says the host received the
 # second call only after the first finished is a client observation. The tool annotations
 # stay unchanged. Step 6 reports whether the client sent notifications/cancelled or only
@@ -43,9 +46,12 @@ VENV=$P/venv
 GT=$VENV/bin/graphtraj
 RUNNER=$VENV/bin/agent-runner
 CHECK=$WT/scripts/realhost-404/check_host_log.py
+RESULTS=$EVIDENCE/results.txt
 
 say() { print -r -- ""; print -r -- "== $*"; }
 fail() { print -r -- "STOP: $*" >&2; exit 1; }
+# One PASS, FAIL or observed line: shown now and kept for the summary.
+result() { print -r -- "$*" | tee -a $RESULTS; }
 
 say "step 0: preflight (native dialog: none; nothing to type)"
 [[ -n ${ZSH_VERSION:-} ]] || fail "run this script with zsh, as shown at its top"
@@ -75,7 +81,7 @@ CLAUDE=$(command -v claude || print -r -- $HOME/.local/bin/claude)
 [[ -x $CLAUDE ]] || fail "claude is not installed"
 print -r -- "claude: $CLAUDE ($($CLAUDE --version))"
 HELP=$($CLAUDE --help)
-for flag in --print --session-id --mcp-config --strict-mcp-config --allowedTools --output-format --verbose --model; do
+for flag in --print --session-id --mcp-config --strict-mcp-config --allowedTools --output-format --verbose --model '\[prompt\]'; do
   print -r -- $HELP | grep -q -- $flag && print -r -- "claude --help lists $flag" || fail "claude --help does not list $flag"
 done
 print -r -- 'In one line: name the model you are running as, and confirm you are logged in. Do not use any tool.' \
@@ -192,15 +198,28 @@ run_main() {  # prompt, stream-json output file
      --allowedTools mcp__agents__tasks,mcp__agents__agents) > $2 || print -r -- "(claude exit $?; continuing to collect evidence)"
 }
 channel_check() {  # What this run left behind; a stale file would refuse the next host.
+  # A host still shutting down removes its own file, so give it time first.
+  for i in {1..50}; do [[ -e $CHANNEL ]] || break; sleep 0.1; done
   if [[ -e $CHANNEL ]]; then
-    print -r -- "FAIL $1: $CHANNEL is still there after Claude Code exited (separate Task on stale channels);"
-    print -r -- "     its content: $(<$CHANNEL). Removed so the next step's host can start."
+    result "FAIL $1: $CHANNEL is still there 5 s after Claude Code exited (separate Task on stale channels);"
+    result "     its content: $(<$CHANNEL). Removed so the next step's host can start."
     rm -f $CHANNEL
   else
-    print -r -- "PASS $1: no channel file left behind"
+    result "PASS $1: no channel file left behind"
   fi
 }
 offset() { wc -c < $LOG | tr -d ' '; }
+# Check one step's log; keep its result lines; never stop the script on a FAIL.
+check_step() {  # step name, log offset, stream-json file (optional)
+  local out=$EVIDENCE/step$1-result.txt
+  $VENV/bin/python $CHECK $LOG ${3:-} --offset $2 > $out || true
+  cat $out
+  grep '^PASS\|^FAIL\|^observed' $out | while IFS= read -r line; do print -r -- "step $1: $line" >> $RESULTS; done || true
+  RAN+=" $1"
+  if grep -q '^PASS .* finished while .* was still in progress' $out; then SHOWN+=" $1"; fi
+}
+RAN=""
+SHOWN=""
 
 say "step 4: two calls asked for in one response (native dialog: none; about 1 minute)"
 print -r -- "Observable: host.log order. PASS if task_graph finishes between task_integrate's received and finished."
@@ -210,7 +229,7 @@ run_main "Use only the MCP tool mcp__agents__tasks. In ONE single response, emit
 1. $(integrate_call $VJSON)
 2. $GRAPH_CALL
 The first takes about 40 seconds and reports a failed validation; that is expected. Print one line DONE after both results and stop." $EVIDENCE/step4.jsonl
-$VENV/bin/python $CHECK $LOG $EVIDENCE/step4.jsonl --offset $START | tee $EVIDENCE/step4-result.txt
+check_step 4 $START $EVIDENCE/step4.jsonl
 channel_check "step 4"
 
 say "step 5: a call past the client's foreground limit (native dialog: none; about 4 minutes)"
@@ -222,8 +241,31 @@ run_main "Use only the MCP tool mcp__agents__tasks. Make this call:
 It takes about 170 seconds and reports a failed validation; that is expected. As soon as you regain control, whether its result arrived or it was moved to the background, make this call:
 2. $GRAPH_CALL
 Do not end your turn until the result of call 1 is available; check for it if it runs in the background. Then print one line DONE and stop." $EVIDENCE/step5.jsonl
-$VENV/bin/python $CHECK $LOG $EVIDENCE/step5.jsonl --offset $START | tee $EVIDENCE/step5-result.txt
+check_step 5 $START $EVIDENCE/step5.jsonl
 channel_check "step 5"
+
+if grep -q '^PASS .* finished while .* was still in progress' $EVIDENCE/step5-result.txt; then
+  say "step 5b: skipped, because step 5 showed the overlap"
+  result "step 5b: skipped, step 5 showed the overlap"
+else
+  say "step 5b: the same call in interactive Claude Code (expected native dialog: none; about 3 minutes)"
+  print -r -- "Step 5 showed no overlap, and claude -p may not move a call to the background as an interactive session does."
+  print -r -- "Claude Code now starts in $WORK with the prompt already sent. Type nothing while it works."
+  print -r -- "Wait for it to print DONE (about 3 minutes), then type /exit and press Enter."
+  print -r -- "Any dialog: press Esc and tell Main its title."
+  VJSON=$(sleeper $P/step5b.pid 170 1)
+  START=$(offset)
+  # The prompt comes first: --mcp-config and --allowedTools take several values and would swallow it.
+  (cd $WORK && $CLAUDE "Use only the MCP tool mcp__agents__tasks. Make this call:
+1. $(integrate_call $VJSON)
+It takes about 170 seconds and reports a failed validation; that is expected. As soon as you regain control, whether its result arrived or it was moved to the background, make this call:
+2. $GRAPH_CALL
+Do not end your turn until the result of call 1 is available; check for it if it runs in the background. Then print one line DONE and stop." \
+    --model $MODEL --mcp-config $WORK/.mcp.json --strict-mcp-config \
+    --allowedTools mcp__agents__tasks,mcp__agents__agents) || print -r -- "(claude exit $?; continuing to collect evidence)"
+  check_step 5b $START
+  channel_check "step 5b"
+fi
 
 say "step 6: cancellation by SIGINT to claude -p (native dialog: none; about 1 minute)"
 print -r -- "Observable: host.log cancelled or finished lines, the validation process gone, the Task still integrating."
@@ -235,29 +277,29 @@ START=$(offset)
   > $EVIDENCE/step6.jsonl &
 MAIN_PID=$!
 for i in {1..120}; do [[ -s $P/step6.pid ]] && break; sleep 1; done
-[[ -s $P/step6.pid ]] || print -r -- "FAIL step 6: the long validation never started; see $EVIDENCE/step6.jsonl"
+[[ -s $P/step6.pid ]] || result "FAIL step 6: the long validation never started; see $EVIDENCE/step6.jsonl"
 VALIDATION=$(cat $P/step6.pid 2>/dev/null || print -r -- 0)
 print -r -- "validation pid: $VALIDATION; sending SIGINT to claude -p (shell job $MAIN_PID) at $(date +%T)"
 pkill -INT -P $MAIN_PID 2>/dev/null || true
 kill -INT $MAIN_PID 2>/dev/null || true
 sleep 15
 if ps -p $MAIN_PID > /dev/null; then
-  print -r -- "observed: claude -p still runs 15 s after SIGINT; sending SIGTERM"
+  result "step 6: observed: claude -p still runs 15 s after SIGINT; sending SIGTERM"
   pkill -TERM -P $MAIN_PID 2>/dev/null || true
   kill -TERM $MAIN_PID 2>/dev/null || true
 fi
 wait $MAIN_PID 2>/dev/null || print -r -- "(claude exit $?)"
 tail -c +$((START + 1)) $LOG | grep ' agents-call ' | tee $EVIDENCE/step6-lines.txt || true
 grep -q ' agents-call cancelled ' $EVIDENCE/step6-lines.txt \
-  && print -r -- "observed: the client sent notifications/cancelled for the running call" \
-  || print -r -- "observed: no notifications/cancelled reached the host; SIGINT or input EOF ended it"
+  && result "step 6: observed: the client sent notifications/cancelled for the running call" \
+  || result "step 6: observed: no notifications/cancelled reached the host; SIGINT or input EOF ended it"
 if [[ $VALIDATION != 0 ]] && ps -p $VALIDATION > /dev/null; then
-  print -r -- "FAIL step 6: validation pid $VALIDATION is still running; stopping it now"; kill $VALIDATION || true
+  result "FAIL step 6: validation pid $VALIDATION is still running; stopping it now"; kill $VALIDATION || true
 else
-  print -r -- "PASS step 6: the long validation process is gone"
+  result "PASS step 6: the long validation process is gone"
 fi
 print -r -- "Task 1 status: $(task_status)"
-[[ $(task_status) == integrating ]] && print -r -- "PASS step 6: the Task stays integrating" || print -r -- "FAIL step 6: the Task left integrating"
+[[ $(task_status) == integrating ]] && result "PASS step 6: the Task stays integrating" || result "FAIL step 6: the Task left integrating"
 channel_check "step 6"
 
 say "step 7: a passing validation integrates the same Task (native dialog: none)"
@@ -266,16 +308,22 @@ START=$(offset)
 run_main "Use only the MCP tool mcp__agents__tasks. Make this call once: $(integrate_call $VJSON)
 Print one line DONE and stop." $EVIDENCE/step7.jsonl
 print -r -- "Task 1 status: $(task_status)"
-[[ $(task_status) == integrated ]] && print -r -- "PASS step 7: Task 1 integrated after the cancellation" || print -r -- "FAIL step 7: Task 1 is not integrated"
+[[ $(task_status) == integrated ]] && result "PASS step 7: Task 1 integrated after the cancellation" || result "FAIL step 7: Task 1 is not integrated"
 channel_check "step 7"
 
 say "step 8: summary and evidence"
 cp $LOG $EVIDENCE/host.log
 cp -R $STATE/worldline $EVIDENCE/worldline
-grep -h '^PASS\|^FAIL\|^observed' $EVIDENCE/step4-result.txt $EVIDENCE/step5-result.txt || true
+print -r -- "Results ($RESULTS):"
+cat $RESULTS
 print -r -- "Follow-up commands (copy as needed):"
 print -r -- "grep ' agents-call ' $EVIDENCE/host.log"
-print -r -- "$VENV/bin/python $CHECK $EVIDENCE/host.log $EVIDENCE/step5.jsonl"
+print -r -- "$VENV/bin/python $CHECK $EVIDENCE/host.log"
 print -r -- "cd $WORK && $RUNNER reports $WRITER"
 print -r -- "cd $WORK && $GT task graph"
 print -r -- "Evidence kept in $EVIDENCE; send that directory's path back to Main."
+if [[ -n $SHOWN ]]; then
+  result "CRITERION PASS: the short call finished while the long call was in progress in step(s)$SHOWN; steps run:$RAN"
+else
+  result "CRITERION NOT SHOWN: no step showed the short call finishing during the long call; steps run:$RAN"
+fi

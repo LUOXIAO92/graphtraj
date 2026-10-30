@@ -1,6 +1,7 @@
 """Claude hosts serve several calls at once without changing any call's result (404)."""
 from __future__ import annotations
 
+from io import StringIO, TextIOBase
 import json
 import os
 import queue
@@ -218,6 +219,40 @@ def test_call_that_ignores_its_stop_cannot_hold_the_host_past_close(tmp_path: Pa
         client.host.join(QUICK)
         assert not client.host.is_alive(), 'serve still waits for the stuck call'
         assert 'agents-call still-running-at-close id=1 tool=tasks feature=wait' in capfd.readouterr().err
+    finally:
+        release.set()
+
+
+def test_sigint_does_not_wait_for_a_call_that_ignores_its_stop(tmp_path: Path) -> None:
+    """KeyboardInterrupt leaves serve at once, so the host reaches its channel unlink first."""
+    started, release, finished = threading.Event(), threading.Event(), threading.Event()
+    raised: list[float] = []
+
+    def native_call(request: dict, tool: str = 'agents') -> AgentsResult:
+        started.set()
+        release.wait(LONG)
+        finished.set()
+        return AgentsResult({})
+
+    class Interrupted(TextIOBase):
+        """Send one call; then Claude Code ends the session while it runs."""
+        def __init__(self) -> None:
+            self.lines = [json.dumps({'jsonrpc': '2.0', 'id': 1, 'method': 'tools/call', 'params': {
+                'name': 'tasks', 'arguments': {'action': 'execute', 'feature': 'wait', 'arguments': {}}}}) + '\n']
+
+        def readline(self, size: int = -1) -> str:
+            if self.lines:
+                return self.lines.pop()
+            assert started.wait(QUICK)
+            raised.append(time.monotonic())
+            raise KeyboardInterrupt
+
+    try:
+        with pytest.raises(KeyboardInterrupt):
+            serve(Interrupted(), StringIO(), tmp_path, native_call=native_call)
+        elapsed = time.monotonic() - raised[0]
+        assert not finished.is_set(), 'serve only returned after the call ended'
+        assert elapsed < 0.5, f'serve took {elapsed:.2f} s to leave after SIGINT'
     finally:
         release.set()
 

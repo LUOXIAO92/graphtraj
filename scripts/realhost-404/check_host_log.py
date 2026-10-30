@@ -37,7 +37,7 @@ def parse(line: str) -> dict:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('log', type=Path)
-    parser.add_argument('stream', type=Path)
+    parser.add_argument('stream', type=Path, nargs='?', help='Stream-json of a print-mode run; none for interactive.')
     parser.add_argument('--offset', type=int, default=0, help='Byte offset where this run starts in the log.')
     parser.add_argument('--long', default='task_integrate')
     parser.add_argument('--short', default='task_graph')
@@ -50,10 +50,11 @@ def main() -> int:
     print('raw host.log lines:')
     for line in lines:
         print('  ' + line)
-    print('stream-json order:', json.dumps(stream_order(options.stream)))
-    streamed = options.stream.read_text(encoding='utf-8', errors='replace')
-    print('mod refusal seen (Another agents call is pending):', 'Another agents call is pending' in streamed)
-    print('association refusal seen (No matching current native call):', 'No matching current native call' in streamed)
+    if options.stream is not None:
+        print('stream-json order:', json.dumps(stream_order(options.stream)))
+        streamed = options.stream.read_text(encoding='utf-8', errors='replace')
+        print('mod refusal seen (Another agents call is pending):', 'Another agents call is pending' in streamed)
+        print('association refusal seen (No matching current native call):', 'No matching current native call' in streamed)
 
     events = [parse(line) for line in lines]
     position = {(event['event'], event.get('feature')): index for index, event in reversed(list(enumerate(events)))}

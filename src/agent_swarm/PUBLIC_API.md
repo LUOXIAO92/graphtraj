@@ -566,6 +566,10 @@ AGENT_SWARM_PYTHON=<python> AGENT_SWARM_DSH_CONFIG=/abs/dsh-host.json \
   env -u DEEPSEEK_BASE_URL dsh --profile headless "<task>"
 ```
 
+The `env -u` concerns only this main Session's own endpoint, which DSH takes
+from that variable when its profile names none. Its DSH children ignore the
+variable (section 2).
+
 Any profile works the same way (`web`, `tui`, `acp`, `sdk`). Without
 installing, a patch file with the row `{id: agents-host, name:
 <DSH_PACKAGE>/plugin.mjs}` under `insert`, passed with `dsh --profile <name>
@@ -716,6 +720,23 @@ the Claude Code and Codex hosts call at start) refuses:
   required (installed <version or unknown>).`.
 - A missing `model` or `sandbox`: `ROLE_CONFIG_INVALID`.
 - An unset `api_key_env`: `RUNTIME_CREDENTIAL_MISSING`.
+
+The child's endpoint comes only from `base_url` in the connection or settings,
+else DSH's official root. `DEEPSEEK_BASE_URL` and `DEEPSEEK_SEARCH_BASE_URL` in
+the parent's environment are removed from every DSH child's environment, GraphTraj's
+DSH members included, so they no longer route a child and a key goes only where
+the connection says. Anyone routing through them must declare `base_url` on the
+connection or the DSH settings. `base_url` sets the Messages endpoint only: DSH's
+web search keeps its official root and its own key reference (`DEEPSEEK_API_KEY`),
+which have no agents setting.
+
+A turn that ends other than `completed` fails the execution with
+`RUNTIME_EXECUTION_FAILED`. When the native reason carries an error, the message
+is `DSH turn ended with <kind>: <code>: <text>.` (for example `DSH turn ended
+with error: HTTP_404: DeepSeek Messages request failed (404).`), else `DSH turn
+ended with <kind>.`. The native part has launch credentials and URLs redacted
+and is cut to 500 characters. Parents read it as `error.message` in `status`
+and `wait`.
 
 Continuing a DSH child (`send` to a standby child, `resume`) reopens the
 same native Session. On DSH 0.2.0-rc.2 (and when the installed version cannot
@@ -1422,6 +1443,13 @@ Recorded classifications:
   compatible additions: new error situations for a configuration that could
   not start before. A `pi` connection declared without an entry still fails
   with `unsupported-runtime`. 408 adds no bump of its own.
+- 411: a DSH child no longer inherits `DEEPSEEK_BASE_URL` or
+  `DEEPSEEK_SEARCH_BASE_URL`, and a failed turn's message gains the native
+  error (section 2). A fix (compatible): section 2 already said a key never
+  reaches another endpoint, and no document offered the variables as a way to
+  route a child. A setup that did rely on them now reaches DSH's official root,
+  and must declare `base_url`. 411 ships in the unreleased 0.2.2 and adds no
+  bump of its own.
 
 While the major version is `0`, an incompatible change raises the minor
 version (`0.1.x` → `0.2.0`), and compatible additions and fixes raise the

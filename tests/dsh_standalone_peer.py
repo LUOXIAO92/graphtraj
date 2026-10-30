@@ -35,6 +35,7 @@ class FakeDshService:
     """One controlled native service per DSH execution."""
 
     instances: list['FakeDshService'] = []
+    end_reason: dict = {'kind': 'completed'}
 
     def __init__(self, executable: str, cwd: Path, environment: dict, **options: object) -> None:
         """Keep the launch facts; find the log root in the profile patch DshExecution wrote."""
@@ -89,7 +90,7 @@ class FakeDshService:
                                 self._event('assistant/message', {'message': {
                                     'id': f'answer-{self.seq}', 'role': 'assistant',
                                     'content': [{'type': 'text', 'text': f'dsh answer: {text}'}]}}),
-                                self._event('turn/end', {'reason': {'kind': 'completed'}})]
+                                self._event('turn/end', {'reason': self.end_reason})]
         if method == 'session/cancel':
             with self.lock:
                 self.frames.clear()

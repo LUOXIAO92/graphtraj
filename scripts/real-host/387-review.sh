@@ -1,8 +1,11 @@
 #!/bin/bash
 # Task 387 real-host check: the review plugin on real DSH and real Pi.
 #
-# Run in your own macOS Terminal (outside any Agent sandbox):
-#   bash /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/387-review-plugin-pi-dsh-adapters/scripts/real-host/387-review.sh
+# Run in your own macOS Terminal (outside any Agent sandbox), in this order:
+#   1. the installer, once:
+#      /bin/bash /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/387-review-plugin-pi-dsh-adapters/scripts/real-host/install-pi-sandbox.sh
+#   2. then this script:
+#      bash /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/387-review-plugin-pi-dsh-adapters/scripts/real-host/387-review.sh
 #
 # Expected native review dialog: NONE. The parent is this script (a Python caller of
 # the public agents API), so no native dialog should appear. If one does, it is a
@@ -103,11 +106,45 @@ else
   echo "DEEPSEEK_API_KEY: unset; steps 2, 3, 5 and 6 will FAIL with that reason"
 fi
 
+# begin one_line
 mkdir -p "$RUN/preflight"
-echo "dsh one-line answer with its configured model (no reviewer, at most 120 s):"
-(cd "$RUN/preflight" && perl -e 'alarm shift; exec @ARGV' 120 "$DSH" headless \
-  'In one line, state the model name you are running as. Do not run tools or print any key or token.' \
-  </dev/null 2>&1 | tail -1) || echo "(dsh one-line answer failed)"
+SELF_REPORT='In one line, state the model name you are running as. Do not run tools or print any key or token.'
+printf '%s\n' "$SELF_REPORT" > "$RUN/preflight/task.txt"
+
+redacted() {
+  # Print one line without the key, whatever a Runtime's failure says.
+  if [ -n "${DEEPSEEK_API_KEY:-}" ]; then
+    printf '%s\n' "${1//"$DEEPSEEK_API_KEY"/[redacted]}"
+  else
+    printf '%s\n' "$1"
+  fi
+}
+
+one_line() {
+  # Run a command with stdin from $1, bounded at 120 s; print its answer, or the failure's
+  # last line. Its output stays only in these files, removed here. Never fatal.
+  local input=$1 out="$RUN/preflight/out.$$" err="$RUN/preflight/err.$$" status=0
+  shift
+  (cd "$RUN/preflight" && perl -e 'alarm shift; exec @ARGV' 120 "$@" <"$input" >"$out" 2>"$err") || status=$?
+  if [ "$status" -eq 0 ]; then
+    redacted "$(tail -1 "$out")"
+  else
+    local last
+    last=$(tail -1 "$err")
+    [ -n "$last" ] || last=$(tail -1 "$out")
+    echo "(failed, exit $status; 142 is the 120 s limit)"
+    redacted "$last"
+  fi
+  rm -f "$out" "$err"
+}
+
+echo "dsh one-line answer with its configured model (no reviewer, read-only, at most 120 s):"
+one_line "$RUN/preflight/task.txt" "$DSH" headless --permission-mode read-only -
+echo "pi one-line answer with $PI_PROVIDER/$PI_MODEL (no reviewer, no tools, at most 120 s); its key comes from the environment:"
+mkdir -p "$RUN/preflight/pi-home"
+one_line /dev/null env PI_CODING_AGENT_DIR="$RUN/preflight/pi-home" PI_SKIP_VERSION_CHECK=1 PI_TELEMETRY=0 \
+  "$PI" --print --no-tools --provider "$PI_PROVIDER" --model "$PI_MODEL" "$SELF_REPORT"
+# end one_line
 
 "$PYTHON" -m venv --system-site-packages "$VENV" || exit 2
 "$VENV/bin/python" -m pip install --quiet --disable-pip-version-check --no-index --no-deps \
@@ -248,6 +285,16 @@ class Stub:
         self.server.shutdown()
 
 
+def refusal(request: dict) -> dict:
+    """Return the reply that refuses one request in its own form."""
+    method = str(request.get('method'))
+    if method == 'dsh/approval-request':
+        return {'decision': 'reject'}
+    if method.startswith('pi/'):
+        return {'cancelled': True}
+    return {'decision': 'decline'}
+
+
 class Child:
     """One step's data root, workspace and parent over one reviewed Runtime."""
 
@@ -314,13 +361,19 @@ class Child:
     def standby(self, seconds: int = 300) -> dict:
         """Wait for standby, declining anything further a child asks after the answer under test."""
         deadline = time.monotonic() + seconds
+        refused: set = set()
         while time.monotonic() < deadline:
             result = self.invoke('status', agent=self.agent).get('result', {})
             if result.get('state') == 'standby':
                 return result
             for request in self.requests():
+                if request.get('request_id') in refused:
+                    continue
                 print('    a further request is declined:', request['method'], clean(json.dumps(request.get('params'))[:200]))
-                self.invoke('reply', agent=self.agent, request=request, response={'decision': 'decline'})
+                receipt = self.invoke('reply', agent=self.agent, request=request, response=refusal(request))
+                if receipt.get('error'):
+                    print('    the decline was refused:', clean(json.dumps(receipt['error'])))
+                    refused.add(request.get('request_id'))
             time.sleep(1)
         return self.invoke('status', agent=self.agent).get('result', {})
 
@@ -447,7 +500,7 @@ def allow_step(step: str, runtime: str) -> None:
                   f"requests: {[(item['method'], item.get('params', {}).get('reason')) for item in requests]}",
                   f"final state: {final.get('state')}")
         except Exception:
-            traceback.print_exc()
+            print(clean(traceback.format_exc()))
             verdict(name, False, 'the step ended with an unexpected error', *(diagnosis(child) if child else []))
         finally:
             if child is not None:
@@ -491,7 +544,7 @@ def held_step(step: str, runtime: str, stub_answer, kind: str, response: dict, e
                   f"reason: {params['reason']}; reviewer calls: {stub.calls}; final state: {final.get('state')}",
                   f"decisions: {[(line['tool'], line['decision']) for line in child.reviews()]}")
         except Exception:
-            traceback.print_exc()
+            print(clean(traceback.format_exc()))
             verdict(name, False, 'the step ended with an unexpected error', *(diagnosis(child) if child else []))
         finally:
             if child is not None:
@@ -632,7 +685,7 @@ def step_probe() -> None:
             holds, proof = rpc_case(RUN / 'probe' / ('confirmed' if confirmed else 'refused'), confirmed)
             verdict(name, holds, *proof)
         except Exception:
-            traceback.print_exc()
+            print(clean(traceback.format_exc()))
             verdict(name, False, 'the probe ended with an unexpected error')
 
 
@@ -717,7 +770,7 @@ def main() -> int:
         try:
             step()
         except Exception:
-            traceback.print_exc()
+            print(clean(traceback.format_exc()))
             verdict('a DSH step finished without an unexpected error', False)
     if read_sandbox():
         if step_compatibility():
@@ -725,7 +778,7 @@ def main() -> int:
                 try:
                     step()
                 except Exception:
-                    traceback.print_exc()
+                    print(clean(traceback.format_exc()))
                     verdict('a Pi step finished without an unexpected error', False)
         else:
             verdict('Pi child steps (5 and 6)', 'NOT RUN',

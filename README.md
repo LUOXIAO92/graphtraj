@@ -335,7 +335,7 @@ Child Agents can use different Runtimes without changing your main Agent's host.
 | Codex (`codex`) | An installed, authenticated Codex CLI. Native permissions and approvals remain in effect. |
 | Claude Code (`claude`) | Official CLI 2.1.299 or later, authenticated separately. Uses structured CLI input/output, native permission prompts and mandatory native sandboxing. Finds `claude` on PATH or `~/.local/bin/claude`. |
 | Pi (`pi`) | An installed Pi backend, existing Pi configuration, and an `asb` sandbox with `srt`. The role's optional `pi.sandbox_python`, `pi.sandbox_path` and `pi.agent_dir` select those locations. |
-| DeepSeek Harness (`dsh`) | DSH `0.2.0-rc.2` or later for child members and a host that supports its native subprocess sandbox. Members ignore `DEEPSEEK_BASE_URL` and `DEEPSEEK_SEARCH_BASE_URL` in the environment; declare `base_url` on the connection to use another endpoint. Native replacement and recovery approval routes are unavailable; its native file tools can read outside the task worktree. |
+| DeepSeek Harness (`dsh`) | DSH `0.2.0-rc.2` or later for child members and a host that supports its native subprocess sandbox. Members ignore `DEEPSEEK_BASE_URL` and `DEEPSEEK_SEARCH_BASE_URL` in the environment; declare `base_url` on the connection to use another endpoint. With `DEEPSEEK_API_KEY` as that connection's key, web search goes to the same endpoint. Native replacement and recovery approval routes are unavailable; its native file tools can read outside the task worktree. |
 
 For Claude Code, select the exact model `claude-opus-5-5` and
 `reasoning_effort: high` in a role, or save an explicit model entry through

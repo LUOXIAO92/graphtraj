@@ -61,28 +61,72 @@ with their documented flags:
   driver settings: `codex` takes the document `agent_swarm.codex.host
   --settings` takes (`adapter_request`, optional `evidence`, `connection`);
   since 383 `dsh` takes the DSH driver settings (section 2, DSH children)
-  and runs in `cwd`. A Runtime without an entry has no driver (`create`
-  fails with `unsupported-runtime`). At start the host refuses a `pi` entry
-  (`unsupported-runtime`, not supported by this host yet), a `claude` entry
+  and runs in `cwd`; since 408 `pi` takes the Pi child settings below and
+  runs in `cwd`. A Runtime without an entry has no driver (`create`
+  fails with `unsupported-runtime`). At start the host refuses another
+  Runtime name (`unsupported-runtime`), a `claude` entry
   or a non-object value (`invalid-config`), invalid Codex settings
   (`invalid-config`), invalid DSH settings or a missing or unsupported DSH
-  (the DSH codes in section 2), and whatever
+  (the DSH codes in section 2), a `pi` entry as below, and whatever
   `AgentControl.require_connections()` refuses, each with its own code.
   The `context` operation is the plugin's private channel.
 - `python -m agent_swarm.codex.host --settings <file> --directory <dir>
   [--output <file>] [--resume] <instruction>`. Since 0.1.2 the settings file
   may hold an optional top-level `runtimes` object: a Runtime name to that
   driver's settings. The host removes it before reading its own Codex
-  settings. `claude` takes the documented Claude host `settings` keys and,
+  settings. `claude` takes the documented Claude host `settings` keys;
   since 383, `dsh` takes the DSH driver settings (section 2, DSH children);
-  both run in `adapter_request.worktree_path` and are checked at start. A
+  since 408, `pi` takes the Pi child settings below;
+  all run in `adapter_request.worktree_path` and are checked at start. A
   Runtime without an entry has no driver (`create` fails with
-  `unsupported-runtime`). At start the host refuses a `pi` entry
-  (`unsupported-runtime`, not supported by this host yet), a `codex` entry or a non-object value
+  `unsupported-runtime`). At start the host refuses another Runtime name
+  (`unsupported-runtime`), a `codex` entry or a non-object value
   (`invalid-config`), invalid DSH settings or a missing or unsupported DSH
-  (the DSH codes in section 2), and whatever
+  (the DSH codes in section 2), a `pi` entry as below, and whatever
   `AgentControl.require_connections()` refuses. On a startup error it prints
   `{"error": {"code", "message"}}` and exits `1`.
+- A `runtimes.pi` entry of the Claude Code and Codex hosts (since 408) lets
+  that host start Pi children without any GraphTraj Task. Its fields are the
+  table *Pi child defaults* in 1.6, except `worktree_path`, which is the
+  host's `cwd` (Claude) or `adapter_request.worktree_path` (Codex). These
+  hosts have no Pi parent to inherit from, so:
+  - `provider` and `model` are required. `create`'s `model`, `preset` and
+    connection still choose per child (section 2). Without a declared
+    connection, a chosen `model` is checked against the catalog of `pi` on the
+    host's `PATH` in `PI_CODING_AGENT_DIR` (else `~/.pi/agent`), not against
+    `executable` and `agent_dir`. If those differ, declare the connection's
+    `models` (section 3).
+  - `executable` defaults to `pi` on the host's `PATH`.
+  - The other fields have the defaults in 1.6, where "the host's" means this
+    Claude Code or Codex host.
+
+  At start the host refuses with `invalid-config`, naming the field: an
+  unknown field, `worktree_path`, a wrong type, a missing `provider` or
+  `model`, or write access without a Git common directory. It also refuses
+  with `invalid-config`, naming both paths, a data root inside the worktree
+  (below). It refuses with `runtime-unavailable`, naming what is missing and
+  the setting that fixes it: a missing Pi executable (`executable`); a
+  `sandbox_python` that does not run or cannot import `agent_sandbox`
+  (`sandbox_python`); `srt` or `node` not on the `PATH` the child gets, which
+  is the host Python's directory followed by `sandbox_path` (`sandbox_path`);
+  and an unset `api_key_env`. No message carries a credential value. A login
+  file and Pi's catalog are not checked at start: a provider can authenticate
+  through Pi's own `models.json`, and a catalog query can take 30 seconds.
+  Those failures appear at `create`.
+
+  **A `pi` entry needs the data root outside the worktree.** A Pi child must
+  not read the data root (1.6) and the sandbox cannot deny a path inside a
+  readable one, so every child would fail. For the Codex host, choose a
+  `--directory` outside `adapter_request.worktree_path`. The Claude host's
+  `configuration` command writes `root` as `<project>/.agents-control`, so set
+  `root` in `claude-host.json` to a directory outside the project and move
+  `config.yml` and any existing `control/`, `native/` and `sessions/` there
+  with it. `channel_file`, the `host.log` two levels above it and the `--config`
+  file are not under `root` and may stay in the project; they hold no
+  credential, and a Pi child can read them there. Running `configuration
+  --write` again resets `root` and `channel_file` and keeps `runtimes`, so the
+  host refuses to start until `root` is set again. Without a `pi` entry the
+  default layout is unchanged.
 - A refused Claude host start answers every call with `host-unavailable` (or
   the refusing check's own code) and writes one JSON line to
   `.agents-control/host.log`.
@@ -1116,6 +1160,11 @@ Recorded classifications:
   additions. The agents DSH gate became a floor (0.2.0-rc.2 or later in semver
   order), which accepts more than before. They ship in 0.2.0; 383 adds no bump
   of its own.
+- 408: the `pi` entry of the Claude Code and Codex hosts' `runtimes`, refused
+  at start with `unsupported-runtime` before, is accepted. Its refusals are
+  compatible additions: new error situations for a configuration that could
+  not start before. A `pi` connection declared without an entry still fails
+  with `unsupported-runtime`. 408 adds no bump of its own.
 
 While the major version is `0`, an incompatible change raises the minor
 version (`0.1.x` → `0.2.0`), and compatible additions and fixes raise the

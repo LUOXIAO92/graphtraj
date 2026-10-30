@@ -365,7 +365,7 @@ execution.DshExecution.service_type = FakeDshService
 work = Path(work)
 settings = {'executable': str(install_dsh(work / 'dsh')), 'model': 'deepseek-flash', 'sandbox': 'read-only'}
 assert isinstance(runtime_drivers({'adapter_request': {'worktree_path': str(work)},
-                                   'runtimes': {'dsh': dict(settings)}})['dsh'], DshDriver)
+                                   'runtimes': {'dsh': dict(settings)}}, work / 'agents')['dsh'], DshDriver)
 host = IndependentCalls(work / 'agents', work, {}, {'dsh': settings})
 host.control.require_connections()
 call = host.make_call(str(uuid4()), work)

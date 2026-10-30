@@ -141,7 +141,7 @@ def write_adoption(material: dict[str, object]) -> None:
                           encoding='utf-8')
 
 
-def codex_driver(settings: dict, cwd: Path):
+def codex_driver(settings: dict, cwd: Path, root: Path):
     """Build a Codex driver from a ``codex.host --settings`` document; refuse it now if invalid."""
     from agent_swarm.codex.driver import CodexDriver
 
@@ -150,7 +150,7 @@ def codex_driver(settings: dict, cwd: Path):
     return driver
 
 
-def dsh_driver(settings: dict, cwd: Path):
+def dsh_driver(settings: dict, cwd: Path, root: Path):
     """Build a DSH driver for children in ``cwd``; refuse missing or unsupported DSH now."""
     from agent_swarm.dsh.driver import DshDriver
 
@@ -159,12 +159,19 @@ def dsh_driver(settings: dict, cwd: Path):
     return driver
 
 
-# Runtime name -> driver factory taking that Runtime's ``runtimes`` entry and
-# the host's working directory. Pi is not supported by this host yet.
-RUNTIME_DRIVERS = {'codex': codex_driver, 'dsh': dsh_driver}
+def pi_driver(settings: dict, cwd: Path, root: Path):
+    """Build a Pi driver for children in ``cwd``; refuse settings or dependencies no child could run with."""
+    from agent_swarm.pi.host import pi_child_driver
+
+    return pi_child_driver(settings, cwd, root)
 
 
-def runtime_drivers(cwd: Path, settings: dict, runtimes: object) -> dict:
+# Runtime name -> driver factory taking that Runtime's ``runtimes`` entry, the
+# host's working directory and its data root.
+RUNTIME_DRIVERS = {'codex': codex_driver, 'dsh': dsh_driver, 'pi': pi_driver}
+
+
+def runtime_drivers(cwd: Path, settings: dict, runtimes: object, root: Path) -> dict:
     """Return the host's own Claude driver plus one driver per ``runtimes`` entry."""
     if not isinstance(runtimes, dict) or not all(isinstance(entry, dict) for entry in runtimes.values()):
         raise AgentsError('invalid-config', 'runtimes must map each Runtime name to its driver settings object.')
@@ -175,7 +182,7 @@ def runtime_drivers(cwd: Path, settings: dict, runtimes: object) -> dict:
         if name not in RUNTIME_DRIVERS:
             raise AgentsError('unsupported-runtime',
                               f'The Claude Code host does not support Runtime {name!r} yet.')
-        drivers[name] = RUNTIME_DRIVERS[name](entry, cwd)
+        drivers[name] = RUNTIME_DRIVERS[name](entry, cwd, root)
     return drivers
 
 
@@ -188,7 +195,7 @@ class IndependentCalls(NativeCalls):
         self.claimed: dict[str, dict[str, dict]] = {}
         self.ended: dict[str, set[str]] = {}
         self.callers: dict[str, object] = {}
-        self.control = AgentControl(root, runtime_drivers(cwd, settings, {} if runtimes is None else runtimes),
+        self.control = AgentControl(root, runtime_drivers(cwd, settings, {} if runtimes is None else runtimes, root),
                                     event_receiver=self.receive, request_notices=True)
         super().__init__(self.make_call, cwd)
 

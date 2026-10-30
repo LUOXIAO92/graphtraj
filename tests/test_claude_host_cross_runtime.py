@@ -154,7 +154,8 @@ def test_without_a_runtimes_entry_codex_is_unsupported(tmp_path: Path) -> None:
 
 
 @pytest.mark.parametrize('runtimes, code, text', [
-    ({'pi': {}}, 'unsupported-runtime', "does not support Runtime 'pi' yet"),
+    ({'pi': {}}, 'invalid-config', 'runtimes.pi.provider'),
+    ({'gemini': {}}, 'unsupported-runtime', "does not support Runtime 'gemini' yet"),
     ({'claude': {}}, 'invalid-config', 'runtimes.claude'),
     ({'codex': {}}, 'invalid-config', ''),
     ({'codex': 'settings.json'}, 'invalid-config', 'driver settings object'),
@@ -197,7 +198,8 @@ def write_host(project: Path, runtimes: object = None, config_yml: str | None = 
 
 
 @pytest.mark.parametrize('runtimes, config_yml, code, text', [
-    ({'pi': {}}, None, 'unsupported-runtime', "does not support Runtime 'pi' yet"),
+    ({'pi': {}}, None, 'invalid-config', 'runtimes.pi.provider'),
+    ({'pi': {'provider': 'p', 'model': 'm'}}, None, 'invalid-config', '.agents-control'),
     (None, 'connections:\n  work-codex:\n    runtime: codex\n', 'unsupported-runtime',
      "Connection 'work-codex' uses Runtime 'codex'"),
     (None, 'connections:\n  work-claude:\n    runtime: claude\n    api_key_env: AGENTS_381_UNSET_KEY\n',

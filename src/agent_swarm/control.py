@@ -481,15 +481,15 @@ class AgentControl:
         roots it created with the same host and Session.
     request_notices
         Whether a child's permission request (native or ``ask_parent``) also
-        notifies its parent once (event ``request``). Off by default, so existing hosts and
-        GraphTraj see only ends.
+        notifies its parent once (event ``request``). ``"decisions"`` notifies
+        only for ``ask_parent``. Off by default, so existing hosts see only ends.
     """
 
     def __init__(
         self, root: Path, drivers: Mapping[str, RuntimeDriver], *,
         event_receiver: Callable[[dict], bool] | None = None,
         roots: Any = None,
-        request_notices: bool = False,
+        request_notices: bool | str = False,
     ) -> None:
         """Bind the data root and the available Runtime drivers."""
         self.root    = Path(root)
@@ -902,7 +902,9 @@ class AgentControl:
         """Build the parent's one ``request`` notice, if this host wants them."""
         native = self._receivers.get(record["parent"])
         receiver = native[1] if native is not None else self.event_receiver
-        if not self.request_notices or receiver is None:
+        wanted = self.request_notices is True or (self.request_notices == "decisions"
+                                                  and details.get("method") == DECISION_METHOD)
+        if not wanted or receiver is None:
             return None
         notice = {"parent": record["parent"], "agent": record["agent"],
                   "session": current["session"], "execution": current["id"],
@@ -965,6 +967,22 @@ class AgentControl:
             record["retired_at"] = _now()
             record["retired_by"] = _scope(caller)
             return self._outcome(record, result={"retired": True})
+
+    def registration(self, agent: str) -> dict | None:
+        """Return who registered ``agent``: its ``host``, ``parent`` and driver ``settings``.
+
+        A host uses this for an Agent it recorded, so it checks no caller.
+        A missing or unreadable record gives ``None``.
+        """
+        try:
+            record = self._load(agent)
+        except (OSError, ValueError):
+            return None
+        if not isinstance(record, dict):
+            return None
+        settings = record.get("settings")
+        return {"host": record.get("host"), "parent": record.get("parent"),
+                "settings": settings if isinstance(settings, dict) else {}}
 
     def unconfirmed_ends(self, agent: str) -> list[str]:
         """Return the ended executions of ``agent`` whose end is still unconfirmed.

@@ -10,7 +10,7 @@ import shutil
 from typing import Any, Mapping
 from urllib.parse import urlsplit
 
-from agent_swarm.dsh.settings import dsh_version_refusal
+from agent_swarm.dsh import dsh_version_refusal
 from graphtraj.configuration.role_definitions import ResolvedChildRole
 from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError, finalize_usage, credential_environment
 

@@ -23,21 +23,15 @@ import time
 from typing import Callable, TextIO
 from uuid import UUID
 
-from agent_swarm.calls import on_discard, stop_requested
-from agent_swarm.claude.plugin import claude_host_plugin
-from agent_swarm.claude.host import (REFUSAL_FILE, claim_channel, context_endpoint, ended_by_claude,
-                                     log_replaced_channel, require_free_channel, serve_refusal)
-from agent_swarm import AgentsError, AgentsResult, Caller, bind
-from agent_swarm.connection import connection_operation, worker_connection
-from agent_swarm.discovery import handle_request
-from agent_swarm.process import process_ancestors
+from agent_swarm.claude import (REFUSAL_FILE, NativeCalls as NativeCallsBase, claim_channel, claude_host_plugin,
+                                context_endpoint, ended_by_claude, log_replaced_channel, require_free_channel,
+                                serve_refusal)
+from agent_swarm import (AgentsError, AgentsResult, Caller, bind, connection_operation, handle_request, on_discard,
+                         process_ancestors, stop_requested, worker_connection)
 from graphtraj.configuration.project_configuration import runner_directory
 from graphtraj.execution.runner_process import process_executable
 from graphtraj.interfaces.agents import GraphTrajAgents, configured_archive
 from graphtraj.runtimes.claude.mcp import SERVER, descriptors, serve
-
-
-from agent_swarm.claude.native_host import NativeCalls as NativeCallsBase
 
 
 # The tool GraphTraj serves beside agents on its MCP server and declares to the plugin.

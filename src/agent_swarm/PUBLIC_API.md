@@ -354,6 +354,8 @@ driver binding an execution replaces it with its own.
 `create`, `send`, `resume`, `interrupt`, `wait`, `requests`, `reply`,
 `ask_parent`, `retire`, `select`, `require_connections`, `hierarchy`,
 `reference_hint`, `interrupt_owned`, `owns_running`, `unconfirmed_ends`,
+`registration(agent)` (`{"host", "parent", "settings"}` of an Agent the host
+recorded, or `None` for a missing or unreadable record; it checks no caller),
 `confirm_ended(agent, caller, *, by=None)` (`by` is the identity recorded as
 confirming: `{"host", "agent", "session"}`), `import_agent(record)` and
 `configure_stopped(agent, settings, caller)`.
@@ -986,6 +988,9 @@ request's token, else its native ID as JSON); a root's notice adds
 `"creator"` and `"error": null`, as an end notice does. A receiver error is
 ignored: the request stays readable through `status` and `requests`. The
 default `False` keeps a host's notices to ends only, as before 0.1.2.
+`request_notices="decisions"` (since 0.2.2) applies this to `ask_parent` only,
+for a host that keeps its children's native requests to `wait` and `requests`.
+GraphTraj's own host does this.
 
 Gaps, by owner:
 

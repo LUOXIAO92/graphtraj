@@ -23,7 +23,6 @@ import time
 from typing import Any, Callable, Mapping, TextIO
 
 from agent_swarm import AgentControl, AgentsError, AgentsResult, Caller, bind
-from agent_swarm.config import reject_archive_without_collector
 from agent_swarm.connection import agents_connection
 from agent_swarm.notices import notice_id
 from agent_swarm.process import process_ancestors, process_arguments, process_executable
@@ -295,7 +294,6 @@ def start(config: Path) -> tuple[Path, Notices, Callable]:
     connection = current_connection()
     if connection is None:
         raise ValueError('Pi native Session association is unavailable.')
-    reject_archive_without_collector(root)
     event = json.loads(sys.stdin.readline())
     # bind_native_main verifies this Session before any child can exist.
     notices = Notices(sys.stdout, connection['session'])

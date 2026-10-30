@@ -9,6 +9,7 @@ import threading
 import sys
 import time
 from typing import Any, Callable
+from urllib.parse import urlsplit
 import uuid
 from contextlib import ExitStack
 
@@ -16,7 +17,7 @@ import yaml
 
 from .service import DshService, redact_native, secret_values
 from .errors import DshError
-from .settings import credential_environment, resumes_by_address
+from .settings import AMBIENT_ENDPOINTS, credential_environment, resumes_by_address
 
 
 # DSH's shipped profile patches carry `!!js` expressions (for example the
@@ -25,9 +26,8 @@ from .settings import credential_environment, resumes_by_address
 _JS_TAG = 'tag:yaml.org,2002:js'
 _WEB_APP_BUNDLE = Path('node_modules') / '@deepseek-ai' / 'dsh-web-app'
 _PERSONA_PLUGIN = '@deepseek-ai/dsh-persona'
-# DSH routes to these when its profile names no endpoint, so inheriting them
-# would send a connection's key wherever the parent's shell points (411).
-_AMBIENT_ENDPOINTS = ('DEEPSEEK_BASE_URL', 'DEEPSEEK_SEARCH_BASE_URL')
+# The variable DSH's Messages route and its web rows read when none is named.
+_DEFAULT_KEY_ENV = 'DEEPSEEK_API_KEY'
 
 
 class _JsExpression(str):
@@ -81,6 +81,25 @@ def _turn_failure(reason: dict, environment: dict[str, str], key_env: str | None
     if environment.get(key_env):
         secrets = sorted({environment[key_env], *secrets}, key=len, reverse=True)
     return f"DSH turn ended with {reason.get('kind')}: {redact_native(detail, secrets)[:500]}."
+
+
+def _search_rows(base_url: str) -> list[dict]:
+    """Keep the default key's web requests on the connection's own endpoint.
+
+    Messages search shares that key, so the row's official root would receive
+    it. Search posts to ``<root>/messages``, and the root is found as DSH finds
+    the Messages one. A patch replaces a row's config, hence the key's name. The
+    Search and Fetch APIs have no address in the connection, so their row goes.
+    An official ``base_url`` needs neither: the key stays at that origin anyway.
+    """
+    parsed = urlsplit(base_url)
+    if parsed.scheme == 'https' and parsed.netloc.lower() in {'api.deepseek.com', 'api.deepseek.com:443'}:
+        return []
+    root = base_url.rstrip('/')
+    if not urlsplit(root).path.endswith('/v1'):
+        root += '/v1'
+    return [{'id': 'web-search-deepseek', 'config': {'apiKeyEnv': _DEFAULT_KEY_ENV, 'baseURL': root}},
+            {'id': 'web-deepseek-api', 'disabled': True}]
 
 
 def _deployment_agent_preset(install_root: Path, instructions: str) -> dict | None:
@@ -224,6 +243,8 @@ class DshExecution:
             }},
             {'id': 'system-prompt', 'config': {'personaSuffix': self.request['instructions']}},
         ]
+        if self.request.get('base_url') and (self.request.get('api_key_env') or _DEFAULT_KEY_ENV) == _DEFAULT_KEY_ENV:
+            patches.extend(_search_rows(self.request['base_url']))
         if self.request.get('plugin'):
             patches.append({'insert': [{'id': 'agents', 'name': self.request['plugin']}]})
         if self.request.get('mcp'):
@@ -245,7 +266,7 @@ class DshExecution:
             'DSH_AGENT_PACKAGE': self.request['package'],
             'DSH_HOME': self.request.get('runtime_home') or str(home), 'DSH_PERMISSION_MODE': mode, 'NO_COLOR': '1',
         })
-        for ambient in _AMBIENT_ENDPOINTS:
+        for ambient in AMBIENT_ENDPOINTS:
             environment.pop(ambient, None)
         return environment
 

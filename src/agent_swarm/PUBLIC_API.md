@@ -275,7 +275,13 @@ Public: `agent_swarm.__version__` and the names in `agent_swarm.__all__`:
   "supported_efforts"}], "message"}`; DSH may add `provider_status`.
   `supported_efforts` is a list or `null` when the Runtime does not enumerate
   them. A connection with `models` returns those without querying the
-  Runtime. It never runs an inference turn and never returns credentials;
+  Runtime. It never runs an inference turn and never returns credentials.
+  A DSH query drops `DEEPSEEK_BASE_URL` and `DEEPSEEK_SEARCH_BASE_URL` and takes
+  `base_url` and `api_key_env` from the connection, as a child does; DSH asks an
+  endpoint for its list only at the official origin, so a custom `base_url`
+  lists DSH's built-in models. A Pi query reads the home (the connection's, else
+  `PI_CODING_AGENT_DIR`, else Pi's default) from a private directory, so the
+  home gains no file and its configured packages are not installed;
 - the normalized Session archive (section 1.5): `read_session(path)` returns
   `{"header", "events"}` in version 5 form for version 4 and 5 files, and
   `validate_extra_fields(value)` checks an `extra_fields` container (section 5).
@@ -726,9 +732,18 @@ else DSH's official root. `DEEPSEEK_BASE_URL` and `DEEPSEEK_SEARCH_BASE_URL` in
 the parent's environment are removed from every DSH child's environment, GraphTraj's
 DSH members included, so they no longer route a child and a key goes only where
 the connection says. Anyone routing through them must declare `base_url` on the
-connection or the DSH settings. `base_url` sets the Messages endpoint only: DSH's
-web search keeps its official root and its own key reference (`DEEPSEEK_API_KEY`),
-which have no agents setting.
+connection or the DSH settings.
+
+DSH's web search has its own key reference, `DEEPSEEK_API_KEY`, which has no agents
+setting. When a connection declares a `base_url` at another origin than
+`https://api.deepseek.com` and its key is that same variable, named or by default,
+search follows the connection: its Messages requests go to `base_url` (with `/v1`
+unless the path ends in it), and DSH's Search and Fetch API provider is disabled,
+because its fixed official address is not in the connection. An endpoint that does
+not serve native search then gives a search error naming the endpoint, rather than
+official search. A connection with any other key variable, or with no `base_url` or
+an official one, leaves search at DSH's official root with `DEEPSEEK_API_KEY`: to
+keep official search beside a gateway, name the gateway's key in another variable.
 
 A turn that ends other than `completed` fails the execution with
 `RUNTIME_EXECUTION_FAILED`. When the native reason carries an error, the message
@@ -1475,6 +1490,19 @@ Recorded classifications:
   route a child. A setup that did rely on them now reaches DSH's official root,
   and must declare `base_url`. 411 ships in the unreleased 0.2.2 and adds no
   bump of its own.
+- 413: `discover_models` for DSH follows the connection's `base_url` and
+  `api_key_env` and ignores the two variables, and for Pi no longer runs on the
+  home. Pi's keyless `pi_destination` likewise, so a home whose configured package
+  cannot be installed no longer has every selection refused. Fixes (compatible):
+  a listing used an endpoint and key the connection did not name, and a query
+  wrote into the home. 413 ships in the unreleased 0.2.2 and adds no bump of its
+  own.
+- 413: a connection with a `base_url` at another origin whose key is
+  `DEEPSEEK_API_KEY` sends search to that endpoint and loses DSH's Search and
+  Fetch API provider (section 2). A
+  fix (compatible): section 2 already said a key never reaches another endpoint.
+  A setup that relied on official search through such a gateway must name the
+  gateway's key in another variable. No bump of its own.
 
 While the major version is `0`, an incompatible change raises the minor
 version (`0.1.x` → `0.2.0`), and compatible additions and fixes raise the

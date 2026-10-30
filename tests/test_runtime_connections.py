@@ -811,7 +811,7 @@ def test_pi_key_only_destination_installs_nothing_and_leaves_the_home_alone(
         'apiKey': '$FAKE_412_UNSET', 'models': [{'id': 'keyed-model'}],
     }}})}
     (home / 'models.json').write_text(native['models.json'])
-    # A keyless query reads its Home directly, where Pi creates its own empty stores.
+    # Without the key and without a login, the model stays unavailable.
     keyless = project.parent / 'keyless-home'
     shutil.copytree(home, keyless)
     with pytest.raises(RuntimeAdapterError, match='supported native destination'):

@@ -22,8 +22,8 @@ def selected(configuration: Mapping[str, Any], selection: Mapping[str, Any]) -> 
     """Apply one create selection to the host's DSH settings.
 
     A selected connection replaces the host's native home, Messages endpoint
-    and credential reference together; DSH's web search keeps its own endpoint
-    (PUBLIC_API section 2).
+    and credential reference together; web search follows them only when the
+    key is DSH's own default (PUBLIC_API section 2).
     """
     config = dict(configuration)
     if selection.get('provider') not in (None, 'deepseek-official'):

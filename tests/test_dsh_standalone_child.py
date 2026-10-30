@@ -549,6 +549,82 @@ def test_an_empty_named_key_redacts_nothing() -> None:
     assert execution._turn_failure(reason, {'DS_CRED': ''}, 'DS_CRED') == 'DSH turn ended with error: HTTP_401.'
 
 
+def launch_patches(settings: dict, tmp_path: Path) -> tuple[dict, list[dict], Path]:
+    """The environment prepare_launch returns, its patch rows and the patch file."""
+    turn = execution.DshExecution(settings, 'unused', tmp_path, lambda *_: None, lambda *_: None,
+                                  tmp_path / 'trace.jsonl', None)
+    environment = turn.prepare_launch()
+    patch = Path(environment['DSH_HOME']) / 'profiles/web/cordis.patch.yml'
+    return environment, yaml.load(patch.read_text(), Loader=execution._PatchLoader), patch
+
+
+@pytest.mark.parametrize(('base_url', 'key', 'root'), [
+    (DECLARED, 'DEEPSEEK_API_KEY', DECLARED + '/v1'),
+    (DECLARED, None, DECLARED + '/v1'),
+    (DECLARED + '/', 'DEEPSEEK_API_KEY', DECLARED + '/v1'),
+    ('https://declared.invalid/v1', 'DEEPSEEK_API_KEY', 'https://declared.invalid/v1'),
+    ('http://127.0.0.1:1234', None, 'http://127.0.0.1:1234/v1'),
+    ('http://api.deepseek.com/anthropic', 'DEEPSEEK_API_KEY', 'http://api.deepseek.com/anthropic/v1'),
+    ('https://api.deepseek.com:8443/anthropic', 'DEEPSEEK_API_KEY', 'https://api.deepseek.com:8443/anthropic/v1'),
+    (OFFICIAL, 'DEEPSEEK_API_KEY', None),
+    (OFFICIAL, None, None),
+    ('https://api.deepseek.com:443/anthropic', 'DEEPSEEK_API_KEY', None),
+    ('https://API.deepseek.com/anthropic', 'DEEPSEEK_API_KEY', None),
+    (DECLARED, 'DSH_383_KEY', None),
+    (None, 'DEEPSEEK_API_KEY', None),
+    (None, None, None),
+    (None, 'DSH_383_KEY', None),
+])
+def test_the_default_key_searches_only_where_the_connection_says(
+    tmp_path: Path, dsh: dict, monkeypatch: pytest.MonkeyPatch, base_url: str | None, key: str | None, root: str | None,
+) -> None:
+    """The default key's search row follows base_url; another key leaves DSH's own search alone."""
+    monkeypatch.setenv('DEEPSEEK_API_KEY', 'fake-413-default-key')
+    settings = prepare({**dsh, **({'base_url': base_url} if base_url else {}),
+                        **({'api_key_env': key} if key else {})}, tmp_path)
+    _, patches, _ = launch_patches(settings, tmp_path)
+    rows = {row['id']: row for row in patches if row.get('id') in ('web-search-deepseek', 'web-deepseek-api')}
+    if root is None:
+        assert rows == {}
+    else:
+        assert rows == {'web-search-deepseek': {'id': 'web-search-deepseek', 'config': {
+                            'apiKeyEnv': 'DEEPSEEK_API_KEY', 'baseURL': root}},
+                        'web-deepseek-api': {'id': 'web-deepseek-api', 'disabled': True}}
+
+
+@pytest.mark.parametrize(('base_url', 'key', 'destination'), [
+    (DECLARED, 'DEEPSEEK_API_KEY', DECLARED + '/v1/messages'),
+    ('https://declared.invalid/v1', 'DEEPSEEK_API_KEY', 'https://declared.invalid/v1/messages'),
+    ('http://api.deepseek.com/anthropic', 'DEEPSEEK_API_KEY', 'http://api.deepseek.com/anthropic/v1/messages'),
+    ('https://api.deepseek.com:8443/anthropic', 'DEEPSEEK_API_KEY', 'https://api.deepseek.com:8443/anthropic/v1/messages'),
+    (OFFICIAL, 'DEEPSEEK_API_KEY', OFFICIAL + '/v1/messages'),
+    (DECLARED, 'DSH_383_KEY', OFFICIAL + '/v1/messages'),
+    (None, 'DEEPSEEK_API_KEY', OFFICIAL + '/v1/messages'),
+])
+def test_installed_search_sends_the_key_where_the_row_says(
+    tmp_path: Path, dsh: dict, monkeypatch: pytest.MonkeyPatch, base_url: str | None, key: str, destination: str,
+) -> None:
+    """The installed DSH composes the patch, its search plugin picks the address; fetch is replaced."""
+    node, installed = shutil.which('node'), shutil.which('dsh')
+    if node is None or installed is None:
+        pytest.skip('Installed DSH and Node are required for native search evidence.')
+    monkeypatch.setenv('DEEPSEEK_API_KEY', 'fake-413-default-key')
+    settings = prepare({**dsh, 'executable': installed, 'api_key_env': key,
+                        **({'base_url': base_url} if base_url else {})}, tmp_path)
+    environment, _, patch = launch_patches(settings, tmp_path)
+    dumped = subprocess.run([installed, '--profile', 'web', '--patch', str(patch), '--dump-config'],
+                            cwd=tmp_path, env={**environment, 'DSH_HOME': str(tmp_path / 'dump-home')},
+                            capture_output=True, text=True, timeout=60)
+    assert dumped.returncode == 0, dumped.stderr
+    rows = {row.get('id'): row for row in yaml.load(dumped.stdout, Loader=execution._PatchLoader)}
+    search = subprocess.run([node, str(ROOT / 'tests/fixtures/dsh_search_request.mjs'),
+                             str(Path(installed).resolve().parent.parent), json.dumps(rows['web-search-deepseek']['config'])],
+                            cwd=tmp_path, env=environment, capture_output=True, text=True, timeout=30)
+    assert search.returncode == 0, search.stderr
+    assert json.loads(search.stdout) == {'url': destination, 'keyed': True}
+    assert rows['web-deepseek-api'].get('disabled', False) is (key == 'DEEPSEEK_API_KEY' and base_url not in (None, OFFICIAL))
+
+
 @pytest.mark.parametrize(('base_url', 'expected'), [(None, OFFICIAL), (DECLARED, DECLARED)])
 def test_installed_dsh_resolves_only_the_connection_endpoint(tmp_path: Path, dsh: dict, monkeypatch: pytest.MonkeyPatch,
                                                              base_url: str | None, expected: str) -> None:

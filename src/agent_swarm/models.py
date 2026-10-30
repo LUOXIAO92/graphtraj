@@ -39,9 +39,9 @@ def discover_models(connection: Mapping[str, Any]) -> dict:
     ----------
     connection : Mapping
         ``runtime`` (``claude``, ``codex``, ``pi`` or ``dsh``) and optional
-        ``home`` (the native home directory), ``provider`` and ``models``;
-        other connection keys (``base_url``, ``api_key_env``) concern
-        execution and are not used to list models. A ``models`` list (strings or mappings with ``id`` and optional
+        ``home`` (the native home directory), ``provider`` and ``models``.
+        ``base_url`` and ``api_key_env`` route a DSH query as they route a DSH
+        child; the other Runtimes list models without them. A ``models`` list (strings or mappings with ``id`` and optional
         ``alias``, ``provider`` and ``supported_efforts``) is the candidate
         list itself, and the Runtime is not queried. A ``provider`` filters
         the Pi and DSH catalogs, which span providers; Claude and Codex list
@@ -172,25 +172,15 @@ def _codex(connection: Mapping[str, Any], cwd: Path) -> dict:
 
 
 def _pi_models(connection: Mapping[str, Any], cwd: Path) -> list[dict]:
-    """Return Pi's native ``get_available_models`` records over its RPC mode.
+    """Return Pi's native ``get_available_models`` records of the connection's home.
 
-    No key is passed: Pi lists the models its own login and environment
+    The home is the connection's, else ``PI_CODING_AGENT_DIR``, else Pi's own
+    default. No key is passed: Pi lists the models its own login and environment
     authenticate, so discovery never handles a credential value.
     """
-    command = [_executable('pi'), '--mode', 'rpc', '--no-session', '--no-extensions',
-               '--no-skills', '--no-prompt-templates', '--no-themes', '--no-context-files']
-
-    completed = subprocess.run(
-        command,
-        input=json.dumps({'id': 'models', 'type': 'get_available_models'}) + '\n',
-        cwd=cwd, env=_environment(connection, 'PI_CODING_AGENT_DIR'),
-        capture_output=True, text=True, timeout=TIMEOUT, check=True,
-    )
-    for line in completed.stdout.splitlines():
-        reply = json.loads(line)
-        if reply.get('id') == 'models' and reply.get('success'):
-            return reply['data']['models']
-    raise ValueError('Pi did not return model metadata.')
+    chosen = connection.get('home') or os.environ.get('PI_CODING_AGENT_DIR')
+    home   = Path(chosen).expanduser() if chosen else Path.home() / '.pi/agent'
+    return _pi_available_models(_executable('pi'), home, cwd)
 
 
 def write_key_reference(agent: Path, provider: str, api_key_env: str) -> None:
@@ -220,39 +210,58 @@ def _private_catalog(home: Path, agent: Path) -> None:
         shutil.copy(home / 'models-store.json', agent)
 
 
+def _pi_available_models(executable: str, home: Path, cwd: Path, *selection: str,
+                         provider: str | None = None, api_key_env: str | None = None) -> list[dict]:
+    """Return Pi's available-model records of ``home``, read from a private agent directory in ``cwd``.
+
+    Pi creates its stores in the directory it runs on and installs that
+    directory's configured packages outside any sandbox, so it never runs on
+    ``home``. ``api_key_env`` becomes the private ``auth.json``; without one a
+    link gives Pi the native login, which it locks beside the link and reads
+    through, writing only when a login changes.
+    """
+    agent = cwd / 'agent'
+    agent.mkdir()
+    if api_key_env:
+        write_key_reference(agent, provider, api_key_env)
+    elif (home / 'auth.json').exists():
+        (agent / 'auth.json').symlink_to((home / 'auth.json').resolve())
+    _private_catalog(home, agent)
+    completed = subprocess.run(
+        [executable, '--mode', 'rpc', '--no-session', '--no-extensions', '--no-skills',
+         '--no-prompt-templates', '--no-themes', '--no-context-files', *selection],
+        input=json.dumps({'id': 'models', 'type': 'get_available_models'}) + '\n',
+        cwd=cwd, env=_environment({'home': agent}, 'PI_CODING_AGENT_DIR'),
+        capture_output=True, text=True, timeout=TIMEOUT, check=True,
+    )
+    for line in completed.stdout.splitlines():
+        reply = json.loads(line)
+        if reply.get('id') == 'models' and reply.get('success'):
+            return reply['data']['models']
+    raise ValueError('Pi did not return model metadata.')
+
+
 def pi_destination(executable: str, home: str, provider: str, model: str, api_key_env: str | None = None) -> str:
     """Return the hostname Pi sends ``provider``/``model`` requests to.
 
     Reads Pi's own ``get_available_models`` record for the selected model from
-    ``home``. With ``api_key_env`` Pi reads that catalog from a private agent
-    directory whose ``auth.json`` names the variable, as a launch does, so a
-    model that only that key authenticates is listed. Extension-only or
-    unavailable models, and destinations that are not plain http(s) hosts, are
-    refused rather than launched under another provider's network grants.
+    ``home``, through a private agent directory. With ``api_key_env`` that
+    directory's ``auth.json`` names the variable, as a launch does, so a model
+    that only that key authenticates is listed; without one the native login
+    decides. Extension-only or unavailable models, and destinations that are
+    not plain http(s) hosts, are refused rather than launched under another
+    provider's network grants.
     """
     from urllib.parse import urlsplit
     from agent_swarm.runtime import RuntimeAdapterError, credential_environment
 
     try:
-        command = [executable, '--mode', 'rpc', '--no-session', '--no-extensions', '--no-skills',
-                   '--no-prompt-templates', '--no-themes', '--no-context-files',
-                   '--provider', provider, '--model', model]
+        if api_key_env:
+            credential_environment(api_key_env)
         with tempfile.TemporaryDirectory(prefix='agents-pi-destination-') as directory:
-            agent = home
-            if api_key_env:
-                credential_environment(api_key_env)
-                agent = Path(directory) / 'agent'
-                agent.mkdir()
-                write_key_reference(agent, provider, api_key_env)
-                _private_catalog(Path(home), agent)
-            completed = subprocess.run(
-                command, input=json.dumps({'id': 'models', 'type': 'get_available_models'}) + '\n',
-                cwd=directory, env=_environment({'home': agent}, 'PI_CODING_AGENT_DIR'),
-                capture_output=True, text=True, timeout=TIMEOUT, check=True,
-            )
-        replies = (json.loads(line) for line in completed.stdout.splitlines())
-        models = next(reply['data']['models'] for reply in replies
-                      if reply.get('id') == 'models' and reply.get('success'))
+            models = _pi_available_models(executable, Path(home), Path(directory),
+                                          '--provider', provider, '--model', model,
+                                          provider=provider, api_key_env=api_key_env)
         selected = next(item for item in models if (item['provider'], item['id']) == (provider, model))
         destination = urlsplit(selected['baseUrl'])
         if (destination.scheme not in {'http', 'https'} or not destination.hostname
@@ -275,10 +284,25 @@ def _pi_catalog(connection: Mapping[str, Any], cwd: Path) -> dict:
 
 
 def _dsh(connection: Mapping[str, Any], cwd: Path) -> dict:
-    """Read the host-generation catalog of an owned ``dsh web``; never create a Session."""
-    from agent_swarm.dsh.service import DshService
+    """Read the host-generation catalog of an owned ``dsh web``; never create a Session.
 
-    service = DshService(_executable('dsh'), cwd, _environment(connection, 'DSH_HOME'))
+    As for a child, the endpoint and key are the connection's: the parent's
+    endpoint variables are removed, and what the connection declares reaches DSH
+    through a patch in ``cwd``, so the connection's home gains nothing.
+    """
+    from agent_swarm.dsh.service import DshService
+    from agent_swarm.dsh.settings import AMBIENT_ENDPOINTS
+
+    environment = _environment(connection, 'DSH_HOME')
+    for ambient in AMBIENT_ENDPOINTS:
+        environment.pop(ambient, None)
+    route = {name: connection[field] for name, field in (('baseURL', 'base_url'), ('apiKeyEnv', 'api_key_env'))
+             if connection.get(field)}
+    options = {}
+    if route:
+        options['profile_patch'] = cwd / 'discovery.patch.yml'
+        options['profile_patch'].write_text(json.dumps([{'id': 'llm-deepseek', 'config': route}]), encoding='utf-8')
+    service = DshService(_executable('dsh'), cwd, environment, **options)
     try:
         service.start()
         catalog = service.rpc('session/modelCatalog')

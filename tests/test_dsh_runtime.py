@@ -1169,6 +1169,53 @@ def test_dsh_role_projection_keeps_secrets_out_of_launch(
     assert context.evidence_document()['native_read_isolation'] is False
 
 
+@pytest.mark.parametrize(('connection', 'base_url', 'key', 'root'), [
+    ('work', 'https://declared.invalid/anthropic', 'DEEPSEEK_API_KEY', 'https://declared.invalid/anthropic/v1'),
+    (None, 'https://declared.invalid/anthropic', 'DEEPSEEK_API_KEY', 'https://declared.invalid/anthropic/v1'),
+    ('work', 'http://api.deepseek.com/anthropic', 'DEEPSEEK_API_KEY', 'http://api.deepseek.com/anthropic/v1'),
+    ('work', 'https://api.deepseek.com:8443/anthropic', 'DEEPSEEK_API_KEY', 'https://api.deepseek.com:8443/anthropic/v1'),
+    (None, None, None, None),
+    ('work', 'https://api.deepseek.com/anthropic', 'DEEPSEEK_API_KEY', None),
+    ('work', 'https://declared.invalid/anthropic', 'DSH_TEST_KEY', None),
+    ('work', 'https://declared.invalid/anthropic', None, None),
+    ('work', None, 'DEEPSEEK_API_KEY', None),
+], ids=['connection', 'inline', 'official-http', 'official-other-port', 'legacy-official', 'official', 'other-key',
+        'unauthenticated', 'no-endpoint'])
+def test_a_graphtraj_members_default_key_searches_only_where_it_says(
+    connection: str | None, base_url: str | None, key: str | None, root: str | None,
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """From role to patch: the default key's search follows the member's endpoint, another key's does not."""
+    import shutil
+    from graphtraj.configuration.project_configuration import default_configuration_content
+
+    monkeypatch.setenv('DEEPSEEK_API_KEY', 'fake-413-default-key')
+    monkeypatch.setenv('DSH_TEST_KEY', 'fake-413-other-key')
+    package = tmp_path / 'dsh'
+    (package / 'lib').mkdir(parents=True)
+    (package / 'package.json').write_text('{"version":"0.2.2-alpha.2"}')
+    monkeypatch.setattr(shutil, 'which', lambda name: str(package / 'lib' / 'bin.js')
+                        if name == 'dsh' else '/installed/graphtraj-session')
+    config = tmp_path / '.graphtraj/config.yml'
+    config.parent.mkdir()
+    config.write_text(default_configuration_content(tmp_path, tmp_path))
+    role = ResolvedChildRole('author', 'Task responsibility', RolePreset(
+        runtime='dsh', model='deepseek-flash', base_url=base_url, api_key_env=key,
+        worktree_access='read', connection=connection,
+    ))
+    adapter = select_runtime_adapter('dsh')
+    launch = adapter.preflight_runtime_context(
+        harness_root=tmp_path, git_common_directory=tmp_path / '.git', role=role,
+        worktree=tmp_path / 'work', evidence=tmp_path / 'state', requested_skills=(),
+    ).finalize().launch_document()['adapter_request']
+    turn = adapter.managed_execution(launch, 'Original instruction', tmp_path, lambda *_: None, {},
+                                     trace_file=tmp_path / 'trace.jsonl', session_created=lambda *_: None)
+    home = turn.prepare_launch()['DSH_HOME']
+    rows = {row.get('id'): row for row in yaml.safe_load((Path(home) / 'profiles/web/cordis.patch.yml').read_text())}
+    assert rows.get('web-search-deepseek', {}).get('config', {}).get('baseURL') == root
+    assert rows.get('web-deepseek-api', {}).get('disabled', False) is (root is not None)
+
+
 @pytest.mark.parametrize(('connection', 'base_url', 'expected'), [
     ('work', None, None),
     ('work', 'https://declared.invalid/anthropic', 'https://declared.invalid/anthropic'),

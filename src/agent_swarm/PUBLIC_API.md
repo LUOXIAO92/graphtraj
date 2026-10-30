@@ -59,24 +59,28 @@ with their documented flags:
   the documented `settings` keys are public. `settings` configures the
   host's Claude children. `runtimes` maps another Runtime's name to its
   driver settings: `codex` takes the document `agent_swarm.codex.host
-  --settings` takes (`adapter_request`, optional `evidence`, `connection`).
-  A Runtime without an entry has no driver (`create` fails with
-  `unsupported-runtime`). At start the host refuses a `pi` or `dsh` entry
+  --settings` takes (`adapter_request`, optional `evidence`, `connection`);
+  since 383 `dsh` takes the DSH driver settings (section 2, DSH children)
+  and runs in `cwd`. A Runtime without an entry has no driver (`create`
+  fails with `unsupported-runtime`). At start the host refuses a `pi` entry
   (`unsupported-runtime`, not supported by this host yet), a `claude` entry
   or a non-object value (`invalid-config`), invalid Codex settings
-  (`invalid-config`), and whatever `AgentControl.require_connections()`
-  refuses, each with its own code.
+  (`invalid-config`), invalid DSH settings or a missing or unsupported DSH
+  (the DSH codes in section 2), and whatever
+  `AgentControl.require_connections()` refuses, each with its own code.
   The `context` operation is the plugin's private channel.
 - `python -m agent_swarm.codex.host --settings <file> --directory <dir>
   [--output <file>] [--resume] <instruction>`. Since 0.1.2 the settings file
   may hold an optional top-level `runtimes` object: a Runtime name to that
   driver's settings. The host removes it before reading its own Codex
-  settings. `claude` takes the documented Claude host `settings` keys, runs
-  in `adapter_request.worktree_path` and is checked at start. A Runtime
-  without an entry has no driver (`create` fails with
-  `unsupported-runtime`). At start the host refuses a `pi` or `dsh` entry
-  (`unsupported-runtime`, until 382 and 383), a `codex` entry or a
-  non-object value (`invalid-config`), and whatever
+  settings. `claude` takes the documented Claude host `settings` keys and,
+  since 383, `dsh` takes the DSH driver settings (section 2, DSH children);
+  both run in `adapter_request.worktree_path` and are checked at start. A
+  Runtime without an entry has no driver (`create` fails with
+  `unsupported-runtime`). At start the host refuses a `pi` entry
+  (`unsupported-runtime`, not supported by this host yet), a `codex` entry or a non-object value
+  (`invalid-config`), invalid DSH settings or a missing or unsupported DSH
+  (the DSH codes in section 2), and whatever
   `AgentControl.require_connections()` refuses. On a startup error it prints
   `{"error": {"code", "message"}}` and exits `1`.
 - A refused Claude host start answers every call with `host-unavailable` (or
@@ -86,6 +90,9 @@ with their documented flags:
   that file's keys (1.6). The extension starts `python -I -m
   agent_swarm.pi.host --config <file>` itself; its pipe protocol with the
   extension is private.
+- The DSH host: the `AGENT_SWARM_DSH_CONFIG` variable naming that file and its
+  keys (1.7). The agents DSH plugin starts `python -I -m agent_swarm.dsh.host
+  --config <file>` itself; its pipe protocol with the plugin is private.
 
 ### 1.2 The `agents` tool and its features
 
@@ -368,6 +375,72 @@ The model reaches the Pi Session through the MCP server `agents`.
 
 **Notices and shutdown** are section 4.
 
+### 1.7 DSH host: the agents DSH plugin
+
+A DSH main Session becomes an agents host (the parent of its children) when
+its DSH loads the agents DSH plugin and the DSH process has
+`AGENT_SWARM_DSH_CONFIG` naming a host configuration file.
+
+**Distribution.** The installed directory `agent_swarm/dsh/` is a DSH plugin
+bundle named `agents-dsh`: its `package.json` declares `"dsh": {"bundle":
+{"patch": "./dsh.patch.yml"}}`, and that patch inserts the row `agents-host`
+(module `agents-dsh`, that is `plugin.mjs`) with no settings. Install it with
+DSH's own plugin command (it runs pnpm in the profile directory), from the
+agents installation DSH should use:
+
+```sh
+DSH_PACKAGE="$(<python> -c 'import agent_swarm.dsh, pathlib; print(pathlib.Path(agent_swarm.dsh.__file__).parent)')"
+dsh plugin --profile headless add "$DSH_PACKAGE"     # once per profile
+AGENT_SWARM_PYTHON=<python> AGENT_SWARM_DSH_CONFIG=/abs/dsh-host.json \
+  env -u DEEPSEEK_BASE_URL dsh --profile headless "<task>"
+```
+
+Any profile works the same way (`web`, `tui`, `acp`, `sdk`). Without
+installing, a patch file with the row `{id: agents-host, name:
+<DSH_PACKAGE>/plugin.mjs}` under `insert`, passed with `dsh --profile <name>
+--patch <file>`, loads it for one invocation. `AGENT_SWARM_PYTHON` names the
+Python that has `agent-swarm` installed. The row does nothing without
+`AGENT_SWARM_DSH_CONFIG`, and nothing inside a DSH that is itself an agents
+child (`AGENT_SWARM_CONNECTION` or `DSH_AGENT_PACKAGE` set). DSH child
+executions keep loading the same `plugin.mjs` with their own `mcpCommand`
+row; that path is unchanged. The plugin finds DSH's packages from the real
+path of the running `dsh` entry, so no `GRAPHTRAJ_*` variable is needed;
+`GRAPHTRAJ_DSH_PACKAGE` and `GRAPHTRAJ_CLI_CONNECTION` are still read when
+set (renamed in 394). Verified against the source of DSH `0.2.2-alpha.2`.
+
+**Configuration file** (JSON). Exactly these keys; any other key fails the
+start:
+
+| Key | Required | Content |
+| --- | --- | --- |
+| `root` | yes | absolute agents data root (its `config.yml` is section 3) |
+| `dsh` | no | DSH driver settings; `sandbox` defaults to `read-only` and `model` to the parent Session's current model |
+| `claude` | no | Claude driver settings, the keys of the Claude host's `settings`; `worktree_access` defaults to `read` |
+| `codex` | no | Codex `Run.settings`, the document `agent_swarm.codex.host --settings` takes; without it a Codex `create` fails with `invalid-config` |
+| `pi` | no | the whole Pi child request (`worktree_path` is the host's cwd); without it the host has no Pi driver and a Pi `create` fails with `unsupported-runtime` |
+
+**Start.** The plugin starts one host, `python -I -m agent_swarm.dsh.host
+--config <file>`, for each DSH main Session when DSH announces it
+(`agent/created`, for new and resumed Sessions), in the Session's cwd. A
+native DSH subagent (header `origin: subagent` or `delegationDepth` above 0)
+gets no host and no `agents` tool. The host verifies that its parent process
+is the DSH Node process that loaded the plugin (kernel executable and entry
+file, inside the `@deepseek-ai/dsh` package) and binds the Session the plugin
+supplied as root caller. Only that Session's MCP server `agents` may call it:
+a client presenting another Session, source or cwd gets `authority-denied`.
+The host then calls
+`AgentControl.require_connections()` (section 2). A refused start prints one
+line `{"error": {"code", "message"}}` on stderr and exits `1`; the plugin's
+`agent/created` handler fails with that text and the Session has no
+`agents` tool.
+
+**Routing.** The host registers the `dsh`, `claude` and `codex` drivers (and
+`pi` when configured) in one `AgentControl` with `request_notices=True`;
+`create`'s `runtime` selects one, and `model`, `preset`, `connection` and
+`reasoning_effort` are resolved per child (section 2).
+
+**Notices, delivery conditions and shutdown** are section 4.
+
 ## 2. Creating a child: Runtime, preset, model, reasoning effort
 
 `create` takes `runtime` (required), `instruction` (required), optional
@@ -451,7 +524,39 @@ driver and one driver per `runtimes` entry (1.1) and calls
 `require_connections()` at start; a refusal answers every call with its
 code (1.1). The independent Codex host does the same with its own
 `runtimes` (1.1) and reports a refusal as its startup error. The Pi host
-calls it at start (1.6). The DSH host follows in 383.
+and the DSH host call it at start (1.6, 1.7).
+
+**DSH children (383).** Any host that registers `agent_swarm.dsh.DshDriver(cwd,
+settings)` starts DSH children without GraphTraj installed and without any
+`GRAPHTRAJ_*` variable. `settings` holds `model` (the default model, required),
+`sandbox` (`read-only` or `workspace-write`, required) and optionally
+`executable` (else `dsh` on `PATH`), `reasoning_effort`, `api_key_env`,
+`base_url`, `runtime_home` and `instructions`. A create's connection, `model`
+and `reasoning_effort` replace them for that child only. The child's MCP
+server is `<host python> -I -m agent_swarm.mcp`, loaded into DSH by the
+packaged `agent_swarm/dsh/plugin.mjs`. DSH receives `DSH_AGENT_PACKAGE` (the
+installed DSH `package.json`) and `AGENT_SWARM_CONNECTION`. `prepare` (which
+the Claude Code and Codex hosts call at start) refuses:
+- DSH not found: `RUNTIME_UNAVAILABLE`.
+- An installed DSH older than 0.2.0-rc.2 in semver order, or a version that
+  cannot be read: `RUNTIME_UNSUPPORTED`, message `DSH 0.2.0-rc.2 or later is
+  required (installed <version or unknown>).`.
+- A missing `model` or `sandbox`: `ROLE_CONFIG_INVALID`.
+- An unset `api_key_env`: `RUNTIME_CREDENTIAL_MISSING`.
+
+Continuing a DSH child (`send` to a standby child, `resume`) reopens the
+same native Session. On DSH 0.2.0-rc.2 (and when the installed version cannot
+be read) the driver calls `session/create` with the stored `sessionId`. Later
+DSH mints a new Session there once the stored one has a turn
+(0.2.2-alpha.2 `dsh-api-session-controller/lib/index.js:345-365`, contract
+`typert.host.js:1993`), so the driver instead subscribes to the stored Session
+(`session/follow`), which DSH resolves by resuming it (`index.js:160-213`). It
+no longer passes `cwd` or an agent preset on that path; the resumed Session
+keeps its own. Another Session in the snapshot, or `session/not-found`, fails
+the execution with `RUNTIME_SESSION_NOT_RESUMABLE`.
+
+This is a floor, not a pin: no newer DSH is refused for its version. GraphTraj's
+own DSH members (`graphtraj.runtimes.dsh`) still require exactly 0.2.0-rc.2.
 
 **Agent document.** Every Agent document carries `preset`, `connection`
 (the connection's name), `model` and `reasoning_effort` as chosen at
@@ -640,6 +745,41 @@ What the parent sees today:
   through `status` when the same Pi Session is resumed with the same
   configuration, and are not pushed then. Agents, Sessions and records are
   kept.
+- **DSH host** (1.7): it enables `request_notices`, for children of every
+  Runtime it runs. Each notice `{"id", "agent", "session", "event",
+  "message", "execution"}` (the id as for Claude above) goes to the plugin,
+  which hands it to the existing `agentMessages.receive` relay
+  (`dsh/communication.mjs`): one native `agent-message` relay message from
+  the child's Agent and Session, text `[agents notice from <agent> ·
+  <event>]` followed by the message, communication id `agents-notice:<id>`,
+  placed in the Session's next-step inbox with a wake. The relay admits one
+  id once per Session, including across processes. Admitted is
+  `delivered`; refused (for example the Session is no longer active in that
+  DSH, `communication.mjs` `deliver`) is `unavailable`; no acknowledgement
+  within 10 seconds is `unconfirmed`.
+
+  When a DSH parent receives a notice depends on its state. Sources are the
+  installed DSH `0.2.2-alpha.2` packages under
+  `node_modules/@deepseek-ai/`:
+
+  | Parent state | What happens | DSH source |
+  | --- | --- | --- |
+  | Turn running | The message enters the next-step inbox; the running turn takes it at its next step and does not end while the next-step inbox has input | `dsh-agent-loop/lib/index.js:564-569` (`send`), `:103-105` (`claim`), `:790-798` |
+  | Idle, host alive (a long-lived profile such as `web`, `tui`, `acp` or `sdk`, or `headless` before its runner leaves its loop) | The wake starts a new turn with the notice at once | `dsh-agent-loop/lib/index.js:564-569`, `:618-623` |
+  | Idle during maintenance (for example compaction) or right after a cancel | The wake is latched and the turn starts when that activity ends | `dsh-agent-loop/lib/index.js:565-566`, `:619-621` |
+  | `headless`, after the parent is idle with no native DSH subagents | The runner flushes and exits. agents children are not native subagents, so it does not wait for them; the host then stops with DSH (next row) | `dsh-headless/lib/index.js:369-373`, `:377-383` |
+  | Host or DSH process stopped (Session disposed, DSH exited) | No host runs. At the stop the plugin closes the host pipe; the host stops pushing, interrupts its active children (descendants first) and records their ends `unavailable`, readable through `status`. Nothing is held for later push | `dsh/plugin.mjs`, `dsh/host.py` |
+  | On resume (`dsh --profile headless --session-id <id> "<task>"`, or reopening the Session in a long-lived profile) | DSH announces the Session again and a new host binds the same Session. Earlier children are listed by `status` and continue with `resume`; ends recorded while stopped are not pushed again | `dsh-headless/lib/index.js:245-280` (`agents.resume` at `:263`) |
+
+  Cases without immediate delivery: (1) a running parent receives a notice
+  only at its next step, after the current model response or tool call;
+  (2) during maintenance or right after a cancel, only when that activity
+  ends; (3) a `headless` parent whose task has ended never receives a later
+  notice: its children are interrupted when DSH exits, so a `headless`
+  parent that needs a child's answer calls `wait` for it before ending its
+  task; (4) while DSH or the Session is stopped, nothing is delivered or held;
+  (5) on resume, ends recorded while stopped are not pushed; the parent reads
+  them with `status`. Upstream DSH is not changed for any of these.
 - A grandchild's notices go to its own parent: a Claude parent Agent is
   continued with them; a Codex parent Agent is not notified, whatever the
   grandchild's Runtime, and reads them through `status`.
@@ -665,8 +805,8 @@ Gaps, by owner:
 
 | Gap | Owner |
 | --- | --- |
-| Independent hosts do not push a child's native permission request or `ask_parent` request; the parent polls | Claude Code and Codex hosts: done in 381 (`ask_parent`: since the 385 integration). Pi host: open, unassigned, needs Main |
-| Independent hosts do not hold notices while the parent is stopped: the Claude host's queue lives in its process, and the Codex host marks them `unavailable` (readable through `status`). The Pi host records them `unavailable` as above (closed in 382 by recording, not holding) | 381 (Claude, Codex), 383 (DSH) |
+| Independent hosts do not push a child's native permission request or `ask_parent` request; the parent polls | Claude Code and Codex hosts: done in 381 (`ask_parent`: since the 385 integration). DSH host: done in 383 (`ask_parent`: since the 383 integration). Pi host: open, unassigned, needs Main |
+| Independent hosts do not hold notices while the parent is stopped: the Claude host's queue lives in its process, and the Codex host marks them `unavailable` (readable through `status`). The Pi host records them `unavailable` as above (closed in 382 by recording, not holding). The DSH host stops with its DSH process, interrupts its children and records their ends `unavailable`; when a DSH parent receives notices, and every case without immediate delivery, is listed under *DSH host* above | 381 (Claude, Codex), 382 (Pi); DSH documented in 383, holding notices for a stopped DSH parent is unassigned, needs Main |
 | A Codex child is not notified of its own children's ends or requests (it reads them through `status`); a Claude child is continued with them | unassigned, needs Main |
 | The notice title names GraphTraj | 394 |
 
@@ -855,6 +995,11 @@ Recorded classifications:
   host section, the Pi package manifest, the Pi host's Runtime routing and
   its notices are compatible additions. They ship in 0.2.0, the version 384
   set; 382 adds no bump of its own.
+- 383: the DSH host section, the `agents-dsh` bundle, the `dsh` entries of the
+  Claude Code and Codex hosts' `runtimes` and their DSH refusals are compatible
+  additions. The agents DSH gate became a floor (0.2.0-rc.2 or later in semver
+  order), which accepts more than before. They ship in 0.2.0; 383 adds no bump
+  of its own.
 
 While the major version is `0`, an incompatible change raises the minor
 version (`0.1.x` → `0.2.0`), and compatible additions and fixes raise the
@@ -884,7 +1029,7 @@ or be renamed. Numbers refer to the subtraction list in
 | 5+ | Core archive facts kept under the `graphtraj` name (event provenance, missing facts, header continuation, `graphtraj/*` types) | Done in 384: product-neutral core fields and types (section 1.5) | 384 |
 | 6 | Pi custom message type `graphtraj:agent-communication`, used for display entries and, since 382, for the Pi host's injected notices | `pi/extension.mjs` | 394 |
 | 7 | Pi execution's GraphTraj Task fields and fixed `.graphtraj` deny-read and deny-write paths | Done in 382: `pi/host.py` takes a Task-free configuration and builds the Pi request from the native parent (1.6); `pi/execution.py` takes the generic request fields (section 2); GraphTraj supplies its former paths and domains in `graphtraj/runtimes/pi/pi_adapter.py:member_policy` | 382 (done) |
-| 8 | No independent DSH host | `dsh/` | 383 |
+| 8 | No independent DSH host | Done in 383: `dsh/host.py`, the `agents-dsh` bundle (`dsh/package.json`, `dsh/dsh.patch.yml`) and the host row of `dsh/plugin.mjs`; see 1.7 | 383 (done) |
 | 9 | Notice title `GraphTraj notice from …` and default sender `graphtraj` | `claude/host_context.mjs` | 394 |
 | 10 | `send`'s `reports_only` and its "Task member" description | Done in 388: generic meaning in `tool.py` and 1.2; `AgentControl` rejects `true` with `not-implemented` (fix, see 7). GraphTraj's Task member handling is unchanged | 388 (done) |
 | 12 | Archiving refused without GraphTraj's collector | Done in 384: the refusal is removed; each Runtime execution builds its own collector from the bound archive (`claude/execution.py`, `claude/collection.py`, `codex/managed_session.py`, `pi/execution.py`, `dsh/driver.py`) | 384 |

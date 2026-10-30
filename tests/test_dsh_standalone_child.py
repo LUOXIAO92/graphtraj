@@ -1,0 +1,440 @@
+"""Any host starts a DSH child without GraphTraj (383).
+
+The Claude Code host and the Codex host register DshDriver from their
+``runtimes`` tables. A controlled DshService (dsh_standalone_peer.py) stands in
+for the native service; no network, model or real DSH process is used except
+where the installed DSH and Node are required and said so.
+"""
+from __future__ import annotations
+
+import json
+import os
+from pathlib import Path
+import shutil
+import subprocess
+import sys
+import time
+from uuid import uuid4
+
+import pytest
+
+from agent_swarm import AgentsError, Caller, bind
+from agent_swarm.claude.host import IndependentCalls
+from agent_swarm.codex.host import CodexHost
+from agent_swarm.dsh import execution
+from agent_swarm.dsh.settings import prepare
+from dsh_standalone_peer import FakeDshService, install_dsh
+from test_codex_independent_control import native_settings  # noqa: F401 - pytest fixture
+
+ROOT = Path(__file__).resolve().parents[1]
+KEY = 'never-shown-383-key'
+CONFIG = """connections:
+  work-dsh:
+    runtime: dsh
+    home: {home}
+    api_key_env: DSH_383_KEY
+    models:
+      - id: deepseek-v5
+        supported_efforts: [low, high]
+"""
+
+
+@pytest.fixture
+def dsh(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict:
+    """A stand-in DSH 0.2.2-alpha.2 install, a key, no GRAPHTRAJ_* variable and the fake service."""
+    for name in [name for name in os.environ if name.startswith('GRAPHTRAJ_')]:
+        monkeypatch.delenv(name)
+    monkeypatch.setenv('DSH_383_KEY', KEY)
+    monkeypatch.setattr(execution.DshExecution, 'service_type', FakeDshService)
+    FakeDshService.instances = []
+    executable = install_dsh(tmp_path / 'dsh')
+    return {'executable': str(executable), 'model': 'deepseek-flash', 'sandbox': 'workspace-write'}
+
+
+def declare(root: Path, tmp_path: Path) -> Path:
+    """Declare one DSH connection with its own home, key variable and models."""
+    home = tmp_path / 'dsh-connection-home'
+    home.mkdir()
+    root.mkdir(parents=True, exist_ok=True)
+    (root / 'config.yml').write_text(CONFIG.format(home=home))
+    return home
+
+
+def until(check, timeout: float = 20):
+    deadline = time.monotonic() + timeout
+    while not (value := check()):
+        assert time.monotonic() < deadline, 'condition not reached'
+        time.sleep(0.02)
+    return value
+
+
+def selected(service: FakeDshService) -> dict:
+    """The session/selectModel body the native service received."""
+    return next(body for method, body in service.calls if method == 'session/selectModel')
+
+
+def prompts(service: FakeDshService) -> list[str]:
+    return [body['content'][0]['text'] for method, body in service.calls if method == 'session/prompt']
+
+
+def check_round_trip(invoke) -> None:
+    """Create with connection, model and effort; answer; continue the same native Session."""
+    created = invoke('create', runtime='dsh', instruction='first task', model='deepseek-v5',
+                     reasoning_effort='high')
+    agent = created['agent']
+    assert (created['result']['runtime'], created['result']['connection'], created['result']['model'],
+            created['result']['reasoning_effort']) == ('dsh', 'work-dsh', 'deepseek-v5', 'high')
+    done = invoke('wait', agent=agent, timeout_seconds=10)['result']['last_result']
+    assert (done['outcome'], done['last_message']) == ('completed', 'dsh answer: first task')
+    [first] = FakeDshService.instances
+    assert selected(first) == {'sessionId': first.session, 'provider': 'deepseek-official',
+                               'model': 'deepseek-v5', 'reasoningEffort': 'high'}
+
+    invoke('send', agent=agent, message='second task')
+    done = invoke('wait', agent=agent, timeout_seconds=10)['result']['last_result']
+    assert done['last_message'] == 'dsh answer: second task'
+    invoke('resume', agent=agent, message='third task')
+    done = invoke('wait', agent=agent, timeout_seconds=10)['result']['last_result']
+    assert done['last_message'] == 'dsh answer: third task'
+    # Each continuation asked DSH for the same native Session and kept the child's choice.
+    first_service, *continued = FakeDshService.instances
+    assert len(continued) == 2
+    for service in continued:
+        # DSH after 0.2.0-rc.2 resumes the stored Session by address, not by session/create.
+        assert service.session == first_service.session
+        assert not [call for call in service.calls if call[0] == 'session/create']
+        assert selected(service)['model'] == 'deepseek-v5'
+    assert [prompts(service) for service in FakeDshService.instances] == [
+        ['first task'], ['second task'], ['third task']]
+    [node] = invoke('status')['result']['agents']
+    assert (node['agent'], node['runtime'], node['parent'], node['state']) == (agent, 'dsh', None, 'standby')
+    assert KEY not in json.dumps(invoke('status', agent=agent))
+
+
+@pytest.mark.parametrize('version', ['0.2.0-rc.2', '0.2.1-alpha.5', '0.2.2-alpha.2'])
+def test_send_and_resume_continue_the_same_dsh_session(tmp_path: Path, dsh: dict, version: str) -> None:
+    """rc.2 resumes through session/create; later DSH mints there, so the driver addresses the Session."""
+    dsh = {**dsh, 'executable': str(install_dsh(tmp_path / f'dsh-{version}', version))}
+    host = IndependentCalls(tmp_path / 'agents', tmp_path, {}, {'dsh': dsh})
+    invoke, _, _ = claude_main(host, tmp_path)
+    try:
+        agent = invoke('create', runtime='dsh', instruction='one')['agent']
+        invoke('wait', agent=agent, timeout_seconds=10)
+        invoke('send', agent=agent, message='two')
+        assert invoke('wait', agent=agent, timeout_seconds=10)['result']['last_result']['last_message'] == 'dsh answer: two'
+        invoke('resume', agent=agent, message='three')
+        last = invoke('wait', agent=agent, timeout_seconds=10)['result']['last_result']
+        assert (last['outcome'], last['last_message']) == ('completed', 'dsh answer: three')
+        first, *continued = FakeDshService.instances
+        assert [service.session for service in continued] == [first.session, first.session]
+        creates = [[body for method, body in service.calls if method == 'session/create'] for service in continued]
+        expected = {'cwd': str(tmp_path), 'sessionId': first.session}
+        assert creates == ([[expected], [expected]] if version == '0.2.0-rc.2' else [[], []])
+        assert invoke('status', agent=agent)['result']['session'] == first.session
+    finally:
+        stop_owned(host.control)
+
+
+def test_a_missing_stored_dsh_session_is_not_resumable(tmp_path: Path, dsh: dict) -> None:
+    """Newer DSH answers session/not-found; the child reports RUNTIME_SESSION_NOT_RESUMABLE."""
+    host = IndependentCalls(tmp_path / 'agents', tmp_path, {}, {'dsh': dsh})
+    invoke, call, _ = claude_main(host, tmp_path)
+    agent = invoke('create', runtime='dsh', instruction='one')['agent']
+    invoke('wait', agent=agent, timeout_seconds=10)
+    for log in (FakeDshService.instances[0].logs / 'workspace').rglob('v4.jsonl'):
+        log.unlink()
+    result = call('agents', {'action': 'execute', 'feature': 'resume', 'arguments': {'agent': agent, 'message': 'two'}})
+    assert result.failed
+    error = json.dumps(result.document)
+    assert 'RUNTIME_SESSION_NOT_RESUMABLE' in error and 'session/not-found' in error, error
+    assert not [call for call in FakeDshService.instances[1].calls if call[0] == 'session/prompt']
+
+
+def check_connection_launch(service: FakeDshService, home: Path) -> None:
+    """The connection's home, key variable and declared model reach the native launch."""
+    assert service.environment['DSH_HOME'] == str(home)
+    assert service.environment['DSH_383_KEY'] == KEY
+    llm = next(row['config'] for row in service.patches if row.get('id') == 'llm-deepseek')
+    assert llm == {'apiKeyEnv': 'DSH_383_KEY', 'models': [{'id': 'deepseek-v5'}], 'reasoningEffort': 'high'}
+
+
+def claude_main(host: IndependentCalls, cwd: Path):
+    session = str(uuid4())
+    call = host.make_call(session, cwd)
+
+    def invoke(feature: str, **arguments) -> dict:
+        result = call('agents', {'action': 'execute', 'feature': feature, 'arguments': arguments})
+        assert not result.failed, result.document
+        return result.document
+
+    return invoke, call, session
+
+
+def stop_owned(control) -> None:
+    for owned in control.interrupt_owned():
+        deadline = time.monotonic() + 10
+        while control.owns_running(owned) and time.monotonic() < deadline:
+            time.sleep(0.05)
+
+
+def test_claude_host_routes_a_dsh_child_with_its_own_choices(tmp_path: Path, dsh: dict) -> None:
+    """create runtime=dsh reaches DshDriver with the child's connection, model and effort."""
+    home = declare(tmp_path / 'agents', tmp_path)
+    host = IndependentCalls(tmp_path / 'agents', tmp_path, {}, {'dsh': dsh})
+    host.control.require_connections()
+    invoke, _, _ = claude_main(host, tmp_path)
+    try:
+        check_round_trip(invoke)
+        check_connection_launch(FakeDshService.instances[0], home)
+    finally:
+        stop_owned(host.control)
+
+
+def test_a_dsh_childs_end_reaches_the_claude_main_once(tmp_path: Path, dsh: dict) -> None:
+    """Without a wait the Claude mod claims the DSH child's answer once."""
+    host = IndependentCalls(tmp_path / 'agents', tmp_path, {}, {'dsh': dsh})
+    invoke, call, session = claude_main(host, tmp_path)
+    agent = invoke('create', runtime='dsh', instruction='report back')['agent']
+    notices = until(lambda: host.context({'operation': 'notices', 'session': session})['notices'])
+    assert [(n['event']['alias'], n['event']['event'], n['event']['message']) for n in notices] == [
+        (agent, 'completed', 'dsh answer: report back')]
+    assert host.context({'operation': 'notices', 'session': session})['notices'] == []
+    # Without a choice the host's own DSH settings apply.
+    [service] = FakeDshService.instances
+    assert (selected(service)['model'], 'reasoningEffort' in selected(service)) == ('deepseek-flash', False)
+
+
+def test_codex_host_routes_a_dsh_child_with_its_own_choices(
+        tmp_path: Path, native_settings: dict, dsh: dict) -> None:
+    """The Codex host's runtimes.dsh entry runs DSH children in its worktree."""
+    home = declare(tmp_path / 'host', tmp_path)
+    host = CodexHost({**native_settings, 'runtimes': {'dsh': dsh}}, tmp_path / 'host', 'unused')
+    call = bind(host.control, Caller('codex', None, 'parent-session', 'codex'))
+
+    def invoke(feature: str, **arguments) -> dict:
+        result = call({'action': feature, **arguments})
+        assert not result.failed, result.document
+        return result.document
+
+    try:
+        check_round_trip(invoke)
+        service = FakeDshService.instances[0]
+        check_connection_launch(service, home)
+        assert service.cwd == Path(native_settings['adapter_request']['worktree_path'])
+    finally:
+        stop_owned(host.control)
+
+
+def test_dsh_child_launch_needs_no_graphtraj_setting(tmp_path: Path, dsh: dict) -> None:
+    """The MCP command, connection variable, package and plugin all come from agents."""
+    host = IndependentCalls(tmp_path / 'agents', tmp_path, {}, {'dsh': dsh})
+    invoke, _, _ = claude_main(host, tmp_path)
+    agent = invoke('create', runtime='dsh', instruction='x')['agent']
+    invoke('wait', agent=agent, timeout_seconds=10)
+    [service] = FakeDshService.instances
+    environment = service.environment
+    assert not [name for name in environment if name.startswith('GRAPHTRAJ_')]
+    assert environment['DSH_AGENT_PACKAGE'] == str(Path(dsh['executable']).resolve().parent.parent / 'package.json')
+    assert environment['AGENT_SWARM_CONNECTION'].startswith(str(tmp_path / '.scratch'))
+    [plugin] = [row['insert'][0] for row in service.patches
+                if 'insert' in row and row['insert'][0]['id'] == 'agents-mcp']
+    assert Path(plugin['name']) == ROOT / 'src/agent_swarm/dsh/plugin.mjs'
+    assert plugin['config'] == {'mcpCommand': str(Path(sys.executable).absolute()),
+                                'mcpArgs': ['-I', '-m', 'agent_swarm.mcp']}
+
+
+def refusal_cases(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, dsh: dict) -> list[tuple]:
+    """DSH settings each host refuses at start, with the code and text it reports."""
+    empty = tmp_path / 'no-dsh-here'
+    empty.mkdir()
+    monkeypatch.setenv('PATH', str(empty))
+    old = install_dsh(tmp_path / 'old-dsh', '0.2.0-rc.1')
+    return [
+        ({'model': 'deepseek-flash', 'sandbox': 'workspace-write'}, 'RUNTIME_UNAVAILABLE', 'Install the native DSH'),
+        ({**dsh, 'executable': str(old)}, 'RUNTIME_UNSUPPORTED',
+         'DSH 0.2.0-rc.2 or later is required (installed 0.2.0-rc.1).'),
+        ({**dsh, 'model': ''}, 'ROLE_CONFIG_INVALID', 'model'),
+        ({**dsh, 'api_key_env': 'DSH_383_UNSET'}, 'RUNTIME_CREDENTIAL_MISSING', 'api_key_env'),
+    ]
+
+
+def test_claude_host_refuses_missing_or_unsupported_dsh_at_start(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch, dsh: dict) -> None:
+    for entry, code, text in refusal_cases(tmp_path, monkeypatch, dsh):
+        with pytest.raises(AgentsError) as refused:
+            IndependentCalls(tmp_path / 'agents', tmp_path, {}, {'dsh': entry})
+        assert (refused.value.code, text in str(refused.value)) == (code, True), refused.value
+
+
+def test_codex_host_refuses_missing_or_unsupported_dsh_at_start(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch, native_settings: dict, dsh: dict) -> None:
+    for entry, code, text in refusal_cases(tmp_path, monkeypatch, dsh):
+        with pytest.raises(AgentsError) as refused:
+            CodexHost({**native_settings, 'runtimes': {'dsh': entry}}, tmp_path / 'host', 'never runs')
+        assert (refused.value.code, text in str(refused.value)) == (code, True), refused.value
+        assert not (tmp_path / 'host/host/session.yml').exists()
+    assert FakeDshService.instances == []
+
+
+def test_codex_host_cli_reports_an_unsupported_dsh(tmp_path: Path, native_settings: dict, dsh: dict) -> None:
+    """The command prints the startup error document and exits 1."""
+    old = install_dsh(tmp_path / 'old-dsh', '0.1.9')
+    settings = tmp_path / 'settings.json'
+    settings.write_text(json.dumps({**native_settings, 'runtimes': {'dsh': {**dsh, 'executable': str(old)}}}))
+    result = subprocess.run([sys.executable, '-m', 'agent_swarm.codex.host', '--settings', str(settings),
+                             '--directory', str(tmp_path / 'host'), 'never runs'],
+                            capture_output=True, text=True, timeout=30)
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert json.loads(result.stdout)['error'] == {
+        'code': 'RUNTIME_UNSUPPORTED', 'message': 'DSH 0.2.0-rc.2 or later is required (installed 0.1.9).'}
+
+
+def test_require_connections_covers_a_declared_dsh_connection(tmp_path: Path, dsh: dict,
+                                                              monkeypatch: pytest.MonkeyPatch) -> None:
+    """A declared DSH connection whose key is unset refuses the host's start."""
+    declare(tmp_path / 'agents', tmp_path)
+    host = IndependentCalls(tmp_path / 'agents', tmp_path, {}, {'dsh': dsh})
+    monkeypatch.delenv('DSH_383_KEY')
+    with pytest.raises(AgentsError) as refused:
+        host.control.require_connections()
+    assert refused.value.code == 'runtime-unavailable'
+    (tmp_path / 'bare').mkdir()
+    (tmp_path / 'bare/config.yml').write_text(CONFIG.format(home=tmp_path))
+    without = IndependentCalls(tmp_path / 'bare', tmp_path, {})
+    with pytest.raises(AgentsError) as refused:
+        without.control.require_connections()
+    assert refused.value.code == 'unsupported-runtime'
+
+
+@pytest.mark.parametrize(('version', 'accepted'), [
+    ('0.1.9', False), ('0.2.0-beta.4', False), ('0.2.0-rc.1', False),
+    ('0.2.0-rc.2', True), ('0.2.0-rc.10', True), ('0.2.0', True),
+    ('0.2.1-alpha.5', True), ('0.2.2-alpha.2', True), ('1.0.0', True),
+])
+def test_the_standalone_dsh_gate_is_a_floor(tmp_path: Path, version: str, accepted: bool) -> None:
+    """0.2.0-rc.2 or later in semver order; GraphTraj's own DSH members keep their exact pin."""
+    executable = install_dsh(tmp_path / 'dsh', version)
+    settings = {'executable': str(executable), 'model': 'm', 'sandbox': 'read-only'}
+    if accepted:
+        assert prepare(settings, tmp_path)['package'] == str(tmp_path / 'dsh/package.json')
+    else:
+        with pytest.raises(AgentsError) as refused:
+            prepare(settings, tmp_path)
+        assert (refused.value.code, str(refused.value)) == (
+            'RUNTIME_UNSUPPORTED', f'DSH 0.2.0-rc.2 or later is required (installed {version}).')
+
+
+@pytest.mark.parametrize(('package', 'installed'), [
+    (None, 'unknown'), ('not json', 'unknown'), ('{}', 'unknown'),
+    ('{"version": 2}', '2'), ('{"version": "latest"}', 'latest'),
+])
+def test_an_unreadable_dsh_version_is_refused(tmp_path: Path, package: str | None, installed: str) -> None:
+    executable = install_dsh(tmp_path / 'dsh')
+    if package is None:
+        (tmp_path / 'dsh/package.json').unlink()
+    else:
+        (tmp_path / 'dsh/package.json').write_text(package)
+    with pytest.raises(AgentsError) as refused:
+        prepare({'executable': str(executable), 'model': 'm', 'sandbox': 'read-only'}, tmp_path)
+    assert (refused.value.code, str(refused.value)) == (
+        'RUNTIME_UNSUPPORTED', f'DSH 0.2.0-rc.2 or later is required (installed {installed}).')
+
+
+STANDALONE = r'''
+import json, os, sys, time
+from pathlib import Path
+from uuid import uuid4
+source, tests, work = sys.argv[1:4]
+sys.path[:0] = [source, tests]
+
+class NoGraphTraj:
+    """Make GraphTraj unimportable even though this venv also installs it."""
+    def find_spec(self, name, path=None, target=None):
+        if name == 'graphtraj' or name.startswith('graphtraj.'):
+            raise ModuleNotFoundError(f'No module named {name!r} (blocked)')
+
+sys.meta_path.insert(0, NoGraphTraj())
+assert not [name for name in os.environ if name.startswith('GRAPHTRAJ_')]
+from dsh_standalone_peer import FakeDshService, install_dsh
+from agent_swarm.dsh import execution
+from agent_swarm.claude.host import IndependentCalls
+from agent_swarm.codex.host import runtime_drivers
+from agent_swarm.dsh.driver import DshDriver
+
+execution.DshExecution.service_type = FakeDshService
+work = Path(work)
+settings = {'executable': str(install_dsh(work / 'dsh')), 'model': 'deepseek-flash', 'sandbox': 'read-only'}
+assert isinstance(runtime_drivers({'adapter_request': {'worktree_path': str(work)},
+                                   'runtimes': {'dsh': dict(settings)}})['dsh'], DshDriver)
+host = IndependentCalls(work / 'agents', work, {}, {'dsh': settings})
+host.control.require_connections()
+call = host.make_call(str(uuid4()), work)
+run = lambda feature, **arguments: call('agents', {'action': 'execute', 'feature': feature,
+                                                   'arguments': arguments}).document
+agent = run('create', runtime='dsh', instruction='hello')['agent']
+assert run('wait', agent=agent, timeout_seconds=10)['result']['last_result']['last_message'] == 'dsh answer: hello'
+run('resume', agent=agent, message='again')
+assert run('wait', agent=agent, timeout_seconds=10)['result']['last_result']['last_message'] == 'dsh answer: again'
+first, second = FakeDshService.instances
+assert second.session == first.session
+plugin = next(row['insert'][0] for row in first.patches if 'insert' in row)
+print(json.dumps({
+    'graphtraj_modules': sorted(name for name in sys.modules if name.split('.')[0] == 'graphtraj'),
+    'environment': sorted(name for name in first.environment
+                          if name.startswith(('GRAPHTRAJ_', 'DSH_AGENT_PACKAGE', 'AGENT_SWARM_CONNECTION'))),
+    'plugin': plugin,
+}))
+'''
+
+
+def test_dsh_child_runs_with_graphtraj_unimportable(tmp_path: Path) -> None:
+    """Both hosts' DSH entries, a round trip and a resume, with GraphTraj blocked and no GRAPHTRAJ_*."""
+    environment = {name: value for name, value in os.environ.items()
+                   if not name.startswith('GRAPHTRAJ_') and name != 'PYTHONPATH'}
+    result = subprocess.run([sys.executable, '-I', '-c', STANDALONE, str(ROOT / 'src'), str(ROOT / 'tests'),
+                             str(tmp_path)], capture_output=True, text=True, timeout=60, env=environment)
+    assert result.returncode == 0, result.stdout + result.stderr
+    evidence = json.loads(result.stdout.splitlines()[-1])
+    assert evidence['graphtraj_modules'] == []
+    assert evidence['environment'] == ['AGENT_SWARM_CONNECTION', 'DSH_AGENT_PACKAGE']
+    assert evidence['plugin']['name'] == str(ROOT / 'src/agent_swarm/dsh/plugin.mjs')
+    assert evidence['plugin']['config']['mcpArgs'] == ['-I', '-m', 'agent_swarm.mcp']
+
+
+def test_the_dsh_mcp_command_serves_without_graphtraj(tmp_path: Path) -> None:
+    """The child's MCP command (python -I -m agent_swarm.mcp) answers with GraphTraj blocked."""
+    program = ('import runpy, sys\n'
+               'class NoGraphTraj:\n'
+               '    def find_spec(self, name, path=None, target=None):\n'
+               "        if name.split('.')[0] == 'graphtraj': raise ModuleNotFoundError(name)\n"
+               'sys.meta_path.insert(0, NoGraphTraj())\n'
+               f'sys.path.insert(0, {str(ROOT / "src")!r})\n'
+               "runpy.run_module('agent_swarm.mcp', run_name='__main__')\n")
+    messages = [{'jsonrpc': '2.0', 'id': 1, 'method': 'initialize', 'params': {}},
+                {'jsonrpc': '2.0', 'id': 2, 'method': 'tools/list', 'params': {}}]
+    environment = {name: value for name, value in os.environ.items()
+                   if not name.startswith(('GRAPHTRAJ_', 'AGENT_SWARM_')) and name != 'PYTHONPATH'}
+    result = subprocess.run([sys.executable, '-I', '-c', program], cwd=tmp_path, env=environment,
+                            input=''.join(json.dumps(message) + '\n' for message in messages),
+                            capture_output=True, text=True, timeout=30)
+    replies = [json.loads(line) for line in result.stdout.splitlines()]
+    assert replies[0]['result']['serverInfo']['name'] == 'agents', result.stderr
+    assert [tool['name'] for tool in replies[1]['result']['tools']] == ['agents']
+
+
+def test_delivered_plugin_loads_from_dsh_agent_package_alone(tmp_path: Path) -> None:
+    """The installed DSH loads plugin.mjs through DSH_AGENT_PACKAGE with no GRAPHTRAJ_* set."""
+    node, dsh = shutil.which('node'), shutil.which('dsh')
+    if node is None or dsh is None:
+        pytest.skip('Installed DSH and Node are required for native plugin evidence.')
+    package = Path(dsh).resolve().parent.parent / 'package.json'
+    environment = {name: value for name, value in os.environ.items() if not name.startswith('GRAPHTRAJ_')}
+    result = subprocess.run([
+        node, str(ROOT / 'tests/fixtures/dsh_mcp_plugin.mjs'), str(Path(dsh).resolve()),
+        str(ROOT / 'src/agent_swarm/dsh/plugin.mjs'), sys.executable, str(ROOT / 'tests/fixtures/dsh_mcp_server.py'),
+    ], cwd=tmp_path, env={**environment, 'DSH_AGENT_PACKAGE': str(package), 'PYTHONPATH': str(ROOT / 'src')},
+        capture_output=True, text=True, timeout=30)
+    assert result.returncode == 0, result.stdout + result.stderr
+    evidence = json.loads(result.stdout.strip().splitlines()[-1])
+    assert evidence['childSourcePreserved']
+    assert evidence['browserEntry'] == 'agents-dsh'

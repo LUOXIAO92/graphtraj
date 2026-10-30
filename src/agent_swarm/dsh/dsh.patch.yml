@@ -1,0 +1,5 @@
+# The agents host row of the agents-dsh bundle (`dsh plugin --profile <name> add <this directory>`).
+# Inert unless the DSH process has AGENT_SWARM_DSH_CONFIG; see PUBLIC_API.md 1.7.
+- insert:
+    - id: agents-host
+      name: agents-dsh

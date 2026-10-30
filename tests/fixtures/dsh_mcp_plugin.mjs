@@ -5,7 +5,8 @@ import { createRequire } from 'node:module';
 import { pathToFileURL } from 'node:url';
 
 const [nativePackage, pluginPath, python, server] = process.argv.slice(2);
-process.env.GRAPHTRAJ_DSH_PACKAGE = nativePackage;
+// A standalone run supplies DSH_AGENT_PACKAGE and no GRAPHTRAJ_* variable (383).
+if (!process.env.DSH_AGENT_PACKAGE) process.env.GRAPHTRAJ_DSH_PACKAGE = nativePackage;
 const require = createRequire(nativePackage);
 const load = name => import(pathToFileURL(require.resolve(name)));
 const { Context } = await load('@deepseek-ai/cordis');

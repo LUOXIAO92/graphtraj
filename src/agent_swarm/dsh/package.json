@@ -6,6 +6,7 @@
   "main": "plugin.mjs",
   "exports": { ".": "./plugin.mjs", "./client": "./client.mjs" },
   "dsh": {
+    "bundle": { "patch": "./dsh.patch.yml" },
     "client": {
       "platform": "web",
       "inject": ["@deepseek-ai/dsh-client-ui-tool", "@deepseek-ai/dsh-client-ui-renderer", "@deepseek-ai/dsh-client-ui-chat"]

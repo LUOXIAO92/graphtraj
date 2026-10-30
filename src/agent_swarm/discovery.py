@@ -32,6 +32,8 @@ DESCRIPTIONS = {
     'requests': 'Read pending native approval or input requests.',
     'reply': 'Answer one native request explicitly.',
     'retire': 'Remove an Agent from the active list while retaining its history.',
+    'ask_parent': 'Ask your direct parent for a decision or resources (more time, wider scope) '
+                  'and wait a finite time for its answer.',
 }
 
 # Intent words a caller may use instead of the action name; discovery matches them too.
@@ -43,6 +45,7 @@ INTENTS = {
     'requests': 'approvals pending',
     'reply': 'answer approve respond',
     'retire': 'remove delete archive',
+    'ask_parent': 'request permission time budget scope extend',
 }
 
 # Words that carry no intent; they would otherwise match nearly every description.

@@ -353,6 +353,19 @@ for line in incoming():
                 'threadId': thread_id, 'turnId': turn_id, 'reason': 'highRiskCyberActivity',
                 'fromModel': sessions[thread_id].get('model', 'runtime-default'), 'toModel': 'safer-model'}})
             complete(thread_id, turn_id, 'answer from the rerouted model')
+        elif prompt.startswith(('review:', 'review-end:')):
+            # Codex 0.164 auto review reports its outcome only as a notification.
+            emit({'method': 'item/autoApprovalReview/completed', 'params': {
+                'threadId': thread_id, 'turnId': turn_id, 'reviewId': f'review-{sequence}',
+                'targetItemId': 'command', 'startedAtMs': 1000, 'completedAtMs': 2000,
+                'decisionSource': 'agent',
+                'review': {'status': prompt.split(':', 1)[1], 'riskLevel': 'medium',
+                           'userAuthorization': 'low', 'rationale': 'outside the workspace'},
+                'action': {'type': 'command', 'command': 'touch /outside', 'cwd': '/work',
+                           'source': 'unifiedExec'},
+            }})
+            if prompt.startswith('review-end:'):
+                complete(thread_id, turn_id, 'turn ended after review')
         elif prompt == 'large-output':
             complete(thread_id, turn_id, 'x' * 100_000)
         elif prompt == 'mcp-create-child':
@@ -415,6 +428,9 @@ for line in incoming():
         assert params['expectedTurnId'] == active[params['threadId']]
         result = {'turnId': params['expectedTurnId']}
         complete(params['threadId'], params['expectedTurnId'], params['input'][0]['text'])
+    elif method == 'thread/approveGuardianDeniedAction':
+        assert params['threadId'] in sessions and params['event']['status'] == 'denied'
+        result = {}
     elif method == 'turn/interrupt':
         assert params['turnId'] == active[params['threadId']]
         result = {}

@@ -104,19 +104,25 @@ Features and their arguments (`*` = required):
 
 | Feature | Arguments | Result fields added to the Agent document |
 | --- | --- | --- |
-| `create` | `runtime*`, `instruction*`, `name`, `configuration`, `preset`, `model`, `reasoning_effort` (see 2), `extra_fields` (object, section 5) | none; returns once the Agent is registered, never waits for its work |
+| `create` | `runtime*`, `instruction*`, `name`, `configuration`, `preset`, `model`, `reasoning_effort`, `workspace` (see 2), `extra_fields` (object, section 5) | none; returns once the Agent is registered, never waits for its work |
 | `send` | `agent*`, `message*`, `reports_only` | `delivery: {at, delivery: submitted\|rejected\|unknown, error?}` when the Agent runs; in standby it continues the Session |
 | `status` | `agent` | without `agent`: `{"agents": [document + "children": [...]]}`, the caller's visible hierarchy |
 | `wait` | `agent*`, `timeout_seconds*` (finite, > 0) | `timed_out`; also ends early on an unanswered native request |
 | `interrupt` | `agent*` | `interrupt: requested\|not-running\|already-requested\|stopped`, `scheduled`, `termination_confirmed` |
 | `resume` | `agent*`, `message` (required in standby) | `resumed: false, reason: already-active` when it already runs |
 | `requests` | `agent*`, `execution` | `requests: [native request document + "execution"]` |
-| `reply` | `agent*`, `request*` (one document from `requests`), `response*` (explicit native response) | the reply receipt; a repeat returns the first receipt with `duplicate: true` |
+| `reply` | `agent*`, `request*` (one document from `requests`), `response*` (explicit native response, or `{"answer"}` for a decision request) | the reply receipt; a repeat returns the first receipt with `duplicate: true`. Checked first under section 6 |
 | `retire` | `agent*` | `retired: true`, `duplicate` on repeat |
+| `ask_parent` | `kind*` (`decision` \| `resources`), `question*`, `timeout_seconds*` (finite, > 0) | `request`, `answer` (text or `null`), `timed_out`, on the caller's own Agent document; see 4 |
 
 An unknown argument, a missing required one or an empty string is rejected.
 Identity, permissions, working directory and parentage always come from the
-host, never from arguments.
+host, never from arguments. `create`'s `workspace` only narrows the caller's
+own working directory (section 2).
+
+`ask_parent` is called by a
+child about itself; a caller without an Agent reference is refused with
+`authority-denied`.
 
 `send`'s `reports_only` (boolean, default false): `true` delivers the message
 only to collect results the Agent already holds; the Agent starts no new work.
@@ -137,11 +143,12 @@ its own rules for which Agents it accepts.
 `result` is the **Agent document** plus the feature's own fields:
 
 - `agent`, `name`, `runtime`, `preset`, `connection`, `model`,
-  `reasoning_effort` (the choice made at `create`, see 2), `state` (`active`
-  or `standby`), `parent`, `creator` (`host`, `agent`, `session`), `host`,
+  `reasoning_effort` (the choice made at `create`, see 2), `workspace` (the
+  assigned directory, `null` for the host's cwd), `state` (`active` or
+  `standby`), `parent`, `creator` (`host`, `agent`, `session`), `host`,
   `session`;
 - while running: `execution`, and when present `stopping`, `diagnostic`,
-  `pending_requests` (count of unanswered native requests);
+  `pending_requests` (count of unanswered native and decision requests);
 - after an execution has ended: `last_result` with `id`, `outcome`
   (`completed`, `interrupted`, `failed`), `last_message`, `error` (`code`,
   `message`), `terminal_confirmed`, `ended_at`, and when present
@@ -157,13 +164,14 @@ people and models and may change. Codes in use:
 | Code | Meaning |
 | --- | --- |
 | `invalid-input` | malformed request, unknown or missing field, empty value |
-| `authority-denied` | no owning host, or the caller may not do this |
+| `authority-denied` | no owning host, or the caller may not do this; also a `reply` that grants more than the request asked |
 | `unsupported-runtime` | no driver for the requested Runtime in this host |
 | `invalid-config` | rejected driver configuration (any `configuration` in an independent host), an invalid `config.yml`, or a driver that cannot run the selected connection |
 | `invalid-preset` | `preset` is not declared, or uses another Runtime than `runtime` |
 | `invalid-model` | `model` is not a candidate, cannot be verified, or contradicts the preset |
 | `invalid-reasoning-effort` | `reasoning_effort` is not supported by the model or Runtime, or contradicts the preset |
 | `ambiguous-connection` | several connections declare the Runtime and no preset selects one |
+| `workspace-denied` | `workspace` lies outside the caller's own workspace (after resolving links) |
 | `runtime-unavailable` | the selected connection's Runtime is not installed or not logged in on this machine |
 | `not-found` | no such Agent visible to the caller |
 | `retired` | the Agent is retired |
@@ -361,6 +369,32 @@ hosts follow in 382 and 383.
 `create`; `null` means not chosen (the host's or Runtime's default).
 Agents created before 0.1.1 show `null` for all four.
 
+**Workspace (approval layer 1).** `create`'s optional `workspace` is an
+existing absolute directory the parent assigns to the child. Rules:
+
+- It must lie inside the caller's own workspace: the calling Agent's assigned
+  `workspace`, else the host's cwd. Links are resolved first. Outside:
+  `workspace-denied`; relative or missing: `invalid-input`.
+- A child created by an Agent that has a workspace inherits it when
+  `workspace` is omitted, so a grandchild is never wider than its parent.
+- The driver receives it as `prepare(..., workspace=Path)`. A driver whose
+  `prepare` does not take `workspace` makes such a create (including an
+  inherited workspace) fail with `not-implemented`, never run wider.
+- It replaces only the child's working directory. It adds no writable root,
+  read grant, network, approval or permission-mode change.
+
+What each Runtime then enforces:
+
+| Runtime | Effect of `workspace` |
+| --- | --- |
+| Claude | cwd, and so the native sandbox's working directory and `blockReadsOutsideWorkingDirectories`; declared `read_paths` stay |
+| Codex | cwd (`worktree_path`, Session `cwd`); the captured permission profile keeps its own filesystem and network grants, which may be wider than the workspace |
+| Pi | cwd and the worktree read/write grants of the native sandbox; other grants stay |
+| DSH | cwd and the sandbox policy's `workspaceRoot` |
+
+It is not an OS sandbox by itself: a Runtime confines the child only as far
+as its own sandbox follows the working directory, as listed above.
+
 **Fallback.** When the Runtime answers with a different model than
 requested (for example a safeguard fallback), the child's result names the
 requested model, the observed model and the Runtime's reason, as 369 does
@@ -433,7 +467,7 @@ only these notify the parent:
 | Kind | Direction | Today |
 | --- | --- | --- |
 | Message | both ways | parent → child: `create` `instruction`, `send`, `resume`. Child → parent: the child's final answer when its round ends and it has no running members of its own |
-| Permission request (decision or resources) | child → parent, waits for a reply | native approval requests only: the parent is notified once per request (event `request`, see below), `wait` returns early, the Agent document shows `pending_requests`, the parent reads them with `requests` and answers once with `reply` |
+| Permission request (decision or resources) | child → parent, waits for a reply | native approval requests, and the child's own `ask_parent`: the parent is notified once per request (event `request`, see below), `wait` returns early, the Agent document shows `pending_requests`, the parent reads them with `requests` and answers once with `reply` |
 | System exception | system → parent | an execution ending `failed` or `interrupted`, with `last_result.error` |
 
 Delivery rules:
@@ -451,11 +485,33 @@ Delivery rules:
   resumes. A child Agent that is itself a parent is continued with its
   child's reply. Under GraphTraj this is the 367, 372 and 375 behaviour.
 - There is no separate "ask for attention" call and no parent watch switch.
-- A native permission request notifies the parent once per request when
-  the host enables it (since 0.1.2; see *Backend* below). A repeated report
-  of the same request notifies nobody again. The notice names the request's
-  method and tool only, never its input, and asks for `requests` and
-  `reply`; it never answers the request.
+  `ask_parent` is the permission-request kind above, not an attention call:
+  it must name `kind` and a `question`, and it waits for an answer.
+- A permission request (native or `ask_parent`) notifies the parent once per
+  request when the host enables it (since 0.1.2; see *Backend* below). A
+  repeated report of the same request notifies nobody again. The notice names
+  the request's method and tool only, never its input, and asks for `requests`
+  and `reply`; it never answers the request.
+
+**Decision and resource requests.** A child asks its direct parent to decide
+or to grant resources (more time, wider scope) with `ask_parent`. agents
+retains it on the child's running execution as a request document `{"session",
+"execution_id", "request_id": null, "request_token", "method":
+"agents/decision", "params": {"kind", "question"}}`. It is distinct from a
+native safety approval: no Runtime sees it, and its reply is `{"answer":
+"<text>"}` (anything else is `invalid-input`), recorded with `reply_status:
+answered`. The child's call waits at most `timeout_seconds`:
+
+- answered: `answer` is the parent's text, `timed_out: false`;
+- no answer in time: `answer: null`, `timed_out: true`. This is an explicit
+  "no answer", never an approval; the request stays pending, and asking the
+  same `kind` and `question` again in the same execution waits for the same
+  request (or returns its answer);
+- the execution ends first: `stale-execution`; the request is withdrawn.
+
+The answer is information for the child. agents itself grants no time or
+scope; the parent does that with its own means (for example `send`, or a new
+`create` with a narrower `workspace` inside its own).
 
 What the parent sees today:
 
@@ -476,14 +532,15 @@ What the parent sees today:
   grandchild's Runtime, and reads them through `status`.
 - `event` is `completed`, `interrupted`, `failed` or `request`; `message` is
   the child's answer, else the error message, else the outcome. For
-  `request` it is a short credential-free text naming the native method and
-  tool, for example `Permission request claude/can_use_tool for Bash waits
+  `request` it is a short credential-free text naming the method and tool
+  (`ask_parent`'s method is `agents/decision`; its question is not included),
+  for example `Permission request claude/can_use_tool for Bash waits
   for your reply. Read it with requests and answer once with reply.`
 
 **Backend.** `AgentControl(root, drivers, event_receiver=..., request_notices=
 False)`. With `request_notices=True` (since 0.1.2), when a driver reports a
-new native request through `ExecutionEvents.request`, the core calls the
-parent's receiver once: a parent Agent's native receiver, else the host's
+new native request through `ExecutionEvents.request`, or a child's
+`ask_parent` adds a new request, the core calls the parent's receiver once: a parent Agent's native receiver, else the host's
 `event_receiver` for a root. The notice is `{"parent", "agent", "session",
 "execution", "body", "outcome": "request", "request"}` (`request` is the
 request's token, else its native ID as JSON); a root's notice adds
@@ -495,12 +552,48 @@ Gaps, by owner:
 
 | Gap | Owner |
 | --- | --- |
-| Independent hosts do not push a child's native permission request; the parent polls | Claude Code and Codex hosts: done in 381 |
-| Codex children's native approvals are handled by `auto_review` and not relayed to the parent | 385 |
+| Independent hosts do not push a child's native permission request or `ask_parent` request; the parent polls | Claude Code and Codex hosts: done in 381 (`ask_parent`: since the 385 integration) |
 | Independent hosts do not hold notices while the parent is stopped: the Claude host's queue lives in its process, and the Codex host marks them `unavailable` (readable through `status`) | 381 (Claude, Codex), 382 (Pi), 383 (DSH) |
 | A Codex child is not notified of its own children's ends or requests (it reads them through `status`); a Claude child is continued with them | unassigned, needs Main |
-| A child cannot ask its parent for a decision or more resources except through native approval requests | unassigned, needs Main (closest: 381) |
 | The notice title names GraphTraj | 394 |
+
+### 4.1 Native approval per Runtime
+
+agents uses each Runtime's own approval where it has one and never loosens
+its sandbox, network or write limits. A request the Runtime asks about is held
+for the direct parent as above.
+
+| Runtime | How native approval is enabled | Configuration agents writes |
+| --- | --- | --- |
+| Claude Code | The supplied `permission_mode`; Claude's permission prompts arrive through `can_use_tool` | Passes the mode as `--permission-mode` and `permissions.defaultMode`; nothing else |
+| Codex | `approvals_reviewer`, default `auto_review` (Codex's own reviewer decides) | Sets `approvals_reviewer = "auto_review"` when the settings name no reviewer, and `features.exec_permission_approvals = true`. `approval_policy`, sandbox, permissions and network stay as supplied |
+| Pi | Pi has no approval of its own; extension dialogs (`extension_ui_request`) are the requests | None |
+| DSH | The `permission` profile patch, approval `ask`, for the chosen sandbox mode | The `sandbox-policy` and `permission` patches; `dsh/approval-request` is the request |
+
+**Codex auto review relay.** Under `auto_review`, Codex decides approvals
+itself and reports the outcome only as an `item/autoApprovalReview/completed`
+notification (Codex 0.164 app-server). agents turns an outcome of `denied`
+(a refusal) or `timedOut`/`aborted` (the reviewer failed) into a request for
+the direct parent, with `method: "item/autoApprovalReview/completed"`,
+`request_id: "auto-review:<reviewId>"` and the notification as `params`.
+Approvals are not relayed. Codex 0.164 has no "escalate" outcome; an action
+Codex hands to the client as a server request is held like any native
+request.
+
+- The child's execution stays active until the parent answers, even if the
+  reviewed turn has ended. `reply` takes exactly `{"decision": "accept"}` or
+  `{"decision": "decline"}`.
+- `accept` after `denied` records Codex's one-retry approval
+  (`thread/approveGuardianDeniedAction`). After a reviewer failure no native
+  record is written. Either way the child is told it may retry once, and the
+  retry **goes through auto review again**: the parent cannot approve the
+  action itself, widen it, or skip the reviewer. If Codex refuses the
+  approval, `reply` fails and the request stays pending.
+- `decline` keeps the refusal; the child is told not to retry.
+- The answer reaches the child as input to its running turn; an accepted
+  answer after the turn ended starts one follow-up turn. A declined answer
+  after the turn ended starts nothing.
+- Interrupting the child drops its unanswered relays.
 
 ## 5. `extra_fields` in the normalized Session
 
@@ -543,7 +636,8 @@ time).
 
 ## 6. Review plugin decision format
 
-**Planned (385, 386, 387).** When a Runtime's native approval is missing or
+**Format and rules: 385 (`agent_swarm.approval`); the review plugin: 386,
+387.** When a Runtime's native approval is missing or
 unusable, the agents review plugin judges each tool call before it runs. Every
 Runtime adapter accepts the same decision document from the reviewer and
 nothing else:
@@ -551,29 +645,50 @@ nothing else:
 ```json
 {"decision": "allow", "reason": "Reads a file inside the assigned workspace."}
 {"decision": "escalate", "reason": "Pushes to a remote; needs the parent."}
-{"decision": "deny", "reason": "Sends a token to an unknown host.", "category": "high-risk"}
+{"decision": "deny", "reason": "Deletes files outside the task."}
 ```
 
 | Field | Required | Values |
 | --- | --- | --- |
 | `decision` | yes | `allow`, `deny` or `escalate` |
 | `reason` | yes | non-empty string, shown to the parent and kept in the record |
-| `category` | no | `high-risk`: an operation no layer may release |
 
 Rules:
 
-- The document must be exactly one JSON object with these fields and types.
-  Any other field, value or shape, an empty answer, a timeout, a connection
-  failure or any reviewer error is a **failed review**: the call is refused
+- The document must be exactly one JSON object with these two fields and
+  types. Any other field (`category` included), value or shape, an empty
+  answer, a timeout, a connection failure or any reviewer error is a **failed review**: the call is refused
   and goes to the direct parent, with the failure as the reason.
 - `allow` lets the call run. It is the only decision that does.
 - `deny` and `escalate` refuse the call now and go to the direct parent, which
   may release it within its own authority. The root may refer it to a person.
-- `category: high-risk` always refuses, whatever `decision` says, and the
-  parent cannot release it either. The high-risk classes (at least leaking
-  credentials across a trust boundary) are defined by 385.
 - The format is the same for every Runtime and every reviewer model. Adapters
   translate it to their native hook; native fields never appear in it.
+
+agents applies no high-risk rule of its own to requests, reviews or replies:
+safety rests on workspace isolation (section 2), the Runtime's native
+sandbox and approval or auto review (4.1), the review plugin where native
+approval is missing (386, 387), and parent fallback below.
+
+**Parent fallback (layer 4).** A refused or failed review, and every native
+request the Runtime itself hands over, reaches the direct parent as a pending
+request (section 4). Before `reply` reaches any driver, agents checks it
+against the request as the Runtime reported it (a parent's edited copy is not
+used):
+
+- a declining reply (Claude `behavior: deny`, Codex `decline`/`cancel` or
+  empty `permissions`, Pi `confirmed: false`/`cancelled`, DSH `reject`)
+  always passes;
+- an approving reply may grant at most what was asked, else
+  `authority-denied`: Claude may not replace the tool input; Codex may answer
+  only `accept` (not `acceptForSession` or a policy amendment) and only the
+  requested permissions for the turn; a Pi `select` must pick an offered
+  option.
+
+The parent's own sandbox is not compared with the request; a parent should
+decline what it could not do itself. The root may refer a request to a
+person: the person answers in the root's own host (its native approval of
+the root's `reply` call, or the conversation), and the root then replies.
 
 The review request sent to the reviewer, the review connection settings and
 the startup connectivity check belong to 386.

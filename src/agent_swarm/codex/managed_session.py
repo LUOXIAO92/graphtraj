@@ -26,6 +26,40 @@ def model_change_message(summary: str, requested: object, observed: object, reas
             + (reason or 'not provided in the native stream') + '.')
 
 
+# Auto-review outcomes Codex reports only as notifications (Codex 0.164
+# app-server: item/autoApprovalReview/completed, GuardianApprovalReviewStatus).
+REVIEW_COMPLETED = 'item/autoApprovalReview/completed'
+RELAYED_REVIEWS = {'denied', 'timedOut', 'aborted'}
+
+
+def _snake(value: object) -> object:
+    """Rename camelCase mapping keys to snake_case, recursively."""
+    if isinstance(value, dict):
+        return {re.sub(r'(?<!^)(?=[A-Z])', '_', key).lower(): _snake(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_snake(item) for item in value]
+    return value
+
+
+def _assessment_event(params: dict) -> dict:
+    """Serialize a review notification as Codex's native assessment event.
+
+    ponytail: the app-server publishes only the camelCase notification while
+    ``thread/approveGuardianDeniedAction`` takes the core GuardianAssessmentEvent.
+    The snake_case names follow the 0.164 binary's field strings; a real host
+    has not yet accepted this shape, and a refusal reaches the parent's reply.
+    """
+    review = params['review']
+    return {
+        'id': params['reviewId'], 'target_item_id': params.get('targetItemId'),
+        'turn_id': params['turnId'], 'started_at_ms': params.get('startedAtMs'),
+        'completed_at_ms': params.get('completedAtMs'), 'status': 'denied',
+        'risk_level': review.get('riskLevel'), 'user_authorization': review.get('userAuthorization'),
+        'rationale': review.get('rationale'), 'decision_source': params.get('decisionSource'),
+        'action': _snake(params.get('action')),
+    }
+
+
 class CodexManagedExecution:
     """Hold a connection until its execution and final Trace drain finish."""
 
@@ -82,6 +116,11 @@ class CodexManagedExecution:
         self.outcome: dict | None = None
         self.requests: dict[str, tuple[CodexServerRequest, asyncio.Future[dict]]] = {}
         self.recovery_requests: dict[str, tuple[dict, asyncio.Future[dict]]] = {}
+        # Auto-review outcomes relayed to the direct parent, and the answers
+        # that still need a native turn after the reviewed turn has ended.
+        self.relays: dict[str, tuple[CodexServerRequest, asyncio.Future[dict]]] = {}
+        self.followups: list[str] = []
+        self.relay_notices: set[asyncio.Task] = set()
 
     @property
     def session(self) -> str | None:
@@ -195,6 +234,7 @@ class CodexManagedExecution:
                 self.started(session.thread_id, adapter.service_pid)
                 try:
                     result = await self.result
+                    result = await self._settle_relays(session, result)
                     self.outcome = result
                 except RuntimeAdapterError as error:
                     with (self.directory / 'stderr.log').open('a', encoding='utf-8') as stream:
@@ -260,6 +300,8 @@ class CodexManagedExecution:
                         and notification['params'].get('turnId') == self.execution.turn_id):
                     # Stop work on a model nobody requested; the result names both.
                     self.terminate()
+                if notification['method'] == 'item/autoApprovalReview/completed':
+                    self._relay_review(notification.get('params', {}))
                 if notification['method'] == 'error':
                     with (self.directory / 'stderr.log').open('a', encoding='utf-8') as stream:
                         stream.write(json.dumps(notification, ensure_ascii=False) + '\n')
@@ -310,8 +352,12 @@ class CodexManagedExecution:
                 {'waiting_for': 'runtime-request'} if self._pending_requests() else {}
             )}
         if request['operation'] == 'requests':
-            return {'requests': self._pending_requests() if not self.result.done() else []}
+            pending = self._pending_requests()
+            return {'requests': pending if not self.result.done() else [
+                details for details in pending if details['request_token'] in self.relays]}
         if request['operation'] == 'reply':
+            if request['request_token'] in self.relays:
+                return await self._answer_relay(request['request_token'], request['response'])
             pending = self.recovery_requests.get(request['request_token'])
             if pending is not None:
                 details, response = pending
@@ -403,8 +449,12 @@ class CodexManagedExecution:
             "request_token": token, "session": session,
             "execution_id": execution_id,
         }
+        if request.method == REVIEW_COMPLETED:
+            notice += (" Codex automatic approval review did not allow this action;"
+                       " reply accept to let the child retry it once under auto review"
+                       " again, or decline to keep it refused.")
         notice += "\n" + json.dumps({**identity, "params": request.params}, ensure_ascii=False)
-        while token in self.requests and not self.requests[token][1].done():
+        while self._waiting(token):
             receipt = await asyncio.to_thread(
                 self.parent_notice, notice, identity,
             ) if self.parent_notice is not None else {"delivery": "no-direct-parent"}
@@ -413,6 +463,95 @@ class CodexManagedExecution:
             # Retry only while the original native request is still pending.
             await asyncio.sleep(1)
 
+
+    def _waiting(self, token: str) -> bool:
+        """Whether a held native request or relayed review still awaits its reply."""
+        entry = self.requests.get(token) or self.relays.get(token)
+        return entry is not None and not entry[1].done()
+
+    def _relay_review(self, params: dict) -> None:
+        """Hold a refused or failed auto review for the direct parent's answer.
+
+        Codex resolves approvals itself under ``approvals_reviewer = auto_review``
+        and only reports the outcome as a notification. A denial (``denied``)
+        or a reviewer failure (``timedOut``, ``aborted``) becomes a
+        parent-visible request; approvals and reviews in progress do not.
+        """
+        review = params.get('review') if isinstance(params.get('review'), dict) else {}
+        if review.get('status') not in RELAYED_REVIEWS or not isinstance(params.get('reviewId'), str):
+            return
+        token = uuid.uuid4().hex
+        relay = CodexServerRequest('auto-review:' + params['reviewId'], REVIEW_COMPLETED, params)
+        self.relays[token] = (relay, asyncio.get_running_loop().create_future())
+        notice = asyncio.create_task(self._notify_direct_parent(relay, token))
+        self.relay_notices.add(notice)
+        notice.add_done_callback(self.relay_notices.discard)
+
+    async def _answer_relay(self, token: str, response: dict) -> dict:
+        """Apply the parent's one answer to a relayed auto-review outcome.
+
+        ``accept`` after a denial records Codex's own one-retry approval
+        (``thread/approveGuardianDeniedAction``); after a reviewer failure no
+        native record exists, so the child is only told it may retry. Either
+        way the retry goes through auto review again, so the parent cannot
+        approve the action itself. ``decline`` keeps the refusal. The answer
+        reaches the child as input to its active turn, or an accepted answer
+        starts one follow-up turn once the reviewed turn has ended.
+        """
+        relay, answered = self.relays[token]
+        if answered.done():
+            raise RuntimeAdapterError('operation-failed', 'The relayed review is no longer pending.')
+        if response not in ({'decision': 'accept'}, {'decision': 'decline'}):
+            raise RuntimeAdapterError('invalid-input', 'Return an explicit accept or decline decision.')
+        assert self.adapter is not None and self.execution is not None
+        params = relay.params
+        denied = params['review']['status'] == 'denied'
+        accepted = response['decision'] == 'accept'
+        if accepted and denied:
+            await self.adapter.approve_denied_action(params['threadId'], _assessment_event(params))
+        outcome = 'denied' if denied else 'could not complete'
+        message = (
+            f"Your direct parent answered the automatic approval review that {outcome} "
+            f"(review {params['reviewId']}): "
+            + ("you may retry that action once; the retry still goes through automatic approval review."
+               if accepted else "do not retry that action; continue with other work or report it as blocked.")
+        )
+        answered.set_result(response)
+        if not self.result.done():
+            try:
+                await self.adapter.send_input(self.execution, message)
+                message = None
+            except RuntimeAdapterError:
+                pass  # The turn ended meanwhile; an accepted answer gets a follow-up turn.
+        if message is not None and accepted:
+            self.followups.append(message)
+        return {'request_id': relay.request_id, 'reply_status': 'submitted'}
+
+    async def _settle_relays(self, session: object, result: dict) -> dict:
+        """Keep the execution open until every relayed review is answered.
+
+        Returns the last native turn's result: an accepted answer that arrives
+        after the reviewed turn has ended starts one follow-up turn.
+        """
+        assert self.adapter is not None
+        while True:
+            # A review reported just before turn/completed may still be queued
+            # for the observer; let it register before deciding nothing waits.
+            for _ in range(100):
+                if not self.adapter.notifications_pending:
+                    break
+                await asyncio.sleep(0.01)
+            waiting = [answered for _, answered in self.relays.values() if not answered.done()]
+            if waiting:
+                await asyncio.wait(waiting)
+                continue
+            if not self.followups or self.termination_requested:
+                return result
+            prompt = '\n'.join(self.followups)
+            self.followups.clear()
+            self.execution = await self.adapter.start_execution(session, prompt)
+            self.result = asyncio.create_task(self.adapter.wait(self.execution))
+            result = await self.result
 
     def permission_evidence(self, observed: dict) -> dict:
         """Distinguish the requested reviewer and its source from Codex's startup report."""
@@ -438,7 +577,8 @@ class CodexManagedExecution:
                 'request_token': token, 'request_id': native.request_id,
                 'method': native.method, 'params': native.params,
             }
-            for token, (native, response) in self.requests.items() if not response.done()
+            for token, (native, response) in [*self.requests.items(), *self.relays.items()]
+            if not response.done()
         ] + [details for details, response in self.recovery_requests.values() if not response.done()]
 
     def terminate(self) -> bool:
@@ -446,6 +586,11 @@ class CodexManagedExecution:
         self.termination_requested = True
         if self.loop is None or self.loop.is_closed():
             return False
+        def drop_relays() -> None:
+            """Stop holding relayed reviews; termination ends the execution."""
+            for _, answered in self.relays.values():
+                answered.cancel()
+        self.loop.call_soon_threadsafe(drop_relays)
         if self.execution is None:
             def cancel_startup() -> None:
                 """Cancel only pending Session loading, leaving shutdown owned."""

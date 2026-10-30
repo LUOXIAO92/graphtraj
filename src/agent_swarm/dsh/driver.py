@@ -10,7 +10,7 @@ import threading
 from typing import Any, Callable, Mapping
 
 from agent_swarm import AgentsError, Caller, Run
-from agent_swarm.control import require_available
+from agent_swarm.control import require_available, within_workspace
 from .execution import DshExecution
 from .settings import prepare
 
@@ -71,15 +71,18 @@ class DshDriver:
         self.turns: dict[str, DshExecution] = {}
         self.lock = threading.Lock()
 
-    def prepare(self, runtime: str, caller: Caller, *, selection: Mapping[str, Any] | None = None) -> dict:
+    def prepare(self, runtime: str, caller: Caller, *, selection: Mapping[str, Any] | None = None,
+                workspace: Path | None = None) -> dict:
         """Validate explicit DSH configuration, independently of caller roles.
 
         ``selection`` is the create's resolved connection, model and effort.
+        ``workspace`` replaces the host cwd, and with it the native sandbox's
+        workspace root; the permission mode stays as configured.
         """
         if runtime != 'dsh':
             raise AgentsError('unsupported-runtime', 'This driver runs DSH only.')
         config = self.configuration if selection is None else selected(self.configuration, selection)
-        return prepare(config, self.cwd)
+        return prepare(config, self.cwd if workspace is None else within_workspace(workspace, self.cwd))
 
     def require_available(self, connection: Mapping[str, Any]) -> None:
         """Refuse a connection whose DSH is not installed, or whose named key is unset.

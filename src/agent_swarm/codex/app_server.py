@@ -601,6 +601,16 @@ class CodexAppServer:
         if result.get('turnId') != execution.turn_id:
             raise self._protocol_failure('turn/steer did not acknowledge the expected native turn ID')
 
+    async def approve_denied_action(self, thread_id: str, event: dict[str, Any]) -> None:
+        """Record one approval for a single retry of an auto-review denial.
+
+        Codex keeps the retry under auto review; this only adds the approval
+        context the model sees. ``event`` is the serialized native assessment.
+        """
+        await self._call('thread/approveGuardianDeniedAction', {
+            'threadId': _native_id(thread_id), 'event': event,
+        })
+
     async def turn_states(self, thread_id: str) -> list[tuple[str, str]]:
         """Recent turn ids and statuses only, without conversation content."""
         response = await self._call('thread/turns/list', {
@@ -1010,6 +1020,11 @@ class CodexAppServer:
         self._require_session(session)
         usage = self._token_usage.get(session.thread_id)
         return json.loads(json.dumps(usage)) if usage is not None else None
+
+    @property
+    def notifications_pending(self) -> bool:
+        """Whether received notifications still wait for their consumer."""
+        return not self._notifications.empty()
 
     async def next_notification(self, *, timeout: float | None = None) -> dict[str, Any]:
         """Receive a raw native notification; one observer drains this connection.

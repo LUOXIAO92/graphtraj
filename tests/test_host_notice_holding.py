@@ -7,16 +7,16 @@ from __future__ import annotations
 
 import asyncio
 import json
-import os
 from pathlib import Path
 import subprocess
 import threading
 import time
+from typing import Callable
 from uuid import uuid4
 
 import pytest
 
-from agent_swarm import AgentControl, Caller, bind
+from agent_swarm import AgentControl, Caller, ExecutionEvents, Run, bind
 from agent_swarm.calls import Call, current_call
 from agent_swarm.claude.host import IndependentCalls
 from agent_swarm.codex.app_server import CodexAdapterError, CodexAppServer
@@ -32,12 +32,14 @@ MAIN = Caller('test-host', None, 'main-session', 'claude')
 class Turn:
     """One running execution with a binding like the Claude and DSH ones."""
 
-    def __init__(self, run) -> None:
-        self.run = run
+    def __init__(self, run: Run) -> None:
+        """Start accepting input for ``run``."""
+        self.run       = run
         self.accepting = True
         self.inbox: list[dict] = []
 
     def receive(self, event: dict) -> bool:
+        """Take the notice into the turn, or continue the retained Session."""
         if self.accepting:
             self.inbox.append(event)
             return True
@@ -48,67 +50,88 @@ class Driver:
     """Keeps every execution running until the test ends it."""
 
     def __init__(self) -> None:
+        """Start with no execution."""
         self.turns: list[Turn] = []
+        self.pending: dict[str, list[dict]] = {}
 
-    def prepare(self, runtime, caller, **options):
+    def prepare(self, runtime: str, caller: Caller, **options: object) -> dict:
+        """Nothing to retain."""
         return {}
 
-    def start(self, run):
+    def start(self, run: Run) -> None:
+        """Bind a receiver the way a Runtime binding does."""
         run.events.session('native-' + run.agent[-6:])
         turn = Turn(run)
         self.turns.append(turn)
         run.events.receive_children(turn.receive)
 
-    def deliver(self, run, message):
-        pass
+    def deliver(self, run: Run, message: str) -> None:
+        """Accept input; these tests do not read it."""
 
-    def interrupt(self, run):
+    def interrupt(self, run: Run) -> bool:
+        """End at once, as an interrupted turn eventually does."""
         self.of(run.agent).run.events.finished('interrupted', error={'code': 'stopped', 'message': 'stopped by host'})
         return True
 
-    def requests(self, run):
-        return []
+    def requests(self, run: Run) -> list[dict]:
+        """Return the native requests the test reported."""
+        return self.pending.get(run.execution, [])
 
-    def reply(self, run, request, response):
+    def reply(self, run: Run, request: dict, response: dict) -> dict:
+        """Acknowledge one answer."""
         return {'request_id': request.get('request_id'), 'reply_status': 'submitted'}
+
+    def report(self, agent: str, details: dict) -> None:
+        """Report one native request as pending."""
+        run = self.of(agent).run
+        self.pending.setdefault(run.execution, []).append(details)
+        run.events.request(details)
 
     def of(self, agent: str) -> Turn:
         """Return the Agent's latest execution."""
-        return [turn for turn in self.turns if turn.run.agent == agent][-1]
+        return self.all_of(agent)[-1]
 
     def all_of(self, agent: str) -> list[Turn]:
+        """Return every execution of the Agent, oldest first."""
         return [turn for turn in self.turns if turn.run.agent == agent]
 
 
-def control_over(root: Path, receiver=None, **options) -> tuple[AgentControl, Driver]:
+def control_over(root: Path, receiver: Callable | None = None) -> tuple[AgentControl, Driver]:
+    """Build a holding control over ``root``; a new one stands for a new process."""
     driver = Driver()
     return AgentControl(root, {'fake': driver}, event_receiver=receiver, request_notices=True,
-                        hold_notices=True, **options), driver
+                        hold_notices=True), driver
 
 
-def create(call, instruction: str = 'work') -> str:
+def create(call: Callable, instruction: str = 'work') -> str:
+    """Create one Agent and return its reference."""
     created = call({'action': 'create', 'runtime': 'fake', 'instruction': instruction})
     assert not created.failed, created.document
     return created.document['agent']
 
 
-def last(call, agent: str) -> dict:
+def last(call: Callable, agent: str) -> dict:
+    """Return the Agent's public ``last_result``."""
     return call({'action': 'status', 'agent': agent}).document['result']['last_result']
 
 
 def record(root: Path, agent: str) -> dict:
+    """Read the Agent's durable record, as a new process would."""
     return json.loads((root / 'control' / 'agents' / f'{agent}.json').read_text())
 
 
 def request_details(token: str = 'tok-1') -> dict:
+    """Return one native request whose input must never reach a notice."""
     return {'request_token': token, 'request_id': 1, 'method': 'claude/can_use_tool',
             'params': {'tool_name': 'Bash', 'input': {'command': 'secret'}}}
 
 
 @pytest.mark.parametrize('result', [False, 'held', 'raises'])
-def test_a_root_end_the_host_cannot_take_is_held_and_survives_a_new_process(tmp_path: Path, result) -> None:
+def test_a_root_end_the_host_cannot_take_is_held_and_survives_a_new_process(
+        tmp_path: Path, result: object) -> None:
     """Refused, 'held' or raising: held, readable, and listed for the same caller once."""
-    def receiver(notice):
+    def receiver(notice: dict) -> object:
+        """Answer as this case's host does."""
         if result == 'raises':
             raise OSError('host gone')
         return result
@@ -171,7 +194,9 @@ def test_a_receiver_can_still_deliver_while_holding_is_on(tmp_path: Path) -> Non
 def test_queueing_left_by_a_dead_process_is_listed_but_not_one_in_flight(tmp_path: Path) -> None:
     """A delivery in this process is not replayed; the same state from a dead one is."""
     entered, release = threading.Event(), threading.Event()
-    def receiver(notice):
+
+    def receiver(notice: dict) -> str:
+        """Stay in flight until the test lets go."""
         entered.set()
         assert release.wait(5)
         return 'held'
@@ -207,6 +232,7 @@ def test_legacy_records_are_never_replayed(tmp_path: Path, legacy: str) -> None:
 
 
 def test_a_retired_agents_notices_are_excluded(tmp_path: Path) -> None:
+    """A retired Agent neither lists nor keeps a notice open."""
     control, driver = control_over(tmp_path, lambda notice: False)
     call = bind(control, MAIN)
     agent = create(call)
@@ -223,15 +249,15 @@ def test_a_held_request_is_listed_only_while_it_waits(tmp_path: Path) -> None:
     call = bind(control, MAIN)
     agent = create(call)
     events = driver.of(agent).run.events
-    events.request(request_details('tok-1'))
-    events.request(request_details('tok-2'))
+    driver.report(agent, request_details('tok-1'))
+    driver.report(agent, request_details('tok-2'))
     held = control.held_notices(MAIN)
     assert [notice['request'] for notice in held] == ['tok-1', 'tok-2']
     assert held[0]['outcome'] == 'request' and 'secret' not in str(held[0])
     assert 'claude/can_use_tool for Bash' in held[0]['body'] and held[0]['error'] is None
 
-    with control._locked(agent) as current:
-        current['executions'][-1]['replies']['tok-1'] = {'at': 0, 'reply_status': 'submitted'}
+    answer = {'action': 'reply', 'agent': agent, 'request': request_details('tok-1'), 'response': {'behavior': 'deny'}}
+    assert not call(answer).failed
     assert [notice['request'] for notice in control.held_notices(MAIN)] == ['tok-2']
     assert control.notice_open(held[0]) is False and control.notice_open(held[1]) is True
 
@@ -241,6 +267,7 @@ def test_a_held_request_is_listed_only_while_it_waits(tmp_path: Path) -> None:
 
 
 def test_settling_is_final_unless_reopened(tmp_path: Path) -> None:
+    """Delivered or unconfirmed stays so; only a discarded result takes it back."""
     control, driver = control_over(tmp_path, lambda notice: False)
     call = bind(control, MAIN)
     agent = create(call)
@@ -259,7 +286,8 @@ def test_settling_is_final_unless_reopened(tmp_path: Path) -> None:
 @pytest.mark.parametrize('form', ['direct', 'execute'])
 def test_a_body_shown_by_status_or_wait_is_not_pushed_again(tmp_path: Path, form: str) -> None:
     """Either request form settles it; other features and failed lookups settle nothing."""
-    def request(feature: str, **arguments) -> dict:
+    def request(feature: str, **arguments: object) -> dict:
+        """Spell one call in this case's request form."""
         return ({'action': feature, **arguments} if form == 'direct'
                 else {'action': 'execute', 'feature': feature, 'arguments': arguments})
 
@@ -287,12 +315,11 @@ def test_the_hierarchy_form_settles_only_what_is_addressed_to_the_reader(tmp_pat
     main = bind(control, MAIN)
     first, second = create(main), create(main)
     grandchild = create(driver.of(first).run.call)
+    # The parent stopped taking input, so its child's end stays held for it.
+    driver.of(first).accepting = False
     for agent in (second, grandchild):
         driver.of(agent).run.events.finished('completed', last_message='answer of ' + agent)
-    # The parent stopped taking input, so its child's end stays held for it.
-    assert last(main, grandchild)['notification'] == 'delivered'
-    with control._locked(grandchild) as current:
-        current['executions'][-1]['notification'] = 'held'
+    assert last(main, grandchild)['notification'] == 'held'
 
     hierarchy = main({'action': 'status'}).document
     [settled] = control.settle_shown({'action': 'status'}, hierarchy)
@@ -342,14 +369,10 @@ def test_a_parent_with_no_receiver_gets_its_childrens_notices_at_its_next_run(tm
     host.clear()
 
     # A new process over the same root: no receiver is bound for the parent.
-    restarted, later = control_over(tmp_path, lambda notice: host.append(notice) or True)
+    restarted, _ = control_over(tmp_path, lambda notice: host.append(notice) or True)
     restarted.drivers['fake'] = driver
-    for agent in (done, asking):
-        with restarted._locked(agent) as current:
-            current['executions'][-1]['process']['worker_pid'] = os.getpid()
-    ending = type(driver.of(done).run.events)(restarted, done, driver.of(done).run.execution)
-    ending.finished('completed', last_message='child answer')
-    type(driver.of(asking).run.events)(restarted, asking, driver.of(asking).run.execution).request(request_details())
+    ExecutionEvents(restarted, done, driver.of(done).run.execution).finished('completed', last_message='child answer')
+    ExecutionEvents(restarted, asking, driver.of(asking).run.execution).request(request_details())
     assert host == []
     assert record(tmp_path, done)['executions'][-1]['notification'] == 'held'
     assert last(bind(restarted, MAIN), done)['last_message'] == 'child answer'
@@ -400,13 +423,14 @@ def test_no_continuation_when_the_parent_has_reasons_not_to(tmp_path: Path, reas
     turn = driver.of(parent)
     grandchild = create(turn.run.call)
     turn.accepting = False
-    driver.of(grandchild).run.events.finished(
-        'interrupted' if reason == 'bodyless' else 'completed',
-        last_message=None if reason == 'bodyless' else 'answer')
+    ending = driver.of(grandchild).run.events
     if reason == 'retired':
-        with control._locked(parent) as current:
-            current['retired_at'] = 1.0
-    turn.run.events.finished('failed' if reason == 'failed' else 'completed', last_message='own')
+        turn.run.events.finished('completed', last_message='own')
+        assert not main({'action': 'retire', 'agent': parent}).failed
+    ending.finished('interrupted' if reason == 'bodyless' else 'completed',
+                    last_message=None if reason == 'bodyless' else 'answer')
+    if reason != 'retired':
+        turn.run.events.finished('failed' if reason == 'failed' else 'completed', last_message='own')
     assert len(driver.all_of(parent)) == 1
     assert record(tmp_path, grandchild)['executions'][-1]['notification'] == 'held'
 
@@ -454,13 +478,14 @@ def stop_host(host) -> None:
             time.sleep(0.01)
 
 
-def claude_main(tmp_path: Path, native_settings: dict, session: str | None = None):
-    """One host process serving one verified Main Session."""
+def claude_main(tmp_path: Path, native_settings: dict, session: str | None = None) -> tuple:
+    """One host process serving one verified Main Session: host, its tool and the Session."""
     host = IndependentCalls(tmp_path / 'agents', tmp_path, {}, {'codex': native_settings})
     session = session or str(uuid4())
     run = host.make_call(session, tmp_path)
 
-    def invoke(feature: str | None = None, **arguments) -> dict:
+    def invoke(feature: str | None = None, **arguments: object) -> dict:
+        """Call the tool as the Main does; no feature means ``discover``."""
         request = ({'action': 'discover'} if feature is None
                    else {'action': 'execute', 'feature': feature, 'arguments': arguments})
         result = run('agents', request)
@@ -499,6 +524,7 @@ def test_claude_a_child_stopped_with_the_host_reaches_the_next_run_once(tmp_path
 
 
 def test_claude_another_session_does_not_receive_it(tmp_path: Path, native_settings: dict) -> None:
+    """Held for the Session that created the child, not for the next one that binds."""
     _, session, _ = interrupted_child(tmp_path, native_settings)
     host, invoke, other = claude_main(tmp_path, native_settings)
     assert 'main_notices' not in invoke()
@@ -526,6 +552,7 @@ def test_claude_the_mods_push_settles_on_acknowledge_only(tmp_path: Path, native
 
 
 def test_claude_requeue_after_a_failed_submit_keeps_it_for_the_next_claim(tmp_path: Path, native_settings: dict) -> None:
+    """A failed submission gives it back, still held."""
     agent, session, identity = interrupted_child(tmp_path, native_settings)
     host, _, _ = claude_main(tmp_path, native_settings, session)
     host.context({'operation': 'notices', 'session': session})
@@ -564,6 +591,7 @@ def test_claude_a_discarded_result_gives_its_notices_back(tmp_path: Path, native
 
 
 def test_claude_a_discarded_status_gives_the_shown_end_back(tmp_path: Path, native_settings: dict) -> None:
+    """A status nobody read showed nothing."""
     agent, session, identity = interrupted_child(tmp_path, native_settings)
     host, invoke, _ = claude_main(tmp_path, native_settings, session)
     cancelled = Call()
@@ -682,7 +710,8 @@ def test_codex_a_flush_that_cannot_write_leaves_it_held(
     original = CodexAppServer.send_host_event
     written = False
 
-    async def refused(self, thread_id, event):
+    async def refused(self: CodexAppServer, thread_id: str, event: dict) -> None:
+        """Fail as this stage of the case does."""
         error = CodexAdapterError('RUNTIME_CONNECTION_FAILED', 'closed', terminal_confirmed=False)
         error.request_written = written
         raise error
@@ -715,7 +744,8 @@ def test_codex_a_turn_that_closes_mid_flush_finishes_it_first(
     original = CodexAppServer.send_host_event
     entered = threading.Event()
 
-    async def slow(self, thread_id, event):
+    async def slow(self: CodexAppServer, thread_id: str, event: dict) -> dict:
+        """Be under way while the turn closes."""
         entered.set()
         await asyncio.sleep(0.3)
         return await original(self, thread_id, event)
@@ -735,7 +765,8 @@ def test_codex_a_failed_live_send_is_held_and_status_settles_it(
     monkeypatch.setenv('PEER_HOST_EVENTS', str(log))
     original = CodexAppServer.send_host_event
 
-    async def refused(self, thread_id, event):
+    async def refused(self: CodexAppServer, thread_id: str, event: dict) -> None:
+        """Fail before anything is written."""
         raise CodexAdapterError('RUNTIME_CONNECTION_FAILED', 'closed', terminal_confirmed=False)
 
     monkeypatch.setattr(CodexAppServer, 'send_host_event', refused)

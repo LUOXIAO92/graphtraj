@@ -6,6 +6,7 @@ it, so a steered notice shows as that turn's last message. No network, no real m
 """
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -25,7 +26,9 @@ class Tree:
     """A host, its Codex child acting as parent, and that child's own tool."""
 
     def __init__(self, tmp_path: Path, settings: dict, instruction: str = 'hold') -> None:
-        self.running = Running(CodexHost(settings, tmp_path / 'host', 'hold'))
+        """Start the host and its child."""
+        self.root    = tmp_path / 'host'
+        self.running = Running(CodexHost(settings, self.root, 'hold'))
         created = self.running.call('create', runtime='codex', instruction=instruction)
         self.child, session = created['agent'], created['session']
         self.call = bind(self.running.host.control, Caller('codex', self.child, session, 'codex'))
@@ -37,14 +40,20 @@ class Tree:
         return created.document['agent']
 
     def status(self, agent: str) -> dict:
+        """Read one Agent's public status as the host's parent."""
         return self.running.call('status', agent=agent)['result']
 
     def standby(self, agent: str) -> dict:
+        """Wait for that status to reach standby."""
         return until(lambda: (lambda result: result if result['state'] == 'standby' else None)(self.status(agent)))
 
+    def record(self, agent: str) -> dict:
+        """Read one Agent's durable record."""
+        return json.loads((self.root / 'control' / 'agents' / f'{agent}.json').read_text())
+
     def executions(self) -> list[dict]:
-        with self.running.host.control._locked(self.child) as record:
-            return list(record['executions'])
+        """Return the child's executions, oldest first."""
+        return self.record(self.child)['executions']
 
 
 @pytest.mark.parametrize('runtime', ['codex', 'claude'])
@@ -108,16 +117,14 @@ def test_a_standby_codex_parents_request_is_held_and_arrives_when_it_resumes(
         tree.standby(tree.child)
         grandchild = tree.create('codex', APPROVAL)
         until(lambda: tree.status(grandchild).get('pending_requests'))
-        with tree.running.host.control._locked(grandchild) as record:
-            [state] = record['executions'][-1]['request_notices'].values()
-        assert state == 'held' and len(tree.executions()) == 1
+        assert list(tree.record(grandchild)['executions'][-1]['request_notices'].values()) == ['held']
+        assert len(tree.executions()) == 1
 
         tree.running.call('resume', agent=tree.child, message='hold')
         tree.standby(tree.child)
         steered = tree.executions()[1]['last_message']
         assert steered.startswith(f'[agents · {grandchild} → {tree.child}]\nPermission request ')
-        with tree.running.host.control._locked(grandchild) as record:
-            assert list(record['executions'][-1]['request_notices'].values()) == ['delivered']
+        assert list(tree.record(grandchild)['executions'][-1]['request_notices'].values()) == ['delivered']
 
         tree.running.call('resume', agent=tree.child, message='ordinary work')
         tree.standby(tree.child)
@@ -131,20 +138,17 @@ def test_a_codex_parents_held_end_is_delivered_across_a_host_restart(tmp_path: P
     tree = Tree(tmp_path, host_settings)
     grandchild = tree.create('codex', 'hold')
     tree.running.stop()
-    control_before = tree.running.host.control
-    with control_before._locked(grandchild) as record:
-        assert record['executions'][-1]['notification'] == 'held'
+    assert tree.record(grandchild)['executions'][-1]['notification'] == 'held'
 
     running = Running(CodexHost(host_settings, tmp_path / 'host', 'hold', resume=True))
     try:
         running.call('resume', agent=tree.child, message='hold')
         def steered() -> str | None:
-            with running.host.control._locked(tree.child) as record:
-                last = record['executions'][-1]
-                return last.get('last_message') if last['state'] == 'ended' else None
+            """Return the child's last answer once its latest turn ended."""
+            last = tree.executions()[-1]
+            return last.get('last_message') if last['state'] == 'ended' else None
         assert until(steered) == f'[agents · {grandchild} → {tree.child}]\ninterrupted'
-        with running.host.control._locked(grandchild) as record:
-            assert record['executions'][-1]['notification'] == 'delivered'
+        assert tree.record(grandchild)['executions'][-1]['notification'] == 'delivered'
         running.call('resume', agent=tree.child, message='ordinary work')
         assert until(lambda: steered() == 'ordinary work')
     finally:
@@ -154,14 +158,22 @@ def test_a_codex_parents_held_end_is_delivered_across_a_host_restart(tmp_path: P
 def test_a_consumers_execution_keeps_its_own_route(tmp_path: Path, native_settings: dict) -> None:
     """GraphTraj's Codex members bring a subclass: no receiver is registered for them."""
     class Member(CodexManagedExecution):
-        def __init__(self, *arguments, independent: bool, **options) -> None:
+        """Stands for GraphTraj's execution subclass."""
+
+        def __init__(self, *arguments: object, independent: bool, **options: object) -> None:
+            """Accept the option the driver passes a consumer."""
             super().__init__(*arguments, **options)
 
     control = AgentControl(tmp_path / 'agents', {'codex': CodexDriver(native_settings, execution=Member)})
     call = bind(control, Caller('host', None, 'parent-session', 'codex'))
     created = call({'action': 'create', 'runtime': 'codex', 'instruction': 'hold'})
     assert not created.failed, created.document
+    member = created.document['agent']
+    as_member = bind(control, Caller('host', member, created.document['session'], 'codex'))
     try:
-        assert control._receivers == {}
+        grandchild = as_member({'action': 'create', 'runtime': 'codex', 'instruction': 'hello'}).document['agent']
+        done = as_member({'action': 'wait', 'agent': grandchild, 'timeout_seconds': 10}).document['result']
+        # No receiver took it: the record stays as it was before this route existed.
+        assert done['last_result']['last_message'] == 'hello' and 'notification' not in done['last_result']
     finally:
         control.interrupt_owned()

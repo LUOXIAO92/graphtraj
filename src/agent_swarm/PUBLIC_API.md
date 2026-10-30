@@ -685,7 +685,8 @@ Delivery rules:
   `wait` or `status` is settled `delivered` and is not pushed again. Records
   written before holding (`queued`, `unavailable`) are never replayed. A crash
   between delivery and settling delivers that notice once more, never loses it.
-  A child Agent that is itself a parent is continued with its child's reply.
+  A child Agent that is itself a parent is continued with its child's reply, on a
+  driver that binds a receiver (see *Gaps* for Pi).
   Under GraphTraj this is the 367, 372 and 375 behaviour.
 - There is no separate "ask for attention" call and no parent watch switch.
   `ask_parent` is the permission-request kind above, not an attention call:
@@ -914,6 +915,8 @@ Gaps, by owner:
 | Gap | Owner |
 | --- | --- |
 | A notice admitted between the `headless` DSH runner's last Session flush and its exit (*DSH host* above; `dsh-headless/lib/index.js:377`, `:383`): the relay answers before that write | Upstream DSH; not changed |
+| A child Runtime that outlives a killed Claude host: Claude Code can kill the host before it stops its children (`mcp.py` `INTERRUPT_SECONDS`), so the execution stays `running` with no notice yet. The notice arrives on a later host process, or read it through `status` | Open, pending the 403 real-host result |
+| A parent Agent on a driver that binds no receiver (a Pi child that is itself a parent): the Pi driver registers no `receive_children`, so its children's notices stay `held` and readable through `status`, and are never pushed to it | Unassigned, needs Main |
 | The notice title names GraphTraj | 394 |
 
 ### 4.1 Native approval per Runtime

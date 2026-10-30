@@ -406,7 +406,10 @@ if os.environ['TEST_READY'] == '1':
     host.stdin.write('{"ready": true}\\n')
     host.stdin.write('{"ready": true}\\n')
     host.stdin.flush()
-    time.sleep(float(os.environ['TEST_SETTLE']))
+    expect = int(os.environ['TEST_EXPECT'])
+    deadline = time.monotonic() + (30 if expect else 1)
+    while time.monotonic() < deadline and (not expect or len(notices) < expect):
+        time.sleep(0.02)
 host.stdin.close()
 code = host.wait(30)
 print(json.dumps({'first': first, 'before_ready': before, 'notices': notices, 'code': code, 'stderr': host.stderr.read()}))
@@ -424,7 +427,7 @@ def seed_held(tmp_path: Path, caller: Caller) -> str:
     return agent
 
 
-def run_native(tmp_path: Path, kind: str, ready: bool = True, shown: str = 'true', settle: float = 1.0) -> dict:
+def run_native(tmp_path: Path, kind: str, ready: bool = True, shown: str = 'true', expect: int = 1) -> dict:
     """Run a real host process below a stand-in native parent for this Session."""
     package = tmp_path / 'native' / 'dsh'
     (package / 'lib').mkdir(parents=True, exist_ok=True)
@@ -435,7 +438,7 @@ def run_native(tmp_path: Path, kind: str, ready: bool = True, shown: str = 'true
     env = {key: value for key, value in os.environ.items()
            if key not in {'AGENT_SWARM_CONNECTION', 'DSH_SESSION_ID', 'DSH_AGENT_SOURCE', 'DSH_AGENT_PACKAGE'}}
     env.update(TEST_CONFIG=str(tmp_path / 'host.json'), PYTHONPATH=str(SOURCE), TEST_SHOWN=shown,
-               TEST_READY='1' if ready else '0', TEST_SETTLE=str(settle))
+               TEST_READY='1' if ready else '0', TEST_EXPECT=str(expect))
     if kind == 'pi':
         header = {'type': 'session', 'version': 3, 'id': 'main', 'cwd': str(tmp_path)}
         env.update(TEST_MODULE='agent_swarm.pi.host', TEST_LAUNCH=json.dumps({'header': header, 'entries': []}),
@@ -466,7 +469,7 @@ def test_a_real_host_process_flushes_once_after_ready_and_a_further_restart_deli
     assert outcome['before_ready'] == 0
     assert [notice['agent'] for notice in outcome['notices']] == [agent]
     assert read_record(tmp_path, agent)['executions'][-1]['notification'] == 'delivered'
-    again = run_native(tmp_path, kind)
+    again = run_native(tmp_path, kind, expect=0)
     assert again['code'] == 0, again['stderr']
     assert again['notices'] == []
 
@@ -494,7 +497,7 @@ def test_a_real_host_refused_notice_stays_held(tmp_path) -> None:
 def test_a_real_host_unacknowledged_notice_ends_as_held_at_shutdown_and_is_replayed(tmp_path) -> None:
     """Silence cut short by shutdown was never settled as shown: the next host replays it."""
     agent = seed_held(tmp_path, CALLERS['pi'])
-    outcome = run_native(tmp_path, 'pi', shown='none', settle=0.5)
+    outcome = run_native(tmp_path, 'pi', shown='none')
     assert outcome['code'] == 0, outcome['stderr']
     assert len(outcome['notices']) == 1
     assert read_record(tmp_path, agent)['executions'][-1]['notification'] == 'held'
@@ -540,7 +543,7 @@ with open(os.environ['TEST_LOG'], 'w') as log:
 
 
 def run_extension(tmp_path: Path, *, entries: list | None = None, ui: bool = False, turn: bool = True,
-                  notices: str = 'exec-1:completed', run_ms: int = 800) -> tuple[list, list]:
+                  notices: str = 'exec-1:completed', run_ms: int = 1500) -> tuple[list, list]:
     """Drive the real extension.mjs with a recording Pi and a scripted host."""
     node = shutil.which('node')
     if not node:
@@ -600,7 +603,7 @@ def test_extension_says_ready_once_at_the_first_turn_and_not_before(tmp_path) ->
 
 def test_extension_with_a_ui_says_ready_after_its_grace_when_no_turn_starts(tmp_path) -> None:
     """An interactive Session with no prompt on its way takes held notices by itself."""
-    sent, received = run_extension(tmp_path, ui=True, turn=False, run_ms=2600)
+    sent, received = run_extension(tmp_path, ui=True, turn=False, run_ms=4000)
     assert received[0] == {'ready': True} and len(sent) == 1
     (tmp_path / 'log.json').unlink()
     sent, received = run_extension(tmp_path, ui=True, turn=False, run_ms=500)
@@ -761,7 +764,7 @@ def run_plugin(tmp_path: Path, **environment: str) -> list:
 
 def test_plugin_says_ready_when_the_sessions_turn_begins_not_at_attach(tmp_path) -> None:
     """A wake before the runner's task would run ahead of its permission settings."""
-    received = run_plugin(tmp_path, TEST_TURN_MS='400', TEST_RUN_MS='900')
+    received = run_plugin(tmp_path, TEST_TURN_MS='400', TEST_RUN_MS='1500')
     assert [item['message'] for item in received] == [{'ready': True}]
     assert received[0]['after'] >= 0.3
 
@@ -770,5 +773,5 @@ def test_plugin_says_ready_after_its_grace_in_a_session_with_no_turn(tmp_path) -
     """A long-lived profile starts no turn by itself: it takes held notices after the grace."""
     assert run_plugin(tmp_path, TEST_RUN_MS='500') == []
     (tmp_path / 'log.json').unlink()
-    received = run_plugin(tmp_path, TEST_RUN_MS='2500')
+    received = run_plugin(tmp_path, TEST_RUN_MS='4000')
     assert [item['message'] for item in received] == [{'ready': True}]

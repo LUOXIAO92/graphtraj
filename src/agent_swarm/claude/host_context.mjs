@@ -4,8 +4,13 @@
  * preserving Claude's entire tool/permission chain.
  * It never caches session.start as identity across clear/resume/branch.
  */
+
+// The tools this module associates. claude_host_plugin() replaces this line in
+// the written copy with the tools a package declares beside agents.
+const TOOLS = ["agents"];
+
 function noticeFrames(session, document, frame) {
-  // Member events queued for this Main arrive with its next agents/tasks result.
+  // Member events queued for this Main arrive with its next tool result.
   const frames = [];
   for (const notice of Array.isArray(document.main_notices) ? document.main_notices : []) {
     const body = notice.event;
@@ -83,7 +88,7 @@ function schedulePush($, state) {
 }
 
 // One push at a time per process: the timer and the re-check after the last
-// running agents/tasks call share it, so a resumed Session or an overlapping
+// running tool call share it, so a resumed Session or an overlapping
 // completion never starts a second loop.
 async function pushNotices($, state) {
   if (state.inflight || state.active > 0 || state.stopped) return;
@@ -140,7 +145,7 @@ export function register(on) {
     const session = await $.session.id();
     const tools = await $.tool.list();
     await $.ui.log(`agents · current Session ${session}`);
-    for (const name of ['agents', 'tasks']) {
+    for (const name of TOOLS) {
       await $.ui.log(tools.some((tool) => tool.name === `mcp__agents__${name}`)
         ? `MCP ${name} registered` : `MCP ${name} missing`);
     }
@@ -150,8 +155,9 @@ export function register(on) {
     return {};
   });
 
-  for (const [tool, name] of [['mcp__agents__agents', 'agents'], ['mcp__agents__tasks', 'tasks']]) {
-    // Both entries share one association; tasks has no agents exchange to render.
+  for (const name of TOOLS) {
+    const tool = `mcp__agents__${name}`;
+    // Every tool shares one association; only agents has an exchange to render.
     on('tool.call', {tool}, async ($, event, next) => {
       // Calls may overlap. Each ends only its own association, named by the
       // exact facts tool.check prepared; the host still consumes each once.

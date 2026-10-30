@@ -12,8 +12,7 @@ from urllib.parse import urlsplit
 from .errors import DshError
 
 
-# Oldest native DSH whose service protocol the driver uses. GraphTraj's own
-# DSH members keep their exact 0.2.0-rc.2 pin in graphtraj.runtimes.dsh.
+# Oldest native DSH whose service protocol the driver uses.
 MINIMUM_VERSION = '0.2.0-rc.2'
 
 
@@ -47,6 +46,27 @@ def resumes_by_address(package: str | None) -> bool:
         return False
 
 
+def dsh_version_refusal(package: str | Path) -> str | None:
+    """Return why the DSH with this ``package.json`` cannot run, or ``None`` when it can.
+
+    Older than ``MINIMUM_VERSION`` in semver order, or a version that cannot be
+    read, is refused; no newer DSH is refused for its version.
+
+    Examples
+    --------
+    >>> dsh_version_refusal('/no/such/package.json')
+    'DSH 0.2.0-rc.2 or later is required (installed unknown).'
+    """
+    installed = 'unknown'
+    try:
+        installed = json.loads(Path(package).read_text(encoding='utf-8'))['version']
+        if version_order(installed) >= version_order(MINIMUM_VERSION):
+            return None
+    except (OSError, ValueError, KeyError, TypeError, AttributeError):
+        pass
+    return f'DSH {MINIMUM_VERSION} or later is required (installed {installed}).'
+
+
 def credential_environment(name: str | None) -> dict[str, str]:
     """Read only the explicitly named credential, without retaining its value."""
     if name is None:
@@ -71,14 +91,9 @@ def prepare(configuration: Mapping[str, Any], cwd: Path) -> dict:
     if not executable:
         raise DshError('RUNTIME_UNAVAILABLE', 'Install the native DSH runtime first.')
     package = Path(executable).resolve().parent.parent / 'package.json'
-    installed = 'unknown'
-    try:
-        installed = json.loads(package.read_text(encoding='utf-8'))['version']
-        if version_order(installed) < version_order(MINIMUM_VERSION):
-            raise ValueError('version')
-    except (OSError, ValueError, KeyError, TypeError, AttributeError) as error:
-        raise DshError('RUNTIME_UNSUPPORTED', f'DSH {MINIMUM_VERSION} or later is required '
-                                              f'(installed {installed}).') from error
+    refusal = dsh_version_refusal(package)
+    if refusal is not None:
+        raise DshError('RUNTIME_UNSUPPORTED', refusal)
     if not isinstance(settings.get('model'), str) or not settings['model']:
         raise DshError('ROLE_CONFIG_INVALID', 'Supply the actual native DSH model.')
     if settings.get('sandbox') not in {'read-only', 'workspace-write'}:

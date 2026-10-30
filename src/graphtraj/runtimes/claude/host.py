@@ -24,7 +24,7 @@ from typing import Callable, TextIO
 from uuid import UUID
 
 from agent_swarm.calls import on_discard, stop_requested
-from agent_swarm.claude import native_host
+from agent_swarm.claude.plugin import claude_host_plugin
 from agent_swarm.claude.host import (REFUSAL_FILE, claim_channel, context_endpoint, ended_by_claude,
                                      log_replaced_channel, require_free_channel, serve_refusal)
 from agent_swarm import AgentsError, AgentsResult, Caller, bind
@@ -40,8 +40,16 @@ from graphtraj.runtimes.claude.mcp import SERVER, descriptors, serve
 from agent_swarm.claude.native_host import NativeCalls as NativeCallsBase
 
 
+# The tool GraphTraj serves beside agents on its MCP server and declares to the plugin.
+ADDED_TOOLS = ('tasks',)
+
+
 class NativeCalls(NativeCallsBase):
-    """Supply GraphTraj's durable Main notice queue to the native association."""
+    """Supply GraphTraj's tasks tool and durable Main notice queue to the native association."""
+
+    def __init__(self, make_call: Callable[[str, Path], Callable], cwd: Path, runner: Path | None = None) -> None:
+        """Associate agents and tasks calls of this project's Main."""
+        super().__init__(make_call, cwd, runner, tools=ADDED_TOOLS)
 
     def notices(self, document: dict) -> dict:
         """Let the mod push queued notices into the idle Main.
@@ -204,13 +212,8 @@ def adoption_material(root: Path, claude: Path) -> dict[str, object]:
             'GRAPHTRAJ_CLAUDE_HOST_PYTHON': str(python),
             'GRAPHTRAJ_CLAUDE_HOST_CONFIG': str(config),
         }},
-        (plugin / '.claude-plugin' / 'plugin.json').as_posix(): {
-            'name': 'graphtraj-claude-host', 'version': '1',
-            'description': 'GraphTraj Main host context for the agents and tasks MCP entries.',
-        },
-        (plugin / 'hooks' / 'hooks.json').as_posix(): {'modules': ['./host_context.mjs']},
-        (plugin / 'hooks' / 'host_context.mjs').as_posix():
-            Path(native_host.__file__).with_name('host_context.mjs').read_text(encoding='utf-8'),
+        **claude_host_plugin(plugin, 'graphtraj-claude-host',
+                             'GraphTraj Main host context for the agents and tasks MCP entries.', ADDED_TOOLS),
     }
 
 

@@ -19,7 +19,7 @@ import yaml
 from agent_swarm import AgentsError, AgentsResult
 from conftest import run_process
 from graphtraj.execution.approved_recovery import review_proposal
-from graphtraj.runtimes.claude.host import NativeCalls
+from graphtraj.runtimes.claude.host import NativeCalls, adoption_material
 from graphtraj.runtimes.claude.mcp import serve
 from test_task_integration import accepted_document  # noqa: F401  (fixture)
 
@@ -515,9 +515,11 @@ def test_many_threads_each_run_exactly_once(tmp_path: Path) -> None:
 
 
 def run_mod(tmp_path: Path, program: str) -> None:
-    """Run ``program`` in node against the mod with a recording host."""
+    """Run ``program`` in node against the mod GraphTraj writes, with a recording host."""
     module = tmp_path / 'host_context.mjs'
-    module.write_text(Path('src/agent_swarm/claude/host_context.mjs').read_text())
+    root = tmp_path.resolve()
+    module.write_text(adoption_material(root, Path('/claude'))[
+        str(root / '.claude/skills/graphtraj-claude-host/hooks/host_context.mjs')])
     header = r'''
 import assert from 'node:assert/strict';
 const {register} = await import(process.argv[1]);

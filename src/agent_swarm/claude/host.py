@@ -22,6 +22,7 @@ from agent_swarm.mcp import serve, serve_concurrent, respond, tool_documents, re
 from agent_swarm.notices import END_EVENTS, notice_id
 from .native_host import NativeCalls
 from .driver import ClaudeDriver
+from .plugin import claude_host_plugin
 
 if os.name != 'nt':
     import fcntl
@@ -384,10 +385,7 @@ def adoption_material(root: Path, claude: Path) -> dict[str, object]:
             'GRAPHTRAJ_CLAUDE_HOST_PYTHON': sys.executable,
             'GRAPHTRAJ_CLAUDE_HOST_CONFIG': str(config),
         }},
-        str(plugin / '.claude-plugin/plugin.json'): {'name': 'agents-claude-host', 'version': '1',
-            'description': 'Native Claude context for independent agents MCP.'},
-        str(plugin / 'hooks/hooks.json'): {'modules': ['./host_context.mjs']},
-        str(plugin / 'hooks/host_context.mjs'): Path(__file__).with_name('host_context.mjs').read_text(),
+        **claude_host_plugin(plugin, 'agents-claude-host', 'Native Claude context for independent agents MCP.'),
     }
 
 

@@ -10,6 +10,7 @@ import shutil
 from typing import Any, Mapping
 from urllib.parse import urlsplit
 
+from agent_swarm.dsh.settings import dsh_version_refusal
 from graphtraj.configuration.role_definitions import ResolvedChildRole
 from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError, finalize_usage, credential_environment
 
@@ -85,11 +86,9 @@ class DshRuntimeAdapter:
         if not executable or not tool:
             raise RuntimeAdapterError('RUNTIME_UNAVAILABLE', 'Install DSH and GraphTraj public CLI first.')
         package = Path(executable).resolve().parent.parent / 'package.json'
-        try:
-            if json.loads(package.read_text())['version'] != '0.2.0-rc.2':
-                raise ValueError('version')
-        except (OSError, ValueError, KeyError) as error:
-            raise RuntimeAdapterError('RUNTIME_UNSUPPORTED', 'DSH 0.2.0-rc.2 is required.') from error
+        refusal = dsh_version_refusal(package)
+        if refusal is not None:
+            raise RuntimeAdapterError('RUNTIME_UNSUPPORTED', refusal)
         base_url = role.settings.base_url or 'https://api.deepseek.com/anthropic'
         parsed = urlsplit(base_url)
         schemes = {'http', 'https'} if role.settings.connection else {'https'}

@@ -25,7 +25,8 @@ from uuid import UUID
 
 from agent_swarm.calls import on_discard, stop_requested
 from agent_swarm.claude import native_host
-from agent_swarm.claude.host import REFUSAL_FILE, ended_by_claude, report_missing_host, serve_refusal
+from agent_swarm.claude.host import (REFUSAL_FILE, claim_channel, context_endpoint, ended_by_claude,
+                                     log_replaced_channel, require_free_channel, serve_refusal)
 from agent_swarm import AgentsError, AgentsResult, Caller, bind
 from agent_swarm.connection import connection_operation, worker_connection
 from agent_swarm.discovery import handle_request
@@ -277,15 +278,11 @@ def main() -> None:
         refuse(ValueError(f'{options.config}: {error}'), log)
         return
     if options.operation == 'context':
-        if not channel_file.exists():
-            report_missing_host(channel_file)
-        endpoint = json.loads(channel_file.read_text())
+        endpoint = context_endpoint(channel_file)
         # The owner already verified its CLI at startup. A launcher symlink
         # may move during an update while that same native process is alive.
         # Use its pinned executable, never whichever version is selected now.
-        parent = native_parent(Path(endpoint['executable']), stage='context')
-        if endpoint['parent'] != parent:
-            raise AgentsError('authority-denied', 'The context belongs to another native host.')
+        native_parent(Path(endpoint['executable']), stage='context')
         print(json.dumps(connection_operation(endpoint['address'], json.load(sys.stdin), authenticate=True)))
         return
     executable = executable.resolve()
@@ -297,10 +294,7 @@ def main() -> None:
         if Path.cwd().resolve() != cwd.resolve():
             raise ValueError(f'Claude Code was started in {Path.cwd().resolve()}, but this host is configured '
                              f'for {cwd.resolve()}. Start or resume Claude Code from {cwd.resolve()}.')
-        if channel_file.exists():
-            raise AgentsError('host-busy', f'{channel_file} exists: another agents host for this project is '
-                              'running, or a previous one was killed. Close the other Claude Code session; '
-                              'if none is running, delete the file.')
+        require_free_channel(channel_file)
         archive = configured_archive(root)
         # The same agents view and control as the Codex Main: every Runtime driver,
         # continued Main roots (MainRoots) and Task member Sessions.
@@ -321,18 +315,25 @@ def main() -> None:
 
     directory.mkdir(parents=True, exist_ok=True)
     (directory.parent / REFUSAL_FILE).unlink(missing_ok=True)
+    refused = None
     try:
         with worker_connection(directory, calls.context, authenticate=authenticate) as address:
             # Exclusive creation prevents a second MCP owner replacing a live
-            # association. A retained stale file requires explicit host cleanup.
-            with channel_file.open('x') as stream:
-                json.dump({'parent': parent, 'executable': str(executable), 'address': address}, stream)
+            # association. A stale file left by a dead host is replaced.
             try:
-                mcp_in, mcp_out = isolate_stdio(directory.parent / 'host.log')
-                with ended_by_claude():
-                    serve(mcp_in, mcp_out, cwd, native_call=calls.call)
-            finally:
-                channel_file.unlink()
+                replaced = claim_channel(channel_file, {'parent': parent, 'executable': str(executable),
+                                                        'address': address})
+            except (AgentsError, OSError) as error:
+                refused = error
+            else:
+                try:
+                    mcp_in, mcp_out = isolate_stdio(directory.parent / 'host.log')
+                    if replaced:
+                        log_replaced_channel(channel_file)
+                    with ended_by_claude():
+                        serve(mcp_in, mcp_out, cwd, native_call=calls.call)
+                finally:
+                    channel_file.unlink()
     finally:
         # Stop the native work this process runs, whichever Main created it.
         deadline = time.monotonic() + 10
@@ -341,6 +342,8 @@ def main() -> None:
                 if time.monotonic() > deadline:
                     raise RuntimeError('Claude child stop was not confirmed at MCP shutdown.')
                 time.sleep(0.05)
+    if refused is not None:
+        refuse(refused, directory.parent / 'host.log')
 
 
 if __name__ == '__main__':

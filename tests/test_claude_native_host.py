@@ -1,9 +1,14 @@
 """Current-context binding boundaries without launching a real Runtime."""
+import fcntl
 from io import StringIO
 import json
 import os
 from pathlib import Path
+import signal
+import subprocess
+import sys
 import threading
+import time
 from uuid import uuid4
 
 import pytest
@@ -143,6 +148,7 @@ def test_context_uses_owner_executable_when_launcher_updates(tmp_path: Path, mon
     config.write_text(json.dumps({'root': str(tmp_path), 'cwd': str(tmp_path),
                                  'claude': str(launcher), 'channel_file': str(endpoint)}))
     monkeypatch.setattr(host, 'process_executable', lambda pid: original)
+    monkeypatch.setattr('agent_swarm.claude.host.host_alive', lambda address: True)
     parent = host.native_parent(launcher)
     endpoint.write_text(json.dumps({'parent': parent, 'executable': str(launcher.resolve()),
                                     'address': 'owned-channel'}))
@@ -243,6 +249,7 @@ def test_generated_hook_context_accepts_the_project_host_configuration(
                                     'address': 'project-host-channel'}))
     received = []
     monkeypatch.setattr(native, 'native_parent', lambda executable, stage: os.getppid())
+    monkeypatch.setattr(native, 'host_alive', lambda address: True)
     monkeypatch.setattr(native, 'connection_operation', lambda address, document, *, authenticate:
                         received.append((address, document, authenticate)) or {'ended': True})
     monkeypatch.setattr('sys.argv', ['host', 'context', '--config', str(config)])
@@ -342,8 +349,25 @@ def _source_env(**extra: str) -> dict:
     return {**os.environ, 'PYTHONPATH': source + os.pathsep + os.environ.get('PYTHONPATH', ''), **extra}
 
 
-@pytest.mark.parametrize('case', ['elsewhere', 'bound-child', 'stale-channel', 'bad-config'])
-def test_refused_graphtraj_host_answers_both_tools_with_the_reason(tmp_path: Path, case: str) -> None:
+@pytest.fixture
+def hold_control():
+    """Hold a control directory's lock as a live host does, for this test's duration."""
+    held = []
+
+    def hold(directory: Path) -> Path:
+        """Lock ``directory``, creating it first."""
+        directory.mkdir(parents=True)
+        held.append(os.open(directory, os.O_RDONLY | os.O_DIRECTORY))
+        fcntl.flock(held[-1], fcntl.LOCK_EX)
+        return directory
+
+    yield hold
+    for descriptor in held:
+        os.close(descriptor)
+
+
+@pytest.mark.parametrize('case', ['elsewhere', 'bound-child', 'live-occupant', 'bad-config'])
+def test_refused_graphtraj_host_answers_both_tools_with_the_reason(tmp_path: Path, case: str, hold_control) -> None:
     """A refused start completes the handshake and every agents and tasks call names why; no Main is bound."""
     import subprocess
     import sys
@@ -351,9 +375,11 @@ def test_refused_graphtraj_host_answers_both_tools_with_the_reason(tmp_path: Pat
     project, elsewhere, config = _host_project(tmp_path)
     host = config.parent
     channel = host / 'live' / 'channel.json'
-    if case == 'stale-channel':
-        channel.parent.mkdir()
-        channel.write_text('{"parent": 1}')
+    occupied = ''
+    if case == 'live-occupant':
+        occupied = json.dumps({'parent': 4242, 'executable': sys.executable,
+                               'address': str(hold_control(channel.parent / 'control-held'))})
+        channel.write_text(occupied)
     if case == 'bad-config':
         config.write_text(json.dumps({**json.loads(config.read_text()), 'extra': 1}))
     messages = [{'jsonrpc': '2.0', 'id': 1, 'method': 'initialize', 'params': {}},
@@ -385,10 +411,12 @@ def test_refused_graphtraj_host_answers_both_tools_with_the_reason(tmp_path: Pat
                                                    f'configured for {project.resolve()}',
                                                    f'Start or resume Claude Code from {project.resolve()}']),
                 'bound-child': ('authority-denied', ['bound child']),
-                'stale-channel': ('host-busy', [f'{channel} exists', 'delete the file']),
+                'live-occupant': ('host-busy', [str(channel), 'another agents host', 'Claude Code pid 4242',
+                                                'Close that Claude Code session']),
                 'bad-config': ('host-unavailable', [str(config), 'Expected root, cwd, claude and channel_file'])}
     code, parts = expected[case]
     assert error['code'] == code and all(part in error['message'] for part in parts), error
+    assert 'delete' not in error['message']
     assert error['message'] in finished.stderr
     log = (host / 'host.log').read_text()
     assert error['message'] in log and 'Traceback' not in log
@@ -396,9 +424,9 @@ def test_refused_graphtraj_host_answers_both_tools_with_the_reason(tmp_path: Pat
     assert not (project / '.graphtraj' / 'swarm').exists()
     assert not list(project.rglob('main-sessions')) and not (host / 'host-refusal.json').exists()
     assert sorted(path.name for path in (host / 'live').glob('*')) == (
-        ['channel.json'] if case == 'stale-channel' else [])
-    if case == 'stale-channel':
-        assert channel.read_text() == '{"parent": 1}'
+        ['channel.json', 'control-held'] if case == 'live-occupant' else [])
+    if case == 'live-occupant':
+        assert channel.read_text() == occupied
 
 
 @pytest.mark.parametrize('case', ['refused', 'serving'])
@@ -483,3 +511,360 @@ def test_graphtraj_context_reports_a_refused_host_in_one_line(tmp_path: Path, mo
     assert line.startswith('host-unavailable: The agents host did not start: Claude Code was started in ')
     assert f'configured for {project.resolve()}' in line
     assert not (config.parent / 'host-refusal.json').exists()
+
+
+HOST_MODULES = ['graphtraj.runtimes.claude.host', 'agent_swarm.claude.host']
+REPLACED_LINE = 'agents host replaced a stale channel of a dead host'
+# The verified Claude parent: it owns one host and runs the mod's context entry as its direct child.
+CLAUDE_PARENT = '''
+import json, signal, subprocess, sys, time
+module, config = sys.argv[1:]
+host = None
+for line in sys.stdin:
+    command = json.loads(line)
+    if command['do'] == 'start':
+        # Like Claude Code, with the default SIGINT disposition. With ``hold`` the host passes
+        # its early check, then waits for that file, so two hosts reach the claim together.
+        program = ['-m', module, 'serve', '--config', config] if 'hold' not in command else ['-c',
+            'import importlib, os, pathlib, sys, time\\n'
+            'host = importlib.import_module(sys.argv[1]); go = pathlib.Path(sys.argv[2]); real = host.worker_connection\\n'
+            'def held(*args, **fields):\\n'
+            '    go.with_name(f"passed-{os.getpid()}").touch()\\n'
+            '    while not go.exists(): time.sleep(0.01)\\n'
+            '    return real(*args, **fields)\\n'
+            'host.worker_connection = held; sys.argv = ["host", "serve", "--config", sys.argv[3]]; host.main()\\n',
+            module, command['hold'], config]
+        host = subprocess.Popen([sys.executable, *program], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                                text=True, preexec_fn=lambda: signal.signal(signal.SIGINT, signal.SIG_DFL))
+        answer = host.pid
+    elif command['do'] == 'send':
+        host.stdin.write(json.dumps(command['message']) + '\\n')
+        host.stdin.flush()
+        answer = json.loads(host.stdout.readline())
+    elif command['do'] == 'context':
+        started = time.monotonic()
+        done = subprocess.run([sys.executable, '-m', module, 'context', '--config', config],
+                              input=json.dumps(command['document']), capture_output=True, text=True, timeout=30)
+        answer = {'code': done.returncode, 'out': done.stdout, 'err': done.stderr,
+                  'seconds': time.monotonic() - started}
+    elif command['do'] == 'kill':
+        host.kill()
+        answer = host.wait()
+    print(json.dumps(answer), flush=True)
+if host is not None:
+    host.stdin.close()
+    host.wait(timeout=30)
+'''
+
+
+class ClaudeParent:
+    """One running verified parent, standing in for one Claude Code process."""
+
+    def __init__(self, module: str, project: Path, config: Path) -> None:
+        self.project = project
+        self.process = subprocess.Popen([sys.executable, '-c', CLAUDE_PARENT, module, str(config)], cwd=project,
+                                        env=_source_env(), stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
+        self.pid = self.process.pid
+        self.ids = 0
+
+    def do(self, **command: object) -> object:
+        """Run one command in the parent and return its answer."""
+        self.process.stdin.write(json.dumps(command) + '\n')
+        self.process.stdin.flush()
+        return json.loads(self.process.stdout.readline())
+
+    def send(self, method: str, params: dict) -> dict:
+        """Exchange one MCP message with this parent's host."""
+        self.ids += 1
+        return self.do(do='send', message={'jsonrpc': '2.0', 'id': self.ids, 'method': method, 'params': params})
+
+    def start(self, **hold: str) -> int:
+        """Start this parent's host; a held host is greeted later by ``greet``."""
+        pid = self.do(do='start', **hold)
+        if not hold:
+            self.greet()
+        return pid
+
+    def greet(self) -> None:
+        """Complete the MCP handshake."""
+        assert self.send('initialize', {})['result']['serverInfo']['name'] == 'agents'
+
+    def context(self, document: dict | None = None) -> dict:
+        """Run the mod's context entry from this parent."""
+        return self.do(do='context', document={'operation': 'end'} if document is None else document)
+
+    def discover(self) -> dict:
+        """Call agents as the mod and Claude Code do: prepare the context, then the MCP call."""
+        request = {'action': 'discover'}
+        prepared = self.context({'operation': 'prepare', 'tool': 'agents', 'session': str(uuid4()),
+                                 'cwd': str(self.project.resolve()), 'agent': None, 'request': request})
+        assert prepared['code'] == 0, prepared
+        return self.send('tools/call', {'name': 'agents', 'arguments': request})['result']
+
+    def close(self) -> None:
+        """End the parent; its host ends with the closed input."""
+        self.process.stdin.close()
+        self.process.wait(timeout=60)
+        self.process.stdout.close()
+
+
+@pytest.fixture
+def claude_parents():
+    """Create parents standing in for Claude Code; every one is closed at the end."""
+    started = []
+
+    def parent(module: str, project: Path, config: Path) -> ClaudeParent:
+        started.append(ClaudeParent(module, project, config))
+        return started[-1]
+
+    yield parent
+    for running in started:
+        if running.process.poll() is None:
+            running.close()
+
+
+def _channel_of(config: Path) -> Path:
+    """Return the configured channel file."""
+    return Path(json.loads(config.read_text())['channel_file'])
+
+
+def _assert_real_discover(result: dict) -> None:
+    """Require real discover output, not a refusal."""
+    assert result['isError'] is False, result
+    assert result['structuredContent']['features'], result
+
+
+def _assert_one_line(answer: dict, line: str) -> None:
+    """Require a refused context of exactly one line, quickly and without a traceback."""
+    assert answer['code'] == 1 and answer['out'] == '', answer
+    assert answer['err'].splitlines() == [line], answer
+    assert answer['seconds'] < 5, answer
+
+
+@pytest.mark.parametrize('module', HOST_MODULES)
+def test_start_replaces_the_channel_of_a_killed_host(tmp_path: Path, claude_parents, module: str) -> None:
+    """A host killed with its Claude leaves its file; the next normal start serves without any cleanup."""
+    project, _, config = _host_project(tmp_path)
+    channel = _channel_of(config)
+    first = claude_parents(module, project, config)
+    first.start()
+    _assert_real_discover(first.discover())
+    dead = json.loads(channel.read_text())
+    first.do(do='kill')
+    first.close()
+    assert json.loads(channel.read_text()) == dead and Path(dead['address']).is_dir()
+
+    second = claude_parents(module, project, config)
+    second.start()
+    _assert_real_discover(second.discover())
+    current = json.loads(channel.read_text())
+    assert current['parent'] == second.pid and current['address'] != dead['address']
+    assert not Path(dead['address']).exists()
+    log = (config.parent / 'host.log').read_text()
+    assert log.count(REPLACED_LINE) == 1
+    assert 'did not start' not in log and 'Traceback' not in log
+    assert not (config.parent / 'host-refusal.json').exists()
+
+
+@pytest.mark.parametrize('module', HOST_MODULES)
+@pytest.mark.parametrize('case', ['dead-address', 'missing-address', 'outside-address', 'parent-address',
+                                  'empty', 'malformed', 'missing-keys', 'not-an-object'])
+def test_start_replaces_an_unusable_channel_file(tmp_path: Path, claude_parents, module: str, case: str) -> None:
+    """Power loss can leave anything here; only a live host's lock blocks a start."""
+    project, _, config = _host_project(tmp_path)
+    channel = _channel_of(config)
+    channel.parent.mkdir()
+    dead, outside = channel.parent / 'control-dead', tmp_path / 'control-outside'
+    dead.mkdir()
+    outside.mkdir()
+    channel.write_text({
+        'dead-address': json.dumps({'parent': 1, 'executable': '/old/claude', 'address': str(dead)}),
+        'missing-address': json.dumps({'parent': 1, 'executable': '/old/claude',
+                                       'address': str(channel.parent / 'control-gone')}),
+        'outside-address': json.dumps({'parent': 1, 'executable': '/old/claude', 'address': str(outside)}),
+        'parent-address': json.dumps({'parent': 1, 'executable': '/old/claude',
+                                      'address': str(channel.parent) + '/..'}),
+        'empty': '', 'malformed': '{"parent": 1, "addr', 'missing-keys': '{"parent": 1}', 'not-an-object': '[1]',
+    }[case])
+    parent = claude_parents(module, project, config)
+    parent.start()
+    _assert_real_discover(parent.discover())
+    assert json.loads(channel.read_text())['parent'] == parent.pid
+    log = (config.parent / 'host.log').read_text()
+    assert log.count(REPLACED_LINE) == 1 and 'did not start' not in log and 'Traceback' not in log
+    # Only the control directory a dead host named beside the channel is removed.
+    assert dead.exists() == (case != 'dead-address')
+    assert outside.exists() and config.exists()
+
+
+@pytest.mark.parametrize('module', HOST_MODULES)
+def test_context_after_the_host_alone_was_killed(tmp_path: Path, claude_parents, module: str) -> None:
+    """The same Claude survives its host: context says not running, without a version error or a 10 s wait."""
+    project, _, config = _host_project(tmp_path)
+    parent = claude_parents(module, project, config)
+    parent.start()
+    _assert_real_discover(parent.discover())
+    parent.do(do='kill')
+    assert json.loads(_channel_of(config).read_text())['parent'] == parent.pid
+    _assert_one_line(parent.context(),
+                     f"The agents host for this project is not running; see {config.parent / 'host.log'}.")
+
+
+@pytest.mark.parametrize('module', HOST_MODULES)
+def test_second_start_is_refused_while_the_occupant_lives(tmp_path: Path, claude_parents, module: str) -> None:
+    """A live host keeps the project: the second start is refused, the first is untouched."""
+    project, _, config = _host_project(tmp_path)
+    channel = _channel_of(config)
+    first = claude_parents(module, project, config)
+    first.start()
+    occupied = channel.read_text()
+    second = claude_parents(module, project, config)
+    # Before its own host starts, the second Claude is told who owns the project.
+    _assert_one_line(second.context(), f'The agents host of another Claude Code session '
+                                       f'(Claude Code pid {first.pid}) owns this project.')
+    second.start()
+    refused = second.send('tools/call', {'name': 'agents', 'arguments': {'action': 'discover'}})['result']
+    assert refused['isError'] is True
+    error = refused['structuredContent']['error']
+    assert error['code'] == 'host-busy' and f'Claude Code pid {first.pid}' in error['message'], error
+    assert 'delete' not in error['message']
+    # Its context reports the refusal, not a CLI version mismatch.
+    _assert_one_line(second.context(), f"host-busy: {error['message']}")
+    assert channel.read_text() == occupied
+    assert sorted(path.name for path in channel.parent.iterdir()) == sorted(
+        ['channel.json', Path(json.loads(occupied)['address']).name])
+    _assert_real_discover(first.discover())
+    second.close()
+    assert channel.read_text() == occupied
+    _assert_real_discover(first.discover())
+
+
+@pytest.mark.parametrize('module', HOST_MODULES)
+def test_concurrent_starts_over_a_stale_channel_serve_once(tmp_path: Path, claude_parents, module: str) -> None:
+    """Both hosts pass the early check on a stale file; one serves, the other gets the normal refusal."""
+    project, _, config = _host_project(tmp_path)
+    channel = _channel_of(config)
+    channel.parent.mkdir()
+    channel.write_text('{"parent": 1}')
+    go = tmp_path / 'go'
+    parents = [claude_parents(module, project, config) for _ in range(2)]
+    for parent in parents:
+        parent.start(hold=str(go))
+    # Both must have passed the early check before either may claim.
+    deadline = time.monotonic() + 60
+    while (len(list(tmp_path.glob('passed-*'))) < 2) and time.monotonic() < deadline:
+        time.sleep(0.01)
+    assert len(list(tmp_path.glob('passed-*'))) == 2
+    go.touch()
+    for parent in parents:
+        parent.greet()
+    owner = json.loads(channel.read_text())
+    winner, loser = parents if owner['parent'] == parents[0].pid else parents[::-1]
+    assert owner['parent'] == winner.pid
+    _assert_real_discover(winner.discover())
+    refused = loser.send('tools/call', {'name': 'agents', 'arguments': {'action': 'discover'}})['result']
+    error = refused['structuredContent']['error']
+    assert refused['isError'] is True and error['code'] == 'host-busy', refused
+    assert f'Claude Code pid {winner.pid}' in error['message']
+    assert sorted(path.name for path in channel.parent.iterdir()) == sorted(
+        ['channel.json', Path(owner['address']).name])
+    log = (config.parent / 'host.log').read_text()
+    assert log.count(REPLACED_LINE) == 1 and 'Traceback' not in log
+    assert log.count('The agents host did not start') == 1
+    _assert_one_line(loser.context(), f"host-busy: {error['message']}")
+    assert json.loads(channel.read_text()) == owner
+
+
+@pytest.mark.parametrize('module', HOST_MODULES)
+@pytest.mark.parametrize('recorded', [False, True])
+@pytest.mark.parametrize('own', [False, True])
+def test_context_over_a_stale_file_names_the_real_cause(
+        tmp_path: Path, claude_parents, module: str, recorded: bool, own: bool) -> None:
+    """The incident: a stale file names an older CLI; the report is the refusal or the missing host."""
+    project, _, config = _host_project(tmp_path)
+    channel = _channel_of(config)
+    channel.parent.mkdir()
+    parent = claude_parents(module, project, config)
+    channel.write_text(json.dumps({'parent': parent.pid if own else 1, 'executable': str(tmp_path / '2.1.312'),
+                                   'address': str(channel.parent / 'control-dead')}))
+    if recorded:
+        (config.parent / 'host-refusal.json').write_text(json.dumps(
+            {'code': 'host-unavailable', 'message': 'The agents host did not start: recorded'}))
+    _assert_one_line(parent.context(), 'host-unavailable: The agents host did not start: recorded' if recorded
+                     else f"The agents host for this project is not running; see {config.parent / 'host.log'}.")
+
+
+@pytest.mark.parametrize('module', HOST_MODULES)
+def test_context_from_another_claude_forwards_nothing(
+        tmp_path: Path, claude_parents, hold_control, module: str) -> None:
+    """Another Claude's live host is named and never reached."""
+    project, _, config = _host_project(tmp_path)
+    channel = _channel_of(config)
+    control = hold_control(channel.parent / 'control-held')
+    parent = claude_parents(module, project, config)
+    channel.write_text(json.dumps({'parent': 4242, 'executable': sys.executable, 'address': str(control)}))
+    _assert_one_line(parent.context(),
+                     'The agents host of another Claude Code session (Claude Code pid 4242) owns this project.')
+    assert list(control.iterdir()) == []
+
+
+@pytest.mark.parametrize('module', HOST_MODULES)
+def test_context_from_the_wrong_executable_is_still_denied(
+        tmp_path: Path, claude_parents, hold_control, module: str) -> None:
+    """The owner's pid running another executable gets authority-denied and reaches nothing."""
+    project, _, config = _host_project(tmp_path)
+    channel = _channel_of(config)
+    control = hold_control(channel.parent / 'control-held')
+    parent = claude_parents(module, project, config)
+    channel.write_text(json.dumps({'parent': parent.pid, 'executable': str(tmp_path / 'other-cli'),
+                                   'address': str(control)}))
+    denied = parent.context()
+    assert denied['code'] != 0 and denied['out'] == ''
+    assert 'authority-denied' in denied['err'] and 'must be launched directly' in denied['err'], denied
+    assert 'other-cli' in denied['err'] and denied['seconds'] < 5
+    assert list(control.iterdir()) == []
+
+
+def test_host_alive_reads_only_the_kernel_lock(tmp_path: Path, hold_control) -> None:
+    """Gone means dead, a free lock means dead, and what cannot be observed counts as alive."""
+    from agent_swarm.connection import host_alive
+
+    assert host_alive(str(tmp_path / 'gone')) is False
+    (tmp_path / 'file').touch()
+    assert host_alive(str(tmp_path / 'file')) is False
+    (tmp_path / 'free').mkdir()
+    assert host_alive(str(tmp_path / 'free')) is False
+    held = hold_control(tmp_path / 'held')
+    assert host_alive(str(held)) is True
+    (tmp_path / 'closed').mkdir(mode=0)
+    try:
+        assert host_alive(str(tmp_path / 'closed')) is True
+    finally:
+        (tmp_path / 'closed').chmod(0o700)
+
+
+def test_killed_owner_lock_is_not_kept_by_its_children(tmp_path: Path) -> None:
+    """A host's descendants outlive it (Agents, validations) but cannot keep it looking alive."""
+    from agent_swarm.connection import host_alive
+
+    address = tmp_path / 'control-owner'
+    address.mkdir()
+    program = ('import fcntl, os, subprocess, sys, time\n'
+               'lock = os.open(sys.argv[1], os.O_RDONLY | os.O_DIRECTORY)\n'
+               'fcntl.flock(lock, fcntl.LOCK_EX)\n'
+               'child = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"], close_fds=False)\n'
+               'print(child.pid, flush=True)\n'
+               'time.sleep(60)\n')
+    owner = subprocess.Popen([sys.executable, '-c', program, str(address)], stdout=subprocess.PIPE, text=True)
+    child = int(owner.stdout.readline())
+    try:
+        assert host_alive(str(address)) is True
+        owner.send_signal(signal.SIGKILL)
+        owner.wait(timeout=30)
+        os.kill(child, 0)  # The child still runs.
+        assert host_alive(str(address)) is False
+    finally:
+        owner.kill()
+        owner.wait(timeout=30)
+        owner.stdout.close()
+        os.kill(child, signal.SIGKILL)

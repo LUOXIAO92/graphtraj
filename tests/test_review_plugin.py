@@ -30,6 +30,7 @@ from agent_swarm.codex import driver as codex_driver
 from agent_swarm.codex.app_server import CodexAppServer
 from agent_swarm.codex.driver import CodexDriver
 from agent_swarm.codex.managed_session import CodexManagedExecution
+from agent_swarm.control import _request_message
 from agent_swarm.review import REVIEW_TIMEOUT_DEFAULT, build_request, check_reviewer, record_decision, review_call
 
 MAIN = Caller('test-host', None)
@@ -951,6 +952,76 @@ def test_without_review_a_native_request_is_held_unreviewed(tmp_path, native, mo
     assert call(control, action='status', agent=agent)[0]['result']['review'] is None
     call(control, action='reply', agent=agent, request=request, response={'decision': 'accept'})
     assert finished(control, agent)['last_message'] == 'request accepted'
+
+
+@pytest.fixture
+def child_environment(tmp_path, native, monkeypatch):
+    """Record the variable NAMES of the Codex child's environment, never a value."""
+    names = tmp_path / 'child-variable-names'
+    wrapper = tmp_path / 'codex-recording'
+    wrapper.write_text("#!/bin/sh\n"
+                       f"awk 'BEGIN {{ for (name in ENVIRON) print name }}' > {names}\n"
+                       f'exec {tmp_path / "codex"} "$@"\n')
+    wrapper.chmod(0o755)
+    native['adapter_request']['arguments'][0] = str(wrapper)
+    return lambda: set(names.read_text().splitlines())
+
+
+def keyed_control(tmp_path, native, connection, variable='REVIEW_KEY'):
+    """Return a control whose reviewer reads ``variable``; ``connection`` adds connection lines."""
+    root = configured(tmp_path / 'data', (
+        f'connections:\n  work:\n    runtime: codex\n    home: {tmp_path / "home"}\n{connection}'
+        f'reviewers:\n  chosen: {{base_url: "{URL}", model: m, api_key_env: {variable}}}\n'))
+    return AgentControl(root, {'codex': CodexDriver(native)})
+
+
+def test_reviewer_key_stays_out_of_the_codex_child(tmp_path, native, endpoint, child_environment):
+    """The host reads the key for review_call; the child it judges never holds it."""
+    control = keyed_control(tmp_path, native, '    review: chosen\n')
+    created, failed = call(control, action='create', runtime='codex', instruction='request:' + COMMAND)
+    assert not failed, created
+    assert finished(control, created['agent'])['last_message'] == 'request accepted'
+    assert 'REVIEW_KEY' not in child_environment()
+    assert {sent.get_header('Authorization') for sent in endpoint.calls} == {'Bearer ' + KEY}
+    assert len(endpoint.calls) == 2
+
+
+def test_reviewer_key_named_openai_is_withheld_without_a_mismatch(tmp_path, native, endpoint, monkeypatch,
+                                                                  child_environment):
+    """Codex's own variable is withheld too when the child's connection does not give it."""
+    monkeypatch.setenv('OPENAI_API_KEY', KEY)
+    control = keyed_control(tmp_path, native, '    review: chosen\n', 'OPENAI_API_KEY')
+    created, failed = call(control, action='create', runtime='codex', instruction='plain turn')
+    assert not failed, created
+    assert finished(control, created['agent'])['outcome'] == 'completed'
+    assert 'OPENAI_API_KEY' not in child_environment()
+
+
+def test_reviewer_key_that_is_the_childs_own_stays(tmp_path, native, endpoint, child_environment):
+    """The connection gives its child this variable, so it is not the reviewer's to remove."""
+    control = keyed_control(tmp_path, native, '    api_key_env: REVIEW_KEY\n    review: chosen\n')
+    created, failed = call(control, action='create', runtime='codex', instruction='plain turn')
+    assert not failed, created
+    finished(control, created['agent'])
+    assert 'REVIEW_KEY' in child_environment()
+
+
+def test_without_review_the_child_environment_is_unchanged(tmp_path, native, endpoint, child_environment):
+    """A declared but unused reviewer removes nothing."""
+    control = keyed_control(tmp_path, native, '')
+    created, failed = call(control, action='create', runtime='codex', instruction='plain turn')
+    assert not failed, created
+    finished(control, created['agent'])
+    assert 'REVIEW_KEY' in child_environment()
+
+
+def test_notice_names_the_tool_without_its_input():
+    """A plugin request's notice names its tool; the input never appears."""
+    message = _request_message({'method': 'agents/review', 'params': {'tool': 'Bash', 'input': {'command': 'rm x'}}})
+    assert 'agents/review for Bash' in message and 'rm x' not in message
+    assert 'claude/can_use_tool for Read' in _request_message({
+        'method': 'claude/can_use_tool', 'params': {'tool_name': 'Read', 'tool': 'ignored'}})
+    assert 'for' not in _request_message({'method': 'm', 'params': {'tool': 5}}).split('waits')[0]
 
 
 def test_a_consumer_execution_is_not_offered_the_plugin(tmp_path, native):

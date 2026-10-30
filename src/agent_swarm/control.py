@@ -416,7 +416,7 @@ def _request_message(details: Mapping[str, Any]) -> str:
     """Name a native request without its input, which may hold credentials."""
     method = details.get("method") if isinstance(details.get("method"), str) else "a native request"
     params = details.get("params")
-    tool = params.get("tool_name") if isinstance(params, Mapping) else None
+    tool = params.get("tool_name") or params.get("tool") if isinstance(params, Mapping) else None
     named = f"{method} for {tool}" if isinstance(tool, str) and tool else method
     return (f"Permission request {named} waits for your reply. Read it with requests "
             "and answer once with reply.")

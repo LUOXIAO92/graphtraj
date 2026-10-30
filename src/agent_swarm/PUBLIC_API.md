@@ -774,7 +774,9 @@ or empty is a failed review naming only the variable. A `command` reviewer gets
 `{"policy", "request"}` on stdin and answers the decision document on stdout; it
 is killed at its timeout, and a non-zero exit is a failed review. Every failure
 reason is free of credentials and of echoes of the request; an HTTP failure
-keeps the status and the provider's `code`, `type` and `message`.
+keeps the status and the provider's `code`, `type` and `message`. The reviewer's
+`api_key_env` variable is read only by the host and is removed from the child's
+environment, unless the child's own connection gives it that variable.
 
 **Connectivity check.** `create` sends one review call through the same path
 with a fixed harmless request (`tool: agents/connectivity-check`), bounded by the

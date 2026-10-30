@@ -155,8 +155,10 @@ class CodexAppServer:
         self._command = tuple(command)
         self._environment = {key: value for key, value in {**os.environ, **(environment or {})}.items()
                              if value is not None}
+        # A variable the caller removed on purpose is no connection mismatch.
         self._default_connection = {
             name: os.environ.get(name) for name in ('OPENAI_BASE_URL', 'OPENAI_API_KEY')
+            if (environment or {}).get(name, '') is not None
         }
         self._timeout = request_timeout
         self._experimental_api = experimental_api

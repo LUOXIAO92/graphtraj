@@ -178,10 +178,15 @@ class CodexManagedExecution:
                 'env': {connection_env: address, 'GRAPHTRAJ_NATIVE_RUNTIME': 'codex'},
             }
             self.context = restore_codex_context(request, self.context.evidence_document())
+        # The reviewer's key stays with this host, away from the child it judges,
+        # unless the connection itself gives the child that variable.
+        review_key = (self.review or {}).get('api_key_env')
+        withheld = {review_key: None} if review_key and review_key not in self.connection_environment else {}
         adapter = CodexAppServer(cwd=Path(self.context.session_document()['adapter_request']['cwd']),
                                  command=self.command, request_timeout=5,
                                  environment={**self.context.runtime_environment(), **self.connection_environment,
-                                              'AGENT_SWARM_CONNECTION': None, 'GRAPHTRAJ_CLI_CONNECTION': None},
+                                              'AGENT_SWARM_CONNECTION': None, 'GRAPHTRAJ_CLI_CONNECTION': None,
+                                              **withheld},
                                  on_request=self._request, request_handler_timeout=None,
                                  experimental_api=True)
         self.adapter = adapter

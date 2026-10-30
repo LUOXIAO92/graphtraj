@@ -90,7 +90,11 @@ def _search_rows(base_url: str) -> list[dict]:
     it. Search posts to ``<root>/messages``, and the root is found as DSH finds
     the Messages one. A patch replaces a row's config, hence the key's name. The
     Search and Fetch APIs have no address in the connection, so their row goes.
+    An official ``base_url`` needs neither: the key stays at that origin anyway.
     """
+    parsed = urlsplit(base_url)
+    if parsed.scheme == 'https' and parsed.netloc.lower() in {'api.deepseek.com', 'api.deepseek.com:443'}:
+        return []
     root = base_url.rstrip('/')
     if not urlsplit(root).path.endswith('/v1'):
         root += '/v1'

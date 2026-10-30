@@ -564,7 +564,12 @@ def launch_patches(settings: dict, tmp_path: Path) -> tuple[dict, list[dict], Pa
     (DECLARED + '/', 'DEEPSEEK_API_KEY', DECLARED + '/v1'),
     ('https://declared.invalid/v1', 'DEEPSEEK_API_KEY', 'https://declared.invalid/v1'),
     ('http://127.0.0.1:1234', None, 'http://127.0.0.1:1234/v1'),
-    (OFFICIAL, 'DEEPSEEK_API_KEY', OFFICIAL + '/v1'),
+    ('http://api.deepseek.com/anthropic', 'DEEPSEEK_API_KEY', 'http://api.deepseek.com/anthropic/v1'),
+    ('https://api.deepseek.com:8443/anthropic', 'DEEPSEEK_API_KEY', 'https://api.deepseek.com:8443/anthropic/v1'),
+    (OFFICIAL, 'DEEPSEEK_API_KEY', None),
+    (OFFICIAL, None, None),
+    ('https://api.deepseek.com:443/anthropic', 'DEEPSEEK_API_KEY', None),
+    ('https://API.deepseek.com/anthropic', 'DEEPSEEK_API_KEY', None),
     (DECLARED, 'DSH_383_KEY', None),
     (None, 'DEEPSEEK_API_KEY', None),
     (None, None, None),
@@ -590,6 +595,8 @@ def test_the_default_key_searches_only_where_the_connection_says(
 @pytest.mark.parametrize(('base_url', 'key', 'destination'), [
     (DECLARED, 'DEEPSEEK_API_KEY', DECLARED + '/v1/messages'),
     ('https://declared.invalid/v1', 'DEEPSEEK_API_KEY', 'https://declared.invalid/v1/messages'),
+    ('http://api.deepseek.com/anthropic', 'DEEPSEEK_API_KEY', 'http://api.deepseek.com/anthropic/v1/messages'),
+    ('https://api.deepseek.com:8443/anthropic', 'DEEPSEEK_API_KEY', 'https://api.deepseek.com:8443/anthropic/v1/messages'),
     (OFFICIAL, 'DEEPSEEK_API_KEY', OFFICIAL + '/v1/messages'),
     (DECLARED, 'DSH_383_KEY', OFFICIAL + '/v1/messages'),
     (None, 'DEEPSEEK_API_KEY', OFFICIAL + '/v1/messages'),
@@ -615,7 +622,7 @@ def test_installed_search_sends_the_key_where_the_row_says(
                             cwd=tmp_path, env=environment, capture_output=True, text=True, timeout=30)
     assert search.returncode == 0, search.stderr
     assert json.loads(search.stdout) == {'url': destination, 'keyed': True}
-    assert rows['web-deepseek-api'].get('disabled', False) is (key == 'DEEPSEEK_API_KEY' and base_url is not None)
+    assert rows['web-deepseek-api'].get('disabled', False) is (key == 'DEEPSEEK_API_KEY' and base_url not in (None, OFFICIAL))
 
 
 @pytest.mark.parametrize(('base_url', 'expected'), [(None, OFFICIAL), (DECLARED, DECLARED)])

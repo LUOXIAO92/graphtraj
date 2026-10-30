@@ -735,14 +735,15 @@ the connection says. Anyone routing through them must declare `base_url` on the
 connection or the DSH settings.
 
 DSH's web search has its own key reference, `DEEPSEEK_API_KEY`, which has no agents
-setting. When a connection declares `base_url` and its key is that same variable,
-named or by default, search follows the connection: its Messages requests go to
-`base_url` (with `/v1` unless the path ends in it), and DSH's Search and Fetch API
-provider is disabled, because its fixed official address is not in the connection.
-An endpoint that does not serve native search then gives a search error naming the
-endpoint, rather than official search. A connection with any other key variable, or
-without `base_url`, leaves search at DSH's official root with `DEEPSEEK_API_KEY`:
-to keep official search beside a gateway, name the gateway's key in another variable.
+setting. When a connection declares a `base_url` at another origin than
+`https://api.deepseek.com` and its key is that same variable, named or by default,
+search follows the connection: its Messages requests go to `base_url` (with `/v1`
+unless the path ends in it), and DSH's Search and Fetch API provider is disabled,
+because its fixed official address is not in the connection. An endpoint that does
+not serve native search then gives a search error naming the endpoint, rather than
+official search. A connection with any other key variable, or with no `base_url` or
+an official one, leaves search at DSH's official root with `DEEPSEEK_API_KEY`: to
+keep official search beside a gateway, name the gateway's key in another variable.
 
 A turn that ends other than `completed` fails the execution with
 `RUNTIME_EXECUTION_FAILED`. When the native reason carries an error, the message
@@ -1471,8 +1472,9 @@ Recorded classifications:
   a listing used an endpoint and key the connection did not name, and a query
   wrote into the home. 413 ships in the unreleased 0.2.2 and adds no bump of its
   own.
-- 413: a connection with `base_url` whose key is `DEEPSEEK_API_KEY` sends search
-  to that endpoint and loses DSH's Search and Fetch API provider (section 2). A
+- 413: a connection with a `base_url` at another origin whose key is
+  `DEEPSEEK_API_KEY` sends search to that endpoint and loses DSH's Search and
+  Fetch API provider (section 2). A
   fix (compatible): section 2 already said a key never reaches another endpoint.
   A setup that relied on official search through such a gateway must name the
   gateway's key in another variable. No bump of its own.

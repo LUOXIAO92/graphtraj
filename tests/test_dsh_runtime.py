@@ -1172,11 +1172,15 @@ def test_dsh_role_projection_keeps_secrets_out_of_launch(
 @pytest.mark.parametrize(('connection', 'base_url', 'key', 'root'), [
     ('work', 'https://declared.invalid/anthropic', 'DEEPSEEK_API_KEY', 'https://declared.invalid/anthropic/v1'),
     (None, 'https://declared.invalid/anthropic', 'DEEPSEEK_API_KEY', 'https://declared.invalid/anthropic/v1'),
-    (None, None, None, 'https://api.deepseek.com/anthropic/v1'),
+    ('work', 'http://api.deepseek.com/anthropic', 'DEEPSEEK_API_KEY', 'http://api.deepseek.com/anthropic/v1'),
+    ('work', 'https://api.deepseek.com:8443/anthropic', 'DEEPSEEK_API_KEY', 'https://api.deepseek.com:8443/anthropic/v1'),
+    (None, None, None, None),
+    ('work', 'https://api.deepseek.com/anthropic', 'DEEPSEEK_API_KEY', None),
     ('work', 'https://declared.invalid/anthropic', 'DSH_TEST_KEY', None),
     ('work', 'https://declared.invalid/anthropic', None, None),
     ('work', None, 'DEEPSEEK_API_KEY', None),
-], ids=['connection', 'inline', 'legacy-official', 'other-key', 'unauthenticated', 'no-endpoint'])
+], ids=['connection', 'inline', 'official-http', 'official-other-port', 'legacy-official', 'official', 'other-key',
+        'unauthenticated', 'no-endpoint'])
 def test_a_graphtraj_members_default_key_searches_only_where_it_says(
     connection: str | None, base_url: str | None, key: str | None, root: str | None,
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch,

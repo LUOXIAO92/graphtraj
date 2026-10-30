@@ -597,20 +597,26 @@ def test_a_request_notice_returns_promptly_while_pi_holds_it(pi_host_process: Ca
         process.pipe.lines[1]['id'].rsplit(':', 1)[1]]
 
 
-@pytest.mark.parametrize('kind', ['pi', 'dsh'])
-def test_a_shutdown_end_stays_held_through_the_real_main(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, kind: str) -> None:
-    """main() stops children through its plain call: its own wait does not settle what it caused."""
+def run_main(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    kind: str,
+    prepare: Callable,
+) -> Pipe:
+    """Run the host's real ``main()`` until the native side closes its pipe.
+
+    ``prepare(operate, control)`` runs after the real ``start`` and before the
+    pipe closes, so what it leaves running meets the real shutdown.
+    """
+    host = {'pi': pi_host, 'dsh': dsh_host}[kind]
+    real_start = host.start
     driver = Driver()
     driver.finish = None
-    host = {'pi': pi_host, 'dsh': dsh_host}[kind]
-    created: list[str] = []
-    real_start = host.start
 
     def started(*arguments):
-        """The real start, then one child still running when the native side closes the pipe."""
+        """The real start, then the test's children."""
         result = real_start(*arguments)
-        operate = result[2] if kind == 'pi' else result[3]
-        created.append(operate({'action': 'create', 'runtime': 'claude', 'instruction': 'work'}).document['agent'])
+        prepare(*((result[2], result[4], driver) if kind == 'pi' else (result[3], result[5], driver)))
         return result
 
     monkeypatch.setattr(host, 'verify_native_parent', lambda *_: None)
@@ -633,9 +639,40 @@ def test_a_shutdown_end_stays_held_through_the_real_main(tmp_path: Path, monkeyp
         running.setattr(sys, 'stdin', io.StringIO(line + '\n'))  # then EOF: the native side closes
         running.setattr(sys, 'stdout', pipe)
         host.main()
+    return pipe
+
+
+@pytest.mark.parametrize('kind', ['pi', 'dsh'])
+def test_a_shutdown_end_stays_held_through_the_real_main(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, kind: str) -> None:
+    """main() stops children through its plain call: its own wait does not settle what it caused."""
+    created: list[str] = []
+
+    def prepare(operate: Callable, control: AgentControl, driver: Driver) -> None:
+        """One child still running when the pipe closes."""
+        created.append(operate({'action': 'create', 'runtime': 'claude', 'instruction': 'work'}).document['agent'])
+
+    pipe = run_main(tmp_path, monkeypatch, kind, prepare)
     record = read_record(tmp_path, created[0])['executions'][-1]
     assert (record['outcome'], record['notification']) == ('interrupted', 'held')
     assert pipe.lines == []
+
+
+@pytest.mark.parametrize('kind', ['pi', 'dsh'])
+def test_shutdown_through_the_real_main_does_not_continue_a_parent_agent(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, kind: str) -> None:
+    """A nested child's end at shutdown is held in its record; no receiver of its parent runs."""
+    created: list[str] = []
+    received: list[dict] = []
+
+    def prepare(operate: Callable, control: AgentControl, driver: Driver) -> None:
+        """A running parent Agent with a bound receiver, and its running child."""
+        parent = operate({'action': 'create', 'runtime': 'claude', 'instruction': 'parent'}).document['agent']
+        wait_until(lambda: driver.runs.get(parent)).events.receive_children(lambda notice: received.append(notice) or True)
+        child = bind(control, Caller('runtime-mcp', parent))({'action': 'create', 'runtime': 'claude', 'instruction': 'child'})
+        created.append(child.document['agent'])
+
+    run_main(tmp_path, monkeypatch, kind, prepare)
+    assert received == []
+    assert read_record(tmp_path, created[0])['executions'][-1]['notification'] == 'held'
 
 
 # The real extension.mjs and the real host process, with a recording Pi: this

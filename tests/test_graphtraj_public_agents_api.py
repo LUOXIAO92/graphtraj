@@ -110,48 +110,38 @@ def imported_classes(tree: ast.AST) -> dict[str, tuple[str, str]]:
             for alias in node.names}
 
 
-def agents_bases(
-    module: str,
-    name: str,
-    trees: dict[str, ast.AST],
-    names: dict[str, set[str]],
-) -> list[type]:
-    """Follow one class name through GraphTraj modules to its public agents bases.
+def agents_bases(module: str, name: str, trees: dict[str, ast.AST]) -> list[type]:
+    """Follow one class name through GraphTraj modules to the agents classes below it.
 
-    Only names that passed the import check are followed; an unpublished base
-    has already been reported there.
+    An unpublished base has its import reported separately and is followed
+    here as well, so its private members are reported too.
     """
-    if module in names:
-        value = getattr(importlib.import_module(module), name, None) if name in names[module] else None
+    if agents_module(module):
+        value = getattr(importlib.import_module(module), name, None)
         return [value] if inspect.isclass(value) else []
     tree = trees.get(module)
     if tree is None:
         return []
     imports = imported_classes(tree)
     if name in imports:
-        return agents_bases(*imports[name], trees, names)
+        return agents_bases(*imports[name], trees)
     found = []
     for node in ast.walk(tree):
         if isinstance(node, ast.ClassDef) and node.name == name:
             for base in node.bases:
                 if isinstance(base, ast.Name):
-                    found += agents_bases(module, base.id, trees, names)
+                    found += agents_bases(module, base.id, trees)
     return found
 
 
-def subclass_findings(
-    tree: ast.AST,
-    module: str,
-    trees: dict[str, ast.AST],
-    names: dict[str, set[str]],
-) -> list[str]:
+def subclass_findings(tree: ast.AST, module: str, trees: dict[str, ast.AST]) -> list[str]:
     """Report a GraphTraj class that overrides or reaches a base's underscore member."""
     findings = []
     for cls in (node for node in ast.walk(tree) if isinstance(node, ast.ClassDef)):
         members = set()
         for base in cls.bases:
             if isinstance(base, ast.Name):
-                for agents_class in agents_bases(module, base.id, trees, names):
+                for agents_class in agents_bases(module, base.id, trees):
                     members |= agents_private_members(agents_class)
         if not members:
             continue
@@ -237,7 +227,7 @@ def scan_graphtraj() -> list[str]:
 
     findings = []
     for module, (path, tree) in files.items():
-        for finding in import_findings(tree, names) + subclass_findings(tree, module, trees, names):
+        for finding in import_findings(tree, names) + subclass_findings(tree, module, trees):
             findings.append(f'{path.relative_to(SOURCE)}: {finding}')
     table = contract_javascript()
     for path in sorted(GRAPHTRAJ.rglob('*.mjs')):
@@ -354,15 +344,14 @@ class Base:
 
 
 @pytest.fixture
-def sample_base(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict[str, set[str]]:
-    """Register a small agents class in a real file, returning its published names."""
+def sample_base(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Register a small agents class, from a real file, as ``agent_swarm.sample``."""
     file = tmp_path / 'sample.py'
     file.write_text(SAMPLE_BASE, encoding='utf-8')
     specification = importlib.util.spec_from_file_location('agent_swarm.sample', file)
     module = importlib.util.module_from_spec(specification)
     monkeypatch.setitem(sys.modules, 'agent_swarm.sample', module)
     specification.loader.exec_module(module)
-    return {'agent_swarm.sample': {'Base'}}
 
 
 @pytest.mark.parametrize('body', [
@@ -374,30 +363,32 @@ def sample_base(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict[str, se
     'def run(self): return self._state',
     'def run(self): self._state = 2',
 ])
-def test_subclass_check_reports_private_members(body: str, sample_base: dict) -> None:
+@pytest.mark.usefixtures('sample_base')
+def test_subclass_check_reports_private_members(body: str) -> None:
     """Overriding, replacing, calling or reading a base's underscore member is reported."""
     tree = ast.parse(f'from agent_swarm.sample import Base\nclass Child(Base):\n    {body}\n')
 
-    assert subclass_findings(tree, 'graphtraj.sample', {'graphtraj.sample': tree}, sample_base)
+    assert subclass_findings(tree, 'graphtraj.sample', {'graphtraj.sample': tree})
 
 
-def test_subclass_check_follows_graphtraj_classes(sample_base: dict) -> None:
+@pytest.mark.usefixtures('sample_base')
+def test_subclass_check_follows_graphtraj_classes() -> None:
     """A class below a GraphTraj subclass of an agents class is checked as well."""
     middle = ast.parse('from agent_swarm.sample import Base\nclass Middle(Base):\n    pass\n')
     child = ast.parse('from graphtraj.middle import Middle\nclass Child(Middle):\n    def _hook(self): pass\n')
 
-    assert subclass_findings(child, 'graphtraj.child', {'graphtraj.middle': middle, 'graphtraj.child': child},
-                             sample_base)
+    assert subclass_findings(child, 'graphtraj.child', {'graphtraj.middle': middle, 'graphtraj.child': child})
 
 
-def test_subclass_check_accepts_own_private_members(sample_base: dict) -> None:
+@pytest.mark.usefixtures('sample_base')
+def test_subclass_check_accepts_own_private_members() -> None:
     """A subclass's own underscore members and the base's public ones are its business."""
     tree = ast.parse('from agent_swarm.sample import Base\n'
                      'class Child(Base):\n'
                      '    def _own(self): pass\n'
                      '    def run(self): self._own()\n')
 
-    assert not subclass_findings(tree, 'graphtraj.sample', {'graphtraj.sample': tree}, sample_base)
+    assert not subclass_findings(tree, 'graphtraj.sample', {'graphtraj.sample': tree})
 
 
 JAVASCRIPT_TABLE = {'agent_swarm/pi/extension.mjs': {'loadHostSdk'}}

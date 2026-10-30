@@ -28,9 +28,9 @@ def test_runner_member_keeps_the_hosted_cli(tmp_path: Path, monkeypatch: pytest.
     calls = []
     monkeypatch.setattr('graphtraj.interfaces.hosted_cli.cli_connection',
                         lambda *arguments: calls.append(arguments) or 'hosted')
-    assert turn._connection() == 'hosted'
+    assert turn.bind_connection() == 'hosted'
     assert calls[0][:2] == (tmp_path, 'alias')
-    assert turn._connection_environment('address') == {
+    assert turn.connection_environment('address') == {
         'GRAPHTRAJ_CLI_CONNECTION': 'address', 'GRAPHTRAJ_HARNESS_ROOT': str(tmp_path.resolve())}
     turn.independent = True
-    assert 'AGENT_SWARM_CONNECTION' in turn._connection_environment('address')
+    assert 'AGENT_SWARM_CONNECTION' in turn.connection_environment('address')

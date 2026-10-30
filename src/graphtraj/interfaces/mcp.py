@@ -144,7 +144,7 @@ def _tool_call_response(
                 return result if result is not None else gateway.handle_request(request, cwd=Path.cwd())
 
             if name == 'agents':
-                from agent_swarm.discovery import handle_request
+                from agent_swarm import handle_request
 
                 from agent_swarm import client_native_context
                 from graphtraj.interfaces.hosted_cli import agents_dispatch

@@ -1,9 +1,11 @@
 """Own Claude Code's official stream-JSON control transport for one invocation."""
 from __future__ import annotations
 
+from collections import Counter
 from contextlib import ExitStack
 from concurrent.futures import Future
 import copy
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -18,6 +20,7 @@ import uuid
 from typing import Callable
 
 from agent_swarm import AgentsResult, __version__
+from agent_swarm.approval import REVIEW_METHOD, parse_decision, review_failed
 from agent_swarm.discovery import handle_request as discover_agents
 from agent_swarm.mcp import tool_documents
 from agent_swarm import SessionArchive
@@ -31,6 +34,12 @@ from .diagnostics import (
 
 # Claude Code's limit for a UserPromptSubmit hook callback reply.
 PROMPT_HOOK_LIMIT_SECONDS = 30
+# The child's channel to its parent, limited by agents' own authority checks.
+# Reviewing it would block ask_parent and status when the reviewer is down.
+AGENTS_TOOL = 'mcp__agents__agents'
+# A PreToolUse hook that misses its timeout is non-blocking, so the host answers first.
+REVIEW_HOOK_MIN_SECONDS = 600
+REVIEW_HOOK_MARGIN_SECONDS = 60
 
 
 class ClaudeExecution:
@@ -101,6 +110,13 @@ class ClaudeExecution:
         self.sdk_tools_listed = False
         self.sdk_calls: dict[str, tuple[dict, Future]] = {}
         self.displayed: set[tuple[str, str]] = set()
+        # Review plugin state, unused without ``request['review']``: calls allowed
+        # so far as (tool_use_id, call), one parent release per accepted call,
+        # and the hook callbacks still under review.
+        self.review_allowed: list[tuple[str | None, tuple[str, str]]] = []
+        self.review_releases: Counter = Counter()
+        self.reviewing: set[str] = set()
+        self.turn_ended = False
         self.diagnostics = {'session_id': self.native_id, 'execution_id': self.execution_id,
                             'launch': 'unknown', 'popen_returned': False,
                             'initialize': {'reason': 'unknown'}, 'system_init': {'reason': 'unknown'},
@@ -313,6 +329,7 @@ class ClaudeExecution:
         self._send(message)
         self.events.put({**message, 'graphtraj_direction': 'sent'})
         self.sent += 1
+        self.turn_ended = False
 
     def _collect(self) -> None:
         """Archive native records in arrival order, off the protocol loop.
@@ -440,6 +457,10 @@ class ClaudeExecution:
             raise RuntimeAdapterError('RUNTIME_REQUEST_FAILED',
                                       'Requested auto conflicts with explicit Claude subprocess scrub.')
         environment.pop('AGENT_SWARM_CONNECTION', None)
+        review_key_env = (request.get('review') or {}).get('api_key_env')
+        if review_key_env and review_key_env != request.get('api_key_env'):
+            # The reviewer's key stays with this host, away from the child it judges.
+            environment.pop(review_key_env, None)
         if address:
             environment['AGENT_SWARM_CONNECTION' if self.independent else 'GRAPHTRAJ_CLI_CONNECTION'] = address
         if request.get('explicit_runtime_home'):
@@ -550,13 +571,17 @@ class ClaudeExecution:
             elif request.get('subtype') == 'hook_callback' and request.get('callback_id') == 'graphtraj_collect_child':
                 self._collect_child(request['input'])
                 self._reply(event['request_id'], {})
+            elif request.get('subtype') == 'hook_callback' and request.get('callback_id') == 'agents_review':
+                self._review_hook(event)
             elif request.get('subtype') == 'can_use_tool':
-                self._permission(event)
+                if not self._reviewed_prompt(event):
+                    self._permission(event)
             else:
                 raise RuntimeAdapterError('RUNTIME_REQUEST_UNHANDLED', 'Unknown Claude control request.')
         else:
             self.prompt_received.pop(event.get('request_id'), None)
             with self.lock:
+                self.reviewing.discard(event.get('request_id'))
                 self.pending = {key: value for key, value in self.pending.items()
                                 if value['request_id'] != event.get('request_id')}
 
@@ -570,6 +595,10 @@ class ClaudeExecution:
                    'method': 'claude/can_use_tool', 'params': event['request']}
         with self.lock:
             self.pending[token] = details
+        self._notify(token, details, 'Claude requires a native permission reply:\n' + json.dumps(details))
+
+    def _notify(self, token: str, details: dict, message: str) -> None:
+        """Tell the direct parent of one pending request, off the protocol loop."""
 
         def notify() -> None:
             """Deliver without blocking the pipe that must still accept interruption.
@@ -579,7 +608,6 @@ class ClaudeExecution:
             retried while this request is still pending, as Codex and DSH do.
             The request stays pending and is never answered here.
             """
-            message = 'Claude requires a native permission reply:\n' + json.dumps(details)
             while True:
                 with self.lock:
                     if token not in self.pending or self.stopping.is_set():
@@ -598,6 +626,157 @@ class ClaudeExecution:
                 time.sleep(1)
 
         threading.Thread(target=notify, daemon=True).start()
+
+    def _review_hook(self, event: dict) -> None:
+        """Answer one PreToolUse callback, always, and off the protocol loop.
+
+        Claude treats a hook that errors or times out as non-blocking, so every
+        path ends in an answer, an exception included, and only an allowed or
+        released call gets ``{}``. That reply states no permission decision, so
+        Claude's own rules, mode and sandbox still apply.
+        """
+        identity = event['request_id']
+        native = event['request'].get('input')
+        native = native if isinstance(native, dict) else {}
+        if native.get('tool_name') == AGENTS_TOOL:
+            self._reply(identity, {})
+            return
+        with self.lock:
+            self.reviewing.add(identity)
+
+        def respond() -> None:
+            """Keep a reviewer that takes minutes off the pipe reader."""
+            try:
+                answer = self._review(identity, native)
+            except Exception as error:
+                failed = review_failed(f'{type(error).__name__} in the review path')
+                answer = review_refusal(failed['reason'])
+                try:
+                    self._hold_review(identity, native, failed)
+                except Exception:
+                    pass  # The refusal stands; the call does not run.
+            with self.lock:
+                if identity not in self.reviewing:
+                    return  # Claude cancelled the callback and reads no answer.
+                self.reviewing.discard(identity)
+            try:
+                self._reply(identity, answer)
+            except RuntimeAdapterError:
+                pass  # The pipe closed: the process and its tool call are gone.
+
+        threading.Thread(target=respond, daemon=True).start()
+
+    def _review(self, identity: str, native: dict) -> dict:
+        """Return the hook answer for one tool call, holding a refused one for the parent.
+
+        Recording comes first: an unrecorded decision is a failed review.
+        """
+        tool, tool_input, tool_use_id = native.get('tool_name'), native.get('tool_input'), native.get('tool_use_id')
+        call = review_key(tool, tool_input)
+        with self.lock:
+            released = self.review_releases[call] > 0
+            if released:
+                self.review_releases[call] -= 1
+            waiting = any(details['method'] == REVIEW_METHOD
+                          and review_key(details['params']['tool'], details['params']['input']) == call
+                          for details in self.pending.values())
+        if released:
+            self._record_review(tool, tool_use_id, {'decision': 'released',
+                                                    'reason': 'The direct parent released this exact retry.'})
+            with self.lock:
+                self.review_allowed.append((tool_use_id, call))
+            return {}
+        if waiting:
+            # One question per call: a child that retries early does not ask again.
+            return review_refusal('An identical refused call already waits for your direct parent.')
+        decision = self._ask_reviewer(tool, tool_input)
+        if decision['decision'] == 'allow':
+            self._record_review(tool, tool_use_id, decision)
+            with self.lock:
+                self.review_allowed.append((tool_use_id, call))
+            return {}
+        self._record_review(tool, tool_use_id, decision)
+        self._hold_review(identity, native, decision)
+        return review_refusal(decision['reason'])
+
+    def _ask_reviewer(self, tool: object, tool_input: object) -> dict:
+        """Return one strict decision document; anything else is a failed review."""
+        from agent_swarm.review import build_request, review_call
+
+        try:
+            request = build_request('claude', tool, tool_input, cwd=self.request['worktree_path'],
+                                    instruction=self.prompt)
+            return parse_decision(review_call(self.request['review'], request))
+        except Exception as error:
+            return review_failed(f'{type(error).__name__} while asking the reviewer')
+
+    def _record_review(self, tool: object, request_id: str | None, decision: dict) -> None:
+        """Keep the decision beside the Session, never the tool input."""
+        from agent_swarm.review import record_decision
+
+        record_decision(self.directory, 'claude', tool, request_id, decision)
+
+    def _hold_review(self, identity: str, native: dict, decision: dict) -> None:
+        """Retain a refused call for the direct parent before the child learns of it.
+
+        Holding first means the turn cannot end before the execution knows it
+        must stay open. A stopping execution or a cancelled callback holds nothing.
+        """
+        token = uuid.uuid4().hex
+        details = {'session': self.session, 'execution_id': self.execution_id,
+                   'request_id': 'agents-review:' + uuid.uuid4().hex, 'request_token': token,
+                   'method': REVIEW_METHOD,
+                   'params': {'tool': native.get('tool_name'), 'input': native.get('tool_input'),
+                              'decision': decision['decision'], 'reason': decision['reason']}}
+        with self.lock:
+            if self.stopping.is_set() or identity not in self.reviewing:
+                return
+            self.pending[token] = details
+        self._notify(token, details, 'Claude review requires a parent reply:\n' + json.dumps(details))
+
+    def _reviewed_prompt(self, event: dict) -> bool:
+        """Answer Claude's prompt for a call already allowed; say whether it was answered.
+
+        A prompt naming ``blocked_path`` or asking to leave the sandbox goes to
+        the parent: the reviewer was not asked to widen a native limit. A prompt
+        for a call never allowed goes there too.
+        """
+        request = event['request']
+        tool_input, tool_use_id = request.get('input'), request.get('tool_use_id')
+        call = review_key(request.get('tool_name'), tool_input)
+        with self.lock:
+            allowed = next((item for item in self.review_allowed if item[1] == call
+                            and (tool_use_id is None or item[0] is None or item[0] == tool_use_id)), None)
+            if allowed is None:
+                return False
+            self.review_allowed.remove(allowed)
+        if request.get('blocked_path') or (isinstance(tool_input, dict) and tool_input.get('dangerouslyDisableSandbox')):
+            return False
+        self._reply(event['request_id'], {'behavior': 'allow', 'updatedInput': tool_input})
+        return True
+
+    def _answer_review(self, token: str, details: dict, response: dict) -> dict:
+        """Apply the parent's one answer to a refused review (under the lock).
+
+        ``accept`` grants one release of exactly that call, whose retry skips the
+        reviewer but not Claude's own limits. The answer is input to the running
+        turn; after the turn ended only an accepted one starts another turn. A
+        failed send leaves the request pending.
+        """
+        if response not in ({'decision': 'accept'}, {'decision': 'decline'}):
+            raise RuntimeAdapterError('invalid-input', 'Return an explicit accept or decline decision.')
+        accepted = response['decision'] == 'accept'
+        params = details['params']
+        message = (f"Your direct parent answered the refused review of your {params['tool']} call "
+                   f"({details['request_id']}): "
+                   + ('you may retry exactly that call once, with identical input; a changed call is reviewed again.'
+                      if accepted else 'do not retry that call; continue with other work or report it as blocked.'))
+        if accepted or not self.turn_ended:
+            self._prompt(message)
+        if accepted:
+            self.review_releases[review_key(params['tool'], params['input'])] += 1
+        del self.pending[token]
+        return {'request_id': details['request_id'], 'reply_status': 'submitted'}
 
     def run(self) -> dict:
         """Own startup, work and cleanup; publish completion only after process exit."""
@@ -648,6 +827,9 @@ class ClaudeExecution:
                     **({'PostToolUse': [{'matcher': 'mcp__agents__agents',
                                          'hookCallbackIds': ['graphtraj_agents_display']}]}
                        if self.independent else {}),
+                    **({'PreToolUse': [{'matcher': None, 'hookCallbackIds': ['agents_review'],
+                                        'timeout': review_hook_timeout(self.request['review'])}]}
+                       if self.request.get('review') is not None else {}),
                 })
                 resource_update = None
                 startup_deadline = time.monotonic() + 45
@@ -683,6 +865,11 @@ class ClaudeExecution:
                     try:
                         event = self.events.get(timeout=0.1)
                     except queue.Empty:
+                        # A parent's answer can release a finished turn with no native event.
+                        with self.lock:
+                            if self.turn_ended and not self._review_held():
+                                self.accepting = False
+                                break
                         continue
                     source_position += 1
                     if event.get('type') != 'eof' and collector is not None:
@@ -802,7 +989,9 @@ class ClaudeExecution:
                             self.echoes >= self.sent and last_result > last_echo and queued_turns == 0) or (
                             self.native_state == 'idle'
                             and self.results + self._absorbed_inputs() >= self.sent)
-                        if self.results and settled and self.native_state == 'idle':
+                        # A refused review keeps the execution open for its parent's answer.
+                        self.turn_ended = bool(self.results and settled and self.native_state == 'idle')
+                        if self.turn_ended and not self._review_held():
                             self.accepting = False
                             break
                 if result_error and not self.stopping.is_set():
@@ -915,6 +1104,10 @@ class ClaudeExecution:
             raise RuntimeAdapterError('RUNTIME_SESSION_MISSING', 'Claude ended without a registered Session.')
         return self.outcome
 
+    def _review_held(self) -> bool:
+        """Whether a refused review still waits for the parent's answer."""
+        return any(details['method'] == REVIEW_METHOD for details in self.pending.values())
+
     def permission_evidence(self) -> dict:
         """Distinguish retained selection from the mode actually reported by Claude."""
         observed = getattr(self, 'native_init', {}).get('permissionMode')
@@ -981,8 +1174,11 @@ class ClaudeExecution:
                 return False
             try:
                 for details in list(self.pending.values()):
-                    self._reply(details['request_id'], {'behavior': 'deny', 'message': 'Execution interrupted.', 'interrupt': True})
+                    # A held review has no native request left to answer.
+                    if details['method'] != REVIEW_METHOD:
+                        self._reply(details['request_id'], {'behavior': 'deny', 'message': 'Execution interrupted.', 'interrupt': True})
                 self.pending.clear()
+                self.review_releases.clear()
                 self._control('interrupt')
             except RuntimeAdapterError:
                 return False
@@ -1010,6 +1206,8 @@ class ClaudeExecution:
             if operation == 'reply':
                 details = self.pending.get(request.get('request_token'))
                 response = request.get('response')
+                if details is not None and details['method'] == REVIEW_METHOD:
+                    return self._answer_review(request['request_token'], details, response)
                 if (details is None or not isinstance(response, dict)
                         or response.get('behavior') not in {'allow', 'deny'}
                         or set(response) - {'behavior', 'updatedInput', 'message', 'interrupt'}
@@ -1036,6 +1234,26 @@ class ClaudeExecution:
         if not self.termination_checked.wait(timeout=30) or not self.terminal_confirmed:
             raise RuntimeAdapterError('operation-failed', 'Claude interruption is not yet confirmed.', terminal_confirmed=False)
         return {}
+
+
+def review_key(tool: object, tool_input: object) -> tuple[str, str]:
+    """Identify one exact tool call: its name and canonical JSON input, as a digest."""
+    text = json.dumps(tool_input, sort_keys=True, ensure_ascii=False, separators=(',', ':'))
+    return str(tool), hashlib.sha256(text.encode()).hexdigest()
+
+
+def review_refusal(reason: str) -> dict:
+    """Refuse the call through Claude's own PreToolUse decision."""
+    return {'hookSpecificOutput': {
+        'hookEventName': 'PreToolUse', 'permissionDecision': 'deny',
+        'permissionDecisionReason': (f'{reason} Your direct parent has been asked; '
+                                     'do not retry this call until you are told you may.'),
+    }}
+
+
+def review_hook_timeout(reviewer: dict) -> int:
+    """Outlast the bounded reviewer, so that Claude never gives up on the hook first."""
+    return max(REVIEW_HOOK_MIN_SECONDS, int(reviewer.get('timeout_seconds', 0)) + REVIEW_HOOK_MARGIN_SECONDS)
 
 
 def native_model_reason(event: dict) -> str | None:

@@ -53,6 +53,9 @@ class ClaudeDriver:
     GraphTraj installation or archive. Plain control needs no configure hook.
     """
 
+    # A create's resolved reviewer runs through this driver's PreToolUse hook.
+    supports_review = True
+
     def __init__(
         self,
         cwd: Path,
@@ -80,7 +83,10 @@ class ClaudeDriver:
         if runtime != 'claude':
             raise AgentsError('unsupported-runtime', 'This driver runs Claude only.')
         config = self.configuration if selection is None else selected(self.configuration, selection)
-        return prepare(config, self.cwd if workspace is None else within_workspace(workspace, self.cwd))
+        settings = prepare(config, self.cwd if workspace is None else within_workspace(workspace, self.cwd))
+        if selection is not None and selection.get('review') is not None:
+            settings['review'] = deepcopy(dict(selection['review']))
+        return settings
 
     def require_available(self, connection: Mapping[str, Any]) -> None:
         """Refuse a connection whose Claude Code is not installed or not logged in."""

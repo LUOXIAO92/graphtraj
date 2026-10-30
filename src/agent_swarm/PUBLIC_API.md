@@ -624,6 +624,40 @@ request.
   after the turn ended starts nothing.
 - Interrupting the child drops its unanswered relays.
 
+**Claude review plugin (386).** A Claude child whose connection names a reviewer
+(section 3) has every tool call judged in a `PreToolUse` hook on its own control
+pipe, except the bound `mcp__agents__agents` tool: it is the child's channel to
+its parent, limited by agents' authority checks, and must work when the reviewer
+is down. Read-only tools are reviewed too. The hook's timeout outlasts the
+reviewer (its timeout plus 60 seconds, at least 600), and the host always answers,
+because a hook that errors or times out does not block the tool. Without a
+reviewer the hooks and settings are unchanged.
+
+- `allow`: the hook answers `{}` with no permission decision, so Claude's own
+  rules, mode and sandbox still apply. A later `can_use_tool` for that call (same
+  `tool_use_id` and input; without an ID, the exact tool and input) is answered
+  with its original input and does not reach the parent, unless it names
+  `blocked_path` or the input sets `dangerouslyDisableSandbox`: the reviewer was
+  not asked to widen a native limit, so those are held as native requests. A
+  prompt for any other call is held as before.
+- `deny`, `escalate` or a failed review, including any error in this path: the
+  hook answers Claude's own `deny`, telling the child its parent has been asked
+  and not to retry, and a request is held with `method: "agents/review"`,
+  `request_id: "agents-review:<uuid>"` and `params` `{"tool", "input", "decision",
+  "reason"}`. An identical call while that request waits is refused without
+  asking the reviewer or the parent again.
+- `reply` takes exactly `{"decision": "accept"}` or `{"decision": "decline"}`.
+  `accept` releases one retry of exactly that call: it skips the reviewer, not
+  Claude's own limits, and a repeat or a changed input is reviewed again.
+- The answer reaches the child as input to its running turn; an accepted answer
+  after the turn ended starts one follow-up turn. A declined answer after the turn
+  ended starts nothing. The execution stays active until the parent answers.
+- Interrupting the child drops its unanswered requests and releases; a release
+  also ends with its execution.
+- Each decision and released retry is recorded in `review.jsonl` in the child's
+  execution directory, without the tool input. The reviewer's key variable is not
+  passed to the child.
+
 ## 5. `extra_fields` in the normalized Session
 
 The header and any event may carry an `extra_fields` container:
@@ -714,7 +748,9 @@ used):
   `authority-denied`: Claude may not replace the tool input; Codex may answer
   only `accept` (not `acceptForSession` or a policy amendment) and only the
   requested permissions for the turn; a Pi `select` must pick an offered
-  option.
+  option;
+- a request held by the Claude review plugin (`agents/review`, 4.1) takes exactly
+  `{"decision": "accept"}` or `{"decision": "decline"}`, else `invalid-input`.
 
 The parent's own sandbox is not compared with the request; a parent should
 decline what it could not do itself. The root may refer a request to a

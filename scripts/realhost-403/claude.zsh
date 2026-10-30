@@ -18,8 +18,9 @@
 # tool results of each `claude -p --output-format stream-json` run and in the native transcript,
 # public `status` `notification`, and two lines of host.log. The child's end is `interrupted` when
 # the host finishes stopping it, or `failed` (owner-exited) when Claude Code kills the host first;
-# either must arrive exactly once. The check names which, and whether host.log shows the host
-# finished, since Claude Code's exit timing cannot be read in the team's sandbox.
+# either must arrive exactly once. Claude Code follows SIGINT with another signal soon after
+# (src/agent_swarm/mcp.py INTERRUPT_SECONDS, Task 404), so the check prints whether host.log shows
+# the host finished. Its absence with a `failed` notice is that kill, not a failure of holding.
 #
 # Flags are those of realhost-381 and realhost-404. No credential is read, copied or printed.
 setopt err_exit pipe_fail no_unset
@@ -181,7 +182,11 @@ Do not wait for the child and do not call any other feature. Then reply with one
 CREATED=($($VENV/bin/python $P/check.py created $EVIDENCE/step2.jsonl))
 [[ ${#CREATED} -eq 2 ]] || fail "step 2 created no child; see $EVIDENCE/step2.jsonl and $ROOT/host.log"
 AGENT=$CREATED[1]; EXECUTION=$CREATED[2]
-print -r -- "child agent $AGENT, execution $EXECUTION; Claude Code has exited, so the child's end is recorded now"
+print -r -- "child agent $AGENT, execution $EXECUTION; Claude Code has exited."
+# If Claude Code's next signal killed the host first, the child's end is only recorded once its
+# Runtime is gone too, which the next host finds. Give that Runtime time to see its input close.
+print -r -- "Waiting 15 s for a Runtime that outlived a killed host to exit (nothing to type)."
+sleep 15
 
 say "step 3: the Main resumes and calls discover, which does not show the end"
 print -r -- "Native review dialog: none."

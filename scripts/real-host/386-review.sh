@@ -1,8 +1,11 @@
 #!/bin/bash
 # Task 386 real-host check: the review plugin on real Claude Code and Codex.
 #
-# Run in your own macOS Terminal (outside any Agent sandbox), with no argument:
+# Run in your own macOS Terminal (outside any Agent sandbox):
 #   bash /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/386-review-plugin-core-claude-codex/scripts/real-host/386-review.sh
+# With no argument it runs everything. With the one optional argument `codex` it runs
+# only the preflight, the model listing, step 3 and step 5 on Codex, about 5 to 10
+# minutes; use that when only Codex evidence is missing.
 #
 # Expected native review dialog: NONE. The parent is this script (a Python caller
 # of the public agents API), so no Claude or Codex dialog should appear. If one
@@ -12,9 +15,11 @@
 #   Preflight  shell, HEAD, versions, each host's one-line self-report.
 #   1  Claude protocol probe: PreToolUse fires before the tool (stub reviewer).
 #   2  Claude child with a DeepSeek reviewer (lists the endpoint's models first).
-#   3  Codex child with the same DeepSeek reviewer.
+#   3  Codex child with the same DeepSeek reviewer. Codex is asked to touch a file
+#      outside its workspace, because under on-request a write inside it runs unasked.
 #   4  Create with a broken reviewer, each child Runtime: refused, nothing started.
-#   5  Reviewer breaks after creation, each child Runtime: the parent decides.
+#   5  Reviewer breaks after creation, each child Runtime: the parent decides. The
+#      Codex target is outside its workspace too.
 #   6  Slow reviewer on Claude, 75 s: past a 60 s default hook limit.
 #   7  Claude with a 5 s hook timeout: prints what happens past it. Observation only.
 #
@@ -30,6 +35,8 @@
 #
 # Every fixture sits in a new directory under $HOME, because a child's sandbox may
 # reach $TMPDIR and /tmp. The directory is printed and kept; delete it when done.
+# Steps 3 and 5 on Codex really change a file outside the child's sandbox, in that
+# directory only, once the reviewer or this parent approves.
 #
 # It stops if the Worktree is not on the 386 branch or has uncommitted changes,
 # because the venv imports the live tree. Written for macOS /bin/bash 3.2.
@@ -49,6 +56,12 @@ DEEPSEEK_MODEL=deepseek-flash
 CLAUDE_MODEL=claude-sonnet-5-5
 # The Codex child's model, required by its settings; empty: read from ~/.codex/config.toml.
 CODEX_MODEL=
+
+MODE=${1:-}
+if [ -n "$MODE" ] && [ "$MODE" != codex ]; then
+  echo "STOP: the only argument is codex; got: $MODE"
+  exit 2
+fi
 
 RUN=$(mktemp -d "$HOME/agents-386-review.XXXXXX") || exit 2
 VENV=$RUN/venv
@@ -145,7 +158,7 @@ RUN = Path(sys.argv[1])
 ENV = os.environ
 # Out of the environment now, so that no child inherits it; see deepseek_key().
 DEEPSEEK_KEY = ENV.pop('DEEPSEEK_API_KEY', None)
-DEEPSEEK_MODEL = ENV['DEEPSEEK_MODEL']
+DEEPSEEK_MODEL = ENV.get('DEEPSEEK_MODEL')
 MODEL_PROBLEM: str | None = None
 # States that report what was seen, with no bearing on the exit status.
 INFORMATIVE = ('OBSERVED', 'NOT OBSERVED')
@@ -174,7 +187,10 @@ def instruction(runtime: str, name: str, path: Path) -> str:
     if runtime == 'claude':
         return (f'Use the Write tool, once, to create the file {path} containing exactly: ok\n'
                 f'Use no other tool. {REFUSE_NOTE}')
-    return f'Run exactly one shell command, once: touch {path}\nRun nothing else. {REFUSE_NOTE}'
+    return (f'Run exactly one shell command, once: touch {path}\nRun nothing else. Your direct parent authorizes '
+            'creating this one empty file. It is outside your workspace, so the sandbox may stop the command: that '
+            'is not a refusal. Ask for the escalated permission it needs, for that same command, like any write '
+            f'outside the sandbox, and do not work around the sandbox. {REFUSE_NOTE}')
 
 
 class Stub:
@@ -231,7 +247,10 @@ class Child:
         self.directory = RUN / step
         self.data = self.directory / 'data'
         self.work = self.directory / 'work'
+        # Not in the permission profile, so a Codex child must ask to write here.
+        self.outside = self.directory / 'outside'
         self.work.mkdir(parents=True)
+        self.outside.mkdir()
         self.data.mkdir()
         lines = ['reviewers:', '  checker:'] + [f'    {key}: {yaml_value(value)}' for key, value in reviewer.items()]
         (self.data / 'config.yml').write_text('\n'.join(lines + [
@@ -254,12 +273,12 @@ class Child:
             driver = CountedClaude(self.work, {'executable': ENV['CLAUDE_BIN'], 'model': ENV['CLAUDE_MODEL'],
                                                'permission_mode': 'default'}, configure=configure)
         else:
-            # What makes Codex ask: approval_policy untrusted asks before any command
-            # outside its known-safe list, such as touch, even inside the workspace.
+            # What makes Codex ask: under on-request (as 385's real run) a write inside
+            # the workspace runs unasked, and one outside it needs an approval.
             driver = CountedCodex({'adapter_request': {
                 'arguments': [ENV['CODEX_BIN']], 'worktree_path': str(self.work),
                 'session_parameters': {'cwd': str(self.work), 'model': ENV['CODEX_MODEL'], 'developerInstructions': '', 'config': {
-                    'approval_policy': 'untrusted', 'default_permissions': 'work',
+                    'approval_policy': 'on-request', 'default_permissions': 'work',
                     'permissions': {'work': {'extends': ':workspace',
                                              'filesystem': {':workspace_roots': {'.': 'write'}}}}}}}})
         self.control = AgentControl(self.data, {runtime: driver}, event_receiver=self.notices.append,
@@ -271,9 +290,13 @@ class Child:
         """Return one public result document."""
         return self.call({'action': action, **arguments}).document
 
+    def target(self, name: str) -> Path:
+        """Return where one file task writes: outside the workspace for Codex, which would not ask inside it."""
+        return (self.outside if self.runtime == 'codex' else self.work) / name
+
     def create(self, name: str) -> dict:
         """Create the child with one file task."""
-        document = self.invoke('create', runtime=self.runtime, instruction=instruction(self.runtime, name, self.work / name))
+        document = self.invoke('create', runtime=self.runtime, instruction=instruction(self.runtime, name, self.target(name)))
         if 'agent' not in document:
             raise RuntimeError(f'create failed: {json.dumps(document, ensure_ascii=False)}')
         self.agent = document['agent']
@@ -281,7 +304,7 @@ class Child:
 
     def send(self, name: str) -> dict:
         """Give the child the next file task."""
-        document = self.invoke('send', agent=self.agent, message=instruction(self.runtime, name, self.work / name))
+        document = self.invoke('send', agent=self.agent, message=instruction(self.runtime, name, self.target(name)))
         if document.get('error'):
             raise RuntimeError(f'send failed: {json.dumps(document, ensure_ascii=False)}')
         return document
@@ -330,12 +353,44 @@ class Child:
             FOLLOW_UPS.append(f'cd {RUN} && {sys.executable} {RUN}/parent.py {RUN} status {self.data} {self.agent}')
 
 
+def accept(child: Child, request: dict) -> None:
+    """Approve one held request in its native form, printing the receipt."""
+    response = ({'permissions': request['params'].get('permissions')}
+                if request['method'] == 'item/permissions/requestApproval' else {'decision': 'accept'})
+    document = child.invoke('reply', agent=child.agent, request=request, response=response)
+    print('    accept', request['method'], json.dumps(
+        document.get('error') or {key: document.get('result', {}).get(key) for key in ('request_id', 'reply_status')}))
+
+
 def decline(child: Child, request: dict) -> None:
     """Refuse one held request in its Runtime's own form, printing the receipt."""
-    response = {'behavior': 'deny'} if request['method'] == 'claude/can_use_tool' else {'decision': 'decline'}
+    response = ({'behavior': 'deny'} if request['method'] == 'claude/can_use_tool' else
+                {'permissions': {}} if request['method'] == 'item/permissions/requestApproval' else
+                {'decision': 'decline'})
     document = child.invoke('reply', agent=child.agent, request=request, response=response)
     print('    decline', request['method'], json.dumps(
         document.get('error') or {key: document.get('result', {}).get(key) for key in ('request_id', 'reply_status')}))
+
+
+def diagnosis(child: Child) -> list[str]:
+    """Return how the child stands, so that a failed execution never reads as 'no request arrived'.
+
+    These are the status document's own facts. A Codex session's confirmed
+    approval_policy and reviewer are not among them; see its session file.
+    """
+    if child.agent is None:
+        return ['child: no Agent was created']
+    result = child.invoke('status', agent=child.agent).get('result', {})
+    last = result.get('last_result') or {}
+    facts = {name: result[name] for name in ('state', 'session', 'stopping', 'diagnostic', 'pending_requests') if name in result}
+    return [f'child status: {json.dumps(facts, ensure_ascii=False)}',
+            f"child last_result outcome: {last.get('outcome')}; error: {json.dumps(last.get('error'), ensure_ascii=False)}",
+            f"child last_result last_message: {str(last.get('last_message'))[:300]}"]
+
+
+def judge(child: Child, name: str, state: str | bool, *proof: object) -> None:
+    """Print one criterion about a child; anything but PASS also says how the child stands."""
+    verdict(name, state, *proof, *([] if state in (True, 'PASS') else diagnosis(child)))
 
 
 def reason_of(request: dict) -> str:
@@ -482,11 +537,14 @@ def step_2() -> None:
             reviews = child.reviews()
             target = child.work / 'ordinary.txt'
             print('    settled:', state, '; file exists:', target.exists())
-            verdict('review connection on a different provider works (Claude)',
-                    target.exists() and any(line['decision'] == 'allow' and line['tool'] == 'Write' for line in reviews),
-                    *[json.dumps(line, ensure_ascii=False) for line in reviews],
-                    *[json.dumps({'pending': request['method'], 'reason': reason_of(request)}) for request in
-                      (child.requests() if state == 'request' else [])])
+            judge(child, 'review connection on a different provider works (Claude)',
+                  target.exists() and any(line['decision'] == 'allow' and line['tool'] == 'Write' for line in reviews),
+                  *[json.dumps(line, ensure_ascii=False) for line in reviews],
+                  *[json.dumps({'pending': request['method'], 'reason': reason_of(request)}) for request in
+                    (child.requests() if state == 'request' else [])])
+        except Exception:
+            print(*diagnosis(child), sep='\n')
+            raise
         finally:
             child.close()
 
@@ -494,7 +552,7 @@ def step_2() -> None:
 def step_3() -> None:
     """A Codex child under its own login, reviewed by the same DeepSeek reviewer."""
     print('\n== Step 3: Codex child (own login) with the same DeepSeek reviewer')
-    print('    Codex asks because approval_policy is untrusted and touch is not on its known-safe list; '
+    print('    Codex asks because approval_policy is on-request and the target is outside its writable workspace; '
           'the sandbox is workspace write, approvals_reviewer is user.')
     if deepseek_blocker():
         verdict('review connection on a different provider works (Codex)', False, deepseek_blocker())
@@ -502,6 +560,7 @@ def step_3() -> None:
     with deepseek_key():
         child = Child('step3', 'codex', deepseek())
         try:
+            print('    target, outside the permission profile:', child.target('ordinary.txt'))
             created = child.create('ordinary.txt')
             print('    create:', json.dumps({'agent': created.get('agent'), 'error': created.get('error'),
                                               'connection': created.get('result', {}).get('connection'),
@@ -509,15 +568,20 @@ def step_3() -> None:
             state = child.settle()
             reviews = child.reviews()
             asked = [line for line in reviews if line['tool'].endswith('/requestApproval')]
-            target = child.work / 'ordinary.txt'
+            target = child.target('ordinary.txt')
             print('    settled:', state, '; /requestApproval arrived:', bool(asked), '; file exists:', target.exists())
             proof = [json.dumps(line, ensure_ascii=False) for line in reviews]
+            proof += [json.dumps({'pending': request['method'], 'reason': reason_of(request)}, ensure_ascii=False)
+                      for request in (child.requests() if state == 'request' else [])]
             if not asked:
-                verdict('review connection on a different provider works (Codex)', 'NOT SHOWN',
-                        'No /requestApproval arrived, so the reviewer was not asked.', *proof)
+                judge(child, 'review connection on a different provider works (Codex)', 'NOT SHOWN',
+                      'No /requestApproval arrived, so the reviewer was not asked.', *proof)
             else:
-                verdict('review connection on a different provider works (Codex)',
-                        target.exists() and any(line['decision'] == 'allow' for line in asked), *proof)
+                judge(child, 'review connection on a different provider works (Codex)',
+                      target.exists() and any(line['decision'] == 'allow' for line in asked), *proof)
+        except Exception:
+            print(*diagnosis(child), sep='\n')
+            raise
         finally:
             child.close()
 
@@ -560,13 +624,13 @@ def step_5(runtime: str) -> None:
     flag = RUN / f'step5-{runtime}.broken'
     stub = Stub(lambda: (400, MISSING_SESSION) if flag.exists() else completion(ALLOW))
     child = Child(f'step5-{runtime}', runtime, stub.entry)
-    work = child.work
     try:
+        print('    targets in:', child.target('first.txt').parent)
         print('    create:', json.dumps({key: child.create('first.txt').get(key) for key in ('error',)}))
         state = child.settle()
-        print('    first call while the reviewer works:', state, '; file exists:', (work / 'first.txt').exists())
-        if state != 'standby' or not (work / 'first.txt').exists():
-            verdict(f'{runtime}: the first call runs while the reviewer works', False, json.dumps(child.reviews()))
+        print('    first call while the reviewer works:', state, '; file exists:', child.target('first.txt').exists())
+        if state != 'standby' or not child.target('first.txt').exists():
+            judge(child, f'{runtime}: the first call runs while the reviewer works', False, json.dumps(child.reviews()))
             return
         flag.touch()
         print('    the stub now answers 400; flag:', flag)
@@ -574,41 +638,42 @@ def step_5(runtime: str) -> None:
         state = child.settle()
         time.sleep(15)  # Let a model that keeps trying show any further request.
         held = child.requests()
-        ran_early = (work / 'second.txt').exists()
+        ran_early = child.target('second.txt').exists()
         notices = child.request_notices()
-        verdict(f'{runtime}: the next tool call does not run; exactly one request reaches the parent, with the reason',
-                state == 'request' and len(held) == 1 and len(notices) == 1 and not ran_early
-                and 'MissingSessionID' in reason_of(held[0]),
-                f'settled: {state}; file exists: {ran_early}; notices: {len(notices)}',
-                *[json.dumps({'method': item['method'], 'request_id': item['request_id'], 'reason': reason_of(item)},
-                             ensure_ascii=False) for item in held])
+        judge(child, f'{runtime}: the next tool call does not run; exactly one request reaches the parent, with the reason',
+              state == 'request' and len(held) == 1 and len(notices) == 1 and not ran_early
+              and 'MissingSessionID' in reason_of(held[0]),
+              f'settled: {state}; file exists: {ran_early}; notices: {len(notices)}',
+              *[json.dumps({'method': item['method'], 'request_id': item['request_id'], 'reason': reason_of(item)},
+                           ensure_ascii=False) for item in held])
         if not held:
             return
-        receipt = child.invoke('reply', agent=child.agent, request=held[0], response={'decision': 'accept'})
-        print('    accept:', json.dumps({key: receipt.get('result', {}).get(key) for key in ('request_id', 'reply_status')}),
-              receipt.get('error') or '')
+        accept(child, held[0])
         final = child.standby()
-        verdict(f"{runtime}: the parent's accept lets exactly that call run",
-                (work / 'second.txt').exists() and final.get('state') == 'standby'
-                and (runtime != 'claude' or any(line['decision'] == 'released' for line in child.reviews())),
-                f"state: {final.get('state')}; file exists: {(work / 'second.txt').exists()}",
-                *[json.dumps(line, ensure_ascii=False) for line in child.reviews()])
+        judge(child, f"{runtime}: the parent's accept lets exactly that call run",
+              child.target('second.txt').exists() and final.get('state') == 'standby'
+              and (runtime != 'claude' or any(line['decision'] == 'released' for line in child.reviews())),
+              f"state: {final.get('state')}; file exists: {child.target('second.txt').exists()}",
+              *[json.dumps(line, ensure_ascii=False) for line in child.reviews()])
         child.send('third.txt')
         state = child.settle()
         time.sleep(5)
         third = child.requests()
-        verdict(f'{runtime}: a second distinct call also reaches the parent rather than the child hanging',
-                state == 'request' and len(third) >= 1 and not (work / 'third.txt').exists(),
-                f'settled: {state}; requests: {len(third)}; file exists: {(work / "third.txt").exists()}')
+        judge(child, f'{runtime}: a second distinct call also reaches the parent rather than the child hanging',
+              state == 'request' and len(third) >= 1 and not child.target('third.txt').exists(),
+              f"settled: {state}; requests: {len(third)}; file exists: {child.target('third.txt').exists()}")
         for item in third:
             decline(child, item)
         final = child.standby()
-        verdict(f'{runtime}: decline keeps that call from running',
-                bool(third) and not (work / 'third.txt').exists() and final.get('state') == 'standby',
-                f"state: {final.get('state')}; file exists: {(work / 'third.txt').exists()}",
-                f"last message: {str((final.get('last_result') or {}).get('last_message'))[:200]}")
+        judge(child, f'{runtime}: decline keeps that call from running',
+              bool(third) and not child.target('third.txt').exists() and final.get('state') == 'standby',
+              f"state: {final.get('state')}; file exists: {child.target('third.txt').exists()}",
+              f"last message: {str((final.get('last_result') or {}).get('last_message'))[:200]}")
         print('    Compare: DSH 0.2.2-alpha.2 on opencode-go answered its review with 400 MissingSessionID and every '
               'tool call stayed blocked; here the same 400 went to the parent, which released or refused each call.')
+    except Exception:
+        print(*diagnosis(child), sep='\n')
+        raise
     finally:
         child.close()
         stub.close()
@@ -743,7 +808,7 @@ def step_7() -> None:
 
 
 def main() -> int:
-    """Run every step, or answer one follow-up command."""
+    """Run every step, only the Codex ones, or answer one follow-up command."""
     if sys.argv[2:3] == ['status']:
         # Show one Agent as the same parent caller sees it.
         control = AgentControl(Path(sys.argv[3]), {'claude': ClaudeDriver(RUN, {}), 'codex': CodexDriver({})})
@@ -752,6 +817,8 @@ def main() -> int:
         return 0
     steps = {'1': [step_1], '2': [pick_deepseek_model, step_2], '3': [step_3], '4': [step_4],
              '5': [lambda: step_5('claude'), lambda: step_5('codex')], '6': [step_6], '7': [step_7]}
+    if sys.argv[2:3] == ['codex']:
+        steps = {'3': [pick_deepseek_model, step_3], '5': [lambda: step_5('codex')]}
     for number in steps:
         for step in steps[number]:
             print('\nDEEPSEEK_API_KEY in this process before this step:', 'present' if 'DEEPSEEK_API_KEY' in ENV else 'absent')
@@ -775,7 +842,7 @@ PARENT_EOF
 
 CLAUDE_BIN="$CLAUDE" CODEX_BIN="$CODEX" CLAUDE_MODEL="$CLAUDE_MODEL" CODEX_MODEL="$CODEX_MODEL" \
   DEEPSEEK_BASE_URL="$DEEPSEEK_BASE_URL" DEEPSEEK_MODEL="$DEEPSEEK_MODEL" \
-  "$VENV/bin/python" "$RUN/parent.py" "$RUN"
+  "$VENV/bin/python" "$RUN/parent.py" "$RUN" ${MODE:+"$MODE"}
 STATUS=$?
 echo
 echo "== Run directory (kept): $RUN"

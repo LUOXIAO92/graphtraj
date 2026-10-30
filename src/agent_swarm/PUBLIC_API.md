@@ -629,9 +629,11 @@ request.
 pipe, except the bound `mcp__agents__agents` tool: it is the child's channel to
 its parent, limited by agents' authority checks, and must work when the reviewer
 is down. Read-only tools are reviewed too. The hook's timeout outlasts the
-reviewer (its timeout plus 60 seconds, at least 600), and the host always answers,
-because a hook that errors or times out does not block the tool. Without a
-reviewer the hooks and settings are unchanged.
+reviewer (its timeout plus 60 seconds, at least 600), and the host always answers
+before it, so nothing depends on what Claude does past it. On Claude Code 2.1.314
+a hook past its timeout was cancelled and the call did not run (one observation,
+one tool); a hook that errors is untested. Without a reviewer the hooks and
+settings are unchanged.
 
 - `allow`: the hook answers `{}` with no permission decision, so Claude's own
   rules, mode and sandbox still apply. A later `can_use_tool` for that call (same
@@ -788,7 +790,10 @@ reason, so an endpoint that would reject every review is reported at once.
 **Codex adapter.** Every command, file change, permissions and MCP tool call
 approval is reviewed before it runs. Calls Codex runs without asking, because
 its sandbox and `approval_policy` allow them, are not reviewed and stay inside
-that sandbox; a granular `approval_policy` object is not inspected. `allow` accepts exactly that request, with
+that sandbox; a granular `approval_policy` object is not inspected. A request
+Codex hands over may ask to go beyond its sandbox, and `allow` grants that one
+request, as Codex's own reviewer would; this differs from Claude, where the
+reviewer's allow never answers a sandbox or directory prompt. `allow` accepts exactly that request, with
 the exact requested permissions for the turn and no persistent trust. `deny`,
 `escalate` or a failed review holds the same native request for the direct
 parent, with `params.review: {"decision", "reason"}` added: `requests`, the

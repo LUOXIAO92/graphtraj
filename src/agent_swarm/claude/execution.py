@@ -37,7 +37,8 @@ PROMPT_HOOK_LIMIT_SECONDS = 30
 # The child's channel to its parent, limited by agents' own authority checks.
 # Reviewing it would block ask_parent and status when the reviewer is down.
 AGENTS_TOOL = 'mcp__agents__agents'
-# A PreToolUse hook that misses its timeout is non-blocking, so the host answers first.
+# The host answers a PreToolUse hook before its timeout, so nothing depends on what
+# Claude does past it. See PUBLIC_API.md 4.1 for what is known.
 REVIEW_HOOK_MIN_SECONDS = 600
 REVIEW_HOOK_MARGIN_SECONDS = 60
 
@@ -630,10 +631,11 @@ class ClaudeExecution:
     def _review_hook(self, event: dict) -> None:
         """Answer one PreToolUse callback, always, and off the protocol loop.
 
-        Claude treats a hook that errors or times out as non-blocking, so every
-        path ends in an answer, an exception included, and only an allowed or
-        released call gets ``{}``. That reply states no permission decision, so
-        Claude's own rules, mode and sandbox still apply.
+        Every path ends in an answer before the hook's timeout, an exception
+        included, so nothing depends on what Claude does with a hook that errors
+        or times out. Only an allowed or released call gets ``{}``. That reply
+        states no permission decision, so Claude's own rules, mode and sandbox
+        still apply.
         """
         identity = event['request_id']
         native = event['request'].get('input')

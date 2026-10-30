@@ -632,6 +632,34 @@ def test_claude_a_request_answered_before_the_claim_is_dropped(tmp_path: Path, n
     stop_host(host)
 
 
+def test_claude_a_child_ending_before_its_create_returns_reaches_the_main_once(tmp_path: Path) -> None:
+    """Its own create result carries the body, so the wait that follows shows none: once, not twice."""
+    class Quick(Driver):
+        """Ends every execution before ``start`` returns."""
+
+        def start(self, run: Run) -> None:
+            """Report the end while the create call is still running."""
+            super().start(run)
+            run.events.finished('completed', last_message='quick answer')
+
+    host = IndependentCalls(tmp_path / 'agents', tmp_path, {})
+    host.control.drivers['fake'] = Quick()
+    session = str(uuid4())
+    run = host.make_call(session, tmp_path)
+
+    def invoke(feature: str, **arguments: object) -> dict:
+        """Call the tool as the Main does."""
+        return run('agents', {'action': 'execute', 'feature': feature, 'arguments': arguments}).document
+
+    created = invoke('create', runtime='fake', instruction='work')
+    assert [notice['event']['message'] for notice in created['main_notices']] == ['quick answer']
+    waited = invoke('wait', agent=created['agent'], timeout_seconds=5)
+    assert waited['result']['last_result']['notification'] == 'delivered'
+    assert waited['result']['last_result']['last_message'] is None
+    assert 'main_notices' not in waited
+    assert host.context({'operation': 'notices', 'session': session})['notices'] == []
+
+
 def test_a_result_sent_to_a_client_already_gone_gives_its_notices_back() -> None:
     """A Main that exited mid-call never read it, so what it carried is not delivered."""
     undone: list[bool] = []

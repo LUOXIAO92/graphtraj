@@ -230,7 +230,7 @@ def notice(**fields) -> dict:
 
 
 def test_notice_receiver_outcomes() -> None:
-    """Admitted is delivered, refused is unavailable, silence is unconfirmed; other Mains are skipped."""
+    """Admitted is delivered, refused is held, silence is unconfirmed; other Mains are skipped."""
     sender, pipe = notices()
     assert sender.receive(notice()) is True
     assert pipe.lines == [{'notice': {'id': 'exec-1:completed', 'agent': 'agent-1', 'session': 'child',
@@ -240,10 +240,10 @@ def test_notice_receiver_outcomes() -> None:
     assert len(pipe.lines) == 1
     sender.receive(notice(execution='exec-2', outcome='request', request='token-1', body='Permission request'))
     assert pipe.lines[-1]['notice']['id'] == 'exec-2:request:token-1'
-    assert notices(shown=False)[0].receive(notice()) is False
+    assert notices(shown=False)[0].receive(notice()) == 'held'
     assert notices(shown=None, timeout=0.05)[0].receive(notice()) == 'unconfirmed'
     sender.close()
-    assert sender.receive(notice(execution='exec-3')) is False
+    assert sender.receive(notice(execution='exec-3')) == 'held'
     assert len(pipe.lines) == 2
 
 

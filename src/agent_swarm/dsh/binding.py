@@ -6,6 +6,7 @@ from typing import Iterator
 
 from agent_swarm import Run
 from agent_swarm.connection import agents_connection
+from agent_swarm.notices import notice_id
 from agent_swarm.process import authenticate_process
 from .execution import DshExecution
 
@@ -47,10 +48,13 @@ def bind_run(turn: DshExecution, run: Run) -> None:
             active = turn.active and not turn.stopping.is_set() and not turn.finished.is_set()
         if not active:
             return run.events.continue_from_child(event, run.archive)
+        # The relay admits one id once, so each request of an execution has its own.
+        identity = (notice_id(event['execution'], 'request', event['request']) if event.get('request')
+                    else event['execution'])
         with turn.lock:
             result = turn.operate({
                 'operation': 'receive', 'session': turn.session, 'execution_id': turn.execution_id,
-                'message': {'id': event['execution'], 'sessionId': turn.session,
+                'message': {'id': identity, 'sessionId': turn.session,
                             'senderSessionId': event['session'], 'sender': event['agent'],
                             'recipient': run.agent, 'body': event['body']},
             })

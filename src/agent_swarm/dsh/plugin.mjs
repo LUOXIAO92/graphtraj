@@ -16,6 +16,8 @@ export const name = 'agents';
 export const inject = ['tools', 'sessionQuery', 'agents'];
 // Without mcpCommand this is the host row: the installed bundle's own entry.
 export const Config = z.object({ mcpCommand: z.string(), mcpArgs: z.array(String).default([]) });
+// How long a Session that starts no turn by itself waits before taking held notices.
+const READY_MS = 2000;
 
 /** Preserve durable native source; fork ancestry alone is not delegation. */
 export function sessionEnvironment(agent) {
@@ -38,6 +40,7 @@ export function noticeMessage(notice, session) {
  * Start the independent control owner for one native main Session.
  * After the connection line, each host stdout line is one notice for
  * ``onNotice``; it is acknowledged with whether the Session admitted it.
+ * ``ready`` tells the host once that it may deliver the notices it holds.
  */
 export function startAgentHost(agent, environment, onNotice) {
   return new Promise((resolve, reject) => {
@@ -46,7 +49,7 @@ export function startAgentHost(agent, environment, onNotice) {
         cwd: agent.session.header.cwd, stdio: ['pipe', 'pipe', 'pipe'],
         env: { ...environment, AGENT_SWARM_DSH_NODE: process.execPath, AGENT_SWARM_DSH_ENTRY: process.argv[1] },
       });
-    let diagnostic = '', output = '', failure, ready = false, closing = false;
+    let diagnostic = '', output = '', failure, ready = false, closing = false, announced = false;
     child.stdout.setEncoding('utf8');
     child.stderr.setEncoding('utf8');
     child.stderr.on('data', value => { diagnostic = (diagnostic + value).slice(-8192); });
@@ -80,7 +83,11 @@ export function startAgentHost(agent, environment, onNotice) {
           if (typeof connection !== 'string' || !connection) throw new Error('No independent host connection.');
           ready = true;
           output = output.slice(output.indexOf('\n') + 1);
-          resolve({ connection, async close() {
+          resolve({ connection, ready() {
+            if (closing || announced) return;
+            announced = true;
+            child.stdin.write('{"ready":true}\n');
+          }, async close() {
             closing = true;
             child.stdin.end();
             await ended;
@@ -96,6 +103,22 @@ export function startAgentHost(agent, environment, onNotice) {
       }
     });
   });
+}
+
+/**
+ * Let the host deliver what it holds once this Session's own start is over.
+ * A relay message wakes an idle Session, and a wake before the runner hands
+ * over its task would run a turn ahead of the runner's permission settings
+ * (``dsh-headless`` ``run``). So wait for the first turn, or for ``limit``
+ * milliseconds in a long-lived profile that starts none by itself.
+ */
+function announceReady(agent, host, limit = READY_MS) {
+  const deadline = Date.now() + limit;
+  const check = () => {
+    if (agent.status === 'running' || Date.now() >= deadline) host.ready();
+    else setTimeout(check, 50).unref?.();
+  };
+  check();
 }
 
 /** Attach the MCP server ``agents`` to one native Agent. */
@@ -147,6 +170,7 @@ function applyHost(ctx) {
       host = await started;
       await attachMcp(agent, environment.AGENT_SWARM_PYTHON, ['-I', '-m', 'agent_swarm.mcp'],
         { ...sessionEnvironment(agent), AGENT_SWARM_CONNECTION: host.connection });
+      announceReady(agent, host);
     } catch (error) {
       await close(id);
       throw error;

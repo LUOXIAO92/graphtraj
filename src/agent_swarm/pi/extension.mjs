@@ -4,6 +4,9 @@ import { existsSync, readFileSync, realpathSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
+// How long a Session with a UI that starts no turn by itself waits before taking held notices.
+const READY_MS = 2000;
+
 /** Render the same successful MCP communication facts without model injection. */
 export function registerAgentDisplay(pi, sdk) {
   const customType = 'graphtraj:agent-communication';
@@ -77,16 +80,23 @@ export function sessionEnvironment(ctx, environment) {
 }
 
 /**
- * Inject one host notice (a child's answer or a failed/interrupted end) into
- * this Pi Session through Pi's native custom-message API: an idle Session
- * starts a turn with it, a streaming one receives it as a follow-up.
+ * Inject one host notice (a child's answer, permission request or a
+ * failed/interrupted end) into this Pi Session through Pi's native
+ * custom-message API: an idle Session starts a turn with it, a streaming one
+ * receives it as a follow-up. A notice replayed after a crash between injecting
+ * and acknowledging is already among the Session's ``custom_message`` entries
+ * (Pi's ``SessionManager.appendCustomMessageEntry``); it is not injected again.
  */
-export function deliverNotice(pi, notice, session) {
+export function deliverNotice(pi, notice, session, manager) {
   const {id, alias, agent, event, message, execution} = notice;
+  const fact = `notice:${id}`;
+  // ponytail: scan native entries, as the display does; a notice is rare.
+  if (manager.getEntries().some(entry => entry.type === 'custom_message' &&
+      entry.customType === 'graphtraj:agent-communication' && entry.details?.fact === fact)) return;
   pi.sendMessage({
     customType: 'graphtraj:agent-communication',
     content: `[agents notice from ${alias} · ${event}]\n${message}`, display: true,
-    details: {fact: `notice:${id}`, sender: alias, recipient: session, body: message,
+    details: {fact, sender: alias, recipient: session, body: message,
       agent, execution, event, source: 'agents'},
   }, {triggerTurn: true, deliverAs: 'followUp'});
 }
@@ -95,7 +105,8 @@ export function deliverNotice(pi, notice, session) {
  * Own the independent core until native shutdown; MCP only connects to it.
  * After the connection line, each host stdout line is one notice for
  * ``onNotice``; it is acknowledged once handled. After ``close`` starts, a
- * notice is neither injected nor acknowledged, so the host records it.
+ * notice is neither injected nor acknowledged, so the host keeps it held.
+ * ``ready`` tells the host once that it may deliver the notices it holds.
  */
 export function startAgentHost(ctx, config, onNotice = () => {}) {
   return new Promise((resolve, reject) => {
@@ -108,7 +119,7 @@ export function startAgentHost(ctx, config, onNotice = () => {}) {
           AGENT_SWARM_PI_MODEL: ctx.model?.id || '',
           AGENT_SWARM_PI_PROVIDER: ctx.model?.provider || ''},
       });
-    let diagnostic = '', output = '', failure, ready = false, closing = false;
+    let diagnostic = '', output = '', failure, ready = false, closing = false, announced = false;
     child.stdout.setEncoding('utf8');
     child.stderr.setEncoding('utf8');
     child.stderr.on('data', value => { diagnostic = (diagnostic + value).slice(-8192); });
@@ -145,7 +156,11 @@ export function startAgentHost(ctx, config, onNotice = () => {}) {
           if (typeof connection !== 'string' || !connection) throw new Error('No independent host connection.');
           ready = true;
           output = output.slice(output.indexOf('\n') + 1);
-          resolve({connection, async close() {
+          resolve({connection, ready() {
+            if (closing || announced) return;
+            announced = true;
+            child.stdin.write('{"ready":true}\n');
+          }, async close() {
             closing = true;
             child.stdin.end();
             await ended;
@@ -170,14 +185,24 @@ export function startAgentHost(ctx, config, onNotice = () => {}) {
 export function registerAgents(pi) {
   const independent = new WeakSet();
   let agentHost;
+  let readyTimer;
   let displayRegistered = false;
   pi.registerFlag('agents-config', { type: 'string',
     description: 'Independent agents host configuration: data root and optional per-Runtime settings.' });
+  // A held notice starts a turn in an idle Session, and Pi refuses a prompt
+  // while a turn runs (AgentSession.prompt, print mode has no streamingBehavior).
+  // So the host flushes during the Session's first turn; a Session with a UI
+  // that starts none by itself gets its held notices after READY_MS.
+  pi.on('agent_start', () => { agentHost?.ready(); });
+  const closeHost = async () => {
+    clearTimeout(readyTimer);
+    await agentHost?.close();
+    agentHost = undefined;
+  };
   return {
     independent,
     async start(ctx) {
-      await agentHost?.close();
-      agentHost = undefined;
+      await closeHost();
       independent.delete(ctx.sessionManager);
       if (ctx.hasUI && !displayRegistered) {
         registerAgentDisplay(pi, await loadHostSdk());
@@ -202,22 +227,21 @@ export function registerAgents(pi) {
         if (!process.env.AGENT_SWARM_PYTHON) throw new Error('Independent agents requires its selected Python installation.');
         independent.add(ctx.sessionManager);
         const session = ctx.sessionManager.getSessionId();
-        agentHost = await startAgentHost(ctx, agentsConfig, notice => deliverNotice(pi, notice, session));
+        const manager = ctx.sessionManager;
+        agentHost = await startAgentHost(ctx, agentsConfig, notice => deliverNotice(pi, notice, session, manager));
         try {
           pi.registerMcpServer('agents', {
             command: process.env.AGENT_SWARM_PYTHON,
             args: ['-I', '-m', 'agent_swarm.mcp'], cwd: ctx.cwd,
             env: {AGENT_SWARM_CONNECTION: agentHost.connection}, exposure: 'direct',
           });
-        } catch (error) { await agentHost.close(); agentHost = undefined; throw error; }
+        } catch (error) { await closeHost(); throw error; }
+        if (ctx.hasUI) readyTimer = setTimeout(() => agentHost?.ready(), READY_MS);
         return true;
       }
       return false;
     },
-    async close() {
-      await agentHost?.close();
-      agentHost = undefined;
-    },
+    close: closeHost,
   };
 }
 

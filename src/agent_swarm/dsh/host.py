@@ -7,9 +7,10 @@ neither identity nor launch settings. The host configuration is Task-free:
 ``pi``); see PUBLIC_API.md 1.7.
 
 Private pipe protocol with the plugin: stdin carries one ``{"header",
-"model"}`` line, then ``{"ack": <notice id>, "shown": bool}`` lines, then EOF
-when the native Session or DSH shuts down; stdout carries one
-``{"connection"}`` line, then ``{"notice"}`` lines.
+"model"}`` line, then one ``{"ready": true}`` line when the Session can take
+held notices and ``{"ack": <notice id>, "shown": bool}`` lines, then EOF when
+the native Session or DSH shuts down; stdout carries one ``{"connection"}``
+line, then ``{"notice"}`` lines.
 """
 from __future__ import annotations
 
@@ -31,6 +32,10 @@ from agent_swarm.process import process_ancestors, process_arguments, process_ex
 CONFIG_KEYS = frozenset({'root', 'dsh', 'claude', 'codex', 'pi'})
 # How long a written notice waits for the plugin's acknowledgement.
 ACK_SECONDS = 10.0
+# How many passes one host makes over the held notices, and the pause between
+# them: DSH refuses a relay message while the Session is not active here.
+FLUSH_ATTEMPTS = 6
+FLUSH_RETRY_SECONDS = 5.0
 
 
 def dsh_installation(entry: Path) -> Path | None:
@@ -130,9 +135,10 @@ class Notices:
     Each notice is one stdout line; the plugin hands it to the existing
     ``agentMessages.receive`` relay (an ``agent-message`` in the Session's
     next-step inbox) and acknowledges it on stdin. Acknowledged as shown is
-    ``delivered``; written but not acknowledged in time is ``unconfirmed``;
-    unwritable, refused, or still waiting at shutdown is ``unavailable`` and
-    stays readable through ``status`` and ``wait``.
+    ``delivered``; written but not acknowledged in time is ``unconfirmed``
+    (it may have been admitted, so it is never repeated); unwritable, refused,
+    or still waiting at shutdown is ``held``: it stays readable through
+    ``status`` and ``wait`` and a later host for this Session delivers it.
     """
 
     def __init__(self, stream: TextIO, session: str, timeout: float = ACK_SECONDS) -> None:
@@ -143,6 +149,7 @@ class Notices:
         self.lock    = threading.Lock()
         self.waiting: dict[str, list] = {}
         self.closing = False
+        self.closed  = threading.Event()
         self.started = time.time()
 
     def write(self, document: dict) -> None:
@@ -161,7 +168,7 @@ class Notices:
         slot = [acknowledged, False]
         with self.lock:
             if self.closing:
-                return False
+                return 'held'
             self.waiting[identity] = slot
             try:
                 self.stream.write(json.dumps({'notice': {
@@ -171,12 +178,34 @@ class Notices:
                 self.stream.flush()
             except (OSError, ValueError):
                 self.waiting.pop(identity, None)
-                return False
+                return 'held'
         if not acknowledged.wait(self.timeout):
             with self.lock:
                 self.waiting.pop(identity, None)
             return 'unconfirmed'
-        return slot[1]
+        return True if slot[1] else 'held'
+
+    def flush(self, control: AgentControl, caller: Caller, attempts: int = FLUSH_ATTEMPTS,
+              pause: float = FLUSH_RETRY_SECONDS) -> None:
+        """Deliver the notices held for this Session, each once, from a new host process.
+
+        Runs on its own thread: a delivery waits for an acknowledgement that
+        the stdin loop reads. One a ``status`` or ``wait`` has shown meanwhile
+        is no longer open and is not pushed. A pass that leaves a refused
+        notice is repeated after ``pause``, ``attempts`` passes at most; what
+        is still refused then stays held for a later host.
+        """
+        for attempt in range(attempts):
+            if attempt and self.closed.wait(pause):
+                return
+            pending = control.held_notices(caller)
+            if not pending:
+                return
+            for notice in pending:
+                if not self.closing and control.notice_open(notice):
+                    result = self.receive(notice)
+                    control.settle_notice(notice, 'delivered' if result is True else
+                                          'unconfirmed' if result == 'unconfirmed' else 'held')
 
     def acknowledge(self, identity: object, shown: bool) -> None:
         """Settle one written notice: admitted to the DSH Session, or refused there."""
@@ -191,32 +220,37 @@ class Notices:
 
         AgentControl marks such an end ``queueing`` before calling the
         receiver, so a concurrent ``wait`` or ``status`` would otherwise show
-        the body and the notice would repeat it. Ends of earlier host
-        processes, and any end once shutdown began, keep their body.
+        the body and the notice would repeat it. A held end being flushed is
+        shown as ``queueing`` the same way, so it is not settled as read. Ends
+        of earlier host processes, and any end once shutdown began, keep their body.
         """
         pending = [document]
         while pending:
             agent = pending.pop()
             last = agent.get('last_result') or {}
-            if (not self.closing and agent.get('parent') is None and last.get('notification') == 'queueing'
-                    and (last.get('ended_at') or 0) >= self.started):
-                last['last_message'] = None
+            flushing = notice_id(last.get('id'), last.get('outcome')) in self.waiting
+            if (not self.closing and agent.get('parent') is None and (flushing or (
+                    last.get('notification') == 'queueing' and (last.get('ended_at') or 0) >= self.started))):
+                last.update(notification='queueing', last_message=None)
             pending.extend(agent.get('children', []))
 
     def close(self) -> None:
-        """Stop pushing at native shutdown; unacknowledged notices become unavailable."""
+        """Stop pushing at native shutdown; unacknowledged notices stay held."""
         with self.lock:
             self.closing = True
+            self.closed.set()
             pending, self.waiting = list(self.waiting.values()), {}
         for slot in pending:
             slot[0].set()
 
 
-def start(config: Path, launch: Mapping[str, Any]) -> tuple[Path, dict, Notices, Callable]:
+def start(config: Path, launch: Mapping[str, Any]) -> tuple[Path, dict, Notices, Callable, Callable, AgentControl, Caller]:
     """Verify the native parent, Session and configuration; bind the DSH Main to its control.
 
     ``launch`` is the plugin's first pipe line: the native Session ``header``
-    and the parent's current ``model``.
+    and the parent's current ``model``. Returns the model-facing entry and the
+    plain bound ``call``: only what the model reads settles a held notice, not
+    this host's own shutdown.
     """
     if any(name in os.environ for name in ('AGENT_SWARM_CONNECTION', 'DSH_SESSION_ID', 'DSH_AGENT_SOURCE')):
         raise ValueError('An already-bound child must use its existing connection, not adopt Main.')
@@ -227,22 +261,25 @@ def start(config: Path, launch: Mapping[str, Any]) -> tuple[Path, dict, Notices,
     model = launch.get('model') if isinstance(launch.get('model'), str) and launch.get('model') else None
     notices = Notices(sys.stdout, expected['session'])
     control = AgentControl(root, runtime_drivers(cwd, settings, model),
-                           event_receiver=notices.receive, request_notices=True)
-    call = bind(control, Caller('dsh-native', None, session=expected['session'], runtime='dsh'))
+                           event_receiver=notices.receive, request_notices=True, hold_notices=True)
+    caller = Caller('dsh-native', None, session=expected['session'], runtime='dsh')
+    call = bind(control, caller)
     # Fail at start, not mid-turn, when config.yml declares a connection
     # this machine cannot run; create re-checks the selected one.
     control.require_connections()
 
     def operate(request: dict) -> AgentsResult:
-        """Serve one action; a body this host is pushing is hidden from its result."""
+        """Serve one action; a body this host is pushing is hidden, a held one shown is settled."""
         result = call(request)
         found = result.document.get('result')
         if isinstance(found, dict):
             for agent in found.get('agents', [found]):
                 notices.hide_pushed(agent)
+            if not result.failed:
+                control.settle_shown(request, result.document)
         return result
 
-    return root, expected, notices, operate
+    return root, expected, notices, operate, call, control, caller
 
 
 def stop_children(call: Callable) -> None:
@@ -273,13 +310,14 @@ def main() -> None:
         launch = json.loads(sys.stdin.readline() or 'null')
         if not isinstance(launch, dict):
             raise ValueError('The DSH plugin did not supply its native Session.')
-        root, expected, notices, call = start(options.config, launch)
+        root, expected, notices, operate, call, control, caller = start(options.config, launch)
     except (AgentsError, OSError, ValueError, KeyError) as error:
         # The plugin logs this line; the Session then has no agents tool.
         print(json.dumps({'error': {'code': getattr(error, 'code', 'invalid-config'), 'message': str(error)}}),
               file=sys.stderr, flush=True)
         raise SystemExit(1) from None
     parent = os.getppid()
+    flusher = threading.Thread(target=notices.flush, args=(control, caller), daemon=True)
 
     def authenticate(caller_pid: int) -> None:
         """Accept only direct clients of the verified native DSH, not child Runtimes."""
@@ -288,21 +326,28 @@ def main() -> None:
             raise AgentsError('authority-denied', 'The client is not owned by this native DSH host.')
 
     try:
-        with agents_connection(root / 'live' / 'dsh-host', call, authenticate,
+        with agents_connection(root / 'live' / 'dsh-host', operate, authenticate,
                                native_context=lambda: expected) as address:
             notices.write({'connection': address})
-            # Only acknowledgements and lifecycle EOF travel over this private
-            # plugin pipe. Model requests use the shared authenticated bridge.
+            # Only readiness, acknowledgements and lifecycle EOF travel over this
+            # private plugin pipe. Model requests use the shared authenticated bridge.
             for line in sys.stdin:
                 message = json.loads(line)
+                if message == {'ready': True}:
+                    if flusher.ident is None:
+                        flusher.start()
+                    continue
                 if (not isinstance(message, dict) or set(message) != {'ack', 'shown'}
                         or not isinstance(message['shown'], bool)):
-                    raise ValueError('The native host pipe only accepts notice acknowledgements and close.')
+                    raise ValueError('The native host pipe only accepts readiness, notice acknowledgements and close.')
                 notices.acknowledge(message['ack'], message['shown'])
     finally:
         # Closing the plugin pipe ends this owner's lifetime. Stop pushing
-        # first: ends caused by this shutdown are recorded, not shown.
+        # first: ends caused by this shutdown are held, not shown.
+        control.close_notices()
         notices.close()
+        if flusher.ident is not None:
+            flusher.join(10)
         stop_children(call)
 
 

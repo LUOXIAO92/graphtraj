@@ -261,7 +261,7 @@ def notices(shown: bool | None = True, timeout: float = 2.0) -> tuple[host.Notic
 
 
 def test_notice_receiver_outcomes() -> None:
-    """Shown is delivered, refused or unwritable is unavailable, silence is unconfirmed."""
+    """Shown is delivered, refused or unwritable is held, silence is unconfirmed."""
     sender, pipe = notices()
     assert sender.receive(notice()) is True
     assert pipe.lines == [{'notice': {'id': 'exec-1:completed', 'alias': 'agent-1', 'agent': 'agent-1',
@@ -273,15 +273,15 @@ def test_notice_receiver_outcomes() -> None:
                           error={'code': 'RUNTIME_REQUEST_FAILED', 'message': 'provider refused'}))
     assert pipe.lines[-1]['notice']['message'] == 'provider refused'
     sender, pipe = notices(shown=False)
-    assert sender.receive(notice()) is False
+    assert sender.receive(notice()) == 'held'
     sender, pipe = notices(shown=None, timeout=0.05)
     assert sender.receive(notice()) == 'unconfirmed'
     sender, pipe = notices()
     pipe.closed = True
-    assert sender.receive(notice()) is False
+    assert sender.receive(notice()) == 'held'
 
 
-def test_notice_waiting_at_shutdown_is_unavailable_and_later_ones_are_not_written() -> None:
+def test_notice_waiting_at_shutdown_is_held_and_later_ones_are_not_written() -> None:
     """Native shutdown settles a pending notice as not shown and stops pushing."""
     sender, pipe = notices(shown=None, timeout=10)
     outcome: list = []
@@ -290,8 +290,8 @@ def test_notice_waiting_at_shutdown_is_unavailable_and_later_ones_are_not_writte
     wait_until(lambda: pipe.lines)
     sender.close()
     worker.join(5)
-    assert outcome == [False]
-    assert sender.receive(notice(execution='exec-2')) is False
+    assert outcome == ['held']
+    assert sender.receive(notice(execution='exec-2')) == 'held'
     assert len(pipe.lines) == 1
 
 
@@ -325,7 +325,7 @@ def last_result(call, agent: str) -> dict:
                                .get('last_result')))
 
 
-def test_each_end_is_pushed_once_and_shutdown_ends_are_recorded(tmp_path: Path, fakes: dict) -> None:
+def test_each_end_is_pushed_once_and_shutdown_ends_are_held(tmp_path: Path, fakes: dict) -> None:
     """Message and system exception reach the Pi Main once; ends at shutdown stay readable."""
     sender, pipe = notices()
     drivers = host.runtime_drivers(tmp_path, host.pi_request({}, tmp_path, PARENT),
@@ -347,7 +347,7 @@ def test_each_end_is_pushed_once_and_shutdown_ends_are_recorded(tmp_path: Path, 
     sender.close()
     fakes['dsh'].finish = ('interrupted', 'partial work', None)
     stopped = call({'action': 'create', 'runtime': 'dsh', 'instruction': 'hi'}).document['agent']
-    assert wait_until(lambda: last_result(call, stopped)['notification'] == 'unavailable')
+    assert wait_until(lambda: last_result(call, stopped)['notification'] == 'held')
     assert last_result(call, stopped)['last_message'] == 'partial work'
     assert len(pipe.lines) == 2
 

@@ -606,9 +606,10 @@ own DSH members (`graphtraj.runtimes.dsh`) still require exactly 0.2.0-rc.2.
 
 **Review plugin (approval layer 3).** A connection with `review` (section 3)
 runs under the review plugin. `create` refuses it with `invalid-config` when
-the Runtime's driver has no adapter (`supports_review = True`), so a child never
-silently runs unreviewed, then runs the connectivity check (section 6). Both
-happen before any Agent record exists; `send` and `resume` do not repeat them.
+the Runtime's driver has no adapter (`supports_review = True`; the Claude, Codex,
+Pi and DSH drivers have one), so a child never silently runs unreviewed, then
+runs the connectivity check (section 6). Both happen before any Agent record
+exists; `send` and `resume` do not repeat them.
 
 **Agent document.** Every Agent document carries `preset`, `connection`
 (the connection's name), `model`, `reasoning_effort` and `review` (the
@@ -893,8 +894,8 @@ for the direct parent as above.
 | --- | --- | --- |
 | Claude Code | The supplied `permission_mode`; Claude's permission prompts arrive through `can_use_tool` | Passes the mode as `--permission-mode` and `permissions.defaultMode`; nothing else |
 | Codex | `approvals_reviewer`, default `auto_review` (Codex's own reviewer decides) | Sets `approvals_reviewer = "auto_review"` when the settings name no reviewer, and `features.exec_permission_approvals = true`. `approval_policy`, sandbox, permissions and network stay as supplied. With a connection's `review` (section 6): `approvals_reviewer = "user"`, so Codex hands each approval to the review plugin; `approval_policy = "never"` is refused with `invalid-config`, and a Session Codex reports as `never` ends `failed`, because no request would reach the reviewer |
-| Pi | Pi has no approval of its own; extension dialogs (`extension_ui_request`) are the requests | None |
-| DSH | The `permission` profile patch, approval `ask`, for the chosen sandbox mode | The `sandbox-policy` and `permission` patches; `dsh/approval-request` is the request |
+| Pi | Pi has no approval of its own; extension dialogs (`extension_ui_request`) are the requests | None. With a connection's `review` (section 6): the agents extension's `tool_call` hook, enabled by the owner for that execution; a reviewed Pi with no agents connection is refused with `ROLE_CONFIG_UNSUPPORTED` |
+| DSH | The `permission` profile patch, approval `ask`, for the chosen sandbox mode | The `sandbox-policy` and `permission` patches; `dsh/approval-request` is the request. With a connection's `review` (section 6): also the `agents-review` plugin row |
 
 **Codex auto review relay.** Under `auto_review`, Codex decides approvals
 itself and reports the outcome only as an `item/autoApprovalReview/completed`
@@ -1025,8 +1026,8 @@ Rules:
 - `allow` lets the call run. It is the only decision that does.
 - With `deny` and `escalate` the call does not run and goes to the direct
   parent, which may release it within its own authority: Claude refuses it at
-  once and releases one exact retry, Codex holds the native request until the
-  parent answers. The root may refer it to a person.
+  once and releases one exact retry; Codex holds the native request, and Pi and
+  DSH hold the call, until the parent answers. The root may refer it to a person.
 - The format is the same for every Runtime and every reviewer model. Adapters
   translate it to their native hook; native fields never appear in it.
 
@@ -1049,8 +1050,9 @@ used):
   only `accept` (not `acceptForSession` or a policy amendment) and only the
   requested permissions for the turn; a Pi `select` must pick an offered
   option;
-- a request held by the Claude review plugin (`agents/review`, 4.1) takes exactly
-  `{"decision": "accept"}` or `{"decision": "decline"}`, else `invalid-input`.
+- a request held by the Claude, Pi or DSH review plugin (`agents/review`, 4.1 and
+  below) takes exactly `{"decision": "accept"}` or `{"decision": "decline"}`, else
+  `invalid-input`.
 
 The parent's own sandbox is not compared with the request; a parent should
 decline what it could not do itself. The root may refer a request to a
@@ -1100,7 +1102,80 @@ is appended to `review.jsonl` in the Agent's driver directory, without the tool
 input (internal, like the rest of that directory). A decision that cannot be
 written does not run.
 
-Pi and DSH drivers have no adapter yet and refuse such a connection (387).
+**Pi and DSH adapters (387).** Both hold the tool call until it is answered, like
+Codex and unlike Claude, so the reviewed call is the call that runs and there is
+no retry. The native side waits with no timeout of its own: Pi's dialog
+(`rpc-mode.js`) and DSH's approval wait in `serviceAsk`. In both:
+
+- `allow` lets the call run with nothing reaching the parent. It answers only this
+  review: Pi's sandbox and DSH's sandbox, permission mode and guards still apply.
+- `deny`, `escalate` or a failed review, including any error in this path, holds
+  the call. A request reaches the direct parent with `method: "agents/review"`,
+  `request_id: "agents-review:<uuid>"` and `params` `{"tool", "input", "decision",
+  "reason"}`. `reply` takes exactly `{"decision": "accept"}`, which runs that one
+  call once with no second review, or `{"decision": "decline"}`, which refuses it.
+- Interrupting the child, or its end, drops every hold and every review in
+  progress, and those calls do not run.
+- Each decision is appended to `review.jsonl` in the Agent's driver directory,
+  without the tool input, before it takes effect. A decision that cannot be written
+  does not run.
+- The reviewer runs in the host, outside the child's sandbox and off the threads
+  reading the Runtime's protocol; no sandbox, network or write grant is added for
+  it. Its `api_key_env` variable is removed from the child's environment, unless
+  the child's own connection names that variable.
+- The bound agents tool, `mcp__agents__agents`, is not reviewed and is the only tool
+  that is not: it is the child's channel to its parent, limited by agents' authority
+  checks, and must work when the reviewer is down.
+- Before the first prompt the owner establishes that the hook is installed, else
+  the execution ends `failed` with `RUNTIME_REQUEST_FAILED` and no model work. Every
+  execution checks this, `resume` included. Without a reviewer the hooks, settings
+  and approval modes are unchanged.
+
+*Pi.* A `tool_call` handler in `pi/extension.mjs` holds each call on a native
+`confirm` dialog whose reserved title the owner chooses for that execution and
+passes in `AGENT_SWARM_PI_REVIEW`. The extension removes the variable from its
+environment at once, so no tool's process inherits the title. A dialog with that
+title never reaches the parent as `pi/confirm`; any other dialog is an ordinary
+native request. Pi documents a `tool_call` handler failure as blocking the tool
+(`docs/extensions.md`). Calls a tool makes through `ctx.executeTool`, such as
+codemode's, go through the same pipeline and hooks (`agent-session.js`
+`_executeNestedToolCall`), so the outer and each nested call are reviewed. The hook
+is established by RPC `get_commands` reporting the `agents-review-hook` command from
+this `extension.mjs`.
+
+Limits on Pi 1.4.0. Pi loads `--extension` paths before the connection home's
+extensions (`resource-loader.js`, `mergePaths`) and runs `tool_call` handlers in that
+order, in place on one `input` (`docs/extensions.md`), so an extension in the
+connection's home can change a call's input after it was reviewed; that home is the
+user's own trust decision. A `mcp.json` server named `agents` in that home overrides
+the bound one (`docs/mcp.md`), and its `agents` tool would have the exempt name.
+
+*DSH.* The `agents-review` row (`dsh/review.mjs`) is a `tools/pre-execute` listener
+that calls DSH's own decision first. A native deny stays denied and a native ask
+stays a native `dsh/approval-request` for the parent, unreviewed. Only a call DSH
+itself would allow becomes a review, as an approval ask marked by a key of
+`displayReason` that holds the tool and exact arguments. Native asks set only fixed
+locale keys there (`dsh-sandbox`, `dsh-experimental-auto-review`), and model-written
+text reaches their values and `reason`, never a key, so the classification does not
+rest on text a model can influence. A frame whose mark is absent, malformed or names
+another tool or call is an ordinary native request: no reviewer call and no
+`allowed-once`. A sandbox escalation is a separate native ask inside the tool body
+(`approveEscalation`), so it reaches the parent even after the reviewer allowed the
+call: the reviewer's `allow` never widens the sandbox. The outer `run_code` and each
+inner call are reviewed. The hook is established by a file the row writes when it
+registers, named for that execution.
+
+*DSH's own auto-review and this plugin.* In an agents child DSH's experimental
+auto-review (`@deepseek-ai/dsh-experimental-auto-review`) never applies. The plugin
+applies when the connection names a reviewer; otherwise a request DSH asks about
+goes to the direct parent as in 4.1. Auto-review acts only under the `auto` permission
+preset, which it registers and which runs with Full access (no file sandbox). agents
+never selects that preset: it accepts only `read-only` and `workspace-write`
+(`dsh/settings.py`) and writes approval `ask` for the chosen mode. agents' profile,
+`dsh-base` and `dsh-web-app`, does not install that layer. If a connection's own home
+has it installed, its listener calls `next()` because the preset is not `auto`. It
+also reviews with the child's own provider and model, unlike this plugin's separately
+configured connection.
 
 ## 7. Version rules
 
@@ -1145,6 +1220,12 @@ Recorded classifications:
   `review`, selection's `review`, the error `review-unavailable`. Compatible: new
   optional config fields and result fields, with a default that keeps current
   behaviour.
+- 387 (0.2.2): a Pi or DSH connection naming a `review`, refused with
+  `invalid-config` before, is accepted, and its calls are reviewed. Requests with
+  `method: "agents/review"` from those Runtimes are new. Compatible: a configuration
+  that could not start before starts now, and a connection without `review` is
+  unchanged. The new refusals (a reviewed Pi with no agents connection, a hook that
+  is not loaded) are new error situations of that same configuration.
 - 381 (0.1.2): the notice event `request` and `AgentControl`'s optional
   `request_notices` argument (default off). Compatible: a new event for a new
   situation, behind a new optional argument with a default that keeps

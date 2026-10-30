@@ -48,6 +48,8 @@ def selected(request: Mapping[str, Any], selection: Mapping[str, Any]) -> dict:
         request['provider'] = provider
     if selection.get('model') is not None:
         request['model'] = selection['model']
+    if selection.get('review') is not None:
+        request['review'] = deepcopy(dict(selection['review']))
     effort = selection.get('reasoning_effort')
     if effort is not None:
         if effort not in EFFORTS:
@@ -73,6 +75,8 @@ class PiDriver:
     before binding. This driver retains that exact request for continuation;
     it does not discover GraphTraj configuration, Tasks, reports or Git.
     """
+
+    supports_review = True
 
     def __init__(self, request: dict) -> None:
         """Keep a detached, already validated native launch configuration."""

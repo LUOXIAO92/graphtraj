@@ -40,6 +40,8 @@ def selected(configuration: Mapping[str, Any], selection: Mapping[str, Any]) -> 
             config['model_source'] = 'manual'
     if selection.get('model') is not None:
         config['model'] = selection['model']
+    if selection.get('review') is not None:
+        config['review'] = deepcopy(dict(selection['review']))
     effort = selection.get('reasoning_effort')
     if effort is not None:
         if effort not in EFFORTS:
@@ -56,6 +58,8 @@ class DshDriver:
     starts. The native owner itself does not discover a Task, role, Git tree,
     GraphTraj installation or archive. Plain control needs no configure hook.
     """
+
+    supports_review = True
 
     def __init__(
         self,

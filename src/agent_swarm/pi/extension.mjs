@@ -221,7 +221,37 @@ export function registerAgents(pi) {
   };
 }
 
+// The bound agents tool is the child's channel to its parent, limited by agents'
+// authority checks, and must work when the reviewer is down.
+const AGENTS_TOOL = 'mcp__agents__agents';
+const REVIEW_TITLE = Symbol.for('agents.pi.review-title');
+
+/**
+ * Hold every tool call on a native dialog with the owner's reserved title until
+ * the owner answers it; only a confirmed dialog lets the call run. Inert unless
+ * the owner names the title in AGENT_SWARM_PI_REVIEW. The variable leaves the
+ * environment at once, so no tool's process can learn the title. Pi may load this
+ * file more than once in a process, with no module cache, so the title stays on
+ * the process itself.
+ */
+export function registerReview(pi, environment = process.env) {
+  const title = environment.AGENT_SWARM_PI_REVIEW || globalThis[REVIEW_TITLE];
+  delete environment.AGENT_SWARM_PI_REVIEW;
+  if (!title) return false;
+  globalThis[REVIEW_TITLE] = title;
+  pi.registerCommand('agents-review-hook', { description: 'The agents review plugin is active.', handler: async () => {} });
+  pi.on('tool_call', async (event, ctx) => {
+    if (event.toolName === AGENTS_TOOL) return undefined;
+    const call = JSON.stringify({ tool: event.toolName, call_id: event.toolCallId, input: event.input });
+    const confirmed = await ctx.ui.confirm(title, call, { signal: ctx.signal });
+    if (confirmed === true) return undefined;
+    return { block: true, reason: `agents review did not allow ${event.toolName}; it did not run. Do not retry it; continue with other work or report it as blocked.` };
+  });
+  return true;
+}
+
 export default function agents(pi) {
+  registerReview(pi);
   const owner = registerAgents(pi);
   pi.on('session_start', async (_event, ctx) => { await owner.start(ctx); });
   pi.on('session_shutdown', async () => { await owner.close(); });

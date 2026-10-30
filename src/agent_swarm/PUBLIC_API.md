@@ -501,7 +501,7 @@ verified native parent; `pi` may set any of these fields except
 | `sandbox_path` | the host's `PATH` (it must reach `srt` and `node`) |
 | `worktree_access` | `read`; `write` also resolves `git_common_directory` with Git unless given |
 | `read_paths`, `write_paths`, `deny_read`, `deny_write` | none (absolute path lists) |
-| `provider_domain` | the selected model's host from Pi's catalog in `agent_dir` (`agent_swarm.models.pi_destination`); refused with `ROLE_CONFIG_UNSUPPORTED` without a plain http(s) destination |
+| `provider_domain` | the selected model's host from Pi's catalog in `agent_dir` (`agent_swarm.pi.pi_destination`); refused with `ROLE_CONFIG_UNSUPPORTED` without a plain http(s) destination |
 | `allowed_domains`, `base_url`, `provider_api`, `api_key_env`, `reasoning_effort`, `native_directory`, `allow_mach_lookup`, `allow_mach_register`, `allow_local_binding`, `allow_unix_sockets` | none |
 
 Besides these, the Pi owner always reads the worktree, its native Session

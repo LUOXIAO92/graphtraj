@@ -3,11 +3,13 @@ from io import StringIO
 import json
 import os
 from pathlib import Path
+import threading
 from uuid import uuid4
 
 import pytest
 
 from agent_swarm import AgentsError, AgentsResult
+from conftest import HeldInput
 from graphtraj.runtimes.claude.host import NativeCalls, native_parent
 from graphtraj.runtimes.claude.mcp import serve
 
@@ -274,26 +276,28 @@ def test_configured_launcher_survives_a_claude_update(tmp_path: Path, monkeypatc
 def test_host_survives_failing_task_operations(tmp_path: Path) -> None:
     """A rejected or crashing operation is a tool error; later calls are still served."""
     failures = iter([ValueError('Task 901 is already registered'), RuntimeError('boom')])
+    lock = threading.Lock()
 
     def call(request: dict, tool: str = 'agents') -> AgentsResult:
         """Fail twice, then answer, like a Task write followed by a status read."""
-        failure = next(failures, None)
+        with lock:
+            failure = next(failures, None)
         if failure is not None:
             raise failure
         return AgentsResult({'ok': tool})
 
     request = {'action': 'execute', 'feature': 'task_register', 'arguments': {}}
-    lines = ''.join(json.dumps({'jsonrpc': '2.0', 'id': index, 'method': 'tools/call',
-                                'params': {'name': 'tasks', 'arguments': request}}) + '\n'
-                    for index in range(3))
+    lines = [json.dumps({'jsonrpc': '2.0', 'id': index, 'method': 'tools/call',
+                         'params': {'name': 'tasks', 'arguments': request}}) + '\n'
+             for index in range(3)]
     output = StringIO()
-    serve(StringIO(lines), output, tmp_path, native_call=call)
-    replies = [json.loads(line)['result'] for line in output.getvalue().splitlines()]
-    assert [reply['isError'] for reply in replies] == [True, True, False]
-    assert replies[0]['structuredContent']['error'] == {'code': 'operation-failed',
-                                                       'message': 'Task 901 is already registered'}
-    assert replies[1]['structuredContent']['error']['code'] == 'internal-error'
-    assert replies[2]['structuredContent'] == {'ok': 'tasks'}
+    serve(HeldInput(lines, lambda: output.getvalue().count('\n') >= 3), output, tmp_path, native_call=call)
+    documents = [json.loads(line)['result']['structuredContent'] for line in output.getvalue().splitlines()]
+    assert sorted(document.get('error', {}).get('code', 'ok') for document in documents) == [
+        'internal-error', 'ok', 'operation-failed']
+    assert {'code': 'operation-failed', 'message': 'Task 901 is already registered'} in [
+        document.get('error') for document in documents]
+    assert {'ok': 'tasks'} in documents
 
 
 def test_stray_output_never_reaches_the_mcp_channel(tmp_path: Path) -> None:

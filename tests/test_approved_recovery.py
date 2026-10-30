@@ -1845,10 +1845,10 @@ def test_claude_main_recovery_is_decided_by_claude_code_elicitation(
     target: tuple, monkeypatch: pytest.MonkeyPatch, decision: str,
 ) -> None:
     """A verified Claude Main's time grant waits for Claude Code's own dialog answer."""
-    from collections import deque
     from io import TextIOBase
 
     from agent_swarm import AgentControl
+    from conftest import HeldInput
     from graphtraj.execution.main_continuity import MainRoots, current_main
     from graphtraj.runtimes.claude.host import main_calls
     from graphtraj.runtimes.claude.mcp import serve
@@ -1868,22 +1868,14 @@ def test_claude_main_recovery_is_decided_by_claude_code_elicitation(
                'arguments': {**arguments, 'restore_active': False, 'resume': False}}
     capabilities = {} if decision == 'no-elicitation' else {'elicitation': {}}
 
-    class ClientInput(TextIOBase):
-        """Send the call; the dialog answer follows the observed elicitation."""
-        def __init__(self) -> None:
-            self.messages = deque(json.dumps(message) + '\n' for message in [
-                {'jsonrpc': '2.0', 'id': 1, 'method': 'initialize',
-                 'params': {'capabilities': capabilities}},
-                {'jsonrpc': '2.0', 'id': 2, 'method': 'tools/call',
-                 'params': {'name': 'tasks', 'arguments': request}},
-            ])
-
-        def readline(self, size: int = -1) -> str:
-            """Return one complete transport frame."""
-            return self.messages.popleft() if self.messages else ''
-
-    source = ClientInput()
     observed = []
+    # Send the call; the dialog answer follows the observed elicitation.
+    source = HeldInput([json.dumps(message) + '\n' for message in [
+        {'jsonrpc': '2.0', 'id': 1, 'method': 'initialize',
+         'params': {'capabilities': capabilities}},
+        {'jsonrpc': '2.0', 'id': 2, 'method': 'tools/call',
+         'params': {'name': 'tasks', 'arguments': request}},
+    ]], lambda: any(message.get('id') == 2 for message in observed))
 
     class ClientOutput(TextIOBase):
         """Answer the elicitation as Claude Code's dialog would."""
@@ -1896,7 +1888,7 @@ def test_claude_main_recovery_is_decided_by_claude_code_elicitation(
                 assert summary['request']['additional_minutes'] == 7
                 if decision == 'cancel':
                     reply = {'jsonrpc': '2.0', 'method': 'notifications/cancelled',
-                             'params': {'requestId': 2}}
+                             'params': {'requestId': message['id']}}
                 else:
                     reply = {'jsonrpc': '2.0', 'id': message['id'],
                              'result': {'action': decision, 'content': {}}}

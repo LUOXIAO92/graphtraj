@@ -23,6 +23,7 @@ import time
 from typing import Callable, TextIO
 from uuid import UUID
 
+from agent_swarm.calls import on_discard, stop_requested
 from agent_swarm.claude import native_host
 from agent_swarm.claude.host import REFUSAL_FILE, ended_by_claude, report_missing_host, serve_refusal
 from agent_swarm import AgentsError, AgentsResult, Caller, bind
@@ -107,7 +108,7 @@ def main_calls(root: Path, backend: object, archive: object) -> Callable[[str, P
     executed call. An end the result itself shows (``wait``/``status``) was
     acknowledged by the backend, so it is not attached or pushed again.
     """
-    from graphtraj.execution.main_continuity import claim_notices, claimable
+    from graphtraj.execution.main_continuity import claim_notices, claimable, requeue_notices
     from graphtraj.execution.runner_connection import parent_connection
     from graphtraj.execution.runner_status import runtime_caller
     from graphtraj.interfaces.gateway import handle_request as handle_task
@@ -116,11 +117,13 @@ def main_calls(root: Path, backend: object, archive: object) -> Callable[[str, P
     callers: dict[str, Callable] = {}
     # Sessions that already entered as Main in this process.
     claimed: set[str] = set()
+    binding = threading.Lock()
 
     def make_call(session: str, current: Path) -> Callable:
         """Bind one verified Main Session; the model request never selects it."""
-        if session not in callers:
-            callers[session] = bind(backend, Caller('claude-native', None, session, 'claude'), archive=archive)
+        with binding:
+            if session not in callers:
+                callers[session] = bind(backend, Caller('claude-native', None, session, 'claude'), archive=archive)
         connection = {'runtime': 'claude', 'session': session, 'runner': str(runner)}
 
         def call(tool: str, request: dict) -> AgentsResult:
@@ -131,6 +134,9 @@ def main_calls(root: Path, backend: object, archive: object) -> Callable[[str, P
                     result = handle_request(request, callers[session])
                 else:
                     result = handle_task(request, cwd=root)
+            # A cancelled call's result is never shown, so it claims nothing.
+            if stop_requested():
+                return result
             try:
                 notices = claim_notices(runner, 'claude', session)
             except Exception as error:
@@ -138,6 +144,7 @@ def main_calls(root: Path, backend: object, archive: object) -> Callable[[str, P
                 return AgentsResult({**result.document, 'main_notices_error': str(error)}, failed=result.failed)
             if not notices:
                 return result
+            on_discard(lambda: requeue_notices(runner, 'claude', session, [notice['id'] for notice in notices]))
             return AgentsResult({**result.document, 'main_notices': notices}, failed=result.failed)
 
         return call

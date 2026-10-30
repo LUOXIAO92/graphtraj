@@ -23,7 +23,7 @@ import time
 import uuid
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any, Callable, Iterator, Mapping, TextIO
+from typing import TYPE_CHECKING, Any, Callable, Iterator, Mapping, TextIO
 
 import yaml
 
@@ -36,6 +36,9 @@ from graphtraj.execution.runner_models import RunnerError
 from graphtraj.interfaces import gateway
 from graphtraj.runtimes.codex.app_server import CodexMainRecovery
 from graphtraj.runtimes.codex.codex_adapter import CodexAdapterError
+
+if TYPE_CHECKING:
+    from agent_swarm.mcp import ConcurrentServer
 
 
 SERVER_INFO      = {"name": "graphtraj", "version": "0.1.0"}
@@ -403,17 +406,9 @@ class ReviewInput:
             yield line
 
 
-def elicit_review(
-    input_stream: TextIO | ReviewInput, output_stream: TextIO, proposal: dict, call_id: Any, feature: str,
-    accepted: Callable[[dict], bool],
-) -> dict:
-    """Keep the change pending until the client's strict native review response arrives.
+def _review_request(proposal: dict, feature: str) -> tuple[str, dict]:
+    """Return the id and the elicitation request of one reviewed change.
 
-    The client's own elicitation handling decides; ``accepted`` checks the
-    accept result for what that client's native decision requires.
-    Decline and cancel refuse; any other answer or a disconnect raises.
-    After ``NATIVE_REVIEW_TIMEOUT`` seconds the dialog is cancelled and nothing
-    is applied; a serve loop reading the same ``ReviewInput`` ignores its late answer.
     The dialog names the reviewed operation: a retirement or replacement
     proposal names itself, otherwise ``feature`` does.
     """
@@ -449,6 +444,52 @@ def elicit_review(
                                        'arguments': reviewed},
                    },
                }}
+    return request_id, request
+
+
+def _dialog_cancelled(request_id: str, reason: str) -> dict:
+    """Return the notification that closes one native review dialog."""
+    return {'jsonrpc': '2.0', 'method': 'notifications/cancelled', 'params': {
+        'requestId': request_id, 'reason': reason}}
+
+
+def _review_timed_out(timeout: float) -> RunnerError:
+    """Return the refusal of a review nobody answered in time."""
+    return RunnerError('native-approval-timeout', (
+        f"The change waited {timeout:g} s for the user's native review dialog without a decision; "
+        'nothing was applied. Repeating the same call shows the dialog again.'))
+
+
+def _review_decision(response: dict, request_id: str, accepted: Callable[[dict], bool]) -> dict:
+    """Interpret the client's response to one review; anything unclear raises."""
+    if response.get('id') != request_id or 'error' in response:
+        raise RunnerError('native-approval-unavailable', 'Native recovery review did not return a decision.')
+    result = response.get('result', {})
+    if not isinstance(result, dict):
+        raise RunnerError('native-approval-unavailable', 'Invalid native recovery decision.')
+    metadata = result.get('_meta') or {}
+    if not isinstance(metadata, dict):
+        raise RunnerError('native-approval-unavailable', 'Invalid native recovery metadata.')
+    if result.get('action') in ('decline', 'cancel'):
+        return {'decision': 'decline', 'rationale': metadata.get('message', 'Native review refused this change.')}
+    if result.get('action') == 'accept' and accepted(result):
+        return {'decision': 'accept'}
+    raise RunnerError('native-approval-unavailable', 'Recovery requires an actual native approval decision.')
+
+
+def elicit_review(
+    input_stream: TextIO | ReviewInput, output_stream: TextIO, proposal: dict, call_id: Any, feature: str,
+    accepted: Callable[[dict], bool],
+) -> dict:
+    """Keep the change pending until the client's strict native review response arrives.
+
+    The client's own elicitation handling decides; ``accepted`` checks the
+    accept result for what that client's native decision requires.
+    Decline and cancel refuse; any other answer or a disconnect raises.
+    After ``NATIVE_REVIEW_TIMEOUT`` seconds the dialog is cancelled and nothing
+    is applied; a serve loop reading the same ``ReviewInput`` ignores its late answer.
+    """
+    request_id, request = _review_request(proposal, feature)
     output_stream.write(json.dumps(request, ensure_ascii=False) + '\n')
     output_stream.flush()
     reader   = input_stream if isinstance(input_stream, ReviewInput) else ReviewInput(input_stream)
@@ -459,12 +500,9 @@ def elicit_review(
             line = reader.readline(timeout=max(0.0, deadline - time.monotonic()))
         except queue.Empty:
             _EXPIRED_REVIEWS.add(request_id)
-            output_stream.write(json.dumps({'jsonrpc': '2.0', 'method': 'notifications/cancelled', 'params': {
-                'requestId': request_id, 'reason': 'Native review timed out.'}}) + '\n')
+            output_stream.write(json.dumps(_dialog_cancelled(request_id, 'Native review timed out.')) + '\n')
             output_stream.flush()
-            raise RunnerError('native-approval-timeout', (
-                f"The change waited {timeout:g} s for the user's native review dialog without a decision; "
-                'nothing was applied. Repeating the same call shows the dialog again.')) from None
+            raise _review_timed_out(timeout) from None
         if not line:
             break
         response = json.loads(line)
@@ -485,20 +523,32 @@ def elicit_review(
                 output_stream.write(json.dumps(reply, ensure_ascii=False) + '\n')
                 output_stream.flush()
             continue
-        if response.get('id') != request_id or 'error' in response:
-            raise RunnerError('native-approval-unavailable', 'Native recovery review did not return a decision.')
-        result = response.get('result', {})
-        if not isinstance(result, dict):
-            raise RunnerError('native-approval-unavailable', 'Invalid native recovery decision.')
-        metadata = result.get('_meta') or {}
-        if not isinstance(metadata, dict):
-            raise RunnerError('native-approval-unavailable', 'Invalid native recovery metadata.')
-        if result.get('action') in ('decline', 'cancel'):
-            return {'decision': 'decline', 'rationale': metadata.get('message', 'Native review refused this change.')}
-        if result.get('action') == 'accept' and accepted(result):
-            return {'decision': 'accept'}
-        raise RunnerError('native-approval-unavailable', 'Recovery requires an actual native approval decision.')
+        return _review_decision(response, request_id, accepted)
     raise RunnerError('native-approval-unavailable', 'Native recovery review disconnected before deciding.')
+
+
+def elicit_routed(server: 'ConcurrentServer', proposal: dict, feature: str, accepted: Callable[[dict], bool]) -> dict:
+    """Run one review on a concurrent server: its answer comes back by JSON-RPC id.
+
+    Other calls keep running meanwhile, so what the review protects is rechecked
+    by each reviewed operation when it applies. Decisions match ``elicit_review``.
+    """
+    from agent_swarm.calls import CallCancelled
+    from agent_swarm.mcp import ClientGone
+
+    request_id, request = _review_request(proposal, feature)
+    timeout = NATIVE_REVIEW_TIMEOUT
+    try:
+        response = server.ask(request, timeout)
+    except TimeoutError:
+        server.send(_dialog_cancelled(request_id, 'Native review timed out.'))
+        raise _review_timed_out(timeout) from None
+    except CallCancelled:
+        server.send(_dialog_cancelled(request_id, 'The call was cancelled.'))
+        raise RunnerError('recovery-denied', 'Native recovery review was cancelled.') from None
+    except ClientGone:
+        raise RunnerError('native-approval-unavailable', 'Native recovery review disconnected before deciding.') from None
+    return _review_decision(response, request_id, accepted)
 
 
 def serve(input_stream: TextIO, output_stream: TextIO) -> None:

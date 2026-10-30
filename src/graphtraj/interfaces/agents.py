@@ -35,6 +35,7 @@ from agent_swarm import (
 
 from graphtraj.execution.runner_models import RunnerError
 from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError
+from agent_swarm.calls import CallCancelled, pause
 from agent_swarm.sessions.archive import ConfiguredSessionArchive
 
 
@@ -391,7 +392,13 @@ class GraphTrajAgents:
         execution = mapping.get("execution_id")
         if directory is not None:
             mark_awaited(directory, execution, time.time() + timeout_seconds + AWAIT_GRACE_SECONDS)
-        result, failed = self._wait_idle(agent, timeout_seconds, pending_requests, status_aliases)
+        try:
+            result, failed = self._wait_idle(agent, timeout_seconds, pending_requests, status_aliases)
+        except CallCancelled:
+            if directory is not None:
+                # No one reads this wait any more, so its parent gets the end notice.
+                mark_awaited(directory, None, 0)
+            raise
         if directory is not None:
             # Only the execution this wait returned stays covered, and briefly.
             returned = result.get("execution_id") if result.get("activity") == "idle" else execution
@@ -414,7 +421,7 @@ class GraphTrajAgents:
             remaining = deadline - time.monotonic()
             if remaining <= 0:
                 return {**status, "timed_out": True}, False
-            time.sleep(min(WAIT_INTERVAL_SECONDS, remaining))
+            pause(min(WAIT_INTERVAL_SECONDS, remaining))
 
     def _references(self, agent: str) -> tuple[str | None, str | None]:
         """Return the target's native Session and current execution, if mapped.

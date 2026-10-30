@@ -191,5 +191,5 @@ def forward_request(
         'cwd': str(cwd.resolve()),
         'request': request,
         **({'native': native} if native is not None else {}),
-    }, authenticate=True, await_accepted=True)
+    }, authenticate=True, await_accepted=True, stoppable=True)
     return ToolResult(response['document'], failed=response['failed'])

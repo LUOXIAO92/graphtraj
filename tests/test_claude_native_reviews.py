@@ -1,6 +1,5 @@
 """A verified Claude Main's reviewed changes are decided by Claude Code's own dialog."""
 
-from collections import deque
 from io import TextIOBase
 import json
 from pathlib import Path
@@ -11,6 +10,7 @@ import yaml
 
 from agent_swarm import AgentsResult
 
+from conftest import HeldInput
 from graphtraj.execution import approved_recovery, runner_retirement, runner_status
 from graphtraj.execution.runner_status import runtime_caller
 from graphtraj.interfaces.gateway import handle_request as handle_task
@@ -27,22 +27,14 @@ def converse(
     Returns the elicitations observed and the call's structured result.
     ``check(params)`` runs while the dialog is open, before any answer.
     """
-    class ClientInput(TextIOBase):
-        """Send the call; the dialog answer follows the observed elicitation."""
-        def __init__(self) -> None:
-            self.messages = deque(json.dumps(message) + '\n' for message in [
-                {'jsonrpc': '2.0', 'id': 1, 'method': 'initialize',
-                 'params': {'capabilities': {'elicitation': {}}}},
-                {'jsonrpc': '2.0', 'id': 2, 'method': 'tools/call',
-                 'params': {'name': tool, 'arguments': request}},
-            ])
-
-        def readline(self, size: int = -1) -> str:
-            """Return one complete transport frame."""
-            return self.messages.popleft() if self.messages else ''
-
-    source   = ClientInput()
     observed = []
+    # Send the call; the dialog answer follows the observed elicitation.
+    source = HeldInput([json.dumps(message) + '\n' for message in [
+        {'jsonrpc': '2.0', 'id': 1, 'method': 'initialize',
+         'params': {'capabilities': {'elicitation': {}}}},
+        {'jsonrpc': '2.0', 'id': 2, 'method': 'tools/call',
+         'params': {'name': tool, 'arguments': request}},
+    ]], lambda: any(message.get('id') == 2 for message in observed))
 
     class ClientOutput(TextIOBase):
         """Answer the elicitation as Claude Code's dialog would."""
@@ -53,7 +45,7 @@ def converse(
                 check(message['params'])
                 if decision == 'cancel':
                     reply = {'jsonrpc': '2.0', 'method': 'notifications/cancelled',
-                             'params': {'requestId': 2}}
+                             'params': {'requestId': message['id']}}
                 else:
                     reply = {'jsonrpc': '2.0', 'id': message['id'],
                              'result': {'action': decision, 'content': {}}}
@@ -153,7 +145,7 @@ def test_claude_main_retirement_review_uses_claude_dialog(
     monkeypatch.setattr(runner_status, 'session_operation', lambda *a: {'activity': 'idle'})
     retired = []
     monkeypatch.setattr(runner_retirement, '_retire_session',
-                        lambda alias, cwd: retired.append(alias) or {'alias': alias, 'retired': True})
+                        lambda alias, cwd, reviewed: retired.append(alias) or {'alias': alias, 'retired': True})
 
     def check(params: dict) -> None:
         """The dialog names the retirement before anything is applied."""

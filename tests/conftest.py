@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from collections import deque
+from io import TextIOBase
 import os
 import shutil
 import subprocess
@@ -852,3 +854,25 @@ def installed_worktree_commands(
 def mutable_installed_commands(tmp_path: Path) -> InstalledCommands:
     build_root = tmp_path / "installed-mutable-environment"
     return _install_commands(build_root / "venv", _build_wheel(build_root))
+
+
+class HeldInput(TextIOBase):
+    """A client's MCP input: its frames, then open until ``finished()``, then EOF.
+
+    The Claude hosts serve calls concurrently and input EOF ends their waits,
+    so a client keeps its input open until it has the replies it expects.
+    """
+
+    def __init__(self, lines: list[str], finished, seconds: float = 60.0) -> None:
+        self.messages = deque(lines)
+        self.finished = finished
+        self.deadline = time.monotonic() + seconds
+
+    def readline(self, size: int = -1) -> str:
+        """Return one frame; wait while the client still expects replies."""
+        while True:
+            if self.messages:
+                return self.messages.popleft()
+            if self.finished() or time.monotonic() > self.deadline:
+                return ''
+            time.sleep(0.005)

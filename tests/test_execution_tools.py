@@ -125,7 +125,7 @@ def test_registered_replacement_preserves_real_parent_qualification(
                         lambda *a, **k: SimpleNamespace(runner_directory=runner))
     monkeypatch.setattr(runner_retirement, 'require_stopped_subtree', lambda *a, **k: None)
     monkeypatch.setattr(runner_retirement, '_retire_session',
-                        lambda alias, cwd: executed.append((alias, 'retired')))
+                        lambda alias, cwd, reviewed: executed.append((alias, 'retired')))
 
     def member(alias: str, causes: tuple[str, ...], cwd: Path) -> dict:
         """Reach the retirement authority as the real replacement does."""

@@ -16,7 +16,8 @@ from agent_swarm import AgentControl, AgentsError, AgentsResult, Caller, __versi
 from agent_swarm.connection import connection_operation, worker_connection
 from agent_swarm.discovery import handle_request
 from agent_swarm.process import process_ancestors, process_executable
-from agent_swarm.mcp import serve, respond, tool_documents, result_response, error_response
+from agent_swarm.calls import on_discard, stop_requested
+from agent_swarm.mcp import serve, serve_concurrent, respond, tool_documents, result_response, error_response
 from agent_swarm.notices import END_EVENTS, notice_id
 from .native_host import NativeCalls
 from .driver import ClaudeDriver
@@ -193,8 +194,9 @@ class IndependentCalls(NativeCalls):
 
     def make_call(self, session: str, cwd: Path):
         """Bind only a Session already verified by NativeCalls.context."""
-        if session not in self.callers:
-            self.callers[session] = bind(self.control, Caller('claude-native', None, session, 'claude'))
+        with self.lock:
+            if session not in self.callers:
+                self.callers[session] = bind(self.control, Caller('claude-native', None, session, 'claude'))
         def call(tool: str, request: dict) -> AgentsResult:
             """Expose agents only through the verified native association."""
             if tool != 'agents':
@@ -202,10 +204,14 @@ class IndependentCalls(NativeCalls):
             result = handle_request(request, self.callers[session])
             # Reuse the native host's next-result delivery when prompt push is
             # unavailable (notably print mode); the mod renders this same fact.
+            # A cancelled call's result is never shown, so it hands over nothing.
+            if stop_requested():
+                return result
+            seen = [] if result.failed else seen_ends(request, result.document)
             with self.lock:
-                if not result.failed:
-                    self.ended.setdefault(session, set()).update(seen_ends(request, result.document))
+                self.ended.setdefault(session, set()).update(seen)
                 notices = self.claim(session)
+            on_discard(lambda: self.restore(session, notices, seen))
             if not notices:
                 return result
             return AgentsResult({**result.document, 'main_notices': notices}, failed=result.failed)
@@ -232,6 +238,12 @@ class IndependentCalls(NativeCalls):
                                                     and notice['event']['event'] in END_EVENTS)]
         self.claimed.setdefault(session, {}).update((notice['id'], notice) for notice in taken)
         return taken
+
+    def restore(self, session: str, notices: list[dict], seen: list[str]) -> None:
+        """Undo one result's hand-over when its caller cancelled before reading it."""
+        with self.lock:
+            self.ended.get(session, set()).difference_update(seen)
+            self.queue.setdefault(session, []).extend(notices)
 
     def notices(self, document: dict) -> dict:
         """Serve the mod's claim/requeue protocol; the caller holds the lock."""
@@ -378,8 +390,9 @@ def main() -> None:
                 json.dump({'parent': parent, 'executable': str(executable), 'address': address}, stream)
             try:
                 mcp_in, mcp_out = isolate_stdio(directory.parent / 'host.log')
-                serve_until_ended(mcp_in, mcp_out, lambda message: respond(
-                    message, tool_documents, call, {'name': 'agents', 'version': __version__}))
+                with ended_by_claude():
+                    serve_concurrent(mcp_in, mcp_out, lambda message: respond(
+                        message, tool_documents, call, {'name': 'agents', 'version': __version__}))
             finally:
                 channel_file.unlink()
     finally:

@@ -14,6 +14,7 @@ import shutil
 import subprocess
 import sys
 import time
+from typing import Callable, Sequence
 from uuid import uuid4
 
 import pytest
@@ -77,25 +78,37 @@ def prompts(service: FakeDshService) -> list[str]:
     return [body['content'][0]['text'] for method, body in service.calls if method == 'session/prompt']
 
 
-def check_round_trip(invoke) -> None:
+def answered(invoke: Callable, agent: str, shown: Sequence[dict] = ()) -> dict:
+    """Wait for an end and return it with the body the Main got, which it must get exactly once.
+
+    The wait shows it, unless an earlier result already carried it as a notice: a
+    quick child can end before its own create, send or resume returns.
+    """
+    last    = invoke('wait', agent=agent, timeout_seconds=10)['result']['last_result']
+    carried = [notice['event']['message'] for notice in shown
+               if (notice['event']['execution'], notice['event']['event']) == (last['id'], last['outcome'])]
+    bodies  = carried + ([last['last_message']] if last['last_message'] is not None else [])
+    assert len(bodies) == 1, (last, carried)
+    return {**last, 'last_message': bodies[0]}
+
+
+def check_round_trip(invoke: Callable, shown: Sequence[dict] = ()) -> None:
     """Create with connection, model and effort; answer; continue the same native Session."""
     created = invoke('create', runtime='dsh', instruction='first task', model='deepseek-v5',
                      reasoning_effort='high')
     agent = created['agent']
     assert (created['result']['runtime'], created['result']['connection'], created['result']['model'],
             created['result']['reasoning_effort']) == ('dsh', 'work-dsh', 'deepseek-v5', 'high')
-    done = invoke('wait', agent=agent, timeout_seconds=10)['result']['last_result']
+    done = answered(invoke, agent, shown)
     assert (done['outcome'], done['last_message']) == ('completed', 'dsh answer: first task')
     [first] = FakeDshService.instances
     assert selected(first) == {'sessionId': first.session, 'provider': 'deepseek-official',
                                'model': 'deepseek-v5', 'reasoningEffort': 'high'}
 
     invoke('send', agent=agent, message='second task')
-    done = invoke('wait', agent=agent, timeout_seconds=10)['result']['last_result']
-    assert done['last_message'] == 'dsh answer: second task'
+    assert answered(invoke, agent, shown)['last_message'] == 'dsh answer: second task'
     invoke('resume', agent=agent, message='third task')
-    done = invoke('wait', agent=agent, timeout_seconds=10)['result']['last_result']
-    assert done['last_message'] == 'dsh answer: third task'
+    assert answered(invoke, agent, shown)['last_message'] == 'dsh answer: third task'
     # Each continuation asked DSH for the same native Session and kept the child's choice.
     first_service, *continued = FakeDshService.instances
     assert len(continued) == 2
@@ -119,11 +132,11 @@ def test_send_and_resume_continue_the_same_dsh_session(tmp_path: Path, dsh: dict
     invoke, _, _ = claude_main(host, tmp_path)
     try:
         agent = invoke('create', runtime='dsh', instruction='one')['agent']
-        invoke('wait', agent=agent, timeout_seconds=10)
+        answered(invoke, agent, invoke.shown)
         invoke('send', agent=agent, message='two')
-        assert invoke('wait', agent=agent, timeout_seconds=10)['result']['last_result']['last_message'] == 'dsh answer: two'
+        assert answered(invoke, agent, invoke.shown)['last_message'] == 'dsh answer: two'
         invoke('resume', agent=agent, message='three')
-        last = invoke('wait', agent=agent, timeout_seconds=10)['result']['last_result']
+        last = answered(invoke, agent, invoke.shown)
         assert (last['outcome'], last['last_message']) == ('completed', 'dsh answer: three')
         first, *continued = FakeDshService.instances
         assert [service.session for service in continued] == [first.session, first.session]
@@ -163,10 +176,13 @@ def claude_main(host: IndependentCalls, cwd: Path):
     call = host.make_call(session, cwd)
 
     def invoke(feature: str, **arguments) -> dict:
+        """Call as the Main; ``invoke.shown`` keeps the notices its results carried."""
         result = call('agents', {'action': 'execute', 'feature': feature, 'arguments': arguments})
         assert not result.failed, result.document
+        invoke.shown.extend(result.document.get('main_notices', []))
         return result.document
 
+    invoke.shown = []
     return invoke, call, session
 
 
@@ -184,18 +200,18 @@ def test_claude_host_routes_a_dsh_child_with_its_own_choices(tmp_path: Path, dsh
     host.control.require_connections()
     invoke, _, _ = claude_main(host, tmp_path)
     try:
-        check_round_trip(invoke)
+        check_round_trip(invoke, invoke.shown)
         check_connection_launch(FakeDshService.instances[0], home)
     finally:
         stop_owned(host.control)
 
 
 def test_a_dsh_childs_end_reaches_the_claude_main_once(tmp_path: Path, dsh: dict) -> None:
-    """Without a wait the Claude mod claims the DSH child's answer once."""
+    """Without a wait the Claude mod claims the DSH child's answer once, or create's own result carried it."""
     host = IndependentCalls(tmp_path / 'agents', tmp_path, {}, {'dsh': dsh})
     invoke, call, session = claude_main(host, tmp_path)
     agent = invoke('create', runtime='dsh', instruction='report back')['agent']
-    notices = until(lambda: host.context({'operation': 'notices', 'session': session})['notices'])
+    notices = until(lambda: invoke.shown or host.context({'operation': 'notices', 'session': session})['notices'])
     assert [(n['event']['alias'], n['event']['event'], n['event']['message']) for n in notices] == [
         (agent, 'completed', 'dsh answer: report back')]
     assert host.context({'operation': 'notices', 'session': session})['notices'] == []
@@ -369,12 +385,25 @@ assert isinstance(runtime_drivers({'adapter_request': {'worktree_path': str(work
 host = IndependentCalls(work / 'agents', work, {}, {'dsh': settings})
 host.control.require_connections()
 call = host.make_call(str(uuid4()), work)
-run = lambda feature, **arguments: call('agents', {'action': 'execute', 'feature': feature,
-                                                   'arguments': arguments}).document
+shown = []
+
+def run(feature, **arguments):
+    document = call('agents', {'action': 'execute', 'feature': feature, 'arguments': arguments}).document
+    shown.extend(document.get('main_notices', []))
+    return document
+
+def answered(agent):
+    # The wait shows the body, unless an earlier result already carried it: once either way.
+    last = run('wait', agent=agent, timeout_seconds=10)['result']['last_result']
+    bodies = [notice['event']['message'] for notice in shown if notice['event']['execution'] == last['id']]
+    bodies += [last['last_message']] if last['last_message'] is not None else []
+    assert len(bodies) == 1, (last, bodies)
+    return bodies[0]
+
 agent = run('create', runtime='dsh', instruction='hello')['agent']
-assert run('wait', agent=agent, timeout_seconds=10)['result']['last_result']['last_message'] == 'dsh answer: hello'
+assert answered(agent) == 'dsh answer: hello'
 run('resume', agent=agent, message='again')
-assert run('wait', agent=agent, timeout_seconds=10)['result']['last_result']['last_message'] == 'dsh answer: again'
+assert answered(agent) == 'dsh answer: again'
 first, second = FakeDshService.instances
 assert second.session == first.session
 plugin = next(row['insert'][0] for row in first.patches if 'insert' in row)

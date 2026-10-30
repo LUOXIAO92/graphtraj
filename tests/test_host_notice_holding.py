@@ -6,6 +6,7 @@ sections below use the controlled Runtimes. No network, no real model.
 from __future__ import annotations
 
 import asyncio
+import io
 import json
 from pathlib import Path
 import subprocess
@@ -17,10 +18,11 @@ from uuid import uuid4
 import pytest
 
 from agent_swarm import AgentControl, Caller, ExecutionEvents, Run, bind
-from agent_swarm.calls import Call, current_call
+from agent_swarm.calls import Call, current_call, on_discard, stop_requested
 from agent_swarm.claude.host import IndependentCalls
 from agent_swarm.codex.app_server import CodexAdapterError, CodexAppServer
 from agent_swarm.codex.host import CodexHost
+from agent_swarm.mcp import result_response, serve_concurrent
 from test_claude_runtime import claude_environment  # noqa: F401 - pytest fixture
 from test_codex_host_cross_runtime import Running, events, host_settings, until  # noqa: F401
 from test_codex_independent_control import native_settings  # noqa: F401 - pytest fixture
@@ -628,6 +630,22 @@ def test_claude_a_request_answered_before_the_claim_is_dropped(tmp_path: Path, n
                for notice in host.context({'operation': 'notices', 'session': session})['notices'])
     call({'action': 'wait', 'agent': agent, 'timeout_seconds': 10})
     stop_host(host)
+
+
+def test_a_result_sent_to_a_client_already_gone_gives_its_notices_back() -> None:
+    """A Main that exited mid-call never read it, so what it carried is not delivered."""
+    undone: list[bool] = []
+
+    def responder(message: dict) -> dict:
+        """Hand something over, finishing only after the client's input has ended."""
+        on_discard(lambda: undone.append(True))
+        while not stop_requested():
+            time.sleep(0.01)
+        return result_response(message['id'], {})
+
+    request = {'jsonrpc': '2.0', 'id': 1, 'method': 'tools/call', 'params': {'name': 'agents', 'arguments': {}}}
+    serve_concurrent(io.StringIO(json.dumps(request) + '\n'), io.StringIO(), responder)
+    assert undone == [True]
 
 
 def test_the_mod_acknowledges_a_submission_and_survives_its_failure(tmp_path: Path) -> None:

@@ -18,7 +18,7 @@ from agent_swarm.discovery import handle_request
 from agent_swarm.process import process_ancestors, process_executable
 from agent_swarm.calls import on_discard, stop_requested
 from agent_swarm.mcp import serve, serve_concurrent, respond, tool_documents, result_response, error_response
-from agent_swarm.notices import END_EVENTS, notice_id
+from agent_swarm.notices import notice_id
 from .native_host import NativeCalls
 from .driver import ClaudeDriver
 
@@ -186,17 +186,36 @@ class IndependentCalls(NativeCalls):
         """Own one independent backend; no project configuration is discovered."""
         self.queue: dict[str, list[dict]] = {}
         self.claimed: dict[str, dict[str, dict]] = {}
-        self.ended: dict[str, set[str]] = {}
+        # Each queued notice as the core knows it, for settling it by id.
+        self.documents: dict[str, dict] = {}
         self.callers: dict[str, object] = {}
         self.control = AgentControl(root, runtime_drivers(cwd, settings, {} if runtimes is None else runtimes),
-                                    event_receiver=self.receive, request_notices=True)
+                                    event_receiver=self.receive, request_notices=True, hold_notices=True)
         super().__init__(self.make_call, cwd)
+
+    def attach(self, session: str) -> None:
+        """Bind a Session once and queue what was held for it while it was stopped. Hold the lock."""
+        if session in self.callers:
+            return
+        caller = Caller('claude-native', None, session, 'claude')
+        self.callers[session] = bind(self.control, caller)
+        for notice in self.control.held_notices(caller):
+            self.enqueue(session, notice)
+
+    def enqueue(self, session: str, event: dict) -> None:
+        """Queue one notice for the Main's mod, once per id. Hold the lock."""
+        identity = notice_id(event['execution'], event['outcome'], event.get('request'))
+        self.documents[identity] = event
+        queue = self.queue.setdefault(session, [])
+        if all(notice['id'] != identity for notice in queue):
+            message = event['body'] or (event.get('error') or {}).get('message') or event['outcome']
+            queue.append({'id': identity, 'event': {'alias': event['agent'], 'event': event['outcome'],
+                                                    'message': message, 'execution': event['execution']}})
 
     def make_call(self, session: str, cwd: Path):
         """Bind only a Session already verified by NativeCalls.context."""
         with self.lock:
-            if session not in self.callers:
-                self.callers[session] = bind(self.control, Caller('claude-native', None, session, 'claude'))
+            self.attach(session)
         def call(tool: str, request: dict) -> AgentsResult:
             """Expose agents only through the verified native association."""
             if tool != 'agents':
@@ -207,10 +226,11 @@ class IndependentCalls(NativeCalls):
             # A cancelled call's result is never shown, so it hands over nothing.
             if stop_requested():
                 return result
-            seen = [] if result.failed else seen_ends(request, result.document)
+            seen = [] if result.failed else self.control.settle_shown(request, result.document)
             with self.lock:
-                self.ended.setdefault(session, set()).update(seen)
                 notices = self.claim(session)
+            for notice in notices:
+                self.control.settle_notice(self.documents[notice['id']], 'delivered')
             on_discard(lambda: self.restore(session, notices, seen))
             if not notices:
                 return result
@@ -218,40 +238,46 @@ class IndependentCalls(NativeCalls):
         return call
 
     def receive(self, event: dict) -> bool | str:
-        """Queue an end or native request its creating Main must handle for that Main's mod to submit."""
-        session = (event.get('creator') or {}).get('session')
-        if event['parent'] is not None or session not in self.callers:
+        """Queue an end or native request its creating Main must handle for that Main's mod to submit.
+
+        It stays held in the core until the mod acknowledges it or a result carries
+        it, so a Session that is stopped now, or stops first, gets it on its next run.
+        """
+        if event['parent'] is not None:
             return False
-        message = event['body'] or (event.get('error') or {}).get('message') or event['outcome']
+        session = (event.get('creator') or {}).get('session')
         with self.lock:
-            self.queue.setdefault(session, []).append({
-                'id': notice_id(event['execution'], event['outcome'], event.get('request')),
-                'event': {'alias': event['agent'], 'event': event['outcome'],
-                          'message': message, 'execution': event['execution']}})
-        return 'queued'
+            if session in self.callers:
+                self.enqueue(session, event)
+        return 'held'
 
     def claim(self, session: str) -> list[dict]:
-        """Take this Session's queued notices once; an end already shown is skipped. Hold the lock."""
+        """Take this Session's queued notices once, skipping any settled or withdrawn meanwhile. Hold the lock."""
         taken, self.queue[session] = self.queue.get(session, []), []
-        ended = self.ended.get(session, set())
-        taken = [notice for notice in taken if not (notice['event']['execution'] in ended
-                                                    and notice['event']['event'] in END_EVENTS)]
+        taken = [notice for notice in taken if self.control.notice_open(self.documents[notice['id']])]
         self.claimed.setdefault(session, {}).update((notice['id'], notice) for notice in taken)
         return taken
 
-    def restore(self, session: str, notices: list[dict], seen: list[str]) -> None:
+    def restore(self, session: str, notices: list[dict], seen: list[dict]) -> None:
         """Undo one result's hand-over when its caller cancelled before reading it."""
+        documents = [self.documents[notice['id']] for notice in notices] + seen
         with self.lock:
-            self.ended.get(session, set()).difference_update(seen)
-            self.queue.setdefault(session, []).extend(notices)
+            for document in documents:
+                self.control.settle_notice(document, 'held', reopen=True)
+                self.enqueue(session, document)
 
     def notices(self, document: dict) -> dict:
-        """Serve the mod's claim/requeue protocol; the caller holds the lock."""
+        """Serve the mod's claim, requeue and acknowledge protocol; the caller holds the lock.
+
+        The mod acknowledges after a submission. A crash between the two
+        delivers that notice once more on the next run, never loses it.
+        """
         session = document.get('session')
         if (not isinstance(session, str) or str(UUID(session)) != session
                 or set(document) - {'operation', 'session', 'position', 'ids'}):
             raise AgentsError('invalid-input', 'Expected one native notice operation.')
         if document['operation'] == 'notices':
+            self.attach(session)
             return {'notices': self.claim(session), 'position': 0}
         if document['operation'] == 'requeue':
             ids = document.get('ids')
@@ -264,17 +290,13 @@ class IndependentCalls(NativeCalls):
             return {'requeued': len(again)}
         if type(document.get('position')) is not int:
             raise AgentsError('invalid-input', 'Expected the position returned by notices.')
+        ids = document.get('ids', [])
+        if not isinstance(ids, list) or not all(isinstance(item, str) for item in ids):
+            raise AgentsError('invalid-input', 'Expected the submitted notice ids.')
+        for item in ids:
+            if item in self.claimed.get(session, {}):
+                self.control.settle_notice(self.documents[item], 'delivered')
         return {'acknowledged': True}
-
-
-def seen_ends(request: dict, document: dict) -> list[str]:
-    """Executions whose end one ``wait`` or ``status`` result showed the Main."""
-    result = document.get('result')
-    if (request.get('action') != 'execute' or request.get('feature') not in {'wait', 'status'}
-            or not isinstance(result, dict) or result.get('state') != 'standby'
-            or not isinstance(result.get('last_result'), dict)):
-        return []
-    return [result['last_result'].get('id')]
 
 
 def adoption_material(root: Path, claude: Path) -> dict[str, object]:
@@ -402,6 +424,8 @@ def main() -> None:
                 if time.monotonic() > deadline:
                     raise RuntimeError('Claude stop was not confirmed at MCP shutdown.')
                 time.sleep(0.05)
+        # Its absence from the log means the process was killed before this point.
+        print(time.strftime('%Y-%m-%dT%H:%M:%S%z'), 'agents host recorded its children stopped.', flush=True)
 
 
 if __name__ == '__main__':

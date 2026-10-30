@@ -5,14 +5,25 @@ sections below use the controlled Runtimes. No network, no real model.
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 from pathlib import Path
+import subprocess
 import threading
+import time
+from uuid import uuid4
 
 import pytest
 
 from agent_swarm import AgentControl, Caller, bind
+from agent_swarm.calls import Call, current_call
+from agent_swarm.claude.host import IndependentCalls
+from agent_swarm.codex.app_server import CodexAdapterError, CodexAppServer
+from agent_swarm.codex.host import CodexHost
+from test_claude_runtime import claude_environment  # noqa: F401 - pytest fixture
+from test_codex_host_cross_runtime import Running, events, host_settings, until  # noqa: F401
+from test_codex_independent_control import native_settings  # noqa: F401 - pytest fixture
 
 
 MAIN = Caller('test-host', None, 'main-session', 'claude')
@@ -429,3 +440,328 @@ def test_an_owner_that_died_leaves_a_held_end(tmp_path: Path) -> None:
     (tmp_path / 'control' / 'agents' / f'{agent}.json').write_text(json.dumps(document))
     [notice] = control_over(tmp_path)[0].held_notices(MAIN)
     assert (notice['outcome'], notice['error']['code']) == ('failed', 'owner-exited')
+
+
+# -- Claude Code host: a real IndependentCalls per "process", a controlled Codex child ------
+
+
+def stop_host(host) -> None:
+    """Do what the Claude host's ``main`` does on its way out."""
+    for agent in host.control.interrupt_owned():
+        deadline = time.monotonic() + 10
+        while host.control.owns_running(agent):
+            assert time.monotonic() < deadline
+            time.sleep(0.01)
+
+
+def claude_main(tmp_path: Path, native_settings: dict, session: str | None = None):
+    """One host process serving one verified Main Session."""
+    host = IndependentCalls(tmp_path / 'agents', tmp_path, {}, {'codex': native_settings})
+    session = session or str(uuid4())
+    run = host.make_call(session, tmp_path)
+
+    def invoke(feature: str | None = None, **arguments) -> dict:
+        request = ({'action': 'discover'} if feature is None
+                   else {'action': 'execute', 'feature': feature, 'arguments': arguments})
+        result = run('agents', request)
+        assert not result.failed, result.document
+        return result.document
+
+    return host, invoke, session
+
+
+def interrupted_child(tmp_path: Path, native_settings: dict) -> tuple[str, str, str]:
+    """A Main creates a long child and exits, which interrupts it. Returns agent, session, notice id."""
+    host, invoke, session = claude_main(tmp_path, native_settings)
+    created = invoke('create', runtime='codex', instruction='hold')
+    stop_host(host)
+    # Written before the host could exit: the wait above ends at the same write.
+    [execution] = record(tmp_path / 'agents', created['agent'])['executions']
+    assert (execution['outcome'], execution['notification']) == ('interrupted', 'held')
+    return created['agent'], session, f"{execution['id']}:interrupted"
+
+
+def test_claude_a_child_stopped_with_the_host_reaches_the_next_run_once(tmp_path: Path, native_settings: dict) -> None:
+    """Print mode's claim: the next result of the same Session carries it, then nothing does."""
+    agent, session, identity = interrupted_child(tmp_path, native_settings)
+    host, invoke, _ = claude_main(tmp_path, native_settings, session)
+    [notice] = invoke()['main_notices']
+    assert notice['id'] == identity
+    assert (notice['event']['alias'], notice['event']['event']) == (agent, 'interrupted')
+    assert 'main_notices' not in invoke()
+    assert host.context({'operation': 'notices', 'session': session})['notices'] == []
+
+    # Another run of the Session, in another process, finds nothing to repeat.
+    host, invoke, _ = claude_main(tmp_path, native_settings, session)
+    assert 'main_notices' not in invoke()
+    assert host.context({'operation': 'notices', 'session': session})['notices'] == []
+    assert invoke('status', agent=agent)['result']['last_result']['notification'] == 'delivered'
+
+
+def test_claude_another_session_does_not_receive_it(tmp_path: Path, native_settings: dict) -> None:
+    _, session, _ = interrupted_child(tmp_path, native_settings)
+    host, invoke, other = claude_main(tmp_path, native_settings)
+    assert 'main_notices' not in invoke()
+    assert host.context({'operation': 'notices', 'session': other})['notices'] == []
+
+
+def test_claude_the_mods_push_settles_on_acknowledge_only(tmp_path: Path, native_settings: dict) -> None:
+    """Claimed and submitted but not acknowledged is a duplicate at worst, never a loss."""
+    agent, session, identity = interrupted_child(tmp_path, native_settings)
+    host, _, _ = claude_main(tmp_path, native_settings, session)
+    [notice] = host.context({'operation': 'notices', 'session': session})['notices']
+    assert notice['id'] == identity
+    assert host.context({'operation': 'notices', 'session': session})['notices'] == []
+
+    # The process died between submit and acknowledge: the next one offers it again.
+    host, _, _ = claude_main(tmp_path, native_settings, session)
+    [again] = host.context({'operation': 'notices', 'session': session})['notices']
+    assert again['id'] == identity
+    assert host.context({'operation': 'acknowledge', 'session': session, 'position': 0,
+                         'ids': [identity, 'unknown:completed']}) == {'acknowledged': True}
+    assert record(tmp_path / 'agents', agent)['executions'][-1]['notification'] == 'delivered'
+
+    host, _, _ = claude_main(tmp_path, native_settings, session)
+    assert host.context({'operation': 'notices', 'session': session})['notices'] == []
+
+
+def test_claude_requeue_after_a_failed_submit_keeps_it_for_the_next_claim(tmp_path: Path, native_settings: dict) -> None:
+    agent, session, identity = interrupted_child(tmp_path, native_settings)
+    host, _, _ = claude_main(tmp_path, native_settings, session)
+    host.context({'operation': 'notices', 'session': session})
+    host.context({'operation': 'requeue', 'session': session, 'ids': [identity]})
+    assert record(tmp_path / 'agents', agent)['executions'][-1]['notification'] == 'held'
+    [again] = host.context({'operation': 'notices', 'session': session})['notices']
+    assert again['id'] == identity
+
+
+def test_claude_a_body_read_by_status_is_not_pushed(tmp_path: Path, native_settings: dict) -> None:
+    """Single and hierarchy forms alike; a later run has nothing either."""
+    agent, session, _ = interrupted_child(tmp_path, native_settings)
+    host, invoke, _ = claude_main(tmp_path, native_settings, session)
+    shown = invoke('status')
+    assert [node['last_result']['notification'] for node in shown['result']['agents']] == ['held']
+    assert 'main_notices' not in shown
+    assert host.context({'operation': 'notices', 'session': session})['notices'] == []
+    assert record(tmp_path / 'agents', agent)['executions'][-1]['notification'] == 'delivered'
+    host, invoke, _ = claude_main(tmp_path, native_settings, session)
+    assert 'main_notices' not in invoke()
+
+
+def test_claude_a_discarded_result_gives_its_notices_back(tmp_path: Path, native_settings: dict) -> None:
+    """Handed over, then never read: held again and carried by the next result, once."""
+    agent, session, identity = interrupted_child(tmp_path, native_settings)
+    host, invoke, _ = claude_main(tmp_path, native_settings, session)
+    cancelled = Call()
+    with current_call(cancelled):
+        assert [notice['id'] for notice in invoke()['main_notices']] == [identity]
+    assert record(tmp_path / 'agents', agent)['executions'][-1]['notification'] == 'delivered'
+    for discard in cancelled.discards:
+        discard()
+    assert record(tmp_path / 'agents', agent)['executions'][-1]['notification'] == 'held'
+    assert [notice['id'] for notice in invoke()['main_notices']] == [identity]
+    assert 'main_notices' not in invoke()
+
+
+def test_claude_a_discarded_status_gives_the_shown_end_back(tmp_path: Path, native_settings: dict) -> None:
+    agent, session, identity = interrupted_child(tmp_path, native_settings)
+    host, invoke, _ = claude_main(tmp_path, native_settings, session)
+    cancelled = Call()
+    with current_call(cancelled):
+        invoke('status', agent=agent)
+    for discard in cancelled.discards:
+        discard()
+    assert [notice['id'] for notice in invoke()['main_notices']] == [identity]
+
+
+def test_claude_a_live_end_for_an_unbound_session_is_held_not_refused(tmp_path: Path, native_settings: dict) -> None:
+    """A child outliving its Main's binding: held for that Session, queued once when it binds."""
+    host, _, session = claude_main(tmp_path, native_settings)
+    notice = {'parent': None, 'agent': 'a', 'session': 's', 'execution': 'e', 'body': 'b', 'outcome': 'completed',
+              'creator': {'host': 'claude-native', 'agent': None, 'session': str(uuid4())}, 'error': None}
+    assert host.receive(notice) == 'held'
+    assert notice['creator']['session'] not in host.queue
+    notice['creator']['session'] = session
+    assert host.receive(notice) == 'held'
+    assert host.receive(notice) == 'held'
+    assert [item['id'] for item in host.queue[session]] == ['e:completed']
+
+
+def test_claude_a_request_answered_before_the_claim_is_dropped(tmp_path: Path, native_settings: dict) -> None:
+    """The notice would ask for a reply already given."""
+    host, invoke, session = claude_main(tmp_path, native_settings)
+    agent = invoke('create', runtime='codex', instruction='request:item/commandExecution/requestApproval')['agent']
+    deadline = time.monotonic() + 10
+    while not invoke('status', agent=agent)['result'].get('pending_requests'):
+        assert time.monotonic() < deadline
+        time.sleep(0.01)
+    [request] = invoke('requests', agent=agent)['result']['requests']
+    invoke('reply', agent=agent, request=request, response={'decision': 'accept'})
+    assert all(notice['event']['event'] != 'request'
+               for notice in host.context({'operation': 'notices', 'session': session})['notices'])
+    invoke('wait', agent=agent, timeout_seconds=10)
+    stop_host(host)
+
+
+def test_the_mod_acknowledges_a_submission_and_survives_its_failure(tmp_path: Path) -> None:
+    """A failed acknowledgement neither requeues nor submits a second prompt."""
+    module = tmp_path / 'host_context.mjs'
+    module.write_text(Path('src/agent_swarm/claude/host_context.mjs').read_text())
+    program = r'''
+import assert from 'node:assert/strict';
+const {register} = await import(process.argv[1]);
+const handlers = new Map();
+register((name, matcher, fn) => {handlers.set(fn && matcher.tool ? `${name}:${matcher.tool}` : name, fn ?? matcher); return {catch() {}};});
+const operations = [], submitted = [], timers = [];
+const pending = [{id: 'e1:completed', event: {alias: 'a', event: 'completed', message: 'done'}}];
+const host = {
+ session: {id: async () => 'main-session', cwd: async () => '/p'},
+ command: {register: async () => {}},
+ env: {get: async key => key.endsWith('PYTHON') ? '/venv/python' : '/host/config'},
+ process: {run: async (argv, options) => {
+   const document = JSON.parse(options.stdin);
+   operations.push(document.operation);
+   if (document.operation === 'acknowledge') return {exitCode: 1, stdout: '', stderr: 'host gone'};
+   return {exitCode: 0, stdout: JSON.stringify({notices: pending.splice(0), position: 0}), stderr: ''};
+ }},
+ prompt: {submit: async input => { submitted.push(input.text); }},
+ clock: {setTimeout: fn => timers.push(fn)},
+ ui: {log: () => {}},
+};
+await handlers.get('session.start')(host, {}, async () => 'started');
+await timers.shift()();
+await timers.shift()();
+assert.equal(submitted.length, 1);
+assert.deepEqual(operations, ['notices', 'acknowledge', 'notices']);
+'''
+    result = subprocess.run(['node', '--input-type=module', '-e', program, module.as_uri()],
+                            capture_output=True, text=True, timeout=20)
+    assert result.returncode == 0, result.stderr
+
+
+# -- Codex host: a real CodexHost per "process" over the controlled stdio peer ---------------
+
+
+def codex_child_stopped_with_the_host(tmp_path: Path, host_settings: dict, log: Path) -> tuple[str, str]:
+    """A parent creates a long child and its turn ends, which interrupts it."""
+    running = Running(CodexHost(host_settings, tmp_path / 'host', 'hold'))
+    agent = running.call('create', runtime='codex', instruction='hold')['agent']
+    running.stop()
+    # Read at once: run() may not return before this is on disk.
+    [execution] = record(tmp_path / 'host', agent)['executions']
+    assert (execution['outcome'], execution['notification']) == ('interrupted', 'held')
+    assert events(log) == []
+    return agent, f"{execution['id']}:interrupted"
+
+
+def test_codex_a_child_stopped_with_the_host_reaches_the_next_resume_once(
+        tmp_path: Path, host_settings: dict, monkeypatch: pytest.MonkeyPatch) -> None:
+    """One host event on the resume, in deliveries too; a further resume sends nothing."""
+    log = tmp_path / 'host-events.jsonl'
+    monkeypatch.setenv('PEER_HOST_EVENTS', str(log))
+    agent, identity = codex_child_stopped_with_the_host(tmp_path, host_settings, log)
+
+    running = Running(CodexHost(host_settings, tmp_path / 'host', 'hold', resume=True))
+    [event] = until(lambda: events(log))
+    assert (event['alias'], event['event']) == (agent, 'interrupted')
+    assert until(lambda: running.call('status', agent=agent)['result']['last_result']['notification'] == 'delivered')
+    first = running.stop()
+    assert [delivery['id'] for delivery in first['deliveries']] == [identity]
+
+    running = Running(CodexHost(host_settings, tmp_path / 'host', 'hold', resume=True))
+    time.sleep(0.2)
+    second = running.stop()
+    assert second['deliveries'] == [] and len(events(log)) == 1
+
+
+def test_codex_a_flush_that_cannot_write_leaves_it_held(
+        tmp_path: Path, host_settings: dict, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Unwritten: held for the next resume. Written and unacknowledged: unconfirmed, not repeated."""
+    log = tmp_path / 'host-events.jsonl'
+    monkeypatch.setenv('PEER_HOST_EVENTS', str(log))
+    agent, _ = codex_child_stopped_with_the_host(tmp_path, host_settings, log)
+    original = CodexAppServer.send_host_event
+    written = False
+
+    async def refused(self, thread_id, event):
+        error = CodexAdapterError('RUNTIME_CONNECTION_FAILED', 'closed', terminal_confirmed=False)
+        error.request_written = written
+        raise error
+
+    monkeypatch.setattr(CodexAppServer, 'send_host_event', refused)
+    state = lambda: record(tmp_path / 'host', agent)['executions'][-1]['notification']
+    running = Running(CodexHost(host_settings, tmp_path / 'host', 'hold', resume=True))
+    time.sleep(0.2)
+    running.stop()
+    assert state() == 'held'
+
+    written = True
+    running = Running(CodexHost(host_settings, tmp_path / 'host', 'hold', resume=True))
+    assert until(lambda: state() == 'unconfirmed')
+    running.stop()
+
+    monkeypatch.setattr(CodexAppServer, 'send_host_event', original)
+    running = Running(CodexHost(host_settings, tmp_path / 'host', 'hold', resume=True))
+    time.sleep(0.2)
+    assert running.stop()['deliveries'] == []
+    assert events(log) == []
+
+
+def test_codex_a_turn_that_closes_mid_flush_finishes_it_first(
+        tmp_path: Path, host_settings: dict, monkeypatch: pytest.MonkeyPatch) -> None:
+    """The connection stays open for a send already under way, so its result is recorded."""
+    log = tmp_path / 'host-events.jsonl'
+    monkeypatch.setenv('PEER_HOST_EVENTS', str(log))
+    agent, _ = codex_child_stopped_with_the_host(tmp_path, host_settings, log)
+    original = CodexAppServer.send_host_event
+    entered = threading.Event()
+
+    async def slow(self, thread_id, event):
+        entered.set()
+        await asyncio.sleep(0.3)
+        return await original(self, thread_id, event)
+
+    monkeypatch.setattr(CodexAppServer, 'send_host_event', slow)
+    running = Running(CodexHost(host_settings, tmp_path / 'host', 'hold', resume=True))
+    assert entered.wait(10)
+    running.stop()
+    assert record(tmp_path / 'host', agent)['executions'][-1]['notification'] == 'delivered'
+    assert len(events(log)) == 1
+
+
+def test_codex_a_failed_live_send_is_held_and_status_settles_it(
+        tmp_path: Path, host_settings: dict, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A live end that could not be written is readable, and reading it ends the notice."""
+    log = tmp_path / 'host-events.jsonl'
+    monkeypatch.setenv('PEER_HOST_EVENTS', str(log))
+    original = CodexAppServer.send_host_event
+
+    async def refused(self, thread_id, event):
+        raise CodexAdapterError('RUNTIME_CONNECTION_FAILED', 'closed', terminal_confirmed=False)
+
+    monkeypatch.setattr(CodexAppServer, 'send_host_event', refused)
+    running = Running(CodexHost(host_settings, tmp_path / 'host', 'hold'))
+    agent = running.call('create', runtime='codex', instruction='hello')['agent']
+    until(lambda: record(tmp_path / 'host', agent)['executions'][-1].get('notification') == 'held')
+    shown = running.call('status', agent=agent)['result']['last_result']
+    assert (shown['notification'], shown['last_message']) == ('held', 'hello')
+    assert record(tmp_path / 'host', agent)['executions'][-1]['notification'] == 'delivered'
+    running.stop()
+
+    monkeypatch.setattr(CodexAppServer, 'send_host_event', original)
+    running = Running(CodexHost(host_settings, tmp_path / 'host', 'hold', resume=True))
+    time.sleep(0.2)
+    assert running.stop()['deliveries'] == [] and events(log) == []
+
+
+def test_codex_a_turn_that_has_ended_holds_a_live_end(tmp_path: Path, host_settings: dict) -> None:
+    """Between a parent's turn and its exit the receiver refuses nothing it could lose."""
+    host = CodexHost(host_settings, tmp_path / 'host', 'hold')
+    notice = {'parent': None, 'agent': 'a', 'session': 's', 'execution': 'e', 'body': 'b', 'outcome': 'completed'}
+    assert host._receive_child(notice) == 'held'
+    host.native_session, host.loop, host.outcome = 'parent', asyncio.new_event_loop(), {'outcome': 'completed'}
+    try:
+        assert host._receive_child(notice) == 'held'
+    finally:
+        host.loop.close()
+    assert host._receive_child({**notice, 'parent': 'agent-a'}) is False

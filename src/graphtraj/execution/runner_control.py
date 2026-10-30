@@ -596,7 +596,7 @@ def _execution_requests(mapping: Mapping[str, Any], directory: Path) -> list:
 
 
 def owned_root_requests(runner_directory: Path, connection: Mapping[str, Any]) -> list[tuple[dict, dict]]:
-    """Return pending native requests of the top-level Sessions a host Main owns.
+    """Return pending native and ``ask_parent`` requests of the top-level Sessions a host Main owns.
 
     The trusted host binding supplies ``connection``; ownership is the recorded
     native owner, as in ``is_direct_owner``. An unreadable record or owner

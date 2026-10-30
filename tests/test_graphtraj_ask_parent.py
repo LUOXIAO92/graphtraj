@@ -1,6 +1,7 @@
 """A Task member asks its direct parent through the real Worker's request path."""
 from __future__ import annotations
 
+import asyncio
 import json
 from pathlib import Path
 import threading
@@ -14,6 +15,7 @@ from graphtraj.configuration.project_configuration import runner_directory
 from graphtraj.execution import main_continuity
 from graphtraj.execution.runner_status import read_alias_mapping, runtime_caller
 from graphtraj.interfaces.gateway import handle_request
+from graphtraj.runtimes.codex import finalize
 from test_managed_sessions import ManagedProject, launch_document, managed_project, observe  # noqa: F401
 
 
@@ -248,3 +250,31 @@ def test_a_root_members_notice_reaches_the_queued_main_once(managed_project: Man
     assert notice['id'].endswith(request['request_token'])
     call('interrupt', [alias])
     assert asking.result()['error']['code'] == 'stale-execution'
+
+
+def test_main_is_kept_going_by_a_root_members_unanswered_question(managed_project: ManagedProject) -> None:
+    """Main's Stop check names the pending request by its token, also after the ask timed out."""
+    root, _, call, _ = managed_project
+    alias, _ = launched(call)
+    runner = root / '.graphtraj/runner'
+    connection = {'runtime': 'codex', 'session': 'main-native', 'codex_home': str(root)}
+    mapping_file = runner / 'sessions' / alias / 'mapping.yml'
+    mapping = yaml.safe_load(mapping_file.read_text())
+    mapping['parent_connection'] = connection
+    mapping_file.write_text(yaml.safe_dump(mapping))
+
+    first = ask(root, alias, 0.2, question='Secret option?')
+    assert first['result']['timed_out'] is True
+    token = first['result']['request']['request_token']
+
+    result = asyncio.run(finalize._owned_request_result({'cwd': str(root), 'connection': connection}))
+    output = json.loads(result['output'])
+    assert result['decided_before_fork'] is True and output['status'] == 'actionable'
+    assert f'{alias} asks Main to answer agents/decision request {token}' in output['reason']
+    assert 'requests' in output['reason'] and 'reply' in output['reason']
+    assert 'native' not in output['reason'] and 'None' not in output['reason']
+    assert 'Secret option' not in output['reason']
+
+    request, = pending(call, alias)
+    call('agents', ['reply', {'agent': alias, 'request': request, 'response': {'answer': 'Done.'}}, 'main-a'])
+    assert asyncio.run(finalize._owned_request_result({'cwd': str(root), 'connection': connection})) is None

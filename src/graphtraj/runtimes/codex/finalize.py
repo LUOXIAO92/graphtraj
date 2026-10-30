@@ -181,10 +181,23 @@ def response(result: dict | None, continued: bool) -> dict:
     return {'continue': False, 'stopReason': message}
 
 
+def _pending_request(mapping: dict, request: dict) -> str:
+    """Name one pending request of Main's child so Main can act on it.
+
+    An ``ask_parent`` request has no native ID and is addressed by its token.
+    It stays pending until answered, so a child's timed-out question still counts.
+    """
+    if request.get('method') == DECISION_METHOD:
+        return (f"{mapping['alias']} asks Main to answer {DECISION_METHOD} request {request.get('request_token')}: "
+                'read it with requests and answer once with reply. It stays pending until answered, '
+                'even after the asking call timed out')
+    return f"{mapping['alias']} awaits {request.get('method')} request {request.get('request_id')}"
+
+
 async def _owned_request_result(binding: dict) -> dict | None:
     """Return an actionable result when Main's own direct child awaits Main.
 
-    A pending native request needs Main's reply, and a latest-Round result of
+    A pending native or ``ask_parent`` request needs Main's reply, and a latest-Round result of
     Main's own root Session needs Main's decision, so no checker is needed.
     Unreadable Runner or result evidence is not proof of neither; the full
     check decides. An empty mapping marks this unreadable case and forbids reuse.
@@ -197,9 +210,10 @@ async def _owned_request_result(binding: dict) -> dict | None:
     try:
         owned = await asyncio.to_thread(owned_root_requests, discover_runner_directory(root), binding['connection'])
         if owned:
-            pending = '; '.join(f"{mapping['alias']} awaits {request.get('method')} request {request.get('request_id')}"
-                                for mapping, request in owned)
-            reason = f"Main's direct child Session needs its native reply; no checker ran. {pending}."
+            pending = '; '.join(_pending_request(mapping, request) for mapping, request in owned)
+            native = all(request.get('method') != DECISION_METHOD for _, request in owned)
+            reply = 'its native reply' if native else "Main's reply"
+            reason = f"Main's direct child Session needs {reply}; no checker ran. {pending}."
         else:
             owned = await asyncio.to_thread(owned_root_undecided_results, root, binding['connection'])
             submitted = '; '.join(f"{mapping['alias']} submitted {submission['candidate']}"

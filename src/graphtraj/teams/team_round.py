@@ -550,7 +550,9 @@ def _deliver_task(
     alias, session = _run_agent(
         project, task, task.role, worktree, evidence, traces, None, None,
         None, parent_alias, retained_batch, prompt, capacity_fd=capacity_fd,
-        register_member=True, wait_for_completion=parent_alias is not None or prompt is not None,
+        # A conflict resolver is an ordinary root: its caller answers its
+        # permission requests, so waiting here for its end would deadlock (402).
+        register_member=True, wait_for_completion=parent_alias is not None,
         driver_reports_end=parent_alias is not None, registered=registered,
     )
     if parent_alias is not None:
@@ -562,7 +564,7 @@ def _deliver_task(
             "execution_id": registered.get("execution_id")
             or read_alias_mapping(project.runner_directory, alias)[0]["execution_id"],
             "worktree_path": str(worktree),
-            "launch_status": "completed" if parent_alias is not None or prompt is not None else "launched"}
+            "launch_status": "completed" if parent_alias is not None else "launched"}
 
 
 def run_session_children(job_file: Path) -> None:

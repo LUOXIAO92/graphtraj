@@ -257,10 +257,14 @@ graphtraj task integrate --task-id <id> --resolve-conflict '<diagnosis>' --role 
 ```
 
 `--role` also accepts the same inline YAML role definition as swarm. The role's
-configured instructions, Skills, reports and access apply. The selected member
-commits and submits its result, its actual parent uses MCP `decide_result`, and the
-integrator repeats the original validation command to complete integration. A
-Session's final message cannot accept a result.
+configured instructions, Skills, reports and access apply. The call returns once
+the member is launched, with the Task in `resolving-integration`; the member's
+notices and permission requests reach its parent, which answers them as for any
+child. The selected member commits and submits its result, its actual parent uses
+MCP `decide_result`, and the integrator repeats the original validation command to
+complete integration. If the member ends without submitting a result, that repeated
+call escalates the integration instead. A Session's final message cannot accept a
+result.
 
 To adopt an already committed escalated integration without starting work, inspect
 the changed contents and supply `--confirm-resolution <full-commit>` with the

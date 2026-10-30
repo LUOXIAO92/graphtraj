@@ -110,11 +110,14 @@ def _integrate(
     dev = configuration.integration_worktree
     if repository.worktree_for_branch("dev") != dev or _git(dev, "branch", "--show-current") != "dev":
         raise ValueError("Integration requires the configured dev Integration Worktree")
+    predecessor = next((event for event in reversed(events) if event.get("task_id") == task_id and event["event"].startswith("task-integration-")), acceptance)
+    if resolving and diagnosis is None and _ended_without_submission(runner, events, record, predecessor, validation_command):
+        # dev keeps whatever the resolver left, for adoption after escalation.
+        return _escalate_ended_resolution(configuration, directory, record, predecessor)
     if diagnosis is None and (_git(dev, "status", "--porcelain")
                               or (dev / _git(dev, "rev-parse", "--git-path", "MERGE_HEAD")).exists()):
         raise ValueError("The dev Integration Worktree must be clean")
     before = _git(dev, "rev-parse", "HEAD")
-    predecessor = next((event for event in reversed(events) if event.get("task_id") == task_id and event["event"].startswith("task-integration-")), acceptance)
     if resolving and diagnosis is None:
         conflict = next(event for event in reversed(events)
                         if event.get('task_id') == task_id
@@ -227,18 +230,18 @@ def _integrate(
                        and resolution.get("launch_status") not in {"failed", "stopped"})
     if established and resolution.get("launch_status") != "registered":
         mapping, _ = read_alias_mapping(runner, resolution["alias"])
-        evidence_refs.append(Path(mapping["trace_file"]).relative_to(root).as_posix())
-        resolution["submissions"] = [event for event in read_worldline(state, root)
-                                     if event['event'] == 'result-submitted'
-                                     and event.get('alias') == resolution['alias']
-                                     and event['event_id'] > started['event_id']]
+        # A just-launched resolver may not have written its trace yet (Claude
+        # links it to a transcript created later); its session_ref still names it.
+        if Path(mapping["trace_file"]).is_file():
+            evidence_refs.append(Path(mapping["trace_file"]).relative_to(root).as_posix())
     if resolving and diagnosis is None:
         evidence_refs.extend(decision['evidence_refs'])
     if diagnosis is not None or recovering:
         evidence_refs.extend(ref for ref in predecessor["evidence_refs"] if ref not in evidence_refs)
-    status = ("integrated" if succeeded else "escalated" if recovering or (
-        resolution and resolution.get('launch_status') != 'registered' and not resolution.get('submissions')
-    ) else "resolving-integration" if resolution or resolving else "integrating")
+    # A launched resolver keeps working after this call; its result arrives
+    # through submit_result and its parent's decision (402).
+    status = ("integrated" if succeeded else "escalated" if recovering or (resolution and not established)
+              else "resolving-integration" if resolution or resolving else "integrating")
     integrated = _record(configuration, directory, record, status, {
         "event": ("task-integration-conflict-resolved" if resolving else "task-integrated") if succeeded else "task-integration-escalated" if status == "escalated" else "task-integration-conflict-dispatched" if resolution else "task-integration-failed",
         "caused_by_event_ids": [started["event_id"]],
@@ -265,6 +268,60 @@ def _integrate(
                 })
                 unlocked.append(dependent_id)
     return {"task_id": task_id, "candidate": candidate, "status": status, **({"resolution": resolution} if resolution else {}), "event_id": integrated["event_id"], "evidence": evidence.relative_to(root).as_posix(), "unlocked_task_ids": unlocked}
+
+
+def _ended_without_submission(
+    runner: Path,
+    events: list[dict],
+    record: dict,
+    dispatched: dict,
+    validation_command: tuple[str, ...],
+) -> bool:
+    """Whether the dispatched resolver's execution ended with no submitted result.
+
+    Only a launched resolver of this integration counts; a submission made
+    after its conflict started keeps the ordinary decision path.
+    """
+    from graphtraj.execution.runner_status import owning_execution
+
+    alias = dispatched.get("session_ref")
+    if (dispatched["event"] != "task-integration-conflict-dispatched" or alias is None
+            or dispatched.get("validation_command") != list(validation_command)):
+        return False
+    started = dispatched["caused_by_event_ids"][0]
+    if any(event["event"] == "result-submitted" and event.get("task_id") == record["task_id"]
+           and event.get("team_ordinal") == record["active_team_ordinal"] and event["event_id"] > started
+           for event in events):
+        return False
+    mapping, directory = read_alias_mapping(runner, alias)
+    return owning_execution(alias, directory, mapping) is None
+
+
+def _escalate_ended_resolution(
+    configuration: ProjectConfiguration,
+    directory: Path,
+    record: dict,
+    dispatched: dict,
+) -> dict:
+    """Escalate a resolution whose resolver ended without submitting a result.
+
+    The retained conflict facts stay unchanged, so Main may adopt a committed
+    resolution with ``confirmed_commit`` as for any escalated integration.
+    """
+    escalated = _record(configuration, directory, record, "escalated", {
+        "event": "task-integration-escalated",
+        "caused_by_event_ids": [dispatched["event_id"]],
+        "evidence_refs": dispatched["evidence_refs"],
+        "candidate": dispatched["candidate"],
+        "dev_before": dispatched["dev_before"],
+        "dev_commit": dispatched["dev_commit"],
+        "validation_command": dispatched["validation_command"],
+        "conflict_kind": dispatched["conflict_kind"],
+        "session_ref": dispatched["session_ref"],
+    })
+    return {"task_id": record["task_id"], "candidate": dispatched["candidate"], "status": "escalated",
+            "event_id": escalated["event_id"], "evidence": dispatched["evidence_refs"][0],
+            "unlocked_task_ids": []}
 
 
 def _resolve(configuration: ProjectConfiguration, batch: Batch, log: TextIO) -> dict:

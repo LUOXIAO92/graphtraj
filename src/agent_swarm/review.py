@@ -305,9 +305,9 @@ def _error_detail(raw: bytes, reviewer: Mapping[str, Any], request: Mapping[str,
         if isinstance(value, int) and not isinstance(value, bool):
             value = str(value)
         if isinstance(value, str):
-            value = _plain(value, reviewer)
+            value = _plain(value, reviewer)[:DETAIL_LIMIT]
             if value and not _echoes(value, request):
-                details[field] = value[:DETAIL_LIMIT]
+                details[field] = value
     return "; error=" + json.dumps(details, ensure_ascii=False) if details else "; error details omitted"
 
 

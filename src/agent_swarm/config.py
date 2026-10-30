@@ -186,7 +186,7 @@ def _read(root: Path) -> tuple[dict[str, bool], dict[str, dict], dict[str, dict]
         """Return a finite number of seconds above zero."""
         if isinstance(node, yaml.ScalarNode) and node.tag in _NUMBERS:
             value = yaml.SafeLoader("").construct_object(node)
-            if math.isfinite(value) and value > 0:
+            if 0 < value < math.inf:
                 return value
         raise fail(node, f"{name}: expected a finite number above 0")
 

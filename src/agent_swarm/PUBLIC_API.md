@@ -727,8 +727,11 @@ What the parent sees today:
   `main_notices` to the next `agents` result. An end already shown by `wait`
   or `status` is not pushed again. It enables `hold_notices`: a notice stays
   held until the plugin acknowledges its submission (`{"operation":
-  "acknowledge", "session", "position": 0, "ids"}`) or a result carries it (a
-  discarded result gives it back). The host interrupts its children when
+  "acknowledge", "session", "position": 0, "ids"}`) or a result carries it. A
+  result the caller cancelled, or sent to a client already gone, gives it back.
+  A child that ends before its own `create`, `send` or `resume` returns can have
+  its notice on that very result; the `wait` that follows then shows
+  `last_message: null`. The host interrupts its children when
   Claude Code ends the Session, and those ends are held. The first time a
   Session binds in a host process, whether by a call or the plugin's claim,
   what was held for it is queued, so `claude --resume` of the same Session

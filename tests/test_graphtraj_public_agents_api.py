@@ -420,3 +420,52 @@ def test_javascript_check_reports_unlisted_imports(source: str) -> None:
 def test_javascript_check_accepts_listed_exports(source: str) -> None:
     """A listed export and any import outside agents is not reported."""
     assert not javascript_findings('graphtraj/runtimes/pi/extension.mjs', source, JAVASCRIPT_TABLE)
+
+
+def recorded_native_files(data_root: Path, outside: Path) -> set[Path]:
+    """Write one record of each shape under ``data_root``, returning the files to be granted."""
+    def record(agent: str, document: str) -> None:
+        """Write one Agent's native record; a nested Agent directory stands for Task members."""
+        path = data_root / 'native' / agent / 'session.yml'
+        path.parent.mkdir(parents=True)
+        path.write_text(document, encoding='utf-8')
+
+    outside.mkdir()
+    rollout, trace = outside / 'rollout.jsonl', outside / 'trace.jsonl'
+    other = outside / 'notes.txt'
+    for file in (rollout, trace, other, outside / 'no-session.jsonl', outside / 'nested.jsonl'):
+        file.write_text('', encoding='utf-8')
+
+    record('rollout', f'session: one\nrollout_path: {rollout}\n')
+    record('trace', f'session: two\nactivity:\n  trace_file: {trace}\n')
+    record('no-session', f'rollout_path: {outside / "no-session.jsonl"}\n')
+    record('relative', 'session: three\nrollout_path: rollout.jsonl\n')
+    record('other-suffix', f'session: four\nrollout_path: {other}\n')
+    record('missing-file', f'session: five\nrollout_path: {outside / "gone.jsonl"}\n')
+    record('not-text', 'session: six\nrollout_path: 7\n')
+    record('bad-yaml', 'session: [unclosed\n')
+    record('not-a-mapping', '- session\n')
+    record('task-member/codex', f'session: eight\nrollout_path: {outside / "nested.jsonl"}\n')
+    return {rollout.resolve(), trace.resolve()}
+
+
+def test_native_session_files_returns_recorded_files_and_skips_bad_records(tmp_path: Path) -> None:
+    """Only a recorded, absolute, existing ``.jsonl`` counts; a bad record is skipped."""
+    from agent_swarm import native_session_files
+
+    data_root = tmp_path / 'data'
+    expected = recorded_native_files(data_root, tmp_path / 'outside')
+    (data_root / 'native' / 'odd-activity').mkdir()
+    (data_root / 'native' / 'odd-activity' / 'session.yml').write_text('session: nine\nactivity: text\n')
+
+    assert set(native_session_files(data_root)) == expected
+    assert native_session_files(tmp_path / 'no-such-root') == []
+
+
+def test_project_history_grants_only_what_agents_recorded(tmp_path: Path) -> None:
+    """The read grants built from a project's Agents are exactly the recorded files."""
+    from graphtraj.runtimes.codex.access import project_history_files
+
+    expected = recorded_native_files(tmp_path / '.graphtraj' / 'swarm', tmp_path / 'outside')
+
+    assert project_history_files(tmp_path) == expected

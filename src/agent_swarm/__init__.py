@@ -76,6 +76,8 @@ __getattr__ = _lazy_names({
     "DECISION_METHOD": ("agent_swarm.approval", "DECISION_METHOD"),
     # Workspaces.
     "within_workspace": ("agent_swarm.control", "within_workspace"),
+    # Native Session files.
+    "native_session_files": ("agent_swarm.sessions.archive", "native_session_files"),
     # Stoppable calls.
     "CallCancelled": ("agent_swarm.calls", "CallCancelled"),
     "on_discard": ("agent_swarm.calls", "on_discard"),
@@ -127,7 +129,7 @@ __all__ = [
     "ACTIVE", "STANDBY", "AgentControl", "ExecutionEvents", "Run", "RuntimeDriver",
     "CONFIG_DEFAULTS", "default_config", "explicit_choices", "read_config", "write_config",
     "discover_models", "read_connections",
-    "read_session", "validate_extra_fields", "DECISION_METHOD", "within_workspace",
+    "read_session", "validate_extra_fields", "DECISION_METHOD", "within_workspace", "native_session_files",
     "CallCancelled", "on_discard", "pause", "run_stoppable", "stop_requested",
     "client_native_context", "connection_operation", "record_lock_owner",
     "verify_native_context", "worker_connection",

@@ -302,6 +302,8 @@ Parts for building a host or a consumer on agents (since 0.2.2), also in
   own record files;
 - `DECISION_METHOD`, the request method of `ask_parent` (section 4), and
   `within_workspace`, the check on `create`'s `workspace` (section 2);
+- `native_session_files(root)`, the native Session files recorded under a data
+  root (1.5);
 - Runtime executions: `RuntimeAdapterError`, the protocols `RuntimeContext` and
   `RuntimeTurn`, `RuntimeExecutionResult`, `SessionStarted`,
   `credential_environment`.
@@ -411,7 +413,10 @@ independent Claude Code host, associates and lists `agents` only.
 The caller chooses the data root. Public within it: `config.yml` (section 3)
 and, when archiving is on, one archive per Session at
 `sessions/<sha256 of the Session ID>/session.jsonl`. Everything else under the
-root is internal.
+root is internal; `native_session_files(root)` returns the native Session files
+its Agents recorded, for a host that grants exact read access to them. It
+returns resolved paths of existing `.jsonl` files named by absolute path, and
+skips a record it cannot read.
 
 The archive is JSONL: a metadata line holding the header, then events in
 native order.

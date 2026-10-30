@@ -424,11 +424,13 @@ def test_configured_document_conflict_requires_common_result_and_validation(
         # A resolver that ended without a submission escalates on the next call.
         escalated = run_process(command + ['--', *validator], cwd=root)
         assert escalated.returncode == 1 and yaml.safe_load(escalated.stdout)['status'] == 'escalated', escalated.stdout
-        retained = fake_codex.log_file.read_bytes()
+        # 405: an ended resolver with a Session no longer blocks another one.
         retry = run_process(command + ['--resolve-conflict', 'Preserve both document requirements',
                                       '--role', selection, '--', *validator], cwd=root, env=environment)
-        assert retry.returncode == 1 and 'without a Session' in retry.stdout
-        assert fake_codex.log_file.read_bytes() == retained
+        assert retry.returncode == 0, retry.stdout + retry.stderr
+        retried = yaml.safe_load(retry.stdout)
+        assert retried['status'] == 'resolving-integration' and retried['resolution']['alias'] != alias
+        wait_for_idle(installed_commands, root, environment, retried['resolution']['alias'])
     else:
         if conflict == 'textual' and outcome == 'resolved':
             from graphtraj.execution.runner_models import RunnerError

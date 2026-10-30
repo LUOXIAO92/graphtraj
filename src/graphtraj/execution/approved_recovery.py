@@ -44,6 +44,10 @@ def approved_recovery(arguments: dict, cwd: Path) -> dict:
     alias = arguments['alias']
     mapping, _ = read_alias_mapping(project.runner_directory, alias)
     require_direct_authority(project.runner_directory, alias, mapping)
+    from graphtraj.teams.merge_resolution import SUPERSEDED_RESOLVER, superseded_resolvers
+
+    if alias in superseded_resolvers(read_worldline(project.state_directory, project.harness_root), mapping['task_id']):
+        raise RunnerError('authority-denied', SUPERSEDED_RESOLVER)
     retry = arguments.get('retry_event_id')
     if retry:
         if set(arguments) != {'alias', 'retry_event_id'}:
@@ -137,13 +141,19 @@ def _repair_snapshot(project: Any, before: dict, request: dict) -> dict:
         # Task budget, leaving the retired Session and Team untouched.
         after['budget']['approved_minutes'] = after['budget'].get('approved_minutes', 0) + minutes
         return after
+    resolver = Path(before['mapping']['worktree_path']) == project.integration_worktree
+    if resume and resolver and before['task']['status'] == 'escalated' and not request.get('restore_active', False):
+        # Refused before anything is recorded: the send below could not start.
+        raise RunnerError('invalid-input', 'Resuming the resolver of an escalated integration requires restore_active.')
     if request.get('restore_active', False):
         if not before['task']['active'] or before['task']['status'] == 'integrated':
             raise RunnerError('invalid-input', 'Task disposition and completed ancestors require task-graph revision.')
         if before['task']['replaced_by']:
             raise RunnerError('invalid-input', 'A replaced Task requires task-graph revision.')
+        if resolver and before['task']['status'] not in {'escalated', 'resolving-integration'}:
+            raise RunnerError('invalid-input', 'restore_active reopens only an escalated or resolving integration.')
         after['task']['active'] = True
-        if Path(before['mapping']['worktree_path']) == project.integration_worktree:
+        if resolver:
             after['task']['status'] = 'resolving-integration'
         elif after['task']['status'] not in {'implementing', 'reviewing', 'reworking'}:
             after['task']['status'] = 'implementing'

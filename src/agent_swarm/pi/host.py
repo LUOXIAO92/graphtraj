@@ -7,9 +7,11 @@ settings (``pi``, ``claude``, ``codex``, ``dsh``); see PUBLIC_API.md 1.6.
 The host builds the Pi child request from its verified native parent.
 
 Private pipe protocol with the extension: stdin carries one Session event
-line, then one ``{"ready": true}`` line when the Session can take held notices
-and ``{"ack": <notice id>, "shown": bool}`` lines, then EOF at native shutdown;
-stdout carries one ``{"connection"}`` line, then ``{"notice"}`` lines.
+line, then one ``{"ready": true}`` line when the Session can take held notices,
+``{"ack": <notice id>, "queued": true}`` lines when Pi has taken a notice and
+``{"ack": <notice id>, "shown": bool}`` lines when it is in the Session or was
+refused, then EOF at native shutdown; stdout carries one ``{"connection"}``
+line, then ``{"notice"}`` lines.
 """
 from __future__ import annotations
 
@@ -196,13 +198,15 @@ def runtime_drivers(cwd: Path, request: Mapping[str, Any], settings: Mapping[str
 class Notices:
     """Push this Main's child messages, requests and system exceptions to the Pi extension.
 
-    Each notice is one stdout line; the extension injects it into the Pi
-    Session and acknowledges it on stdin. A notice acknowledged as shown is
-    ``delivered``. One written but not acknowledged in time is
-    ``unconfirmed``: it may have been shown, so it is never repeated. One that
-    cannot be written, is refused by the extension, or is still waiting when
-    the Session shuts down, is ``held``: it stays readable through ``status``
-    and ``wait`` and the next host process for this Session delivers it.
+    Each notice is one stdout line; the extension hands it to Pi and
+    acknowledges it on stdin. Pi writes a message to the Session only when a
+    turn takes it, so handing over only stops the wait: the notice is
+    ``held``, its body hidden, until the extension reports it in the Session,
+    and then it is ``delivered``. If the Session stops first the next host
+    process delivers it. A notice written but not acknowledged at all in time
+    is ``unconfirmed``: it may have been shown, so it is never repeated. One
+    that cannot be written or is refused is ``held`` too, and stays readable
+    through ``status`` and ``wait``.
     """
 
     def __init__(self, stream: TextIO, session: str, timeout: float = ACK_SECONDS) -> None:
@@ -212,6 +216,9 @@ class Notices:
         self.timeout = timeout
         self.lock = threading.Lock()
         self.waiting: dict[str, list] = {}
+        # Notices Pi has taken and not yet written to the Session, for this host's lifetime.
+        self.awaiting: dict[str, dict] = {}
+        self.control: AgentControl | None = None
         self.closing = False
         self.started = time.time()
 
@@ -228,7 +235,7 @@ class Notices:
         identity = notice_id(notice['execution'], notice['outcome'], notice.get('request'))
         message = notice['body'] or (notice.get('error') or {}).get('message') or notice['outcome']
         acknowledged = threading.Event()
-        slot = [acknowledged, False]
+        slot = [acknowledged, False, notice]
         with self.lock:
             if self.closing:
                 return 'held'
@@ -248,6 +255,19 @@ class Notices:
             return 'unconfirmed'
         return True if slot[1] else 'held'
 
+    def queue(self, identity: object) -> None:
+        """Pi has taken one written notice for a turn: stop waiting, it stays held until it is shown.
+
+        A request notice must not wait for a turn: its receiver runs inline on
+        the driver path and in ``ask_parent``.
+        """
+        with self.lock:
+            slot = self.waiting.pop(identity, None)
+            if slot is not None:
+                self.awaiting[identity] = slot[2]
+        if slot is not None:
+            slot[0].set()
+
     def flush(self, control: AgentControl, caller: Caller) -> None:
         """Deliver the notices held for this Session, each once, from a new host process.
 
@@ -257,33 +277,39 @@ class Notices:
         for the next host process.
         """
         for notice in control.held_notices(caller):
-            if not self.closing and control.notice_open(notice):
+            identity = notice_id(notice['execution'], notice['outcome'], notice.get('request'))
+            if not self.closing and identity not in self.awaiting and control.notice_open(notice):
                 result = self.receive(notice)
                 control.settle_notice(notice, 'delivered' if result is True else
                                       'unconfirmed' if result == 'unconfirmed' else 'held')
 
     def acknowledge(self, identity: object, shown: bool) -> None:
-        """Settle one written notice: injected into the Pi Session, or refused there."""
+        """Settle one written notice: in the Pi Session, or refused there."""
         with self.lock:
             slot = self.waiting.pop(identity, None)
+            awaited = self.awaiting.pop(identity, None)
         if slot is not None:
             slot[1] = shown
             slot[0].set()
+        elif awaited is not None and shown:
+            self.control.settle_notice(awaited, 'delivered')
 
     def hide_pushed(self, document: Mapping[str, Any]) -> None:
         """Hide a body this host is about to push, so the Main receives it once.
 
         AgentControl marks such an end ``queueing`` before calling the
         receiver, so a concurrent ``wait`` or ``status`` would otherwise show
-        the body and the notice would repeat it. A held end being flushed is
-        shown as ``queueing`` the same way, so it is not settled as read. Ends
-        of earlier host processes, and any end once shutdown began, keep their body.
+        the body and the notice would repeat it. A held end being flushed, or
+        taken by Pi and not yet in the Session, is shown as ``queueing`` the
+        same way, so it is not settled as read. Ends of earlier host processes,
+        and any end once shutdown began, keep their body.
         """
         pending = [document]
         while pending:
             agent = pending.pop()
             last = agent.get('last_result') or {}
-            flushing = notice_id(last.get('id'), last.get('outcome')) in self.waiting
+            identity = notice_id(last.get('id'), last.get('outcome'))
+            flushing = identity in self.waiting or identity in self.awaiting
             if (not self.closing and agent.get('parent') is None and (flushing or (
                     last.get('notification') == 'queueing' and (last.get('ended_at') or 0) >= self.started))):
                 last.update(notification='queueing', last_message=None)
@@ -294,6 +320,7 @@ class Notices:
         with self.lock:
             self.closing = True
             pending, self.waiting = list(self.waiting.values()), {}
+            self.awaiting = {}
         for slot in pending:
             slot[0].set()
 
@@ -320,6 +347,7 @@ def start(config: Path) -> tuple[Path, Notices, Callable, Callable, AgentControl
     notices = Notices(sys.stdout, connection['session'])
     control = AgentControl(root, runtime_drivers(cwd, request, settings), event_receiver=notices.receive,
                            request_notices=True, hold_notices=True)
+    notices.control = control
     call = bind_native_main(control, connection, cwd, event)
     # Fail at start, not mid-turn, when config.yml declares a connection
     # this machine cannot run; create re-checks the selected one.
@@ -392,6 +420,9 @@ def main() -> None:
                 if message == {'ready': True}:
                     if flusher.ident is None:
                         flusher.start()
+                    continue
+                if isinstance(message, dict) and set(message) == {'ack', 'queued'} and message['queued'] is True:
+                    notices.queue(message['ack'])
                     continue
                 if (not isinstance(message, dict) or set(message) != {'ack', 'shown'}
                         or not isinstance(message['shown'], bool)):

@@ -69,8 +69,8 @@ class Driver:
 class Pipe:
     """The extension or plugin side of a host's notice pipe."""
 
-    def __init__(self, shown: bool | None = True) -> None:
-        """``shown`` is the acknowledgement to send; ``None`` sends none."""
+    def __init__(self, shown: bool | str | None = True) -> None:
+        """``shown`` is the acknowledgement to send, or ``'queued'``; ``None`` sends none."""
         self.lines: list[dict] = []
         self.shown = shown
         self.notices = None
@@ -79,10 +79,14 @@ class Pipe:
     def write(self, text: str) -> None:
         """Record one notice line and acknowledge it the way the native side does."""
         document = json.loads(text)
+        if 'notice' not in document:
+            return
         self.lines.append(document['notice'])
         if self.on_write is not None:
             self.on_write(document['notice'])
-        if self.shown is not None:
+        if self.shown == 'queued':
+            threading.Thread(target=self.notices.queue, args=(document['notice']['id'],)).start()
+        elif self.shown is not None:
             threading.Thread(target=self.notices.acknowledge, args=(document['notice']['id'], self.shown)).start()
 
     def flush(self) -> None:
@@ -97,7 +101,7 @@ class Process:
         kind: str,
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
-        shown: bool | None,
+        shown: bool | str | None,
         timeout: float,
         driver: Driver,
     ) -> None:
@@ -166,7 +170,7 @@ def wait_until(check, seconds: float = 5.0):
 @pytest.fixture(params=['pi', 'dsh'])
 def native_host(request: pytest.FixtureRequest, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     """Build one host process of the Pi or DSH host for this test's Session."""
-    def build(shown: bool | None = True, timeout: float = 2.0, driver: Driver | None = None) -> Process:
+    def build(shown: bool | str | None = True, timeout: float = 2.0, driver: Driver | None = None) -> Process:
         """One more host process for the same Session and data root."""
         return Process(request.param, tmp_path, monkeypatch, shown, timeout, driver or Driver())
 
@@ -523,6 +527,206 @@ def test_a_real_host_unacknowledged_notice_ends_as_held_at_shutdown_and_is_repla
     assert len(run_native(tmp_path, 'pi')['notices']) == 1
 
 
+# --- Pi takes a notice now and writes it when a turn does ---
+
+
+@pytest.fixture
+def pi_host_process(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Callable:
+    """Build one Pi host process for this test's Session."""
+    def build(shown: bool | str | None = True, driver: Driver | None = None) -> Process:
+        """One more host process for the same Session and data root."""
+        return Process('pi', tmp_path, monkeypatch, shown, 2.0, driver or Driver())
+
+    return build
+
+
+def test_a_notice_pi_took_is_delivered_only_when_it_is_in_the_session(pi_host_process: Callable, tmp_path: Path) -> None:
+    """Queued: the wait ends and it stays held. Shown later: delivered, and nothing is pushed again."""
+    process = pi_host_process(shown='queued')
+    agent = process.create()
+    identity = wait_until(lambda: process.pipe.lines)[0]['id']
+    wait_until(lambda: read_record(tmp_path, agent)['executions'][-1].get('notification') == 'held')
+    assert identity in process.notices.awaiting and process.flush() == process.pipe.lines
+    process.notices.acknowledge(identity, True)
+    assert read_record(tmp_path, agent)['executions'][-1]['notification'] == 'delivered'
+    assert identity not in process.notices.awaiting and len(process.pipe.lines) == 1
+
+
+def test_a_notice_pi_took_and_never_wrote_is_delivered_by_the_next_host(pi_host_process: Callable, tmp_path: Path) -> None:
+    """A quit during the turn: it stays held, and the next host process delivers it once."""
+    process = pi_host_process(shown='queued')
+    agent = process.create()
+    wait_until(lambda: read_record(tmp_path, agent)['executions'][-1].get('notification') == 'held')
+    process.shutdown()
+    assert read_record(tmp_path, agent)['executions'][-1]['notification'] == 'held'
+    resumed = pi_host_process()
+    assert [line['agent'] for line in resumed.flush()] == [agent]
+    assert read_record(tmp_path, agent)['executions'][-1]['notification'] == 'delivered'
+    assert pi_host_process().flush() == []
+
+
+def test_a_status_while_pi_holds_the_notice_shows_no_body_and_settles_nothing(pi_host_process: Callable, tmp_path: Path) -> None:
+    """During the turn the Main does not read the body twice, and reading does not end the wait."""
+    process = pi_host_process(shown='queued')
+    agent = process.create()
+    wait_until(lambda: read_record(tmp_path, agent)['executions'][-1].get('notification') == 'held')
+    shown = process.call({'action': 'status', 'agent': agent}).document['result']['last_result']
+    assert shown['notification'] == 'queueing' and shown['last_message'] is None
+    assert read_record(tmp_path, agent)['executions'][-1]['notification'] == 'held'
+
+
+def test_a_request_notice_returns_promptly_while_pi_holds_it(pi_host_process: Callable) -> None:
+    """The driver path and ask_parent must not wait for a turn; shown later settles the request."""
+    driver = Driver()
+    driver.finish = None
+    process = pi_host_process(shown='queued', driver=driver)
+    agent = process.create()
+    run = wait_until(lambda: driver.runs.get(agent))
+    began = time.monotonic()
+    run.events.request({'request_token': 'token-1', 'request_id': 7, 'method': 'claude/can_use_tool',
+                        'params': {'tool_name': 'Bash'}})
+    assert time.monotonic() - began < 1.5
+    child = bind(process.control, Caller('runtime-mcp', agent))
+    began = time.monotonic()
+    child({'action': 'ask_parent', 'kind': 'decision', 'question': 'Which?', 'timeout_seconds': 0.05})
+    assert time.monotonic() - began < 1.5
+    assert len(process.pipe.lines) == 2 and len(process.notices.awaiting) == 2
+    assert len(process.flush()) == 2  # still awaiting: not pushed again
+    process.notices.acknowledge(process.pipe.lines[0]['id'], True)
+    assert [notice['request'] for notice in process.control.held_notices(process.caller)] == [
+        process.pipe.lines[1]['id'].rsplit(':', 1)[1]]
+
+
+@pytest.mark.parametrize('kind', ['pi', 'dsh'])
+def test_a_shutdown_end_stays_held_through_the_real_main(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, kind: str) -> None:
+    """main() stops children through its plain call: its own wait does not settle what it caused."""
+    driver = Driver()
+    driver.finish = None
+    host = {'pi': pi_host, 'dsh': dsh_host}[kind]
+    created: list[str] = []
+    real_start = host.start
+
+    def started(*arguments):
+        """The real start, then one child still running when the native side closes the pipe."""
+        result = real_start(*arguments)
+        operate = result[2] if kind == 'pi' else result[3]
+        created.append(operate({'action': 'create', 'runtime': 'claude', 'instruction': 'work'}).document['agent'])
+        return result
+
+    monkeypatch.setattr(host, 'verify_native_parent', lambda *_: None)
+    monkeypatch.setattr(host, 'runtime_drivers', lambda *_: {'claude': driver})
+    monkeypatch.setattr(host, 'start', started)
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / 'host.json').write_text(json.dumps({'root': str(tmp_path / 'data')}))
+    monkeypatch.setattr(sys, 'argv', ['host', '--config', str(tmp_path / 'host.json')])
+    if kind == 'pi':
+        monkeypatch.setenv('AGENT_SWARM_PI_ENTRY', sys.executable)
+        monkeypatch.setattr(pi_host, 'pi_request', lambda *_: {})
+        monkeypatch.setattr(pi_host, 'current_connection', lambda: {
+            'runtime': 'pi', 'session': 'main', 'session_file': str(tmp_path / 's.jsonl')})
+        header = {'type': 'session', 'version': 3, 'id': 'main', 'cwd': str(tmp_path)}
+        line = json.dumps({'header': header, 'entries': []})
+    else:
+        line = json.dumps({'header': {'version': 4, 'id': 'main', 'cwd': str(tmp_path), 'isSeeded': False}})
+    pipe = Pipe()
+    with monkeypatch.context() as running:
+        running.setattr(sys, 'stdin', io.StringIO(line + '\n'))  # then EOF: the native side closes
+        running.setattr(sys, 'stdout', pipe)
+        host.main()
+    record = read_record(tmp_path, created[0])['executions'][-1]
+    assert (record['outcome'], record['notification']) == ('interrupted', 'held')
+    assert pipe.lines == []
+
+
+# The real extension.mjs and the real host process, with a recording Pi: this
+# is Pi's own order, message_end before the entry (agent-session.js:752, :760).
+FAKE_PI = '''
+import { pathToFileURL } from 'node:url';
+const module = await import(pathToFileURL(process.env.TEST_EXTENSION).href);
+const sent = [], handlers = {};
+const entries = JSON.parse(process.env.TEST_ENTRIES);
+const mode = process.env.TEST_MODE;
+const sleep = ms => new Promise(done => setTimeout(done, ms));
+const entry = details => ({type: 'custom_message', customType: 'graphtraj:agent-communication', details});
+const pi = {
+  registerFlag() {}, getFlag: name => name === 'agents-config' ? process.env.TEST_CONFIG : undefined,
+  on: (event, handler) => { handlers[event] = handler; }, registerMcpServer() {},
+  sendMessage: async message => {
+    sent.push(message.details.fact);
+    if (mode === 'queue') return;
+    await sleep(50);
+    handlers.message_end({type: 'message_end', message: {role: 'custom', details: message.details}});
+    await sleep(100);
+    if (mode === 'written') entries.push(entry(message.details));
+  },
+};
+const ctx = {hasUI: false, cwd: process.cwd(), model: {id: 'parent-model', provider: 'anthropic'}, sessionManager: {
+  getSessionId: () => 'main', getSessionFile: () => process.env.TEST_SESSION_FILE,
+  getHeader: () => ({type: 'session', version: 3, id: 'main', cwd: process.cwd()}), getEntries: () => entries}};
+const owner = module.registerAgents(pi);
+await owner.start(ctx);
+handlers.agent_start({type: 'agent_start'}, ctx);
+await sleep(Number(process.env.TEST_RUN_MS));
+await owner.close();
+console.log(JSON.stringify({sent, entries}));
+'''
+
+
+def run_pi(tmp_path: Path, mode: str, entries: list | None = None) -> dict:
+    """One real host process below a fake Pi driving the real extension.mjs."""
+    node = shutil.which('node')
+    if not node:
+        pytest.skip('Node is required')
+    script = tmp_path / 'fake-pi.mjs'
+    script.write_text(FAKE_PI)
+    (tmp_path / 'host.json').write_text(json.dumps({'root': str(tmp_path / 'data')}))
+    env = {key: value for key, value in os.environ.items()
+           if key not in {'AGENT_SWARM_CONNECTION', 'DSH_SESSION_ID', 'DSH_AGENT_SOURCE', 'DSH_AGENT_PACKAGE'}}
+    env.update(AGENT_SWARM_PYTHON=sys.executable, TEST_EXTENSION=str(SOURCE / 'agent_swarm/pi/extension.mjs'),
+               TEST_CONFIG=str(tmp_path / 'host.json'), TEST_ENTRIES=json.dumps(entries or []), TEST_MODE=mode,
+               TEST_SESSION_FILE=str(tmp_path / 's.jsonl'), TEST_RUN_MS='1500',
+               PI_CODING_AGENT_DIR=str(tmp_path / 'pi-home'))
+    result = subprocess.run([node, str(script)], cwd=tmp_path, env=env, capture_output=True, text=True, timeout=60)
+    assert result.returncode == 0, result.stderr
+    return json.loads(result.stdout)
+
+
+def test_real_extension_and_host_deliver_once_when_pi_writes_the_notice(tmp_path: Path) -> None:
+    """Queued, then message_end, then the entry: delivered, and a further restart injects nothing."""
+    agent = seed_held(tmp_path, CALLERS['pi'])
+    first = run_pi(tmp_path, 'written')
+    assert len(first['sent']) == 1
+    assert read_record(tmp_path, agent)['executions'][-1]['notification'] == 'delivered'
+    assert run_pi(tmp_path, 'written', first['entries'])['sent'] == []
+
+
+def test_real_extension_and_host_keep_a_notice_quit_before_pi_wrote_it(tmp_path: Path) -> None:
+    """A quit during the turn: not delivered; the next host process injects it once."""
+    agent = seed_held(tmp_path, CALLERS['pi'])
+    assert len(run_pi(tmp_path, 'queue')['sent']) == 1
+    assert read_record(tmp_path, agent)['executions'][-1]['notification'] == 'held'
+    second = run_pi(tmp_path, 'written')
+    assert len(second['sent']) == 1
+    assert read_record(tmp_path, agent)['executions'][-1]['notification'] == 'delivered'
+
+
+def test_real_extension_waits_for_the_entry_after_message_end(tmp_path: Path) -> None:
+    """message_end comes before Pi's write: with no entry the notice is not delivered."""
+    agent = seed_held(tmp_path, CALLERS['pi'])
+    assert len(run_pi(tmp_path, 'unwritten')['sent']) == 1
+    assert read_record(tmp_path, agent)['executions'][-1]['notification'] == 'held'
+
+
+def test_real_extension_and_host_do_not_inject_twice_after_a_crash_before_shown(tmp_path: Path) -> None:
+    """Pi wrote it and the acknowledgement was lost: the next host settles it with no injection."""
+    agent = seed_held(tmp_path, CALLERS['pi'])
+    fact = run_pi(tmp_path, 'queue')['sent'][0]
+    persisted = {'type': 'custom_message', 'customType': 'graphtraj:agent-communication', 'details': {'fact': fact}}
+    assert read_record(tmp_path, agent)['executions'][-1]['notification'] == 'held'
+    assert run_pi(tmp_path, 'queue', [persisted])['sent'] == []
+    assert read_record(tmp_path, agent)['executions'][-1]['notification'] == 'delivered'
+
+
 # --- The native sides, with recording fakes ---
 
 EXTENSION = '''
@@ -596,7 +800,7 @@ def test_extension_does_not_inject_a_replayed_notice_and_acknowledges_it(tmp_pat
     sent, received = run_extension(tmp_path, entries=[persisted], notices='exec-1:completed,exec-2:completed')
     assert [item['message']['details']['fact'] for item in sent] == ['notice:exec-2:completed']
     assert received == [{'ready': True}, {'ack': 'exec-1:completed', 'shown': True},
-                        {'ack': 'exec-2:completed', 'shown': True}]
+                        {'ack': 'exec-2:completed', 'queued': True}]
 
 
 @pytest.mark.parametrize('entry', [

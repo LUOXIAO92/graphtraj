@@ -753,20 +753,22 @@ What the parent sees today:
   <event>]` and the message, `details.fact` `notice:<id>`, the id as for
   Claude above), with `triggerTurn: true, deliverAs: "followUp"`: an idle
   Session starts a turn with it, a busy one receives it after the current
-  turn's work. The notice is `delivered` once the extension acknowledges the
-  injection, `unconfirmed` without an acknowledgement within 10 seconds (it may
-  have been shown, so it is never repeated), and `held` when it could not be
-  written or injected. While a notice is on its way (`notification:
-  queueing`), `wait` and `status` also show `last_message: null`, so a
-  `wait` that ends with the child does not repeat the body the notice
-  carries. Before injecting, the extension looks for the same `details.fact`
-  among the Session's `custom_message` entries; when it is there (a crash
-  after injecting and before acknowledging), it acknowledges without
-  injecting again. A notice queued as a follow-up reaches the Session file
-  only when Pi delivers it (`dist/core/agent-session.js:760`), and it is
-  acknowledged when handed to Pi: a Pi process that dies with it still queued
-  loses that notice, which is already `delivered`. Sources are
-  `@earendil-works/pi-coding-agent` `1.4.0`.
+  turn's work. Pi writes the message to the Session only when a turn takes it
+  (`dist/core/agent-session.js:760`), so the notice is `delivered` once the
+  extension finds its entry there after Pi's `message_end`; until then it stays
+  `held`. It is `unconfirmed` when no acknowledgement of any kind comes within
+  10 seconds (it may have been shown, so it is never repeated), and `held` when
+  it could not be written or injected. While a notice is on its way
+  (`notification: queueing`), `wait` and `status` also show `last_message:
+  null`, so a `wait` that ends with the child, or a `status` during the turn,
+  does not repeat the body the notice carries. A permission request does not
+  wait for that turn: its child and `ask_parent` go on at once. Before
+  injecting, the extension looks for the same `details.fact` among the Session's
+  `custom_message` entries; when it is there (a crash after Pi wrote it and
+  before the acknowledgement), it acknowledges without injecting again. A notice
+  Pi took but never wrote, because the Session stopped or its turn failed to
+  start, is delivered by the next host process for this Session; until then the
+  host hides its body. Sources are `@earendil-works/pi-coding-agent` `1.4.0`.
 - **Pi Session shutdown** (Pi's `session_shutdown`: quit, reload, new, resume
   or fork):
   the extension stops injecting and closes the host's pipe. The host stops
@@ -826,12 +828,14 @@ What the parent sees today:
   are held; (5) on resume, each held notice is delivered once, unless the parent
   read it through `status` or `wait` first.
 
-  One case stays open, because of how the `headless` runner leaves: a notice the
-  relay admits after the runner's last idle check
-  (`dsh-headless/lib/index.js:372`) and before its exit (`:383`) wakes a turn
-  that the exit ends, and the notice is already `delivered`. A flush begins with
-  the turn, so it reaches this window only when that whole turn ends before the
-  relay answers. Upstream DSH is not changed for any of these.
+  A notice the relay admitted and no turn has taken yet survives a stop: DSH
+  appends each inbox insertion to the Session as an event
+  (`dsh-agent-loop/lib/index.js:198`) and restores the inbox from those events on
+  resume (`:26-60`), so the next turn takes it. One case stays open, because of
+  how the `headless` runner leaves: a notice admitted after the runner's last
+  Session flush (`dsh-headless/lib/index.js:377`) and before its exit (`:383`)
+  may not reach the Session file, and it is already `delivered`. Upstream DSH is
+  not changed for any of these.
 - A grandchild's notices go to its own parent, whatever the grandchild's
   Runtime. A running Claude or Codex parent Agent takes them into its turn as
   `[agents · <child> → <parent>]` followed by the message; a standby one is
@@ -906,8 +910,7 @@ Gaps, by owner:
 
 | Gap | Owner |
 | --- | --- |
-| A Pi follow-up acknowledged and then lost with its Pi process (*Pi host* above): Pi offers an extension no acknowledgement of persistence | Upstream Pi; not changed |
-| A notice admitted while the `headless` DSH runner is exiting (*DSH host* above): the relay answers before the turn takes it | Upstream DSH; not changed |
+| A notice admitted between the `headless` DSH runner's last Session flush and its exit (*DSH host* above; `dsh-headless/lib/index.js:377`, `:383`): the relay answers before that write | Upstream DSH; not changed |
 | The notice title names GraphTraj | 394 |
 
 ### 4.1 Native approval per Runtime

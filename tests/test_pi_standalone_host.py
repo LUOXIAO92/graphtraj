@@ -478,8 +478,8 @@ def test_extension_injects_each_notice_natively_and_acknowledges_it(tmp_path: Pa
     assert first['content'] == '[agents notice from agent-1 · completed]\nthe answer'
     assert first['details']['fact'] == 'notice:exec-1:completed'
     assert sent[1]['message']['content'].endswith('· failed]\nprovider refused')
-    assert acknowledgements == [{'ack': 'exec-1:completed', 'shown': True},
-                                {'ack': 'exec-2:failed', 'shown': True}]
+    assert acknowledgements == [{'ack': 'exec-1:completed', 'queued': True},
+                                {'ack': 'exec-2:failed', 'queued': True}]
 
 
 def test_extension_reports_a_notice_it_could_not_inject(tmp_path: Path) -> None:
@@ -487,4 +487,4 @@ def test_extension_reports_a_notice_it_could_not_inject(tmp_path: Path) -> None:
     sent, acknowledgements = run_extension(tmp_path, TEST_REFUSE='1')
     assert sent[0] is None
     assert acknowledgements == [{'ack': 'exec-1:completed', 'shown': False},
-                                {'ack': 'exec-2:failed', 'shown': True}]
+                                {'ack': 'exec-2:failed', 'queued': True}]

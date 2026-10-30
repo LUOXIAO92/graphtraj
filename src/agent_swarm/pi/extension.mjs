@@ -6,6 +6,9 @@ import { pathToFileURL } from 'node:url';
 
 // How long a Session with a UI that starts no turn by itself waits before taking held notices.
 const READY_MS = 2000;
+// How often, and how many times, to look for a notice's entry after its message_end.
+const ENTRY_POLL_MS = 20;
+const ENTRY_POLLS = 250;
 
 /** Render the same successful MCP communication facts without model injection. */
 export function registerAgentDisplay(pi, sdk) {
@@ -79,34 +82,42 @@ export function sessionEnvironment(ctx, environment) {
   };
 }
 
+/** Whether this notice's message is among the Session's ``custom_message`` entries. */
+function noticeInSession(manager, fact) {
+  // ponytail: scan native entries, as the display does; a notice is rare.
+  return manager.getEntries().some(entry => entry.type === 'custom_message' &&
+    entry.customType === 'graphtraj:agent-communication' && entry.details?.fact === fact);
+}
+
 /**
  * Inject one host notice (a child's answer, permission request or a
  * failed/interrupted end) into this Pi Session through Pi's native
  * custom-message API: an idle Session starts a turn with it, a streaming one
- * receives it as a follow-up. A notice replayed after a crash between injecting
- * and acknowledging is already among the Session's ``custom_message`` entries
- * (Pi's ``SessionManager.appendCustomMessageEntry``); it is not injected again.
+ * receives it as a follow-up. Returns true for a notice replayed after a crash
+ * between injecting and acknowledging: it is already among the Session's
+ * entries (Pi's ``SessionManager.appendCustomMessageEntry``) and is not
+ * injected again. Otherwise Pi has only taken it; see ``registerAgents``.
  */
 export function deliverNotice(pi, notice, session, manager) {
   const {id, alias, agent, event, message, execution} = notice;
   const fact = `notice:${id}`;
-  // ponytail: scan native entries, as the display does; a notice is rare.
-  if (manager.getEntries().some(entry => entry.type === 'custom_message' &&
-      entry.customType === 'graphtraj:agent-communication' && entry.details?.fact === fact)) return;
+  if (noticeInSession(manager, fact)) return true;
   pi.sendMessage({
     customType: 'graphtraj:agent-communication',
     content: `[agents notice from ${alias} · ${event}]\n${message}`, display: true,
     details: {fact, sender: alias, recipient: session, body: message,
       agent, execution, event, source: 'agents'},
   }, {triggerTurn: true, deliverAs: 'followUp'});
+  return false;
 }
 
 /**
  * Own the independent core until native shutdown; MCP only connects to it.
  * After the connection line, each host stdout line is one notice for
- * ``onNotice``; it is acknowledged once handled. After ``close`` starts, a
- * notice is neither injected nor acknowledged, so the host keeps it held.
- * ``ready`` tells the host once that it may deliver the notices it holds.
+ * ``onNotice``: true means it is already in the Session (``shown``), otherwise
+ * Pi has taken it (``queued``) and ``shown`` reports it later. After ``close``
+ * starts, a notice is neither injected nor acknowledged, so the host keeps it
+ * held. ``ready`` tells the host once that it may deliver the notices it holds.
  */
 export function startAgentHost(ctx, config, onNotice = () => {}) {
   return new Promise((resolve, reject) => {
@@ -134,18 +145,18 @@ export function startAgentHost(ctx, config, onNotice = () => {}) {
       entries: ctx.sessionManager.getEntries().filter(entry => entry.type === 'custom')}) + '\n');
     const notice = line => {
       if (closing) return;
-      let document;
+      let document, inSession;
       try {
         document = JSON.parse(line).notice;
         if (typeof document?.id !== 'string') throw new Error('not a notice');
-        onNotice(document);
+        inSession = onNotice(document) === true;
       } catch (error) {
         // The host keeps a notice that was not shown readable through status.
         diagnostic = (diagnostic + `\nNotice delivery failed: ${error.message}`).slice(-8192);
         if (typeof document?.id === 'string') child.stdin.write(JSON.stringify({ack: document.id, shown: false}) + '\n');
         return;
       }
-      child.stdin.write(JSON.stringify({ack: document.id, shown: true}) + '\n');
+      child.stdin.write(JSON.stringify(inSession ? {ack: document.id, shown: true} : {ack: document.id, queued: true}) + '\n');
     };
     child.stdout.on('data', value => {
       output += value;
@@ -160,6 +171,8 @@ export function startAgentHost(ctx, config, onNotice = () => {}) {
             if (closing || announced) return;
             announced = true;
             child.stdin.write('{"ready":true}\n');
+          }, shown(id) {
+            if (!closing) child.stdin.write(JSON.stringify({ack: id, shown: true}) + '\n');
           }, async close() {
             closing = true;
             child.stdin.end();
@@ -186,6 +199,7 @@ export function registerAgents(pi) {
   const independent = new WeakSet();
   let agentHost;
   let readyTimer;
+  let sessionManager;
   let displayRegistered = false;
   pi.registerFlag('agents-config', { type: 'string',
     description: 'Independent agents host configuration: data root and optional per-Runtime settings.' });
@@ -194,6 +208,19 @@ export function registerAgents(pi) {
   // So the host flushes during the Session's first turn; a Session with a UI
   // that starts none by itself gets its held notices after READY_MS.
   pi.on('agent_start', () => { agentHost?.ready(); });
+  // A notice is delivered once Pi has written it to the Session, which a quit
+  // during the turn would prevent. Handlers run before that write
+  // (AgentSession._handleAgentEvent, dist/core/agent-session.js:752 then :760),
+  // so look for the entry itself; without one the next host replays the notice.
+  const confirmEntry = (host, fact, polls = ENTRY_POLLS) => {
+    if (host !== agentHost) return;
+    if (noticeInSession(sessionManager, fact)) host.shown(fact.slice('notice:'.length));
+    else if (polls > 0) setTimeout(confirmEntry, ENTRY_POLL_MS, host, fact, polls - 1).unref?.();
+  };
+  pi.on('message_end', event => {
+    const fact = event.message?.role === 'custom' ? event.message.details?.fact : undefined;
+    if (agentHost && typeof fact === 'string' && fact.startsWith('notice:')) confirmEntry(agentHost, fact);
+  });
   const closeHost = async () => {
     clearTimeout(readyTimer);
     await agentHost?.close();
@@ -227,8 +254,8 @@ export function registerAgents(pi) {
         if (!process.env.AGENT_SWARM_PYTHON) throw new Error('Independent agents requires its selected Python installation.');
         independent.add(ctx.sessionManager);
         const session = ctx.sessionManager.getSessionId();
-        const manager = ctx.sessionManager;
-        agentHost = await startAgentHost(ctx, agentsConfig, notice => deliverNotice(pi, notice, session, manager));
+        sessionManager = ctx.sessionManager;
+        agentHost = await startAgentHost(ctx, agentsConfig, notice => deliverNotice(pi, notice, session, sessionManager));
         try {
           pi.registerMcpServer('agents', {
             command: process.env.AGENT_SWARM_PYTHON,

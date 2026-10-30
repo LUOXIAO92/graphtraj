@@ -209,14 +209,15 @@ for field in ('denyRead', 'denyWrite'):
     selected['filesystem'][field] = list(dict.fromkeys(
         native.get('filesystem', {}).get(field, []) + selected['filesystem'][field]))
 Path(policy_file).write_text(json.dumps(selected), encoding='utf-8')
-argv = ['/bin/sh', '-c', 'echo ok > "$0"', target]
+# srt joins argv with plain spaces, so this is one shell string for its inner bash.
+argv = ['/bin/echo', 'ok', '>', target]
 command = wrap_command(argv, policy_file)
 if command == argv:
     raise SystemExit('wrap_command returned the command unwrapped')
 environment = dict(os.environ)
 environment.update({'ASB_SANDBOX': '1', 'ASB_PROFILE': 'custom',
                     'ASB_PROFILE_JSON': Path(policy_file).read_text(encoding='utf-8')})
-done = subprocess.run(command, env=environment, capture_output=True, text=True, timeout=60)
+done = subprocess.run(command, cwd='/', env=environment, capture_output=True, text=True, timeout=60)
 print(json.dumps({'command': command, 'exit': done.returncode, 'stderr': done.stderr[-1500:], 'stdout': done.stdout[-300:]}))
 PROBE_EOF
 

@@ -701,7 +701,8 @@ time).
 
 **Format and rules: 385 (`agent_swarm.approval`); the review plugin: 386,
 387.** When a Runtime's native approval is missing or
-unusable, the agents review plugin judges each tool call before it runs. Every
+unusable, the agents review plugin judges each tool call the adapter can see
+before it runs. Every
 Runtime adapter accepts the same decision document from the reviewer and
 nothing else:
 
@@ -785,7 +786,9 @@ failure or an invalid document fails `create` with `review-unavailable` and the
 reason, so an endpoint that would reject every review is reported at once.
 
 **Codex adapter.** Every command, file change, permissions and MCP tool call
-approval is reviewed before it runs. `allow` accepts exactly that request, with
+approval is reviewed before it runs. Calls Codex runs without asking, because
+its sandbox and `approval_policy` allow them, are not reviewed and stay inside
+that sandbox; a granular `approval_policy` object is not inspected. `allow` accepts exactly that request, with
 the exact requested permissions for the turn and no persistent trust. `deny`,
 `escalate` or a failed review holds the same native request for the direct
 parent, with `params.review: {"decision", "reason"}` added: `requests`, the

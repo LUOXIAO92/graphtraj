@@ -8,10 +8,23 @@
 # of the public agents API), so no Claude or Codex dialog should appear. If one
 # does, it is a finding: answer it, and report it.
 #
+# Steps, about 15 to 20 minutes in all (a child that stalls can add 5 per wait):
+#   Preflight  shell, HEAD, versions, each host's one-line self-report.
+#   1  Claude protocol probe: PreToolUse fires before the tool (stub reviewer).
+#   2  Claude child with a DeepSeek reviewer (lists the endpoint's models first).
+#   3  Codex child with the same DeepSeek reviewer.
+#   4  Create with a broken reviewer, each child Runtime: refused, nothing started.
+#   5  Reviewer breaks after creation, each child Runtime: the parent decides.
+#   6  Slow reviewer on Claude, 75 s: past a 60 s default hook limit.
+#   7  Claude with a 5 s hook timeout: prints what happens past it. Observation only.
+#
 # What it uses: Claude Code and Codex with your existing logins (children run real
-# models, a few short turns each); DEEPSEEK_API_KEY for the reviewer in steps 2
-# and 3, from the environment or else from ~/.zshrc, never printed or stored. The
-# local stub reviewers bind 127.0.0.1 and never see a key. Nothing is installed
+# models, a few short turns each). DEEPSEEK_API_KEY comes from the environment or
+# else from ~/.zshrc, and is never printed or stored. It is used by the model
+# listing before step 2 and by the reviewer in steps 2 and 3, and it is in the
+# Python process's environment only while those two steps run, so no other child
+# can inherit it, even if your Terminal exports it. The local stub reviewers bind
+# 127.0.0.1 and never see a key. Nothing is installed
 # outside the run directory: a dedicated venv with an editable install of this
 # Worktree, no PyPI; websockets is linked from the persistent .venv-runtime.
 #
@@ -20,14 +33,16 @@
 #
 # It stops if the Worktree is not on the 386 branch or has uncommitted changes,
 # because the venv imports the live tree. Written for macOS /bin/bash 3.2.
-# Exit status: 0 only when every criterion printed PASS; 2 when it stopped early.
+# Exit status: 0 only when every criterion printed PASS (step 7 prints OBSERVED and
+# does not count); 2 when it stopped early.
 set -uo pipefail
 
 WORKTREE=/Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/386-review-plugin-core-claude-codex
 PYTHON=/Users/luoxiao/miniconda3/bin/python3.13
 BRANCH=agent/386-review-plugin-core-claude-codex
 WEBSOCKETS=/Users/luoxiao/workspace/you-are-a-product-architect-delivery/.venv-runtime/lib/python3.13/site-packages/websockets
-# Reviewer for steps 2 and 3 (as accepted in Task 383's reports and tests).
+# Reviewer for steps 2 and 3 (as in Task 383's reports and tests). The model is checked
+# against the endpoint's own list before step 2, and replaced if it is not listed.
 DEEPSEEK_BASE_URL=https://api.deepseek.com
 DEEPSEEK_MODEL=deepseek-flash
 # The Claude child's model, under your own login (used by Task 383's real host).
@@ -76,9 +91,9 @@ echo "codex model:   $CODEX_MODEL"
 mkdir -p "$RUN/preflight"
 SELF_REPORT='In one line, state the model name you are running as and whether you are logged in. Do not run tools or print any key or token.'
 echo "claude one-line self-report (configured model and login, no reviewer):"
-(cd "$RUN/preflight" && "$CLAUDE" -p "$SELF_REPORT" </dev/null 2>/dev/null | tail -1) || echo "(claude self-report failed)"
+(cd "$RUN/preflight" && env -u DEEPSEEK_API_KEY "$CLAUDE" -p "$SELF_REPORT" </dev/null 2>/dev/null | tail -1) || echo "(claude self-report failed)"
 echo "codex one-line self-report (configured model and login, no reviewer):"
-"$CODEX" exec --skip-git-repo-check --ephemeral -s read-only -C "$RUN/preflight" "$SELF_REPORT" </dev/null 2>/dev/null | tail -1 \
+env -u DEEPSEEK_API_KEY "$CODEX" exec --skip-git-repo-check --ephemeral -s read-only -C "$RUN/preflight" "$SELF_REPORT" </dev/null 2>/dev/null | tail -1 \
   || echo "(codex self-report failed)"
 
 # The key stays out of every log: tracing stays off, only its state is printed.
@@ -106,6 +121,7 @@ cat > "$RUN/parent.py" <<'PARENT_EOF'
 """Act as the direct parent of real children through the public agents API."""
 from __future__ import annotations
 
+from contextlib import contextmanager
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
 import os
@@ -115,14 +131,24 @@ import sys
 import threading
 import time
 import traceback
+from urllib.error import HTTPError
+from urllib.request import Request, build_opener
 
 from agent_swarm import AgentControl, Caller, bind
+from agent_swarm.claude import execution as claude_execution
 from agent_swarm.claude.driver import ClaudeDriver
 from agent_swarm.claude.execution import review_hook_timeout
 from agent_swarm.codex.driver import CodexDriver
+from agent_swarm.review import _NoRedirect
 
 RUN = Path(sys.argv[1])
 ENV = os.environ
+# Out of the environment now, so that no child inherits it; see deepseek_key().
+DEEPSEEK_KEY = ENV.pop('DEEPSEEK_API_KEY', None)
+DEEPSEEK_MODEL = ENV['DEEPSEEK_MODEL']
+MODEL_PROBLEM: str | None = None
+# States that report what was seen, with no bearing on the exit status.
+INFORMATIVE = ('OBSERVED', 'NOT OBSERVED')
 RESULTS: list[tuple[str, str]] = []
 FOLLOW_UPS: list[str] = []
 MISSING_SESSION = {'error': {'code': 'MissingSessionID', 'message': 'session id is required', 'type': 'invalid_request_error'}}
@@ -304,6 +330,14 @@ class Child:
             FOLLOW_UPS.append(f'cd {RUN} && {sys.executable} {RUN}/parent.py {RUN} status {self.data} {self.agent}')
 
 
+def decline(child: Child, request: dict) -> None:
+    """Refuse one held request in its Runtime's own form, printing the receipt."""
+    response = {'behavior': 'deny'} if request['method'] == 'claude/can_use_tool' else {'decision': 'decline'}
+    document = child.invoke('reply', agent=child.agent, request=request, response=response)
+    print('    decline', request['method'], json.dumps(
+        document.get('error') or {key: document.get('result', {}).get(key) for key in ('request_id', 'reply_status')}))
+
+
 def reason_of(request: dict) -> str:
     """Return a held request's review reason, in the Runtime's own form."""
     params = request.get('params', {})
@@ -374,35 +408,87 @@ def step_1() -> None:
         stub.close()
 
 
+def pick_deepseek_model() -> None:
+    """Check the reviewer's model against the endpoint's own list, before spending a step.
+
+    Prints ids only. A failed listing keeps the configured model.
+    """
+    global DEEPSEEK_MODEL, MODEL_PROBLEM
+    print('\n== Before step 2: the models the reviewer endpoint lists')
+    if not DEEPSEEK_KEY:
+        print('    skipped: DEEPSEEK_API_KEY is unset')
+        return
+    request = Request(ENV['DEEPSEEK_BASE_URL'].rstrip('/') + '/models',
+                      headers={'Authorization': 'Bearer ' + DEEPSEEK_KEY})
+    try:
+        # No redirect: the key stays on the configured endpoint.
+        with build_opener(_NoRedirect()).open(request, timeout=30) as response:
+            ids = [item['id'] for item in json.loads(response.read())['data'] if isinstance(item['id'], str)]
+    except HTTPError as error:
+        print(f'    listing failed with HTTP status {error.code}; keeping the configured model {DEEPSEEK_MODEL}')
+        return
+    except Exception as error:
+        print(f'    listing failed ({type(error).__name__}); keeping the configured model {DEEPSEEK_MODEL}')
+        return
+    print('    ids:', ids)
+    if DEEPSEEK_MODEL in ids:
+        print(f'    using {DEEPSEEK_MODEL}: the configured model is listed')
+        return
+    for word in ('flash', 'chat'):
+        chosen = next((item for item in ids if word in item), None)
+        if chosen is not None:
+            print(f'    using {chosen}: the configured {DEEPSEEK_MODEL} is not listed, '
+                  f'and this is the first id containing {word!r}')
+            DEEPSEEK_MODEL = chosen
+            return
+    MODEL_PROBLEM = f"the endpoint lists neither {DEEPSEEK_MODEL} nor an id containing 'flash' or 'chat': {ids}"
+
+
+@contextmanager
+def deepseek_key():
+    """Hold the real key in this process's environment only while the reviewer needs it."""
+    ENV['DEEPSEEK_API_KEY'] = DEEPSEEK_KEY
+    try:
+        yield
+    finally:
+        ENV.pop('DEEPSEEK_API_KEY', None)
+
+
 def deepseek() -> dict:
     """Return the reviewer on a provider different from the child's own login."""
-    return {'base_url': ENV['DEEPSEEK_BASE_URL'], 'model': ENV['DEEPSEEK_MODEL'], 'api_key_env': 'DEEPSEEK_API_KEY',
+    return {'base_url': ENV['DEEPSEEK_BASE_URL'], 'model': DEEPSEEK_MODEL, 'api_key_env': 'DEEPSEEK_API_KEY',
             'json_mode': True, 'timeout_seconds': 60}
+
+
+def deepseek_blocker() -> str | None:
+    """Return why steps 2 and 3 cannot run, if so."""
+    return 'DEEPSEEK_API_KEY is unset' if not DEEPSEEK_KEY else MODEL_PROBLEM
 
 
 def step_2() -> None:
     """A Claude child under its own login, reviewed by DeepSeek."""
     print('\n== Step 2: Claude child (own login) with a DeepSeek reviewer')
-    if not ENV.get('DEEPSEEK_API_KEY'):
-        verdict('review connection on a different provider works (Claude)', False, 'DEEPSEEK_API_KEY is unset')
+    if deepseek_blocker():
+        verdict('review connection on a different provider works (Claude)', False, deepseek_blocker())
         return
-    child = Child('step2', 'claude', deepseek())
-    try:
-        created = child.create('ordinary.txt')
-        print('    create:', json.dumps({'agent': created.get('agent'), 'error': created.get('error'),
-                                          'connection': created.get('result', {}).get('connection'),
-                                          'review': created.get('result', {}).get('review')}))
-        state = child.settle()
-        reviews = child.reviews()
-        target = child.work / 'ordinary.txt'
-        print('    settled:', state, '; file exists:', target.exists())
-        verdict('review connection on a different provider works (Claude)',
-                target.exists() and any(line['decision'] == 'allow' and line['tool'] == 'Write' for line in reviews),
-                *[json.dumps(line, ensure_ascii=False) for line in reviews],
-                *[json.dumps({'pending': request['method'], 'reason': reason_of(request)}) for request in
-                  (child.requests() if state == 'request' else [])])
-    finally:
-        child.close()
+    with deepseek_key():
+        child = Child('step2', 'claude', deepseek())
+        try:
+            created = child.create('ordinary.txt')
+            print('    create:', json.dumps({'agent': created.get('agent'), 'error': created.get('error'),
+                                              'connection': created.get('result', {}).get('connection'),
+                                              'review': created.get('result', {}).get('review')}))
+            state = child.settle()
+            reviews = child.reviews()
+            target = child.work / 'ordinary.txt'
+            print('    settled:', state, '; file exists:', target.exists())
+            verdict('review connection on a different provider works (Claude)',
+                    target.exists() and any(line['decision'] == 'allow' and line['tool'] == 'Write' for line in reviews),
+                    *[json.dumps(line, ensure_ascii=False) for line in reviews],
+                    *[json.dumps({'pending': request['method'], 'reason': reason_of(request)}) for request in
+                      (child.requests() if state == 'request' else [])])
+        finally:
+            child.close()
 
 
 def step_3() -> None:
@@ -410,29 +496,30 @@ def step_3() -> None:
     print('\n== Step 3: Codex child (own login) with the same DeepSeek reviewer')
     print('    Codex asks because approval_policy is untrusted and touch is not on its known-safe list; '
           'the sandbox is workspace write, approvals_reviewer is user.')
-    if not ENV.get('DEEPSEEK_API_KEY'):
-        verdict('review connection on a different provider works (Codex)', False, 'DEEPSEEK_API_KEY is unset')
+    if deepseek_blocker():
+        verdict('review connection on a different provider works (Codex)', False, deepseek_blocker())
         return
-    child = Child('step3', 'codex', deepseek())
-    try:
-        created = child.create('ordinary.txt')
-        print('    create:', json.dumps({'agent': created.get('agent'), 'error': created.get('error'),
-                                          'connection': created.get('result', {}).get('connection'),
-                                          'review': created.get('result', {}).get('review')}))
-        state = child.settle()
-        reviews = child.reviews()
-        asked = [line for line in reviews if line['tool'].endswith('/requestApproval')]
-        target = child.work / 'ordinary.txt'
-        print('    settled:', state, '; /requestApproval arrived:', bool(asked), '; file exists:', target.exists())
-        proof = [json.dumps(line, ensure_ascii=False) for line in reviews]
-        if not asked:
-            verdict('review connection on a different provider works (Codex)', 'NOT SHOWN',
-                    'No /requestApproval arrived, so the reviewer was not asked.', *proof)
-        else:
-            verdict('review connection on a different provider works (Codex)',
-                    target.exists() and any(line['decision'] == 'allow' for line in asked), *proof)
-    finally:
-        child.close()
+    with deepseek_key():
+        child = Child('step3', 'codex', deepseek())
+        try:
+            created = child.create('ordinary.txt')
+            print('    create:', json.dumps({'agent': created.get('agent'), 'error': created.get('error'),
+                                              'connection': created.get('result', {}).get('connection'),
+                                              'review': created.get('result', {}).get('review')}))
+            state = child.settle()
+            reviews = child.reviews()
+            asked = [line for line in reviews if line['tool'].endswith('/requestApproval')]
+            target = child.work / 'ordinary.txt'
+            print('    settled:', state, '; /requestApproval arrived:', bool(asked), '; file exists:', target.exists())
+            proof = [json.dumps(line, ensure_ascii=False) for line in reviews]
+            if not asked:
+                verdict('review connection on a different provider works (Codex)', 'NOT SHOWN',
+                        'No /requestApproval arrived, so the reviewer was not asked.', *proof)
+            else:
+                verdict('review connection on a different provider works (Codex)',
+                        target.exists() and any(line['decision'] == 'allow' for line in asked), *proof)
+        finally:
+            child.close()
 
 
 def step_4() -> None:
@@ -514,7 +601,7 @@ def step_5(runtime: str) -> None:
                 state == 'request' and len(third) >= 1 and not (work / 'third.txt').exists(),
                 f'settled: {state}; requests: {len(third)}; file exists: {(work / "third.txt").exists()}')
         for item in third:
-            child.invoke('reply', agent=child.agent, request=item, response={'decision': 'decline'})
+            decline(child, item)
         final = child.standby()
         verdict(f'{runtime}: decline keeps that call from running',
                 bool(third) and not (work / 'third.txt').exists() and final.get('state') == 'standby',
@@ -528,14 +615,14 @@ def step_5(runtime: str) -> None:
 
 
 def step_6() -> None:
-    """A slow reviewer: Claude must wait for the answer, not run the tool at a default limit."""
-    print('\n== Step 6: slow reviewer on Claude (command reviewer sleeps 45 s, timeout 60 s, then denies)')
+    """A reviewer slower than a 60 s default hook limit: Claude must wait for its answer."""
+    print('\n== Step 6: slow reviewer on Claude (command reviewer sleeps 75 s, timeout 90 s, then denies)')
     script = RUN / 'slow-reviewer.py'
     script.write_text(
         'import json, sys, time\n'
         "tool = json.load(sys.stdin)['request']['tool']\n"
         "if tool != 'agents/connectivity-check':\n"
-        '    time.sleep(45)\n'
+        '    time.sleep(75)\n'
         "print(json.dumps({'decision': 'deny', 'reason': 'Slow stub reviewer refuses this call.'}))\n")
     seen: dict[str, float] = {}
 
@@ -550,7 +637,7 @@ def step_6() -> None:
 
         turn._control_event = observe
 
-    child = Child('step6', 'claude', {'command': [sys.executable, str(script)], 'timeout_seconds': 60}, configure=configure)
+    child = Child('step6', 'claude', {'command': [sys.executable, str(script)], 'timeout_seconds': 90}, configure=configure)
     target = child.work / 'target.txt'
     try:
         print('    create:', json.dumps({key: child.create('target.txt').get(key) for key in ('error',)}))
@@ -559,15 +646,100 @@ def step_6() -> None:
         during = target.exists()
         held = child.requests() if state == 'request' else []
         for item in held:
-            child.invoke('reply', agent=child.agent, request=item, response={'decision': 'decline'})
+            decline(child, item)
         final = child.standby()
         verdict('the file does not exist afterwards: Claude waited for the answer instead of failing open',
-                state == 'request' and waited is not None and waited >= 45 and not during and not target.exists(),
+                state == 'request' and waited is not None and waited >= 75 and not during and not target.exists(),
                 f'request seen {waited} s after the hook; file existed then: {during}; exists now: {target.exists()}',
                 f"final state: {final.get('state')}",
                 *[json.dumps(line, ensure_ascii=False) for line in child.reviews()])
     finally:
         child.close()
+
+
+def step_7() -> None:
+    """Observe what Claude does with a hook past its timeout; nothing here is a criterion."""
+    print('\n== Step 7: fail-open observation on Claude (hook timeout 5 s; reviewer sleeps 25 s, then denies)')
+    hook_timeout = 5
+    script = RUN / 'late-reviewer.py'
+    script.write_text(
+        'import json, sys, time\n'
+        "tool = json.load(sys.stdin)['request']['tool']\n"
+        "if tool != 'agents/connectivity-check':\n"
+        '    time.sleep(25)\n'
+        "print(json.dumps({'decision': 'deny', 'reason': 'Late stub reviewer refuses this call.'}))\n")
+    seen: dict[str, object] = {}
+
+    def configure(turn, run) -> None:
+        """Note when the hook, its cancellation and a prompt for the same call arrive."""
+        control_event = turn._control_event
+
+        def observe(event: dict) -> None:
+            request = event.get('request', {})
+            native = request.get('input') if isinstance(request.get('input'), dict) else {}
+            if request.get('callback_id') == 'agents_review' and native.get('tool_name') != 'mcp__agents__agents':
+                seen.setdefault('hook', time.time())
+                seen.setdefault('hook_request', event.get('request_id'))
+                seen.setdefault('tool_use_id', request.get('tool_use_id') or native.get('tool_use_id'))
+            elif (request.get('subtype') == 'can_use_tool' and 'hook' in seen
+                  and request.get('tool_use_id') in (None, seen['tool_use_id'])):
+                seen.setdefault('prompt', time.time())
+            elif event.get('type') == 'control_cancel_request' and event.get('request_id') == seen.get('hook_request'):
+                seen.setdefault('cancel', time.time())
+            control_event(event)
+
+        turn._control_event = observe
+
+    original = claude_execution.review_hook_timeout
+    claude_execution.review_hook_timeout = lambda reviewer: hook_timeout
+    child = None
+    try:
+        child = Child('step7', 'claude', {'command': [sys.executable, str(script)], 'timeout_seconds': 40},
+                      configure=configure)
+        target = child.work / 'target.txt'
+        child.create('target.txt')
+        answered = None
+        deadline = time.monotonic() + 180
+        while time.monotonic() < deadline:
+            if target.exists():
+                seen.setdefault('file', target.stat().st_mtime)
+            for item in child.requests():
+                decline(child, item)
+            reviews = child.reviews()
+            answered = reviews[0]['at'] if reviews else None
+            if answered is not None and child.invoke('status', agent=child.agent).get('result', {}).get('state') == 'standby':
+                break
+            time.sleep(0.5)
+        final = child.invoke('status', agent=child.agent).get('result', {})
+        hook = seen.get('hook')
+
+        def after(name: str) -> str:
+            return f'+{seen[name] - hook:.1f} s' if name in seen else 'never'
+
+        if hook is None:
+            verdict('no PreToolUse hook arrived, so nothing can be said about its timeout', 'NOT OBSERVED',
+                    f"final state: {final.get('state')}")
+            return
+        unblocked = [name for name in ('prompt', 'file') if name in seen and (answered is None or seen[name] < answered)]
+        logged = [line.strip()[:200] for path in child.data.rglob('stderr.log')
+                  for line in path.read_text(errors='replace').splitlines() if 'time' in line.lower() and 'out' in line.lower()]
+        verdict('the hook past its timeout did not block the call (fails open), so the host answering first is required'
+                if unblocked else "the call stayed blocked past the hook's timeout", 'OBSERVED',
+                f'registered hook timeout: {hook_timeout} s; times from the hook at {hook}:',
+                f"can_use_tool for that call: {after('prompt')}",
+                f"target file written: {after('file')}",
+                f"hook cancelled by Claude: {after('cancel')}",
+                'reviewer answered: ' + (f'+{answered - hook:.1f} s' if answered is not None else 'not within 180 s'),
+                f"target file exists now: {target.exists()}; final state: {final.get('state')}; "
+                f"last result: {json.dumps(final.get('last_result'), ensure_ascii=False)[:300]}",
+                f'Claude stderr lines mentioning a timeout: {logged[:5]}')
+    except Exception:
+        traceback.print_exc()
+        verdict('step 7 ended with an unexpected error before it could observe the hook', 'NOT OBSERVED')
+    finally:
+        claude_execution.review_hook_timeout = original
+        if child is not None:
+            child.close()
 
 
 def main() -> int:
@@ -578,10 +750,11 @@ def main() -> int:
         call = bind(control, Caller('386-real-host', 'parent-386', 'parent-386-session', 'claude'))
         print(json.dumps(call({'action': 'status', 'agent': sys.argv[4]}).document, indent=2, ensure_ascii=False))
         return 0
-    steps = {'1': [step_1], '2': [step_2], '3': [step_3], '4': [step_4],
-             '5': [lambda: step_5('claude'), lambda: step_5('codex')], '6': [step_6]}
+    steps = {'1': [step_1], '2': [pick_deepseek_model, step_2], '3': [step_3], '4': [step_4],
+             '5': [lambda: step_5('claude'), lambda: step_5('codex')], '6': [step_6], '7': [step_7]}
     for number in steps:
         for step in steps[number]:
+            print('\nDEEPSEEK_API_KEY in this process before this step:', 'present' if 'DEEPSEEK_API_KEY' in ENV else 'absent')
             try:
                 step()
             except Exception:
@@ -593,7 +766,7 @@ def main() -> int:
     print('\n== Follow-up commands')
     for command in FOLLOW_UPS:
         print(command)
-    return 0 if RESULTS and all(state == 'PASS' for _, state in RESULTS) else 1
+    return 0 if RESULTS and all(state == 'PASS' or state in INFORMATIVE for _, state in RESULTS) else 1
 
 
 if __name__ == '__main__':

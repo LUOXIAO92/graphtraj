@@ -52,9 +52,16 @@ def main() -> None:
     entries = records[1:]
     traffic = {'bytes': 0, 'records': 0}
     active = False
+    turn = ''
     queued = []
+    taken = []
     stop = threading.Event()
     dialog = threading.Event()
+    held_seconds = float(os.environ.get('PI_FIXTURE_HELD_SECONDS', '5'))
+
+    def gated(name: str) -> bool:
+        """Whether the file named by this environment variable exists now."""
+        return bool(os.environ.get(name)) and Path(os.environ[name]).exists()
 
     def emit(document: dict) -> None:
         """Keep interleaved asynchronous events valid JSONL."""
@@ -72,6 +79,23 @@ def main() -> None:
             with session_file.open('a') as stream:
                 stream.write(json.dumps(entry) + '\n')
             entries.append(entry)
+
+    def shown(text: str) -> None:
+        """Show one user message as Pi does when it takes it (agent-loop.js message_start)."""
+        if text.startswith('[agents · ') and os.environ.get('PI_FIXTURE_REWRITE_NOTICES'):
+            text = 'rewritten ' + text  # as a user extension's input handler can
+        message = {'role': 'user', 'content': [{'type': 'text', 'text': text}], 'timestamp': 1791936000000}
+        emit({'type': 'message_start', 'message': message})
+        emit({'type': 'message_end', 'message': message})
+        if os.environ.get('PI_FIXTURE_INPUT_LOG'):
+            with open(os.environ['PI_FIXTURE_INPUT_LOG'], 'a') as log:
+                log.write(json.dumps(text) + '\n')
+
+    def take_queued() -> None:
+        """Move what is queued into the turn, in order."""
+        while queued:
+            taken.append(queued.pop(0))
+            shown(taken[-1])
 
     def streamed(text: str) -> dict:
         """Send equal semantic content with controlled real stdout fragmentation."""
@@ -115,14 +139,19 @@ def main() -> None:
     def finish(text: str) -> None:
         """Run asynchronously so steer/abort and ACK/settled races are observable."""
         nonlocal active
-        if text == 'dialog':
+        if text in {'dialog', 'dialogs'}:
             emit({'type': 'extension_ui_request', 'id': 'question', 'method': 'confirm', 'message': 'Continue?'})
-            dialog.wait(5)
+            dialog.wait(held_seconds)
+        if text == 'dialogs':
+            dialog.clear()
+            emit({'type': 'extension_ui_request', 'id': 'question-2', 'method': 'confirm', 'message': 'Sure?'})
+            dialog.wait(held_seconds)
         if text.startswith('wait'):
-            stop.wait(5)
+            stop.wait(held_seconds)
         else:
             time.sleep(0.04)
-        answer = '|'.join(str(x) for x in history + queued)
+        take_queued()
+        answer = '|'.join(str(x) for x in history + taken)
         if text == 'cli':
             env = {**os.environ, 'GRAPHTRAJ_CALLER_ALIAS': 'research@x2', 'GRAPHTRAJ_ROLE': 'main'}
             # The restricted Session's own directory is its Worktree, never the
@@ -155,7 +184,7 @@ def main() -> None:
             emit({'type': 'tool_execution_end', 'toolCallId': 'call-1', 'toolName': 'read', 'result': tool, 'isError': False})
             emit({'type': 'message_start', 'message': tool})
             emit({'type': 'message_end', 'message': tool})
-        queued.clear()
+        taken.clear()
         active = False
         if text == 'settled-race':
             # Delay delivery of the prior settlement until the next command;
@@ -191,20 +220,34 @@ def main() -> None:
                 response['data'] = {'entries': list(entries),
                                     'leafId': entries[-1]['id'] if entries else None}
         elif kind == 'prompt':
-            if active and request.get('streamingBehavior') == 'steer':
+            notice = request['message'].startswith('[agents · ')
+            if notice and gated('PI_FIXTURE_REFUSE_NOTICES'):
+                response.update(success=False, error='fixture refused the notice')
+                emit(response)
+                continue
+            steered = active and request.get('streamingBehavior') == 'steer'
+            if not steered and os.environ.get('PI_FIXTURE_PROMPT_SECONDS'):
+                time.sleep(float(os.environ['PI_FIXTURE_PROMPT_SECONDS']))
+            if steered:
                 queued.append(request['message'])
                 if request['message'] == 'finish':
                     stop.set()
+                if notice and gated('PI_FIXTURE_LOSE_NOTICE_ACKS'):
+                    continue
                 response['data'] = {'disposition': 'queued'}
                 emit(response)
+                # This turn takes steered input at once; any other at its end.
+                if turn.startswith('wait-take'):
+                    take_queued()
                 continue
             stop.clear()
             active = True
-            text = request['message']
+            turn = text = request['message']
             history.append(text)
             record({'role': 'user', 'content': text})
             response['data'] = {'disposition': 'started'}
             emit(response)
+            shown(text)
             threading.Thread(target=finish, args=(text,), daemon=True).start()
             continue
         elif kind == 'steer':
@@ -221,6 +264,9 @@ def main() -> None:
             # Deliberately acknowledge before settlement to catch ACK-only stops.
             emit(response)
             time.sleep(0.08)
+            deadline = time.monotonic() + 30
+            while os.environ.get('PI_FIXTURE_ABORT_GATE') and not gated('PI_FIXTURE_ABORT_GATE') and time.monotonic() < deadline:
+                time.sleep(0.01)
             stop.set()
             dialog.set()
             continue

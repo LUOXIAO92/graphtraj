@@ -13,7 +13,7 @@ from agent_swarm import AgentsError, Caller, Run
 from agent_swarm.control import require_available, within_workspace
 from agent_swarm.models import pi_destination
 from agent_swarm.runtime import RuntimeAdapterError
-from .execution import PiExecution
+from .execution import PiExecution, RPC_SECONDS
 
 # Native Pi thinking levels; a model's own list may be narrower.
 EFFORTS = ('off', 'minimal', 'low', 'medium', 'high', 'xhigh')
@@ -112,7 +112,14 @@ class PiDriver:
             run.events.session(session)
             run.events.process(runtime_pid=pid)
 
-        turn = PiExecution(dict(run.settings['adapter_request']), run.message, run.directory,
+        def framed(notice: Mapping[str, Any]) -> str:
+            """Name the child and this parent, as the Claude and Codex bindings do."""
+            return f"[agents · {notice['agent']} → {run.agent}]\n{notice['body']}"
+
+        # The child's end that continues this Session is the turn's input.
+        notice = run.settings.get('completion_message')
+        prompt = framed(notice) if notice else run.message
+        turn = PiExecution(dict(run.settings['adapter_request']), prompt, run.directory,
                            lambda session, pid: ready.set(), created,
                            run.directory / 'trace.jsonl', run.session)
         turn.archive = run.archive
@@ -122,22 +129,45 @@ class PiDriver:
         turn.parent_notice = lambda message, details: (run.events.request(details), {'delivery': 'retained'})[1]
         turn.record_process = lambda pid, outcome=None: (
             run.events.process(runtime_pid=pid) if outcome is None else run.events.process(runtime_exit=outcome))
+        if notice:
+            turn.unseen.append({'text': prompt, 'notice': notice})
+
+        def receive(event: dict) -> bool | str:
+            """Queue into the running turn, or continue the retained Session when nothing reached it."""
+            if event['parent'] != run.agent or not event['session']:
+                return False
+            # Held notices are flushed when start returns, before Pi accepted the prompt.
+            turn.accepted.wait(RPC_SECONDS)
+            return (turn.send_notice(framed(event), event)
+                    or run.events.continue_from_child(event, run.archive))
+
+        run.events.receive_children(receive)
         with self.lock:
             self.turns[run.execution] = turn
+
+        def return_unseen() -> None:
+            """Hold again what a stopped turn dropped from Pi's queue, before the end's flush looks."""
+            for dropped in turn.take_unseen():
+                run.events.return_notice(dropped)
 
         def own() -> None:
             """Report native completion only after confirmed native settlement."""
             try:
                 result = turn.run()
+                # A completed turn settled with Pi's queue empty: nothing was dropped.
+                if result['outcome'] != 'completed':
+                    return_unseen()
                 run.events.finished(result['outcome'], last_message=result.get('last_agent_message'))
             except Exception as error:
                 failure.append(error)
+                return_unseen()
                 run.events.finished('failed', error={
                     'code': getattr(error, 'code', 'RUNTIME_WORKER_FAILED'), 'message': str(error),
                 }, terminal_confirmed=getattr(error, 'terminal_confirmed', False))
             finally:
                 with self.lock:
                     self.turns.pop(run.execution, None)
+                turn.accepted.set()
                 ready.set()
 
         threading.Thread(target=own, name=f'pi-{run.agent}').start()

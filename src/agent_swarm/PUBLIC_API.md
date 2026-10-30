@@ -1038,7 +1038,7 @@ What the parent sees today:
   may not reach the Session file, and it is already `delivered`. Upstream DSH is
   not changed for any of these.
 - A grandchild's notices go to its own parent, whatever the grandchild's
-  Runtime. A running Claude or Codex parent Agent takes them into its turn as
+  Runtime. A running Claude, Codex or Pi parent Agent takes them into its turn as
   `[agents · <child> → <parent>]` followed by the message; a standby one is
   continued with a child's reply, in its retained Session. A standby parent is
   not started for a `request`, or for an end without a body: under
@@ -1051,6 +1051,28 @@ What the parent sees today:
   reading its child's end through its own `wait` or `status` settles it; an
   ancestor reading a grandchild does not, since `delivered` would hide the body
   from that child's parent.
+- A Pi parent Agent gets a notice through RPC `prompt` with
+  `streamingBehavior: "steer"`. Pi acknowledges when it queues the text, and
+  takes it before its next model call (`message_start` of the user message); the
+  record is `delivered` from the acknowledgement. Its own timing:
+  - Held notices are flushed when `driver.start` returns, which is before Pi has
+    accepted the turn's first prompt. The receiver waits for that, up to 30
+    seconds (the RPC limit), so a `resume` with held notices can take that long
+    and they reach the turn it starts. When the wait expires the notice stays
+    `held` for that turn's end or the next run.
+  - A stop or a dying process drops what Pi has queued. A notice Pi acknowledged
+    and never took returns to `held` when the parent ends `interrupted` or
+    `failed`, its body readable again, and the next run takes it. The same holds
+    for a continued turn's prompt. A notice Pi took stays `delivered`. A
+    `completed` turn settled with Pi's queue empty, so nothing returns.
+  - A refused `prompt`, a stopping or ended execution wrote nothing: the notice
+    stays `held`, or continues a standby parent as above. An acknowledgement not
+    received in 30 seconds may have been taken: `unconfirmed`, never repeated.
+  - Remaining windows. A killed host process cannot return what Pi dropped: it
+    stays `delivered`, its body hidden. A Pi extension whose `input` handler
+    rewrites or handles the notice hides it from this check, so a stop returns it
+    and it can arrive twice. A stop that ends the parent between its receiver
+    returning and the core recording `delivered` keeps `delivered`.
 - `event` is `completed`, `interrupted`, `failed` or `request`; `message` is
   the child's answer, else the error message, else the outcome. For
   `request` it is a short credential-free text naming the method and tool
@@ -1095,6 +1117,9 @@ value) a notice its parent cannot receive now is kept in the record:
   `unconfirmed` or `held` and returns whether that changed anything. `delivered`
   and `unconfirmed` are final unless `reopen`, which is for a tool result that
   carried the notice and was discarded.
+- `ExecutionEvents.return_notice(notice)` (since 0.2.2) is that `reopen` for a
+  driver: a child's notice its Runtime acknowledged and then dropped is `held`
+  again. It does nothing without `hold_notices`.
 - `settle_shown(request, document)` settles `delivered` what one successful
   `wait` or `status` showed, in either request form and including the hierarchy
   form's `children`, and returns those notices. It settles only ends addressed
@@ -1108,7 +1133,8 @@ value) a notice its parent cannot receive now is kept in the record:
   another way calls it first.
 
 A parent Agent's held notices are handed to its bound receiver after `driver.start`
-returns, so a driver's receiver must take input by then.
+returns, so a driver's receiver must take input by then, or wait for it as the
+Pi driver's does.
 
 Gaps, by owner:
 
@@ -1116,7 +1142,6 @@ Gaps, by owner:
 | --- | --- |
 | A notice admitted between the `headless` DSH runner's last Session flush and its exit (*DSH host* above; `dsh-headless/lib/index.js:377`, `:383`): the relay answers before that write | Upstream DSH; not changed |
 | A child Runtime that outlives a killed Claude host: Claude Code can kill the host before it stops its children (`mcp.py` `INTERRUPT_SECONDS`), so the execution stays `running` with no notice yet. The notice arrives on a later host process, or read it through `status`. In the one real run (403), Claude Code 2.1.314's SIGINT left the host time to finish (`agents host recorded its children stopped.`, in all 3 Claude runs of that step), and the end arrived as `interrupted`. A kill was not observed, so the case stays possible by code | Unassigned, needs Main |
-| A parent Agent on a driver that binds no receiver (a Pi child that is itself a parent): the Pi driver registers no `receive_children`, so its children's notices stay `held` and readable through `status`, and are never pushed to it | Unassigned, needs Main |
 | The notice title names GraphTraj | 394 |
 
 ### 4.1 Native approval per Runtime

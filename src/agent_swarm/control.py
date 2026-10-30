@@ -310,6 +310,15 @@ class ExecutionEvents:
                 raise AgentsError('stale-execution', 'The reply receiver belongs to an ended execution.')
             self._control._receivers[self._agent] = (self._execution, receiver)
 
+    def return_notice(self, notice: Mapping[str, Any]) -> None:
+        """Hold again a child's notice this parent's Runtime acknowledged and then dropped.
+
+        Its next run takes it. For a receiver that returned ``True`` on an
+        acknowledgement alone; without ``hold_notices`` this does nothing.
+        """
+        if self._control.hold_notices:
+            self._control.settle_notice(notice, "held", reopen=True)
+
     def continue_from_child(self, notice: dict, archive: SessionArchive | None) -> bool:
         """Resume the retained parent with one trusted native child reply.
 

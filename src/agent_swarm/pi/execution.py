@@ -35,11 +35,17 @@ REQUIRED = ('executable', 'provider', 'model', 'worktree_path', 'agent_dir', 'in
 PATH_LISTS = ('read_paths', 'write_paths', 'deny_read', 'deny_write')
 OPTIONAL_TEXT = ('provider_domain', 'base_url', 'provider_api', 'api_key_env', 'reasoning_effort',
                  'native_directory', 'git_common_directory')
+# How long Pi has to acknowledge one RPC command.
+RPC_SECONDS = 30
 
 
 def child_path(sandbox_path: str) -> str:
     """Return the PATH a Pi child gets: the host Python's directory, then ``sandbox_path``."""
     return str(Path(sys.executable).parent) + os.pathsep + sandbox_path
+
+
+class AckLost(RuntimeAdapterError):
+    """Pi got a command and did not acknowledge it, so it may have acted on it."""
 
 
 class PiExecution:
@@ -77,6 +83,11 @@ class PiExecution:
         self.outcome: dict | None = None
         self.transport_closed = threading.Event()
         self.prompt_started = False
+        # Set when Pi accepted the first prompt; the driver also sets it at the end.
+        self.accepted = threading.Event()
+        # Child notices given to Pi that no user message has shown yet.
+        self.unseen: list[dict] = []
+        self.unseen_lock = threading.Lock()
         self.stderr_reader: threading.Thread | None = None
         self.startup_terminal_confirmed = False
         self.independent = True
@@ -117,13 +128,13 @@ class PiExecution:
         self.responses[identity] = reply
         try:
             self._send({'id': identity, 'type': kind, **arguments})
-            response = reply.get(timeout=30)
+            response = reply.get(timeout=RPC_SECONDS)
             if not response.get('success'):
                 raise RuntimeAdapterError('RUNTIME_REQUEST_FAILED',
                                           'Pi ' + kind + ' failed: ' + str(response.get('error', 'transport closed')))
             return response.get('data', {})
         except queue.Empty as error:
-            raise RuntimeAdapterError('RUNTIME_REQUEST_FAILED', 'Pi did not acknowledge ' + kind + '.') from error
+            raise AckLost('RUNTIME_REQUEST_FAILED', 'Pi did not acknowledge ' + kind + '.') from error
         finally:
             self.responses.pop(identity, None)
 
@@ -140,6 +151,8 @@ class PiExecution:
                 if not isinstance(event, dict):
                     self.events.put({'type': 'transport_error'})
                     break
+                if event.get('type') == 'message_start':
+                    self._saw_message(event.get('message'))
                 if event.get('type') == 'extension_ui_request' and event.get('method') not in INFORMATION:
                     self.events.put({'type': 'pi/dialog', 'event': event})
                     if self.session is None:
@@ -162,6 +175,50 @@ class PiExecution:
             for target in list(self.responses.values()):
                 target.put({'success': False, 'error': 'transport closed'})
             self.events.put({'type': 'transport_error'})
+
+    def _saw_message(self, message: object) -> None:
+        """Clear the notice this user message shows: Pi took it from its queue here.
+
+        On the reader, not the run loop, which can return with events unread.
+        Equal texts clear oldest first, as Pi's own queue does.
+        """
+        if not isinstance(message, dict) or message.get('role') != 'user':
+            return
+        content = message.get('content')
+        text = content if isinstance(content, str) else ''.join(
+            p.get('text', '') for p in content or [] if isinstance(p, dict) and p.get('type') == 'text')
+        with self.unseen_lock:
+            for entry in self.unseen:
+                if entry['text'] == text:
+                    entry['taken'] = True
+                    self.unseen.remove(entry)
+                    return
+
+    def send_notice(self, instruction: str, notice: dict) -> bool | str:
+        """Queue one child's notice into the turn, unseen until Pi takes it.
+
+        Returns ``True`` once Pi acknowledged or took it, ``'unconfirmed'`` when
+        it never acknowledged the write, and ``False`` when nothing reached it:
+        refused, stopping, ended or not yet accepting input.
+        """
+        entry = {'text': instruction, 'notice': notice}
+        with self.unseen_lock:
+            self.unseen.append(entry)
+        try:
+            self.operate({'operation': 'send', 'session': self.session if self.bound else None,
+                          'execution_id': self.execution_id, 'instruction': instruction})
+            return True
+        except RuntimeAdapterError as error:
+            with self.unseen_lock:
+                if entry in self.unseen:
+                    self.unseen.remove(entry)
+            return entry.get('taken', False) or ('unconfirmed' if isinstance(error, AckLost) else False)
+
+    def take_unseen(self) -> list[dict]:
+        """Return and forget the notices Pi never showed as a user message."""
+        with self.unseen_lock:
+            unseen, self.unseen = self.unseen, []
+        return [entry['notice'] for entry in unseen]
 
     def prepare_launch(self, address: str | None) -> tuple[list[str], dict]:
         """Project native asb fields and preserve user resources through references.
@@ -418,6 +475,7 @@ class PiExecution:
                 if disposition.get('disposition') != 'started':
                     raise RuntimeAdapterError('RUNTIME_REQUEST_FAILED', 'Pi task prompt did not start a run.')
                 self.prompt_started = True
+                self.accepted.set()
                 if self.stopping.is_set():
                     self._interrupt()
                 last = None

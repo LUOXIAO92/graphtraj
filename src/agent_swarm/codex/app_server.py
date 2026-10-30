@@ -1069,11 +1069,12 @@ class CodexAppServer:
         self._fail(error)
         return error
 
-    async def call(
-        self, method: str, params: dict[str, Any] | None, *, wait_for_session: bool = False,
-    ) -> dict[str, Any]:
-        """Send one native JSON-RPC request and return its result."""
-        return await self._call(method, params, wait_for_session=wait_for_session)
+    async def call(self, method: str, params: dict[str, Any] | None, **options: bool) -> dict[str, Any]:
+        """Send one native JSON-RPC request and return its result.
+
+        ``wait_for_session=True`` holds the request until the native Session is ready.
+        """
+        return await self._call(method, params, **options)
 
     async def _call(
         self, method: str, params: dict[str, Any] | None, *, wait_for_session: bool = False,

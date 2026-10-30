@@ -33,7 +33,7 @@ setopt err_exit pipe_fail no_unset
 
 WT=/Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/404-claude-host-concurrent-calls
 # The code under test; later commits may change only this script's directory.
-COMMIT=REPLACE_WITH_CODE_COMMIT
+COMMIT=120f2734f1bb9e6e90074bb4033bc699dea58d94
 P=/Users/luoxiao/agents-404-realhost
 PY=/Users/luoxiao/miniconda3/bin/python3.13
 MODEL=claude-opus-5-5

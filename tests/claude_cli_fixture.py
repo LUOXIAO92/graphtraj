@@ -4,6 +4,7 @@ import os
 from pathlib import Path
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 import uuid
@@ -187,14 +188,30 @@ def result(text: str, error: bool = False, queued: int | None = 0, idle: bool = 
 
 
 
-def call(feature: str, arguments: dict) -> dict:
-    """Call an actual public tool through the owned stdio MCP subprocess."""
+def ask_bridge(feature: str, arguments: dict) -> str:
+    """Call a public tool through the owned stdio MCP subprocess; return its answer line.
+
+    As a stdio client does, this keeps the input open until the answer is read:
+    input EOF means the client went away and ends the call's waits.
+    """
     command = json.loads(args[args.index('--mcp-config') + 1])['mcpServers']['agents']
     query = {'jsonrpc': '2.0', 'id': 1, 'method': 'tools/call', 'params': {
         'name': 'tasks', 'arguments': {'action': 'execute', 'feature': feature, 'arguments': arguments}}}
-    response = subprocess.run([command['command'], *command['args']], input=json.dumps(query) + '\n',
-                              text=True, capture_output=True, env={**os.environ, **command['env']})
-    return json.loads(response.stdout)['result']
+    with tempfile.TemporaryFile('w+') as errors, subprocess.Popen(
+            [command['command'], *command['args']], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=errors,
+            text=True, env={**os.environ, **command['env']}) as bridge:
+        bridge.stdin.write(json.dumps(query) + '\n')
+        bridge.stdin.flush()
+        answer = bridge.stdout.readline()
+        bridge.stdin.close()
+        bridge.wait()
+        errors.seek(0)
+        return answer or errors.read()
+
+
+def call(feature: str, arguments: dict) -> dict:
+    """Return an actual public tool's MCP result."""
+    return json.loads(ask_bridge(feature, arguments))['result']
 
 
 def tool(feature: str, arguments: dict) -> dict:
@@ -268,12 +285,7 @@ def prompt(message: dict) -> None:
             'subtype': 'mcp_message', 'server_name': 'agents',
             'message': {'jsonrpc': '2.0', 'id': 1, 'method': 'tools/list'}}})
     elif text == 'mcp':
-        command = json.loads(args[args.index('--mcp-config') + 1])['mcpServers']['agents']
-        query = {'jsonrpc': '2.0', 'id': 1, 'method': 'tools/call', 'params': {
-            'name': 'tasks', 'arguments': {'action': 'execute', 'feature': 'session_reports', 'arguments': {'alias': 'research@x1'}}}}
-        response = subprocess.run([command['command'], *command['args']], input=json.dumps(query) + '\n',
-                                  text=True, capture_output=True, env={**os.environ, **command['env']})
-        result(response.stdout or response.stderr)
+        result(ask_bridge('session_reports', {'alias': 'research@x1'}))
     elif text == 'deliver':
         Path('claude-result.md').write_text('Controlled Claude task result\n')
         subprocess.run(['git', 'add', 'claude-result.md'], check=True, capture_output=True)

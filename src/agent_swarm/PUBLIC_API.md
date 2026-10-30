@@ -154,7 +154,7 @@ its own rules for which Agents it accepts.
 `result` is the **Agent document** plus the feature's own fields:
 
 - `agent`, `name`, `runtime`, `preset`, `connection`, `model`,
-  `reasoning_effort` (the choice made at `create`, see 2), `workspace` (the
+  `reasoning_effort`, `review` (the choice made at `create`, see 2), `workspace` (the
   assigned directory, `null` for the host's cwd), `state` (`active` or
   `standby`), `parent`, `creator` (`host`, `agent`, `session`), `host`,
   `session`;
@@ -184,6 +184,7 @@ people and models and may change. Codes in use:
 | `ambiguous-connection` | several connections declare the Runtime and no preset selects one |
 | `workspace-denied` | `workspace` lies outside the caller's own workspace (after resolving links) |
 | `runtime-unavailable` | the selected connection's Runtime is not installed or not logged in on this machine |
+| `review-unavailable` | the connection's reviewer failed the connectivity check at `create` (section 6); the message holds the cause |
 | `not-found` | no such Agent visible to the caller |
 | `retired` | the Agent is retired |
 | `active` | the Agent must be in standby first |
@@ -493,8 +494,9 @@ independent hosts still refuse it with `invalid-config`.
 
 **Drivers.** The selection reaches the driver as
 `prepare(runtime, caller, selection={"preset", "connection", "model",
-"reasoning_effort", "provider", "settings"})`, where `settings` is the
-declared connection entry or `null`. A selected connection replaces the
+"reasoning_effort", "provider", "settings", "review"})`, where `settings` is the
+declared connection entry or `null`, and `review` is the entry of the reviewer
+that connection names (section 3) or `null`. A selected connection replaces the
 host's native home, endpoint and key variable together, so a host key never
 reaches another endpoint. A driver whose `prepare` does not accept
 `selection` makes such a create fail with `invalid-config`. The agents
@@ -558,10 +560,17 @@ the execution with `RUNTIME_SESSION_NOT_RESUMABLE`.
 This is a floor, not a pin: no newer DSH is refused for its version. GraphTraj's
 own DSH members (`graphtraj.runtimes.dsh`) still require exactly 0.2.0-rc.2.
 
+**Review plugin (approval layer 3).** A connection with `review` (section 3)
+runs under the review plugin. `create` refuses it with `invalid-config` when
+the Runtime's driver has no adapter (`supports_review = True`), so a child never
+silently runs unreviewed, then runs the connectivity check (section 6). Both
+happen before any Agent record exists; `send` and `resume` do not repeat them.
+
 **Agent document.** Every Agent document carries `preset`, `connection`
-(the connection's name), `model` and `reasoning_effort` as chosen at
-`create`; `null` means not chosen (the host's or Runtime's default).
-Agents created before 0.1.1 show `null` for all four.
+(the connection's name), `model`, `reasoning_effort` and `review` (the
+reviewer's name) as chosen at `create`; `null` means not chosen (the host's or
+Runtime's default). Agents created before 0.1.1 show `null` for the first four,
+and before 0.2.1 for `review`.
 
 **Workspace (approval layer 1).** `create`'s optional `workspace` is an
 existing absolute directory the parent assigns to the child. Rules:
@@ -622,6 +631,7 @@ connections:                        # optional
     provider: anthropic             # optional native provider
     base_url: https://host/v1       # optional, http(s) without credentials, query or fragment
     api_key_env: WORK_KEY           # optional: the NAME of an environment variable, never a key
+    review: local-review            # optional: this connection's reviewer (section 6)
     models:                         # optional candidates; omitted: native discovery
       - claude-opus-5-5             # an id, or
       - id: claude-sonnet-5-5       # a mapping with id and optional alias,
@@ -631,7 +641,23 @@ presets:                            # optional
     connection: work-claude         # exactly one of connection or runtime
     model: claude-sonnet-5-5        # optional
     reasoning_effort: high          # optional
+reviewers:                          # optional
+  local-review:                     # a chat completions endpoint
+    base_url: http://127.0.0.1:1234/v1   # required, http(s) without credentials, query or fragment
+    model: tuned-reviewer           # required
+    api_key_env: REVIEW_KEY         # optional: the NAME of an environment variable, never a key
+    json_mode: false                # optional, default false: send response_format json_object
+    timeout_seconds: 20             # optional, default 20: finite, above 0
+  own-script:                       # or a local process
+    command: [/abs/reviewer, --strict]   # required, exact argv
+    timeout_seconds: 30             # optional, as above
 ```
+
+`review` on a connection is how the user declares that its native approval is
+missing or unusable. A connection without it keeps native approval exactly as
+4.1 and no reviewer ever runs; agents does not guess or probe native
+availability. A reviewer is never defaulted to the child's own provider, and
+there is no preset field or inheritance for it.
 
 With `save_normalized_sessions: true`, every execution of every Runtime
 (Claude, Codex, Pi, DSH) in any host writes its normalized Session to
@@ -644,11 +670,14 @@ argument, not from this file.
 - The two booleans keep their meaning and defaults. A value must be exactly
   `true` or `false`.
 - Blank lines and comments are allowed. Reading is strict: an unknown or
-  repeated field, a wrong type, a preset naming an undeclared connection, or
-  a preset with both or neither of `connection` and `runtime` fails with
+  repeated field, a wrong type, a preset naming an undeclared connection, a
+  preset with both or neither of `connection` and `runtime`, a connection
+  naming an undeclared reviewer, a reviewer with both or neither form, or
+  `api_key_env` over plain http to anything but this machine fails with
   `<file>:<line>: <field>: ...`; `create` reports it as `invalid-config`.
 - `read_connections(root)` returns `{"connections": {name: entry},
-  "presets": {name: entry}}`; each entry is the file's fields plus `name`.
+  "presets": {name: entry}}`, plus `"reviewers": {name: entry}` when the file
+  declares any; each entry is the file's fields plus `name`.
 - `write_config` and `default_config` replace only the boolean lines and keep
   every other line, including connections, presets and comments.
 - A file that holds only boolean lines is read exactly as before 0.1.1.
@@ -819,7 +848,7 @@ for the direct parent as above.
 | Runtime | How native approval is enabled | Configuration agents writes |
 | --- | --- | --- |
 | Claude Code | The supplied `permission_mode`; Claude's permission prompts arrive through `can_use_tool` | Passes the mode as `--permission-mode` and `permissions.defaultMode`; nothing else |
-| Codex | `approvals_reviewer`, default `auto_review` (Codex's own reviewer decides) | Sets `approvals_reviewer = "auto_review"` when the settings name no reviewer, and `features.exec_permission_approvals = true`. `approval_policy`, sandbox, permissions and network stay as supplied |
+| Codex | `approvals_reviewer`, default `auto_review` (Codex's own reviewer decides) | Sets `approvals_reviewer = "auto_review"` when the settings name no reviewer, and `features.exec_permission_approvals = true`. `approval_policy`, sandbox, permissions and network stay as supplied. With a connection's `review` (section 6): `approvals_reviewer = "user"`, so Codex hands each approval to the review plugin; `approval_policy = "never"` is refused with `invalid-config`, and a Session Codex reports as `never` ends `failed`, because no request would reach the reviewer |
 | Pi | Pi has no approval of its own; extension dialogs (`extension_ui_request`) are the requests | None |
 | DSH | The `permission` profile patch, approval `ask`, for the chosen sandbox mode | The `sandbox-policy` and `permission` patches; `dsh/approval-request` is the request |
 
@@ -847,6 +876,42 @@ request.
   answer after the turn ended starts one follow-up turn. A declined answer
   after the turn ended starts nothing.
 - Interrupting the child drops its unanswered relays.
+
+**Claude review plugin (386).** A Claude child whose connection names a reviewer
+(section 3) has every tool call judged in a `PreToolUse` hook on its own control
+pipe, except the bound `mcp__agents__agents` tool: it is the child's channel to
+its parent, limited by agents' authority checks, and must work when the reviewer
+is down. Read-only tools are reviewed too. The hook's timeout outlasts the
+reviewer (its timeout plus 60 seconds, at least 600), and the host always answers
+before it, so nothing depends on what Claude does past it. On Claude Code 2.1.314
+a hook past its timeout was cancelled and the call did not run (one observation,
+one tool); a hook that errors is untested. Without a reviewer the hooks and
+settings are unchanged.
+
+- `allow`: the hook answers `{}` with no permission decision, so Claude's own
+  rules, mode and sandbox still apply. A later `can_use_tool` for that call (same
+  `tool_use_id` and input; without an ID, the exact tool and input) is answered
+  with its original input and does not reach the parent, unless it names
+  `blocked_path` or the input sets `dangerouslyDisableSandbox`: the reviewer was
+  not asked to widen a native limit, so those are held as native requests. A
+  prompt for any other call is held as before.
+- `deny`, `escalate` or a failed review, including any error in this path: the
+  hook answers Claude's own `deny`, telling the child its parent has been asked
+  and not to retry, and a request is held with `method: "agents/review"`,
+  `request_id: "agents-review:<uuid>"` and `params` `{"tool", "input", "decision",
+  "reason"}`. An identical call while that request waits is refused without
+  asking the reviewer or the parent again.
+- `reply` takes exactly `{"decision": "accept"}` or `{"decision": "decline"}`.
+  `accept` releases one retry of exactly that call: it skips the reviewer, not
+  Claude's own limits, and a repeat or a changed input is reviewed again.
+- The answer reaches the child as input to its running turn; an accepted answer
+  after the turn ended starts one follow-up turn. A declined answer after the turn
+  ended starts nothing. The execution stays active until the parent answers.
+- Interrupting the child drops its unanswered requests and releases; a release
+  also ends with its execution.
+- Each decision and released retry is recorded in `review.jsonl` in the child's
+  execution directory, without the tool input. The reviewer's key variable is not
+  passed to the child.
 
 ## 5. `extra_fields` in the normalized Session
 
@@ -891,7 +956,8 @@ time).
 
 **Format and rules: 385 (`agent_swarm.approval`); the review plugin: 386,
 387.** When a Runtime's native approval is missing or
-unusable, the agents review plugin judges each tool call before it runs. Every
+unusable, the agents review plugin judges each tool call the adapter can see
+before it runs. Every
 Runtime adapter accepts the same decision document from the reviewer and
 nothing else:
 
@@ -913,8 +979,10 @@ Rules:
   answer, a timeout, a connection failure or any reviewer error is a **failed review**: the call is refused
   and goes to the direct parent, with the failure as the reason.
 - `allow` lets the call run. It is the only decision that does.
-- `deny` and `escalate` refuse the call now and go to the direct parent, which
-  may release it within its own authority. The root may refer it to a person.
+- With `deny` and `escalate` the call does not run and goes to the direct
+  parent, which may release it within its own authority: Claude refuses it at
+  once and releases one exact retry, Codex holds the native request until the
+  parent answers. The root may refer it to a person.
 - The format is the same for every Runtime and every reviewer model. Adapters
   translate it to their native hook; native fields never appear in it.
 
@@ -936,15 +1004,59 @@ used):
   `authority-denied`: Claude may not replace the tool input; Codex may answer
   only `accept` (not `acceptForSession` or a policy amendment) and only the
   requested permissions for the turn; a Pi `select` must pick an offered
-  option.
+  option;
+- a request held by the Claude review plugin (`agents/review`, 4.1) takes exactly
+  `{"decision": "accept"}` or `{"decision": "decline"}`, else `invalid-input`.
 
 The parent's own sandbox is not compared with the request; a parent should
 decline what it could not do itself. The root may refer a request to a
 person: the person answers in the root's own host (its native approval of
 the root's `reply` call, or the conversation), and the root then replies.
 
-The review request sent to the reviewer, the review connection settings and
-the startup connectivity check belong to 386.
+**Review request.** The reviewer receives `{"version": 1, "runtime", "tool",
+"input", "cwd", "instruction", "native"}`: the exact planned call, its working
+directory, the task the direct parent gave (bounded to about 20000 characters,
+with a `<truncated .../>` marker) and the Runtime's own facts (`native`, or
+`null`). `tool` is the Runtime's name for the call; for Codex, the approval
+method.
+
+**Connection (section 3).** The shared policy, `agent_swarm/review_policy/`, is
+the reviewer's prompt only. A `base_url` reviewer gets one POST to
+`{base_url}/chat/completions`, with the policy as system message, the request as
+JSON user message and `stream: false`. There are no retries and no redirects. It
+must finish with `finish_reason: stop`; the message content is parsed as above,
+with no repair and no stripping of code fences. A key variable that is missing
+or empty is a failed review naming only the variable. A `command` reviewer gets
+`{"policy", "request"}` on stdin and answers the decision document on stdout; it
+is killed at its timeout, and a non-zero exit is a failed review. Every failure
+reason is free of credentials and of echoes of the request; an HTTP failure
+keeps the status and the provider's `code`, `type` and `message`. The reviewer's
+`api_key_env` variable is read only by the host and is removed from the child's
+environment, unless the child's own connection gives it that variable.
+
+**Connectivity check.** `create` sends one review call through the same path
+with a fixed harmless request (`tool: agents/connectivity-check`), bounded by the
+reviewer's timeout. A well-formed decision of any value passes. A transport
+failure or an invalid document fails `create` with `review-unavailable` and the
+reason, so an endpoint that would reject every review is reported at once.
+
+**Codex adapter.** Every command, file change, permissions and MCP tool call
+approval is reviewed before it runs. Calls Codex runs without asking, because
+its sandbox and `approval_policy` allow them, are not reviewed and stay inside
+that sandbox; a granular `approval_policy` object is not inspected. A request
+Codex hands over may ask to go beyond its sandbox, and `allow` grants that one
+request, as Codex's own reviewer would; this differs from Claude, where the
+reviewer's allow never answers a sandbox or directory prompt. `allow` accepts exactly that request, with
+the exact requested permissions for the turn and no persistent trust. `deny`,
+`escalate` or a failed review holds the same native request for the direct
+parent, with `params.review: {"decision", "reason"}` added: `requests`, the
+single notice, `wait` and the reply checks above work unchanged, and interrupting
+the child drops the hold. There is no retry and no second review. Each decision
+is appended to `review.jsonl` in the Agent's driver directory, without the tool
+input (internal, like the rest of that directory). A decision that cannot be
+written does not run.
+
+Pi and DSH drivers have no adapter yet and refuse such a connection (387).
 
 ## 7. Version rules
 
@@ -985,6 +1097,10 @@ Recorded classifications:
   `RUNTIME_REQUEST_FAILED` under every host, GraphTraj included (section 2).
   A fix: the run used to continue on another model, contradicting the rule
   that a chosen value is never silently replaced.
+- 386 (0.2.1): `reviewers`, a connection's `review`, the Agent document's
+  `review`, selection's `review`, the error `review-unavailable`. Compatible: new
+  optional config fields and result fields, with a default that keeps current
+  behaviour.
 - 381 (0.1.2): the notice event `request` and `AgentControl`'s optional
   `request_notices` argument (default off). Compatible: a new event for a new
   situation, behind a new optional argument with a default that keeps

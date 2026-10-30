@@ -24,6 +24,19 @@ optional named presets::
         connection: work-claude      # or runtime: <name>, never both
         model: claude-opus-5-5       # optional
         reasoning_effort: high       # optional
+    reviewers:
+      local-review:                  # a chat completions endpoint, or
+        base_url: http://127.0.0.1:1234/v1
+        model: reviewer-model
+        api_key_env: REVIEW_KEY      # optional: the variable's NAME, never a key
+        json_mode: false             # optional, default false
+        timeout_seconds: 20          # optional, default 20
+      own-script:                    # a local process
+        command: [/abs/reviewer, --strict]
+
+A connection names its reviewer with ``review: <reviewer name>``; this is how
+the user declares that its native approval is missing or unusable. A connection
+without it keeps native approval and no reviewer ever runs.
 
 A field absent from the file has no explicit choice and takes its default;
 without connections each Runtime uses its native default login. Consumers set
@@ -37,6 +50,8 @@ connections, presets and comments.
 
 from __future__ import annotations
 
+import ipaddress
+import math
 import os
 import re
 import tempfile
@@ -60,12 +75,15 @@ CONFIG_DEFAULTS: dict[str, bool] = {
 
 # Runtimes a connection may name, and the keys of each declared entry.
 RUNTIMES = ("claude", "codex", "pi", "dsh")
-CONNECTION_FIELDS = frozenset({"runtime", "home", "provider", "base_url", "api_key_env", "models"})
+CONNECTION_FIELDS = frozenset({"runtime", "home", "provider", "base_url", "api_key_env", "models", "review"})
 MODEL_FIELDS      = frozenset({"id", "alias", "provider", "supported_efforts"})
 PRESET_FIELDS     = frozenset({"connection", "runtime", "model", "reasoning_effort"})
+REVIEWER_HTTP_FIELDS = frozenset({"base_url", "model", "api_key_env", "json_mode"})
+REVIEWER_FIELDS      = REVIEWER_HTTP_FIELDS | {"command", "timeout_seconds"}
 
 _STR  = "tag:yaml.org,2002:str"
 _BOOL = "tag:yaml.org,2002:bool"
+_NUMBERS = ("tag:yaml.org,2002:int", "tag:yaml.org,2002:float")
 
 
 def explicit_choices(root: Path) -> dict[str, bool]:
@@ -84,19 +102,31 @@ def read_connections(root: Path) -> dict[str, dict[str, dict]]:
 
     Every entry is a copy of what the file says plus its ``name``; ``home`` is
     expanded to an absolute path. No credential is read: ``api_key_env`` stays
-    the variable's name. Raises ``ValueError`` like :func:`explicit_choices`.
+    the variable's name. ``reviewers`` is added when the file declares any.
+    Raises ``ValueError`` like :func:`explicit_choices`.
     """
-    _, connections, presets = _read(Path(root))
-    return {"connections": connections, "presets": presets}
+    _, connections, presets, reviewers = _read(Path(root))
+    declared = {"connections": connections, "presets": presets}
+    return {**declared, "reviewers": reviewers} if reviewers else declared
 
 
-def _read(root: Path) -> tuple[dict[str, bool], dict[str, dict], dict[str, dict]]:
+def is_loopback(host: str | None) -> bool:
+    """Whether ``host`` names this machine, so traffic to it leaves no network."""
+    if host == "localhost":
+        return True
+    try:
+        return ipaddress.ip_address(host).is_loopback
+    except ValueError:
+        return False
+
+
+def _read(root: Path) -> tuple[dict[str, bool], dict[str, dict], dict[str, dict], dict[str, dict]]:
     """Parse and check the whole file once."""
     path = root / CONFIG_FILE
     try:
         text = path.read_text(encoding="utf-8")
     except FileNotFoundError:
-        return {}, {}, {}
+        return {}, {}, {}, {}
 
     def fail(node: yaml.Node | None, problem: str) -> ValueError:
         """Name the file and the 1-based line of ``node``."""
@@ -130,6 +160,36 @@ def _read(root: Path) -> tuple[dict[str, bool], dict[str, dict], dict[str, dict]
             raise fail(node, f"{name}: expected a non-empty list of strings")
         return [string(item, name) for item in node.value]
 
+    def variable(node: yaml.Node, name: str) -> str:
+        """Return the name of an environment variable, never a key."""
+        value = string(node, name)
+        if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", value):
+            raise fail(node, f"{name}: expected the name of an environment variable, never a key")
+        return value
+
+    def endpoint(node: yaml.Node, name: str) -> str:
+        """Return a credential-free http(s) URL."""
+        value = string(node, name)
+        url = urlsplit(value)
+        if (url.scheme not in ("http", "https") or not url.hostname or url.username
+                or url.password or url.query or url.fragment):
+            raise fail(node, f"{name}: expected a credential-free http(s) URL")
+        return value
+
+    def boolean(node: yaml.Node, name: str) -> bool:
+        """Return exactly true or false."""
+        if not isinstance(node, yaml.ScalarNode) or node.tag != _BOOL or node.value not in ("true", "false"):
+            raise fail(node, f"{name}: expected true or false")
+        return node.value == "true"
+
+    def seconds(node: yaml.Node, name: str) -> int | float:
+        """Return a finite number of seconds above zero."""
+        if isinstance(node, yaml.ScalarNode) and node.tag in _NUMBERS:
+            value = yaml.SafeLoader("").construct_object(node)
+            if 0 < value < math.inf:
+                return value
+        raise fail(node, f"{name}: expected a finite number above 0")
+
     def model(node: yaml.Node, name: str) -> str | dict:
         """Return one candidate: an id, or a mapping with ``id`` and optional metadata."""
         if isinstance(node, yaml.ScalarNode):
@@ -146,7 +206,7 @@ def _read(root: Path) -> tuple[dict[str, bool], dict[str, dict], dict[str, dict]
 
     legacy = _legacy_choices(path, text)
     if legacy is not None:
-        return legacy, {}, {}
+        return legacy, {}, {}, {}
     # Only connections and presets need YAML; boolean-only files never import it.
     import yaml
     try:
@@ -155,21 +215,43 @@ def _read(root: Path) -> tuple[dict[str, bool], dict[str, dict], dict[str, dict]
         mark = getattr(error, "problem_mark", None)
         raise ValueError(f"{path}:{mark.line + 1 if mark else 1}: not valid YAML") from None
     if document is None:
-        return {}, {}, {}
+        return {}, {}, {}, {}
 
     choices: dict[str, bool] = {}
     sections: dict[str, yaml.Node] = {}
     for name, key, value in fields(document, "config.yml"):
         if name in CONFIG_DEFAULTS:
-            if (not isinstance(value, yaml.ScalarNode) or value.tag != _BOOL
-                    or value.value not in ("true", "false")):
-                raise fail(value, f"{name}: expected true or false")
-            choices[name] = value.value == "true"
-        elif name in ("connections", "presets"):
+            choices[name] = boolean(value, name)
+        elif name in ("connections", "presets", "reviewers"):
             sections[name] = value
         else:
             raise fail(key, f"{name}: unknown field; expected {', '.join(CONFIG_DEFAULTS)}, "
-                            "connections or presets")
+                            "connections, presets or reviewers")
+
+    reviewers: dict[str, dict] = {}
+    if "reviewers" in sections:
+        for name, key, value in fields(sections["reviewers"], "reviewers"):
+            entry = {"name": name}
+            for field, field_key, item in fields(value, f"reviewers.{name}"):
+                label = f"reviewers.{name}.{field}"
+                if field not in REVIEWER_FIELDS:
+                    raise fail(field_key, f"{label}: unknown field; expected "
+                                          + ", ".join(sorted(REVIEWER_FIELDS)))
+                entry[field] = (strings(item, label) if field == "command"
+                                else boolean(item, label) if field == "json_mode"
+                                else seconds(item, label) if field == "timeout_seconds"
+                                else endpoint(item, label) if field == "base_url"
+                                else variable(item, label) if field == "api_key_env"
+                                else string(item, label))
+            if "command" in entry and REVIEWER_HTTP_FIELDS & entry.keys():
+                raise fail(key, f"reviewers.{name}: give either command or the HTTP fields, never both")
+            if "command" not in entry and not {"base_url", "model"} <= entry.keys():
+                raise fail(key, f"reviewers.{name}: give either command, or base_url and model")
+            url = urlsplit(entry.get("base_url", ""))
+            if "api_key_env" in entry and url.scheme == "http" and not is_loopback(url.hostname):
+                raise fail(key, f"reviewers.{name}.api_key_env: a key is never sent over plain http "
+                                "to another host; use https")
+            reviewers[name] = entry
 
     connections: dict[str, dict] = {}
     if "connections" in sections:
@@ -195,13 +277,12 @@ def _read(root: Path) -> tuple[dict[str, bool], dict[str, dict], dict[str, dict]
                     entry[field] = os.path.expanduser(entry[field])
                     if not os.path.isabs(entry[field]):
                         raise fail(item, f"{label}: expected an absolute path")
-                if field == "api_key_env" and not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", entry[field]):
-                    raise fail(item, f"{label}: expected the name of an environment variable, never a key")
+                if field == "api_key_env":
+                    variable(item, label)
                 if field == "base_url":
-                    url = urlsplit(entry[field])
-                    if (url.scheme not in ("http", "https") or not url.hostname or url.username
-                            or url.password or url.query or url.fragment):
-                        raise fail(item, f"{label}: expected a credential-free http(s) URL")
+                    endpoint(item, label)
+                if field == "review" and entry[field] not in reviewers:
+                    raise fail(item, f"{label}: no reviewer {entry[field]!r} is declared")
             if "runtime" not in entry:
                 raise fail(key, f"connections.{name}.runtime: required")
             connections[name] = entry
@@ -223,7 +304,7 @@ def _read(root: Path) -> tuple[dict[str, bool], dict[str, dict], dict[str, dict]
             if ("connection" in entry) == ("runtime" in entry):
                 raise fail(key, f"presets.{name}: give either connection or runtime")
             presets[name] = entry
-    return choices, connections, presets
+    return choices, connections, presets, reviewers
 
 
 def _legacy_choices(path: Path, text: str) -> dict[str, bool] | None:

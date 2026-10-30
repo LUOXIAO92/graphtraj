@@ -28,6 +28,9 @@ DECISIONS = ("allow", "deny", "escalate")
 DECISION_METHOD = "agents/decision"
 DECISION_KINDS = ("decision", "resources")
 
+# The method of a call the review plugin refused and holds for the parent (section 4.1).
+REVIEW_METHOD = "agents/review"
+
 
 def parse_decision(answer: Any) -> dict:
     """Return a reviewer's decision document, or the failed review it amounts to.
@@ -67,6 +70,8 @@ def approves(request: Mapping[str, Any], response: Mapping[str, Any]) -> bool:
     treated as releasing the request.
     """
     method = str(request.get("method") or "")
+    if method == REVIEW_METHOD:
+        return dict(response) == {"decision": "accept"}
     if response.get("behavior") == "deny" or response.get("decision") in ("decline", "cancel", "reject"):
         return False
     if response.get("action") in ("decline", "cancel") or response.get("cancelled") is True:
@@ -111,12 +116,18 @@ def check_reply(request: Mapping[str, Any], response: Mapping[str, Any]) -> None
     decision request) reported it, never the parent's copy. A declining reply
     always passes; an approving one that grants more than asked raises
     ``authority-denied``.
-    A decision request takes exactly ``{"answer": "<non-empty text>"}``.
+    A decision request takes exactly ``{"answer": "<non-empty text>"}``, a
+    held review exactly ``{"decision": "accept"}`` or ``{"decision": "decline"}``.
     """
     if request.get("method") == DECISION_METHOD:
         answer = response.get("answer")
         if set(response) != {"answer"} or not isinstance(answer, str) or not answer.strip():
             raise AgentsError("invalid-input", 'request.response: a decision request takes {"answer": "<text>"}')
+        return
+    if request.get("method") == REVIEW_METHOD:
+        if dict(response) not in ({"decision": "accept"}, {"decision": "decline"}):
+            raise AgentsError("invalid-input", 'request.response: a held review takes {"decision": "accept"} '
+                                               'or {"decision": "decline"}')
         return
     if not approves(request, response):
         return

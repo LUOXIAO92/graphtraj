@@ -45,6 +45,14 @@ def _select(settings: dict, parameters: dict, selection: Mapping[str, Any]) -> N
             raise AgentsError('invalid-reasoning-effort',
                               f'Codex takes reasoning_effort {list(EFFORTS)}, not {effort!r}.')
         config['model_reasoning_effort'] = effort
+    review = selection.get('review')
+    if review is not None:
+        # With no request reaching the client the reviewer would never run.
+        if 'never' in (parameters.get('approvalPolicy'), config.get('approval_policy')):
+            raise AgentsError('invalid-config', "Codex approval_policy 'never' asks for no approval, so the "
+                                                f"review plugin (reviewer {review['name']!r}) would never run.")
+        settings['review'] = deepcopy(dict(review))
+        parameters['approvalsReviewer'] = config['approvals_reviewer'] = 'user'
 
 
 class CodexDriver:
@@ -65,6 +73,8 @@ class CodexDriver:
         """Capture explicit native settings without starting a Runtime."""
         self.settings = deepcopy(dict(settings)) if settings is not None else None
         self.execution = execution
+        # A consumer's execution binds its own review policy, not this plugin.
+        self.supports_review = execution is CodexManagedExecution
 
     def prepare(self, runtime: str, caller: Caller, *, configuration: str | None = None,
                 selection: Mapping[str, Any] | None = None, workspace: Path | None = None) -> dict:
@@ -116,6 +126,8 @@ class CodexDriver:
                    'archive': run.archive, 'extra_fields': run.extra_fields}
         if self.execution is not CodexManagedExecution:
             options.update(independent=True)
+        if run.settings.get('review') is not None:
+            options.update(review=run.settings['review'])
         turn = self.execution(dict(run.settings['adapter_request']), run.message, run.directory,
                               lambda session, pid: ready.set(), dict(run.settings.get('evidence', {})),
                               trace_file=run.directory / 'trace.jsonl', expected_session=run.session,

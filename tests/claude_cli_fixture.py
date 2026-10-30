@@ -76,6 +76,12 @@ sdk_display_reply = None
 # dropped when the host does not answer within the hook timeout.
 later_hook_timeout = float(os.environ.get('CLAUDE_FIXTURE_LATER_HOOK_TIMEOUT', '0'))
 prompt_hooks = {}
+# A scripted sequence of tool calls for the review plugin's PreToolUse hook.
+review_script = {}
+review_steps = []
+review_hooks = {}
+review_prompts = {}
+review_count = 0
 
 
 def later_prompt(message: dict) -> None:
@@ -96,6 +102,63 @@ def later_prompt(message: dict) -> None:
         'subtype': 'hook_callback', 'callback_id': 'graphtraj_start', 'input': {
             'hook_event_name': 'UserPromptSubmit', 'session_id': session,
             'transcript_path': str(transcript), 'prompt': message['message']['content']}}})
+
+
+def review_log(record: dict) -> None:
+    """Keep what the host answered, in order, for the test to read."""
+    with Path(os.environ['CLAUDE_FIXTURE_HOME'], 'native-review.jsonl').open('a') as log:
+        log.write(json.dumps(record) + '\n')
+
+
+def next_review_step() -> None:
+    """Ask about the next scripted tool call, or end the turn.
+
+    A step's ``prompt`` makes the native prompt follow an allowed call, ``ask``
+    sends only the prompt, ``cancel`` withdraws the hook at once. A script with
+    ``running`` keeps its turn open once its steps are done.
+    """
+    global review_count
+    if not review_steps:
+        if review_script.get('running'):
+            review_script['running'] = False
+        else:
+            result('review-done')
+        return
+    step = review_steps.pop(0)
+    review_count += 1
+    identity = f'review-{review_count}'
+    step = {'tool_use_id': f'use-{review_count}', **step}
+    if step.get('ask'):
+        send_review_prompt(identity, step)
+        return
+    native = {'hook_event_name': 'PreToolUse', 'session_id': session, 'tool_name': step['tool'],
+              'tool_input': step['input'], 'tool_use_id': step['tool_use_id']}
+    review_hooks[identity] = step
+    emit({'type': 'control_request', 'request_id': identity, 'request': {
+        'subtype': 'hook_callback', 'callback_id': 'agents_review', 'input': native,
+        'tool_use_id': step['tool_use_id']}})
+    if step.get('cancel'):
+        emit({'type': 'control_cancel_request', 'request_id': identity})
+        review_hooks.pop(identity)
+        review_log({'cancelled': step['tool_use_id']})
+        next_review_step()
+
+
+def send_review_prompt(identity: str, step: dict) -> None:
+    """Send the native permission prompt that may follow an allowed call."""
+    fields = {'subtype': 'can_use_tool', 'tool_name': step['tool'], 'input': step.get('prompt_input', step['input']),
+              'tool_use_id': step['tool_use_id'], **step.get('prompt_fields', {})}
+    if step.get('no_id'):
+        fields.pop('tool_use_id')
+    review_prompts[identity] = step
+    emit({'type': 'control_request', 'request_id': identity + '-prompt', 'request': fields})
+
+
+def review_ran(step: dict) -> None:
+    """Run one allowed call: log it and write the file a step ``creates``."""
+    review_log({'ran': step['tool_use_id']})
+    if step.get('creates'):
+        Path(step['creates']).write_text('ok')
 
 
 def write_transcript(record: dict) -> None:
@@ -181,6 +244,14 @@ def prompt(message: dict) -> None:
         merging.append(text)
     elif text == 'absorb':
         absorbing.append(text)
+    elif text.startswith('review-script '):
+        review_script.update(json.loads(text.removeprefix('review-script ')))
+        review_steps.extend(review_script['steps'])
+        next_review_step()
+    elif text.startswith('Your direct parent'):
+        review_log({'answer': text})
+        review_steps.extend(review_script.get('on_accept' if 'you may retry' in text else 'on_decline', []))
+        next_review_step()
     elif text == 'garbage':
         print('not json secret-token', flush=True)
     elif text == 'permission':
@@ -311,6 +382,7 @@ for line in sys.stdin:
         emit({'type': 'control_response', 'response': {'subtype': 'success',
               'request_id': event['request_id'], 'response': initialized}})
         if request['subtype'] == 'initialize':
+            Path(os.environ['CLAUDE_FIXTURE_HOME'], 'native-initialize.json').write_text(json.dumps(request['hooks']))
             sdk_servers = request.get('sdkMcpServers', [])
             if sdk_servers:
                 emit({'type': 'control_request', 'request_id': 'sdk-initialize', 'request': {
@@ -339,6 +411,23 @@ for line in sys.stdin:
         held = prompt_hooks.pop(response['request_id'], None)
         if held is not None:
             prompt(held)
+        elif response['request_id'] in review_hooks:
+            step = review_hooks.pop(response['request_id'])
+            answer = response['response']
+            review_log({'hook': step['tool_use_id'], 'answer': answer})
+            if answer.get('hookSpecificOutput', {}).get('permissionDecision') == 'deny':
+                next_review_step()
+            elif step.get('prompt'):
+                send_review_prompt(response['request_id'], step)
+            else:
+                review_ran(step)
+                next_review_step()
+        elif response['request_id'].removesuffix('-prompt') in review_prompts:
+            step = review_prompts.pop(response['request_id'].removesuffix('-prompt'))
+            review_log({'prompt': step['tool_use_id'], 'answer': response['response']})
+            if response['response'].get('behavior') == 'allow':
+                review_ran(step)
+            next_review_step()
         elif response['request_id'].startswith('prompt-'):
             pass  # Answered after the CLI dropped the prompt.
         elif response['request_id'] == 'sdk-initialize':

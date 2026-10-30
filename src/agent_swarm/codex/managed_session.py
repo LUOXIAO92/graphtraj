@@ -10,11 +10,14 @@ import sys
 import uuid
 from concurrent.futures import CancelledError
 from contextlib import ExitStack
+from dataclasses import replace
 from pathlib import Path
-from typing import Callable
+from typing import Callable, Mapping
 
 import yaml
 
+from agent_swarm.approval import review_failed
+from agent_swarm.review import build_request, record_decision, review_call
 from agent_swarm.runtime import RuntimeAdapterError
 from .app_server import CodexAppServer, CodexExecution, CodexServerRequest
 from .context import restore_codex_context, recovery_environment
@@ -30,6 +33,21 @@ def model_change_message(summary: str, requested: object, observed: object, reas
 # app-server: item/autoApprovalReview/completed, GuardianApprovalReviewStatus).
 REVIEW_COMPLETED = 'item/autoApprovalReview/completed'
 RELAYED_REVIEWS = {'denied', 'timedOut', 'aborted'}
+
+
+def _accepted(request: CodexServerRequest) -> dict | None:
+    """Return the native answer accepting exactly this request, if Codex offers one."""
+    if request.method == 'mcpServer/elicitation/request':
+        # The exact native tool call, without persistent server trust.
+        return {'action': 'accept'}
+    if request.method == 'item/permissions/requestApproval':
+        # The exact requested profile; omitted scope is Codex's default, the turn.
+        permissions = request.params.get('permissions')
+        return {'permissions': permissions} if permissions else None
+    if request.method in {'item/commandExecution/requestApproval', 'item/fileChange/requestApproval'}:
+        available = request.params.get('availableDecisions')
+        return {'decision': 'accept'} if available is None or 'accept' in available else None
+    return None
 
 
 def _snake(value: object) -> object:
@@ -78,11 +96,14 @@ class CodexManagedExecution:
         agent_call: Callable | None = None,
         archive: object | None = None,
         extra_fields: dict | None = None,
+        review: Mapping | None = None,
     ) -> None:
         """Capture immutable task configuration for one Worker execution.
 
         ``archive`` is the bound :class:`SessionArchive`, or ``None`` to archive
         nothing; ``extra_fields`` goes to the header of a Session first archived here.
+        ``review`` is the reviewer judging this execution's native approvals, or
+        ``None`` to keep Codex's own.
         """
         self.context = restore_codex_context(request, context_evidence)
         self.connection_environment = recovery_environment(connection or {})
@@ -103,6 +124,7 @@ class CodexManagedExecution:
         self.agent_call = agent_call
         self.archive = archive
         self.extra_fields = extra_fields
+        self.review = review
         self.parent_notice: Callable[[str, dict], dict] | None = None
         self.expected_session = expected_session
         self.termination_requested = False
@@ -212,6 +234,10 @@ class CodexManagedExecution:
                 if permissions['matches_request'] is False:
                     raise RuntimeAdapterError('RUNTIME_REQUEST_FAILED',
                                               'Codex did not confirm the requested approvals reviewer.')
+                if self.review is not None and permissions['approval_policy'] == 'never':
+                    # A setting outside what agents supplied, such as the native home's.
+                    raise RuntimeAdapterError('RUNTIME_REQUEST_FAILED', "Codex runs this Session with approval_policy "
+                                                                        "'never', so the review plugin would never run.")
                 requested = request['session_parameters'].get('model')
                 observed = session.configuration.get('model', requested)
                 if requested is not None and observed != requested:
@@ -403,6 +429,10 @@ class CodexManagedExecution:
         )
         if self._uses_review() and (request.method.endswith("/requestApproval") or mcp_approval):
             return await self._review_approval(request)
+        return await self._hold(request)
+
+    async def _hold(self, request: CodexServerRequest) -> dict:
+        """Keep one native request pending for the direct parent's reply."""
         token = uuid.uuid4().hex
         response = asyncio.get_running_loop().create_future()
         self.requests[token] = (request, response)
@@ -561,7 +591,8 @@ class CodexManagedExecution:
         actual = observed.get('approvalsReviewer')
         return {
             'requested': requested,
-            'source': 'role' if self._uses_review() else selection.get('source', 'unknown'),
+            'source': ('review-plugin' if self.review is not None else
+                       'role' if self._uses_review() else selection.get('source', 'unknown')),
             'observed': actual if isinstance(actual, str) else 'unknown',
             'observed_source': 'thread/start' if isinstance(actual, str) else 'unknown',
             'approval_policy': observed.get('approvalPolicy'),
@@ -609,8 +640,38 @@ class CodexManagedExecution:
         return True
 
     def _uses_review(self) -> bool:
-        """Native approval is handled by Codex unless a consumer provides a reviewer."""
-        return False
+        """Native approval is handled by Codex unless a reviewer is selected or a consumer provides one."""
+        return self.review is not None
+
+    async def _review_approval(self, request: CodexServerRequest) -> dict:
+        """Judge one native approval with the review plugin before the call runs.
+
+        ``allow`` accepts exactly this request. Anything else, including a
+        failed review, holds the same native request for the direct parent with
+        ``params.review`` added, so ``requests``, the notice and ``reply`` work as
+        for any held request. There is no retry and no second review.
+        """
+        parameters = self.context.session_document()['adapter_request']
+        item = self.approval_items.get(request.params.get('itemId'))
+        accepted = _accepted(request)
+        if accepted is None:
+            decision = review_failed('Codex offers no answer accepting this request')
+        elif request.method == 'item/fileChange/requestApproval' and not item:
+            decision = review_failed('the file changes are not available for review')
+        else:
+            decision = await asyncio.to_thread(review_call, self.review, build_request(
+                'codex', request.method, request.params, cwd=parameters['cwd'], instruction=self.prompt,
+                native={'item': item, 'permissions': parameters['config'].get('permissions'),
+                        'default_permissions': parameters['config'].get('default_permissions')},
+            ))
+        try:
+            await asyncio.to_thread(record_decision, self.directory, 'codex', request.method,
+                                    str(request.request_id), decision)
+        except OSError as error:
+            decision = review_failed(f'the decision could not be recorded ({type(error).__name__})')
+        if decision['decision'] == 'allow':
+            return accepted
+        return await self._hold(replace(request, params={**request.params, 'review': decision}))
 
     def _write_session(self, document: dict) -> None:
         """Atomically retain native identity before reporting Session creation."""

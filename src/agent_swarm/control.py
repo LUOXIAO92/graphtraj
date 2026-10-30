@@ -46,6 +46,8 @@ the connections and presets in ``config.yml`` (see :meth:`AgentControl.select`)
 and passes the result to the driver as ``prepare(..., selection=...)``. A
 create that selects nothing calls ``prepare`` exactly as before, so a Runtime
 without a declared connection keeps the host's own settings and native login.
+A connection that names a reviewer gets the review plugin (``review.py``): the
+driver must support it and the reviewer must answer before anything is recorded.
 """
 
 from __future__ import annotations
@@ -66,6 +68,7 @@ from agent_swarm.approval import DECISION_METHOD, check_reply
 from agent_swarm.config import CONFIG_FILE, read_config, read_connections
 from agent_swarm.locks import exclusive
 from agent_swarm.notices import needs_parent
+from agent_swarm.review import check_reviewer
 from agent_swarm.tool import AgentsError, AgentsResult, Binding, Caller, Outcome, SessionArchive, bind, unavailable
 
 
@@ -608,6 +611,13 @@ class AgentControl:
             if not _accepts(driver.prepare, "workspace"):
                 raise unavailable("create", f"this host's {runtime} driver cannot assign a workspace")
             options["workspace"] = Path(workspace)
+        review = (selection or {}).get("review")
+        if review is not None:
+            if getattr(driver, "supports_review", False) is not True:
+                raise AgentsError("invalid-config", f"The review plugin is not available for Runtime {runtime!r} "
+                                                    f"in this host, so connection {selection['connection']!r} "
+                                                    "cannot run unreviewed.")
+            check_reviewer(review)
         # Keep the original call shape for drivers whose users select defaults.
         settings = driver.prepare(runtime, caller, **options)
         json.dumps(settings)
@@ -623,8 +633,9 @@ class AgentControl:
             "session":    None,
             "sessions":   [],
             "settings":   settings,
-            "selection":  {name: (selection or {}).get(name) for name in
-                           ("preset", "connection", "model", "reasoning_effort")},
+            "selection":  {**{name: (selection or {}).get(name) for name in
+                              ("preset", "connection", "model", "reasoning_effort")},
+                           "review": review["name"] if review is not None else None},
             "workspace":  str(Path(workspace).resolve()) if workspace is not None else None,
             "created_at": _now(),
             "retired_at": None,
@@ -660,7 +671,8 @@ class AgentControl:
         Returns ``None`` when nothing is selected (no preset, model, effort or
         declared connection for the Runtime), else ``{"preset", "connection"
         (its name), "model", "reasoning_effort", "provider", "settings" (the
-        declared connection entry or None)}``.
+        declared connection entry or None), "review" (the reviewer entry the
+        connection names, or None)}``.
         """
         try:
             declared = read_connections(self.root)
@@ -711,8 +723,9 @@ class AgentControl:
                 raise AgentsError("invalid-reasoning-effort",
                                   f"Model {chosen['model']!r} supports reasoning_effort {supported}, "
                                   f"not {effort!r}.")
+        review = declared.get("reviewers", {}).get((settings or {}).get("review"))
         return {"preset": preset, "connection": connection, "provider": provider,
-                "settings": deepcopy(settings), **chosen}
+                "settings": deepcopy(settings), "review": deepcopy(review), **chosen}
 
     def _candidate(self, runtime: str, settings: Mapping[str, Any] | None, model: str) -> dict:
         """Return the one candidate whose ``id`` is ``model``, or raise ``invalid-model``."""
@@ -1411,7 +1424,7 @@ class AgentControl:
             "name":    record["name"],
             "runtime": record["runtime"],
             **{name: (record.get("selection") or {}).get(name)
-               for name in ("preset", "connection", "model", "reasoning_effort")},
+               for name in ("preset", "connection", "model", "reasoning_effort", "review")},
             "workspace": record.get("workspace"),
             "state":   ACTIVE if current is not None else STANDBY,
             "parent":  record["parent"],

@@ -53,7 +53,7 @@ class Peer:
     def follow(self, session: str) -> dict:
         """Subscribe to the exact retained Session."""
         assert session == 'native-standalone'
-        return {'type': 'snapshot'}
+        return {'type': 'snapshot', 'header': {'id': session}}
 
     def open_events(self) -> None:
         """No approvals are emitted by this controlled peer."""

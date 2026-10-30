@@ -216,7 +216,9 @@ Public: `agent_swarm.__version__` and the names in `agent_swarm.__all__`:
   `validate_request`, `bind`, `unavailable`, `AgentsError`, `AgentsResult`,
   `Caller`, `Binding`, `Backend`, `Outcome`, `SessionArchive`;
 - the backend: `AgentControl`, `RuntimeDriver`, `Run`, `ExecutionEvents`,
-  `ACTIVE`, `STANDBY`;
+  `ACTIVE`, `STANDBY`. For a host holding notices (section 4, *Backend*):
+  `AgentControl(hold_notices=...)` and its `held_notices`, `notice_open`,
+  `settle_notice`, `settle_shown` and `close_notices`;
 - configuration: `CONFIG_DEFAULTS`, `default_config`, `explicit_choices`,
   `read_config`, `write_config`, `read_connections` (section 3), and
   `discover_models(connection)`. `discover_models` takes one `config.yml`
@@ -669,17 +671,22 @@ only these notify the parent:
 Delivery rules:
 
 - Each event reaches the parent once. `last_result.notification` records it:
-  `pending`, `queueing`, `queued`, `delivered`, `unconfirmed` or
+  `pending`, `queueing`, `queued`, `held`, `delivered`, `unconfirmed` or
   `unavailable`. Once the body was delivered (or may have been), `status` and
-  `wait` show `last_message: null` instead of repeating it; a queued body
-  stays readable there.
+  `wait` show `last_message: null` instead of repeating it; a queued or held
+  body stays readable there.
 - A failed or interrupted end notifies immediately, whatever the child's
   members are doing.
 - A completed round of a child that still has running members is recorded,
   not pushed. All rounds stay readable through `status`.
-- While the parent is stopped, notices are held and delivered when it
-  resumes. A child Agent that is itself a parent is continued with its
-  child's reply. Under GraphTraj this is the 367, 372 and 375 behaviour.
+- A notice its parent cannot receive now is recorded `held`, stays readable
+  through `status` and `wait`, and is delivered once when that parent next
+  runs, including across host processes. A body the parent has read through
+  `wait` or `status` is settled `delivered` and is not pushed again. Records
+  written before holding (`queued`, `unavailable`) are never replayed. A crash
+  between delivery and settling delivers that notice once more, never loses it.
+  A child Agent that is itself a parent is continued with its child's reply.
+  Under GraphTraj this is the 367, 372 and 375 behaviour.
 - There is no separate "ask for attention" call and no parent watch switch.
   `ask_parent` is the permission-request kind above, not an attention call:
   it must name `kind` and a `question`, and it waits for an answer.
@@ -718,11 +725,27 @@ What the parent sees today:
   pushes it into the Main Session as `[GraphTraj notice from <alias> ·
   <event>]` followed by the message; otherwise it is attached as
   `main_notices` to the next `agents` result. An end already shown by `wait`
-  or `status` is not pushed again.
+  or `status` is not pushed again. It enables `hold_notices`: a notice stays
+  held until the plugin acknowledges its submission (`{"operation":
+  "acknowledge", "session", "position": 0, "ids"}`) or a result carries it (a
+  discarded result gives it back). The host interrupts its children when
+  Claude Code ends the Session, and those ends are held. The first time a
+  Session binds in a host process, whether by a call or the plugin's claim,
+  what was held for it is queued, so `claude --resume` of the same Session
+  receives it; another Session does not. Adopting this version means running
+  `agent_swarm.claude.host configuration --write` again: an earlier copy of the
+  plugin never acknowledges, so its pushed notices repeat once per host process.
 - **Codex host:** one host event per notice, `{"source": "agents", "alias",
   "event", "message"}`, sent to the parent Session while its turn runs. It
   enables `request_notices`, for children of every Runtime it runs (Codex,
-  Claude). The `--output` document lists the notices in `deliveries`.
+  Claude). The `--output` document lists the notices in `deliveries` (`id`,
+  `agent`, `event`, `parent_session`, `body`, `accepted`). It enables
+  `hold_notices`: a notice that arrives before the parent's turn starts or after
+  it ended, or whose event could not be written, is held. A written event
+  whose acknowledgement was lost stays `unconfirmed`. A closing host interrupts
+  the children it runs and waits up to 10 seconds for their ends, which are
+  held. `--resume` sends what was held for that Session once, into the resumed
+  turn; a notice not yet sent when that turn ends waits for the next `--resume`.
 - **Pi host:** it enables `request_notices` and `hold_notices`, for children
   of every Runtime it runs. Each notice is injected into the Pi Session with
   Pi's `pi.sendMessage` as a displayed custom message (`customType`
@@ -809,9 +832,20 @@ What the parent sees today:
   that the exit ends, and the notice is already `delivered`. A flush begins with
   the turn, so it reaches this window only when that whole turn ends before the
   relay answers. Upstream DSH is not changed for any of these.
-- A grandchild's notices go to its own parent: a Claude parent Agent is
-  continued with them; a Codex parent Agent is not notified, whatever the
-  grandchild's Runtime, and reads them through `status`.
+- A grandchild's notices go to its own parent, whatever the grandchild's
+  Runtime. A running Claude or Codex parent Agent takes them into its turn as
+  `[agents · <child> → <parent>]` followed by the message; a standby one is
+  continued with a child's reply, in its retained Session. A standby parent is
+  not started for a `request`, or for an end without a body: under
+  `hold_notices` those are held and taken into its next run (`resume`, `send`,
+  or being continued by another child's reply). So is any notice while its
+  host process has no receiver for that parent, after a restart for example;
+  the host's root receiver never sees it. An end that reaches a parent whose
+  turn has just stopped accepting input continues it once when that turn ends,
+  unless the parent ended `failed` or `interrupted`, or was retired. A parent
+  reading its child's end through its own `wait` or `status` settles it; an
+  ancestor reading a grandchild does not, since `delivered` would hide the body
+  from that child's parent.
 - `event` is `completed`, `interrupted`, `failed` or `request`; `message` is
   the child's answer, else the error message, else the outcome. For
   `request` it is a short credential-free text naming the method and tool
@@ -829,6 +863,44 @@ request's token, else its native ID as JSON); a root's notice adds
 `"creator"` and `"error": null`, as an end notice does. A receiver error is
 ignored: the request stays readable through `status` and `requests`. The
 default `False` keeps a host's notices to ends only, as before 0.1.2.
+
+With `hold_notices=True` (since 0.2.0; the default `False` writes no new field or
+value) a notice its parent cannot receive now is kept in the record:
+
+- A receiver may return `"held"`. For a root's end, so do a receiver that
+  returns `False` or raises, and a control without a receiver. An end a process
+  died before reporting (`owner-exited`) is held too. A receiver that returns
+  `"unconfirmed"`, or a parent Agent's receiver that raises, leaves it
+  `unconfirmed`: not repeated.
+- A request is `held` before its receiver is called, in the execution's
+  `request_notices: {<request>: "held"|"delivered"|"unconfirmed"}`. The request
+  document does not change.
+- `held_notices(caller)` returns every undelivered notice addressed to `caller`,
+  oldest first, in the shape a receiver gets: for a root caller those of the root
+  Agents it created (the scope of `status`), for an Agent caller those of its
+  direct children. It lists ends `held`, or left `queueing` or `pending` by a
+  process that died, and `held` requests while their execution runs unanswered:
+  a request whose execution ended is withdrawn, and its end covers it. Retired
+  Agents are left out.
+- `notice_open(notice)` says whether one notice still waits.
+- `settle_notice(notice, delivery, reopen=False)` marks one notice `delivered`,
+  `unconfirmed` or `held` and returns whether that changed anything. `delivered`
+  and `unconfirmed` are final unless `reopen`, which is for a tool result that
+  carried the notice and was discarded.
+- `settle_shown(request, document)` settles `delivered` what one successful
+  `wait` or `status` showed, in either request form and including the hierarchy
+  form's `children`, and returns those notices. It settles only ends addressed
+  to the root caller; the core does the same for a parent Agent's own calls. It
+  runs only where a host calls it, so a host's own internal `wait` settles
+  nothing. Hide a body before calling it: a `queueing` end whose `last_message`
+  is hidden is not settled.
+- `close_notices()` stops delivery for a host about to stop its children: later
+  ends and requests are held in the same record write, no receiver runs and no
+  parent is continued. `interrupt_owned()` calls it; a host stopping children
+  another way calls it first.
+
+A parent Agent's held notices are handed to its bound receiver after `driver.start`
+returns, so a driver's receiver must take input by then.
 
 Gaps, by owner:
 

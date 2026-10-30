@@ -588,18 +588,17 @@ def test_claude_a_live_end_for_an_unbound_session_is_held_not_refused(tmp_path: 
 
 
 def test_claude_a_request_answered_before_the_claim_is_dropped(tmp_path: Path, native_settings: dict) -> None:
-    """The notice would ask for a reply already given."""
-    host, invoke, session = claude_main(tmp_path, native_settings)
-    agent = invoke('create', runtime='codex', instruction='request:item/commandExecution/requestApproval')['agent']
-    deadline = time.monotonic() + 10
-    while not invoke('status', agent=agent)['result'].get('pending_requests'):
-        assert time.monotonic() < deadline
-        time.sleep(0.01)
-    [request] = invoke('requests', agent=agent)['result']['requests']
-    invoke('reply', agent=agent, request=request, response={'decision': 'accept'})
+    """The notice would ask for a reply already given. Through the bound tool, so no result claims it first."""
+    host, _, session = claude_main(tmp_path, native_settings)
+    call = host.callers[session]
+    agent = call({'action': 'create', 'runtime': 'codex',
+                  'instruction': 'request:item/commandExecution/requestApproval'}).document['agent']
+    [request] = until(lambda: call({'action': 'requests', 'agent': agent}).document.get('result', {}).get('requests'))
+    until(lambda: any(notice['event']['event'] == 'request' for notice in host.queue.get(session, [])))
+    assert not call({'action': 'reply', 'agent': agent, 'request': request, 'response': {'decision': 'accept'}}).failed
     assert all(notice['event']['event'] != 'request'
                for notice in host.context({'operation': 'notices', 'session': session})['notices'])
-    invoke('wait', agent=agent, timeout_seconds=10)
+    call({'action': 'wait', 'agent': agent, 'timeout_seconds': 10})
     stop_host(host)
 
 

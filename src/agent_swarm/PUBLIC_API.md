@@ -261,7 +261,9 @@ Public: `agent_swarm.__version__` and the names in `agent_swarm.__all__`:
   `validate_request`, `bind`, `unavailable`, `AgentsError`, `AgentsResult`,
   `Caller`, `Binding`, `Backend`, `Outcome`, `SessionArchive`;
 - the backend: `AgentControl`, `RuntimeDriver`, `Run`, `ExecutionEvents`,
-  `ACTIVE`, `STANDBY`;
+  `ACTIVE`, `STANDBY`. For a host holding notices (section 4, *Backend*):
+  `AgentControl(hold_notices=...)` and its `held_notices`, `notice_open`,
+  `settle_notice`, `settle_shown` and `close_notices`;
 - configuration: `CONFIG_DEFAULTS`, `default_config`, `explicit_choices`,
   `read_config`, `write_config`, `read_connections` (section 3), and
   `discover_models(connection)`. `discover_models` takes one `config.yml`
@@ -414,7 +416,8 @@ one line `{"error": {"code", "message"}}` on stderr and exits `1`; Pi shows it
 as the extension's error and the Session has no `agents` tool.
 
 **Routing.** The host registers the `pi`, `claude`, `codex` and `dsh`
-drivers in one `AgentControl`; `create`'s `runtime` selects one, and
+drivers in one `AgentControl` with `request_notices=True` and
+`hold_notices=True`; `create`'s `runtime` selects one, and
 `model`, `preset` and `reasoning_effort` are resolved per child (section 2).
 The model reaches the Pi Session through the MCP server `agents`.
 
@@ -480,7 +483,8 @@ line `{"error": {"code", "message"}}` on stderr and exits `1`; the plugin's
 `agents` tool.
 
 **Routing.** The host registers the `dsh`, `claude` and `codex` drivers (and
-`pi` when configured) in one `AgentControl` with `request_notices=True`;
+`pi` when configured) in one `AgentControl` with `request_notices=True` and
+`hold_notices=True`;
 `create`'s `runtime` selects one, and `model`, `preset`, `connection` and
 `reasoning_effort` are resolved per child (section 2).
 
@@ -740,17 +744,23 @@ only these notify the parent:
 Delivery rules:
 
 - Each event reaches the parent once. `last_result.notification` records it:
-  `pending`, `queueing`, `queued`, `delivered`, `unconfirmed` or
+  `pending`, `queueing`, `queued`, `held`, `delivered`, `unconfirmed` or
   `unavailable`. Once the body was delivered (or may have been), `status` and
-  `wait` show `last_message: null` instead of repeating it; a queued body
-  stays readable there.
+  `wait` show `last_message: null` instead of repeating it; a queued or held
+  body stays readable there.
 - A failed or interrupted end notifies immediately, whatever the child's
   members are doing.
 - A completed round of a child that still has running members is recorded,
   not pushed. All rounds stay readable through `status`.
-- While the parent is stopped, notices are held and delivered when it
-  resumes. A child Agent that is itself a parent is continued with its
-  child's reply. Under GraphTraj this is the 367, 372 and 375 behaviour.
+- A notice its parent cannot receive now is recorded `held`, stays readable
+  through `status` and `wait`, and is delivered once when that parent next
+  runs, including across host processes. A body the parent has read through
+  `wait` or `status` is settled `delivered` and is not pushed again. Records
+  written before holding (`queued`, `unavailable`) are never replayed. A crash
+  between delivery and settling delivers that notice once more, never loses it.
+  A child Agent that is itself a parent is continued with its child's reply, on a
+  driver that binds a receiver (see *Gaps* for Pi).
+  Under GraphTraj this is the 367, 372 and 375 behaviour.
 - There is no separate "ask for attention" call and no parent watch switch.
   `ask_parent` is the permission-request kind above, not an attention call:
   it must name `kind` and a `question`, and it waits for an answer.
@@ -789,47 +799,90 @@ What the parent sees today:
   pushes it into the Main Session as `[GraphTraj notice from <alias> ·
   <event>]` followed by the message; otherwise it is attached as
   `main_notices` to the next `agents` result. An end already shown by `wait`
-  or `status` is not pushed again.
+  or `status` is not pushed again. It enables `hold_notices`: a notice stays
+  held until the plugin acknowledges its submission (`{"operation":
+  "acknowledge", "session", "position": 0, "ids"}`) or a result carries it. A
+  result the caller cancelled, or sent to a client already gone, gives it back.
+  A child that ends before its own `create`, `send` or `resume` returns can have
+  its notice on that very result; the `wait` that follows then shows
+  `last_message: null`. The host interrupts its children when
+  Claude Code ends the Session, and those ends are held. The first time a
+  Session binds in a host process, whether by a call or the plugin's claim,
+  what was held for it is queued, so `claude --resume` of the same Session
+  receives it; another Session does not. Adopting this version means running
+  `agent_swarm.claude.host configuration --write` again: an earlier copy of the
+  plugin never acknowledges, so its pushed notices repeat once per host process.
 - **Codex host:** one host event per notice, `{"source": "agents", "alias",
   "event", "message"}`, sent to the parent Session while its turn runs. It
   enables `request_notices`, for children of every Runtime it runs (Codex,
-  Claude). The `--output` document lists the notices in `deliveries`.
-- **Pi host:** each notice is injected into the Pi Session with Pi's
-  `pi.sendMessage` as a displayed custom message (`customType`
+  Claude). The `--output` document lists the notices in `deliveries` (`id`,
+  `agent`, `event`, `parent_session`, `body`, `accepted`). It enables
+  `hold_notices`: a notice that arrives before the parent's turn starts or after
+  it ended, or whose event could not be written, is held. A written event
+  whose acknowledgement was lost stays `unconfirmed`. A closing host interrupts
+  the children it runs and waits up to 10 seconds for their ends, which are
+  held. `--resume` sends what was held for that Session once, into the resumed
+  turn; a notice not yet sent when that turn ends waits for the next `--resume`.
+- **Pi host:** it enables `request_notices` and `hold_notices`, for children
+  of every Runtime it runs. Each notice is injected into the Pi Session with
+  Pi's `pi.sendMessage` as a displayed custom message (`customType`
   `graphtraj:agent-communication`, content `[agents notice from <alias> ·
-  <event>]` and the message, `details.fact` `notice:<execution>:<event>`),
-  with `triggerTurn: true, deliverAs: "followUp"`: an idle Session starts a
-  turn with it, a busy one receives it after the current turn's work. The
-  notice is `delivered` once the extension acknowledges the injection,
-  `unconfirmed` without an acknowledgement within 10 seconds, and
-  `unavailable` (body readable through `status` and `wait`) when it could not
-  be written or injected. While a notice is on its way (`notification:
-  queueing`), `wait` and `status` also show `last_message: null`, so a
-  `wait` that ends with the child does not repeat the body the notice
-  carries. This host leaves `request_notices` off, so permission and
-  `ask_parent` requests are not pushed: `wait` ends early and the parent uses
-  `requests` and `reply`.
+  <event>]` and the message, `details.fact` `notice:<id>`, the id as for
+  Claude above), with `triggerTurn: true, deliverAs: "followUp"`: an idle
+  Session starts a turn with it, a busy one receives it after the current
+  turn's work. Pi writes the message to the Session only when a turn takes it
+  (`dist/core/agent-session.js:760`), so the notice is `delivered` once the
+  extension finds its entry there after Pi's `message_end`; until then it stays
+  `held`. It is `unconfirmed` when no acknowledgement of any kind comes within
+  10 seconds (it may have been shown, so it is never repeated), and `held` when
+  it could not be written or injected. While a notice is on its way
+  (`notification: queueing`), `wait` and `status` also show `last_message:
+  null`, so a `wait` that ends with the child, or a `status` during the turn,
+  does not repeat the body the notice carries. A permission request does not
+  wait for that turn: its child and `ask_parent` go on at once. Before
+  injecting, the extension looks for the same `details.fact` among the Session's
+  `custom_message` entries; when it is there (a crash after Pi wrote it and
+  before the acknowledgement), it acknowledges without injecting again. A notice
+  Pi took but never wrote, because the Session stopped or its turn failed to
+  start, is delivered by the next host process for this Session; until then the
+  host hides its body. A notice to a Pi parent that is mid-turn is taken at the
+  end of that turn, so a permission-request notice can arrive after the parent
+  has already answered the request through `wait`, `requests` and `reply`; it
+  then costs one more model turn and is still delivered once (observed once on
+  the real host, 403). Sources are `@earendil-works/pi-coding-agent` `1.4.0`.
 - **Pi Session shutdown** (Pi's `session_shutdown`: quit, reload, new, resume
   or fork):
   the extension stops injecting and closes the host's pipe. The host stops
   pushing, then interrupts every running child, descendants first, and
   waits up to 10 seconds for each. The ends this causes, and any notice not
-  yet acknowledged, are recorded `unavailable`, not held: they stay readable
-  through `status` when the same Pi Session is resumed with the same
-  configuration, and are not pushed then. Agents, Sessions and records are
-  kept.
-- **DSH host** (1.7): it enables `request_notices`, for children of every
-  Runtime it runs. Each notice `{"id", "agent", "session", "event",
+  yet acknowledged, are `held`, readable through `status`. Agents, Sessions
+  and records are kept.
+- **Pi Session resumed** with the same configuration: a new host process binds
+  the same Session and delivers each held notice once, in the order the
+  children ended. It starts when the Session's first turn starts
+  (`agent_start`), or two seconds after the start in a Session with a UI where
+  no turn has started, because a held notice starts a turn in an idle Session
+  and Pi refuses a prompt while one runs (`dist/core/agent-session.js:1667`;
+  print mode passes no queueing option, `dist/modes/print-mode.js:105`). A
+  notice refused then stays held for the next host process. A Session with no
+  UI and no turn delivers nothing and keeps them held. Held notices belong to
+  their Session: a new or forked Pi Session does not receive them.
+- **DSH host** (1.7): it enables `request_notices` and `hold_notices`, for
+  children of every Runtime it runs. Each notice `{"id", "agent", "session", "event",
   "message", "execution"}` (the id as for Claude above) goes to the plugin,
   which hands it to the existing `agentMessages.receive` relay
   (`dsh/communication.mjs`): one native `agent-message` relay message from
   the child's Agent and Session, text `[agents notice from <agent> ·
   <event>]` followed by the message, communication id `agents-notice:<id>`,
   placed in the Session's next-step inbox with a wake. The relay admits one
-  id once per Session, including across processes. Admitted is
+  id once per Session, including across processes, by looking for it in the
+  Session's persisted events and inbox (`communication.mjs` `deliver`); that is
+  the guard against showing a replayed notice twice. Admitted is
   `delivered`; refused (for example the Session is no longer active in that
-  DSH, `communication.mjs` `deliver`) is `unavailable`; no acknowledgement
-  within 10 seconds is `unconfirmed`.
+  DSH) is `held`; no acknowledgement within 10 seconds is `unconfirmed` (it may
+  have been admitted, so it is never repeated). A DSH parent Agent's request
+  notice has the relay id `<execution>:request:<request>`, and its end keeps
+  `<execution>`, so one execution's notices do not collide.
 
   When a DSH parent receives a notice depends on its state. Sources are the
   installed DSH `0.2.2-alpha.2` packages under
@@ -841,21 +894,43 @@ What the parent sees today:
   | Idle, host alive (a long-lived profile such as `web`, `tui`, `acp` or `sdk`, or `headless` before its runner leaves its loop) | The wake starts a new turn with the notice at once | `dsh-agent-loop/lib/index.js:564-569`, `:618-623` |
   | Idle during maintenance (for example compaction) or right after a cancel | The wake is latched and the turn starts when that activity ends | `dsh-agent-loop/lib/index.js:565-566`, `:619-621` |
   | `headless`, after the parent is idle with no native DSH subagents | The runner flushes and exits. agents children are not native subagents, so it does not wait for them; the host then stops with DSH (next row) | `dsh-headless/lib/index.js:369-373`, `:377-383` |
-  | Host or DSH process stopped (Session disposed, DSH exited) | No host runs. At the stop the plugin closes the host pipe; the host stops pushing, interrupts its active children (descendants first) and records their ends `unavailable`, readable through `status`. Nothing is held for later push | `dsh/plugin.mjs`, `dsh/host.py` |
-  | On resume (`dsh --profile headless --session-id <id> "<task>"`, or reopening the Session in a long-lived profile) | DSH announces the Session again and a new host binds the same Session. Earlier children are listed by `status` and continue with `resume`; ends recorded while stopped are not pushed again | `dsh-headless/lib/index.js:245-280` (`agents.resume` at `:263`) |
+  | Host or DSH process stopped (Session disposed, DSH exited) | No host runs. At the stop the plugin closes the host pipe; the host stops pushing, interrupts its active children (descendants first) and holds their ends, readable through `status` | `dsh/plugin.mjs`, `dsh/host.py` |
+  | On resume (`dsh --profile headless --session-id <id> "<task>"`, or reopening the Session in a long-lived profile) | DSH registers and announces the Session again and a new host binds the same Session. The plugin tells the host to begin when the Session's first turn begins, or two seconds after its `agents` tool attaches in a Session that starts no turn by itself: a relay message wakes an idle Session, and the `headless` runner applies its permission settings and hands over its task only after the announcement. The host then delivers each held notice once through the relay. A refused notice is tried again, at most six passes five seconds apart in that host's lifetime, and then stays held for a later host. Earlier children are listed by `status` and continue with `resume` | `dsh-agent/lib/index.js:655`, `:710`; `dsh-headless/lib/index.js:263`, `:344`, `:361` |
 
   Cases without immediate delivery: (1) a running parent receives a notice
   only at its next step, after the current model response or tool call;
   (2) during maintenance or right after a cancel, only when that activity
-  ends; (3) a `headless` parent whose task has ended never receives a later
-  notice: its children are interrupted when DSH exits, so a `headless`
-  parent that needs a child's answer calls `wait` for it before ending its
-  task; (4) while DSH or the Session is stopped, nothing is delivered or held;
-  (5) on resume, ends recorded while stopped are not pushed; the parent reads
-  them with `status`. Upstream DSH is not changed for any of these.
-- A grandchild's notices go to its own parent: a Claude parent Agent is
-  continued with them; a Codex parent Agent is not notified, whatever the
-  grandchild's Runtime, and reads them through `status`.
+  ends; (3) a `headless` parent whose task has ended receives a later notice
+  only when resumed: its children are interrupted when DSH exits and their ends
+  are held, so a later `dsh --profile headless --session-id <id> "<task>"`
+  delivers them in that task's turn, and a parent that needs a child's answer
+  within its task calls `wait` for it before ending that task;
+  (4) while DSH or the Session is stopped, nothing is delivered, and notices
+  are held; (5) on resume, each held notice is delivered once, unless the parent
+  read it through `status` or `wait` first.
+
+  A notice the relay admitted and no turn has taken yet survives a stop: DSH
+  appends each inbox insertion to the Session as an event
+  (`dsh-agent-loop/lib/index.js:198`) and restores the inbox from those events on
+  resume (`:26-60`), so the next turn takes it. One case stays open, because of
+  how the `headless` runner leaves: a notice admitted after the runner's last
+  Session flush (`dsh-headless/lib/index.js:377`) and before its exit (`:383`)
+  may not reach the Session file, and it is already `delivered`. Upstream DSH is
+  not changed for any of these.
+- A grandchild's notices go to its own parent, whatever the grandchild's
+  Runtime. A running Claude or Codex parent Agent takes them into its turn as
+  `[agents · <child> → <parent>]` followed by the message; a standby one is
+  continued with a child's reply, in its retained Session. A standby parent is
+  not started for a `request`, or for an end without a body: under
+  `hold_notices` those are held and taken into its next run (`resume`, `send`,
+  or being continued by another child's reply). So is any notice while its
+  host process has no receiver for that parent, after a restart for example;
+  the host's root receiver never sees it. An end that reaches a parent whose
+  turn has just stopped accepting input continues it once when that turn ends,
+  unless the parent ended `failed` or `interrupted`, or was retired. A parent
+  reading its child's end through its own `wait` or `status` settles it; an
+  ancestor reading a grandchild does not, since `delivered` would hide the body
+  from that child's parent.
 - `event` is `completed`, `interrupted`, `failed` or `request`; `message` is
   the child's answer, else the error message, else the outcome. For
   `request` it is a short credential-free text naming the method and tool
@@ -874,13 +949,51 @@ request's token, else its native ID as JSON); a root's notice adds
 ignored: the request stays readable through `status` and `requests`. The
 default `False` keeps a host's notices to ends only, as before 0.1.2.
 
+With `hold_notices=True` (since 0.2.0; the default `False` writes no new field or
+value) a notice its parent cannot receive now is kept in the record:
+
+- A receiver may return `"held"`. For a root's end, so do a receiver that
+  returns `False` or raises, and a control without a receiver. An end a process
+  died before reporting (`owner-exited`) is held too. A receiver that returns
+  `"unconfirmed"`, or a parent Agent's receiver that raises, leaves it
+  `unconfirmed`: not repeated.
+- A request is `held` before its receiver is called, in the execution's
+  `request_notices: {<request>: "held"|"delivered"|"unconfirmed"}`. The request
+  document does not change.
+- `held_notices(caller)` returns every undelivered notice addressed to `caller`,
+  oldest first, in the shape a receiver gets: for a root caller those of the root
+  Agents it created (the scope of `status`), for an Agent caller those of its
+  direct children. It lists ends `held`, or left `queueing` or `pending` by a
+  process that died, and `held` requests while their execution runs unanswered:
+  a request whose execution ended is withdrawn, and its end covers it. Retired
+  Agents are left out.
+- `notice_open(notice)` says whether one notice still waits.
+- `settle_notice(notice, delivery, reopen=False)` marks one notice `delivered`,
+  `unconfirmed` or `held` and returns whether that changed anything. `delivered`
+  and `unconfirmed` are final unless `reopen`, which is for a tool result that
+  carried the notice and was discarded.
+- `settle_shown(request, document)` settles `delivered` what one successful
+  `wait` or `status` showed, in either request form and including the hierarchy
+  form's `children`, and returns those notices. It settles only ends addressed
+  to the root caller; the core does the same for a parent Agent's own calls. It
+  runs only where a host calls it, so a host's own internal `wait` settles
+  nothing. Hide a body before calling it: a `queueing` end whose `last_message`
+  is hidden is not settled.
+- `close_notices()` stops delivery for a host about to stop its children: later
+  ends and requests are held in the same record write, no receiver runs and no
+  parent is continued. `interrupt_owned()` calls it; a host stopping children
+  another way calls it first.
+
+A parent Agent's held notices are handed to its bound receiver after `driver.start`
+returns, so a driver's receiver must take input by then.
+
 Gaps, by owner:
 
 | Gap | Owner |
 | --- | --- |
-| Independent hosts do not push a child's native permission request or `ask_parent` request; the parent polls | Claude Code and Codex hosts: done in 381 (`ask_parent`: since the 385 integration). DSH host: done in 383 (`ask_parent`: since the 383 integration). Pi host: open, unassigned, needs Main |
-| Independent hosts do not hold notices while the parent is stopped: the Claude host's queue lives in its process, and the Codex host marks them `unavailable` (readable through `status`). The Pi host records them `unavailable` as above (closed in 382 by recording, not holding). The DSH host stops with its DSH process, interrupts its children and records their ends `unavailable`; when a DSH parent receives notices, and every case without immediate delivery, is listed under *DSH host* above | 381 (Claude, Codex), 382 (Pi); DSH documented in 383, holding notices for a stopped DSH parent is unassigned, needs Main |
-| A Codex child is not notified of its own children's ends or requests (it reads them through `status`); a Claude child is continued with them | unassigned, needs Main |
+| A notice admitted between the `headless` DSH runner's last Session flush and its exit (*DSH host* above; `dsh-headless/lib/index.js:377`, `:383`): the relay answers before that write | Upstream DSH; not changed |
+| A child Runtime that outlives a killed Claude host: Claude Code can kill the host before it stops its children (`mcp.py` `INTERRUPT_SECONDS`), so the execution stays `running` with no notice yet. The notice arrives on a later host process, or read it through `status`. In the one real run (403), Claude Code 2.1.314's SIGINT left the host time to finish (`agents host recorded its children stopped.`, in all 3 Claude runs of that step), and the end arrived as `interrupted`. A kill was not observed, so the case stays possible by code | Unassigned, needs Main |
+| A parent Agent on a driver that binds no receiver (a Pi child that is itself a parent): the Pi driver registers no `receive_children`, so its children's notices stay `held` and readable through `status`, and are never pushed to it | Unassigned, needs Main |
 | The notice title names GraphTraj | 394 |
 
 ### 4.1 Native approval per Runtime
@@ -1155,6 +1268,17 @@ Recorded classifications:
   host section, the Pi package manifest, the Pi host's Runtime routing and
   its notices are compatible additions. They ship in 0.2.0, the version 384
   set; 382 adds no bump of its own.
+- 403 (0.2.1): `last_result.notification` gains the value `held`, for a notice
+  its parent cannot receive now, and `AgentControl` gains the optional
+  `hold_notices` argument (default off, which writes nothing new) with
+  `held_notices`, `settle_notice`, `settle_shown`, `notice_open` and
+  `close_notices`. Compatible: a new value for a new situation, behind a new
+  optional argument with a default that keeps current behaviour. All four hosts
+  enable it, so `held` replaces `unavailable` for a notice they could not
+  deliver; the Pi host also pushes each child request. The Pi and DSH hosts are
+  themselves new in 0.2.0. The Claude Code and Codex hosts shipped in 0.1.2, so
+  a consumer of theirs that reads `notification` sees the new value in 0.2.1,
+  the version 386 already raised; 403 adds no bump of its own.
 - 383: the DSH host section, the `agents-dsh` bundle, the `dsh` entries of the
   Claude Code and Codex hosts' `runtimes` and their DSH refusals are compatible
   additions. The agents DSH gate became a floor (0.2.0-rc.2 or later in semver

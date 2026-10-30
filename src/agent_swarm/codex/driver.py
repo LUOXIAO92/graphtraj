@@ -55,6 +55,25 @@ def _select(settings: dict, parameters: dict, selection: Mapping[str, Any]) -> N
         parameters['approvalsReviewer'] = config['approvals_reviewer'] = 'user'
 
 
+def _receive_children(turn: CodexManagedExecution, run: Run) -> None:
+    """Deliver a child's end or request once, as the Claude and DSH bindings do."""
+    def receive(event: dict) -> bool:
+        """Steer the running turn, or continue the retained Session when its input closed."""
+        if event['parent'] != run.agent or not event['session']:
+            return False
+        try:
+            turn.operate({'operation': 'send', 'session': turn.session, 'execution_id': turn.execution_id,
+                          'instruction': f"[agents · {event['agent']} → {run.agent}]\n{event['body']}"})
+            return True
+        except RuntimeAdapterError as error:
+            # These two are raised before any input is written.
+            if error.code not in {'runtime-input-closed', 'operation-failed'}:
+                raise
+        return run.events.continue_from_child(event, run.archive)
+
+    run.events.receive_children(receive)
+
+
 class CodexDriver:
     """Own native Codex turns, using host-selected Run.settings.
 
@@ -124,15 +143,22 @@ class CodexDriver:
 
         options = {'connection': run.settings.get('connection', {}), 'agent_call': run.call,
                    'archive': run.archive, 'extra_fields': run.extra_fields}
+        prompt = run.message
         if self.execution is not CodexManagedExecution:
             options.update(independent=True)
+        elif 'completion_message' in run.settings:
+            # The child's end that continues this Session is the turn's input.
+            notice = run.settings['completion_message']
+            prompt = f"[agents · {notice['agent']} → {run.agent}]\n{notice['body']}"
         if run.settings.get('review') is not None:
             options.update(review=run.settings['review'])
-        turn = self.execution(dict(run.settings['adapter_request']), run.message, run.directory,
+        turn = self.execution(dict(run.settings['adapter_request']), prompt, run.directory,
                               lambda session, pid: ready.set(), dict(run.settings.get('evidence', {})),
                               trace_file=run.directory / 'trace.jsonl', expected_session=run.session,
                               session_created=created, **options)
         turn.parent_notice = lambda message, details: (run.events.request(details), {'delivery': 'retained'})[1]
+        if self.execution is CodexManagedExecution:
+            _receive_children(turn, run)
         with _TURNS_LOCK:
             _TURNS[run.execution] = turn
 

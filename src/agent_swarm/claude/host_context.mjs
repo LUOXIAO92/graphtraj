@@ -96,9 +96,13 @@ async function pushNotices($, state) {
     claimed = pending.notices ?? [];
     if (claimed.length) {
       await $.prompt.submit({text: noticePrompt(claimed)});
+      const ids = claimed.map((notice) => notice.id).filter((id) => typeof id === 'string');
       claimed = [];
       state.pushed = true;
       state.pushError = null;
+      // The notices are in the Main now: this failing is no failed submission.
+      try { await context($, {operation: 'acknowledge', session, position: 0, ids}); }
+      catch (error) { state.pushError = String(error); }
     }
   } catch (error) {
     state.pushError = String(error);

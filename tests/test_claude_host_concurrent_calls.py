@@ -748,14 +748,28 @@ def test_cancelled_main_call_does_not_lose_its_notices(tmp_path: Path) -> None:
 
 
 def test_independent_host_restores_a_discarded_results_notices(tmp_path: Path) -> None:
-    """Its in-memory queue and seen ends return when the result is never read."""
+    """What a result carried or showed is held and queued again when it is never read."""
     from agent_swarm.claude.host import IndependentCalls
 
+    settled = []
+
+    class Control:
+        def settle_notice(self, notice, delivery, *, reopen=False):
+            settled.append((notice['execution'], delivery, reopen))
+
+        def notice_open(self, notice):
+            return True
+
+    def document(execution):
+        return {'agent': 'a', 'execution': execution, 'outcome': 'completed', 'body': 'body of ' + execution}
+
     calls = IndependentCalls.__new__(IndependentCalls)
-    calls.queue, calls.claimed, calls.ended, calls.lock = {}, {}, {'s': {'e1', 'e2'}}, threading.Lock()
-    notice = {'id': 'n1', 'event': {'execution': 'e1', 'event': 'completed'}}
-    calls.restore('s', [notice], ['e1'])
-    assert calls.ended['s'] == {'e2'} and calls.claim('s') == [notice]
+    calls.queue, calls.claimed, calls.lock, calls.control = {}, {}, threading.Lock(), Control()
+    calls.documents = {'e1:completed': document('e1')}
+    carried = {'id': 'e1:completed', 'event': {'execution': 'e1', 'event': 'completed'}}
+    calls.restore('s', [carried], [document('e2')])
+    assert settled == [('e1', 'held', True), ('e2', 'held', True)]
+    assert [notice['id'] for notice in calls.claim('s')] == ['e1:completed', 'e2:completed']
 
 
 def test_retirement_refused_when_its_session_changed_during_review(tmp_path: Path, monkeypatch) -> None:

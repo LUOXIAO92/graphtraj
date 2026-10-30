@@ -53,14 +53,14 @@ def test_f8_failure_before_write_is_not_delivered(host_loop) -> None:
     """A transport error before the write never showed the body: keep it readable."""
     error = CodexAdapterError('RUNTIME_CONNECTION_FAILED', 'Writing Codex stdio failed: closed',
                               terminal_confirmed=False)
-    assert _host(host_loop, error)._receive_child(dict(_NOTICE)) is False
+    assert _host(host_loop, error)._receive_child(dict(_NOTICE)) == 'held'
 
 
 def test_f8_rpc_rejection_is_not_delivered(host_loop) -> None:
     """A host that refused the event did not show it either."""
     from agent_swarm.codex.app_server import CodexRPCError
     error = CodexRPCError('turn/start', 3, {'code': -32600, 'message': 'rejected'})
-    assert _host(host_loop, error)._receive_child(dict(_NOTICE)) is False
+    assert _host(host_loop, error)._receive_child(dict(_NOTICE)) == 'held'
 
 
 def test_f8_failure_after_write_is_unconfirmed(host_loop) -> None:

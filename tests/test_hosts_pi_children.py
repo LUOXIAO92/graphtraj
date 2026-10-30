@@ -247,6 +247,44 @@ def test_interrupt_and_resume_keep_the_native_session(main) -> None:
     assert header['id'] == session
 
 
+def test_a_pi_child_stopped_with_the_claude_host_reaches_the_next_run_once(project: Path, tmp_path: Path) -> None:
+    """The end the host's own stop causes is held, then the same Session's next process gets it once."""
+    root = tmp_path / 'data'
+    first = ClaudeMain(project, root, dict(ENTRY), tmp_path / 'unused')
+    agent = first.call('create', runtime='pi', instruction='wait-first')['agent']
+    first.close()
+    assert first.shown == []
+
+    def run() -> list:
+        """One result of the same Session in a new host process."""
+        host = IndependentCalls(root, project, {}, {'pi': dict(ENTRY)})
+        return host.make_call(first.session, project)('agents', {'action': 'status'}).document.get('main_notices', [])
+
+    [notice] = run()
+    assert (notice['event']['alias'], notice['event']['event']) == (agent, 'interrupted')
+    assert run() == []
+
+
+def test_a_pi_child_stopped_with_the_codex_host_reaches_the_next_resume_once(
+        project: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """The end the host's own stop causes is held, then the resumed parent gets one host event."""
+    root, log = tmp_path / 'data', tmp_path / 'host-events.jsonl'
+    monkeypatch.setenv('PEER_HOST_EVENTS', str(log))
+    running = Running(CodexHost(codex_settings(project, dict(ENTRY)), root, 'hold'))
+    agent = running.call('create', runtime='pi', instruction='wait-first')['agent']
+    running.stop()
+    assert events(log) == []
+
+    running = Running(CodexHost(codex_settings(project, dict(ENTRY)), root, 'hold', resume=True))
+    [event] = until(lambda: events(log))
+    assert (event['alias'], event['event']) == (agent, 'interrupted')
+    running.stop()
+    running = Running(CodexHost(codex_settings(project, dict(ENTRY)), root, 'hold', resume=True))
+    time.sleep(0.2)
+    running.stop()
+    assert len(events(log)) == 1
+
+
 def test_default_claude_layout_fails_on_the_real_driver(project: Path, pi_environment: dict) -> None:
     """Why the host refuses it: a data root inside the worktree fails every Pi child at create."""
     root = project / '.agents-control'

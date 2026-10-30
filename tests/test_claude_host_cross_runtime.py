@@ -12,6 +12,7 @@ from pathlib import Path
 import subprocess
 import sys
 import time
+from typing import Callable
 from uuid import uuid4
 
 import pytest
@@ -49,6 +50,20 @@ def main_call(host: IndependentCalls, cwd: Path):
     return invoke, call, session, shown
 
 
+def answered(invoke: Callable, agent: str, shown: list[dict]) -> dict:
+    """Wait for an end and return it with the body the Main got, which it must get exactly once.
+
+    The wait shows it, unless an earlier result already carried it as a notice: a
+    quick child can end before its own create, send or resume returns.
+    """
+    last    = invoke('wait', agent=agent, timeout_seconds=10)['result']['last_result']
+    carried = [notice['event']['message'] for notice in shown
+               if (notice['event']['execution'], notice['event']['event']) == (last['id'], last['outcome'])]
+    bodies  = carried + ([last['last_message']] if last['last_message'] is not None else [])
+    assert len(bodies) == 1, (last, carried)
+    return {**last, 'last_message': bodies[0]}
+
+
 def claimed(host: IndependentCalls, session: str, until: int, shown: list[dict],
             timeout: float = 20) -> list[dict]:
     """Collect this Main's notices from results and the mod's claim until ``until`` arrived."""
@@ -71,9 +86,8 @@ def test_claude_host_runs_a_codex_child_like_a_claude_child(
         assert (created['result']['runtime'], created['result']['model'],
                 created['result']['reasoning_effort']) == ('codex', 'gpt-5.5', 'high')
         assert created['result']['creator'] == {'host': 'claude-native', 'agent': None, 'session': session}
-        done = invoke('wait', agent=agent, timeout_seconds=10)
         # The Codex child actually ran the chosen model and effort.
-        observed = json.loads(done['result']['last_result']['last_message'])
+        observed = json.loads(answered(invoke, agent, shown)['last_message'])
         assert observed['model'] == 'gpt-5.5'
         assert observed['config']['model_reasoning_effort'] == 'high'
         [node] = invoke('status')['result']['agents']
@@ -81,26 +95,25 @@ def test_claude_host_runs_a_codex_child_like_a_claude_child(
 
         invoke('resume', agent=agent, message='hold')
         invoke('send', agent=agent, message='second answer')
-        assert invoke('wait', agent=agent, timeout_seconds=10)['result']['last_result']['last_message'] == 'second answer'
+        assert answered(invoke, agent, shown)['last_message'] == 'second answer'
         invoke('resume', agent=agent, message='hold')
         invoke('interrupt', agent=agent)
-        stopped = invoke('wait', agent=agent, timeout_seconds=10)
-        assert stopped['result']['last_result']['outcome'] == 'interrupted'
+        assert answered(invoke, agent, shown)['outcome'] == 'interrupted'
 
-        # Every end so far was shown by a wait, so none was pushed (367 result 2).
-        assert shown == []
+        # Every end so far reached the Main once, by a wait or a result, never both (367 result 2).
+        earlier = len(shown)
         # A native request reaches the Main once as a notice; the Main answers with reply.
         invoke('resume', agent=agent, message='request:item/commandExecution/requestApproval')
         assert invoke('wait', agent=agent, timeout_seconds=10)['result']['pending_requests'] == 1
-        [notice] = claimed(host, session, 1, shown)
+        [notice] = claimed(host, session, earlier + 1, shown)[earlier:]
         assert (notice['event']['alias'], notice['event']['event']) == (agent, 'request')
         assert 'item/commandExecution/requestApproval' in notice['event']['message']
         assert notice['id'].startswith(notice['event']['execution'] + ':request:')
         [request] = invoke('requests', agent=agent)['result']['requests']
         invoke('reply', agent=agent, request=request, response={'decision': 'accept'})
-        assert invoke('wait', agent=agent, timeout_seconds=10)['result']['last_result']['last_message'] == 'request accepted'
+        assert answered(invoke, agent, shown)['last_message'] == 'request accepted'
         assert host.context({'operation': 'notices', 'session': session})['notices'] == []
-        assert len(shown) == 1
+        assert len([item for item in shown if item['event']['event'] == 'request']) == 1
 
         invoke('retire', agent=agent)
         assert invoke('status')['result']['agents'] == []

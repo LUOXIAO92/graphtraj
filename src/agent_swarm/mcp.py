@@ -259,7 +259,10 @@ class ConcurrentServer:
 
     def _run(self, call: Call, identity: Any, tool: str, feature: str, message: dict,
              responder: Callable[[Mapping], dict | None]) -> None:
-        """Execute one call; a cancelled one's result is discarded, never sent."""
+        """Execute one call; a cancelled one's result is discarded, never sent.
+
+        One sent to a client already gone is undone too: nobody will read it.
+        """
         started, reply = time.monotonic(), None
         try:
             with current_call(call):
@@ -272,14 +275,16 @@ class ConcurrentServer:
             del self.calls[identity]
             cancelled = call.cancelled
             self.threads.discard(threading.current_thread())
-        if cancelled:
+        if reply is not None and not cancelled:
+            self.send(reply)
+        with self.changed:
+            unread = cancelled or self.client_gone
+        if unread:
             for discard in call.discards:
                 try:
                     discard()
                 except Exception:  # noqa: BLE001 - one failed undo must not stop the others
                     traceback.print_exc(file=sys.stderr)
-        elif reply is not None:
-            self.send(reply)
         result = (reply or {}).get('result')
         failed = 'error' in (reply or {}) or (isinstance(result, dict) and result.get('isError'))
         self._log('finished', identity, tool, feature, seconds=round(time.monotonic() - started, 3),

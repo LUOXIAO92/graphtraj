@@ -26,10 +26,12 @@ import asyncio
 import json
 from pathlib import Path
 import sys
+import time
 
 import yaml
 
 from agent_swarm import AgentControl, AgentsError, Caller, bind
+from agent_swarm.notices import notice_id
 from agent_swarm.runtime import RuntimeAdapterError
 from .app_server import CodexServerRequest
 from .driver import CodexDriver
@@ -99,7 +101,7 @@ class CodexHost(CodexManagedExecution):
         elif (native / 'session.yml').exists():
             raise AgentsError('session-exists', 'Use --resume to continue this host Session.')
         self.control = AgentControl(directory, {'codex': driver, **others}, event_receiver=self._receive_child,
-                                    request_notices=True)
+                                    request_notices=True, hold_notices=True)
         self.control.require_connections()
         self.authentications: list[dict] = []
         self.calls: list[dict] = []
@@ -129,6 +131,11 @@ class CodexHost(CodexManagedExecution):
         print(json.dumps({'parent_session': session, 'service_pid': pid,
                           'source': 'thread/resume' if self.expected_session else 'thread/start'},
                          ensure_ascii=False), file=sys.stderr, flush=True)
+        if self.expected_session:
+            # As an operation, the turn's owner keeps the connection open for it.
+            flush = asyncio.ensure_future(self._flush_held())
+            self.operations.add(flush)
+            flush.add_done_callback(self.operations.discard)
 
     def _authenticate_mcp(self, pid: int) -> None:
         """Retain only authentication that the actual service owner accepted."""
@@ -154,34 +161,53 @@ class CodexHost(CodexManagedExecution):
             body = request.get('instruction') or request.get('message')
             if body:
                 self._display(self.native_session, result.document['agent'], body)
+        if not result.failed:
+            self.control.settle_shown(request, result.document)
         self.calls.append({'action': request['action'], 'failed': result.failed,
                            'parent_session': self.native_session, 'result': result.document})
         return result
 
     def _receive_child(self, notice: dict) -> bool | str:
         """Forward one genuine end or native request notice to this still-owned external parent."""
-        if notice['parent'] is not None or self.native_session is None or self.loop is None:
+        if notice['parent'] is not None:
             return False
-        if self.loop.is_closed() or self.outcome is not None:
-            return False
+        # The parent's turn is over or not begun: its next --resume delivers it.
+        if self.native_session is None or self.loop is None or self.loop.is_closed() or self.outcome is not None:
+            return 'held'
+        return asyncio.run_coroutine_threadsafe(self._forward(notice), self.loop).result()
+
+    async def _forward(self, notice: dict) -> bool | str:
+        """Send one notice as a host event; ``'held'`` when it was not written."""
         # The backend calls this only after retaining the child's native outcome.
         # No model-provided string or Session ID selects the recipient.
-        event = {'source': 'agents', 'alias': notice['agent'], 'event': notice['outcome'],
-                 'message': notice['body'] or (notice.get('error') or {}).get('message') or notice['outcome']}
-        # Once submitted, a lost acknowledgement is unconfirmed, not unavailable.
+        message = notice['body'] or (notice.get('error') or {}).get('message') or notice['outcome']
+        event = {'source': 'agents', 'alias': notice['agent'], 'event': notice['outcome'], 'message': message}
+        # Once submitted, a lost acknowledgement is unconfirmed, not held.
         # Let the existing backend retain that distinction and suppress duplicates.
         try:
-            asyncio.run_coroutine_threadsafe(
-                self.adapter.send_host_event(self.native_session, event), self.loop,
-            ).result()
+            await self.adapter.send_host_event(self.native_session, event)
         except Exception as error:
             # Only a written request can have shown the body; any earlier
             # failure leaves it readable through wait/status.
-            return 'unconfirmed' if getattr(error, 'request_written', False) else False
-        self._display(notice['agent'], self.native_session, notice['body'])
-        self.deliveries.append({'agent': notice['agent'], 'parent_session': self.native_session,
-                                'body': notice['body'], 'accepted': True})
+            return 'unconfirmed' if getattr(error, 'request_written', False) else 'held'
+        self._display(notice['agent'], self.native_session, message)
+        self.deliveries.append({'id': notice_id(notice.get('execution'), notice['outcome'], notice.get('request')),
+                                'agent': notice['agent'], 'event': notice['outcome'],
+                                'parent_session': self.native_session, 'body': notice['body'], 'accepted': True})
         return True
+
+    async def _flush_held(self) -> None:
+        """Send what was held while this Session was stopped, each once, into the resumed turn."""
+        caller = Caller('codex', None, self.native_session, 'codex')
+        for notice in await asyncio.to_thread(self.control.held_notices, caller):
+            # A turn that ended first leaves the rest held for the next --resume.
+            if self.result.done() or self.termination_requested:
+                return
+            if await asyncio.to_thread(self.control.notice_open, notice):
+                delivery = await self._forward(notice)
+                if delivery != 'held':
+                    await asyncio.to_thread(self.control.settle_notice, notice,
+                                            'delivered' if delivery is True else delivery)
 
     def run(self) -> dict:
         """Keep one actual parent owner, even across repeated host invocations."""
@@ -195,9 +221,13 @@ class CodexHost(CodexManagedExecution):
             try:
                 result = super().run()
             finally:
-                # A closing host stops only work its own controller started.
-                # Native Session records remain available to the next invocation.
-                self.control.interrupt_owned()
+                # A closing host stops only work its own controller started, and
+                # stays until those ends are recorded for the next invocation.
+                # Native Session records remain available to it.
+                deadline = time.monotonic() + 10
+                for agent in self.control.interrupt_owned():
+                    while self.control.owns_running(agent) and time.monotonic() < deadline:
+                        time.sleep(0.05)
             return {**result, 'parent_session': self.native_session,
                     'operations': self.calls, 'deliveries': self.deliveries,
                     'authenticated_callers': self.authentications}

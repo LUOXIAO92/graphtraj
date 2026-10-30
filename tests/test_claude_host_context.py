@@ -146,7 +146,7 @@ fail = false;
 await timers.shift()();
 assert.equal(submitted.length, 1);
 assert.ok(submitted[0].includes('leader@l1') && submitted[0].includes('done'));
-assert.deepEqual(operations.at(-1), {operation: 'notices', session: 'main-session'});
+assert.deepEqual(operations.at(-1), {operation: 'acknowledge', session: 'main-session', position: 0, ids: ['e1:completed']});
 assert.equal(timers.length, 1);
 '''
     result = subprocess.run(['node', '--input-type=module', '-e', program, module.as_uri()],

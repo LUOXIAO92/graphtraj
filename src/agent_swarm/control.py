@@ -68,7 +68,7 @@ from agent_swarm.approval import DECISION_METHOD, check_reply
 from agent_swarm.calls import pause
 from agent_swarm.config import CONFIG_FILE, read_config, read_connections
 from agent_swarm.locks import exclusive
-from agent_swarm.notices import needs_parent
+from agent_swarm.notices import needs_parent, notice_id
 from agent_swarm.review import check_reviewer
 from agent_swarm.tool import AgentsError, AgentsResult, Binding, Caller, Outcome, SessionArchive, bind, unavailable
 
@@ -300,7 +300,7 @@ class ExecutionEvents:
                 return
             current["requests"].append(dict(details))
             notice = self._control._request_notice(record, current, details)
-        _send_request_notice(notice)
+        self._control._send_request_notice(notice)
 
     def receive_children(self, receiver: Callable[[dict], bool]) -> None:
         """Bind a host reply receiver to this actual active parent execution."""
@@ -318,13 +318,19 @@ class ExecutionEvents:
         from a model argument. Launch happens outside both Agent locks.
         """
         control = self._control
+        if control._closing:
+            return False
+        # Under hold_notices a held end can continue its parent too, but only
+        # with a real reply: an end without a body waits for the parent's next run.
+        states = ('pending', 'held') if control.hold_notices else ('pending',)
         with control._locked(notice['agent']) as child:
             ended = next((item for item in child['executions']
                           if item['id'] == notice['execution']), None)
             if (child['parent'] != self._agent or ended is None
-                    or ended['state'] != 'ended' or ended.get('notification') != 'pending'
+                    or ended['state'] != 'ended' or ended.get('notification') not in states
                     or ended['session'] != notice['session']
-                    or ended['last_message'] != notice['body']):
+                    or ended['last_message'] != notice['body']
+                    or (control.hold_notices and not ended['last_message'])):
                 return False
         with control._locked(self._agent) as parent:
             if (_running(parent) is not None or parent['retired_at'] is not None
@@ -348,12 +354,14 @@ class ExecutionEvents:
         ``outcome`` is ``completed``, ``interrupted`` or ``failed``; ``error``
         keeps the native ``code`` and ``message`` unchanged.
         """
-        with self._control._locked(self._agent) as record:
+        control = self._control
+        with control._locked(self._agent) as record:
             current = _running(record)
             if current is None or current['id'] != self._execution:
                 return
-            native = self._control._receivers.get(record['parent'])
-            receiver = native[1] if native is not None else self._control.event_receiver
+            parent = record['parent']
+            native = control._receivers.get(parent)
+            receiver = native[1] if native is not None else control.event_receiver
             notice = {'parent': record['parent'], 'agent': record['agent'],
                       'session': current['session'], 'execution': current['id'],
                       'body': last_message, 'outcome': outcome}
@@ -366,13 +374,24 @@ class ExecutionEvents:
                 last_message=last_message, terminal_confirmed=terminal_confirmed,
                 error=dict(error) if error else None,
             )
-            # A native parent continues with the child's reply, so it needs a
-            # body; a host receiver also announces ends without one.
-            notify = (receiver is not None and (bool(last_message) or native is None)
-                      and needs_parent(outcome, active_members=self._control._active_children(self._agent)))
+            if control.hold_notices:
+                # Held in one write with the end, so the process can exit at any
+                # moment after it. A parent Agent reads a body-less end as its error.
+                notify = needs_parent(outcome, active_members=control._active_children(self._agent))
+                if notify and parent is not None:
+                    notice['body'] = last_message or (error or {}).get('message') or outcome
+                if notify and (control._closing or receiver is None or (parent is not None and native is None)):
+                    current['notification'], notify = 'held', False
+            else:
+                # A native parent continues with the child's reply, so it needs a
+                # body; a host receiver also announces ends without one.
+                notify = (receiver is not None and (bool(last_message) or native is None)
+                          and needs_parent(outcome, active_members=control._active_children(self._agent)))
             if notify:
                 # Only a native parent's pending reply hides the body meanwhile.
                 current['notification'] = 'pending' if native is not None else 'queueing'
+                identity = notice_id(self._execution, outcome)
+                control._delivering.add(identity)
             # Keep the native receiver while this Agent is in standby so its
             # children can continue the retained Session after this turn ends.
 
@@ -385,20 +404,33 @@ class ExecutionEvents:
                 # acknowledges the queued notice instead of hiding the result.
                 # A receiver that submitted the body natively but lost the
                 # acknowledgement returns 'unconfirmed', so it is not shown again.
+                # A receiver that could not reach a stopped parent returns 'held'.
                 accepted = receiver(notice)
-                delivery = ('queued' if accepted == 'queued'
+                delivery = ('held' if accepted == 'held'
+                            else 'queued' if accepted == 'queued'
                             else 'unconfirmed' if accepted == 'unconfirmed'
-                            else 'delivered' if accepted is True else 'unavailable')
+                            else 'delivered' if accepted is True
+                            else 'held' if control.hold_notices else 'unavailable')
             except Exception:
                 # A native parent may have received the body before its transport
                 # failed: do not re-inject it through wait/status. A host queue
                 # that failed keeps the body readable there instead.
-                delivery = 'unconfirmed' if native is not None else 'unavailable'
-            with self._control._locked(self._agent) as record:
+                delivery = ('unconfirmed' if native is not None
+                            else 'held' if control.hold_notices else 'unavailable')
+            with control._locked(self._agent) as record:
                 for ended in record['executions']:
                     if ended['id'] == self._execution:
-                        ended['notification'] = delivery
+                        # A wait, or the host's acknowledgement, may have settled it meanwhile.
+                        if ended.get('notification') in ('pending', 'queueing'):
+                            ended['notification'] = delivery
                         break
+            control._delivering.discard(identity)
+            # The parent may have started or ended while this one waited.
+            if delivery == 'held' and parent is not None:
+                control._flush_children(parent)
+        # A child's end may be held for this very stop: this parent is next in line.
+        if outcome == 'completed':
+            control._flush_children(self._agent)
 
     def _apply(self, change: Callable[[dict, dict], None]) -> None:
         """Apply ``change`` only while this execution is still the running one."""
@@ -423,19 +455,9 @@ def _request_message(details: Mapping[str, Any]) -> str:
             "and answer once with reply.")
 
 
-def _send_request_notice(notice: tuple[Callable[[dict], bool], dict] | None) -> None:
-    """Deliver a built ``request`` notice with no Agent lock held.
-
-    As for ends, no Agent lock spans the receiver's native I/O. A failed
-    delivery leaves the request readable through status and requests.
-    """
-    if notice is None:
-        return
-    receiver, document = notice
-    try:
-        receiver(document)
-    except Exception:
-        pass
+def _delivery(accepted: object) -> str:
+    """Name what a parent's receiver did with a notice under ``hold_notices``."""
+    return "delivered" if accepted is True else "unconfirmed" if accepted == "unconfirmed" else "held"
 
 
 def _unanswered(current: Mapping[str, Any]) -> int:
@@ -483,6 +505,10 @@ class AgentControl:
         Whether a child's permission request (native or ``ask_parent``) also
         notifies its parent once (event ``request``). Off by default, so existing hosts and
         GraphTraj see only ends.
+    hold_notices
+        Whether a notice its parent cannot receive now is kept durably
+        (``held``) and delivered when that parent next runs, including across
+        host processes. Off by default: records and behaviour stay as they were.
     """
 
     def __init__(
@@ -490,6 +516,7 @@ class AgentControl:
         event_receiver: Callable[[dict], bool] | None = None,
         roots: Any = None,
         request_notices: bool = False,
+        hold_notices: bool = False,
     ) -> None:
         """Bind the data root and the available Runtime drivers."""
         self.root    = Path(root)
@@ -498,7 +525,15 @@ class AgentControl:
         self.event_receiver = event_receiver
         self.roots   = roots
         self.request_notices = request_notices
+        self.hold_notices = hold_notices
         self._receivers: dict[str, tuple[str, Callable[[dict], bool]]] = {}
+        # Notices a receiver in this process is handling now, by notice_id.
+        self._delivering: set[str] = set()
+        # True once this host is shutting down: nothing more is delivered.
+        self._closing = False
+        # Parents with a flush running; True asks that flush to look again.
+        self._flushing: dict[str, bool] = {}
+        self._flushing_lock = threading.Lock()
 
     # -- Backend --------------------------------------------------------
 
@@ -899,9 +934,17 @@ class AgentControl:
 
     def _request_notice(self, record: dict, current: dict,
                         details: Mapping[str, Any]) -> tuple[Callable[[dict], bool], dict] | None:
-        """Build the parent's one ``request`` notice, if this host wants them."""
+        """Build the parent's one ``request`` notice, if this host wants them.
+
+        Under ``hold_notices`` the notice is durably ``held`` before any
+        receiver sees it, and stays so when none can take it now.
+        """
         native = self._receivers.get(record["parent"])
         receiver = native[1] if native is not None else self.event_receiver
+        if self.hold_notices and self.request_notices:
+            current.setdefault("request_notices", {})[_reply_key(details)] = "held"
+            if self._closing or (record["parent"] is not None and native is None):
+                return None
         if not self.request_notices or receiver is None:
             return None
         notice = {"parent": record["parent"], "agent": record["agent"],
@@ -909,7 +952,31 @@ class AgentControl:
                   "body": _request_message(details), "outcome": "request", "request": _reply_key(details)}
         if native is None:
             notice.update(creator=dict(record["creator"]), error=None)
+        if self.hold_notices:
+            self._delivering.add(notice_id(current["id"], "request", notice["request"]))
         return receiver, notice
+
+    def _send_request_notice(self, notice: tuple[Callable[[dict], bool], dict] | None) -> None:
+        """Deliver a built ``request`` notice with no Agent lock held.
+
+        As for ends, no Agent lock spans the receiver's native I/O. A failed
+        delivery leaves the request readable through status and requests;
+        under ``hold_notices`` it also stays held for the parent's next run.
+        """
+        if notice is None:
+            return
+        receiver, document = notice
+        try:
+            accepted = receiver(document)
+        except Exception:
+            accepted = "unconfirmed" if document["parent"] is not None else "held"
+        if not self.hold_notices:
+            return
+        delivery = _delivery(accepted)
+        self.settle_notice(document, delivery)
+        self._delivering.discard(notice_id(document["execution"], "request", document["request"]))
+        if delivery == "held" and document["parent"] is not None:
+            self._flush_children(document["parent"])
 
     def ask_parent(self, caller: Caller, kind: str, question: str, timeout_seconds: float) -> Outcome:
         """Ask the calling Agent's direct parent for a decision or resources.
@@ -939,7 +1006,7 @@ class AgentControl:
                            "request_token": uuid.uuid4().hex, "method": DECISION_METHOD, "params": params}
                 current["requests"].append(request)
                 notice = self._request_notice(record, current, request)
-        _send_request_notice(notice)
+        self._send_request_notice(notice)
         deadline = time.monotonic() + timeout_seconds
         while True:
             with self._locked(caller.agent) as record:
@@ -1033,8 +1100,10 @@ class AgentControl:
 
         A host that is exiting stops the native work it runs itself, whoever
         created the Agent. Executions owned by other processes are untouched.
-        Returns the Agents whose execution this process owns.
+        Returns the Agents whose execution this process owns. Under
+        ``hold_notices`` the ends this causes are held (:meth:`close_notices`).
         """
+        self.close_notices()
         owned = []
         for path in sorted((self.root / "control" / "agents").glob("*.json")):
             with self._locked(path.stem) as record:
@@ -1052,6 +1121,186 @@ class AgentControl:
         with self._locked(agent) as record:
             current = _running(record)
             return current is not None and current["process"].get("worker_pid") == os.getpid()
+
+    # -- Held notices -----------------------------------------------------
+
+    def close_notices(self) -> None:
+        """Stop delivering, for a host about to stop its children and exit.
+
+        Under ``hold_notices`` every later end or request is held in the same
+        record write, with no receiver called and no parent continued. A host
+        that stops children by other means than :meth:`interrupt_owned` calls
+        this first.
+        """
+        self._closing = self.hold_notices
+
+    def held_notices(self, caller: Caller) -> list[dict]:
+        """Return every undelivered notice addressed to ``caller``, oldest first.
+
+        A root caller gets those of the root Agents it created (the same scope
+        as ``status``), an Agent caller those of its direct children, in the
+        document shape receivers get. Ends that are ``held``, or left
+        ``queueing``/``pending`` by a process that died, are included, as are
+        ``held`` requests while their execution runs unanswered: a request whose
+        execution ended is withdrawn, and the end notice covers it. Retired
+        Agents and records written before ``hold_notices`` (``queued``,
+        ``unavailable``) are not, so upgrading never replays old records.
+        """
+        return self._addressed(caller.agent, lambda record: self._can_view(record, caller))
+
+    def notice_open(self, notice: Mapping[str, Any]) -> bool:
+        """Whether one notice is still waiting to reach its parent."""
+        with self._locked(notice["agent"]) as record:
+            execution = next((item for item in record["executions"] if item["id"] == notice["execution"]), None)
+            if execution is None or record["retired_at"] is not None:
+                return False
+            if notice["outcome"] == "request":
+                return (execution["state"] == "running" and notice["request"] not in execution["replies"]
+                        and (execution.get("request_notices") or {}).get(notice["request"]) == "held")
+            return execution.get("notification") in ("held", "queueing", "pending")
+
+    def settle_notice(self, notice: Mapping[str, Any], delivery: str, *, reopen: bool = False) -> bool:
+        """Mark one notice ``delivered``, ``unconfirmed`` or ``held``.
+
+        ``delivered`` and ``unconfirmed`` are final: settling again returns
+        ``False`` and changes nothing, unless ``reopen`` (only for a tool result
+        that carried it and was discarded). Returns whether the state changed.
+        """
+        if delivery not in ("delivered", "unconfirmed", "held"):
+            raise ValueError(f"Unknown notice delivery {delivery!r}.")
+        with self._locked(notice["agent"]) as record:
+            execution = next((item for item in record["executions"] if item["id"] == notice["execution"]), None)
+            if execution is None:
+                return False
+            if notice["outcome"] == "request":
+                states, key = execution.setdefault("request_notices", {}), notice["request"]
+            else:
+                states, key = execution, "notification"
+            if not reopen and states.get(key) in ("delivered", "unconfirmed"):
+                return False
+            states[key] = delivery
+            return True
+
+    def settle_shown(self, request: Mapping[str, Any], document: Mapping[str, Any], *,
+                     reader: str | None = None) -> list[dict]:
+        """Settle ``delivered`` the held ends one ``wait`` or ``status`` result showed.
+
+        A body the parent has read is not pushed again. ``request`` and
+        ``document`` are one successful call, in either request form; the
+        hierarchy form of ``status`` and its nested ``children`` count. Only an
+        end addressed to ``reader`` (the root caller by default) is settled: an
+        ancestor reading a grandchild does not consume its parent's notice,
+        which ``delivered`` would hide from that parent. Runs only where a host
+        calls it, so a host's own internal ``wait`` settles nothing. Returns
+        what it settled, for :meth:`settle_notice` ``reopen``.
+        """
+        feature = request.get("feature") if request.get("action") == "execute" else request.get("action")
+        result = document.get("result")
+        if feature not in ("wait", "status") or not isinstance(result, Mapping):
+            return []
+        pending = list(result["agents"]) if isinstance(result.get("agents"), list) else [result]
+        settled = []
+        while pending:
+            node = pending.pop()
+            pending.extend(node.get("children") or [])
+            last = node.get("last_result")
+            if node.get("parent") != reader or not isinstance(last, Mapping):
+                continue
+            # A body being pushed may be hidden from this result: then it was not shown.
+            shown = last.get("notification") == "held" or (
+                last.get("notification") == "queueing" and last.get("last_message") is not None)
+            if not shown:
+                continue
+            with self._locked(node["agent"]) as record:
+                execution = next(item for item in record["executions"] if item["id"] == last["id"])
+                if execution.get("notification") in ("held", "queueing"):
+                    execution["notification"] = "delivered"
+                    settled.append(self._notice_document(record, execution))
+        return settled
+
+    def _notice_document(self, record: Mapping[str, Any], execution: Mapping[str, Any],
+                         details: Mapping[str, Any] | None = None) -> dict:
+        """Build one held notice in the shape its parent's receiver takes."""
+        error = execution.get("error")
+        notice = {"parent": record["parent"], "agent": record["agent"], "session": execution.get("session"),
+                  "execution": execution["id"], "body": execution.get("last_message"),
+                  "outcome": execution.get("outcome")}
+        if details is not None:
+            notice.update(body=_request_message(details), outcome="request", request=_reply_key(details))
+        if record["parent"] is None:
+            notice.update(creator=dict(record["creator"]), error=dict(error) if error and not details else None)
+        elif details is None and not notice["body"]:
+            notice["body"] = (error or {}).get("message") or notice["outcome"]
+        return notice
+
+    def _in_flight(self, execution: Mapping[str, Any]) -> bool:
+        """Whether a live process is still delivering this ``queueing`` or ``pending`` end."""
+        owner = execution.get("process", {}).get("worker_pid")
+        if owner == os.getpid():
+            return notice_id(execution["id"], execution.get("outcome")) in self._delivering
+        return _alive(owner)
+
+    def _addressed(self, parent: str | None, visible: Callable[[Mapping[str, Any]], bool]) -> list[dict]:
+        """Return the undelivered notices of ``parent``'s direct children, oldest first."""
+        found = []
+        for path in (self.root / "control" / "agents").glob("*.json"):
+            try:
+                summary = json.loads(path.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                continue
+            if summary.get("parent") != parent:
+                continue
+            with self._locked(path.stem) as record:
+                if record["retired_at"] is not None or not visible(record):
+                    continue
+                for execution in record["executions"]:
+                    state = execution.get("notification")
+                    if state == "held" or (state in ("queueing", "pending") and not self._in_flight(execution)):
+                        found.append((execution.get("ended_at") or 0, self._notice_document(record, execution)))
+                current = _running(record)
+                for details in current["requests"] if current is not None else ():
+                    key = _reply_key(details)
+                    if ((current.get("request_notices") or {}).get(key) == "held" and key not in current["replies"]
+                            and notice_id(current["id"], "request", key) not in self._delivering):
+                        found.append((current.get("started_at") or 0, self._notice_document(record, current, details)))
+        return [notice for _, notice in sorted(found, key=lambda item: item[0])]
+
+    def _flush_children(self, parent: str) -> None:
+        """Hand a parent Agent's held notices to its bound receiver, each once.
+
+        Called whenever the parent starts or ends, and after a notice is held,
+        so one of them always sees it. A notice the receiver cannot take stays
+        held. One flush runs per parent; another caller only asks it to look
+        again, because a receiver may start the parent's next turn on this very
+        thread, and no lock can span that. A failure leaves the notices held.
+        """
+        if not self.hold_notices or self._closing:
+            return
+        with self._flushing_lock:
+            if parent in self._flushing:
+                self._flushing[parent] = True
+                return
+            self._flushing[parent] = False
+        try:
+            again = True
+            while again:
+                for notice in self._addressed(parent, lambda record: True):
+                    bound = self._receivers.get(parent)
+                    if bound is None or self._closing or not self.notice_open(notice):
+                        continue
+                    try:
+                        delivery = _delivery(bound[1](notice))
+                    except Exception:
+                        delivery = "unconfirmed"
+                    if delivery != "held":
+                        self.settle_notice(notice, delivery)
+                with self._flushing_lock:
+                    again, self._flushing[parent] = self._flushing[parent], False
+        except Exception:
+            pass
+        finally:
+            with self._flushing_lock:
+                del self._flushing[parent]
 
     def reference_hint(self, name: str, caller: Caller) -> str:
         """Explain that ``agent`` is a reference, listing visible Agents with that name.
@@ -1223,6 +1472,9 @@ class AgentControl:
             error={"code": "owner-exited",
                    "message": "The process owning this execution exited before reporting its end."},
         )
+        if self.hold_notices:
+            # Its owner died before notifying anyone, so nobody else will.
+            current["notification"] = "held"
 
     # -- Authority --------------------------------------------------------
 
@@ -1334,7 +1586,10 @@ class AgentControl:
                     caller = Caller('runtime-mcp', agent, session=owner['session'], runtime=owner['runtime'])
                 # Do not hold the caller's record lock over a finite wait or
                 # child launch; native completion must be able to report.
-                return bind(self, caller, archive=archive)(request)
+                result = bind(self, caller, archive=archive)(request)
+                if self.hold_notices and not result.failed:
+                    self.settle_shown(request, result.document, reader=agent)
+                return result
             except AgentsError as error:
                 return AgentsResult({'error': {'code': error.code, 'message': error.message}}, failed=True)
 
@@ -1409,6 +1664,8 @@ class AgentControl:
             run.events.finished("failed", error=failure)
         else:
             run.events._apply(lambda record, current: current.update(started=True))
+            # The turn takes input now; registering its receiver was too early.
+            self._flush_children(run.agent)
         with self._locked(run.agent) as record:
             return self._outcome(record, failed=failure is not None)
 

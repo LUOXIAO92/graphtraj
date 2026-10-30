@@ -292,9 +292,8 @@ def test_grandchild_under_a_codex_child_keeps_its_parentage(
 ) -> None:
     """A Codex child's own create (agent_call) records the child as parent, on either Runtime.
 
-    A Codex child registers no native receiver for its children, so a
-    grandchild's end is not pushed to it or to the host's root parent; it
-    stays readable through status. The Claude grandchild matches the Codex one.
+    The grandchild's end goes to that child, not to the host's root parent; the
+    Claude grandchild matches the Codex one (test_codex_child_parent_notices.py).
     """
     log = tmp_path / 'host-events.jsonl'
     monkeypatch.setenv('PEER_HOST_EVENTS', str(log))
@@ -305,21 +304,17 @@ def test_grandchild_under_a_codex_child_keeps_its_parentage(
     running = Running(CodexHost(host_settings, tmp_path / 'host', 'hold'))
     try:
         child = running.call('create', runtime='codex', instruction='mcp-requests')['agent']
-        settled(running, child)
-        [reply] = json.loads(running.call('wait', agent=child, timeout_seconds=5)['result']['last_result']
-                             ['last_message'] or events(log)[0]['message'])
-        created = reply['result']['structuredContent']
+        [created] = until(lambda: running.call('status')['result']['agents'][0]['children'])
         grandchild = created['agent']
-        assert created['result']['parent'] == child and created['result']['runtime'] == runtime
+        assert created['parent'] == child and created['runtime'] == runtime
         session = running.call('status', agent=child)['result']['session']
         call = bind(running.host.control, Caller('codex', child, session, 'codex'))
 
         def ended() -> dict | None:
             result = call({'action': 'status', 'agent': grandchild}).document['result']
-            return result if result['state'] == 'standby' else None
+            return result if result.get('last_result', {}).get('notification') == 'delivered' else None
         result = until(ended)
         assert result['parent'] == child and result['last_result']['outcome'] == 'completed'
-        assert result['last_result']['notification'] == 'unavailable'
-        assert [event['alias'] for event in events(log)] == [child]
+        assert {event['alias'] for event in events(log)} <= {child}
     finally:
         running.stop()

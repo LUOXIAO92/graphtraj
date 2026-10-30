@@ -79,7 +79,10 @@ def test_native_main_notice_is_scoped_and_acknowledged(tmp_path: Path, claude_en
     wait = host.make_call(session, tmp_path)('agents', {'action': 'execute', 'feature': 'wait',
         'arguments': {'agent': created.document['agent'], 'timeout_seconds': 20}})
     assert not wait.failed
-    assert wait.document['result']['last_result']['last_message'] == 'hello'
+    # Once: by this wait, or by the create result when the child ended before it returned.
+    carried = [notice['event']['message'] for notice in created.document.get('main_notices', [])]
+    message = wait.document['result']['last_result']['last_message']
+    assert carried + ([message] if message is not None else []) == ['hello']
     pending = host.context({'operation': 'notices', 'session': session})
     assert wait.document.get('main_notices', []) + pending['notices'] == []
     assert host.context({'operation': 'notices', 'session': str(uuid4())})['notices'] == []
@@ -116,11 +119,12 @@ def test_native_print_result_delivers_queued_notice_once(tmp_path: Path, claude_
         replies.append(call('agents', {'action': 'execute', 'feature': 'status',
                                       'arguments': {'agent': agent}}).document)
         time.sleep(0.01)
-    # The wait returned the end, so the queued notice is not delivered again (367 result 2).
-    notices = [notice for reply in replies for notice in reply.get('main_notices', [])]
+    # The body reached the Main once, by the wait or by the create result, never both (367 result 2).
+    notices = [notice['event']['message'] for reply in [created.document, *replies]
+               for notice in reply.get('main_notices', [])]
     shown = [reply['result']['last_result']['last_message'] for reply in replies
              if reply.get('result', {}).get('last_result')]
-    assert notices == [] and shown[0] == 'remembered352'
+    assert notices + [message for message in shown if message is not None] == ['remembered352']
     assert 'main_notices' not in call('agents', {'action': 'discover'}).document
     assert host.context({'operation': 'notices', 'session': session})['notices'] == []
 

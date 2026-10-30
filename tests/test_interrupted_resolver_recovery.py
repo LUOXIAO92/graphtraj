@@ -2,11 +2,11 @@
 from __future__ import annotations
 
 import json
-import subprocess
 import sys
 import time
 from dataclasses import dataclass
 from pathlib import Path
+from uuid import uuid4
 
 import pytest
 import yaml
@@ -113,10 +113,8 @@ def _wait_ended(fixture: Interrupted, alias: str) -> None:
     raise AssertionError(_status(fixture, alias))
 
 
-def _dispatch_held_resolver(
-    commands: InstalledCommands, accepted: tuple, fake_codex, tmp_path: Path,
-) -> tuple[Path, Path, Path, str, dict, str]:
-    """Create a retained textual conflict and a resolver held after its first event."""
+def _retain_conflict(commands: InstalledCommands, accepted: tuple) -> tuple[Path, Path, Path, str, dict, list[str]]:
+    """Retain a textual conflict through a failed first integration."""
     root, worktrees, state, candidate, environment = accepted
     dev = worktrees / 'dev'
     (dev / 'article.md').write_text('conflicting integration work\n')
@@ -125,32 +123,53 @@ def _dispatch_held_resolver(
     command = [str(commands.product), 'task', 'integrate', '--task-id', '83']
     failed = run_process(command + ['--', *VALIDATOR], cwd=root)
     assert failed.returncode == 1, failed.stdout
-    environment.update(FAKE_CODEX_LIFECYCLE_ACTION='resolve-integration', FAKE_CODEX_RESOLUTION='resolved',
-                       FAKE_CODEX_RELEASE_FILE=str(tmp_path / 'never-released'))
-    # The held resolver inherits this call's descriptors, so a pipe would never reach end of file.
-    written = tmp_path / 'dispatch.yml'
-    with written.open('w') as stream:
-        dispatched = subprocess.run(command + ['--resolve-conflict', DIAGNOSIS, '--role', 'editor', '--', *VALIDATOR],
-                                    cwd=root, env=environment, stdout=stream, stderr=subprocess.DEVNULL, timeout=60)
-    assert dispatched.returncode == 0, written.read_text()
-    output = yaml.safe_load(written.read_text())
-    assert output['status'] == 'resolving-integration'
+    return root, dev, state, candidate, environment, command
+
+
+def _dispatch_from_host(
+    commands: InstalledCommands, accepted: tuple, monkeypatch: pytest.MonkeyPatch, **resolver: str,
+) -> tuple[Path, Path, Path, str, dict, str]:
+    """Dispatch as Main on its host does: the call returns once the resolver is launched (402)."""
+    from graphtraj.execution.runner_connection import parent_connection
+    from graphtraj.execution.runner_status import runtime_caller
+    from graphtraj.teams.task_integration import integrate_task
+
+    root, dev, state, candidate, environment, _ = _retain_conflict(commands, accepted)
+    environment.update(FAKE_CODEX_LIFECYCLE_ACTION='resolve-integration', **resolver)
+    runner = root / '.graphtraj/runner'
+    connection = {'runtime': 'claude', 'session': str(uuid4()), 'runner': str(runner)}
+    with monkeypatch.context() as host:
+        for name, value in environment.items():
+            host.setenv(name, value)
+        host.chdir(root)
+        with parent_connection(connection), runtime_caller(runner, None):
+            output = integrate_task(load_project_configuration(root), '83', tuple(VALIDATOR), DIAGNOSIS, 'editor')
+    assert output['status'] == 'resolving-integration', output
+    for name in resolver:
+        environment.pop(name)
+    environment['FAKE_CODEX_RESOLUTION'] = 'resolved'
     return root, dev, state, candidate, environment, output['resolution']['alias']
+
+
+def _stage_resolution(dev: Path) -> None:
+    """Leave the first resolver's uncommitted work in dev, as 384's did."""
+    (dev / 'article.md').write_text(RESOLVED)
+    (dev / 'staged-by-first-resolver.txt').write_text('kept\n')
+    run_process(['git', 'add', 'article.md', 'staged-by-first-resolver.txt'], cwd=dev).check_returncode()
 
 
 @pytest.fixture
 def interrupted(
     installed_commands: InstalledCommands, accepted_document: tuple, fake_codex, tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> Interrupted:
     """Reproduce 384: interrupted resolver, staged resolution, MERGE_HEAD, then escalation."""
-    root, dev, state, candidate, environment, alias = _dispatch_held_resolver(
-        installed_commands, accepted_document, fake_codex, tmp_path)
+    root, dev, state, candidate, environment, alias = _dispatch_from_host(
+        installed_commands, accepted_document, monkeypatch,
+        FAKE_CODEX_RELEASE_FILE=str(tmp_path / 'never-released'))
     stopped = run_process(runner_operation(installed_commands, 'interrupt', alias), cwd=root, env=environment)
     assert stopped.returncode == 0, stopped.stdout + stopped.stderr
-    environment.pop('FAKE_CODEX_RELEASE_FILE')
-    (dev / 'article.md').write_text(RESOLVED)
-    (dev / 'staged-by-first-resolver.txt').write_text('kept\n')
-    run_process(['git', 'add', 'article.md', 'staged-by-first-resolver.txt'], cwd=dev).check_returncode()
+    _stage_resolution(dev)
     fixture = Interrupted(installed_commands, root, dev, state, candidate, environment, alias,
                           yaml.safe_load((root / '.graphtraj/runner/sessions' / alias / 'mapping.yml').read_text())['session'],
                           '', fake_codex.log_file)
@@ -160,6 +179,64 @@ def interrupted(
     fixture.escalation = escalated['event_id']
     assert run_process(['git', 'rev-parse', 'MERGE_HEAD'], cwd=dev).stdout.strip() == candidate
     return fixture
+
+
+@pytest.mark.parametrize('ending', ['interrupted', 'runtime-error'])
+def test_resolver_ended_while_still_resolving_resumes_without_restore_active(
+    installed_commands: InstalledCommands, accepted_document: tuple, fake_codex, tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch, ending: str,
+) -> None:
+    """385's path: the refusal depends on escalated status, not on the Session existing."""
+    resolver = ({'FAKE_CODEX_RELEASE_FILE': str(tmp_path / 'never-released')} if ending == 'interrupted'
+                else {'FAKE_CODEX_RESOLUTION': 'prose-only', 'FAKE_CODEX_EXIT_CODE': '1'})
+    root, dev, state, candidate, environment, alias = _dispatch_from_host(
+        installed_commands, accepted_document, monkeypatch, **resolver)
+    fixture = Interrupted(installed_commands, root, dev, state, candidate, environment, alias, '', '', fake_codex.log_file)
+    if ending == 'interrupted':
+        stopped = run_process(runner_operation(installed_commands, 'interrupt', alias), cwd=root, env=environment)
+        assert stopped.returncode == 0, stopped.stdout + stopped.stderr
+    _wait_ended(fixture, alias)
+    assert _status(fixture, alias)['last_outcome'] != 'completed'
+    fixture.escalation = fixture.events('task-integration-conflict-dispatched')[-1]['event_id']
+    assert fixture.status == 'resolving-integration'
+    # A new resolver needs the escalation first; this call starts nothing.
+    launches = sorted(path.name for path in fixture.sessions.iterdir())
+    code, output = fixture.redispatch('editor')
+    assert code == 1 and 'retained conflict' in str(output), output
+    assert sorted(path.name for path in fixture.sessions.iterdir()) == launches
+    code, output = fixture.recover()
+    assert code == 0 and output['recovery_status'] == 'resumed', output
+    assert fixture.events('recovery-applied')[-1]['proposal']['request']['restore_active'] is False
+    assert fixture.status == 'resolving-integration'
+    assert fixture.complete(alias)['status'] == 'integrated'
+    assert fixture.events('task-integration-conflict-resolved')
+    assert run_process(['git', 'merge-base', '--is-ancestor', candidate, 'HEAD'], cwd=dev).returncode == 0
+
+
+def test_resumed_resolver_of_a_record_without_a_session_reference_escalates_again(
+    interrupted: Interrupted, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """384's retained escalation names no Session; the reopening recovery supplies it."""
+    from graphtraj.teams import task_integration
+
+    interrupted.environment['FAKE_CODEX_RESOLUTION'] = 'prose-only'
+    code, output = interrupted.recover('--restore-active')
+    assert code == 0 and output['recovery_status'] == 'resumed', output
+    wait_for_idle(interrupted.commands, interrupted.root, interrupted.environment, interrupted.alias)
+    read = task_integration.read_worldline
+
+    def without_session_ref(*arguments) -> list[dict]:
+        """Return the Worldline as 384 retained it, before 402 named the resolver."""
+        return [{key: value for key, value in event.items()
+                 if not (event['event'] == 'task-integration-escalated' and key == 'session_ref')}
+                for event in read(*arguments)]
+
+    monkeypatch.chdir(interrupted.root)
+    monkeypatch.setattr(task_integration, 'read_worldline', without_session_ref)
+    result = task_integration.integrate_task(load_project_configuration(interrupted.root), '83', tuple(VALIDATOR))
+    monkeypatch.undo()
+    assert result['status'] == 'escalated'
+    assert interrupted.events('task-integration-escalated')[-1]['session_ref'] == interrupted.alias
 
 
 def test_resume_without_restore_active_is_refused_before_anything_is_recorded(interrupted: Interrupted) -> None:
@@ -318,8 +395,9 @@ def test_running_resolver_refuses_redispatch_and_resume(
     from graphtraj.execution import runner_status
     from graphtraj.teams.task_integration import integrate_task
 
-    root, dev, state, candidate, environment, alias = _dispatch_held_resolver(
-        installed_commands, accepted_document, fake_codex, tmp_path)
+    root, dev, state, candidate, environment, alias = _dispatch_from_host(
+        installed_commands, accepted_document, monkeypatch,
+        FAKE_CODEX_RELEASE_FILE=str(tmp_path / 'never-released'))
     fixture = Interrupted(installed_commands, root, dev, state, candidate, environment, alias, '', '', fake_codex.log_file)
     # Only a lost status answer leaves a running resolver under an escalated Task.
     monkeypatch.chdir(root)

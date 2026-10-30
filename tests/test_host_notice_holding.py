@@ -1,0 +1,431 @@
+"""A notice its parent cannot receive now is held and arrives once at its next run (403).
+
+Fake drivers report through the public ``ExecutionEvents``; the Claude and Codex
+sections below use the controlled Runtimes. No network, no real model.
+"""
+from __future__ import annotations
+
+import json
+import os
+from pathlib import Path
+import threading
+
+import pytest
+
+from agent_swarm import AgentControl, Caller, bind
+
+
+MAIN = Caller('test-host', None, 'main-session', 'claude')
+
+
+class Turn:
+    """One running execution with a binding like the Claude and DSH ones."""
+
+    def __init__(self, run) -> None:
+        self.run = run
+        self.accepting = True
+        self.inbox: list[dict] = []
+
+    def receive(self, event: dict) -> bool:
+        if self.accepting:
+            self.inbox.append(event)
+            return True
+        return self.run.events.continue_from_child(event, self.run.archive)
+
+
+class Driver:
+    """Keeps every execution running until the test ends it."""
+
+    def __init__(self) -> None:
+        self.turns: list[Turn] = []
+
+    def prepare(self, runtime, caller, **options):
+        return {}
+
+    def start(self, run):
+        run.events.session('native-' + run.agent[-6:])
+        turn = Turn(run)
+        self.turns.append(turn)
+        run.events.receive_children(turn.receive)
+
+    def deliver(self, run, message):
+        pass
+
+    def interrupt(self, run):
+        self.of(run.agent).run.events.finished('interrupted', error={'code': 'stopped', 'message': 'stopped by host'})
+        return True
+
+    def requests(self, run):
+        return []
+
+    def reply(self, run, request, response):
+        return {'request_id': request.get('request_id'), 'reply_status': 'submitted'}
+
+    def of(self, agent: str) -> Turn:
+        """Return the Agent's latest execution."""
+        return [turn for turn in self.turns if turn.run.agent == agent][-1]
+
+    def all_of(self, agent: str) -> list[Turn]:
+        return [turn for turn in self.turns if turn.run.agent == agent]
+
+
+def control_over(root: Path, receiver=None, **options) -> tuple[AgentControl, Driver]:
+    driver = Driver()
+    return AgentControl(root, {'fake': driver}, event_receiver=receiver, request_notices=True,
+                        hold_notices=True, **options), driver
+
+
+def create(call, instruction: str = 'work') -> str:
+    created = call({'action': 'create', 'runtime': 'fake', 'instruction': instruction})
+    assert not created.failed, created.document
+    return created.document['agent']
+
+
+def last(call, agent: str) -> dict:
+    return call({'action': 'status', 'agent': agent}).document['result']['last_result']
+
+
+def record(root: Path, agent: str) -> dict:
+    return json.loads((root / 'control' / 'agents' / f'{agent}.json').read_text())
+
+
+def request_details(token: str = 'tok-1') -> dict:
+    return {'request_token': token, 'request_id': 1, 'method': 'claude/can_use_tool',
+            'params': {'tool_name': 'Bash', 'input': {'command': 'secret'}}}
+
+
+@pytest.mark.parametrize('result', [False, 'held', 'raises'])
+def test_a_root_end_the_host_cannot_take_is_held_and_survives_a_new_process(tmp_path: Path, result) -> None:
+    """Refused, 'held' or raising: held, readable, and listed for the same caller once."""
+    def receiver(notice):
+        if result == 'raises':
+            raise OSError('host gone')
+        return result
+
+    control, driver = control_over(tmp_path, receiver)
+    call = bind(control, MAIN)
+    agent = create(call)
+    driver.of(agent).run.events.finished('completed', last_message='answer')
+    assert last(call, agent)['notification'] == 'held'
+    assert last(call, agent)['last_message'] == 'answer'
+
+    # Nothing in memory is needed: a new control over the same root sees it.
+    again, _ = control_over(tmp_path)
+    [notice] = again.held_notices(MAIN)
+    execution = driver.of(agent).run.execution
+    assert notice == {'parent': None, 'agent': agent, 'session': 'native-' + agent[-6:], 'execution': execution,
+                      'body': 'answer', 'outcome': 'completed', 'error': None,
+                      'creator': {'host': 'test-host', 'agent': None, 'session': 'main-session'}}
+    assert again.held_notices(Caller('test-host', None, 'other-session', 'claude')) == []
+    assert again.settle_notice(notice, 'delivered') is True
+    assert again.held_notices(MAIN) == []
+    assert again.settle_notice(notice, 'delivered') is False
+    assert last(bind(again, MAIN), agent)['last_message'] is None
+
+
+def test_default_control_writes_nothing_new(tmp_path: Path) -> None:
+    """Without hold_notices a refused end is unavailable and no new field or value appears."""
+    driver = Driver()
+    control = AgentControl(tmp_path, {'fake': driver}, event_receiver=lambda notice: False, request_notices=True)
+    call = bind(control, MAIN)
+    agent = create(call)
+    driver.of(agent).run.events.request(request_details())
+    driver.of(agent).run.events.finished('completed', last_message='answer')
+    [execution] = record(tmp_path, agent)['executions']
+    assert execution['notification'] == 'unavailable'
+    assert 'request_notices' not in execution
+    assert control.held_notices(MAIN) == []
+    # Children of an Agent reach the host's receiver as before, and an owner's death stays silent.
+    assert set(execution) == {'id', 'operation', 'state', 'started_at', 'resumed_session', 'session', 'process',
+                              'inputs', 'requests', 'replies', 'started', 'archive', 'ended_at', 'outcome',
+                              'last_message', 'terminal_confirmed', 'error', 'notification'}
+
+
+def test_a_receiver_can_still_deliver_while_holding_is_on(tmp_path: Path) -> None:
+    """Holding changes only what cannot be delivered; a repeated end notifies nobody."""
+    seen: list[dict] = []
+    control, driver = control_over(tmp_path, lambda notice: seen.append(notice) or True)
+    call = bind(control, MAIN)
+    agent = create(call)
+    events = driver.of(agent).run.events
+    events.request(request_details())
+    events.request(request_details())
+    events.finished('completed', last_message='answer')
+    events.finished('completed', last_message='answer')
+    assert [notice['outcome'] for notice in seen] == ['request', 'completed']
+    assert control.held_notices(MAIN) == []
+    assert record(tmp_path, agent)['executions'][0]['request_notices'] == {'tok-1': 'delivered'}
+
+
+def test_queueing_left_by_a_dead_process_is_listed_but_not_one_in_flight(tmp_path: Path) -> None:
+    """A delivery in this process is not replayed; the same state from a dead one is."""
+    entered, release = threading.Event(), threading.Event()
+    def receiver(notice):
+        entered.set()
+        assert release.wait(5)
+        return 'held'
+
+    control, driver = control_over(tmp_path, receiver)
+    call = bind(control, MAIN)
+    agent = create(call)
+    thread = threading.Thread(target=lambda: driver.of(agent).run.events.finished('completed', last_message='a'))
+    thread.start()
+    assert entered.wait(5)
+    assert record(tmp_path, agent)['executions'][0]['notification'] == 'queueing'
+    assert control.held_notices(MAIN) == []
+    release.set()
+    thread.join(5)
+
+    document = record(tmp_path, agent)
+    document['executions'][0]['notification'] = 'queueing'
+    document['executions'][0]['process']['worker_pid'] = 2 ** 22 + 1
+    (tmp_path / 'control' / 'agents' / f'{agent}.json').write_text(json.dumps(document))
+    assert [notice['agent'] for notice in control.held_notices(MAIN)] == [agent]
+
+
+@pytest.mark.parametrize('legacy', ['queued', 'unavailable'])
+def test_legacy_records_are_never_replayed(tmp_path: Path, legacy: str) -> None:
+    """A record from before holding stays readable and is not pushed after an upgrade."""
+    driver = Driver()
+    old = AgentControl(tmp_path, {'fake': driver}, event_receiver=lambda notice: legacy)
+    agent = create(bind(old, MAIN))
+    driver.of(agent).run.events.finished('completed', last_message='answer')
+    control, _ = control_over(tmp_path)
+    assert record(tmp_path, agent)['executions'][0]['notification'] == ('queued' if legacy == 'queued' else 'unavailable')
+    assert control.held_notices(MAIN) == []
+
+
+def test_a_retired_agents_notices_are_excluded(tmp_path: Path) -> None:
+    control, driver = control_over(tmp_path, lambda notice: False)
+    call = bind(control, MAIN)
+    agent = create(call)
+    driver.of(agent).run.events.finished('completed', last_message='answer')
+    [notice] = control.held_notices(MAIN)
+    assert not call({'action': 'retire', 'agent': agent}).failed
+    assert control.held_notices(MAIN) == []
+    assert control.notice_open(notice) is False
+
+
+def test_a_held_request_is_listed_only_while_it_waits(tmp_path: Path) -> None:
+    """Answered or with its execution ended, a held request is withdrawn; the end covers it."""
+    control, driver = control_over(tmp_path, lambda notice: False)
+    call = bind(control, MAIN)
+    agent = create(call)
+    events = driver.of(agent).run.events
+    events.request(request_details('tok-1'))
+    events.request(request_details('tok-2'))
+    held = control.held_notices(MAIN)
+    assert [notice['request'] for notice in held] == ['tok-1', 'tok-2']
+    assert held[0]['outcome'] == 'request' and 'secret' not in str(held[0])
+    assert 'claude/can_use_tool for Bash' in held[0]['body'] and held[0]['error'] is None
+
+    with control._locked(agent) as current:
+        current['executions'][-1]['replies']['tok-1'] = {'at': 0, 'reply_status': 'submitted'}
+    assert [notice['request'] for notice in control.held_notices(MAIN)] == ['tok-2']
+    assert control.notice_open(held[0]) is False and control.notice_open(held[1]) is True
+
+    events.finished('completed', last_message='answer')
+    assert [notice['outcome'] for notice in control.held_notices(MAIN)] == ['completed']
+    assert control.notice_open(held[1]) is False
+
+
+def test_settling_is_final_unless_reopened(tmp_path: Path) -> None:
+    control, driver = control_over(tmp_path, lambda notice: False)
+    call = bind(control, MAIN)
+    agent = create(call)
+    driver.of(agent).run.events.finished('completed', last_message='answer')
+    [notice] = control.held_notices(MAIN)
+    assert control.settle_notice(notice, 'held') is True
+    assert control.settle_notice(notice, 'unconfirmed') is True
+    assert control.settle_notice(notice, 'delivered') is False
+    assert control.held_notices(MAIN) == []
+    assert control.settle_notice(notice, 'held', reopen=True) is True
+    assert control.held_notices(MAIN) == [notice]
+    with pytest.raises(ValueError):
+        control.settle_notice(notice, 'queued')
+
+
+@pytest.mark.parametrize('form', ['direct', 'execute'])
+def test_a_body_shown_by_status_or_wait_is_not_pushed_again(tmp_path: Path, form: str) -> None:
+    """Either request form settles it; other features and failed lookups settle nothing."""
+    def request(feature: str, **arguments) -> dict:
+        return ({'action': feature, **arguments} if form == 'direct'
+                else {'action': 'execute', 'feature': feature, 'arguments': arguments})
+
+    control, driver = control_over(tmp_path, lambda notice: False)
+    call = bind(control, MAIN)
+    agent = create(call)
+    driver.of(agent).run.events.finished('completed', last_message='answer')
+    document = call({'action': 'status', 'agent': agent}).document
+    assert control.settle_shown(request('resume', agent=agent), document) == []
+    assert control.settle_shown(request('wait', agent=agent), {'error': {'code': 'not-found'}}) == []
+    assert len(control.held_notices(MAIN)) == 1
+
+    [settled] = control.settle_shown(request('wait', agent=agent), document)
+    assert (settled['agent'], settled['body']) == (agent, 'answer')
+    assert control.held_notices(MAIN) == []
+    assert control.settle_shown(request('status', agent=agent), call({'action': 'status', 'agent': agent}).document) == []
+    # A discarded result gives it back.
+    assert control.settle_notice(settled, 'held', reopen=True) is True
+    assert [notice['agent'] for notice in control.held_notices(MAIN)] == [agent]
+
+
+def test_the_hierarchy_form_settles_only_what_is_addressed_to_the_reader(tmp_path: Path) -> None:
+    """A Main reading a grandchild does not consume the notice its parent still needs."""
+    control, driver = control_over(tmp_path, lambda notice: False)
+    main = bind(control, MAIN)
+    first, second = create(main), create(main)
+    grandchild = create(driver.of(first).run.call)
+    for agent in (second, grandchild):
+        driver.of(agent).run.events.finished('completed', last_message='answer of ' + agent)
+    # The parent stopped taking input, so its child's end stays held for it.
+    assert last(main, grandchild)['notification'] == 'delivered'
+    with control._locked(grandchild) as current:
+        current['executions'][-1]['notification'] = 'held'
+
+    hierarchy = main({'action': 'status'}).document
+    [settled] = control.settle_shown({'action': 'status'}, hierarchy)
+    assert settled['agent'] == second
+    assert record(tmp_path, grandchild)['executions'][-1]['notification'] == 'held'
+
+    # Its true parent reading the same body does consume it, through its own call.
+    assert not driver.of(first).run.call({'action': 'status', 'agent': grandchild}).failed
+    assert record(tmp_path, grandchild)['executions'][-1]['notification'] == 'delivered'
+
+
+def test_a_standby_parents_request_is_held_without_starting_it(tmp_path: Path) -> None:
+    """Delivered once on its next run, not lost and not a reason to start."""
+    host: list[dict] = []
+    control, driver = control_over(tmp_path, lambda notice: host.append(notice) or False)
+    main = bind(control, MAIN)
+    parent = create(main)
+    grandchild = create(driver.of(parent).run.call)
+    driver.of(parent).accepting = False
+    driver.of(parent).run.events.finished('completed', last_message='standing by')
+    assert len(driver.all_of(parent)) == 1
+
+    driver.of(grandchild).run.events.request(request_details())
+    assert len(driver.all_of(parent)) == 1
+    assert record(tmp_path, grandchild)['executions'][-1]['request_notices'] == {'tok-1': 'held'}
+
+    assert not main({'action': 'resume', 'agent': parent, 'message': 'go on'}).failed
+    [notice] = driver.of(parent).inbox
+    assert (notice['agent'], notice['outcome'], notice['request']) == (grandchild, 'request', 'tok-1')
+    assert record(tmp_path, grandchild)['executions'][-1]['request_notices'] == {'tok-1': 'delivered'}
+
+    # The next run has nothing left to hand over.
+    driver.of(parent).run.events.finished('completed', last_message='done')
+    assert not main({'action': 'send', 'agent': parent, 'message': 'again'}).failed
+    assert driver.of(parent).inbox == []
+    assert [notice for notice in host if notice['parent'] is not None] == []
+
+
+def test_a_parent_with_no_receiver_gets_its_childrens_notices_at_its_next_run(tmp_path: Path) -> None:
+    """After a host restart ends and requests stay in core, away from the host's root receiver."""
+    host: list[dict] = []
+    control, driver = control_over(tmp_path, lambda notice: host.append(notice) or True)
+    main = bind(control, MAIN)
+    parent = create(main)
+    done, asking = create(driver.of(parent).run.call), create(driver.of(parent).run.call)
+    driver.of(parent).run.events.finished('completed', last_message='standing by')
+    host.clear()
+
+    # A new process over the same root: no receiver is bound for the parent.
+    restarted, later = control_over(tmp_path, lambda notice: host.append(notice) or True)
+    restarted.drivers['fake'] = driver
+    for agent in (done, asking):
+        with restarted._locked(agent) as current:
+            current['executions'][-1]['process']['worker_pid'] = os.getpid()
+    ending = type(driver.of(done).run.events)(restarted, done, driver.of(done).run.execution)
+    ending.finished('completed', last_message='child answer')
+    type(driver.of(asking).run.events)(restarted, asking, driver.of(asking).run.execution).request(request_details())
+    assert host == []
+    assert record(tmp_path, done)['executions'][-1]['notification'] == 'held'
+    assert last(bind(restarted, MAIN), done)['last_message'] == 'child answer'
+
+    assert not bind(restarted, MAIN)({'action': 'resume', 'agent': parent, 'message': 'go on'}).failed
+    received = driver.of(parent).inbox
+    assert sorted(notice['outcome'] for notice in received) == ['completed', 'request']
+    assert [notice['body'] for notice in received if notice['agent'] == done] == ['child answer']
+    assert record(tmp_path, done)['executions'][-1]['notification'] == 'delivered'
+    assert host == []
+    assert restarted.held_notices(Caller('test', parent)) == []
+
+
+def test_an_end_reaching_a_stopping_parent_continues_it_once(tmp_path: Path) -> None:
+    """Accepting no input but still running: held, then one continuation when it finishes."""
+    control, driver = control_over(tmp_path, lambda notice: True)
+    main = bind(control, MAIN)
+    parent = create(main)
+    turn = driver.of(parent)
+    grandchild = create(turn.run.call)
+    other = create(turn.run.call)
+
+    turn.accepting = False
+    driver.of(grandchild).run.events.finished('completed', last_message='late answer')
+    assert record(tmp_path, grandchild)['executions'][-1]['notification'] == 'held'
+    assert len(driver.all_of(parent)) == 1
+
+    # The other child still runs, so this completed round is recorded, not pushed.
+    turn.run.events.finished('completed', last_message='my own answer')
+    [_, continued] = driver.all_of(parent)
+    assert continued.run.settings['completion_message']['body'] == 'late answer'
+    assert record(tmp_path, grandchild)['executions'][-1]['notification'] == 'delivered'
+    assert continued.inbox == []
+
+    # Ending again finds nothing held, so nothing continues it a second time.
+    driver.of(other).run.events.finished('completed', last_message='other answer')
+    assert [notice['body'] for notice in continued.inbox] == ['other answer']
+    continued.run.events.finished('completed', last_message='final')
+    assert len(driver.all_of(parent)) == 2
+
+
+@pytest.mark.parametrize('reason', ['retired', 'failed', 'bodyless'])
+def test_no_continuation_when_the_parent_has_reasons_not_to(tmp_path: Path, reason: str) -> None:
+    """A retired or failed parent, or an end without a reply, is not continued; it stays held."""
+    control, driver = control_over(tmp_path, lambda notice: True)
+    main = bind(control, MAIN)
+    parent = create(main)
+    turn = driver.of(parent)
+    grandchild = create(turn.run.call)
+    turn.accepting = False
+    driver.of(grandchild).run.events.finished(
+        'interrupted' if reason == 'bodyless' else 'completed',
+        last_message=None if reason == 'bodyless' else 'answer')
+    if reason == 'retired':
+        with control._locked(parent) as current:
+            current['retired_at'] = 1.0
+    turn.run.events.finished('failed' if reason == 'failed' else 'completed', last_message='own')
+    assert len(driver.all_of(parent)) == 1
+    assert record(tmp_path, grandchild)['executions'][-1]['notification'] == 'held'
+
+    if reason != 'retired':
+        assert not main({'action': 'resume', 'agent': parent, 'message': 'go on'}).failed
+        [notice] = driver.of(parent).inbox
+        assert notice['body'] == ('interrupted' if reason == 'bodyless' else 'answer')
+
+
+def test_host_shutdown_holds_the_ends_it_causes_in_one_write(tmp_path: Path) -> None:
+    """Interrupted at shutdown: no receiver runs, no parent restarts, and nothing is in flight."""
+    seen: list[dict] = []
+    control, driver = control_over(tmp_path, lambda notice: seen.append(notice) or True)
+    main = bind(control, MAIN)
+    parent = create(main)
+    grandchild = create(driver.of(parent).run.call)
+    driver.of(parent).run.events.finished('completed', last_message='standing by')
+    seen.clear()
+    assert sorted(control.interrupt_owned()) == sorted([grandchild])
+    assert seen == [] and len(driver.all_of(parent)) == 1
+    [execution] = record(tmp_path, grandchild)['executions']
+    assert (execution['state'], execution['notification']) == ('ended', 'held')
+
+
+def test_an_owner_that_died_leaves_a_held_end(tmp_path: Path) -> None:
+    """A process killed before any report: the reconciled failure still reaches the parent."""
+    control, driver = control_over(tmp_path)
+    agent = create(bind(control, MAIN))
+    document = record(tmp_path, agent)
+    document['executions'][0]['process'] = {'worker_pid': 2 ** 22 + 1}
+    (tmp_path / 'control' / 'agents' / f'{agent}.json').write_text(json.dumps(document))
+    [notice] = control_over(tmp_path)[0].held_notices(MAIN)
+    assert (notice['outcome'], notice['error']['code']) == ('failed', 'owner-exited')

@@ -252,6 +252,42 @@ print(json.dumps({{'id': request['id'], 'success': True, 'data': {{'models': mod
     assert {path.name: path.read_text() for path in home.iterdir()} == native
 
 
+def test_a_keyless_destination_query_runs_on_a_private_directory_with_the_native_login(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Pi's stores, lock and packages land beside a link to the login; the Home is unchanged."""
+    monkeypatch.delenv('PI_CODING_AGENT_DIR', raising=False)
+    home = tmp_path / 'home'
+    home.mkdir()
+    for name, content in (('models.json', '{"providers": {}}'), ('models-store.json', '{"stored": true}'),
+                          ('auth.json', '{"p": {"type": "api_key", "key": "stored-key"}}'),
+                          ('settings.json', '{"packages": ["npm:must-not-install"]}')):
+        (home / name).write_text(content)
+    state = {path.name: (path.stat().st_size, path.stat().st_mtime_ns) for path in home.iterdir()}
+    log = tmp_path / 'query.json'
+    peer = tmp_path / 'pi'
+    peer.write_text(f"""#!{sys.executable}
+import json, os, sys
+agent = os.environ['PI_CODING_AGENT_DIR']
+entries = {{name: os.readlink(os.path.join(agent, name)) if os.path.islink(os.path.join(agent, name)) else None
+           for name in os.listdir(agent)}}
+json.dump({{'agent': agent, 'entries': entries, 'auth': json.load(open(os.path.join(agent, 'auth.json')))}}, open({str(log)!r}, 'w'))
+for name in ('models-store.json', 'auth.json.lock', 'npm'):
+    open(os.path.join(agent, name), 'w').close()
+request = json.loads(sys.stdin.readline())
+models = [{{'provider': 'p', 'id': 'm', 'baseUrl': 'https://native.invalid/v1'}}]
+print(json.dumps({{'id': request['id'], 'success': True, 'data': {{'models': models}}}}))
+""")
+    peer.chmod(0o755)
+    assert pi_destination(str(peer), str(home), 'p', 'm') == 'native.invalid'
+    query = json.loads(log.read_text())
+    assert query['agent'] != str(home) and not Path(query['agent']).exists()
+    assert query['auth'] == {'p': {'type': 'api_key', 'key': 'stored-key'}}
+    assert query['entries'] == {'auth.json': str((home / 'auth.json').resolve()), 'models-store.json': None,
+                                'models.json': str((home / 'models.json').resolve())}
+    assert {path.name: (path.stat().st_size, path.stat().st_mtime_ns) for path in home.iterdir()} == state
+
+
 def test_pi_config_dependency_and_host_limits(tmp_path: Path, pi_environment: dict, monkeypatch: pytest.MonkeyPatch) -> None:
     """Resolve provider IDs, refuse missing isolation, and keep secrets out of Context."""
     result_project(tmp_path)

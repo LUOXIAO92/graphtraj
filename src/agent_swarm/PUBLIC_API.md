@@ -275,7 +275,13 @@ Public: `agent_swarm.__version__` and the names in `agent_swarm.__all__`:
   "supported_efforts"}], "message"}`; DSH may add `provider_status`.
   `supported_efforts` is a list or `null` when the Runtime does not enumerate
   them. A connection with `models` returns those without querying the
-  Runtime. It never runs an inference turn and never returns credentials;
+  Runtime. It never runs an inference turn and never returns credentials.
+  A DSH query drops `DEEPSEEK_BASE_URL` and `DEEPSEEK_SEARCH_BASE_URL` and takes
+  `base_url` and `api_key_env` from the connection, as a child does; DSH asks an
+  endpoint for its list only at the official origin, so a custom `base_url`
+  lists DSH's built-in models. A Pi query reads the home (the connection's, else
+  `PI_CODING_AGENT_DIR`, else Pi's default) from a private directory, so the
+  home gains no file and its configured packages are not installed;
 - the normalized Session archive (section 1.5): `read_session(path)` returns
   `{"header", "events"}` in version 5 form for version 4 and 5 files, and
   `validate_extra_fields(value)` checks an `extra_fields` container (section 5).
@@ -1450,6 +1456,13 @@ Recorded classifications:
   route a child. A setup that did rely on them now reaches DSH's official root,
   and must declare `base_url`. 411 ships in the unreleased 0.2.2 and adds no
   bump of its own.
+- 413: `discover_models` for DSH follows the connection's `base_url` and
+  `api_key_env` and ignores the two variables, and for Pi no longer runs on the
+  home. Pi's keyless `pi_destination` likewise, so a home whose configured package
+  cannot be installed no longer has every selection refused. Fixes (compatible):
+  a listing used an endpoint and key the connection did not name, and a query
+  wrote into the home. 413 ships in the unreleased 0.2.2 and adds no bump of its
+  own.
 
 While the major version is `0`, an incompatible change raises the minor
 version (`0.1.x` → `0.2.0`), and compatible additions and fixes raise the

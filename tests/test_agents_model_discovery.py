@@ -8,14 +8,19 @@ network is used, and no inference request is possible.
 import json
 import os
 from pathlib import Path
+import shutil
 import socket
+import subprocess
 import sys
 
 import pytest
+import yaml
 
 from agent_swarm import discover_models
+from agent_swarm.dsh.execution import _PatchLoader
 
 
+ROOT = Path(__file__).resolve().parents[1]
 SECRET = 'sk-controlled-secret-value'
 
 AVAILABLE = 'Native catalog metadata does not establish account calling permission.'
@@ -75,6 +80,12 @@ for line in sys.stdin:
 '''
 
 PI = PRELUDE + '''
+agent = os.environ['PI_CODING_AGENT_DIR']
+record({'agent': {name: os.readlink(os.path.join(agent, name)) if os.path.islink(os.path.join(agent, name)) else None
+                  for name in os.listdir(agent)}})
+# What real Pi does in the directory it runs on: its stores, a lock beside auth.json, a package install.
+for name in ('models-store.json', 'auth.json.lock', 'npm'):
+    open(os.path.join(agent, name), 'w').close()
 for line in sys.stdin:
     message = json.loads(line)
     record({'stdin': message})
@@ -146,6 +157,12 @@ DSH_MODELS = [
     {'id': 'custom-model', 'alias': 'custom-model', 'provider': 'custom', 'supported_efforts': None},
 ]
 DSH_PROVIDERS = {'deepseek-official': 'available', 'custom': 'available', 'broken': 'unknown'}
+
+AMBIENT = {'DEEPSEEK_BASE_URL': 'https://ambient.invalid/anthropic',
+           'DEEPSEEK_SEARCH_BASE_URL': 'https://ambient-search.invalid/anthropic/v1'}
+DECLARED = 'https://declared.invalid/anthropic'
+REAL_DSH = shutil.which('dsh')
+REAL_PI = shutil.which('pi')
 
 
 @pytest.fixture
@@ -269,10 +286,197 @@ def test_pi_lists_its_catalog_and_filters_the_connection_provider(native, tmp_pa
     ]}
     assert [model['id'] for model in selected['models']] == ['model-b']
     start = records()[0]
-    assert start['home']['PI_CODING_AGENT_DIR'] == home
+    assert start['home']['PI_CODING_AGENT_DIR'] != home
     assert start['argv'] == ['--mode', 'rpc', '--no-session', '--no-extensions', '--no-skills',
                              '--no-prompt-templates', '--no-themes', '--no-context-files']
     assert 'baseUrl' not in json.dumps(result)
+
+
+def home_state(home: Path) -> dict:
+    """Paths, sizes and modification times under a native home."""
+    return {str(path.relative_to(home)): (path.stat().st_size, path.stat().st_mtime_ns) for path in home.rglob('*')}
+
+
+def fill_pi_home(home: Path) -> None:
+    """A native Pi home holding only fake data."""
+    home.mkdir(parents=True)
+    for name, content in (('auth.json', '{"first": {"type": "api_key", "key": "fake-stored-key"}}'),
+                          ('models.json', '{"providers": {}}'), ('models-store.json', '{"stored": true}'),
+                          ('settings.json', '{"packages": ["npm:agents-413-package-must-not-install"]}')):
+        (home / name).write_text(content)
+
+
+@pytest.mark.parametrize('source', ['connection', 'variable', 'default'])
+def test_a_pi_listing_reads_the_resolved_home_from_a_private_directory(
+    native, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, source: str,
+) -> None:
+    """Pi never runs on the home: its stores, lock and packages land in a private directory."""
+    install, records = native
+    install('pi')
+    home = {'connection': tmp_path / 'chosen', 'variable': tmp_path / 'from-variable',
+            'default': tmp_path / 'user/.pi/agent'}[source]
+    fill_pi_home(home)
+    before = home_state(home)
+    if source == 'connection':
+        monkeypatch.setenv('PI_CODING_AGENT_DIR', str(tmp_path / 'not-this-one'))
+    if source == 'variable':
+        monkeypatch.setenv('PI_CODING_AGENT_DIR', str(home))
+
+    result = discover_models({'runtime': 'pi', **({'home': str(home)} if source == 'connection' else {})})
+
+    assert result['status'] == 'available'
+    assert records()[1]['agent'] == {'auth.json': str((home / 'auth.json').resolve()),
+                                     'models.json': str((home / 'models.json').resolve()),
+                                     'models-store.json': None}
+    assert records()[0]['home']['PI_CODING_AGENT_DIR'] != str(home)
+    assert home_state(home) == before
+
+
+def test_a_pi_home_without_a_login_gains_nothing(native, tmp_path: Path) -> None:
+    """A missing home stays missing, and no link points at a login that does not exist."""
+    install, records = native
+    install('pi')
+    home = tmp_path / 'absent'
+
+    assert discover_models({'runtime': 'pi', 'home': str(home)})['status'] == 'available'
+    assert records()[1]['agent'] == {}
+    assert not home.exists()
+
+
+@pytest.mark.skipif(REAL_PI is None, reason='Installed Pi is required for native catalog evidence.')
+def test_installed_pi_lists_the_home_login_and_leaves_the_home_alone(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Real Pi: the fake login still authenticates its model; stores, lock and packages stay out of the home."""
+    from agent_swarm.pi import pi_destination
+
+    monkeypatch.setenv('HOME', str(tmp_path / 'user'))
+    monkeypatch.setenv('PI_OFFLINE', '1')
+    monkeypatch.delenv('PI_CODING_AGENT_DIR', raising=False)
+    monkeypatch.delenv('FAKE_413_UNSET', raising=False)
+    home = tmp_path / 'native-home'
+    home.mkdir()
+    (home / 'auth.json').write_text(json.dumps({'authed': {'type': 'api_key', 'key': 'fake-stored-key'}}))
+    (home / 'models.json').write_text(json.dumps({'providers': {
+        'authed': {'baseUrl': 'https://authed.invalid/v1', 'api': 'openai-completions',
+                   'models': [{'id': 'authed-model'}]},
+        'unauthed': {'baseUrl': 'https://unauthed.invalid/v1', 'api': 'openai-completions',
+                     'apiKey': '$FAKE_413_UNSET', 'models': [{'id': 'unauthed-model'}]},
+    }}))
+    (home / 'settings.json').write_text(json.dumps({'packages': ['npm:agents-413-package-must-not-install']}))
+    before = home_state(home)
+
+    # Read-only: Pi locks auth.json where it found it, so a lock in the home would lose the login.
+    home.chmod(0o555)
+    try:
+        assert pi_destination(REAL_PI, str(home), 'authed', 'authed-model') == 'authed.invalid'
+        found = discover_models({'runtime': 'pi', 'home': str(home)})
+    finally:
+        home.chmod(0o755)
+
+    assert found['status'] == 'available'
+    assert {model['id'] for model in found['models'] if model['provider'] in ('authed', 'unauthed')} == {'authed-model'}
+    assert home_state(home) == before
+
+
+class RecordingHost:
+    """Keep the launch facts of the owned ``dsh web``; nothing starts."""
+
+    launches: list[dict] = []
+
+    def __init__(self, executable: str, cwd: Path, environment: dict, **options: Path) -> None:
+        """Read the patch now, because it lives in the query's temporary directory."""
+        patch = options.get('profile_patch')
+        self.launches.append({
+            'executable': executable, 'cwd': cwd, 'environment': environment, 'options': set(options),
+            'patch': yaml.load(patch.read_text(), Loader=_PatchLoader) if patch else None,
+            'patch_in_cwd': bool(patch) and patch.parent == cwd,
+        })
+
+    def start(self) -> None:
+        """Nothing runs."""
+
+    def rpc(self, method: str) -> dict:
+        """An empty catalog."""
+        return {'groups': []}
+
+    def close(self) -> None:
+        """Nothing to stop."""
+
+
+@pytest.fixture
+def dsh_launch(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """Ambient endpoints set, the service recorded, a stand-in ``dsh`` on PATH; returns the connection's home."""
+    from agent_swarm.dsh import service
+
+    for name, value in AMBIENT.items():
+        monkeypatch.setenv(name, value)
+    monkeypatch.setattr(service, 'DshService', RecordingHost)
+    RecordingHost.launches = []
+    home = tmp_path / 'dsh-home'
+    home.mkdir()
+    (home / 'settings.yml').write_text('kept: true\n')
+    return home
+
+
+@pytest.mark.parametrize(('declared', 'route'), [
+    ({}, None),
+    ({'base_url': DECLARED}, {'baseURL': DECLARED}),
+    ({'api_key_env': 'FAKE_413_NAMED'}, {'apiKeyEnv': 'FAKE_413_NAMED'}),
+    ({'base_url': DECLARED, 'api_key_env': 'FAKE_413_NAMED'}, {'baseURL': DECLARED, 'apiKeyEnv': 'FAKE_413_NAMED'}),
+], ids=['nothing', 'endpoint', 'key', 'both'])
+def test_a_dsh_listing_takes_its_endpoint_and_key_from_the_connection(
+    native, dsh_launch: Path, declared: dict, route: dict | None,
+) -> None:
+    """The parent's endpoint variables are gone, and a private patch names what the connection declares."""
+    native[0]('dsh')
+    before = home_state(dsh_launch)
+
+    result = discover_models({'runtime': 'dsh', 'home': str(dsh_launch), **declared})
+
+    assert result['status'] == 'available'
+    launch = RecordingHost.launches[0]
+    assert [name for name in AMBIENT if name in launch['environment']] == []
+    assert launch['environment']['DSH_HOME'] == str(dsh_launch)
+    if route is None:
+        assert launch['options'] == set()
+    else:
+        assert launch['options'] == {'profile_patch'}
+        assert launch['patch_in_cwd'] is True
+        assert launch['patch'] == [{'id': 'llm-deepseek', 'config': route}]
+    assert home_state(dsh_launch) == before
+
+
+@pytest.mark.skipif(REAL_DSH is None or shutil.which('node') is None,
+                    reason='Installed DSH and Node are required for native endpoint evidence.')
+@pytest.mark.parametrize('declared', [None, DECLARED], ids=['official', 'declared'])
+def test_installed_dsh_applies_the_listing_route_to_its_row(
+    dsh_launch: Path, tmp_path: Path, declared: str | None,
+) -> None:
+    """The installed DSH composes the patch into its own row and its resolver reaches only that endpoint."""
+    connection = {'runtime': 'dsh', 'api_key_env': 'FAKE_413_NAMED', **({'base_url': declared} if declared else {})}
+    discover_models(connection)
+    launch = RecordingHost.launches[0]
+    patch = tmp_path / 'listing.patch.yml'
+    patch.write_text(yaml.safe_dump(launch['patch']))
+    environment = {**launch['environment'], 'DSH_HOME': str(tmp_path / 'dump-home')}
+
+    dumped = subprocess.run([REAL_DSH, '--profile', 'web', '--patch', str(patch), '--dump-config'],
+                            cwd=tmp_path, env=environment, capture_output=True, text=True, timeout=60)
+    assert dumped.returncode == 0, dumped.stderr
+    row = next(row for row in yaml.load(dumped.stdout, Loader=_PatchLoader) if row.get('id') == 'llm-deepseek')
+    assert row['config']['apiKeyEnv'] == 'FAKE_413_NAMED'
+
+    def resolved(launch_environment: dict) -> str:
+        result = subprocess.run(['node', str(ROOT / 'tests/fixtures/dsh_resolve_endpoint.mjs'),
+                                 str(Path(REAL_DSH).resolve().parent.parent), json.dumps(row['config'])],
+                                cwd=tmp_path, env=launch_environment, capture_output=True, text=True, timeout=30)
+        assert result.returncode == 0, result.stderr
+        return result.stdout.strip()
+
+    assert resolved(environment) == (declared or 'https://api.deepseek.com/anthropic')
+    # This DSH does honour the variable when it is left in: what the removal prevents.
+    assert resolved({**environment, **AMBIENT}) == (declared or AMBIENT['DEEPSEEK_BASE_URL'])
 
 
 @pytest.mark.skipif(not CAN_BIND, reason='loopback port binding is not permitted here')

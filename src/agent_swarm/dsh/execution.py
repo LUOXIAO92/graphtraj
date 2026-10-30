@@ -16,7 +16,7 @@ import yaml
 
 from .service import DshService, redact_native, secret_values
 from .errors import DshError
-from .settings import credential_environment, resumes_by_address
+from .settings import AMBIENT_ENDPOINTS, credential_environment, resumes_by_address
 
 
 # DSH's shipped profile patches carry `!!js` expressions (for example the
@@ -25,9 +25,6 @@ from .settings import credential_environment, resumes_by_address
 _JS_TAG = 'tag:yaml.org,2002:js'
 _WEB_APP_BUNDLE = Path('node_modules') / '@deepseek-ai' / 'dsh-web-app'
 _PERSONA_PLUGIN = '@deepseek-ai/dsh-persona'
-# DSH routes to these when its profile names no endpoint, so inheriting them
-# would send a connection's key wherever the parent's shell points (411).
-_AMBIENT_ENDPOINTS = ('DEEPSEEK_BASE_URL', 'DEEPSEEK_SEARCH_BASE_URL')
 
 
 class _JsExpression(str):
@@ -245,7 +242,7 @@ class DshExecution:
             'DSH_AGENT_PACKAGE': self.request['package'],
             'DSH_HOME': self.request.get('runtime_home') or str(home), 'DSH_PERMISSION_MODE': mode, 'NO_COLOR': '1',
         })
-        for ambient in _AMBIENT_ENDPOINTS:
+        for ambient in AMBIENT_ENDPOINTS:
             environment.pop(ambient, None)
         return environment
 

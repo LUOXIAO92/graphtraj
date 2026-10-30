@@ -15,6 +15,10 @@ from .errors import DshError
 # Oldest native DSH whose service protocol the driver uses.
 MINIMUM_VERSION = '0.2.0-rc.2'
 
+# DSH routes to these when its profile names no endpoint, so inheriting them
+# would send a connection's key wherever the parent's shell points (411).
+AMBIENT_ENDPOINTS = ('DEEPSEEK_BASE_URL', 'DEEPSEEK_SEARCH_BASE_URL')
+
 
 def version_order(version: str) -> tuple:
     """Return a semver sort key: release numbers, then prerelease identifiers.

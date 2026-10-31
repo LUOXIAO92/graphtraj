@@ -12,7 +12,7 @@ this file; anything it does not list is internal.
 
 # The only definition of the distribution version; packaging and every
 # runtime report (MCP serverInfo, Codex clientInfo) read it from here.
-__version__ = "0.2.8"
+__version__ = "0.2.9"
 
 from importlib import import_module
 

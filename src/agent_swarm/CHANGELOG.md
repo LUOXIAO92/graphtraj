@@ -12,6 +12,18 @@ version that identifies everything listed under it.
 
 The numbers in parentheses are the project's Task numbers.
 
+## 0.2.9 (compatible)
+
+- Reading a Claude transcript while a line is still being written no longer leaves a
+  resumed archive stuck (426). The failed read stayed pending once the line completed,
+  and `messages()` raised `Unresolved observations remain` for good. The next successful
+  read now clears it, and the partial line stays in `observations()`. History that was
+  really left out, and a line that never completes, still make `messages()` raise.
+- A read that failed and later cleared no longer hides a later gap in the same archive.
+- A failed read now appears under the archive locator `read-gap:<n>`, not `history-gap`.
+  An archive saved by an earlier version recovers its old read failures on the next
+  successful read, unless history is missing from that resume too.
+
 ## 0.2.8 (compatible)
 
 - A resumed Claude execution no longer loses its reply from the archive (422). A reply

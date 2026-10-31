@@ -1071,3 +1071,53 @@ def test_claude_prompt_hook_reply_after_host_sleep_is_a_retryable_failure(
     with ExitStack() as stack:
         resumed, _, _ = execution(tmp_path, stack, 'again', turn.session)
         assert resumed.run()['outcome'] == 'completed'
+
+
+class BrokenCollector:
+    """A consumer's collector whose final close fails."""
+
+    def accept(self, event: dict, position: int, defer: bool = False) -> None:
+        """Take no record; only closing fails here."""
+
+    def flush(self) -> None:
+        """Nothing is held back."""
+
+    def close(self) -> None:
+        """Fail while closing up."""
+        raise ValueError('archive broke')
+
+
+def test_claude_start_failure_stays_ahead_of_an_archive_failure(
+    tmp_path: Path, claude_environment: None, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The parent reads why Claude did not start; the diagnostics record the archive failure."""
+    result_project(tmp_path)
+    monkeypatch.setenv('CLAUDE_FIXTURE_FAIL', '1')
+    with ExitStack() as stack:
+        turn, _, _ = execution(tmp_path, stack, 'unused')
+        turn.collector = BrokenCollector()
+        with pytest.raises(RuntimeAdapterError) as caught:
+            turn.run()
+    assert caught.value.code == 'RUNTIME_TRANSPORT_FAILED'
+    assert 'archive broke' not in caught.value.message
+    assert turn.diagnostics['collection'] == 'failed'
+
+
+def test_claude_start_failure_stays_ahead_of_an_unconfirmed_stop(
+    tmp_path: Path, claude_environment: None, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The start reason stays the message, and the stop stays unconfirmed."""
+    result_project(tmp_path)
+    monkeypatch.setenv('CLAUDE_FIXTURE_FAIL', '1')
+
+    def refuse(pid: int, signal_number: int) -> None:
+        """Refuse the signal, so the owned process group cannot be confirmed gone."""
+        raise PermissionError('refused')
+
+    monkeypatch.setattr(os, 'killpg', refuse)
+    with ExitStack() as stack:
+        turn, _, _ = execution(tmp_path, stack, 'unused')
+        with pytest.raises(RuntimeAdapterError) as caught:
+            turn.run()
+    assert caught.value.code == 'RUNTIME_TRANSPORT_FAILED'
+    assert caught.value.terminal_confirmed is False

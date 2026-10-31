@@ -1256,3 +1256,28 @@ def test_ambient_endpoints_do_not_route_a_graphtraj_member(
     home = environment['DSH_HOME']
     patch = yaml.load((Path(home) / 'profiles/web/cordis.patch.yml').read_text(), Loader=TaggedLoader)
     assert next(row['config'] for row in patch if row.get('id') == 'llm-deepseek').get('baseURL') == expected
+
+
+def test_an_empty_trace_after_a_completed_turn_reports_with_text(
+    tmp_path: Path, peer: list, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A genuine closing failure after success is still reported, and says something."""
+    monkeypatch.setattr(NativePeer, 'close', lambda service: service.log.write_text(''))
+    turn, thread, outcome = run_turn(tmp_path)
+    peer[0].frames.extend(['assistant/message', 'turn/end'])
+    thread.join(3)
+    assert outcome['error'].code == 'RUNTIME_TRACE_FAILED'
+    assert outcome['error'].message.strip()
+
+
+def test_a_native_failure_stays_ahead_of_a_trace_failure(
+    tmp_path: Path, peer: list, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Two failures: the parent reads the first, and the Session's log keeps the second."""
+    monkeypatch.setattr(NativePeer, 'close', lambda service: service.log.write_text(''))
+    turn, thread, outcome = run_turn(tmp_path)
+    end_turn(peer[0], {'kind': 'error', 'error': NATIVE_404})
+    thread.join(3)
+    assert outcome['error'].code == 'RUNTIME_EXECUTION_FAILED'
+    assert 'DeepSeek Messages request failed (404)' in outcome['error'].message
+    assert 'RUNTIME_TRACE_FAILED' in (tmp_path / 'stderr.log').read_text()

@@ -25,6 +25,8 @@ from agent_swarm import AgentsError, Caller, bind
 from agent_swarm.claude.host import IndependentCalls
 from agent_swarm.codex.host import CodexHost
 from agent_swarm.dsh import execution
+from agent_swarm.dsh.errors import DshError
+from agent_swarm.dsh.service import DshService
 from agent_swarm.dsh.settings import prepare
 from dsh_standalone_peer import FakeDshService, install_dsh
 from test_codex_independent_control import native_settings  # noqa: F401 - pytest fixture
@@ -653,3 +655,45 @@ def test_installed_dsh_resolves_only_the_connection_endpoint(tmp_path: Path, dsh
     assert resolved(environment) == expected
     # This DSH does honour the variable when it is left in: what the removal prevents.
     assert resolved({**environment, **AMBIENT}) == (base_url or AMBIENT['DEEPSEEK_BASE_URL'])
+
+
+REASON = 'Error: listen EPERM: operation not permitted 127.0.0.1'
+
+
+def test_a_dsh_that_cannot_start_tells_the_standalone_parent_why(
+    tmp_path: Path, dsh: dict, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A real process exits before authentication; a first start has no Trace to read."""
+    monkeypatch.setattr(execution.DshExecution, 'service_type', DshService)
+    Path(dsh['executable']).write_text(f'#!/bin/sh\necho "{REASON}"\nexit 1\n')
+    (tmp_path / 'agents').mkdir()
+    (tmp_path / 'agents/config.yml').write_text('save_normalized_sessions: true\n')
+    host = IndependentCalls(tmp_path / 'agents', tmp_path, {}, {'dsh': dsh})
+    _, call, _ = claude_main(host, tmp_path)
+    created = call('agents', {'action': 'execute', 'feature': 'create',
+                              'arguments': {'runtime': 'dsh', 'instruction': 'one'}})
+    assert created.failed
+    failure = created.document['result']['last_result']['error']
+    assert failure['code'] == 'RUNTIME_START_FAILED' and REASON in failure['message']
+
+
+def test_a_resume_that_cannot_start_tells_the_standalone_parent_why(
+    tmp_path: Path, dsh: dict, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The earlier turn left a Trace; saving turned on since does not replace the start failure."""
+    (tmp_path / 'agents').mkdir()
+    host = IndependentCalls(tmp_path / 'agents', tmp_path, {}, {'dsh': dsh})
+    invoke, call, _ = claude_main(host, tmp_path)
+    agent = invoke('create', runtime='dsh', instruction='one')['agent']
+    answered(invoke, agent, invoke.shown)
+    (tmp_path / 'agents/config.yml').write_text('save_normalized_sessions: true\n')
+
+    def exits_before_authentication(service: FakeDshService) -> None:
+        """Fail as the DSH process does when it cannot start."""
+        raise DshError('RUNTIME_START_FAILED', REASON)
+
+    monkeypatch.setattr(FakeDshService, 'start', exits_before_authentication)
+    resumed = call('agents', {'action': 'execute', 'feature': 'resume', 'arguments': {'agent': agent, 'message': 'two'}})
+    assert resumed.failed
+    failure = resumed.document['result']['last_result']['error']
+    assert failure['code'] == 'RUNTIME_START_FAILED' and REASON in failure['message']

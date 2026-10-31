@@ -585,3 +585,28 @@ def test_pi_standalone_root_worktree_refuses_unexpressible_read_denial(
     filesystem = json.loads(captured.read_text())['filesystem']
     assert str(project / protected) in filesystem['denyRead']
     assert str(project.resolve()) in filesystem['allowRead']
+
+
+def test_pi_failure_stays_ahead_of_an_archive_failure(tmp_path: Path, pi_environment: dict) -> None:
+    """A collector that cannot close does not replace why the execution failed."""
+    class BrokenCollector:
+        """Collect nothing and fail on the final close."""
+
+        def receive(self, event: dict) -> None:
+            """Take no record; only closing fails here."""
+
+        def sync(self, *args: object, **kwargs: object) -> None:
+            """Nothing to reconcile."""
+
+        def close(self) -> None:
+            """Fail while closing up."""
+            raise ValueError('archive broke')
+
+    result_project(tmp_path)
+    with ExitStack() as stack:
+        turn, _, _ = execution(tmp_path, pi_environment, 'research@x1', 'provider-error', stack)
+        turn.archive_collector = lambda header, native: BrokenCollector()
+        with pytest.raises(RuntimeAdapterError, match='provider rejected') as caught:
+            turn.run()
+    assert caught.value.code == 'RUNTIME_PROVIDER_FAILED'
+    assert 'archive broke' in (tmp_path / '.graphtraj/runner/sessions/research@x1/stderr.log').read_text()

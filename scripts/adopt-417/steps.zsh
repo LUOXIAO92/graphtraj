@@ -162,12 +162,12 @@ step_V() {
   return $rc
 }
 
-step_Vc() {
-  local C=$(claude_bin) G=$VV/bin/graphtraj
+# Vc has three parts. Only the interactive start stays out of `logged`: the arm runs it with the
+# Terminal's own stdio, as scripts/realhost-406/stale-channel.sh does, so it is not in Vc.txt.
+# Each part has its own marker, so a retry after a stop anywhere resumes at the first part not done.
+vc_setup() {
+  local G=$VV/bin/graphtraj
   [[ -x $G ]] || { print "没有 scratch venv，先运行 V。"; return 1; }
-  # Each part has its own marker, so a retry after a stop anywhere resumes at the first part not done.
-  local TRUSTED=$VPROJECT/.git/adopt417-trust-start-ok rc
-  local WRITTEN=$VPROJECT/.claude/skills/graphtraj-claude-host/hooks/host_context.mjs  # the last file --write writes
   mkdir -p $VPROJECT
   [[ -d $VPROJECT/.git ]] || git -C $VPROJECT init -q --initial-branch=main || return 1
   if ! git -C $VPROJECT rev-parse -q --verify HEAD > /dev/null; then
@@ -177,22 +177,16 @@ step_Vc() {
   if ! { [[ -e $VPROJECT/.graphtraj/core/config.yml || -e $VPROJECT/.graphtraj/config.yml ]] && git -C $VPROJECT rev-parse -q --verify refs/heads/dev > /dev/null; }; then
     (cd $VPROJECT && print -r -- y | $G setup) || return 1
   fi
-  if [[ ! -e $TRUSTED ]]; then
-    print "现在 Claude Code 在 $VPROJECT 启动一次。对话框 'Do you trust the files in this folder?' 选 'Yes, proceed'。"
-    print "然后输入 /exit 回车，不要发消息。其它任何框按 Esc 并告诉 Main 标题。"
-    # This step's stdout is the log's pipe; the dialog needs the terminal itself.
-    if [[ -n ${ADOPT417_NO_TTY:-} ]]; then
-      (cd $VPROJECT && $C) < /dev/null > /dev/null 2>&1; rc=$?   # Rehearsal with a stub claude only.
-    else
-      (cd $VPROJECT && $C) < /dev/tty > /dev/tty 2>&1; rc=$?
-    fi
-    if (( rc != 0 )); then
-      print "Claude Code 的交互启动没有正常退出（rc=$rc），或打不开终端 /dev/tty。信任框可能没有出现或没有确认，Vc 未通过，配置也没有写。"
-      print "请在普通 Terminal 里重新运行本步：已完成的部分不会重做。若仍失败，把这段输出交给 Main。"
-      return 1
-    fi
-    touch $TRUSTED
-  fi
+}
+
+vc_instructions() {
+  print "现在 Claude Code 在 $VPROJECT 启动一次。对话框 'Do you trust the files in this folder?' 选 'Yes, proceed'。"
+  print "然后输入 /exit 回车，不要发消息。其它任何框按 Esc 并告诉 Main 标题。"
+}
+
+vc_stream() {
+  local C=$(claude_bin)
+  local WRITTEN=$VPROJECT/.claude/skills/graphtraj-claude-host/hooks/host_context.mjs  # the last file --write writes
   if [[ ! -e $VPROJECT/.mcp.json || ! -e $WRITTEN ]]; then
     (cd $VPROJECT && $VV/bin/python -m graphtraj.runtimes.claude.host configuration --project $VPROJECT --claude $C --write) || return 1
   fi
@@ -294,11 +288,38 @@ V) print "[V] 安装前校验。无对话框。只读真实项目，不写生产
   else print "\nV 不通过，不要做 I，把 $R/V.txt 交给 Main。本步没有改动生产。"; exit 1; fi ;;
 
 Vc) print "[Vc] 隔离 scratch 项目里的真实 Claude 演练。首次运行有一个对话框（scratch 文件夹信任），选信任；其它框按 Esc。之后的 claude -p 无对话框。约 2 分钟。"
-  if logged $R/Vc.txt step_Vc; then
+  vc_fail() {
+    print "\nVc 不通过，不要做 I，把 $R/Vc.txt 与 $R/Vc-stream.jsonl 交给 Main。"
+    print "交互启动不在 Vc.txt 里，所以请把屏幕上 Claude Code 的输出也复制给 Main。修好后重新运行本步：已完成的部分不会重做。"
+    exit 1
+  }
+  TRUSTED=$VPROJECT/.git/adopt417-trust-start-ok
+  logged $R/Vc.txt vc_setup || vc_fail
+  if [[ ! -e $TRUSTED ]]; then
+    logged $R/Vc.txt vc_instructions
+    if [[ -z ${ADOPT417_NO_TTY:-} ]] && ! [[ -t 0 && -t 1 ]]; then
+      print "拒绝启动：本步要显示信任框，stdin 和 stdout 都必须是终端。请在普通 Terminal 里直接运行，不要加管道或重定向。" | tee -a $R/Vc.txt
+      vc_fail
+    fi
+    (cd $VPROJECT && $(claude_bin)); rc=$?
+    print "trust start rc=$rc" | tee -a $R/Vc.txt
+    if (( rc != 0 )); then
+      # A normal /exit's rc is unproven on the real host; the stream check below is the decisive proof.
+      print "Claude Code 退出码是 $rc。信任框出现过、你选了信任、并且用 /exit 离开了吗？按 y 表示是，按其它键表示否（没有反应就再按回车）。"
+      if read -q -u 0 REPLY; then
+        print "\ntrust start: user answered yes: the dialog appeared, was accepted and Claude was left with /exit" | tee -a $R/Vc.txt
+      else
+        print "\ntrust start: user answered no" | tee -a $R/Vc.txt
+        vc_fail
+      fi
+    fi
+    touch $TRUSTED
+  fi
+  if logged $R/Vc.txt vc_stream; then
     touch $R/Vc.ok
     print "\n证明: PASS mcp__agents__tasks 与 PASS mcp__agents__agents，且 error=False。"
     next "zsh $THIS I"
-  else print "\nVc 不通过，不要做 I，把 $R/Vc.txt 与 $R/Vc-stream.jsonl 交给 Main。"; exit 1; fi ;;
+  else vc_fail; fi ;;
 
 _backup) # Rehearsal only: the backup part of I, so a half-way install can be made and rolled back.
   [[ -e $BK ]] && { print "已存在 $BK，拒绝覆盖备份。"; exit 1; }
@@ -358,8 +379,14 @@ inbox) print "[inbox] Main 的通知队列。无对话框。只读。"
 
 P) HOSTED=$(unzip -p $(wheel_of graphtraj) graphtraj/interfaces/hosted_cli.py | shasum -a 256 | cut -d' ' -f1)
   if [[ -r $PISBX/pi-sandbox.env ]]; then
-    PIROLE=$($CONDA -I -c 'import json,sys; d=dict(l.strip().split("=",1) for l in open(sys.argv[1]) if "=" in l); print(json.dumps({"pi_dsh_trial.merge_resolver":{"connection":"pi/deepseek/deepseek-flash","worktree_access":"read","pi":{"sandbox_python":d["sandbox_python"],"sandbox_path":d["sandbox_path"],"agent_dir":sys.argv[2]}}}))' $PISBX/pi-sandbox.env $HOME/.pi/agent)
-    PINOTE="$PISBX 存在：内联 role 用它，不改 roles.yml。证明同上，PONG-417-PI。"
+    # 387: the env file may not name rg's directory. Only the printed role changes; the file stays as it is.
+    SBP=$(sed -n 's/^sandbox_path=//p' $PISBX/pi-sandbox.env | tail -1)
+    if [[ -e $PISBX/bin/rg && ":$SBP:" != *":$PISBX/bin:"* ]]; then SBP=$PISBX/bin:$SBP; fi
+    RGAT=$($CONDA -I -c 'import shutil,sys; print(shutil.which("rg",path=sys.argv[1]) or "")' "$SBP")
+    if [[ -n $RGAT ]]; then RGNOTE="这个 PATH 里的 rg: $RGAT（解析到 ${RGAT:A}）。"
+    else RGNOTE="这个 PATH 里没有 rg，预期 Pi 的启动因此失败；把错误带回，这就是原因。"; fi
+    PIROLE=$($CONDA -I -c 'import json,sys; d=dict(l.strip().split("=",1) for l in open(sys.argv[1]) if "=" in l); print(json.dumps({"pi_dsh_trial.merge_resolver":{"connection":"pi/deepseek/deepseek-flash","worktree_access":"read","pi":{"sandbox_python":d["sandbox_python"],"sandbox_path":sys.argv[3],"agent_dir":sys.argv[2]}}}))' $PISBX/pi-sandbox.env $HOME/.pi/agent "$SBP")
+    PINOTE="$PISBX 存在：内联 role 用它，不改 roles.yml。$RGNOTE 证明同上，PONG-417-PI。"
     PIEXPECT="Reply with exactly one line: PONG-417-PI. Use no tools."
   else
     PIROLE='"pi_dsh_trial.team_leader"'

@@ -10,8 +10,8 @@ pyyaml-6.0.3.dist-info
 websockets-16.1.1.dist-info
 WARNING: The directory '/Users/luoxiao/Library/Caches/pip' or its parent directory is not owned or is not writable by the current user. The cache has been disabled. Check the permissions and owner of that directory. If executing pip with sudo, you should use sudo's -H flag.
 No broken requirements found.
-Proposed dev base: 0d70167b0631aaa7eedbb4d39283dd90199c1b4c
-Create dev from 0d70167b0631aaa7eedbb4d39283dd90199c1b4c? [y/N]: Created Integration Worktree on dev.
+Proposed dev base: 719e84d271ad84ea93f5f35458e686dfabd14f50
+Create dev from 719e84d271ad84ea93f5f35458e686dfabd14f50? [y/N]: Created Integration Worktree on dev.
 GraphTraj project setup complete.
 created aaa version 4
 created bbb version 4
@@ -31,17 +31,17 @@ Processing /tmp/claude-501/adopt417-rehearsal/project/.graphtraj/core/state/task
 Building wheels for collected packages: graphtraj, agent-swarm
   Building wheel for graphtraj (pyproject.toml): started
   Building wheel for graphtraj (pyproject.toml): finished with status 'done'
-  Created wheel for graphtraj: filename=graphtraj-0.1.0-py3-none-any.whl size=567356 sha256=3cc111a564358400cbfd5ca7f8562ed7e83d9c0d14779684ac0d7f6efc2bf848
-  Stored in directory: /private/tmp/claude-501/pip-ephem-wheel-cache-7j3ftlf5/wheels/32/31/be/522975d0a2d271b80a441b893d2b5a7dcd9ac2a65d3e9a96c8
+  Created wheel for graphtraj: filename=graphtraj-0.1.0-py3-none-any.whl size=567356 sha256=f0b6ee70f648974dc6dfeebf09836eeb73351eb0f47bea5970e507a35ed585ac
+  Stored in directory: /private/tmp/claude-501/pip-ephem-wheel-cache-08dna7kv/wheels/32/31/be/522975d0a2d271b80a441b893d2b5a7dcd9ac2a65d3e9a96c8
   Building wheel for agent-swarm (pyproject.toml): started
   Building wheel for agent-swarm (pyproject.toml): finished with status 'done'
-  Created wheel for agent-swarm: filename=agent_swarm-0.2.4-py3-none-any.whl size=385782 sha256=ae1387a9acab6ffc3901c2ad16bc0245c7f4eaee5139c2499de20d688ef83565
-  Stored in directory: /private/tmp/claude-501/pip-ephem-wheel-cache-7j3ftlf5/wheels/86/79/84/4d86df5c3c4b8acbe1e702f0681c1c1f48a1d8e25d0ce79959
+  Created wheel for agent-swarm: filename=agent_swarm-0.2.4-py3-none-any.whl size=385782 sha256=03dad796fce83e1f3f903a6985ff9a4ecf802654412082b0f93343cd6de43bb8
+  Stored in directory: /private/tmp/claude-501/pip-ephem-wheel-cache-08dna7kv/wheels/86/79/84/4d86df5c3c4b8acbe1e702f0681c1c1f48a1d8e25d0ce79959
 Successfully built graphtraj agent-swarm
 
 ### wheels and sha256 (expect graphtraj-0.1.0 and agent_swarm-0.2.4)
-ae1387a9acab6ffc3901c2ad16bc0245c7f4eaee5139c2499de20d688ef83565  agent_swarm-0.2.4-py3-none-any.whl
-3cc111a564358400cbfd5ca7f8562ed7e83d9c0d14779684ac0d7f6efc2bf848  graphtraj-0.1.0-py3-none-any.whl
+03dad796fce83e1f3f903a6985ff9a4ecf802654412082b0f93343cd6de43bb8  agent_swarm-0.2.4-py3-none-any.whl
+f0b6ee70f648974dc6dfeebf09836eeb73351eb0f47bea5970e507a35ed585ac  graphtraj-0.1.0-py3-none-any.whl
 
 ### no build/ or __pycache__ inside the wheels (expect 0)
 leaked: 0
@@ -120,7 +120,7 @@ phase_guard:2: nice(5) failed: operation not permitted
 [I] 备份并安装。本步无对话框。需用户已同意，且 Main 已 /exit；Main 退出后不要再打开，直到本步结束。
 确认已在 Claude Code Main 里输入 /exit。按回车继续，Ctrl-C 放弃。
 拒绝继续：以下 1 个进程仍在使用 /tmp/claude-501/adopt417-rehearsal/project/.venv-runtime（或是 Main）。先在 Main 里 /exit，并等它们结束。
-95131 /tmp/claude-501/adopt417-rehearsal/project/.venv-runtime/bin/python -c import time; time.sleep(120)
+97982 /tmp/claude-501/adopt417-rehearsal/project/.venv-runtime/bin/python -c import time; time.sleep(120)
 自行查找: ps -axww -o pid,ppid,etime,command | grep -F .venv-runtime
 REHEARSAL PASS: I refused while a process runs from the venv (rc=1)
 REHEARSAL PASS: the refusal names that process
@@ -137,8 +137,8 @@ REHEARSAL PASS: still no backup
 [I] 备份并安装。本步无对话框。需用户已同意，且 Main 已 /exit；Main 退出后不要再打开，直到本步结束。
 确认已在 Claude Code Main 里输入 /exit。按回车继续，Ctrl-C 放弃。
 guard: 没有进程在使用 /tmp/claude-501/adopt417-rehearsal/project/.venv-runtime，Main 的 host 不在运行。
-I start 2026-10-31 23:51:31
-backup start 2026-10-31 23:51:31
+I start 2026-11-01 00:27:04
+backup start 2026-11-01 00:27:04
 
 ### manifest, then whole venv copy (cp -Rp)
 manifest /tmp/claude-501/adopt417-rehearsal/home/graphtraj-adoption-417/backup/venv.manifest: 958 entries
@@ -155,8 +155,8 @@ archives=2 by-version={'4': 2} total-bytes=304
 97151daa1081c5cf2aca3e558196a7d0c3f88bf34be9fa0ce7162ba24e73a684  /tmp/claude-501/adopt417-rehearsal/project/.mcp.json
 e7f8fb7b57ab71de28bd092b2a1d971c2ce80abe7c04bd041f61c5e9d74c1f87  /tmp/claude-501/adopt417-rehearsal/project/.claude/settings.local.json
 39118828dadc37cfcdc4ff1d16cc9a24f85e819efe47803f70583b9762b4382f  /tmp/claude-501/adopt417-rehearsal/project/.graphtraj/claude-host/config.json
-drwx------  12 luoxiao  wheel  384 10月 31 23:51 /tmp/claude-501/adopt417-rehearsal/home/graphtraj-adoption-417/backup
-backup end 2026-10-31 23:51:32
+drwx------  12 luoxiao  wheel  384 11月  1 00:27 /tmp/claude-501/adopt417-rehearsal/home/graphtraj-adoption-417/backup
+backup end 2026-11-01 00:27:04
 
 ### wheels (expect 2 x OK)
 1a648ca32d651ce379dbfaa89040a35745c182af
@@ -244,7 +244,7 @@ created ccc version 5
 archives=3 by-version={'4': 1, '5': 2} total-bytes=473
 [R] 回退到安装前的字节。本步无对话框。先在 Main 里 /exit。按回车继续，Ctrl-C 放弃。
 guard: 没有进程在使用 /tmp/claude-501/adopt417-rehearsal/project/.venv-runtime，Main 的 host 不在运行。
-R start 2026-10-31 23:51:33
+R start 2026-11-01 00:27:06
 
 ### before restoring: how the venv differs from the pre-install manifest
 DIFF entries=958 differences=148 (/tmp/claude-501/adopt417-rehearsal/project/.venv-runtime)
@@ -263,7 +263,7 @@ SAME entries=5 differences=0 (/tmp/claude-501/adopt417-rehearsal/project/.claude
 RESTORED bbb/session.jsonl
 MOVED-OUT ccc/session.jsonl
 restored-to-pre-install=1 moved-out-of-glob=1 problems=0
-kept copies: /tmp/claude-501/adopt417-rehearsal/home/graphtraj-adoption-417/backup/after-install-20261031T235133/archives
+kept copies: /tmp/claude-501/adopt417-rehearsal/home/graphtraj-adoption-417/backup/after-install-20261101T002706/archives
 archives=2 by-version={'4': 2} total-bytes=304
 not-version-4 left for the old reader: 0
 
@@ -288,7 +288,7 @@ Version: 0.1.2
 WARNING: The directory '/Users/luoxiao/Library/Caches/pip' or its parent directory is not owned or is not writable by the current user. The cache has been disabled. Check the permissions and owner of that directory. If executing pip with sudo, you should use sudo's -H flag.
 No broken requirements found.
 
-回退的代价: 安装后记录的 Session 事件不在恢复后的档案里，只在 /tmp/claude-501/adopt417-rehearsal/home/graphtraj-adoption-417/backup/after-install-20261031T235133/archives 的保留副本中；旧代码读不了它们。
+回退的代价: 安装后记录的 Session 事件不在恢复后的档案里，只在 /tmp/claude-501/adopt417-rehearsal/home/graphtraj-adoption-417/backup/after-install-20261101T002706/archives 的保留副本中；旧代码读不了它们。
 
 证明: venv 与 plugin 都是 SAME differences=0（字节等于安装前）；problems=0；not-version-4 left: 0；三个文件 OK；agent-swarm 0.1.2；pip check 通过。
 然后: cd /tmp/claude-501/adopt417-rehearsal/project && claude --resume 1845493c-4a13-43d4-b4ea-c5864f8b22cb （插件字节又变了，至多一个插件信任框，选信任；其它框拒绝并告诉 Main）。
@@ -300,7 +300,7 @@ REHEARSAL PASS: venv equals the pre-install manifest
 SAME entries=5 differences=0 (/tmp/claude-501/adopt417-rehearsal/project/.claude/skills/graphtraj-claude-host)
 REHEARSAL PASS: plugin equals the pre-install manifest
 REHEARSAL PASS: stale channel moved out
-kept: /tmp/claude-501/adopt417-rehearsal/home/graphtraj-adoption-417/backup/after-install-20261031T235133
+kept: /tmp/claude-501/adopt417-rehearsal/home/graphtraj-adoption-417/backup/after-install-20261101T002706
 plugin/hooks/hooks.json
 plugin/hooks/host_context.mjs
 plugin/.claude-plugin/plugin.json
@@ -336,7 +336,7 @@ REHEARSAL PASS: venv equals the pre-install manifest
 
 ======== half-way install, then R: only one wheel installed, a package file removed, a stray file added
 guard: 没有进程在使用 /tmp/claude-501/adopt417-rehearsal/project/.venv-runtime，Main 的 host 不在运行。
-backup start 2026-10-31 23:51:37
+backup start 2026-11-01 00:27:10
 
 ### manifest, then whole venv copy (cp -Rp)
 manifest /tmp/claude-501/adopt417-rehearsal/home/graphtraj-adoption-417/backup/venv.manifest: 958 entries
@@ -353,8 +353,8 @@ archives=2 by-version={'4': 2} total-bytes=304
 97151daa1081c5cf2aca3e558196a7d0c3f88bf34be9fa0ce7162ba24e73a684  /tmp/claude-501/adopt417-rehearsal/project/.mcp.json
 e7f8fb7b57ab71de28bd092b2a1d971c2ce80abe7c04bd041f61c5e9d74c1f87  /tmp/claude-501/adopt417-rehearsal/project/.claude/settings.local.json
 39118828dadc37cfcdc4ff1d16cc9a24f85e819efe47803f70583b9762b4382f  /tmp/claude-501/adopt417-rehearsal/project/.graphtraj/claude-host/config.json
-drwx------  12 luoxiao  wheel  384 10月 31 23:51 /tmp/claude-501/adopt417-rehearsal/home/graphtraj-adoption-417/backup
-backup end 2026-10-31 23:51:38
+drwx------  12 luoxiao  wheel  384 11月  1 00:27 /tmp/claude-501/adopt417-rehearsal/home/graphtraj-adoption-417/backup
+backup end 2026-11-01 00:27:11
 REHEARSAL PASS: backup alone exit 0
 CHANGED lib/python3.13/site-packages/graphtraj/runtimes/dsh/driver.py
 CHANGED lib/python3.13/site-packages/graphtraj/runtimes/dsh/execution.py
@@ -362,7 +362,7 @@ CHANGED lib/python3.13/site-packages/graphtraj/runtimes/dsh/execution.py
 DIFF entries=958 differences=59 (/tmp/claude-501/adopt417-rehearsal/project/.venv-runtime)
 [R] 回退到安装前的字节。本步无对话框。先在 Main 里 /exit。按回车继续，Ctrl-C 放弃。
 guard: 没有进程在使用 /tmp/claude-501/adopt417-rehearsal/project/.venv-runtime，Main 的 host 不在运行。
-R start 2026-10-31 23:51:39
+R start 2026-11-01 00:27:12
 
 ### before restoring: how the venv differs from the pre-install manifest
 DIFF entries=958 differences=59 (/tmp/claude-501/adopt417-rehearsal/project/.venv-runtime)
@@ -379,7 +379,7 @@ SAME entries=5 differences=0 (/tmp/claude-501/adopt417-rehearsal/project/.claude
 
 ### archives: every non-v4 archive is kept, then restored or moved out of the old reader's glob
 restored-to-pre-install=0 moved-out-of-glob=0 problems=0
-kept copies: /tmp/claude-501/adopt417-rehearsal/home/graphtraj-adoption-417/backup/after-install-20261031T235139/archives
+kept copies: /tmp/claude-501/adopt417-rehearsal/home/graphtraj-adoption-417/backup/after-install-20261101T002712/archives
 archives=2 by-version={'4': 2} total-bytes=304
 not-version-4 left for the old reader: 0
 
@@ -404,7 +404,7 @@ Version: 0.1.2
 WARNING: The directory '/Users/luoxiao/Library/Caches/pip' or its parent directory is not owned or is not writable by the current user. The cache has been disabled. Check the permissions and owner of that directory. If executing pip with sudo, you should use sudo's -H flag.
 No broken requirements found.
 
-回退的代价: 安装后记录的 Session 事件不在恢复后的档案里，只在 /tmp/claude-501/adopt417-rehearsal/home/graphtraj-adoption-417/backup/after-install-20261031T235139/archives 的保留副本中；旧代码读不了它们。
+回退的代价: 安装后记录的 Session 事件不在恢复后的档案里，只在 /tmp/claude-501/adopt417-rehearsal/home/graphtraj-adoption-417/backup/after-install-20261101T002712/archives 的保留副本中；旧代码读不了它们。
 
 证明: venv 与 plugin 都是 SAME differences=0（字节等于安装前）；problems=0；not-version-4 left: 0；三个文件 OK；agent-swarm 0.1.2；pip check 通过。
 然后: cd /tmp/claude-501/adopt417-rehearsal/project && claude --resume 1845493c-4a13-43d4-b4ea-c5864f8b22cb （插件字节又变了，至多一个插件信任框，选信任；其它框拒绝并告诉 Main）。
@@ -416,7 +416,7 @@ REHEARSAL PASS: old code imports again
 phase_half:print:10: bad option: - 
 [R] 回退到安装前的字节。本步无对话框。先在 Main 里 /exit。按回车继续，Ctrl-C 放弃。
 guard: 没有进程在使用 /tmp/claude-501/adopt417-rehearsal/project/.venv-runtime，Main 的 host 不在运行。
-R start 2026-10-31 23:51:41
+R start 2026-11-01 00:27:13
 
 ### before restoring: how the venv differs from the pre-install manifest
 DIFF entries=958 differences=19 (/tmp/claude-501/adopt417-rehearsal/project/.venv-runtime)
@@ -433,7 +433,7 @@ SAME entries=5 differences=0 (/tmp/claude-501/adopt417-rehearsal/project/.claude
 
 ### archives: every non-v4 archive is kept, then restored or moved out of the old reader's glob
 restored-to-pre-install=0 moved-out-of-glob=0 problems=0
-kept copies: /tmp/claude-501/adopt417-rehearsal/home/graphtraj-adoption-417/backup/after-install-20261031T235141/archives
+kept copies: /tmp/claude-501/adopt417-rehearsal/home/graphtraj-adoption-417/backup/after-install-20261101T002713/archives
 archives=2 by-version={'4': 2} total-bytes=304
 not-version-4 left for the old reader: 0
 
@@ -458,7 +458,7 @@ Version: 0.1.2
 WARNING: The directory '/Users/luoxiao/Library/Caches/pip' or its parent directory is not owned or is not writable by the current user. The cache has been disabled. Check the permissions and owner of that directory. If executing pip with sudo, you should use sudo's -H flag.
 No broken requirements found.
 
-回退的代价: 安装后记录的 Session 事件不在恢复后的档案里，只在 /tmp/claude-501/adopt417-rehearsal/home/graphtraj-adoption-417/backup/after-install-20261031T235141/archives 的保留副本中；旧代码读不了它们。
+回退的代价: 安装后记录的 Session 事件不在恢复后的档案里，只在 /tmp/claude-501/adopt417-rehearsal/home/graphtraj-adoption-417/backup/after-install-20261101T002713/archives 的保留副本中；旧代码读不了它们。
 
 证明: venv 与 plugin 都是 SAME differences=0（字节等于安装前）；problems=0；not-version-4 left: 0；三个文件 OK；agent-swarm 0.1.2；pip check 通过。
 然后: cd /tmp/claude-501/adopt417-rehearsal/project && claude --resume 1845493c-4a13-43d4-b4ea-c5864f8b22cb （插件字节又变了，至多一个插件信任框，选信任；其它框拒绝并告诉 Main）。
@@ -476,8 +476,16 @@ REHEARSAL PASS: R refused without COMPLETE
 REHEARSAL PASS: M prints
 [pi] /tmp/claude-501/adopt417-rehearsal/no-pi-sandbox 不存在：配置的 Pi preset 指向已删除的 /private/tmp/pi-asb-247。预期 launch_status failed，error.code RUNTIME_EXECUTABLE_INVALID（'Pi requires srt on pi.sandbox_path; no fallback.' 或 'Pi and agent-sandbox must be installed in the selected environment.'）。这条拒绝就是 Pi 未派发的原因，写进报告；不要安装沙箱。
 Using only the tasks tool: execute swarm with arguments {"tasks":[{"task_id":"417","role":"pi_dsh_trial.team_leader","instruction":"Reply with exactly one line: PONG-417-PI. Use no tools."}]}. Print the raw result and end your turn. Do not wait.
-[pi] /tmp/claude-501/adopt417-rehearsal/pisb 存在：内联 role 用它，不改 roles.yml。证明同上，PONG-417-PI。
+[pi] /tmp/claude-501/adopt417-rehearsal/pisb 存在：内联 role 用它，不改 roles.yml。这个 PATH 里没有 rg，预期 Pi 的启动因此失败；把错误带回，这就是原因。 证明同上，PONG-417-PI。
 Using only the tasks tool: execute swarm with arguments {"tasks":[{"task_id":"417","role":{"pi_dsh_trial.merge_resolver": {"connection": "pi/deepseek/deepseek-flash", "worktree_access": "read", "pi": {"sandbox_python": "/x/venv/bin/python", "sandbox_path": "/x/srt:/usr/bin", "agent_dir": "/Users/luoxiao/.pi/agent"}}},"instruction":"Reply with exactly one line: PONG-417-PI. Use no tools."}]}. Print the raw result and end your turn. Do not wait.
+REHEARSAL PASS: no rg anywhere: the note says the Pi launch is expected to fail
+REHEARSAL PASS: and the role is unchanged
+[pi] /tmp/claude-501/adopt417-rehearsal/pisb 存在：内联 role 用它，不改 roles.yml。这个 PATH 里的 rg: /tmp/claude-501/adopt417-rehearsal/pisb/bin/rg（解析到 /private/tmp/claude-501/adopt417-rehearsal/rgreal/rg）。 证明同上，PONG-417-PI。
+Using only the tasks tool: execute swarm with arguments {"tasks":[{"task_id":"417","role":{"pi_dsh_trial.merge_resolver": {"connection": "pi/deepseek/deepseek-flash", "worktree_access": "read", "pi": {"sandbox_python": "/x/venv/bin/python", "sandbox_path": "/tmp/claude-501/adopt417-rehearsal/pisb/bin:/x/srt:/usr/bin", "agent_dir": "/Users/luoxiao/.pi/agent"}}},"instruction":"Reply with exactly one line: PONG-417-PI. Use no tools."}]}. Print the raw result and end your turn. Do not wait.
+REHEARSAL PASS: rg link present: $PISBX/bin is prepended in the printed role
+REHEARSAL PASS: the note names the rg it resolves to
+REHEARSAL PASS: the env file is unchanged
+REHEARSAL PASS: already named: not added twice
 [inbox] Main 的通知队列。无对话框。只读。
 records=2 cursor=None
 n1 p completed e
@@ -522,25 +530,31 @@ guard: 没有进程在使用 /tmp/claude-501/adopt417-rehearsal/project/.venv-ru
 
 ==> 下一步（直接粘贴）: zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/417-production-adoption-agents-024/scripts/adopt-417/steps.zsh B
 REHEARSAL PASS: 0 runs (rc=0)
---- Vc retry 1: stopped right after git init; no terminal, as in this sandbox (the real /dev/tty branch)
-Claude Code 的交互启动没有正常退出（rc=1），或打不开终端 /dev/tty。信任框可能没有出现或没有确认，Vc 未通过，配置也没有写。
-请在普通 Terminal 里重新运行本步：已完成的部分不会重做。若仍失败，把这段输出交给 Main。
+--- Vc 1: stopped right after git init; not a terminal: setup is reached, the start is refused
+拒绝启动：本步要显示信任框，stdin 和 stdout 都必须是终端。请在普通 Terminal 里直接运行，不要加管道或重定向。
 
 Vc 不通过，不要做 I，把 /tmp/claude-501/adopt417-rehearsal/project/.graphtraj/core/state/tasks/417-production-adoption-agents-024/adoption/raw/Vc.txt 与 /tmp/claude-501/adopt417-rehearsal/project/.graphtraj/core/state/tasks/417-production-adoption-agents-024/adoption/raw/Vc-stream.jsonl 交给 Main。
-REHEARSAL PASS: Vc fails when /dev/tty cannot be opened (rc=1)
-REHEARSAL PASS: it says so
-a58109f3b12a08153898b922f286d7c7e6cacc9c
-REHEARSAL PASS: the commit and setup were still reached after the git init stop
-REHEARSAL PASS: no trust marker, no configuration, no Vc.ok
---- Vc retry 2: the stub's start exits 3
-请在普通 Terminal 里重新运行本步：已完成的部分不会重做。若仍失败，把这段输出交给 Main。
+交互启动不在 Vc.txt 里，所以请把屏幕上 Claude Code 的输出也复制给 Main。修好后重新运行本步：已完成的部分不会重做。
+REHEARSAL PASS: Vc refuses when stdin and stdout are not a terminal (rc=1)
+REHEARSAL PASS: it says so, and asks for the screen output
+REHEARSAL PASS: the failure asks for the screen output
+REHEARSAL PASS: no start was made
+REHEARSAL PASS: the two instruction lines are in Vc.txt
+REHEARSAL PASS: this is the user's state: git and setup done, no trust marker, no .mcp.json, no Vc.ok
+--- Vc 2: from that exact state, the start exits 3 and the answer is n
+
+trust start: user answered no
 
 Vc 不通过，不要做 I，把 /tmp/claude-501/adopt417-rehearsal/project/.graphtraj/core/state/tasks/417-production-adoption-agents-024/adoption/raw/Vc.txt 与 /tmp/claude-501/adopt417-rehearsal/project/.graphtraj/core/state/tasks/417-production-adoption-agents-024/adoption/raw/Vc-stream.jsonl 交给 Main。
-REHEARSAL PASS: Vc fails on a start that did not exit normally (rc=1)
-REHEARSAL PASS: the message names rc=3
+交互启动不在 Vc.txt 里，所以请把屏幕上 Claude Code 的输出也复制给 Main。修好后重新运行本步：已完成的部分不会重做。
+REHEARSAL PASS: answering no fails (rc=1)
 REHEARSAL PASS: setup was not repeated
-REHEARSAL PASS: still no trust marker or configuration
---- Vc retry 3: the start exits 0
+REHEARSAL PASS: one start, and it was not under the log
+REHEARSAL PASS: Vc.txt has the rc and the answer
+REHEARSAL PASS: no marker, no configuration
+--- Vc 3: the same, with no answer at all (end of input)
+REHEARSAL PASS: no answer counts as no (rc=1)
+--- Vc 4: the start exits 3 and the answer is y: the stream check decides
 PASS mcp__agents__agents: answers=1 ok=1
    error=False ok
 
@@ -553,17 +567,21 @@ tail: /tmp/claude-501/adopt417-rehearsal/home/graphtraj-adoption-417/vproject/.g
 证明: PASS mcp__agents__tasks 与 PASS mcp__agents__agents，且 error=False。
 
 ==> 下一步（直接粘贴）: zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/417-production-adoption-agents-024/scripts/adopt-417/steps.zsh I
-REHEARSAL PASS: Vc runs and judges a stream (rc=0)
+REHEARSAL PASS: answering yes continues (rc=0)
+REHEARSAL PASS: Vc.txt records the yes
 REHEARSAL PASS: Vc.ok, trust marker and configuration written
-REHEARSAL PASS: two starts so far
---- Vc retry 4: configuration lost; no terminal, so a second start would fail
+REHEARSAL PASS: three starts so far
+--- Vc 5: configuration lost, no terminal: rewritten with no new start
 REHEARSAL PASS: Vc rewrites the configuration without a new start (rc=0)
-REHEARSAL PASS: still two starts
+REHEARSAL PASS: still three starts
+--- Vc 6: a normal start, rc=0: no question
+REHEARSAL PASS: rc=0 passes without asking (rc=0)
+REHEARSAL PASS: the question did not appear
 FAIL mcp__agents__tasks: answers=1 ok=0
    error=True denied
 REHEARSAL PASS: a refused tool call does not pass the stream check
 [Mps] 记录运行中的 host 与它的父 claude。无对话框。只读。Main 要保持运行。
-at 2026-10-31 23:51:46
+at 2026-11-01 00:27:20
 host: 4242 1 /tmp/claude-501/adopt417-rehearsal/project/.venv-runtime/bin/python -m graphtraj.runtimes.claude.host serve --config /tmp/claude-501/adopt417-rehearsal/project/.graphtraj/claude-host/config.json
 parent claude: 1 /sbin/launchd
 PASS 115 FAIL 130

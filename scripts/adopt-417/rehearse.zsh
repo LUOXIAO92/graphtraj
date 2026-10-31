@@ -196,35 +196,50 @@ case "$1" in
   -p) cat >/dev/null
     print '{"message":{"content":[{"type":"tool_use","id":"1","name":"mcp__agents__tasks"},{"type":"tool_use","id":"2","name":"mcp__agents__agents"}]}}'
     print '{"message":{"content":[{"type":"tool_result","tool_use_id":"1","content":"ok"},{"type":"tool_result","tool_use_id":"2","content":[{"type":"text","text":"ok"}]}]}}' ;;
-  *) print start >> $STUB_START_LOG; exit ${STUB_START_RC:-0} ;;
+  *) print start >> $STUB_START_LOG; print stub-interactive-screen; exit ${STUB_START_RC:-0} ;;
 esac
 exit 0
 EOF2
   steps 0 2>&1 | tail -32; check "0 runs (rc=${pipestatus[1]})" [ ${pipestatus[1]} -eq 0 ]
   local VPJ=$FB/vproject T=$FB/vproject/.git/adopt417-trust-start-ok
   export STUB_START_LOG=$F/starts.txt; : > $STUB_START_LOG
-  print -r -- "--- Vc retry 1: stopped right after git init; no terminal, as in this sandbox (the real /dev/tty branch)"
-  rm -f $W/raw/Vc.ok; rm -rf $VPJ; mkdir -p $VPJ; git -C $VPJ init -q --initial-branch=main
-  steps Vc > $F/vc1.txt 2>&1; local rc=$?; tail -4 $F/vc1.txt
-  check "Vc fails when /dev/tty cannot be opened (rc=$rc)" [ $rc -ne 0 ]
-  check "it says so" grep -q "交互启动没有正常退出" $F/vc1.txt
-  check "the commit and setup were still reached after the git init stop" git -C $VPJ rev-parse -q --verify refs/heads/dev
-  check "no trust marker, no configuration, no Vc.ok" test ! -e $T -a ! -e $VPJ/.mcp.json -a ! -e $W/raw/Vc.ok
-  print -r -- "--- Vc retry 2: the stub's start exits 3"
-  (export ADOPT417_NO_TTY=1 STUB_START_RC=3; steps Vc) > $F/vc2.txt 2>&1; rc=$?; tail -3 $F/vc2.txt
-  check "Vc fails on a start that did not exit normally (rc=$rc)" [ $rc -ne 0 ]
-  check "the message names rc=3" grep -q "rc=3" $F/vc2.txt
+  local VCLOG=$W/raw/Vc.txt
+  starts() { wc -l < $STUB_START_LOG | tr -d ' '; }
+  print -r -- "--- Vc 1: stopped right after git init; not a terminal: setup is reached, the start is refused"
+  rm -f $W/raw/Vc.ok $VCLOG; rm -rf $VPJ; mkdir -p $VPJ; git -C $VPJ init -q --initial-branch=main
+  steps Vc < /dev/null > $F/vc1.txt 2>&1; local rc=$?; tail -4 $F/vc1.txt
+  check "Vc refuses when stdin and stdout are not a terminal (rc=$rc)" [ $rc -ne 0 ]
+  check "it says so, and asks for the screen output" grep -q "拒绝启动" $F/vc1.txt
+  check "the failure asks for the screen output" grep -q "屏幕上 Claude Code 的输出" $F/vc1.txt
+  check "no start was made" test "$(starts)" = 0
+  check "the two instruction lines are in Vc.txt" grep -q "Yes, proceed" $VCLOG
+  check "this is the user's state: git and setup done, no trust marker, no .mcp.json, no Vc.ok" \
+    test "$(git -C $VPJ rev-parse -q --verify refs/heads/dev)" -a ! -e $T -a ! -e $VPJ/.mcp.json -a ! -e $W/raw/Vc.ok
+  print -r -- "--- Vc 2: from that exact state, the start exits 3 and the answer is n"
+  (export ADOPT417_NO_TTY=1 STUB_START_RC=3; print n | steps Vc) > $F/vc2.txt 2>&1; rc=$?; tail -5 $F/vc2.txt
+  check "answering no fails (rc=$rc)" [ $rc -ne 0 ]
   check "setup was not repeated" test -z "$(grep 'Setup plan' $F/vc2.txt)"
-  check "still no trust marker or configuration" test ! -e $T -a ! -e $VPJ/.mcp.json
-  print -r -- "--- Vc retry 3: the start exits 0"
-  (export ADOPT417_NO_TTY=1; steps Vc) > $F/vc3.txt 2>&1; rc=$?; tail -12 $F/vc3.txt
-  check "Vc runs and judges a stream (rc=$rc)" [ $rc -eq 0 ]
+  check "one start, and it was not under the log" test "$(starts)" = 1 -a -n "$(grep stub-interactive-screen $F/vc2.txt)" -a -z "$(grep stub-interactive-screen $VCLOG)"
+  check "Vc.txt has the rc and the answer" grep -q "trust start rc=3" $VCLOG
+  check "no marker, no configuration" test ! -e $T -a ! -e $VPJ/.mcp.json
+  print -r -- "--- Vc 3: the same, with no answer at all (end of input)"
+  (export ADOPT417_NO_TTY=1 STUB_START_RC=3; steps Vc < /dev/null) > $F/vc3.txt 2>&1; rc=$?
+  check "no answer counts as no (rc=$rc)" [ $rc -ne 0 -a ! -e $T ]
+  print -r -- "--- Vc 4: the start exits 3 and the answer is y: the stream check decides"
+  (export ADOPT417_NO_TTY=1 STUB_START_RC=3; print y | steps Vc) > $F/vc4.txt 2>&1; rc=$?; tail -12 $F/vc4.txt
+  check "answering yes continues (rc=$rc)" [ $rc -eq 0 ]
+  check "Vc.txt records the yes" grep -q "user answered yes" $VCLOG
   check "Vc.ok, trust marker and configuration written" test -e $W/raw/Vc.ok -a -e $T -a -e $VPJ/.mcp.json
-  check "two starts so far" test "$(wc -l < $STUB_START_LOG | tr -d ' ')" = 2
-  print -r -- "--- Vc retry 4: configuration lost; no terminal, so a second start would fail"
+  check "three starts so far" test "$(starts)" = 3
+  print -r -- "--- Vc 5: configuration lost, no terminal: rewritten with no new start"
   rm -f $VPJ/.mcp.json
-  steps Vc > $F/vc4.txt 2>&1; rc=$?; check "Vc rewrites the configuration without a new start (rc=$rc)" [ $rc -eq 0 -a -e $VPJ/.mcp.json ]
-  check "still two starts" test "$(wc -l < $STUB_START_LOG | tr -d ' ')" = 2
+  steps Vc < /dev/null > $F/vc5.txt 2>&1; rc=$?; check "Vc rewrites the configuration without a new start (rc=$rc)" [ $rc -eq 0 -a -e $VPJ/.mcp.json ]
+  check "still three starts" test "$(starts)" = 3
+  print -r -- "--- Vc 6: a normal start, rc=0: no question"
+  rm -f $T $W/raw/Vc.ok
+  (export ADOPT417_NO_TTY=1; steps Vc < /dev/null) > $F/vc6.txt 2>&1; rc=$?
+  check "rc=0 passes without asking (rc=$rc)" [ $rc -eq 0 -a -e $T -a -e $W/raw/Vc.ok ]
+  check "the question did not appear" test -z "$(grep '按 y 表示是' $F/vc6.txt)"
   print -r -- '{"message":{"content":[{"type":"tool_use","id":"1","name":"mcp__agents__tasks"},{"type":"tool_result","tool_use_id":"1","content":"denied","is_error":true}]}}' > $F/bad.jsonl
   $CONDA -I $SD/adopt_tree.py stream $F/bad.jsonl mcp__agents__tasks; check "a refused tool call does not pass the stream check" [ $? -ne 0 ]
   print "4242 1 $FRT/bin/python -m graphtraj.runtimes.claude.host serve --config $FH/.graphtraj/claude-host/config.json" > $F/ps.txt
@@ -241,7 +256,18 @@ phase_refuse() {
   steps M > /dev/null; check "M prints" [ $? -eq 0 ]
   steps P | grep -A1 '^\[pi\]'
   mkdir -p $F/pisb; print 'sandbox_python=/x/venv/bin/python\nsandbox_path=/x/srt:/usr/bin' > $F/pisb/pi-sandbox.env
-  (export ADOPT417_PI_SANDBOX=$F/pisb; steps P) | grep -A1 '^\[pi\]'
+  (export ADOPT417_PI_SANDBOX=$F/pisb; steps P) > $F/p-none.txt; grep -A1 '^\[pi\]' $F/p-none.txt
+  check "no rg anywhere: the note says the Pi launch is expected to fail" grep -q "没有 rg，预期 Pi 的启动因此失败" $F/p-none.txt
+  check "and the role is unchanged" grep -q '"sandbox_path": "/x/srt:/usr/bin"' $F/p-none.txt
+  mkdir -p $F/pisb/bin $F/rgreal; print '#!/bin/sh' > $F/rgreal/rg; chmod +x $F/rgreal/rg; ln -s $F/rgreal/rg $F/pisb/bin/rg
+  cp $F/pisb/pi-sandbox.env $F/env.before
+  (export ADOPT417_PI_SANDBOX=$F/pisb; steps P) > $F/p-rg.txt; grep -A1 '^\[pi\]' $F/p-rg.txt
+  check "rg link present: \$PISBX/bin is prepended in the printed role" grep -q "\"sandbox_path\": \"$F/pisb/bin:/x/srt:/usr/bin\"" $F/p-rg.txt
+  check "the note names the rg it resolves to" grep -q "rgreal/rg" $F/p-rg.txt
+  check "the env file is unchanged" cmp $F/pisb/pi-sandbox.env $F/env.before
+  print "sandbox_python=/x/venv/bin/python\nsandbox_path=$F/pisb/bin:/usr/bin" > $F/pisb/pi-sandbox.env
+  (export ADOPT417_PI_SANDBOX=$F/pisb; steps P) > $F/p-has.txt
+  check "already named: not added twice" grep -q "\"sandbox_path\": \"$F/pisb/bin:/usr/bin\"" $F/p-has.txt
   local K=$(print -rn -- 'claude:1845493c-4a13-43d4-b4ea-c5864f8b22cb' | shasum -a 256 | cut -d' ' -f1)
   mkdir -p $FH/.graphtraj/core/runner/main-sessions/inbox
   print '{"at":1,"event":{"alias":"p","event":"completed","execution":"e"},"id":"n1"}\n{"at":2,"event":{"alias":"p","event":"completed","execution":"e"},"id":"n1"}' > $FH/.graphtraj/core/runner/main-sessions/inbox/$K.jsonl

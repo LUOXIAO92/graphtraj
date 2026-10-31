@@ -31,7 +31,9 @@ def timestamp(record: dict) -> tuple[int, list[dict]]:
             pass
     return 0, [{
         'path': 'time', 'reason': 'Native timestamp unavailable; zero is a protocol placeholder.'}]
-from agent_swarm.sessions.claude_history import conversation, message_id, read_records
+from agent_swarm.sessions.claude_history import (
+    NO_HISTORY_SIZE, conversation, message_id, read_records, read_split,
+)
 
 
 def _events(store: JsonlSessionStore) -> list[dict]:
@@ -110,15 +112,50 @@ class ClaudeJsonlCollector:
         self.deferred: tuple[dict, int] | None = None
         self.position = 0
 
-    def bind(self, path: Path, current_inputs: set[str] | None = None) -> None:
-        """Bind only the native hook's transcript and establish its history cut."""
+    def history_size(self, path: Path) -> int | None:
+        """Measure the history for ``bind`` while Claude's hook is still unanswered.
+
+        Claude's reply cannot exist until the hook is answered, so this size
+        stays below it however late the bind runs. Only ``stat`` runs here: the
+        caller must keep answering hooks. Returns ``None`` when no cut applies,
+        and ``NO_HISTORY_SIZE`` when the transcript cannot be measured.
+        """
+        if (self.archive is None or not self.archive.save_normalized_sessions
+                or self.archive.backfill_history or self.resumed is False
+                or self.activation_count is not None):
+            return None
+        try:
+            return path.stat().st_size
+        except OSError:
+            return NO_HISTORY_SIZE
+
+    def bind(
+        self,
+        path: Path,
+        current_inputs: set[str] | None = None,
+        history_size: int | None = None,
+    ) -> None:
+        """Bind only the native hook's transcript and establish its history cut.
+
+        ``history_size`` comes from ``history_size()`` at the hook. Without it,
+        everything in the transcript when this runs counts as history.
+        """
         if self.path is not None and self.path != path:
             raise ValueError('Claude changed the associated transcript path.')
         self.path = path
         if self.archive is None or not self.archive.save_normalized_sessions:
             return
+        history = 0
         try:
-            records = read_records(path, self.session)
+            if history_size is None:
+                records = read_records(path, self.session)
+                history = len(records)
+            elif history_size == NO_HISTORY_SIZE:
+                self.cut_known = False
+                _, records = read_split(path, self.session, 0)
+            else:
+                inside, later = read_split(path, self.session, history_size)
+                records, history = inside + later, len(inside)
         except FileNotFoundError:
             records = []
             self.cut_known = self.resumed is False
@@ -127,7 +164,7 @@ class ClaudeJsonlCollector:
             self.cut_known = False
         if not self.archive.backfill_history:
             self.history_count = (self.activation_count if self.activation_count is not None
-                                  else len(records) if self.resumed is not False else 0)
+                                  else history if self.resumed is not False else 0)
             self.excluded = {r['uuid'] for r in records[:self.history_count] if isinstance(r.get('uuid'), str)}
             self.excluded.difference_update(current_inputs or ())
             self.live_ids.update(r['uuid'] for r in records if r.get('uuid') in (current_inputs or ()))

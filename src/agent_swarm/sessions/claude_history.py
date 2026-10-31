@@ -7,25 +7,67 @@ Original records are never modified when applying the native retained links.
 from __future__ import annotations
 
 from copy import deepcopy
+from io import BytesIO
 import json
 from pathlib import Path
 
 
+# The history size of a resumed transcript that could not be measured at its hook.
+NO_HISTORY_SIZE = -1
+
+
+def _record(line: bytes, session: str) -> dict:
+    """Parse one transcript line that belongs to ``session``.
+
+    The SDK accepts a valid final JSON value without a newline. A torn value
+    raises with its original bytes/text still available to the collector as an
+    unresolved observation.
+    """
+    record = json.loads(line)
+    if not isinstance(record, dict):
+        raise ValueError('Claude transcript entry must be an object.')
+    if record.get('sessionId', session) != session:
+        raise ValueError('Claude transcript belongs to another Session.')
+    return record
+
+
 def read_records(path: Path, session: str) -> list[dict]:
     """Read complete lines from the one attested transcript, never scan a home."""
-    records = []
     with path.open('rb') as stream:
-        for line in stream:
-            # The SDK accepts a valid final JSON value without a newline. A
-            # torn value raises with its original bytes/text still available
-            # to the collector as an unresolved observation.
-            record = json.loads(line)
-            if not isinstance(record, dict):
-                raise ValueError('Claude transcript entry must be an object.')
-            if record.get('sessionId', session) != session:
-                raise ValueError('Claude transcript belongs to another Session.')
-            records.append(record)
-    return records
+        return [_record(line, session) for line in stream]
+
+
+def read_split(path: Path, session: str, size: int) -> tuple[list[dict], list[dict]]:
+    """Read the transcript as the records inside ``size`` bytes and those after it.
+
+    Parameters
+    ----------
+    path, session
+        The attested transcript and its Session.
+    size
+        The transcript's byte size measured while Claude's hook was unanswered.
+
+    Returns
+    -------
+    tuple[list[dict], list[dict]]
+        The history, read as strictly as ``read_records``: a size inside a value
+        raises, as a torn tail does. Then the later records up to the first
+        value that does not parse, because Claude may still be writing it.
+    """
+    with path.open('rb') as stream:
+        history, rest = stream.read(size), stream.read()
+
+    records = [_record(line, session) for line in BytesIO(history)]
+
+    later = []
+    for line in BytesIO(rest):
+        # A history whose last value had no newline leaves that newline here.
+        if line.strip():
+            try:
+                later.append(_record(line, session))
+            except ValueError:
+                break
+    return records, later
 
 
 def conversation(records: list[dict]) -> list[dict]:

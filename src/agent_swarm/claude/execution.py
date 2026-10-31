@@ -357,7 +357,10 @@ class ClaudeExecution:
                     self.diagnostics['collection_progress'] = progress
                     self._save_diagnostics()
                 if item[0] == 'bind':
-                    self.collector.bind(item[1], item[2])
+                    if item[3] is None:
+                        self.collector.bind(item[1], item[2])
+                    else:
+                        self.collector.bind(item[1], item[2], item[3])
                 else:
                     records = [(item[1], item[2])]
                     # Read one archive snapshot for the already received batch,
@@ -517,7 +520,12 @@ class ClaudeExecution:
         if native.get('transcript_path'):
             self.transcript = Path(native['transcript_path'])
             if self.collector is not None:
-                self.collection.put(('bind', self.transcript, set(self.input_ids)))
+                # Measure the history now: once the hook is answered, Claude's
+                # reply can reach the transcript before the queued bind runs. A
+                # collector a consumer supplied need not offer this.
+                measure = getattr(self.collector, 'history_size', None)
+                size    = measure(self.transcript) if measure is not None else None
+                self.collection.put(('bind', self.transcript, set(self.input_ids), size))
             # Keep the native file as the Trace reference, never a third
             # transport body. Nonempty older transport evidence stays untouched.
             self.trace.parent.mkdir(parents=True, exist_ok=True)

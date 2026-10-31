@@ -1,11 +1,12 @@
 # Task 392 real-host steps: what every step shares. Sourced, never run.
 #
-# A step starts:
+# A step, in a file named <step>.zsh in this directory, starts:
 #   #!/bin/zsh
 #   [ -n "$ZSH_VERSION" ] || exec /bin/zsh "$0" "$@"
 #   source /abs/path/scripts/real-host/392/common.zsh
 #   step_begin <step> <expected minutes> <dialog text, or "none"> <what success looks like>
-# and ends with `step_end <exact next command>`, which scans, saves and exits.
+# and ends with `step_end`, which scans, saves, prints the next numbered step and exits
+# (`step_end <exact command>` to name another).
 #
 # Layout (fixed; AGENTS_392_DRY_* only exist for the dry run against stub hosts):
 #   HARNESS, WT     the Harness root and this Worktree
@@ -35,6 +36,7 @@ VENV=$AG/venv
 PI_SANDBOX=${AGENTS_392_DRY_SANDBOX:-$HOME/agents-pi-sandbox}
 REALHOST=${AGENTS_392_DRY_REALHOST:-$HARNESS/.graphtraj/core/state/tasks/392-agents-standalone-combined-acceptance/realhost}
 path=(/opt/homebrew/bin $HOME/.local/bin $path)
+if [[ -n ${AGENTS_392_DRY_BIN:-} ]]; then path=($AGENTS_392_DRY_BIN $path); fi
 # The test Runtimes' models. Children and hosts use the small ones; the Codex one is the user's own.
 CLAUDE_MODEL=claude-sonnet-5-5
 DEEPSEEK_MODEL=deepseek-flash
@@ -135,20 +137,25 @@ read_sandbox() {
   [[ -n $SANDBOX_PYTHON && -n $SANDBOX_PATH ]] || fail "$env_file lacks sandbox_python or sandbox_path"
 }
 
-# Begin a step: re-run under script(1) so the terminal stays with a native dialog and a transcript
-# is kept (403's form), make the run's directories and print what to expect.
+# Begin a step. It runs again under script(1), so the terminal stays with a native dialog and a
+# transcript is kept (403's form), then makes the run's directories and prints what to expect.
+SCRIPT_ARGS=("$@")
 step_begin() {
   STEP=$1 STEP_MINUTES=$2 STEP_DIALOG=$3 STEP_SUCCESS=$4
-  STAMP=$(date +%Y%m%dT%H%M%S)
+  [[ $STEP == *[!a-z0-9-]* ]] && { print -r -- "STOP: bad step name $STEP" >&2; exit 2; }
+  STAMP=${AGENTS_392_STAMP:-$(date +%Y%m%dT%H%M%S)}
   RUN=$AG/runs/$STEP-$STAMP
   OUT=$RUN/out
   WORK=$RUN/work
-  [[ $STEP == *[!a-z0-9-]* ]] && { print -r -- "STOP: bad step name $STEP" >&2; exit 2; }
   mkdir -p $OUT $WORK
-  SCAN_DONE=
-  trap 'step_save' EXIT
+  if [[ -z ${AGENTS_392_STAMP:-} && -z ${AGENTS_392_DRY_NO_SCRIPT:-} ]]; then
+    export AGENTS_392_STAMP=$STAMP
+    exec /usr/bin/script -q $OUT/terminal.log /bin/zsh $ZSH_ARGZERO "${SCRIPT_ARGS[@]}"
+  fi
+  # A step run after this one starts its own transcript and takes its own time.
+  unset AGENTS_392_STAMP
   say "$STEP (expect about $STEP_MINUTES minutes)"
-  info "shell: zsh $ZSH_VERSION, script: ${ZSH_ARGZERO:-$0}"
+  info "shell: zsh $ZSH_VERSION, script: $ZSH_ARGZERO"
   info "scratch: $RUN"
   info "saved to: $REALHOST/$STEP"
   if [[ $STEP_DIALOG == none ]]; then
@@ -161,10 +168,40 @@ step_begin() {
   commit_check
 }
 
+# Prepare the variables checks.py reads. Stops when a host or the Codex model is missing.
+prepare_checks() {
+  venv_check
+  find_hosts
+  load_key
+  read_sandbox
+  local model=$(codex_model)
+  [[ -n $model ]] || fail "no top-level model line in ~/.codex/config.toml; add one (model = \"...\") and run again"
+  export RH_RUN=$RUN RH_OUT=$OUT RH_AG=$AG RH_PYTHON=$VENV/bin/python RH_CLAUDE=$CLAUDE RH_CODEX=$CODEX RH_PI=$PI_BIN \
+    RH_DSH=$DSH RH_CLAUDE_MODEL=$CLAUDE_MODEL RH_CODEX_MODEL=$model RH_DEEPSEEK_MODEL=$DEEPSEEK_MODEL \
+    RH_PI_PROVIDER=$PI_PROVIDER RH_SANDBOX_PYTHON=$SANDBOX_PYTHON RH_SANDBOX_PATH=$SANDBOX_PATH
+  info "models: Claude $CLAUDE_MODEL, Codex $model (from ~/.codex/config.toml), Pi and DSH $DEEPSEEK_MODEL"
+  info "DEEPSEEK_BASE_URL in this shell: ${${DEEPSEEK_BASE_URL:+set}:-unset} (left as it is: DSH children must ignore it, 411)"
+}
+
+# Stop unless step 02 trusted the one scratch Claude project these steps share.
+need_claude_project() {
+  [[ -f $AG/claude-project/.trust-392-done ]] || fail "the Claude project is not trusted yet; run: zsh $HERE/02-claude-trust.zsh"
+}
+
+# `run_checks <function> [argument]`: a stop inside is a FAIL line, and the step still saves.
+run_checks() {
+  setopt local_options no_err_exit
+  (cd $RUN && $VENV/bin/python -E -s $HERE/checks.py "$@")
+  local code=$?
+  (( code == 0 )) || check FAIL "checks.py $* stopped with exit $code; see the terminal transcript"
+}
+
 # Look for the key's value in $OUT and copy the rest to the Harness. Runs once. The scan is a Python
 # program reading the value from its environment, so the value is on no command line, and its answer
 # is a file: inside an EXIT trap zsh can lose a command's status (403), and no file means no copy.
 step_save() {
+  # A subshell, such as $(...), runs the EXIT trap too; only the step's own shell saves.
+  (( ZSH_SUBSHELL == 0 )) || return 0
   [[ -z ${SCAN_DONE:-} && -n ${OUT:-} && -d ${OUT:-/nonexistent} ]] || return 0
   SCAN_DONE=1
   setopt local_options no_err_exit
@@ -177,15 +214,31 @@ step_save() {
   fi
 }
 
-# End a step: save, show the summary and print the exact next command.
+# Here, not in step_begin: a function's EXIT trap would run when that function returns.
+SCAN_DONE=
+trap 'step_save' EXIT
+
+# The numbered step after this one, by name; steps are named so that this order is the order to run.
+next_step() {
+  local steps=($HERE/[0-9][0-9]-*.zsh(N)) index
+  index=${steps[(ie)$HERE/$STEP.zsh]}
+  if (( index < ${#steps} )); then
+    print -r -- "zsh $steps[index+1]"
+  else
+    print -r -- "no further step; tell Main this run is finished"
+  fi
+}
+
+# End a step: save, show the summary and print the exact next command (given, or the next by number).
 step_end() {
   step_save
   print -r -- ""
   print -r -- "== $STEP summary ($REALHOST/$STEP/summary.txt)"
   cat $OUT/summary.txt 2>/dev/null || print -r -- "(no criterion lines)"
   print -r -- ""
+  print -r -- "If a line above says FAIL or CANNOT, go on anyway: Main reads the saved output."
   print -r -- "Next command:"
-  print -r -- "  $*"
+  print -r -- "  ${*:-$(next_step)}"
   local failed=0
   grep -q '^FAIL ' $OUT/summary.txt 2>/dev/null && failed=1
   exit $failed

@@ -1006,7 +1006,9 @@ class ClaudeExecution:
                 try:
                     self._close()
                 except RuntimeAdapterError as error:
-                    failure = error
+                    # A failure already in hand stays the reason the parent reads;
+                    # terminal_confirmed still reports this unconfirmed stop below.
+                    failure = failure or error
                 process_group_closed = self.terminal_confirmed
                 if reader is not None:
                     reader.join(timeout=5)
@@ -1077,10 +1079,10 @@ class ClaudeExecution:
                     elif collector is not None:
                         collector.flush()
                 except Exception as error:
-                    failure = RuntimeAdapterError('RUNTIME_ARCHIVE_FAILED', str(error))
-                self.diagnostics['collection'] = ('failed' if self.collection_failure is not None
-                                                  or getattr(failure, 'code', None) == 'RUNTIME_ARCHIVE_FAILED'
-                                                  else 'complete')
+                    # The diagnostics record this; a failure already in hand stays the reason.
+                    self.collection_failure = self.collection_failure or error
+                    failure = failure or RuntimeAdapterError('RUNTIME_ARCHIVE_FAILED', str(error))
+                self.diagnostics['collection'] = 'failed' if self.collection_failure is not None else 'complete'
                 self._save_diagnostics()
                 if (failure is None and self.dropped_prompt_seconds is not None
                         and not self.stopping.is_set()):

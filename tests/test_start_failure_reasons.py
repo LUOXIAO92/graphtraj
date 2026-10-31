@@ -1,6 +1,7 @@
 """A Runtime that fails to start tells its parent why (421)."""
 import asyncio
 from contextlib import nullcontext
+import json
 import os
 from pathlib import Path
 import shutil
@@ -69,6 +70,11 @@ def test_graphtraj_dispatch_reports_why_dsh_did_not_start(
     document = yaml.safe_load(failure.read_text())
     assert document['code'] == 'RUNTIME_START_FAILED'
     assert REASON in document['message']
+    # The member's core Agent, which a parent's status and notices read, has the same reason.
+    [agent] = (root / '.graphtraj/swarm/control/agents').glob('*.json')
+    [ended] = json.loads(agent.read_text())['executions']
+    assert ended['error']['code'] == 'RUNTIME_START_FAILED'
+    assert REASON in ended['error']['message']
 
 
 def failing_turn(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, close_failure: Exception) -> object:

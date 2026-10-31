@@ -688,27 +688,42 @@ class DshExecution:
                 stream.write(error.code + ': ' + error.message + '\n')
             raise
         finally:
+            in_flight = sys.exc_info()[1]
             try:
-                self.service.close()
-                with self.lock:
-                    self.active = False
-                    self.pending.clear()
-                    self.reviewing.clear()
-                    self.tool_calls.clear()
-                self.review_ready.unlink(missing_ok=True)
-                self._retain_trace()
-                if self.outcome is not None and not self.trace_file.is_file():
-                    raise self.error_type('RUNTIME_TRACE_FAILED', 'DSH native Trace was not retained.')
-                if self.archive is not None and self.trace_file.is_file():
-                    try:
-                        self.archive.finish(self.trace_file)
-                    except (OSError, ValueError, StopIteration) as error:
-                        raise self.error_type('RUNTIME_TRACE_FAILED', str(error)) from error
-                if self.outcome is not None and self.confirm_native is not None:
-                    self.confirm_native(self)
-            finally:
-                connections.close()
-                self.finished.set()
+                try:
+                    self.service.close()
+                    with self.lock:
+                        self.active = False
+                        self.pending.clear()
+                        self.reviewing.clear()
+                        self.tool_calls.clear()
+                    self.review_ready.unlink(missing_ok=True)
+                    self._retain_trace()
+                    if self.outcome is not None and not self.trace_file.is_file():
+                        raise self.error_type('RUNTIME_TRACE_FAILED', 'DSH native Trace was not retained.')
+                    if self.archive is not None and self.trace_file.is_file():
+                        try:
+                            self.archive.finish(self.trace_file)
+                        except (OSError, ValueError, StopIteration) as error:
+                            # Reading an empty log raises StopIteration, which has no text.
+                            raise self.error_type('RUNTIME_TRACE_FAILED',
+                                                  str(error) or 'DSH native Trace is empty.') from error
+                    if self.outcome is not None and self.confirm_native is not None:
+                        self.confirm_native(self)
+                finally:
+                    connections.close()
+                    self.finished.set()
+            except Exception as closing:
+                if in_flight is None:
+                    raise
+
+                # The failure already on its way stays the reason the parent
+                # reads; the Session's log keeps this one. A stop that could not
+                # be confirmed must still show, whichever failure came first.
+                if getattr(closing, 'terminal_confirmed', True) is False:
+                    in_flight.terminal_confirmed = False
+                with (self.directory / 'stderr.log').open('a', encoding='utf-8') as stream:
+                    stream.write(f"{getattr(closing, 'code', type(closing).__name__)}: {closing}\n")
 
     def operate(self, request: dict) -> dict:
         """Use the exact native Session/invocation binding; never accept caller identity."""

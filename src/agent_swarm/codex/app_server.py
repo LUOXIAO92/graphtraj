@@ -258,8 +258,14 @@ class CodexAppServer:
         return self
 
     async def __aexit__(self, *exc: object) -> None:
-        """Release the service even when caller work fails."""
-        await self.close()
+        """Release the service even when caller work fails; a failed close still names that work's failure."""
+        try:
+            await self.close()
+        except CodexAdapterError as error:
+            if exc[1] is None:
+                raise
+            raise CodexAdapterError(error.code, f'{error.message} Original failure: {exc[1]}',
+                                    terminal_confirmed=error.terminal_confirmed) from exc[1]
 
     async def close(self) -> None:
         """Close and reap this service; cancellation of a waiter leaves cleanup owned."""

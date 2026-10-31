@@ -590,11 +590,19 @@ class PiExecution:
                         self.stderr_reader.join(timeout=5)
                     if reader is not None:
                         reader.join(timeout=5)
+                    in_flight = sys.exc_info()[1]
                     try:
                         if collector is not None:
                             collector.close()
                         if hasattr(self, 'native_trace'):
                             self._retain_trace()
+                    except Exception as closing:
+                        if in_flight is None:
+                            raise
+
+                        # The failure already on its way stays the reason the
+                        # parent reads; the Session's log keeps this one.
+                        stderr.write(f"{getattr(closing, 'code', type(closing).__name__)}: {closing}\n")
                     finally:
                         self.done.set()
 

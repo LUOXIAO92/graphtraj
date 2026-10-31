@@ -12,6 +12,20 @@ version that identifies everything listed under it.
 
 The numbers in parentheses are the project's Task numbers.
 
+## 0.2.6 (compatible)
+
+- A failure while closing up no longer replaces the failure already on its way to the
+  parent (421). A DSH child that could not start used to report an empty
+  `RUNTIME_TRACE_FAILED` on a resume with session saving on; it now reports
+  `RUNTIME_START_FAILED` with DSH's own words. The second failure goes to the child's
+  `stderr.log`, and a stop that could not be confirmed still gives
+  `terminal_confirmed: false`.
+- The same holds for Claude and Pi. Codex keeps `RUNTIME_SHUTDOWN_FAILED` for a service
+  that will not exit, and its message now ends with the original failure.
+- A DSH Trace that is empty after a completed turn reports `RUNTIME_TRACE_FAILED` with
+  text; its message used to be empty.
+- GraphTraj relies on this for its members, so it now requires `agent-swarm>=0.2.6,<0.3`.
+
 ## 0.2.5 (compatible)
 
 - `agent_swarm.claude.host configuration --write` on a configured project (419) now

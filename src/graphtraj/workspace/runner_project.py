@@ -288,22 +288,17 @@ def runtime_executable(runtime_name: str) -> Path:
             "RUNTIME_UNSUPPORTED",
             "The selected Agent Runtime is not supported by this Runner.",
         )
+    unavailable = f"The selected Agent Runtime executable '{runtime_name}' is unavailable."
     executable = shutil.which(runtime_name)
     if executable is None:
-        raise RunnerError(
-            "RUNTIME_EXECUTABLE_INVALID",
-            "The selected Agent Runtime executable is unavailable.",
-        )
+        raise RunnerError("RUNTIME_EXECUTABLE_INVALID", unavailable)
     resolved = _resolve_path(
         Path(executable),
         code="RUNTIME_EXECUTABLE_INVALID",
-        message="The selected Agent Runtime executable is unavailable.",
+        message=unavailable,
     )
     if not resolved.is_file() or not os.access(resolved, os.X_OK):
-        raise RunnerError(
-            "RUNTIME_EXECUTABLE_INVALID",
-            "The configured Codex Runtime executable is unavailable.",
-        )
+        raise RunnerError("RUNTIME_EXECUTABLE_INVALID", unavailable)
     return resolved
 
 

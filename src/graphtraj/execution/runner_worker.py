@@ -65,6 +65,8 @@ def run(job_file: Path) -> int:
     restored_cwd: Path | None = None
     task_agent = None
     agent_reported = False
+    # What the core Agent records for a start that ends before any terminal record.
+    start_error = {"code": "RUNTIME_WORKER_FAILED", "message": "The member execution did not start."}
 
     def request_termination(signum: int, frame: object) -> None:
         """Pass Worker/budget termination to the owned native execution."""
@@ -325,6 +327,7 @@ def run(job_file: Path) -> int:
                     # publisher would otherwise deliver (372 6d).
                     terminal["outcome"] = "interrupted"
             else:
+                start_error = {"code": error.code, "message": error.message}
                 _write_worker_error(
                     session_directory,
                     operation,
@@ -378,8 +381,7 @@ def run(job_file: Path) -> int:
         if task_agent is not None and not agent_reported:
             # A start that failed before any terminal record still ends the core execution.
             task_agent.finished({"outcome": "runtime-error", "terminal_confirmed": False,
-                                 "error": {"code": "RUNTIME_WORKER_FAILED",
-                                           "message": "The member execution did not start."}})
+                                 "error": start_error})
         if restored_cwd is not None:
             from graphtraj.execution.runner_control import _remove_restored_cwd
 

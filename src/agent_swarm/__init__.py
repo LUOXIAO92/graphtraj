@@ -109,6 +109,8 @@ __getattr__ = _lazy_names({
     "notice_id": ("agent_swarm.notices", "notice_id"),
     # Processes and locks.
     "exclusive_lock": ("agent_swarm.locks", "exclusive"),
+    "stop_owned": ("agent_swarm.shutdown", "stop_owned"),
+    "exit_if_owned_unconfirmed": ("agent_swarm.shutdown", "exit_if_owned_unconfirmed"),
     "process_ancestors": ("agent_swarm.process", "process_ancestors"),
     "process_arguments": ("agent_swarm.process", "process_arguments"),
     "process_executable": ("agent_swarm.process", "process_executable"),
@@ -137,7 +139,7 @@ __all__ = [
     "ClientGone", "ConcurrentServer", "mcp_error_response", "mcp_respond",
     "mcp_result_response", "mcp_serve", "mcp_tool_documents",
     "END_EVENTS", "needs_parent", "notice_id",
-    "exclusive_lock", "process_ancestors", "process_arguments", "process_executable",
+    "exclusive_lock", "stop_owned", "exit_if_owned_unconfirmed", "process_ancestors", "process_arguments", "process_executable",
     "RuntimeAdapterError", "RuntimeContext", "RuntimeExecutionResult", "RuntimeTurn",
     "SessionStarted", "credential_environment",
 ]

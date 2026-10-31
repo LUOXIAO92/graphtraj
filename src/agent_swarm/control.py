@@ -78,6 +78,8 @@ STANDBY = "standby"
 
 # Polling interval of a finite wait; records are replaced atomically.
 WAIT_INTERVAL_SECONDS = 0.05
+# How long one interrupt_owned call waits for its attempts before answering.
+INTERRUPT_SECONDS = 1.0
 
 
 @dataclass(frozen=True)
@@ -540,6 +542,8 @@ class AgentControl:
         self._delivering: set[str] = set()
         # True once this host is shutting down: nothing more is delivered.
         self._closing = False
+        # Each Agent's latest interrupt_owned attempt, which may still be blocked.
+        self._interrupting: dict[str, threading.Thread] = {}
         # Parents with a flush running; True asks that flush to look again.
         self._flushing: dict[str, bool] = {}
         self._flushing_lock = threading.Lock()
@@ -1127,21 +1131,51 @@ class AgentControl:
 
         A host that is exiting stops the native work it runs itself, whoever
         created the Agent. Executions owned by other processes are untouched.
-        Returns the Agents whose execution this process owns. Under
+        Returns the Agents whose execution this process still owns, so a later
+        call that returns nothing confirms the stops. Each Agent is tried on its
+        own daemon thread: an interrupt that fails or blocks stops neither the
+        others nor this call, which returns within ``INTERRUPT_SECONDS``. That
+        Agent stays in the list with no stop recorded, and a later call tries it
+        again unless its earlier attempt is still blocked. Under
         ``hold_notices`` the ends this causes are held (:meth:`close_notices`).
         """
         self.close_notices()
-        owned = []
-        for path in sorted((self.root / "control" / "agents").glob("*.json")):
-            with self._locked(path.stem) as record:
-                current = _running(record)
-                if current is None or current["process"].get("worker_pid") != os.getpid():
-                    continue
-                owned.append(record["agent"])
-                if current.get("stop_requested_at") is None and current["started"]:
-                    scheduled = self._driver(record).interrupt(self._run(record, current, "", None))
-                    current.update(stop_requested_at=_now(), stop_scheduled=bool(scheduled))
-        return owned
+        agents = [path.stem for path in sorted((self.root / "control" / "agents").glob("*.json"))]
+        owned: dict[str, bool] = {}
+
+        def attempt(agent: str) -> None:
+            """Answer whether ``agent`` is still owned; a failure leaves it counted as owned."""
+            try:
+                owned[agent] = self._interrupt_if_owned(agent)
+            except Exception:
+                owned[agent] = True
+
+        # ponytail: one short-lived thread per record per call; only a host
+        # waiting on an unconfirmed stop calls this repeatedly, for seconds.
+        started = []
+        for agent in agents:
+            if agent not in self._interrupting or not self._interrupting[agent].is_alive():
+                self._interrupting[agent] = threading.Thread(target=attempt, args=(agent,), daemon=True)
+                self._interrupting[agent].start()
+                started.append(self._interrupting[agent])
+
+        deadline = time.monotonic() + INTERRUPT_SECONDS
+        for thread in started:
+            thread.join(max(0.0, deadline - time.monotonic()))
+
+        # An attempt that has not answered is blocked, so it is not confirmed.
+        return [agent for agent in agents if owned.get(agent, True)]
+
+    def _interrupt_if_owned(self, agent: str) -> bool:
+        """Request the stop of ``agent`` once if this process owns it; return whether it does."""
+        with self._locked(agent) as record:
+            current = _running(record)
+            if current is None or current["process"].get("worker_pid") != os.getpid():
+                return False
+            if current.get("stop_requested_at") is None and current["started"]:
+                scheduled = self._driver(record).interrupt(self._run(record, current, "", None))
+                current.update(stop_requested_at=_now(), stop_scheduled=bool(scheduled))
+            return True
 
     def owns_running(self, agent: str) -> bool:
         """Whether this process still owns a running execution of ``agent``."""

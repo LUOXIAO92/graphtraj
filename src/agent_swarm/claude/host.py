@@ -20,6 +20,7 @@ from agent_swarm.process import process_ancestors, process_executable
 from agent_swarm.calls import on_discard, stop_requested
 from agent_swarm.mcp import serve, serve_concurrent, respond, tool_documents, result_response, error_response
 from agent_swarm.notices import notice_id
+from agent_swarm.shutdown import exit_if_owned_unconfirmed, stop_owned
 from .native_host import NativeCalls
 from .driver import ClaudeDriver
 from .plugin import claude_host_plugin
@@ -506,16 +507,14 @@ def main() -> None:
                 finally:
                     channel_file.unlink()
     finally:
-        deadline = time.monotonic() + 10
-        for agent in calls.control.interrupt_owned():
-            while calls.control.owns_running(agent):
-                if time.monotonic() > deadline:
-                    raise RuntimeError('Claude stop was not confirmed at MCP shutdown.')
-                time.sleep(0.05)
-        # Its absence from the log means the process was killed before this point.
         # A refused start has no children, and its stdout is still the MCP channel.
         if refused is None:
-            print(time.strftime('%Y-%m-%dT%H:%M:%S%z'), 'agents host recorded its children stopped.', flush=True)
+            unconfirmed = stop_owned(calls.control)
+            # Its absence from the log means a stop was unconfirmed (that line is
+            # in the log) or the process was killed before this point.
+            if not unconfirmed:
+                print(time.strftime('%Y-%m-%dT%H:%M:%S%z'), 'agents host recorded its children stopped.', flush=True)
+            exit_if_owned_unconfirmed(unconfirmed)
     if refused is not None:
         serve_refusal(refused, directory.parent / 'host.log')
 

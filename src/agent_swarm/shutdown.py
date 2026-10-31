@@ -1,9 +1,11 @@
 """How a host that owns its children stops them when its native side closes.
 
-The Pi and DSH hosts share this. It stops through the public ``call`` and reads
-the end through ``status``, never ``wait``: ``wait`` returns at once while a
-request is unanswered, and an interrupted execution keeps counting its request
-until it ends.
+The Pi and DSH hosts share ``stop_children``. It stops through the public
+``call`` and reads the end through ``status``, never ``wait``: ``wait`` returns
+at once while a request is unanswered, and an interrupted execution keeps
+counting its request until it ends. The Claude and Codex hosts use
+``stop_owned``: they stop whatever this process runs, which no caller's
+``status`` scope covers.
 """
 from __future__ import annotations
 
@@ -12,7 +14,10 @@ import os
 import sys
 import time
 import traceback
-from typing import Callable
+from typing import TYPE_CHECKING, Callable
+
+if TYPE_CHECKING:
+    from .control import AgentControl
 
 # One deadline for the whole stop, however many children there are.
 STOP_SECONDS = 10.0
@@ -64,18 +69,40 @@ def stop_children(call: Callable) -> list[str]:
         time.sleep(min(PAUSE_SECONDS, remaining))
 
 
-def exit_if_unconfirmed(unconfirmed: list[str]) -> None:
+def stop_owned(control: AgentControl) -> list[str]:
+    """Interrupt what this process owns and return the Agents still owned at the deadline.
+
+    Every pass interrupts again, which reaches an Agent still starting or one
+    whose interrupt failed. It does not call ``owns_running``: that takes the
+    record lock, which a blocked interrupt holds until the process ends.
+    """
+    deadline = time.monotonic() + STOP_SECONDS
+    while True:
+        owned     = control.interrupt_owned()
+        remaining = deadline - time.monotonic()
+        if not owned or remaining <= 0:
+            return owned
+        time.sleep(min(PAUSE_SECONDS, remaining))
+
+
+def exit_if_owned_unconfirmed(unconfirmed: list[str]) -> None:
+    """``exit_if_unconfirmed`` for ``stop_owned``, which leaves other processes' Agents alone."""
+    exit_if_unconfirmed(unconfirmed, 'Every other Agent this process ran stopped.')
+
+
+def exit_if_unconfirmed(unconfirmed: list[str], others: str = 'Every other Agent stopped.') -> None:
     """Report what was not confirmed stopped and end this process; nothing to report returns.
 
     Its owning thread can keep a stuck child's process alive, and the native
     Session's shutdown waits for this process, so this path alone uses
     ``os._exit``. An error already unwinding is written first, or it would be lost.
+    ``others`` is the sentence about the Agents that are not named.
     """
     if not unconfirmed:
         return
     what = ('Host shutdown could not read status, so no Agent is confirmed stopped.'
             if unconfirmed == [STATUS_UNREADABLE] else
-            f"Host shutdown could not confirm the stop of: {', '.join(unconfirmed)}. Every other Agent stopped.")
+            f"Host shutdown could not confirm the stop of: {', '.join(unconfirmed)}. {others}")
     try:
         if sys.exc_info()[1] is not None:
             traceback.print_exc(file=sys.stderr)

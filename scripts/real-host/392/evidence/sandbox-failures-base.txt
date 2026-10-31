@@ -1,0 +1,8 @@
+# Sandbox run at 837ff46f, the commit before 421, 4 shards, while the head also ran: 7 failed, 3450 passed, 78 skipped
+FAILED tests/test_codex_app_server.py::test_transport_failures_are_controlled_and_never_leave_requests_hanging[closed-RUNTIME_CONNECTION_CLOSED]
+FAILED tests/test_codex_app_server.py::test_unhandled_server_requests_fail_visibly_without_blocking_peers[absent-RUNTIME_REQUEST_UNHANDLED]
+FAILED tests/test_codex_app_server.py::test_unhandled_server_requests_fail_visibly_without_blocking_peers[raised-RUNTIME_REQUEST_FAILED]
+FAILED tests/test_codex_app_server.py::test_unhandled_server_requests_fail_visibly_without_blocking_peers[unsupported-RUNTIME_REQUEST_UNHANDLED]
+FAILED tests/test_descendant_stop_control.py::test_native_root_owner_outlives_historical_checker_membership[SessionStart]
+FAILED tests/test_descendant_stop_control.py::test_native_root_owner_outlives_historical_checker_membership[Stop]
+FAILED tests/test_hosted_cli.py::test_host_does_not_follow_request_or_response_links

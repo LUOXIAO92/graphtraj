@@ -29,8 +29,8 @@ print -r -- "  Use the agents tool to create a Claude child with model $CLAUDE_M
 print -r -- "  /exit"
 (cd $PROJECT && claude) || note "claude exit $?"
 print -r -- ""
-print -n -- "Did /agents-context print the current Session and 'MCP agents registered'? [y/n] "; read -r ANSWER_CONTEXT
-print -n -- "Did /mcp list agents? [y/n] "; read -r ANSWER_MCP
+print -n -- "Did /agents-context print the current Session and 'MCP agents registered'? [y/n] "; read -r ANSWER_CONTEXT || ANSWER_CONTEXT=
+print -n -- "Did /mcp list agents? [y/n] "; read -r ANSWER_MCP || ANSWER_MCP=
 note "the user reports /agents-context showed the binding: ${ANSWER_CONTEXT:-no answer}"
 note "the user reports /mcp listed agents: ${ANSWER_MCP:-no answer}"
 LOG=$PROJECT/.agents-control/host.log

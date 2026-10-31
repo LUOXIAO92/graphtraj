@@ -312,8 +312,8 @@ def review_calls(child: str, instruction: str, reply: str | None) -> list[str]:
              call('wait', agent='<agent from 1>', timeout_seconds=WAIT),
              call('requests', agent='<agent from 1>')]
     if reply is not None:
-        calls += ['If call 3 listed a request whose method is agents/review, call the reply feature with arguments '
-                  '{"agent": <agent from 1>, "request": <that whole request object, copied exactly>, '
+        calls += ['If call 3 listed a request, call the reply feature with arguments '
+                  '{"agent": <agent from 1>, "request": <the first request object in that list, copied exactly>, '
                   f'"response": {{"decision": "{reply}"}}}}. Otherwise skip this call.',
                   call('wait', agent='<agent from 1>', timeout_seconds=WAIT),
                   call('status', agent='<agent from 1>')]
@@ -326,6 +326,11 @@ def host_decisions(host: Host) -> list[tuple[str, str]]:
     for path in host.data.rglob('review.jsonl'):
         found += [(line.get('tool'), line.get('decision')) for line in map(json.loads, path.read_text().splitlines())]
     return found
+
+
+def is_review(request: dict) -> bool:
+    """Say whether a held request is a reviewer's: agents/review, or Codex's own form with params.review."""
+    return request.get('method') == 'agents/review' or 'review' in (request.get('params') or {})
 
 
 def host_requests(turn: Turn) -> list[dict]:
@@ -343,12 +348,12 @@ def reviewed_child_case(kind: str, child: str) -> None:
     try:
         turn = host.turn(name, script_prompt(review_calls(child, command_instruction(target), 'accept')))
         created = turn.created(child)
-        requests = [item for item in host_requests(turn) if item.get('method') == 'agents/review']
+        requests = [item for item in host_requests(turn) if is_review(item)]
         agent = created and created.get('agent')
         ended = [last_result(document) for document in turn.of('status', agent)]
         judge(bool(created), f'{name}: the real {kind} host created a reviewed {child} child',
               created and (created.get('result') or {}).get('connection'))
-        judge(bool(requests), f'{name}: agents/review reached the real {kind} parent through requests',
+        judge(bool(requests), f'{name}: the reviewer\'s hold reached the real {kind} parent through requests',
               [(item.get('method'), str((item.get('params') or {}).get('reason'))[:80]) for item in requests])
         judge(lines_of(target) == ['ran'], f'{name}: the parent accepted and the call ran once',
               f'file lines {lines_of(target)}, decisions {host_decisions(host)}, reviewer calls {stub.calls}')
@@ -448,11 +453,11 @@ def codex_form(form: str, decision: dict, reply: dict) -> None:
             return
         state = parent.settle()
         requests = parent.requests() if state == 'request' else []
-        held = [item for item in requests if item.get('method') == 'agents/review']
+        held = [item for item in requests if item.get('method') == expected and 'review' in (item.get('params') or {})]
         before = lines_of(target)
         if not held:
             result = 'CANNOT' if form != 'command' else 'FAIL'
-            check(result, f'{name}: no agents/review reached the parent: settled {state}; requests '
+            check(result, f'{name}: no reviewed {expected} reached the parent: settled {state}; requests '
                           f'{clean([item.get("method") for item in requests])}; file lines {before}; reviewer calls {stub.calls}; '
                           f'last_result {clean(parent.last())[:300]}. Codex may not have asked in this form')
             return
@@ -460,7 +465,7 @@ def codex_form(form: str, decision: dict, reply: dict) -> None:
         receipt = parent.invoke('reply', agent=parent.agent, request=held[0], response=reply)
         parent.settle()
         after = lines_of(target)
-        note(f'{name}: native form {clean(json.dumps(params))[:240]} (expected {expected})')
+        note(f'{name}: held as {expected}; review {clean(json.dumps(params.get("review")))[:200]}')
         decisions = [(line.get('tool'), line.get('decision')) for line in parent.reviews()]
         judge(not before and after == (['ran'] if answer == 'accept' else [])
               and any(item[1] == decision['decision'] for item in decisions),
@@ -573,7 +578,7 @@ def unanswered_review(kind: str, child: str) -> None:
         turn = host.turn(f'{name}-first', script_prompt(calls, 'Do not answer the request. Reply with one line and stop.'), limit=420)
         created = turn.created(child)
         agent = created and created.get('agent')
-        requests = [item for item in host_requests(turn) if item.get('method') == 'agents/review']
+        requests = [item for item in host_requests(turn) if is_review(item)]
         stderr = (OUT / f'{name}-first.stderr').read_text(errors='replace')
         judge(bool(requests), f'{name}: a request was pending when the parent ended',
               [item.get('method') for item in requests])

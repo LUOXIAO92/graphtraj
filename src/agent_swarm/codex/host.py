@@ -26,13 +26,13 @@ import asyncio
 import json
 from pathlib import Path
 import sys
-import time
 
 import yaml
 
 from agent_swarm import AgentControl, AgentsError, Caller, bind
 from agent_swarm.notices import notice_id
 from agent_swarm.runtime import RuntimeAdapterError
+from agent_swarm.shutdown import exit_if_owned_unconfirmed, stop_owned
 from .app_server import CodexServerRequest
 from .driver import CodexDriver
 from .managed_session import CodexManagedExecution
@@ -106,6 +106,8 @@ class CodexHost(CodexManagedExecution):
         self.authentications: list[dict] = []
         self.calls: list[dict] = []
         self.deliveries: list[dict] = []
+        # The Agents the last ``run`` could not confirm stopped.
+        self.stop_unconfirmed: list[str] = []
         super().__init__(settings['adapter_request'], instruction, native,
                          self._started, settings.get('evidence', {}), native / 'trace.jsonl',
                          expected_session=expected, connection=settings.get('connection', {}),
@@ -224,13 +226,11 @@ class CodexHost(CodexManagedExecution):
                 # A closing host stops only work its own controller started, and
                 # stays until those ends are recorded for the next invocation.
                 # Native Session records remain available to it.
-                deadline = time.monotonic() + 10
-                for agent in self.control.interrupt_owned():
-                    while self.control.owns_running(agent) and time.monotonic() < deadline:
-                        time.sleep(0.05)
+                self.stop_unconfirmed = stop_owned(self.control)
             return {**result, 'parent_session': self.native_session,
                     'operations': self.calls, 'deliveries': self.deliveries,
-                    'authenticated_callers': self.authentications}
+                    'authenticated_callers': self.authentications,
+                    'stop_unconfirmed': self.stop_unconfirmed}
 
 
 def main() -> None:
@@ -242,19 +242,28 @@ def main() -> None:
     parser.add_argument('--resume', action='store_true', help='Continue the retained parent native Session.')
     parser.add_argument('instruction', help='Instruction for the actual parent Agent.')
     arguments = parser.parse_args()
+    host = None
     try:
         settings = json.loads(arguments.settings.read_text())
         host = CodexHost(settings, arguments.directory.resolve(), arguments.instruction, arguments.resume)
         result = host.run()
     except (AgentsError, RuntimeAdapterError, OSError, ValueError, KeyError) as error:
         result = {'error': {'code': getattr(error, 'code', 'invalid-input'), 'message': str(error)}}
-        print(json.dumps(result, ensure_ascii=False))
+        print(json.dumps(result, ensure_ascii=False), flush=True)
+        exit_if_owned_unconfirmed(host.stop_unconfirmed if host else [])
         raise SystemExit(1) from error
+    except BaseException:
+        # It would end at the interpreter's exit, which a stuck child's thread can hold up.
+        exit_if_owned_unconfirmed(host.stop_unconfirmed if host else [])
+        raise
     if arguments.output is not None:
         arguments.output.write_text(json.dumps(result, ensure_ascii=False, indent=2) + '\n')
-    print(result.get('last_agent_message') or result['outcome'])
+    # Written out first: a stuck child ends this process without Python's own flush.
+    print(result.get('last_agent_message') or result['outcome'], flush=True)
     if result.get('error') is not None:
         print(json.dumps(result['error'], ensure_ascii=False), file=sys.stderr)
+    exit_if_owned_unconfirmed(result['stop_unconfirmed'])
+    if result.get('error') is not None:
         raise SystemExit(1)
 
 

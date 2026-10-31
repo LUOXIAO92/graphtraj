@@ -19,15 +19,14 @@ import os
 from pathlib import Path
 import sys
 import threading
-import time
 from typing import Callable, TextIO
 from uuid import UUID
 
 from agent_swarm.claude import (REFUSAL_FILE, NativeCalls as NativeCallsBase, claim_channel, claude_host_plugin,
                                 context_endpoint, ended_by_claude, log_replaced_channel, require_free_channel,
                                 serve_refusal)
-from agent_swarm import (AgentsError, AgentsResult, Caller, bind, connection_operation, handle_request, on_discard,
-                         process_ancestors, stop_requested, worker_connection)
+from agent_swarm import (AgentsError, AgentsResult, Caller, bind, connection_operation, exit_if_owned_unconfirmed,
+                         handle_request, on_discard, process_ancestors, stop_owned, stop_requested, worker_connection)
 from graphtraj.configuration.project_configuration import runner_directory
 from graphtraj.execution.runner_process import process_executable
 from graphtraj.interfaces.agents import GraphTrajAgents, configured_archive
@@ -333,12 +332,9 @@ def main() -> None:
                     channel_file.unlink()
     finally:
         # Stop the native work this process runs, whichever Main created it.
-        deadline = time.monotonic() + 10
-        for agent in control.interrupt_owned():
-            while control.owns_running(agent):
-                if time.monotonic() > deadline:
-                    raise RuntimeError('Claude child stop was not confirmed at MCP shutdown.')
-                time.sleep(0.05)
+        # A refused start has none, and its stdout is still the MCP channel.
+        if refused is None:
+            exit_if_owned_unconfirmed(stop_owned(control))
     if refused is not None:
         refuse(refused, directory.parent / 'host.log')
 

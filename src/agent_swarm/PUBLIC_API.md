@@ -305,6 +305,10 @@ Parts for building a host or a consumer on agents (since 0.2.2), also in
   `ClientGone`, `mcp_serve`, `mcp_respond`, `mcp_result_response`,
   `mcp_error_response`, `mcp_tool_documents`;
 - notices (section 4): `END_EVENTS`, `needs_parent`, `notice_id`;
+- host shutdown (section 4): `stop_owned(control)` interrupts what this process
+  runs on one 10-second deadline and returns the Agents it still owns;
+  `exit_if_owned_unconfirmed(agents)` writes their `stop-unconfirmed` line and
+  ends the process, and returns when the list is empty;
 - processes and locks: `process_ancestors`, `process_executable`,
   `process_arguments`, and `exclusive_lock(path)`, the lock agents takes on its
   own record files;
@@ -983,7 +987,7 @@ What the parent sees today:
   it ended, or whose event could not be written, is held. A written event
   whose acknowledgement was lost stays `unconfirmed`. A closing host interrupts
   the children it runs and waits up to 10 seconds for their ends, which are
-  held. `--resume` sends what was held for that Session once, into the resumed
+  held (*Claude Code and Codex host shutdown* below). `--resume` sends what was held for that Session once, into the resumed
   turn; a notice not yet sent when that turn ends waits for the next `--resume`.
 - **Pi host:** it enables `request_notices` and `hold_notices`, for children
   of every Runtime it runs. Each notice is injected into the Pi Session with
@@ -1028,6 +1032,34 @@ What the parent sees today:
   its Runtime lives; once that is gone, it is in standby with `last_result`
   `outcome: failed`, `terminal_confirmed: false` and error `owner-exited`, and
   that end is held.
+- **Claude Code and Codex host shutdown** (Claude Code ends the Session, or the
+  Codex parent's run ends or fails): the host interrupts every execution this
+  process runs, whoever created it, and tries again until they end, up to 10
+  seconds in total. A call blocked in a driver or on a record lock can add up to
+  1 second. Executions other processes own are not touched. An interrupt that
+  fails or blocks does not stop the others (`interrupt_owned` keeps that Agent
+  in its list and records no stop for it). The ends this causes are held under
+  `hold_notices`. Each Agent still owned at that deadline is named in one
+  `{"error": {"code": "stop-unconfirmed", "message"}}` line, and the process
+  exits non-zero even if a stuck thread would keep it alive. The next host's
+  `status` for that Session shows such an Agent as in *Pi Session shutdown*
+  above: `active` while its Runtime lives, then standby with `outcome: failed`,
+  `terminal_confirmed: false` and error `owner-exited`. A confirmed shutdown
+  writes no line and exits as before. Where the line lands:
+  - **Claude Code hosts** (`agent_swarm.claude.host` and GraphTraj's): in
+    `host.log`, because the host's stderr is that file once it serves MCP.
+    `agents host recorded its children stopped.` is written only when every stop
+    was confirmed. The Claude Session does not see the line: the host stops its
+    children after Claude Code has closed MCP or is ending the Session, so no
+    tool result or notification can reach it, and a Claude Code host has no other
+    path into the Session. Read the state through `status` on the next host.
+  - **Codex host:** on the stderr of `agent_swarm.codex.host`, and in
+    `stop_unconfirmed`, a list of Agents that is empty for a confirmed shutdown,
+    in the `--output` document and the result of `CodexHost.run`. The parent
+    Session does not see it: its run has ended, so no host event can reach it. A
+    run that raises writes no `--output` document, as before, so only the line
+    names them. `CodexHost.run` called as a library returns its result and never
+    ends the caller's process; only `main` does.
 - **Pi Session resumed** with the same configuration: a new host process binds
   the same Session and delivers each held notice once, in the order the
   children ended. It starts when the Session's first turn starts
@@ -1593,6 +1625,13 @@ Recorded classifications:
   fix (compatible): section 2 already said a key never reaches another endpoint.
   A setup that relied on official search through such a gateway must name the
   gateway's key in another variable. No bump of its own.
+- 415: `stop_owned` and `exit_if_owned_unconfirmed` are new public names, and
+  the `--output` document gains `stop_unconfirmed`. `interrupt_owned` no longer
+  raises when one Agent's interrupt fails, and returns while one is blocked. The
+  Codex host now exits non-zero when a stop is unconfirmed, where it exited 0 and
+  recorded nothing; the Claude Code hosts name every such Agent where they raised
+  naming none. Fixes and additions (compatible). 415 ships in the unreleased
+  0.2.2 and adds no bump of its own.
 
 While the major version is `0`, an incompatible change raises the minor
 version (`0.1.x` → `0.2.0`), and compatible additions and fixes raise the

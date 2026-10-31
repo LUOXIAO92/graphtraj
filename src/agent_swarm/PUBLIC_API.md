@@ -1682,7 +1682,7 @@ patch version. From `1.0.0` the usual rule applies: major for incompatible,
 minor for additions, patch for fixes. A release that changes this document
 updates it in the same change.
 
-GraphTraj declares the range it supports (today `agent-swarm>=0.2.5,<0.3`, since it imports the 0.2.5 names in 1.3)
+GraphTraj declares the range it supports (today `agent-swarm>=0.2.6,<0.3`, since its members rely on the 0.2.6 start-failure reasons and it imports the 0.2.5 names in 1.3)
 and widens it in the same change that adopts an incompatible release.
 
 ## Appendix: Known GraphTraj-specific surfaces

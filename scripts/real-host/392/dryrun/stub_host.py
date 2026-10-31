@@ -193,5 +193,5 @@ def main() -> int:
 
 
 if __name__ == '__main__':
-    time.sleep(0.05)
+    time.sleep(float(os.environ.get('AGENTS_392_DRY_SLEEP', 0.05)))
     raise SystemExit(main())

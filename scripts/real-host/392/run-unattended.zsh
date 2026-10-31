@@ -1,0 +1,36 @@
+#!/bin/zsh
+[ -n "$ZSH_VERSION" ] || exec /bin/zsh "$0" "$@"
+# Task 392: run the unattended steps one at a time, in the fixed order, in a plain macOS Terminal
+# outside any sandbox, after the attended steps:
+#   zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/392-agents-standalone-combined-acceptance/scripts/real-host/392/run-unattended.zsh
+#
+# Running the same command again continues: a step already finished at this commit is skipped.
+# `--from <step>` starts at that step and runs it even if it is finished.
+# native review dialog: none from this command; each step prints its own line, and all of them say none.
+# Nothing to type. Keep the Mac on power with its lid open: caffeinate stops idle sleep, not a closed lid.
+source /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/392-agents-standalone-combined-acceptance/scripts/real-host/392/common.zsh
+
+commit_check
+
+# Stop unless this step ended with a result for this code and no FAIL line.
+need_clean() {
+  local saved=$REALHOST/$1
+  [[ -f $saved/summary.txt ]] || fail "realhost/$1 has no result; run first: zsh $HERE/$1.zsh"
+  grep -q "code $COMMIT " $saved/run.txt 2>/dev/null || fail "realhost/$1 is for other code; run again: zsh $HERE/$1.zsh"
+  if grep -q '^FAIL ' $saved/summary.txt; then
+    fail "realhost/$1/summary.txt has a FAIL line; tell Main, or fix it and run again: zsh $HERE/$1.zsh"
+  fi
+}
+need_clean 00-preflight
+need_clean 01-install
+need_claude_project
+load_key
+
+if [[ -n ${AGENTS_392_DRY_STEPS:-} ]]; then UNATTENDED=(${=AGENTS_392_DRY_STEPS}); fi
+if [[ ${1:-} == --from ]]; then
+  (( ${UNATTENDED[(Ie)${2:-none}]} )) || fail "--from names no unattended step: ${2:-nothing}"
+  export AGENTS_392_FROM=$2
+fi
+
+export AGENTS_392_UNDER_RUNNER=1 AGENTS_392_AG=$AG AGENTS_392_REALHOST=$REALHOST AGENTS_392_COMMIT=$COMMIT
+exec /usr/bin/caffeinate -i $PY -I $HERE/run_unattended.py $HERE $UNATTENDED

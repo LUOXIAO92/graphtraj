@@ -5,8 +5,8 @@
 #   [ -n "$ZSH_VERSION" ] || exec /bin/zsh "$0" "$@"
 #   source /abs/path/scripts/real-host/392/common.zsh
 #   step_begin <step> <expected minutes> <dialog text, or "none"> <what success looks like>
-# and ends with `step_end`, which scans, saves, prints the next numbered step and exits
-# (`step_end <exact command>` to name another).
+# and ends with `step_end`, which scans, saves, prints the next step of the fixed order below and
+# exits (`step_end <exact command>` to name another).
 #
 # Layout (fixed; AGENTS_392_DRY_* only exist for the dry run against stub hosts):
 #   HARNESS, WT     the Harness root and this Worktree
@@ -217,28 +217,49 @@ step_save() {
 # Here, not in step_begin: a function's EXIT trap would run when that function returns.
 SCAN_DONE=
 trap 'step_save' EXIT
+# run-unattended.zsh ends a step at its wall limit with TERM. zsh runs this once the foreground
+# command has ended, which the runner also signals, so the evidence is saved and no later line runs.
+if [[ -n ${AGENTS_392_UNDER_RUNNER:-} ]]; then
+  trap 'step_save; exit 143' TERM
+fi
 
-# The numbered step after this one, by name; steps are named so that this order is the order to run.
+# The fixed order. The user runs ATTENDED one by one, then run-unattended.zsh runs UNATTENDED.
+ATTENDED=(00-preflight 01-install 02-claude-trust 40-idle-claude 43-esc-claude 44-sigkill-claude
+          61-walk-claude-trust 62-walk-claude)
+UNATTENDED=(10-matrix-claude 11-matrix-codex 12-matrix-pi 13-matrix-dsh 20-permission-requests 21-system-failures
+            22-launch-failed 30-approval-layers 31-archive 41-idle-pi 42-hold-dsh 45-pi-parent 46-shutdown-request
+            47-stuck-claude 48-stuck-codex 49-stuck-pi 50-stuck-dsh 60-readme-sandbox 63-walk-codex 64-walk-pi
+            65-walk-dsh 70-suite 71-flaky 72-metadata 80-residual-386 81-residual-387-child 82-residual-387-hosts
+            83-residual-387-exit 84-residual-391 85-residual-411-413 86-residual-412 87-residual-419
+            88-graphtraj-venv 89-residual-416 90-residual-416-main 91-residual-420)
+
+# The command after this step in the fixed order. After the attended steps, and after any step of
+# the unattended part run by hand, it is the runner, which skips what is already finished.
 next_step() {
-  local steps=($HERE/[0-9][0-9]-*.zsh(N)) index
-  index=${steps[(ie)$HERE/$STEP.zsh]}
-  if (( index < ${#steps} )); then
-    print -r -- "zsh $steps[index+1]"
+  local index=${ATTENDED[(ie)$STEP]}
+  if (( index < ${#ATTENDED} )); then
+    print -r -- "zsh $HERE/$ATTENDED[index+1].zsh"
   else
-    print -r -- "no further step; tell Main this run is finished"
+    print -r -- "zsh $HERE/run-unattended.zsh"
   fi
 }
 
-# End a step: save, show the summary and print the exact next command (given, or the next by number).
+# End a step: mark it finished, save, show the summary and print the exact next command (given, or
+# the next in the fixed order). Under the runner there is no next command to type.
 step_end() {
+  print -r -- "finished $(date +%Y%m%dT%H%M%S)" > $OUT/finished.txt
   step_save
   print -r -- ""
   print -r -- "== $STEP summary ($REALHOST/$STEP/summary.txt)"
   cat $OUT/summary.txt 2>/dev/null || print -r -- "(no criterion lines)"
   print -r -- ""
-  print -r -- "If a line above says FAIL or CANNOT, go on anyway: Main reads the saved output."
-  print -r -- "Next command:"
-  print -r -- "  ${*:-$(next_step)}"
+  if [[ -n ${AGENTS_392_UNDER_RUNNER:-} ]]; then
+    print -r -- "Nothing to type: the unattended run goes on by itself."
+  else
+    print -r -- "If a line above says FAIL or CANNOT, go on anyway: Main reads the saved output."
+    print -r -- "Next command:"
+    print -r -- "  ${*:-$(next_step)}"
+  fi
   local failed=0
   grep -q '^FAIL ' $OUT/summary.txt 2>/dev/null && failed=1
   exit $failed

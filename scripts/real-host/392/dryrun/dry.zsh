@@ -20,6 +20,9 @@ print -r -- $(<$HERE/COMMIT) > $D/ag/venv/installed-commit
 export HOME=$D/home AGENTS_392_DRY_ROOT=$D/ag AGENTS_392_DRY_SANDBOX=$D/sandbox AGENTS_392_DRY_REALHOST=$D/realhost
 export AGENTS_392_DRY_BIN=$D/bin AGENTS_392_DRY_NO_SCRIPT=1 RH_DRY_CODEX_HOST=$D/bin/codex-host
 export DEEPSEEK_API_KEY=${AGENTS_392_DRY_KEY:-dry-run-not-a-key-392}
+# `dry.zsh runner [--from <step>]` runs run-unattended.zsh instead, with AGENTS_392_DRY_STEPS and
+# AGENTS_392_DRY_LIMIT_SECONDS as the caller set them.
+if [[ ${1:-} == runner ]]; then shift; exec zsh $HERE/run-unattended.zsh "$@" </dev/null; fi
 steps=($@)
 (( ${#steps} )) || steps=($HERE/[0-9][0-9]-*.zsh(N:t:r))
 for step in $steps; do

@@ -12,6 +12,19 @@ version that identifies everything listed under it.
 
 The numbers in parentheses are the project's Task numbers.
 
+## 0.2.7 (compatible)
+
+- A standalone Pi attachment under `.graphtraj` is now copied (424). agents read it as
+  missing because it named that directory itself; it no longer does.
+- New keyword `private_paths` on `PiArchive` and new attribute `archive_private_paths` on
+  `PiExecution`: further directories kept out of attachment copies. The data root,
+  `<project>/.codex` and `~/.codex` stay protected, and the rule is now in the public
+  interface (1.5).
+- A `.codex` that is itself a link now stays protected. It used to be compared unresolved,
+  so its files were copied if the link's target lay inside the authorized directory.
+- GraphTraj requires `agent-swarm>=0.2.7,<0.3` because it passes these to keep its own
+  `.graphtraj` protected.
+
 ## 0.2.6 (compatible)
 
 - A failure while closing up no longer replaces the failure already on its way to the

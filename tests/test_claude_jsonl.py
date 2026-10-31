@@ -1,4 +1,5 @@
 """Claude native transcript fixtures through the optional public JSONL archive."""
+import base64
 from copy import deepcopy
 import json
 import os
@@ -361,6 +362,280 @@ def test_bind_without_a_size_still_reads_history_at_the_bind(tmp_path: Path) -> 
     missing = ClaudeJsonlCollector(c.archive, 'other', tmp_path, 'e', resumed=True)
     missing.bind(tmp_path / 'absent.jsonl')
     assert not missing.cut_known
+
+
+def first_start(tmp_path: Path, records: list[dict]) -> tuple[ClaudeJsonlCollector, Path, SessionArchive]:
+    """Archive a whole transcript from its first start, with history backfill off."""
+    path = tmp_path / 'native.jsonl'
+    write(path, records)
+    archive = SessionArchive(tmp_path / 'swarm', save_normalized_sessions=True, backfill_history=False)
+    c = ClaudeJsonlCollector(archive, 's', tmp_path, 'first', resumed=False)
+    c.bind(path, set())
+    assert store(archive).pending() == []
+    return c, path, archive
+
+
+def resume(path: Path, archive: SessionArchive) -> ClaudeJsonlCollector:
+    """Bind a later activation, with everything now in the transcript as its history."""
+    c = ClaudeJsonlCollector(archive, 's', path.parent, 'later', resumed=True)
+    c.bind(path, set(), path.stat().st_size)
+    return c
+
+
+def resume_with_full_archive(tmp_path: Path, records: list[dict]) -> tuple[ClaudeJsonlCollector, Path, SessionArchive]:
+    """Resume a Session whose whole history is already in its archive."""
+    first, path, archive = first_start(tmp_path, records)
+    first.close()
+    return resume(path, archive), path, archive
+
+
+def append_torn(path: Path, record: dict) -> str:
+    """Append the start of a record, as a reader sees a write still in progress."""
+    tail = json.dumps(record)[:30]
+    with path.open('a') as stream:
+        stream.write(tail)
+    return tail
+
+
+def pending_locators(archive: SessionArchive) -> list[str]:
+    """Name the observations that keep messages() refusing."""
+    return [item['event']['native']['locator'] for item in store(archive).pending()]
+
+
+def retain_history_gap(archive: SessionArchive, record: dict, reason: str) -> None:
+    """Leave the draft an earlier version checkpointed under ``history-gap``."""
+    store(archive).checkpoint(
+        {'type': 'claude/observation', 'seq': 0, 'time': 0, 'data': {}, 'ignorable': True,
+         'native': {'runtime': 'claude', 'sessionId': 's', 'locator': 'history-gap', 'record': record},
+         'missing': [{'path': 'history', 'reason': reason}]},
+        source='history-gap', position=0)
+
+
+BACKFILL_DISABLED = 'History backfill is disabled; native prefix was not collected.'
+
+
+def test_resume_with_a_full_archive_collects_a_torn_line_once_it_completes(tmp_path: Path) -> None:
+    """A read that met a write in progress stops mattering when the write ends."""
+    q, a, n = message('q', None, 'q'), message('a', 'q', 'a', role='assistant'), message('n', 'a', 'n')
+    c, path, archive = resume_with_full_archive(tmp_path, [q, a])
+    tail = append_torn(path, n)
+    c.collect()
+    with pytest.raises(ValueError, match='incomplete'):
+        store(archive).messages()
+
+    write(path, [q, a, n])
+    c.close()
+    result = store(archive)
+    assert [m['id'] for m in result.messages()] == ['q', 'a', 'n']
+    assert result.pending() == []
+    assert any(o['event']['native']['record'].get('unparsedTranscriptTail') == tail for o in result.observations())
+
+
+def test_resume_with_a_full_archive_collects_a_line_torn_inside_a_character(tmp_path: Path) -> None:
+    """Bytes cut inside a UTF-8 character are the same read failure."""
+    q, n = message('q', None, 'q'), message('n', 'q', 'é')
+    c, path, archive = resume_with_full_archive(tmp_path, [q])
+    whole = json.dumps(n, ensure_ascii=False).encode()
+    torn = whole[:whole.index('é'.encode()) + 1]
+    path.write_bytes(path.read_bytes() + torn)
+    c.collect()
+    with pytest.raises(ValueError, match='incomplete'):
+        store(archive).messages()
+
+    path.write_bytes(path.read_bytes().removesuffix(torn) + whole + b'\n')
+    c.close()
+    result = store(archive)
+    assert [m['id'] for m in result.messages()] == ['q', 'n']
+    assert result.pending() == []
+    expected = base64.b64encode(torn).decode()
+    assert any(o['event']['native']['record'].get('unparsedBytes') == expected for o in result.observations())
+
+
+def test_resume_with_a_full_archive_recovers_from_a_transcript_briefly_unreadable(tmp_path: Path) -> None:
+    """A read failure with no bytes to keep clears on the next read too."""
+    q, n = message('q', None, 'q'), message('n', 'q', 'n')
+    c, path, archive = resume_with_full_archive(tmp_path, [q])
+    aside = path.with_suffix('.aside')
+    path.rename(aside)
+    c.collect()
+    with pytest.raises(ValueError, match='incomplete'):
+        store(archive).messages()
+
+    aside.rename(path)
+    write(path, [q, n])
+    c.close()
+    assert [m['id'] for m in store(archive).messages()] == ['q', 'n']
+
+
+def test_resume_without_an_archive_keeps_its_gap_after_a_torn_line_completes(tmp_path: Path) -> None:
+    """The history a resume left out stays reported, whatever the read did."""
+    c, path, archive = cut_collector(tmp_path)
+    old, n = message('old', None, 'old'), message('n', 'old', 'n')
+    write(path, [old])
+    c.bind(path, set(), path.stat().st_size)
+    append_torn(path, n)
+    c.collect()
+
+    write(path, [old, n])
+    c.close()
+    assert pending_locators(archive) == ['history-gap']
+    result = store(archive)
+    assert result.pending()[0]['event']['missing'] == [{'path': 'history', 'reason': BACKFILL_DISABLED}]
+    with pytest.raises(ValueError, match='Unresolved observations'):
+        result.messages()
+    assert [e['data']['id'] for e in result.page()['events'] if e['type'] == 'user/message'] == ['n']
+    assert 'old' not in {e['native']['record'].get('uuid') for e in result.page()['events']}
+
+
+def test_a_gap_from_an_earlier_activation_survives_a_later_torn_read(tmp_path: Path) -> None:
+    """A later activation finding its own history archived does not clear an older gap."""
+    from agent_swarm.sessions.claude_history import NO_HISTORY_SIZE
+
+    current, reply = message('current', None, 'current'), message('reply', 'current', 'reply', role='assistant')
+    first, path, archive = cut_collector(tmp_path)
+    write(path, [current, reply])
+    first.bind(path, {'current'}, NO_HISTORY_SIZE)
+    first.accept({**reply, 'session_id': 's'}, 0)
+    first.close()
+    assert pending_locators(archive) == ['history-gap']
+
+    later = resume(path, archive)
+    assert later.excluded == {'current', 'reply'}
+    n = message('n', 'reply', 'n')
+    append_torn(path, n)
+    later.collect()
+    write(path, [current, reply, n])
+    later.close()
+
+    assert pending_locators(archive) == ['history-gap']
+    with pytest.raises(ValueError, match='Unresolved observations'):
+        store(archive).messages()
+
+
+@pytest.mark.parametrize('resumed', [False, True])
+def test_a_second_torn_read_is_reported_and_clears_in_turn(tmp_path: Path, resumed: bool) -> None:
+    """One read resolving does not silence the next, on a first start or a resume."""
+    q, n, m = message('q', None, 'q'), message('n', 'q', 'n'), message('m', 'n', 'm')
+    c, path, archive = resume_with_full_archive(tmp_path, [q]) if resumed else first_start(tmp_path, [q])
+    append_torn(path, n)
+    c.collect()
+    write(path, [q, n])
+    c.collect()
+
+    append_torn(path, m)
+    c.close()
+    assert store(archive).pending()
+    with pytest.raises(ValueError, match='Unresolved observations'):
+        store(archive).messages()
+
+    write(path, [q, n, m])
+    c.close()
+    assert store(archive).pending() == []
+    assert [item['id'] for item in store(archive).messages()] == ['q', 'n', 'm']
+
+
+def test_repeated_torn_reads_of_one_tail_are_one_observation(tmp_path: Path) -> None:
+    """Reads of one unfinished tail replace a draft; a later tail gets its own."""
+    q, n, m = message('q', None, 'q'), message('n', 'q', 'n'), message('m', 'n', 'm')
+    c, path, archive = resume_with_full_archive(tmp_path, [q])
+    append_torn(path, n)
+    c.collect()
+    longer = json.dumps(n)[:40]
+    write(path, [q])
+    with path.open('a') as stream:
+        stream.write(longer)
+    c.collect()
+    assert pending_locators(archive) == ['read-gap:0']
+    assert store(archive).pending()[0]['event']['native']['record']['unparsedTranscriptTail'] == longer
+
+    write(path, [q, n])
+    c.collect()
+    append_torn(path, m)
+    c.collect()
+    assert pending_locators(archive) == ['read-gap:1']
+
+
+def test_a_resolved_torn_read_does_not_hide_a_later_real_gap(tmp_path: Path) -> None:
+    """A published read failure leaves history-gap free for history really missed."""
+    q, n, missed = message('q', None, 'q'), message('n', 'q', 'n'), message('missed', 'n', 'missed')
+    c, path, archive = first_start(tmp_path, [q])
+    append_torn(path, n)
+    c.collect()
+    write(path, [q, n])
+    c.close()
+    assert store(archive).pending() == []
+
+    # An activation nothing collected wrote this; the next resume reads it as history.
+    write(path, [q, n, missed])
+    resume(path, archive).close()
+    assert pending_locators(archive) == ['history-gap']
+    result = store(archive)
+    assert result.pending()[0]['event']['missing'] == [{'path': 'history', 'reason': BACKFILL_DISABLED}]
+    with pytest.raises(ValueError, match='Unresolved observations'):
+        result.messages()
+
+
+@pytest.mark.parametrize('raw', [{'unparsedTranscriptTail': '{"type": "us'}, {'unparsedBytes': 'AP8='}])
+def test_retained_torn_read_gap_resolves_on_a_resume_with_a_full_archive(tmp_path: Path, raw: dict) -> None:
+    """An archive from an earlier version is not stuck on its old read failure."""
+    q = message('q', None, 'q')
+    first, path, archive = first_start(tmp_path, [q])
+    retain_history_gap(archive, raw, 'Expecting value')
+    resume(path, archive).close()
+    result = store(archive)
+    assert result.pending() == []
+    assert [m['id'] for m in result.messages()] == ['q']
+    assert any(o['event']['native']['record'] == raw for o in result.observations())
+
+
+def test_a_resolved_retained_torn_read_does_not_hide_a_later_real_gap(tmp_path: Path) -> None:
+    """Clearing an old read failure leaves history-gap free for history really missed."""
+    q, missed = message('q', None, 'q'), message('missed', 'q', 'missed')
+    first, path, archive = first_start(tmp_path, [q])
+    retain_history_gap(archive, {'unparsedTranscriptTail': '{"type": "us'}, 'Expecting value')
+    resume(path, archive).close()
+    assert store(archive).pending() == []
+
+    write(path, [q, missed])
+    resume(path, archive).close()
+    assert pending_locators(archive) == ['history-gap']
+    with pytest.raises(ValueError, match='Unresolved observations'):
+        store(archive).messages()
+
+
+def test_retained_design_gap_stays_on_a_resume_with_a_full_archive(tmp_path: Path) -> None:
+    """A retained gap without read bytes is history left out, not a failed read."""
+    q = message('q', None, 'q')
+    first, path, archive = first_start(tmp_path, [q])
+    retain_history_gap(archive, {}, BACKFILL_DISABLED)
+    resume(path, archive).close()
+    assert pending_locators(archive) == ['history-gap']
+    with pytest.raises(ValueError, match='Unresolved observations'):
+        store(archive).messages()
+
+
+def test_retained_torn_read_gap_stays_while_history_is_really_missing(tmp_path: Path) -> None:
+    """A retained read failure clears only when no history is missing either."""
+    q, missed = message('q', None, 'q'), message('missed', 'q', 'missed')
+    first, path, archive = first_start(tmp_path, [q])
+    retain_history_gap(archive, {'unparsedTranscriptTail': '{"type": "us'}, 'Expecting value')
+    write(path, [q, missed])
+    resume(path, archive).close()
+    assert pending_locators(archive) == ['history-gap']
+    with pytest.raises(ValueError, match='Unresolved observations'):
+        store(archive).messages()
+
+
+def test_a_tail_never_completed_keeps_messages_refusing(tmp_path: Path) -> None:
+    """Content that never arrived stays reported, with what was read of it."""
+    q, n = message('q', None, 'q'), message('n', 'q', 'n')
+    c, path, archive = resume_with_full_archive(tmp_path, [q])
+    tail = append_torn(path, n)
+    c.close()
+    result = store(archive)
+    assert result.pending()[0]['event']['native']['record']['unparsedTranscriptTail'] == tail
+    with pytest.raises(ValueError, match='Unresolved observations'):
+        result.messages()
 
 
 @pytest.mark.skipif(not os.environ.get('CLAUDE_SDK_MODULE'), reason='Explicit pinned official SDK comparison')

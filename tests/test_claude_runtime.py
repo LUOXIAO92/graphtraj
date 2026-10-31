@@ -8,6 +8,7 @@ from pathlib import Path
 import sys
 import threading
 import time
+import uuid
 
 import pytest
 import yaml
@@ -1121,3 +1122,214 @@ def test_claude_start_failure_stays_ahead_of_an_unconfirmed_stop(
             turn.run()
     assert caught.value.code == 'RUNTIME_TRANSPORT_FAILED'
     assert caught.value.terminal_confirmed is False
+
+
+def force_bind_order(monkeypatch: pytest.MonkeyPatch, order: str, reply: str) -> None:
+    """Fix which comes first: the collection thread's bind or the peer's reply.
+
+    ``reply_first`` holds the bind until the assistant's text block is in the
+    transcript being bound (the input echo holds a plain string, so it cannot match).
+    ``bind_first`` holds the answer to Claude's startup hook until the bind has
+    finished, so the peer cannot write its reply any earlier. Neither order
+    relies on a sleep being long enough.
+    """
+    from agent_swarm.claude.execution import ClaudeExecution
+    from agent_swarm.sessions.claude import ClaudeJsonlCollector
+
+    bind, answer = ClaudeJsonlCollector.bind, ClaudeExecution._reply
+    bound        = threading.Event()
+
+    def held_bind(self, path: Path, *arguments: object) -> None:
+        """Bind on the collection thread once the chosen order allows it."""
+        deadline = time.monotonic() + 20
+        written  = '"text": ' + json.dumps(reply)
+        while order == 'reply_first' and written not in (path.read_text() if path.exists() else ''):
+            assert time.monotonic() < deadline, 'The peer never wrote its reply.'
+            bound.wait(0.01)
+        bind(self, path, *arguments)
+        bound.set()
+
+    def held_reply(self, request_id: str, response: dict) -> None:
+        """Answer the startup hook only after the bind in ``bind_first``."""
+        if order == 'bind_first' and request_id == 'startup':
+            assert bound.wait(20), 'The bind never finished.'
+        answer(self, request_id, response)
+
+    monkeypatch.setattr(ClaudeJsonlCollector, 'bind', held_bind)
+    monkeypatch.setattr(ClaudeExecution, '_reply', held_reply)
+
+
+def archived_turn(root: Path, archive: object, prompt: str, expected: str | None = None) -> dict:
+    """Run one turn of the controlled peer, archiving when ``archive`` is supplied."""
+    with ExitStack() as stack:
+        turn, _, _ = execution(root, stack, prompt, expected)
+        if archive is not None:
+            turn.configure_independent(archive=archive, agents_callback=lambda request: None)
+        return turn.run()
+
+
+def native_ids(transcript: Path) -> list[str]:
+    """Return the transcript's message UUIDs in native file order."""
+    rows = [json.loads(line) for line in transcript.read_text().splitlines()]
+    return [row['uuid'] for row in rows if row.get('type') in {'user', 'assistant'}]
+
+
+def surface_ids(store: object) -> list[str]:
+    """Return the archived messages' native UUIDs in archive order, repeats included."""
+    return [event['native']['record']['uuid'] for event in store.page()['events']
+            if event['type'] in {'user/message', 'assistant/message'}]
+
+
+def retained_archive(root: Path) -> object:
+    """Create the policy under test: saving on and history backfill off."""
+    from agent_swarm.sessions.archive import SessionArchive
+
+    return SessionArchive(root / 'archive', save_normalized_sessions=True, backfill_history=False)
+
+
+def retained_store(archive: object, session: str) -> object:
+    """Reopen the archive, so assertions read what is durable."""
+    from agent_swarm.sessions.archive import JsonlSessionStore, archive_path
+
+    return JsonlSessionStore(archive_path(archive.root, 'claude:' + session))
+
+
+@pytest.mark.parametrize('order', ['reply_first', 'bind_first'])
+def test_claude_resume_with_an_archive_keeps_every_message_once(
+    tmp_path: Path, claude_environment: None, monkeypatch: pytest.MonkeyPatch, order: str,
+) -> None:
+    """Whichever comes first, the reply is archived and the earlier archive stands."""
+    result_project(tmp_path)
+    archive = retained_archive(tmp_path)
+    first   = archived_turn(tmp_path, archive, 'first')
+    session = first['session_id']
+    earlier = retained_store(archive, session).page()['events']
+    assert len(earlier) >= 2
+
+    with monkeypatch.context() as held:
+        force_bind_order(held, order, 'first|again')
+        second = archived_turn(tmp_path, archive, 'again', session)
+    assert second['outcome'] == 'completed'
+    assert second['last_agent_message'] == 'first|again'
+
+    store  = retained_store(archive, session)
+    native = native_ids(tmp_path / (session + '.jsonl'))
+    assert len(native) == 4
+    assert [message['id'] for message in store.messages()] == native
+    assert store.pending() == []
+    assert [message['content'][0]['text'] for message in store.messages()] == [
+        'first', 'first', 'again', 'first|again']
+    assert surface_ids(store) == native
+
+    # The earlier Session's events are untouched, not rewritten or repeated.
+    assert store.page()['events'][:len(earlier)] == earlier
+
+
+@pytest.mark.parametrize('order', ['reply_first', 'bind_first'])
+def test_claude_resume_without_an_archive_collects_only_the_new_messages(
+    tmp_path: Path, claude_environment: None, monkeypatch: pytest.MonkeyPatch, order: str,
+) -> None:
+    """History before the hook stays excluded; the gap it leaves stays explicit."""
+    result_project(tmp_path)
+    first      = archived_turn(tmp_path, None, 'first')
+    session    = first['session_id']
+    transcript = tmp_path / (session + '.jsonl')
+    history    = native_ids(transcript)
+    assert len(history) == 2
+
+    archive = retained_archive(tmp_path)
+    with monkeypatch.context() as held:
+        force_bind_order(held, order, 'first|again')
+        second = archived_turn(tmp_path, archive, 'again', session)
+    assert second['outcome'] == 'completed'
+
+    store = retained_store(archive, session)
+    assert surface_ids(store) == native_ids(transcript)[2:]
+    collected = {event['native']['record'].get('uuid') for event in store.page()['events']}
+    assert not set(history) & collected
+    assert [item['event']['native']['locator'] for item in store.pending()] == ['history-gap']
+    with pytest.raises(ValueError, match='Unresolved observations'):
+        store.messages()
+
+
+@pytest.mark.parametrize('order', ['reply_first', 'bind_first'])
+def test_claude_first_start_archives_the_same_in_either_order(
+    tmp_path: Path, claude_environment: None, monkeypatch: pytest.MonkeyPatch, order: str,
+) -> None:
+    """A first start has no history, so the order of bind and reply changes nothing."""
+    result_project(tmp_path)
+    archive = retained_archive(tmp_path)
+    with monkeypatch.context() as held:
+        force_bind_order(held, order, 'first')
+        first = archived_turn(tmp_path, archive, 'first')
+    assert first['outcome'] == 'completed'
+
+    session = first['session_id']
+    store   = retained_store(archive, session)
+    native  = native_ids(tmp_path / (session + '.jsonl'))
+    assert len(native) == 2
+    assert store.pending() == []
+    assert [message['id'] for message in store.messages()] == native
+    assert surface_ids(store) == native
+
+
+@pytest.mark.parametrize('order', ['reply_first', 'bind_first'])
+def test_claude_resume_of_a_missing_transcript_keeps_the_cut_unknown(
+    tmp_path: Path, claude_environment: None, monkeypatch: pytest.MonkeyPatch, order: str,
+) -> None:
+    """Nothing could be measured at the hook, so only live messages are claimed."""
+    session    = str(uuid.uuid4())
+    transcript = tmp_path / (session + '.jsonl')
+    result_project(tmp_path)
+    assert not transcript.exists()
+
+    archive = retained_archive(tmp_path)
+    with monkeypatch.context() as held:
+        force_bind_order(held, order, 'again')
+        outcome = archived_turn(tmp_path, archive, 'again', session)
+    assert outcome['outcome'] == 'completed'
+
+    store = retained_store(archive, session)
+    assert surface_ids(store) == native_ids(transcript)
+    assert [item['event']['native']['locator'] for item in store.pending()] == ['history-gap']
+
+
+class PlainCollector:
+    """A consumer's collector that knows only the two-argument ``bind``."""
+
+    def __init__(self) -> None:
+        """Keep what the execution hands over."""
+        self.bound = []
+
+    def bind(self, path: Path, current_inputs: set[str] | None = None) -> None:
+        """Record the bind exactly as the execution calls it."""
+        self.bound.append((path, current_inputs))
+
+    def accept(self, event: dict, position: int, defer: bool = False) -> None:
+        """Take no record."""
+
+    def accept_batch(self, records: list[tuple[dict, int]]) -> None:
+        """Take no record."""
+
+    def flush(self) -> None:
+        """Nothing is held back."""
+
+    def close(self) -> None:
+        """Nothing to finish."""
+
+
+def test_claude_supplied_collector_keeps_its_two_argument_bind(
+    tmp_path: Path, claude_environment: None,
+) -> None:
+    """A supplied collector is bound as before and is not asked for a history cut."""
+    result_project(tmp_path)
+    first = archived_turn(tmp_path, None, 'first')
+
+    with ExitStack() as stack:
+        turn, _, _ = execution(tmp_path, stack, 'again', first['session_id'])
+        turn.collector = PlainCollector()
+        assert turn.run()['outcome'] == 'completed'
+
+    (path, inputs), = turn.collector.bound
+    assert path == tmp_path / (first['session_id'] + '.jsonl')
+    assert len(inputs) == 1

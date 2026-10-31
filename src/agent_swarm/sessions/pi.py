@@ -6,6 +6,7 @@ remain explicit gaps, never content-based deletion or guessed ordering.
 """
 from __future__ import annotations
 
+from collections.abc import Iterable
 from copy import deepcopy
 import json
 from pathlib import Path
@@ -65,13 +66,15 @@ class PiArchive:
         source: str | None = None,
         attachment_root: Path | None = None,
         extra_fields: dict | None = None,
+        private_paths: Iterable[Path | str] = (),
     ) -> None:
         """Bind a verified native header and the activation's history boundary.
 
         ``project`` is the workspace that resolves relative attachment paths
-        and whose private state is never copied; it is not written to the
+        and whose ``.codex`` is never copied; it is not written to the
         archive. ``extra_fields`` is written verbatim (after redaction) to a
-        new header.
+        new header. ``private_paths`` are further directories the caller keeps
+        out of attachment copies.
         """
         if extra_fields is not None:
             validate_extra_fields(extra_fields)
@@ -92,6 +95,7 @@ class PiArchive:
         self.tool_buffers = {}
         self.attachment_root = attachment_root.resolve() if attachment_root is not None else None
         self.project = Path(project).resolve()
+        self.private_paths = tuple(Path(path).resolve() for path in private_paths)
         self.exclude = set() if archive.backfill_history else {entry['id'] for entry in entries}
         created = native_time(header)
         canonical = {'version': SESSION_FORMAT_VERSION, 'id': self.key, 'createdAt': created or 0,
@@ -270,8 +274,9 @@ class PiArchive:
             if not path.is_absolute():
                 path = Path(self.native_header.get('cwd') or self.project) / path
             path = path.resolve()
-            private = (self.archive.root.resolve(), self.project / '.graphtraj',
-                       self.project / '.codex', Path.home() / '.codex')
+            # ``path`` is resolved, so a linked ``.codex`` must be compared resolved too.
+            private = (self.archive.root.resolve(), (self.project / '.codex').resolve(),
+                       (Path.home() / '.codex').resolve(), *self.private_paths)
             if (self.attachment_root is None or not path.is_relative_to(self.attachment_root)
                     or any(path.is_relative_to(root) for root in private)):
                 reference = {'missing': {'path': location, 'reason': 'Outside the host-authorized attachment directory.'}}

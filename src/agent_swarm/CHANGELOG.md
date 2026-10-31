@@ -12,6 +12,55 @@ version that identifies everything listed under it.
 
 The numbers in parentheses are the project's Task numbers.
 
+## 0.2.10 (compatible)
+
+- A resumed Claude Session with a full archive no longer raises `Unresolved observations
+  remain` for good because its transcript holds a record outside the conversation, such
+  as an attachment (427). Only conversation messages the resume really left out now count
+  as missing. A resume with no archive, and a message really missing, still make
+  `messages()` raise. An archive that already holds this false gap stays pending, because
+  it cannot be told from a real one.
+- A Claude first start that reads a half-written last line no longer loses its messages
+  (427). A resume that reads one, including a `SessionStart` hook with `source=resume`,
+  now counts that line as history instead of collecting the whole history as new. A bad
+  line before the last is still reported.
+
+## 0.2.9 (compatible)
+
+- Reading a Claude transcript while a line is still being written no longer leaves a
+  resumed archive stuck (426). The failed read stayed pending once the line completed,
+  and `messages()` raised `Unresolved observations remain` for good. The next successful
+  read now clears it, and the partial line stays in `observations()`. History that was
+  really left out, and a line that never completes, still make `messages()` raise.
+- A read that failed and later cleared no longer hides a later gap in the same archive.
+- A failed read now appears under the archive locator `read-gap:<n>`, not `history-gap`.
+  An archive saved by an earlier version recovers its old read failures on the next
+  successful read, unless history is missing from that resume too.
+
+## 0.2.8 (compatible)
+
+- A resumed Claude execution no longer loses its reply from the archive (422). A reply
+  that reached the transcript before the history boundary was read counted as history,
+  and `messages()` raised `Unresolved observations remain`. The boundary is now measured
+  before Claude's hook is answered, so what Claude writes afterwards is always new. Only
+  the controlled test peer has shown this; a real Claude would need the same delay.
+- Records written after the hook, including off-chain ones, are now collected however
+  late the archive's first read runs. A late read used to drop them as history. A resume
+  without delay and a first start archive the same content as before.
+
+## 0.2.7 (compatible)
+
+- A standalone Pi attachment under `.graphtraj` is now copied (424). agents read it as
+  missing because it named that directory itself; it no longer does.
+- New keyword `private_paths` on `PiArchive` and new attribute `archive_private_paths` on
+  `PiExecution`: further directories kept out of attachment copies. The data root,
+  `<project>/.codex` and `~/.codex` stay protected, and the rule is now in the public
+  interface (1.5).
+- A `.codex` that is itself a link now stays protected. It used to be compared unresolved,
+  so its files were copied if the link's target lay inside the authorized directory.
+- GraphTraj requires `agent-swarm>=0.2.7,<0.3` because it passes these to keep its own
+  `.graphtraj` protected.
+
 ## 0.2.6 (compatible)
 
 - A failure while closing up no longer replaces the failure already on its way to the

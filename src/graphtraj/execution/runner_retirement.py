@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 from pathlib import Path
+import time
 
 import yaml
 
-from graphtraj.execution.runner_heartbeat import execution_start_lock
+from graphtraj.execution.runner_heartbeat import execution_start_lock, ownership_is_held
 from graphtraj.execution.runner_io import write_yaml_durably
 from graphtraj.execution.runner_models import Project, RunnerError
 from graphtraj.execution.approved_recovery import review_proposal
@@ -20,6 +21,9 @@ from graphtraj.graph.delivery_state import apply_delivery_state_request, read_te
 from graphtraj.graph.delivery_worldline import read_worldline
 from graphtraj.graph.task_graph import _load_states
 from graphtraj.workspace.runner_project import discover_project
+
+# Longer than a Worker's end needs: its close, then one parent delivery window.
+WORKER_EXIT_SECONDS = 30.0
 
 
 def retire_session(alias: str, cwd: Path, *, replacement: dict | None = None) -> dict:
@@ -84,9 +88,23 @@ def _require_reviewed(mapping: dict, reviewed: dict | None) -> None:
 def _retire_session(alias: str, cwd: Path, reviewed: dict | None = None) -> dict:
     """Check the stopped subtree under the existing startup lock, then retire."""
     project = discover_project(cwd, require_clean_integration=False)
+    _wait_for_worker_exit(project.runner_directory, alias)
     with execution_start_lock(project.runner_directory):
         _require_reviewed(read_alias_mapping(project.runner_directory, alias)[0], reviewed)
         return retire_stopped_session(project, alias)
+
+
+def _wait_for_worker_exit(runner_directory: Path, alias: str) -> None:
+    """Give a stopped Session's Worker time to finish writing into its directory.
+
+    An interrupted execution reads as idle before its Worker has written
+    ``execution.yml`` and told the parent. The wait stays outside the startup
+    lock because that delivery can need the lock. The caller rechecks under it.
+    """
+    mapping, directory = read_alias_mapping(runner_directory, alias)
+    deadline = time.monotonic() + WORKER_EXIT_SECONDS
+    while ownership_is_held(directory, mapping["worker_pid"]) and time.monotonic() < deadline:
+        time.sleep(0.05)
 
 
 def _retire_legacy_session(alias: str, cwd: Path, reviewed: dict | None = None) -> dict:
@@ -252,6 +270,14 @@ def retire_stopped_session(project: Project, alias: str) -> dict:
     """
     mapping, directory = read_alias_mapping(project.runner_directory, alias)
     require_stopped_subtree(project.runner_directory, alias)
+
+    # The record moves next, so a Worker still writing would lose its directory.
+    if ownership_is_held(directory, mapping["worker_pid"]):
+        raise RunnerError(
+            "replacement-not-stopped",
+            f"The Worker of {alias} is still finishing; no retirement was applied. Repeat the call.",
+        )
+
     record_file = directory / "session.yml"
     record = yaml.safe_load(record_file.read_text())
     retirement = record.get("retirement")

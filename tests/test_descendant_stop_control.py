@@ -184,6 +184,10 @@ def test_native_root_owner_outlives_historical_checker_membership(
     assert not list((root / '.graphtraj/runner/sessions').glob('*/mapping.yml'))
     retained_mapping = Path(original['trace_file']).parent / 'runner/session.yml'
     assert yaml.safe_load(retained_mapping.read_text())['retirement']['mapping'] == original
+    # The Worker finished before the move, so its end stays with the record.
+    assert not (root / '.graphtraj/runner/sessions' / target).exists()
+    assert yaml.safe_load((retained_mapping.parent / 'execution.yml').read_text())['outcome'] == 'interrupted'
+    assert 'interrupted' in (retained_mapping.parent / 'parent-notices.jsonl').read_text()
 
     # Check Stop before another dispatch can supply an active root mapping.
     (root / 'options.json').write_text(json.dumps({'source': 'vscode', 'child': 'checker-after-retire'}))
@@ -239,6 +243,142 @@ def test_native_root_owner_outlives_historical_checker_membership(
     monkeypatch.setenv('CODEX_HOME', str(root / 'other-home'))
     assert 'recorded completion checker' in native_hook(root)['systemMessage']
     assert historical.read_bytes() == retained
+
+
+def test_stray_directory_does_not_hide_a_retired_roots_owner(
+    managed_project: ManagedProject, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A retired Session's late files leave the owner recognized and everyone else refused."""
+    import shutil
+    from graphtraj.execution import main_finalize
+    from graphtraj.execution.runner_batch import parse_batch
+    from graphtraj.execution.runner_connection import parent_connection
+    from graphtraj.execution.runner_launch import launch_batch
+    from graphtraj.execution.runner_models import RunnerError
+    from graphtraj.interfaces.local_tool import bind
+    from graphtraj.runtimes import runtime_adapter
+    from graphtraj.runtimes.codex import finalize
+
+    root, _, _, executable = managed_project
+    monkeypatch.setenv('PATH', str(executable.parent) + os.pathsep + os.environ['PATH'])
+    monkeypatch.setenv('MANAGED_NATIVE_ROOT', str(executable.parent.parent / 'native'))
+    monkeypatch.setenv('CODEX_HOME', str(root))
+    connection = {'runtime': 'codex', 'session': 'main', 'codex_home': str(root)}
+    with parent_connection(connection):
+        target = launch_batch(parse_batch(launch_document()), root).document['tasks'][0]['alias']
+    original = mapping(root, target)
+
+    class NativeMetadata:
+        """Supply the owning daemon's verified root thread at its public seam."""
+        async def __aenter__(self) -> 'NativeMetadata':
+            """Open this controlled native metadata connection."""
+            return self
+
+        async def __aexit__(self, *args: object) -> None:
+            """Close without changing any Session."""
+
+        async def read_thread(self, session: str) -> dict:
+            """Every caller here is a root-like native Session."""
+            return {'id': session, 'sessionId': 'hook-session', 'source': 'vscode', 'parentThreadId': None}
+
+    monkeypatch.setattr(finalize, 'proxy', lambda value: NativeMetadata())
+    monkeypatch.setattr(runtime_adapter, 'current_host_connection', lambda: dict(connection))
+    monkeypatch.setattr(main_finalize, 'current_host_connection', lambda: dict(connection))
+
+    # The owner is an associated Main, which is what lets it organize roles.
+    main_finalize.bind_session({**connection, 'hook_session': 'hook-session'}, root)
+
+    # Both the owner and a non-owner were completion checkers of an older Main,
+    # so each identity reaches the ownership lookup over the retired root.
+    owner_record = root / '.graphtraj/runner/main-sessions/old-owner/session.yml'
+    old_main = {'runtime': 'codex', 'session': 'old-owner',
+                'connection': {**connection, 'session': 'old-owner'}, 'summary_issue': ''}
+    main_finalize.bind_checker(owner_record, old_main, 'main')
+    main_finalize.bind_checker(owner_record, old_main, 'other-checker')
+
+    tool = bind(root, recovery_reviewer=lambda proposal: {'decision': 'accept'})
+    for action in ('interrupt', 'retire'):
+        done = tool({'action': 'execute', 'feature': 'agents',
+                     'arguments': {'action': action, 'agent': target}})
+        assert not done.failed, done.document
+
+    # Exactly what a late Worker left behind, with no timing involved.
+    stray = root / '.graphtraj/runner/sessions' / target
+    shutil.rmtree(stray, ignore_errors=True)
+    stray.mkdir()
+    (stray / 'execution.yml').write_text(yaml.safe_dump({'outcome': 'runtime-error'}))
+    (stray / 'parent-notices.jsonl').write_text('{"delivery": "not-delivered"}\n')
+
+    def organize(preset: str) -> object:
+        """Ask for a change only the Harness Project owner may make."""
+        return tool({'action': 'execute', 'feature': 'role_organization', 'arguments': {'change': {
+            'set_presets': {preset: {'runtime': 'codex', 'model': 'gpt-5.6'}},
+        }}})
+
+    roles = (root / '.graphtraj/roles.yml').read_bytes()
+
+    # Another native identity, then the owner's identity in another home.
+    connection['session'] = 'other-checker'
+    with pytest.raises(RunnerError, match='owns the Harness Project'):
+        organize('refused-session')
+    connection.update(session='main', codex_home=str(root / 'other-home'))
+    with pytest.raises(RunnerError, match='owns the Harness Project'):
+        organize('refused-home')
+    assert (root / '.graphtraj/roles.yml').read_bytes() == roles
+
+    # The real owner is recognized through the retained record, which stays intact.
+    connection['codex_home'] = str(root)
+    organized = organize('owner')
+    assert not organized.failed and organized.document['applied'], organized.document
+    retained = Path(original['trace_file']).parent / 'runner/session.yml'
+    assert yaml.safe_load(retained.read_text())['retirement']['mapping'] == original
+
+
+@pytest.mark.parametrize('finishes', [True, False])
+def test_retirement_waits_for_a_finishing_worker(
+    managed_project: ManagedProject, monkeypatch: pytest.MonkeyPatch, finishes: bool,
+) -> None:
+    """The record stays in place while its Worker holds it; a lasting hold retires nothing."""
+    import threading
+    import time
+    from graphtraj.execution import runner_retirement
+    from graphtraj.execution.runner_heartbeat import hold_ownership, ownership_is_held
+    from graphtraj.execution.runner_models import RunnerError
+
+    root, _, call, _ = managed_project
+    target = call('launch', launch_document())['tasks'][0]['alias']
+    owner = mapping(root, target)
+    assert call('interrupt', [target])['interrupt_status'] == 'interrupted'
+    directory = root / '.graphtraj/runner/sessions' / target
+    deadline = time.monotonic() + 30
+    while ownership_is_held(directory, owner['worker_pid']):
+        assert time.monotonic() < deadline
+        time.sleep(0.05)
+
+    # This process takes the lock the Worker holds until its writes have ended.
+    held = hold_ownership(directory, owner['worker_pid'])
+    if not finishes:
+        monkeypatch.setattr(runner_retirement, 'WORKER_EXIT_SECONDS', 0.1)
+        with pytest.raises(RunnerError, match='still finishing') as refusal:
+            runner_retirement.retire_session(target, root)
+        held.close()
+        assert refusal.value.code == 'replacement-not-stopped'
+        assert (directory / 'mapping.yml').is_file()
+        return
+
+    in_place: list[bool] = []
+
+    def finish() -> None:
+        """Observe the record while it is held, then end the hold."""
+        in_place.append((directory / 'session.yml').is_file())
+        held.close()
+
+    timer = threading.Timer(0.3, finish)
+    timer.start()
+    assert runner_retirement.retire_session(target, root)['retire_status'] == 'retired'
+    timer.join()
+    assert in_place == [True]
+    assert not directory.exists()
 
 
 def test_stop_descendants_preserves_identity_and_prohibits_later_work(managed_project: ManagedProject) -> None:

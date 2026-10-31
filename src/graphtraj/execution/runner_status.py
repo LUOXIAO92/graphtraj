@@ -1103,9 +1103,14 @@ def retained_session_directories(runner_directory: Path) -> list[Path]:
 
 
 def session_record_directory(runner_directory: Path, alias: str) -> Path:
-    """Resolve an active entity or its retained Trace records without a new registry."""
+    """Resolve an active entity or its retained Trace records without a new registry.
+
+    Retirement moves these three records away and a late write never creates
+    them, so a directory lacking all of them cannot hide a retained record. One
+    with no retained record is an allocation and still resolves here.
+    """
     active = runner_directory / "sessions" / alias
-    if active.exists():
+    if any(os.path.lexists(active / name) for name in ("mapping.yml", "session.yml", "launch.yml")):
         return active
     for directory in retained_session_directories(runner_directory):
         if directory.parent.name == alias:

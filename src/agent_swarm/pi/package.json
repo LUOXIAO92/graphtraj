@@ -1,6 +1,6 @@
 {
   "name": "agents-pi",
-  "version": "0.2.9",
+  "version": "0.2.10",
   "private": true,
   "description": "agents for Pi: start child Agents on any configured Runtime from a Pi Session.",
   "keywords": ["pi-package"],

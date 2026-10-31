@@ -12,6 +12,19 @@ version that identifies everything listed under it.
 
 The numbers in parentheses are the project's Task numbers.
 
+## 0.2.10 (compatible)
+
+- A resumed Claude Session with a full archive no longer raises `Unresolved observations
+  remain` for good because its transcript holds a record outside the conversation, such
+  as an attachment (427). Only conversation messages the resume really left out now count
+  as missing. A resume with no archive, and a message really missing, still make
+  `messages()` raise. An archive that already holds this false gap stays pending, because
+  it cannot be told from a real one.
+- A Claude first start that reads a half-written last line no longer loses its messages
+  (427). A resume that reads one, including a `SessionStart` hook with `source=resume`,
+  now counts that line as history instead of collecting the whole history as new. A bad
+  line before the last is still reported.
+
 ## 0.2.9 (compatible)
 
 - Reading a Claude transcript while a line is still being written no longer leaves a

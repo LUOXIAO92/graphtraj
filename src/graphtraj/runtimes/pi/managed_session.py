@@ -32,7 +32,7 @@ class PiManagedExecution(PiExecution):
         project = Path(self.request['harness_root'])
         root = swarm_root(project)
         self.archive = SessionArchive(root, **default_config(root, save_normalized_sessions=True))
-        self.archive_private_paths = attachment_private_paths(project)
+        self.archive_private_paths = attachment_private_paths(project, self.request.get('worktree_path'))
         # The agents driver path replaces this with its own receiver.
         self.parent_notice = self._notify_direct_parent
 

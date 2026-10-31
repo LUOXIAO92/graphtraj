@@ -196,12 +196,35 @@ case "$1" in
   -p) cat >/dev/null
     print '{"message":{"content":[{"type":"tool_use","id":"1","name":"mcp__agents__tasks"},{"type":"tool_use","id":"2","name":"mcp__agents__agents"}]}}'
     print '{"message":{"content":[{"type":"tool_result","tool_use_id":"1","content":"ok"},{"type":"tool_result","tool_use_id":"2","content":[{"type":"text","text":"ok"}]}]}}' ;;
+  *) print start >> $STUB_START_LOG; exit ${STUB_START_RC:-0} ;;
 esac
 exit 0
 EOF2
   steps 0 2>&1 | tail -32; check "0 runs (rc=${pipestatus[1]})" [ ${pipestatus[1]} -eq 0 ]
-  rm -f $W/raw/Vc.ok; mkdir -p $FB; steps Vc 2>&1 | tail -12; check "Vc runs and judges a stream (rc=${pipestatus[1]})" [ ${pipestatus[1]} -eq 0 ]
-  check "Vc.ok written" test -e $W/raw/Vc.ok
+  local VPJ=$FB/vproject T=$FB/vproject/.git/adopt417-trust-start-ok
+  export STUB_START_LOG=$F/starts.txt; : > $STUB_START_LOG
+  print -r -- "--- Vc retry 1: stopped right after git init; no terminal, as in this sandbox (the real /dev/tty branch)"
+  rm -f $W/raw/Vc.ok; rm -rf $VPJ; mkdir -p $VPJ; git -C $VPJ init -q --initial-branch=main
+  steps Vc > $F/vc1.txt 2>&1; local rc=$?; tail -4 $F/vc1.txt
+  check "Vc fails when /dev/tty cannot be opened (rc=$rc)" [ $rc -ne 0 ]
+  check "it says so" grep -q "交互启动没有正常退出" $F/vc1.txt
+  check "the commit and setup were still reached after the git init stop" git -C $VPJ rev-parse -q --verify refs/heads/dev
+  check "no trust marker, no configuration, no Vc.ok" test ! -e $T -a ! -e $VPJ/.mcp.json -a ! -e $W/raw/Vc.ok
+  print -r -- "--- Vc retry 2: the stub's start exits 3"
+  (export ADOPT417_NO_TTY=1 STUB_START_RC=3; steps Vc) > $F/vc2.txt 2>&1; rc=$?; tail -3 $F/vc2.txt
+  check "Vc fails on a start that did not exit normally (rc=$rc)" [ $rc -ne 0 ]
+  check "the message names rc=3" grep -q "rc=3" $F/vc2.txt
+  check "setup was not repeated" test -z "$(grep 'Setup plan' $F/vc2.txt)"
+  check "still no trust marker or configuration" test ! -e $T -a ! -e $VPJ/.mcp.json
+  print -r -- "--- Vc retry 3: the start exits 0"
+  (export ADOPT417_NO_TTY=1; steps Vc) > $F/vc3.txt 2>&1; rc=$?; tail -12 $F/vc3.txt
+  check "Vc runs and judges a stream (rc=$rc)" [ $rc -eq 0 ]
+  check "Vc.ok, trust marker and configuration written" test -e $W/raw/Vc.ok -a -e $T -a -e $VPJ/.mcp.json
+  check "two starts so far" test "$(wc -l < $STUB_START_LOG | tr -d ' ')" = 2
+  print -r -- "--- Vc retry 4: configuration lost; no terminal, so a second start would fail"
+  rm -f $VPJ/.mcp.json
+  steps Vc > $F/vc4.txt 2>&1; rc=$?; check "Vc rewrites the configuration without a new start (rc=$rc)" [ $rc -eq 0 -a -e $VPJ/.mcp.json ]
+  check "still two starts" test "$(wc -l < $STUB_START_LOG | tr -d ' ')" = 2
   print -r -- '{"message":{"content":[{"type":"tool_use","id":"1","name":"mcp__agents__tasks"},{"type":"tool_result","tool_use_id":"1","content":"denied","is_error":true}]}}' > $F/bad.jsonl
   $CONDA -I $SD/adopt_tree.py stream $F/bad.jsonl mcp__agents__tasks; check "a refused tool call does not pass the stream check" [ $? -ne 0 ]
   print "4242 1 $FRT/bin/python -m graphtraj.runtimes.claude.host serve --config $FH/.graphtraj/claude-host/config.json" > $F/ps.txt

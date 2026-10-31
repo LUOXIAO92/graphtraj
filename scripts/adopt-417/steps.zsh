@@ -165,13 +165,35 @@ step_V() {
 step_Vc() {
   local C=$(claude_bin) G=$VV/bin/graphtraj
   [[ -x $G ]] || { print "没有 scratch venv，先运行 V。"; return 1; }
-  if [[ ! -d $VPROJECT/.git ]]; then
-    mkdir -p $VPROJECT; git -C $VPROJECT init -q --initial-branch=main; print -r -- "# 417 scratch project" > $VPROJECT/README.md
-    git -C $VPROJECT add README.md && git -C $VPROJECT -c user.name=417 -c user.email=417@invalid commit -qm "Initial source"
+  # Each part has its own marker, so a retry after a stop anywhere resumes at the first part not done.
+  local TRUSTED=$VPROJECT/.git/adopt417-trust-start-ok rc
+  local WRITTEN=$VPROJECT/.claude/skills/graphtraj-claude-host/hooks/host_context.mjs  # the last file --write writes
+  mkdir -p $VPROJECT
+  [[ -d $VPROJECT/.git ]] || git -C $VPROJECT init -q --initial-branch=main || return 1
+  if ! git -C $VPROJECT rev-parse -q --verify HEAD > /dev/null; then
+    print -r -- "# 417 scratch project" > $VPROJECT/README.md
+    git -C $VPROJECT add README.md && git -C $VPROJECT -c user.name=417 -c user.email=417@invalid commit -qm "Initial source" || return 1
+  fi
+  if ! { [[ -e $VPROJECT/.graphtraj/core/config.yml || -e $VPROJECT/.graphtraj/config.yml ]] && git -C $VPROJECT rev-parse -q --verify refs/heads/dev > /dev/null; }; then
     (cd $VPROJECT && print -r -- y | $G setup) || return 1
+  fi
+  if [[ ! -e $TRUSTED ]]; then
     print "现在 Claude Code 在 $VPROJECT 启动一次。对话框 'Do you trust the files in this folder?' 选 'Yes, proceed'。"
     print "然后输入 /exit 回车，不要发消息。其它任何框按 Esc 并告诉 Main 标题。"
-    (cd $VPROJECT && $C)
+    # This step's stdout is the log's pipe; the dialog needs the terminal itself.
+    if [[ -n ${ADOPT417_NO_TTY:-} ]]; then
+      (cd $VPROJECT && $C) < /dev/null > /dev/null 2>&1; rc=$?   # Rehearsal with a stub claude only.
+    else
+      (cd $VPROJECT && $C) < /dev/tty > /dev/tty 2>&1; rc=$?
+    fi
+    if (( rc != 0 )); then
+      print "Claude Code 的交互启动没有正常退出（rc=$rc），或打不开终端 /dev/tty。信任框可能没有出现或没有确认，Vc 未通过，配置也没有写。"
+      print "请在普通 Terminal 里重新运行本步：已完成的部分不会重做。若仍失败，把这段输出交给 Main。"
+      return 1
+    fi
+    touch $TRUSTED
+  fi
+  if [[ ! -e $VPROJECT/.mcp.json || ! -e $WRITTEN ]]; then
     (cd $VPROJECT && $VV/bin/python -m graphtraj.runtimes.claude.host configuration --project $VPROJECT --claude $C --write) || return 1
   fi
   say "claude -p calls tasks discover and agents status (no dialog)"

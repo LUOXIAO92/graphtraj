@@ -370,9 +370,13 @@ class ClaudeJsonlCollector:
         except (OSError, ValueError, KeyError, TypeError) as error:
             raw = ({'unparsedTranscriptTail': error.doc} if isinstance(error, json.JSONDecodeError) else
                    {'unparsedBytes': base64.b64encode(error.object).decode()} if isinstance(error, UnicodeDecodeError) else {})
-            gap = self._event('history-gap', raw)
+            # A failed read is its own fact, apart from the history-gap of history
+            # left out. A published locator hides later drafts under it, so each
+            # resolved failure leaves the next one a new key.
+            failures = sum(e['native']['locator'].startswith('read-gap:') for e in _events(store))
+            gap = self._event(f'read-gap:{failures}', raw)
             gap['missing'] = [{'path': 'history', 'reason': str(error)}]
-            store.checkpoint(gap, source='history-gap', position=store.position('history-gap') + 1)
+            store.checkpoint(gap, source='read-gap', position=store.position('read-gap') + 1)
             return
         old = _events(store)
         surface = _surface(old)
@@ -441,6 +445,9 @@ class ClaudeJsonlCollector:
         for record in desired:
             if record['type'] == 'assistant' and record.get('message', {}).get('id'):
                 responses.setdefault(record['message']['id'], []).append(record['uuid'])
+        history_left_out = (not self.archive.backfill_history
+                            and (not self.cut_known or self.excluded and not set(self.excluded) <= set(originals)))
+        retained_failure = None
         for pending in store.pending():
             draft = pending['event']
             key = draft['native']['locator']
@@ -455,6 +462,18 @@ class ClaudeJsonlCollector:
                 target = [key.removeprefix('message:')]
             elif key == 'history-gap' and (self.cut_known and not self.excluded or self.archive.backfill_history):
                 target = ids
+            elif key.startswith('read-gap:'):
+                # This read parsed the whole file, so what the failure hid is
+                # collected now, subject to the cut.
+                target = ids
+            elif (key == 'history-gap' and not history_left_out
+                  and {'unparsedTranscriptTail', 'unparsedBytes'} & draft['native']['record'].keys()):
+                # Earlier versions kept read failures under history-gap. Only
+                # these hold read bytes; history left out has an empty record.
+                # The marker takes a read-gap key to keep history-gap unpublished.
+                failures = sum(e['native']['locator'].startswith('read-gap:') for e in events)
+                key = retained_failure = f'read-gap:{failures}'
+                target = ids
             elif key.startswith('live:'):
                 target = []
             if target is not None and key not in {e['native']['locator'] for e in events}:
@@ -462,8 +481,10 @@ class ClaudeJsonlCollector:
                 marker.update(seq=len(events), data={'nativeMessageUuids': target, 'observationResolved': True})
                 events.append(marker)
         store.publish(events, source='transcript', position=store.position('transcript') + 1)
-        if (not self.archive.backfill_history
-                and (not self.cut_known or self.excluded and not set(self.excluded) <= set(originals))):
+        if retained_failure is not None:
+            store.resolve_observation(('claude', self.session, 'history-gap'),
+                                      ('claude', self.session, retained_failure))
+        if history_left_out:
             gap = self._event('history-gap', {})
             gap['missing'] = [{'path': 'history', 'reason': 'History backfill is disabled; native prefix was not collected.'}]
             store.checkpoint(gap, source='history-gap', position=store.position('history-gap') + 1)

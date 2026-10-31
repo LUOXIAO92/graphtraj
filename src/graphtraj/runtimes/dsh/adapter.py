@@ -7,6 +7,7 @@ import json
 import os
 from pathlib import Path
 import shutil
+import sys
 from typing import Any, Mapping
 from urllib.parse import urlsplit
 
@@ -82,9 +83,15 @@ class DshRuntimeAdapter:
         if effort not in {None, 'off', 'low', 'high', 'max'}:
             raise RuntimeAdapterError('ROLE_CONFIG_UNSUPPORTED', 'Unsupported DSH reasoning effort.')
         executable = shutil.which('dsh')
-        tool = shutil.which('graphtraj-session')
-        if not executable or not tool:
-            raise RuntimeAdapterError('RUNTIME_UNAVAILABLE', 'Install DSH and GraphTraj public CLI first.')
+        # This install's script sits beside its Python, unresolved: a venv's Python links elsewhere.
+        # The PATH serves layouts without a sibling script, such as `pip install --user`.
+        sibling = Path(sys.executable).parent / 'graphtraj-session'
+        tool = str(sibling) if os.access(sibling, os.X_OK) else shutil.which('graphtraj-session')
+        missing = [label for found, label in ((executable, 'dsh on PATH'),
+                                              (tool, f'graphtraj-session beside {sys.executable} or on PATH'))
+                   if not found]
+        if missing:
+            raise RuntimeAdapterError('RUNTIME_UNAVAILABLE', f"A DSH member cannot start: no {' and no '.join(missing)}.")
         package = Path(executable).resolve().parent.parent / 'package.json'
         refusal = dsh_version_refusal(package)
         if refusal is not None:

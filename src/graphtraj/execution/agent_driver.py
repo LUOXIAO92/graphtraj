@@ -18,7 +18,7 @@ import threading
 from pathlib import Path
 from typing import Any, Mapping
 
-from agent_swarm import AgentsError, AgentsResult, Caller, Run, within_workspace
+from agent_swarm import AgentControl, AgentsError, AgentsResult, Caller, Run, within_workspace
 
 from graphtraj.runtimes.runtime_adapter import (
     RuntimeAdapterError,
@@ -53,6 +53,31 @@ def _git_common_directory(cwd: Path) -> Path:
     return Path(output)
 
 
+def member_worktree(root: Path, alias: str) -> Path | None:
+    """Return Task member ``alias``'s Worktree, or ``None`` for any other identity.
+
+    The Runner alias form is what identifies a member: a native Session or
+    helper identity, which also reaches ``create``, never has it. A member whose
+    record cannot be read or whose Worktree is gone is refused, because its
+    child must not fall back to a wider directory.
+    """
+    from graphtraj.execution.runner_models import RunnerError
+    from graphtraj.execution.runner_status import ALIAS, read_alias_mapping
+    from graphtraj.workspace.runner_project import discover_runner_directory
+
+    if not ALIAS.fullmatch(alias):
+        return None
+    try:
+        worktree = Path(read_alias_mapping(discover_runner_directory(root), alias)[0]["worktree_path"])
+    except RunnerError as error:
+        raise AgentsError("workspace-denied", f"Task member {alias!r} cannot start a child: "
+                                              f"{error.message}") from None
+    if not worktree.is_dir():
+        raise AgentsError("workspace-denied", f"Task member {alias!r} cannot start a child: "
+                                              f"its recorded Worktree {worktree} is not a directory.")
+    return worktree
+
+
 class AdapterDriver:
     """Native execution through the selected Runtime's existing Adapter.
 
@@ -75,14 +100,33 @@ class AdapterDriver:
 
         self.codex = CodexDriver(execution=CodexManagedExecution)
 
+    def _ancestor_worktree(self, agent: str) -> Path | None:
+        """Return the Worktree of the Task member ``agent`` descends from, if any."""
+        from graphtraj.interfaces.agents import AGENT_PREFIX, swarm_root
+
+        control = AgentControl(swarm_root(self.root), {})
+        while agent.startswith(AGENT_PREFIX):
+            registration = control.registration(agent)
+            if registration is None or not isinstance(registration["parent"], str):
+                return None
+            agent = registration["parent"]
+        return member_worktree(self.root, agent)
+
     def _own_directory(self, caller: Caller) -> Path:
-        """Return the directory ``caller`` works in: a Task member's Worktree, else this host's."""
+        """Return the directory ``caller`` works in.
+
+        A Task member's is its Worktree, and so is its descendants': the host
+        may run elsewhere, such as in a subdirectory or at a project that does
+        not contain the Worktree. Anyone else's is this host's.
+        """
         from graphtraj.execution.runner_status import read_alias_mapping
         from graphtraj.interfaces.agents import AGENT_PREFIX
         from graphtraj.workspace.runner_project import discover_runner_directory
 
-        if caller.agent is None or caller.agent.startswith(AGENT_PREFIX):
+        if caller.agent is None:
             return self.cwd
+        if caller.agent.startswith(AGENT_PREFIX):
+            return self._ancestor_worktree(caller.agent) or self.cwd
         worktree = read_alias_mapping(discover_runner_directory(self.root), caller.agent)[0].get("worktree_path")
         if not isinstance(worktree, str) or not worktree:
             raise AgentsError("workspace-denied", f"Task member {caller.agent!r} has no recorded Worktree.")
@@ -201,7 +245,7 @@ class AdapterDriver:
 
             turn.configure_independent(
                 archive=run.archive, agents_callback=callback,
-                extra_fields=graphtraj_fields(str(turn.request['worktree_path']), turn.directory.name,
+                extra_fields=graphtraj_fields(str(turn.request['harness_root']), turn.directory.name,
                                               extra_fields=run.extra_fields))
         if run.runtime == 'dsh':
             from graphtraj.runtimes.dsh.driver import bind_agents

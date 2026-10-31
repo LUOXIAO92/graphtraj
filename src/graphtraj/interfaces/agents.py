@@ -123,7 +123,8 @@ class GraphTrajAgents:
     """Run ``agents`` actions through the core, keeping Task member controls.
 
     ``root`` is the trusted project location supplied by the host and
-    ``cwd`` the working directory new Agents run in. At first use GraphTraj
+    ``cwd`` the working directory new Agents run in, except that a Task
+    member's child runs in the member's Worktree. At first use GraphTraj
     turns normalized Session archiving on through the tool's public
     configuration, keeping any explicit choice already made.
     """
@@ -212,6 +213,8 @@ class GraphTrajAgents:
             if action == "create" or (agent or "").startswith(AGENT_PREFIX):
                 if arguments.get("reports_only"):
                     raise AgentsError("invalid-input", "request.reports_only: only for a Task member")
+                if action == "create":
+                    arguments = self._member_workspace(arguments, binding.caller)
                 return self.control.operate(action, arguments, binding)
             if action == "status" and agent is None:
                 return self._hierarchy(binding)
@@ -223,6 +226,19 @@ class GraphTrajAgents:
             raise AgentsError(error.code, message) from None
         except ValueError as error:
             raise AgentsError("invalid-input", str(error)) from None
+
+    def _member_workspace(self, arguments: Mapping[str, Any], caller: Caller) -> Mapping[str, Any]:
+        """Assign a Task member's new child the member's Worktree unless it names a workspace.
+
+        As the ``create`` argument it passes the driver's check and is recorded
+        by the core, so the child's own children inherit it.
+        """
+        from graphtraj.execution.agent_driver import member_worktree
+
+        if arguments.get("workspace") is not None or caller.agent is None:
+            return arguments
+        worktree = member_worktree(self.root, caller.agent)
+        return arguments if worktree is None else {**arguments, "workspace": str(worktree)}
 
     def _ask_parent(self, arguments: Mapping[str, Any], caller: Caller) -> Outcome:
         """Ask the caller's own direct parent for a decision or resources.
@@ -496,7 +512,7 @@ def run_agents_feature(arguments: Mapping[str, Any], *, cwd: Path | None = None)
     call (native callback scope, calling process tree, or a verified native
     Main Session), never an argument. A call with no verified identity is
     refused rather than sharing one anonymous root scope with other callers.
-    New Agents run in the call's working directory.
+    New Agents run in the call's working directory; a Task member's in its Worktree.
     """
     from graphtraj.execution.runner_models import RunnerError
     from graphtraj.execution.runner_status import NativeCaller, caller_alias, runtime_caller_is_bound

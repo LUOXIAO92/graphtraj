@@ -22,8 +22,8 @@ import uuid
 
 import yaml
 
-from rh392 import (AG, CHILD_CHOICE, CLAUDE, CLAUDE_MODEL, CLAUDE_PROJECT, DEEPSEEK_MODEL, ENV, Host, KEY_VARIABLE,
-                   OUT, PI, PI_PROVIDER, PYTHON, RUN, RUNTIMES, SLEEP, Turn, alive, call, check, codex_settings,
+from rh392 import (CHILD_CHOICE, CLAUDE, CLAUDE_MODEL, CLAUDE_PROJECT, DEEPSEEK_MODEL, ENV, Host, KEY_VARIABLE,
+                   OUT, PI, PI_PROVIDER, PYTHON, RUN, RUNTIMES, SLEEP, alive, call, check, codex_settings,
                    connection, error_code, host_process, judge, keep_tree, last_result, note, script_prompt,
                    shown_count)
 
@@ -292,53 +292,28 @@ def failures() -> None:
     guarded('resume-failure', resume_start_failure)
 
 
-def launch_failed(runner: str, graphtraj: str) -> None:
-    """421: GraphTraj's Runner reports a DSH member that cannot start as ``launch-failed`` with its reason."""
+def launch_failed() -> None:
+    """421: GraphTraj's Runner reports a DSH member that cannot start as ``launch-failed`` with its reason.
+
+    Runs under the GraphTraj venv's Python. The project is the one scratch_project.py builds for 416 and
+    420; only the dispatch differs, because it runs under the sandbox that refuses local binding.
+    """
+    import scratch_project as scratch
+
     reason = bind_is_refused()
     if reason:
         check('CANNOT', f'launch-failed: needs a Runner that refuses local binding; {reason}')
         return
-    project = RUN / 'gt-project'
-    project.mkdir()
-    environment = {name: value for name, value in ENV.items() if not name.startswith(('GRAPHTRAJ_', 'RH_'))}
-    environment.pop('AGENT_SWARM_CONNECTION', None)
-
-    def run(*argv: str, stdin: str | None = None, sandboxed: bool = False) -> subprocess.CompletedProcess:
-        prefix = ['/usr/bin/sandbox-exec', '-p', NO_BIND] if sandboxed else []
-        return subprocess.run([*prefix, *argv], cwd=project, env=environment, input=stdin, capture_output=True,
-                              text=True, timeout=240)
-
-    run('git', 'init', '-q', '--initial-branch=main')
-    (project / 'README.md').write_text('# 392 scratch project\n')
-    run('git', 'add', 'README.md')
-    run('git', 'commit', '-qm', 'Initial source')
-    setup = run(graphtraj, 'setup', stdin='y\n')
-    (OUT / 'setup.txt').write_text(setup.stdout + setup.stderr)
-    (project / '.graphtraj' / 'roles.yml').write_text(yaml.safe_dump({
-        'roles': {'writer': {'runtime': 'dsh', 'model': DEEPSEEK_MODEL, 'dsh': {'api_key_env': KEY_VARIABLE}}},
-        'role_tree': {'writer': {}}}))
-    task = RUN / 'task.yml'
-    task.write_text(yaml.safe_dump({
-        'task_id': '1', 'task_name': 'article', 'source': 'realhost-392', 'title': 'Article line',
-        'body': 'Reply with one line.', 'dependencies': [], 'schema_version': 2, 'parent_id': None,
-        'disposition': 'active', 'replaced_by': [], 'retirement_reason': None}))
-    registered = run(graphtraj, 'task', 'register', '--task-file', str(task))
-    (project / 'delivery-evidence.md').write_text('Main validated readiness for the 392 check.\n')
-    ready = RUN / 'ready.yml'
-    ready.write_text(yaml.safe_dump({
-        'task_id': '1', 'status': 'ready', 'active_team_ordinal': None, 'worktree': None, 'branch': None,
-        'current_candidate': None, 'caused_by_event_ids': [], 'evidence_refs': ['delivery-evidence.md']}))
-    updated = run(graphtraj, 'task', 'update', '--state-file', str(ready))
-    (OUT / 'task.txt').write_text(registered.stdout + registered.stderr + updated.stdout + updated.stderr)
-    batch = RUN / 'batch.yml'
-    batch.write_text("tasks: [{task_id: '1', task_name: article, role: writer}]\n")
-    done = run(runner, '--swarm-input', str(batch), sandboxed=True)
-    (OUT / 'swarm-output.yml').write_text(done.stdout)
-    (OUT / 'swarm-stderr.txt').write_text(done.stderr)
+    scratch.prepare(['dsh'])
+    scratch.ready('1', 'article', 'Reply with one line.')
+    swarm = RUN / 'swarm.yml'
+    swarm.write_text(yaml.safe_dump({'tasks': [{'task_id': '1', 'role': 'member_dsh', 'instruction': 'Reply with one line.'}]}))
+    done = scratch.run('dispatch', '/usr/bin/sandbox-exec', '-p', NO_BIND, str(scratch.BIN / 'agent-runner'),
+                       '--swarm-input', str(swarm), limit=300)
     try:
         tasks = yaml.safe_load(done.stdout)['tasks']
     except Exception as error:
-        check('FAIL', f'launch-failed: the Runner printed no task list ({type(error).__name__}); see swarm-output.yml, swarm-stderr.txt')
+        check('FAIL', f'launch-failed: the Runner printed no task list ({type(error).__name__}); see dispatch.txt')
         return
     error = tasks[0].get('error') or {}
     judge(error.get('code') == 'launch-failed', 'launch-failed the public code of a failed DSH start', error.get('code'))
@@ -578,6 +553,7 @@ def interactive(host: Host, label: str, prompt: str, *extra: str, limit: int = 6
         process.terminate()
         process.wait(30)
     host.started = True
+    host.wait_host_gone()
     if host.host_log.exists():
         with host.host_log.open('rb') as log:
             log.seek(host.host_log_offset)
@@ -600,7 +576,15 @@ def idle_claude() -> None:
     interactive(host, name, prompt, '--mcp-config', str(host.work / '.mcp.json'), '--strict-mcp-config',
                 '--allowedTools', 'mcp__agents__agents')
     text = host.transcript(name)
-    pushed = text.count('[GraphTraj notice from') + text.count('[agents notice from')
+    # A prompt is one user record in the transcript; other record kinds may repeat its text.
+    pushed = 0
+    for line in text.splitlines():
+        try:
+            record = json.loads(line)
+        except ValueError:
+            continue
+        if record.get('type') == 'user' and ('[GraphTraj notice from' in line or '[agents notice from' in line):
+            pushed += 1
     judge('IDLE-PONG' in text and pushed >= 1, 'idle-claude an idle parent receives the end without calling anything', f'notice prompts {pushed}')
     judge(pushed == 1, 'idle-claude the notice arrives once', pushed)
     log = OUT / f'{name}.host.log'
@@ -650,6 +634,10 @@ def idle_pi() -> None:
     told = [notice for notice in host.notices if notice['event'] == 'completed']
     judge(notice_after == 1, 'idle-pi the notice starts a turn after the first turn ended', f'taken after {notice_after} turn ends')
     judge(len(told) == 1 and 'IDLE-PONG' in told[0]['body'], 'idle-pi the end arrives once', [notice['id'] for notice in told])
+    check('CANNOT', 'idle-codex a parent alive and idle: the Codex host runs one instruction per invocation and ends with its '
+                    'turn, so no idle parent exists; a later end is held for --resume, which matrix row 11 shows')
+    check('CANNOT', 'idle-dsh a parent alive and idle: this needs a long-lived DSH profile (web, tui, acp, sdk), which no real '
+                    'run has driven yet; headless, the only form run, exits when its task ends. Step 42 shows its holding')
     host.keep_data()
 
 
@@ -923,10 +911,11 @@ def stuck(kind: str, how: str) -> None:
             return
         # Another process holding the record lock past the host's deadline: a blocked call in the stop
         # path. Taken after the parent's wait has returned, because that wait needs the same lock, and
-        # released after LOCK_SECONDS so that a host with no bound on the call still ends here.
-        time.sleep(47)
+        # released after LOCK_SECONDS so that a host with no bound on the call still ends here. The
+        # parent's discover calls take no record lock and keep it running past this moment.
+        time.sleep(28)
         agents = list((host.data / 'control' / 'agents').glob('*.json'))
-        if not agents:
+        if not agents or process.poll() is not None:
             return
         lock_file = host.data / 'live' / 'agents' / f'{agents[0].stem}.lock'
         with lock_file.open('a+b') as stream:
@@ -938,14 +927,15 @@ def stuck(kind: str, how: str) -> None:
     first = host.turn(name + '-1', script_prompt([
         call('create', runtime='claude', model=CLAUDE_MODEL, reasoning_effort='low',
              instruction=SLEEP.format(seconds=500, answer='SLEPT')),
-        wait_call(seconds=45),
+        wait_call(seconds=20),
+        *['{"action":"discover"}'] * 6,
     ], 'Do not call anything else. Reply with one line and stop.'), limit=360, during=make_stuck)
-    ended_at = time.monotonic()
     server = facts.get('server')
     for _ in range(40):
         if not (server and alive(server)):
             break
         time.sleep(1)
+    ended_at = time.monotonic()
     judge(not first.limited and not (server and alive(server)), f'{name} the host process ends with a stuck child',
           f'turn exit {first.exit_code} after {first.seconds:.0f} s (total {time.monotonic() - begun:.0f} s); host pid {server}')
     if 'locked_at' in facts:

@@ -178,12 +178,12 @@ def child_settings(host: str, runtime: str, work: Path, pi_home: Path) -> dict:
         return codex_settings(work)
     if runtime == 'dsh':
         return {'executable': DSH, 'model': DEEPSEEK_MODEL, 'sandbox': 'read-only', 'api_key_env': KEY_VARIABLE}
-    settings = {'provider': PI_PROVIDER, 'model': DEEPSEEK_MODEL, 'agent_dir': str(pi_home), 'instructions': '',
+    settings = {'provider': PI_PROVIDER, 'model': DEEPSEEK_MODEL, 'agent_dir': str(pi_home),
                 'sandbox_python': SANDBOX_PYTHON, 'sandbox_path': SANDBOX_PATH, 'worktree_access': 'read',
                 'api_key_env': KEY_VARIABLE}
-    # Only DSH takes the whole request; the other hosts fill executable themselves.
+    # Only DSH takes the whole request, with an empty instructions; the other hosts fill these themselves.
     if host == 'dsh':
-        settings['executable'] = PI
+        settings.update(executable=PI, instructions='')
     return settings
 
 
@@ -248,6 +248,13 @@ class Host:
         document['runtimes'] = settings
         self.config_file.write_text(json.dumps(document, indent=2))
         self.host_log = self.work / '.agents-control' / 'host.log'
+        self.channel = Path(document['channel_file'])
+
+    def wait_host_gone(self, seconds: int = 20) -> None:
+        """Give a Claude host time to stop its children: the next one is refused while its channel lives (406)."""
+        deadline = time.monotonic() + seconds
+        while self.channel.exists() and time.monotonic() < deadline:
+            time.sleep(0.2)
 
     def _setup_codex(self, settings: dict) -> None:
         """Write the settings file ``agent_swarm.codex.host --settings`` reads."""
@@ -323,8 +330,10 @@ class Host:
             process = subprocess.Popen(argv, cwd=self.work, env=self.environment, stdout=stdout,
                                        stdin=subprocess.PIPE,
                                        stderr=subprocess.PIPE if self.kind == 'codex' else stderr)
+            answering = None
             if self.kind == 'codex':
-                threading.Thread(target=self._answer_codex, args=(process, stderr, label), daemon=True).start()
+                answering = threading.Thread(target=self._answer_codex, args=(process, stderr, label), daemon=True)
+                answering.start()
             elif stdin is not None:
                 process.stdin.write(stdin)
                 process.stdin.close()
@@ -341,7 +350,11 @@ class Host:
                 except subprocess.TimeoutExpired:
                     process.kill()
                     process.wait()
+            if answering is not None:
+                answering.join(5)
         seconds = time.monotonic() - begun
+        if self.kind == 'claude':
+            self.wait_host_gone()
         note(f'{label}: exit {process.returncode}, {seconds:.0f} s' + (', STOPPED AT THE TIME LIMIT' if limited else ''))
         self.started = True
         if self.kind == 'dsh':

@@ -15,7 +15,7 @@ prepare_checks
 GT_VENV=$AG/venv-graphtraj
 if [[ ! -f $GT_VENV/installed-commit || $(cat $GT_VENV/installed-commit 2>/dev/null) != $COMMIT ]]; then
   say "build $GT_VENV from commit $COMMIT (dependencies from PyPI)"
-  rm -rf $GT_VENV
+  if [[ -e $GT_VENV ]]; then mv $GT_VENV $GT_VENV.$STAMP; note "an earlier venv was moved to $GT_VENV.$STAMP"; fi
   $PY -m venv $GT_VENV
   WHEELS=$RUN/wheels
   mkdir -p $WHEELS
@@ -25,5 +25,5 @@ if [[ ! -f $GT_VENV/installed-commit || $(cat $GT_VENV/installed-commit 2>/dev/n
   print -r -- $COMMIT > $GT_VENV/installed-commit
 fi
 $GT_VENV/bin/python -c 'import agent_swarm, graphtraj; print("agent_swarm", agent_swarm.__version__, "graphtraj", graphtraj.__file__)' | tee $OUT/versions.txt
-run_checks launch_failed $GT_VENV/bin/agent-runner $GT_VENV/bin/graphtraj
+(cd $RUN && $GT_VENV/bin/python -E -s $HERE/checks.py launch_failed) || check FAIL "checks.py launch_failed stopped with exit $?"
 step_end

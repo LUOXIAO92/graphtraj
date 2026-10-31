@@ -67,7 +67,7 @@ if /bin/bash $WT/scripts/real-host/install-pi-sandbox.sh ${AGENTS_392_DRY_SANDBO
   check PASS "install-pi-sandbox.sh: $(tail -1 $OUT/install-pi-sandbox.txt)"
   read_sandbox
   for tool in srt node rg; do
-    FOUND=$(PATH=$SANDBOX_PATH command -v $tool) && check PASS "sandbox tool $tool: $FOUND" || check FAIL "sandbox tool $tool: not on $SANDBOX_PATH"
+    FOUND=$(/usr/bin/env PATH=$SANDBOX_PATH /usr/bin/which $tool) && check PASS "sandbox tool $tool: $FOUND" || check FAIL "sandbox tool $tool: not on $SANDBOX_PATH"
   done
   $SANDBOX_PYTHON -c 'import agent_sandbox' 2>> $OUT/install-pi-sandbox.txt && check PASS "agent_sandbox imports in $SANDBOX_PYTHON" \
     || check FAIL "agent_sandbox does not import in $SANDBOX_PYTHON"

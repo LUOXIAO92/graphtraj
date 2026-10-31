@@ -12,6 +12,17 @@ version that identifies everything listed under it.
 
 The numbers in parentheses are the project's Task numbers.
 
+## 0.2.8 (compatible)
+
+- A resumed Claude execution no longer loses its reply from the archive (422). A reply
+  that reached the transcript before the history boundary was read counted as history,
+  and `messages()` raised `Unresolved observations remain`. The boundary is now measured
+  before Claude's hook is answered, so what Claude writes afterwards is always new. Only
+  the controlled test peer has shown this; a real Claude would need the same delay.
+- Records written after the hook, including off-chain ones, are now collected however
+  late the archive's first read runs. A late read used to drop them as history. A resume
+  without delay and a first start archive the same content as before.
+
 ## 0.2.7 (compatible)
 
 - A standalone Pi attachment under `.graphtraj` is now copied (424). agents read it as

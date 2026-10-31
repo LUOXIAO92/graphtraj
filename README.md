@@ -27,7 +27,7 @@ graphtraj task graph
 ```
 
 GraphTraj and `agent-swarm` are separate distributions. GraphTraj declares the
-`agent-swarm` versions it supports (currently `>=0.2.4,<0.3`); building both
+`agent-swarm` versions it supports (currently `>=0.2.5,<0.3`); building both
 from the same revision always satisfies it. From a checkout, build both with
 `python -m pip wheel --no-deps -w dist ./src/agent_swarm .`, then install both
 wheels in your dedicated environment. The independent distribution can also
@@ -264,6 +264,18 @@ It produces:
 - the plugin `.claude/skills/graphtraj-claude-host/`, which Claude Code loads
   at session start: `.claude-plugin/plugin.json`, `hooks/hooks.json`
   (`{"modules": ["./host_context.mjs"]}`) and `hooks/host_context.mjs`.
+
+Running it again on a configured project updates only what the command owns:
+`command` and `args` of the `agents` server, those two `env` entries, `cwd` and
+`claude` in the host configuration, and the plugin files. Everything else stays,
+including other keys of the `agents` server such as `env`, other servers, and
+`root` and `channel_file` in the host configuration. If the project moved, a
+`root` or `channel_file` inside its old directory moves to the same relative
+place in the new one. An existing JSON file that does not parse or does not hold
+an object stops the command with an error naming the file, and nothing is
+written. A key you add by hand to `config.json` also stays, but the host accepts
+exactly `root`, `cwd`, `claude` and `channel_file` and refuses to start with any
+other key.
 
 Check it with `claude plugin validate .claude/skills/graphtraj-claude-host`;
 `claude --plugin-dir <dir>` loads it for a temporary session. Claude Code's own

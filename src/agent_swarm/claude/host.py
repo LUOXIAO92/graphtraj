@@ -23,7 +23,7 @@ from agent_swarm.notices import notice_id
 from agent_swarm.shutdown import exit_if_owned_unconfirmed, stop_owned
 from .native_host import NativeCalls
 from .driver import ClaudeDriver
-from .plugin import claude_host_plugin
+from .plugin import claude_host_plugin, kept_host_paths, write_adoption
 
 if os.name != 'nt':
     import fcntl
@@ -207,25 +207,6 @@ def serve_refusal(error: Exception, log: Path, descriptors=tool_documents,
         record.unlink(missing_ok=True)
 
 
-def write_adoption(material: dict[str, object]) -> None:
-    """Write printed adoption material: JSON values as JSON, the mod as text.
-
-    An existing JSON file keeps its other settings: each top-level object
-    (for example ``env`` or ``mcpServers``) is merged one level deep.
-    """
-    for path, content in material.items():
-        target = Path(path)
-        target.parent.mkdir(parents=True, exist_ok=True)
-        if not isinstance(content, str) and target.exists():
-            existing = json.loads(target.read_text(encoding='utf-8'))
-            for key, value in content.items():
-                existing[key] = ({**existing[key], **value}
-                                 if isinstance(value, dict) and isinstance(existing.get(key), dict) else value)
-            content = existing
-        target.write_text(content if isinstance(content, str) else json.dumps(content, indent=2) + '\n',
-                          encoding='utf-8')
-
-
 def codex_driver(settings: dict, cwd: Path, root: Path):
     """Build a Codex driver from a ``codex.host --settings`` document; refuse it now if invalid."""
     from agent_swarm.codex.driver import CodexDriver
@@ -396,10 +377,12 @@ def adoption_material(root: Path, claude: Path) -> dict[str, object]:
     root = root.resolve()
     config = root / '.agents-control' / 'claude-host.json'
     plugin = root / '.claude' / 'skills' / 'agents-claude-host'
+    kept = kept_host_paths(config, root, {'root': str(config.parent),
+                                          'channel_file': str(config.parent / 'live' / 'channel.json')})
     return {
-        str(config): {'root': str(config.parent), 'cwd': str(root),
+        str(config): {'root': kept['root'], 'cwd': str(root),
                       'claude': os.path.abspath(claude),
-                      'channel_file': str(config.parent / 'live' / 'channel.json'), 'settings': {}},
+                      'channel_file': kept['channel_file'], 'settings': {}},
         str(root / '.mcp.json'): {'mcpServers': {'agents': {
             'command': sys.executable,
             'args': ['-m', 'agent_swarm.claude.host', 'serve', '--config', str(config)],

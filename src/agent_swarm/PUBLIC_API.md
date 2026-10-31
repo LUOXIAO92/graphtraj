@@ -56,7 +56,16 @@ notes (`install/`) are public with their documented flags:
   <path> [--write]` and `... serve --config <file>`. The written
   `.agents-control/claude-host.json` keys (`root`, `cwd`, `claude`,
   `channel_file`, `settings`, and since 0.1.2 the optional `runtimes`) and
-  the documented `settings` keys are public. `settings` configures the
+  the documented `settings` keys are public. Since 0.2.5, running `configuration`
+  on a configured project updates only `command` and `args` of the `agents` MCP
+  server, the two `GRAPHTRAJ_CLAUDE_HOST_*` variables, `cwd`, `claude` and the
+  plugin files, and keeps everything else, `root` and `channel_file` included. If
+  the configuration's recorded `cwd` differs from `--project`, a `root` or
+  `channel_file` inside that old `cwd` goes to the same relative place under the
+  project. Without `--write` it prints the kept paths and reads only the host
+  configuration. An existing JSON file it reads that does not parse or hold an
+  object raises `ValueError` naming it, and nothing is written. `settings`
+  configures the
   host's Claude children. `runtimes` maps another Runtime's name to its
   driver settings: `codex` takes the document `agent_swarm.codex.host
   --settings` takes (`adapter_request`, optional `evidence`, `connection`);
@@ -126,9 +135,8 @@ notes (`install/`) are public with their documented flags:
   with it. `channel_file`, the `host.log` two levels above it and the `--config`
   file are not under `root` and may stay in the project; they hold no
   credential, and a Pi child can read them there. Running `configuration
-  --write` again resets `root` and `channel_file` and keeps `runtimes`, so the
-  host refuses to start until `root` is set again. Without a `pi` entry the
-  default layout is unchanged.
+  --write` again keeps a `root` you set. Without a `pi` entry the default layout
+  is unchanged.
 - A refused Claude host start answers every call with `host-unavailable` (or
   the refusing check's own code) and writes one JSON line to
   `.agents-control/host.log`.
@@ -338,7 +346,7 @@ with its own `__all__`:
 
 | Package | Names |
 | --- | --- |
-| `agent_swarm.claude` | `ClaudeDriver`, `ClaudeExecution`, `collect_hook_event`, `hook_source`, `NativeCalls`, `REFUSAL_FILE`, `claim_channel`, `context_endpoint`, `ended_by_claude`, `log_replaced_channel`, `require_free_channel`, `serve_refusal`, `claude_host_plugin` |
+| `agent_swarm.claude` | `ClaudeDriver`, `ClaudeExecution`, `collect_hook_event`, `hook_source`, `NativeCalls`, `REFUSAL_FILE`, `claim_channel`, `context_endpoint`, `ended_by_claude`, `log_replaced_channel`, `require_free_channel`, `serve_refusal`, `claude_host_plugin`, `kept_host_paths`, `write_adoption` |
 | `agent_swarm.codex` | `CodexDriver`, `CodexManagedExecution`, `CodexAppServer`, `CodexExecution`, `CodexSession`, `CodexServerRequest`, `CodexRPCError`, `CodexAdapterError`, `CodexRuntimeContext`, `restore_codex_context`, `validate_codex_launch_request`, `reject_legacy_sandbox_config`, `codex_api_key_env`, `codex_connection_environment`, `find_native_session`, `project_access`, `validate_connection` |
 | `agent_swarm.pi` | `PiDriver`, `PiExecution`, `current_connection`, `session_record`, `session_source`, `verify_main`, `pi_destination` |
 | `agent_swarm.dsh` | `DshDriver`, `DshService`, `DshError`, `DshExecution`, `bind_run`, `session_context`, `dsh_version_refusal` |
@@ -419,6 +427,16 @@ way.
   as text. `directory` is the plugin's directory (`.claude/skills/<name>`), and
   `tools` the added tool names. A name that is not letters, digits, `_` or `-`,
   the name `agents`, or a repeated name raises `ValueError`.
+- `write_adoption(material)` (since 0.2.5) writes such a mapping of absolute path
+  to text or JSON value. Text replaces the file. A JSON value merges into an
+  existing file recursively over objects: a list or scalar replaces the existing
+  value, and every key the value does not name stays. An existing file that does
+  not parse or hold an object raises `ValueError` naming it, and nothing is written.
+- `kept_host_paths(config, project, defaults)` (since 0.2.5) returns, for each key
+  of `defaults`, the string the host configuration at `config` already holds, or
+  the default. A value inside the configuration's `cwd`, when that differs from
+  `project`, goes to the same relative place under `project`. It raises the same
+  `ValueError`.
 - `NativeCalls(make_call, cwd, runner=None, tools=())` associates each native
   call with its Claude Session for the host. `make_call(session, cwd)` returns
   `call(tool, request)`, which returns an `AgentsResult`. The host passes
@@ -1648,6 +1666,15 @@ Recorded classifications:
   version has been published; these numbers mark `dev` history, and before 0.2.4
   several fixes merged without a bump, so commits with the same number can differ.
   `CHANGELOG.md` lists each version's content.
+- 419 (0.2.5): `configuration --write` on a configured project keeps other keys of
+  the `agents` MCP entry, such as `env`. A fix (compatible): the install note already
+  said existing files keep their other entries, and the command dropped these. It
+  also no longer resets `root` and `channel_file`. This replaces documented behaviour,
+  and is still classified as a fix (compatible): the reset only ever forced the user
+  to set `root` again by hand, and nothing depended on it. An existing JSON file that
+  does not parse or hold an object now raises `ValueError` naming it, where a parse
+  failure could leave some files already written and a non-object failed with an
+  unrelated error. `write_adoption` and `kept_host_paths` are new public names.
 
 While the major version is `0`, an incompatible change raises the minor
 version (`0.1.x` → `0.2.0`), and compatible additions and fixes raise the
@@ -1655,7 +1682,7 @@ patch version. From `1.0.0` the usual rule applies: major for incompatible,
 minor for additions, patch for fixes. A release that changes this document
 updates it in the same change.
 
-GraphTraj declares the range it supports (today `agent-swarm>=0.2.4,<0.3`, since it imports the 0.2.4 names in 1.3)
+GraphTraj declares the range it supports (today `agent-swarm>=0.2.5,<0.3`, since it imports the 0.2.5 names in 1.3)
 and widens it in the same change that adopts an incompatible release.
 
 ## Appendix: Known GraphTraj-specific surfaces

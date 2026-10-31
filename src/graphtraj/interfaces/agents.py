@@ -68,9 +68,30 @@ def swarm_root(root: Path) -> Path:
     return root / ".graphtraj" / "swarm"
 
 
-def attachment_private_paths(root: Path) -> list[Path]:
-    """Return the project directories a Pi attachment is never copied from."""
-    return [root / ".graphtraj"]
+def attachment_private_paths(root: Path, directory: Path | str | None = None) -> list[Path]:
+    """Return the project directories a Pi attachment is never copied from.
+
+    A Worktree in a Worktree Directory under ``.graphtraj`` declares only its own
+    private directories. That is safe because copies are also confined to the
+    resolved attachment ``directory``, so the rest of ``.graphtraj`` and other
+    Worktrees stay out. Any other directory or bad configuration declares it all.
+    """
+    from graphtraj.configuration.project_configuration import ProjectConfigurationError, load_project_configuration
+
+    whole = [root / ".graphtraj"]
+    if directory is None:
+        return whole
+    try:
+        worktrees = load_project_configuration(root).agent_worktrees
+        location = Path(directory).resolve()
+        private = whole[0].resolve()
+    # YAML's loader also raises ValueError and RecursionError, a link loop RuntimeError.
+    except (ProjectConfigurationError, OSError, ValueError, RuntimeError):
+        return whole
+    if private not in worktrees.parents or worktrees not in location.parents:
+        return whole
+    worktree = worktrees / location.relative_to(worktrees).parts[0]
+    return [worktree / ".graphtraj", worktree / ".codex"]
 
 
 # GraphTraj turns saving on only where the user has made no explicit choice.

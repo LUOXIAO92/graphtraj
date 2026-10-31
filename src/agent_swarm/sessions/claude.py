@@ -32,7 +32,7 @@ def timestamp(record: dict) -> tuple[int, list[dict]]:
     return 0, [{
         'path': 'time', 'reason': 'Native timestamp unavailable; zero is a protocol placeholder.'}]
 from agent_swarm.sessions.claude_history import (
-    NO_HISTORY_SIZE, conversation, message_id, read_records, read_split,
+    NO_HISTORY_SIZE, conversation, message_id, read_records, read_split, read_with_torn_tail,
 )
 
 
@@ -106,6 +106,9 @@ class ClaudeJsonlCollector:
         self.before_bind: list[tuple[dict, int, int]] = []
         self.path: Path | None = None
         self.excluded: set[str] = set()
+        self.history_ids: set[str] = set()
+        self.current_inputs: set[str] = set()
+        self.cut_unread = False
         self.header: dict | None = None
         self.api_id: str | None = None
         self.streams: dict[str, dict] = {}
@@ -138,36 +141,34 @@ class ClaudeJsonlCollector:
         """Bind only the native hook's transcript and establish its history cut.
 
         ``history_size`` comes from ``history_size()`` at the hook. Without it,
-        everything in the transcript when this runs counts as history.
+        everything in the transcript when this runs counts as history, including
+        a torn final line, which is one record once Claude finishes writing it.
         """
         if self.path is not None and self.path != path:
             raise ValueError('Claude changed the associated transcript path.')
         self.path = path
         if self.archive is None or not self.archive.save_normalized_sessions:
             return
-        history = 0
+        history, torn = 0, False
         try:
             if history_size is None:
-                records = read_records(path, self.session)
-                history = len(records)
+                records, torn = read_with_torn_tail(path, self.session)
+                history = len(records) + torn
             elif history_size == NO_HISTORY_SIZE:
                 self.cut_known = False
                 _, records = read_split(path, self.session, 0)
             else:
                 inside, later = read_split(path, self.session, history_size)
                 records, history = inside + later, len(inside)
-        except FileNotFoundError:
-            records = []
-            self.cut_known = self.resumed is False
         except (OSError, ValueError):
             records = []
-            self.cut_known = False
+            self.cut_known = self.resumed is False
         if not self.archive.backfill_history:
             self.history_count = (self.activation_count if self.activation_count is not None
                                   else history if self.resumed is not False else 0)
-            self.excluded = {r['uuid'] for r in records[:self.history_count] if isinstance(r.get('uuid'), str)}
-            self.excluded.difference_update(current_inputs or ())
-            self.live_ids.update(r['uuid'] for r in records if r.get('uuid') in (current_inputs or ()))
+            self.current_inputs = set(current_inputs or ())
+            self.cut_unread = torn and self.history_count > len(records)
+            self._apply_cut(records)
         destination = archive_path(self.archive.root, self.identity)
         if destination.exists():
             self.header = JsonlSessionStore(destination).header
@@ -195,6 +196,25 @@ class ClaudeJsonlCollector:
         pending, self.before_bind = self.before_bind, []
         for record, position, received_at in pending:
             self.accept(record, position, received_at)
+
+    def _apply_cut(self, records: list[dict]) -> None:
+        """Fix this activation's history from its prefix of ``records``.
+
+        ``history_ids`` holds the conversation the prefix held, and stays fixed:
+        a later compaction takes messages off the chain without collecting them.
+        A prefix with no readable conversation falls back to every UUID in it,
+        which errs toward reporting history as left out. So does a child, whose
+        entries are all sidechain, which ``conversation`` never returns.
+        """
+        prefix = records[:self.history_count]
+        self.excluded = {r['uuid'] for r in prefix if isinstance(r.get('uuid'), str)} - self.current_inputs
+        self.live_ids.update(r['uuid'] for r in records if r.get('uuid') in self.current_inputs)
+        self.history_ids = set(self.excluded)
+        if self.child_id is None:
+            try:
+                self.history_ids = {message_id(r) for r in conversation(prefix)} - self.current_inputs
+            except (ValueError, KeyError, TypeError):
+                pass
 
     def _store(self) -> JsonlSessionStore | None:
         """Check the policy each time; never retain a store across disablement."""
@@ -378,6 +398,10 @@ class ClaudeJsonlCollector:
             gap['missing'] = [{'path': 'history', 'reason': str(error)}]
             store.checkpoint(gap, source='read-gap', position=store.position('read-gap') + 1)
             return
+        if self.cut_unread and len(records) >= self.history_count:
+            # The line torn at bind is whole now, and it belongs to the history.
+            self.cut_unread = False
+            self._apply_cut(records)
         old = _events(store)
         surface = _surface(old)
         originals = {e['native']['record']['uuid']: e['native']['record']
@@ -445,8 +469,9 @@ class ClaudeJsonlCollector:
         for record in desired:
             if record['type'] == 'assistant' and record.get('message', {}).get('id'):
                 responses.setdefault(record['message']['id'], []).append(record['uuid'])
+        archived = {message_id(e['native']['record']) for e in old if e['type'] in SURFACE_TYPES}
         history_left_out = (not self.archive.backfill_history
-                            and (not self.cut_known or self.excluded and not set(self.excluded) <= set(originals)))
+                            and (not self.cut_known or not self.history_ids <= archived))
         retained_failure = None
         for pending in store.pending():
             draft = pending['event']

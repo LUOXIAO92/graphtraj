@@ -37,6 +37,22 @@ def read_records(path: Path, session: str) -> list[dict]:
         return [_record(line, session) for line in stream]
 
 
+def read_with_torn_tail(path: Path, session: str) -> tuple[list[dict], bool]:
+    """Read as ``read_records`` does, except that the final line may be torn.
+
+    Returns the records and whether the final line failed to parse, because
+    Claude may still be writing it. Any other bad line still raises.
+    """
+    with path.open('rb') as stream:
+        lines = stream.readlines()
+    records = [_record(line, session) for line in lines[:-1]]
+    try:
+        records.extend(_record(line, session) for line in lines[-1:])
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        return records, True
+    return records, False
+
+
 def read_split(path: Path, session: str, size: int) -> tuple[list[dict], list[dict]]:
     """Read the transcript as the records inside ``size`` bytes and those after it.
 

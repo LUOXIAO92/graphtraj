@@ -228,10 +228,20 @@ npm --prefix "$PI_SANDBOX/srt" install --ignore-scripts --save-exact \
 
 Then set `sandbox_python` to `$PI_SANDBOX/venv/bin/python`, and `sandbox_path` to
 `$PI_SANDBOX/srt/node_modules/.bin`, the directories holding `node` and `rg`, and
-`/usr/bin:/bin:/usr/sbin:/sbin`. All values are absolute. A host that starts Pi
-children refuses to start, with `runtime-unavailable`, when one of these is missing,
-and names the setting that fixes it. `rg` is not part of that check: without it the
-child itself fails.
+`/usr/bin:/bin:/usr/sbin:/sbin`. All values are absolute.
+
+What happens when one of these is missing depends on the host:
+
+- **Claude Code and Codex hosts** check their `runtimes.pi` entry when they start. A
+  `sandbox_python` that does not run or cannot import `agent_sandbox`, or `srt` or `node`
+  not on the child's PATH, stops the start with `runtime-unavailable`, and the message
+  names the setting that fixes it.
+- **Pi and DSH hosts** do not check these when they start. The host starts, and the Pi
+  child's own start fails: `create` returns a failed result with
+  `last_result.outcome: failed`, and the error message holds the cause.
+
+`rg` is outside the Claude Code and Codex check too: without it the child itself fails,
+on any host.
 
 The agents data root must also lie outside the directory the Pi child works in,
 because the child must not read it. See the note for your host.

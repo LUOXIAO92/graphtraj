@@ -246,6 +246,123 @@ def test_prebind_input_and_resume_cut_use_native_input_uuid(tmp_path: Path) -> N
     assert any(p['event']['native']['locator'] == 'history-gap' for p in result.pending())
 
 
+def test_history_size_is_measured_only_when_a_cut_is_needed(tmp_path: Path) -> None:
+    """The run loop gets a file size, or nothing when no history cut applies."""
+    from agent_swarm.sessions.claude_history import NO_HISTORY_SIZE
+
+    path = tmp_path / 'native.jsonl'
+    path.write_bytes(b'not parsed here')
+
+    def size(*, save: bool = True, backfill: bool = False, resumed: bool | None = True,
+             count: int | None = None) -> int | None:
+        """Measure under one policy."""
+        archive = SessionArchive(tmp_path / 'swarm', save_normalized_sessions=save, backfill_history=backfill)
+        return ClaudeJsonlCollector(archive, 's', tmp_path, 'e', resumed=resumed,
+                                    history_count=count).history_size(path)
+
+    assert size() == len(b'not parsed here')
+    assert size(resumed=None) == len(b'not parsed here')
+    assert size(save=False) is None
+    assert size(backfill=True) is None
+    assert size(resumed=False) is None
+    assert size(count=3) is None
+    assert ClaudeJsonlCollector(None, 's', tmp_path, 'e', resumed=True).history_size(path) is None
+
+    path.unlink()
+    assert size() == NO_HISTORY_SIZE
+    assert size(resumed=False) is None
+
+
+def cut_collector(tmp_path: Path) -> tuple[ClaudeJsonlCollector, Path, SessionArchive]:
+    """Build a resumed collector under saving on and history backfill off."""
+    archive = SessionArchive(tmp_path / 'swarm', save_normalized_sessions=True, backfill_history=False)
+    return ClaudeJsonlCollector(archive, 's', tmp_path, 'e', resumed=True), tmp_path / 'native.jsonl', archive
+
+
+def test_bind_at_a_size_keeps_later_records_out_of_history(tmp_path: Path) -> None:
+    """Records after the measured size are new, whenever the bind reads them."""
+    c, path, archive = cut_collector(tmp_path)
+    old, off_chain = message('old', None, 'old'), {'type': 'note', 'uuid': 'off-before', 'sessionId': 's'}
+    write(path, [old, off_chain])
+    size = path.stat().st_size
+
+    later = {'type': 'note', 'uuid': 'off-after', 'sessionId': 's'}
+    reply = message('reply', 'old', 'reply', role='assistant')
+    with path.open('a') as stream:
+        stream.write(json.dumps(later) + '\n' + json.dumps(reply) + '\n')
+    c.bind(path, set(), size)
+
+    assert c.history_count == 2 and c.cut_known
+    assert c.excluded == {'old', 'off-before'}
+    result = store(archive)
+    assert [e['data']['message']['id'] for e in result.page()['events'] if e['type'] == 'assistant/message'] == ['reply']
+    observed = [e['native']['record'].get('uuid') for e in result.page()['events'] if e['type'] == 'claude/observation']
+    assert observed == ['off-after']
+
+
+def test_bind_at_a_size_sees_a_current_input_on_either_side(tmp_path: Path) -> None:
+    """The current input is never history, wherever the hook's size fell."""
+    for inside in (True, False):
+        root = tmp_path / str(inside)
+        root.mkdir()
+        c, path, _ = cut_collector(root)
+        old, current = message('old', None, 'old'), message('current', 'old', 'current')
+        write(path, [old, current] if inside else [old])
+        size = path.stat().st_size
+        write(path, [old, current])
+        c.bind(path, {'current'}, size)
+        assert c.history_count == (2 if inside else 1)
+        assert c.excluded == {'old'} and c.live_ids == {'current'}
+
+
+def test_bind_at_a_size_ignores_a_write_still_arriving_after_it(tmp_path: Path) -> None:
+    """A torn value past the size is in flight; it does not make the cut unknown."""
+    c, path, _ = cut_collector(tmp_path)
+    old = message('old', None, 'old')
+    write(path, [old])
+    size = path.stat().st_size
+    with path.open('a') as stream:
+        stream.write(json.dumps(message('current', 'old', 'current')) + '\n' + '{"type": "assis')
+    c.bind(path, {'current'}, size)
+    assert c.cut_known and c.history_count == 1
+    assert c.excluded == {'old'} and c.live_ids == {'current'}
+
+
+def test_bind_at_a_size_treats_a_torn_prefix_as_unreadable(tmp_path: Path) -> None:
+    """A size inside a value means the hook saw a torn tail, as an unreadable file."""
+    c, path, _ = cut_collector(tmp_path)
+    write(path, [message('old', None, 'old')])
+    size = path.stat().st_size - 5
+    c.bind(path, set(), size)
+    assert not c.cut_known
+    assert c.history_count == 0 and c.excluded == set()
+
+
+def test_bind_with_no_size_measured_keeps_the_cut_unknown(tmp_path: Path) -> None:
+    """A transcript the hook could not measure stays unknown, even if it now exists."""
+    from agent_swarm.sessions.claude_history import NO_HISTORY_SIZE
+
+    c, path, _ = cut_collector(tmp_path)
+    write(path, [message('current', None, 'current'), message('reply', 'current', 'reply', role='assistant')])
+    c.bind(path, {'current'}, NO_HISTORY_SIZE)
+    assert not c.cut_known
+    assert c.history_count == 0 and c.excluded == set()
+    assert c.live_ids == {'current'}
+
+
+def test_bind_without_a_size_still_reads_history_at_the_bind(tmp_path: Path) -> None:
+    """Callers with no hook-time fact keep today's meaning: the whole file is history."""
+    c, path, _ = cut_collector(tmp_path)
+    write(path, [message('old', None, 'old'), message('older', 'old', 'older')])
+    c.bind(path)
+    assert c.cut_known and c.history_count == 2
+    assert c.excluded == {'old', 'older'}
+
+    missing = ClaudeJsonlCollector(c.archive, 'other', tmp_path, 'e', resumed=True)
+    missing.bind(tmp_path / 'absent.jsonl')
+    assert not missing.cut_known
+
+
 @pytest.mark.skipif(not os.environ.get('CLAUDE_SDK_MODULE'), reason='Explicit pinned official SDK comparison')
 @pytest.mark.parametrize('case', ['chain', 'siblings', 'preserved-messages', 'preserved-segment', 'tools', 'replay',
                                 'queued', 'queued-tail', 'queued-delivery', 'queued-forwarded', 'tools-indirect-replay',

@@ -7,6 +7,7 @@ only ``agent_swarm``; the GraphTraj tests import it inside their bodies.
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 import shutil
 import subprocess
@@ -175,11 +176,11 @@ def test_private_directory_that_is_itself_a_link_stays_private(
     assert_missing(found[0])
 
 
-def managed(tmp_path: Path, *, independent: bool):
+def managed(tmp_path: Path, *, independent: bool, worktree: Path | None = None):
     """Build GraphTraj's real execution on the Runner or the agents driver path."""
     from graphtraj.runtimes.pi.managed_session import PiManagedExecution
 
-    turn = PiManagedExecution({'harness_root': str(tmp_path), 'worktree_path': str(tmp_path)}, 'go',
+    turn = PiManagedExecution({'harness_root': str(tmp_path), 'worktree_path': str(worktree or tmp_path)}, 'go',
                               tmp_path / 'alias', None, None, tmp_path / 'trace.jsonl', None)
     turn.session = 'attachments'
     if independent:
@@ -215,6 +216,7 @@ def test_graphtraj_collection_entry_protects_its_directory_and_declares_it(
     write(tmp_path / '.graphtraj/config.yml', default_configuration_content(tmp_path, tmp_path).encode())
     secret = write(tmp_path / '.graphtraj/x')
     ordinary = write(tmp_path / 'ordinary')
+    in_worktree = write(tmp_path / '.graphtraj/.agent-worktrees/member/x')
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv('GRAPHTRAJ_NATIVE_RUNTIME', 'pi')
     monkeypatch.setenv('GRAPHTRAJ_NATIVE_SESSION', 'attachments')
@@ -230,7 +232,7 @@ def test_graphtraj_collection_entry_protects_its_directory_and_declares_it(
 
     monkeypatch.setattr(PiArchive, '__init__', recording)
     pipe = [{'header': header(tmp_path), 'entries': [], 'leafId': None},
-            {'type': 'agent_end', 'piNative': {'entries': [entry(secret, ordinary)], 'leafId': 'm1'}}]
+            {'type': 'agent_end', 'piNative': {'entries': [entry(secret, ordinary, in_worktree)], 'leafId': 'm1'}}]
     result = CliRunner().invoke(main, ['pi', '--collect'], input=''.join(json.dumps(line) + '\n' for line in pipe))
     assert result.exit_code == 0, result.output
     assert json.loads(result.output) == {'ready': True}
@@ -240,4 +242,330 @@ def test_graphtraj_collection_entry_protects_its_directory_and_declares_it(
     found = references(archive, key)
     assert_missing(found[0])
     assert_copied(found[1], archive)
+    # The entry runs with cwd at the Harness Root, so the whole directory stays declared.
+    assert_missing(found[2])
     assert [list(paths) for paths in declared] == [[tmp_path / '.graphtraj']]
+
+
+# Where each project layout keeps the Worktree Directory; ``core_directory`` picks
+# the layout from where config.yml sits, so the config is written beside its layout.
+LAYOUTS = {'migrated': ('.graphtraj/core', '.graphtraj/core/worktrees'),
+           'default': ('.graphtraj', '.graphtraj/.agent-worktrees')}
+MEMBER = '425-member'
+each_path = pytest.mark.parametrize('independent', [False, True], ids=['runner', 'agents-driver'])
+each_layout = pytest.mark.parametrize('layout', list(LAYOUTS))
+
+
+def configure(root: Path, layout: str = 'migrated', worktrees: str | None = None, state: str | None = None) -> Path:
+    """Write a real config for one layout and return the configured Worktree Directory."""
+    from graphtraj.configuration.project_configuration import default_configuration_content
+    import yaml
+
+    core, default = LAYOUTS[layout]
+    document = yaml.safe_load(default_configuration_content(root, root))
+    document['paths'].update(agent_worktrees=worktrees or default, state=state or core + '/state')
+    write(root / core / 'config.yml', yaml.safe_dump(document).encode())
+    return root / (worktrees or default)
+
+
+def member_project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, layout: str) -> tuple[Path, Path]:
+    """Return a Harness Root in a private Home and the member's Worktree, built as Runner builds it."""
+    home = (tmp_path / 'home').resolve()
+    monkeypatch.setenv('HOME', str(home))
+    root = home / 'project'
+    worktree = configure(root, layout) / MEMBER
+    worktree.mkdir(parents=True)
+    return root, worktree
+
+
+def member_collected(root: Path, cwd: Path, independent: bool, *paths: Path) -> tuple[list[dict], SessionArchive]:
+    """Collect the paths through the real ``archive_collector`` of a member at ``cwd``."""
+    turn = managed(root, independent=independent, worktree=cwd)
+    collector = turn.archive_collector(header(cwd), {'entries': [], 'leafId': None})
+    return collected(collector, *paths), turn.archive
+
+
+@each_layout
+@each_path
+def test_member_reads_files_of_its_own_worktree(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, layout: str, independent: bool,
+) -> None:
+    """Absolute, cwd-relative and nested files and an inner link are all copied."""
+    root, worktree = member_project(tmp_path, monkeypatch, layout)
+    write(worktree / 'plain', b'plain')
+    write(worktree / 'a/b/nested', b'nested')
+    (worktree / 'link').symlink_to('a/b/nested')
+    cases = {worktree / 'plain': b'plain', Path('plain'): b'plain', worktree / 'a/b/nested': b'nested',
+             Path('a/b/nested'): b'nested', worktree / 'link': b'nested'}
+    found, archive = member_collected(root, worktree, independent, *cases)
+    for reference, content in zip(found, cases.values(), strict=True):
+        assert_copied(reference, archive, content)
+
+
+@each_layout
+@each_path
+def test_member_working_in_a_subdirectory_reads_files_there(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, layout: str, independent: bool,
+) -> None:
+    """A subdirectory is authorized for its own files, and only those."""
+    root, worktree = member_project(tmp_path, monkeypatch, layout)
+    inside = write(worktree / 'sub/x', b'inside')
+    beside = write(worktree / 'beside/x')
+    found, archive = member_collected(root, worktree / 'sub', independent, inside, Path('x'), beside)
+    assert_copied(found[0], archive, b'inside')
+    assert_copied(found[1], archive, b'inside')
+    assert_missing(found[2])
+
+
+def refused_paths(root: Path, worktree: Path) -> dict[str, Path]:
+    """Create everything a member's attachment must not reach, under the name of each case."""
+    from graphtraj.configuration.project_configuration import core_directory
+
+    core = core_directory(root)
+    other = worktree.parent / 'other'
+    write(other / 'x')
+    (worktree / 'other-link').symlink_to(os.path.relpath(other / 'x', worktree))
+    state = write(core / 'state/tasks/425-member/x')
+    (worktree / '.state').symlink_to(os.path.relpath(state.parent, worktree), target_is_directory=True)
+    (worktree / 'docs').symlink_to(os.path.relpath(write(root / 'docs/x').parent, worktree), target_is_directory=True)
+    (worktree / 'CONTEXT.md').symlink_to(os.path.relpath(write(root / 'CONTEXT.md'), worktree))
+    write(worktree / '.graphtraj/x')
+    (worktree / 'private-link').symlink_to('.graphtraj/x')
+    write(worktree.parent / (MEMBER + '-more/x'))
+    return {
+        'own .graphtraj': worktree / '.graphtraj/x',
+        'own .graphtraj, relative': Path('.graphtraj/x'),
+        'own .graphtraj, by link': worktree / 'private-link',
+        'own .codex': write(worktree / '.codex/x'),
+        'own .codex, relative': Path('.codex/x'),
+        'other Worktree': other / 'x',
+        'other Worktree, relative': Path('../other/x'),
+        'other Worktree, by link': worktree / 'other-link',
+        'prefix sibling': worktree.parent / (MEMBER + '-more/x'),
+        'prefix sibling, relative': Path('../' + MEMBER + '-more/x'),
+        '.state link': worktree / '.state/x',
+        'docs link': worktree / 'docs/x',
+        'CONTEXT.md link': worktree / 'CONTEXT.md',
+        'state': write(core / 'state/x'),
+        'runner': write(core / 'runner/x'),
+        'config': core / 'config.yml',
+        'roles': write(core / 'roles.yml'),
+        'swarm': write(root / '.graphtraj/swarm/x'),
+        'project .codex': write(root / '.codex/x'),
+        'home .codex': write(Path.home() / '.codex/x'),
+    }
+
+
+@each_layout
+@each_path
+def test_member_reads_nothing_outside_its_worktree(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, layout: str, independent: bool,
+) -> None:
+    """Every protected path reads as missing, while the member's own file beside them is copied."""
+    root, worktree = member_project(tmp_path, monkeypatch, layout)
+    refused = refused_paths(root, worktree)
+    own = write(worktree / 'own', b'own bytes')
+    found, archive = member_collected(root, worktree, independent, *refused.values(), own)
+    copied = [name for name, reference in zip(refused, found, strict=False) if 'missing' not in reference]
+    assert copied == []
+    for reference in found[:-1]:
+        assert_missing(reference)
+    assert_copied(found[-1], archive, b'own bytes')
+    stored = [path for path in (archive.root / 'sessions').rglob('*') if path.is_file()]
+    assert not [path for path in stored if b'private bytes' in path.read_bytes()]
+
+
+@pytest.mark.parametrize('private', ['.graphtraj', '.codex'])
+def test_member_working_inside_its_private_directory_reads_nothing_there(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, private: str,
+) -> None:
+    """The private directories are the Worktree's own, also for a subdirectory below them."""
+    root, worktree = member_project(tmp_path, monkeypatch, 'migrated')
+    found, _ = member_collected(root, worktree / private / 'sub', False, write(worktree / private / 'sub/x'))
+    assert_missing(found[0])
+
+
+@each_layout
+def test_declaration_narrows_for_a_worktree_in_the_worktree_directory(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, layout: str,
+) -> None:
+    """The top Worktree directory is named however the attachment directory is spelled."""
+    from graphtraj.interfaces.agents import attachment_private_paths
+
+    root, worktree = member_project(tmp_path, monkeypatch, layout)
+    (worktree / 'sub/deep').mkdir(parents=True)
+    (root / 'entry').symlink_to(worktree, target_is_directory=True)
+    expected = [worktree / '.graphtraj', worktree / '.codex']
+    for directory in (worktree, worktree / 'sub', worktree / 'sub/deep', str(worktree), root / 'entry',
+                      worktree / '../' / MEMBER, worktree / '.graphtraj/sub'):
+        assert attachment_private_paths(root, directory) == expected, directory
+
+
+def whole_directory_cases() -> dict:
+    """Name every attachment directory that keeps all of ``.graphtraj`` declared."""
+    def layout_case(place: str) -> object:
+        """Build the case for ``place`` under the migrated layout's core directory."""
+        return lambda root: (configure(root), root / place)[1]
+
+    def default_layout_case(place: str) -> object:
+        """Build the case for ``place`` under the default layout."""
+        return lambda root: (configure(root, 'default'), root / place)[1]
+
+    def link_out(root: Path) -> Path:
+        """A Worktree Directory entry that resolves out of it, to the state directory."""
+        worktrees = configure(root)
+        worktrees.mkdir(parents=True)
+        (worktrees / 'link').symlink_to(root / '.graphtraj/core/state', target_is_directory=True)
+        return worktrees / 'link'
+
+    def link_to_root(root: Path) -> Path:
+        """A Worktree Directory entry that resolves to the Harness Root."""
+        worktrees = configure(root)
+        worktrees.mkdir(parents=True)
+        (worktrees / 'link').symlink_to(root, target_is_directory=True)
+        return worktrees / 'link'
+
+    def config_text(text: str) -> object:
+        """Build a case whose config file holds ``text``."""
+        return lambda root: (write(root / '.graphtraj/core/config.yml', text.encode()),
+                             root / '.graphtraj/core/worktrees/member')[1]
+
+    def linked_config(root: Path) -> Path:
+        """A config file that is a link is refused by the loader."""
+        configure(root)
+        config = root / '.graphtraj/core/config.yml'
+        config.rename(root / 'elsewhere.yml')
+        config.symlink_to(root / 'elsewhere.yml')
+        return root / '.graphtraj/core/worktrees/member'
+
+    def outside(root: Path) -> Path:
+        """A Worktree Directory configured outside ``.graphtraj``."""
+        return configure(root, worktrees='worktrees', state='.graphtraj/core/state') / 'member'
+
+    def data_directory_itself(root: Path) -> Path:
+        """A Worktree Directory that is ``.graphtraj`` itself holds everything; nothing narrows."""
+        configure(root, worktrees='.graphtraj', state='state')
+        return root / '.graphtraj/core'
+
+    return {
+        'no argument': lambda root: (configure(root), None)[1],
+        'harness root': layout_case('.'),
+        '.graphtraj': layout_case('.graphtraj'),
+        '.graphtraj/core': layout_case('.graphtraj/core'),
+        'worktree directory': layout_case('.graphtraj/core/worktrees'),
+        'prefix of worktree directory': layout_case('.graphtraj/core/worktrees-more/member'),
+        'state': layout_case('.graphtraj/core/state'),
+        'state task': layout_case('.graphtraj/core/state/tasks/425-member'),
+        'runner': layout_case('.graphtraj/core/runner'),
+        'swarm': layout_case('.graphtraj/swarm'),
+        'other under .graphtraj': layout_case('.graphtraj/other/member'),
+        'old layout worktree beside a migrated config': layout_case('.graphtraj/.agent-worktrees/member'),
+        'default layout .graphtraj': default_layout_case('.graphtraj'),
+        'default layout worktree directory': default_layout_case('.graphtraj/.agent-worktrees'),
+        'default layout state': default_layout_case('.graphtraj/state'),
+        'default layout runner': default_layout_case('.graphtraj/runner'),
+        'link to state': link_out,
+        'link to harness root': link_to_root,
+        'worktree directory outside .graphtraj': outside,
+        'worktree directory is .graphtraj': data_directory_itself,
+        'missing config': lambda root: root / '.graphtraj/core/worktrees/member',
+        'linked config': linked_config,
+        'config not yaml': config_text('{'),
+        'config wrong shape': config_text('version: 1\n'),
+        'config raises ValueError': config_text('version: 2001-13-45\n'),
+        'config raises RecursionError': config_text('[' * 20000),
+        'directory with NUL': lambda root: (configure(root), str(root / '.graphtraj/core/worktrees/a\0b'))[1],
+    }
+
+
+@pytest.mark.parametrize('case', list(whole_directory_cases()))
+def test_declaration_keeps_the_whole_directory_otherwise(tmp_path: Path, case: str) -> None:
+    """Only a real Worktree narrows; everything else, and any bad config, stays as it was."""
+    from graphtraj.interfaces.agents import attachment_private_paths
+
+    root = tmp_path.resolve()
+    directory = whole_directory_cases()[case](root)
+    assert attachment_private_paths(root, directory) == [root / '.graphtraj']
+
+
+def test_execution_without_a_worktree_keeps_the_whole_directory(tmp_path: Path) -> None:
+    """A captured request that names no Worktree still builds, with everything declared."""
+    from graphtraj.runtimes.pi.managed_session import PiManagedExecution
+
+    turn = PiManagedExecution({'harness_root': str(tmp_path)}, 'go', tmp_path / 'alias', None, None,
+                              tmp_path / 'trace.jsonl', None)
+    assert list(turn.archive_private_paths) == [tmp_path / '.graphtraj']
+
+
+@pytest.mark.parametrize('owner', ['plugin-child', 'runner', 'agents-driver'])
+def test_extension_in_a_worktree_never_spawns_the_collector(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, owner: str,
+) -> None:
+    """``--collect`` exits 1 in a Worktree, and the real extension's session_start never reaches it.
+
+    A characterisation of existing behaviour: it also passes on the code before the fix.
+    """
+    if shutil.which('node') is None:
+        pytest.skip('node is not installed')
+    root, worktree = member_project(tmp_path, monkeypatch, 'migrated')
+    record = tmp_path / 'spawned.txt'
+    bin_dir = tmp_path / 'bin'
+    bin_dir.mkdir()
+    command = bin_dir / 'graphtraj-session'
+    command.write_text(f"""#!{sys.executable}
+import sys
+with open({str(record)!r}, 'a') as spawned:
+    spawned.write(' '.join(sys.argv[1:]) + '\\n')
+from graphtraj.runtimes.native_entry import main
+main()
+""")
+    command.chmod(0o755)
+    source = Path(__file__).resolve().parents[1] / 'src'
+    for name in ('AGENT_SWARM_CONNECTION', 'AGENT_SWARM_PYTHON', 'GRAPHTRAJ_CLI_CONNECTION', 'PI_SUBAGENT_CHILD'):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv('PATH', str(bin_dir) + os.pathsep + os.environ['PATH'])
+    monkeypatch.setenv('PYTHONPATH', str(source))
+    monkeypatch.setenv('GRAPHTRAJ_NATIVE_RUNTIME', 'pi')
+    monkeypatch.setenv('GRAPHTRAJ_NATIVE_SESSION', 'attachments')
+    monkeypatch.setenv('GRAPHTRAJ_NATIVE_SESSION_FILE', str(tmp_path / 'native.jsonl'))
+    direct = subprocess.run([str(command), 'pi', '--collect'], cwd=worktree, input='', capture_output=True,
+                            text=True, timeout=30, check=False)
+    assert direct.returncode == 1
+    assert 'GraphTraj Config was not found' in direct.stderr
+    record.unlink()
+    if owner == 'plugin-child':
+        monkeypatch.setenv('PI_SUBAGENT_CHILD', '1')
+    elif owner == 'runner':
+        monkeypatch.setenv('GRAPHTRAJ_CLI_CONNECTION', 'unused')
+    else:
+        monkeypatch.setenv('AGENT_SWARM_CONNECTION', 'unused')
+        monkeypatch.setenv('AGENT_SWARM_PYTHON', sys.executable)
+    script = """
+import { pathToFileURL } from 'node:url';
+const { default: graphtraj } = await import(pathToFileURL(process.argv[1]).href);
+const handlers = [], notices = [], servers = [];
+graphtraj({registerFlag() {}, getFlag() {}, registerMcpServer(name) { servers.push(name); },
+  on(name, handler) { if (name === 'session_start') handlers.push(handler); }});
+const header = {type: 'session', version: 3, id: 'attachments', cwd: process.cwd(), timestamp: 0};
+const sessionManager = {getSessionId: () => 'attachments', getSessionFile: () => '', getHeader: () => header,
+  getEntries: () => [], getLeafId: () => null};
+const ctx = {cwd: process.cwd(), hasUI: false, sessionManager,
+  ui: {notify(message, level) { notices.push({message, level}); }}};
+for (const handler of handlers) await handler({reason: 'startup'}, ctx);
+console.log(JSON.stringify({notices, servers}));
+"""
+    # A rejected session_start exits node nonzero, so check=True pins that the handler resolved.
+    result = subprocess.run(['node', '--input-type=module', '-e', script,
+                             str(source / 'graphtraj/runtimes/pi/extension.mjs')],
+                            cwd=worktree, check=True, timeout=30, capture_output=True, text=True)
+    outcome = json.loads(result.stdout)
+    spawned = record.read_text().splitlines() if record.exists() else []
+    assert not [line for line in spawned if '--collect' in line]
+    if owner == 'agents-driver':
+        # extension.mjs returns before any native entry: an agents connection owns the Session.
+        assert (spawned, outcome) == ([], {'notices': [], 'servers': ['agents']})
+    else:
+        assert spawned == ['pi']
+        assert [notice['level'] for notice in outcome['notices']] == ['error']
+        assert 'GraphTraj Config was not found' in outcome['notices'][0]['message']
+        assert outcome['servers'] == ['graphtraj']

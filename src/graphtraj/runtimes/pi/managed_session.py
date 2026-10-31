@@ -27,10 +27,12 @@ class PiManagedExecution(PiExecution):
 
         from agent_swarm import default_config
         from agent_swarm.sessions import SessionArchive
-        from graphtraj.interfaces.agents import swarm_root
+        from graphtraj.interfaces.agents import attachment_private_paths, swarm_root
 
-        root = swarm_root(Path(self.request['harness_root']))
+        project = Path(self.request['harness_root'])
+        root = swarm_root(project)
         self.archive = SessionArchive(root, **default_config(root, save_normalized_sessions=True))
+        self.archive_private_paths = attachment_private_paths(project)
         # The agents driver path replaces this with its own receiver.
         self.parent_notice = self._notify_direct_parent
 

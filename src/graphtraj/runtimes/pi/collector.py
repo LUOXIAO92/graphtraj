@@ -483,7 +483,7 @@ def collect_stdio() -> None:
         raise ValueError('Unknown Pi collection source.')
     configuration = load_project_configuration(cwd)
     from agent_swarm import default_config
-    from graphtraj.interfaces.agents import swarm_root
+    from graphtraj.interfaces.agents import attachment_private_paths, swarm_root
     from agent_swarm.sessions import PiArchive, SessionArchive
 
     root = swarm_root(configuration.harness_root)
@@ -491,7 +491,8 @@ def collect_stdio() -> None:
     collector = PiArchive(archive, header, project=str(configuration.harness_root), source=source,
                           entries=entries, leaf_id=initial.get('leafId'), attachment_root=cwd,
                           extra_fields=graphtraj_fields(str(configuration.harness_root),
-                                                        'pi:' + connection['session']))
+                                                        'pi:' + connection['session']),
+                          private_paths=attachment_private_paths(configuration.harness_root))
     print(json.dumps({'ready': True}), flush=True)
     try:
         for line in sys.stdin:

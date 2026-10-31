@@ -6,6 +6,7 @@ connections, Task notices or Session archives overrides the hook methods.
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from contextlib import ExitStack, nullcontext
 import copy
 import json
@@ -103,6 +104,8 @@ class PiExecution:
         self.extra_fields: dict | None = None
         # Header ``source`` of a Session this execution archives first.
         self.archive_source: str | None = 'child'
+        # Further directories kept out of this archive's attachment copies.
+        self.archive_private_paths: Iterable[Path | str] = ()
         # Installed control code the sandboxed child reads but never rewrites.
         self.packages = [str(Path(__file__).resolve().parents[1])]
         self.agent = None
@@ -421,12 +424,13 @@ class PiExecution:
             return None
         from agent_swarm.sessions.pi import PiArchive
 
-        # The project root bounds relative attachment paths and private state;
-        # a request without one uses its working tree.
+        # The project root resolves relative attachment paths and holds a private
+        # ``.codex``; a request without one uses its working tree.
         return PiArchive(
             self.archive, header, project=self.request.get('harness_root') or self.request['worktree_path'],
             entries=native['entries'], leaf_id=native['leafId'], source=self.archive_source,
             attachment_root=Path(self.request['worktree_path']), extra_fields=self.extra_fields,
+            private_paths=self.archive_private_paths,
         )
 
     def record_process(self, pid: int, outcome: dict | None = None) -> None:

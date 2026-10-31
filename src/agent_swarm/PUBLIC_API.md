@@ -352,6 +352,9 @@ with its own `__all__`:
 | `agent_swarm.dsh` | `DshDriver`, `DshService`, `DshError`, `DshExecution`, `bind_run`, `session_context`, `dsh_version_refusal` |
 | `agent_swarm.sessions` | `SessionArchive` (the JSONL archive; `agent_swarm.SessionArchive` is the interface a backend expects), `ConfiguredSessionArchive`, `JsonlSessionStore`, `archive_path`, `SESSION_FORMAT_VERSION`, `INITIAL_COLLECTION_TYPE`, `append_stream_record`, `native_record`, `retain_native`, `snapshot_event`, `upgrade_event`, `upgrade_header`, `validate_header`, `validate_session`, `CodexJsonlArchive`, `CodexHistoryArchive`, `NativeInputError`, `rollout_record`, `codex_attachments`, `DshArchive`, `DshLiveFrames`, `attachment_refs`, `attempt_usage`, `collect_jsonl`, `PiArchive`, `import_native`, `import_sqlite`, `verify_sqlite` |
 
+`PiArchive` takes the optional keyword `private_paths` (since 0.2.7): an iterable of
+further directories the caller keeps out of attachment copies (1.5).
+
 `import agent_swarm` loads none of these Runtime packages; each name loads
 its code on first use. Every other submodule (`agent_swarm.control`,
 `agent_swarm.claude.host`, `agent_swarm.sessions.archive` and so on) is
@@ -383,7 +386,9 @@ A consumer may read and, before `run()`, set the attributes these classes
 declare without an underscore (for example `request`, `directory`, `archive`,
 `extra_fields`, `parent_notice`, `host_connection`, `independent`). A
 `parent_notice(message, details)` set this way receives native requests, and a
-driver binding an execution replaces it with its own.
+driver binding an execution replaces it with its own. `PiExecution` also declares
+`archive_private_paths` (since 0.2.7, default empty), which `archive_collector`
+passes to `PiArchive` as `private_paths`.
 
 **`AgentControl` methods.** Besides `operate` (`bind`'s entry) a host may call
 `create`, `send`, `resume`, `interrupt`, `wait`, `requests`, `reply`,
@@ -500,6 +505,16 @@ version 4 value whose `graphtraj` key would overwrite an existing top-level
 field is refused, not merged.
 
 Independent hosts write archives when `save_normalized_sessions` is on.
+
+**Pi attachments.** A Pi attachment is copied into the archive only from inside the
+host-authorized directory (`attachment_root`, the worktree for a Pi child), and never
+from the data root, `<project>/.codex`, `~/.codex` or `private_paths` (1.3). Anything
+else reads as missing. Links are resolved first, in the attachment's path and in these
+directories. Codex keeps its configuration and logins in `.codex`, and agents drives
+Codex. The archive writer runs in the host, with wider read access than the sandboxed
+child, so a path a model wrote must not pull those files into an archive. The data
+root holds this host's own records. A consumer adds its own private directories with
+`private_paths`.
 
 ### 1.6 Pi host: the agents Pi extension
 
@@ -1703,7 +1718,7 @@ or be renamed. Numbers refer to the subtraction list in
 | 5 | Archive header extension `graphtraj` with `projectId`, `agentId`, `taskIds` | Done in 384: agents writes no product fields; GraphTraj passes `extra_fields.graphtraj`. The `graphtraj` name remains only in the version 4 reader (`sessions/protocol.py`, `LEGACY_*`) | 384 |
 | 5+ | Core archive facts kept under the `graphtraj` name (event provenance, missing facts, header continuation, `graphtraj/*` types) | Done in 384: product-neutral core fields and types (section 1.5) | 384 |
 | 6 | Pi custom message type `graphtraj:agent-communication`, used for display entries and, since 382, for the Pi host's injected notices | `pi/extension.mjs` | 394 |
-| 7 | Pi execution's GraphTraj Task fields and fixed `.graphtraj` deny-read and deny-write paths | Done in 382: `pi/host.py` takes a Task-free configuration and builds the Pi request from the native parent (1.6); `pi/execution.py` takes the generic request fields (section 2); GraphTraj supplies its former paths and domains in `graphtraj/runtimes/pi/pi_adapter.py:member_policy` | 382 (done) |
+| 7 | Pi execution's GraphTraj Task fields and fixed `.graphtraj` deny-read and deny-write paths | Done in 382: `pi/host.py` takes a Task-free configuration and builds the Pi request from the native parent (1.6); `pi/execution.py` takes the generic request fields (section 2); GraphTraj supplies its former paths and domains in `graphtraj/runtimes/pi/pi_adapter.py:member_policy`. Done in 424: the Pi attachment check no longer names `.graphtraj` (`sessions/pi.py`, 1.5); GraphTraj declares `<harness_root>/.graphtraj` through `private_paths` and `archive_private_paths` (`graphtraj/interfaces/agents.py:attachment_private_paths`) | 382 (done), 424 (done) |
 | 8 | No independent DSH host | Done in 383: `dsh/host.py`, the `agents-dsh` bundle (`dsh/package.json`, `dsh/dsh.patch.yml`) and the host row of `dsh/plugin.mjs`; see 1.7 | 383 (done) |
 | 9 | Notice title `GraphTraj notice from …` and default sender `graphtraj` | `claude/host_context.mjs` | 394 |
 | 10 | `send`'s `reports_only` and its "Task member" description | Done in 388: generic meaning in `tool.py` and 1.2; `AgentControl` rejects `true` with `not-implemented` (fix, see 7). GraphTraj's Task member handling is unchanged | 388 (done) |

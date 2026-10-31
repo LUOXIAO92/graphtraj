@@ -68,6 +68,11 @@ def swarm_root(root: Path) -> Path:
     return root / ".graphtraj" / "swarm"
 
 
+def attachment_private_paths(root: Path) -> list[Path]:
+    """Return the project directories a Pi attachment is never copied from."""
+    return [root / ".graphtraj"]
+
+
 # GraphTraj turns saving on only where the user has made no explicit choice.
 ARCHIVE_DEFAULTS = {"save_normalized_sessions": True}
 

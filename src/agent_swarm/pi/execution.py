@@ -23,11 +23,17 @@ import uuid
 import tempfile
 
 from agent_swarm.models import write_key_reference
+from agent_swarm.approval import REVIEW_METHOD, review_failed
+from agent_swarm.review import build_request, record_decision, review_call
 from agent_swarm.runtime import RuntimeAdapterError, SessionStarted, credential_environment
 
 
 INFORMATION = {'notify', 'setStatus', 'setWidget', 'setTitle', 'set_editor_text'}
 DIALOGS = {'select', 'confirm', 'input', 'editor'}
+# The review plugin's extension side (extension.mjs). The variable enables it and
+# names this execution's reserved dialog title; the command proves it is installed.
+REVIEW_ENV = 'AGENT_SWARM_PI_REVIEW'
+REVIEW_COMMAND = 'agents-review-hook'
 
 # The launch request a host prepares. Other fields are kept for subclasses.
 REQUIRED = ('executable', 'provider', 'model', 'worktree_path', 'agent_dir', 'instructions',
@@ -102,6 +108,10 @@ class PiExecution:
         self.agent = None
         self.parent_notice = None
         self.agent_call = None
+        # Review plugin state, unused without ``request['review']``: the reserved
+        # dialog title and the native dialogs still with the reviewer.
+        self.review_title = 'agents-review:' + uuid.uuid4().hex if request.get('review') else None
+        self.reviewing: set[object] = set()
 
     @property
     def execution_id(self) -> str:
@@ -154,6 +164,12 @@ class PiExecution:
                     break
                 if event.get('type') == 'message_start':
                     self._saw_message(event.get('message'))
+                if event.get('type') == 'extension_ui_request' and self._is_review(event):
+                    try:
+                        self._review_dialog(event)
+                    except RuntimeAdapterError as error:
+                        self.events.put({'type': 'interaction_error', 'error': error})
+                    continue
                 if event.get('type') == 'extension_ui_request' and event.get('method') not in INFORMATION:
                     self.events.put({'type': 'pi/dialog', 'event': event})
                     if self.session is None:
@@ -231,6 +247,10 @@ class PiExecution:
         request = self.request
         _validate(request)
         credential_environment(request.get('api_key_env'))
+        if request.get('review') and not (self.independent and address is not None):
+            # Without the agents extension the reviewer would never run.
+            raise RuntimeAdapterError('ROLE_CONFIG_UNSUPPORTED',
+                                      'A reviewed Pi needs the agents extension, loaded only with an agents connection.')
         worktree = Path(request['worktree_path']).resolve()
         # Migrated hosts retain native files separately from Task Trace views.
         native = Path(request['native_directory']) if request.get('native_directory') else self.trace.with_suffix('.pi')
@@ -350,12 +370,18 @@ class PiExecution:
             if (key.startswith(('GRAPHTRAJ_', 'AGENT_SWARM_', 'AGENTS_'))
                     or key in {'DSH_SESSION_ID', 'DSH_AGENT_SOURCE'}):
                 del env[key]
+        review_key = (request.get('review') or {}).get('api_key_env')
+        if review_key and review_key != request.get('api_key_env'):
+            # The reviewer's key stays with this host, away from the child it judges.
+            env.pop(review_key, None)
         env.update(credential_environment(request.get('api_key_env')))
         env.update({'PATH': child_path(request['sandbox_path']),
                     'PI_CODING_AGENT_DIR': str(agent),
                     'PI_ASB_NO_ALIAS_PROMPT': '1'})
         if address is not None:
             env.update(self.connection_environment(address))
+        if self.review_title is not None:
+            env[REVIEW_ENV] = self.review_title
         # Pi's native find accepts an existing fd on PATH; do not download it or
         # alter the user's installation to populate the isolated cache.
         fd = source / 'bin/fd'
@@ -457,6 +483,7 @@ class PiExecution:
                 model = state.get('model', {})
                 if (model.get('provider'), model.get('id')) != (self.request['provider'], self.request['model']):
                     raise RuntimeAdapterError('RUNTIME_REQUEST_FAILED', 'Pi selected a different provider/model.')
+                self._require_review_hook()
                 _write_yaml(self.directory / 'session.yml', {
                     'session': self.session, 'rollout_path': str(self.native_trace), 'model': model,
                     'runtime_version': self.request.get('version'),
@@ -651,14 +678,16 @@ class PiExecution:
                    'request_id': event['id'], 'request_token': token,
                    'method': 'pi/' + method, 'params': event}
         self.pending[token] = details
+        self._notify(token, details)
 
+    def _notify(self, token: str, details: dict) -> None:
+        """Notify through the existing parent execution without granting consent.
+
+        A parent still closing its settled turn refuses input, so a
+        ``not-delivered`` receipt is retried while the dialog is pending,
+        as Codex, Claude and DSH do. The dialog is never answered here.
+        """
         def notify() -> None:
-            """Notify through the existing parent execution without granting consent.
-
-            A parent still closing its settled turn refuses input, so a
-            ``not-delivered`` receipt is retried while the dialog is pending,
-            as Codex, Claude and DSH do. The dialog is never answered here.
-            """
             message = 'Pi child requires a native reply:\n' + json.dumps(details)
             while True:
                 with self.lock:
@@ -676,12 +705,88 @@ class PiExecution:
 
         threading.Thread(target=notify, daemon=True).start()
 
+    def _is_review(self, event: dict) -> bool:
+        """Whether a native dialog is this execution's review of one tool call.
+
+        Before Session binding any dialog is a failed startup, as before.
+        """
+        return (self.review_title is not None and self.session is not None
+                and event.get('method') == 'confirm' and event.get('title') == self.review_title)
+
+    def _review_dialog(self, event: dict) -> None:
+        """Start judging one held call, off the pipe reader so Pi's protocol never stalls.
+
+        The tool waits on the native dialog, which has no timeout of its own, so
+        the reviewed call is the call that runs. A stopping execution refuses it.
+        """
+        with self.lock:
+            if self.stopping.is_set():
+                self._send({'type': 'extension_ui_response', 'id': event.get('id'), 'cancelled': True})
+                return
+            self.reviewing.add(event.get('id'))
+        threading.Thread(target=self._judge_dialog, args=(event,), daemon=True).start()
+
+    def _judge_dialog(self, event: dict) -> None:
+        """Answer an allowed call, or hold anything else for the direct parent.
+
+        Any exception here is a failed review. Recording comes first: a decision
+        that cannot be written does not run.
+        """
+        dialog = event.get('id')
+        tool, tool_input, call_id = None, None, None
+        try:
+            call = json.loads(event['message'])
+            tool, tool_input, call_id = call['tool'], call['input'], call['call_id']
+            decision = review_call(self.request['review'], build_request(
+                'pi', tool, tool_input, cwd=self.request['worktree_path'], instruction=self.prompt))
+        except Exception as error:
+            decision = review_failed(f'{type(error).__name__} in the review path')
+        try:
+            record_decision(self.directory, 'pi', tool, call_id, decision)
+        except Exception as error:
+            decision = review_failed(f'the decision could not be recorded ({type(error).__name__})')
+        token = uuid.uuid4().hex
+        details = {'session': self.session, 'execution_id': self.execution_id,
+                   'request_id': 'agents-review:' + uuid.uuid4().hex, 'request_token': token,
+                   'method': REVIEW_METHOD, 'dialog_id': dialog,
+                   'params': {'tool': tool, 'input': tool_input,
+                              'decision': decision['decision'], 'reason': decision['reason']}}
+        with self.lock:
+            if dialog not in self.reviewing:
+                return  # An interrupt already refused this dialog.
+            self.reviewing.discard(dialog)
+            if decision['decision'] == 'allow':
+                try:
+                    self._send({'type': 'extension_ui_response', 'id': dialog, 'confirmed': True})
+                except RuntimeAdapterError:
+                    pass  # The pipe closed: the process and its tool call are gone.
+                return
+            self.pending[token] = details
+        self._notify(token, details)
+
+    def _require_review_hook(self) -> None:
+        """Refuse to prompt a reviewed child unless Pi reports the agents hook as loaded."""
+        if self.review_title is None:
+            return
+        commands = self._rpc('get_commands').get('commands', [])
+        extension = Path(__file__).with_name('extension.mjs').resolve()
+        for command in commands:
+            path = (command.get('sourceInfo') or {}).get('path')
+            if command.get('name') == REVIEW_COMMAND and path and Path(path).resolve() == extension:
+                return
+        raise RuntimeAdapterError('RUNTIME_REQUEST_FAILED', 'The review plugin hook is not loaded in Pi, so its tool '
+                                                            'calls would run unreviewed; no prompt was sent.')
+
     def _interrupt(self) -> None:
         """Clear pending work before abort; an ACK alone never publishes completion."""
         with self.lock:
             self.stopping.set()
+            for dialog in list(self.reviewing):
+                self._send({'type': 'extension_ui_response', 'id': dialog, 'cancelled': True})
+            self.reviewing.clear()
             for details in list(self.pending.values()):
-                self._send({'type': 'extension_ui_response', 'id': details['request_id'], 'cancelled': True})
+                self._send({'type': 'extension_ui_response', 'id': details.get('dialog_id', details['request_id']),
+                            'cancelled': True})
             self.pending.clear()
             self._rpc('clear_queue')
             self._rpc('abort')
@@ -720,6 +825,13 @@ class PiExecution:
             if operation == 'reply':
                 details = self.pending.get(request.get('request_token'))
                 response = request.get('response')
+                if details is not None and details['method'] == REVIEW_METHOD:
+                    if response not in ({'decision': 'accept'}, {'decision': 'decline'}):
+                        raise RuntimeAdapterError('invalid-input', 'Return an explicit accept or decline decision.')
+                    self._send({'type': 'extension_ui_response', 'id': details['dialog_id'],
+                                'confirmed': response['decision'] == 'accept'})
+                    del self.pending[request['request_token']]
+                    return {'request_id': details['request_id'], 'reply_status': 'submitted'}
                 if details is None or not isinstance(response, dict) or not response or set(response) - {'value', 'confirmed', 'cancelled'}:
                     raise RuntimeAdapterError('invalid-input', 'Supply an explicit reply to a pending Pi dialog.')
                 if (any(key in response and not isinstance(response[key], bool) for key in ('confirmed', 'cancelled'))

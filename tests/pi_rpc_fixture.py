@@ -58,10 +58,21 @@ def main() -> None:
     stop = threading.Event()
     dialog = threading.Event()
     held_seconds = float(os.environ.get('PI_FIXTURE_HELD_SECONDS', '5'))
+    answers: list[dict] = []
+    if os.environ.get('PI_FIXTURE_KEY_PROBE'):
+        # Which named variables reached this process, never their values.
+        target, _, names = os.environ['PI_FIXTURE_KEY_PROBE'].partition(':')
+        Path(target).write_text(json.dumps({name: name in os.environ for name in names.split(',')}))
 
     def gated(name: str) -> bool:
         """Whether the file named by this environment variable exists now."""
         return bool(os.environ.get(name)) and Path(os.environ[name]).exists()
+
+    def log_kind(kind: str) -> None:
+        """Keep the order of received commands for tests that require one first."""
+        if os.environ.get('PI_FIXTURE_COMMANDS'):
+            with open(os.environ['PI_FIXTURE_COMMANDS'], 'a') as stream:
+                stream.write(kind + '\n')
 
     def emit(document: dict) -> None:
         """Keep interleaved asynchronous events valid JSONL."""
@@ -146,12 +157,28 @@ def main() -> None:
             dialog.clear()
             emit({'type': 'extension_ui_request', 'id': 'question-2', 'method': 'confirm', 'message': 'Sure?'})
             dialog.wait(held_seconds)
+        reviewed = None
+        if text.startswith(('review:', 'unreserved:')):
+            # What the real tool_call handler does (extension.mjs): the call waits on
+            # one dialog, and only a confirmed answer lets it run, once.
+            kind, _, target = text.partition(':')
+            dialog.clear()
+            answers.clear()
+            emit({'type': 'extension_ui_request', 'id': 'native-dialog-1', 'method': 'confirm',
+                  'title': os.environ.get('AGENT_SWARM_PI_REVIEW', '') if kind == 'review' else 'Allow?',
+                  'message': json.dumps({'tool': 'write', 'call_id': 'call-1', 'input': {'path': target}})})
+            dialog.wait(30)
+            reviewed = 'blocked'
+            if answers and answers[0].get('confirmed') is True:
+                with open(target, 'a') as stream:
+                    stream.write('ran\n')
+                reviewed = 'ran'
         if text.startswith('wait'):
             stop.wait(held_seconds)
         else:
             time.sleep(0.04)
         take_queued()
-        answer = '|'.join(str(x) for x in history + taken)
+        answer = reviewed or '|'.join(str(x) for x in history + taken)
         if text == 'cli':
             env = {**os.environ, 'GRAPHTRAJ_CALLER_ALIAS': 'research@x2', 'GRAPHTRAJ_ROLE': 'main'}
             # The restricted Session's own directory is its Worktree, never the
@@ -197,6 +224,7 @@ def main() -> None:
     for line in sys.stdin:
         request = json.loads(line)
         kind = request['type']
+        log_kind(kind)
         response = {'type': 'response', 'id': request.get('id'), 'command': kind, 'success': True}
         if kind == 'get_state':
             response['data'] = {'sessionId': session, 'sessionFile': str(session_file),
@@ -271,8 +299,16 @@ def main() -> None:
             dialog.set()
             continue
         elif kind == 'extension_ui_response':
+            answers.append(request)
             dialog.set()
             continue
+        elif kind == 'get_commands':
+            hook = (os.environ.get('AGENT_SWARM_PI_REVIEW') and '--extension' in sys.argv
+                    and not os.environ.get('PI_FIXTURE_NO_REVIEW_HOOK'))
+            response['data'] = {'commands': [{
+                'name': 'agents-review-hook', 'source': 'extension',
+                'sourceInfo': {'path': sys.argv[sys.argv.index('--extension') + 1]},
+            }] if hook else []}
         emit(response)
     (session_file.parent / 'traffic.json').write_text(json.dumps(traffic))
 

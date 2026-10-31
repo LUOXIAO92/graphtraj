@@ -15,6 +15,8 @@ from contextlib import ExitStack
 
 import yaml
 
+from agent_swarm.approval import REVIEW_METHOD, review_failed
+from agent_swarm.review import build_request, record_decision, review_call
 from .service import DshService, redact_native, secret_values
 from .errors import DshError
 from .settings import AMBIENT_ENDPOINTS, credential_environment, resumes_by_address
@@ -28,6 +30,11 @@ _WEB_APP_BUNDLE = Path('node_modules') / '@deepseek-ai' / 'dsh-web-app'
 _PERSONA_PLUGIN = '@deepseek-ai/dsh-persona'
 # The variable DSH's Messages route and its web rows read when none is named.
 _DEFAULT_KEY_ENV = 'DEEPSEEK_API_KEY'
+# The review row's mark on its asks (review.mjs): a displayReason key, which only
+# in-process code sets. Text a model writes reaches its values, never a key.
+REVIEW_MARKER = 'agents-review'
+# How long a started service has to apply the review row.
+REVIEW_HOOK_SECONDS = 10
 
 
 class _JsExpression(str):
@@ -201,11 +208,14 @@ class DshExecution:
         # Streamed tool/call contexts, keyed by callId, held only while the
         # call is open so an approval can name exactly what it will run.
         self.tool_calls: dict[str, dict] = {}
+        # Native approval events still with the reviewer, unused without a reviewer.
+        self.reviewing: set[str] = set()
         # Runner retires/moves its control directory. Keep native Session data
         # with the durable Trace so retirement cannot break the retained link.
         self.native_directory = Path(request['native_directory']) if request.get('native_directory') else directory
         self.logs = (self.native_directory / 'dsh-native' if request.get('native_directory')
                      else trace_file.parent / 'dsh-native')
+        self.review_ready = self.native_directory / 'dsh-home' / f'agents-review-{self.execution_id}.ready'
 
     def prepare_launch(self) -> dict[str, str]:
         """Compose an isolated native profile, retaining defaults outside this Agent."""
@@ -251,6 +261,9 @@ class DshExecution:
             mcp = self.request['mcp']
             patches.append({'insert': [{'id': 'agents-mcp', 'name': str(Path(__file__).with_name('plugin.mjs')),
                                         'config': {'mcpCommand': mcp['command'], 'mcpArgs': mcp.get('args', [])}}]})
+        if self.request.get('review'):
+            patches.append({'insert': [{'id': 'agents-review', 'name': str(Path(__file__).with_name('review.mjs')),
+                                        'config': {'readyFile': str(self.review_ready)}}]})
         if self.request.get('connection'):
             # Native selectModel otherwise saves the selection to the shared
             # profile. This service must keep it scoped to its own Session.
@@ -262,6 +275,10 @@ class DshExecution:
             patches.append(preset)
         (profile / 'cordis.patch.yml').write_text(_dump_profile_patches(patches), encoding='utf-8')
         environment = {**os.environ, **credentials}
+        review_key = (self.request.get('review') or {}).get('api_key_env')
+        if review_key and review_key != key:
+            # The reviewer's key stays with this host, away from the child it judges.
+            environment.pop(review_key, None)
         environment.update({
             'DSH_AGENT_PACKAGE': self.request['package'],
             'DSH_HOME': self.request.get('runtime_home') or str(home), 'DSH_PERMISSION_MODE': mode, 'NO_COLOR': '1',
@@ -380,8 +397,9 @@ class DshExecution:
                 # The first answer, native abort or process exit settles the
                 # native request; a later reply must authorize nothing.
                 with self.lock:
+                    self.reviewing.discard(frame.get('eventId'))
                     for token, details in list(self.pending.items()):
-                        if details['request_id'] == frame.get('eventId'):
+                        if details.get('event_id', details['request_id']) == frame.get('eventId'):
                             self.tool_calls.pop(details.get('call_id'), None)
                             del self.pending[token]
 
@@ -409,6 +427,10 @@ class DshExecution:
         """Publish one pending native approval with the identity its parent needs."""
         request  = frame.get('request') or {}
         event_id = frame.get('eventId')
+        call     = self._reviewed_call(request)
+        if call is not None:
+            self._review_ask(event_id, call)
+            return
         token    = uuid.uuid4().hex
         call_id  = request.get('callId')
         with self.lock:
@@ -428,6 +450,83 @@ class DshExecution:
                 return
             self.pending[token] = details
         threading.Thread(target=self._notify_direct_parent, args=(token, details), daemon=True).start()
+
+    def _reviewed_call(self, request: dict) -> dict | None:
+        """Return the call a review row's ask names; anything else is a native request.
+
+        Only a well-formed mark naming this frame's own tool and call counts. An
+        unmarked or malformed frame keeps its native path, unreviewed, so text a
+        model can influence never reaches ``allowed-once``.
+        """
+        display = request.get('displayReason')
+        mark = display.get(REVIEW_MARKER) if isinstance(display, dict) else None
+        if not self.request.get('review') or not isinstance(mark, str):
+            return None
+        try:
+            call = json.loads(mark)
+        except ValueError:
+            return None
+        if (not isinstance(call, dict) or set(call) - {'call_id'} != {'tool', 'input'}
+                or call['tool'] != request.get('toolName') or call.get('call_id') != request.get('callId')):
+            return None
+        return call
+
+    def _review_ask(self, event_id: str, call: dict) -> None:
+        """Start judging one held call, off the frame reader so DSH's protocol never stalls."""
+        with self.lock:
+            if self.stopping.is_set() or self.finished.is_set():
+                return  # Native cancellation settles the ask; it is not answered.
+            self.reviewing.add(event_id)
+        threading.Thread(target=self._judge_ask, args=(event_id, call), daemon=True).start()
+
+    def _judge_ask(self, event_id: str, call: dict) -> None:
+        """Answer an allowed call, or hold anything else for the direct parent.
+
+        Any exception here is a failed review. Recording comes first: a decision
+        that cannot be written does not run.
+        """
+        tool, tool_input, call_id = call['tool'], call['input'], call.get('call_id')
+        try:
+            decision = review_call(self.request['review'], build_request(
+                'dsh', tool, tool_input, cwd=self.request['worktree_path'], instruction=self.prompt))
+        except Exception as error:
+            decision = review_failed(f'{type(error).__name__} in the review path')
+        try:
+            record_decision(self.directory, 'dsh', tool, call_id, decision)
+        except Exception as error:
+            decision = review_failed(f'the decision could not be recorded ({type(error).__name__})')
+        with self.lock:
+            if event_id not in self.reviewing or self.stopping.is_set() or self.finished.is_set():
+                return
+            self.reviewing.discard(event_id)
+        if decision['decision'] == 'allow':
+            try:
+                self.service.answer_approval(event_id, 'allowed-once')
+                return
+            except Exception as error:
+                decision = review_failed(f'the answer did not reach DSH ({type(error).__name__})')
+        token = uuid.uuid4().hex
+        details = {'session': self.session, 'execution_id': self.execution_id,
+                   'request_id': 'agents-review:' + uuid.uuid4().hex, 'request_token': token,
+                   'method': REVIEW_METHOD, 'tool': tool, 'call_id': call_id, 'event_id': event_id,
+                   'params': {'tool': tool, 'input': tool_input,
+                              'decision': decision['decision'], 'reason': decision['reason']}}
+        with self.lock:
+            if self.stopping.is_set() or self.finished.is_set():
+                return
+            self.pending[token] = details
+        threading.Thread(target=self._notify_direct_parent, args=(token, details), daemon=True).start()
+
+    def _require_review_hook(self) -> None:
+        """Refuse to prompt a reviewed child unless the review row reports it is registered."""
+        if not self.request.get('review'):
+            return
+        deadline = time.monotonic() + REVIEW_HOOK_SECONDS
+        while not self.review_ready.is_file():
+            if time.monotonic() >= deadline:
+                raise self.error_type('RUNTIME_REQUEST_FAILED', 'The review plugin hook is not loaded in DSH, so its '
+                                                                'tool calls would run unreviewed; no prompt was sent.')
+            time.sleep(0.05)
 
     def _notify_direct_parent(self, token: str, details: dict) -> None:
         """Announce a pending request through the real parent channel, without deciding."""
@@ -476,6 +575,7 @@ class DshExecution:
         )
         try:
             self.service.start()
+            self._require_review_hook()
             addressed = self.session is not None and resumes_by_address(self.request.get('package'))
             if addressed:
                 # Newer DSH resumes the stored Session when follow addresses it.
@@ -593,7 +693,9 @@ class DshExecution:
                 with self.lock:
                     self.active = False
                     self.pending.clear()
+                    self.reviewing.clear()
                     self.tool_calls.clear()
+                self.review_ready.unlink(missing_ok=True)
                 self._retain_trace()
                 if self.outcome is not None and not self.trace_file.is_file():
                     raise self.error_type('RUNTIME_TRACE_FAILED', 'DSH native Trace was not retained.')
@@ -632,10 +734,13 @@ class DshExecution:
                 if details is None or self.stopping.is_set() or self.finished.is_set():
                     raise self.error_type('invalid-input', 'Supply a reply to a pending DSH approval request.')
                 decision = response.get('decision') if isinstance(response, dict) else None
-                if not isinstance(response, dict) or set(response) != {'decision'} or decision not in {'allow', 'reject'}:
-                    raise self.error_type('invalid-input', 'Return exactly one explicit allow or reject decision.')
-                outcome = 'allowed-once' if decision == 'allow' else 'rejected'
-                self.service.answer_approval(details['request_id'], outcome)
+                held = details['method'] == REVIEW_METHOD
+                if not isinstance(response, dict) or set(response) != {'decision'} or decision not in (
+                        {'accept', 'decline'} if held else {'allow', 'reject'}):
+                    raise self.error_type('invalid-input', 'Return exactly one explicit accept or decline decision.'
+                                          if held else 'Return exactly one explicit allow or reject decision.')
+                outcome = 'allowed-once' if decision in {'allow', 'accept'} else 'rejected'
+                self.service.answer_approval(details.get('event_id', details['request_id']), outcome)
                 self.tool_calls.pop(details.get('call_id'), None)
                 del self.pending[request['request_token']]
                 return {'request_id': details['request_id'], 'reply_status': 'submitted'}

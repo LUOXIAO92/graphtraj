@@ -49,8 +49,8 @@ on stdout.
 - It forwards over the same owner connection as the CLI and refuses the same
   way without one.
 
-**Independent hosts.** The host commands documented in the README are public
-with their documented flags:
+**Independent hosts.** The host commands documented in the README and its host
+notes (`install/`) are public with their documented flags:
 
 - `python -m agent_swarm.claude.host configuration --project <dir> --claude
   <path> [--write]` and `... serve --config <file>`. The written
@@ -60,8 +60,8 @@ with their documented flags:
   host's Claude children. `runtimes` maps another Runtime's name to its
   driver settings: `codex` takes the document `agent_swarm.codex.host
   --settings` takes (`adapter_request`, optional `evidence`, `connection`);
-  since 383 `dsh` takes the DSH driver settings (section 2, DSH children)
-  and runs in `cwd`; since 408 `pi` takes the Pi child settings below and
+  since 0.2.0 `dsh` takes the DSH driver settings (section 2, DSH children)
+  and runs in `cwd`; since 0.2.1 `pi` takes the Pi child settings below and
   runs in `cwd`. A Runtime without an entry has no driver (`create`
   fails with `unsupported-runtime`). At start the host refuses another
   Runtime name (`unsupported-runtime`), a `claude` entry
@@ -77,8 +77,8 @@ with their documented flags:
   may hold an optional top-level `runtimes` object: a Runtime name to that
   driver's settings. The host removes it before reading its own Codex
   settings. `claude` takes the documented Claude host `settings` keys;
-  since 383, `dsh` takes the DSH driver settings (section 2, DSH children);
-  since 408, `pi` takes the Pi child settings below;
+  since 0.2.0, `dsh` takes the DSH driver settings (section 2, DSH children);
+  since 0.2.1, `pi` takes the Pi child settings below;
   all run in `adapter_request.worktree_path` and are checked at start. A
   Runtime without an entry has no driver (`create` fails with
   `unsupported-runtime`). At start the host refuses another Runtime name
@@ -87,7 +87,7 @@ with their documented flags:
   (the DSH codes in section 2), a `pi` entry as below, and whatever
   `AgentControl.require_connections()` refuses. On a startup error it prints
   `{"error": {"code", "message"}}` and exits `1`.
-- A `runtimes.pi` entry of the Claude Code and Codex hosts (since 408) lets
+- A `runtimes.pi` entry of the Claude Code and Codex hosts (since 0.2.1) lets
   that host start Pi children without any GraphTraj Task. Its fields are the
   table *Pi child defaults* in 1.6, except `worktree_path`, which is the
   host's `cwd` (Claude) or `adapter_request.worktree_path` (Codex). These
@@ -244,10 +244,21 @@ people and models and may change. Codes in use:
 | `archive-unavailable` | no longer returned since 0.2.0: every host archives when saving is on (384) |
 | `host-unavailable`, `host-busy`, `session-exists`, `turn-running` | host start and ownership refusals |
 | `start-failed`, `delivery-unknown` | a native start or delivery failed without a native code |
+| `call-cancelled` | a host serving calls concurrently stopped this call's wait, because its caller cancelled the call or its client went away |
 
 An execution that fails natively keeps the Runtime's own code and message in
 `last_result.error` (for example `RUNTIME_REQUEST_FAILED`). Those codes belong
 to the Runtime driver; the ones the README documents are public.
+
+`call-cancelled` is rarely read as a result. The Claude Code hosts run each
+`tools/call` on its own thread, so a long `wait` does not block another call, and
+the other hosts run calls one at a time. An explicit cancel sends no response at
+all, so that caller never sees the code. When the client's input ends, the waits
+stop the same way and a response carrying the code is still written, for a client
+that may be gone. A host or consumer using `pause` or `run_stoppable` receives it as
+`CallCancelled`. Two identical calls running at once in a Claude Code host share one
+association, and the second is refused with `authority-denied`; it can be retried
+once the first ends.
 
 Envelope validation errors in `discover`, `describe` and `execute`
 (malformed envelope, unknown feature, `arguments` failing the feature's
@@ -305,10 +316,6 @@ Parts for building a host or a consumer on agents (since 0.2.2), also in
   `ClientGone`, `mcp_serve`, `mcp_respond`, `mcp_result_response`,
   `mcp_error_response`, `mcp_tool_documents`;
 - notices (section 4): `END_EVENTS`, `needs_parent`, `notice_id`;
-- host shutdown (section 4): `stop_owned(control)` interrupts what this process
-  runs on one 10-second deadline and returns the Agents it still owns;
-  `exit_if_owned_unconfirmed(agents)` writes their `stop-unconfirmed` line and
-  ends the process, and returns when the list is empty;
 - processes and locks: `process_ancestors`, `process_executable`,
   `process_arguments`, and `exclusive_lock(path)`, the lock agents takes on its
   own record files;
@@ -319,6 +326,12 @@ Parts for building a host or a consumer on agents (since 0.2.2), also in
 - Runtime executions: `RuntimeAdapterError`, the protocols `RuntimeContext` and
   `RuntimeTurn`, `RuntimeExecutionResult`, `SessionStarted`,
   `credential_environment`.
+
+Host shutdown (section 4, since 0.2.4), also in `agent_swarm.__all__`:
+`stop_owned(control)` interrupts what this process runs on one 10-second deadline
+and returns the Agents it still owns; `exit_if_owned_unconfirmed(agents)` writes
+their `stop-unconfirmed` line and ends the process, and returns when the list is
+empty.
 
 Parts for one Runtime or for the Session archive live in these packages, each
 with its own `__all__`:
@@ -981,7 +994,7 @@ What the parent sees today:
 - **Codex host:** one host event per notice, `{"source": "agents", "alias",
   "event", "message"}`, sent to the parent Session while its turn runs. It
   enables `request_notices`, for children of every Runtime it runs (Codex,
-  Claude). The `--output` document lists the notices in `deliveries` (`id`,
+  Claude, DSH, Pi). The `--output` document lists the notices in `deliveries` (`id`,
   `agent`, `event`, `parent_session`, `body`, `accepted`). It enables
   `hold_notices`: a notice that arrives before the parent's turn starts or after
   it ended, or whose event could not be written, is held. A written event
@@ -1177,7 +1190,7 @@ default `False` keeps a host's notices to ends only, as before 0.1.2.
 for a host that keeps its children's native requests to `wait` and `requests`.
 GraphTraj's own host does this.
 
-With `hold_notices=True` (since 0.2.0; the default `False` writes no new field or
+With `hold_notices=True` (since 0.2.1; the default `False` writes no new field or
 value) a notice its parent cannot receive now is kept in the record:
 
 - A receiver may return `"held"`. For a root's end, so do a receiver that
@@ -1587,7 +1600,7 @@ Recorded classifications:
   optional argument with a default that keeps current behaviour. All four hosts
   enable it, so `held` replaces `unavailable` for a notice they could not
   deliver; the Pi host also pushes each child request. The Pi and DSH hosts are
-  themselves new in 0.2.0. The Claude Code and Codex hosts shipped in 0.1.2, so
+  themselves new in 0.2.0. The Claude Code and Codex hosts date from 0.1.0, so
   a consumer of theirs that reads `notification` sees the new value in 0.2.1,
   the version 386 already raised; 403 adds no bump of its own.
 - 383: the DSH host section, the `agents-dsh` bundle, the `dsh` entries of the
@@ -1600,38 +1613,41 @@ Recorded classifications:
   name they replace was internal, so renaming those is not an incompatible
   change. `import agent_swarm` also stopped loading the `agent_swarm.codex`
   package, which nothing public depended on.
-- 408: the `pi` entry of the Claude Code and Codex hosts' `runtimes`, refused
+- 408 (0.2.1): the `pi` entry of the Claude Code and Codex hosts' `runtimes`, refused
   at start with `unsupported-runtime` before, is accepted. Its refusals are
   compatible additions: new error situations for a configuration that could
   not start before. A `pi` connection declared without an entry still fails
   with `unsupported-runtime`. 408 adds no bump of its own.
-- 411: a DSH child no longer inherits `DEEPSEEK_BASE_URL` or
+- 411 (0.2.2): a DSH child no longer inherits `DEEPSEEK_BASE_URL` or
   `DEEPSEEK_SEARCH_BASE_URL`, and a failed turn's message gains the native
   error (section 2). A fix (compatible): section 2 already said a key never
   reaches another endpoint, and no document offered the variables as a way to
   route a child. A setup that did rely on them now reaches DSH's official root,
-  and must declare `base_url`. 411 ships in the unreleased 0.2.2 and adds no
-  bump of its own.
-- 413: `discover_models` for DSH follows the connection's `base_url` and
+  and must declare `base_url`. 411 adds no bump of its own.
+- 413 (0.2.2): `discover_models` for DSH follows the connection's `base_url` and
   `api_key_env` and ignores the two variables, and for Pi no longer runs on the
   home. Pi's keyless `pi_destination` likewise, so a home whose configured package
   cannot be installed no longer has every selection refused. Fixes (compatible):
   a listing used an endpoint and key the connection did not name, and a query
-  wrote into the home. 413 ships in the unreleased 0.2.2 and adds no bump of its
-  own.
-- 413: a connection with a `base_url` at another origin whose key is
+  wrote into the home. 413 adds no bump of its own.
+- 413 (0.2.2): a connection with a `base_url` at another origin whose key is
   `DEEPSEEK_API_KEY` sends search to that endpoint and loses DSH's Search and
   Fetch API provider (section 2). A
   fix (compatible): section 2 already said a key never reaches another endpoint.
   A setup that relied on official search through such a gateway must name the
   gateway's key in another variable. No bump of its own.
-- 415: `stop_owned` and `exit_if_owned_unconfirmed` are new public names, and
+- 415 (0.2.4): `stop_owned` and `exit_if_owned_unconfirmed` are new public names, and
   the `--output` document gains `stop_unconfirmed`. `interrupt_owned` no longer
   raises when one Agent's interrupt fails, and returns while one is blocked. The
   Codex host now exits non-zero when a stop is unconfirmed, where it exited 0 and
   recorded nothing; the Claude Code hosts name every such Agent where they raised
-  naming none. Fixes and additions (compatible). 415 ships in the unreleased
-  0.2.2 and adds no bump of its own.
+  naming none. Fixes and additions (compatible). 415 merged while `dev` said
+  0.2.3, so 0.2.3 does not identify these names; 0.2.4 does.
+- 391 (0.2.4): the version rises for 415's names, and the README, `CHANGELOG.md`
+  and host notes join the wheel. Compatible: nothing is removed or narrowed. No
+  version has been published; these numbers mark `dev` history, and before 0.2.4
+  several fixes merged without a bump, so commits with the same number can differ.
+  `CHANGELOG.md` lists each version's content.
 
 While the major version is `0`, an incompatible change raises the minor
 version (`0.1.x` → `0.2.0`), and compatible additions and fixes raise the
@@ -1639,7 +1655,7 @@ patch version. From `1.0.0` the usual rule applies: major for incompatible,
 minor for additions, patch for fixes. A release that changes this document
 updates it in the same change.
 
-GraphTraj declares the range it supports (today `agent-swarm>=0.2.2,<0.3`, since it imports the 0.2.2 names in 1.3)
+GraphTraj declares the range it supports (today `agent-swarm>=0.2.4,<0.3`, since it imports the 0.2.4 names in 1.3)
 and widens it in the same change that adopts an incompatible release.
 
 ## Appendix: Known GraphTraj-specific surfaces

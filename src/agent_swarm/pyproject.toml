@@ -6,6 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "agent-swarm"
 dynamic = ["version"]
 description = "Independent native Agent control and optional native Session archives."
+readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "PyYAML>=6,<7",
@@ -25,5 +26,5 @@ package-dir = {agent_swarm = "."}
 version = {attr = "agent_swarm.__version__"}
 
 [tool.setuptools.package-data]
-agent_swarm = ["PUBLIC_API.md", "dsh/*.mjs", "dsh/package.json", "dsh/dsh.patch.yml", "claude/*.mjs", "pi/*.mjs", "pi/package.json", "sessions/DSH-LICENSE",
+agent_swarm = ["PUBLIC_API.md", "README.md", "CHANGELOG.md", "install/*.md", "dsh/*.mjs", "dsh/package.json", "dsh/dsh.patch.yml", "claude/*.mjs", "pi/*.mjs", "pi/package.json", "sessions/DSH-LICENSE",
                "review_policy/*"]

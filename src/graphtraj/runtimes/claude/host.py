@@ -23,8 +23,8 @@ from typing import Callable, TextIO
 from uuid import UUID
 
 from agent_swarm.claude import (REFUSAL_FILE, NativeCalls as NativeCallsBase, claim_channel, claude_host_plugin,
-                                context_endpoint, ended_by_claude, log_replaced_channel, require_free_channel,
-                                serve_refusal)
+                                context_endpoint, ended_by_claude, kept_host_paths, log_replaced_channel,
+                                require_free_channel, serve_refusal, write_adoption)
 from agent_swarm import (AgentsError, AgentsResult, Caller, bind, connection_operation, exit_if_owned_unconfirmed,
                          handle_request, on_discard, process_ancestors, stop_owned, stop_requested, worker_connection)
 from graphtraj.configuration.project_configuration import runner_directory
@@ -192,10 +192,12 @@ def adoption_material(root: Path, claude: Path) -> dict[str, object]:
     config = root / '.graphtraj' / 'claude-host' / 'config.json'
     plugin = root / '.claude' / 'skills' / 'graphtraj-claude-host'
     python = Path(sys.executable)
+    kept = kept_host_paths(config, root, {'root': str(root),
+                                          'channel_file': str(config.parent / 'live' / 'channel.json')})
     return {
         config.as_posix(): {
-            'root': str(root), 'cwd': str(root), 'claude': str(claude),
-            'channel_file': str(config.parent / 'live' / 'channel.json'),
+            'root': kept['root'], 'cwd': str(root), 'claude': str(claude),
+            'channel_file': kept['channel_file'],
         },
         (root / '.mcp.json').as_posix(): {'mcpServers': {'agents': {
             'command': str(python),
@@ -208,25 +210,6 @@ def adoption_material(root: Path, claude: Path) -> dict[str, object]:
         **claude_host_plugin(plugin, 'graphtraj-claude-host',
                              'GraphTraj Main host context for the agents and tasks MCP entries.', ADDED_TOOLS),
     }
-
-
-def write_adoption(material: dict[str, object]) -> None:
-    """Write printed adoption material: JSON values as JSON, the mod as text.
-
-    An existing JSON file keeps its other settings: each top-level object
-    (for example ``env`` or ``mcpServers``) is merged one level deep.
-    """
-    for path, content in material.items():
-        target = Path(path)
-        target.parent.mkdir(parents=True, exist_ok=True)
-        if not isinstance(content, str) and target.exists():
-            existing = json.loads(target.read_text(encoding='utf-8'))
-            for key, value in content.items():
-                existing[key] = ({**existing[key], **value}
-                                 if isinstance(value, dict) and isinstance(existing.get(key), dict) else value)
-            content = existing
-        target.write_text(content if isinstance(content, str) else json.dumps(content, indent=2) + '\n',
-                          encoding='utf-8')
 
 
 def refuse(error: Exception, log: Path) -> None:

@@ -12,6 +12,21 @@ version that identifies everything listed under it.
 
 The numbers in parentheses are the project's Task numbers.
 
+## 0.2.5 (compatible)
+
+- `agent_swarm.claude.host configuration --write` on a configured project (419) now
+  updates only what the command owns: `command` and `args` of the `agents` MCP server,
+  the two `GRAPHTRAJ_CLAUDE_HOST_*` variables, `cwd`, `claude` and the plugin files.
+  Other keys of the `agents` entry, such as `env`, were lost before and are now kept.
+- The same re-run no longer resets `root` and `channel_file`, so a host with Pi children
+  still starts afterwards. If the project itself moved, a path inside its old directory
+  moves with it. Without `--write`, the printed configuration shows the kept paths.
+- An existing JSON file that does not parse or does not hold an object now raises
+  `ValueError` naming it, and nothing is written.
+- New public names `write_adoption` and `kept_host_paths` in `agent_swarm.claude`.
+  GraphTraj's Claude host imports them, so GraphTraj now requires
+  `agent-swarm>=0.2.5,<0.3`.
+
 ## 0.2.4 (compatible)
 
 - New public names `stop_owned` and `exit_if_owned_unconfirmed` (415). GraphTraj's

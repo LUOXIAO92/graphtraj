@@ -48,7 +48,18 @@ prints the list of paths and writes:
 | `.claude/settings.local.json` | Two `env` entries that point the plugin at this Python and configuration |
 | `.claude/skills/agents-claude-host/` | The plugin: its manifest, hooks and `host_context.mjs` |
 
-An existing `.mcp.json` or `.claude/settings.local.json` keeps its other entries.
+Running it again on a configured project updates only what the command owns: `command`
+and `args` of the `agents` server, the two `env` entries, `cwd` and `claude` in the host
+configuration, and the plugin files. Everything else stays, including other keys of the
+`agents` server such as `env`, other servers and `root`, `channel_file`, `settings` and
+`runtimes` in the host configuration. Without `--write`, the printed host configuration
+shows the `root` and `channel_file` that would be kept.
+
+If you moved the project, a `root` or `channel_file` inside its old directory moves to
+the same relative place in the new one. A path outside the old directory stays as it is.
+
+An existing JSON file that does not parse or does not hold an object stops the command
+with an error naming the file, and nothing is written. Fix or remove that file.
 
 ## Minimal configuration
 
@@ -178,10 +189,7 @@ and any existing `control/`, `native/` and `sessions/` there. `channel_file` and
 2. Run `configuration --write` again. **This is required:** an earlier copy of the
    plugin never acknowledges a notice, so its pushed notices repeat once per host
    process.
-3. If you moved `root` for Pi children, set it again. `--write` resets `root`,
-   `cwd`, `claude` and `channel_file`, and keeps `settings` and `runtimes`, so the host
-   refuses to start until `root` is back outside the project.
-4. Start a new Claude Code process.
+3. Start a new Claude Code process.
 
 ## Limits
 

@@ -313,12 +313,11 @@ def serve_claude_host(config: Path, project: Path) -> str:
     return json.loads(finished.stdout.splitlines()[1])['result']['content'][0]['text']
 
 
-def test_claude_configuration_with_root_moved_starts_and_rewriting_it_refuses(
+def test_claude_configuration_with_root_moved_starts_and_still_starts_after_rewriting_it(
     project: Path, tmp_path: Path,
 ) -> None:
-    """Only ``root`` has to move; ``configuration --write`` puts it back and the host refuses again."""
-    material = adoption_material(project, Path(sys.executable))
-    write_adoption(material)
+    """Only ``root`` has to move, and ``configuration --write`` keeps it, so the host starts again."""
+    write_adoption(adoption_material(project, Path(sys.executable)))
     config = project / '.agents-control' / 'claude-host.json'
     document = json.loads(config.read_text())
     assert document['root'] == str(project.resolve() / '.agents-control')
@@ -329,9 +328,11 @@ def test_claude_configuration_with_root_moved_starts_and_rewriting_it_refuses(
     assert 'did not start' not in answer, answer
     assert not (project / '.agents-control' / 'host-refusal.json').exists()
 
-    write_adoption(material)
-    answer = json.loads(serve_claude_host(config, project))['error']
-    assert answer['code'] == 'invalid-config' and str(project.resolve()) in answer['message'], answer
+    write_adoption(adoption_material(project, Path(sys.executable)))
+    assert json.loads(config.read_text())['root'] == str(tmp_path / 'data')
+    answer = serve_claude_host(config, project)
+    assert 'did not start' not in answer, answer
+    assert not (project / '.agents-control' / 'host-refusal.json').exists()
 
 
 def build(kind: str, project: Path, root: Path, entry: dict) -> None:

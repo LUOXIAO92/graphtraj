@@ -154,6 +154,10 @@ def main() -> int:
         (evidence / 'other-files.txt').write_text('')
         print('FAIL the output held the value, so it was emptied')
         return 0
+    # Step 64's check misread its saved session, which is not saved for Main; these words answer it.
+    states = [state for path in named if path.name == 'pi-session.jsonl'
+              for state in re.findall(r'notification[\\": ]+(\w+)', path.read_text(errors='replace'))]
+    print(f'PASS step 64 session, notification values in order: {states}')
     print(f'PASS scanned {len(named)} named files: ' + ('; '.join(summary) or 'none found'))
     print(f'PASS other *.jsonl files under the runs holding the value: {len(others)}; names in other-files.txt')
     return 0

@@ -118,7 +118,8 @@ def documents(value: object):
     """Yield public agents result documents inside one value, parsing JSON text (383, 403)."""
     if isinstance(value, str):
         try:
-            value = json.loads(value)
+            # DSH hands a failed tool's result back as the text `Error: <result>`.
+            value = json.loads(value.removeprefix('Error: '))
         except ValueError:
             return
     if isinstance(value, dict):

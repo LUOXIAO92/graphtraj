@@ -157,27 +157,31 @@ def ask_parent(runtime: str) -> None:
     instruction = ('Use the agents tool (the MCP server agents) once, with exactly these arguments: '
                    + call('ask_parent', kind='decision', question='Which colour should this check use?', timeout_seconds=300)
                    + ' Then reply with exactly: COLOUR=<the answer field>. Use no other tool.')
-    turn = host.turn(name, script_prompt([
-        call('create', runtime=runtime, model=model, reasoning_effort=effort, instruction=instruction),
-        wait_call(seconds=300),
-        call('requests', agent='<agent from 1>'),
-        '{"action":"execute","feature":"reply","arguments":{"agent":"<agent from 1>","request":<the first request document '
-        'from call 3, unchanged>,"response":{"answer":"BLUE392"}}}',
-        wait_call(seconds=300),
-    ]))
+    reply = ('{{"action":"execute","feature":"reply","arguments":{{"agent":"<agent from 1>","request":<the first request document '
+             'from call {source}, unchanged>,"response":{response}}}}}')
+    calls = [call('create', runtime=runtime, model=model, reasoning_effort=effort, instruction=instruction),
+             wait_call(seconds=300),
+             call('requests', agent='<agent from 1>')]
+    source = 3
+    if runtime == 'claude':
+        # Under this step's permission_mode default, Claude asks before running even its own agents
+        # tool (4.1), so a native prompt comes first; the parent allows it, then the decision comes.
+        calls += [reply.format(source=3, response='{"behavior":"allow"}'), wait_call(seconds=300),
+                  call('requests', agent='<agent from 1>')]
+        source = 6
+    calls += [reply.format(source=source, response='{"answer":"BLUE392"}'), wait_call(seconds=300)]
+    turn = host.turn(name, script_prompt(calls))
     created = turn.created(runtime)
     if created is None:
         check('FAIL', f'{name}: no child; see {name}.stdout')
         return
     agent = created['agent']
-    requests = next(((d.get('result') or {}).get('requests') for d in turn.of('requests', agent)
-                     if (d.get('result') or {}).get('requests')), []) or []
-    method = requests[0].get('method') if requests else None
-    judge(method == 'agents/decision', f'{name} the child asks through ask_parent', f'requests method {method}')
+    methods = [item.get('method') for d in turn.of('requests', agent) for item in (d.get('result') or {}).get('requests') or []]
+    judge('agents/decision' in methods, f'{name} the child asks through ask_parent', f'requests methods {methods}')
     replies = [d for d in turn.of('reply', agent) if not error_code(d)]
     judge(bool(replies), f'{name} the parent answers once with reply', [(d.get('result') or {}).get('reply_status') for d in replies])
     told = [notice for notice in host.notices_of(agent) if notice['event'] == 'request']
-    judge(len(told) == 1, f'{name} the permission request notifies the parent once', [notice['id'] for notice in told])
+    judge(len(told) == (2 if runtime == 'claude' else 1), f'{name} each permission request notifies the parent once', [notice['id'] for notice in told])
     count = shown_count(host, [turn], agent, 'BLUE392')
     judge(count == 1, f'{name} the child goes on with the answer and its answer reaches the parent once', f'COLOUR=BLUE392 shown {count}')
     host.keep_data()
@@ -334,8 +338,8 @@ def layer_workspace() -> None:
     host = Host('claude', name, {'claude': None}, {'connections': {'local-claude': connection('claude')}})
     turn = host.turn(name, script_prompt([
         call('create', runtime='claude', model=CLAUDE_MODEL, reasoning_effort='low', workspace=str(assigned),
-             instruction=f'First state your working directory in one line starting PWD=. Then use your Read tool on {secret} '
-                         'once. If it is refused, reply REFUSED. Otherwise reply with its first line. Do not work around a refusal.'),
+             instruction=f'Use your Read tool on {secret} once. Do not work around a refusal. Your final reply is one line: '
+                         'PWD=<your working directory> READ=<REFUSED if it was refused, otherwise the first line of the file>.'),
         wait_call(),
         call('status', agent='<agent from 1>'),
         call('create', runtime='claude', workspace=str(outside), instruction='Reply OK.'),
@@ -859,7 +863,8 @@ def steer() -> None:
     judge(grand is not None and grand.get('parent') == parent, f'{name} the grandchild\'s parent is the Pi child', grand and grand.get('parent'))
     notifications = [(item.get('last_result') or {}).get('notification') for snapshot in statuses for item in snapshot]
     judge(bool(notifications) and notifications[-1] == 'delivered', f'{name} the end stays delivered after the Pi parent is stopped', notifications)
-    native = list((host.data / 'native' / parent).rglob('*.jsonl'))
+    # One file reached through a link counts once.
+    native = sorted({path.resolve() for path in (host.data / 'native' / parent).rglob('*.jsonl')})
     text = ''.join(path.read_text(errors='replace') for path in native)
     marker = f'→ {parent}]' if grand is None else f"[agents · {grand['agent']} → {parent}]"
     seen = sum(line.count(marker) for line in text.splitlines() if '"role":"user"' in line or '"role": "user"' in line)
@@ -969,11 +974,16 @@ def stuck(kind: str, how: str) -> None:
             os.kill(child, signal.SIGSTOP)
             return
         # Another process holding the record lock past the host's deadline: a blocked call in the stop
-        # path. Taken after the parent's wait has returned, because that wait needs the same lock, and
-        # released after LOCK_SECONDS so that a host with no bound on the call still ends here. The
-        # parent's discover calls take no record lock and keep it running past this moment.
-        time.sleep(28)
-        agents = list((host.data / 'control' / 'agents').glob('*.json'))
+        # path. Taken once create has returned to the parent, because create needs the same lock (Codex
+        # shows nothing on stdout, so it gets the 12 seconds), and released after LOCK_SECONDS so that
+        # a host with no bound on the call still ends here. This case's parent calls no wait: its
+        # discover calls take no record lock and keep it running past this moment.
+        agents = []
+        for _ in range(12):
+            agents = list((host.data / 'control' / 'agents').glob('*.json'))
+            if agents and agents[0].stem in (OUT / f'{name}-1.stdout').read_text(errors='replace'):
+                break
+            time.sleep(1)
         if not agents or process.poll() is not None:
             return
         lock_file = host.data / 'live' / 'agents' / f'{agents[0].stem}.lock'
@@ -986,8 +996,7 @@ def stuck(kind: str, how: str) -> None:
     first = host.turn(name + '-1', script_prompt([
         call('create', runtime='claude', model=CLAUDE_MODEL, reasoning_effort='low',
              instruction=SLEEP.format(seconds=500, answer='SLEPT')),
-        wait_call(seconds=20),
-        *['{"action":"discover"}'] * 6,
+        *([wait_call(seconds=20), *['{"action":"discover"}'] * 6] if how == 'stopped' else ['{"action":"discover"}'] * 12),
     ], 'Do not call anything else. Reply with one line and stop.'), limit=360, during=make_stuck)
     server = facts.get('server')
     for _ in range(40):

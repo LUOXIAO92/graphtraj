@@ -36,7 +36,7 @@ if (( ${#SESSION} )); then
   NOTICES=$(grep -c 'agents notice from' $OUT/pi-session.jsonl || true)
   grep -q 'graphtraj:agent-communication' $OUT/pi-session.jsonl && check PASS "pi.md: a notice message appears in the Session ($NOTICES lines naming it); status below" \
     || check FAIL "pi.md: no agents notice in the Session; read pi-session.jsonl"
-  grep -q '"notification":"delivered"\|notification\\":\\"delivered' $OUT/pi-session.jsonl \
+  grep -Eq 'notification[\\": ]+delivered' $OUT/pi-session.jsonl \
     && check PASS "pi.md: status shows notification delivered" || check FAIL "pi.md: status did not show notification delivered"
 else
   check FAIL "pi.md: no Session file in $WORK/sessions"

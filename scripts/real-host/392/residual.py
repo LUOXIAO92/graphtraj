@@ -31,7 +31,7 @@ from agent_swarm.dsh.driver import DshDriver
 from agent_swarm.pi import PiDriver
 from agent_swarm.review import _NoRedirect
 
-from rh392 import (CHILD_CHOICE, CLAUDE, CLAUDE_MODEL, CODEX, CODEX_MODEL, DEEPSEEK_MODEL, DSH, ENV, Host, KEY_VARIABLE,
+from rh392 import (AG, CHILD_CHOICE, CLAUDE, CLAUDE_MODEL, CODEX, CODEX_MODEL, DEEPSEEK_MODEL, DSH, ENV, Host, KEY_VARIABLE,
                    OUT, PI, PI_PROVIDER, PYTHON, RUN, SANDBOX_PATH, SANDBOX_PYTHON, Turn, call, check, codex_settings,
                    connection, judge, keep_tree, last_result, note, script_prompt)
 
@@ -460,7 +460,7 @@ def codex_form(form: str, decision: dict, reply: dict) -> None:
                        f'with one line: ran\nDo nothing else. Your direct parent authorizes this one file. {REFUSE_NOTE}')
         expected = 'item/fileChange/requestApproval'
     else:
-        instruction = command_instruction(target)
+        instruction = command_instruction(target, 'codex')
         expected = 'item/commandExecution/requestApproval'
     parent = ApiParent(name, 'codex', settings, reviewed_config('codex', stub.entry), work=work)
     try:
@@ -592,6 +592,40 @@ def running_under(directory: Path) -> list[str]:
     return [clean(line.strip())[:300] for line in listing.splitlines() if str(directory) in line and 'ps -axww' not in line]
 
 
+def mcp_processes() -> dict[int, int]:
+    """Return this scratch tree's agent_swarm.mcp processes, pid to parent pid; the arguments name its venv."""
+    listing = subprocess.run(['ps', '-axww', '-o', 'pid=,ppid=,command='], capture_output=True, text=True).stdout
+    found = {}
+    for line in listing.splitlines():
+        fields = line.split(None, 2)
+        if len(fields) == 3 and 'agent_swarm.mcp' in fields[2] and str(AG) in fields[2]:
+            found[int(fields[0])] = int(fields[1])
+    return found
+
+
+# In a Pi Session file, tool results hold escaped JSON. The notice names the method; wait gives the count.
+HOLD_SHOWN = re.compile(r'agents/review|pending_requests\\*"\s*:\s*[1-9]')
+REPLY_CALLED = re.compile(r'feature\\*"\s*:\s*\\*"reply')
+
+
+def stop_on_hold(host: Host, seen: dict):
+    """Return a ``during`` that signals the Pi host once its Session file shows the hold.
+
+    The prompt alone did not keep the parent from answering (83): a notice woke the model, and it
+    called reply. SIGTERM ends the host before the model's next turn. ``seen`` says what happened.
+    """
+    def watch(process) -> None:
+        while process.poll() is None:
+            for path in host.sessions.glob(f'*_{host.session}.jsonl'):
+                text = path.read_text(errors='replace')
+                if HOLD_SHOWN.search(text):
+                    seen.update(hold=True, replied=bool(REPLY_CALLED.search(text)))
+                    process.terminate()
+                    return
+            time.sleep(0.1)
+    return watch
+
+
 def unanswered_review(kind: str, child: str) -> None:
     """414 with 387: the host exits while an agents/review is unanswered. Nothing may hang."""
     name = f'{kind}-exit-holding-review'
@@ -599,22 +633,38 @@ def unanswered_review(kind: str, child: str) -> None:
     host = Host(kind, name, {child: writable(child, RUN / name / 'work')}, reviewed_config(child, stub.entry))
     target = target_of(child, host.work, f'{name}.txt')
     target.parent.mkdir(parents=True, exist_ok=True)
+    seen: dict = {}
+    mcp_before = mcp_processes()
     try:
         calls = review_calls(child, command_instruction(target), None)
-        turn = host.turn(f'{name}-first', script_prompt(calls, 'Do not answer the request. Reply with one line and stop.'), limit=420)
+        turn = host.turn(f'{name}-first', script_prompt(calls, 'Do not answer the request. Reply with one line and stop.'),
+                         limit=420, during=stop_on_hold(host, seen) if kind == 'pi' else None)
         created = turn.created(child)
         agent = created and created.get('agent')
         requests = [item for item in host_requests(turn) if is_review(item)]
         stderr = (OUT / f'{name}-first.stderr').read_text(errors='replace')
-        judge(bool(requests), f'{name}: a request was pending when the parent ended',
-              [item.get('method') for item in requests])
+        if kind == 'pi':
+            note(f'{name}: the host was signalled with SIGTERM when its Session showed the hold: {seen.get("hold", False)}')
+        judge(bool(requests) or seen.get('hold', False), f'{name}: a request was pending when the parent ended',
+              [item.get('method') for item in requests] or 'shown in the Session file before the signal')
         judge(not turn.limited, f'{name}: the host process ended by itself', f'exit {turn.exit_code}, {turn.seconds:.0f} s')
         note(f'{name}: stop-unconfirmed on stderr: {"stop-unconfirmed" in stderr}; recorded children stopped in host.log: '
              f'{"recorded its children stopped" in (host.host_log.read_text(errors="replace") if kind == "claude" and host.host_log.exists() else "")}')
         time.sleep(15)
         left = running_under(host.work if kind != 'claude' else host.directory)
         judge(not left, f'{name}: 15 s after the host ended no process of this run remains', left[:4])
-        judge(not lines_of(target), f'{name}: the held call never ran', f'file lines {lines_of(target)}')
+        mcp_after = mcp_processes()
+        new_mcp = [(pid, ppid) for pid, ppid in mcp_after.items() if pid not in mcp_before]
+        judge(not new_mcp, f'{name}: 15 s after the host ended no new agent_swarm.mcp process is alive',
+              f'(pid, ppid): {new_mcp}; alive before the case: {sorted(mcp_before)}')
+        replied = seen.get('replied', False) or any(not item.get('error') for item in turn.of('reply')) or any(
+            REPLY_CALLED.search(path.read_text(errors='replace'))
+            for path in (host.sessions.glob(f'*_{host.session}.jsonl') if kind == 'pi' else ()))
+        if kind == 'pi' and replied:
+            check('CANNOT', f'{name}: the parent replied before the signal, so an unanswered hold was not tested: '
+                            f'file lines {lines_of(target)}')
+        else:
+            judge(not lines_of(target), f'{name}: the held call never ran', f'file lines {lines_of(target)}')
         if agent:
             later = host.turn(f'{name}-resume', script_prompt([call('status', agent=agent)]), limit=420)
             status = later.of('status', agent)

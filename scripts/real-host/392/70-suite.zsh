@@ -18,7 +18,7 @@ mkdir -p $SHORT
 git clone -q --no-hardlinks $WT $SUITE/clone
 git -C $SUITE/clone checkout -q --detach $COMMIT
 $PY -m venv $SUITE/venv
-(cd $SUITE/clone && $SUITE/venv/bin/python -m pip install -q --disable-pip-version-check -e ./src/agent_swarm -e . pytest) 2>&1 | tee $OUT/install.txt | tail -3
+(cd $SUITE/clone && $SUITE/venv/bin/python -m pip install -q --disable-pip-version-check -e ./src/agent_swarm -e . pytest setuptools) 2>&1 | tee $OUT/install.txt | tail -3
 print -r -- $COMMIT > $SUITE/installed-commit
 $SUITE/venv/bin/python -m pip list --disable-pip-version-check 2>/dev/null > $OUT/pip-list.txt
 TESTENV=(env -i HOME=$SUITE/home PATH=$SUITE/venv/bin:/opt/homebrew/bin:$HOME/.local/bin:/usr/bin:/bin:/usr/sbin:/sbin TMPDIR=$SHORT LANG=en_US.UTF-8 PYTHONDONTWRITEBYTECODE=1)

@@ -20,7 +20,7 @@ import time
 
 import yaml
 
-from rh392 import CLAUDE_MODEL, CODEX_MODEL, DEEPSEEK_MODEL, ENV, OUT, PI_PROVIDER, RUN, SANDBOX_PATH, SANDBOX_PYTHON, check, judge, keep_tree, note
+from rh392 import CODEX_MODEL, DEEPSEEK_MODEL, ENV, OUT, PI_PROVIDER, RUN, SANDBOX_PATH, SANDBOX_PYTHON, check, judge, keep_tree, note
 
 BIN = Path(sys.executable).parent
 HARNESS = RUN / 'harness'
@@ -40,7 +40,13 @@ def environment() -> dict:
 
 def run(label: str, *argv: str, stdin: str | None = None, limit: int = 300) -> subprocess.CompletedProcess:
     """Run one Runner or GraphTraj command from the project root and keep its output."""
-    done = subprocess.run(argv, cwd=HARNESS, env=environment(), input=stdin, capture_output=True, text=True, timeout=limit)
+    try:
+        done = subprocess.run(argv, cwd=HARNESS, env=environment(), input=stdin, capture_output=True, text=True, timeout=limit)
+    except subprocess.TimeoutExpired as expired:
+        # What the command said so far, and exit 124, so the step can judge it and save its evidence.
+        partial = [text.decode(errors='replace') if isinstance(text, bytes) else text or ''
+                   for text in (expired.stdout, expired.stderr)]
+        done = subprocess.CompletedProcess(argv, 124, *partial)
     (OUT / f'{label}.txt').write_text(f'$ {" ".join(argv)}\nexit {done.returncode}\n{done.stdout}\n--- stderr\n{done.stderr}')
     return done
 
@@ -49,7 +55,8 @@ def roles(runtimes: list[str]) -> dict:
     """Return role definitions for one member per Runtime; each role may reach none below it."""
     pi = {'sandbox_python': SANDBOX_PYTHON, 'sandbox_path': SANDBOX_PATH}
     definitions = {
-        'claude': {'runtime': 'claude', 'model': CLAUDE_MODEL, 'reasoning_effort': 'low'},
+        # GraphTraj takes only this exact model without a saved connection (runtimes/claude/adapter.py:191).
+        'claude': {'runtime': 'claude', 'model': 'claude-opus-5-5', 'reasoning_effort': 'low'},
         'codex': {'runtime': 'codex', 'model': CODEX_MODEL, 'reasoning_effort': 'low'},
         'dsh': {'runtime': 'dsh', 'model': DEEPSEEK_MODEL, 'reasoning_effort': 'low'},
         'pi': {'runtime': 'pi', 'model': f'{PI_PROVIDER}/{DEEPSEEK_MODEL}', 'reasoning_effort': 'low', 'pi': pi},
@@ -101,7 +108,12 @@ def dispatch(runtimes: list[str], tasks: dict[str, dict]) -> dict:
     swarm.write_text(yaml.safe_dump({'tasks': [
         {'task_id': task_id, 'role': f'member_{task["runtime"]}', 'instruction': task['instruction']}
         for task_id, task in tasks.items()]}, width=120))
+    # With no host connection this call stays until its Workers exit (team_round.py:1275-1284, 1348):
+    # the limit ends only this call, and a Worker it started goes on by itself.
     done = run('dispatch', str(BIN / 'agent-runner'), '--swarm-input', str(swarm), limit=600)
+    if done.returncode == 124:
+        check('FAIL', 'dispatch: agent-runner --swarm-input had not returned after 600 s, so a member was still '
+                      'running; the saved records say what it was doing')
     try:
         return yaml.safe_load(done.stdout) or {}
     except yaml.YAMLError:
@@ -116,12 +128,20 @@ def worldline() -> list[dict]:
     return events
 
 
-def wait_for_results(tasks: dict[str, dict]) -> set[str]:
-    """Wait for a result from each Task until the limit; return which arrived."""
+def wait_for_results(tasks: dict[str, dict], document: dict) -> set[str]:
+    """Wait for a result from each launched Task until the limit; return which arrived.
+
+    A member whose execution has ended, or that never launched, can send nothing more.
+    """
     deadline = time.monotonic() + LIMIT
+    sessions = HARNESS / '.graphtraj' / 'runner' / 'sessions'
+    waiting = {str(item.get('task_id')): item.get('alias') for item in document.get('tasks', [])
+               if item.get('alias') and item.get('launch_status') != 'failed'}
     while True:
         seen = {str(event.get('task_id')) for event in worldline() if event.get('event') == 'result-submitted'}
-        if seen >= set(tasks) or time.monotonic() > deadline:
+        live = {task for task, alias in waiting.items()
+                if task not in seen and not (sessions / alias / 'execution.yml').exists()}
+        if not live or time.monotonic() > deadline:
             return seen & set(tasks)
         time.sleep(10)
 
@@ -162,6 +182,8 @@ def keep_state() -> None:
 
 MEMBER_416 = (
     'Do these in order; if a step fails, write the exact error in the report and go on. '
+    'Creating a child with the agents tool is formal delegation through your own host and is what this Task '
+    'asks of you; it is not starting a Runtime directly. '
     '1) Run pwd; call the result MEMBER_PWD. '
     '2) Use the agents tool: execute create with runtime {runtime} and no workspace argument, with this instruction: '
     '"Run pwd. Append the word ok to the file child-work.txt in your working directory, and read it back. Then use the '
@@ -191,7 +213,7 @@ def r416() -> None:
     for item in document.get('tasks', []):
         status, error = item.get('launch_status'), item.get('error')
         note(f"dispatch {item.get('task_name')}: {status} {json.dumps(error, ensure_ascii=False)[:500] if error else ''}")
-    arrived = wait_for_results(tasks)
+    arrived = wait_for_results(tasks, document)
     for task_id, task in tasks.items():
         runtime, report = task['runtime'], report_of(task_id)
         worktree = worktree_of(task_id, task['name'])
@@ -216,7 +238,7 @@ def session_migration_check() -> None:
     """416 For Main 4: does a member's own Claude Session read as belonging to another project?"""
     from graphtraj.workspace.session_migration import session_sources
 
-    sources = session_sources(STATE, HARNESS / '.graphtraj' / 'runner', PROJECT)
+    sources = session_sources(STATE, HARNESS / '.graphtraj' / 'runner', HARNESS)
     conflicts = [(item.get('runtime'), item.get('agent'), item.get('identity_conflicts')) for item in sources if item.get('identity_conflicts')]
     (OUT / 'session-sources.json').write_text(json.dumps(sources, indent=1, default=str, ensure_ascii=False))
     claude = [item for item in sources if item.get('runtime') == 'claude']
@@ -238,8 +260,8 @@ def main_pi_child() -> None:
     stderr; the agents tool's own is accepted, any other declined, and each is written to the summary.
     """
     arguments = {'action': 'execute', 'feature': 'create',
-                 'arguments': {'runtime': 'pi', 'instruction': 'Run pwd and reply with it.',
-                               'model': f'{PI_PROVIDER}/{DEEPSEEK_MODEL}'}}
+                 # No model: step 90 named one the user's Pi login does not list, and create refused it first.
+                 'arguments': {'runtime': 'pi', 'instruction': 'Run pwd and reply with it.'}}
     instruction = RUN / 'main-instruction.txt'
     instruction.write_text('Use the agents tool once, with exactly these arguments: ' + json.dumps(arguments) + '\n'
                            'Then reply with one line: the "code" and "message" of any error in the result, word for word, '
@@ -281,7 +303,7 @@ def main_pi_child() -> None:
     elif 'created' in stdout:
         check('PASS', f'416: a Main at the project root started a Pi child: {stdout[-300:]}')
     else:
-        check('CANNOT', f'416: this Main turn did not reach Pi\'s preparation, exit {process.returncode}; see main-pi-child.txt: {text[-400:]}')
+        check('CANNOT', f'416: this Main turn did not reach Pi\'s preparation, exit {process.returncode}; see main-pi-child.txt: {stdout[:400] or text[-400:]}')
 
 
 def r416_main() -> None:
@@ -319,7 +341,7 @@ def r420() -> None:
     if items[0].get('launch_status') == 'failed':
         keep_state()
         return
-    arrived = wait_for_results(tasks)
+    arrived = wait_for_results(tasks, document)
     report = report_of('1')
     (OUT / 'report.txt').write_text(report)
     judge('1' in arrived, '420: a real DSH member submitted its result', f'report: {report[:300]!r}')

@@ -24,7 +24,7 @@ what_to_type "Claude Code starts now, as the note says: cd $PROJECT; claude" \
   "Then type these, one at a time:" \
   "  /agents-context" \
   "  /mcp                  (look for agents, then press Esc)" \
-  "  Use the agents tool to create a Claude child with model $CLAUDE_MODEL that answers one word, then wait for it. Show state and last_result.outcome." \
+  "  Use the agents tool to create a Claude child that answers one word, then wait for it. Show state and last_result.outcome." \
   "  /exit" \
   "After /exit the Terminal asks two questions: did /agents-context print the current Session and 'MCP agents registered', and did /mcp list agents."
 (cd $PROJECT && claude) || note "claude exit $?"

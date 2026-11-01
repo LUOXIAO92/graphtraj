@@ -6,6 +6,7 @@
 #
 # Running the same command again continues: a step already finished at this commit is skipped.
 # `--from <step>` starts at that step and runs it even if it is finished.
+# `--despite-dsh`, alone or before `--from <step>`, starts even if step 00's only FAIL lines start `FAIL dsh answers`.
 # native review dialog: none from this command; each step prints its own line, and all of them say none.
 # Nothing to type. Keep the Mac on power with its lid open: caffeinate stops idle sleep, not a closed lid.
 source /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/392-agents-standalone-combined-acceptance/scripts/real-host/392/common.zsh
@@ -17,10 +18,20 @@ need_clean() {
   local saved=$REALHOST/$1
   [[ -f $saved/summary.txt ]] || fail "realhost/$1 has no result; run first: zsh $HERE/$1.zsh"
   grep -q "code $COMMIT " $saved/run.txt 2>/dev/null || fail "realhost/$1 is for other code; run again: zsh $HERE/$1.zsh"
-  if grep -q '^FAIL ' $saved/summary.txt; then
+  local failing=$(grep '^FAIL ' $saved/summary.txt || true)
+  if [[ $1 == 00-preflight && -n $DESPITE_DSH ]]; then
+    failing=${(F)${${(f)failing}:#FAIL dsh answers*}}
+  fi
+  if [[ -n $failing ]]; then
     fail "realhost/$1/summary.txt has a FAIL line; tell Main, or fix it and run again: zsh $HERE/$1.zsh"
   fi
 }
+DESPITE_DSH=
+if [[ ${1:-} == --despite-dsh ]]; then
+  DESPITE_DSH=1
+  shift
+  print -r -- "--despite-dsh: a FAIL dsh answers line in step 00 is ignored; DSH-host steps are expected to FAIL."
+fi
 need_clean 00-preflight
 need_clean 01-install
 need_claude_project

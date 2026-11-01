@@ -33,7 +33,7 @@ cat > $PATCH_FILE <<PATCH
     - id: agents-host
       name: $DSH_PACKAGE/plugin.mjs
 PATCH
-PROMPT="Use the agents tool to create a Claude child with model $CLAUDE_MODEL that answers one word, and wait for it with timeout_seconds 240 before ending the task. Then read its status. Reply with one line."
+PROMPT="Use the agents tool to create a Claude child that answers one word, and wait for it with timeout_seconds 240 before ending the task. Then read its status. Reply with one line."
 ROUTE=(); [[ -n $ADDED ]] || ROUTE=(--patch $PATCH_FILE)
 say "the start line as written, on an empty DSH home with the key only in the environment"
 CODE=0

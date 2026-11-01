@@ -26,10 +26,25 @@ AG = Path(os.environ['AGENTS_392_AG'])
 REALHOST = Path(os.environ['AGENTS_392_REALHOST'])
 COMMIT = os.environ['AGENTS_392_COMMIT']
 FROM = os.environ.get('AGENTS_392_FROM')
-OWN = REALHOST / 'run-unattended'
+RERUN = bool(os.environ.get('AGENTS_392_RERUN'))
+OWN = REALHOST / ('run-rerun' if RERUN else 'run-unattended')
 # Only the dry run sets these: a short limit, and a directory for a step that exists only there.
 DRY_LIMIT = os.environ.get('AGENTS_392_DRY_LIMIT_SECONDS')
 DRY_STEPS = os.environ.get('AGENTS_392_DRY_STEP_DIR')
+
+
+def rerun_start() -> str:
+    """Return this rerun's start time; it is kept, so running again continues, until ``--restart``."""
+    record = OWN / 'started.txt'
+    if os.environ.get('AGENTS_392_RESTART') or not record.is_file():
+        OWN.mkdir(parents=True, exist_ok=True)
+        (OWN / 'elapsed.json').unlink(missing_ok=True)
+        record.write_text(time.strftime('%Y%m%dT%H%M%S') + '\n')
+    return record.read_text().strip()
+
+
+# A result older than this does not count as finished. Empty outside a rerun, so nothing is older.
+SINCE = rerun_start() if RERUN else ''
 
 
 def step_file(step: str) -> Path:
@@ -51,6 +66,7 @@ def finished(step: str) -> bool:
     saved = REALHOST / step
     record = saved / 'run.txt'
     return (record.is_file() and f'code {COMMIT} ' in record.read_text(errors='replace')
+            and record.read_text(errors='replace').split()[-1] >= SINCE
             and ((saved / 'finished.txt').is_file() or (saved / 'limit.txt').is_file()))
 
 
@@ -76,7 +92,8 @@ def write_summary(elapsed: dict) -> None:
         state = ('not run' if step not in elapsed and not finished(step) else
                  'limit' if (saved / 'limit.txt').is_file() else
                  'finished' if finished(step) else 'stopped early')
-        number = counts(step)
+        # In a rerun, an earlier result's counts are not this run's.
+        number = {'PASS': 0, 'FAIL': 0, 'CANNOT': 0} if RERUN and state == 'not run' else counts(step)
         minutes = f'{elapsed[step]:.1f}' if step in elapsed else '-'
         lines.append(f'{step}: {state}; PASS {number["PASS"]} FAIL {number["FAIL"]} CANNOT {number["CANNOT"]}; {minutes} min')
     temporary = OWN / 'summary.txt.tmp'
@@ -211,7 +228,7 @@ def main() -> int:
         write_summary(elapsed)
     print(f'\nSaved summary: {OWN / "summary.txt"}')
     print((OWN / 'summary.txt').read_text())
-    print('Tell Main the run is finished.', flush=True)
+    print('Tell Main the rerun is finished.' if RERUN else 'Tell Main the run is finished.', flush=True)
     return 0
 
 

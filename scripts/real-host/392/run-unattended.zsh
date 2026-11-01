@@ -7,6 +7,8 @@
 # Running the same command again continues: a step already finished at this commit is skipped.
 # `--from <step>` starts at that step and runs it even if it is finished.
 # `--despite-dsh`, alone or before `--from <step>`, starts even if step 00's only FAIL lines start `FAIL dsh answers`.
+# `--rerun`, alone or after `--despite-dsh`, runs the fixed rerun list below instead, even where a result
+# is finished; running it again continues, and `--rerun --restart` starts over. Its summary is realhost/run-rerun/.
 # native review dialog: none from this command; each step prints its own line, and all of them say none.
 # Nothing to type. Keep the Mac on power with its lid open: caffeinate stops idle sleep, not a closed lid.
 source /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/392-agents-standalone-combined-acceptance/scripts/real-host/392/common.zsh
@@ -37,6 +39,19 @@ need_clean 01-install
 need_claude_project
 load_key
 
+if [[ ${1:-} == --rerun ]]; then
+  shift
+  # Quick ones first, the suite and step 89 last, so a partial run still answers most.
+  UNATTENDED=(20-permission-requests 47-stuck-claude 49-stuck-pi 50-stuck-dsh 80-residual-386 81-residual-387-child
+              83-residual-387-exit 84-residual-391 86-residual-412 90-residual-416-main 70-suite 71-flaky 72-metadata
+              89-residual-416)
+  export AGENTS_392_RERUN=1
+  if [[ ${1:-} == --restart ]]; then
+    shift
+    export AGENTS_392_RESTART=1
+  fi
+  (( $# == 0 )) || fail "--rerun takes only --restart, got: $*"
+fi
 if [[ -n ${AGENTS_392_DRY_STEPS:-} ]]; then UNATTENDED=(${=AGENTS_392_DRY_STEPS}); fi
 if [[ ${1:-} == --from ]]; then
   (( ${UNATTENDED[(Ie)${2:-none}]} )) || fail "--from names no unattended step: ${2:-nothing}"

@@ -515,9 +515,10 @@ class Host:
 
 
 def keep_tree(source: Path, target: Path) -> None:
-    """Copy text records under ``source``; skip packages, ``auth.json`` and anything over 5 MB."""
+    """Copy text records under ``source``; skip packages, login files and anything over 5 MB."""
     for path in source.rglob('*') if source.exists() else []:
-        if (not path.is_file() or path.is_symlink() or 'node_modules' in path.parts or path.name == 'auth.json'
+        if (not path.is_file() or path.is_symlink() or 'node_modules' in path.parts
+                or path.name in ('auth.json', '.credentials.yaml')
                 or path.suffix not in ('.json', '.jsonl', '.log', '.yml', '.yaml', '.txt')
                 or path.stat().st_size > 5_000_000):
             continue

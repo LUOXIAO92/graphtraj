@@ -9,10 +9,10 @@ venv_check
 find_hosts
 PROJECT=$AG/walk-claude
 mkdir -p $PROJECT
-print -r -- ""
-print -r -- "Claude Code now starts in the empty project $PROJECT."
-print -r -- "Dialog: 'Do you trust the files in this folder?' -> choose 'Yes, proceed'. Then type /exit and press Enter."
+what_to_type "Claude Code now starts in the empty project $PROJECT." \
+  "Dialog: 'Do you trust the files in this folder?' -> choose 'Yes, proceed'." \
+  "Then type /exit and press Enter."
 (cd $PROJECT && $CLAUDE) || note "claude exit $?"
 touch $PROJECT/.trust-392-done
-check PASS "folder trust: $PROJECT"
+note "folder trust: the choice is not confirmed here; step 62's run shows it. $PROJECT"
 step_end

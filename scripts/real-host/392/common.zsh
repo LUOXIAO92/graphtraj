@@ -64,6 +64,20 @@ judge() {
   if [[ $1 == 0 ]]; then check PASS "$2"; else check FAIL "$2"; fi
 }
 
+# `what_to_type <line>...`: show what to type in its own window, where Claude Code's screen cannot
+# cover it, and wait for Enter. Call it just before Claude Code starts. The same as what_to_type in
+# rh392.py. The dry run has no window or person, so it only prints.
+what_to_type() {
+  local file=$OUT/what-to-type.txt answer
+  print -rl -- "$@" "" "This file stays open while you work. Return to the Terminal to type: Claude Code runs there." > $file
+  print -r -- ""
+  cat $file
+  [[ -z ${AGENTS_392_DRY_BIN:-} ]] || return 0
+  /usr/bin/open -e $file || note "what-to-type: the window did not open; read the lines above, or $file"
+  print -n -- "Press Enter to start Claude Code "
+  read -r answer || true
+}
+
 # Stop this step: the reason goes to the summary, the evidence so far is saved.
 fail() {
   print -r -- "STOP: $*" >&2
@@ -233,15 +247,23 @@ UNATTENDED=(10-matrix-claude 11-matrix-codex 12-matrix-pi 13-matrix-dsh 20-permi
             83-residual-387-exit 84-residual-391 85-residual-411-413 86-residual-412 87-residual-419
             88-graphtraj-venv 89-residual-416 90-residual-416-main 91-residual-420)
 
-# The command after this step in the fixed order. After the attended steps, and after any step of
-# the unattended part run by hand, it is the runner, which skips what is already finished.
+# Say whether a step holds a finished result for this code.
+step_finished() {
+  [[ -f $REALHOST/$1/finished.txt ]] && grep -q "code $COMMIT " $REALHOST/$1/run.txt 2>/dev/null
+}
+
+# The command after this step in the fixed order: the first later attended step with no finished
+# result for this code, so that valid steps are not redone. When none remains, and after any step
+# of the unattended part run by hand, it is the runner, which skips what is already finished.
 next_step() {
-  local index=${ATTENDED[(ie)$STEP]}
-  if (( index < ${#ATTENDED} )); then
-    print -r -- "zsh $HERE/$ATTENDED[index+1].zsh"
-  else
-    print -r -- "zsh $HERE/run-unattended.zsh"
-  fi
+  local index=${ATTENDED[(ie)$STEP]} step
+  for step in $ATTENDED[index+1,-1]; do
+    if ! step_finished $step; then
+      print -r -- "zsh $HERE/$step.zsh"
+      return 0
+    fi
+  done
+  print -r -- "zsh $HERE/run-unattended.zsh"
 }
 
 # End a step: mark it finished, save, show the summary and print the exact next command (given, or

@@ -25,7 +25,7 @@ import yaml
 from rh392 import (CHILD_CHOICE, CLAUDE, CLAUDE_MODEL, CLAUDE_PROJECT, DEEPSEEK_MODEL, ENV, Host, KEY_VARIABLE,
                    OUT, PI, PI_PROVIDER, PYTHON, RUN, RUNTIMES, SLEEP, alive, call, check, codex_settings,
                    connection, error_code, host_process, judge, keep_tree, last_result, note, script_prompt,
-                   shown_count)
+                   shown_count, what_to_type)
 
 WAIT = 240
 LOCK_SECONDS = 60
@@ -565,9 +565,9 @@ def idle_claude() -> None:
     """A Claude Main alive and idle receives a child's end as a pushed prompt, once (403)."""
     name = 'idle-claude'
     host = Host('claude', name, {'codex': None}, {'connections': {'local-codex': connection('codex')}})
-    print('\nClaude Code now starts with the prompt already sent. It creates a child and goes idle.', flush=True)
-    print('Type nothing. After about a minute a notice arrives by itself and it prints SEEN-NOTICE.', flush=True)
-    print('Then type /exit and press Enter. If nothing arrives within 4 minutes, type /exit anyway.', flush=True)
+    what_to_type('Claude Code now starts with the prompt already sent. It creates a child and goes idle.',
+                 'Type nothing. After about a minute a notice arrives by itself and it prints SEEN-NOTICE.',
+                 'Then type /exit and press Enter. If nothing arrives within 4 minutes, type /exit anyway.')
     prompt = script_prompt([call('create', runtime='codex', model=CHILD_CHOICE['codex'][0], reasoning_effort='low',
                                  instruction=SLEEP.format(seconds=40, answer='IDLE-PONG'))],
                            'Do not call wait or status. Then print exactly CREATED and stop. Later, when a message starting '
@@ -678,21 +678,80 @@ def esc() -> None:
         wait_call(seconds=280),
     ], 'Then print exactly DONE and stop.')
     (OUT / f'{name}.prompt.txt').write_text(prompt)
-    print('\nClaude Code now starts with the prompt already sent. It creates a child, then a long wait call runs.', flush=True)
-    print('When the screen shows the wait call running (about 30 s after the start), press Esc ONCE.', flush=True)
-    print('Then type /exit and press Enter. No dialog is expected.', flush=True)
+    what_to_type('Claude Code now starts with the prompt already sent. It creates a child, then a long wait call runs.',
+                 'Wait for one of these: a voice saying Press Escape now, or the line PRESS ESC NOW, or the moment the screen '
+                 'shows the agents tool call with wait running.',
+                 'Then press Esc ONCE, within 60 seconds. The wait does not stay open for long.',
+                 'Then type /exit and press Enter. No dialog is expected.')
+    done = threading.Event()
+    watcher = threading.Thread(target=announce_wait, args=(host, done), daemon=True)
+    watcher.start()
     interactive(host, name, prompt, '--mcp-config', str(host.work / '.mcp.json'), '--strict-mcp-config',
                 '--allowedTools', 'mcp__agents__agents')
+    done.set()
     log = (OUT / f'{name}.host.log').read_text(errors='replace') if (OUT / f'{name}.host.log').exists() else ''
     lines = [line for line in log.splitlines() if ' agents-call ' in line]
     (OUT / f'{name}.agents-call.txt').write_text('\n'.join(lines) + '\n')
     received = [line for line in lines if ' received ' in line and 'feature=wait' in line]
     cancelled = [line for line in lines if ' cancelled ' in line]
-    if not received:
-        check('CANNOT', f'{name} Esc: the wait call never reached the host; lines {lines[-4:]}')
+    pressed = interrupted_during_wait(host.transcript(name))
+    if not received or not pressed:
+        check('CANNOT', f'{name} Esc was not seen during the wait call, so this run says nothing about Esc; run step 43 again. '
+                        f'wait reached the host: {bool(received)}; interrupt record after it in the transcript: {pressed}; lines {lines[-4:]}')
     else:
         check('PASS', f'{name} the answer to "does Esc send notifications/cancelled": {"yes" if cancelled else "no"}: {cancelled or lines[-3:]}')
     host.keep_data()
+
+
+def announce_wait(host: Host, done: threading.Event) -> None:
+    """Tell the person to press Esc when host.log first shows the wait call; once only.
+
+    This watches the log's new text from before Claude Code starts. A voice or terminal that fails
+    changes nothing: the what-to-type file also names the screen as the sign.
+    """
+    start = host.host_log.stat().st_size if host.host_log.exists() else 0
+    while not done.wait(0.5):
+        if not host.host_log.exists():
+            continue
+        with host.host_log.open('rb') as log:
+            log.seek(start)
+            text = log.read().decode(errors='replace')
+        if any(' agents-call received ' in line and 'feature=wait' in line for line in text.splitlines()):
+            try:
+                subprocess.run(['/usr/bin/say', 'Press Escape now'], timeout=20)
+            except (OSError, subprocess.SubprocessError):
+                pass
+            try:
+                with open('/dev/tty', 'w') as terminal:
+                    terminal.write('\aPRESS ESC NOW\n')
+            except OSError:
+                pass
+            return
+
+
+def interrupted_during_wait(transcript: str) -> bool:
+    """Say whether Claude Code recorded the user's interrupt after the wait call started.
+
+    Its record is a user message with the text ``[Request interrupted by user for tool use]`` (seen in a
+    real transcript; the shorter ``[Request interrupted by user]`` also matches).
+    """
+    waiting = False
+    for line in transcript.splitlines():
+        try:
+            record = json.loads(line)
+        except ValueError:
+            continue
+        message = record.get('message') if isinstance(record, dict) else None
+        content = message.get('content') if isinstance(message, dict) else None
+        for item in content if isinstance(content, list) else []:
+            if not isinstance(item, dict):
+                continue
+            if item.get('type') == 'tool_use' and (item.get('input') or {}).get('feature') == 'wait':
+                waiting = True
+            if waiting and record.get('type') == 'user' and item.get('type') == 'text' \
+                    and str(item.get('text')).startswith('[Request interrupted by user'):
+                return True
+    return False
 
 
 # -- 406: SIGKILL the host while an Agent runs; the --resume start --------
@@ -734,9 +793,9 @@ def sigkill() -> None:
     time.sleep(15)
     if killed.get('runtime'):
         note(f"{name}: the child's Runtime pid {killed['runtime']} alive 15 s after the kill: {alive(killed['runtime'])}")
-    print('\nClaude Code now starts with --resume, using the project\'s own .mcp.json.', flush=True)
-    print("Dialog: 'New MCP server found in .mcp.json: agents' -> choose the option that uses this server. Any other dialog: press Esc.", flush=True)
-    print('Type nothing else until it prints DONE, then type /exit and press Enter.', flush=True)
+    what_to_type("Claude Code now starts with --resume, using the project's own .mcp.json.",
+                 "Dialog: 'New MCP server found in .mcp.json: agents' -> choose the option that uses this server. Any other dialog: press Esc.",
+                 'Type nothing else until it prints DONE, then type /exit and press Enter.')
     prompt = (f'Call mcp__agents__agents once with {call("status", agent=agent)}. Print the state and last_result.outcome on one line, '
               'then print one line DONE.')
     (OUT / f'{name}-2.prompt.txt').write_text(prompt)

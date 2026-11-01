@@ -95,6 +95,25 @@ def script_prompt(calls: list[str], tail: str = 'Then reply with one line and st
     return '\n'.join(lines)
 
 
+def what_to_type(*lines: str) -> None:
+    """Show what to type in its own window, where Claude Code's screen cannot cover it; wait for Enter.
+
+    The same as ``what_to_type`` in common.zsh. The dry run has no window or person, so it only prints.
+    """
+    file = OUT / 'what-to-type.txt'
+    shown = [*lines, '', 'This file stays open while you work. Return to the Terminal to type: Claude Code runs there.']
+    file.write_text('\n'.join(shown) + '\n')
+    print('\n' + '\n'.join(shown), flush=True)
+    if ENV.get('AGENTS_392_DRY_BIN'):
+        return
+    if subprocess.run(['/usr/bin/open', '-e', str(file)]).returncode != 0:
+        note(f'what-to-type: the window did not open; read the lines above, or {file}')
+    try:
+        input('Press Enter to start Claude Code ')
+    except EOFError:
+        pass
+
+
 def documents(value: object):
     """Yield public agents result documents inside one value, parsing JSON text (383, 403)."""
     if isinstance(value, str):
@@ -283,7 +302,7 @@ class Host:
         # The Main's own endpoint is named here, so DEEPSEEK_BASE_URL can stay set for the children
         # (411) and the Main's key goes only to this root. The value stays in the environment.
         patch.write_text(yaml.safe_dump([
-            {'id': 'llm-deepseek', 'config': {'apiKeyEnv': KEY_VARIABLE, 'baseURL': 'https://api.deepseek.com'}},
+            {'id': 'llm-deepseek', 'config': {'apiKeyEnv': KEY_VARIABLE, 'baseURL': 'https://api.deepseek.com/anthropic'}},
             {'insert': [{'id': 'agents-host', 'name': str(installed_package('dsh') / 'plugin.mjs')}]},
         ]))
         self.patch = patch

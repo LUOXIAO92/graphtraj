@@ -53,7 +53,7 @@ LOGIN=$($CODEX login status 2>&1 | tail -1) && check PASS "codex login: $LOGIN" 
 print -r -- $ASK > $PROBE_DIR/ask.txt
 print -n > $PROBE_DIR/empty.txt
 mkdir -p $PROBE_DIR/pi-home $PROBE_DIR/dsh-home
-print -rl -- '- id: llm-deepseek' '  config:' '    apiKeyEnv: DEEPSEEK_API_KEY' '    baseURL: https://api.deepseek.com' > $PROBE_DIR/dsh.patch.yml
+print -rl -- '- id: llm-deepseek' '  config:' '    apiKeyEnv: DEEPSEEK_API_KEY' '    baseURL: https://api.deepseek.com/anthropic' > $PROBE_DIR/dsh.patch.yml
 answers claude $PROBE_DIR/ask.txt $CLAUDE -p --model $CLAUDE_MODEL
 answers codex $PROBE_DIR/ask.txt $CODEX exec --skip-git-repo-check --ephemeral -s read-only -
 answers pi $PROBE_DIR/empty.txt env PI_CODING_AGENT_DIR=$PROBE_DIR/pi-home PI_SKIP_VERSION_CHECK=1 PI_TELEMETRY=0 \

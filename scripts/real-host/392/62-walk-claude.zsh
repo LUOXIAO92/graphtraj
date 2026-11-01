@@ -19,14 +19,14 @@ for file in .mcp.json .agents-control/claude-host.json .claude/settings.local.js
   [[ -f $PROJECT/$file ]] && check PASS "claude-code.md lists $file: written" || check FAIL "claude-code.md lists $file: not written"
 done
 cp .mcp.json $OUT/mcp.json; cp .agents-control/claude-host.json $OUT/claude-host.json
-print -r -- ""
-print -r -- "Claude Code starts now, as the note says: cd $PROJECT; claude"
-print -r -- "Dialog: the project MCP server prompt for 'agents' -> accept it."
-print -r -- "Then type these, one at a time:"
-print -r -- "  /agents-context"
-print -r -- "  /mcp                  (look for agents, then press Esc)"
-print -r -- "  Use the agents tool to create a Claude child with model $CLAUDE_MODEL that answers one word, then wait for it. Show state and last_result.outcome."
-print -r -- "  /exit"
+what_to_type "Claude Code starts now, as the note says: cd $PROJECT; claude" \
+  "Dialog: the project MCP server prompt for 'agents' -> accept it." \
+  "Then type these, one at a time:" \
+  "  /agents-context" \
+  "  /mcp                  (look for agents, then press Esc)" \
+  "  Use the agents tool to create a Claude child with model $CLAUDE_MODEL that answers one word, then wait for it. Show state and last_result.outcome." \
+  "  /exit" \
+  "After /exit the Terminal asks two questions: did /agents-context print the current Session and 'MCP agents registered', and did /mcp list agents."
 (cd $PROJECT && claude) || note "claude exit $?"
 print -r -- ""
 print -n -- "Did /agents-context print the current Session and 'MCP agents registered'? [y/n] "; read -r ANSWER_CONTEXT || ANSWER_CONTEXT=

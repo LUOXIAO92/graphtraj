@@ -16,11 +16,11 @@ mkdir -p $PROJECT
 if [[ -f $PROJECT/.trust-392-done ]]; then
   note "the project was trusted by an earlier run of this step"
 else
-  print -r -- ""
-  print -r -- "Claude Code now starts once in the empty project $PROJECT."
-  print -r -- "Dialog: 'Do you trust the files in this folder?' -> choose 'Yes, proceed'."
-  print -r -- "Then type /exit and press Enter. Send no message. Any other dialog: press Esc."
+  what_to_type "Claude Code now starts once in the empty project $PROJECT." \
+    "Dialog: 'Do you trust the files in this folder?' -> choose 'Yes, proceed'." \
+    "Then type /exit and press Enter. Send no message. Any other dialog: press Esc."
   (cd $PROJECT && $CLAUDE) || note "claude exit $?"
+  note "folder trust: the choice is not confirmed here; steps 40, 43 and 44 show it. $PROJECT"
 fi
 touch $PROJECT/.trust-392-done
 

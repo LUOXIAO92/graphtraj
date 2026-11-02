@@ -235,7 +235,11 @@ class DshExecution:
         patches = [
             {'id': 'hmr', 'disabled': True},
             {'id': 'session-persistence-jsonl', 'config': {'root': str(self.logs), 'compression': 'none'}},
-            {'id': 'sandbox-policy', 'config': {'mode': mode, 'workspaceRoot': self.request['worktree_path']}},
+            {'id': 'sandbox-policy', 'config': {
+                'mode': mode, 'workspaceRoot': self.request['worktree_path'],
+                **({'additionalWritableRoots': self.request['additional_writable_roots']}
+                   if self.request.get('additional_writable_roots') else {}),
+            }},
             {'id': 'permission', 'config': {
                 'presets': {mode: {'sandbox': mode, 'approval': 'ask'}}, 'defaultPreset': mode,
             }},

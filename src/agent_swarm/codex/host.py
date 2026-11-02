@@ -35,7 +35,16 @@ from agent_swarm.runtime import RuntimeAdapterError
 from agent_swarm.shutdown import exit_if_owned_unconfirmed, stop_owned
 from .app_server import CodexServerRequest
 from .driver import CodexDriver
-from .managed_session import CodexManagedExecution
+from .managed_session import MCP_SERVER, CodexManagedExecution
+
+# Added to the parent only, after the user's own text: the model also has Codex's
+# native spawn_agent, which literally does what "create a child" asks (432).
+GUIDANCE = (
+    f'The MCP tool `agents` (`mcp__{MCP_SERVER}__agents`) is how this host creates and controls child Agents. '
+    'Use it when asked for a child, a subagent or the agents tool. '
+    "Codex's own `spawn_agent` and related tools put a child outside agents' hierarchy, approvals and records; "
+    'use those only when the user names them.'
+)
 
 
 def _claude(settings: dict, cwd: Path, root: Path) -> object:
@@ -94,6 +103,9 @@ class CodexHost(CodexManagedExecution):
         others = runtime_drivers(settings, directory)
         driver = CodexDriver(settings)
         settings = driver.prepare('codex', Caller('codex', None))
+        # ``prepare`` returned a copy, so children keep the user's own text.
+        parameters = settings['adapter_request']['session_parameters']
+        parameters['developerInstructions'] = '\n\n'.join(filter(None, (parameters['developerInstructions'], GUIDANCE)))
         expected = None
         if resume:
             previous = yaml.safe_load((native / 'session.yml').read_text())
@@ -106,6 +118,8 @@ class CodexHost(CodexManagedExecution):
         self.authentications: list[dict] = []
         self.calls: list[dict] = []
         self.deliveries: list[dict] = []
+        # Codex's own subagents the parent started, by native item.
+        self.native_subagents: dict[str, dict] = {}
         # The Agents the last ``run`` could not confirm stopped.
         self.stop_unconfirmed: list[str] = []
         super().__init__(settings['adapter_request'], instruction, native,
@@ -133,11 +147,45 @@ class CodexHost(CodexManagedExecution):
         print(json.dumps({'parent_session': session, 'service_pid': pid,
                           'source': 'thread/resume' if self.expected_session else 'thread/start'},
                          ensure_ascii=False), file=sys.stderr, flush=True)
+        for entry in self.native_subagents.values():
+            self._print_native_subagent(entry)
         if self.expected_session:
             # As an operation, the turn's owner keeps the connection open for it.
             flush = asyncio.ensure_future(self._flush_held())
             self.operations.add(flush)
             flush.add_done_callback(self.operations.discard)
+
+    def _native_item(self, item: dict) -> None:
+        """Record a subagent Codex started itself, once per native item; its later state replaces the earlier."""
+        if (item.get('type') != 'collabAgentToolCall' or item.get('tool') != 'spawnAgent'
+                or not isinstance(item.get('id'), str)):
+            return
+        first = item['id'] not in self.native_subagents
+        entry = {'id': item['id'], 'sender_thread': item.get('senderThreadId'),
+                 'receiver_threads': item.get('receiverThreadIds'), 'status': item.get('status'),
+                 'model': item.get('model')}
+        self.native_subagents[item['id']] = entry
+        # Before the execution exists parent_session is unprinted; _started prints this after it.
+        if first and self.execution is not None:
+            self._print_native_subagent(entry)
+
+    @staticmethod
+    def _print_native_subagent(entry: dict) -> None:
+        """Say on stderr that this child is outside agents."""
+        print(json.dumps({'native_subagent': {
+            **entry, 'note': "Codex's own subagent, not an agents child: agents has no record or control of it.",
+        }}, ensure_ascii=False), file=sys.stderr, flush=True)
+
+    def _print_summary(self) -> None:
+        """Say what this run did through agents, whatever the parent's last message claims."""
+        # No Session means no run: a refused start reports only its error.
+        if self.native_session is None:
+            return
+        summary: dict = {'agents_calls': len(self.calls), 'native_subagents': len(self.native_subagents)}
+        if not self.calls:
+            summary['note'] = ('This run made no agents call, so any child the parent reports creating '
+                               'in this run was not created through agents.')
+        print(json.dumps({'run_summary': summary}, ensure_ascii=False), file=sys.stderr, flush=True)
 
     def _authenticate_mcp(self, pid: int) -> None:
         """Retain only authentication that the actual service owner accepted."""
@@ -229,8 +277,20 @@ class CodexHost(CodexManagedExecution):
                 self.stop_unconfirmed = stop_owned(self.control)
             return {**result, 'parent_session': self.native_session,
                     'operations': self.calls, 'deliveries': self.deliveries,
+                    'native_subagents': list(self.native_subagents.values()),
                     'authenticated_callers': self.authentications,
                     'stop_unconfirmed': self.stop_unconfirmed}
+
+
+def _close(host: CodexHost | None) -> None:
+    """Print the run's summary, then end at once if a stop is unconfirmed."""
+    if host is None:
+        return
+    try:
+        host._print_summary()
+    except OSError:
+        pass  # A closed stderr changes neither the exit status nor the stop report.
+    exit_if_owned_unconfirmed(host.stop_unconfirmed)
 
 
 def main() -> None:
@@ -250,11 +310,11 @@ def main() -> None:
     except (AgentsError, RuntimeAdapterError, OSError, ValueError, KeyError) as error:
         result = {'error': {'code': getattr(error, 'code', 'invalid-input'), 'message': str(error)}}
         print(json.dumps(result, ensure_ascii=False), flush=True)
-        exit_if_owned_unconfirmed(host.stop_unconfirmed if host else [])
+        _close(host)
         raise SystemExit(1) from error
     except BaseException:
         # It would end at the interpreter's exit, which a stuck child's thread can hold up.
-        exit_if_owned_unconfirmed(host.stop_unconfirmed if host else [])
+        _close(host)
         raise
     if arguments.output is not None:
         arguments.output.write_text(json.dumps(result, ensure_ascii=False, indent=2) + '\n')
@@ -262,7 +322,7 @@ def main() -> None:
     print(result.get('last_agent_message') or result['outcome'], flush=True)
     if result.get('error') is not None:
         print(json.dumps(result['error'], ensure_ascii=False), file=sys.stderr)
-    exit_if_owned_unconfirmed(result['stop_unconfirmed'])
+    _close(host)
     if result.get('error') is not None:
         raise SystemExit(1)
 

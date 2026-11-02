@@ -33,6 +33,8 @@ def model_change_message(summary: str, requested: object, observed: object, reas
 # app-server: item/autoApprovalReview/completed, GuardianApprovalReviewStatus).
 REVIEW_COMPLETED = 'item/autoApprovalReview/completed'
 RELAYED_REVIEWS = {'denied', 'timedOut', 'aborted'}
+# The name Codex's model sees the tool under: mcp__<this>__agents.
+MCP_SERVER = 'graphtraj'
 
 
 def _accepted(request: CodexServerRequest) -> dict | None:
@@ -173,7 +175,7 @@ class CodexManagedExecution:
             shell[connection_env] = address
             shell['GRAPHTRAJ_NATIVE_RUNTIME'] = 'codex'
             # A Task host serves agents and tasks itself; an independent one only agents.
-            config.setdefault('mcp_servers', {})['graphtraj'] = {
+            config.setdefault('mcp_servers', {})[MCP_SERVER] = {
                 'command': sys.executable, 'args': ['-m', entry], 'cwd': str(cwd),
                 'env': {connection_env: address, 'GRAPHTRAJ_NATIVE_RUNTIME': 'codex'},
             }
@@ -327,6 +329,7 @@ class CodexManagedExecution:
                     item = notification.get('params', {}).get('item', {})
                     if isinstance(item.get('id'), str):
                         self.approval_items[item['id']] = item
+                    self._native_item(item)
                 if (notification['method'] == 'model/rerouted' and self.execution is not None
                         and notification['params'].get('turnId') == self.execution.turn_id):
                     # Stop work on a model nobody requested; the result names both.
@@ -338,6 +341,9 @@ class CodexManagedExecution:
                         stream.write(json.dumps(notification, ensure_ascii=False) + '\n')
         except RuntimeAdapterError:
             return
+
+    def _native_item(self, item: dict) -> None:
+        """See one native item as it starts or completes; a host may watch for some."""
 
     def operate(self, request: dict) -> dict:
         """Schedule a targeted control request from the Worker's local server."""

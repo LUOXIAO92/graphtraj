@@ -574,7 +574,18 @@ directory, the running Python and installed packages and the linked native
 Home files; writes only its native directory, the connection socket and (for
 `write`) the worktree and Git common directory; denies reading `agent_dir` and
 the agents data root, and writing `agent_dir`, the Python prefix, the
-packages and `<git_common_directory>/config` and `hooks`. The only domains are
+packages and `<git_common_directory>/config` and `hooks`. A `write` child also
+reads the Git common directory, so it can commit in its worktree. That directory
+is shared: the child can read every branch's objects and refs, other worktrees'
+Git metadata under `<git_common_directory>/worktrees`, and the repository's
+`config` and `hooks`, but no other worktree's working files and not the primary
+checkout's. A `write` child's environment sets `GIT_CONFIG_GLOBAL` to the null
+device, because the sandbox denies the Home and `~/.gitconfig` is never granted.
+Its identity is what `git config user.name` and `user.email` report in the
+worktree before launch, passed as `GIT_AUTHOR_NAME`, `GIT_COMMITTER_NAME`,
+`GIT_AUTHOR_EMAIL` and `GIT_COMMITTER_EMAIL`. A value that is unset adds no
+variable, and Git then reports the missing identity itself. A `read` child gets
+none of this. The only domains are
 `allowed_domains` plus the `base_url` host or `provider_domain`. A field of the
 wrong type fails with `ROLE_CONFIG_INVALID` naming the field. An `api_key_env`
 variable stays in the child's environment, where same-account processes and the

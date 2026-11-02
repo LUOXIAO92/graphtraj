@@ -1,5 +1,5 @@
 {
- "_provenance": "Captured by tests/pi_parity_scenarios.py run under a venv with graphtraj and agent_swarm installed editable from base commit 33c7adb (git worktree add --detach 33c7adb). Task 412 then removed api_key_env and unauthenticated from each process spec and added the name-only auth.json to the overlay of key routes; policies, argv and environments stay as captured.",
+ "_provenance": "Captured by tests/pi_parity_scenarios.py run under a venv with graphtraj and agent_swarm installed editable from base commit 33c7adb (git worktree add --detach 33c7adb). Task 412 then removed api_key_env and unauthenticated from each process spec and added the name-only auth.json to the overlay of key routes; policies, argv and environments stay as captured. Task 429 then added the Git common directory to allowRead and GIT_CONFIG_GLOBAL to the environment of the write and base-url-with-key scenarios.",
  "agents-member": {
   "argv": [
    "<python>",
@@ -223,6 +223,7 @@
   ],
   "environment": {
    "changed": {
+    "GIT_CONFIG_GLOBAL": "/dev/null",
     "GRAPHTRAJ_CLI_CONNECTION": "/bound/cli",
     "GRAPHTRAJ_HARNESS_ROOT": "<tmp>/base-url-with-key/project",
     "PATH": "<python-bin>:/usr/bin:/bin:<tmp>/base-url-with-key/user-agent/bin",
@@ -265,7 +266,8 @@
      "<tmp>/base-url-with-key/project/worktrees/research/.agents",
      "<tmp>/base-url-with-key/project/worktrees/research/AGENTS.md",
      "<tmp>/base-url-with-key/project/worktrees/research/docs",
-     "<tmp>/base-url-with-key/user-agent/bin/fd"
+     "<tmp>/base-url-with-key/user-agent/bin/fd",
+     "<tmp>/base-url-with-key/project/.git"
     ],
     "allowWrite": [
      "<tmp>/base-url-with-key/project/state/base-url-with-key.pi",
@@ -883,6 +885,7 @@
   ],
   "environment": {
    "changed": {
+    "GIT_CONFIG_GLOBAL": "/dev/null",
     "GRAPHTRAJ_CLI_CONNECTION": "/bound/cli",
     "GRAPHTRAJ_HARNESS_ROOT": "<tmp>/write/project",
     "PATH": "<python-bin>:/usr/bin:/bin:<tmp>/write/user-agent/bin",
@@ -927,7 +930,8 @@
      "<tmp>/write/project/worktrees/research/.agents",
      "<tmp>/write/project/worktrees/research/AGENTS.md",
      "<tmp>/write/project/worktrees/research/docs",
-     "<tmp>/write/user-agent/bin/fd"
+     "<tmp>/write/user-agent/bin/fd",
+     "<tmp>/write/project/.git"
     ],
     "allowWrite": [
      "<tmp>/write/project/state/write.pi",

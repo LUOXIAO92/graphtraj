@@ -297,6 +297,10 @@ class PiExecution:
             (agent / 'models.json').write_text(json.dumps({'providers': {provider: custom}}), encoding='utf-8')
         git = request.get('git_common_directory')
         if request['worktree_access'] == 'write':
+            # Git cannot open a linked worktree's admin directory, objects or
+            # refs without reading them. Only this directory: no project root,
+            # primary checkout or sibling worktree.
+            read.append(git)
             write.extend((str(worktree), git))
         write.extend(request.get('write_paths', ()))
         read.extend(request.get('read_paths', ()))
@@ -381,6 +385,12 @@ class PiExecution:
         env.update({'PATH': child_path(request['sandbox_path']),
                     'PI_CODING_AGENT_DIR': str(agent),
                     'PI_ASB_NO_ALIAS_PROMPT': '1'})
+        if request['worktree_access'] == 'write':
+            # The sandbox denies the Home, and Git dies on a global config it may
+            # not read. That file is never granted: it can hold tokens and name
+            # further denied paths. The identity it usually holds comes from here.
+            env['GIT_CONFIG_GLOBAL'] = os.devnull
+            env.update(_git_identity(worktree))
         if address is not None:
             env.update(self.connection_environment(address))
         if self.review_title is not None:
@@ -887,6 +897,26 @@ def _write_yaml(path: Path, document: dict) -> None:
     except BaseException:
         Path(temporary).unlink(missing_ok=True)
         raise
+
+
+def _git_identity(worktree: Path) -> dict[str, str]:
+    """Return Git's author and committer variables for the identity the host sees.
+
+    A value that is unset, or that Git cannot report, adds no variable, so Git
+    names the missing identity itself; none is invented here.
+    """
+    identity = {}
+    for field, suffix in (('user.name', 'NAME'), ('user.email', 'EMAIL')):
+        try:
+            found = subprocess.run(['git', '-C', str(worktree), 'config', field],
+                                   capture_output=True, timeout=10)
+        except (OSError, subprocess.SubprocessError):
+            continue
+
+        value = os.fsdecode(found.stdout).strip()
+        if found.returncode == 0 and value:
+            identity.update({'GIT_AUTHOR_' + suffix: value, 'GIT_COMMITTER_' + suffix: value})
+    return identity
 
 
 def _validate(request: dict) -> None:

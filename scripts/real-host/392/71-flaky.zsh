@@ -15,6 +15,7 @@ for spec in \
     20:tests/test_standalone_session_capture.py::test_standalone_claude_archives_with_create_fields_and_stops_when_off \
     20:tests/test_dsh_standalone_child.py::test_a_dsh_childs_end_reaches_the_claude_main_once \
     20:tests/test_descendant_stop_control.py::test_native_root_owner_outlives_historical_checker_membership \
+    10:tests/test_agent_runner_cleanup.py::test_native_interrupt_confirms_only_pre_runtime_allocations 10:tests/test_team_replacement.py::test_replacing_parent_keeps_old_descendants_stopped_and_bound_to_old_session \
     10:tests/test_claude_runtime.py::test_claude_later_prompt_hook_is_answered_during_one_slow_collection; do
   COUNT=${spec%%:*} ID=${spec#*:} NAME=${ID##*::} PASSED=0 FAILED=0
   say "$NAME, $COUNT runs"

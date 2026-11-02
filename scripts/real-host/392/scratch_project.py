@@ -10,9 +10,12 @@ venv by absolute path, on a PATH that does not hold the venv, which is the condi
 """
 from __future__ import annotations
 
+import functools
 import json
 import os
 from pathlib import Path
+import re
+import signal
 import subprocess
 import sys
 import threading
@@ -87,11 +90,24 @@ def prepare(runtimes: list[str]) -> None:
     judge('roles: OK' in doctor.stdout, 'the scratch project\'s roles resolve (graphtraj doctor)', doctor.stdout.strip()[:200])
 
 
-def ready(task_id: str, name: str, body: str) -> None:
+def budgeted(runtime: str, body: str) -> str:
+    """Add the public execution budget, the one finite limit a Task can carry.
+
+    It is not a hard limit: past the estimate and its allowance, each 2-minute check stops the Task at random
+    (execution_budget.py:642-647), so the step still ends what is left, in stop_leftovers.
+    """
+    budget = {'difficulty': 'low', 'difficulty_reason': 'Scratch probe',
+              'execution_budget': {'estimated_minutes': {'total': 20}, 'planned_sessions': {f'member_{runtime}': 1},
+                                   'correction_rounds': 0, 'estimation_note': 'One scratch member of a real-host step',
+                                   'on_exceed': 'Stop; the step records what it reached'}}
+    return f'---\n{yaml.safe_dump(budget)}---\n{body}'
+
+
+def ready(task_id: str, name: str, body: str, runtime: str) -> None:
     """Register one Task and move it to ready, as `graphtraj task graph` then shows it."""
     register = RUN / f'register-{task_id}.yml'
     register.write_text(yaml.safe_dump({
-        'task_id': task_id, 'task_name': name, 'source': f'local:scratch/{task_id}', 'title': name, 'body': body,
+        'task_id': task_id, 'task_name': name, 'source': f'local:scratch/{task_id}', 'title': name, 'body': budgeted(runtime, body),
         'dependencies': [], 'schema_version': 2, 'parent_id': None, 'disposition': 'active', 'replaced_by': [],
         'retirement_reason': None}))
     run(f'register-{task_id}', str(BIN / 'graphtraj'), 'task', 'register', '--task-file', str(register))
@@ -180,6 +196,93 @@ def keep_state() -> None:
     keep_tree(HARNESS / '.graphtraj' / 'swarm', OUT / 'swarm')
 
 
+def own_processes() -> dict[int, tuple[int, str]]:
+    """Return this run's processes, pid to (ppid, command): only those of this scratch project.
+
+    One belongs if its working directory is in the project or its arguments name it, and so does everything
+    under it. This process and its ancestors never do, so the step cannot stop itself.
+    """
+    table = {}
+    for line in subprocess.run(['ps', '-axww', '-o', 'pid=,ppid=,command='], capture_output=True, text=True).stdout.splitlines():
+        fields = line.split(None, 2)
+        if len(fields) == 3 and fields[0].isdigit() and fields[1].isdigit():
+            table[int(fields[0])] = (int(fields[1]), fields[2])
+    roots = (str(HARNESS), str(HARNESS.resolve()))
+    names = re.compile('|'.join(re.escape(root) + r'''(?![^\s/'"])''' for root in roots))
+    found = {pid for pid, (_, command) in table.items() if names.search(command)}
+    listing = subprocess.run(['lsof', '-nP', '-a', '-d', 'cwd', '-u', str(os.getuid()), '-Fn'], capture_output=True, text=True).stdout
+    current = None
+    for line in listing.splitlines():
+        if line.startswith('p') and line[1:].isdigit():
+            current = int(line[1:])
+        elif line.startswith('n') and current in table and any(line[1:] == root or line[1:].startswith(root + os.sep) for root in roots):
+            found.add(current)
+    while True:
+        more = {pid for pid, (parent, _) in table.items() if parent in found} - found
+        if not more:
+            break
+        found |= more
+    pid = os.getpid()
+    while pid in table:
+        found.discard(pid)
+        pid = table[pid][0]
+    return {pid: table[pid] for pid in found}
+
+
+def masked(text: str) -> str:
+    """Hide any long token that follows key, token or =, as step 93 does."""
+    return re.sub(r'(?i)((?:key|token|=)[^A-Za-z0-9_-]{0,3})[A-Za-z0-9_-]{20,}', r'\1[masked]', text)
+
+
+def stop_leftovers() -> None:
+    """End what this step's run left: the public stop for each open member, signals for what outlives it."""
+    sessions = HARNESS / '.graphtraj' / 'runner' / 'sessions'
+    aliases = sorted(path.name for path in sessions.iterdir() if path.is_dir() and not (path / 'execution.yml').exists()) if sessions.is_dir() else []
+    record = [f'open members: {aliases}']
+    for number, alias in enumerate(aliases, 1):
+        done = run(f'stop-{number}', str(BIN / 'agent-runner'), 'interrupt', alias, limit=120)
+        record.append(f'agent-runner interrupt {alias}: exit {done.returncode}, see stop-{number}.txt')
+        note(f'stop of the member this step left, {alias}: exit {done.returncode}; see stop-{number}.txt')
+
+    def settled(seconds: float) -> dict[int, tuple[int, str]]:
+        """Wait for this run's processes to end; return those left."""
+        deadline = time.monotonic() + seconds
+        left = own_processes()
+        while left and time.monotonic() < deadline:
+            time.sleep(1)
+            left = own_processes()
+        return left
+
+    left = settled(30)
+    for name, number in (('SIGTERM', signal.SIGTERM), ('SIGKILL', signal.SIGKILL)):
+        if not left:
+            break
+        record += [f'{name} {pid}, parent {parent}: {masked(command)[:300]}' for pid, (parent, command) in sorted(left.items())]
+        for pid in left:
+            try:
+                os.kill(pid, number)
+            except OSError as error:
+                record.append(f'{name} {pid} failed: {error}')
+        left = settled(10)
+    record.append(f'left after the stop: {sorted(left)}')
+    (OUT / 'leftover-stop.txt').write_text('\n'.join(record) + '\n')
+    judge(not left, 'the step\'s own run left no process of its scratch project', f'see leftover-stop.txt; left {sorted(left)}')
+
+
+def ends_its_run(function):
+    """Stop what the step left, then keep its records, however the step's body ended."""
+    @functools.wraps(function)
+    def whole_step() -> None:
+        try:
+            function()
+        finally:
+            try:
+                stop_leftovers()
+            finally:
+                keep_state()
+    return whole_step
+
+
 MEMBER_416 = (
     'Do these in order; if a step fails, write the exact error in the report and go on. '
     'Do not print environment variables. '
@@ -200,6 +303,7 @@ MEMBER_416 = (
 )
 
 
+@ends_its_run
 def r416() -> None:
     """416: a real member on each Runtime, no workspace: child and grandchild pwd, work under Worktree grants."""
     runtimes = ['claude', 'codex', 'dsh', 'pi']
@@ -207,7 +311,7 @@ def r416() -> None:
     tasks = {}
     for number, runtime in enumerate(runtimes, 1):
         name = f'probe-{runtime}'
-        ready(str(number), name, f'Find where a child of a {runtime} member works.')
+        ready(str(number), name, f'Find where a child of a {runtime} member works.', runtime)
         tasks[str(number)] = {'runtime': runtime, 'name': name, 'instruction': MEMBER_416.format(runtime=runtime)}
     (OUT / 'graph.txt').write_text(run('graph', str(BIN / 'graphtraj'), 'task', 'graph').stdout)
     document = dispatch(runtimes, tasks)
@@ -232,7 +336,6 @@ def r416() -> None:
               f'416 {runtime}: the child finished work under Worktree-scoped permissions',
               f'CHILD_WROTE={value(report, "CHILD_WROTE")}, file exists {(worktree / "child-work.txt").exists()}')
     session_migration_check()
-    keep_state()
 
 
 def session_migration_check() -> None:
@@ -307,11 +410,11 @@ def main_pi_child() -> None:
         check('CANNOT', f'416: this Main turn did not reach Pi\'s preparation, exit {process.returncode}; see main-pi-child.txt: {stdout[:400] or text[-400:]}')
 
 
+@ends_its_run
 def r416_main() -> None:
     """Prepare a project with a Pi role and try 416's root-level Pi child in a scratch Main turn."""
     prepare(['pi'])
     main_pi_child()
-    keep_state()
 
 
 MEMBER_420 = (
@@ -325,10 +428,11 @@ MEMBER_420 = (
 )
 
 
+@ends_its_run
 def r420() -> None:
     """420: one real DSH member round under the Runner, with the venv's bin off the host's PATH."""
     prepare(['dsh'])
-    ready('1', 'dsh-member-probe', 'Create probe.txt containing the word ok, commit it on your branch, write your assigned report, then submit your task result.')
+    ready('1', 'dsh-member-probe', 'Create probe.txt containing the word ok, commit it on your branch, write your assigned report, then submit your task result.', 'dsh')
     from shutil import which
     path = environment()['PATH']
     note(f"420: dsh --version: {subprocess.run(['dsh', '--version'], env=environment(), capture_output=True, text=True).stdout.strip()}")
@@ -341,7 +445,6 @@ def r420() -> None:
     judge(items[0].get('launch_status') not in ('failed', None), '420: dispatch started the member',
           json.dumps(items[0], ensure_ascii=False)[:500])
     if items[0].get('launch_status') == 'failed':
-        keep_state()
         return
     arrived = wait_for_results(tasks, document)
     report = report_of('1')
@@ -357,7 +460,6 @@ def r420() -> None:
          f'{subprocess.run("ulimit -n", shell=True, capture_output=True, text=True).stdout.strip()}')
     fallback = value(report, 'agent-runner') or ('agent-runner' in report)
     note(f'420: team_round.py:1086 names agent-runner as a fallback; the member\'s `command -v agent-runner` output is in report.txt ({fallback})')
-    keep_state()
 
 
 if __name__ == '__main__':

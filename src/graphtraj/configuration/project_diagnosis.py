@@ -55,10 +55,11 @@ def _claude_launch_diagnostics(roles: ProjectRoles) -> Tuple[str, ...]:
 
     diagnostics = []
     for reference, preset in roles.presets.items():
-        if preset.runtime != "claude":
-            continue
         try:
-            check_role_settings(resolve_preset(preset))
+            # A connection role names its Runtime only once it resolves.
+            settings = resolve_preset(preset)
+            if settings.runtime == "claude":
+                check_role_settings(settings)
         except RuntimeAdapterError as error:
             diagnostics.append("{0}: {1}".format(reference, error.message))
         except ProjectRolesError as error:

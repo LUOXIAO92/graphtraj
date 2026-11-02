@@ -215,3 +215,56 @@ def test_a_running_team_is_told_where_a_later_revision_of_its_definition_is(
     assert (root / record['worktree'] / '.state').resolve() == state.resolve()
     assert 'Revised after dispatch.' not in (state / 'task.md').read_text()
     assert 'Revised after dispatch.' in (state / record['current_definition']).read_text()
+
+
+CONNECTIONS = {'version': 1, 'runtimes': {'claude': {'runtime': 'claude', 'providers': {'anthropic': {'models': {
+    'opus-5_5': {'id': 'claude-opus-5-5', 'source': 'manual'}}}}}}}
+
+
+def doctor_with_connection_roles(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, roles: str):
+    """Run doctor with a real user catalog holding this project's real Claude connection."""
+    home = tmp_path / 'home'
+    (home / '.graphtraj').mkdir(parents=True)
+    (home / '.graphtraj/connections.yml').write_text(yaml.safe_dump(CONNECTIONS))
+    monkeypatch.setenv('HOME', str(home))
+    (tmp_path / '.graphtraj').mkdir()
+    (tmp_path / '.graphtraj/roles.yml').write_text(roles, encoding='utf-8')
+    monkeypatch.chdir(tmp_path)
+    return CliRunner().invoke(main, ['doctor'])
+
+
+def test_doctor_passes_a_claude_role_whose_connection_resolves(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The shape this project's real Claude roles use is not a false failure."""
+    result = doctor_with_connection_roles(tmp_path, monkeypatch, """roles:
+  opus:
+    connection: claude/anthropic/opus-5_5
+    reasoning_effort: high
+""")
+    assert result.exit_code == 0, result.output
+    assert result.output.splitlines() == ['roles: OK']
+
+
+def test_doctor_reports_a_connection_it_cannot_resolve(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A launch cannot start this role either, and nothing else names its Runtime."""
+    result = doctor_with_connection_roles(tmp_path, monkeypatch, """roles:
+  missing:
+    connection: claude/anthropic/absent
+""")
+    assert result.exit_code == 1, result.output
+    assert 'missing: Unknown Runtime/provider/model connection reference.' in result.output
+
+
+def test_doctor_checks_a_claude_role_reached_through_its_connection(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A connection role has no ``runtime`` until it resolves, so it must not skip the check."""
+    result = doctor_with_connection_roles(tmp_path, monkeypatch, """roles:
+  mode:
+    connection: claude/anthropic/opus-5_5
+    claude:
+      permission_mode: bypassPermissions
+""")
+    assert result.exit_code == 1, result.output
+    assert 'mode: claude.permission_mode must be default or auto' in result.output

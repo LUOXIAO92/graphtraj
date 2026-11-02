@@ -11,6 +11,7 @@ from typing import Any, Callable, Mapping
 
 from agent_swarm import AgentsError, Caller, Run
 from agent_swarm.control import require_available, within_workspace
+from agent_swarm.runtime import RuntimeAdapterError
 from .execution import ClaudeExecution
 from .settings import current_cli, prepare
 
@@ -156,11 +157,17 @@ class ClaudeDriver:
             raise AgentsError('not-owned', 'This host does not own the Claude execution.')
         return turn
 
+    def _operate(self, run: Run, **request: Any) -> dict:
+        """Apply one native operation; a Runtime refusal keeps its code and reason."""
+        turn = self._turn(run)
+        try:
+            return turn.operate({**request, 'session': turn.session, 'execution_id': turn.execution_id})
+        except RuntimeAdapterError as error:
+            raise AgentsError(error.code, error.message) from error
+
     def deliver(self, run: Run, message: str) -> None:
         """Submit input to the same active native Session."""
-        turn = self._turn(run)
-        turn.operate({'operation': 'send', 'session': turn.session,
-                      'execution_id': turn.execution_id, 'instruction': message})
+        self._operate(run, operation='send', instruction=message)
 
     def interrupt(self, run: Run) -> bool:
         """Request cancellation; the owner confirms actual native quiescence."""
@@ -168,13 +175,9 @@ class ClaudeDriver:
 
     def requests(self, run: Run) -> list[dict]:
         """Expose pending native approval requests without answering them."""
-        turn = self._turn(run)
-        return turn.operate({'operation': 'requests', 'session': turn.session,
-                             'execution_id': turn.execution_id})['requests']
+        return self._operate(run, operation='requests')['requests']
 
     def reply(self, run: Run, request: Mapping[str, Any], response: Mapping[str, Any]) -> dict:
         """Return one explicit decision through the native request binding."""
-        turn = self._turn(run)
-        return turn.operate({'operation': 'reply', 'session': turn.session,
-                             'execution_id': turn.execution_id, 'request_token': request.get('request_token'),
-                             'response': dict(response)})
+        return self._operate(run, operation='reply', request_token=request.get('request_token'),
+                             response=dict(response))

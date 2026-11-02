@@ -167,18 +167,36 @@ def _answer_request(
             # The reply keeps its format; the host keeps where the call failed.
             traceback.print_exc(file=sys.stderr)
         result = {'error': {'code': 'operation-failed', 'message': str(error)}}
+    except BaseException as error:  # noqa: BLE001 - the caller waits on this reply for as long as the host lives
+        result = _unexpected(error)
+    try:
+        # Serialised first, so a result that cannot be written is a refusal, not silence.
+        reply = json.dumps(result)
+    except (TypeError, ValueError, RecursionError) as error:
+        reply = json.dumps(_unexpected(error))
     try:
         descriptor = os.open('response.tmp', os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
                              0o600, dir_fd=directory)
         with os.fdopen(descriptor, 'w') as stream:
-            json.dump(result, stream)
+            stream.write(reply)
         os.replace('response.tmp', 'response.json', src_dir_fd=directory, dst_dir_fd=directory)
         try:
             os.unlink('request.json', dir_fd=directory)
         except FileNotFoundError:
             pass
-    except OSError:
+    except FileNotFoundError:
         pass  # Caller EOF does not cancel an accepted native operation.
+    except OSError:
+        # The caller cannot be told; the host keeps why it was left waiting.
+        traceback.print_exc(file=sys.stderr)
+
+
+def _unexpected(error: BaseException) -> dict:
+    """Keep where a failure happened in the host's log and name it to the caller."""
+    traceback.print_exception(error, file=sys.stderr)
+    code = getattr(error, 'code', None)
+    return {'error': {'code': code if isinstance(code, str) and code else 'operation-failed',
+                      'message': f'{type(error).__name__}: {error}'}}
 
 
 def connection_operation(

@@ -39,6 +39,7 @@ from test_pi_dsh_notice_holding import Process
 
 # Far longer than a refusal takes; the old code never answers at all.
 PROMPT = 10.0
+QUICK = 4.0
 WAIT = 30.0
 AGENT_ENV = ('AGENT_SWARM_CONNECTION', 'GRAPHTRAJ_CLI_CONNECTION', 'GRAPHTRAJ_NATIVE_RUNTIME',
              'DSH_SESSION_ID', 'DSH_AGENT_SOURCE')
@@ -406,6 +407,135 @@ def test_a_result_that_cannot_be_written_is_answered(tmp_path: Path, capsys: pyt
         assert 'TypeError' in document['error']['message']
         assert client.ok('status')['result'] == {'value': 'fine'}
     assert 'Traceback' in capsys.readouterr().err
+
+
+# -- Diagnostics and the polling pass cannot silence the channel ---------------------------
+
+
+class Unwritable:
+    """A host stderr whose reader has gone."""
+
+    def write(self, text: str) -> int:
+        raise BrokenPipeError('stderr closed')
+
+    def flush(self) -> None:
+        raise BrokenPipeError('stderr closed')
+
+
+class NoText(Exception):
+    """A failure that cannot describe itself."""
+
+    def __str__(self) -> str:
+        raise ValueError('no text')
+
+
+@pytest.mark.parametrize(('failure', 'named'), [
+    (RuntimeError('native wiring broke'), 'RuntimeError: native wiring broke'),
+    (OSError('disk went away'), 'disk went away'),
+    (NoText(), 'NoText'),
+], ids=['runtime-error', 'os-error', 'no-text'])
+def test_an_unwritable_stderr_does_not_stop_the_reply(
+        failure: BaseException, named: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Diagnostics are guarded, so the caller is answered and the next request served."""
+    calls = []
+
+    def call(request: dict) -> AgentsResult:
+        calls.append(request)
+        if len(calls) == 1:
+            raise failure
+        return AgentsResult({'result': {'served': True}})
+
+    monkeypatch.setattr(sys, 'stderr', Unwritable())
+    with channel(tmp_path / 'channel', call, tmp_path) as client:
+        document, failed = client.call('status', timeout=QUICK)
+        assert failed and document['error']['code'] == 'operation-failed', document
+        assert document['error']['message'] == named
+        assert client.ok('status', timeout=QUICK)['result'] == {'served': True}
+
+
+def served(request: dict) -> AgentsResult:
+    """A host callback with nothing to go wrong."""
+    return AgentsResult({'result': {'served': True}})
+
+
+@pytest.fixture
+def failing_passes(monkeypatch: pytest.MonkeyPatch) -> list:
+    """Fail one channel listing per entry; the entries are left for the test to add."""
+    entries: list[BaseException] = []
+    real = Path.iterdir
+
+    def listing(self: Path):
+        if self.name.startswith('control-') and entries:
+            raise entries.pop()
+        return real(self)
+
+    monkeypatch.setattr(Path, 'iterdir', listing)
+    return entries
+
+
+def consumed(entries: list) -> None:
+    """Wait for the polling pass to take every armed failure."""
+    deadline = time.monotonic() + QUICK
+    while entries and time.monotonic() < deadline:
+        time.sleep(0.005)
+    assert not entries
+
+
+@pytest.mark.parametrize('log', ['writable', 'unwritable'])
+def test_one_failed_listing_does_not_end_the_polling(
+        log: str, tmp_path: Path, failing_passes: list, monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture) -> None:
+    """The next request is served, whether or not the failure could be logged."""
+    if log == 'unwritable':
+        monkeypatch.setattr(sys, 'stderr', Unwritable())
+    with channel(tmp_path / 'channel', served, tmp_path) as client:
+        failing_passes.append(OSError('transient listing failure'))
+        consumed(failing_passes)
+        assert client.ok('status', timeout=QUICK)['result'] == {'served': True}
+    monkeypatch.undo()
+    if log == 'writable':
+        assert 'transient listing failure' in capsys.readouterr().err
+
+
+def test_a_repeating_listing_failure_logs_once_and_recovers(
+        tmp_path: Path, failing_passes: list, capsys: pytest.CaptureFixture) -> None:
+    """Many failed passes in a row keep one traceback, and polling resumes when they stop."""
+    with channel(tmp_path / 'channel', served, tmp_path) as client:
+        failing_passes.extend(OSError('repeating listing failure') for _ in range(20))
+        consumed(failing_passes)
+        assert client.ok('status', timeout=QUICK)['result'] == {'served': True}
+    assert capsys.readouterr().err.count('repeating listing failure') == 1
+
+
+def test_a_failed_worker_start_releases_its_request(tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+                                                    capsys: pytest.CaptureFixture) -> None:
+    """The slot and descriptor are released, so the next pass answers that same request."""
+    starts: list[int] = []
+    closed: list[int] = []
+    released: list[bool] = []
+    real_start, real_close = threading.Thread.start, os.close
+
+    def start(self: threading.Thread) -> None:
+        arguments = getattr(self, '_args', ())
+        if len(arguments) == 3 and getattr(arguments[0], '__name__', '') == 'answer':
+            if not starts:
+                starts.append(arguments[2])
+                raise RuntimeError("can't start new thread")
+            released.append(starts[0] in closed)
+        real_start(self)
+
+    def close(descriptor: int) -> None:
+        closed.append(descriptor)
+        real_close(descriptor)
+
+    monkeypatch.setattr(threading.Thread, 'start', start)
+    monkeypatch.setattr(os, 'close', close)
+    with channel(tmp_path / 'channel', served, tmp_path) as client:
+        assert client.ok('status', timeout=QUICK)['result'] == {'served': True}
+        assert client.ok('status', timeout=QUICK)['result'] == {'served': True}
+    monkeypatch.undo()
+    assert len(starts) == 1 and released[0] is True
+    assert "can't start new thread" in capsys.readouterr().err
 
 
 # -- deliver: rejected versus unknown ------------------------------------------------------

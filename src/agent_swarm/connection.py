@@ -27,6 +27,8 @@ if os.name != 'nt':
     import fcntl
 
 OPERATION_TIMEOUT_SECONDS = 10.0
+# A repeating failure of the channel's polling pass logs at most this often.
+SERVE_LOG_SECONDS = 60.0
 CONNECTION_ENV = 'AGENT_SWARM_CONNECTION'
 
 
@@ -77,25 +79,41 @@ def worker_connection(
                 os.close(descriptor)
                 del accepted[name]
 
-        def serve() -> None:
+        def take_requests() -> None:
             """Answer each request on its own thread so a slow one cannot block others."""
-            while not stop.is_set():
-                for entry in Path(address).iterdir():
-                    if entry.name in accepted:
-                        continue
-                    try:
-                        descriptor = os.open(entry, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
-                    except OSError:
-                        continue
-                    try:
-                        os.stat('request.json', dir_fd=descriptor, follow_symlinks=False)
-                    except OSError:
-                        os.close(descriptor)  # Not yet sent, or already answered.
-                        continue
+            for entry in Path(address).iterdir():
+                if entry.name in accepted:
+                    continue
+                try:
+                    descriptor = os.open(entry, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+                except OSError:
+                    continue
+                try:
+                    os.stat('request.json', dir_fd=descriptor, follow_symlinks=False)
+                except OSError:
+                    os.close(descriptor)  # Not yet sent, or already answered.
+                    continue
+                try:
                     # A fresh Context keeps caller identity ContextVars per request.
                     accepted[entry.name] = worker = threading.Thread(
                         target=contextvars.Context().run, args=(answer, entry.name, descriptor), daemon=True)
                     worker.start()
+                except BaseException:
+                    # The request is still unclaimed, so a later pass can take it.
+                    accepted.pop(entry.name, None)
+                    os.close(descriptor)
+                    raise
+
+        def serve() -> None:
+            """Keep polling until stopped: one failed pass must not refuse every later call."""
+            next_log = 0.0
+            while not stop.is_set():
+                try:
+                    take_requests()
+                except BaseException as error:  # noqa: BLE001 - this thread's last line of defence
+                    if time.monotonic() >= next_log:
+                        next_log = time.monotonic() + SERVE_LOG_SECONDS
+                        _log_failure(error)
                 stop.wait(0.01)
 
         thread = threading.Thread(target=serve, daemon=True)
@@ -165,14 +183,14 @@ def _answer_request(
     except (OSError, ValueError, KeyError, TypeError) as error:
         if isinstance(error, OSError):
             # The reply keeps its format; the host keeps where the call failed.
-            traceback.print_exc(file=sys.stderr)
-        result = {'error': {'code': 'operation-failed', 'message': str(error)}}
+            _log_failure(error)
+        result = {'error': {'code': 'operation-failed', 'message': _failure_text(error)}}
     except BaseException as error:  # noqa: BLE001 - the caller waits on this reply for as long as the host lives
         result = _unexpected(error)
     try:
         # Serialised first, so a result that cannot be written is a refusal, not silence.
         reply = json.dumps(result)
-    except (TypeError, ValueError, RecursionError) as error:
+    except BaseException as error:  # noqa: BLE001 - this reply must still be written
         reply = json.dumps(_unexpected(error))
     try:
         descriptor = os.open('response.tmp', os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
@@ -186,17 +204,38 @@ def _answer_request(
             pass
     except FileNotFoundError:
         pass  # Caller EOF does not cancel an accepted native operation.
-    except OSError:
+    except OSError as error:
         # The caller cannot be told; the host keeps why it was left waiting.
-        traceback.print_exc(file=sys.stderr)
+        _log_failure(error)
+
+
+def _log_failure(error: BaseException) -> None:
+    """Keep where a failure happened; an unwritable host log never stops the channel."""
+    try:
+        traceback.print_exception(error, file=sys.stderr)
+    except BaseException:  # noqa: BLE001 - diagnostics only
+        pass
+
+
+def _failure_text(error: BaseException) -> str:
+    """Return the failure's own text, or its type name when it has none it can give."""
+    try:
+        return str(error)
+    except BaseException:  # noqa: BLE001 - the reply needs some text
+        return type(error).__name__
 
 
 def _unexpected(error: BaseException) -> dict:
     """Keep where a failure happened in the host's log and name it to the caller."""
-    traceback.print_exception(error, file=sys.stderr)
-    code = getattr(error, 'code', None)
+    _log_failure(error)
+    try:
+        code = getattr(error, 'code', None)
+    except BaseException:  # noqa: BLE001 - the reply falls back to the general code
+        code = None
+    name = type(error).__name__
+    text = _failure_text(error)
     return {'error': {'code': code if isinstance(code, str) and code else 'operation-failed',
-                      'message': f'{type(error).__name__}: {error}'}}
+                      'message': name if text == name else f'{name}: {text}'}}
 
 
 def connection_operation(

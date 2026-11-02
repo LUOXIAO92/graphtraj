@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import copy
 import os
 import json
 import re
@@ -20,7 +21,8 @@ from agent_swarm.approval import review_failed
 from agent_swarm.review import build_request, record_decision, review_call
 from agent_swarm.runtime import RuntimeAdapterError
 from .app_server import CodexAppServer, CodexExecution, CodexServerRequest
-from .context import restore_codex_context, recovery_environment
+from agent_swarm.child_env import child_environment, is_credential_name
+from .context import exclude_credentials, native_key_names, restore_codex_context, recovery_environment
 
 
 def model_change_message(summary: str, requested: object, observed: object, reason: str | None) -> str:
@@ -156,6 +158,37 @@ class CodexManagedExecution:
         """Expose native execution identity without leaking the Codex handle."""
         return self.execution.turn_id if self.execution is not None else None
 
+    def child_overrides(self, request: Mapping, config: Mapping) -> dict[str, str | None]:
+        """Return the service environment as overrides of this host's; ``None`` removes a name.
+
+        The connection's values are applied after the rule, so a connection that names
+        the reviewer's key keeps it and one with an endpoint still clears the default key.
+        """
+        connection = {**self.context.runtime_environment(), **self.connection_environment}
+        named = connection.keys() - {'CODEX_HOME', 'OPENAI_BASE_URL'}
+        kept = child_environment(
+            os.environ, defaults=() if named else native_key_names(connection.get('CODEX_HOME'), config),
+            declared=request.get('pass_env', ()), review_key=(self.review or {}).get('api_key_env'))
+        return {**{name: None for name in os.environ if name not in kept}, **kept, **connection,
+                'AGENT_SWARM_CONNECTION': None, 'GRAPHTRAJ_CLI_CONNECTION': None}
+
+    def declared_context(self, request: Mapping, environment: Mapping[str, str | None]) -> object:
+        """Return the context the native Session starts from, with declared credentials added.
+
+        The exclude globs cannot spare one name, so a declared credential-class name
+        reaches the tool shell through ``set``. Its value goes only into this transient
+        copy, sent to Codex once: ``self.context``, which the rest of the owner reads, and
+        anything written from it never hold a value.
+        """
+        values = {name: environment[name] for name in request.get('pass_env', ())
+                  if is_credential_name(name) and environment.get(name) is not None}
+        if not values:
+            return self.context
+        transient = copy.deepcopy(dict(request))
+        policy = transient['session_parameters']['config'].setdefault('shell_environment_policy', {})
+        policy['set'] = {**policy.get('set', {}), **values}
+        return restore_codex_context(transient, self.context.evidence_document())
+
     def run(self) -> dict:
         """Run native control on one loop while the Worker accepts local calls."""
         return asyncio.run(self._run())
@@ -180,15 +213,13 @@ class CodexManagedExecution:
                 'env': {connection_env: address, 'GRAPHTRAJ_NATIVE_RUNTIME': 'codex'},
             }
             self.context = restore_codex_context(request, self.context.evidence_document())
-        # The reviewer's key stays with this host, away from the child it judges,
-        # unless the connection itself gives the child that variable.
-        review_key = (self.review or {}).get('api_key_env')
-        withheld = {review_key: None} if review_key and review_key not in self.connection_environment else {}
+        environment = self.child_overrides(request, config)
+        exclude_credentials(config, environment.get('CODEX_HOME'))
+        self.context = restore_codex_context(request, self.context.evidence_document())
+        session_context = self.declared_context(request, environment)
         adapter = CodexAppServer(cwd=Path(self.context.session_document()['adapter_request']['cwd']),
                                  command=self.command, request_timeout=5,
-                                 environment={**self.context.runtime_environment(), **self.connection_environment,
-                                              'AGENT_SWARM_CONNECTION': None, 'GRAPHTRAJ_CLI_CONNECTION': None,
-                                              **withheld},
+                                 environment=environment,
                                  on_request=self._request, request_handler_timeout=None,
                                  experimental_api=True)
         self.adapter = adapter
@@ -215,8 +246,8 @@ class CodexManagedExecution:
                         except FileNotFoundError:
                             pass
                 self.startup = asyncio.create_task(
-                    adapter.resume_session(self.context, self.expected_session)
-                    if self.expected_session else adapter.create_session(self.context)
+                    adapter.resume_session(session_context, self.expected_session)
+                    if self.expected_session else adapter.create_session(session_context)
                 )
                 try:
                     session = await self.startup

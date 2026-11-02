@@ -25,6 +25,8 @@ from agent_swarm.discovery import handle_request as discover_agents
 from agent_swarm.mcp import tool_documents
 from agent_swarm import SessionArchive
 from agent_swarm.sessions.claude_history import read_records
+from agent_swarm.child_env import child_environment
+from .settings import login_variables
 from .support import write_yaml_durably, credential_environment, redact
 
 from agent_swarm.runtime import RuntimeAdapterError, SessionStarted
@@ -448,7 +450,11 @@ class ClaudeExecution:
             argv += ['--effort', request['reasoning_effort']]
         if request.get('permission_mode') is not None:
             argv += ['--permission-mode', request['permission_mode']]
-        environment = {key: value for key, value in os.environ.items() if not key.startswith('GRAPHTRAJ_')}
+        environment = child_environment(
+            os.environ, api_key_env=request.get('api_key_env'),
+            defaults=() if request.get('api_key_env') else login_variables(os.environ),
+            declared=request.get('pass_env', ()), review_key=(request.get('review') or {}).get('api_key_env'))
+        environment = {key: value for key, value in environment.items() if not key.startswith('GRAPHTRAJ_')}
         environment.update(CLAUDE_CODE_SDK_READS_SESSION_STATE='1',
                            CLAUDE_CODE_DISABLE_BACKGROUND_TASKS='1')
         scrub_key = 'CLAUDE_CODE_SUBPROCESS_ENV_SCRUB'
@@ -465,10 +471,6 @@ class ClaudeExecution:
             raise RuntimeAdapterError('RUNTIME_REQUEST_FAILED',
                                       'Requested auto conflicts with explicit Claude subprocess scrub.')
         environment.pop('AGENT_SWARM_CONNECTION', None)
-        review_key_env = (request.get('review') or {}).get('api_key_env')
-        if review_key_env and review_key_env != request.get('api_key_env'):
-            # The reviewer's key stays with this host, away from the child it judges.
-            environment.pop(review_key_env, None)
         if address:
             environment['AGENT_SWARM_CONNECTION' if self.independent else 'GRAPHTRAJ_CLI_CONNECTION'] = address
         if request.get('explicit_runtime_home'):

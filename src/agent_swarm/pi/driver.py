@@ -11,7 +11,7 @@ from typing import Any, Mapping
 
 from agent_swarm import AgentsError, Caller, Run
 from agent_swarm.control import require_available, within_workspace
-from agent_swarm.models import pi_destination, pi_offers
+from agent_swarm.models import pi_destination, pi_named_keys, pi_offers
 from agent_swarm.runtime import RuntimeAdapterError
 from .execution import PiExecution, RPC_SECONDS
 
@@ -32,7 +32,9 @@ def _refuse_key_held_by_reviewer(request: Mapping[str, Any]) -> None:
             or not os.environ.get(variable)):
         return
     target = (request['executable'], request['agent_dir'], request['provider'], request['model'])
-    if pi_offers(*target, without=variable) is False and pi_offers(*target) is True:
+    # Pi offers a models.json provider with or without its variable, so the file decides there.
+    if (variable in pi_named_keys(request['agent_dir'], request['provider'])
+            or pi_offers(*target, without=variable) is False and pi_offers(*target) is True):
         raise AgentsError(
             'invalid-config',
             f"Reviewer {review.get('name', '')!r} uses {variable}, which is kept from the child it reviews, "
@@ -146,7 +148,10 @@ class PiDriver:
         # The child's end that continues this Session is the turn's input.
         notice = run.settings.get('completion_message')
         prompt = framed(notice) if notice else run.message
-        turn = PiExecution(dict(run.settings['adapter_request']), prompt, run.directory,
+        request = dict(run.settings['adapter_request'])
+        if run.settings.get('pass_env'):
+            request['pass_env'] = run.settings['pass_env']
+        turn = PiExecution(request, prompt, run.directory,
                            lambda session, pid: ready.set(), created,
                            run.directory / 'trace.jsonl', run.session)
         turn.archive = run.archive

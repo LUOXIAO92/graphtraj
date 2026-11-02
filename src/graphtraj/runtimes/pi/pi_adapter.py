@@ -210,6 +210,7 @@ class PiRuntimeAdapter:
             'provider': 'graphtraj-role' if settings.base_url else provider,
             'model': model, 'reasoning_effort': reasoning,
             'api_key_env': settings.api_key_env, 'version': version,
+            **({'pass_env': list(settings.pass_env)} if settings.pass_env else {}),
             'base_url': settings.base_url, 'provider_api': settings.provider_api,
             'connection': settings.connection,
             'connection_revision': settings.connection_revision,

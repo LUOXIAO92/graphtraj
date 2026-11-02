@@ -8,12 +8,14 @@ optional named presets::
 
     save_normalized_sessions: false
     backfill_history: false
+    pass_env: [GH_TOKEN]             # optional: for a child with no connection
     connections:
       work-claude:
         runtime: claude              # claude, codex, pi or dsh
         home: /abs/native/home       # optional native home
         base_url: https://host/v1    # optional, credential-free
         api_key_env: WORK_KEY        # optional: the variable's NAME, never a key
+        pass_env: [GH_TOKEN]         # optional: more variables' NAMES this child receives
         provider: anthropic          # optional native provider
         models:                      # optional candidates; else discovery
           - claude-opus-5-5          # an id, or a mapping with id and optional
@@ -75,7 +77,8 @@ CONFIG_DEFAULTS: dict[str, bool] = {
 
 # Runtimes a connection may name, and the keys of each declared entry.
 RUNTIMES = ("claude", "codex", "pi", "dsh")
-CONNECTION_FIELDS = frozenset({"runtime", "home", "provider", "base_url", "api_key_env", "models", "review"})
+CONNECTION_FIELDS = frozenset({"runtime", "home", "provider", "base_url", "api_key_env", "models", "review",
+                               "pass_env"})
 MODEL_FIELDS      = frozenset({"id", "alias", "provider", "supported_efforts"})
 PRESET_FIELDS     = frozenset({"connection", "runtime", "model", "reasoning_effort"})
 REVIEWER_HTTP_FIELDS = frozenset({"base_url", "model", "api_key_env", "json_mode"})
@@ -101,13 +104,14 @@ def read_connections(root: Path) -> dict[str, dict[str, dict]]:
     """Return the declared ``connections`` and ``presets``, each keyed by name.
 
     Every entry is a copy of what the file says plus its ``name``; ``home`` is
-    expanded to an absolute path. No credential is read: ``api_key_env`` stays
-    the variable's name. ``reviewers`` is added when the file declares any.
+    expanded to an absolute path. No credential is read: ``api_key_env`` and
+    ``pass_env`` stay variable names. ``reviewers`` and the top-level ``pass_env``
+    are added when the file declares them.
     Raises ``ValueError`` like :func:`explicit_choices`.
     """
-    _, connections, presets, reviewers = _read(Path(root))
+    _, connections, presets, reviewers, passed = _read(Path(root))
     declared = {"connections": connections, "presets": presets}
-    return {**declared, "reviewers": reviewers} if reviewers else declared
+    return {**declared, **({"reviewers": reviewers} if reviewers else {}), **({"pass_env": passed} if passed else {})}
 
 
 def is_loopback(host: str | None) -> bool:
@@ -120,13 +124,13 @@ def is_loopback(host: str | None) -> bool:
         return False
 
 
-def _read(root: Path) -> tuple[dict[str, bool], dict[str, dict], dict[str, dict], dict[str, dict]]:
+def _read(root: Path) -> tuple[dict[str, bool], dict[str, dict], dict[str, dict], dict[str, dict], list[str]]:
     """Parse and check the whole file once."""
     path = root / CONFIG_FILE
     try:
         text = path.read_text(encoding="utf-8")
     except FileNotFoundError:
-        return {}, {}, {}, {}
+        return {}, {}, {}, {}, []
 
     def fail(node: yaml.Node | None, problem: str) -> ValueError:
         """Name the file and the 1-based line of ``node``."""
@@ -167,6 +171,12 @@ def _read(root: Path) -> tuple[dict[str, bool], dict[str, dict], dict[str, dict]
             raise fail(node, f"{name}: expected the name of an environment variable, never a key")
         return value
 
+    def variables(node: yaml.Node, name: str) -> list[str]:
+        """Return a non-empty list of environment variable names, never keys."""
+        if not isinstance(node, yaml.SequenceNode) or not node.value:
+            raise fail(node, f"{name}: expected a non-empty list of environment variable names")
+        return [variable(item, name) for item in node.value]
+
     def endpoint(node: yaml.Node, name: str) -> str:
         """Return a credential-free http(s) URL."""
         value = string(node, name)
@@ -206,7 +216,7 @@ def _read(root: Path) -> tuple[dict[str, bool], dict[str, dict], dict[str, dict]
 
     legacy = _legacy_choices(path, text)
     if legacy is not None:
-        return legacy, {}, {}, {}
+        return legacy, {}, {}, {}, []
     # Only connections and presets need YAML; boolean-only files never import it.
     import yaml
     try:
@@ -215,18 +225,21 @@ def _read(root: Path) -> tuple[dict[str, bool], dict[str, dict], dict[str, dict]
         mark = getattr(error, "problem_mark", None)
         raise ValueError(f"{path}:{mark.line + 1 if mark else 1}: not valid YAML") from None
     if document is None:
-        return {}, {}, {}, {}
+        return {}, {}, {}, {}, []
 
     choices: dict[str, bool] = {}
     sections: dict[str, yaml.Node] = {}
+    passed: list[str] = []
     for name, key, value in fields(document, "config.yml"):
         if name in CONFIG_DEFAULTS:
             choices[name] = boolean(value, name)
         elif name in ("connections", "presets", "reviewers"):
             sections[name] = value
+        elif name == "pass_env":
+            passed = variables(value, name)
         else:
             raise fail(key, f"{name}: unknown field; expected {', '.join(CONFIG_DEFAULTS)}, "
-                            "connections, presets or reviewers")
+                            "pass_env, connections, presets or reviewers")
 
     reviewers: dict[str, dict] = {}
     if "reviewers" in sections:
@@ -270,6 +283,9 @@ def _read(root: Path) -> tuple[dict[str, bool], dict[str, dict], dict[str, dict]
                     if len(set(ids)) != len(ids):
                         raise fail(item, f"{label}: a model id is repeated")
                     continue
+                if field == "pass_env":
+                    entry[field] = variables(item, label)
+                    continue
                 entry[field] = string(item, label)
                 if field == "runtime" and entry[field] not in RUNTIMES:
                     raise fail(item, f"{label}: expected one of {', '.join(RUNTIMES)}")
@@ -304,7 +320,7 @@ def _read(root: Path) -> tuple[dict[str, bool], dict[str, dict], dict[str, dict]
             if ("connection" in entry) == ("runtime" in entry):
                 raise fail(key, f"presets.{name}: give either connection or runtime")
             presets[name] = entry
-    return choices, connections, presets, reviewers
+    return choices, connections, presets, reviewers, passed
 
 
 def _legacy_choices(path: Path, text: str) -> dict[str, bool] | None:

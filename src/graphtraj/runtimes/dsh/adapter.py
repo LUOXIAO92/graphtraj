@@ -132,6 +132,7 @@ class DshRuntimeAdapter:
                 None if role.settings.connection else 'DEEPSEEK_API_KEY'
             ),
             'unauthenticated': unauthenticated,
+            **({'pass_env': list(role.settings.pass_env)} if role.settings.pass_env else {}),
             'instructions': role.instructions, 'reports': reports,
             'sandbox': 'read-only' if role.settings.worktree_access == 'read' else 'workspace-write',
         }, {'effective_role': role.name})

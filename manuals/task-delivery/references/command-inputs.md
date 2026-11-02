@@ -256,7 +256,8 @@ For a retained integration conflict, select the permitted role explicitly:
 graphtraj task integrate --task-id <id> --resolve-conflict '<diagnosis>' --role <role-reference> -- <validation-command> <arguments>
 ```
 
-`--role` also accepts the same inline YAML role definition as swarm. The role's
+`--role` also accepts the same inline YAML role definition as swarm, which refuses
+`api_key_env` and `pass_env`: select `connection: runtime/provider/model` instead. The role's
 configured instructions, Skills, reports and access apply. The call returns once
 the member is launched, with the Task in `resolving-integration`; the member's
 notices and permission requests reach its parent, which answers them as for any

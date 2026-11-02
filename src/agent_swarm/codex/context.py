@@ -8,6 +8,7 @@ import tomllib
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Mapping, Tuple
+from agent_swarm.child_env import CODEX_SHELL_EXCLUDE
 from agent_swarm.runtime import RuntimeAdapterError, RuntimeContext
 
 BARE_TOML_KEY = re.compile(r"^[A-Za-z0-9_-]+$")
@@ -89,7 +90,7 @@ def validate_codex_launch_request(
     if (
         not isinstance(request, dict)
         or not {"arguments", "worktree_path"}.issubset(request)
-        or not set(request).issubset({"arguments", "worktree_path", "session_parameters", "approval", "local_websocket_projection"})
+        or not set(request).issubset({"arguments", "worktree_path", "session_parameters", "approval", "local_websocket_projection", "pass_env"})
     ):
         raise CodexAdapterError(
             "RUNTIME_REQUEST_INVALID",
@@ -196,6 +197,41 @@ def codex_api_key_env(base_url: str | None, name: str | None) -> str | None:
         if parsed.scheme == 'https' and parsed.netloc.lower() in {'api.openai.com', 'api.openai.com:443'}:
             return 'OPENAI_API_KEY'
     return name
+
+
+def _home_config(runtime_home: str | None) -> dict:
+    """Return the selected home's ``config.toml``, or nothing if it is unusable."""
+    home = Path(runtime_home or os.environ.get('CODEX_HOME') or Path.home() / '.codex')
+    try:
+        return tomllib.loads((home / 'config.toml').read_text(encoding='utf-8'))
+    except (OSError, UnicodeError, tomllib.TOMLDecodeError):
+        return {}
+
+
+def exclude_credentials(config: dict, runtime_home: str | None) -> None:
+    """Make Codex's tool shells exclude credential-class names, in the Session's ``config``.
+
+    A Session's ``exclude`` replaces the home's list where ``set`` merges with it (observed
+    on Codex 0.164.0), so the user's entries from the home and the Session are kept here.
+    """
+    policy = config.setdefault('shell_environment_policy', {})
+    home   = _home_config(runtime_home).get('shell_environment_policy', {})
+    theirs = [*(home.get('exclude', []) if isinstance(home, dict) else []), *policy.get('exclude', [])]
+    policy['exclude'] = list(dict.fromkeys((*theirs, *CODEX_SHELL_EXCLUDE)))
+
+
+def native_key_names(runtime_home: str | None, config: Mapping[str, Any]) -> tuple[str, ...]:
+    """Return the variables Codex reads for a connection that names no key.
+
+    These are its own defaults and, read from the Session's settings and then the
+    selected home's ``config.toml``, the ``env_key`` of the selected provider. Its
+    ``auth.json`` login needs no variable. Names only; no value is read.
+    """
+    document  = _home_config(runtime_home)
+    provider  = config.get('model_provider') or document.get('model_provider')
+    providers = {**document.get('model_providers', {}), **config.get('model_providers', {})}
+    key = providers.get(provider, {}).get('env_key') if isinstance(providers.get(provider), dict) else None
+    return ('OPENAI_API_KEY', 'CODEX_API_KEY', *([key] if isinstance(key, str) else []))
 
 
 def _connection_environment(

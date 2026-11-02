@@ -12,6 +12,34 @@ version that identifies everything listed under it.
 
 The numbers in parentheses are the project's Task numbers.
 
+## 0.3.0 (incompatible)
+
+Classified under `PUBLIC_API.md` section 7 as a default that changes observable
+behaviour, so the minor version rises. GraphTraj adopts it in the same change: its
+range becomes `agent-swarm>=0.3.0,<0.4`.
+
+- A child Agent now receives only its own connection's key (433). Every launch path of
+  all four Runtimes and of GraphTraj's Runner members calls one function,
+  `agent_swarm.child_environment`, on first start and on resume. Other credential-class
+  variables, chosen by `agent_swarm.is_credential_name`, no longer reach the child.
+- `pass_env`, a list of variable names, declares more variables on a connection or at the
+  top level of `config.yml` for a child with no connection. It is user configuration only:
+  `create` still refuses it as an unexpected parameter. It never brings back a reviewer's
+  key. GraphTraj takes it on a connection provider and on a role in `roles.yml`.
+- A Codex child's tool shell now excludes credential names through
+  `shell_environment_policy`, including exports reloaded from dotfiles and written to Codex's
+  shell snapshot (433). `~/.zshenv` is not stopped, and `~/.zprofile` and `~/.zlogin` are not
+  stopped before the snapshot is ready. The child's own key stays with Codex's process and leaves
+  its shell. A declared credential name travels to Codex in the Session parameters.
+- A GraphTraj inline role on a new dispatch refuses `pass_env` and `api_key_env` with
+  `ROLE_NOT_CONFIGURED`; select a `connection:` instead (433). A retained Batch keeps loading.
+- A Pi connection naming no key keeps the variable its home's `models.json` or `auth.json` names
+  for the selected provider (433).
+- **What a user may need to change:** a child that used an unrelated key from its parent's
+  environment must now declare it. That covers tools in its shell such as `gh` with
+  `GH_TOKEN`, a Codex MCP server with `bearer_token_env_var`, and DSH's official web search
+  beside a connection naming another key (`pass_env: [DEEPSEEK_API_KEY]`).
+
 ## 0.2.20 (compatible)
 
 - A Bash `cd` no longer ends a Claude child or loses its result (437). A native helper

@@ -27,7 +27,7 @@ graphtraj task graph
 ```
 
 GraphTraj and `agent-swarm` are separate distributions. GraphTraj declares the
-`agent-swarm` versions it supports (currently `>=0.2.15,<0.3`); building both
+`agent-swarm` versions it supports (currently `>=0.3.0,<0.4`); building both
 from the same revision always satisfies it. From a checkout, build both with
 `python -m pip wheel --no-deps -w dist ./src/agent_swarm .`, then install both
 wheels in your dedicated environment. The independent distribution can also

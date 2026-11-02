@@ -553,7 +553,7 @@ def test_reviewer_key_stays_out_of_the_child(make, tmp_path: Path, monkeypatch: 
     monkeypatch.setattr(control_module, 'check_reviewer', lambda entry: None)
     monkeypatch.setenv(REVIEW_KEY, FAKE)
     probe = tmp_path / 'key-probe.json'
-    monkeypatch.setenv('PI_FIXTURE_KEY_PROBE', f'{probe}:{REVIEW_KEY},{CHILD_KEY}')
+    monkeypatch.setenv('PI_FIXTURE_PROBE_NAMES', f'{probe}:{REVIEW_KEY},{CHILD_KEY}')
     child = make({'base_url': 'http://127.0.0.1:9/v1', 'model': 'm', 'api_key_env': REVIEW_KEY},
                  {'api_key_env': CHILD_KEY})
     assert 'agent' in child.create('hello')
@@ -566,7 +566,7 @@ def test_child_connection_naming_the_variable_keeps_it(make, tmp_path: Path, mon
     monkeypatch.setattr(control_module, 'check_reviewer', lambda entry: None)
     monkeypatch.setenv(REVIEW_KEY, FAKE)
     probe = tmp_path / 'key-probe.json'
-    monkeypatch.setenv('PI_FIXTURE_KEY_PROBE', f'{probe}:{REVIEW_KEY}')
+    monkeypatch.setenv('PI_FIXTURE_PROBE_NAMES', f'{probe}:{REVIEW_KEY}')
     child = make({'base_url': 'http://127.0.0.1:9/v1', 'model': 'm', 'api_key_env': REVIEW_KEY},
                  {'api_key_env': REVIEW_KEY})
     assert 'agent' in child.create('hello')
@@ -683,12 +683,12 @@ def pi_listing(tmp_path: Path, pi_environment: dict, monkeypatch: pytest.MonkeyP
     monkeypatch.setenv(DEFAULT_KEY, FAKE)
     monkeypatch.setenv(CHILD_KEY, FAKE)
     monkeypatch.setenv(REVIEW_KEY, FAKE)
-    monkeypatch.setenv('PI_FIXTURE_LISTING_KEY', DEFAULT_KEY)
+    monkeypatch.setenv('PI_FIXTURE_LISTING_NEEDS', DEFAULT_KEY)
     listings, commands = tmp_path / 'listings', tmp_path / 'commands'
     monkeypatch.setenv('PI_FIXTURE_LISTINGS', str(listings))
     monkeypatch.setenv('PI_FIXTURE_COMMANDS', str(commands))
     probe = tmp_path / 'key-probe.json'
-    monkeypatch.setenv('PI_FIXTURE_KEY_PROBE', f'{probe}:{DEFAULT_KEY},{REVIEW_KEY},{CHILD_KEY}')
+    monkeypatch.setenv('PI_FIXTURE_PROBE_NAMES', f'{probe}:{DEFAULT_KEY},{REVIEW_KEY},{CHILD_KEY}')
     return {'environment': pi_environment, 'listings': listings, 'commands': commands, 'probe': probe}
 
 
@@ -762,18 +762,24 @@ def test_pi_reviewer_on_another_variable_is_unchanged(tmp_path: Path, pi_listing
     assert (seen[DEFAULT_KEY], seen[REVIEW_KEY]) == (True, False)
 
 
-def test_pi_command_reviewer_is_unchanged(tmp_path: Path, pi_listing: dict, reviewer: dict) -> None:
-    """A command reviewer holds no key, so no listing asks about one."""
+def test_pi_command_reviewer_is_unchanged(tmp_path: Path, pi_listing: dict, reviewer: dict,
+                                          monkeypatch: pytest.MonkeyPatch) -> None:
+    """A command reviewer holds no key, so its refusal check never asks about one.
+
+    Since 433 the launch itself lists without keys to find the child's own, so the check
+    is observed directly rather than from what the listings held.
+    """
+    asked = []
+    monkeypatch.setattr('agent_swarm.pi.driver.pi_offers', lambda *a, **k: asked.append(a) or True)
     child = pi_child(tmp_path, pi_listing, reviewer['entry'], {'api_key_env': None, 'home': pi_home(tmp_path, {})})
     assert pi_child_ran(child, pi_listing)[DEFAULT_KEY] is True
-    no_listing_without_a_key = all(json.loads(line)['key'] for line in pi_listing['listings'].read_text().splitlines())
-    assert no_listing_without_a_key
+    assert asked == []
 
 
 def test_pi_model_offered_in_neither_listing_is_not_this_refusal(
         tmp_path: Path, pi_listing: dict, monkeypatch: pytest.MonkeyPatch) -> None:
     """The reviewer's removal is not the cause, so the existing paths report it."""
-    monkeypatch.setenv('PI_FIXTURE_LISTING_KEY', 'NO_SUCH_430_KEY')
+    monkeypatch.setenv('PI_FIXTURE_LISTING_NEEDS', 'NO_SUCH_430_KEY')
     home = pi_home(tmp_path, {})
     declared = pi_child(tmp_path, pi_listing, DEFAULT_KEY_REVIEWER, {'api_key_env': None, 'home': home})
     message = declared.create('never runs')['error']['message']
@@ -785,7 +791,7 @@ def test_pi_model_offered_in_neither_listing_is_not_this_refusal(
 def test_pi_model_offered_in_neither_listing_passes_when_the_destination_is_not_read(
         tmp_path: Path, pi_listing: dict, monkeypatch: pytest.MonkeyPatch) -> None:
     """With nothing changed from the host, both listings ask and neither offers: no refusal."""
-    monkeypatch.setenv('PI_FIXTURE_LISTING_KEY', 'NO_SUCH_430_KEY')
+    monkeypatch.setenv('PI_FIXTURE_LISTING_NEEDS', 'NO_SUCH_430_KEY')
     home = pi_home(tmp_path, {})
     monkeypatch.setenv('PI_CODING_AGENT_DIR', home)
     environment = {**pi_listing['environment'], 'agent_dir': home}
@@ -888,7 +894,7 @@ def test_pi_without_review_is_unchanged(tmp_path: Path, pi_environment: dict, mo
     """No variable, no hook check; an ordinary dialog keeps its native request."""
     monkeypatch.setenv(CHILD_KEY, FAKE)
     probe, commands = tmp_path / 'probe', tmp_path / 'commands'
-    monkeypatch.setenv('PI_FIXTURE_KEY_PROBE', f'{probe}:{pi_execution.REVIEW_ENV}')
+    monkeypatch.setenv('PI_FIXTURE_PROBE_NAMES', f'{probe}:{pi_execution.REVIEW_ENV}')
     monkeypatch.setenv('PI_FIXTURE_COMMANDS', str(commands))
     child = PiChild(tmp_path, pi_environment, None)
     target = tmp_path / 'native.txt'

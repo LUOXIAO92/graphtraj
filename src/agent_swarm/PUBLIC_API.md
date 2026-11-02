@@ -352,7 +352,8 @@ Parts for building a host or a consumer on agents (since 0.2.2), also in
   root (1.5);
 - Runtime executions: `RuntimeAdapterError`, the protocols `RuntimeContext` and
   `RuntimeTurn`, `RuntimeExecutionResult`, `SessionStarted`,
-  `credential_environment`.
+  `credential_environment`, `child_environment`, `is_credential_name`, `CODEX_SHELL_EXCLUDE`
+  (section 3.1).
 
 Host shutdown (section 4, since 0.2.4), also in `agent_swarm.__all__`:
 `stop_owned(control)` interrupts what this process runs on one 10-second deadline
@@ -839,7 +840,10 @@ because its fixed official address is not in the connection. An endpoint that do
 not serve native search then gives a search error naming the endpoint, rather than
 official search. A connection with any other key variable, or with no `base_url` or
 an official one, leaves search at DSH's official root with `DEEPSEEK_API_KEY`: to
-keep official search beside a gateway, name the gateway's key in another variable.
+keep official search beside a gateway, name the gateway's key in another variable and
+declare `pass_env: [DEEPSEEK_API_KEY]` on the connection (section 3.1). Without that
+declaration a connection naming another key has no key for official search; a connection
+naming none, or naming `DEEPSEEK_API_KEY`, needs no declaration.
 
 A turn that ends other than `completed` fails the execution with
 `RUNTIME_EXECUTION_FAILED`. When the native reason carries an error, the message
@@ -930,6 +934,7 @@ this file.
 ```yaml
 save_normalized_sessions: false     # boolean, default false
 backfill_history: false             # boolean, default false
+pass_env: [GH_TOKEN]                # optional: the same for a child with no connection (3.1)
 connections:                        # optional
   work-claude:                      # name: any non-empty string
     runtime: claude                 # required: claude, codex, pi or dsh
@@ -937,6 +942,7 @@ connections:                        # optional
     provider: anthropic             # optional native provider
     base_url: https://host/v1       # optional, http(s) without credentials, query or fragment
     api_key_env: WORK_KEY           # optional: the NAME of an environment variable, never a key
+    pass_env: [GH_TOKEN]            # optional: more variables' NAMES this child receives (3.1)
     review: local-review            # optional: this connection's reviewer (section 6)
     models:                         # optional candidates; omitted: native discovery
       - claude-opus-5-5             # an id, or
@@ -983,10 +989,100 @@ argument, not from this file.
   `<file>:<line>: <field>: ...`; `create` reports it as `invalid-config`.
 - `read_connections(root)` returns `{"connections": {name: entry},
   "presets": {name: entry}}`, plus `"reviewers": {name: entry}` when the file
-  declares any; each entry is the file's fields plus `name`.
+  declares any and `"pass_env": [name]` when it declares that; each entry is the
+  file's fields plus `name`.
 - `write_config` and `default_config` replace only the boolean lines and keep
   every other line, including connections, presets and comments.
 - A file that holds only boolean lines is read exactly as before 0.1.1.
+
+### 3.1 What a child's environment holds (433)
+
+A child's Runtime starts from `agent_swarm.child_environment(parent, *, api_key_env,
+defaults, declared, review_key)`, on every launch and resume of all four Runtimes and of
+GraphTraj's Runner members. In order: the host's environment; credential-class names
+removed; the child's own keys added; the declared names added; then the reviewer's key
+removed, unless the connection names it as its own `api_key_env`. So declaring a
+reviewer's key in `pass_env` does not hand it over. A name the host does not have stays
+absent. Ordinary variables such as `PATH` and `HOME` are unchanged.
+
+This is not a review rule: nothing forbids or detects a model reading its environment.
+It only does not hand a child keys unrelated to its connection.
+
+**Credential-class names** (`agent_swarm.is_credential_name(name)`). Ignoring case, split
+the name on `_`; it is a credential when any part ends in `KEY`, `TOKEN`, `SECRET`,
+`SECRETS`, `PASSWORD`, `CREDENTIAL` or `CREDENTIALS`. `GIT_CONFIG_KEY_<n>` is excepted: Git
+fails without it when `GIT_CONFIG_COUNT` is set.
+
+| Differences from the redaction markers | Redaction (substring, unchanged) | This rule |
+| --- | --- | --- |
+| `TOKENIZERS_PARALLELISM`, `KEYBOARD_LAYOUT` | redacted | ordinary |
+| `CLAUDE_CODE_MAX_OUTPUT_TOKENS`, `MAX_THINKING_TOKENS` | redacted | ordinary: `TOKENS` is not a marker |
+| `GIT_CONFIG_KEY_0` | redacted | ordinary |
+| `PGPASSWORD`, `APIKEY`, `HF_TOKEN` | redacted | credential |
+
+Redaction may over-match because hiding text costs little; removing a variable breaks
+what uses it, so this rule compares parts. It also over-matches rarely (`MONKEY`,
+`PASSWORD_STORE_DIR`); declare such a name.
+
+**A name rule has gaps.** It does not catch: a URL holding a credential
+(`DATABASE_URL`, `HTTP_PROXY`); a value in `GIT_CONFIG_VALUE_<n>` or
+`GIT_CONFIG_PARAMETERS`; names without a marker such as `MYSQL_PWD`, `NPM_CONFIG__AUTH` or
+`ANTHROPIC_CUSTOM_HEADERS`. `SSH_AUTH_SOCK` stays deliberately: it is a socket path Git
+over SSH needs, which is also why the redaction markers do not treat it as secret. Holding
+it does let a child use the keys loaded in that agent.
+
+**A child's own keys.** The connection's `api_key_env` always. With none named, each
+Runtime's own login variables:
+
+| Runtime | Own variables when `api_key_env` is absent |
+| --- | --- |
+| Claude | `ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`, `CLAUDE_CODE_OAUTH_TOKEN`; the `AWS_*` credentials with `CLAUDE_CODE_USE_BEDROCK`, the `GOOGLE_*`, `GCLOUD_*` and `CLOUDSDK_*` credentials with `CLAUDE_CODE_USE_VERTEX`, the `ANTHROPIC_FOUNDRY_*` credentials with `CLAUDE_CODE_USE_FOUNDRY` |
+| Codex | `OPENAI_API_KEY`, `CODEX_API_KEY`, and the `env_key` of the selected provider in the Session's settings or the home's `config.toml` |
+| Pi | A set variable the home's `models.json` `apiKey` or `auth.json` `key` names for the selected provider, as `$NAME`, `${NAME}` or plain text; a `!command` is ignored. Otherwise whatever Pi itself needs: agents asks `get_available_models` with variables kept to a candidate set, on each launch. If Pi offers it under none, none is added |
+| DSH | `DEEPSEEK_API_KEY`, which 430's refusal still covers when a reviewer holds it |
+
+A Runtime's native login (`auth.json`, the Claude keychain, `$DSH_HOME/.credentials.yaml`)
+needs no variable and is untouched. Pi 1.4.0 lists a `models.json` provider with a plain
+`apiKey` whatever is set, and sends that text as written; only `$NAME` and `${NAME}` read the
+environment. DSH removes credential-shaped names from its own shell tool regardless.
+
+**A Codex child's tool shell.** Every Codex child, first start and resume, has
+`agent_swarm.CODEX_SHELL_EXCLUDE` in its Session's `shell_environment_policy.exclude`, after any
+entries from the Session and the home's `config.toml`: a Session's `exclude` replaces the home's
+list on Codex 0.164.0, while `set` merges and other fields stay. Codex's globs have `*` and `?`
+only, ignore case, and have no classes or negation. They equal the rule above except for one
+written difference: a `KEY` part followed by `_` and a digit, as in `MY_KEY_2`, is not matched,
+because `*KEY_*` would also match `GIT_CONFIG_KEY_<n>`. Such a name is still removed from what the
+child inherits; only a dotfile's export of it reaches the shell.
+
+The policy governs tool shells, not Codex's process, which keeps the child's key for model access;
+the shell no longer sees that key. A declared credential-class name reaches the shell through
+`set`, in the transient copy of the parameters of `thread/start` or `thread/resume`: it travels to
+Codex in the Session parameters and agents writes it in no document, trace, diagnostic or archive.
+An ordinary declared name is inherited as before.
+
+Not stopped, all observed on Codex 0.164.0: `~/.zshenv`, which zsh runs after the environment is
+set; `~/.zprofile` and `~/.zlogin` when a shell starts as a login shell before the snapshot is
+ready; a shell's other effects, since these files still run. Existing plaintext in a native home's
+`shell_snapshots` stays.
+
+**A grandchild** needs nothing from its parent: a child's `create` reaches the owning host
+over its connection, which checks and launches from the host's environment, so a grandchild
+on another connection gets that connection's key and its parent's environment plays no part.
+
+**`pass_env`** is a list of variable names on a connection, or at the top level of
+`config.yml` for a child with no connection; a connection's list replaces the top-level one.
+It is the only way to declare one, and it belongs to the user: `create` refuses it with
+`invalid-input`, so a model cannot ask for a key. A running or resumed child keeps the list
+captured when it was created. GraphTraj takes the same field on a connection provider in
+`connections.yml` and on a role in `roles.yml`. A GraphTraj inline role refuses `pass_env` and
+`api_key_env` on a new dispatch, since a model can write one; `connection:` selects what the user
+declared, and a retained Batch keeps loading for the Sessions it started.
+
+**Not protected:** a top-level host started from the user's own shell, whose environment is
+the user's; the child's own key, which it can read; and plaintext files a child can read,
+such as `~/.zshrc`, including through a shell that reloads them. `command` reviewers (section 6) are the user's own process, not a child, and still
+receive the host's environment apart from the agents connection.
 
 ## 4. Parent-child traffic
 
@@ -1678,6 +1774,10 @@ Consumers must ignore result fields and archive fields they do not know.
 
 Recorded classifications:
 
+- 433 (0.3.0): a child no longer inherits credential-class variables other than its own keys.
+  This changes a default's observable behaviour, so it is incompatible and raises the minor
+  version; `pass_env` restores any one of them. GraphTraj adopts it in the same change, so its
+  range becomes `agent-swarm>=0.3.0,<0.4`.
 - 388: `send` with `reports_only: true` is rejected with `not-implemented` by
   agents' own backend, which used to ignore the field and start new work. This
   is a fix (compatible): the silent ignore contradicted the field's only
@@ -1788,8 +1888,9 @@ patch version. From `1.0.0` the usual rule applies: major for incompatible,
 minor for additions, patch for fixes. A release that changes this document
 updates it in the same change.
 
-GraphTraj declares the range it supports (today `agent-swarm>=0.2.15,<0.3`: it imports the names in 1.3, and
-its DSH member launch relies on `additional_writable_roots` reaching the sandbox policy, which needs 0.2.15).
+GraphTraj declares the range it supports (today `agent-swarm>=0.3.0,<0.4`: it imports the names in 1.3, its
+DSH member launch relies on `additional_writable_roots` reaching the sandbox policy, which needs 0.2.15, and its
+member launches rely on `pass_env` and the child environment rule of section 3.1, which need 0.3.0).
 It raises the lower bound when it starts relying on a newer version, and widens the range in the same change that
 adopts an incompatible release.
 

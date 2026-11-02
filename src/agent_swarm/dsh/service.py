@@ -88,7 +88,8 @@ class DshService:
         """Launch an owned Web backend and exchange its single-use launch token."""
         urls: queue.Queue[str | None] = queue.Queue()
         diagnostics: deque[str] = deque(maxlen=40)
-        secrets = secret_values(self.environment)
+        # The host's names too: redaction covers more than a child now holds.
+        secrets = secret_values({**os.environ, **self.environment})
         try:
             argv = [self.executable, 'web']
             if self.profile_patch is not None:

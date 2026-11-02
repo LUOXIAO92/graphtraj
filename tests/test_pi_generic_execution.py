@@ -15,6 +15,7 @@ from agent_swarm.models import pi_destination
 from agent_swarm.pi import PiDriver, execution
 from agent_swarm.pi.execution import PiExecution
 from agent_swarm.runtime import RuntimeAdapterError
+from agent_swarm.child_env import is_credential_name
 from pi_parity_scenarios import capture
 from test_pi_runtime import pi_environment  # noqa: F401
 
@@ -161,4 +162,7 @@ def test_graphtraj_member_launch_matches_base() -> None:
             if name != 'destinations':
                 for kind in ('allowRead', 'denyRead', 'denyWrite'):
                     scenario['policy']['filesystem'][kind].sort()
+                # Since 433 a launch also removes credential-class names; all else matches the base.
+                environment = scenario['environment']
+                environment['removed'] = [name for name in environment['removed'] if not is_credential_name(name)]
     assert actual == goldens

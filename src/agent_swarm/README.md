@@ -268,7 +268,7 @@ Tests is expected to work and has not been seen to.
 | Archive | Yes, with `save_normalized_sessions`. Tests | Yes. Real: a Codex child | Yes. Tests | Yes. Tests |
 | Children on other Runtimes | Real: Codex. Tests: DSH, Pi | Real: Claude, DSH. Tests: Pi | Real: Claude. Tests: Codex, DSH | Real: Claude. Tests: Codex, Pi |
 | Grandchild notices | Go to the child that is the grandchild's parent, on any Runtime, once each; held while it is stopped. Tests | As Claude Code host | As Claude Code host | As Claude Code host |
-| Host shutdown | Stops every child this process runs, up to 10 seconds in total. Their ends are held for the next run. Real: a confirmed stop. Tests: an unconfirmed one, reported as `stop-unconfirmed` in `host.log` | The same, reported on stderr and in `stop_unconfirmed` in `--output`. Real: a confirmed stop. Tests: an unconfirmed one | The same, reported on stderr, and the extension's shutdown handler rejects. Tests | The same, reported on stderr and in DSH's logger. Tests |
+| Host shutdown | Stops every child this process runs, up to 10 seconds in total. Their ends are held for the next run. Real: a confirmed stop. Tests: an unconfirmed one, reported as `stop-unconfirmed` in `host.log`; a killed host's DSH child, whose process group a watcher stops and reports in `host.log` | The same, reported on stderr and in `stop_unconfirmed` in `--output`. Real: a confirmed stop. Tests: an unconfirmed one | The same, reported on stderr, and the extension's shutdown handler rejects. Tests | The same, reported on stderr and in DSH's logger. Tests |
 
 A Pi child has not yet run under a real host parent. Real Pi children have only run
 with a test parent through the Python interface. `ask_parent` from a real Pi child has

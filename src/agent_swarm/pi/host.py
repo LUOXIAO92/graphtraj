@@ -296,6 +296,8 @@ class Notices:
         self.waiting: dict[str, list] = {}
         # Notices Pi has taken and not yet written to the Session, for this host's lifetime.
         self.awaiting: dict[str, dict] = {}
+        # Records of shown notices being written: main waits for them at the close.
+        self.settling: list[threading.Thread] = []
         self.control: AgentControl | None = None
         self.closing = False
         self.started = time.time()
@@ -362,7 +364,13 @@ class Notices:
                                       'unconfirmed' if result == 'unconfirmed' else 'held')
 
     def acknowledge(self, identity: object, shown: bool) -> None:
-        """Settle one written notice: in the Pi Session, or refused there."""
+        """Settle one written notice: in the Pi Session, or refused there.
+
+        The record is written on its own daemon thread, because the stdin loop
+        calls this and a held record lock must not stop that loop reading the
+        close. If the host ends first the notice stays ``held``, and the next
+        host pushes it again, as for any host that ended before settling.
+        """
         with self.lock:
             slot = self.waiting.pop(identity, None)
             awaited = self.awaiting.pop(identity, None)
@@ -370,7 +378,9 @@ class Notices:
             slot[1] = shown
             slot[0].set()
         elif awaited is not None and shown:
-            self.control.settle_notice(awaited, 'delivered')
+            # ponytail: one short-lived thread per shown notice, kept for the host's life.
+            self.settling.append(threading.Thread(target=self.control.settle_notice, args=(awaited, 'delivered'), daemon=True))
+            self.settling[-1].start()
 
     def hide_pushed(self, document: Mapping[str, Any]) -> None:
         """Hide a body this host is about to push, so the Main receives it once.
@@ -490,8 +500,12 @@ def main() -> None:
         # Stop pushing first: ends caused by this shutdown are held, not shown.
         control.close_notices()
         notices.close()
+        # One wait for the flusher and for shown notices still being recorded.
+        limit = time.monotonic() + CLOSE_SECONDS
         if flusher.ident is not None:
             flusher.join(CLOSE_SECONDS)
+        for settling in notices.settling:
+            settling.join(max(0.0, limit - time.monotonic()))
         # Preserve identities and Sessions; use the same public stop path.
         exit_if_unconfirmed(stop_children(call, lambda: control.visible_agents(caller)))
 

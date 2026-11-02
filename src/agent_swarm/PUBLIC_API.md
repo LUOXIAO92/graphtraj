@@ -1090,7 +1090,10 @@ What the parent sees today:
   end, and the host does not wait for the lock to be released. A model request
   still running when the pipe closes, and the host's notice flusher, can add up to
   3 seconds each before the stop, so a host process ends within 20 seconds of its
-  pipe closing; that request's caller is told the operation is unconfirmed. An
+  pipe closing; that request's caller is told the operation is unconfirmed. A held
+  record lock does not stop the Pi host reading its pipe either: a notice reported
+  shown whose record is still locked when the host ends stays `held`, and the next
+  host pushes it again. An
   Agent whose latest `status` did not show it out of `active` at that deadline is
   not reported as stopped: the host
   writes one `{"error": {"code": "stop-unconfirmed", "message"}}` line naming

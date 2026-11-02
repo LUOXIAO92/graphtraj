@@ -24,6 +24,9 @@ The numbers in parentheses are the project's Task numbers.
   Agent was seen stopped.
   New: `worker_connection` and `agents_connection` take `close_seconds` (default: unchanged),
   and `AgentControl.visible_agents` names a caller's Agents without taking a record lock.
+  The Pi host's stdin loop no longer writes a shown notice's record itself, so a held lock
+  cannot stop it reading the close. A notice still locked when the host ends stays `held`, and
+  the next host pushes it again.
   Claude and Codex hosts are unchanged.
 
 ## 0.2.12 (compatible)

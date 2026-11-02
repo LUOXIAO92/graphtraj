@@ -378,6 +378,23 @@ def hold_lock(agent):
         time.sleep(0.01)
 
 
+def acknowledgements(notices, agent):
+    """What the extension sends for one child's end: taken for a turn, then shown. The end of these lines is the close."""
+    driver.stops[agent].set()
+    while not notices.waiting:
+        time.sleep(0.01)
+    identity = next(iter(notices.waiting))
+    yield json.dumps({'ack': identity, 'queued': True})
+    record = where / 'data' / 'control' / 'agents' / f'{agent}.json'
+    while json.loads(record.read_text())['executions'][-1].get('notification') != 'held':
+        time.sleep(0.01)
+    facts['acknowledged'] = agent
+    (where / 'facts.json').write_text(json.dumps(facts))
+    if os.environ['TEST_ACK'] == 'locked':
+        hold_lock(agent)
+    yield json.dumps({'ack': identity, 'shown': True})
+
+
 def late_status(call):
     """``call`` whose first status answers and whose later ones fail or never return."""
     reads = []
@@ -449,6 +466,9 @@ def started(*arguments):
         facts['locked'] = {'second': second, 'first': first}[os.environ['TEST_LOCK']]
         hold_lock(facts['locked'])
     (where / 'facts.json').write_text(json.dumps(facts))
+    if os.environ.get('TEST_ACK'):
+        notices.timeout = 10.0
+        sys.stdin = acknowledgements(notices, second)
     if os.environ.get('TEST_LATE'):
         at = 3 if kind == 'pi' else 4
         result = (*result[:at], late_status(result[at]), *result[at + 1:])
@@ -686,6 +706,29 @@ def test_a_request_in_flight_that_finishes_still_gets_its_reply(tmp_path: Path, 
     assert result.returncode == 0 and 'stop-unconfirmed' not in result.stderr
     outcome = json.loads(wait_until(lambda: (tmp_path / 'client.txt').exists() and (tmp_path / 'client.txt').read_text()))
     assert outcome['failed'] is False
+
+
+def test_a_shown_acknowledgement_on_a_locked_record_does_not_hold_the_pi_host(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Pi's stdin loop settles what it was told is shown: a held lock must not stop it reading the close.
+
+    Unsettled when the host ends, the notice stays ``held`` as for any host that ended
+    first, so the next host pushes it once more.
+    """
+    result, facts = run_host(tmp_path, 'pi', stop_seconds=2.0, limit=12, ack='locked')
+    assert result.returncode != 0 and 'Traceback' not in result.stderr
+    agent = facts['acknowledged']
+    assert_others_ended(tmp_path, facts, agent, stop_line(result.stderr)['message'])
+    assert read_record(tmp_path, agent)['executions'][-1]['notification'] == 'held'
+    written = Process('pi', tmp_path, monkeypatch, True, 2.0, Driver()).flush()
+    assert [line['agent'] for line in written].count(agent) == 1
+    assert read_record(tmp_path, agent)['executions'][-1]['notification'] == 'delivered'
+
+
+def test_a_shown_acknowledgement_still_settles_when_the_record_is_free(tmp_path: Path) -> None:
+    """Nothing blocked: the notice is delivered, however soon the pipe closes after the acknowledgement."""
+    result, facts = run_host(tmp_path, 'pi', limit=20, ack='free')
+    assert result.returncode == 0 and 'stop-unconfirmed' not in result.stderr
+    assert read_record(tmp_path, facts['acknowledged'])['executions'][-1]['notification'] == 'delivered'
 
 
 # --- Where the line surfaces on the native side ---

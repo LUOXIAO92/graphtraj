@@ -11,7 +11,7 @@ from typing import Any, Mapping
 
 from agent_swarm import AgentsError, Caller, Run
 from agent_swarm.control import require_available, within_workspace
-from agent_swarm.models import pi_destination, pi_offers
+from agent_swarm.models import pi_destination, pi_named_keys, pi_offers
 from agent_swarm.runtime import RuntimeAdapterError
 from .execution import PiExecution, RPC_SECONDS
 
@@ -32,7 +32,9 @@ def _refuse_key_held_by_reviewer(request: Mapping[str, Any]) -> None:
             or not os.environ.get(variable)):
         return
     target = (request['executable'], request['agent_dir'], request['provider'], request['model'])
-    if pi_offers(*target, without=variable) is False and pi_offers(*target) is True:
+    # Pi offers a models.json provider with or without its variable, so the file decides there.
+    if (variable in pi_named_keys(request['agent_dir'], request['provider'])
+            or pi_offers(*target, without=variable) is False and pi_offers(*target) is True):
         raise AgentsError(
             'invalid-config',
             f"Reviewer {review.get('name', '')!r} uses {variable}, which is kept from the child it reviews, "

@@ -24,7 +24,16 @@ behaviour, recorded there as a deliberate security fix within `0.2.x`.
 - `pass_env`, a list of variable names, declares more variables on a connection or at the
   top level of `config.yml` for a child with no connection. It is user configuration only:
   `create` still refuses it as an unexpected parameter. It never brings back a reviewer's
-  key. GraphTraj takes it on a connection provider and on an inline role.
+  key. GraphTraj takes it on a connection provider and on a role in `roles.yml`.
+- A Codex child's tool shell now excludes credential names through
+  `shell_environment_policy`, including exports reloaded from dotfiles and written to Codex's
+  shell snapshot (433). `~/.zshenv` is not stopped, and `~/.zprofile` and `~/.zlogin` are not
+  stopped before the snapshot is ready. The child's own key stays with Codex's process and leaves
+  its shell. A declared credential name travels to Codex in the Session parameters.
+- A GraphTraj inline role on a new dispatch refuses `pass_env` and `api_key_env` with
+  `ROLE_NOT_CONFIGURED`; select a `connection:` instead (433). A retained Batch keeps loading.
+- A Pi connection naming no key keeps the variable its home's `models.json` or `auth.json` names
+  for the selected provider (433).
 - **What a user may need to change:** a child that used an unrelated key from its parent's
   environment must now declare it. That covers tools in its shell such as `gh` with
   `GH_TOKEN`, a Codex MCP server with `bearer_token_env_var`, and DSH's official web search

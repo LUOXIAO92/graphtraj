@@ -333,7 +333,8 @@ Parts for building a host or a consumer on agents (since 0.2.2), also in
   root (1.5);
 - Runtime executions: `RuntimeAdapterError`, the protocols `RuntimeContext` and
   `RuntimeTurn`, `RuntimeExecutionResult`, `SessionStarted`,
-  `credential_environment`, `child_environment`, `is_credential_name` (section 3.1).
+  `credential_environment`, `child_environment`, `is_credential_name`, `CODEX_SHELL_EXCLUDE`
+  (section 3.1).
 
 Host shutdown (section 4, since 0.2.4), also in `agent_swarm.__all__`:
 `stop_owned(control)` interrupts what this process runs on one 10-second deadline
@@ -1007,12 +1008,33 @@ Runtime's own login variables:
 | --- | --- |
 | Claude | `ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`, `CLAUDE_CODE_OAUTH_TOKEN`; the `AWS_*` credentials with `CLAUDE_CODE_USE_BEDROCK`, the `GOOGLE_*`, `GCLOUD_*` and `CLOUDSDK_*` credentials with `CLAUDE_CODE_USE_VERTEX`, the `ANTHROPIC_FOUNDRY_*` credentials with `CLAUDE_CODE_USE_FOUNDRY` |
 | Codex | `OPENAI_API_KEY`, `CODEX_API_KEY`, and the `env_key` of the selected provider in the Session's settings or the home's `config.toml` |
-| Pi | Whatever Pi itself needs for the selected model: agents asks Pi's `get_available_models` with variables kept to a candidate set, on each launch. If Pi offers it under none, none is added |
+| Pi | A set variable the home's `models.json` `apiKey` or `auth.json` `key` names for the selected provider, as `$NAME`, `${NAME}` or plain text; a `!command` is ignored. Otherwise whatever Pi itself needs: agents asks `get_available_models` with variables kept to a candidate set, on each launch. If Pi offers it under none, none is added |
 | DSH | `DEEPSEEK_API_KEY`, which 430's refusal still covers when a reviewer holds it |
 
 A Runtime's native login (`auth.json`, the Claude keychain, `$DSH_HOME/.credentials.yaml`)
-needs no variable and is untouched. Note that DSH removes credential-shaped names from its
-own shell tool regardless, and that Codex removes nothing by default.
+needs no variable and is untouched. Pi 1.4.0 lists a `models.json` provider with a plain
+`apiKey` whatever is set, and sends that text as written; only `$NAME` and `${NAME}` read the
+environment. DSH removes credential-shaped names from its own shell tool regardless.
+
+**A Codex child's tool shell.** Every Codex child, first start and resume, has
+`agent_swarm.CODEX_SHELL_EXCLUDE` in its Session's `shell_environment_policy.exclude`, after any
+entries from the Session and the home's `config.toml`: a Session's `exclude` replaces the home's
+list on Codex 0.164.0, while `set` merges and other fields stay. Codex's globs have `*` and `?`
+only, ignore case, and have no classes or negation. They equal the rule above except for one
+written difference: a `KEY` part followed by `_` and a digit, as in `MY_KEY_2`, is not matched,
+because `*KEY_*` would also match `GIT_CONFIG_KEY_<n>`. Such a name is still removed from what the
+child inherits; only a dotfile's export of it reaches the shell.
+
+The policy governs tool shells, not Codex's process, which keeps the child's key for model access;
+the shell no longer sees that key. A declared credential-class name reaches the shell through
+`set`, in the transient copy of the parameters of `thread/start` or `thread/resume`: it travels to
+Codex in the Session parameters and agents writes it in no document, trace, diagnostic or archive.
+An ordinary declared name is inherited as before.
+
+Not stopped, all observed on Codex 0.164.0: `~/.zshenv`, which zsh runs after the environment is
+set; `~/.zprofile` and `~/.zlogin` when a shell starts as a login shell before the snapshot is
+ready; a shell's other effects, since these files still run. Existing plaintext in a native home's
+`shell_snapshots` stays.
 
 **A grandchild** needs nothing from its parent: a child's `create` reaches the owning host
 over its connection, which checks and launches from the host's environment, so a grandchild
@@ -1023,12 +1045,13 @@ on another connection gets that connection's key and its parent's environment pl
 It is the only way to declare one, and it belongs to the user: `create` refuses it with
 `invalid-input`, so a model cannot ask for a key. A running or resumed child keeps the list
 captured when it was created. GraphTraj takes the same field on a connection provider in
-`connections.yml` and on an inline role.
+`connections.yml` and on a role in `roles.yml`. A GraphTraj inline role refuses `pass_env` and
+`api_key_env` on a new dispatch, since a model can write one; `connection:` selects what the user
+declared, and a retained Batch keeps loading for the Sessions it started.
 
 **Not protected:** a top-level host started from the user's own shell, whose environment is
 the user's; the child's own key, which it can read; and plaintext files a child can read,
-such as `~/.zshrc`, including through a shell that reloads them. Codex's shell does: see the
-README. `command` reviewers (section 6) are the user's own process, not a child, and still
+such as `~/.zshrc`, including through a shell that reloads them. `command` reviewers (section 6) are the user's own process, not a child, and still
 receive the host's environment apart from the agents connection.
 
 ## 4. Parent-child traffic

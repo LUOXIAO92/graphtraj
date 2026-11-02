@@ -116,7 +116,7 @@ _INTEGRATE_SCHEMA = {
         "confirmed_commit":   {"type": ["string", "null"],
                                "description": "Confirm the exact committed resolution when adopting an escalated integration."},
         "role":               {"type": ["string", "object", "null"],
-                               "description": "Explicit configured role reference or inline YAML role definition for conflict work."},
+                               "description": "Explicit configured role reference or inline YAML role definition for conflict work; an inline role names no environment variable (no api_key_env or pass_env), so select connection instead."},
     },
     "required":             ["task_id", "validation_command"],
     "additionalProperties": False,

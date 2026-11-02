@@ -123,6 +123,7 @@ __getattr__ = _lazy_names({
     "credential_environment": ("agent_swarm.runtime", "credential_environment"),
     "child_environment": ("agent_swarm.child_env", "child_environment"),
     "is_credential_name": ("agent_swarm.child_env", "is_credential_name"),
+    "CODEX_SHELL_EXCLUDE": ("agent_swarm.child_env", "CODEX_SHELL_EXCLUDE"),
 })
 
 __all__ = [
@@ -143,5 +144,5 @@ __all__ = [
     "END_EVENTS", "needs_parent", "notice_id",
     "exclusive_lock", "stop_owned", "exit_if_owned_unconfirmed", "process_ancestors", "process_arguments", "process_executable",
     "RuntimeAdapterError", "RuntimeContext", "RuntimeExecutionResult", "RuntimeTurn",
-    "SessionStarted", "credential_environment", "child_environment", "is_credential_name",
+    "SessionStarted", "credential_environment", "child_environment", "is_credential_name", "CODEX_SHELL_EXCLUDE",
 ]

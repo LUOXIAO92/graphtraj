@@ -19,6 +19,18 @@ _CREDENTIAL_PART = re.compile(r'(?:KEY|TOKEN|SECRET|SECRETS|PASSWORD|CREDENTIAL|
 _NOT_CREDENTIAL = re.compile(r'GIT_CONFIG_KEY_[0-9]+')
 
 
+# The same rule as far as Codex's exclude globs allow: `*` and `?` only, case-insensitive,
+# no classes and no negation. A part ending in a marker is the last part or is followed by
+# `_`. `*KEY_<digit>*` is left out because it would also match GIT_CONFIG_KEY_<n>, whose
+# removal breaks Git; so a dotfile's `MY_KEY_2` is not excluded (PUBLIC_API section 3.1).
+_MARKERS = ('KEY', 'TOKEN', 'SECRET', 'SECRETS', 'PASSWORD', 'CREDENTIAL', 'CREDENTIALS')
+CODEX_SHELL_EXCLUDE = (
+    *('*' + marker for marker in _MARKERS),
+    *('*' + marker + '_*' for marker in _MARKERS if marker != 'KEY'),
+    *('*KEY_' + first + '*' for first in 'ABCDEFGHIJKLMNOPQRSTUVWXYZ_'),
+)
+
+
 def is_credential_name(name: str) -> bool:
     """Return whether an environment variable's name marks it as a credential.
 

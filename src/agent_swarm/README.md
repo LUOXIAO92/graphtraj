@@ -144,7 +144,8 @@ naming no `api_key_env` keeps the variables that Runtime logs in with, and a Run
 login file is untouched. A reviewer's key is not handed to the child it judges.
 
 To give a child another variable, declare its name in your configuration. A model cannot
-ask for one:
+ask for one: `create` refuses it, and so does a GraphTraj inline role, where a dispatching
+model could otherwise name it:
 
 ```yaml
 pass_env: [GH_TOKEN]              # a child with no connection
@@ -162,11 +163,32 @@ This is not a guard against a model reading what it can reach. Three cases are n
 
 - **A top-level host you start from your own shell.** Its environment is yours.
 - **The child's own key.** It can still read that.
-- **Plaintext files the child can read**, such as `~/.zshrc`, and shells that reload them.
-  A Codex child's shell does reload them: with the installed Codex 0.164.0 a key exported in
-  `~/.zshrc`, `~/.zshenv`, `~/.zprofile` or `~/.zlogin` reappears in its shell. Pi's and DSH's
-  shells reload none of these, and DSH removes credential names from its shell as well.
-  Claude Code's has not been observed; expect any zsh to read `~/.zshenv`.
+- **Plaintext files the child can read**, such as `~/.zshrc` and anything it loads, and shells
+  that reload them. Pi's and DSH's shells reload none of these, and DSH removes credential names
+  from its shell as well. Claude Code's has not been observed; expect any zsh to read `~/.zshenv`.
+
+**A Codex child's shell.** Codex reloads your dotfiles into its tool shell and writes the result
+in plaintext to `$CODEX_HOME/shell_snapshots`. So agents sets Codex's `shell_environment_policy`
+to exclude credential names on every Codex child, first start and resume. Exports from
+`~/.zshrc` and anything it sources, whether guarded by `[[ -o interactive ]]` or not, then stay
+out of the shell and the snapshot (Codex 0.164.0). What this does not stop:
+
+- `~/.zshenv`: zsh runs it after Codex sets the environment, so exports there reach the shell.
+- `~/.zprofile` and `~/.zlogin`, before Codex's snapshot is ready: a shell started then is a login
+  shell, which runs them. The snapshot itself still leaves them out. Keep keys out of those files.
+- The files still run. A command in them still executes; only credential names are filtered from
+  what the shell keeps. The model can still read the files.
+- A name the globs cannot express: a middle `KEY` part followed by a digit, such as `MY_KEY_2`,
+  because that shape must spare Git's `GIT_CONFIG_KEY_0`. Such a name is still removed from what a
+  child inherits; only a dotfile's export of it gets through.
+- Old plaintext in a native home's `shell_snapshots` from earlier runs. agents does not remove it.
+
+The policy applies to tool shells only. Codex's own process keeps the child's key for model access,
+but the child's shell no longer sees it. For a Codex child, a declared credential name is sent to
+Codex in the Session's parameters, because the globs have no way to spare one name. agents writes
+it nowhere; whether Codex writes it into a Session rollout during a turn has not been verified.
+Your own `shell_environment_policy` in the home's `config.toml` is kept: agents adds to your
+`exclude` list, and your `set` and other fields stay.
 
 The rule matches names, so a URL holding a credential is not caught, and `SSH_AUTH_SOCK` stays
 because Git over SSH needs it. See `PUBLIC_API.md` section 3.1 for the exact rule.

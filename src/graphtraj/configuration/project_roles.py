@@ -21,6 +21,7 @@ ROLE_REFERENCE = re.compile(
 _REQUIRED_FIELDS = frozenset({"runtime", "model"})
 _CONNECTION_FIELDS = frozenset({"base_url", "api_key_env"})
 _ENVIRONMENT_NAME = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+INLINE_REFUSED = frozenset({"pass_env", "api_key_env"})
 
 class ProjectRolesError(Exception):
     """The reusable child-role configuration is missing or invalid."""
@@ -244,6 +245,16 @@ def parse_inline_role(value: object, *, retained: bool = False) -> tuple[str, Ro
             ("An inline Batch role must use a preset reference or lowercase kebab-case name.",)
         )
     name = configured_role_name(name)
+    # An inline role is written by whoever dispatches, which can be a model. The
+    # variables a child receives belong to the user's roles.yml and connections.yml;
+    # a retained Batch keeps loading for the Sessions it started.
+    refused = sorted(INLINE_REFUSED & set(settings)) if not retained and isinstance(settings, dict) else []
+    if refused:
+        raise ProjectRolesError((
+            "{0}.{1}: an inline role cannot name environment variables; declare it in .graphtraj/roles.yml "
+            "or connections.yml and select that with a role reference or `connection: "
+            "runtime/provider/model`.".format(name, refused[0]),
+        ))
     if retained and isinstance(settings, dict):
         # Old names are historical input, not selections for a new Runtime.
         settings = {key: item for key, item in settings.items()

@@ -31,6 +31,10 @@ def main() -> None:
         auth = Path(os.environ.get('PI_CODING_AGENT_DIR', '.')) / 'auth.json'
         offered = (not needs or needs in os.environ
                    or (auth.exists() and provider in json.loads(auth.read_text())))
+        # As real Pi 1.4.0: a models.json provider with an apiKey is listed with nothing set.
+        catalog = Path(os.environ.get('PI_CODING_AGENT_DIR', '.')) / 'models.json'
+        if catalog.exists():
+            offered = offered or 'apiKey' in json.loads(catalog.read_text()).get('providers', {}).get(provider, {})
         if os.environ.get('PI_FIXTURE_LISTINGS'):
             with open(os.environ['PI_FIXTURE_LISTINGS'], 'a') as stream:
                 stream.write(json.dumps({'key': bool(needs) and needs in os.environ}) + '\n')

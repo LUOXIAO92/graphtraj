@@ -13,28 +13,34 @@ import stat
 import subprocess
 import sys
 import threading
+import time
+from fnmatch import fnmatchcase
+import json
 
 import pytest
+import yaml
 
 from agent_swarm import AgentControl, AgentsResult, Caller, bind
-from agent_swarm.child_env import child_environment, is_credential_name
+from agent_swarm.child_env import CODEX_SHELL_EXCLUDE, child_environment, is_credential_name
 from agent_swarm.claude import ClaudeDriver
 from agent_swarm.claude.execution import ClaudeExecution
 from agent_swarm.codex.managed_session import CodexManagedExecution
 from agent_swarm.config import read_connections
 from agent_swarm.connection import agents_connection
+from agent_swarm.sessions import SessionArchive
 from agent_swarm.dsh.execution import DshExecution
 from agent_swarm.pi.driver import selected as pi_selected
 from agent_swarm.pi.execution import PiExecution
 from agent_swarm.process import authenticate_process
-from graphtraj.configuration.project_roles import parse_inline_role
+from graphtraj.configuration.project_roles import ProjectRolesError, load_project_roles, parse_inline_role
 from graphtraj.configuration.runtime_connections import resolve_connection, validate_catalog
 from graphtraj.configuration.role_definitions import resolve_child_role
 from graphtraj.runtimes.runtime_adapter import select_runtime_adapter
 
 from test_claude_review import native  # noqa: F401  (fixture)
 from test_codex_app_server import peer  # noqa: F401  (fixture)
-from test_pi_runtime import context as pi_role_context, pi_environment  # noqa: F401  (fixture)
+from test_codex_approval import managed
+from test_pi_runtime import pi_environment  # noqa: F401  (fixture)
 
 
 # Names seen on real machines; test_rule pins each one.
@@ -502,9 +508,10 @@ def test_a_read_only_pi_child_carries_no_git_setting_of_a_write_child(tmp_path: 
 
 
 def _member_role(root: Path, **fields) -> object:
-    """Resolve an inline role the way a Runner dispatch does."""
-    _, settings = parse_inline_role({'author': fields})
-    return resolve_child_role('author', settings, root)
+    """Resolve a role from the user's roles.yml, the way a Runner dispatch does."""
+    (root / '.graphtraj').mkdir(exist_ok=True)
+    (root / '.graphtraj/roles.yml').write_text(yaml.safe_dump({'roles': {'author': fields}}))
+    return resolve_child_role('author', load_project_roles(root).presets['author'], root)
 
 
 def test_runner_pi_member(tmp_path: Path, pi_environment: dict) -> None:  # noqa: F811
@@ -513,10 +520,14 @@ def test_runner_pi_member(tmp_path: Path, pi_environment: dict) -> None:  # noqa
 
     worktree = tmp_path / 'worktrees/research'
     worktree.mkdir(parents=True)
-    _, prepared = pi_role_context(tmp_path, {'sandbox_python': pi_environment['sandbox_python'],
-                                             'sandbox_path': pi_environment['sandbox_path'],
-                                             'agent_dir': pi_environment['agent_dir']},
-                                  api_key_env=OWN, pass_env=[DECLARED], worktree_access='read')
+    role = _member_role(tmp_path, runtime='pi', model='deepseek/deepseek-flash', api_key_env=OWN, pass_env=[DECLARED],
+                        worktree_access='read', pi={'sandbox_python': pi_environment['sandbox_python'],
+                                                    'sandbox_path': pi_environment['sandbox_path'],
+                                                    'agent_dir': pi_environment['agent_dir']})
+    prepared = select_runtime_adapter('pi').preflight_runtime_context(
+        harness_root=tmp_path, git_common_directory=worktree / '.git', role=role, worktree=worktree,
+        evidence=tmp_path / 'state', requested_skills=(),
+    ).finalize()
     request = prepared.launch_document()['adapter_request']
     directory = tmp_path / '.graphtraj/runner/sessions/one'
     directory.mkdir(parents=True)
@@ -605,3 +616,203 @@ def test_role_connection_catalog_carries_the_declaration(tmp_path: Path, monkeyp
     with pytest.raises(ValueError, match='pass_env must list') as caught:
         validate_catalog(catalog)
     assert 'sk-not-a-name' not in str(caught.value)
+
+
+# --- Round 2: an inline role names no environment variable (results 2 and 8) ---------------------
+
+
+@pytest.mark.parametrize('field', [{'pass_env': [UNRELATED]}, {'api_key_env': UNRELATED}])
+def test_a_swarm_inline_role_cannot_name_a_variable(tmp_path: Path, field: dict) -> None:
+    """The real Batch entry refuses it, so a model dispatching a role cannot ask for a key."""
+    from graphtraj.execution.runner_batch import parse_batch
+    from graphtraj.execution.runner_models import RunnerError
+
+    role = {'coding_team.engineer': {'runtime': 'codex', 'model': 'm', **field}}
+    with pytest.raises(ProjectRolesError, match=next(iter(field))):
+        parse_inline_role(role)
+    with pytest.raises(RunnerError) as caught:
+        parse_batch({'tasks': [{'task_id': '1', 'task_name': 'one', 'role': role}]})
+    assert caught.value.code == 'ROLE_NOT_CONFIGURED'
+    assert next(iter(field)) in caught.value.message and 'connection: runtime/provider/model' in caught.value.message
+    assert UNRELATED not in caught.value.message
+
+
+def test_a_retained_inline_role_keeps_loading(tmp_path: Path) -> None:
+    """A Session started from a retained Batch resumes: only a new dispatch is refused."""
+    from graphtraj.execution.runner_batch import parse_batch
+
+    role = {'coding_team.engineer': {'runtime': 'dsh', 'model': 'm', 'base_url': 'https://gateway.invalid',
+                                     'api_key_env': 'DEEPSEEK_API_KEY'}}
+    assert parse_inline_role(role, retained=True)[1].api_key_env == 'DEEPSEEK_API_KEY'
+    task = parse_batch({'tasks': [{'task_id': '1', 'task_name': 'one', 'role': role}]}, retained=True).tasks[0]
+    assert task.inline_preset.api_key_env == 'DEEPSEEK_API_KEY'
+
+
+def test_an_inline_role_still_selects_a_connection_and_its_other_fields(tmp_path: Path) -> None:
+    """Refusing the two variable fields leaves every other inline use as it was."""
+    assert parse_inline_role({'a': {'connection': 'one/two/three'}})[1].connection == 'one/two/three'
+    assert parse_inline_role({'a': {'runtime': 'codex', 'model': 'm', 'base_url': 'https://x.invalid'}})[1].base_url
+
+
+def test_the_users_roles_file_still_declares_both(tmp_path: Path) -> None:
+    """roles.yml is the user's own, so it keeps both fields."""
+    role = _member_role(tmp_path, runtime='codex', model='m', api_key_env=OWN, pass_env=[DECLARED])
+    assert (role.settings.api_key_env, role.settings.pass_env) == (OWN, (DECLARED,))
+
+
+# --- Round 2: Pi's models.json and auth.json name the child's key (result 3) -----------------------
+
+
+def write_pi_home(tmp_path: Path, name: str, document: dict) -> Path:
+    """Write one of Pi's home files under a fake agent directory."""
+    agent = Path(os.environ['PI_TEST_AGENT'])
+    agent.mkdir(parents=True, exist_ok=True)
+    (agent / name).write_text(json.dumps(document))
+    return agent
+
+
+@pytest.mark.parametrize('value', [OWN, '$' + OWN, '${' + OWN + '}'])
+def test_pi_key_named_in_models_json(tmp_path: Path, pi_agent: None, value: str) -> None:
+    """Real Pi lists this provider with no key set, so only the file can say which variable it means."""
+    write_pi_home(tmp_path, 'models.json', {'providers': {'deepseek': {'apiKey': value}}})
+    assert_only_own_credentials(launch_pi(tmp_path), OWN)
+
+
+def test_pi_key_named_in_auth_json(tmp_path: Path, pi_agent: None) -> None:
+    """auth.json's key reference for the selected provider is the child's own."""
+    write_pi_home(tmp_path, 'auth.json', {'deepseek': {'type': 'api_key', 'key': '$' + OWN}})
+    assert_only_own_credentials(launch_pi(tmp_path), OWN)
+
+
+@pytest.mark.parametrize('value', ['!printf ' + OWN, 'not-a-variable', '$NOT_SET_ANYWHERE_KEY'])
+def test_pi_home_value_naming_no_set_variable_hands_over_nothing(tmp_path: Path, pi_agent: None, value: str) -> None:
+    """A command is never run or read for a name; a literal or an unset name adds nothing."""
+    write_pi_home(tmp_path, 'models.json', {'providers': {'deepseek': {'apiKey': value}}})
+    assert_only_own_credentials(launch_pi(tmp_path))
+
+
+def test_pi_another_providers_name_is_not_own(tmp_path: Path, pi_agent: None) -> None:
+    """Only the selected provider's entry counts."""
+    write_pi_home(tmp_path, 'models.json', {'providers': {'other': {'apiKey': '$' + UNRELATED}}})
+    assert_only_own_credentials(launch_pi(tmp_path))
+
+
+def test_pi_reviewer_holding_the_named_key_is_refused(tmp_path: Path, pi_agent: None) -> None:
+    """A models.json naming the reviewer's key would leave the child with only that name."""
+    from agent_swarm import AgentsError
+    from agent_swarm.pi.driver import _refuse_key_held_by_reviewer
+
+    write_pi_home(tmp_path, 'models.json', {'providers': {'deepseek': {'apiKey': '$' + REVIEW}}})
+    request = {'executable': _which('pi'), 'agent_dir': os.environ['PI_TEST_AGENT'], 'provider': 'deepseek',
+               'model': 'deepseek-flash', 'review': REVIEWER}
+    with pytest.raises(AgentsError, match=REVIEW):
+        _refuse_key_held_by_reviewer(request)
+
+
+# --- Round 2: Codex's tool shells exclude credential names (result 7) ------------------------------
+
+
+@pytest.mark.parametrize('name', MUST_DROP)
+def test_codex_globs_cover_each_credential_name(name: str) -> None:
+    """Every name the rule drops is matched by a glob; globs ignore case on real Codex."""
+    assert any(fnmatchcase(name.upper(), pattern) for pattern in CODEX_SHELL_EXCLUDE)
+
+
+@pytest.mark.parametrize('name', MUST_KEEP)
+def test_codex_globs_spare_each_ordinary_name(name: str) -> None:
+    """GIT_CONFIG_KEY_<n> above all: Git fails without it when GIT_CONFIG_COUNT is set."""
+    assert not any(fnmatchcase(name.upper(), pattern) for pattern in CODEX_SHELL_EXCLUDE)
+
+
+def test_codex_globs_difference_from_the_rule_is_the_written_one() -> None:
+    """PUBLIC_API 3.1 names this: a digit after a middle KEY part cannot be spared only for Git."""
+    assert is_credential_name('MY_KEY_2')
+    assert not any(fnmatchcase('MY_KEY_2', pattern) for pattern in CODEX_SHELL_EXCLUDE)
+
+
+def run_codex_member(tmp_path: Path, peer: Path, monkeypatch: pytest.MonkeyPatch, *, session: str | None = None,
+                     **fields) -> tuple[list[dict], Path]:
+    """Run a real owner against the controlled peer; return what thread/start or resume received."""
+    record = tmp_path / 'session-parameters.jsonl'
+    monkeypatch.setenv('MANAGED_SESSION_PARAMETERS', str(record))
+    request, directory = managed(tmp_path, peer, monkeypatch)
+    archive = SessionArchive(tmp_path / 'data', save_normalized_sessions=True, backfill_history=False)
+    worker = CodexManagedExecution({**request, **fields}, 'request: inspect only', directory, lambda *a: None, {},
+                                   directory / 'events.jsonl', session, archive=archive)
+
+    def own() -> None:
+        """Run the owner; only what it sent and wrote is observed."""
+        try:
+            worker.run()
+        except Exception:
+            pass
+
+    thread = threading.Thread(target=own, daemon=True)
+    thread.start()
+    deadline = time.monotonic() + 15
+    while time.monotonic() < deadline and not record.exists():
+        time.sleep(0.05)
+    # The Session has started, which is all these tests need; the peer would wait for a reply.
+    time.sleep(0.3)
+    worker.terminate()
+    thread.join(10)
+    return [json.loads(line) for line in record.read_text().splitlines()], directory
+
+
+def test_codex_session_excludes_credentials_on_first_start(tmp_path: Path, peer: Path,  # noqa: F811
+                                                           monkeypatch: pytest.MonkeyPatch) -> None:
+    """Every native Session gets the policy, and what the owner sets for its connection stays."""
+    [sent], _ = run_codex_member(tmp_path, peer, monkeypatch)
+    policy = sent['params']['config']['shell_environment_policy']
+    assert sent['method'] == 'thread/start'
+    assert set(CODEX_SHELL_EXCLUDE) <= set(policy['exclude'])
+
+
+def test_codex_session_excludes_credentials_on_resume(tmp_path: Path, peer: Path,  # noqa: F811
+                                                      monkeypatch: pytest.MonkeyPatch) -> None:
+    """A resumed Session gets it too, since a resume carries its own config."""
+    sent, _ = run_codex_member(tmp_path, peer, monkeypatch, session='resumed-session')
+    assert sent[0]['method'] == 'thread/resume'
+    assert set(CODEX_SHELL_EXCLUDE) <= set(sent[0]['params']['config']['shell_environment_policy']['exclude'])
+
+
+def test_codex_users_exclude_entries_are_kept(tmp_path: Path, peer: Path,  # noqa: F811
+                                              monkeypatch: pytest.MonkeyPatch) -> None:
+    """A Session's list replaces the home's on real Codex, so the home's entries are carried over."""
+    home = Path(os.environ['CODEX_HOME'])
+    home.mkdir()
+    (home / 'config.toml').write_text('[shell_environment_policy]\nexclude = ["MINE_*"]\n')
+    [sent], _ = run_codex_member(tmp_path, peer, monkeypatch)
+    assert 'MINE_*' in sent['params']['config']['shell_environment_policy']['exclude']
+
+
+def test_codex_declared_credential_reaches_the_shell_but_no_retained_file(tmp_path: Path, peer: Path,  # noqa: F811
+                                                                          monkeypatch: pytest.MonkeyPatch) -> None:
+    """Sent to Codex once; absent from every document, trace, diagnostic and archive the owner writes."""
+    [sent], directory = run_codex_member(tmp_path, peer, monkeypatch, pass_env=[DECLARED])
+    assert sent['params']['config']['shell_environment_policy']['set'][DECLARED] == 'fake-' + DECLARED
+
+    value = ('fake-' + DECLARED).encode()
+    written = [path for path in tmp_path.rglob('*') if path.is_file() and path.name != 'session-parameters.jsonl']
+    assert written
+    assert [str(path) for path in written if value in path.read_bytes()] == []
+
+
+def test_codex_declared_ordinary_name_needs_no_set(tmp_path: Path, peer: Path,  # noqa: F811
+                                                   monkeypatch: pytest.MonkeyPatch) -> None:
+    """Only a name the globs would hide travels in the parameters."""
+    monkeypatch.setenv('PLAIN_SETTING', 'plain')
+    [sent], _ = run_codex_member(tmp_path, peer, monkeypatch, pass_env=['PLAIN_SETTING'])
+    assert 'PLAIN_SETTING' not in sent['params']['config']['shell_environment_policy'].get('set', {})
+
+
+def test_codex_withheld_reviewer_key_is_not_set_when_declared(tmp_path: Path) -> None:
+    """A declared reviewer's key stays out of the parameters as out of the environment."""
+    executable, _ = recording_codex(tmp_path)
+    worker = CodexManagedExecution(codex_request(tmp_path, executable, pass_env=[REVIEW]), 'x', tmp_path,
+                                   lambda *a: None, {}, tmp_path / 't', None, review=REVIEWER)
+    environment = worker.child_overrides(worker.context.launch_document()['adapter_request'],
+                                         worker.context.launch_document()['adapter_request']['session_parameters']['config'])
+    assert environment[REVIEW] is None
+    transient = worker.declared_context(worker.context.launch_document()['adapter_request'], environment)
+    assert transient is worker.context

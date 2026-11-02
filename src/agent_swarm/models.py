@@ -266,15 +266,48 @@ def pi_offers(executable: str, home: str, provider: str, model: str, without: st
         return None
 
 
+def pi_named_keys(home: str, provider: str) -> tuple[str, ...]:
+    """Return the set variables the home's files name as ``provider``'s key.
+
+    Pi 1.4.0 lists a ``models.json`` provider with a plain ``apiKey`` whatever is set, so
+    a listing cannot reveal this. It reads ``$NAME`` and ``${NAME}`` from the environment,
+    runs a ``!command``, and sends plain text as written. Plain text equal to a set
+    variable's name is still returned: the user wrote that name, and it costs nothing.
+    Only names are compared; no variable's value is read and nothing here is reported.
+    """
+    def read(name: str) -> dict:
+        """Return one of the home's JSON documents, or nothing if it is unusable."""
+        try:
+            document = json.loads((Path(home) / name).read_text(encoding='utf-8'))
+        except (OSError, ValueError):
+            return {}
+        return document if isinstance(document, dict) else {}
+
+    def entry(document: Mapping) -> dict:
+        """Return ``provider``'s mapping within ``document``."""
+        value = document.get(provider)
+        return value if isinstance(value, dict) else {}
+
+    models = read('models.json').get('providers')
+    values = (entry(models if isinstance(models, dict) else {}).get('apiKey'), entry(read('auth.json')).get('key'))
+    names  = [name for value in values if isinstance(value, str) and not value.startswith('!')
+              for name in (value, *re.findall(r'\$\{?([A-Za-z_][A-Za-z0-9_]*)', value))]
+    return tuple(dict.fromkeys(name for name in names if name in os.environ))
+
+
 def pi_default_keys(executable: str, home: str, provider: str, model: str) -> tuple[str, ...]:
     """Return the credential-class variables Pi needs for a model on a connection naming no key.
 
-    Pi maps providers to variables itself, and a ``models.json`` can name any other,
-    so Pi is asked by listing with the variables kept to a candidate set: none (its
-    native login is enough, or nothing would help), those naming the provider, then
-    all with each removed in turn. Only names are handled and no value is read. When
-    Pi cannot answer nothing is added, so uncertainty never hands over a key.
+    A variable the home's files name for this provider comes first (:func:`pi_named_keys`).
+    Otherwise Pi maps providers to variables itself, so it is asked by listing with the
+    variables kept to a candidate set: none (its native login is enough, or nothing would
+    help), those naming the provider, then all with each removed in turn. Only names are
+    handled. When Pi cannot answer nothing is added, so uncertainty never hands over a key.
     """
+    named = pi_named_keys(home, provider)
+    if named:
+        return named
+
     def offers(names: Iterable[str]) -> bool:
         """Whether Pi authenticates the model with only ``names`` kept."""
         try:

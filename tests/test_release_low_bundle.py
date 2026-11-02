@@ -16,6 +16,7 @@ from agent_swarm.pi.execution import PiExecution
 from agent_swarm.runtime import RuntimeAdapterError
 from graphtraj.interfaces.agents import GraphTrajAgents
 from graphtraj.interfaces.cli.graphtraj import main
+from test_claude_host_concurrent_calls import run_mod
 from test_agents_connections_presets import RecordingDriver, catalog, configured, create  # noqa: F401
 from test_member_child_workspace import RecordingTurn, claimed_main, harness, request  # noqa: F401
 from test_pi_generic_execution import generic
@@ -104,3 +105,38 @@ def test_doctor_reports_the_claude_role_a_launch_would_refuse(
     assert 'sonnet: Use exact claude-opus-5-5' in result.output
     assert 'mode: claude.permission_mode must be default or auto' in result.output
     assert 'opus:' not in result.output and 'roles: OK' not in result.output
+
+
+def test_an_end_esc_aborted_is_retried_by_a_later_hook_without_an_error(tmp_path: Path) -> None:
+    """Esc rejects the interrupted hook's host calls; the next tick ends exactly that call, silently."""
+    run_mod(tmp_path, r'''
+const logged = [];
+host.ui.log = line => { logged.push(line); };
+await handlers.get('session.start')(host, {}, async () => 'started');
+const request = {action: 'execute', feature: 'wait', arguments: {agent: 'a'}};
+const aborted = {...host, process: {run: async () => { throw new Error('aborted'); }}};
+await call('agents')(aborted, {tool: 'mcp__agents__agents', ...request}, async () => ({result: '{}'}));
+assert.deepEqual(logged.filter(line => line.includes('cleanup failed')), []);
+assert.equal(operations.length, 0);
+await timers.shift()();
+assert.deepEqual(operations.filter(item => item.operation === 'end'),
+                 [{operation: 'end', tool: 'agents', request, session: 'main-session'}]);
+// Ended once: a later tick does not send it again.
+await timers.shift()();
+assert.equal(operations.filter(item => item.operation === 'end').length, 1);
+assert.deepEqual(logged.filter(line => line.includes('cleanup failed')), []);
+''')
+
+
+def test_an_end_that_keeps_failing_is_shown_once(tmp_path: Path) -> None:
+    """A failure outside the interrupted hook is real, so it stays visible, without repeating."""
+    run_mod(tmp_path, r'''
+const logged = [];
+host.ui.log = line => { logged.push(line); };
+await handlers.get('session.start')(host, {}, async () => 'started');
+host.process.run = async () => { throw new Error('host gone'); };
+await call('agents')(host, {tool: 'mcp__agents__agents', action: 'execute'}, async () => ({result: '{}'}));
+await timers.shift()();
+await timers.shift()();
+assert.equal(logged.filter(line => line.includes('cleanup failed')).length, 1);
+''')

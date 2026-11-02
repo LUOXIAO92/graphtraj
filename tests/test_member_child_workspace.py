@@ -81,7 +81,7 @@ def harness(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, pi_environment: dic
     monkeypatch.setattr(codex_adapter, '_require_codex_permissions', lambda executable: None)
     monkeypatch.setattr('graphtraj.runtimes.claude.adapter.current_cli', lambda: ('/installed/claude', '2.0'))
 
-    presets = {name: project_roles.parse_inline_role({name: fields})[1] for name, fields in {
+    presets = {name: project_roles.parse_inline_role({name: fields}, retained=True)[1] for name, fields in {
         'claude': {'runtime': 'claude', 'model': 'claude-opus-5-5'},
         'codex': {'runtime': 'codex', 'model': 'chosen-model', 'reasoning_effort': 'low'},
         'dsh': {'runtime': 'dsh', 'model': 'deepseek-official/deepseek-flash', 'api_key_env': 'DSH_TEST_KEY'},

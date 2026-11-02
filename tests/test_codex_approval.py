@@ -14,6 +14,7 @@ from urllib.error import HTTPError
 import pytest
 import yaml
 
+from agent_swarm.child_env import CODEX_SHELL_EXCLUDE
 from graphtraj.configuration.project_configuration import (
     DEFAULT_CONFIG_CONTENT,
     ProjectConfigurationError,
@@ -508,6 +509,9 @@ def test_resume_refreshes_route_preserving_session_and_work_model(
     if not native:
         expected['approvalsReviewer'] = 'user'
         expected['config']['approvals_reviewer'] = 'user'
+    # Since 433 an owner adds the credential exclude to its Session, never to the retained request.
+    policy = expected['config'].setdefault('shell_environment_policy', {})
+    policy['exclude'] = [*policy.get('exclude', []), *CODEX_SHELL_EXCLUDE]
     assert params == expected
     assert params['config']['approvals_reviewer'] == ('auto_review' if native else 'user')
     if native:

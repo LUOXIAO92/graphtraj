@@ -12,6 +12,18 @@ version that identifies everything listed under it.
 
 The numbers in parentheses are the project's Task numbers.
 
+## 0.2.17 (compatible)
+
+- A DSH child no longer leaves `dsh web` and `agent_swarm.mcp` running when the process
+  that owns it dies before closing it (436). Every `dsh web` now comes with one small
+  watcher process, with no inherited environment, that stops the process group if its
+  owner ends without closing it, and writes `stopped` or `could not stop` to the owner's
+  stderr: `host.log` in a Claude Code host. It keeps that stderr open until it ends,
+  about 15 seconds at most. A normal close behaves as before and writes nothing.
+- `agents host recorded its children stopped.` is no longer written while an Agent
+  started by an earlier host still has a running Runtime (436). The host names those
+  Agents in `host.log` instead. Its exit code does not change.
+
 ## 0.2.16 (compatible)
 
 - A refused `reply` on a Claude child no longer makes the agents tool of a Pi, DSH or Codex

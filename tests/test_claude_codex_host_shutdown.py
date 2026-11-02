@@ -569,6 +569,39 @@ def test_the_next_host_shows_a_surviving_runtime_as_active(tmp_path: Path, kind:
             os.kill(pid, signal.SIGKILL)
 
 
+def test_the_next_host_names_a_surviving_runtime_and_records_no_stop(tmp_path: Path) -> None:
+    """436: a host that owned nothing must not claim the stop of a Runtime an earlier host left running."""
+    survivors = []
+    try:
+        first = run_host('agents-claude', tmp_path, 'runtime')
+        survivors = first.facts['survivors']
+        stuck = target_of(first)
+
+        second = run_host('agents-claude', tmp_path, requests=DISCOVER)
+        written = second.report[len(first.report):]
+        assert second.returncode == 0
+        assert RECORDED not in written
+        names_only(next(line for line in written.splitlines() if 'earlier host' in line), [stuck], first.agents[1:])
+    finally:
+        for pid in survivors:
+            os.kill(pid, signal.SIGKILL)
+
+    # Once that Runtime is gone there is nothing left to name, and the claim is true again.
+    wait_for(lambda: not any(pid_exists(pid) for pid in survivors))
+    third = run_host('agents-claude', tmp_path, requests=DISCOVER)
+    written = third.report[len(second.report):]
+    assert RECORDED in written and 'earlier host' not in written
+
+
+def pid_exists(pid: int) -> bool:
+    """Whether ``pid`` still resolves, a zombie included."""
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    return True
+
+
 def test_403_agents_claude_ends_stay_held_and_arrive_once_on_a_later_host(tmp_path: Path) -> None:
     """A child's interrupt fails, the others stop: nothing is pushed then; a later result carries each once."""
     first = run_host('agents-claude', tmp_path, 'raises')

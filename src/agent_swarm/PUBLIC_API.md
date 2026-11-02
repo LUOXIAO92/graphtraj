@@ -1116,6 +1116,17 @@ What the parent sees today:
   its Runtime lives; once that is gone, it is in standby with `last_result`
   `outcome: failed`, `terminal_confirmed: false` and error `owner-exited`, and
   that end is held.
+- **A DSH child whose owner dies:** every `dsh web` this library starts comes with
+  one small watcher process, whatever host or process owns it. If the owner ends
+  without closing the service (it was killed, or left with a stop unconfirmed), the
+  watcher stops the `dsh web` process group: SIGINT, SIGTERM, then SIGKILL, up to 5
+  seconds each. It writes one line to the owner's stderr when it begins and one with
+  the outcome, saying `stopped` or `could not stop`, with a timestamp and the pid. In
+  a Claude Code host that is `host.log`. It keeps that stderr open until it ends,
+  about 15 seconds at most, so a reader waiting for the end of that stream waits as
+  long. A normal close stops the group as before, and the watcher leaves with no
+  line and no signal. The record still says `running` until the next host: it then
+  shows the end as in *Pi Session shutdown* above.
 - **Claude Code and Codex host shutdown** (Claude Code ends the Session, or the
   Codex parent's run ends or fails): the host interrupts every execution this
   process runs, whoever created it, and tries again until they end, up to 10
@@ -1133,8 +1144,12 @@ What the parent sees today:
   - **Claude Code hosts** (`agent_swarm.claude.host` and GraphTraj's): in
     `host.log`, because the host's stderr is that file once it serves MCP.
     `agents host recorded its children stopped.` is written only when every stop
-    was confirmed. The Claude Session does not see the line: the host stops its
-    children after Claude Code has closed MCP or is ending the Session, so no
+    was confirmed and no record shows a running execution whose owner process is
+    gone while its Runtime still lives. If one does, the host writes one line
+    naming those Agents, as started by an earlier host and still having a running
+    Runtime; its exit code does not change. The line's absence can also mean the
+    host was killed before it got there. The Claude Session does not see the line:
+    the host stops its children after Claude Code has closed MCP or is ending the Session, so no
     tool result or notification can reach it, and a Claude Code host has no other
     path into the Session. Read the state through `status` on the next host.
   - **Codex host:** on the stderr of `agent_swarm.codex.host`, and in
@@ -1308,7 +1323,7 @@ Gaps, by owner:
 | Gap | Owner |
 | --- | --- |
 | A notice admitted between the `headless` DSH runner's last Session flush and its exit (*DSH host* above; `dsh-headless/lib/index.js:377`, `:383`): the relay answers before that write | Upstream DSH; not changed |
-| A child Runtime that outlives a killed Claude host: Claude Code can kill the host before it stops its children (`mcp.py` `INTERRUPT_SECONDS`), so the execution stays `running` with no notice yet. The notice arrives on a later host process, or read it through `status`. In the one real run (403), Claude Code 2.1.314's SIGINT left the host time to finish (`agents host recorded its children stopped.`, in all 3 Claude runs of that step), and the end arrived as `interrupted`. A kill was not observed, so the case stays possible by code | Unassigned, needs Main |
+| A killed Claude host leaves its children's executions `running`: Claude Code can kill the host before it stops them (`mcp.py` `INTERRUPT_SECONDS`), so there is no notice yet. The notice arrives on a later host process, or read it through `status`. In one real run (403), Claude Code 2.1.314's SIGINT left the host time to finish (`agents host recorded its children stopped.`, in all 3 Claude runs of that step), and the end arrived as `interrupted`. In another (392, a reviewed DSH child), the log ended at the SIGINT line with the stop unfinished; that Claude Code's later signal ended it is an inference. A DSH child's process group no longer outlives the host (*A DSH child whose owner dies*). Pi, Claude and Codex children are started with a stdin pipe from the host, which closes when it dies; whether each one then ends has not been tested | Unassigned, needs Main |
 | The notice title names GraphTraj | 394 |
 
 ### 4.1 Native approval per Runtime

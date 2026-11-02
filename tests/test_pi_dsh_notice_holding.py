@@ -552,7 +552,7 @@ def test_a_notice_pi_took_is_delivered_only_when_it_is_in_the_session(pi_host_pr
     wait_until(lambda: read_record(tmp_path, agent)['executions'][-1].get('notification') == 'held')
     assert identity in process.notices.awaiting and process.flush() == process.pipe.lines
     process.notices.acknowledge(identity, True)
-    assert read_record(tmp_path, agent)['executions'][-1]['notification'] == 'delivered'
+    wait_until(lambda: read_record(tmp_path, agent)['executions'][-1]['notification'] == 'delivered')
     assert identity not in process.notices.awaiting and len(process.pipe.lines) == 1
 
 

@@ -424,15 +424,25 @@ for line in incoming():
                 process.wait(timeout=10)
                 complete(thread_id, turn_id, 'The child answered.')
             threading.Thread(target=run_in_turn, daemon=True).start()
-        elif prompt == 'native-subagent':
-            # Codex 0.164's ThreadItem for its own spawn_agent, before the turn/start reply as for any item.
-            for event, status, receivers in (('item/started', 'inProgress', []),
-                                             ('item/completed', 'completed', ['native-child'])):
+        elif prompt in {'native-subagent', 'native-subagent-late'}:
+            def spawn_item(event, status, receivers, thread_id=thread_id, turn_id=turn_id):
+                """Codex 0.164's ThreadItem for its own spawn_agent."""
                 emit({'method': event, 'params': {'threadId': thread_id, 'turnId': turn_id, 'item': {
                     'id': 'native-spawn', 'type': 'collabAgentToolCall', 'tool': 'spawnAgent', 'status': status,
                     'senderThreadId': thread_id, 'receiverThreadIds': receivers,
                     'prompt': 'the native prompt body', 'model': 'native-model'}}})
-            complete(thread_id, turn_id, 'The child answered.')
+
+            def finish_spawn(late=prompt.endswith('late'), thread_id=thread_id, turn_id=turn_id):
+                """Report the rest after the turn/start reply has gone."""
+                time.sleep(0.2)
+                if late:
+                    spawn_item('item/started', 'inProgress', [])
+                spawn_item('item/completed', 'completed', ['native-child'])
+                complete(thread_id, turn_id, 'The child answered.')
+            if prompt == 'native-subagent':
+                # Before the reply, as any item can be: the host's first line is still to come.
+                spawn_item('item/started', 'inProgress', [])
+            threading.Thread(target=finish_spawn, daemon=True).start()
         elif prompt == 'configuration':
             if os.environ.get('PEER_CONFIGURATION_HOME'):
                 Path(os.environ['PEER_CONFIGURATION_HOME']).write_text(os.environ.get('CODEX_HOME', ''))

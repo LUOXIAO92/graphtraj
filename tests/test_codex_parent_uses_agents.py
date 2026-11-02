@@ -123,11 +123,12 @@ def test_only_the_parent_gets_the_guidance_after_the_users_text_on_start_and_res
         assert not {'multi_agent', 'collab', 'collaboration'} & set(params['config'].get('features', {}))
 
 
+@pytest.mark.parametrize('prompt', ['native-subagent', 'native-subagent-late'])
 def test_a_native_subagent_shows_without_changing_stdout_or_the_exit_status(
-    tmp_path: Path, native_settings: dict,
+    tmp_path: Path, native_settings: dict, prompt: str,
 ) -> None:
     """Started and completed count once, the prompt stays out, and parent_session stays first."""
-    process, lines, output = run_host(tmp_path, native_settings, 'native-subagent')
+    process, lines, output = run_host(tmp_path, native_settings, prompt)
     assert process.returncode == 0, process.stdout + process.stderr
     assert process.stdout == 'The child answered.\n'
     assert 'parent_session' in lines[0]

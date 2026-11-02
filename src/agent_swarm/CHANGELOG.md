@@ -12,6 +12,15 @@ version that identifies everything listed under it.
 
 The numbers in parentheses are the project's Task numbers.
 
+## 0.2.11 (compatible)
+
+- A DSH launch can name extra writable directories (428). `DshExecution` adds the
+  request's `additional_writable_roots` to the `sandbox-policy` row as DSH's own
+  `additionalWritableRoots`. A launch that names none, which includes every independent
+  DSH child, writes the same row as before. The package does not choose these
+  directories; GraphTraj's member launch does, which is why GraphTraj now needs this
+  version.
+
 ## 0.2.10 (compatible)
 
 - A resumed Claude Session with a full archive no longer raises `Unresolved observations

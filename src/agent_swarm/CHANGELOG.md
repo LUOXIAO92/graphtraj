@@ -12,7 +12,7 @@ version that identifies everything listed under it.
 
 The numbers in parentheses are the project's Task numbers.
 
-## 0.2.13 (compatible)
+## 0.2.16 (compatible)
 
 - A Pi child that ends by itself before its first prompt, for example because a sandbox
   tool is missing, now fails with `RUNTIME_START_FAILED`, and the message opens with
@@ -26,6 +26,47 @@ The numbers in parentheses are the project's Task numbers.
 - The README states what a reviewer's `allow` means for a Claude child with
   `permission_mode: default`. `PUBLIC_API.md` warns that a `write` Pi child can read a token
   held in a remote URL in the repository's `config` (438).
+
+## 0.2.15 (compatible)
+
+- A DSH launch can name extra writable directories (428). `DshExecution` adds the
+  request's `additional_writable_roots` to the `sandbox-policy` row as DSH's own
+  `additionalWritableRoots`. A launch that names none, which includes every independent
+  DSH child, writes the same row as before. The package does not choose these
+  directories; GraphTraj's member launch does, which is why GraphTraj now needs this
+  version.
+
+## 0.2.14 (compatible)
+
+- The Codex install note's example could leave the parent using Codex's own `spawn_agent`,
+  with `operations: []` and a last message saying the child had answered (432). The
+  example now gives the literal `create` and `wait` calls and excludes `spawn_agent`. The
+  `agents` tool description says what it is for, and `agent_swarm.codex.host` adds a
+  passage after the parent's `developerInstructions` naming `agents` as the way to make
+  children. Children's settings are unchanged, and Codex's native tools stay available.
+- A Codex host run now shows when a child did not come through `agents` (432). Stderr ends
+  with `{"run_summary": {"agents_calls": N, "native_subagents": M}}`, with a note when N is
+  0. A `collabAgentToolCall` `spawnAgent` item prints one `{"native_subagent": ...}` line and
+  adds an entry to the new `native_subagents` in `--output` and `CodexHost.run`. stdout and
+  the exit status are unchanged: a native subagent is not a failure. Which tool the model
+  chooses can only be observed in a real run, and no real run has yet shown that item.
+- The Claude Code, DSH and Pi install notes' examples now name the `agents` tool (432).
+  This is the same wording risk; no bypass was seen on those hosts.
+
+## 0.2.13 (compatible)
+
+- A DSH connection that names no `api_key_env`, beside a reviewer whose `api_key_env` is
+  `DEEPSEEK_API_KEY`, is now refused at `create` with `ROLE_CONFIG_INVALID` when no key
+  file of the child's own exists (430). The child never receives the reviewer's key and
+  DSH's default key is that same variable, so such a child could only fail at start with
+  `session/model-unavailable`. The message names the reviewer, the variable and the fixes.
+  A file that exists but holds no DeepSeek key still fails at start, because it is not read.
+- A Pi connection with no `api_key_env`, beside a reviewer whose key is the only one that
+  authenticates its model, is now refused at `create` with `invalid-config` (430). Such a
+  child could only fail at its first prompt with `No API key found`. `create` asks Pi's own
+  model listing with and without the reviewer's variable, so no credential is read and a
+  login in the connection's home is not refused. The message names the reviewer, the
+  variable, the provider and the fixes.
 
 ## 0.2.12 (compatible)
 

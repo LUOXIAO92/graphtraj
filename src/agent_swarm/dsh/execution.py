@@ -19,7 +19,7 @@ from agent_swarm.approval import REVIEW_METHOD, review_failed
 from agent_swarm.review import build_request, record_decision, review_call
 from .service import DshService, redact_native, secret_values
 from .errors import DshError
-from .settings import AMBIENT_ENDPOINTS, credential_environment, resumes_by_address
+from .settings import _DEFAULT_KEY_ENV, AMBIENT_ENDPOINTS, credential_environment, resumes_by_address
 
 
 # DSH's shipped profile patches carry `!!js` expressions (for example the
@@ -28,8 +28,6 @@ from .settings import AMBIENT_ENDPOINTS, credential_environment, resumes_by_addr
 _JS_TAG = 'tag:yaml.org,2002:js'
 _WEB_APP_BUNDLE = Path('node_modules') / '@deepseek-ai' / 'dsh-web-app'
 _PERSONA_PLUGIN = '@deepseek-ai/dsh-persona'
-# The variable DSH's Messages route and its web rows read when none is named.
-_DEFAULT_KEY_ENV = 'DEEPSEEK_API_KEY'
 # The review row's mark on its asks (review.mjs): a displayReason key, which only
 # in-process code sets. Text a model writes reaches its values, never a key.
 REVIEW_MARKER = 'agents-review'
@@ -237,7 +235,11 @@ class DshExecution:
         patches = [
             {'id': 'hmr', 'disabled': True},
             {'id': 'session-persistence-jsonl', 'config': {'root': str(self.logs), 'compression': 'none'}},
-            {'id': 'sandbox-policy', 'config': {'mode': mode, 'workspaceRoot': self.request['worktree_path']}},
+            {'id': 'sandbox-policy', 'config': {
+                'mode': mode, 'workspaceRoot': self.request['worktree_path'],
+                **({'additionalWritableRoots': self.request['additional_writable_roots']}
+                   if self.request.get('additional_writable_roots') else {}),
+            }},
             {'id': 'permission', 'config': {
                 'presets': {mode: {'sandbox': mode, 'approval': 'ask'}}, 'defaultPreset': mode,
             }},

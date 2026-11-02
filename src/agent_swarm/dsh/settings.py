@@ -19,6 +19,9 @@ MINIMUM_VERSION = '0.2.0-rc.2'
 # would send a connection's key wherever the parent's shell points (411).
 AMBIENT_ENDPOINTS = ('DEEPSEEK_BASE_URL', 'DEEPSEEK_SEARCH_BASE_URL')
 
+# The variable DSH's Messages route and its web rows read when none is named.
+_DEFAULT_KEY_ENV = 'DEEPSEEK_API_KEY'
+
 
 def version_order(version: str) -> tuple:
     """Return a semver sort key: release numbers, then prerelease identifiers.
@@ -83,6 +86,35 @@ def credential_environment(name: str | None) -> dict[str, str]:
     return {name: value}
 
 
+def _refuse_key_held_by_reviewer(settings: Mapping[str, Any], cwd: Path) -> None:
+    """Refuse a child left with no key because its reviewer holds DSH's default one.
+
+    The launch removes the reviewer's variable, and with no key DSH offers no
+    model, so its start would fail with only ``session/model-unavailable``.
+    DSH also finds a key in ``$DSH_HOME/.credentials.yaml``, ``$DSH_HOME/.env``
+    and ``<cwd>/.env`` (dsh-credentials-local, loadLayeredEnv). Those files are
+    checked by existence and never read. An undeclared home is the Agent's own
+    empty directory, so only a declared one can hold a login.
+    """
+    review = settings.get('review') or {}
+    if settings.get('api_key_env') or review.get('api_key_env') != _DEFAULT_KEY_ENV:
+        return
+    sources = [Path(cwd) / '.env']
+    if settings.get('runtime_home'):
+        home = Path(settings['runtime_home'])
+        sources += [home / '.credentials.yaml', home / '.env']
+    if any(source.exists() for source in sources):
+        return
+    raise DshError(
+        'ROLE_CONFIG_INVALID',
+        f"Reviewer {review.get('name', '')!r} uses {_DEFAULT_KEY_ENV}, which is kept from the child it reviews. "
+        'This DSH connection names no api_key_env, so the child would read that same variable and have no key. '
+        f'Set api_key_env on the connection (naming {_DEFAULT_KEY_ENV} deliberately shares it with the child), '
+        'give the reviewer a different api_key_env, or point the connection\'s home at a DSH home holding the '
+        "child's own login.",
+    )
+
+
 def prepare(configuration: Mapping[str, Any], cwd: Path) -> dict:
     """Validate caller-owned native settings and freeze a resumable request.
 
@@ -110,6 +142,7 @@ def prepare(configuration: Mapping[str, Any], cwd: Path) -> dict:
                 or parsed.password or parsed.query or parsed.fragment):
             raise DshError('ROLE_CONFIG_INVALID', 'Supply a credential-free native provider endpoint.')
     credential_environment(settings.get('api_key_env'))
+    _refuse_key_held_by_reviewer(settings, cwd)
     return {
         **settings, 'executable': str(executable), 'package': str(package),
         'worktree_path': str(Path(cwd).resolve()), 'provider': 'deepseek-official',

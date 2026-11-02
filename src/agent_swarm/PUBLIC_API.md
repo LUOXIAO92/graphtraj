@@ -96,6 +96,24 @@ notes (`install/`) are public with their documented flags:
   (the DSH codes in section 2), a `pi` entry as below, and whatever
   `AgentControl.require_connections()` refuses. On a startup error it prints
   `{"error": {"code", "message"}}` and exits `1`.
+- Since 0.2.14 this host adds a fixed passage after the parent's
+  `developerInstructions`, on `thread/start` and `thread/resume`, naming the `agents`
+  tool as how it creates and controls children and Codex's own `spawn_agent` as for when
+  the user names it. Children's settings are unchanged and no native tool is removed.
+  Which tool the model chooses can only be observed in a real run. The output shows it:
+  - `run_summary`: once a Session has started, `main` prints
+    `{"run_summary": {"agents_calls": N, "native_subagents": M}}` on stderr at the end of
+    the run, whether it succeeded or raised, with a `note` when `N` is 0. `N` counts the
+    entries of `operations`, so `discover` and `describe` do not count. It is the last
+    stderr line, except that a `stop-unconfirmed` line, and its traceback when one is
+    unwinding, comes after it. A refused start has none.
+  - `native_subagents`: in `--output` and the result of `CodexHost.run`, one entry `{"id",
+    "sender_thread", "receiver_threads", "status", "model"}` per `collabAgentToolCall` item
+    with tool `spawnAgent` seen on `item/started` or `item/completed`, in its latest state
+    and without its prompt. The first sighting prints `{"native_subagent": {..., "note"}}` on
+    stderr, after `parent_session`. Codex 0.164.0's protocol schema documents this item, but
+    no real run has shown it yet, so an empty list does not prove `spawn_agent` was unused.
+  A native subagent is not a failure: stdout and the exit status stay as they were.
 - A `runtimes.pi` entry of the Claude Code and Codex hosts (since 0.2.1) lets
   that host start Pi children without any GraphTraj Task. Its fields are the
   table *Pi child defaults* in 1.6, except `worktree_path`, which is the
@@ -752,7 +770,8 @@ connection's home. When a Pi selection changes the provider, model, home or
 key, the driver reads the model's network destination from Pi's catalog in
 the selected home and fails with `invalid-config` if Pi exposes no plain
 http(s) destination; another provider or a selected connection drops the
-host's `api_key_env`, `base_url` and `provider_api`. Claude has no native
+host's `api_key_env`, `base_url` and `provider_api`. A reviewed Pi connection
+whose only key is the reviewer's is refused the same way (section 6). Claude has no native
 provider setting, so a Claude connection's `provider` only names its models.
 
 **Several Runtimes in one host.** A host registers one driver per Runtime in
@@ -789,6 +808,10 @@ the Claude Code and Codex hosts call at start) refuses:
   required (installed <version or unknown>).`.
 - A missing `model` or `sandbox`: `ROLE_CONFIG_INVALID`.
 - An unset `api_key_env`: `RUNTIME_CREDENTIAL_MISSING`.
+- A create with no `api_key_env` whose reviewer's `api_key_env` is `DEEPSEEK_API_KEY`,
+  when none of the child's own key files exists: `ROLE_CONFIG_INVALID`, naming the
+  reviewer, the variable and the fixes (section 6, Pi and DSH adapters). Those files
+  are `<cwd>/.env` and, in a declared `home`, `.credentials.yaml` and `.env`.
 
 The child's endpoint comes only from `base_url` in the connection or settings,
 else DSH's official root. `DEEPSEEK_BASE_URL` and `DEEPSEEK_SEARCH_BASE_URL` in
@@ -1528,7 +1551,15 @@ no retry. The native side waits with no timeout of its own: Pi's dialog
 - The reviewer runs in the host, outside the child's sandbox and off the threads
   reading the Runtime's protocol; no sandbox, network or write grant is added for
   it. Its `api_key_env` variable is removed from the child's environment, unless
-  the child's own connection names that variable.
+  the child's own connection names that variable. DSH reads `DEEPSEEK_API_KEY` when a
+  connection names no key, so `create` refuses that connection beside a reviewer on
+  `DEEPSEEK_API_KEY` unless a key file exists (DSH children, section 2). Files are checked
+  by existence and not read, so one that holds no DeepSeek key still fails at start
+  with the native `session/model-unavailable`.
+  For Pi, `create` asks Pi's own model listing instead, without reading a credential: a
+  connection naming no key, with no `base_url`, is refused with `invalid-config` when Pi
+  offers the model with the reviewer's variable and not without it. Any other answer, or a
+  listing that fails, is no refusal, and a login in the connection's home counts as its own.
 - The bound agents tool, `mcp__agents__agents`, is not reviewed and is the only tool
   that is not: it is the child's channel to its parent, limited by agents' authority
   checks, and must work when the reviewer is down.
@@ -1707,6 +1738,13 @@ Recorded classifications:
   does not parse or hold an object now raises `ValueError` naming it, where a parse
   failure could leave some files already written and a non-object failed with an
   unrelated error. `write_adoption` and `kept_host_paths` are new public names.
+- 430 (0.2.13): `create` refuses a DSH connection with no `api_key_env` beside a reviewer on
+  `DEEPSEEK_API_KEY` when no key file of the child's own exists (section 2). Compatible: a new
+  error for a configuration that could not start before, since DSH offers no model without
+  a key and the child's start failed with `session/model-unavailable`. `create` likewise refuses
+  a Pi connection with no `api_key_env` and no `base_url` when Pi offers the model only with the
+  reviewer's variable (section 6). Compatible on the same reasoning: `create` used to return an
+  Agent, but that child could only fail at its first prompt with `No API key found`.
 
 While the major version is `0`, an incompatible change raises the minor
 version (`0.1.x` → `0.2.0`), and compatible additions and fixes raise the

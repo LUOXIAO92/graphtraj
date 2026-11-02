@@ -149,11 +149,15 @@ class Process:
         """Read the Agent's last result once it has one."""
         return wait_until(lambda: self.call({'action': 'status', 'agent': agent}).document['result'].get('last_result'))
 
+    def stop_children(self, call: Callable | None = None) -> list[str]:
+        """The stop ``main`` runs, through ``call`` if given."""
+        return self.host.stop_children(call or self.inner, lambda: self.control.visible_agents(self.caller))
+
     def shutdown(self) -> None:
         """What ``main`` does when the native side closes its pipe."""
         self.control.close_notices()
         self.notices.close()
-        self.host.stop_children(self.inner)
+        self.stop_children()
 
 
 def wait_until(check, seconds: float = 5.0):
@@ -548,7 +552,7 @@ def test_a_notice_pi_took_is_delivered_only_when_it_is_in_the_session(pi_host_pr
     wait_until(lambda: read_record(tmp_path, agent)['executions'][-1].get('notification') == 'held')
     assert identity in process.notices.awaiting and process.flush() == process.pipe.lines
     process.notices.acknowledge(identity, True)
-    assert read_record(tmp_path, agent)['executions'][-1]['notification'] == 'delivered'
+    wait_until(lambda: read_record(tmp_path, agent)['executions'][-1]['notification'] == 'delivered')
     assert identity not in process.notices.awaiting and len(process.pipe.lines) == 1
 
 

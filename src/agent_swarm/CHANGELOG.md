@@ -12,6 +12,23 @@ version that identifies everything listed under it.
 
 The numbers in parentheses are the project's Task numbers.
 
+## 0.2.19 (compatible)
+
+- One blocked call no longer holds a closing Pi or DSH host (434). With another process
+  holding one Agent's record lock, or a driver's `interrupt` that never returns, the other
+  children are still interrupted and seen to end, only that Agent is named in the
+  `stop-unconfirmed` line, and the process ends within 20 seconds of its pipe closing instead
+  of when the lock is released. A model request in flight at the close and the notice flusher
+  can add up to 3 seconds each; that request's caller is told the operation is unconfirmed.
+  The line no longer says every other Agent stopped when a `status` went unanswered and no
+  Agent was seen stopped.
+  New: `worker_connection` and `agents_connection` take `close_seconds` (default: unchanged),
+  and `AgentControl.visible_agents` names a caller's Agents without taking a record lock.
+  The Pi host's stdin loop no longer writes a shown notice's record itself, so a held lock
+  cannot stop it reading the close. A notice still locked when the host ends stays `held`, and
+  the next host pushes it again.
+  Claude and Codex hosts are unchanged.
+
 ## 0.2.18 (compatible)
 
 - A Pi child that ends by itself before its first prompt, for example because a sandbox

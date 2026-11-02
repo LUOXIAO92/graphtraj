@@ -331,7 +331,8 @@ Parts for building a host or a consumer on agents (since 0.2.2), also in
   `run_stoppable` wait, `stop_requested` asks, `on_discard` registers cleanup
   and `CallCancelled` is raised when the caller cancels or goes away;
 - the owner connection, the authenticated local file transport of 1.1:
-  `worker_connection` serves it, `connection_operation` exchanges one document
+  `worker_connection` serves it (`close_seconds`, since 0.2.19, caps how long its
+  close waits; the default waits as before), `connection_operation` exchanges one document
   over it, `record_lock_owner` proves a lock's owning process,
   `client_native_context` reads the caller's native Session facts and
   `verify_native_context` compares them with what the host expects;
@@ -411,7 +412,7 @@ passes to `PiArchive` as `private_paths`.
 **`AgentControl` methods.** Besides `operate` (`bind`'s entry) a host may call
 `create`, `send`, `resume`, `interrupt`, `wait`, `requests`, `reply`,
 `ask_parent`, `retire`, `select`, `require_connections`, `hierarchy`,
-`reference_hint`, `interrupt_owned`, `owns_running`, `unconfirmed_ends`,
+`reference_hint`, `interrupt_owned`, `visible_agents`, `owns_running`, `unconfirmed_ends`,
 `registration(agent)` (`{"host", "parent", "settings"}` of an Agent the host
 recorded, or `None` for a missing or unreadable record; it checks no caller),
 `confirm_ended(agent, caller, *, by=None)` (`by` is the identity recorded as
@@ -1109,11 +1110,22 @@ What the parent sees today:
   waits up to 10 seconds in total for all of them, whether or not they have
   an unanswered request. The ends this causes, and any notice not
   yet acknowledged, are `held`, readable through `status`. Agents, Sessions
-  and records are kept. An Agent still active at that deadline, or every
-  Agent when no `status` could be read, is not reported as stopped: the host
+  and records are kept. A call that blocks, on an Agent's record lock or inside
+  a driver, costs only that Agent: the others are still interrupted and seen to
+  end, and the host does not wait for the lock to be released. A model request
+  still running when the pipe closes, and the host's notice flusher, can add up to
+  3 seconds each before the stop, so a host process ends within 20 seconds of its
+  pipe closing; that request's caller is told the operation is unconfirmed. A held
+  record lock does not stop the Pi host reading its pipe either: a notice reported
+  shown whose record is still locked when the host ends stays `held`, and the next
+  host pushes it again. An
+  Agent whose latest `status` did not show it out of `active` at that deadline is
+  not reported as stopped: the host
   writes one `{"error": {"code": "stop-unconfirmed", "message"}}` line naming
   it to stderr and exits non-zero, and the extension's `session_shutdown`
-  handler rejects with that text. In the next host's `status` that Agent is `active` with `stopping`
+  handler rejects with that text. The line says every other Agent stopped only
+  when each was seen to; if a `status` went unanswered and no Agent was seen
+  stopped, it says no other Agent is confirmed either. In the next host's `status` that Agent is `active` with `stopping`
   and the diagnostic `owner-exited; the Runtime process is still running` while
   its Runtime lives; once that is gone, it is in standby with `last_result`
   `outcome: failed`, `terminal_confirmed: false` and error `owner-exited`, and
@@ -1198,7 +1210,7 @@ What the parent sees today:
   | Idle, host alive (a long-lived profile such as `web`, `tui`, `acp` or `sdk`, or `headless` before its runner leaves its loop) | The wake starts a new turn with the notice at once | `dsh-agent-loop/lib/index.js:564-569`, `:618-623` |
   | Idle during maintenance (for example compaction) or right after a cancel | The wake is latched and the turn starts when that activity ends | `dsh-agent-loop/lib/index.js:565-566`, `:619-621` |
   | `headless`, after the parent is idle with no native DSH subagents | The runner flushes and exits. agents children are not native subagents, so it does not wait for them; the host then stops with DSH (next row) | `dsh-headless/lib/index.js:369-373`, `:377-383` |
-  | Host or DSH process stopped (Session disposed, DSH exited) | No host runs. At the stop the plugin closes the host pipe; the host stops pushing, interrupts its active children (descendants first), waits up to 10 seconds in total for all of them and holds their ends, readable through `status`. An Agent it cannot confirm stopped is reported as for the Pi host above (`stop-unconfirmed` on stderr, non-zero exit, the same `status` in the next host); the plugin writes that text to the DSH logger | `dsh/plugin.mjs`, `agent_swarm/shutdown.py` |
+  | Host or DSH process stopped (Session disposed, DSH exited) | No host runs. At the stop the plugin closes the host pipe; the host stops pushing, interrupts its active children (descendants first), waits up to 10 seconds in total for all of them and holds their ends, readable through `status`. A blocked call costs only that Agent and the host ends within 20 seconds of the pipe closing, as for the Pi host above. An Agent it cannot confirm stopped is reported as for the Pi host above (`stop-unconfirmed` on stderr, non-zero exit, the same `status` in the next host); the plugin writes that text to the DSH logger | `dsh/plugin.mjs`, `agent_swarm/shutdown.py` |
   | On resume (`dsh --profile headless --session-id <id> "<task>"`, or reopening the Session in a long-lived profile) | DSH registers and announces the Session again and a new host binds the same Session. The plugin tells the host to begin when the Session's first turn begins, or two seconds after its `agents` tool attaches in a Session that starts no turn by itself: a relay message wakes an idle Session, and the `headless` runner applies its permission settings and hands over its task only after the announcement. The host then delivers each held notice once through the relay. A refused notice is tried again, at most six passes five seconds apart in that host's lifetime, and then stays held for a later host. Earlier children are listed by `status` and continue with `resume` | `dsh-agent/lib/index.js:655`, `:710`; `dsh-headless/lib/index.js:263`, `:344`, `:361` |
 
   Cases without immediate delivery: (1) a running parent receives a notice

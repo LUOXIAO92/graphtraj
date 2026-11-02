@@ -54,8 +54,15 @@ def worker_connection(
     operate: Callable[[dict], dict],
     *,
     authenticate: Callable[[int], None] | None = None,
+    close_seconds: float | None = None,
 ) -> Iterator[str]:
-    """Serve local requests without requiring a listening network/socket permission."""
+    """Serve local requests without requiring a listening network/socket permission.
+
+    By default closing waits for every accepted request and then for callers to
+    take their replies. ``close_seconds`` caps all of that for a host that must
+    end: a request still running then keeps its daemon thread until the process
+    ends, and its caller is told the operation is unconfirmed.
+    """
     if os.name == 'nt':
         raise AgentsError('authority-denied', 'Windows does not support the authenticated local control pipe.')
     stop = threading.Event()
@@ -122,18 +129,22 @@ def worker_connection(
             yield address
         finally:
             closing.set()
-            # Every request already taken finishes and publishes its reply.
-            for running in list(accepted.values()):
-                running.join()
+            limit = None if close_seconds is None else time.monotonic() + close_seconds
+
+            def join_accepted() -> None:
+                """Let each request taken finish and publish its reply, up to ``limit``."""
+                for running in list(accepted.values()):
+                    running.join(None if limit is None else max(0.0, limit - time.monotonic()))
+
+            join_accepted()
             # A caller removes its request directory after consuming the reply.
             # Keep acknowledged results available across fast native completion.
-            deadline = time.monotonic() + OPERATION_TIMEOUT_SECONDS
+            deadline = limit if limit is not None else time.monotonic() + OPERATION_TIMEOUT_SECONDS
             while any(Path(address).iterdir()) and time.monotonic() < deadline:
                 time.sleep(0.01)
             stop.set()
             thread.join()
-            for running in list(accepted.values()):
-                running.join()
+            join_accepted()
             os.close(host_lock)
 
 
@@ -341,12 +352,14 @@ def agents_connection(
     authenticate: Callable[[int], None],
     *,
     native_context: Callable[[], dict | None] | None = None,
+    close_seconds: float | None = None,
 ) -> Iterator[str]:
     """Serve one bound caller, optionally checking host-owned native Session facts.
 
     Native facts only constrain the existing binding. They never select an
     Agent or substitute for kernel-PID authentication. The host obtains its
     expected context from the actual native Session, not child environment.
+    ``close_seconds`` is :func:`worker_connection`'s.
     """
     from agent_swarm.discovery import handle_request
 
@@ -363,7 +376,7 @@ def agents_connection(
         return {'document': result.document, 'failed': result.failed}
 
     directory.mkdir(parents=True, exist_ok=True)
-    with worker_connection(directory, operate, authenticate=authenticate) as address:
+    with worker_connection(directory, operate, authenticate=authenticate, close_seconds=close_seconds) as address:
         yield address
 
 

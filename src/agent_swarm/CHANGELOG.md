@@ -12,6 +12,15 @@ version that identifies everything listed under it.
 
 The numbers in parentheses are the project's Task numbers.
 
+## 0.2.11 (compatible)
+
+- A DSH connection that names no `api_key_env`, beside a reviewer whose `api_key_env` is
+  `DEEPSEEK_API_KEY`, is now refused at `create` with `ROLE_CONFIG_INVALID` when no key
+  file of the child's own exists (430). The child never receives the reviewer's key and
+  DSH's default key is that same variable, so such a child could only fail at start with
+  `session/model-unavailable`. The message names the reviewer, the variable and the fixes.
+  A file that exists but holds no DeepSeek key still fails at start, because it is not read.
+
 ## 0.2.10 (compatible)
 
 - A resumed Claude Session with a full archive no longer raises `Unresolved observations

@@ -823,7 +823,8 @@ register_tool(
         'catalog': {'type': 'object', 'description':
             'Complete version: 1 catalog. runtimes maps names to runtime (codex/pi/dsh/claude), '
             'optional absolute home, and providers. Each provider has models and optional '
-            'base_url, api_key_env (variable name), and Pi api. models maps reference keys '
+            'base_url, api_key_env (variable name), pass_env (variable names a child also receives) '
+            'and Pi api. models maps reference keys '
             'to id, source (manual/native), optional alias and supported_efforts. '
             'Project roles select connection: runtime-name/provider-name/model-key.'},
         'changes': {'type': 'object', 'description':

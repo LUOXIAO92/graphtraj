@@ -236,6 +236,7 @@ class ClaudeRuntimeAdapter:
             'provider': settings.runtime_provider or 'native',
             'credential_source': 'api_key_env' if settings.api_key_env else 'native',
             'api_key_env': settings.api_key_env,
+            **({'pass_env': list(settings.pass_env)} if settings.pass_env else {}),
             'instructions': '\n\n'.join(filter(None, (role.instructions, READ_GUIDANCE))),
             'worktree_access': settings.worktree_access, 'reports': reports, 'resources': resources,
             'settings_sources': 'managed settings and explicit Runner settings; restricted mode',

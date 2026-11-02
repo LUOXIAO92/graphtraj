@@ -26,7 +26,8 @@ def main() -> None:
         domain = {'deepseek': 'api.deepseek.com', 'openrouter': 'openrouter.ai',
                   'openai': 'api.openai.com'}.get(provider, 'custom.invalid')
         # Opt-in: list the model as real Pi does, only when something authenticates it.
-        needs = os.environ.get('PI_FIXTURE_LISTING_KEY')
+        # An ordinary name, so it reaches a listing that keeps only named credentials.
+        needs = os.environ.get('PI_FIXTURE_LISTING_NEEDS')
         auth = Path(os.environ.get('PI_CODING_AGENT_DIR', '.')) / 'auth.json'
         offered = (not needs or needs in os.environ
                    or (auth.exists() and provider in json.loads(auth.read_text())))
@@ -70,9 +71,9 @@ def main() -> None:
     dialog = threading.Event()
     held_seconds = float(os.environ.get('PI_FIXTURE_HELD_SECONDS', '5'))
     answers: list[dict] = []
-    if os.environ.get('PI_FIXTURE_KEY_PROBE'):
+    if os.environ.get('PI_FIXTURE_PROBE_NAMES'):
         # Which named variables reached this process, never their values.
-        target, _, names = os.environ['PI_FIXTURE_KEY_PROBE'].partition(':')
+        target, _, names = os.environ['PI_FIXTURE_PROBE_NAMES'].partition(':')
         Path(target).write_text(json.dumps({name: name in os.environ for name in names.split(',')}))
 
     def gated(name: str) -> bool:

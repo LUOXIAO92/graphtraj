@@ -12,7 +12,7 @@ this file; anything it does not list is internal.
 
 # The only definition of the distribution version; packaging and every
 # runtime report (MCP serverInfo, Codex clientInfo) read it from here.
-__version__ = "0.2.13"
+__version__ = "0.2.14"
 
 from importlib import import_module
 
@@ -121,6 +121,8 @@ __getattr__ = _lazy_names({
     "RuntimeTurn": ("agent_swarm.runtime", "RuntimeTurn"),
     "SessionStarted": ("agent_swarm.runtime", "SessionStarted"),
     "credential_environment": ("agent_swarm.runtime", "credential_environment"),
+    "child_environment": ("agent_swarm.child_env", "child_environment"),
+    "is_credential_name": ("agent_swarm.child_env", "is_credential_name"),
 })
 
 __all__ = [
@@ -141,5 +143,5 @@ __all__ = [
     "END_EVENTS", "needs_parent", "notice_id",
     "exclusive_lock", "stop_owned", "exit_if_owned_unconfirmed", "process_ancestors", "process_arguments", "process_executable",
     "RuntimeAdapterError", "RuntimeContext", "RuntimeExecutionResult", "RuntimeTurn",
-    "SessionStarted", "credential_environment",
+    "SessionStarted", "credential_environment", "child_environment", "is_credential_name",
 ]

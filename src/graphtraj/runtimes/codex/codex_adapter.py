@@ -226,6 +226,7 @@ class _CodexRuntimePreflight:
     _report_files: Tuple[Path, ...]
     _connection_reference: str | None = None
     _connection_revision: str | None = None
+    _pass_env: Tuple[str, ...] = ()
 
     def finalize(self) -> RuntimeContext:
         """Resolve Task Worktree facts shared by supported role boundaries."""
@@ -240,6 +241,8 @@ class _CodexRuntimePreflight:
             report_files=self._report_files,
             model=self._model,
         )
+        if self._pass_env:
+            request["pass_env"] = list(self._pass_env)
         return CodexRuntimeContext(
             launch=json.dumps({
                 "runtime": "codex",
@@ -582,6 +585,7 @@ def preflight_runtime_context(
         _report_files=report_files,
         _connection_reference=settings.connection,
         _connection_revision=settings.connection_revision,
+        _pass_env=settings.pass_env,
     )
 
 

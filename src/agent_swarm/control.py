@@ -669,6 +669,10 @@ class AgentControl:
             check_reviewer(review)
         # Keep the original call shape for drivers whose users select defaults.
         settings = driver.prepare(runtime, caller, **options)
+        # Only the user's file declares this; no create argument can ask for a key.
+        passed = self._pass_env(selection)
+        if passed:
+            settings = {**settings, "pass_env": passed}
         json.dumps(settings)
 
         agent  = "agent-" + uuid.uuid4().hex
@@ -775,6 +779,16 @@ class AgentControl:
         review = declared.get("reviewers", {}).get((settings or {}).get("review"))
         return {"preset": preset, "connection": connection, "provider": provider,
                 "settings": deepcopy(settings), "review": deepcopy(review), **chosen}
+
+    def _pass_env(self, selection: Mapping[str, Any] | None) -> list[str]:
+        """Return the declared names: the selected connection's, else the file's default."""
+        settings = (selection or {}).get("settings")
+        if settings is not None:
+            return list(settings.get("pass_env", ()))
+        try:
+            return list(read_connections(self.root).get("pass_env", ()))
+        except ValueError as error:
+            raise AgentsError("invalid-config", str(error)) from None
 
     def _candidate(self, runtime: str, settings: Mapping[str, Any] | None, model: str) -> dict:
         """Return the one candidate whose ``id`` is ``model``, or raise ``invalid-model``."""

@@ -13,10 +13,13 @@ from concurrent.futures import ThreadPoolExecutor
 import json
 import os
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import tempfile
-from typing import Any, Callable, Mapping
+from typing import Any, Callable, Iterable, Mapping
+
+from agent_swarm.child_env import child_environment, is_credential_name
 
 
 RUNTIMES = ('claude', 'codex', 'pi', 'dsh')
@@ -212,7 +215,7 @@ def _private_catalog(home: Path, agent: Path) -> None:
 
 def _pi_available_models(executable: str, home: Path, cwd: Path, *selection: str,
                          provider: str | None = None, api_key_env: str | None = None,
-                         without: str | None = None) -> list[dict]:
+                         without: str | None = None, only: Iterable[str] | None = None) -> list[dict]:
     """Return Pi's available-model records of ``home``, read from a private agent directory in ``cwd``.
 
     Pi creates its stores in the directory it runs on and installs that
@@ -220,7 +223,8 @@ def _pi_available_models(executable: str, home: Path, cwd: Path, *selection: str
     ``home``. ``api_key_env`` becomes the private ``auth.json``; without one a
     link gives Pi the native login, which it locks beside the link and reads
     through, writing only when a login changes. ``without`` names one variable
-    removed from Pi's environment for this listing.
+    removed from Pi's environment for this listing; ``only`` names the sole
+    credential-class variables left in it.
     """
     agent = cwd / 'agent'
     agent.mkdir()
@@ -232,6 +236,8 @@ def _pi_available_models(executable: str, home: Path, cwd: Path, *selection: str
     environment = _environment({'home': agent}, 'PI_CODING_AGENT_DIR')
     if without:
         environment.pop(without, None)
+    if only is not None:
+        environment = child_environment(environment, declared=only)
     completed = subprocess.run(
         [executable, '--mode', 'rpc', '--no-session', '--no-extensions', '--no-skills',
          '--no-prompt-templates', '--no-themes', '--no-context-files', *selection],
@@ -258,6 +264,41 @@ def pi_offers(executable: str, home: str, provider: str, model: str, without: st
         return any((item['provider'], item['id']) == (provider, model) for item in models)
     except Exception:
         return None
+
+
+def pi_default_keys(executable: str, home: str, provider: str, model: str) -> tuple[str, ...]:
+    """Return the credential-class variables Pi needs for a model on a connection naming no key.
+
+    Pi maps providers to variables itself, and a ``models.json`` can name any other,
+    so Pi is asked by listing with the variables kept to a candidate set: none (its
+    native login is enough, or nothing would help), those naming the provider, then
+    all with each removed in turn. Only names are handled and no value is read. When
+    Pi cannot answer nothing is added, so uncertainty never hands over a key.
+    """
+    def offers(names: Iterable[str]) -> bool:
+        """Whether Pi authenticates the model with only ``names`` kept."""
+        try:
+            with tempfile.TemporaryDirectory(prefix='agents-pi-keys-') as directory:
+                models = _pi_available_models(executable, Path(home), Path(directory),
+                                              '--provider', provider, '--model', model, only=names)
+            return any((item['provider'], item['id']) == (provider, model) for item in models)
+        except Exception:
+            return False
+
+    candidates = [name for name in sorted(os.environ) if is_credential_name(name)]
+    if not candidates or offers(()):
+        return ()
+    label  = re.sub(r'[^A-Z0-9]', '', provider.upper())
+    likely = [name for name in candidates if label and label in name.replace('_', '')]
+    if likely and offers(likely):
+        candidates = likely
+    elif not offers(candidates):
+        return ()
+    for name in tuple(candidates):
+        remaining = [item for item in candidates if item != name]
+        if offers(remaining):
+            candidates = remaining
+    return tuple(candidates)
 
 
 def pi_destination(executable: str, home: str, provider: str, model: str, api_key_env: str | None = None) -> str:

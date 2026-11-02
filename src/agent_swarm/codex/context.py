@@ -89,7 +89,7 @@ def validate_codex_launch_request(
     if (
         not isinstance(request, dict)
         or not {"arguments", "worktree_path"}.issubset(request)
-        or not set(request).issubset({"arguments", "worktree_path", "session_parameters", "approval", "local_websocket_projection"})
+        or not set(request).issubset({"arguments", "worktree_path", "session_parameters", "approval", "local_websocket_projection", "pass_env"})
     ):
         raise CodexAdapterError(
             "RUNTIME_REQUEST_INVALID",
@@ -196,6 +196,24 @@ def codex_api_key_env(base_url: str | None, name: str | None) -> str | None:
         if parsed.scheme == 'https' and parsed.netloc.lower() in {'api.openai.com', 'api.openai.com:443'}:
             return 'OPENAI_API_KEY'
     return name
+
+
+def native_key_names(runtime_home: str | None, config: Mapping[str, Any]) -> tuple[str, ...]:
+    """Return the variables Codex reads for a connection that names no key.
+
+    These are its own defaults and, read from the Session's settings and then the
+    selected home's ``config.toml``, the ``env_key`` of the selected provider. Its
+    ``auth.json`` login needs no variable. Names only; no value is read.
+    """
+    home = Path(runtime_home or os.environ.get('CODEX_HOME') or Path.home() / '.codex')
+    try:
+        document = tomllib.loads((home / 'config.toml').read_text(encoding='utf-8'))
+    except (OSError, UnicodeError, tomllib.TOMLDecodeError):
+        document = {}
+    provider  = config.get('model_provider') or document.get('model_provider')
+    providers = {**document.get('model_providers', {}), **config.get('model_providers', {})}
+    key = providers.get(provider, {}).get('env_key') if isinstance(providers.get(provider), dict) else None
+    return ('OPENAI_API_KEY', 'CODEX_API_KEY', *([key] if isinstance(key, str) else []))
 
 
 def _connection_environment(

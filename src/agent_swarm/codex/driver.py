@@ -152,7 +152,10 @@ class CodexDriver:
             prompt = f"[agents · {notice['agent']} → {run.agent}]\n{notice['body']}"
         if run.settings.get('review') is not None:
             options.update(review=run.settings['review'])
-        turn = self.execution(dict(run.settings['adapter_request']), prompt, run.directory,
+        request = dict(run.settings['adapter_request'])
+        if run.settings.get('pass_env'):
+            request['pass_env'] = run.settings['pass_env']
+        turn = self.execution(request, prompt, run.directory,
                               lambda session, pid: ready.set(), dict(run.settings.get('evidence', {})),
                               trace_file=run.directory / 'trace.jsonl', expected_session=run.session,
                               session_created=created, **options)

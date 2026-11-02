@@ -9,7 +9,26 @@ import subprocess
 from typing import Any, Mapping
 
 from agent_swarm import AgentsError
+from agent_swarm.child_env import is_credential_name
 from .support import credential_environment
+
+
+def login_variables(environment: Mapping[str, str]) -> tuple[str, ...]:
+    """Return the variables Claude Code logs in with when a connection names no key.
+
+    These are its three login variables and, only when the matching provider mode
+    is selected in ``environment``, that provider's credential-class variables.
+    A keychain or ``.credentials.json`` login needs no variable.
+    """
+    def selected(mode: str) -> bool:
+        """Read a provider switch as Claude reads its boolean settings."""
+        return environment.get(mode, '').strip().lower() in {'1', 'true', 'yes', 'on'}
+
+    prefixes = (*(('AWS_',) if selected('CLAUDE_CODE_USE_BEDROCK') else ()),
+                *(('GOOGLE_', 'GCLOUD_', 'CLOUDSDK_') if selected('CLAUDE_CODE_USE_VERTEX') else ()),
+                *(('ANTHROPIC_FOUNDRY_',) if selected('CLAUDE_CODE_USE_FOUNDRY') else ()))
+    provider = [name for name in environment if name.startswith(prefixes) and is_credential_name(name)] if prefixes else []
+    return ('ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN', 'CLAUDE_CODE_OAUTH_TOKEN', *provider)
 
 
 def current_cli(executable: str | None = None) -> tuple[str, str]:

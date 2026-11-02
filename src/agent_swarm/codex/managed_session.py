@@ -20,7 +20,8 @@ from agent_swarm.approval import review_failed
 from agent_swarm.review import build_request, record_decision, review_call
 from agent_swarm.runtime import RuntimeAdapterError
 from .app_server import CodexAppServer, CodexExecution, CodexServerRequest
-from .context import restore_codex_context, recovery_environment
+from agent_swarm.child_env import child_environment
+from .context import native_key_names, restore_codex_context, recovery_environment
 
 
 def model_change_message(summary: str, requested: object, observed: object, reason: str | None) -> str:
@@ -154,6 +155,20 @@ class CodexManagedExecution:
         """Expose native execution identity without leaking the Codex handle."""
         return self.execution.turn_id if self.execution is not None else None
 
+    def child_overrides(self, request: Mapping, config: Mapping) -> dict[str, str | None]:
+        """Return the service environment as overrides of this host's; ``None`` removes a name.
+
+        The connection's values are applied after the rule, so a connection that names
+        the reviewer's key keeps it and one with an endpoint still clears the default key.
+        """
+        connection = {**self.context.runtime_environment(), **self.connection_environment}
+        named = connection.keys() - {'CODEX_HOME', 'OPENAI_BASE_URL'}
+        kept = child_environment(
+            os.environ, defaults=() if named else native_key_names(connection.get('CODEX_HOME'), config),
+            declared=request.get('pass_env', ()), review_key=(self.review or {}).get('api_key_env'))
+        return {**{name: None for name in os.environ if name not in kept}, **kept, **connection,
+                'AGENT_SWARM_CONNECTION': None, 'GRAPHTRAJ_CLI_CONNECTION': None}
+
     def run(self) -> dict:
         """Run native control on one loop while the Worker accepts local calls."""
         return asyncio.run(self._run())
@@ -178,15 +193,9 @@ class CodexManagedExecution:
                 'env': {connection_env: address, 'GRAPHTRAJ_NATIVE_RUNTIME': 'codex'},
             }
             self.context = restore_codex_context(request, self.context.evidence_document())
-        # The reviewer's key stays with this host, away from the child it judges,
-        # unless the connection itself gives the child that variable.
-        review_key = (self.review or {}).get('api_key_env')
-        withheld = {review_key: None} if review_key and review_key not in self.connection_environment else {}
         adapter = CodexAppServer(cwd=Path(self.context.session_document()['adapter_request']['cwd']),
                                  command=self.command, request_timeout=5,
-                                 environment={**self.context.runtime_environment(), **self.connection_environment,
-                                              'AGENT_SWARM_CONNECTION': None, 'GRAPHTRAJ_CLI_CONNECTION': None,
-                                              **withheld},
+                                 environment=self.child_overrides(request, config),
                                  on_request=self._request, request_handler_timeout=None,
                                  experimental_api=True)
         self.adapter = adapter

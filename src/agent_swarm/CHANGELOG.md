@@ -12,6 +12,24 @@ version that identifies everything listed under it.
 
 The numbers in parentheses are the project's Task numbers.
 
+## 0.2.14 (incompatible)
+
+Classified under `PUBLIC_API.md` section 7 as a default that changes observable
+behaviour, recorded there as a deliberate security fix within `0.2.x`.
+
+- A child Agent now receives only its own connection's key (433). Every launch path of
+  all four Runtimes and of GraphTraj's Runner members calls one function,
+  `agent_swarm.child_environment`, on first start and on resume. Other credential-class
+  variables, chosen by `agent_swarm.is_credential_name`, no longer reach the child.
+- `pass_env`, a list of variable names, declares more variables on a connection or at the
+  top level of `config.yml` for a child with no connection. It is user configuration only:
+  `create` still refuses it as an unexpected parameter. It never brings back a reviewer's
+  key. GraphTraj takes it on a connection provider and on an inline role.
+- **What a user may need to change:** a child that used an unrelated key from its parent's
+  environment must now declare it. That covers tools in its shell such as `gh` with
+  `GH_TOKEN`, a Codex MCP server with `bearer_token_env_var`, and DSH's official web search
+  beside a connection naming another key (`pass_env: [DEEPSEEK_API_KEY]`).
+
 ## 0.2.13 (compatible)
 
 - A DSH connection that names no `api_key_env`, beside a reviewer whose `api_key_env` is

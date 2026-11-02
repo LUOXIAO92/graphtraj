@@ -42,6 +42,7 @@ class RolePreset:
     model: str
     base_url: str | None
     api_key_env: str | None
+    pass_env: tuple[str, ...] = ()
     allow_runtime_swarm: bool = False
     reasoning_effort: str | None = None
     codex: Mapping[str, object] | None = None
@@ -377,8 +378,15 @@ def _role_preset(
             return None
     allowed = _REQUIRED_FIELDS | _CONNECTION_FIELDS | {
         "reasoning_effort", "codex", "pi", "claude", "allow_runtime_swarm", "instructions",
-        "system_prompt", "developer_prompt", "worktree_access", "reports", "connection",
+        "system_prompt", "developer_prompt", "worktree_access", "reports", "connection", "pass_env",
     }
+    passed = entry.get("pass_env", [])
+    if not isinstance(passed, list) or any(
+        not isinstance(value, str) or not _ENVIRONMENT_NAME.fullmatch(value) for value in passed
+    ):
+        diagnostics.append(f"{name}.pass_env must list environment variable names.")
+    elif reference is not None and passed:
+        diagnostics.append(f"{name}.pass_env belongs to the referenced connection.")
     if "instructions" in entry and (
         not isinstance(entry["instructions"], str)
         or not entry["instructions"].strip()
@@ -469,6 +477,7 @@ def _role_preset(
         api_key_env=(
             str(entry["api_key_env"]) if "api_key_env" in entry else None
         ),
+        pass_env=tuple(entry.get("pass_env", ())),
         allow_runtime_swarm=entry.get("allow_runtime_swarm", False),
         instructions=entry.get("instructions"),
         system_prompt=entry.get("system_prompt"),

@@ -134,6 +134,43 @@ make `create` take up to about 30 seconds).
 If several connections declare one Runtime, `create` needs a preset that selects one,
 else it fails with `ambiguous-connection`.
 
+### What a child's environment holds
+
+A child receives only its own connection's key. Every other variable whose name marks it
+as a credential stays with the host: anything with a `_`-separated part ending in `KEY`,
+`TOKEN`, `SECRET`, `PASSWORD` or `CREDENTIAL`, such as `HF_TOKEN`, `AWS_SECRET_ACCESS_KEY`
+or `PGPASSWORD`. Ordinary variables such as `PATH` and `HOME` are unchanged. A connection
+naming no `api_key_env` keeps the variables that Runtime logs in with, and a Runtime's own
+login file is untouched. A reviewer's key is not handed to the child it judges.
+
+To give a child another variable, declare its name in your configuration. A model cannot
+ask for one:
+
+```yaml
+pass_env: [GH_TOKEN]              # a child with no connection
+connections:
+  work-claude:
+    runtime: claude
+    api_key_env: WORK_KEY
+    pass_env: [GH_TOKEN]          # this connection's children; replaces the list above
+```
+
+Declaring a reviewer's key does not hand it over. For a DSH child to use official web search
+beside a connection that names another key, declare `DEEPSEEK_API_KEY`.
+
+This is not a guard against a model reading what it can reach. Three cases are not protected:
+
+- **A top-level host you start from your own shell.** Its environment is yours.
+- **The child's own key.** It can still read that.
+- **Plaintext files the child can read**, such as `~/.zshrc`, and shells that reload them.
+  A Codex child's shell does reload them: with the installed Codex 0.164.0 a key exported in
+  `~/.zshrc`, `~/.zshenv`, `~/.zprofile` or `~/.zlogin` reappears in its shell. Pi's and DSH's
+  shells reload none of these, and DSH removes credential names from its shell as well.
+  Claude Code's has not been observed; expect any zsh to read `~/.zshenv`.
+
+The rule matches names, so a URL holding a credential is not caught, and `SSH_AUTH_SOCK` stays
+because Git over SSH needs it. See `PUBLIC_API.md` section 3.1 for the exact rule.
+
 ### Presets
 
 A preset names a choice you reuse. `create` selects it with `preset` and still gives

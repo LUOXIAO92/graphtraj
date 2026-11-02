@@ -117,6 +117,7 @@ class DshRuntimeAdapter:
         return DshContext({
             'executable': executable, 'package': str(package), 'tool': tool,
             'worktree_path': str(worktree), 'harness_root': str(harness_root),
+            'git_common_directory': str(git_common_directory),
             'model': (role.settings.model if role.settings.connection else
                       role.settings.model.removeprefix('deepseek-official/')),
             'provider': 'deepseek-official',

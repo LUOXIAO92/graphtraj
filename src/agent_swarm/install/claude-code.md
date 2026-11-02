@@ -103,7 +103,8 @@ not load this project's `.mcp.json`.
 
 - In the Session, `/agents-context` prints the current Session, `MCP agents
   registered` and the state of notice push, without a model turn. `/mcp` lists `agents`.
-- Ask the model to create a Claude child that answers one word, then to `wait` for it.
+- Ask the model to use the `agents` tool, not Claude Code's own subagents, to create a Claude
+  child that answers one word, then to `wait` for it.
   The result shows `state: standby` and `last_result.outcome: completed`.
 - After you quit, `.agents-control/host.log` ends with `agents host recorded its
   children stopped.`

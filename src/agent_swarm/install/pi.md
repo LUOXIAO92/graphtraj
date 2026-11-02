@@ -77,8 +77,8 @@ A refused start shows as the extension's error, with one `{"error": {"code",
 ## See that it worked
 
 - The model can call the `agents` tool, through the MCP server `agents`.
-- Ask it to create a Claude child that answers one word. A message appears in the Pi
-  Session titled `[agents notice from <agent> · completed]`.
+- Ask it to use the `agents` tool to create a Claude child that answers one word. A message
+  appears in the Pi Session titled `[agents notice from <agent> · completed]`.
 - `status` then shows `last_result.notification: delivered`, and `last_message: null`
   because the body was already shown.
 

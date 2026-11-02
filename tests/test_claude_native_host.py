@@ -56,8 +56,8 @@ def test_progressive_mcp_consumes_current_context_once(tmp_path: Path) -> None:
         host.call({**request, 'arguments': {'caller': first}})
     with pytest.raises(AgentsError, match='subagent'):
         host.context({**context, 'agent': 'native-child'})
-    with pytest.raises(AgentsError, match='cwd'):
-        host.context({**context, 'cwd': str(tmp_path / 'elsewhere')})
+    with pytest.raises(AgentsError, match='outside the project'):
+        host.context({**context, 'cwd': str(tmp_path.parent / 'elsewhere')})
     host.context(context)
     host.context({'operation': 'end'})
     with pytest.raises(AgentsError, match='No matching'):

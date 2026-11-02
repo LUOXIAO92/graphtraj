@@ -1,0 +1,116 @@
+# OLD CODE: HEAD 4c3916559e620141de7336f63f2e73fac46bdb71, src diff lines:        0
+/Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/437-claude-member-survives-cd/src/agent_swarm/claude/collection.py /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/437-claude-member-survives-cd/src/agent_swarm/claude/native_host.py
+============================= test session starts ==============================
+platform darwin -- Python 3.13.11, pytest-9.2.0, pluggy-1.7.0 -- /tmp/claude-501/venv-437/bin/python
+rootdir: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/437-claude-member-survives-cd
+configfile: pyproject.toml
+collecting ... collected 14 items
+
+tests/test_claude_member_survives_cd.py::test_a_helper_finishing_after_cd_keeps_the_member_and_its_result[subdirectory] FAILED [  7%]
+tests/test_claude_member_survives_cd.py::test_a_helper_finishing_after_cd_keeps_the_member_and_its_result[outside] FAILED [ 14%]
+tests/test_claude_member_survives_cd.py::test_a_helper_from_another_session_is_refused_and_not_archived FAILED [ 21%]
+tests/test_claude_member_survives_cd.py::test_without_a_session_the_working_directory_still_decides PASSED [ 28%]
+tests/test_claude_member_survives_cd.py::test_with_a_session_only_that_session_is_accepted FAILED [ 35%]
+tests/test_claude_member_survives_cd.py::test_main_prepares_from_inside_the_project_and_calls_with_its_root FAILED [ 42%]
+tests/test_claude_member_survives_cd.py::test_one_call_prepared_again_after_cd_keeps_one_association FAILED [ 50%]
+tests/test_claude_member_survives_cd.py::test_main_outside_the_project_is_refused_with_a_way_back FAILED [ 57%]
+tests/test_claude_member_survives_cd.py::test_a_sibling_sharing_the_project_name_prefix_is_outside FAILED [ 64%]
+tests/test_claude_member_survives_cd.py::test_symlinks_are_judged_by_where_they_lead FAILED [ 71%]
+tests/test_claude_member_survives_cd.py::test_another_session_stays_refused_while_one_is_pending FAILED [ 78%]
+tests/test_claude_member_survives_cd.py::test_session_and_request_validation_keeps_its_text[123-request_0] PASSED [ 85%]
+tests/test_claude_member_survives_cd.py::test_session_and_request_validation_keeps_its_text[11111111-1111-4111-8111-11111111111A-request_1] PASSED [ 92%]
+tests/test_claude_member_survives_cd.py::test_session_and_request_validation_keeps_its_text[3522ba70-44fc-4801-9002-5802bb6c2e54-not an object] PASSED [100%]
+
+=================================== FAILURES ===================================
+_ test_a_helper_finishing_after_cd_keeps_the_member_and_its_result[subdirectory] _
+tests/test_claude_member_survives_cd.py:55: in test_a_helper_finishing_after_cd_keeps_the_member_and_its_result
+    assert (ended['outcome'], ended['error'], ended['last_message']) == ('completed', None, 'helper-done')
+E   AssertionError: assert ('failed', {'...ntry.'}, None) == ('completed',...'helper-done')
+E     
+E     At index 0 diff: 'failed' != 'completed'
+E     
+E     Full diff: (-: missing in left side, +: extra in left side)
+E       (
+E     -     'completed',
+E     +     'failed',...
+E     
+E     ...Full output truncated, use '-vv' to show
+__ test_a_helper_finishing_after_cd_keeps_the_member_and_its_result[outside] ___
+tests/test_claude_member_survives_cd.py:55: in test_a_helper_finishing_after_cd_keeps_the_member_and_its_result
+    assert (ended['outcome'], ended['error'], ended['last_message']) == ('completed', None, 'helper-done')
+E   AssertionError: assert ('failed', {'...ntry.'}, None) == ('completed',...'helper-done')
+E     
+E     At index 0 diff: 'failed' != 'completed'
+E     
+E     Full diff: (-: missing in left side, +: extra in left side)
+E       (
+E     -     'completed',
+E     +     'failed',...
+E     
+E     ...Full output truncated, use '-vv' to show
+________ test_a_helper_from_another_session_is_refused_and_not_archived ________
+tests/test_claude_member_survives_cd.py:71: in test_a_helper_from_another_session_is_refused_and_not_archived
+    assert ended['outcome'] == 'failed' and ended['last_message'] is None
+E   AssertionError: assert ('completed' == 'failed'
+E     
+E     - failed
+E     + completed)
+______________ test_with_a_session_only_that_session_is_accepted _______________
+tests/test_claude_member_survives_cd.py:97: in test_with_a_session_only_that_session_is_accepted
+    assert hook_source(event(moved), tmp_path, native_id='native')[1] == 'native'
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   TypeError: hook_source() got an unexpected keyword argument 'native_id'
+______ test_main_prepares_from_inside_the_project_and_calls_with_its_root ______
+tests/test_claude_member_survives_cd.py:125: in test_main_prepares_from_inside_the_project_and_calls_with_its_root
+    assert host.context(prepare(session, host.cwd / 'sub/deeper')) == {'prepared': True}
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_swarm/claude/native_host.py:65: in context
+    raise AgentsError('authority-denied', 'Native Session/cwd/request is invalid.')
+E   agent_swarm.tool.AgentsError: Native Session/cwd/request is invalid.
+_________ test_one_call_prepared_again_after_cd_keeps_one_association __________
+tests/test_claude_member_survives_cd.py:133: in test_one_call_prepared_again_after_cd_keeps_one_association
+    host.context(prepare(session, host.cwd / 'sub'))
+src/agent_swarm/claude/native_host.py:65: in context
+    raise AgentsError('authority-denied', 'Native Session/cwd/request is invalid.')
+E   agent_swarm.tool.AgentsError: Native Session/cwd/request is invalid.
+___________ test_main_outside_the_project_is_refused_with_a_way_back ___________
+tests/test_claude_member_survives_cd.py:144: in test_main_outside_the_project_is_refused_with_a_way_back
+    assert str(outside.resolve()) in refused.value.message and str(host.cwd) in refused.value.message
+E   AssertionError: assert ('/private/tmp/claude-501/pytest-of-luoxiao/pytest-901/test_main_outside_the_project_0/elsewhere' in 'Native Session/cwd/request is invalid.')
+E    +  where '/private/tmp/claude-501/pytest-of-luoxiao/pytest-901/test_main_outside_the_project_0/elsewhere' = str(PosixPath('/private/tmp/claude-501/pytest-of-luoxiao/pytest-901/test_main_outside_the_project_0/elsewhere'))
+E    +    where PosixPath('/private/tmp/claude-501/pytest-of-luoxiao/pytest-901/test_main_outside_the_project_0/elsewhere') = resolve()
+E    +      where resolve = PosixPath('/private/tmp/claude-501/pytest-of-luoxiao/pytest-901/test_main_outside_the_project_0/elsewhere').resolve
+E    +  and   'Native Session/cwd/request is invalid.' = AgentsError('Native Session/cwd/request is invalid.').message
+E    +    where AgentsError('Native Session/cwd/request is invalid.') = <ExceptionInfo AgentsError('Native Session/cwd/request is invalid.') tblen=2>.value
+__________ test_a_sibling_sharing_the_project_name_prefix_is_outside ___________
+tests/test_claude_member_survives_cd.py:153: in test_a_sibling_sharing_the_project_name_prefix_is_outside
+    with pytest.raises(AgentsError, match='outside the project'):
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   AssertionError: Regex pattern did not match.
+E     Expected regex: 'outside the project'
+E     Actual message: 'Native Session/cwd/request is invalid.'
+_________________ test_symlinks_are_judged_by_where_they_lead __________________
+tests/test_claude_member_survives_cd.py:161: in test_symlinks_are_judged_by_where_they_lead
+    assert host.context(prepare(str(uuid4()), inward)) == {'prepared': True}
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_swarm/claude/native_host.py:65: in context
+    raise AgentsError('authority-denied', 'Native Session/cwd/request is invalid.')
+E   agent_swarm.tool.AgentsError: Native Session/cwd/request is invalid.
+___________ test_another_session_stays_refused_while_one_is_pending ____________
+tests/test_claude_member_survives_cd.py:171: in test_another_session_stays_refused_while_one_is_pending
+    host.context(prepare(str(uuid4()), host.cwd / 'sub'))
+src/agent_swarm/claude/native_host.py:65: in context
+    raise AgentsError('authority-denied', 'Native Session/cwd/request is invalid.')
+E   agent_swarm.tool.AgentsError: Native Session/cwd/request is invalid.
+=========================== short test summary info ============================
+FAILED tests/test_claude_member_survives_cd.py::test_a_helper_finishing_after_cd_keeps_the_member_and_its_result[subdirectory]
+FAILED tests/test_claude_member_survives_cd.py::test_a_helper_finishing_after_cd_keeps_the_member_and_its_result[outside]
+FAILED tests/test_claude_member_survives_cd.py::test_a_helper_from_another_session_is_refused_and_not_archived
+FAILED tests/test_claude_member_survives_cd.py::test_with_a_session_only_that_session_is_accepted
+FAILED tests/test_claude_member_survives_cd.py::test_main_prepares_from_inside_the_project_and_calls_with_its_root
+FAILED tests/test_claude_member_survives_cd.py::test_one_call_prepared_again_after_cd_keeps_one_association
+FAILED tests/test_claude_member_survives_cd.py::test_main_outside_the_project_is_refused_with_a_way_back
+FAILED tests/test_claude_member_survives_cd.py::test_a_sibling_sharing_the_project_name_prefix_is_outside
+FAILED tests/test_claude_member_survives_cd.py::test_symlinks_are_judged_by_where_they_lead
+FAILED tests/test_claude_member_survives_cd.py::test_another_session_stays_refused_while_one_is_pending
+========================= 10 failed, 4 passed in 1.19s =========================

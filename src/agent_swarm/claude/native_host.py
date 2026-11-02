@@ -15,7 +15,8 @@ class NativeCalls:
     The mod prepares an association during Claude's permission check and ends
     it when that native call ends. Calls run concurrently, so several can be
     prepared, but only from one native Session at a time: an MCP request names
-    no Session, so another Session's preparation is refused meanwhile.
+    no Session, so another Session's preparation is refused meanwhile. The
+    native cwd may be anywhere inside ``cwd``; every call still runs with ``cwd``.
     Preparing one exact call again keeps its one association. Two identical
     calls in flight therefore share it: the second is refused and can repeat.
 
@@ -60,14 +61,22 @@ class NativeCalls:
                 raise AgentsError('authority-denied', 'A native subagent cannot adopt the Main association.')
             if (not isinstance(document['session'], str)
                     or str(UUID(document['session'])) != document['session']
-                    or Path(document['cwd']).resolve() != self.cwd
                     or not isinstance(document['request'], dict)):
                 raise AgentsError('authority-denied', 'Native Session/cwd/request is invalid.')
+            # The sender is already this native process, and a Bash ``cd`` moves
+            # its cwd. Outside the project, the path cannot tell a moved Main
+            # from a foreign Session's directory, so it stays refused.
+            moved = Path(document['cwd']).resolve()
+            if not moved.is_relative_to(self.cwd):
+                raise AgentsError('authority-denied', f'The native working directory {moved} is outside the '
+                                  f'project {self.cwd}. Run `cd {self.cwd}` and call again.')
             if any(native['session'] != document['session'] for native in self.prepared):
                 raise AgentsError('authority-denied', 'A different native call is already pending.')
             self.queued = [native for native in self.queued if native['session'] == document['session']]
-            if document not in self.prepared:
-                self.prepared.append(copy.deepcopy(document))
+            # One exact call keeps one association wherever the cwd moved between preparations.
+            association = {**document, 'cwd': str(self.cwd)}
+            if association not in self.prepared:
+                self.prepared.append(copy.deepcopy(association))
             return {'prepared': True}
 
     def end(self, document: dict) -> dict:

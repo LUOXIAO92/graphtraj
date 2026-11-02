@@ -1,0 +1,37 @@
+## M0 no mutation
+14 passed in 1.22s
+## M1 string-prefix containment
+FAILED tests/test_claude_member_survives_cd.py::test_a_sibling_sharing_the_project_name_prefix_is_outside
+1 failed, 13 passed in 1.53s
+## M2 no cwd refusal at all
+FAILED tests/test_claude_member_survives_cd.py::test_main_outside_the_project_is_refused_with_a_way_back
+FAILED tests/test_claude_member_survives_cd.py::test_a_sibling_sharing_the_project_name_prefix_is_outside
+FAILED tests/test_claude_member_survives_cd.py::test_symlinks_are_judged_by_where_they_lead
+3 failed, 11 passed in 1.10s
+## M3 association keeps the moved cwd
+FAILED tests/test_claude_member_survives_cd.py::test_one_call_prepared_again_after_cd_keeps_one_association
+1 failed, 13 passed in 1.08s
+## M4 session mismatch not refused
+E   AssertionError: assert ('completed' == 'failed'
+     
+/Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/437-claude-member-survives-cd/tests/test_claude_member_survives_cd.py:71: AssertionError: assert ('completed' == 'failed'
+FAILED tests/test_claude_member_survives_cd.py::test_a_helper_from_another_session_is_refused_and_not_archived
+FAILED tests/test_claude_member_survives_cd.py::test_with_a_session_only_that_session_is_accepted
+2 failed, 12 passed in 1.08s
+## M5 _collect_child passes no native_id
+E   AssertionError: assert ('failed', {'...ntry.'}, None) == ('completed',...'helper-done')
+      At index 0 diff: 'failed' != 'completed'
+/Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/437-claude-member-survives-cd/tests/test_claude_member_survives_cd.py:55: AssertionError: assert ('failed', {'...ntry.'}, None) == ('completed',...'helper-done')
+E   AssertionError: assert ('failed', {'...ntry.'}, None) == ('completed',...'helper-done')
+      At index 0 diff: 'failed' != 'completed'
+/Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/437-claude-member-survives-cd/tests/test_claude_member_survives_cd.py:55: AssertionError: assert ('failed', {'...ntry.'}, None) == ('completed',...'helper-done')
+E   AssertionError: assert ('completed' == 'failed'
+     
+/Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/437-claude-member-survives-cd/tests/test_claude_member_survives_cd.py:71: AssertionError: assert ('completed' == 'failed'
+FAILED tests/test_claude_member_survives_cd.py::test_a_helper_finishing_after_cd_keeps_the_member_and_its_result[subdirectory]
+FAILED tests/test_claude_member_survives_cd.py::test_a_helper_finishing_after_cd_keeps_the_member_and_its_result[outside]
+FAILED tests/test_claude_member_survives_cd.py::test_a_helper_from_another_session_is_refused_and_not_archived
+3 failed, 11 passed in 1.44s
+## M6 without native_id the cwd check is dropped
+FAILED tests/test_claude_member_survives_cd.py::test_without_a_session_the_working_directory_still_decides
+1 failed, 13 passed in 1.26s

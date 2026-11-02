@@ -151,13 +151,17 @@ class ClaudeExecution:
         return resources.enter_context(self.host_connection(directory))
 
     def _collect_child(self, event: dict) -> None:
-        """Archive a finished native helper's own transcript beside its parent Session."""
+        """Archive a finished native helper's own transcript beside its parent Session.
+
+        This hook arrives on the owned stdio channel, so its Session is the
+        identity. Its cwd is wherever a Bash ``cd`` left the member.
+        """
         if self.archive is None:
             return
         from .collection import collect_hook_event
 
         collect_hook_event(self.archive, event, Path(self.request['worktree_path']),
-                           extra_fields=self.extra_fields)
+                           extra_fields=self.extra_fields, native_id=self.native_id)
 
     def _parent_notice(self, message: str, details: dict) -> dict:
         """Require the owning host to bind native permission delivery."""

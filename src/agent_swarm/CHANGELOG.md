@@ -12,6 +12,14 @@ version that identifies everything listed under it.
 
 The numbers in parentheses are the project's Task numbers.
 
+## 0.2.11 (compatible)
+
+- A Codex parent no longer receives one child answer twice when its `wait` or `status`
+  meets the host event carrying that answer (431). While the event is on its way, or a
+  held end is being sent on `--resume`, these results show `notification: queueing` and
+  `last_message: null`, as on the Pi and DSH hosts. An event that could not be written
+  leaves the end `held`, so the next `status` or `--resume` still gives the answer.
+
 ## 0.2.10 (compatible)
 
 - A resumed Claude Session with a full archive no longer raises `Unresolved observations

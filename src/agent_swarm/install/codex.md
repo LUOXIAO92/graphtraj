@@ -70,13 +70,21 @@ unless your settings name another reviewer.
 `config.yml` for connections and presets goes in the `--directory` you choose. See
 [Configuration](../README.md#configuration).
 
+The host adds a short passage after your `developerInstructions`, for the parent only.
+It says that `agents` is how this host creates and controls children, and that Codex's
+own `spawn_agent` is for when the user names it. Your text comes first and is what
+children get. No native tool is removed.
+
 ## Run it
 
 ```sh
 "$AGENTS_VENV/bin/python" -m agent_swarm.codex.host \
   --settings native-settings.json --directory /absolute/agents-data \
   --output /absolute/agents-data/last-run.json \
-  'Use the agents tool to create a Codex child that answers one word, then wait for it.'
+  'Use only the MCP tool agents, not spawn_agent. Make these tool calls one at a time, in this order. Where an argument says <agent from 1>, use the "agent" field returned by call 1.
+1. {"action": "execute", "feature": "create", "arguments": {"runtime": "codex", "instruction": "Do not use any tool. Reply with exactly: PONG"}}
+2. {"action": "execute", "feature": "wait", "arguments": {"agent": "<agent from 1>", "timeout_seconds": 240}}
+A notice from agents may arrive at any time and changes nothing. Then reply with the answer of the child, and stop.'
 ```
 
 | Flag | Meaning |
@@ -99,12 +107,31 @@ If the parent itself needs a native approval, the request prints to stderr as
 
 ## See that it worked
 
+- `--output`'s `operations` lists a `create` and a `wait` for the child, and stderr's last
+  line is `{"run_summary": {"agents_calls": 2, "native_subagents": 0}}`. These two show
+  the parent used `agents`. Its last message does not.
 - stderr starts with `{"parent_session": ..., "source": "thread/start"}`.
 - stderr shows each exchange, as `┌ <parent session> → <agent>` for the instruction
   and `┌ <agent> → <parent session>` for the child's reply.
 - stdout ends with the parent's last message, and the exit status is 0.
 - `--output`'s `deliveries` lists each notice sent, and `stop_unconfirmed` is an empty
   list.
+
+**`operations: []` means the parent made no `agents` call in that run, whatever its last
+message says.** `run_summary` then has `agents_calls: 0` and a note saying so. Any child
+the parent reports creating in that run is not an `agents` child: it is not in `status`,
+and `agents` did not approve or record it.
+
+A `{"native_subagent": ...}` line on stderr, with an entry in `--output`'s
+`native_subagents`, means the parent started Codex's own subagent. This is not a failure
+and the exit status does not change, because you may want one. To ask for that on purpose,
+name it in the instruction: `Use spawn_agent to ...`. The line comes from a notification
+in Codex 0.164.0's protocol schema that no real run here has shown yet, so a run without
+it can still have used `spawn_agent`. Trust `operations`, not the absence of this line.
+
+Which tool the model chooses can only be observed in a real run. The instruction above
+and the host's passage make `agents` the plain choice, and tests check that those literal
+calls work, but neither forces the choice.
 
 `deliveries` shows that a notice was submitted, not that the model read it. A notice
 that arrives after the parent's turn ended is held, and the next `--resume` delivers it.

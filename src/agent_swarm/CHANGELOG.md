@@ -12,6 +12,23 @@ version that identifies everything listed under it.
 
 The numbers in parentheses are the project's Task numbers.
 
+## 0.2.14 (compatible)
+
+- The Codex install note's example could leave the parent using Codex's own `spawn_agent`,
+  with `operations: []` and a last message saying the child had answered (432). The
+  example now gives the literal `create` and `wait` calls and excludes `spawn_agent`. The
+  `agents` tool description says what it is for, and `agent_swarm.codex.host` adds a
+  passage after the parent's `developerInstructions` naming `agents` as the way to make
+  children. Children's settings are unchanged, and Codex's native tools stay available.
+- A Codex host run now shows when a child did not come through `agents` (432). Stderr ends
+  with `{"run_summary": {"agents_calls": N, "native_subagents": M}}`, with a note when N is
+  0. A `collabAgentToolCall` `spawnAgent` item prints one `{"native_subagent": ...}` line and
+  adds an entry to the new `native_subagents` in `--output` and `CodexHost.run`. stdout and
+  the exit status are unchanged: a native subagent is not a failure. Which tool the model
+  chooses can only be observed in a real run, and no real run has yet shown that item.
+- The Claude Code, DSH and Pi install notes' examples now name the `agents` tool (432).
+  This is the same wording risk; no bypass was seen on those hosts.
+
 ## 0.2.13 (compatible)
 
 - A DSH connection that names no `api_key_env`, beside a reviewer whose `api_key_env` is

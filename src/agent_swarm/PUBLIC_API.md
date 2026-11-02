@@ -96,6 +96,24 @@ notes (`install/`) are public with their documented flags:
   (the DSH codes in section 2), a `pi` entry as below, and whatever
   `AgentControl.require_connections()` refuses. On a startup error it prints
   `{"error": {"code", "message"}}` and exits `1`.
+- Since 0.2.14 this host adds a fixed passage after the parent's
+  `developerInstructions`, on `thread/start` and `thread/resume`, naming the `agents`
+  tool as how it creates and controls children and Codex's own `spawn_agent` as for when
+  the user names it. Children's settings are unchanged and no native tool is removed.
+  Which tool the model chooses can only be observed in a real run. The output shows it:
+  - `run_summary`: once a Session has started, `main` prints
+    `{"run_summary": {"agents_calls": N, "native_subagents": M}}` on stderr at the end of
+    the run, whether it succeeded or raised, with a `note` when `N` is 0. `N` counts the
+    entries of `operations`, so `discover` and `describe` do not count. It is the last
+    stderr line, except that a `stop-unconfirmed` line, and its traceback when one is
+    unwinding, comes after it. A refused start has none.
+  - `native_subagents`: in `--output` and the result of `CodexHost.run`, one entry `{"id",
+    "sender_thread", "receiver_threads", "status", "model"}` per `collabAgentToolCall` item
+    with tool `spawnAgent` seen on `item/started` or `item/completed`, in its latest state
+    and without its prompt. The first sighting prints `{"native_subagent": {..., "note"}}` on
+    stderr, after `parent_session`. Codex 0.164.0's protocol schema documents this item, but
+    no real run has shown it yet, so an empty list does not prove `spawn_agent` was unused.
+  A native subagent is not a failure: stdout and the exit status stay as they were.
 - A `runtimes.pi` entry of the Claude Code and Codex hosts (since 0.2.1) lets
   that host start Pi children without any GraphTraj Task. Its fields are the
   table *Pi child defaults* in 1.6, except `worktree_path`, which is the

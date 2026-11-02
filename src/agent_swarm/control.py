@@ -1375,6 +1375,26 @@ class AgentControl:
         hint = "`agent` takes the reference returned by create or status, not the readable name."
         return hint + (f" Agents named {name!r}: {', '.join(named)}." if named else "")
 
+    def visible_agents(self, caller: Caller) -> list[str]:
+        """Name the Agents :meth:`hierarchy` would show, deepest first, without any record lock.
+
+        For a host stopping its children: a held lock blocks ``hierarchy`` but
+        not this. The answer says who exists, never what state they are in.
+        """
+        records = map(self._load, (path.stem for path in sorted((self.root / "control" / "agents").glob("*.json"))))
+        visible = [record for record in records
+                   if record is not None and record["retired_at"] is None and self._can_view(record, caller)]
+
+        def depth(record: Mapping[str, Any]) -> int:
+            """Count the recorded ancestors of ``record``."""
+            seen = {record["agent"]}
+            while record["parent"] is not None and record["parent"] not in seen:
+                record = self._load(record["parent"]) or {"agent": record["parent"], "parent": None}
+                seen.add(record["agent"])
+            return len(seen)
+
+        return [record["agent"] for record in sorted(visible, key=depth, reverse=True)]
+
     def hierarchy(self, caller: Caller) -> list[dict]:
         """Return the caller's visible descendants nested by true control parent.
 

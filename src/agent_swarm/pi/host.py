@@ -30,7 +30,7 @@ from agent_swarm import AgentControl, AgentsError, AgentsResult, Caller, bind
 from agent_swarm.connection import agents_connection
 from agent_swarm.notices import notice_id
 from agent_swarm.process import process_ancestors, process_arguments, process_executable
-from agent_swarm.shutdown import exit_if_unconfirmed, stop_children
+from agent_swarm.shutdown import CLOSE_SECONDS, exit_if_unconfirmed, stop_children
 from agent_swarm.runtime import RuntimeAdapterError
 from .driver import PiDriver
 from .execution import _validate, child_path
@@ -467,7 +467,8 @@ def main() -> None:
             raise AgentsError('authority-denied', 'The client is not owned by this native Pi host.')
 
     try:
-        with agents_connection(root / 'live' / 'pi-host', operate, authenticate) as address:
+        with agents_connection(root / 'live' / 'pi-host', operate, authenticate,
+                               close_seconds=CLOSE_SECONDS) as address:
             notices.write({'connection': address})
             # Only readiness, acknowledgements and lifecycle EOF travel over this
             # private extension pipe. Model requests use the shared authenticated bridge.
@@ -490,9 +491,9 @@ def main() -> None:
         control.close_notices()
         notices.close()
         if flusher.ident is not None:
-            flusher.join(10)
+            flusher.join(CLOSE_SECONDS)
         # Preserve identities and Sessions; use the same public stop path.
-        exit_if_unconfirmed(stop_children(call))
+        exit_if_unconfirmed(stop_children(call, lambda: control.visible_agents(caller)))
 
 
 if __name__ == '__main__':

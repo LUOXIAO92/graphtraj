@@ -1046,6 +1046,10 @@ What the parent sees today:
   the children it runs and waits up to 10 seconds for their ends, which are
   held (*Claude Code and Codex host shutdown* below). `--resume` sends what was held for that Session once, into the resumed
   turn; a notice not yet sent when that turn ends waits for the next `--resume`.
+  While an end's event is on its way (`notification: queueing`), `wait` and
+  `status` show `last_message: null`, so they do not repeat the body the event
+  carries. An event that could not be written leaves the end `held` and its body
+  readable there.
 - **Pi host:** it enables `request_notices` and `hold_notices`, for children
   of every Runtime it runs. Each notice is injected into the Pi Session with
   Pi's `pi.sendMessage` as a displayed custom message (`customType`

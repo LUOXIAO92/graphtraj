@@ -182,11 +182,12 @@ def keep_state() -> None:
 
 MEMBER_416 = (
     'Do these in order; if a step fails, write the exact error in the report and go on. '
+    'Do not print environment variables. '
     'Creating a child with the agents tool is formal delegation through your own host and is what this Task '
     'asks of you; it is not starting a Runtime directly. '
     '1) Run pwd; call the result MEMBER_PWD. '
     '2) Use the agents tool: execute create with runtime {runtime} and no workspace argument, with this instruction: '
-    '"Run pwd. Append the word ok to the file child-work.txt in your working directory, and read it back. Then use the '
+    '"Run pwd. Do not print environment variables. Append the word ok to the file child-work.txt in your working directory, and read it back. Then use the '
     'agents tool: execute create with runtime {runtime} and no workspace argument, with the instruction: Run pwd and reply '
     'with exactly GRANDCHILD_PWD=<its output>. Wait for it with the wait feature. Reply with exactly these lines: '
     'CHILD_PWD=<your pwd>, CHILD_WROTE=<yes or no>, and the GRANDCHILD_PWD line it gave, or GRANDCHILD_ERROR=<the error>." '
@@ -314,7 +315,8 @@ def r416_main() -> None:
 
 
 MEMBER_420 = (
-    'Do these in order. 1) Run: command -v agent-runner; command -v graphtraj-session; echo PATH=$PATH. Keep the output. '
+    'Do these in order. Do not print any environment variable other than PATH. '
+    '1) Run: command -v agent-runner; command -v graphtraj-session; echo PATH=$PATH. Keep the output. '
     '2) Create probe.txt containing the word ok and commit it on your branch with git. '
     '3) Write your assigned report named report.md with one line saying what you did, followed by the output of step 1, '
     'using the graphtraj submit_report tool with notify_parent true. '

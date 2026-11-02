@@ -25,7 +25,7 @@ pi list > $OUT/pi-list.txt 2>&1 || true
 cp $PI_CODING_AGENT_DIR/settings.json $OUT/settings.json 2>/dev/null || true
 print -r -- "{\"root\": \"$WORK/data\", \"claude\": {\"model\": \"$CLAUDE_MODEL\"}}" > $WORK/pi-host.json
 say "start it, with no -e: AGENT_SWARM_PYTHON=... pi --agents-config ..."
-PROMPT="Use the agents tool to create a Claude child that answers one word, then wait for it with timeout_seconds 240, then read its status. Reply with one line."
+PROMPT="Use the agents tool to create a Claude child that answers one word, then wait for it with timeout_seconds 240, then read its status. Do not print environment variables. Reply with one line."
 CODE=0
 bounded 420 env AGENT_SWARM_PYTHON="$AGENTS_VENV/bin/python" pi --agents-config $WORK/pi-host.json --mode json \
   --session-dir $WORK/sessions --model $PI_PROVIDER/$PI_MODEL -p $PROMPT </dev/null > $OUT/pi-session-stdout.jsonl 2> $OUT/pi-session.stderr || CODE=$?

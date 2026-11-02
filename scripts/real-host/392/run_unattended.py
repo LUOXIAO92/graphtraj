@@ -31,6 +31,10 @@ OWN = REALHOST / ('run-rerun' if RERUN else 'run-unattended')
 # Only the dry run sets these: a short limit, and a directory for a step that exists only there.
 DRY_LIMIT = os.environ.get('AGENTS_392_DRY_LIMIT_SECONDS')
 DRY_STEPS = os.environ.get('AGENTS_392_DRY_STEP_DIR')
+DRY_SLEPT_STEP = os.environ.get('AGENTS_392_DRY_SLEPT_STEP')
+DRY_SLEPT_SECONDS = os.environ.get('AGENTS_392_DRY_SLEPT_SECONDS', '0')
+# A step whose two clocks differ by more than this slept.
+SLEEP_SECONDS = 60
 
 
 def rerun_start() -> str:
@@ -67,6 +71,7 @@ def finished(step: str) -> bool:
     record = saved / 'run.txt'
     return (record.is_file() and f'code {COMMIT} ' in record.read_text(errors='replace')
             and record.read_text(errors='replace').split()[-1] >= SINCE
+            and not (saved / 'slept.txt').is_file()
             and ((saved / 'finished.txt').is_file() or (saved / 'limit.txt').is_file()))
 
 
@@ -90,6 +95,7 @@ def write_summary(elapsed: dict) -> None:
     for step in STEPS:
         saved = REALHOST / step
         state = ('not run' if step not in elapsed and not finished(step) else
+                 f'slept {(saved / "slept.txt").read_text().strip()} min' if (saved / 'slept.txt').is_file() else
                  'limit' if (saved / 'limit.txt').is_file() else
                  'finished' if finished(step) else 'stopped early')
         # In a rerun, an earlier result's counts are not this run's.
@@ -194,12 +200,27 @@ def record_limit(step: str, started: str, seconds: float) -> None:
     print(line, end='', flush=True)
 
 
+def record_sleep(step: str, seconds: float) -> None:
+    """Say so in the step's saved result if the Mac slept through it; a rerun then runs it again."""
+    if seconds <= SLEEP_SECONDS:
+        return
+    minutes = f'{seconds / 60:.1f}'
+    saved = REALHOST / step
+    saved.mkdir(parents=True, exist_ok=True)
+    line = f'CANNOT {step} the Mac slept {minutes} minutes during this step; its result says nothing and it needs a rerun\n'
+    with (saved / 'summary.txt').open('a') as summary:
+        summary.write(line)
+    (saved / 'slept.txt').write_text(minutes + '\n')
+    print(line, end='', flush=True)
+
+
 def run_step(step: str) -> float:
     """Run one step to its end or its limit; return its elapsed minutes."""
     seconds = limit_seconds(step)
     print(f'\n===== {step}: at most {seconds / 60:.1f} minutes; nothing to type', flush=True)
     started = time.strftime('%Y%m%dT%H%M%S')
     begun = time.monotonic()
+    wall = time.time()
     process = subprocess.Popen(['/bin/zsh', str(step_file(step))])
     if not wait_for(process, seconds):
         print(f'{step} reached its limit; ending it.', flush=True)
@@ -207,11 +228,17 @@ def run_step(step: str) -> float:
         record_limit(step, started, seconds)
     elif process.returncode not in (0, 1):
         print(f'{step} exited {process.returncode}; going on.', flush=True)
-    return (time.monotonic() - begun) / 60
+    # macOS's monotonic clock stops while the Mac sleeps; the wall clock does not.
+    awake = time.monotonic() - begun
+    faked = float(DRY_SLEPT_SECONDS) if step == DRY_SLEPT_STEP else 0
+    record_sleep(step, time.time() - wall - awake + faked)
+    return awake / 60
 
 
 def main() -> int:
     """Run the steps in order; nothing here stops the run but the user's own interrupt."""
+    print('Keep the lid open for the whole run: caffeinate -i stops idle sleep but does not hold a closed lid. '
+          'A step the Mac sleeps through says nothing and needs a rerun.', flush=True)
     elapsed = json.loads((OWN / 'elapsed.json').read_text()) if (OWN / 'elapsed.json').is_file() else {}
     write_summary(elapsed)
     for step in STEPS[STEPS.index(FROM) if FROM else 0:]:

@@ -25,6 +25,25 @@
 
 setopt err_exit pipe_fail no_unset
 
+# Only the DeepSeek key may reach a host or a model. A model that prints its environment hands every
+# exported key to its provider, so the rest go first, and every child inherits their absence. Names
+# only are printed, and kept for the step's summary, where a step run again under script(1) finds none.
+() {
+  local name removed=()
+  for name in ${(k)parameters[(R)*export*]}; do
+    if [[ ${name:l} == *(key|token|secret|password|credential)* && $name != DEEPSEEK_API_KEY ]]; then
+      unset $name || true
+      removed+=($name)
+      # git refuses to run when GIT_CONFIG_COUNT promises a GIT_CONFIG_KEY_n that is gone.
+      [[ $name != GIT_CONFIG_KEY_* ]] || unset GIT_CONFIG_COUNT
+    fi
+  done
+  if (( ${#removed} )); then
+    print -r -- "removed from this run's environment (names only): $removed"
+    export AGENTS_392_REMOVED_NAMES="$removed"
+  fi
+}
+
 HARNESS=/Users/luoxiao/workspace/you-are-a-product-architect-delivery
 WT=$HARNESS/.graphtraj/core/worktrees/392-agents-standalone-combined-acceptance
 HERE=$WT/scripts/real-host/392
@@ -179,6 +198,9 @@ step_begin() {
   fi
   info "success: $STEP_SUCCESS"
   print -r -- "step $STEP code $COMMIT started $STAMP" > $OUT/run.txt
+  if [[ -n ${AGENTS_392_REMOVED_NAMES:-} ]]; then
+    note "removed from this run's environment (names only): $AGENTS_392_REMOVED_NAMES"
+  fi
   commit_check
 }
 

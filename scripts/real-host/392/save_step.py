@@ -1,15 +1,27 @@
-"""Copy one 392 step's evidence to the Harness, leaving out any file holding the DeepSeek value.
+"""Copy one 392 step's evidence to the Harness, leaving out any file holding a key's value.
 
 Usage: python -I save_step.py <evidence directory> <destination> <answer file>
 
-The value comes from this process's environment only. The answer file is written last, so its
-absence means the copy did not finish. An earlier result at the destination is kept beside the new
-one, named with its own start time.
+The DeepSeek value comes from this process's environment. The others come from a child shell that
+reads ~/.zshrc: variables named like a credential, with values of 16 characters or more. All of them
+stay in this process's memory, on no command line and in no file; a summary line names the variable
+and the file, never the value. If that shell cannot answer, nothing can be called clean, so only
+run.txt, finished.txt and the failure line are saved, and the evidence stays where it was.
+
+The answer file is written last, so its absence means the copy did not finish. An earlier result at
+the destination is kept beside the new one, named with its own start time.
 """
 import os
 from pathlib import Path
+import re
 import shutil
+import subprocess
 import sys
+
+SHELL_LISTING = 'source ~/.zshrc >/dev/null 2>&1; /usr/bin/env -0'
+CREDENTIAL_NAME = re.compile('KEY|TOKEN|SECRET|PASSWORD|CREDENTIAL', re.IGNORECASE)
+SHORTEST_VALUE = 16
+ALWAYS_SAVED = ('run.txt', 'finished.txt')
 
 
 def holding_value(directory: Path, value: bytes) -> list[Path]:
@@ -21,6 +33,23 @@ def holding_value(directory: Path, value: bytes) -> list[Path]:
         return []
     return [path for path in sorted(directory.rglob('*'))
             if path.is_file() and not path.is_symlink() and value in path.read_bytes()]
+
+
+def shell_values() -> dict[str, bytes] | None:
+    """Return the credential-named variables a shell reading ~/.zshrc has; ``None`` if it cannot say."""
+    try:
+        done = subprocess.run(['/bin/zsh', '-c', SHELL_LISTING], stdin=subprocess.DEVNULL, capture_output=True, timeout=60)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if not done.stdout:
+        return None
+    found = {}
+    for entry in done.stdout.split(b'\0'):
+        name, separator, value = entry.partition(b'=')
+        text = name.decode(errors='replace')
+        if separator and len(value) >= SHORTEST_VALUE and CREDENTIAL_NAME.search(text):
+            found[text] = value
+    return found
 
 
 def keep_earlier(destination: Path) -> None:
@@ -39,30 +68,58 @@ def keep_earlier(destination: Path) -> None:
     destination.rename(target)
 
 
+def scan(evidence: Path, value: bytes) -> tuple[set[Path], list[str]]:
+    """Return the files to leave out and the summary lines saying why, by variable name and file."""
+    names = lambda files: [str(path.relative_to(evidence)) for path in files]
+    matched = holding_value(evidence, value)
+    left_out = set(matched)
+    if matched:
+        lines = [f'FAIL secret: {len(matched)} files hold the DeepSeek value and were not saved: {names(matched)}']
+    elif value:
+        lines = ['PASS secret: no saved file holds the DeepSeek value']
+    else:
+        lines = ['note: no DeepSeek key was loaded in this step']
+    others = shell_values()
+    if others is None:
+        left_out |= {path for path in evidence.rglob('*') if path.name not in ALWAYS_SAVED}
+        lines.append(f'FAIL secret: a shell reading ~/.zshrc gave no listing, so the other keys could not be looked for; '
+                     f'only run.txt, finished.txt and these lines were saved, and the evidence stays in {evidence}')
+        return left_out, lines
+    clean = []
+    for name, other in sorted(others.items()):
+        if other == value:
+            continue
+        files = holding_value(evidence, other)
+        left_out |= set(files)
+        if files:
+            lines.append(f'FAIL secret: {len(files)} files hold the value of {name} and were not saved: {names(files)}')
+        else:
+            clean.append(name)
+    lines.append(f'PASS secret: no saved file holds the value of these variables from ~/.zshrc: {clean}')
+    return left_out, lines
+
+
 def main() -> int:
     """Scan, record what was left out in the summary, copy and answer."""
     evidence, destination, answer = (Path(item) for item in sys.argv[1:4])
-    value = os.environ.get('DEEPSEEK_API_KEY', '').encode()
-    matched = holding_value(evidence, value)
+    left_out, lines = scan(evidence, os.environ.get('DEEPSEEK_API_KEY', '').encode())
     summary = evidence / 'summary.txt'
-    with summary.open('a') as lines:
-        if matched:
-            lines.write(f'FAIL secret: {len(matched)} files hold the DeepSeek value and were not saved: '
-                        f'{[str(path.relative_to(evidence)) for path in matched]}\n')
-        else:
-            lines.write('PASS secret: no saved file holds the DeepSeek value\n'
-                        if value else 'note: no DeepSeek key was loaded in this step\n')
+    with summary.open('a') as stream:
+        stream.write(''.join(line + '\n' for line in lines))
     keep_earlier(destination)
     destination.mkdir(parents=True)
     copied = 0
     for path in sorted(evidence.rglob('*')):
-        if not path.is_file() or path.is_symlink() or path in matched:
+        if not path.is_file() or path.is_symlink() or path in left_out:
             continue
         target = destination / path.relative_to(evidence)
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(path, target)
         copied += 1
-    answer.write_text(f'Saved {copied} files to {destination}; left out {len(matched)} holding the DeepSeek value.\n')
+    # A summary left out still has to say why. These lines hold names only.
+    if summary in left_out:
+        (destination / 'summary.txt').write_text(''.join(line + '\n' for line in lines))
+    answer.write_text(f"Saved {copied} files to {destination}; left out {len(left_out)} holding a key's value.\n")
     return 0
 
 

@@ -12,6 +12,19 @@ version that identifies everything listed under it.
 
 The numbers in parentheses are the project's Task numbers.
 
+## 0.2.16 (compatible)
+
+- A refused `reply` on a Claude child no longer makes the agents tool of a Pi, DSH or Codex
+  host stop answering (435). The call returns its failure at once, with the code and the
+  reason, and the request stays pending, so a reply in the right form still answers it. The
+  refusal now names the form: a `claude/can_use_tool` request takes `{"behavior": "allow"}`
+  or `{"behavior": "deny"}`. Any other unexpected failure while the channel handles a call,
+  including a result it cannot serialise, is also answered as an error, with the traceback
+  on the host's stderr.
+- `send` to a Claude child that refuses the input now records the delivery as `rejected`
+  and returns the Runtime's code and reason, as on Pi, Codex and DSH. It was recorded as
+  `unknown` (435).
+
 ## 0.2.15 (compatible)
 
 - A DSH launch can name extra writable directories (428). `DshExecution` adds the

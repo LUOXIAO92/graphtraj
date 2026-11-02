@@ -1220,13 +1220,19 @@ class ClaudeExecution:
                 response = request.get('response')
                 if details is not None and details['method'] == REVIEW_METHOD:
                     return self._answer_review(request['request_token'], details, response)
-                if (details is None or not isinstance(response, dict)
+                if details is None:
+                    raise RuntimeAdapterError('invalid-input', 'No pending Claude request has this request_token.')
+                if (not isinstance(response, dict)
                         or response.get('behavior') not in {'allow', 'deny'}
                         or set(response) - {'behavior', 'updatedInput', 'message', 'interrupt'}
                         or ('updatedInput' in response and not isinstance(response['updatedInput'], dict))
                         or ('message' in response and not isinstance(response['message'], str))
                         or ('interrupt' in response and not isinstance(response['interrupt'], bool))):
-                    raise RuntimeAdapterError('invalid-input', 'Supply an explicit native allow/deny response.')
+                    raise RuntimeAdapterError(
+                        'invalid-input',
+                        f"A {details['method']} request takes the response "
+                        '{"behavior": "allow"} or {"behavior": "deny"}, optionally with updatedInput (object), '
+                        'message (string) or interrupt (boolean). It is still pending; reply again in this form.')
                 response = dict(response)
                 if response['behavior'] == 'allow':
                     response.setdefault('updatedInput', details['params']['input'])

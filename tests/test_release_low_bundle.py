@@ -1,6 +1,7 @@
 """Small release defects, each through the seam its caller reads (Task 438)."""
 from __future__ import annotations
 
+import json
 import os
 import subprocess
 import sys
@@ -8,6 +9,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+import yaml
 from click.testing import CliRunner
 
 from agent_swarm import bind
@@ -16,7 +18,10 @@ from agent_swarm.pi.execution import PiExecution
 from agent_swarm.runtime import RuntimeAdapterError
 from graphtraj.interfaces.agents import GraphTrajAgents
 from graphtraj.interfaces.cli.graphtraj import main
+from conftest import FakeCodex, InstalledCommands, run_process, wait_for_file
+from runner_fixtures import configure_harness
 from test_claude_host_concurrent_calls import run_mod
+from test_team_round import _register_ready_inline_task
 from test_agents_connections_presets import RecordingDriver, catalog, configured, create  # noqa: F401
 from test_member_child_workspace import RecordingTurn, claimed_main, harness, request  # noqa: F401
 from test_pi_generic_execution import generic
@@ -140,3 +145,73 @@ await timers.shift()();
 await timers.shift()();
 assert.equal(logged.filter(line => line.includes('cleanup failed')).length, 1);
 ''')
+
+
+def test_a_claude_members_archive_names_the_project_not_its_worktree(tmp_path: Path) -> None:
+    """``projectId`` means the Harness Project Root; the working directory is the header's ``cwd``."""
+    from graphtraj.runtimes.claude.execution import ClaudeExecution
+
+    project, worktree, directory = tmp_path / 'project', tmp_path / 'project/worktrees/one', tmp_path / 'session'
+    worktree.mkdir(parents=True)
+    directory.mkdir()
+    turn = ClaudeExecution({'harness_root': str(project), 'worktree_path': str(worktree)}, 'x', directory,
+                           lambda *_: None, lambda *_: None, tmp_path / 't', None)
+    assert turn.extra_fields['graphtraj']['projectId'] == str(project)
+
+
+def test_a_claude_native_hooks_archive_names_the_project_from_a_subdirectory(tmp_path: Path) -> None:
+    """A native Session working below the project root still belongs to that project."""
+    from agent_swarm.sessions import JsonlSessionStore, archive_path
+    from graphtraj.configuration.project_configuration import default_configuration_content
+    from graphtraj.runtimes.claude.collection import collect_jsonl_hook
+
+    (tmp_path / '.graphtraj').mkdir()
+    (tmp_path / '.graphtraj/config.yml').write_text(default_configuration_content(tmp_path, tmp_path))
+    below = tmp_path / 'below'
+    below.mkdir()
+    transcript = tmp_path / 'native.jsonl'
+    transcript.write_text('')
+    assert collect_jsonl_hook({'hook_event_name': 'SessionStart', 'session_id': 's', 'source': 'startup',
+                               'cwd': str(below), 'transcript_path': str(transcript)}, below)['saved']
+    store = JsonlSessionStore(archive_path(tmp_path / '.graphtraj/swarm', 'claude:s'))
+    assert store.header['extra_fields']['graphtraj']['projectId'] == str(tmp_path)
+
+
+def test_a_running_team_is_told_where_a_later_revision_of_its_definition_is(
+    installed_commands: InstalledCommands,
+    temporary_git_repository: Path,
+    fake_codex: FakeCodex,
+    tmp_path: Path,
+) -> None:
+    """A revision after dispatch leaves ``.state/task.md`` alone; the prompt's path reaches the new text."""
+    root, _, _, environment = configure_harness(installed_commands, temporary_git_repository, fake_codex, tmp_path)
+    _register_ready_inline_task(root, installed_commands.product)
+    roles_file = root / '.graphtraj/roles.yml'
+    roles = yaml.safe_load(roles_file.read_text())
+    roles['role_tree']['researcher'] = {}
+    roles_file.write_text(yaml.safe_dump(roles))
+    batch = root / 'batch.yml'
+    batch.write_text(yaml.safe_dump({'tasks': [{
+        'task_id': '75', 'task_name': 'inline-specialist', 'instruction': 'Inspect.',
+        'role': {'researcher': {'runtime': 'codex', 'model': 'gpt-5.6-luna'}}}]}))
+    environment['FAKE_CODEX_CAPTURE_STDIN'] = '1'
+    launched = run_process([str(installed_commands.runner), '--swarm-input', str(batch)],
+                           cwd=root, env=environment, timeout=10)
+    assert launched.returncode == 0, launched.stderr
+    wait_for_file(fake_codex.log_file)
+    prompt = json.loads(fake_codex.log_file.read_text())['stdin']
+    assert '`.state/task.yml`' in prompt and '`current_definition`' in prompt
+
+    definition = yaml.safe_load((root / 'task.yml').read_text())
+    revision = root / 'revision.yml'
+    revision.write_text(yaml.safe_dump({
+        'product_preserving': True, 'caused_by_event_ids': [], 'evidence_refs': ['readiness.md'],
+        'tasks': [{**definition, 'body': 'Revised after dispatch.', 'current_definition': 'task.md'}]}))
+    revised = run_process([str(installed_commands.product), 'task', 'revise', '--revision-file', str(revision)],
+                          cwd=root)
+    assert revised.returncode == 0, revised.stderr
+    [state] = (root / '.graphtraj').rglob('tasks/75-inline-specialist')
+    record = yaml.safe_load((state / 'task.yml').read_text())
+    assert (root / record['worktree'] / '.state').resolve() == state.resolve()
+    assert 'Revised after dispatch.' not in (state / 'task.md').read_text()
+    assert 'Revised after dispatch.' in (state / record['current_definition']).read_text()

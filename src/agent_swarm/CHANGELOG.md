@@ -12,6 +12,21 @@ version that identifies everything listed under it.
 
 The numbers in parentheses are the project's Task numbers.
 
+## 0.2.13 (compatible)
+
+- A Pi child that ends by itself before its first prompt, for example because a sandbox
+  tool is missing, now fails with `RUNTIME_START_FAILED`, and the message opens with
+  `Pi did not start:` and Pi's stderr (438). It used to read `RUNTIME_SHUTDOWN_FAILED`,
+  `Pi native stop is unconfirmed`. That stop is still not certified.
+- Esc on a running Claude host call no longer leaves that call's association prepared or
+  shows `agents context cleanup failed` (438). A later hook ends it. A failure outside the
+  interrupted hook is still shown, once.
+- The `invalid-model` error for a model off the list now says to list its id under
+  `models` of a connection in `config.yml` (438).
+- The README states what a reviewer's `allow` means for a Claude child with
+  `permission_mode: default`. `PUBLIC_API.md` warns that a `write` Pi child can read a token
+  held in a remote URL in the repository's `config` (438).
+
 ## 0.2.12 (compatible)
 
 - A Codex parent no longer receives one child answer twice when its `wait` or `status`

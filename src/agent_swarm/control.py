@@ -1177,6 +1177,24 @@ class AgentControl:
                 current.update(stop_requested_at=_now(), stop_scheduled=bool(scheduled))
             return True
 
+    def runtimes_without_owner(self) -> list[str]:
+        """Return the Agents whose running execution lost its owner while its Runtime lives.
+
+        The test of ``_reconcile``, read without the record lock: a host ending
+        its shutdown must not wait on a lock a blocked interrupt holds. A record
+        that cannot be read is skipped, because ``interrupt_owned`` reports it.
+        """
+        found = []
+        for path in sorted((self.root / "control" / "agents").glob("*.json")):
+            try:
+                current = _running(json.loads(path.read_text(encoding="utf-8")))
+                if (current is not None and not _alive(current["process"].get("worker_pid"))
+                        and _alive(current["process"].get("runtime_pid"))):
+                    found.append(path.stem)
+            except (OSError, ValueError, KeyError, TypeError):
+                continue
+        return found
+
     def owns_running(self, agent: str) -> bool:
         """Whether this process still owns a running execution of ``agent``."""
         with self._locked(agent) as record:

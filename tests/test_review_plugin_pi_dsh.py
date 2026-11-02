@@ -572,6 +572,106 @@ def test_child_connection_naming_the_variable_keeps_it(make, tmp_path: Path, mon
     assert variables_seen(child, probe, REVIEW_KEY) == {REVIEW_KEY: True}
 
 
+# -- A DSH child with no key of its own beside a reviewer on the default key --
+
+DEFAULT_KEY = 'DEEPSEEK_API_KEY'
+DEFAULT_KEY_REVIEWER = {'base_url': 'http://127.0.0.1:9/v1', 'model': 'm', 'api_key_env': DEFAULT_KEY}
+
+
+@pytest.fixture
+def default_key(monkeypatch: pytest.MonkeyPatch):
+    """Set a fake default key and a fake child key, with the reviewer's check passed."""
+    monkeypatch.setattr(control_module, 'check_reviewer', lambda entry: None)
+    monkeypatch.setenv(DEFAULT_KEY, FAKE)
+    monkeypatch.setenv(CHILD_KEY, FAKE)
+    monkeypatch.setenv(REVIEW_KEY, FAKE)
+
+
+def declared_home(tmp_path: Path, *files: str) -> dict:
+    """Return a connection whose home exists and holds exactly ``files``."""
+    home = tmp_path / 'declared-home'
+    home.mkdir()
+    for name in files:
+        (home / name).write_text('')
+    return {'home': str(home)}
+
+
+@pytest.mark.parametrize('files', [None, ()], ids=['default-home', 'declared-empty-home'])
+def test_dsh_child_without_a_key_is_refused_beside_a_default_key_reviewer(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch, default_key: None, files: tuple | None) -> None:
+    """The create fails naming the reason and the fixes; no Agent or service exists."""
+    connection = None if files is None else declared_home(tmp_path, *files)
+    child = DshChild(tmp_path, monkeypatch, DEFAULT_KEY_REVIEWER, connection)
+    document = child.create('never runs')
+    error = document.get('error') or {}
+    message = error.get('message', '')
+    code_is_config = error.get('code') == 'ROLE_CONFIG_INVALID'
+    names_reviewer_and_variable = "'checker'" in message and DEFAULT_KEY in message
+    names_fixes = all(fix in message for fix in ('Set api_key_env', 'a different api_key_env', "connection's home"))
+    assert code_is_config and names_reviewer_and_variable and names_fixes, message
+    holds_no_value = FAKE not in json.dumps(document)
+    assert holds_no_value
+    assert child.agent is None
+    assert not list((child.data / 'control' / 'agents').glob('*.json'))
+    assert ReviewService.instances == []
+
+
+@pytest.mark.parametrize('name', ['.credentials.yaml', '.env'])
+def test_dsh_declared_home_with_a_login_file_is_not_refused(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch, default_key: None, name: str) -> None:
+    """A declared home may hold the child's own login; the reviewer's key still stays out."""
+    child = DshChild(tmp_path, monkeypatch, DEFAULT_KEY_REVIEWER, declared_home(tmp_path, name))
+    assert 'agent' in child.create('hello')
+    child.finished()
+    assert variables_seen(child, tmp_path, DEFAULT_KEY) == {DEFAULT_KEY: False}
+
+
+def test_dsh_project_env_file_is_not_refused(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, default_key: None) -> None:
+    """DSH also reads ``<cwd>/.env``, so that file counts as the child's own source."""
+    (tmp_path / 'worktree').mkdir()
+    (tmp_path / 'worktree' / '.env').write_text('')
+    child = DshChild(tmp_path, monkeypatch, DEFAULT_KEY_REVIEWER)
+    assert 'agent' in child.create('hello')
+    child.finished()
+    assert variables_seen(child, tmp_path, DEFAULT_KEY) == {DEFAULT_KEY: False}
+
+
+def test_dsh_child_with_its_own_key_keeps_the_reviewers_out(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch, default_key: None) -> None:
+    """A different named key runs, and the reviewer's default key is not handed over."""
+    child = DshChild(tmp_path, monkeypatch, DEFAULT_KEY_REVIEWER, {'api_key_env': CHILD_KEY})
+    assert 'agent' in child.create('hello')
+    child.finished()
+    assert variables_seen(child, tmp_path, DEFAULT_KEY, CHILD_KEY) == {DEFAULT_KEY: False, CHILD_KEY: True}
+
+
+def test_dsh_child_naming_the_default_key_shares_it(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch, default_key: None) -> None:
+    """Naming the same variable deliberately shares it."""
+    child = DshChild(tmp_path, monkeypatch, DEFAULT_KEY_REVIEWER, {'api_key_env': DEFAULT_KEY})
+    assert 'agent' in child.create('hello')
+    child.finished()
+    assert variables_seen(child, tmp_path, DEFAULT_KEY) == {DEFAULT_KEY: True}
+
+
+def test_dsh_reviewer_on_another_variable_leaves_the_default_key(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch, default_key: None) -> None:
+    """With no conflict the child inherits the default key and the reviewer's stays out."""
+    child = DshChild(tmp_path, monkeypatch, {**DEFAULT_KEY_REVIEWER, 'api_key_env': REVIEW_KEY})
+    assert 'agent' in child.create('hello')
+    child.finished()
+    assert variables_seen(child, tmp_path, DEFAULT_KEY, REVIEW_KEY) == {DEFAULT_KEY: True, REVIEW_KEY: False}
+
+
+def test_dsh_command_reviewer_with_no_child_key_runs(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch, default_key: None, reviewer: dict) -> None:
+    """A command reviewer holds no key, so nothing is taken from the child."""
+    child = DshChild(tmp_path, monkeypatch, reviewer['entry'])
+    assert 'agent' in child.create('hello')
+    child.finished()
+    assert variables_seen(child, tmp_path, DEFAULT_KEY) == {DEFAULT_KEY: True}
+
+
 # -- Fail closed when the hook is absent ------------------------------------
 
 def test_pi_missing_hook_fails_before_any_prompt(tmp_path: Path, pi_environment: dict, reviewer: dict, monkeypatch: pytest.MonkeyPatch) -> None:

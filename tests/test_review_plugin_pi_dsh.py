@@ -170,6 +170,8 @@ class PiChild(Child):
                    'sandbox_python': environment['sandbox_python'], 'sandbox_path': environment['sandbox_path'],
                    'worktree_access': 'read'}
         fields = {'api_key_env': CHILD_KEY, **(connection or {})}
+        if fields['api_key_env'] is None:
+            del fields['api_key_env']
         super().__init__(tmp_path, PiDriver(request), review, fields)
 
 
@@ -570,6 +572,240 @@ def test_child_connection_naming_the_variable_keeps_it(make, tmp_path: Path, mon
     assert 'agent' in child.create('hello')
     child.finished()
     assert variables_seen(child, probe, REVIEW_KEY) == {REVIEW_KEY: True}
+
+
+# -- A DSH child with no key of its own beside a reviewer on the default key --
+
+DEFAULT_KEY = 'DEEPSEEK_API_KEY'
+DEFAULT_KEY_REVIEWER = {'base_url': 'http://127.0.0.1:9/v1', 'model': 'm', 'api_key_env': DEFAULT_KEY}
+
+
+@pytest.fixture
+def default_key(monkeypatch: pytest.MonkeyPatch):
+    """Set a fake default key and a fake child key, with the reviewer's check passed."""
+    monkeypatch.setattr(control_module, 'check_reviewer', lambda entry: None)
+    monkeypatch.setenv(DEFAULT_KEY, FAKE)
+    monkeypatch.setenv(CHILD_KEY, FAKE)
+    monkeypatch.setenv(REVIEW_KEY, FAKE)
+
+
+def declared_home(tmp_path: Path, *files: str) -> dict:
+    """Return a connection whose home exists and holds exactly ``files``."""
+    home = tmp_path / 'declared-home'
+    home.mkdir()
+    for name in files:
+        (home / name).write_text('')
+    return {'home': str(home)}
+
+
+@pytest.mark.parametrize('files', [None, ()], ids=['default-home', 'declared-empty-home'])
+def test_dsh_child_without_a_key_is_refused_beside_a_default_key_reviewer(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch, default_key: None, files: tuple | None) -> None:
+    """The create fails naming the reason and the fixes; no Agent or service exists."""
+    connection = None if files is None else declared_home(tmp_path, *files)
+    child = DshChild(tmp_path, monkeypatch, DEFAULT_KEY_REVIEWER, connection)
+    document = child.create('never runs')
+    error = document.get('error') or {}
+    message = error.get('message', '')
+    code_is_config = error.get('code') == 'ROLE_CONFIG_INVALID'
+    names_reviewer_and_variable = "'checker'" in message and DEFAULT_KEY in message
+    names_fixes = all(fix in message for fix in ('Set api_key_env', 'a different api_key_env', "connection's home"))
+    assert code_is_config and names_reviewer_and_variable and names_fixes, message
+    holds_no_value = FAKE not in json.dumps(document)
+    assert holds_no_value
+    assert child.agent is None
+    assert not list((child.data / 'control' / 'agents').glob('*.json'))
+    assert ReviewService.instances == []
+
+
+@pytest.mark.parametrize('name', ['.credentials.yaml', '.env'])
+def test_dsh_declared_home_with_a_login_file_is_not_refused(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch, default_key: None, name: str) -> None:
+    """A declared home may hold the child's own login; the reviewer's key still stays out."""
+    child = DshChild(tmp_path, monkeypatch, DEFAULT_KEY_REVIEWER, declared_home(tmp_path, name))
+    assert 'agent' in child.create('hello')
+    child.finished()
+    assert variables_seen(child, tmp_path, DEFAULT_KEY) == {DEFAULT_KEY: False}
+
+
+def test_dsh_project_env_file_is_not_refused(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, default_key: None) -> None:
+    """DSH also reads ``<cwd>/.env``, so that file counts as the child's own source."""
+    (tmp_path / 'worktree').mkdir()
+    (tmp_path / 'worktree' / '.env').write_text('')
+    child = DshChild(tmp_path, monkeypatch, DEFAULT_KEY_REVIEWER)
+    assert 'agent' in child.create('hello')
+    child.finished()
+    assert variables_seen(child, tmp_path, DEFAULT_KEY) == {DEFAULT_KEY: False}
+
+
+def test_dsh_child_with_its_own_key_keeps_the_reviewers_out(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch, default_key: None) -> None:
+    """A different named key runs, and the reviewer's default key is not handed over."""
+    child = DshChild(tmp_path, monkeypatch, DEFAULT_KEY_REVIEWER, {'api_key_env': CHILD_KEY})
+    assert 'agent' in child.create('hello')
+    child.finished()
+    assert variables_seen(child, tmp_path, DEFAULT_KEY, CHILD_KEY) == {DEFAULT_KEY: False, CHILD_KEY: True}
+
+
+def test_dsh_child_naming_the_default_key_shares_it(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch, default_key: None) -> None:
+    """Naming the same variable deliberately shares it."""
+    child = DshChild(tmp_path, monkeypatch, DEFAULT_KEY_REVIEWER, {'api_key_env': DEFAULT_KEY})
+    assert 'agent' in child.create('hello')
+    child.finished()
+    assert variables_seen(child, tmp_path, DEFAULT_KEY) == {DEFAULT_KEY: True}
+
+
+def test_dsh_reviewer_on_another_variable_leaves_the_default_key(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch, default_key: None) -> None:
+    """With no conflict the child inherits the default key and the reviewer's stays out."""
+    child = DshChild(tmp_path, monkeypatch, {**DEFAULT_KEY_REVIEWER, 'api_key_env': REVIEW_KEY})
+    assert 'agent' in child.create('hello')
+    child.finished()
+    assert variables_seen(child, tmp_path, DEFAULT_KEY, REVIEW_KEY) == {DEFAULT_KEY: True, REVIEW_KEY: False}
+
+
+def test_dsh_command_reviewer_with_no_child_key_runs(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch, default_key: None, reviewer: dict) -> None:
+    """A command reviewer holds no key, so nothing is taken from the child."""
+    child = DshChild(tmp_path, monkeypatch, reviewer['entry'])
+    assert 'agent' in child.create('hello')
+    child.finished()
+    assert variables_seen(child, tmp_path, DEFAULT_KEY) == {DEFAULT_KEY: True}
+
+
+# -- A Pi child whose only key is the one its reviewer keeps from it ----------
+
+@pytest.fixture
+def pi_listing(tmp_path: Path, pi_environment: dict, monkeypatch: pytest.MonkeyPatch) -> dict:
+    """Make the Pi fixture list the model only when the default key or a login authenticates it."""
+    monkeypatch.setattr(control_module, 'check_reviewer', lambda entry: None)
+    monkeypatch.setenv(DEFAULT_KEY, FAKE)
+    monkeypatch.setenv(CHILD_KEY, FAKE)
+    monkeypatch.setenv(REVIEW_KEY, FAKE)
+    monkeypatch.setenv('PI_FIXTURE_LISTING_KEY', DEFAULT_KEY)
+    listings, commands = tmp_path / 'listings', tmp_path / 'commands'
+    monkeypatch.setenv('PI_FIXTURE_LISTINGS', str(listings))
+    monkeypatch.setenv('PI_FIXTURE_COMMANDS', str(commands))
+    probe = tmp_path / 'key-probe.json'
+    monkeypatch.setenv('PI_FIXTURE_KEY_PROBE', f'{probe}:{DEFAULT_KEY},{REVIEW_KEY},{CHILD_KEY}')
+    return {'environment': pi_environment, 'listings': listings, 'commands': commands, 'probe': probe}
+
+
+def pi_home(tmp_path: Path, auth: dict) -> str:
+    """Return a Pi home whose ``auth.json`` holds ``auth``, which never holds a key value."""
+    home = tmp_path / 'pi-home'
+    home.mkdir()
+    (home / 'auth.json').write_text(json.dumps(auth))
+    return str(home)
+
+
+def pi_child(tmp_path: Path, listing: dict, review: dict, connection: dict) -> PiChild:
+    """Return a Pi child on the listing fixture."""
+    return PiChild(tmp_path, listing['environment'], review, connection)
+
+
+def pi_child_ran(child: PiChild, listing: dict) -> dict:
+    """Create the child, wait for its end and return which variables reached it, as booleans."""
+    assert 'agent' in child.create('hello')
+    child.finished()
+    return json.loads(listing['probe'].read_text())
+
+
+def test_pi_child_without_a_key_is_refused_beside_its_reviewers_key(tmp_path: Path, pi_listing: dict) -> None:
+    """Offered with the variable and not without it: refused, with no Agent and no Pi beyond the listings."""
+    connection = {'api_key_env': None, 'home': pi_home(tmp_path, {})}
+    child = pi_child(tmp_path, pi_listing, DEFAULT_KEY_REVIEWER, connection)
+    document = child.create('never runs')
+    error = document.get('error') or {}
+    message = error.get('message', '')
+    code_is_config = error.get('code') == 'invalid-config'
+    names_all = all(name in message for name in ("'checker'", DEFAULT_KEY, "'deepseek'", 'kept from the child'))
+    names_fixes = all(fix in message for fix in ('Set api_key_env', 'a different api_key_env', 'log in to this provider'))
+    assert code_is_config and names_all and names_fixes, message
+    holds_no_value = FAKE not in json.dumps(document)
+    assert holds_no_value
+    assert child.agent is None
+    assert not list((child.data / 'control' / 'agents').glob('*.json'))
+    no_pi_beyond_the_listings = not pi_listing['commands'].exists()
+    assert no_pi_beyond_the_listings
+    keys_listed = [json.loads(line)['key'] for line in pi_listing['listings'].read_text().splitlines()]
+    assert keys_listed == [True, False, True]
+
+
+def test_pi_home_with_its_own_login_is_not_refused(tmp_path: Path, pi_listing: dict) -> None:
+    """The model is offered without the variable, and the variable still stays out of the child."""
+    home = pi_home(tmp_path, {'deepseek': {'type': 'oauth'}})
+    child = pi_child(tmp_path, pi_listing, DEFAULT_KEY_REVIEWER, {'api_key_env': None, 'home': home})
+    seen = pi_child_ran(child, pi_listing)
+    assert seen[DEFAULT_KEY] is False
+
+
+def test_pi_child_with_its_own_key_keeps_the_reviewers_out(tmp_path: Path, pi_listing: dict) -> None:
+    """A different named key is not refused, and only that key reaches the child."""
+    child = pi_child(tmp_path, pi_listing, DEFAULT_KEY_REVIEWER, {'api_key_env': CHILD_KEY})
+    seen = pi_child_ran(child, pi_listing)
+    assert (seen[DEFAULT_KEY], seen[CHILD_KEY]) == (False, True)
+
+
+def test_pi_child_naming_the_reviewers_key_keeps_it(tmp_path: Path, pi_listing: dict) -> None:
+    """Naming the same variable deliberately shares it."""
+    child = pi_child(tmp_path, pi_listing, DEFAULT_KEY_REVIEWER, {'api_key_env': DEFAULT_KEY})
+    assert pi_child_ran(child, pi_listing)[DEFAULT_KEY] is True
+
+
+def test_pi_reviewer_on_another_variable_is_unchanged(tmp_path: Path, pi_listing: dict) -> None:
+    """Removing another variable does not stop the model being offered."""
+    review = {**DEFAULT_KEY_REVIEWER, 'api_key_env': REVIEW_KEY}
+    child = pi_child(tmp_path, pi_listing, review, {'api_key_env': None, 'home': pi_home(tmp_path, {})})
+    seen = pi_child_ran(child, pi_listing)
+    assert (seen[DEFAULT_KEY], seen[REVIEW_KEY]) == (True, False)
+
+
+def test_pi_command_reviewer_is_unchanged(tmp_path: Path, pi_listing: dict, reviewer: dict) -> None:
+    """A command reviewer holds no key, so no listing asks about one."""
+    child = pi_child(tmp_path, pi_listing, reviewer['entry'], {'api_key_env': None, 'home': pi_home(tmp_path, {})})
+    assert pi_child_ran(child, pi_listing)[DEFAULT_KEY] is True
+    no_listing_without_a_key = all(json.loads(line)['key'] for line in pi_listing['listings'].read_text().splitlines())
+    assert no_listing_without_a_key
+
+
+def test_pi_model_offered_in_neither_listing_is_not_this_refusal(
+        tmp_path: Path, pi_listing: dict, monkeypatch: pytest.MonkeyPatch) -> None:
+    """The reviewer's removal is not the cause, so the existing paths report it."""
+    monkeypatch.setenv('PI_FIXTURE_LISTING_KEY', 'NO_SUCH_430_KEY')
+    home = pi_home(tmp_path, {})
+    declared = pi_child(tmp_path, pi_listing, DEFAULT_KEY_REVIEWER, {'api_key_env': None, 'home': home})
+    message = declared.create('never runs')['error']['message']
+    reports_the_destination = 'did not expose' in message
+    blames_the_reviewer = 'kept from the child' in message
+    assert reports_the_destination and not blames_the_reviewer, message
+
+
+def test_pi_model_offered_in_neither_listing_passes_when_the_destination_is_not_read(
+        tmp_path: Path, pi_listing: dict, monkeypatch: pytest.MonkeyPatch) -> None:
+    """With nothing changed from the host, both listings ask and neither offers: no refusal."""
+    monkeypatch.setenv('PI_FIXTURE_LISTING_KEY', 'NO_SUCH_430_KEY')
+    home = pi_home(tmp_path, {})
+    monkeypatch.setenv('PI_CODING_AGENT_DIR', home)
+    environment = {**pi_listing['environment'], 'agent_dir': home}
+    child = PiChild(tmp_path, environment, DEFAULT_KEY_REVIEWER, {'api_key_env': None})
+    document = child.create('hello')
+    assert 'agent' in document, (document.get('error') or {}).get('message')
+    child.finished()
+    keys_listed = [json.loads(line)['key'] for line in pi_listing['listings'].read_text().splitlines()]
+    assert keys_listed[0] is False
+
+
+@pytest.mark.parametrize('failing', [2, 3], ids=['without-the-variable', 'with-the-variable'])
+def test_pi_listing_failure_is_not_this_refusal(
+        tmp_path: Path, pi_listing: dict, monkeypatch: pytest.MonkeyPatch, failing: int) -> None:
+    """A listing that fails says nothing about the key, so create goes on."""
+    monkeypatch.setenv('PI_FIXTURE_LISTING_FAIL_AT', str(failing))
+    child = pi_child(tmp_path, pi_listing, DEFAULT_KEY_REVIEWER, {'api_key_env': None, 'home': pi_home(tmp_path, {})})
+    document = child.create('hello')
+    assert 'agent' in document, (document.get('error') or {}).get('message')
+    child.finished()
 
 
 # -- Fail closed when the hook is absent ------------------------------------

@@ -25,12 +25,23 @@ def main() -> None:
         model = sys.argv[sys.argv.index('--model') + 1]
         domain = {'deepseek': 'api.deepseek.com', 'openrouter': 'openrouter.ai',
                   'openai': 'api.openai.com'}.get(provider, 'custom.invalid')
+        # Opt-in: list the model as real Pi does, only when something authenticates it.
+        needs = os.environ.get('PI_FIXTURE_LISTING_KEY')
+        auth = Path(os.environ.get('PI_CODING_AGENT_DIR', '.')) / 'auth.json'
+        offered = (not needs or needs in os.environ
+                   or (auth.exists() and provider in json.loads(auth.read_text())))
+        if os.environ.get('PI_FIXTURE_LISTINGS'):
+            with open(os.environ['PI_FIXTURE_LISTINGS'], 'a') as stream:
+                stream.write(json.dumps({'key': bool(needs) and needs in os.environ}) + '\n')
+            count = len(Path(os.environ['PI_FIXTURE_LISTINGS']).read_text().splitlines())
+            if str(count) == os.environ.get('PI_FIXTURE_LISTING_FAIL_AT'):
+                raise SystemExit(3)
         for line in sys.stdin:
             request = json.loads(line)
             assert request['type'] == 'get_available_models'
             print(json.dumps({'id': request['id'], 'success': True, 'data': {'models': [{
                 'provider': provider, 'id': model, 'baseUrl': 'https://' + domain,
-            }]}}), flush=True)
+            }] if offered else []}}), flush=True)
         return
     if os.environ.get('PI_FIXTURE_PIPE_STDERR') and not stat.S_ISFIFO(os.fstat(2).st_mode):
         print('fixture refuses private regular-file stderr', file=sys.stderr)

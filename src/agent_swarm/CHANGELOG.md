@@ -12,6 +12,21 @@ version that identifies everything listed under it.
 
 The numbers in parentheses are the project's Task numbers.
 
+## 0.2.13 (compatible)
+
+- A DSH connection that names no `api_key_env`, beside a reviewer whose `api_key_env` is
+  `DEEPSEEK_API_KEY`, is now refused at `create` with `ROLE_CONFIG_INVALID` when no key
+  file of the child's own exists (430). The child never receives the reviewer's key and
+  DSH's default key is that same variable, so such a child could only fail at start with
+  `session/model-unavailable`. The message names the reviewer, the variable and the fixes.
+  A file that exists but holds no DeepSeek key still fails at start, because it is not read.
+- A Pi connection with no `api_key_env`, beside a reviewer whose key is the only one that
+  authenticates its model, is now refused at `create` with `invalid-config` (430). Such a
+  child could only fail at its first prompt with `No API key found`. `create` asks Pi's own
+  model listing with and without the reviewer's variable, so no credential is read and a
+  login in the connection's home is not refused. The message names the reviewer, the
+  variable, the provider and the fixes.
+
 ## 0.2.12 (compatible)
 
 - A Codex parent no longer receives one child answer twice when its `wait` or `status`

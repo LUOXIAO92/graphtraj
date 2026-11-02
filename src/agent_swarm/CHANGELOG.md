@@ -20,6 +20,12 @@ The numbers in parentheses are the project's Task numbers.
   DSH's default key is that same variable, so such a child could only fail at start with
   `session/model-unavailable`. The message names the reviewer, the variable and the fixes.
   A file that exists but holds no DeepSeek key still fails at start, because it is not read.
+- A Pi connection with no `api_key_env`, beside a reviewer whose key is the only one that
+  authenticates its model, is now refused at `create` with `invalid-config` (430). Such a
+  child could only fail at its first prompt with `No API key found`. `create` asks Pi's own
+  model listing with and without the reviewer's variable, so no credential is read and a
+  login in the connection's home is not refused. The message names the reviewer, the
+  variable, the provider and the fixes.
 
 ## 0.2.10 (compatible)
 

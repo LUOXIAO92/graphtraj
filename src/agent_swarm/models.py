@@ -211,14 +211,16 @@ def _private_catalog(home: Path, agent: Path) -> None:
 
 
 def _pi_available_models(executable: str, home: Path, cwd: Path, *selection: str,
-                         provider: str | None = None, api_key_env: str | None = None) -> list[dict]:
+                         provider: str | None = None, api_key_env: str | None = None,
+                         without: str | None = None) -> list[dict]:
     """Return Pi's available-model records of ``home``, read from a private agent directory in ``cwd``.
 
     Pi creates its stores in the directory it runs on and installs that
     directory's configured packages outside any sandbox, so it never runs on
     ``home``. ``api_key_env`` becomes the private ``auth.json``; without one a
     link gives Pi the native login, which it locks beside the link and reads
-    through, writing only when a login changes.
+    through, writing only when a login changes. ``without`` names one variable
+    removed from Pi's environment for this listing.
     """
     agent = cwd / 'agent'
     agent.mkdir()
@@ -227,11 +229,14 @@ def _pi_available_models(executable: str, home: Path, cwd: Path, *selection: str
     elif (home / 'auth.json').exists():
         (agent / 'auth.json').symlink_to((home / 'auth.json').resolve())
     _private_catalog(home, agent)
+    environment = _environment({'home': agent}, 'PI_CODING_AGENT_DIR')
+    if without:
+        environment.pop(without, None)
     completed = subprocess.run(
         [executable, '--mode', 'rpc', '--no-session', '--no-extensions', '--no-skills',
          '--no-prompt-templates', '--no-themes', '--no-context-files', *selection],
         input=json.dumps({'id': 'models', 'type': 'get_available_models'}) + '\n',
-        cwd=cwd, env=_environment({'home': agent}, 'PI_CODING_AGENT_DIR'),
+        cwd=cwd, env=environment,
         capture_output=True, text=True, timeout=TIMEOUT, check=True,
     )
     for line in completed.stdout.splitlines():
@@ -239,6 +244,20 @@ def _pi_available_models(executable: str, home: Path, cwd: Path, *selection: str
         if reply.get('id') == 'models' and reply.get('success'):
             return reply['data']['models']
     raise ValueError('Pi did not return model metadata.')
+
+
+def pi_offers(executable: str, home: str, provider: str, model: str, without: str | None = None) -> bool | None:
+    """Return whether Pi can authenticate ``provider``/``model``, or ``None`` if the listing fails.
+
+    Pi lists only the models it can authenticate, so no credential is read here.
+    """
+    try:
+        with tempfile.TemporaryDirectory(prefix='agents-pi-offers-') as directory:
+            models = _pi_available_models(executable, Path(home), Path(directory),
+                                          '--provider', provider, '--model', model, without=without)
+        return any((item['provider'], item['id']) == (provider, model) for item in models)
+    except Exception:
+        return None
 
 
 def pi_destination(executable: str, home: str, provider: str, model: str, api_key_env: str | None = None) -> str:

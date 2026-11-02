@@ -739,7 +739,8 @@ connection's home. When a Pi selection changes the provider, model, home or
 key, the driver reads the model's network destination from Pi's catalog in
 the selected home and fails with `invalid-config` if Pi exposes no plain
 http(s) destination; another provider or a selected connection drops the
-host's `api_key_env`, `base_url` and `provider_api`. Claude has no native
+host's `api_key_env`, `base_url` and `provider_api`. A reviewed Pi connection
+whose only key is the reviewer's is refused the same way (section 6). Claude has no native
 provider setting, so a Claude connection's `provider` only names its models.
 
 **Several Runtimes in one host.** A host registers one driver per Runtime in
@@ -1520,6 +1521,10 @@ no retry. The native side waits with no timeout of its own: Pi's dialog
   `DEEPSEEK_API_KEY` unless a key file exists (DSH children, section 2). Files are checked
   by existence and not read, so one that holds no DeepSeek key still fails at start
   with the native `session/model-unavailable`.
+  For Pi, `create` asks Pi's own model listing instead, without reading a credential: a
+  connection naming no key, with no `base_url`, is refused with `invalid-config` when Pi
+  offers the model with the reviewer's variable and not without it. Any other answer, or a
+  listing that fails, is no refusal, and a login in the connection's home counts as its own.
 - The bound agents tool, `mcp__agents__agents`, is not reviewed and is the only tool
   that is not: it is the child's channel to its parent, limited by agents' authority
   checks, and must work when the reviewer is down.
@@ -1701,7 +1706,10 @@ Recorded classifications:
 - 430 (0.2.11): `create` refuses a DSH connection with no `api_key_env` beside a reviewer on
   `DEEPSEEK_API_KEY` when no key file of the child's own exists (section 2). Compatible: a new
   error for a configuration that could not start before, since DSH offers no model without
-  a key and the child's start failed with `session/model-unavailable`.
+  a key and the child's start failed with `session/model-unavailable`. `create` likewise refuses
+  a Pi connection with no `api_key_env` and no `base_url` when Pi offers the model only with the
+  reviewer's variable (section 6). Compatible on the same reasoning: `create` used to return an
+  Agent, but that child could only fail at its first prompt with `No API key found`.
 
 While the major version is `0`, an incompatible change raises the minor
 version (`0.1.x` → `0.2.0`), and compatible additions and fixes raise the

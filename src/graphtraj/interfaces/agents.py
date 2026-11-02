@@ -115,6 +115,11 @@ def configured_archive(root: Path) -> ConfiguredSessionArchive:
 EXTRA_FIELDS_VERSION = 1
 
 
+def archive_project(archive: ConfiguredSessionArchive) -> str:
+    """Return the project whose ``swarm_root`` holds ``archive``."""
+    return str(Path(archive.root).parents[1])
+
+
 def graphtraj_fields(
     project_id: str,
     agent_id: str,
@@ -122,6 +127,11 @@ def graphtraj_fields(
     extra_fields: Mapping[str, Any] | None = None,
 ) -> dict:
     """Return a header ``extra_fields`` container carrying GraphTraj's namespace.
+
+    ``project_id`` is the Harness Project Root on every Runtime: the project that
+    owns the archive, never a Worktree or the tool's data root. A Session's own
+    working directory is the header's ``cwd``. Archives already written keep the
+    value they were created with, since a header is written once.
 
     Other namespaces in ``extra_fields`` are kept unchanged; GraphTraj's own
     association replaces any ``graphtraj`` entry a caller supplied.

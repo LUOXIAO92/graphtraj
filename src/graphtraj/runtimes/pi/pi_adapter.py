@@ -201,7 +201,8 @@ class PiRuntimeAdapter:
             if any(path.is_relative_to(p.resolve()) or p.resolve().is_relative_to(path) for p in protected):
                 raise RuntimeAdapterError('RUNTIME_ACCESS_DENIED', 'A Pi resource grant would expose private control/history.')
         if state.resolve().is_relative_to(worktree.resolve()):
-            raise RuntimeAdapterError('RUNTIME_ACCESS_DENIED', 'Pi needs a Worktree outside private state.')
+            raise RuntimeAdapterError('RUNTIME_ACCESS_DENIED', 'Pi needs a Worktree outside private state: '
+                                      f'assign the child a `workspace` that does not contain {state}.')
         request = {
             'worktree_path': str(worktree), 'harness_root': str(harness_root),
             'git_common_directory': str(git_common_directory), 'evidence': str(evidence),

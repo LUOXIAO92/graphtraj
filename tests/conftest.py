@@ -100,13 +100,26 @@ def _installation_problem(executable: str = sys.executable, scripts: Optional[Pa
     ).format(executable, " and ".join(missing), PROJECT_ROOT)
 
 
+def _build_backend_problem(cwd: Path, executable: str = sys.executable) -> Optional[str]:
+    """Say why ``_build_wheel``, which builds with --no-build-isolation, would fail."""
+    probe = subprocess.run([executable, "-c", "import setuptools.build_meta"], cwd=cwd,
+                           capture_output=True, text=True, timeout=60)
+    if probe.returncode == 0:
+        return None
+    return (
+        "The test interpreter {0} cannot import setuptools.build_meta, and the suite's wheel fixtures "
+        "build with --no-build-isolation. Install setuptools in this venv: {0} -m pip install setuptools."
+    ).format(executable)
+
+
 def pytest_sessionstart(session: pytest.Session) -> None:
     """Stop at once, with one cause, when subprocesses would import another tree
-    or the interpreter lacks the installed metadata and commands."""
+    or the interpreter lacks the installed metadata, commands or build backend."""
     import tempfile
 
     with tempfile.TemporaryDirectory() as neutral:
-        problem = _checkout_import_problem(Path(neutral)) or _installation_problem()
+        problem = (_checkout_import_problem(Path(neutral)) or _installation_problem()
+                   or _build_backend_problem(Path(neutral)))
     if problem:
         pytest.exit(problem, returncode=pytest.ExitCode.USAGE_ERROR)
 

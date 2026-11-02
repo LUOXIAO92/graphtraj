@@ -201,6 +201,12 @@ A reviewer is either a chat completions endpoint (`base_url`, `model`, optional
 "reason": "..."}`. Only `allow` lets the call run. Anything else, including a bad
 answer or a failure, goes to the direct parent.
 
+`allow` does not change the child's native permission mode. A Claude child with
+`permission_mode: default` can still raise Claude's own prompt for an allowed call. agents
+answers that prompt itself, once, when it names the same tool and input. A prompt that
+names a `blocked_path`, asks to leave the sandbox or changes the input goes to the
+direct parent as an ordinary permission request, which you answer with `reply`.
+
 `create` calls the reviewer once with a harmless request. If that fails, `create`
 fails at once with `review-unavailable` and the cause, and no Agent is recorded. The
 reviewer never defaults to the child's own provider.

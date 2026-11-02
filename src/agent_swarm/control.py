@@ -789,7 +789,9 @@ class AgentControl:
         matches = [item for item in found["models"] if item["id"] == model]
         if not matches:
             raise AgentsError("invalid-model", f"Model {model!r} is not a candidate of {where}; candidates: "
-                                               f"{sorted({item['id'] for item in found['models']}) or 'none'}.")
+                                               f"{sorted({item['id'] for item in found['models']}) or 'none'}. "
+                                               f"If it serves this model, list the id under `models` of a {runtime} "
+                                               f"connection in {self.root / CONFIG_FILE}.")
         if len({item.get("provider") for item in matches}) > 1:
             raise AgentsError("invalid-model", f"Model {model!r} is offered by several providers of {where}; "
                                                "set the connection's provider.")

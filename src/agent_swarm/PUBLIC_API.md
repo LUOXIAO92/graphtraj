@@ -597,7 +597,9 @@ reads the Git common directory, so it can commit in its worktree. That directory
 is shared: the child can read every branch's objects and refs, other worktrees'
 Git metadata under `<git_common_directory>/worktrees`, and the repository's
 `config` and `hooks`, but no other worktree's working files and not the primary
-checkout's. A `write` child's environment sets `GIT_CONFIG_GLOBAL` to the null
+checkout's. That `config` can hold a token inside a remote URL, and the child can then
+read it, so keep tokens out of remote URLs on a repository a `write` child works in. A
+`write` child's environment sets `GIT_CONFIG_GLOBAL` to the null
 device, because the sandbox denies the Home and `~/.gitconfig` is never granted.
 Its identity is what `git config user.name` and `user.email` report in the
 worktree before launch, passed as `GIT_AUTHOR_NAME`, `GIT_COMMITTER_NAME`,
@@ -1765,8 +1767,10 @@ patch version. From `1.0.0` the usual rule applies: major for incompatible,
 minor for additions, patch for fixes. A release that changes this document
 updates it in the same change.
 
-GraphTraj declares the range it supports (today `agent-swarm>=0.2.5,<0.3`, since it imports the 0.2.5 names in 1.3)
-and widens it in the same change that adopts an incompatible release.
+GraphTraj declares the range it supports (today `agent-swarm>=0.2.15,<0.3`: it imports the names in 1.3, and
+its DSH member launch relies on `additional_writable_roots` reaching the sandbox policy, which needs 0.2.15).
+It raises the lower bound when it starts relying on a newer version, and widens the range in the same change that
+adopts an incompatible release.
 
 ## Appendix: Known GraphTraj-specific surfaces
 

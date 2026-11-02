@@ -98,6 +98,7 @@ class PiExecution:
         self.unseen_lock = threading.Lock()
         self.stderr_reader: threading.Thread | None = None
         self.startup_terminal_confirmed = False
+        self.start_failed = False
         self.independent = True
         self.archive = None
         # Header ``extra_fields`` for a Session this execution archives first.
@@ -563,6 +564,9 @@ class PiExecution:
                             return self._result('interrupted' if self.stopping.is_set() or native_aborted else 'completed', last)
             finally:
                 original_error = sys.exc_info()[1]
+                # Pi ended by itself before any prompt: the launch failed, nobody stopped it.
+                self.start_failed = (self.proc is not None and self.transport_closed.is_set()
+                                     and not self.prompt_started and not self.stopping.is_set())
                 # Native abort owns tools/queues. Closing the transport and reaping
                 # this exact process follows it, and never targets another Session.
                 native_idle = self.outcome is not None
@@ -663,15 +667,18 @@ class PiExecution:
             details += f' Native process exit: {self.proc.poll()}.'
         # Startup stderr is otherwise unreachable when no Session mapping could
         # be bound. Do not expose older executions or task-generated stderr.
+        diagnostic = ''
         if not self.prompt_started:
             try:
                 with (self.directory / 'stderr.log').open('rb') as stream:
                     stream.seek(stderr_offset)
-                    diagnostic = stream.read(8192).decode('utf-8', errors='replace')
-                if diagnostic.strip():
-                    details += '\nStartup stderr: ' + diagnostic.strip()
+                    diagnostic = stream.read(8192).decode('utf-8', errors='replace').strip()
+                if diagnostic and not self.start_failed:
+                    details += '\nStartup stderr: ' + diagnostic
             except OSError:
                 details += ' Startup stderr unavailable.'
+        if self.start_failed and diagnostic:
+            details = f'Pi did not start: {diagnostic}\n{details}'
         for name, value in os.environ.items():
             if value and (name == self.request.get('api_key_env')
                           or any(part in name.upper() for part in ('KEY', 'TOKEN', 'SECRET', 'PASSWORD', 'CREDENTIAL'))):
@@ -679,7 +686,8 @@ class PiExecution:
         details = re.sub(r'(?i)(bearer\s+)[^\s"\']+', r'\1[REDACTED]', details)
         details = re.sub(r'(https?://)[^\s/@]+:[^\s/@]+@', r'\1[REDACTED]@', details)
         details = re.sub(r'(https?://[^\s?]+)\?[^\s]+', r'\1?[REDACTED]', details)
-        return RuntimeAdapterError('RUNTIME_SHUTDOWN_FAILED', details, terminal_confirmed=False)
+        return RuntimeAdapterError('RUNTIME_START_FAILED' if self.start_failed else 'RUNTIME_SHUTDOWN_FAILED',
+                                   details, terminal_confirmed=False)
 
     def _result(self, outcome: str, last: str | None) -> dict:
         """Publish a terminal result only after native idle and empty queue."""

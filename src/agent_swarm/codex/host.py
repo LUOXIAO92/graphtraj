@@ -26,6 +26,8 @@ import asyncio
 import json
 from pathlib import Path
 import sys
+import threading
+import time
 
 import yaml
 
@@ -82,6 +84,11 @@ def runtime_drivers(settings: dict, root: Path) -> dict:
     return {runtime: RUNTIMES[runtime](entry, cwd, root) for runtime, entry in entries.items()}
 
 
+def _notice_identity(notice: dict) -> str | None:
+    """Return the stable identity of one notice in a receiver's document shape."""
+    return notice_id(notice.get('execution'), notice['outcome'], notice.get('request'))
+
+
 class CodexHost(CodexManagedExecution):
     """Bind an actual owned native parent to the existing independent controller."""
 
@@ -106,6 +113,11 @@ class CodexHost(CodexManagedExecution):
         self.authentications: list[dict] = []
         self.calls: list[dict] = []
         self.deliveries: list[dict] = []
+        self.began_at = time.time()
+        # Held ends this process took to push, and the lock that lets either a
+        # result settle a held end or the flush take it, never both.
+        self.flushed: set[str | None] = set()
+        self.notice_lock = threading.Lock()
         # The Agents the last ``run`` could not confirm stopped.
         self.stop_unconfirmed: list[str] = []
         super().__init__(settings['adapter_request'], instruction, native,
@@ -163,11 +175,39 @@ class CodexHost(CodexManagedExecution):
             body = request.get('instruction') or request.get('message')
             if body:
                 self._display(self.native_session, result.document['agent'], body)
-        if not result.failed:
-            self.control.settle_shown(request, result.document)
+        found = result.document.get('result')
+        if isinstance(found, dict):
+            with self.notice_lock:
+                for agent in found.get('agents', [found]):
+                    self._hide_pushed(agent)
+                if not result.failed:
+                    self.control.settle_shown(request, result.document)
         self.calls.append({'action': request['action'], 'failed': result.failed,
                            'parent_session': self.native_session, 'result': result.document})
         return result
+
+    def _hide_pushed(self, document: dict) -> None:
+        """Hide a body this host is pushing, so the parent receives it once.
+
+        AgentControl marks a live end ``queueing`` before calling the receiver,
+        so a concurrent ``wait`` or ``status`` would otherwise show the body the
+        host event carries. A held end being flushed is shown as ``queueing``
+        the same way. Neither is settled as read, so a send refused before
+        anything was written leaves the end readable. Ends of earlier host
+        processes that no flush has taken keep their body.
+        """
+        pending = [document]
+        while pending:
+            agent = pending.pop()
+            last = agent.get('last_result') or {}
+            state = last.get('notification')
+            # The flush may have finished since this result was read, so a
+            # taken end stays hidden unless its send was refused.
+            flushed = notice_id(last.get('id'), last.get('outcome')) in self.flushed
+            live = state == 'queueing' and (last.get('ended_at') or 0) >= self.began_at
+            if agent.get('parent') is None and state in ('held', 'queueing') and (flushed or live):
+                last.update(notification='queueing', last_message=None)
+            pending.extend(agent.get('children', []))
 
     def _receive_child(self, notice: dict) -> bool | str:
         """Forward one genuine end or native request notice to this still-owned external parent."""
@@ -193,7 +233,7 @@ class CodexHost(CodexManagedExecution):
             # failure leaves it readable through wait/status.
             return 'unconfirmed' if getattr(error, 'request_written', False) else 'held'
         self._display(notice['agent'], self.native_session, message)
-        self.deliveries.append({'id': notice_id(notice.get('execution'), notice['outcome'], notice.get('request')),
+        self.deliveries.append({'id': _notice_identity(notice),
                                 'agent': notice['agent'], 'event': notice['outcome'],
                                 'parent_session': self.native_session, 'body': notice['body'], 'accepted': True})
         return True
@@ -205,11 +245,21 @@ class CodexHost(CodexManagedExecution):
             # A turn that ended first leaves the rest held for the next --resume.
             if self.result.done() or self.termination_requested:
                 return
-            if await asyncio.to_thread(self.control.notice_open, notice):
+            if await asyncio.to_thread(self._take_held, notice):
                 delivery = await self._forward(notice)
-                if delivery != 'held':
+                if delivery == 'held':
+                    self.flushed.discard(_notice_identity(notice))
+                else:
                     await asyncio.to_thread(self.control.settle_notice, notice,
                                             'delivered' if delivery is True else delivery)
+
+    def _take_held(self, notice: dict) -> bool:
+        """Take one held notice to push, unless a result has already shown it."""
+        with self.notice_lock:
+            if not self.control.notice_open(notice):
+                return False
+            self.flushed.add(_notice_identity(notice))
+            return True
 
     def run(self) -> dict:
         """Keep one actual parent owner, even across repeated host invocations."""

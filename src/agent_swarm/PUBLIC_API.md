@@ -442,12 +442,21 @@ way.
   the default. A value inside the configuration's `cwd`, when that differs from
   `project`, goes to the same relative place under `project`. It raises the same
   `ValueError`.
+- `hook_source(event, cwd, *, native_id=None)` validates one native hook event and
+  `collect_hook_event(archive, event, cwd, *, extra_fields=None, native_id=None)`
+  (`native_id` since 0.2.13) collects its transcript under `cwd`. A host that owns
+  the Session's channel passes `native_id`: the event must name that Session and its
+  cwd is not compared, because a Bash `cd` moves it. Without `native_id`, the event's
+  cwd must equal `cwd`. Either refusal raises `ValueError`.
 - `NativeCalls(make_call, cwd, runner=None, tools=())` associates each native
   call with its Claude Session for the host. `make_call(session, cwd)` returns
   `call(tool, request)`, which returns an `AgentsResult`. The host passes
   `NativeCalls.context` as the receiver of its context channel and calls
   `NativeCalls.call(request, tool)` when the MCP server receives `tools/call`.
-  Preparing a tool that was not declared fails with `invalid-input`.
+  Preparing a tool that was not declared fails with `invalid-input`. The native
+  cwd may be `cwd` or a directory inside it, and `make_call` always receives
+  `cwd`. A native cwd outside `cwd` fails with `authority-denied`, and the message
+  names both directories.
 
 A declared tool gets the behaviour of `agents`, except the display: each native
 call has its own association, overlapping calls each end only their own, one

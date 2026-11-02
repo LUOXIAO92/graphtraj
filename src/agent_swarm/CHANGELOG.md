@@ -12,6 +12,21 @@ version that identifies everything listed under it.
 
 The numbers in parentheses are the project's Task numbers.
 
+## 0.2.13 (compatible)
+
+- A Bash `cd` no longer ends a Claude child or loses its result (437). A native helper
+  that finished while the child's working directory was moved raised `Hook working
+  directory differs from collection entry`, and the execution failed with
+  `RUNTIME_WORKER_FAILED`. The execution now compares the hook's Session with the Session
+  it owns and ignores the hook's working directory. This is stricter: a hook naming another
+  Session now fails the execution and archives nothing, where it used to be accepted.
+  `hook_source` and `collect_hook_event` gain a `native_id` keyword for this; without it
+  they keep comparing the working directory.
+- A Claude host's `agents` call no longer fails with `Native Session/cwd/request is invalid`
+  after a `cd` inside the project (437); the call still runs with the project's directory.
+  A `cd` outside the project is still refused, with `authority-denied` and a message naming
+  both directories and how to return.
+
 ## 0.2.12 (compatible)
 
 - A Codex parent no longer receives one child answer twice when its `wait` or `status`

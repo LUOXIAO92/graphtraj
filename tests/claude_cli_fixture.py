@@ -222,6 +222,27 @@ def tool(feature: str, arguments: dict) -> dict:
     return value['structuredContent']
 
 
+def helper_stop() -> None:
+    """Finish a native helper: its own transcript, then SubagentStop.
+
+    CLAUDE_FIXTURE_HELPER_CWD is the directory a Bash ``cd`` left the Session in,
+    and CLAUDE_FIXTURE_HELPER_SESSION a Session other than this one.
+    """
+    helper = history.with_suffix('.helper.jsonl')
+    base = {'sessionId': session, 'agentId': 'helper', 'isSidechain': True, 'timestamp': '2026-11-02T00:00:00Z'}
+    helper.write_text(
+        json.dumps({**base, 'type': 'user', 'uuid': 'h1', 'message': {'role': 'user', 'content': 'look up'}}) + '\n'
+        + json.dumps({**base, 'type': 'assistant', 'uuid': 'h2', 'parentUuid': 'h1', 'message': {
+            'id': 'api-h2', 'role': 'assistant', 'model': model,
+            'content': [{'type': 'text', 'text': 'found'}]}}) + '\n')
+    emit({'type': 'control_request', 'request_id': 'helper-stop', 'request': {
+        'subtype': 'hook_callback', 'callback_id': 'graphtraj_collect_child', 'input': {
+            'hook_event_name': 'SubagentStop', 'agent_id': 'helper', 'agent_transcript_path': str(helper),
+            'session_id': os.environ.get('CLAUDE_FIXTURE_HELPER_SESSION', session),
+            'transcript_path': str(transcript),
+            'cwd': os.environ.get('CLAUDE_FIXTURE_HELPER_CWD', os.getcwd())}}})
+
+
 def prompt(message: dict) -> None:
     """Process fixture input only after Runner releases the startup hook."""
     global sdk_request_arguments, sdk_display
@@ -269,6 +290,8 @@ def prompt(message: dict) -> None:
         review_log({'answer': text})
         review_steps.extend(review_script.get('on_accept' if 'you may retry' in text else 'on_decline', []))
         next_review_step()
+    elif text == 'helper-stop':
+        helper_stop()
     elif text == 'garbage':
         print('not json secret-token', flush=True)
     elif text == 'permission':
@@ -462,6 +485,8 @@ for line in sys.stdin:
             if observed_mode is not None:
                 init['permissionMode'] = observed_mode
             emit(init)
+        elif response['request_id'] == 'helper-stop':
+            result('helper-done')
         elif response['request_id'] == 'permission-1':
             result(json.dumps(response['response']))
         elif response['request_id'] == 'sdk-list':

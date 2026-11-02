@@ -12,6 +12,17 @@ version that identifies everything listed under it.
 
 The numbers in parentheses are the project's Task numbers.
 
+## 0.2.11 (compatible)
+
+- A Pi child with `worktree_access: write` can now commit in a linked worktree (429). It
+  had write access to the Git common directory but could not read it, and Git also stopped
+  on the `~/.gitconfig` the sandbox denies. The child now reads that directory, so it can
+  read every branch's objects and refs, other worktrees' Git metadata and the repository's
+  `config` and `hooks`, but no other worktree's working files. Its environment sets
+  `GIT_CONFIG_GLOBAL` to the null device and carries the `user.name` and `user.email` the
+  host's Git reports, as the `GIT_AUTHOR_*` and `GIT_COMMITTER_*` variables. Without a value
+  no variable is added, and Git reports the missing identity. A `read` child is unchanged.
+
 ## 0.2.10 (compatible)
 
 - A resumed Claude Session with a full archive no longer raises `Unresolved observations

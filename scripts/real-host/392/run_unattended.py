@@ -214,6 +214,22 @@ def record_sleep(step: str, seconds: float) -> None:
     print(line, end='', flush=True)
 
 
+def reclaim_terminal(step: str) -> None:
+    """Take the Terminal foreground back if a process the step started kept it."""
+    try:
+        tty = os.open('/dev/tty', os.O_RDWR | os.O_NOCTTY)
+    except OSError:
+        return
+    try:
+        if os.tcgetpgrp(tty) != os.getpgrp():
+            os.tcsetpgrp(tty, os.getpgrp())
+            print(f'NOTE {step}: a process it started had taken the Terminal foreground; taken back.', flush=True)
+    except OSError:
+        pass
+    finally:
+        os.close(tty)
+
+
 def run_step(step: str) -> float:
     """Run one step to its end or its limit; return its elapsed minutes."""
     seconds = limit_seconds(step)
@@ -221,6 +237,8 @@ def run_step(step: str) -> float:
     started = time.strftime('%Y%m%dT%H%M%S')
     begun = time.monotonic()
     wall = time.time()
+    # script(1) in the step sets terminal modes and reads stdin, so the run must own the foreground first.
+    reclaim_terminal(step)
     process = subprocess.Popen(['/bin/zsh', str(step_file(step))])
     if not wait_for(process, seconds):
         print(f'{step} reached its limit; ending it.', flush=True)
@@ -232,6 +250,7 @@ def run_step(step: str) -> float:
     awake = time.monotonic() - begun
     faked = float(DRY_SLEPT_SECONDS) if step == DRY_SLEPT_STEP else 0
     record_sleep(step, time.time() - wall - awake + faked)
+    reclaim_terminal(step)
     return awake / 60
 
 
@@ -248,6 +267,9 @@ def gate_failing(step: str) -> list[str]:
 
 def main() -> int:
     """Run the steps in order; nothing here stops the run but the user's own interrupt."""
+    # Ignored signals survive exec, so every step and host inherits this: a background write or a change of
+    # terminal modes can no longer suspend the run with SIGTTOU.
+    signal.signal(signal.SIGTTOU, signal.SIG_IGN)
     print('Keep the lid open for the whole run: caffeinate -i stops idle sleep but does not hold a closed lid. '
           'A step the Mac sleeps through says nothing and needs a rerun.', flush=True)
     elapsed = json.loads((OWN / 'elapsed.json').read_text()) if (OWN / 'elapsed.json').is_file() else {}

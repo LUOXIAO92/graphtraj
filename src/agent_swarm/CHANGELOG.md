@@ -12,6 +12,14 @@ version that identifies everything listed under it.
 
 The numbers in parentheses are the project's Task numbers.
 
+## 0.3.1 (compatible)
+
+- A Codex host you start yourself (`CodexHost`) again runs its own Codex with your
+  environment: 0.3.0 had applied the child rule and the credential shell exclude to it
+  too, so its tool shell lost names such as `GH_TOKEN`. Children it starts still get the
+  0.3.0 rule and exclude. This matches the README and `PUBLIC_API.md` 3.1, which leave a
+  top-level host's environment to the user, so it is a compatible fix. (439)
+
 ## 0.3.0 (incompatible)
 
 Classified under `PUBLIC_API.md` section 7 as a default that changes observable

@@ -61,6 +61,38 @@ answers pi $PROBE_DIR/empty.txt env PI_CODING_AGENT_DIR=$PROBE_DIR/pi-home PI_SK
 answers dsh $PROBE_DIR/empty.txt env DSH_HOME=$PROBE_DIR/dsh-home \
   $DSH --profile probe --from-default-profile headless --patch $PROBE_DIR/dsh.patch.yml $ASK
 
+say "key names each host's own shell tool sees (names only; any name but DEEPSEEK_API_KEY stops the run)"
+# The command prints names, never values: `cut -d= -f1` drops everything after the first `=`. FLAGS shows
+# whether that shell is interactive (433 item 3). A host whose model did not run it gets a FAIL too.
+NAMES_CMD="echo NAMES-BEGIN; env | cut -d= -f1 | grep -i -E 'key|token|secret|password|credential' | sort | tr '\n' ' '; echo; echo FLAGS=\$-; echo NAMES-END"
+NAMES_ASK="Run exactly this one command with your shell tool, once, and reply with only its output: $NAMES_CMD"
+print -r -- $NAMES_ASK > $PROBE_DIR/names-ask.txt
+# `names <label> <stdin file> <command...>`: judges the names between the markers in that host's answer.
+names() {
+  local label=$1 input=$2 code=0 seen
+  shift 2
+  (cd $PROBE_DIR && bounded 240 "$@" < $input > $OUT/$label.names.txt 2> $OUT/$label.names.stderr.txt) || code=$?
+  if ! grep -q NAMES-END $OUT/$label.names.txt; then
+    check FAIL "$label key names: the model did not run the names command (exit $code); see $label.names.txt"
+    return 0
+  fi
+  seen=$(sed -n '/NAMES-BEGIN/,/NAMES-END/p' $OUT/$label.names.txt | grep -v -E 'NAMES-(BEGIN|END)|^FLAGS=' \
+    | tr ' ' '\n' | grep -v -x -e DEEPSEEK_API_KEY -e '' | sort -u | tr '\n' ' ' || true)
+  local flags=$(grep -m1 -o 'FLAGS=[A-Za-z0-9]*' $OUT/$label.names.txt || true)
+  [[ -z ${seen// /} ]] && check PASS "$label key names: only DEEPSEEK_API_KEY or none; $flags" \
+    || check FAIL "$label key names: its shell tool sees $seen; $flags"
+}
+if [[ -n ${AGENTS_392_DRY_BIN:-} ]]; then
+  note 'dry run: the stub hosts have no shell tool; the key-name probe did not run'
+else
+  names claude $PROBE_DIR/names-ask.txt $CLAUDE -p --model $CLAUDE_MODEL --allowedTools Bash
+  names codex $PROBE_DIR/names-ask.txt $CODEX exec --skip-git-repo-check --ephemeral -s read-only -
+  names pi $PROBE_DIR/empty.txt env PI_CODING_AGENT_DIR=$PROBE_DIR/pi-home PI_SKIP_VERSION_CHECK=1 PI_TELEMETRY=0 \
+    $PI_BIN --no-session --model $PI_PROVIDER/$PI_MODEL -p $NAMES_ASK
+  names dsh $PROBE_DIR/empty.txt env DSH_HOME=$PROBE_DIR/dsh-home \
+    $DSH --profile probe --from-default-profile headless --patch $PROBE_DIR/dsh.patch.yml $NAMES_ASK
+fi
+
 say "the Pi sandbox (nothing is downloaded when it is already complete; the user approved the install on 20261031)"
 if /bin/bash $WT/scripts/real-host/install-pi-sandbox.sh ${AGENTS_392_DRY_SANDBOX:+$AGENTS_392_DRY_SANDBOX} > $OUT/install-pi-sandbox.txt 2>&1 \
     && [[ -f $PI_SANDBOX/pi-sandbox.env ]]; then

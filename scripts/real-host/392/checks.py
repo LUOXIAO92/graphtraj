@@ -316,7 +316,8 @@ def launch_failed() -> None:
         check('CANNOT', f'launch-failed: needs a Runner that refuses local binding; {reason}')
         return
     scratch.prepare(['dsh'])
-    scratch.ready('1', 'article', 'Reply with one line.')
+    # The member is member_dsh (swarm.yml below), so the Task's body is budgeted for DSH.
+    scratch.ready('1', 'article', 'Reply with one line.', 'dsh')
     swarm = RUN / 'swarm.yml'
     swarm.write_text(yaml.safe_dump({'tasks': [{'task_id': '1', 'role': 'member_dsh', 'instruction': 'Reply with one line.'}]}))
     done = scratch.run('dispatch', '/usr/bin/sandbox-exec', '-p', NO_BIND, str(scratch.BIN / 'agent-runner'),

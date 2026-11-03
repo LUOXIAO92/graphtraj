@@ -47,7 +47,13 @@ setopt err_exit pipe_fail no_unset
 HARNESS=/Users/luoxiao/workspace/you-are-a-product-architect-delivery
 WT=$HARNESS/.graphtraj/core/worktrees/392-agents-standalone-combined-acceptance
 HERE=$WT/scripts/real-host/392
-COMMIT=$(<$HERE/COMMIT)
+# The runner reads COMMIT once and exports it, so an edit of the file during a run cannot split the run
+# between two commits. A step run by hand, outside the runner, reads the file.
+if [[ -n ${AGENTS_392_UNDER_RUNNER:-} && -n ${AGENTS_392_COMMIT:-} ]]; then
+  COMMIT=$AGENTS_392_COMMIT
+else
+  COMMIT=$(<$HERE/COMMIT)
+fi
 # Used only to read the scan and for small fixed logic before the venv exists; nothing imports agents.
 PY=/Users/luoxiao/miniconda3/bin/python3.13
 # Second pass: keys ~/.zshrc gives only to an interactive shell, or under names the pattern misses, are

@@ -1,0 +1,22 @@
+============================= test session starts ==============================
+platform darwin -- Python 3.13.11, pytest-9.2.0, pluggy-1.7.0 -- /tmp/claude-501/venv-437/bin/python
+rootdir: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/437-claude-member-survives-cd
+configfile: pyproject.toml
+collecting ... collected 14 items
+
+tests/test_claude_member_survives_cd.py::test_a_helper_finishing_after_cd_keeps_the_member_and_its_result[subdirectory] PASSED [  7%]
+tests/test_claude_member_survives_cd.py::test_a_helper_finishing_after_cd_keeps_the_member_and_its_result[outside] PASSED [ 14%]
+tests/test_claude_member_survives_cd.py::test_a_helper_from_another_session_is_refused_and_not_archived PASSED [ 21%]
+tests/test_claude_member_survives_cd.py::test_without_a_session_the_working_directory_still_decides PASSED [ 28%]
+tests/test_claude_member_survives_cd.py::test_with_a_session_only_that_session_is_accepted PASSED [ 35%]
+tests/test_claude_member_survives_cd.py::test_main_prepares_from_inside_the_project_and_calls_with_its_root PASSED [ 42%]
+tests/test_claude_member_survives_cd.py::test_one_call_prepared_again_after_cd_keeps_one_association PASSED [ 50%]
+tests/test_claude_member_survives_cd.py::test_main_outside_the_project_is_refused_with_a_way_back PASSED [ 57%]
+tests/test_claude_member_survives_cd.py::test_a_sibling_sharing_the_project_name_prefix_is_outside PASSED [ 64%]
+tests/test_claude_member_survives_cd.py::test_symlinks_are_judged_by_where_they_lead PASSED [ 71%]
+tests/test_claude_member_survives_cd.py::test_another_session_stays_refused_while_one_is_pending PASSED [ 78%]
+tests/test_claude_member_survives_cd.py::test_session_and_request_validation_keeps_its_text[123-request_0] PASSED [ 85%]
+tests/test_claude_member_survives_cd.py::test_session_and_request_validation_keeps_its_text[11111111-1111-4111-8111-11111111111A-request_1] PASSED [ 92%]
+tests/test_claude_member_survives_cd.py::test_session_and_request_validation_keeps_its_text[7db506a2-14ad-40c8-894d-406146b126b8-not an object] PASSED [100%]
+
+============================== 14 passed in 1.60s ==============================

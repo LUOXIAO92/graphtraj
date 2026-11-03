@@ -12,6 +12,174 @@ version that identifies everything listed under it.
 
 The numbers in parentheses are the project's Task numbers.
 
+## 0.3.1 (compatible)
+
+- A Codex host you start yourself (`CodexHost`) again runs its own Codex with your
+  environment: 0.3.0 had applied the child rule and the credential shell exclude to it
+  too, so its tool shell lost names such as `GH_TOKEN`. Children it starts still get the
+  0.3.0 rule and exclude. This matches the README and `PUBLIC_API.md` 3.1, which leave a
+  top-level host's environment to the user, so it is a compatible fix. (439)
+
+## 0.3.0 (incompatible)
+
+Classified under `PUBLIC_API.md` section 7 as a default that changes observable
+behaviour, so the minor version rises. GraphTraj adopts it in the same change: its
+range becomes `agent-swarm>=0.3.0,<0.4`.
+
+- A child Agent now receives only its own connection's key (433). Every launch path of
+  all four Runtimes and of GraphTraj's Runner members calls one function,
+  `agent_swarm.child_environment`, on first start and on resume. Other credential-class
+  variables, chosen by `agent_swarm.is_credential_name`, no longer reach the child.
+- `pass_env`, a list of variable names, declares more variables on a connection or at the
+  top level of `config.yml` for a child with no connection. It is user configuration only:
+  `create` still refuses it as an unexpected parameter. It never brings back a reviewer's
+  key. GraphTraj takes it on a connection provider and on a role in `roles.yml`.
+- A Codex child's tool shell now excludes credential names through
+  `shell_environment_policy`, including exports reloaded from dotfiles and written to Codex's
+  shell snapshot (433). `~/.zshenv` is not stopped, and `~/.zprofile` and `~/.zlogin` are not
+  stopped before the snapshot is ready. The child's own key stays with Codex's process and leaves
+  its shell. A declared credential name travels to Codex in the Session parameters.
+- A GraphTraj inline role on a new dispatch refuses `pass_env` and `api_key_env` with
+  `ROLE_NOT_CONFIGURED`; select a `connection:` instead (433). A retained Batch keeps loading.
+- A Pi connection naming no key keeps the variable its home's `models.json` or `auth.json` names
+  for the selected provider (433).
+- **What a user may need to change:** a child that used an unrelated key from its parent's
+  environment must now declare it. That covers tools in its shell such as `gh` with
+  `GH_TOKEN`, a Codex MCP server with `bearer_token_env_var`, and DSH's official web search
+  beside a connection naming another key (`pass_env: [DEEPSEEK_API_KEY]`).
+
+## 0.2.20 (compatible)
+
+- A Bash `cd` no longer ends a Claude child or loses its result (437). A native helper
+  that finished while the child's working directory was moved raised `Hook working
+  directory differs from collection entry`, and the execution failed with
+  `RUNTIME_WORKER_FAILED`. The execution now compares the hook's Session with the Session
+  it owns and ignores the hook's working directory. This is stricter: a hook naming another
+  Session now fails the execution and archives nothing, where it used to be accepted.
+  `hook_source` and `collect_hook_event` gain a `native_id` keyword for this; without it
+  they keep comparing the working directory.
+- A Claude host's `agents` call no longer fails with `Native Session/cwd/request is invalid`
+  after a `cd` inside the project (437); the call still runs with the project's directory.
+  A `cd` outside the project is still refused, with `authority-denied` and a message naming
+  both directories and how to return.
+
+## 0.2.19 (compatible)
+
+- One blocked call no longer holds a closing Pi or DSH host (434). With another process
+  holding one Agent's record lock, or a driver's `interrupt` that never returns, the other
+  children are still interrupted and seen to end, only that Agent is named in the
+  `stop-unconfirmed` line, and the process ends within 20 seconds of its pipe closing instead
+  of when the lock is released. A model request in flight at the close and the notice flusher
+  can add up to 3 seconds each; that request's caller is told the operation is unconfirmed.
+  The line no longer says every other Agent stopped when a `status` went unanswered and no
+  Agent was seen stopped.
+  New: `worker_connection` and `agents_connection` take `close_seconds` (default: unchanged),
+  and `AgentControl.visible_agents` names a caller's Agents without taking a record lock.
+  The Pi host's stdin loop no longer writes a shown notice's record itself, so a held lock
+  cannot stop it reading the close. A notice still locked when the host ends stays `held`, and
+  the next host pushes it again.
+  Claude and Codex hosts are unchanged.
+
+## 0.2.18 (compatible)
+
+- A Pi child that ends by itself before its first prompt, for example because a sandbox
+  tool is missing, now fails with `RUNTIME_START_FAILED`, and the message opens with
+  `Pi did not start:` and Pi's stderr (438). It used to read `RUNTIME_SHUTDOWN_FAILED`,
+  `Pi native stop is unconfirmed`. That stop is still not certified.
+- Esc on a running Claude host call no longer leaves that call's association prepared or
+  shows `agents context cleanup failed` (438). A later hook ends it. A failure outside the
+  interrupted hook is still shown, once.
+- The `invalid-model` error for a model off the list now says to list its id under
+  `models` of a connection in `config.yml` (438).
+- The README states what a reviewer's `allow` means for a Claude child with
+  `permission_mode: default`. `PUBLIC_API.md` warns that a `write` Pi child can read a token
+  held in a remote URL in the repository's `config` (438).
+
+## 0.2.17 (compatible)
+
+- A DSH child no longer leaves `dsh web` and `agent_swarm.mcp` running when the process
+  that owns it dies before closing it (436). Every `dsh web` now comes with one small
+  watcher process, with no inherited environment, that stops the process group if its
+  owner ends without closing it, and writes `stopped` or `could not stop` to the owner's
+  stderr: `host.log` in a Claude Code host. It keeps that stderr open until it ends,
+  about 15 seconds at most. A normal close behaves as before and writes nothing.
+- `agents host recorded its children stopped.` is no longer written while an Agent
+  started by an earlier host still has a running Runtime (436). The host names those
+  Agents in `host.log` instead. Its exit code does not change.
+
+## 0.2.16 (compatible)
+
+- A refused `reply` on a Claude child no longer makes the agents tool of a Pi, DSH or Codex
+  host stop answering (435). The call returns its failure at once, with the code and the
+  reason, and the request stays pending, so a reply in the right form still answers it. The
+  refusal now names the form: a `claude/can_use_tool` request takes `{"behavior": "allow"}`
+  or `{"behavior": "deny"}`. Any other unexpected failure while the channel handles a call,
+  including a result it cannot serialise, is also answered as an error, with the traceback
+  on the host's stderr.
+- `send` to a Claude child that refuses the input now records the delivery as `rejected`
+  and returns the Runtime's code and reason, as on Pi, Codex and DSH. It was recorded as
+  `unknown` (435).
+
+## 0.2.15 (compatible)
+
+- A DSH launch can name extra writable directories (428). `DshExecution` adds the
+  request's `additional_writable_roots` to the `sandbox-policy` row as DSH's own
+  `additionalWritableRoots`. A launch that names none, which includes every independent
+  DSH child, writes the same row as before. The package does not choose these
+  directories; GraphTraj's member launch does, which is why GraphTraj now needs this
+  version.
+
+## 0.2.14 (compatible)
+
+- The Codex install note's example could leave the parent using Codex's own `spawn_agent`,
+  with `operations: []` and a last message saying the child had answered (432). The
+  example now gives the literal `create` and `wait` calls and excludes `spawn_agent`. The
+  `agents` tool description says what it is for, and `agent_swarm.codex.host` adds a
+  passage after the parent's `developerInstructions` naming `agents` as the way to make
+  children. Children's settings are unchanged, and Codex's native tools stay available.
+- A Codex host run now shows when a child did not come through `agents` (432). Stderr ends
+  with `{"run_summary": {"agents_calls": N, "native_subagents": M}}`, with a note when N is
+  0. A `collabAgentToolCall` `spawnAgent` item prints one `{"native_subagent": ...}` line and
+  adds an entry to the new `native_subagents` in `--output` and `CodexHost.run`. stdout and
+  the exit status are unchanged: a native subagent is not a failure. Which tool the model
+  chooses can only be observed in a real run, and no real run has yet shown that item.
+- The Claude Code, DSH and Pi install notes' examples now name the `agents` tool (432).
+  This is the same wording risk; no bypass was seen on those hosts.
+
+## 0.2.13 (compatible)
+
+- A DSH connection that names no `api_key_env`, beside a reviewer whose `api_key_env` is
+  `DEEPSEEK_API_KEY`, is now refused at `create` with `ROLE_CONFIG_INVALID` when no key
+  file of the child's own exists (430). The child never receives the reviewer's key and
+  DSH's default key is that same variable, so such a child could only fail at start with
+  `session/model-unavailable`. The message names the reviewer, the variable and the fixes.
+  A file that exists but holds no DeepSeek key still fails at start, because it is not read.
+- A Pi connection with no `api_key_env`, beside a reviewer whose key is the only one that
+  authenticates its model, is now refused at `create` with `invalid-config` (430). Such a
+  child could only fail at its first prompt with `No API key found`. `create` asks Pi's own
+  model listing with and without the reviewer's variable, so no credential is read and a
+  login in the connection's home is not refused. The message names the reviewer, the
+  variable, the provider and the fixes.
+
+## 0.2.12 (compatible)
+
+- A Codex parent no longer receives one child answer twice when its `wait` or `status`
+  meets the host event carrying that answer (431). While the event is on its way, or a
+  held end is being sent on `--resume`, these results show `notification: queueing` and
+  `last_message: null`, as on the Pi and DSH hosts. An event that could not be written
+  leaves the end `held`, so the next `status` or `--resume` still gives the answer.
+
+## 0.2.11 (compatible)
+
+- A Pi child with `worktree_access: write` can now commit in a linked worktree (429). It
+  had write access to the Git common directory but could not read it, and Git also stopped
+  on the `~/.gitconfig` the sandbox denies. The child now reads that directory, so it can
+  read every branch's objects and refs, other worktrees' Git metadata and the repository's
+  `config` and `hooks`, but no other worktree's working files. Its environment sets
+  `GIT_CONFIG_GLOBAL` to the null device and carries the `user.name` and `user.email` the
+  host's Git reports, as the `GIT_AUTHOR_*` and `GIT_COMMITTER_*` variables. Without a value
+  no variable is added, and Git reports the missing identity. A `read` child is unchanged.
+
 ## 0.2.10 (compatible)
 
 - A resumed Claude Session with a full archive no longer raises `Unresolved observations

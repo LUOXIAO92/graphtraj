@@ -15,7 +15,7 @@ from typing import Awaitable, Callable
 
 from graphtraj import file_lock
 from agent_swarm.sessions import CodexJsonlArchive
-from graphtraj.interfaces.agents import configured_archive, graphtraj_fields
+from graphtraj.interfaces.agents import archive_project, configured_archive, graphtraj_fields
 from graphtraj.configuration.project_configuration import load_project_configuration
 from graphtraj.execution.runner_models import RunnerError
 from graphtraj.execution.runner_status import caller_alias
@@ -150,7 +150,7 @@ async def run_main(
             archive = configured_archive(root)
             adapter.retain_native_trace(session, record / 'events.jsonl', archive=CodexJsonlArchive(
                 archive, session.thread_id, session.rollout_path, new_session=resume is None,
-                extra_fields=graphtraj_fields(str(archive.root), 'main'),
+                extra_fields=graphtraj_fields(archive_project(archive), 'main'),
             ))
             execution = await adapter.start_execution(session, instruction)
             result = await adapter.wait(execution)

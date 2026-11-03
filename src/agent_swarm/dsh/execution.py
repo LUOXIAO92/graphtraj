@@ -19,7 +19,8 @@ from agent_swarm.approval import REVIEW_METHOD, review_failed
 from agent_swarm.review import build_request, record_decision, review_call
 from .service import DshService, redact_native, secret_values
 from .errors import DshError
-from .settings import AMBIENT_ENDPOINTS, credential_environment, resumes_by_address
+from agent_swarm.child_env import child_environment
+from .settings import _DEFAULT_KEY_ENV, AMBIENT_ENDPOINTS, credential_environment, resumes_by_address
 
 
 # DSH's shipped profile patches carry `!!js` expressions (for example the
@@ -28,8 +29,6 @@ from .settings import AMBIENT_ENDPOINTS, credential_environment, resumes_by_addr
 _JS_TAG = 'tag:yaml.org,2002:js'
 _WEB_APP_BUNDLE = Path('node_modules') / '@deepseek-ai' / 'dsh-web-app'
 _PERSONA_PLUGIN = '@deepseek-ai/dsh-persona'
-# The variable DSH's Messages route and its web rows read when none is named.
-_DEFAULT_KEY_ENV = 'DEEPSEEK_API_KEY'
 # The review row's mark on its asks (review.mjs): a displayReason key, which only
 # in-process code sets. Text a model writes reaches its values, never a key.
 REVIEW_MARKER = 'agents-review'
@@ -237,7 +236,11 @@ class DshExecution:
         patches = [
             {'id': 'hmr', 'disabled': True},
             {'id': 'session-persistence-jsonl', 'config': {'root': str(self.logs), 'compression': 'none'}},
-            {'id': 'sandbox-policy', 'config': {'mode': mode, 'workspaceRoot': self.request['worktree_path']}},
+            {'id': 'sandbox-policy', 'config': {
+                'mode': mode, 'workspaceRoot': self.request['worktree_path'],
+                **({'additionalWritableRoots': self.request['additional_writable_roots']}
+                   if self.request.get('additional_writable_roots') else {}),
+            }},
             {'id': 'permission', 'config': {
                 'presets': {mode: {'sandbox': mode, 'approval': 'ask'}}, 'defaultPreset': mode,
             }},
@@ -274,11 +277,10 @@ class DshExecution:
         if preset is not None:
             patches.append(preset)
         (profile / 'cordis.patch.yml').write_text(_dump_profile_patches(patches), encoding='utf-8')
-        environment = {**os.environ, **credentials}
-        review_key = (self.request.get('review') or {}).get('api_key_env')
-        if review_key and review_key != key:
-            # The reviewer's key stays with this host, away from the child it judges.
-            environment.pop(review_key, None)
+        environment = child_environment(
+            os.environ, api_key_env=key, defaults=() if key else (_DEFAULT_KEY_ENV,),
+            declared=self.request.get('pass_env', ()), review_key=(self.request.get('review') or {}).get('api_key_env'))
+        environment.update(credentials)
         environment.update({
             'DSH_AGENT_PACKAGE': self.request['package'],
             'DSH_HOME': self.request.get('runtime_home') or str(home), 'DSH_PERMISSION_MODE': mode, 'NO_COLOR': '1',
@@ -673,7 +675,8 @@ class DshExecution:
                         reason = self.end.get('reason', {})
                         if reason.get('kind') != 'completed':
                             raise self.error_type('RUNTIME_EXECUTION_FAILED', _turn_failure(
-                                reason, environment, self.request.get('api_key_env')))
+                                # The host's names too: redaction covers more than a child now holds.
+                                reason, {**os.environ, **environment}, self.request.get('api_key_env')))
                         # Close input admission atomically with quiescence so a
                         # racing send cannot get a receipt after work finished.
                         self.active = False

@@ -23,9 +23,10 @@ import uuid
 
 import tempfile
 
-from agent_swarm.models import write_key_reference
+from agent_swarm.models import pi_default_keys, write_key_reference
 from agent_swarm.approval import REVIEW_METHOD, review_failed
 from agent_swarm.review import build_request, record_decision, review_call
+from agent_swarm.child_env import child_environment
 from agent_swarm.runtime import RuntimeAdapterError, SessionStarted, credential_environment
 
 
@@ -98,6 +99,7 @@ class PiExecution:
         self.unseen_lock = threading.Lock()
         self.stderr_reader: threading.Thread | None = None
         self.startup_terminal_confirmed = False
+        self.start_failed = False
         self.independent = True
         self.archive = None
         # Header ``extra_fields`` for a Session this execution archives first.
@@ -297,6 +299,10 @@ class PiExecution:
             (agent / 'models.json').write_text(json.dumps({'providers': {provider: custom}}), encoding='utf-8')
         git = request.get('git_common_directory')
         if request['worktree_access'] == 'write':
+            # Git cannot open a linked worktree's admin directory, objects or
+            # refs without reading them. Only this directory: no project root,
+            # primary checkout or sibling worktree.
+            read.append(git)
             write.extend((str(worktree), git))
         write.extend(request.get('write_paths', ()))
         read.extend(request.get('read_paths', ()))
@@ -366,21 +372,28 @@ class PiExecution:
             argv += ['--thinking', request['reasoning_effort']]
         spec = self.directory / 'pi-process.json'
         spec.write_text(json.dumps({'policy': str(policy_file), 'argv': argv}), encoding='utf-8')
-        env = dict(os.environ)
+        named = request.get('api_key_env')
+        env = child_environment(
+            os.environ, api_key_env=named,
+            defaults=() if named or request.get('base_url') else pi_default_keys(
+                request['executable'], str(source), provider, request['model']),
+            declared=request.get('pass_env', ()), review_key=(request.get('review') or {}).get('api_key_env'))
         # Do not forward Runner bookkeeping as model-declared authority. The only
         # child operation address is authenticated by the existing hosted CLI.
         for key in tuple(env):
             if (key.startswith(('GRAPHTRAJ_', 'AGENT_SWARM_', 'AGENTS_'))
                     or key in {'DSH_SESSION_ID', 'DSH_AGENT_SOURCE'}):
                 del env[key]
-        review_key = (request.get('review') or {}).get('api_key_env')
-        if review_key and review_key != request.get('api_key_env'):
-            # The reviewer's key stays with this host, away from the child it judges.
-            env.pop(review_key, None)
-        env.update(credential_environment(request.get('api_key_env')))
+        env.update(credential_environment(named))
         env.update({'PATH': child_path(request['sandbox_path']),
                     'PI_CODING_AGENT_DIR': str(agent),
                     'PI_ASB_NO_ALIAS_PROMPT': '1'})
+        if request['worktree_access'] == 'write':
+            # The sandbox denies the Home, and Git dies on a global config it may
+            # not read. That file is never granted: it can hold tokens and name
+            # further denied paths. The identity it usually holds comes from here.
+            env['GIT_CONFIG_GLOBAL'] = os.devnull
+            env.update(_git_identity(worktree))
         if address is not None:
             env.update(self.connection_environment(address))
         if self.review_title is not None:
@@ -553,6 +566,9 @@ class PiExecution:
                             return self._result('interrupted' if self.stopping.is_set() or native_aborted else 'completed', last)
             finally:
                 original_error = sys.exc_info()[1]
+                # Pi ended by itself before any prompt: the launch failed, nobody stopped it.
+                self.start_failed = (self.proc is not None and self.transport_closed.is_set()
+                                     and not self.prompt_started and not self.stopping.is_set())
                 # Native abort owns tools/queues. Closing the transport and reaping
                 # this exact process follows it, and never targets another Session.
                 native_idle = self.outcome is not None
@@ -653,15 +669,18 @@ class PiExecution:
             details += f' Native process exit: {self.proc.poll()}.'
         # Startup stderr is otherwise unreachable when no Session mapping could
         # be bound. Do not expose older executions or task-generated stderr.
+        diagnostic = ''
         if not self.prompt_started:
             try:
                 with (self.directory / 'stderr.log').open('rb') as stream:
                     stream.seek(stderr_offset)
-                    diagnostic = stream.read(8192).decode('utf-8', errors='replace')
-                if diagnostic.strip():
-                    details += '\nStartup stderr: ' + diagnostic.strip()
+                    diagnostic = stream.read(8192).decode('utf-8', errors='replace').strip()
+                if diagnostic and not self.start_failed:
+                    details += '\nStartup stderr: ' + diagnostic
             except OSError:
                 details += ' Startup stderr unavailable.'
+        if self.start_failed and diagnostic:
+            details = f'Pi did not start: {diagnostic}\n{details}'
         for name, value in os.environ.items():
             if value and (name == self.request.get('api_key_env')
                           or any(part in name.upper() for part in ('KEY', 'TOKEN', 'SECRET', 'PASSWORD', 'CREDENTIAL'))):
@@ -669,7 +688,8 @@ class PiExecution:
         details = re.sub(r'(?i)(bearer\s+)[^\s"\']+', r'\1[REDACTED]', details)
         details = re.sub(r'(https?://)[^\s/@]+:[^\s/@]+@', r'\1[REDACTED]@', details)
         details = re.sub(r'(https?://[^\s?]+)\?[^\s]+', r'\1?[REDACTED]', details)
-        return RuntimeAdapterError('RUNTIME_SHUTDOWN_FAILED', details, terminal_confirmed=False)
+        return RuntimeAdapterError('RUNTIME_START_FAILED' if self.start_failed else 'RUNTIME_SHUTDOWN_FAILED',
+                                   details, terminal_confirmed=False)
 
     def _result(self, outcome: str, last: str | None) -> dict:
         """Publish a terminal result only after native idle and empty queue."""
@@ -889,6 +909,26 @@ def _write_yaml(path: Path, document: dict) -> None:
         raise
 
 
+def _git_identity(worktree: Path) -> dict[str, str]:
+    """Return Git's author and committer variables for the identity the host sees.
+
+    A value that is unset, or that Git cannot report, adds no variable, so Git
+    names the missing identity itself; none is invented here.
+    """
+    identity = {}
+    for field, suffix in (('user.name', 'NAME'), ('user.email', 'EMAIL')):
+        try:
+            found = subprocess.run(['git', '-C', str(worktree), 'config', field],
+                                   capture_output=True, timeout=10)
+        except (OSError, subprocess.SubprocessError):
+            continue
+
+        value = os.fsdecode(found.stdout).strip()
+        if found.returncode == 0 and value:
+            identity.update({'GIT_AUTHOR_' + suffix: value, 'GIT_COMMITTER_' + suffix: value})
+    return identity
+
+
 def _validate(request: dict) -> None:
     """Refuse a launch request whose fields have the wrong type, naming the field."""
     def invalid(field: str, expected: str) -> RuntimeAdapterError:
@@ -907,7 +947,7 @@ def _validate(request: dict) -> None:
         paths = request.get(field, [])
         if not isinstance(paths, list) or any(not isinstance(p, str) or not Path(p).is_absolute() for p in paths):
             raise invalid(field, 'a list of absolute paths')
-    for field in ('allowed_domains', 'allow_mach_lookup', 'allow_mach_register', 'allow_unix_sockets'):
+    for field in ('allowed_domains', 'allow_mach_lookup', 'allow_mach_register', 'allow_unix_sockets', 'pass_env'):
         values = request.get(field, [])
         if not isinstance(values, list) or any(not isinstance(v, str) or not v for v in values):
             raise invalid(field, 'a list of nonempty strings')

@@ -145,7 +145,7 @@ class CodexManagedExecution(NativeCodexExecution):
         ``extra_fields.graphtraj``. A Runner execution with a creation callback
         uses the project archive and its mapped Task.
         """
-        from graphtraj.interfaces.agents import configured_archive, graphtraj_fields
+        from graphtraj.interfaces.agents import archive_project, configured_archive, graphtraj_fields
 
         request = restore_codex_context(request, context_evidence).launch_document()['adapter_request']
         if expected_session and not independent:
@@ -157,7 +157,7 @@ class CodexManagedExecution(NativeCodexExecution):
 
                 archive = configured_archive(discover_project_root(Path(request['worktree_path'])))
         if archive is not None:
-            extra_fields = graphtraj_fields(str(archive.root), session_directory.name, (), extra_fields)
+            extra_fields = graphtraj_fields(archive_project(archive), session_directory.name, (), extra_fields)
         super().__init__(request, prompt, session_directory, session_started, context_evidence,
                          trace_file, expected_session, session_created,
                          connection=connection, agent_call=agent_call,

@@ -11,7 +11,13 @@ from graphtraj.configuration.project_configuration import (
     configuration_exists,
     load_project_configuration,
 )
-from graphtraj.configuration.project_roles import ProjectRolesError, load_project_roles, roles_exist
+from graphtraj.configuration.project_roles import (
+    ProjectRoles,
+    ProjectRolesError,
+    load_project_roles,
+    resolve_preset,
+    roles_exist,
+)
 
 
 def _doctor_harness_root(cwd: Path) -> Path:
@@ -42,6 +48,25 @@ class ProjectDiagnosis:
         return not self.role_diagnostics
 
 
+def _claude_launch_diagnostics(roles: ProjectRoles) -> Tuple[str, ...]:
+    """Report the refusal a Claude role's launch would hit, starting nothing."""
+    from graphtraj.runtimes.claude.adapter import check_role_settings
+    from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError
+
+    diagnostics = []
+    for reference, preset in roles.presets.items():
+        try:
+            # A connection role names its Runtime only once it resolves.
+            settings = resolve_preset(preset)
+            if settings.runtime == "claude":
+                check_role_settings(settings)
+        except RuntimeAdapterError as error:
+            diagnostics.append("{0}: {1}".format(reference, error.message))
+        except ProjectRolesError as error:
+            diagnostics.extend("{0}: {1}".format(reference, item) for item in error.diagnostics)
+    return tuple(diagnostics)
+
+
 def diagnose_project(cwd: Path) -> ProjectDiagnosis:
     """Check configuration and roles without mutation or Skill discovery.
 
@@ -58,7 +83,7 @@ def diagnose_project(cwd: Path) -> ProjectDiagnosis:
     diagnostics = ()
     if roles_checked:
         try:
-            load_project_roles(harness_root)
+            diagnostics = _claude_launch_diagnostics(load_project_roles(harness_root))
         except ProjectRolesError as error:
             diagnostics = error.diagnostics
     return ProjectDiagnosis(roles_checked, diagnostics)

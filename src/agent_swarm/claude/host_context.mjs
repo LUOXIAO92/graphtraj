@@ -79,11 +79,27 @@ function startPush($, state) {
 }
 
 function schedulePush($, state) {
-  const run = () => pushNotices($, state).finally(() => schedulePush($, state));
+  const run = () => retryEnds($, state).then(() => pushNotices($, state))
+    .finally(() => schedulePush($, state));
   try {
     $.clock.setTimeout(run, 5000);
   } catch {
     setTimeout(run, 5000);
+  }
+}
+
+// Esc aborts the host calls of the interrupted hook, so its per-call end cannot
+// run there. Later hooks end it; only a failure outside that hook is shown.
+async function retryEnds($, state) {
+  for (const ending of state.ends.splice(0)) {
+    try { await context($, ending); }
+    catch (error) {
+      state.ends.push(ending);
+      if (!state.endFailureShown) {
+        state.endFailureShown = true;
+        try { await $.ui.log('agents context cleanup failed: ' + String(error)); } catch {}
+      }
+    }
   }
 }
 
@@ -136,7 +152,7 @@ function callRequest(event) {
 
 export function register(on) {
   const displayed = new Set();
-  const state = {active: 0, pushing: false, inflight: false, stopped: false, pushed: false, pushError: null};
+  const state = {active: 0, pushing: false, inflight: false, stopped: false, pushed: false, pushError: null, ends: []};
 
   on('session.start', async ($, event, next) => {
     await $.command.register({name: 'agents-context',
@@ -181,8 +197,10 @@ export function register(on) {
       } catch (error) {
         return {deny: String(error)};
       } finally {
-        try { if (ending.session) await context($, ending); }
-        catch (error) { $.ui.log('agents context cleanup failed: ' + String(error)); }
+        try {
+          if (ending.session) await context($, ending);
+          await retryEnds($, state);
+        } catch { state.ends.push(ending); }
         state.active -= 1;
         // Re-check at once: a notice queued during the calls need not wait a tick.
         if (state.pushing) pushNotices($, state);
@@ -207,7 +225,7 @@ export function register(on) {
   }
 
   on('session.end', async ($, event, next) => {
-    try { await context($, {operation: 'end'}); }
+    try { await context($, {operation: 'end'}); state.ends = []; }
     catch (error) { $.ui.log('agents context cleanup failed: ' + String(error)); }
     return next(event);
   });

@@ -73,7 +73,7 @@ def validate_catalog(document: object) -> dict:
         ):
             raise ValueError('Runtime home must be an absolute directory path.')
         for provider_id, provider in entries(runtime['providers']).items():
-            fields(provider, {'base_url', 'api_key_env', 'api', 'models'}, {'models'})
+            fields(provider, {'base_url', 'api_key_env', 'pass_env', 'api', 'models'}, {'models'})
             endpoint = provider.get('base_url')
             if endpoint is not None:
                 if not isinstance(endpoint, str):
@@ -87,6 +87,11 @@ def validate_catalog(document: object) -> dict:
             env = provider.get('api_key_env')
             if env is not None and (not isinstance(env, str) or not ENV_NAME.fullmatch(env)):
                 raise ValueError('api_key_env must be an environment variable name.')
+            passed = provider.get('pass_env', [])
+            if not isinstance(passed, list) or any(
+                not isinstance(name, str) or not ENV_NAME.fullmatch(name) for name in passed
+            ):
+                raise ValueError('pass_env must list environment variable names.')
             if kind == 'codex' and env and not endpoint and provider_id != 'openai':
                 raise ValueError('A Codex native provider key override requires its explicit Base URL.')
             api = provider.get('api')
@@ -168,6 +173,7 @@ def resolve_connection(reference: str, effort: str | None) -> dict:
                          and not os.environ.get(variable) else str(Path(home).resolve())),
         'runtime_provider': provider_id,
         'base_url': provider.get('base_url'), 'api_key_env': provider.get('api_key_env'),
+        'pass_env': tuple(provider.get('pass_env', ())),
         'provider_api': provider.get('api'), 'connection_revision': revision,
         'model_source': model['source'],
     }

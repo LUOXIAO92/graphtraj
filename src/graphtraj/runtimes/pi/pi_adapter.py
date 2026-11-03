@@ -201,7 +201,8 @@ class PiRuntimeAdapter:
             if any(path.is_relative_to(p.resolve()) or p.resolve().is_relative_to(path) for p in protected):
                 raise RuntimeAdapterError('RUNTIME_ACCESS_DENIED', 'A Pi resource grant would expose private control/history.')
         if state.resolve().is_relative_to(worktree.resolve()):
-            raise RuntimeAdapterError('RUNTIME_ACCESS_DENIED', 'Pi needs a Worktree outside private state.')
+            raise RuntimeAdapterError('RUNTIME_ACCESS_DENIED', 'Pi needs a Worktree outside private state: '
+                                      f'assign the child a `workspace` that does not contain {state}.')
         request = {
             'worktree_path': str(worktree), 'harness_root': str(harness_root),
             'git_common_directory': str(git_common_directory), 'evidence': str(evidence),
@@ -209,6 +210,7 @@ class PiRuntimeAdapter:
             'provider': 'graphtraj-role' if settings.base_url else provider,
             'model': model, 'reasoning_effort': reasoning,
             'api_key_env': settings.api_key_env, 'version': version,
+            **({'pass_env': list(settings.pass_env)} if settings.pass_env else {}),
             'base_url': settings.base_url, 'provider_api': settings.provider_api,
             'connection': settings.connection,
             'connection_revision': settings.connection_revision,

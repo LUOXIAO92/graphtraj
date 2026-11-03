@@ -1006,9 +1006,18 @@ def test_reviewer_key_that_is_the_childs_own_stays(tmp_path, native, endpoint, c
     assert 'REVIEW_KEY' in child_environment()
 
 
-def test_without_review_the_child_environment_is_unchanged(tmp_path, native, endpoint, child_environment):
-    """A declared but unused reviewer removes nothing."""
+def test_without_review_an_unrelated_key_still_stays_out(tmp_path, native, endpoint, child_environment):
+    """Since 433 any key not the child's stays out, reviewer or not; declaring it brings it back."""
     control = keyed_control(tmp_path, native, '')
+    created, failed = call(control, action='create', runtime='codex', instruction='plain turn')
+    assert not failed, created
+    finished(control, created['agent'])
+    assert 'REVIEW_KEY' not in child_environment()
+
+
+def test_without_review_a_declared_key_reaches_the_child(tmp_path, native, endpoint, child_environment):
+    """A connection declaring the same variable, with no reviewer, receives it."""
+    control = keyed_control(tmp_path, native, '    pass_env: [REVIEW_KEY]\n')
     created, failed = call(control, action='create', runtime='codex', instruction='plain turn')
     assert not failed, created
     finished(control, created['agent'])

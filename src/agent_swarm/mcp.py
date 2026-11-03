@@ -312,7 +312,10 @@ def serve_concurrent(input_stream: TextIO, output_stream: TextIO,
 
 def tool_documents() -> list[dict]:
     """Expose only the lightweight agents entry."""
-    return [{'name': 'agents', 'description': 'Discover, describe, or execute an Agent feature.',
+    return [{'name': 'agents',
+             'description': "Create and control child Agents. These children are in agents' hierarchy, approvals "
+                            "and records; a host's own subagents are not. Discover, describe, or execute an "
+                            'Agent feature.',
              'inputSchema': INPUT_SCHEMA}]
 
 

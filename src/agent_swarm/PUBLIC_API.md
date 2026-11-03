@@ -96,6 +96,24 @@ notes (`install/`) are public with their documented flags:
   (the DSH codes in section 2), a `pi` entry as below, and whatever
   `AgentControl.require_connections()` refuses. On a startup error it prints
   `{"error": {"code", "message"}}` and exits `1`.
+- Since 0.2.14 this host adds a fixed passage after the parent's
+  `developerInstructions`, on `thread/start` and `thread/resume`, naming the `agents`
+  tool as how it creates and controls children and Codex's own `spawn_agent` as for when
+  the user names it. Children's settings are unchanged and no native tool is removed.
+  Which tool the model chooses can only be observed in a real run. The output shows it:
+  - `run_summary`: once a Session has started, `main` prints
+    `{"run_summary": {"agents_calls": N, "native_subagents": M}}` on stderr at the end of
+    the run, whether it succeeded or raised, with a `note` when `N` is 0. `N` counts the
+    entries of `operations`, so `discover` and `describe` do not count. It is the last
+    stderr line, except that a `stop-unconfirmed` line, and its traceback when one is
+    unwinding, comes after it. A refused start has none.
+  - `native_subagents`: in `--output` and the result of `CodexHost.run`, one entry `{"id",
+    "sender_thread", "receiver_threads", "status", "model"}` per `collabAgentToolCall` item
+    with tool `spawnAgent` seen on `item/started` or `item/completed`, in its latest state
+    and without its prompt. The first sighting prints `{"native_subagent": {..., "note"}}` on
+    stderr, after `parent_session`. Codex 0.164.0's protocol schema documents this item, but
+    no real run has shown it yet, so an empty list does not prove `spawn_agent` was unused.
+  A native subagent is not a failure: stdout and the exit status stay as they were.
 - A `runtimes.pi` entry of the Claude Code and Codex hosts (since 0.2.1) lets
   that host start Pi children without any GraphTraj Task. Its fields are the
   table *Pi child defaults* in 1.6, except `worktree_path`, which is the
@@ -313,7 +331,8 @@ Parts for building a host or a consumer on agents (since 0.2.2), also in
   `run_stoppable` wait, `stop_requested` asks, `on_discard` registers cleanup
   and `CallCancelled` is raised when the caller cancels or goes away;
 - the owner connection, the authenticated local file transport of 1.1:
-  `worker_connection` serves it, `connection_operation` exchanges one document
+  `worker_connection` serves it (`close_seconds`, since 0.2.19, caps how long its
+  close waits; the default waits as before), `connection_operation` exchanges one document
   over it, `record_lock_owner` proves a lock's owning process,
   `client_native_context` reads the caller's native Session facts and
   `verify_native_context` compares them with what the host expects;
@@ -333,7 +352,8 @@ Parts for building a host or a consumer on agents (since 0.2.2), also in
   root (1.5);
 - Runtime executions: `RuntimeAdapterError`, the protocols `RuntimeContext` and
   `RuntimeTurn`, `RuntimeExecutionResult`, `SessionStarted`,
-  `credential_environment`.
+  `credential_environment`, `child_environment`, `is_credential_name`, `CODEX_SHELL_EXCLUDE`
+  (section 3.1).
 
 Host shutdown (section 4, since 0.2.4), also in `agent_swarm.__all__`:
 `stop_owned(control)` interrupts what this process runs on one 10-second deadline
@@ -393,7 +413,7 @@ passes to `PiArchive` as `private_paths`.
 **`AgentControl` methods.** Besides `operate` (`bind`'s entry) a host may call
 `create`, `send`, `resume`, `interrupt`, `wait`, `requests`, `reply`,
 `ask_parent`, `retire`, `select`, `require_connections`, `hierarchy`,
-`reference_hint`, `interrupt_owned`, `owns_running`, `unconfirmed_ends`,
+`reference_hint`, `interrupt_owned`, `visible_agents`, `owns_running`, `unconfirmed_ends`,
 `registration(agent)` (`{"host", "parent", "settings"}` of an Agent the host
 recorded, or `None` for a missing or unreadable record; it checks no caller),
 `confirm_ended(agent, caller, *, by=None)` (`by` is the identity recorded as
@@ -442,12 +462,21 @@ way.
   the default. A value inside the configuration's `cwd`, when that differs from
   `project`, goes to the same relative place under `project`. It raises the same
   `ValueError`.
+- `hook_source(event, cwd, *, native_id=None)` validates one native hook event and
+  `collect_hook_event(archive, event, cwd, *, extra_fields=None, native_id=None)`
+  (`native_id` since 0.2.20) collects its transcript under `cwd`. A host that owns
+  the Session's channel passes `native_id`: the event must name that Session and its
+  cwd is not compared, because a Bash `cd` moves it. Without `native_id`, the event's
+  cwd must equal `cwd`. Either refusal raises `ValueError`.
 - `NativeCalls(make_call, cwd, runner=None, tools=())` associates each native
   call with its Claude Session for the host. `make_call(session, cwd)` returns
   `call(tool, request)`, which returns an `AgentsResult`. The host passes
   `NativeCalls.context` as the receiver of its context channel and calls
   `NativeCalls.call(request, tool)` when the MCP server receives `tools/call`.
-  Preparing a tool that was not declared fails with `invalid-input`.
+  Preparing a tool that was not declared fails with `invalid-input`. The native
+  cwd may be `cwd` or a directory inside it, and `make_call` always receives
+  `cwd`. A native cwd outside `cwd` fails with `authority-denied`, and the message
+  names both directories.
 
 A declared tool gets the behaviour of `agents`, except the display: each native
 call has its own association, overlapping calls each end only their own, one
@@ -574,7 +603,20 @@ directory, the running Python and installed packages and the linked native
 Home files; writes only its native directory, the connection socket and (for
 `write`) the worktree and Git common directory; denies reading `agent_dir` and
 the agents data root, and writing `agent_dir`, the Python prefix, the
-packages and `<git_common_directory>/config` and `hooks`. The only domains are
+packages and `<git_common_directory>/config` and `hooks`. A `write` child also
+reads the Git common directory, so it can commit in its worktree. That directory
+is shared: the child can read every branch's objects and refs, other worktrees'
+Git metadata under `<git_common_directory>/worktrees`, and the repository's
+`config` and `hooks`, but no other worktree's working files and not the primary
+checkout's. That `config` can hold a token inside a remote URL, and the child can then
+read it, so keep tokens out of remote URLs on a repository a `write` child works in. A
+`write` child's environment sets `GIT_CONFIG_GLOBAL` to the null
+device, because the sandbox denies the Home and `~/.gitconfig` is never granted.
+Its identity is what `git config user.name` and `user.email` report in the
+worktree before launch, passed as `GIT_AUTHOR_NAME`, `GIT_COMMITTER_NAME`,
+`GIT_AUTHOR_EMAIL` and `GIT_COMMITTER_EMAIL`. A value that is unset adds no
+variable, and Git then reports the missing identity itself. A `read` child gets
+none of this. The only domains are
 `allowed_domains` plus the `base_url` host or `provider_domain`. A field of the
 wrong type fails with `ROLE_CONFIG_INVALID` naming the field. An `api_key_env`
 variable stays in the child's environment, where same-account processes and the
@@ -739,7 +781,8 @@ connection's home. When a Pi selection changes the provider, model, home or
 key, the driver reads the model's network destination from Pi's catalog in
 the selected home and fails with `invalid-config` if Pi exposes no plain
 http(s) destination; another provider or a selected connection drops the
-host's `api_key_env`, `base_url` and `provider_api`. Claude has no native
+host's `api_key_env`, `base_url` and `provider_api`. A reviewed Pi connection
+whose only key is the reviewer's is refused the same way (section 6). Claude has no native
 provider setting, so a Claude connection's `provider` only names its models.
 
 **Several Runtimes in one host.** A host registers one driver per Runtime in
@@ -776,6 +819,10 @@ the Claude Code and Codex hosts call at start) refuses:
   required (installed <version or unknown>).`.
 - A missing `model` or `sandbox`: `ROLE_CONFIG_INVALID`.
 - An unset `api_key_env`: `RUNTIME_CREDENTIAL_MISSING`.
+- A create with no `api_key_env` whose reviewer's `api_key_env` is `DEEPSEEK_API_KEY`,
+  when none of the child's own key files exists: `ROLE_CONFIG_INVALID`, naming the
+  reviewer, the variable and the fixes (section 6, Pi and DSH adapters). Those files
+  are `<cwd>/.env` and, in a declared `home`, `.credentials.yaml` and `.env`.
 
 The child's endpoint comes only from `base_url` in the connection or settings,
 else DSH's official root. `DEEPSEEK_BASE_URL` and `DEEPSEEK_SEARCH_BASE_URL` in
@@ -793,7 +840,10 @@ because its fixed official address is not in the connection. An endpoint that do
 not serve native search then gives a search error naming the endpoint, rather than
 official search. A connection with any other key variable, or with no `base_url` or
 an official one, leaves search at DSH's official root with `DEEPSEEK_API_KEY`: to
-keep official search beside a gateway, name the gateway's key in another variable.
+keep official search beside a gateway, name the gateway's key in another variable and
+declare `pass_env: [DEEPSEEK_API_KEY]` on the connection (section 3.1). Without that
+declaration a connection naming another key has no key for official search; a connection
+naming none, or naming `DEEPSEEK_API_KEY`, needs no declaration.
 
 A turn that ends other than `completed` fails the execution with
 `RUNTIME_EXECUTION_FAILED`. When the native reason carries an error, the message
@@ -884,6 +934,7 @@ this file.
 ```yaml
 save_normalized_sessions: false     # boolean, default false
 backfill_history: false             # boolean, default false
+pass_env: [GH_TOKEN]                # optional: the same for a child with no connection (3.1)
 connections:                        # optional
   work-claude:                      # name: any non-empty string
     runtime: claude                 # required: claude, codex, pi or dsh
@@ -891,6 +942,7 @@ connections:                        # optional
     provider: anthropic             # optional native provider
     base_url: https://host/v1       # optional, http(s) without credentials, query or fragment
     api_key_env: WORK_KEY           # optional: the NAME of an environment variable, never a key
+    pass_env: [GH_TOKEN]            # optional: more variables' NAMES this child receives (3.1)
     review: local-review            # optional: this connection's reviewer (section 6)
     models:                         # optional candidates; omitted: native discovery
       - claude-opus-5-5             # an id, or
@@ -937,10 +989,100 @@ argument, not from this file.
   `<file>:<line>: <field>: ...`; `create` reports it as `invalid-config`.
 - `read_connections(root)` returns `{"connections": {name: entry},
   "presets": {name: entry}}`, plus `"reviewers": {name: entry}` when the file
-  declares any; each entry is the file's fields plus `name`.
+  declares any and `"pass_env": [name]` when it declares that; each entry is the
+  file's fields plus `name`.
 - `write_config` and `default_config` replace only the boolean lines and keep
   every other line, including connections, presets and comments.
 - A file that holds only boolean lines is read exactly as before 0.1.1.
+
+### 3.1 What a child's environment holds (433)
+
+A child's Runtime starts from `agent_swarm.child_environment(parent, *, api_key_env,
+defaults, declared, review_key)`, on every launch and resume of all four Runtimes and of
+GraphTraj's Runner members. In order: the host's environment; credential-class names
+removed; the child's own keys added; the declared names added; then the reviewer's key
+removed, unless the connection names it as its own `api_key_env`. So declaring a
+reviewer's key in `pass_env` does not hand it over. A name the host does not have stays
+absent. Ordinary variables such as `PATH` and `HOME` are unchanged.
+
+This is not a review rule: nothing forbids or detects a model reading its environment.
+It only does not hand a child keys unrelated to its connection.
+
+**Credential-class names** (`agent_swarm.is_credential_name(name)`). Ignoring case, split
+the name on `_`; it is a credential when any part ends in `KEY`, `TOKEN`, `SECRET`,
+`SECRETS`, `PASSWORD`, `CREDENTIAL` or `CREDENTIALS`. `GIT_CONFIG_KEY_<n>` is excepted: Git
+fails without it when `GIT_CONFIG_COUNT` is set.
+
+| Differences from the redaction markers | Redaction (substring, unchanged) | This rule |
+| --- | --- | --- |
+| `TOKENIZERS_PARALLELISM`, `KEYBOARD_LAYOUT` | redacted | ordinary |
+| `CLAUDE_CODE_MAX_OUTPUT_TOKENS`, `MAX_THINKING_TOKENS` | redacted | ordinary: `TOKENS` is not a marker |
+| `GIT_CONFIG_KEY_0` | redacted | ordinary |
+| `PGPASSWORD`, `APIKEY`, `HF_TOKEN` | redacted | credential |
+
+Redaction may over-match because hiding text costs little; removing a variable breaks
+what uses it, so this rule compares parts. It also over-matches rarely (`MONKEY`,
+`PASSWORD_STORE_DIR`); declare such a name.
+
+**A name rule has gaps.** It does not catch: a URL holding a credential
+(`DATABASE_URL`, `HTTP_PROXY`); a value in `GIT_CONFIG_VALUE_<n>` or
+`GIT_CONFIG_PARAMETERS`; names without a marker such as `MYSQL_PWD`, `NPM_CONFIG__AUTH` or
+`ANTHROPIC_CUSTOM_HEADERS`. `SSH_AUTH_SOCK` stays deliberately: it is a socket path Git
+over SSH needs, which is also why the redaction markers do not treat it as secret. Holding
+it does let a child use the keys loaded in that agent.
+
+**A child's own keys.** The connection's `api_key_env` always. With none named, each
+Runtime's own login variables:
+
+| Runtime | Own variables when `api_key_env` is absent |
+| --- | --- |
+| Claude | `ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`, `CLAUDE_CODE_OAUTH_TOKEN`; the `AWS_*` credentials with `CLAUDE_CODE_USE_BEDROCK`, the `GOOGLE_*`, `GCLOUD_*` and `CLOUDSDK_*` credentials with `CLAUDE_CODE_USE_VERTEX`, the `ANTHROPIC_FOUNDRY_*` credentials with `CLAUDE_CODE_USE_FOUNDRY` |
+| Codex | `OPENAI_API_KEY`, `CODEX_API_KEY`, and the `env_key` of the selected provider in the Session's settings or the home's `config.toml` |
+| Pi | A set variable the home's `models.json` `apiKey` or `auth.json` `key` names for the selected provider, as `$NAME`, `${NAME}` or plain text; a `!command` is ignored. Otherwise whatever Pi itself needs: agents asks `get_available_models` with variables kept to a candidate set, on each launch. If Pi offers it under none, none is added |
+| DSH | `DEEPSEEK_API_KEY`, which 430's refusal still covers when a reviewer holds it |
+
+A Runtime's native login (`auth.json`, the Claude keychain, `$DSH_HOME/.credentials.yaml`)
+needs no variable and is untouched. Pi 1.4.0 lists a `models.json` provider with a plain
+`apiKey` whatever is set, and sends that text as written; only `$NAME` and `${NAME}` read the
+environment. DSH removes credential-shaped names from its own shell tool regardless.
+
+**A Codex child's tool shell.** Every Codex child, first start and resume, has
+`agent_swarm.CODEX_SHELL_EXCLUDE` in its Session's `shell_environment_policy.exclude`, after any
+entries from the Session and the home's `config.toml`: a Session's `exclude` replaces the home's
+list on Codex 0.164.0, while `set` merges and other fields stay. Codex's globs have `*` and `?`
+only, ignore case, and have no classes or negation. They equal the rule above except for one
+written difference: a `KEY` part followed by `_` and a digit, as in `MY_KEY_2`, is not matched,
+because `*KEY_*` would also match `GIT_CONFIG_KEY_<n>`. Such a name is still removed from what the
+child inherits; only a dotfile's export of it reaches the shell.
+
+The policy governs tool shells, not Codex's process, which keeps the child's key for model access;
+the shell no longer sees that key. A declared credential-class name reaches the shell through
+`set`, in the transient copy of the parameters of `thread/start` or `thread/resume`: it travels to
+Codex in the Session parameters and agents writes it in no document, trace, diagnostic or archive.
+An ordinary declared name is inherited as before.
+
+Not stopped, all observed on Codex 0.164.0: `~/.zshenv`, which zsh runs after the environment is
+set; `~/.zprofile` and `~/.zlogin` when a shell starts as a login shell before the snapshot is
+ready; a shell's other effects, since these files still run. Existing plaintext in a native home's
+`shell_snapshots` stays.
+
+**A grandchild** needs nothing from its parent: a child's `create` reaches the owning host
+over its connection, which checks and launches from the host's environment, so a grandchild
+on another connection gets that connection's key and its parent's environment plays no part.
+
+**`pass_env`** is a list of variable names on a connection, or at the top level of
+`config.yml` for a child with no connection; a connection's list replaces the top-level one.
+It is the only way to declare one, and it belongs to the user: `create` refuses it with
+`invalid-input`, so a model cannot ask for a key. A running or resumed child keeps the list
+captured when it was created. GraphTraj takes the same field on a connection provider in
+`connections.yml` and on a role in `roles.yml`. A GraphTraj inline role refuses `pass_env` and
+`api_key_env` on a new dispatch, since a model can write one; `connection:` selects what the user
+declared, and a retained Batch keeps loading for the Sessions it started.
+
+**Not protected:** a top-level host started from the user's own shell, whose environment is
+the user's; the child's own key, which it can read; and plaintext files a child can read,
+such as `~/.zshrc`, including through a shell that reloads them. `command` reviewers (section 6) are the user's own process, not a child, and still
+receive the host's environment apart from the agents connection.
 
 ## 4. Parent-child traffic
 
@@ -1035,6 +1177,10 @@ What the parent sees today:
   the children it runs and waits up to 10 seconds for their ends, which are
   held (*Claude Code and Codex host shutdown* below). `--resume` sends what was held for that Session once, into the resumed
   turn; a notice not yet sent when that turn ends waits for the next `--resume`.
+  While an end's event is on its way (`notification: queueing`), `wait` and
+  `status` show `last_message: null`, so they do not repeat the body the event
+  carries. An event that could not be written leaves the end `held` and its body
+  readable there.
 - **Pi host:** it enables `request_notices` and `hold_notices`, for children
   of every Runtime it runs. Each notice is injected into the Pi Session with
   Pi's `pi.sendMessage` as a displayed custom message (`customType`
@@ -1069,15 +1215,37 @@ What the parent sees today:
   waits up to 10 seconds in total for all of them, whether or not they have
   an unanswered request. The ends this causes, and any notice not
   yet acknowledged, are `held`, readable through `status`. Agents, Sessions
-  and records are kept. An Agent still active at that deadline, or every
-  Agent when no `status` could be read, is not reported as stopped: the host
+  and records are kept. A call that blocks, on an Agent's record lock or inside
+  a driver, costs only that Agent: the others are still interrupted and seen to
+  end, and the host does not wait for the lock to be released. A model request
+  still running when the pipe closes, and the host's notice flusher, can add up to
+  3 seconds each before the stop, so a host process ends within 20 seconds of its
+  pipe closing; that request's caller is told the operation is unconfirmed. A held
+  record lock does not stop the Pi host reading its pipe either: a notice reported
+  shown whose record is still locked when the host ends stays `held`, and the next
+  host pushes it again. An
+  Agent whose latest `status` did not show it out of `active` at that deadline is
+  not reported as stopped: the host
   writes one `{"error": {"code": "stop-unconfirmed", "message"}}` line naming
   it to stderr and exits non-zero, and the extension's `session_shutdown`
-  handler rejects with that text. In the next host's `status` that Agent is `active` with `stopping`
+  handler rejects with that text. The line says every other Agent stopped only
+  when each was seen to; if a `status` went unanswered and no Agent was seen
+  stopped, it says no other Agent is confirmed either. In the next host's `status` that Agent is `active` with `stopping`
   and the diagnostic `owner-exited; the Runtime process is still running` while
   its Runtime lives; once that is gone, it is in standby with `last_result`
   `outcome: failed`, `terminal_confirmed: false` and error `owner-exited`, and
   that end is held.
+- **A DSH child whose owner dies:** every `dsh web` this library starts comes with
+  one small watcher process, whatever host or process owns it. If the owner ends
+  without closing the service (it was killed, or left with a stop unconfirmed), the
+  watcher stops the `dsh web` process group: SIGINT, SIGTERM, then SIGKILL, up to 5
+  seconds each. It writes one line to the owner's stderr when it begins and one with
+  the outcome, saying `stopped` or `could not stop`, with a timestamp and the pid. In
+  a Claude Code host that is `host.log`. It keeps that stderr open until it ends,
+  about 15 seconds at most, so a reader waiting for the end of that stream waits as
+  long. A normal close stops the group as before, and the watcher leaves with no
+  line and no signal. The record still says `running` until the next host: it then
+  shows the end as in *Pi Session shutdown* above.
 - **Claude Code and Codex host shutdown** (Claude Code ends the Session, or the
   Codex parent's run ends or fails): the host interrupts every execution this
   process runs, whoever created it, and tries again until they end, up to 10
@@ -1095,8 +1263,12 @@ What the parent sees today:
   - **Claude Code hosts** (`agent_swarm.claude.host` and GraphTraj's): in
     `host.log`, because the host's stderr is that file once it serves MCP.
     `agents host recorded its children stopped.` is written only when every stop
-    was confirmed. The Claude Session does not see the line: the host stops its
-    children after Claude Code has closed MCP or is ending the Session, so no
+    was confirmed and no record shows a running execution whose owner process is
+    gone while its Runtime still lives. If one does, the host writes one line
+    naming those Agents, as started by an earlier host and still having a running
+    Runtime; its exit code does not change. The line's absence can also mean the
+    host was killed before it got there. The Claude Session does not see the line:
+    the host stops its children after Claude Code has closed MCP or is ending the Session, so no
     tool result or notification can reach it, and a Claude Code host has no other
     path into the Session. Read the state through `status` on the next host.
   - **Codex host:** on the stderr of `agent_swarm.codex.host`, and in
@@ -1143,7 +1315,7 @@ What the parent sees today:
   | Idle, host alive (a long-lived profile such as `web`, `tui`, `acp` or `sdk`, or `headless` before its runner leaves its loop) | The wake starts a new turn with the notice at once | `dsh-agent-loop/lib/index.js:564-569`, `:618-623` |
   | Idle during maintenance (for example compaction) or right after a cancel | The wake is latched and the turn starts when that activity ends | `dsh-agent-loop/lib/index.js:565-566`, `:619-621` |
   | `headless`, after the parent is idle with no native DSH subagents | The runner flushes and exits. agents children are not native subagents, so it does not wait for them; the host then stops with DSH (next row) | `dsh-headless/lib/index.js:369-373`, `:377-383` |
-  | Host or DSH process stopped (Session disposed, DSH exited) | No host runs. At the stop the plugin closes the host pipe; the host stops pushing, interrupts its active children (descendants first), waits up to 10 seconds in total for all of them and holds their ends, readable through `status`. An Agent it cannot confirm stopped is reported as for the Pi host above (`stop-unconfirmed` on stderr, non-zero exit, the same `status` in the next host); the plugin writes that text to the DSH logger | `dsh/plugin.mjs`, `agent_swarm/shutdown.py` |
+  | Host or DSH process stopped (Session disposed, DSH exited) | No host runs. At the stop the plugin closes the host pipe; the host stops pushing, interrupts its active children (descendants first), waits up to 10 seconds in total for all of them and holds their ends, readable through `status`. A blocked call costs only that Agent and the host ends within 20 seconds of the pipe closing, as for the Pi host above. An Agent it cannot confirm stopped is reported as for the Pi host above (`stop-unconfirmed` on stderr, non-zero exit, the same `status` in the next host); the plugin writes that text to the DSH logger | `dsh/plugin.mjs`, `agent_swarm/shutdown.py` |
   | On resume (`dsh --profile headless --session-id <id> "<task>"`, or reopening the Session in a long-lived profile) | DSH registers and announces the Session again and a new host binds the same Session. The plugin tells the host to begin when the Session's first turn begins, or two seconds after its `agents` tool attaches in a Session that starts no turn by itself: a relay message wakes an idle Session, and the `headless` runner applies its permission settings and hands over its task only after the announcement. The host then delivers each held notice once through the relay. A refused notice is tried again, at most six passes five seconds apart in that host's lifetime, and then stays held for a later host. Earlier children are listed by `status` and continue with `resume` | `dsh-agent/lib/index.js:655`, `:710`; `dsh-headless/lib/index.js:263`, `:344`, `:361` |
 
   Cases without immediate delivery: (1) a running parent receives a notice
@@ -1270,7 +1442,7 @@ Gaps, by owner:
 | Gap | Owner |
 | --- | --- |
 | A notice admitted between the `headless` DSH runner's last Session flush and its exit (*DSH host* above; `dsh-headless/lib/index.js:377`, `:383`): the relay answers before that write | Upstream DSH; not changed |
-| A child Runtime that outlives a killed Claude host: Claude Code can kill the host before it stops its children (`mcp.py` `INTERRUPT_SECONDS`), so the execution stays `running` with no notice yet. The notice arrives on a later host process, or read it through `status`. In the one real run (403), Claude Code 2.1.314's SIGINT left the host time to finish (`agents host recorded its children stopped.`, in all 3 Claude runs of that step), and the end arrived as `interrupted`. A kill was not observed, so the case stays possible by code | Unassigned, needs Main |
+| A killed Claude host leaves its children's executions `running`: Claude Code can kill the host before it stops them (`mcp.py` `INTERRUPT_SECONDS`), so there is no notice yet. The notice arrives on a later host process, or read it through `status`. In one real run (403), Claude Code 2.1.314's SIGINT left the host time to finish (`agents host recorded its children stopped.`, in all 3 Claude runs of that step), and the end arrived as `interrupted`. In another (392, a reviewed DSH child), the log ended at the SIGINT line with the stop unfinished; that Claude Code's later signal ended it is an inference. A DSH child's process group no longer outlives the host (*A DSH child whose owner dies*). Pi, Claude and Codex children are started with a stdin pipe from the host, which closes when it dies; whether each one then ends has not been tested | Unassigned, needs Main |
 | The notice title names GraphTraj | 394 |
 
 ### 4.1 Native approval per Runtime
@@ -1511,7 +1683,15 @@ no retry. The native side waits with no timeout of its own: Pi's dialog
 - The reviewer runs in the host, outside the child's sandbox and off the threads
   reading the Runtime's protocol; no sandbox, network or write grant is added for
   it. Its `api_key_env` variable is removed from the child's environment, unless
-  the child's own connection names that variable.
+  the child's own connection names that variable. DSH reads `DEEPSEEK_API_KEY` when a
+  connection names no key, so `create` refuses that connection beside a reviewer on
+  `DEEPSEEK_API_KEY` unless a key file exists (DSH children, section 2). Files are checked
+  by existence and not read, so one that holds no DeepSeek key still fails at start
+  with the native `session/model-unavailable`.
+  For Pi, `create` asks Pi's own model listing instead, without reading a credential: a
+  connection naming no key, with no `base_url`, is refused with `invalid-config` when Pi
+  offers the model with the reviewer's variable and not without it. Any other answer, or a
+  listing that fails, is no refusal, and a login in the connection's home counts as its own.
 - The bound agents tool, `mcp__agents__agents`, is not reviewed and is the only tool
   that is not: it is the child's channel to its parent, limited by agents' authority
   checks, and must work when the reviewer is down.
@@ -1594,6 +1774,13 @@ Consumers must ignore result fields and archive fields they do not know.
 
 Recorded classifications:
 
+- 439 (0.3.1): a Codex host the user starts directly again runs with the user's environment,
+  without the child rule or the credential shell exclude; its children keep both. This is a
+  fix that makes behaviour match section 3.1, so it is compatible. No version-range change.
+- 433 (0.3.0): a child no longer inherits credential-class variables other than its own keys.
+  This changes a default's observable behaviour, so it is incompatible and raises the minor
+  version; `pass_env` restores any one of them. GraphTraj adopts it in the same change, so its
+  range becomes `agent-swarm>=0.3.0,<0.4`.
 - 388: `send` with `reports_only: true` is rejected with `not-implemented` by
   agents' own backend, which used to ignore the field and start new work. This
   is a fix (compatible): the silent ignore contradicted the field's only
@@ -1690,6 +1877,13 @@ Recorded classifications:
   does not parse or hold an object now raises `ValueError` naming it, where a parse
   failure could leave some files already written and a non-object failed with an
   unrelated error. `write_adoption` and `kept_host_paths` are new public names.
+- 430 (0.2.13): `create` refuses a DSH connection with no `api_key_env` beside a reviewer on
+  `DEEPSEEK_API_KEY` when no key file of the child's own exists (section 2). Compatible: a new
+  error for a configuration that could not start before, since DSH offers no model without
+  a key and the child's start failed with `session/model-unavailable`. `create` likewise refuses
+  a Pi connection with no `api_key_env` and no `base_url` when Pi offers the model only with the
+  reviewer's variable (section 6). Compatible on the same reasoning: `create` used to return an
+  Agent, but that child could only fail at its first prompt with `No API key found`.
 
 While the major version is `0`, an incompatible change raises the minor
 version (`0.1.x` → `0.2.0`), and compatible additions and fixes raise the
@@ -1697,8 +1891,11 @@ patch version. From `1.0.0` the usual rule applies: major for incompatible,
 minor for additions, patch for fixes. A release that changes this document
 updates it in the same change.
 
-GraphTraj declares the range it supports (today `agent-swarm>=0.2.7,<0.3`, since it passes `private_paths` and `archive_private_paths` from 0.2.7 to keep its own directory out of Pi attachments, its members rely on the 0.2.6 start-failure reasons, and it imports the 0.2.5 names in 1.3)
-and widens it in the same change that adopts an incompatible release.
+GraphTraj declares the range it supports (today `agent-swarm>=0.3.0,<0.4`: it imports the names in 1.3, its
+DSH member launch relies on `additional_writable_roots` reaching the sandbox policy, which needs 0.2.15, and its
+member launches rely on `pass_env` and the child environment rule of section 3.1, which need 0.3.0).
+It raises the lower bound when it starts relying on a newer version, and widens the range in the same change that
+adopts an incompatible release.
 
 ## Appendix: Known GraphTraj-specific surfaces
 

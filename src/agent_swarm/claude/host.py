@@ -493,9 +493,16 @@ def main() -> None:
         # A refused start has no children, and its stdout is still the MCP channel.
         if refused is None:
             unconfirmed = stop_owned(calls.control)
-            # Its absence from the log means a stop was unconfirmed (that line is
-            # in the log) or the process was killed before this point.
-            if not unconfirmed:
+            without_owner = calls.control.runtimes_without_owner()
+            # The line speaks for every child, so a Runtime an earlier host left
+            # running rules it out as well. Its absence from the log means a stop
+            # was unconfirmed or such a Runtime lives (each has its own line), or
+            # the process was killed before this point.
+            if without_owner:
+                print(time.strftime('%Y-%m-%dT%H:%M:%S%z'),
+                      f"agents host found Agents started by an earlier host that still have a running Runtime: "
+                      f"{', '.join(without_owner)}.", flush=True)
+            elif not unconfirmed:
                 print(time.strftime('%Y-%m-%dT%H:%M:%S%z'), 'agents host recorded its children stopped.', flush=True)
             exit_if_owned_unconfirmed(unconfirmed)
     if refused is not None:

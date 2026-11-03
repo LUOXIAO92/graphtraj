@@ -25,6 +25,8 @@ from agent_swarm.discovery import handle_request as discover_agents
 from agent_swarm.mcp import tool_documents
 from agent_swarm import SessionArchive
 from agent_swarm.sessions.claude_history import read_records
+from agent_swarm.child_env import child_environment
+from .settings import login_variables
 from .support import write_yaml_durably, credential_environment, redact
 
 from agent_swarm.runtime import RuntimeAdapterError, SessionStarted
@@ -151,13 +153,17 @@ class ClaudeExecution:
         return resources.enter_context(self.host_connection(directory))
 
     def _collect_child(self, event: dict) -> None:
-        """Archive a finished native helper's own transcript beside its parent Session."""
+        """Archive a finished native helper's own transcript beside its parent Session.
+
+        This hook arrives on the owned stdio channel, so its Session is the
+        identity. Its cwd is wherever a Bash ``cd`` left the member.
+        """
         if self.archive is None:
             return
         from .collection import collect_hook_event
 
         collect_hook_event(self.archive, event, Path(self.request['worktree_path']),
-                           extra_fields=self.extra_fields)
+                           extra_fields=self.extra_fields, native_id=self.native_id)
 
     def _parent_notice(self, message: str, details: dict) -> dict:
         """Require the owning host to bind native permission delivery."""
@@ -444,7 +450,11 @@ class ClaudeExecution:
             argv += ['--effort', request['reasoning_effort']]
         if request.get('permission_mode') is not None:
             argv += ['--permission-mode', request['permission_mode']]
-        environment = {key: value for key, value in os.environ.items() if not key.startswith('GRAPHTRAJ_')}
+        environment = child_environment(
+            os.environ, api_key_env=request.get('api_key_env'),
+            defaults=() if request.get('api_key_env') else login_variables(os.environ),
+            declared=request.get('pass_env', ()), review_key=(request.get('review') or {}).get('api_key_env'))
+        environment = {key: value for key, value in environment.items() if not key.startswith('GRAPHTRAJ_')}
         environment.update(CLAUDE_CODE_SDK_READS_SESSION_STATE='1',
                            CLAUDE_CODE_DISABLE_BACKGROUND_TASKS='1')
         scrub_key = 'CLAUDE_CODE_SUBPROCESS_ENV_SCRUB'
@@ -461,10 +471,6 @@ class ClaudeExecution:
             raise RuntimeAdapterError('RUNTIME_REQUEST_FAILED',
                                       'Requested auto conflicts with explicit Claude subprocess scrub.')
         environment.pop('AGENT_SWARM_CONNECTION', None)
-        review_key_env = (request.get('review') or {}).get('api_key_env')
-        if review_key_env and review_key_env != request.get('api_key_env'):
-            # The reviewer's key stays with this host, away from the child it judges.
-            environment.pop(review_key_env, None)
         if address:
             environment['AGENT_SWARM_CONNECTION' if self.independent else 'GRAPHTRAJ_CLI_CONNECTION'] = address
         if request.get('explicit_runtime_home'):
@@ -1220,13 +1226,19 @@ class ClaudeExecution:
                 response = request.get('response')
                 if details is not None and details['method'] == REVIEW_METHOD:
                     return self._answer_review(request['request_token'], details, response)
-                if (details is None or not isinstance(response, dict)
+                if details is None:
+                    raise RuntimeAdapterError('invalid-input', 'No pending Claude request has this request_token.')
+                if (not isinstance(response, dict)
                         or response.get('behavior') not in {'allow', 'deny'}
                         or set(response) - {'behavior', 'updatedInput', 'message', 'interrupt'}
                         or ('updatedInput' in response and not isinstance(response['updatedInput'], dict))
                         or ('message' in response and not isinstance(response['message'], str))
                         or ('interrupt' in response and not isinstance(response['interrupt'], bool))):
-                    raise RuntimeAdapterError('invalid-input', 'Supply an explicit native allow/deny response.')
+                    raise RuntimeAdapterError(
+                        'invalid-input',
+                        f"A {details['method']} request takes the response "
+                        '{"behavior": "allow"} or {"behavior": "deny"}, optionally with updatedInput (object), '
+                        'message (string) or interrupt (boolean). It is still pending; reply again in this form.')
                 response = dict(response)
                 if response['behavior'] == 'allow':
                     response.setdefault('updatedInput', details['params']['input'])

@@ -11,12 +11,36 @@ from typing import Any, Mapping
 
 from agent_swarm import AgentsError, Caller, Run
 from agent_swarm.control import require_available, within_workspace
-from agent_swarm.models import pi_destination
+from agent_swarm.models import pi_destination, pi_named_keys, pi_offers
 from agent_swarm.runtime import RuntimeAdapterError
 from .execution import PiExecution, RPC_SECONDS
 
 # Native Pi thinking levels; a model's own list may be narrower.
 EFFORTS = ('off', 'minimal', 'low', 'medium', 'high', 'xhigh')
+
+
+def _refuse_key_held_by_reviewer(request: Mapping[str, Any]) -> None:
+    """Refuse a child whose only key for its model is the one its reviewer keeps from it.
+
+    The launch removes the reviewer's variable, so the child would fail at its
+    first prompt. Only Pi knows what authenticates a model, so it is asked with
+    the variable and without; any other answer is not this cause.
+    """
+    review = request.get('review') or {}
+    variable = review.get('api_key_env')
+    if (not variable or request.get('api_key_env') or request.get('base_url')
+            or not os.environ.get(variable)):
+        return
+    target = (request['executable'], request['agent_dir'], request['provider'], request['model'])
+    # Pi offers a models.json provider with or without its variable, so the file decides there.
+    if (variable in pi_named_keys(request['agent_dir'], request['provider'])
+            or pi_offers(*target, without=variable) is False and pi_offers(*target) is True):
+        raise AgentsError(
+            'invalid-config',
+            f"Reviewer {review.get('name', '')!r} uses {variable}, which is kept from the child it reviews, "
+            f"so Pi would have no key for provider {request['provider']!r}. Set api_key_env on the connection "
+            f'(naming {variable} deliberately shares it with the child), give the reviewer a different '
+            "api_key_env, or log in to this provider in the connection's home.")
 
 
 def selected(request: Mapping[str, Any], selection: Mapping[str, Any]) -> dict:
@@ -65,6 +89,7 @@ def selected(request: Mapping[str, Any], selection: Mapping[str, Any]) -> dict:
         except RuntimeAdapterError as error:
             raise AgentsError('invalid-config', f"{error.message} Provider {request['provider']!r}, "
                                                 f"model {request['model']!r}.") from None
+    _refuse_key_held_by_reviewer(request)
     return request
 
 
@@ -123,7 +148,10 @@ class PiDriver:
         # The child's end that continues this Session is the turn's input.
         notice = run.settings.get('completion_message')
         prompt = framed(notice) if notice else run.message
-        turn = PiExecution(dict(run.settings['adapter_request']), prompt, run.directory,
+        request = dict(run.settings['adapter_request'])
+        if run.settings.get('pass_env'):
+            request['pass_env'] = run.settings['pass_env']
+        turn = PiExecution(request, prompt, run.directory,
                            lambda session, pid: ready.set(), created,
                            run.directory / 'trace.jsonl', run.session)
         turn.archive = run.archive

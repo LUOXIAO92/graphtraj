@@ -624,6 +624,11 @@ def test_installed_runner_runs_a_main_inline_specialist_without_creating_a_prese
     assert absolute_writes[0].name.startswith("control-")
     assert "Investigate the accepted Task." in runtime["stdin"]
     assert "Inspect the Task in its assigned Worktree." in runtime["stdin"]
+    # Member shells have no agent-runner: the prompt names only the tools they do have.
+    # test_dsh_member_tools checks a member's real tasks tool lists these features.
+    assert "agent-runner" not in runtime["stdin"] and "graphtraj_" not in runtime["stdin"]
+    for feature in ("submit_result", "decide_result", "session_reports"):
+        assert feature in runtime["stdin"]
     assert runtime["connection"]["base_url"] is None
     assert any(
         tomllib.loads(argument)["agents"]["enabled"] is False

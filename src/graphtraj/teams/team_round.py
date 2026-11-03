@@ -1083,12 +1083,17 @@ def _execute_agent(
     round_directory = traces.parent / "rounds" / str(ordinal)
     task_prompt += "\nAssigned report paths: " + ', '.join(map(str, report_files)) + ".\n"
     task_prompt += (
-        "To submit a task result, use graphtraj_submit_result (or agent-runner submit-result) "
+        "`.state/task.md` is this Task's initial text and never changes. A revision during "
+        "execution adds a file under `.state/definitions/`; `current_definition` in "
+        "`.state/task.yml` names the latest, and task_graph with this Task in details returns it.\n"
+    )
+    task_prompt += (
+        "To submit a task result, use the tasks tool's submit_result feature "
         "including Worktree-relative result_refs, evidence_refs, completion and unresolved items.\n"
-        "An authorized parent records its decision with graphtraj_decide_result (or agent-runner "
-        "decide-result), supplying submission_id, commit, decision (accepted or rejected), reason "
-        "and Harness-relative evidence_refs. Read the child's submission through graphtraj_reports. "
-        "A report alone does not record acceptance.\n"
+        "An authorized parent records its decision with the tasks tool's decide_result feature, "
+        "supplying submission_id, commit, decision (accepted or rejected), reason "
+        "and Harness-relative evidence_refs. Read the child's submission through the tasks tool's "
+        "session_reports feature. A report alone does not record acceptance.\n"
     )
     if reports_only:
         task_prompt += (

@@ -31,7 +31,7 @@ class ClaudeExecution(NativeClaudeExecution):
         from graphtraj.interfaces.agents import configured_archive, graphtraj_fields, mapped_task_ids
 
         self.archive      = configured_archive(Path(self.request['harness_root']))
-        self.extra_fields = graphtraj_fields(str(self.request['worktree_path']), self.directory.name,
+        self.extra_fields = graphtraj_fields(str(self.request['harness_root']), self.directory.name,
                                              mapped_task_ids(self.directory))
         # The agents driver path replaces this with its own receiver.
         self.parent_notice = self._notify_direct_parent

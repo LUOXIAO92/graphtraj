@@ -69,6 +69,35 @@ def unsupported(*args: object, **kwargs: object) -> Any:
     raise RuntimeAdapterError('RUNTIME_UNSUPPORTED', 'Claude Code interactive Main hosting is unavailable.')
 
 
+def check_role_settings(settings: Any) -> None:
+    """Raise what a launch raises for role settings that cannot start.
+
+    It reads only the settings, so ``graphtraj doctor`` reports the same refusal
+    without a Claude CLI, a credential or a model.
+    """
+    if settings.codex or settings.pi or settings.allow_runtime_swarm:
+        raise RuntimeAdapterError('ROLE_CONFIG_UNSUPPORTED', 'Claude uses native resources and no native helpers.')
+    if settings.reasoning_effort not in (None, *EFFORTS):
+        raise RuntimeAdapterError('ROLE_CONFIG_INVALID', 'Unsupported Claude effort.')
+    if settings.model != 'claude-opus-5-5' and not settings.connection:
+        raise RuntimeAdapterError('ROLE_CONFIG_INVALID', 'Use exact claude-opus-5-5 or an explicit model connection.')
+    # Only an explicit connection endpoint may replace the official service.
+    if settings.base_url:
+        from urllib.parse import urlsplit
+
+        url = urlsplit(settings.base_url)
+        if (url.scheme not in {'http', 'https'} or not url.hostname or url.username
+                or url.password or url.query or url.fragment):
+            raise RuntimeAdapterError('ROLE_CONFIG_INVALID', 'Claude Base URL must be credential-free HTTP(S).')
+    config = dict(settings.claude or {})
+    resources = config.get('read_paths', [])
+    if (set(config) - {'read_paths', 'permission_mode'} or not isinstance(resources, list)
+            or any(not isinstance(path, str) or not Path(path).is_absolute() for path in resources)):
+        raise RuntimeAdapterError('ROLE_CONFIG_INVALID', 'claude.read_paths must list absolute resource paths.')
+    if 'permission_mode' in config and config['permission_mode'] not in ('default', 'auto'):
+        raise RuntimeAdapterError('ROLE_CONFIG_INVALID', 'claude.permission_mode must be default or auto.')
+
+
 def _validated_resources(value: object, root: Path, state: Path, home: Path) -> list[str]:
     """Admit project development records without granting control or credential access."""
     from graphtraj.runtimes.codex.access import project_history_files
@@ -184,29 +213,13 @@ class ClaudeRuntimeAdapter:
         from graphtraj.configuration.project_configuration import configuration_exists, load_project_configuration
 
         settings = role.settings
-        if requested_skills or settings.codex or settings.pi or settings.allow_runtime_swarm:
+        if requested_skills:
             raise RuntimeAdapterError('ROLE_CONFIG_UNSUPPORTED', 'Claude uses native resources and no native helpers.')
-        if settings.reasoning_effort not in (None, *EFFORTS):
-            raise RuntimeAdapterError('ROLE_CONFIG_INVALID', 'Unsupported Claude effort.')
-        if settings.model != 'claude-opus-5-5' and not settings.connection:
-            raise RuntimeAdapterError('ROLE_CONFIG_INVALID', 'Use exact claude-opus-5-5 or an explicit model connection.')
-        # Only an explicit connection endpoint may replace the official service.
+        check_role_settings(settings)
         base_url = settings.base_url
         base_url_source = 'configuration' if base_url else 'native'
-        if base_url:
-            from urllib.parse import urlsplit
-
-            url = urlsplit(base_url)
-            if (url.scheme not in {'http', 'https'} or not url.hostname or url.username
-                    or url.password or url.query or url.fragment):
-                raise RuntimeAdapterError('ROLE_CONFIG_INVALID', 'Claude Base URL must be credential-free HTTP(S).')
         config = dict(settings.claude or {})
         resources = config.get('read_paths', [])
-        if (set(config) - {'read_paths', 'permission_mode'} or not isinstance(resources, list)
-                or any(not isinstance(path, str) or not Path(path).is_absolute() for path in resources)):
-            raise RuntimeAdapterError('ROLE_CONFIG_INVALID', 'claude.read_paths must list absolute resource paths.')
-        if 'permission_mode' in config and config['permission_mode'] not in ('default', 'auto'):
-            raise RuntimeAdapterError('ROLE_CONFIG_INVALID', 'claude.permission_mode must be default or auto.')
         credential_environment(settings.api_key_env)
         binary, version = current_cli()
         reports = []
@@ -236,6 +249,7 @@ class ClaudeRuntimeAdapter:
             'provider': settings.runtime_provider or 'native',
             'credential_source': 'api_key_env' if settings.api_key_env else 'native',
             'api_key_env': settings.api_key_env,
+            **({'pass_env': list(settings.pass_env)} if settings.pass_env else {}),
             'instructions': '\n\n'.join(filter(None, (role.instructions, READ_GUIDANCE))),
             'worktree_access': settings.worktree_access, 'reports': reports, 'resources': resources,
             'settings_sources': 'managed settings and explicit Runner settings; restricted mode',

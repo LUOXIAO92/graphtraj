@@ -669,6 +669,10 @@ class AgentControl:
             check_reviewer(review)
         # Keep the original call shape for drivers whose users select defaults.
         settings = driver.prepare(runtime, caller, **options)
+        # Only the user's file declares this; no create argument can ask for a key.
+        passed = self._pass_env(selection)
+        if passed:
+            settings = {**settings, "pass_env": passed}
         json.dumps(settings)
 
         agent  = "agent-" + uuid.uuid4().hex
@@ -776,6 +780,16 @@ class AgentControl:
         return {"preset": preset, "connection": connection, "provider": provider,
                 "settings": deepcopy(settings), "review": deepcopy(review), **chosen}
 
+    def _pass_env(self, selection: Mapping[str, Any] | None) -> list[str]:
+        """Return the declared names: the selected connection's, else the file's default."""
+        settings = (selection or {}).get("settings")
+        if settings is not None:
+            return list(settings.get("pass_env", ()))
+        try:
+            return list(read_connections(self.root).get("pass_env", ()))
+        except ValueError as error:
+            raise AgentsError("invalid-config", str(error)) from None
+
     def _candidate(self, runtime: str, settings: Mapping[str, Any] | None, model: str) -> dict:
         """Return the one candidate whose ``id`` is ``model``, or raise ``invalid-model``."""
         settings = settings or {"runtime": runtime}
@@ -789,7 +803,9 @@ class AgentControl:
         matches = [item for item in found["models"] if item["id"] == model]
         if not matches:
             raise AgentsError("invalid-model", f"Model {model!r} is not a candidate of {where}; candidates: "
-                                               f"{sorted({item['id'] for item in found['models']}) or 'none'}.")
+                                               f"{sorted({item['id'] for item in found['models']}) or 'none'}. "
+                                               f"If it serves this model, list the id under `models` of a {runtime} "
+                                               f"connection in {self.root / CONFIG_FILE}.")
         if len({item.get("provider") for item in matches}) > 1:
             raise AgentsError("invalid-model", f"Model {model!r} is offered by several providers of {where}; "
                                                "set the connection's provider.")
@@ -1177,6 +1193,24 @@ class AgentControl:
                 current.update(stop_requested_at=_now(), stop_scheduled=bool(scheduled))
             return True
 
+    def runtimes_without_owner(self) -> list[str]:
+        """Return the Agents whose running execution lost its owner while its Runtime lives.
+
+        The test of ``_reconcile``, read without the record lock: a host ending
+        its shutdown must not wait on a lock a blocked interrupt holds. A record
+        that cannot be read is skipped, because ``interrupt_owned`` reports it.
+        """
+        found = []
+        for path in sorted((self.root / "control" / "agents").glob("*.json")):
+            try:
+                current = _running(json.loads(path.read_text(encoding="utf-8")))
+                if (current is not None and not _alive(current["process"].get("worker_pid"))
+                        and _alive(current["process"].get("runtime_pid"))):
+                    found.append(path.stem)
+            except (OSError, ValueError, KeyError, TypeError):
+                continue
+        return found
+
     def owns_running(self, agent: str) -> bool:
         """Whether this process still owns a running execution of ``agent``."""
         with self._locked(agent) as record:
@@ -1374,6 +1408,26 @@ class AgentControl:
             and self._can_view(record, caller))
         hint = "`agent` takes the reference returned by create or status, not the readable name."
         return hint + (f" Agents named {name!r}: {', '.join(named)}." if named else "")
+
+    def visible_agents(self, caller: Caller) -> list[str]:
+        """Name the Agents :meth:`hierarchy` would show, deepest first, without any record lock.
+
+        For a host stopping its children: a held lock blocks ``hierarchy`` but
+        not this. The answer says who exists, never what state they are in.
+        """
+        records = map(self._load, (path.stem for path in sorted((self.root / "control" / "agents").glob("*.json"))))
+        visible = [record for record in records
+                   if record is not None and record["retired_at"] is None and self._can_view(record, caller)]
+
+        def depth(record: Mapping[str, Any]) -> int:
+            """Count the recorded ancestors of ``record``."""
+            seen = {record["agent"]}
+            while record["parent"] is not None and record["parent"] not in seen:
+                record = self._load(record["parent"]) or {"agent": record["parent"], "parent": None}
+                seen.add(record["agent"])
+            return len(seen)
+
+        return [record["agent"] for record in sorted(visible, key=depth, reverse=True)]
 
     def hierarchy(self, caller: Caller) -> list[dict]:
         """Return the caller's visible descendants nested by true control parent.

@@ -611,8 +611,10 @@ def test_installed_search_sends_the_key_where_the_row_says(
     if node is None or installed is None:
         pytest.skip('Installed DSH and Node are required for native search evidence.')
     monkeypatch.setenv('DEEPSEEK_API_KEY', 'fake-413-default-key')
+    # Since 433 official search beside another key needs the search key declared.
     settings = prepare({**dsh, 'executable': installed, 'api_key_env': key,
-                        **({'base_url': base_url} if base_url else {})}, tmp_path)
+                        **({'base_url': base_url} if base_url else {}),
+                        **({'pass_env': ['DEEPSEEK_API_KEY']} if key != 'DEEPSEEK_API_KEY' else {})}, tmp_path)
     environment, _, patch = launch_patches(settings, tmp_path)
     dumped = subprocess.run([installed, '--profile', 'web', '--patch', str(patch), '--dump-config'],
                             cwd=tmp_path, env={**environment, 'DSH_HOME': str(tmp_path / 'dump-home')},

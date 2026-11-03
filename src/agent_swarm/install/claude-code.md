@@ -103,10 +103,15 @@ not load this project's `.mcp.json`.
 
 - In the Session, `/agents-context` prints the current Session, `MCP agents
   registered` and the state of notice push, without a model turn. `/mcp` lists `agents`.
-- Ask the model to create a Claude child that answers one word, then to `wait` for it.
+- Ask the model to use the `agents` tool, not Claude Code's own subagents, to create a Claude
+  child that answers one word, then to `wait` for it.
   The result shows `state: standby` and `last_result.outcome: completed`.
 - After you quit, `.agents-control/host.log` ends with `agents host recorded its
-  children stopped.`
+  children stopped.` If that line is missing, the host could not confirm a stop or
+  was killed before it finished, or an Agent started by an earlier host still has a
+  running Runtime, and the lines above it say which. If it was killed with a DSH
+  child, a DSH watcher line says the child's process group was stopped, or could not
+  be, up to about 15 seconds later.
 
 If every `agents` call returns `host-unavailable`, the host refused to start.
 `.agents-control/host.log` holds the reason as one JSON line; search for `did not

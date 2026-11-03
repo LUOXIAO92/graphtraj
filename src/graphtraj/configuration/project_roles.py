@@ -21,6 +21,29 @@ ROLE_REFERENCE = re.compile(
 _REQUIRED_FIELDS = frozenset({"runtime", "model"})
 _CONNECTION_FIELDS = frozenset({"base_url", "api_key_env"})
 _ENVIRONMENT_NAME = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+INLINE_REFUSED = frozenset({"pass_env", "api_key_env"})
+# The boundary for a model-written inline role on a new dispatch: it may not
+# choose a key source, a network destination a key is sent to, or an executable
+# or home the host launches with its own environment. Each path is refused.
+INLINE_REFUSED_PATHS: tuple[tuple[str, ...], ...] = (
+    ("pass_env",), ("api_key_env",), ("base_url",),
+    ("pi", "agent_dir"), ("pi", "sandbox_python"), ("pi", "sandbox_path"),
+    ("codex", "approval", "model"), ("codex", "approval", "base_url"),
+    ("codex", "approval", "api_key_env"),
+)
+
+
+def _inline_refused(settings: object) -> list[str]:
+    found = []
+    for path in INLINE_REFUSED_PATHS:
+        node = settings
+        for key in path:
+            if not isinstance(node, dict) or key not in node:
+                break
+            node = node[key]
+        else:
+            found.append(".".join(path))
+    return found
 
 class ProjectRolesError(Exception):
     """The reusable child-role configuration is missing or invalid."""
@@ -42,6 +65,7 @@ class RolePreset:
     model: str
     base_url: str | None
     api_key_env: str | None
+    pass_env: tuple[str, ...] = ()
     allow_runtime_swarm: bool = False
     reasoning_effort: str | None = None
     codex: Mapping[str, object] | None = None
@@ -243,6 +267,17 @@ def parse_inline_role(value: object, *, retained: bool = False) -> tuple[str, Ro
             ("An inline Batch role must use a preset reference or lowercase kebab-case name.",)
         )
     name = configured_role_name(name)
+    # An inline role is written by whoever dispatches, which can be a model. The
+    # variables a child receives belong to the user's roles.yml and connections.yml;
+    # a retained Batch keeps loading for the Sessions it started.
+    refused = [] if retained else _inline_refused(settings)
+    if refused:
+        raise ProjectRolesError((
+            "{0}.{1}: an inline role cannot choose a key source, a key destination or a launched "
+            "executable; declare it in .graphtraj/roles.yml "
+            "or connections.yml and select that with a role reference or `connection: "
+            "runtime/provider/model`.".format(name, refused[0]),
+        ))
     if retained and isinstance(settings, dict):
         # Old names are historical input, not selections for a new Runtime.
         settings = {key: item for key, item in settings.items()
@@ -377,8 +412,15 @@ def _role_preset(
             return None
     allowed = _REQUIRED_FIELDS | _CONNECTION_FIELDS | {
         "reasoning_effort", "codex", "pi", "claude", "allow_runtime_swarm", "instructions",
-        "system_prompt", "developer_prompt", "worktree_access", "reports", "connection",
+        "system_prompt", "developer_prompt", "worktree_access", "reports", "connection", "pass_env",
     }
+    passed = entry.get("pass_env", [])
+    if not isinstance(passed, list) or any(
+        not isinstance(value, str) or not _ENVIRONMENT_NAME.fullmatch(value) for value in passed
+    ):
+        diagnostics.append(f"{name}.pass_env must list environment variable names.")
+    elif reference is not None and passed:
+        diagnostics.append(f"{name}.pass_env belongs to the referenced connection.")
     if "instructions" in entry and (
         not isinstance(entry["instructions"], str)
         or not entry["instructions"].strip()
@@ -469,6 +511,7 @@ def _role_preset(
         api_key_env=(
             str(entry["api_key_env"]) if "api_key_env" in entry else None
         ),
+        pass_env=tuple(entry.get("pass_env", ())),
         allow_runtime_swarm=entry.get("allow_runtime_swarm", False),
         instructions=entry.get("instructions"),
         system_prompt=entry.get("system_prompt"),

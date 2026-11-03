@@ -475,7 +475,7 @@ def check(
             child_id = child.thread_id
             created(child_id)
             from graphtraj.configuration.project_configuration import load_project_configuration
-            from graphtraj.interfaces.agents import configured_archive, graphtraj_fields
+            from graphtraj.interfaces.agents import archive_project, configured_archive, graphtraj_fields
             from agent_swarm.sessions import CodexJsonlArchive
 
             project = load_project_configuration(Path(binding['cwd']))
@@ -484,7 +484,7 @@ def check(
                 trace = directory / 'checks' / hashlib.sha256(child_id.encode()).hexdigest() / 'events.jsonl'
                 client.retain_native_trace(child, trace, archive=CodexJsonlArchive(
                     archive, child_id, child.rollout_path, new_session=True,
-                    extra_fields=graphtraj_fields(str(archive.root), 'checker:' + child_id),
+                    extra_fields=graphtraj_fields(archive_project(archive), 'checker:' + child_id),
                 ))
             else:
                 await client.retain_ordered_history(child, archive, 'checker:' + child_id)

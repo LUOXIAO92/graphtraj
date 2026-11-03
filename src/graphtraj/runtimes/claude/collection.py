@@ -219,8 +219,9 @@ def collect_jsonl_hook(event: dict, cwd: Path) -> dict:
     from graphtraj.workspace.runner_project import discover_project_root
 
     _kind, native_id, child, _path = hook_source(event, cwd)
-    return collect_hook_event(configured_archive(discover_project_root(cwd)), event, cwd,
-                              extra_fields=graphtraj_fields(str(cwd), 'claude-native:' + (child or native_id)))
+    project = discover_project_root(cwd)
+    return collect_hook_event(configured_archive(project), event, cwd,
+                              extra_fields=graphtraj_fields(str(project), 'claude-native:' + (child or native_id)))
 
 
 def collect_hook(event: dict, cwd: Path) -> dict:

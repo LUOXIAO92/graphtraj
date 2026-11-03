@@ -1,0 +1,42 @@
+# OLD CODE probe: public wait result for a SubagentStop with moved cwd, HEAD 4c3916559e620141de7336f63f2e73fac46bdb71, src diff lines:        0
+{"action": "create", "agent": "agent-cfa68535f2344fd9a1988044b08ff19d", "session": "b98accd4-b700-4bc1-8535-ead08a4eb95c", "execution": "0fa43f508d3743d8801c3118db64dcd6", "message": null, "result": {"agent": "agent-cfa68535f2344fd9a1988044b08ff19d", "name": "agent-cfa68535f2344fd9a1988044b08ff19d", "runtime": "claude", "preset": null, "connection": null, "model": null, "reasoning_effort": null, "review": null, "workspace": null, "state": "active", "parent": null, "creator": {"agent": null, "host": "h", "session": "2d8265ef-411f-46a4-809e-dc503321e5de"}, "host": "h", "session": "b98accd4-b700-
+{
+ "action": "wait",
+ "agent": "agent-cfa68535f2344fd9a1988044b08ff19d",
+ "session": "b98accd4-b700-4bc1-8535-ead08a4eb95c",
+ "execution": "0fa43f508d3743d8801c3118db64dcd6",
+ "message": null,
+ "result": {
+  "agent": "agent-cfa68535f2344fd9a1988044b08ff19d",
+  "name": "agent-cfa68535f2344fd9a1988044b08ff19d",
+  "runtime": "claude",
+  "preset": null,
+  "connection": null,
+  "model": null,
+  "reasoning_effort": null,
+  "review": null,
+  "workspace": null,
+  "state": "standby",
+  "parent": null,
+  "creator": {
+   "agent": null,
+   "host": "h",
+   "session": "2d8265ef-411f-46a4-809e-dc503321e5de"
+  },
+  "host": "h",
+  "session": "b98accd4-b700-4bc1-8535-ead08a4eb95c",
+  "last_result": {
+   "id": "0fa43f508d3743d8801c3118db64dcd6",
+   "outcome": "failed",
+   "last_message": null,
+   "error": {
+    "code": "RUNTIME_WORKER_FAILED",
+    "message": "Hook working directory differs from collection entry."
+   },
+   "terminal_confirmed": false,
+   "ended_at": 1793617602.52405
+  },
+  "timed_out": false
+ }
+}
+['config.yml', 'control/agents/agent-cfa68535f2344fd9a1988044b08ff19d.json', 'live/agents/agent-cfa68535f2344fd9a1988044b08ff19d.lock', 'live/config.lock', 'native/agent-cfa68535f2344fd9a1988044b08ff19d/claude-diagnostics-22319d6e5cd445af8bfe161fc7fe6ec1.yml', 'native/agent-cfa68535f2344fd9a1988044b08ff19d/claude-settings.yml', 'native/agent-cfa68535f2344fd9a1988044b08ff19d/claude-termination-22319d6e5cd445af8bfe161fc7fe6ec1.yml', 'native/agent-cfa68535f2344fd9a1988044b08ff19d/session.yml', 'native/agent-cfa68535f2344fd9a1988044b08ff19d/stderr.log', 'native/agent-cfa68535f2344fd9a1988044b08ff19d/trace.jsonl', 'sessions/5421a46534b84ce2835aba1082c2c56d63513aa30f838e787d4ebaa41df63668/session.jsonl', 'sessions/5421a46534b84ce2835aba1082c2c56d63513aa30f838e787d4ebaa41df63668/session.lock']

@@ -103,7 +103,7 @@ def test_an_unanswered_request_does_not_stop_the_others(build: Callable, positio
     order = stop_order(process.inner({'action': 'status'}).document['result'])
     ask(process, order[position], how, driver.runs[order[position]])
 
-    assert process.host.stop_children(process.inner) == []
+    assert process.stop_children() == []
     assert all(standby(process, agent) for agent in order)
     assert sorted(driver.interrupted) == sorted(order)
     assert driver.interrupted.index(grandchild) < driver.interrupted.index(first)
@@ -115,7 +115,7 @@ def test_every_child_is_interrupted_before_any_is_waited_for(build: Callable) ->
     """The stops run in parallel, so the shared deadline covers them all at once."""
     driver = Stopping()
     process, first, second, grandchild = family(build, driver)
-    process.host.stop_children(process.inner)
+    process.stop_children()
     began = [record['executions'][-1]['stop_requested_at'] for record in map(
         lambda agent: read_record(process.tmp, agent), (first, second, grandchild))]
     ended = [read_record(process.tmp, agent)['executions'][-1]['ended_at'] for agent in (first, second, grandchild)]
@@ -160,7 +160,7 @@ def test_a_child_that_never_stops_is_named_and_the_others_end_within_the_bound(b
     driver = Stubborn()
     process, first, second, grandchild = family(build, driver)
     began = time.monotonic()
-    assert process.host.stop_children(process.inner) == list(driver.stubborn)
+    assert process.stop_children() == list(driver.stubborn)
     assert 1.0 <= time.monotonic() - began < 3.0
     others = {first, second, grandchild} - set(driver.stubborn)
     assert len(others) == 2 and all(standby(process, agent) for agent in others)
@@ -189,7 +189,7 @@ def test_a_failing_interrupt_is_reported_and_stops_nobody_else(build: Callable, 
 
     driver = Broken()
     process, first, second, grandchild = family(build, driver)
-    unconfirmed = process.host.stop_children(process.inner)
+    unconfirmed = process.stop_children()
     bad = list(driver.broken)
     assert unconfirmed == bad
     assert all(standby(process, agent) for agent in {first, second, grandchild} - set(bad))
@@ -200,7 +200,7 @@ def test_an_agent_that_was_still_starting_is_interrupted_again(build: Callable) 
     driver = Stopping()
     process, first, second, grandchild = family(build, driver)
     driver.broken[second] = [AgentsError('starting', 'The execution is still starting.')]
-    assert process.host.stop_children(process.inner) == []
+    assert process.stop_children() == []
     assert standby(process, second) and driver.interrupted.count(second) == 2
 
 
@@ -231,10 +231,22 @@ def test_a_status_that_never_answers_confirms_nothing(build: Callable, behave: C
     """No status at all is not success: the result says so, within the bound."""
     driver = Stopping()
     process, *_ = family(build, driver)
+    order = process.control.visible_agents(process.caller)
     began = time.monotonic()
-    assert process.host.stop_children(status_that(process.inner, behave)) == [shutdown.STATUS_UNREADABLE]
+    assert process.stop_children(status_that(process.inner, behave)) == [*order, shutdown.STATUS_UNREADABLE]
     assert time.monotonic() - began < 3.0
-    process.host.stop_children(process.inner)  # no timer outlives the test
+    process.stop_children()  # no timer outlives the test
+
+
+def test_agents_that_cannot_be_listed_confirm_nothing(build: Callable) -> None:
+    """Who exists is unknown, so nothing is claimed about anyone."""
+    def unlisted() -> list[str]:
+        """The record directory cannot be read."""
+        raise OSError('record store unavailable')
+
+    process, *_ = family(build, Stopping())
+    assert process.host.stop_children(process.inner, unlisted) == [shutdown.STATUS_UNREADABLE]
+    process.stop_children()  # no timer outlives the test
 
 
 def test_a_status_lost_after_the_first_keeps_every_agent_unconfirmed(build: Callable) -> None:
@@ -242,7 +254,7 @@ def test_a_status_lost_after_the_first_keeps_every_agent_unconfirmed(build: Call
     driver = Stopping()
     process, first, second, grandchild = family(build, driver)
     call = status_that(process.inner, lambda count, real: real() if count == 1 else FAILED)
-    assert sorted(process.host.stop_children(call)) == sorted([first, second, grandchild])
+    assert sorted(process.stop_children(call)) == sorted([first, second, grandchild, shutdown.STATUS_UNREADABLE])
     assert sorted(driver.interrupted) == sorted([first, second, grandchild])
     wait_until(lambda: all(standby(process, agent) for agent in (first, second, grandchild)))
 
@@ -252,8 +264,48 @@ def test_a_status_that_recovers_stops_everything(build: Callable) -> None:
     driver = Stopping()
     process, first, second, grandchild = family(build, driver)
     call = status_that(process.inner, lambda count, real: FAILED if count == 1 else real())
-    assert process.host.stop_children(call) == []
+    assert process.stop_children(call) == []
     assert all(standby(process, agent) for agent in (first, second, grandchild))
+
+
+def test_a_blocked_call_keeps_one_thread_and_the_stop_within_its_bound(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Every pass reads the others again, but the blocked Agent is not called a second time."""
+    monkeypatch.setattr(shutdown, 'STOP_SECONDS', 0.6)
+    release, reads = threading.Event(), {'stuck': 0, 'other': 0}
+
+    def call(request: dict) -> AgentsResult:
+        """``stuck`` blocks on its first read; ``other`` answers as active until the end."""
+        if request['action'] == 'status':
+            reads[request['agent']] += 1
+            if request['agent'] == 'stuck':
+                release.wait()
+            return AgentsResult({'result': {'state': 'active'}})
+        return AgentsResult({})
+
+    began = time.monotonic()
+    try:
+        assert shutdown.stop_children(call, lambda: ['stuck', 'other']) == ['stuck', 'other', shutdown.STATUS_UNREADABLE]
+        assert time.monotonic() - began < 0.6 + 1.0
+        assert reads['stuck'] == 1 and reads['other'] > 1
+    finally:
+        release.set()
+
+
+def test_an_agent_seen_stopped_whose_latest_read_is_lost_is_named(monkeypatch: pytest.MonkeyPatch) -> None:
+    """'Confirmed' is the latest answer: an earlier one does not speak for an Agent after its read fails."""
+    monkeypatch.setattr(shutdown, 'STOP_SECONDS', 0.3)
+    reads = [0]
+
+    def call(request: dict) -> AgentsResult:
+        """``idle`` answers standby once; ``busy`` keeps the stop going until the deadline."""
+        if request['action'] != 'status':
+            return AgentsResult({})
+        if request['agent'] == 'busy':
+            return AgentsResult({'result': {'state': 'active'}})
+        reads[0] += 1
+        return AgentsResult({'result': {'state': 'standby'}}) if reads[0] == 1 else FAILED
+
+    assert shutdown.stop_children(call, lambda: ['idle', 'busy']) == ['idle', 'busy', shutdown.STATUS_UNREADABLE]
 
 
 # --- The real main() in a real process, closed by ending its stdin ---
@@ -262,10 +314,10 @@ def test_a_status_that_recovers_stops_everything(build: Callable) -> None:
 HOST_LIMIT = 30
 
 HOST = r'''
-import importlib, json, os, subprocess, sys, threading, time
+import contextlib, importlib, json, os, subprocess, sys, threading, time
 from pathlib import Path
 import agent_swarm
-from agent_swarm import Caller, bind, shutdown
+from agent_swarm import AgentsResult, Caller, bind, shutdown
 
 kind, where, stubborn = os.environ['TEST_KIND'], Path(os.environ['TEST_WHERE']), os.environ['TEST_STUBBORN']
 host = importlib.import_module(f'agent_swarm.{kind}.host')
@@ -298,6 +350,8 @@ class Driver:
         threading.Thread(target=own, name=f'test-{run.agent}').start()
 
     def interrupt(self, run):
+        if stubborn == 'interrupt' and run.agent == facts.get('stubborn'):
+            threading.Event().wait()
         if run.agent != facts.get('stubborn'):
             threading.Timer(0.2, self.stops[run.agent].set).start()
         return True
@@ -311,6 +365,71 @@ class Driver:
 
 driver = Driver()
 real_start = host.start
+real_connection = host.agents_connection
+entered = threading.Event()
+
+
+def hold_lock(agent):
+    """Another real process takes this Agent's real record lock and keeps it past any limit."""
+    held = where / 'lock-held'
+    subprocess.Popen([sys.executable, '-c', HOLDER, str(where / 'data' / 'live' / 'agents' / f'{agent}.lock'), str(held)],
+                     stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    while not held.exists():
+        time.sleep(0.01)
+
+
+def acknowledgements(notices, agent):
+    """What the extension sends for one child's end: taken for a turn, then shown. The end of these lines is the close."""
+    driver.stops[agent].set()
+    while not notices.waiting:
+        time.sleep(0.01)
+    identity = next(iter(notices.waiting))
+    yield json.dumps({'ack': identity, 'queued': True})
+    record = where / 'data' / 'control' / 'agents' / f'{agent}.json'
+    while json.loads(record.read_text())['executions'][-1].get('notification') != 'held':
+        time.sleep(0.01)
+    facts['acknowledged'] = agent
+    (where / 'facts.json').write_text(json.dumps(facts))
+    if os.environ['TEST_ACK'] == 'locked':
+        hold_lock(agent)
+    yield json.dumps({'ack': identity, 'shown': True})
+
+
+def late_status(call):
+    """``call`` whose first status answers and whose later ones fail or never return."""
+    reads = []
+
+    def wrapped(request):
+        if request['action'] == 'status':
+            reads.append(request)
+            if len(reads) > 1:
+                if os.environ['TEST_LATE'] == 'blocks':
+                    threading.Event().wait()
+                return AgentsResult({'action': 'status', 'error': {'code': 'broken', 'message': 'no status'}}, failed=True)
+        return call(request)
+
+    return wrapped
+
+
+@contextlib.contextmanager
+def connection(directory, operate, authenticate, **options):
+    """The real channel; a real client process leaves one model request in flight before the pipe closes."""
+    def traced(request):
+        entered.set()
+        time.sleep(float(os.environ.get('TEST_SLOW', 0)))
+        return operate(request)
+
+    with real_connection(directory, traced, authenticate, **options) as address:
+        if os.environ.get('TEST_IN_FLIGHT'):
+            request = {'action': 'execute', 'feature': 'status', 'arguments': {}}
+            document = request if kind == 'pi' else {'request': request, 'native': options['native_context']()}
+            subprocess.Popen([sys.executable, '-c', CLIENT, address, json.dumps(document), str(where / 'client.txt')],
+                             stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            entered.wait()
+            time.sleep(0.2)  # past the admission, into the blocked operation
+        facts['closing_at'] = time.time()
+        (where / 'facts.json').write_text(json.dumps(facts))
+        yield address
 
 
 def started(*arguments):
@@ -343,13 +462,24 @@ def started(*arguments):
                                     stdout=subprocess.PIPE, stderr=subprocess.PIPE, start_new_session=True)
         driver.runs[asking].events.process(runtime_pid=survivor.pid)
         facts['survivor'] = survivor.pid
+    if os.environ.get('TEST_LOCK'):
+        facts['locked'] = {'second': second, 'first': first}[os.environ['TEST_LOCK']]
+        hold_lock(facts['locked'])
     (where / 'facts.json').write_text(json.dumps(facts))
+    if os.environ.get('TEST_ACK'):
+        notices.timeout = 10.0
+        sys.stdin = acknowledgements(notices, second)
+    if os.environ.get('TEST_LATE'):
+        at = 3 if kind == 'pi' else 4
+        result = (*result[:at], late_status(result[at]), *result[at + 1:])
     return result
 
 
 host.verify_native_parent = lambda *_: None
 host.runtime_drivers = lambda *_: {'claude': driver}
 host.start = started
+host.agents_connection = connection
+host.process_ancestors = lambda pid: [pid, os.getppid()]  # the test's client stands for the native side's
 if kind == 'pi':
     host.pi_request = lambda *_: {}
     host.current_connection = lambda: {'runtime': 'pi', 'session': 'main', 'session_file': str(where / 's.jsonl')}
@@ -357,12 +487,37 @@ sys.argv = ['host', '--config', str(where / 'host.json')]
 host.main()
 '''
 
+HOLDER = '''
+import fcntl, pathlib, sys, time
+stream = open(sys.argv[1], 'a+b')
+fcntl.flock(stream.fileno(), fcntl.LOCK_EX)
+pathlib.Path(sys.argv[2]).write_text('held')
+time.sleep(600)
+'''
+
+CLIENT = '''
+import json, pathlib, sys
+from agent_swarm.connection import connection_operation
+try:
+    outcome = json.dumps(connection_operation(sys.argv[1], json.loads(sys.argv[2]), authenticate=True, await_accepted=True))
+except Exception as error:
+    outcome = str(error)
+pathlib.Path(sys.argv[3]).write_text(outcome)
+'''
+
 
 def run_host(tmp_path: Path, kind: str, position: str = 'first', stubborn: str = '', stop_seconds: float | None = None,
-             then: str = '') -> tuple[subprocess.CompletedProcess, dict]:
-    """Run ``main()`` in its own process group, end its stdin and wait at most ``HOST_LIMIT``."""
+             then: str = '', limit: float = HOST_LIMIT, **tests: str) -> tuple[subprocess.CompletedProcess, dict]:
+    """Run ``main()`` in its own process group, end its stdin and wait at most ``limit``.
+
+    ``tests`` become ``TEST_*`` variables: ``lock`` (which child's record lock another process
+    holds), ``late`` (how status behaves after its first answer), ``in_flight`` (a model request
+    left in flight on the host connection), ``slow`` (seconds that request takes before its
+    operation). ``facts['ended_after']`` is the seconds from the
+    host entering its stdin loop, by which time the pipe is closed, to its process ending.
+    """
     script = tmp_path / 'run-host.py'
-    script.write_text(HOST)
+    script.write_text(f'HOLDER = {HOLDER!r}\nCLIENT = {CLIENT!r}\n' + HOST)
     (tmp_path / 'host.json').write_text(json.dumps({'root': str(tmp_path / 'data')}))
     if kind == 'pi':
         header = {'type': 'session', 'version': 3, 'id': 'main', 'cwd': str(tmp_path)}
@@ -372,16 +527,18 @@ def run_host(tmp_path: Path, kind: str, position: str = 'first', stubborn: str =
     # Built, not copied: nothing of the real environment reaches this process or its output.
     env = {'PATH': '/usr/bin:/bin', 'HOME': str(tmp_path), 'PYTHONPATH': str(SOURCE), 'TEST_KIND': kind,
            'TEST_WHERE': str(tmp_path), 'TEST_POSITION': position, 'TEST_STUBBORN': stubborn,
-           'AGENT_SWARM_PI_ENTRY': sys.executable}
+           'AGENT_SWARM_PI_ENTRY': sys.executable,
+           **{f'TEST_{name.upper()}': value for name, value in tests.items()}}
     if stop_seconds is not None:
         env['TEST_STOP_SECONDS'] = str(stop_seconds)
     process = subprocess.Popen([sys.executable, str(script)], cwd=tmp_path, env=env, stdin=subprocess.PIPE,
                                stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, start_new_session=True)
     try:
         # communicate reads to EOF: like Node's close, it also waits for whoever holds the pipes.
-        stdout, stderr = process.communicate(launch + '\n' + then, timeout=HOST_LIMIT)
+        stdout, stderr = process.communicate(launch + '\n' + then, timeout=limit)
+        ended = time.time()
     except subprocess.TimeoutExpired:
-        pytest.fail(f'The host process did not exit within {HOST_LIMIT} seconds.')
+        pytest.fail(f'The host process did not exit within {limit} seconds.')
     finally:
         try:
             os.killpg(process.pid, signal.SIGKILL)
@@ -390,6 +547,7 @@ def run_host(tmp_path: Path, kind: str, position: str = 'first', stubborn: str =
         process.wait(5)
     facts = json.loads((tmp_path / 'facts.json').read_text())
     assert Path(facts['module']).is_relative_to(SOURCE)
+    facts['ended_after'] = ended - facts['closing_at']
     return subprocess.CompletedProcess(script, process.returncode, stdout, stderr), facts
 
 
@@ -473,6 +631,104 @@ def test_an_error_with_every_child_stopped_exits_as_before(tmp_path: Path, kind:
     result, _ = run_host(tmp_path, kind, then='not json\n')
     assert result.returncode == 1
     assert 'JSONDecodeError' in result.stderr and 'stop-unconfirmed' not in result.stderr
+
+
+# --- One blocked call (434) ---
+
+# The contract: a host process ends this soon after its pipe closes, its 10-second stop included.
+END_SECONDS = 20
+# Time to fail on old code, where the process waits for a lock released only after this.
+BLOCKED_LIMIT = 25
+READY = '{"ready": true}\n'
+
+
+def assert_others_ended(tmp_path: Path, facts: dict, stuck: str, message: str) -> None:
+    """Only ``stuck`` is named; every other child was interrupted, seen to end, and its end is held."""
+    assert stuck in message and not any(agent in message for agent in facts['order'] if agent != stuck)
+    for agent in facts['order']:
+        if agent != stuck:
+            record = read_record(tmp_path, agent)['executions'][-1]
+            assert (record['outcome'], record['notification']) == ('interrupted', 'held')
+
+
+@pytest.mark.parametrize('kind', ['pi', 'dsh'])
+def test_another_process_holding_a_record_lock_does_not_hold_the_host(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, kind: str) -> None:
+    """392 steps 49 and 50, with every wait at once: the flusher and a model request blocked too, at the real 10 seconds."""
+    result, facts = run_host(tmp_path, kind, then=READY, limit=BLOCKED_LIMIT, lock='second', in_flight='status')
+    assert facts['ended_after'] < END_SECONDS
+    assert result.returncode != 0 and 'Traceback' not in result.stderr
+    stuck = facts['locked']
+    message = stop_line(result.stderr)['message']
+    assert_others_ended(tmp_path, facts, stuck, message)
+    assert 'Every other Agent stopped.' in message  # each was read after the lock was taken
+    # The caller of the request in flight is told it is unconfirmed, not left waiting.
+    assert 'unconfirmed' in wait_until(lambda: (tmp_path / 'client.txt').exists() and (tmp_path / 'client.txt').read_text())
+
+    # With the lock free again the next host shows the real state, as PUBLIC_API section 4 says.
+    next_host = Process(kind, tmp_path, monkeypatch, True, 2.0, Driver())
+    document = next_host.inner({'action': 'status', 'agent': stuck}).document['result']
+    last = document['last_result']
+    assert (last['outcome'], last['terminal_confirmed'], last['error']['code']) == ('failed', False, 'owner-exited')
+
+
+@pytest.mark.parametrize('kind', ['pi', 'dsh'])
+def test_a_locked_parent_does_not_hide_or_hold_its_descendants(tmp_path: Path, kind: str) -> None:
+    """The locked record is a parent whose child must still end, within the shortened stop."""
+    result, facts = run_host(tmp_path, kind, stop_seconds=2.0, limit=10, lock='first')
+    assert result.returncode != 0
+    assert_others_ended(tmp_path, facts, facts['locked'], stop_line(result.stderr)['message'])
+
+
+@pytest.mark.parametrize('kind', ['pi', 'dsh'])
+def test_a_driver_interrupt_that_never_returns_stops_nobody_else(tmp_path: Path, kind: str) -> None:
+    """The first Agent's interrupt blocks while holding its lock: the others still end and only it is named."""
+    result, facts = run_host(tmp_path, kind, stubborn='interrupt', stop_seconds=2.0, limit=10)
+    assert result.returncode != 0
+    assert_others_ended(tmp_path, facts, facts['stubborn'], stop_line(result.stderr)['message'])
+
+
+@pytest.mark.parametrize('late', ['fails', 'blocks'])
+@pytest.mark.parametrize('kind', ['pi', 'dsh'])
+def test_a_status_lost_after_the_first_claims_no_other_agent_stopped(tmp_path: Path, kind: str, late: str) -> None:
+    """Interrupted but never seen to end: all are named, and the line does not vouch for anyone else."""
+    result, facts = run_host(tmp_path, kind, stop_seconds=1.0, limit=10, late=late)
+    assert result.returncode != 0
+    message = stop_line(result.stderr)['message']
+    assert all(agent in message for agent in facts['order'])
+    assert 'Every other Agent stopped' not in message
+    assert 'no other Agent is confirmed' in message
+
+
+@pytest.mark.parametrize('kind', ['pi', 'dsh'])
+def test_a_request_in_flight_that_finishes_still_gets_its_reply(tmp_path: Path, kind: str) -> None:
+    """The bound only cuts what is blocked: a request that takes a second still answers, and the stop is clean."""
+    result, facts = run_host(tmp_path, kind, in_flight='status', slow='1')
+    assert result.returncode == 0 and 'stop-unconfirmed' not in result.stderr
+    outcome = json.loads(wait_until(lambda: (tmp_path / 'client.txt').exists() and (tmp_path / 'client.txt').read_text()))
+    assert outcome['failed'] is False
+
+
+def test_a_shown_acknowledgement_on_a_locked_record_does_not_hold_the_pi_host(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Pi's stdin loop settles what it was told is shown: a held lock must not stop it reading the close.
+
+    Unsettled when the host ends, the notice stays ``held`` as for any host that ended
+    first, so the next host pushes it once more.
+    """
+    result, facts = run_host(tmp_path, 'pi', stop_seconds=2.0, limit=12, ack='locked')
+    assert result.returncode != 0 and 'Traceback' not in result.stderr
+    agent = facts['acknowledged']
+    assert_others_ended(tmp_path, facts, agent, stop_line(result.stderr)['message'])
+    assert read_record(tmp_path, agent)['executions'][-1]['notification'] == 'held'
+    written = Process('pi', tmp_path, monkeypatch, True, 2.0, Driver()).flush()
+    assert [line['agent'] for line in written].count(agent) == 1
+    assert read_record(tmp_path, agent)['executions'][-1]['notification'] == 'delivered'
+
+
+def test_a_shown_acknowledgement_still_settles_when_the_record_is_free(tmp_path: Path) -> None:
+    """Nothing blocked: the notice is delivered, however soon the pipe closes after the acknowledgement."""
+    result, facts = run_host(tmp_path, 'pi', limit=20, ack='free')
+    assert result.returncode == 0 and 'stop-unconfirmed' not in result.stderr
+    assert read_record(tmp_path, facts['acknowledged'])['executions'][-1]['notification'] == 'delivered'
 
 
 # --- Where the line surfaces on the native side ---

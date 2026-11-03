@@ -116,7 +116,7 @@ _INTEGRATE_SCHEMA = {
         "confirmed_commit":   {"type": ["string", "null"],
                                "description": "Confirm the exact committed resolution when adopting an escalated integration."},
         "role":               {"type": ["string", "object", "null"],
-                               "description": "Explicit configured role reference or inline YAML role definition for conflict work."},
+                               "description": "Explicit configured role reference or inline YAML role definition for conflict work; an inline role cannot set api_key_env, pass_env, base_url, pi.agent_dir, pi.sandbox_python, pi.sandbox_path or codex.approval model/base_url/api_key_env; select connection (or codex.approval.connection) instead."},
     },
     "required":             ["task_id", "validation_command"],
     "additionalProperties": False,
@@ -823,7 +823,8 @@ register_tool(
         'catalog': {'type': 'object', 'description':
             'Complete version: 1 catalog. runtimes maps names to runtime (codex/pi/dsh/claude), '
             'optional absolute home, and providers. Each provider has models and optional '
-            'base_url, api_key_env (variable name), and Pi api. models maps reference keys '
+            'base_url, api_key_env (variable name), pass_env (variable names a child also receives) '
+            'and Pi api. models maps reference keys '
             'to id, source (manual/native), optional alias and supported_efforts. '
             'Project roles select connection: runtime-name/provider-name/model-key.'},
         'changes': {'type': 'object', 'description':

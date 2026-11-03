@@ -10,6 +10,7 @@ import queue
 import re
 import signal
 import subprocess
+import sys
 import threading
 import time
 import urllib.error
@@ -28,6 +29,8 @@ from agent_swarm.dsh.errors import DshError
 APPROVAL_STREAM   = 'events'
 APPROVAL_ENDPOINT = '$events'
 APPROVAL_RESULT   = '$events/result'
+
+WATCHER = Path(__file__).with_name('watcher.py')
 
 _SECRET_NAME = re.compile(r'KEY|TOKEN|SECRET|PASSWORD|COOKIE|AUTH', re.I)
 
@@ -71,6 +74,8 @@ class DshService:
         self.environment = environment
         self.profile_patch = profile_patch
         self.process: subprocess.Popen | None = None
+        self.watcher: subprocess.Popen | None = None
+        self.watcher_pipe: int | None = None
         self.origin = ''
         self.cookie = ''
         self.socket = None
@@ -83,7 +88,8 @@ class DshService:
         """Launch an owned Web backend and exchange its single-use launch token."""
         urls: queue.Queue[str | None] = queue.Queue()
         diagnostics: deque[str] = deque(maxlen=40)
-        secrets = secret_values(self.environment)
+        # The host's names too: redaction covers more than a child now holds.
+        secrets = secret_values({**os.environ, **self.environment})
         try:
             argv = [self.executable, 'web']
             if self.profile_patch is not None:
@@ -95,6 +101,7 @@ class DshService:
                 stderr=subprocess.STDOUT, start_new_session=True,
                 text=True, bufsize=1,
             )
+            self._start_watcher()
         except OSError as error:
             raise self.error_type('RUNTIME_START_FAILED', 'Cannot start DSH.') from error
 
@@ -137,6 +144,38 @@ class DshService:
             # Native authentication failures can contain the launch URL. Do
             # not retain even an exception-chain copy of that credential.
             raise self.error_type('RUNTIME_CONNECTION_FAILED', 'DSH launch/authentication failed.') from None
+
+    def _start_watcher(self) -> None:
+        """Start the process that stops this service's group if this process dies first.
+
+        ``close`` runs on a thread of this process, so a host killed before it
+        finishes would otherwise leave ``dsh web`` running with nothing to stop
+        it. Only this service holds the pipe's write end: it closes on exec, so
+        no child inherits it, and it ends when this process does, however it ends.
+        """
+        read_end, self.watcher_pipe = os.pipe()
+        try:
+            self.watcher = subprocess.Popen(
+                [sys.executable, '-I', '-S', str(WATCHER), str(self.process.pid)],
+                cwd='/', env={}, stdin=read_end, stdout=subprocess.DEVNULL, start_new_session=True,
+            )
+        finally:
+            os.close(read_end)
+
+    def _dismiss_watcher(self) -> None:
+        """Tell the watcher the group is stopped, and reap it."""
+        if self.watcher_pipe is not None:
+            try:
+                os.write(self.watcher_pipe, b'x')
+            except OSError:
+                pass  # It is already gone, so there is nobody to tell.
+            os.close(self.watcher_pipe)
+            self.watcher_pipe = None
+        if self.watcher is not None:
+            try:
+                self.watcher.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                pass  # It holds nothing and ends by itself; a close must not fail for this.
 
     def rpc(self, method: str, request: dict | None = None) -> dict:
         """Call the native Remote envelope; a successful response is only a receipt."""
@@ -317,4 +356,5 @@ class DshService:
             if self.process.poll() is None:
                 raise self.error_type('RUNTIME_SHUTDOWN_FAILED', 'Owned DSH service did not stop.',
                                           terminal_confirmed=False)
+        self._dismiss_watcher()
         self.cookie = ''

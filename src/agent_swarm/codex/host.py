@@ -26,6 +26,8 @@ import asyncio
 import json
 from pathlib import Path
 import sys
+import threading
+import time
 
 import yaml
 
@@ -35,7 +37,16 @@ from agent_swarm.runtime import RuntimeAdapterError
 from agent_swarm.shutdown import exit_if_owned_unconfirmed, stop_owned
 from .app_server import CodexServerRequest
 from .driver import CodexDriver
-from .managed_session import CodexManagedExecution
+from .managed_session import MCP_SERVER, CodexManagedExecution
+
+# Added to the parent only, after the user's own text: the model also has Codex's
+# native spawn_agent, which literally does what "create a child" asks (432).
+GUIDANCE = (
+    f'The MCP tool `agents` (`mcp__{MCP_SERVER}__agents`) is how this host creates and controls child Agents. '
+    'Use it when asked for a child, a subagent or the agents tool. '
+    "Codex's own `spawn_agent` and related tools put a child outside agents' hierarchy, approvals and records; "
+    'use those only when the user names them.'
+)
 
 
 def _claude(settings: dict, cwd: Path, root: Path) -> object:
@@ -82,8 +93,15 @@ def runtime_drivers(settings: dict, root: Path) -> dict:
     return {runtime: RUNTIMES[runtime](entry, cwd, root) for runtime, entry in entries.items()}
 
 
+def _notice_identity(notice: dict) -> str | None:
+    """Return the stable identity of one notice in a receiver's document shape."""
+    return notice_id(notice.get('execution'), notice['outcome'], notice.get('request'))
+
+
 class CodexHost(CodexManagedExecution):
     """Bind an actual owned native parent to the existing independent controller."""
+
+    user_environment = True
 
     def __init__(self, settings: dict, directory: Path, instruction: str, resume: bool = False) -> None:
         """Restore parent identity only from this host's retained native result."""
@@ -94,6 +112,9 @@ class CodexHost(CodexManagedExecution):
         others = runtime_drivers(settings, directory)
         driver = CodexDriver(settings)
         settings = driver.prepare('codex', Caller('codex', None))
+        # ``prepare`` returned a copy, so children keep the user's own text.
+        parameters = settings['adapter_request']['session_parameters']
+        parameters['developerInstructions'] = '\n\n'.join(filter(None, (parameters['developerInstructions'], GUIDANCE)))
         expected = None
         if resume:
             previous = yaml.safe_load((native / 'session.yml').read_text())
@@ -106,6 +127,13 @@ class CodexHost(CodexManagedExecution):
         self.authentications: list[dict] = []
         self.calls: list[dict] = []
         self.deliveries: list[dict] = []
+        self.began_at = time.time()
+        # Held ends this process took to push, and the lock that lets either a
+        # result settle a held end or the flush take it, never both.
+        self.flushed: set[str | None] = set()
+        self.notice_lock = threading.Lock()
+        # Codex's own subagents the parent started, by native item.
+        self.native_subagents: dict[str, dict] = {}
         # The Agents the last ``run`` could not confirm stopped.
         self.stop_unconfirmed: list[str] = []
         super().__init__(settings['adapter_request'], instruction, native,
@@ -133,11 +161,45 @@ class CodexHost(CodexManagedExecution):
         print(json.dumps({'parent_session': session, 'service_pid': pid,
                           'source': 'thread/resume' if self.expected_session else 'thread/start'},
                          ensure_ascii=False), file=sys.stderr, flush=True)
+        for entry in self.native_subagents.values():
+            self._print_native_subagent(entry)
         if self.expected_session:
             # As an operation, the turn's owner keeps the connection open for it.
             flush = asyncio.ensure_future(self._flush_held())
             self.operations.add(flush)
             flush.add_done_callback(self.operations.discard)
+
+    def _native_item(self, item: dict) -> None:
+        """Record a subagent Codex started itself, once per native item; its later state replaces the earlier."""
+        if (item.get('type') != 'collabAgentToolCall' or item.get('tool') != 'spawnAgent'
+                or not isinstance(item.get('id'), str)):
+            return
+        first = item['id'] not in self.native_subagents
+        entry = {'id': item['id'], 'sender_thread': item.get('senderThreadId'),
+                 'receiver_threads': item.get('receiverThreadIds'), 'status': item.get('status'),
+                 'model': item.get('model')}
+        self.native_subagents[item['id']] = entry
+        # Before the execution exists parent_session is unprinted; _started prints this after it.
+        if first and self.execution is not None:
+            self._print_native_subagent(entry)
+
+    @staticmethod
+    def _print_native_subagent(entry: dict) -> None:
+        """Say on stderr that this child is outside agents."""
+        print(json.dumps({'native_subagent': {
+            **entry, 'note': "Codex's own subagent, not an agents child: agents has no record or control of it.",
+        }}, ensure_ascii=False), file=sys.stderr, flush=True)
+
+    def _print_summary(self) -> None:
+        """Say what this run did through agents, whatever the parent's last message claims."""
+        # No Session means no run: a refused start reports only its error.
+        if self.native_session is None:
+            return
+        summary: dict = {'agents_calls': len(self.calls), 'native_subagents': len(self.native_subagents)}
+        if not self.calls:
+            summary['note'] = ('This run made no agents call, so any child the parent reports creating '
+                               'in this run was not created through agents.')
+        print(json.dumps({'run_summary': summary}, ensure_ascii=False), file=sys.stderr, flush=True)
 
     def _authenticate_mcp(self, pid: int) -> None:
         """Retain only authentication that the actual service owner accepted."""
@@ -163,11 +225,39 @@ class CodexHost(CodexManagedExecution):
             body = request.get('instruction') or request.get('message')
             if body:
                 self._display(self.native_session, result.document['agent'], body)
-        if not result.failed:
-            self.control.settle_shown(request, result.document)
+        found = result.document.get('result')
+        if isinstance(found, dict):
+            with self.notice_lock:
+                for agent in found.get('agents', [found]):
+                    self._hide_pushed(agent)
+                if not result.failed:
+                    self.control.settle_shown(request, result.document)
         self.calls.append({'action': request['action'], 'failed': result.failed,
                            'parent_session': self.native_session, 'result': result.document})
         return result
+
+    def _hide_pushed(self, document: dict) -> None:
+        """Hide a body this host is pushing, so the parent receives it once.
+
+        AgentControl marks a live end ``queueing`` before calling the receiver,
+        so a concurrent ``wait`` or ``status`` would otherwise show the body the
+        host event carries. A held end being flushed is shown as ``queueing``
+        the same way. Neither is settled as read, so a send refused before
+        anything was written leaves the end readable. Ends of earlier host
+        processes that no flush has taken keep their body.
+        """
+        pending = [document]
+        while pending:
+            agent = pending.pop()
+            last = agent.get('last_result') or {}
+            state = last.get('notification')
+            # The flush may have finished since this result was read, so a
+            # taken end stays hidden unless its send was refused.
+            flushed = notice_id(last.get('id'), last.get('outcome')) in self.flushed
+            live = state == 'queueing' and (last.get('ended_at') or 0) >= self.began_at
+            if agent.get('parent') is None and state in ('held', 'queueing') and (flushed or live):
+                last.update(notification='queueing', last_message=None)
+            pending.extend(agent.get('children', []))
 
     def _receive_child(self, notice: dict) -> bool | str:
         """Forward one genuine end or native request notice to this still-owned external parent."""
@@ -193,7 +283,7 @@ class CodexHost(CodexManagedExecution):
             # failure leaves it readable through wait/status.
             return 'unconfirmed' if getattr(error, 'request_written', False) else 'held'
         self._display(notice['agent'], self.native_session, message)
-        self.deliveries.append({'id': notice_id(notice.get('execution'), notice['outcome'], notice.get('request')),
+        self.deliveries.append({'id': _notice_identity(notice),
                                 'agent': notice['agent'], 'event': notice['outcome'],
                                 'parent_session': self.native_session, 'body': notice['body'], 'accepted': True})
         return True
@@ -205,11 +295,21 @@ class CodexHost(CodexManagedExecution):
             # A turn that ended first leaves the rest held for the next --resume.
             if self.result.done() or self.termination_requested:
                 return
-            if await asyncio.to_thread(self.control.notice_open, notice):
+            if await asyncio.to_thread(self._take_held, notice):
                 delivery = await self._forward(notice)
-                if delivery != 'held':
+                if delivery == 'held':
+                    self.flushed.discard(_notice_identity(notice))
+                else:
                     await asyncio.to_thread(self.control.settle_notice, notice,
                                             'delivered' if delivery is True else delivery)
+
+    def _take_held(self, notice: dict) -> bool:
+        """Take one held notice to push, unless a result has already shown it."""
+        with self.notice_lock:
+            if not self.control.notice_open(notice):
+                return False
+            self.flushed.add(_notice_identity(notice))
+            return True
 
     def run(self) -> dict:
         """Keep one actual parent owner, even across repeated host invocations."""
@@ -229,8 +329,20 @@ class CodexHost(CodexManagedExecution):
                 self.stop_unconfirmed = stop_owned(self.control)
             return {**result, 'parent_session': self.native_session,
                     'operations': self.calls, 'deliveries': self.deliveries,
+                    'native_subagents': list(self.native_subagents.values()),
                     'authenticated_callers': self.authentications,
                     'stop_unconfirmed': self.stop_unconfirmed}
+
+
+def _close(host: CodexHost | None) -> None:
+    """Print the run's summary, then end at once if a stop is unconfirmed."""
+    if host is None:
+        return
+    try:
+        host._print_summary()
+    except OSError:
+        pass  # A closed stderr changes neither the exit status nor the stop report.
+    exit_if_owned_unconfirmed(host.stop_unconfirmed)
 
 
 def main() -> None:
@@ -250,11 +362,11 @@ def main() -> None:
     except (AgentsError, RuntimeAdapterError, OSError, ValueError, KeyError) as error:
         result = {'error': {'code': getattr(error, 'code', 'invalid-input'), 'message': str(error)}}
         print(json.dumps(result, ensure_ascii=False), flush=True)
-        exit_if_owned_unconfirmed(host.stop_unconfirmed if host else [])
+        _close(host)
         raise SystemExit(1) from error
     except BaseException:
         # It would end at the interpreter's exit, which a stuck child's thread can hold up.
-        exit_if_owned_unconfirmed(host.stop_unconfirmed if host else [])
+        _close(host)
         raise
     if arguments.output is not None:
         arguments.output.write_text(json.dumps(result, ensure_ascii=False, indent=2) + '\n')
@@ -262,7 +374,7 @@ def main() -> None:
     print(result.get('last_agent_message') or result['outcome'], flush=True)
     if result.get('error') is not None:
         print(json.dumps(result['error'], ensure_ascii=False), file=sys.stderr)
-    exit_if_owned_unconfirmed(result['stop_unconfirmed'])
+    _close(host)
     if result.get('error') is not None:
         raise SystemExit(1)
 

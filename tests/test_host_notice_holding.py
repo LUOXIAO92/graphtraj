@@ -845,6 +845,267 @@ def test_codex_a_failed_live_send_is_held_and_status_settles_it(
     assert running.stop()['deliveries'] == [] and events(log) == []
 
 
+# A read meeting a push (431). The child's answer is its instruction, so counting it
+# covers every result the parent read and every host event it received.
+
+READS = {'wait': {'timeout_seconds': 10}, 'status': {}, 'hierarchy': {}}
+
+
+def read_during_push(running: Running, form: str, agent: str) -> dict:
+    """Read the Agent in one public form and return its ``last_result``."""
+    if form == 'hierarchy':
+        [found] = running.call('status')['result']['agents']
+    else:
+        found = running.call(form, agent=agent, **READS[form])['result']
+    return found['last_result']
+
+
+def received(result: dict, log: Path, body: str) -> dict:
+    """Count ``body`` across what the parent read and what it was sent."""
+    reads = sum(json.dumps(call['result']).count(body) for call in result['operations'])
+    return {'reads': reads, 'events': [event['message'] for event in events(log)].count(body),
+            'deliveries': [delivery['body'] for delivery in result['deliveries']].count(body)}
+
+
+def gated_sends(monkeypatch: pytest.MonkeyPatch, refuse: bool = False) -> tuple[threading.Event, threading.Event]:
+    """Hold each host event open until released; returns ``(entered, release)``.
+
+    The event loop stays free meanwhile. With ``refuse`` the send then fails
+    before anything was written.
+    """
+    original = CodexAppServer.send_host_event
+    entered, release = threading.Event(), threading.Event()
+
+    async def gated(self: CodexAppServer, thread_id: str, event: dict) -> object:
+        """Be under way until the test lets go."""
+        entered.set()
+        await asyncio.to_thread(release.wait, 10)
+        if refuse:
+            raise CodexAdapterError('RUNTIME_CONNECTION_FAILED', 'closed', terminal_confirmed=False)
+        return await original(self, thread_id, event)
+
+    monkeypatch.setattr(CodexAppServer, 'send_host_event', gated)
+    return entered, release
+
+
+def codex_held_answer(tmp_path: Path, host_settings: dict, monkeypatch: pytest.MonkeyPatch, body: str) -> str:
+    """Leave one answer held for the next ``--resume``, unread and unsent; returns the Agent."""
+    original = CodexAppServer.send_host_event
+
+    async def refused(self: CodexAppServer, thread_id: str, event: dict) -> None:
+        """Fail before anything is written."""
+        raise CodexAdapterError('RUNTIME_CONNECTION_FAILED', 'closed', terminal_confirmed=False)
+
+    monkeypatch.setattr(CodexAppServer, 'send_host_event', refused)
+    running = Running(CodexHost(host_settings, tmp_path / 'host', 'hold'))
+    agent = running.call('create', runtime='codex', instruction=body)['agent']
+    until(lambda: record(tmp_path / 'host', agent)['executions'][-1].get('notification') == 'held')
+    running.stop()
+    monkeypatch.setattr(CodexAppServer, 'send_host_event', original)
+    return agent
+
+
+@pytest.mark.parametrize('form', list(READS))
+def test_codex_a_read_during_a_live_push_does_not_repeat_the_answer(
+        tmp_path: Path, host_settings: dict, monkeypatch: pytest.MonkeyPatch, form: str) -> None:
+    """The 392 failure: the read returns during the send, and the event alone carries the answer."""
+    log = tmp_path / 'host-events.jsonl'
+    monkeypatch.setenv('PEER_HOST_EVENTS', str(log))
+    entered, release = gated_sends(monkeypatch)
+    running = Running(CodexHost(host_settings, tmp_path / 'host', 'hold'))
+    agent = running.call('create', runtime='codex', instruction='PONG-431')['agent']
+    assert entered.wait(10)
+
+    shown = read_during_push(running, form, agent)
+    during = record(tmp_path / 'host', agent)['executions'][-1]['notification']
+    release.set()
+    until(lambda: record(tmp_path / 'host', agent)['executions'][-1]['notification'] == 'delivered')
+    result = running.stop()
+
+    assert received(result, log, 'PONG-431') == {'reads': 0, 'events': 1, 'deliveries': 1}
+    assert during == 'queueing'
+    assert (shown['notification'], shown['last_message']) == ('queueing', None)
+
+
+def test_codex_a_push_with_no_read_still_reaches_the_parent(
+        tmp_path: Path, host_settings: dict, monkeypatch: pytest.MonkeyPatch) -> None:
+    """One path only: the event carries the answer, and a later read shows it was delivered."""
+    log = tmp_path / 'host-events.jsonl'
+    monkeypatch.setenv('PEER_HOST_EVENTS', str(log))
+    running = Running(CodexHost(host_settings, tmp_path / 'host', 'hold'))
+    agent = running.call('create', runtime='codex', instruction='PONG-431')['agent']
+    until(lambda: record(tmp_path / 'host', agent)['executions'][-1].get('notification') == 'delivered')
+    after = running.call('status', agent=agent)['result']['last_result']
+    result = running.stop()
+
+    assert (after['notification'], after['last_message']) == ('delivered', None)
+    assert received(result, log, 'PONG-431') == {'reads': 0, 'events': 1, 'deliveries': 1}
+
+
+@pytest.mark.parametrize('then', ['status', 'resume'])
+def test_codex_a_refused_send_after_a_hidden_read_still_gives_the_answer(
+        tmp_path: Path, host_settings: dict, monkeypatch: pytest.MonkeyPatch, then: str) -> None:
+    """The read hid the body and the event was never written: the next read or resume gives it."""
+    log = tmp_path / 'host-events.jsonl'
+    monkeypatch.setenv('PEER_HOST_EVENTS', str(log))
+    state = lambda: record(tmp_path / 'host', agent)['executions'][-1]['notification']
+    original = CodexAppServer.send_host_event
+    entered, release = gated_sends(monkeypatch, refuse=True)
+    running = Running(CodexHost(host_settings, tmp_path / 'host', 'hold'))
+    agent = running.call('create', runtime='codex', instruction='PONG-431')['agent']
+    assert entered.wait(10)
+    hidden = running.call('wait', agent=agent, timeout_seconds=10)['result']['last_result']
+    release.set()
+    try:
+        assert (hidden['notification'], hidden['last_message']) == ('queueing', None)
+        until(lambda: state() == 'held')
+    except AssertionError:
+        running.stop()
+        raise
+    monkeypatch.setattr(CodexAppServer, 'send_host_event', original)
+
+    if then == 'status':
+        shown = running.call('status', agent=agent)['result']['last_result']
+        assert (shown['notification'], shown['last_message']) == ('held', 'PONG-431')
+        first = running.stop()
+        assert state() == 'delivered'
+        assert received(first, log, 'PONG-431') == {'reads': 1, 'events': 0, 'deliveries': 0}
+    else:
+        first = running.stop()
+        assert received(first, log, 'PONG-431') == {'reads': 0, 'events': 0, 'deliveries': 0}
+        running = Running(CodexHost(host_settings, tmp_path / 'host', 'hold', resume=True))
+        until(lambda: state() == 'delivered')
+        assert received(running.stop(), log, 'PONG-431') == {'reads': 0, 'events': 1, 'deliveries': 1}
+
+    # Nothing is left for a further resume to repeat.
+    running = Running(CodexHost(host_settings, tmp_path / 'host', 'hold', resume=True))
+    time.sleep(0.2)
+    assert running.stop()['deliveries'] == []
+
+
+@pytest.mark.parametrize('form', list(READS))
+def test_codex_a_read_during_a_flush_does_not_repeat_the_answer(
+        tmp_path: Path, host_settings: dict, monkeypatch: pytest.MonkeyPatch, form: str) -> None:
+    """A held end being sent on ``--resume`` is not shown, nor settled as read."""
+    log = tmp_path / 'host-events.jsonl'
+    monkeypatch.setenv('PEER_HOST_EVENTS', str(log))
+    agent = codex_held_answer(tmp_path, host_settings, monkeypatch, 'PONG-431')
+    entered, release = gated_sends(monkeypatch)
+    running = Running(CodexHost(host_settings, tmp_path / 'host', 'hold', resume=True))
+    assert entered.wait(10)
+
+    shown = read_during_push(running, form, agent)
+    release.set()
+    until(lambda: record(tmp_path / 'host', agent)['executions'][-1]['notification'] == 'delivered')
+    after = running.call('status', agent=agent)['result']['last_result']
+    result = running.stop()
+
+    assert received(result, log, 'PONG-431') == {'reads': 0, 'events': 1, 'deliveries': 1}
+    assert (shown['notification'], shown['last_message']) == ('queueing', None)
+    assert (after['notification'], after['last_message']) == ('delivered', None)
+
+
+def test_codex_a_read_after_a_refused_flush_gives_the_answer(
+        tmp_path: Path, host_settings: dict, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A flush that could not write gives the end back: the next read shows it, once."""
+    log = tmp_path / 'host-events.jsonl'
+    monkeypatch.setenv('PEER_HOST_EVENTS', str(log))
+    agent = codex_held_answer(tmp_path, host_settings, monkeypatch, 'PONG-431')
+    original = CodexAppServer.send_host_event
+    entered, release = gated_sends(monkeypatch, refuse=True)
+    running = Running(CodexHost(host_settings, tmp_path / 'host', 'hold', resume=True))
+    assert entered.wait(10)
+
+    def readable() -> dict | None:
+        """Return the Agent's ``last_result`` once it carries a body."""
+        last = running.call('status', agent=agent)['result']['last_result']
+        return last if last['last_message'] else None
+
+    hidden = running.call('status', agent=agent)['result']['last_result']
+    release.set()
+    try:
+        assert (hidden['notification'], hidden['last_message']) == ('queueing', None)
+        shown = until(readable)
+    finally:
+        monkeypatch.setattr(CodexAppServer, 'send_host_event', original)
+        result = running.stop()
+
+    assert (shown['notification'], shown['last_message']) == ('held', 'PONG-431')
+    assert record(tmp_path / 'host', agent)['executions'][-1]['notification'] == 'delivered'
+    assert received(result, log, 'PONG-431') == {'reads': 1, 'events': 0, 'deliveries': 0}
+
+
+def test_codex_a_read_while_the_flush_checks_the_notice_does_not_repeat_it(
+        tmp_path: Path, host_settings: dict, monkeypatch: pytest.MonkeyPatch) -> None:
+    """The window between the flush finding a notice open and sending it, held open."""
+    log = tmp_path / 'host-events.jsonl'
+    monkeypatch.setenv('PEER_HOST_EVENTS', str(log))
+    agent = codex_held_answer(tmp_path, host_settings, monkeypatch, 'PONG-431')
+    original = AgentControl.notice_open
+    found_open, release = threading.Event(), threading.Event()
+
+    def gated(self: AgentControl, notice: dict) -> bool:
+        """Report the answer it read only after the test's read had its chance."""
+        still_open = original(self, notice)
+        found_open.set()
+        assert release.wait(10)
+        return still_open
+
+    monkeypatch.setattr(AgentControl, 'notice_open', gated)
+    running = Running(CodexHost(host_settings, tmp_path / 'host', 'hold', resume=True))
+    assert found_open.wait(10)
+
+    shown: list[dict] = []
+    reader = threading.Thread(target=lambda: shown.append(running.call('status', agent=agent)))
+    reader.start()
+    # A read that shows the body finishes inside the window; one that waits for the
+    # flush to take the notice cannot be seen waiting. Either way the count below holds.
+    reader.join(0.5)
+    release.set()
+    reader.join(10)
+    until(lambda: record(tmp_path / 'host', agent)['executions'][-1]['notification'] == 'delivered')
+    # Stopping waits for a send already under way, so the count sees it.
+    result = running.stop()
+
+    assert len(shown) == 1
+    assert received(result, log, 'PONG-431') == {'reads': 0, 'events': 1, 'deliveries': 1}
+
+
+@pytest.mark.parametrize('left', ['held', 'queueing'])
+def test_codex_a_read_before_the_flush_keeps_an_earlier_processs_answer(
+        tmp_path: Path, host_settings: dict, monkeypatch: pytest.MonkeyPatch, left: str) -> None:
+    """An end of an earlier host process that no flush has taken is shown, settled and not pushed."""
+    log = tmp_path / 'host-events.jsonl'
+    monkeypatch.setenv('PEER_HOST_EVENTS', str(log))
+    agent = codex_held_answer(tmp_path, host_settings, monkeypatch, 'PONG-431')
+    path = tmp_path / 'host' / 'control' / 'agents' / f'{agent}.json'
+    document = json.loads(path.read_text())
+    document['executions'][-1]['notification'] = left
+    document['executions'][-1].setdefault('process', {})['worker_pid'] = 2 ** 22 + 1
+    path.write_text(json.dumps(document))
+
+    original = AgentControl.held_notices
+    release, listed = threading.Event(), threading.Event()
+
+    def gated(self: AgentControl, caller: Caller) -> list[dict]:
+        """List what is held only after the test's read."""
+        assert release.wait(10)
+        notices = original(self, caller)
+        listed.set()
+        return notices
+
+    monkeypatch.setattr(AgentControl, 'held_notices', gated)
+    running = Running(CodexHost(host_settings, tmp_path / 'host', 'hold', resume=True))
+    shown = running.call('status', agent=agent)['result']['last_result']
+    release.set()
+    assert listed.wait(10)
+    result = running.stop()
+
+    assert (shown['notification'], shown['last_message']) == (left, 'PONG-431')
+    assert record(tmp_path / 'host', agent)['executions'][-1]['notification'] == 'delivered'
+    assert received(result, log, 'PONG-431') == {'reads': 1, 'events': 0, 'deliveries': 0}
+
+
 def test_codex_a_turn_that_has_ended_holds_a_live_end(tmp_path: Path, host_settings: dict) -> None:
     """Between a parent's turn and its exit the receiver refuses nothing it could lose."""
     host = CodexHost(host_settings, tmp_path / 'host', 'hold')

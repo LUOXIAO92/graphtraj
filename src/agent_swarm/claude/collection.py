@@ -11,12 +11,22 @@ from pathlib import Path
 from agent_swarm.sessions.archive import JsonlSessionStore, SessionArchive, archive_path
 
 
-def hook_source(event: dict, cwd: Path) -> tuple[str, str, str | None, str]:
+def hook_source(
+    event: dict,
+    cwd: Path,
+    *,
+    native_id: str | None = None,
+) -> tuple[str, str, str | None, str]:
     """Validate the exact native hook association without interpreting its history.
+
+    A caller that owns the Session's channel passes its ``native_id``: the event
+    must name that Session, and its cwd is not compared because a Bash ``cd``
+    moves it. Without one, the event's cwd must equal ``cwd``.
 
     Returns ``(kind, native_id, child_id, transcript_path)``; ``child_id`` is
     ``None`` for the Session itself.
     """
+    expected = native_id
     kind = event.get('hook_event_name')
     if kind not in {'SessionStart', 'Stop', 'StopFailure', 'SessionEnd', 'SubagentStop'}:
         raise ValueError('Unsupported Claude collection hook.')
@@ -33,7 +43,10 @@ def hook_source(event: dict, cwd: Path) -> tuple[str, str, str | None, str]:
         raise ValueError('The native source must supply its own absolute transcript path.')
     if child and event.get('transcript_path') and Path(path).resolve() == Path(event['transcript_path']).resolve():
         raise ValueError('The parent transcript is not the child transcript.')
-    if event.get('cwd') and Path(event['cwd']).resolve() != cwd.resolve():
+    if expected is not None:
+        if native_id != expected:
+            raise ValueError('Hook Session differs from the owned Session.')
+    elif event.get('cwd') and Path(event['cwd']).resolve() != cwd.resolve():
         raise ValueError('Hook working directory differs from collection entry.')
     return kind, native_id, child, path
 
@@ -44,16 +57,19 @@ def collect_hook_event(
     cwd: Path,
     *,
     extra_fields: dict | None = None,
+    native_id: str | None = None,
 ) -> dict:
     """Collect the hook's associated transcript into ``archive``.
 
-    ``extra_fields`` is written to a newly created header only; an existing
-    archive keeps its original header. Returns the archive identity, the
-    native source kind and whether anything was saved.
+    ``cwd`` is the collection entry, kept in a new header whatever directory the
+    event names. ``native_id`` is as in ``hook_source``. ``extra_fields`` is
+    written to a newly created header only; an existing archive keeps its
+    original header. Returns the archive identity, the native source kind and
+    whether anything was saved.
     """
     from agent_swarm.sessions.claude import ClaudeJsonlCollector
 
-    kind, native_id, child, path = hook_source(event, cwd)
+    kind, native_id, child, path = hook_source(event, cwd, native_id=native_id)
 
     # A resumed native Session continues from the boundary its SessionStart recorded.
     retained      = archive.native_header('claude', native_id, agent_id=child)

@@ -30,7 +30,7 @@ from agent_swarm import AgentControl, AgentsError, AgentsResult, Caller, bind
 from agent_swarm.connection import agents_connection
 from agent_swarm.notices import notice_id
 from agent_swarm.process import process_ancestors, process_arguments, process_executable
-from agent_swarm.shutdown import exit_if_unconfirmed, stop_children
+from agent_swarm.shutdown import CLOSE_SECONDS, exit_if_unconfirmed, stop_children
 from agent_swarm.runtime import RuntimeAdapterError
 from .driver import PiDriver
 from .execution import _validate, child_path
@@ -296,6 +296,8 @@ class Notices:
         self.waiting: dict[str, list] = {}
         # Notices Pi has taken and not yet written to the Session, for this host's lifetime.
         self.awaiting: dict[str, dict] = {}
+        # Records of shown notices being written: main waits for them at the close.
+        self.settling: list[threading.Thread] = []
         self.control: AgentControl | None = None
         self.closing = False
         self.started = time.time()
@@ -362,7 +364,13 @@ class Notices:
                                       'unconfirmed' if result == 'unconfirmed' else 'held')
 
     def acknowledge(self, identity: object, shown: bool) -> None:
-        """Settle one written notice: in the Pi Session, or refused there."""
+        """Settle one written notice: in the Pi Session, or refused there.
+
+        The record is written on its own daemon thread, because the stdin loop
+        calls this and a held record lock must not stop that loop reading the
+        close. If the host ends first the notice stays ``held``, and the next
+        host pushes it again, as for any host that ended before settling.
+        """
         with self.lock:
             slot = self.waiting.pop(identity, None)
             awaited = self.awaiting.pop(identity, None)
@@ -370,7 +378,9 @@ class Notices:
             slot[1] = shown
             slot[0].set()
         elif awaited is not None and shown:
-            self.control.settle_notice(awaited, 'delivered')
+            # ponytail: one short-lived thread per shown notice, kept for the host's life.
+            self.settling.append(threading.Thread(target=self.control.settle_notice, args=(awaited, 'delivered'), daemon=True))
+            self.settling[-1].start()
 
     def hide_pushed(self, document: Mapping[str, Any]) -> None:
         """Hide a body this host is about to push, so the Main receives it once.
@@ -467,7 +477,8 @@ def main() -> None:
             raise AgentsError('authority-denied', 'The client is not owned by this native Pi host.')
 
     try:
-        with agents_connection(root / 'live' / 'pi-host', operate, authenticate) as address:
+        with agents_connection(root / 'live' / 'pi-host', operate, authenticate,
+                               close_seconds=CLOSE_SECONDS) as address:
             notices.write({'connection': address})
             # Only readiness, acknowledgements and lifecycle EOF travel over this
             # private extension pipe. Model requests use the shared authenticated bridge.
@@ -489,10 +500,14 @@ def main() -> None:
         # Stop pushing first: ends caused by this shutdown are held, not shown.
         control.close_notices()
         notices.close()
+        # One wait for the flusher and for shown notices still being recorded.
+        limit = time.monotonic() + CLOSE_SECONDS
         if flusher.ident is not None:
-            flusher.join(10)
+            flusher.join(CLOSE_SECONDS)
+        for settling in notices.settling:
+            settling.join(max(0.0, limit - time.monotonic()))
         # Preserve identities and Sessions; use the same public stop path.
-        exit_if_unconfirmed(stop_children(call))
+        exit_if_unconfirmed(stop_children(call, lambda: control.visible_agents(caller)))
 
 
 if __name__ == '__main__':

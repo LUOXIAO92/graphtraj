@@ -40,6 +40,7 @@ from graphtraj.execution.runner_process import (
 from graphtraj.workspace.runner_project import discover_project, discover_project_root, discover_runner_directory
 from graphtraj.execution.runner_status import (
     SESSION_BINDING_FIELDS,
+    crashed_start,
     is_session_mapping,
     owning_execution,
     read_alias_mapping,
@@ -1529,6 +1530,9 @@ def _interrupt_session(
             if read_execution_result(execution_file).get('terminal_confirmed') is not False:
                 raise
             return _confirm_termination(alias, session_directory, mapping)
+        return {"alias": alias, "interrupt_status": "stopped"}
+    if crashed_start(mapping, session_directory) is not None:
+        # The Worker died before recording this execution and nothing runs it.
         return {"alias": alias, "interrupt_status": "stopped"}
     try:
         session_operation(mapping, "interrupt", response_timeout=INTERRUPT_RESPONSE_SECONDS)

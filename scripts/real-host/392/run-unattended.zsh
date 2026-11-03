@@ -42,7 +42,7 @@ if [[ ${1:-} == --rerun ]]; then
   # Main's list for the rerun after 441 and the COMMIT move. 00 and 01 run inside it, and a FAIL in either stops
   # the run (00's key-name probe included).
   UNATTENDED=(00-preflight 01-install 88-graphtraj-venv 13-matrix-dsh 22-launch-failed 42-hold-dsh 45-pi-parent 50-stuck-dsh
-              65-walk-dsh 82-residual-387-hosts 91-residual-420 89-residual-416 70-suite 71-flaky 72-metadata)
+              65-walk-dsh 82-residual-387-hosts 91-residual-420 89-residual-416 90-residual-416-main 95-claude-cd 70-suite 71-flaky 72-metadata)
   export AGENTS_392_RERUN=1
   if [[ ${1:-} == --restart ]]; then
     shift

@@ -440,10 +440,12 @@ MEMBER_437 = (
     'Do these in order; if a step fails, write the exact error in the report and go on. Do not print environment variables. '
     '1) In Bash run exactly: mkdir -p sub/deeper && cd sub/deeper && pwd. Stay in that directory for the next step. '
     '2) Use your Agent (Task) tool once: a subagent with the prompt "Reply with exactly: HELPER-OK". Keep its answer. '
+    'If you have no such tool, the answer is: none: no Agent tool. '
     '3) In Bash run: cd back to your Worktree root. '
     '4) Write your assigned report report.md through the graphtraj submit_report tool with the line HELPER=<the answer>. '
     '5) Commit any changed file on your branch, then submit your task result through the graphtraj submit_result tool '
-    'with the commit and a one-line completion. Do not search for workarounds.'
+    'with the commit and a one-line completion. Steps 4 and 5 are required even when step 2 failed: never end '
+    'without submit_result. Do not search for workarounds.'
 )
 
 
@@ -469,8 +471,17 @@ def r437_member() -> None:
     judge('RUNTIME_WORKER_FAILED' not in text and 'Hook Session differs' not in text and '1' in arrived,
           '437: after a plain cd the member was not ended, and it submitted its result',
           f'outcome {record.get("outcome")}; {text[:300]}')
-    judge(value(report, 'HELPER') == 'HELPER-OK', "437: the member's native helper completed and answered after the cd",
-          f'HELPER={value(report, "HELPER")}')
+    helper = value(report, 'HELPER')
+    if helper == 'HELPER-OK':
+        check('PASS', f"437: the member's native helper completed and answered after the cd: HELPER={helper}")
+    elif helper and 'agent' in helper.lower() and 'tool' in helper.lower():
+        # At this commit the agents Claude driver starts every Claude member with
+        # --tools Bash,Read,Write,Edit,Glob,Grep (src/agent_swarm/claude/execution.py:446): no Agent tool by design.
+        check('CANNOT', "437: the member's native helper after a cd cannot run here: the agents Claude driver gives "
+              'members only Bash, Read, Write, Edit, Glob and Grep (src/agent_swarm/claude/execution.py:446, --tools); '
+              f'HELPER={helper}')
+    else:
+        check('FAIL', f"437: the member's native helper did not answer after the cd: HELPER={helper}")
 
 
 MEMBER_420 = (

@@ -380,6 +380,13 @@ def reviewed_child_case(kind: str, child: str) -> None:
         ended = [last_result(document) for document in turn.of('status', agent)]
         judge(bool(created), f'{name}: the real {kind} host created a reviewed {child} child',
               created and (created.get('result') or {}).get('connection'))
+        if created and not requests and not stub.calls and not lines_of(target):
+            # As step 81: a child that never issued the command says nothing about review. A call that ran
+            # without review, ran twice, or was held and never released still FAILs below.
+            check('CANNOT', f'{name}: the child did not make the call, so the reviewer was not asked; '
+                  f'reviewer calls 0, no request, no file line; child said: '
+                  f'{str((ended[-1] if ended else {}).get("last_message"))[:200]}')
+            return
         judge(bool(requests), f'{name}: the reviewer\'s hold reached the real {kind} parent through requests',
               [(item.get('method'), str((item.get('params') or {}).get('reason'))[:80]) for item in requests])
         judge(lines_of(target) == ['ran'], f'{name}: the parent accepted and the call ran once',

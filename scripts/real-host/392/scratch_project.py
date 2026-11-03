@@ -291,8 +291,11 @@ MEMBER_416 = (
     '1) Run pwd; call the result MEMBER_PWD. '
     '2) Use the agents tool: execute create with runtime {runtime} and no workspace argument, with this instruction: '
     '"Run pwd. Do not print environment variables. Append the word ok to the file child-work.txt in your working directory, and read it back. Then use the '
-    'agents tool: execute create with runtime {runtime} and no workspace argument, with the instruction: Run pwd and reply '
-    'with exactly GRANDCHILD_PWD=<its output>. Wait for it with the wait feature. Reply with exactly these lines: '
+    # 440: the grandchild's instruction is closed in its own single quotes before the child's reply lines, so the
+    # child cannot forward its own reply template (GRANDCHILD_ERROR) to the grandchild.
+    "agents tool: execute create with runtime {runtime} and no workspace argument, with the instruction "
+    "'Run pwd and reply with exactly GRANDCHILD_PWD=<its output>.' (that quoted sentence is the grandchild's whole "
+    'instruction). After that create, wait for the grandchild with the wait feature. Then reply with exactly these lines: '
     'CHILD_PWD=<your pwd>, CHILD_WROTE=<yes or no>, and the GRANDCHILD_PWD line it gave, or GRANDCHILD_ERROR=<the error>." '
     '3) Wait for your child with the wait feature, timeout_seconds 300, again if it is still running. '
     '4) Write your assigned report report.md through the graphtraj submit_report tool, with these lines exactly: '
@@ -478,7 +481,9 @@ def r437_member() -> None:
         # At this commit the agents Claude driver starts every Claude member with
         # --tools Bash,Read,Write,Edit,Glob,Grep (src/agent_swarm/claude/execution.py:446): no Agent tool by design.
         check('CANNOT', "437: the member's native helper after a cd cannot run here: the agents Claude driver gives "
-              'members only Bash, Read, Write, Edit, Glob and Grep (src/agent_swarm/claude/execution.py:446, --tools); '
+              'members only Bash, Read, Write, Edit, Glob and Grep (src/agent_swarm/claude/execution.py:446, --tools), '
+              'and by design allow_runtime_swarm only permits trying, so this refusal fits '
+              '(docs/design/runtime-neutral-roles-and-ticket-state-attack-defense.md:103); '
               f'HELPER={helper}')
     else:
         check('FAIL', f"437: the member's native helper did not answer after the cd: HELPER={helper}")

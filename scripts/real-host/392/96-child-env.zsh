@@ -17,20 +17,26 @@ for file in zshenv zprofile zlogin zshrc; do
   print -r -- "export FAKE_${file:u}_API_KEY=fake-433-$file-not-a-key" > $FAKE_Z/.$file
 done
 # The markers come from printf, so a copy of the command text is never read as its output.
-NAMES_CMD="printf '%s-%s\\n' NAMES BEGIN; env | cut -d= -f1 | grep -E 'KEY|TOKEN|SECRET|PASSWORD|CREDENTIAL|^FAKE' | sort | tr '\n' ' '; echo; echo FLAGS=\$-; printf '%s-%s\\n' NAMES END"
+NAMES_CMD="printf '%s-%s\\n' NAMES BEGIN; for n in \$(env | cut -d= -f1 | grep -E 'KEY|TOKEN|SECRET|PASSWORD|CREDENTIAL|^FAKE' | sort); do if [ -n \"\$(printenv \"\$n\")\" ]; then printf '%s(set) ' \"\$n\"; else printf '%s(empty) ' \"\$n\"; fi; done; echo; echo FLAGS=\$-; printf '%s-%s\\n' NAMES END"
 
 # `seen <file>`: the names between the markers of the LAST block in a host's answer, one line.
 seen() {
   awk '/NAMES-BEGIN/{n="";f=1;next} /NAMES-END/{last=n;f=0} f&&!/^FLAGS=/{n=n" "$0} END{print last}' $1 \
-    | tr ' ' '\n' | grep -E '^[A-Za-z_][A-Za-z0-9_]*$' | sort -u | tr '\n' ' ' || true
+    | tr ' ' '\n' | grep -E '^[A-Za-z_][A-Za-z0-9_]*(\((set|empty)\))?$' | sort -u | tr '\n' ' ' || true
 }
 # `judge_names <label> <file>`: FAIL for a real credential name; the fake markers are only noted.
 judge_names() {
   local names=$(seen $2)
   if ! grep -q NAMES-END $2; then check CANNOT "$1: the model did not run the names command; see ${2:t}"; return 0; fi
-  local real=$(print -r -- $names | tr ' ' '\n' | grep -v -x -e DEEPSEEK_API_KEY -e '' | grep -v '^FAKE' | tr '\n' ' ' || true)
+  local real=$(print -r -- $names | tr ' ' '\n' | grep -v -E '^(DEEPSEEK_API_KEY)?(\((set|empty)\))?$' | grep -v '^FAKE' | tr '\n' ' ' || true) besides=
   note "$1 sees: $names; $(grep -m1 -o 'FLAGS=[A-Za-z0-9]*' $2 || true)"
-  [[ -z ${real// /} ]] && check PASS "$1: no real credential name but DEEPSEEK_API_KEY" || check FAIL "$1: real credential names: $real"
+  # Claude only (433 item 5), exactly this name, as in step 00: CLAUDE_CODE_MESSAGING_TOKEN was in neither the
+  # run's environment nor either ~/.zshrc form, so Claude Code injects it into its own tool shell. Not for children.
+  if [[ $1 == *Claude* && " $real " == *" CLAUDE_CODE_MESSAGING_TOKEN("* ]]; then
+    real=$(print -r -- $real | tr ' ' '\n' | grep -v -E '^CLAUDE_CODE_MESSAGING_TOKEN(\((set|empty)\))?$' | tr '\n' ' ' || true)
+    besides=", besides Claude Code's own CLAUDE_CODE_MESSAGING_TOKEN"
+  fi
+  [[ -z ${real// /} ]] && check PASS "$1: only DEEPSEEK_API_KEY or none$besides" || check FAIL "$1: real credential names: $real"
 }
 
 say "433 items 2 and 3: Codex with the fake dotfiles and a declared fake marker; the tool path, first and later command"

@@ -28,6 +28,18 @@ CODE=0
 (cd $SUITE/clone && bounded 3600 $TESTENV $SUITE/venv/bin/python scripts/run_test_shards.py --shards 4 --log-dir $OUT/logs -- -o faulthandler_timeout=300) 2>&1 | tee $OUT/console.txt | tail -30 || CODE=$?
 COUNTS=$(tail -2 $OUT/console.txt | head -1)
 check $([[ -s $OUT/logs/failures.txt ]] && print FAIL || print PASS) "suite at $COMMIT: $COUNTS; failing ids in logs/failures.txt: $(wc -l < $OUT/logs/failures.txt 2>/dev/null | tr -d ' ')"
+# 441's acceptance: none of these three fails in the suite. Without the suite's logs this says nothing.
+for id in tests/test_child_env_own_key.py::test_a_read_only_pi_child_carries_no_git_setting_of_a_write_child \
+    tests/test_codex_parent_uses_agents.py::test_only_the_parent_gets_the_guidance_after_the_users_text_on_start_and_resume \
+    tests/test_team_replacement.py::test_replacing_parent_keeps_old_descendants_stopped_and_bound_to_old_session; do
+  if [[ ! -d $OUT/logs ]]; then
+    check CANNOT "441: ${id##*::}: the suite left no logs, so this run says nothing about it"
+  elif grep -qF -- ${id##*::} $OUT/logs/failures.txt 2>/dev/null; then
+    check FAIL "441: ${id##*::} fails in the suite; see logs/failures.txt"
+  else
+    check PASS "441: ${id##*::} does not fail in the suite"
+  fi
+done
 say "the native-sandbox test must say passed, not skipped"
 (cd $SUITE/clone && bounded 300 $TESTENV $SUITE/venv/bin/python -m pytest -p no:cacheprovider -q -rA tests/test_runtime_resources.py::test_explicit_read_access_is_enforced_by_native_sandbox) > $OUT/native-sandbox.txt 2>&1 || true
 grep -q '^PASSED' $OUT/native-sandbox.txt && check PASS "test_explicit_read_access_is_enforced_by_native_sandbox: passed" \

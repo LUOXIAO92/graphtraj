@@ -495,7 +495,13 @@ def test_a_read_only_pi_child_carries_no_git_setting_of_a_write_child(tmp_path: 
     """A write launch sets Git's variables in its own environment only, never in the owner's."""
     (tmp_path / 'write').mkdir()
     (tmp_path / 'read').mkdir()
-    subprocess.run(['git', 'init', '-q', str(tmp_path / 'write' / 'worktree')], check=True)
+    # fake_environment's GIT_CONFIG_COUNT/KEY_0 stand for an owner's names, not a Git
+    # setting; this setup runs Git without them or the user's own configuration.
+    git = {name: value for name, value in os.environ.items() if not name.startswith('GIT_')}
+    git.update(GIT_CONFIG_GLOBAL=os.devnull, GIT_CONFIG_NOSYSTEM='1')
+    made = subprocess.run(['git', 'init', '-q', str(tmp_path / 'write' / 'worktree')], env=git,
+                          capture_output=True, text=True)
+    assert made.returncode == 0, made.stderr
     written = launch_pi(tmp_path / 'write', worktree_access='write', git_common_directory=str(tmp_path / 'write/worktree/.git'))
     assert written['GIT_CONFIG_GLOBAL'] == os.devnull
     assert 'GIT_CONFIG_GLOBAL' not in os.environ

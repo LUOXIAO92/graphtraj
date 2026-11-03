@@ -16,7 +16,7 @@ import sys
 import pytest
 
 from agent_swarm.codex.host import CodexHost
-from test_codex_host_cross_runtime import Running, until
+from test_codex_host_cross_runtime import Running, events, until
 from test_codex_independent_control import native_settings  # noqa: F401 - pytest fixture
 
 INSTALL = Path(__file__).resolve().parents[1] / 'src/agent_swarm/install'
@@ -102,12 +102,20 @@ def test_only_the_parent_gets_the_guidance_after_the_users_text_on_start_and_res
 ) -> None:
     """thread/start and thread/resume carry it, a Codex child does not, and nothing disables native subagents."""
     log = tmp_path / 'protocol.jsonl'
+    received = tmp_path / 'host-events.jsonl'
     monkeypatch.setenv('PEER_PROTOCOL_LOG', str(log))
+    monkeypatch.setenv('PEER_HOST_EVENTS', str(received))
     running = Running(CodexHost(native_settings, tmp_path / 'host', 'hold'))
     try:
         child = running.call('create', runtime='codex', instruction='configuration')['agent']
         done = running.call('wait', agent=child, timeout_seconds=10)
-        observed = json.loads(done['result']['last_result']['last_message'])
+        # The running host pushes the child's reply to its parent once (431), so wait
+        # shows that body hidden; the reply is what the parent's Session received.
+        try:
+            [reply] = until(lambda: [event for event in events(received) if event.get('alias') == child])
+        except (AssertionError, ValueError):
+            raise AssertionError(json.dumps({'wait': done, 'parent_received': events(received)}, indent=1))
+        observed = json.loads(reply['message'])
     finally:
         running.stop()
     assert observed['developerInstructions'] == USER_TEXT

@@ -1774,6 +1774,9 @@ Consumers must ignore result fields and archive fields they do not know.
 
 Recorded classifications:
 
+- 439 (0.3.1): a Codex host the user starts directly again runs with the user's environment,
+  without the child rule or the credential shell exclude; its children keep both. This is a
+  fix that makes behaviour match section 3.1, so it is compatible. No version-range change.
 - 433 (0.3.0): a child no longer inherits credential-class variables other than its own keys.
   This changes a default's observable behaviour, so it is incompatible and raises the minor
   version; `pass_env` restores any one of them. GraphTraj adopts it in the same change, so its

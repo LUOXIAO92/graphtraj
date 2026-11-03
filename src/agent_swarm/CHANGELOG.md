@@ -12,6 +12,25 @@ version that identifies everything listed under it.
 
 The numbers in parentheses are the project's Task numbers.
 
+## 0.4.0 (incompatible)
+
+Classified under `PUBLIC_API.md` section 7 as a new rejection of a request that used to
+succeed, so the minor version rises. GraphTraj adopts it in the same change: its range
+becomes `agent-swarm>=0.4.0,<0.5`.
+
+- A child Agent's `create` now refuses a new Agent whose connection uses a key the child
+  does not hold, with `authority-denied` (440). A child holds its own connection's key
+  (DSH's `DEEPSEEK_API_KEY` when it names none) and its connection's `pass_env`. The
+  message names the key and says to add it to `pass_env` of the child's connection in
+  your own configuration. A grandchild on the child's own connection is unaffected, and
+  so are creates by a host or a GraphTraj Task member. Before, the owner ran the create
+  with its own environment, so a child could start a grandchild on a key it was never given.
+- GraphTraj: a DSH child started by `agents` can create a grandchild again (440). Its
+  `agents` tool ran GraphTraj's own MCP entry, which ignored the child's channel and ran the
+  create inside the MCP server as the Task member. DSH strips credential names from an MCP
+  server's environment, so the launch failed with `RUNTIME_CREDENTIAL_MISSING`. The child
+  now runs `agent_swarm.mcp`, and its create runs in its owner as the child.
+
 ## 0.3.1 (compatible)
 
 - A Codex host you start yourself (`CodexHost`) again runs its own Codex with your

@@ -1008,6 +1008,15 @@ absent. Ordinary variables such as `PATH` and `HOME` are unchanged.
 This is not a review rule: nothing forbids or detects a model reading its environment.
 It only does not hand a child keys unrelated to its connection.
 
+**A child's own create (440).** A child's `create` runs in the owner that launched the
+child, so the grandchild starts from the owner's environment by the same rule. The child
+may start only an Agent whose key it holds itself: its connection's `api_key_env` (for DSH
+with none, `DEEPSEEK_API_KEY`) or a name in its connection's `pass_env`, less a reviewer's
+key as above. Any other named key fails with `authority-denied`; the message names the key
+and says to add it to `pass_env` of the child's connection in the user's own configuration.
+A key reached only through a native login has no name and is not checked. Creates by a host
+or a GraphTraj Task member, which have no Agent record, are not checked.
+
 **Credential-class names** (`agent_swarm.is_credential_name(name)`). Ignoring case, split
 the name on `_`; it is a credential when any part ends in `KEY`, `TOKEN`, `SECRET`,
 `SECRETS`, `PASSWORD`, `CREDENTIAL` or `CREDENTIALS`. `GIT_CONFIG_KEY_<n>` is excepted: Git
@@ -1774,6 +1783,11 @@ Consumers must ignore result fields and archive fields they do not know.
 
 Recorded classifications:
 
+- 440 (0.4.0): a child Agent's `create` refuses a new Agent whose named key the child does
+  not hold, with `authority-denied` (section 3.1). This is a new rejection of a request that
+  used to succeed, so it is incompatible and raises the minor version; `pass_env` on the
+  child's connection allows the key. GraphTraj adopts it in the same change, so its range
+  becomes `agent-swarm>=0.4.0,<0.5`.
 - 439 (0.3.1): a Codex host the user starts directly again runs with the user's environment,
   without the child rule or the credential shell exclude; its children keep both. This is a
   fix that makes behaviour match section 3.1, so it is compatible. No version-range change.

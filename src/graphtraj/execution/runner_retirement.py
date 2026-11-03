@@ -88,18 +88,20 @@ def _require_reviewed(mapping: dict, reviewed: dict | None) -> None:
 def _retire_session(alias: str, cwd: Path, reviewed: dict | None = None) -> dict:
     """Check the stopped subtree under the existing startup lock, then retire."""
     project = discover_project(cwd, require_clean_integration=False)
-    _wait_for_worker_exit(project.runner_directory, alias)
+    wait_for_worker_exit(project.runner_directory, alias)
     with execution_start_lock(project.runner_directory):
         _require_reviewed(read_alias_mapping(project.runner_directory, alias)[0], reviewed)
         return retire_stopped_session(project, alias)
 
 
-def _wait_for_worker_exit(runner_directory: Path, alias: str) -> None:
+def wait_for_worker_exit(runner_directory: Path, alias: str) -> None:
     """Give a stopped Session's Worker time to finish writing into its directory.
 
     An interrupted execution reads as idle before its Worker has written
     ``execution.yml`` and told the parent. The wait stays outside the startup
-    lock because that delivery can need the lock. The caller rechecks under it.
+    lock, and a caller waits before taking the Session's input lock, because
+    that delivery or a Driver's results turn can need them. The caller
+    rechecks under them.
     """
     mapping, directory = read_alias_mapping(runner_directory, alias)
     deadline = time.monotonic() + WORKER_EXIT_SECONDS

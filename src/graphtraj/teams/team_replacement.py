@@ -13,7 +13,7 @@ from graphtraj.execution.runner_batch import read_session_task
 from graphtraj.execution.runner_control import _require_project_events, _session_report_paths
 from graphtraj.execution.runner_connection import current_parent_connection, parent_connection
 from graphtraj.execution.runner_models import Project, RunnerError
-from graphtraj.execution.runner_retirement import retire_session
+from graphtraj.execution.runner_retirement import retire_session, wait_for_worker_exit
 from graphtraj.workspace.runner_project import discover_project, registered_worktrees, run_git
 from graphtraj.execution.runner_status import (
     read_alias_mapping,
@@ -99,6 +99,9 @@ def _replace_stopped_session(
     require_stopped_subtree(project.runner_directory, alias)
     if not caused_by_event_ids or len(caused_by_event_ids) != len(set(caused_by_event_ids)):
         raise RunnerError("invalid-input", "Replacement requires unique causal Project Worldline event IDs.")
+    # A stopped parent's Worker may still be driving its children's results turn,
+    # which takes this input lock: let it finish before holding the lock.
+    wait_for_worker_exit(project.runner_directory, alias)
     with (directory / "launch.yml").open("rb") as lock:
         file_lock.flock(lock, file_lock.LOCK_EX)
         return _replace_member(alias, caused_by_event_ids, cwd)

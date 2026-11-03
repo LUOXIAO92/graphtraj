@@ -34,8 +34,12 @@ def events(root: Path) -> list[dict]:
 
 
 def command(commands: InstalledCommands, root: Path, env: dict, *args: str) -> subprocess.CompletedProcess:
-    """Invoke the public Runner with a bounded lifetime."""
-    return run_process(runner_command(commands, *args), cwd=root, env=env, timeout=30)
+    """Invoke the public Runner with a bounded lifetime; a timeout keeps what it wrote."""
+    try:
+        return run_process(runner_command(commands, *args), cwd=root, env=env, timeout=30)
+    except subprocess.TimeoutExpired as expired:
+        raise AssertionError('{0} timed out after 30s\nstdout:\n{1}\nstderr:\n{2}'.format(
+            args, expired.stdout or '', expired.stderr or '')) from expired
 
 
 def prepare(

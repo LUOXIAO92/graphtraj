@@ -651,7 +651,7 @@ def test_a_retained_inline_role_keeps_loading(tmp_path: Path) -> None:
 def test_an_inline_role_still_selects_a_connection_and_its_other_fields(tmp_path: Path) -> None:
     """Refusing the two variable fields leaves every other inline use as it was."""
     assert parse_inline_role({'a': {'connection': 'one/two/three'}})[1].connection == 'one/two/three'
-    assert parse_inline_role({'a': {'runtime': 'codex', 'model': 'm', 'base_url': 'https://x.invalid'}})[1].base_url
+    assert parse_inline_role({'a': {'runtime': 'codex', 'model': 'm', 'codex': {'approval': {'connection': 'one/two/three'}}}})
 
 
 def test_the_users_roles_file_still_declares_both(tmp_path: Path) -> None:

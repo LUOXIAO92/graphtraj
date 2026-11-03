@@ -22,6 +22,28 @@ _REQUIRED_FIELDS = frozenset({"runtime", "model"})
 _CONNECTION_FIELDS = frozenset({"base_url", "api_key_env"})
 _ENVIRONMENT_NAME = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 INLINE_REFUSED = frozenset({"pass_env", "api_key_env"})
+# The boundary for a model-written inline role on a new dispatch: it may not
+# choose a key source, a network destination a key is sent to, or an executable
+# or home the host launches with its own environment. Each path is refused.
+INLINE_REFUSED_PATHS: tuple[tuple[str, ...], ...] = (
+    ("pass_env",), ("api_key_env",), ("base_url",),
+    ("pi", "agent_dir"), ("pi", "sandbox_python"), ("pi", "sandbox_path"),
+    ("codex", "approval", "model"), ("codex", "approval", "base_url"),
+    ("codex", "approval", "api_key_env"),
+)
+
+
+def _inline_refused(settings: object) -> list[str]:
+    found = []
+    for path in INLINE_REFUSED_PATHS:
+        node = settings
+        for key in path:
+            if not isinstance(node, dict) or key not in node:
+                break
+            node = node[key]
+        else:
+            found.append(".".join(path))
+    return found
 
 class ProjectRolesError(Exception):
     """The reusable child-role configuration is missing or invalid."""
@@ -248,10 +270,11 @@ def parse_inline_role(value: object, *, retained: bool = False) -> tuple[str, Ro
     # An inline role is written by whoever dispatches, which can be a model. The
     # variables a child receives belong to the user's roles.yml and connections.yml;
     # a retained Batch keeps loading for the Sessions it started.
-    refused = sorted(INLINE_REFUSED & set(settings)) if not retained and isinstance(settings, dict) else []
+    refused = [] if retained else _inline_refused(settings)
     if refused:
         raise ProjectRolesError((
-            "{0}.{1}: an inline role cannot name environment variables; declare it in .graphtraj/roles.yml "
+            "{0}.{1}: an inline role cannot choose a key source, a key destination or a launched "
+            "executable; declare it in .graphtraj/roles.yml "
             "or connections.yml and select that with a role reference or `connection: "
             "runtime/provider/model`.".format(name, refused[0]),
         ))

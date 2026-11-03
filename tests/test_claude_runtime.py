@@ -36,9 +36,10 @@ def claude_environment(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
 
 def context(root: Path, **fields: object):
     """Resolve a role through the public Runtime preparation interface."""
+    # base_url is the user's setting; a new inline role refuses it (439), so load it as retained.
     _, settings = parse_inline_role({'author': {
         'runtime': 'claude', 'model': 'claude-opus-5-5', 'reasoning_effort': 'high', **fields,
-    }})
+    }}, retained=True)
     role = resolve_child_role('author', settings, root)
     adapter = select_runtime_adapter('claude')
     prepared = adapter.preflight_runtime_context(

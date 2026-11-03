@@ -116,7 +116,7 @@ _INTEGRATE_SCHEMA = {
         "confirmed_commit":   {"type": ["string", "null"],
                                "description": "Confirm the exact committed resolution when adopting an escalated integration."},
         "role":               {"type": ["string", "object", "null"],
-                               "description": "Explicit configured role reference or inline YAML role definition for conflict work; an inline role names no environment variable (no api_key_env or pass_env), so select connection instead."},
+                               "description": "Explicit configured role reference or inline YAML role definition for conflict work; an inline role cannot set api_key_env, pass_env, base_url, pi.agent_dir, pi.sandbox_python, pi.sandbox_path or codex.approval model/base_url/api_key_env; select connection (or codex.approval.connection) instead."},
     },
     "required":             ["task_id", "validation_command"],
     "additionalProperties": False,

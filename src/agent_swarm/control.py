@@ -188,6 +188,33 @@ def _discover_models(connection: Mapping[str, Any]) -> dict:
     return discover_models(connection)
 
 
+def _named_key(runtime: str, settings: Mapping[str, Any]) -> str | None:
+    """Return the variable an Agent's settings name as its key, or ``None`` for a native login.
+
+    GraphTraj nests the Runtime's settings in ``adapter_request``. DSH with no name reads
+    ``DEEPSEEK_API_KEY``; an unauthenticated endpoint's placeholder is not a key.
+    """
+    request = settings.get("adapter_request", settings)
+    if request.get("unauthenticated"):
+        return None
+    return request.get("api_key_env") or ("DEEPSEEK_API_KEY" if runtime == "dsh" else None)
+
+
+def _held_keys(record: Mapping[str, Any]) -> set[str]:
+    """Return the keys ``child_environment`` gives this Agent: its own and the declared ones.
+
+    A reviewer's key is withheld even when declared, unless the Agent's own connection names it.
+    """
+    settings = record.get("settings") or {}
+    request  = settings.get("adapter_request", settings)
+    own      = _named_key(record["runtime"], settings)
+    declared = {*settings.get("pass_env", ()), *request.get("pass_env", ())}
+    review   = (request.get("review") or {}).get("api_key_env")
+    if review and review != own:
+        declared.discard(review)
+    return declared | ({own} if own else set())
+
+
 def require_available(
     connection: Mapping[str, Any],
     *,
@@ -674,6 +701,7 @@ class AgentControl:
         if passed:
             settings = {**settings, "pass_env": passed}
         json.dumps(settings)
+        self._require_held_key(caller, runtime, settings)
 
         agent  = "agent-" + uuid.uuid4().hex
         record = {
@@ -779,6 +807,25 @@ class AgentControl:
         review = declared.get("reviewers", {}).get((settings or {}).get("review"))
         return {"preset": preset, "connection": connection, "provider": provider,
                 "settings": deepcopy(settings), "review": deepcopy(review), **chosen}
+
+    def _require_held_key(self, caller: Caller, runtime: str, settings: Mapping[str, Any]) -> None:
+        """Refuse a child Agent's create whose new Agent names a key the child does not hold.
+
+        The owner runs a child's create and holds more keys than the child, so without
+        this a child could start a grandchild on a key it was never given. A host or Task
+        member caller has no record here and is not checked.
+        """
+        parent = self._load(caller.agent) if caller.agent else None
+        needed = _named_key(runtime, settings)
+        if parent is None or needed is None or needed in _held_keys(parent):
+            return
+        raise AgentsError(
+            "authority-denied",
+            f"Agent {caller.agent} does not hold {needed}, the key this new {runtime} Agent's connection "
+            f"uses, so it cannot start that Agent. A child Agent receives only its own connection's key. "
+            f"To allow it, add {needed} to pass_env of {caller.agent}'s connection in your own "
+            f"configuration; a create argument cannot name a key.",
+        )
 
     def _pass_env(self, selection: Mapping[str, Any] | None) -> list[str]:
         """Return the declared names: the selected connection's, else the file's default."""

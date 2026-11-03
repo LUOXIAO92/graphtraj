@@ -8,6 +8,7 @@ import zipfile
 from pathlib import Path
 
 from packaging.requirements import Requirement
+from packaging.version import Version
 
 import agent_swarm
 from conftest import InstalledCommands
@@ -66,7 +67,11 @@ def test_wheels_have_separate_owners(built_wheel: Path) -> None:
                           if line.startswith('Version: '))
     assert agents_version == agent_swarm.__version__
     assert requirement.specifier.contains(agents_version)
-    assert not requirement.specifier.contains('0.4.0')
+    # Under 0.x an incompatible change raises the minor version (PUBLIC_API section 7).
+    major, minor, patch = Version(agents_version).release[:3]
+    next_incompatible = f'{major}.{minor + 1}.0' if major == 0 else f'{major + 1}.0.0'
+    assert requirement.specifier.contains(f'{major}.{minor}.{patch + 1}')
+    assert not requirement.specifier.contains(next_incompatible)
     assert 'Requires-Dist: graphtraj' not in agents_metadata
     for text in (metadata, agents_metadata):
         assert 'Requires-Dist: PyYAML' in text

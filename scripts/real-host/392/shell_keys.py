@@ -27,7 +27,10 @@ def listing(command: list[str]) -> list[tuple[str, bytes]] | None:
     try:
         # A new session has no controlling terminal, so neither shell, `zsh -i` above all, can take the
         # user's Terminal foreground or change its modes, which suspended the run with SIGTTOU.
-        done = subprocess.run(command, stdin=subprocess.DEVNULL, capture_output=True, timeout=60, start_new_session=True)
+        # Without ZDOTDIR, both shells read the user's real startup files, not the run's empty ones.
+        environment = {name: value for name, value in os.environ.items() if name != 'ZDOTDIR'}
+        done = subprocess.run(command, stdin=subprocess.DEVNULL, capture_output=True, timeout=60, start_new_session=True,
+                              env=environment)
     except (OSError, subprocess.SubprocessError):
         return None
     if not done.stdout:

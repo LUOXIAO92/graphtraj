@@ -78,8 +78,14 @@ names() {
   fi
   seen=$(sed -n '/NAMES-BEGIN/,/NAMES-END/p' $OUT/$label.names.txt | grep -v -E 'NAMES-(BEGIN|END)|^FLAGS=' \
     | tr ' ' '\n' | grep -v -x -e DEEPSEEK_API_KEY -e '' | sort -u | tr '\n' ' ' || true)
-  local flags=$(grep -m1 -o 'FLAGS=[A-Za-z0-9]*' $OUT/$label.names.txt || true)
-  [[ -z ${seen// /} ]] && check PASS "$label key names: only DEEPSEEK_API_KEY or none; $flags" \
+  local flags=$(grep -m1 -o 'FLAGS=[A-Za-z0-9]*' $OUT/$label.names.txt || true) besides=
+  # Claude only, this exact name: CLAUDE_CODE_MESSAGING_TOKEN was in neither the run's environment nor either
+  # ~/.zshrc form in the user's run, so Claude Code injects it into its own tool shell. Any other name FAILs.
+  if [[ $label == claude && " $seen " == *" CLAUDE_CODE_MESSAGING_TOKEN "* ]]; then
+    seen=${${seen//CLAUDE_CODE_MESSAGING_TOKEN/}// ##/ }
+    besides=", besides Claude Code's own CLAUDE_CODE_MESSAGING_TOKEN"
+  fi
+  [[ -z ${seen// /} ]] && check PASS "$label key names: only DEEPSEEK_API_KEY or none$besides; $flags" \
     || check FAIL "$label key names: its shell tool sees $seen; $flags"
 }
 if [[ -n ${AGENTS_392_DRY_BIN:-} ]]; then

@@ -61,6 +61,15 @@ PY=/Users/luoxiao/miniconda3/bin/python3.13
   fi
 }
 AG=${AGENTS_392_DRY_ROOT:-/Users/luoxiao/agents-392}
+# One scratch ZDOTDIR for the whole run: every zsh a host, a child or Codex's shell snapshot starts reads these
+# empty files instead of the user's, so ~/.zshrc cannot bring back the keys removed above. PATH and the rest
+# are already in the environment. shell_keys.py drops ZDOTDIR, so the key scans still read the real files.
+mkdir -p $AG/zdotdir
+for _rc in .zshenv .zprofile .zshrc .zlogin; do
+  [[ -f $AG/zdotdir/$_rc ]] || print -r -- '# Empty on purpose: task 392 keeps the user startup files and their keys out of the run.' > $AG/zdotdir/$_rc
+done
+unset _rc
+export ZDOTDIR=$AG/zdotdir
 VENV=$AG/venv
 PI_SANDBOX=${AGENTS_392_DRY_SANDBOX:-$HOME/agents-pi-sandbox}
 REALHOST=${AGENTS_392_DRY_REALHOST:-$HARNESS/.graphtraj/core/state/tasks/392-agents-standalone-combined-acceptance/realhost}

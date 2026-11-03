@@ -85,6 +85,10 @@ def _assessment_event(params: dict) -> dict:
 class CodexManagedExecution:
     """Hold a connection until its execution and final Trace drain finish."""
 
+    # A child Agent's environment follows the child rule; a host the user started
+    # directly (CodexHost) keeps the user's own environment and tool shell.
+    user_environment = False
+
     def __init__(
         self,
         request: dict,
@@ -158,6 +162,13 @@ class CodexManagedExecution:
         """Expose native execution identity without leaking the Codex handle."""
         return self.execution.turn_id if self.execution is not None else None
 
+    def host_overrides(self) -> dict[str, str | None]:
+        """Return a user-started host's environment: the user's own, as before 433."""
+        review_key = (self.review or {}).get('api_key_env')
+        withheld = {review_key: None} if review_key and review_key not in self.connection_environment else {}
+        return {**self.context.runtime_environment(), **self.connection_environment,
+                'AGENT_SWARM_CONNECTION': None, 'GRAPHTRAJ_CLI_CONNECTION': None, **withheld}
+
     def child_overrides(self, request: Mapping, config: Mapping) -> dict[str, str | None]:
         """Return the service environment as overrides of this host's; ``None`` removes a name.
 
@@ -213,8 +224,11 @@ class CodexManagedExecution:
                 'env': {connection_env: address, 'GRAPHTRAJ_NATIVE_RUNTIME': 'codex'},
             }
             self.context = restore_codex_context(request, self.context.evidence_document())
-        environment = self.child_overrides(request, config)
-        exclude_credentials(config, environment.get('CODEX_HOME'))
+        if self.user_environment:
+            environment = self.host_overrides()
+        else:
+            environment = self.child_overrides(request, config)
+            exclude_credentials(config, environment.get('CODEX_HOME'))
         self.context = restore_codex_context(request, self.context.evidence_document())
         session_context = self.declared_context(request, environment)
         adapter = CodexAppServer(cwd=Path(self.context.session_document()['adapter_request']['cwd']),

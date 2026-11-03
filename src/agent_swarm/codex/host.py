@@ -101,6 +101,8 @@ def _notice_identity(notice: dict) -> str | None:
 class CodexHost(CodexManagedExecution):
     """Bind an actual owned native parent to the existing independent controller."""
 
+    user_environment = True
+
     def __init__(self, settings: dict, directory: Path, instruction: str, resume: bool = False) -> None:
         """Restore parent identity only from this host's retained native result."""
         directory.mkdir(parents=True, exist_ok=True)

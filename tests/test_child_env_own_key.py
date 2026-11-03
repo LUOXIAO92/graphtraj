@@ -816,3 +816,31 @@ def test_codex_withheld_reviewer_key_is_not_set_when_declared(tmp_path: Path) ->
     assert environment[REVIEW] is None
     transient = worker.declared_context(worker.context.launch_document()['adapter_request'], environment)
     assert transient is worker.context
+
+
+# --- Task 439: a user-started Codex host keeps the user's environment; its children do not -------
+
+
+def test_codex_top_level_host_keeps_the_users_environment(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """CodexHost takes the user's environment as before 433: no removal and no shell exclude."""
+    from agent_swarm.codex.host import CodexHost
+
+    assert CodexHost.user_environment is True and CodexManagedExecution.user_environment is False
+    monkeypatch.setenv('GH_TOKEN', 'FAKE439HOSTVALUE')
+    executable, _ = recording_codex(tmp_path)
+    worker = CodexManagedExecution(codex_request(tmp_path, executable), 'x', tmp_path,
+                                   lambda *a: None, {}, tmp_path / 't', None)
+    request = worker.context.launch_document()['adapter_request']
+    host = worker.host_overrides()
+    assert 'GH_TOKEN' not in host  # inherited unchanged from the user's environment
+    child = worker.child_overrides(request, request['session_parameters']['config'])
+    assert child['GH_TOKEN'] is None
+
+
+def test_codex_top_level_host_session_has_no_child_exclude(tmp_path: Path, peer: Path,  # noqa: F811
+                                                           monkeypatch: pytest.MonkeyPatch) -> None:
+    """With the host switch on, the native Session gets no 433 exclude; a child's still does."""
+    monkeypatch.setattr(CodexManagedExecution, 'user_environment', True)
+    [sent], _ = run_codex_member(tmp_path, peer, monkeypatch)
+    policy = sent['params']['config'].get('shell_environment_policy', {})
+    assert not set(CODEX_SHELL_EXCLUDE) & set(policy.get('exclude', []))

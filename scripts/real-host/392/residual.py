@@ -570,7 +570,7 @@ def default_key(runtime: str, home: str) -> None:
         scratch.mkdir(parents=True)
         entry['home'] = str(scratch)
         if runtime == 'pi':
-            # Past the login check (control.py:219), so the child relies on the variable it would inherit.
+            # Past the login check (control.py:219) with no deepseek entry, so only the variable could serve (430).
             (scratch / 'auth.json').write_text('{}')
     parent = ApiParent(name, runtime, settings, {'reviewers': {'checker': reviewer}, 'connections': {'plain': entry}})
     try:
@@ -579,8 +579,12 @@ def default_key(runtime: str, home: str) -> None:
         last = parent.last() if parent.agent else {}
         message = clean(json.dumps(last.get('error') or created.get('error') or ''))[:600]
         works = last.get('outcome') == 'completed'
-        judge(works, f'{name}: no api_key_env, reviewer on {KEY_VARIABLE}, the child can still reach its model',
-              f'settled {state}, outcome {last.get("outcome")}, error {message}')
+        # 430: create now refuses such a child (DSH ROLE_CONFIG_INVALID, Pi invalid-config); either is a PASS.
+        refusal = (created.get('error') or {}) if not parent.agent else {}
+        refused = refusal.get('code') in ('ROLE_CONFIG_INVALID', 'invalid-config')
+        judge(works or refused, f'{name}: no api_key_env, reviewer on {KEY_VARIABLE}: the child reaches its model '
+              'or create refuses it explicitly', f'settled {state}, outcome {last.get("outcome")}, '
+              f'refusal {refusal.get("code")}, error {message}')
     finally:
         parent.close()
         stub.close()
@@ -661,8 +665,15 @@ def unanswered_review(kind: str, child: str) -> None:
         judge(bool(requests) or seen.get('hold', False), f'{name}: a request was pending when the parent ended',
               [item.get('method') for item in requests] or 'shown in the Session file before the signal')
         judge(not turn.limited, f'{name}: the host process ended by itself', f'exit {turn.exit_code}, {turn.seconds:.0f} s')
-        note(f'{name}: stop-unconfirmed on stderr: {"stop-unconfirmed" in stderr}; recorded children stopped in host.log: '
-             f'{"recorded its children stopped" in (host.host_log.read_text(errors="replace") if kind == "claude" and host.host_log.exists() else "")}')
+        note(f'{name}: stop-unconfirmed on stderr: {"stop-unconfirmed" in stderr}')
+        if kind == 'claude':
+            # 436: only the first host's part of host.log counts; a resume's 'recorded' line is not this child's.
+            first = host.host_log.read_bytes()[host.host_log_offset:].decode(errors='replace') if host.host_log.exists() else ''
+            shown = [line for line in first.splitlines() if 'watcher' in line or 'recorded its children' in line]
+            stopped = ('agents DSH watcher: stopped the DSH process group' in first
+                       or 'agents host recorded its children stopped' in first)
+            judge(stopped and 'could not stop' not in first,
+                  f"{name}: the first host's log shows its child stopped (watcher or host), and no 'could not stop'", shown[:4])
         time.sleep(15)
         left = running_under(host.work if kind != 'claude' else host.directory)
         judge(not left, f'{name}: 15 s after the host ended no process of this run remains', left[:4])
@@ -963,9 +974,24 @@ def r419() -> None:
 def walk_codex() -> None:
     """install/codex.md as written: settings, run, what to see, refusals, --resume."""
     host = Host('codex', 'walk-codex', {})
-    instruction = 'Use the agents tool to create a Codex child that answers one word, then wait for it.'
+    # 432: the note's own instruction, word for word (install/codex.md, 'Run it').
+    instruction = ('Use only the MCP tool agents, not spawn_agent. Make these tool calls one at a time, in this order. '
+                   'Where an argument says <agent from 1>, use the "agent" field returned by call 1.\n'
+                   '1. {"action": "execute", "feature": "create", "arguments": {"runtime": "codex", "instruction": '
+                   '"Do not use any tool. Reply with exactly: PONG"}}\n'
+                   '2. {"action": "execute", "feature": "wait", "arguments": {"agent": "<agent from 1>", "timeout_seconds": 240}}\n'
+                   'A notice from agents may arrive at any time and changes nothing. Then reply with the answer of the child, and stop.')
     turn = host.turn('walk-first', instruction)
     stderr = (OUT / 'walk-first.stderr').read_text(errors='replace').splitlines()
+    operations = [item.get('feature') or item.get('action') for item in
+                  (json.loads((OUT / 'walk-first.output.json').read_text()).get('operations') or [])
+                  if isinstance(item, dict)] if (OUT / 'walk-first.output.json').exists() else []
+    summary = next((json.loads(line)['run_summary'] for line in reversed(stderr)
+                    if line.startswith('{"run_summary"')), None)
+    judge('create' in operations and 'wait' in operations, "codex.md: --output's operations lists a create and a wait",
+          operations)
+    judge(bool(summary) and summary.get('agents_calls', 0) > 0, "codex.md: stderr's run_summary has agents_calls above 0",
+          summary)
     stdout = (OUT / 'walk-first.stdout').read_text(errors='replace').strip()
     judge(bool(stderr) and stderr[0].startswith('{"parent_session"') and '"thread/start"' in stderr[0],
           'codex.md: stderr starts with parent_session and thread/start', stderr[0][:160] if stderr else 'no stderr')
@@ -984,6 +1010,39 @@ def walk_codex() -> None:
     again = host.turn('walk-resume', 'Use the agents tool to read status of your child, then say done in one line.')
     judge(again.exit_code == 0 and bool(again.of('status')), 'codex.md: --resume continues the parent and status lists the child', f'exit {again.exit_code}')
     host.keep_data()
+
+
+def r437_main() -> None:
+    """437: a Claude host (the Main path) does a plain cd into a project subdirectory, then still uses agents."""
+    name = 'claude-main-cd'
+    host = Host('claude', name, {'dsh': {'sandbox': 'read-only'}})
+    original = host._argv
+
+    def with_bash(prompt: str, label: str):
+        """The same command, with Bash allowed so the parent itself can cd."""
+        command, stdin = original(prompt, label)
+        return [item if item != 'mcp__agents__agents' else 'mcp__agents__agents,Bash' for item in command], stdin
+
+    host._argv = with_bash
+    model, effort = CHILD_CHOICE['dsh']
+    try:
+        turn = host.turn(name, script_prompt([
+            'Run this one Bash command, exactly: mkdir -p sub/deeper && cd sub/deeper && pwd',
+            call('create', runtime='dsh', instruction='Use no tool. Reply with exactly: CD-OK', model=model,
+                 reasoning_effort=effort),
+            call('wait', agent='<agent from 2>', timeout_seconds=WAIT)]).replace(
+                'Use only the agents tool', 'Use the Bash tool for call 1 only, and only the agents tool after it', 1))
+        stdout = (OUT / f'{name}.stdout').read_text(errors='replace')
+        created = turn.created('dsh')
+        moved = 'sub/deeper' in stdout
+        if not moved:
+            check('CANNOT', f'{name}: the parent did not run the cd, so this run says nothing about it; see {name}.stdout')
+        else:
+            judge(bool(created) and 'Native Session/cwd/request is invalid' not in stdout,
+                  f'{name}: after a plain cd into a project subdirectory, the Claude host still creates a child through agents',
+                  (created or {}).get('agent') or stdout[stdout.find('error'):][:300])
+    finally:
+        host.keep_data()
 
 
 def readme_sandbox(location: str) -> None:

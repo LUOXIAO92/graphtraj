@@ -2,9 +2,9 @@
 [ -n "$ZSH_VERSION" ] || exec /bin/zsh "$0" "$@"
 # Task 392 real-host step 71-flaky. Run in a plain macOS Terminal, outside any sandbox:
 #   zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/392-agents-standalone-combined-acceptance/scripts/real-host/392/71-flaky.zsh
-# Repeats the four flaky tests of the definition, each on its own, outside the sandbox. Each failure's log is kept.
+# Repeats the listed tests (the definition's flaky tests, step 70's failures and 428's Seatbelt test), each on its own, outside the sandbox. Each failure's log is kept.
 source /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/392-agents-standalone-combined-acceptance/scripts/real-host/392/common.zsh
-step_begin 71-flaky 25 none "each of the four tests has a pass and fail count and every failing run's log; 'FAIL' means it failed at least once"
+step_begin 71-flaky 25 none "each listed test has a pass and fail count and every failing run's log; 'FAIL' means it failed at least once"
 if [[ -n ${AGENTS_392_DRY_BIN:-} ]]; then note 'dry run: needs step 70, not run'; step_end; fi
 SUITE=$AG/suite
 [[ -f $SUITE/installed-commit && $(<$SUITE/installed-commit) == $COMMIT ]] || fail "run step 70 first: zsh $HERE/70-suite.zsh"
@@ -16,6 +16,8 @@ for spec in \
     20:tests/test_dsh_standalone_child.py::test_a_dsh_childs_end_reaches_the_claude_main_once \
     20:tests/test_descendant_stop_control.py::test_native_root_owner_outlives_historical_checker_membership \
     10:tests/test_agent_runner_cleanup.py::test_native_interrupt_confirms_only_pre_runtime_allocations 10:tests/test_team_replacement.py::test_replacing_parent_keeps_old_descendants_stopped_and_bound_to_old_session \
+    10:'tests/test_claude_review.py::test_refused_review_denies_and_asks_the_parent_once[decision1]' \
+    10:tests/test_dsh_member_tools.py::test_seatbelt_enforces_the_written_grants \
     10:tests/test_claude_runtime.py::test_claude_later_prompt_hook_is_answered_during_one_slow_collection; do
   COUNT=${spec%%:*} ID=${spec#*:} NAME=${ID##*::} PASSED=0 FAILED=0
   say "$NAME, $COUNT runs"

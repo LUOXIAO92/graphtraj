@@ -713,6 +713,11 @@ def esc() -> None:
                         f'wait reached the host: {bool(received)}; interrupt record after it in the transcript: {pressed}; lines {lines[-4:]}')
     else:
         check('PASS', f'{name} the answer to "does Esc send notifications/cancelled": {"yes" if cancelled else "no"}: {cancelled or lines[-3:]}')
+        # 438 item 2: Esc leaves no cleanup failure, and a later hook ends that call.
+        failed = [line for line in log.splitlines() if 'agents context cleanup failed' in line]
+        judge(not failed, f"{name} after Esc, host.log has no 'agents context cleanup failed' line", failed[:3])
+        ended = [line for line in lines if 'feature=wait' in line and (' finished ' in line or ' cancelled ' in line)]
+        judge(bool(ended), f'{name} the interrupted wait call is ended afterwards (finished or cancelled in host.log)', ended[-2:] or lines[-3:])
     host.keep_data()
 
 
@@ -1013,11 +1018,11 @@ def stuck(kind: str, how: str) -> None:
             break
         time.sleep(1)
     ended_at = time.monotonic()
-    judge(not first.limited and not (server and alive(server)), f'{name} the host process ends with a stuck child',
+    judge(not first.limited and not (server and alive(server)), f'{name} the host process ends with a stuck child (measures process end: the turn returned and the host pid is gone)',
           f'turn exit {first.exit_code} after {first.seconds:.0f} s (total {time.monotonic() - begun:.0f} s); host pid {server}')
     if 'locked_at' in facts:
         blocked = ended_at - facts['locked_at']
-        judge(blocked < LOCK_SECONDS - 5, f'{name} one blocked call does not hold the host past its bound',
+        judge(blocked < LOCK_SECONDS - 5, f'{name} one blocked call does not hold the host past its bound (measures process end, from the lock taken to the host pid gone, not Node close; about 35 s worst is accepted)',
               f'the host ended {blocked:.0f} s after another process took the record lock (released after {LOCK_SECONDS} s)')
     elif how == 'locked':
         check('CANNOT', f'{name} a blocked call: the lock was never taken; child {facts.get("child")}; see {name}-1.stdout')

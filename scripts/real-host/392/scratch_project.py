@@ -401,11 +401,13 @@ def main_pi_child() -> None:
     thread.join(5)
     text = stdout + ''.join(errors)
     (OUT / 'main-pi-child.txt').write_text(f'exit {process.returncode}\n--- stdout\n{stdout}\n--- stderr\n{"".join(errors)}')
+    # Main keeps this refusal (Worldline 20261102T193403); 438 made its text say to assign a workspace.
     if 'RUNTIME_ACCESS_DENIED' in text:
-        check('FAIL', '416: a Main at the project root gets RUNTIME_ACCESS_DENIED for a Pi child; '
-                      f'see main-pi-child.txt: {text[text.index("RUNTIME_ACCESS_DENIED"):][:300]}')
+        refusal = text[text.index('RUNTIME_ACCESS_DENIED'):][:400]
+        judge('workspace' in refusal, '416: a Main at the project root is refused a Pi child, and the refusal says to '
+              'assign a workspace', f'see main-pi-child.txt: {refusal}')
     elif 'created' in stdout:
-        check('PASS', f'416: a Main at the project root started a Pi child: {stdout[-300:]}')
+        check('FAIL', f'416: a Main at the project root started a Pi child, but Main kept the refusal: {stdout[-300:]}')
     else:
         check('CANNOT', f'416: this Main turn did not reach Pi\'s preparation, exit {process.returncode}; see main-pi-child.txt: {stdout[:400] or text[-400:]}')
 
@@ -415,6 +417,60 @@ def r416_main() -> None:
     """Prepare a project with a Pi role and try 416's root-level Pi child in a scratch Main turn."""
     prepare(['pi'])
     main_pi_child()
+    inline_role_refused()
+
+
+def inline_role_refused() -> None:
+    """439 item 2: a Batch with an inline role that writes base_url or pi.agent_dir is refused, naming connection:."""
+    for number, (field, value) in enumerate((('base_url', {'base_url': 'https://example.invalid/v1'}),
+                                             ('pi.agent_dir', {'pi': {'agent_dir': str(RUN / 'agent-dir')}})), 1):
+        task_id = str(10 + number)
+        ready(task_id, f'inline-{number}', 'Reply done.', 'pi')
+        swarm = RUN / f'inline-{number}.yml'
+        role = {'inline_probe': {'runtime': 'pi', 'model': f'{PI_PROVIDER}/{DEEPSEEK_MODEL}', **value}}
+        swarm.write_text(yaml.safe_dump({'tasks': [{'task_id': task_id, 'role': role, 'instruction': 'Reply done.'}]}))
+        done = run(f'inline-{number}', str(BIN / 'agent-runner'), '--swarm-input', str(swarm), limit=120)
+        said = done.stdout + done.stderr
+        judge(field in said and 'connection:' in said,
+              f'439: an inline role writing {field} is refused, naming the field and connection:',
+              f'exit {done.returncode}: {said.strip()[-300:]}')
+
+
+MEMBER_437 = (
+    'Do these in order; if a step fails, write the exact error in the report and go on. Do not print environment variables. '
+    '1) In Bash run exactly: mkdir -p sub/deeper && cd sub/deeper && pwd. Stay in that directory for the next step. '
+    '2) Use your Agent (Task) tool once: a subagent with the prompt "Reply with exactly: HELPER-OK". Keep its answer. '
+    '3) In Bash run: cd back to your Worktree root. '
+    '4) Write your assigned report report.md through the graphtraj submit_report tool with the line HELPER=<the answer>. '
+    '5) Commit any changed file on your branch, then submit your task result through the graphtraj submit_result tool '
+    'with the commit and a one-line completion. Do not search for workarounds.'
+)
+
+
+@ends_its_run
+def r437_member() -> None:
+    """437: a Claude member's native helper completes normally after a plain cd."""
+    prepare(['claude'])
+    ready('1', 'claude-cd', 'Run one helper after a cd and report its answer.', 'claude')
+    tasks = {'1': {'runtime': 'claude', 'name': 'claude-cd', 'instruction': MEMBER_437}}
+    document = dispatch(['claude'], tasks)
+    items = document.get('tasks', [{}])
+    judge(items[0].get('launch_status') not in ('failed', None), '437: dispatch started the Claude member',
+          json.dumps(items[0], ensure_ascii=False)[:500])
+    if items[0].get('launch_status') == 'failed':
+        return
+    arrived = wait_for_results(tasks, document)
+    report = report_of('1')
+    (OUT / 'report.txt').write_text(report)
+    alias = items[0].get('alias') or ''
+    execution = HARNESS / '.graphtraj' / 'runner' / 'sessions' / alias / 'execution.yml'
+    record = yaml.safe_load(execution.read_text()) if alias and execution.exists() else {}
+    text = json.dumps(record, ensure_ascii=False, default=str)
+    judge('RUNTIME_WORKER_FAILED' not in text and 'Hook Session differs' not in text and '1' in arrived,
+          '437: after a plain cd the member was not ended, and it submitted its result',
+          f'outcome {record.get("outcome")}; {text[:300]}')
+    judge(value(report, 'HELPER') == 'HELPER-OK', "437: the member's native helper completed and answered after the cd",
+          f'HELPER={value(report, "HELPER")}')
 
 
 MEMBER_420 = (

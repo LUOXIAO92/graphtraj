@@ -3,7 +3,7 @@
 Usage: python -I save_step.py <evidence directory> <destination> <answer file>
 
 The DeepSeek value comes from this process's environment. The others come from a child shell that
-reads ~/.zshrc: variables named like a credential, with values of 16 characters or more. All of them
+reads ~/.zshrc, plainly and interactively (shell_keys.py): variables named like a credential, with values of 16 characters or more. All of them
 stay in this process's memory, on no command line and in no file; a summary line names the variable
 and the file, never the value. If that shell cannot answer, nothing can be called clean, so only
 run.txt, finished.txt and the failure line are saved, and the evidence stays where it was.
@@ -13,14 +13,12 @@ the destination is kept beside the new one, named with its own start time.
 """
 import os
 from pathlib import Path
-import re
 import shutil
-import subprocess
 import sys
 
-SHELL_LISTING = 'source ~/.zshrc >/dev/null 2>&1; /usr/bin/env -0'
-CREDENTIAL_NAME = re.compile('KEY|TOKEN|SECRET|PASSWORD|CREDENTIAL', re.IGNORECASE)
-SHORTEST_VALUE = 16
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from shell_keys import shell_values  # noqa: E402
+
 ALWAYS_SAVED = ('run.txt', 'finished.txt')
 
 
@@ -33,23 +31,6 @@ def holding_value(directory: Path, value: bytes) -> list[Path]:
         return []
     return [path for path in sorted(directory.rglob('*'))
             if path.is_file() and not path.is_symlink() and value in path.read_bytes()]
-
-
-def shell_values() -> dict[str, bytes] | None:
-    """Return the credential-named variables a shell reading ~/.zshrc has; ``None`` if it cannot say."""
-    try:
-        done = subprocess.run(['/bin/zsh', '-c', SHELL_LISTING], stdin=subprocess.DEVNULL, capture_output=True, timeout=60)
-    except (OSError, subprocess.SubprocessError):
-        return None
-    if not done.stdout:
-        return None
-    found = {}
-    for entry in done.stdout.split(b'\0'):
-        name, separator, value = entry.partition(b'=')
-        text = name.decode(errors='replace')
-        if separator and len(value) >= SHORTEST_VALUE and CREDENTIAL_NAME.search(text):
-            found[text] = value
-    return found
 
 
 def keep_earlier(destination: Path) -> None:
@@ -79,23 +60,23 @@ def scan(evidence: Path, value: bytes) -> tuple[set[Path], list[str]]:
         lines = ['PASS secret: no saved file holds the DeepSeek value']
     else:
         lines = ['note: no DeepSeek key was loaded in this step']
-    others = shell_values()
+    others, failed = shell_values()
     if others is None:
         left_out |= {path for path in evidence.rglob('*') if path.name not in ALWAYS_SAVED}
-        lines.append(f'FAIL secret: a shell reading ~/.zshrc gave no listing, so the other keys could not be looked for; '
+        lines.append(f'FAIL secret: these shell forms gave no listing: {failed}, so the other keys could not be looked for; '
                      f'only run.txt, finished.txt and these lines were saved, and the evidence stays in {evidence}')
         return left_out, lines
     clean = []
-    for name, other in sorted(others.items()):
+    for name, other in others:
         if other == value:
             continue
         files = holding_value(evidence, other)
         left_out |= set(files)
         if files:
             lines.append(f'FAIL secret: {len(files)} files hold the value of {name} and were not saved: {names(files)}')
-        else:
+        elif name not in clean:
             clean.append(name)
-    lines.append(f'PASS secret: no saved file holds the value of these variables from ~/.zshrc: {clean}')
+    lines.append(f'PASS secret: no saved file holds the value of these variables from ~/.zshrc, plain and interactive: {clean}')
     return left_out, lines
 
 

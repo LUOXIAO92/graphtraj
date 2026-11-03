@@ -50,6 +50,16 @@ HERE=$WT/scripts/real-host/392
 COMMIT=$(<$HERE/COMMIT)
 # Used only to read the scan and for small fixed logic before the venv exists; nothing imports agents.
 PY=/Users/luoxiao/miniconda3/bin/python3.13
+# Second pass: keys ~/.zshrc gives only to an interactive shell, or under names the pattern misses, are
+# dropped too, found by name or by value through shell_keys.py. Names only are printed.
+() {
+  local name extra=($($PY -I $HERE/shell_keys.py names))
+  for name in $extra; do unset $name || true; done
+  if (( ${#extra} )); then
+    print -r -- "removed from this run's environment (names only): $extra"
+    export AGENTS_392_REMOVED_NAMES="${AGENTS_392_REMOVED_NAMES:-} $extra"
+  fi
+}
 AG=${AGENTS_392_DRY_ROOT:-/Users/luoxiao/agents-392}
 VENV=$AG/venv
 PI_SANDBOX=${AGENTS_392_DRY_SANDBOX:-$HOME/agents-pi-sandbox}

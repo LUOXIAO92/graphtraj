@@ -10,12 +10,13 @@ DEEPSEEK = 'sk-deepseek-planted-0123456789'
 OTHER = 'planted-other-token-value-0123456789'
 SHORT = 'short-value'
 NOT_NAMED = 'not-a-credential-name-0123456789'
+GUARDED = 'planted-guarded-interactive-0123456789'
 
 
-def run(root: Path, zshrc: str, files: dict, key: str = DEEPSEEK) -> tuple[Path, str]:
+def run(root: Path, zshrc: str, files: dict, key: str = DEEPSEEK, make_home: bool = True) -> tuple[Path, str]:
     """Save one evidence directory under a temporary HOME; return the destination and all that was printed."""
     home, evidence = root / 'home', root / 'out'
-    home.mkdir()
+    home.mkdir(exist_ok=not make_home)
     evidence.mkdir()
     (home / '.zshrc').write_text(zshrc)
     for name, text in files.items():
@@ -65,6 +66,20 @@ def main() -> int:
         results['if the shell gives no listing, only run.txt, finished.txt and the reason are saved'] = (
             sorted(item.name for item in saved.iterdir()) == ['finished.txt', 'run.txt', 'summary.txt']
             and 'could not be looked for' in (saved / 'summary.txt').read_text())
+    guarded = ('if [[ -o interactive ]]; then\n  for f in ~/.api_keys/*.sh; do source $f; done\nfi\n'
+               f'export DEEPSEEK_API_KEY={DEEPSEEK}\n')
+    with tempfile.TemporaryDirectory() as directory:
+        keys = Path(directory) / 'home' / '.api_keys'
+        keys.mkdir(parents=True)
+        (keys / 'fake.sh').write_text(f'export GUARDED_API_KEY={GUARDED}\n')
+        saved, printed = run(Path(directory), guarded, {
+            'summary.txt': 'PASS one\n', 'run.txt': 'step s code c started t\n', 'holds-guarded.txt': f'{GUARDED}\n',
+            'clean.txt': 'x\n'}, make_home=False)
+        summary = (saved / 'summary.txt').read_text()
+        results['a key loaded only in an interactive shell is found and its file left out'] = (
+            not (saved / 'holds-guarded.txt').exists() and 'GUARDED_API_KEY' in summary and (saved / 'clean.txt').exists())
+        results['the guarded value is in no saved byte, the summary or the output'] = (
+            GUARDED.encode() not in written(saved) and GUARDED not in printed)
     for name, passed in results.items():
         print(('PASS ' if passed else 'FAIL ') + name)
     return 0 if all(results.values()) else 1

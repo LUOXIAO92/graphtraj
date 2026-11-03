@@ -34,17 +34,17 @@ if [[ ${1:-} == --despite-dsh ]]; then
   shift
   print -r -- "--despite-dsh: a FAIL dsh answers line in step 00 is ignored; DSH-host steps are expected to FAIL."
 fi
-need_clean 00-preflight
-need_clean 01-install
 need_claude_project
 load_key
 
 if [[ ${1:-} == --rerun ]]; then
   shift
-  # Quick ones first, the suite and step 89 last, so a partial run still answers most.
-  UNATTENDED=(20-permission-requests 47-stuck-claude 49-stuck-pi 50-stuck-dsh 80-residual-386 81-residual-387-child
-              83-residual-387-exit 84-residual-391 86-residual-412 90-residual-416-main 70-suite 71-flaky 72-metadata
-              89-residual-416)
+  # Main's order for the rerun at 75684f9d. 00 and 01 run inside it, and a FAIL in either stops the run
+  # (00's key-name probe included); 94 and 95 are the key rescan and Engineer 2's 437 step.
+  UNATTENDED=(00-preflight 01-install 88-graphtraj-venv 10-matrix-claude 11-matrix-codex 12-matrix-pi 13-matrix-dsh
+              20-permission-requests 47-stuck-claude 48-stuck-codex 49-stuck-pi 50-stuck-dsh 63-walk-codex 64-walk-pi
+              80-residual-386 81-residual-387-child 82-residual-387-hosts 83-residual-387-exit 95-residual-437
+              90-residual-416-main 89-residual-416 91-residual-420 94-rescan-keys 70-suite 71-flaky 72-metadata)
   export AGENTS_392_RERUN=1
   if [[ ${1:-} == --restart ]]; then
     shift
@@ -52,6 +52,12 @@ if [[ ${1:-} == --rerun ]]; then
   fi
   (( $# == 0 )) || fail "--rerun takes only --restart, got: $*"
 fi
+# The plain run needs 00 and 01 done and clean first; the rerun runs them itself and stops on their FAIL.
+if [[ -z ${AGENTS_392_RERUN:-} ]]; then
+  need_clean 00-preflight
+  need_clean 01-install
+fi
+export AGENTS_392_DESPITE_DSH=$DESPITE_DSH
 if [[ -n ${AGENTS_392_DRY_STEPS:-} ]]; then UNATTENDED=(${=AGENTS_392_DRY_STEPS}); fi
 if [[ ${1:-} == --from ]]; then
   (( ${UNATTENDED[(Ie)${2:-none}]} )) || fail "--from names no unattended step: ${2:-nothing}"

@@ -235,6 +235,17 @@ def run_step(step: str) -> float:
     return awake / 60
 
 
+GATES = ('00-preflight', '01-install')
+
+
+def gate_failing(step: str) -> list[str]:
+    """Return the FAIL lines that stop a run after 00 or 01; with --despite-dsh, 00's dsh line does not."""
+    summary = REALHOST / step / 'summary.txt'
+    lines = summary.read_text(errors='replace').splitlines() if summary.is_file() else ['FAIL no summary was saved']
+    return [line for line in lines if line.startswith('FAIL ')
+            and not (os.environ.get('AGENTS_392_DESPITE_DSH') and line.startswith('FAIL dsh answers'))]
+
+
 def main() -> int:
     """Run the steps in order; nothing here stops the run but the user's own interrupt."""
     print('Keep the lid open for the whole run: caffeinate -i stops idle sleep but does not hold a closed lid. '
@@ -253,6 +264,10 @@ def main() -> int:
         except Exception as error:
             print(f'{step}: the runner could not run it: {type(error).__name__}: {error}; going on.', flush=True)
         write_summary(elapsed)
+        if step in GATES and gate_failing(step):
+            print(f'STOP: realhost/{step}/summary.txt has a FAIL line, so the run ends here: '
+                  f'{gate_failing(step)}. Tell Main.', flush=True)
+            return 1
     print(f'\nSaved summary: {OWN / "summary.txt"}')
     print((OWN / 'summary.txt').read_text())
     print('Tell Main the rerun is finished.' if RERUN else 'Tell Main the run is finished.', flush=True)

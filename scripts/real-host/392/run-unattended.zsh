@@ -43,7 +43,7 @@ if [[ ${1:-} == --rerun ]]; then
   # (00's key-name probe included); 94 and 95 are the key rescan and Engineer 2's 437 step.
   UNATTENDED=(00-preflight 01-install 88-graphtraj-venv 10-matrix-claude 11-matrix-codex 12-matrix-pi 13-matrix-dsh
               20-permission-requests 47-stuck-claude 48-stuck-codex 49-stuck-pi 50-stuck-dsh 63-walk-codex 64-walk-pi
-              80-residual-386 81-residual-387-child 82-residual-387-hosts 83-residual-387-exit 95-residual-437
+              80-residual-386 81-residual-387-child 82-residual-387-hosts 83-residual-387-exit 95-claude-cd
               90-residual-416-main 89-residual-416 91-residual-420 94-rescan-keys 70-suite 71-flaky 72-metadata)
   export AGENTS_392_RERUN=1
   if [[ ${1:-} == --restart ]]; then

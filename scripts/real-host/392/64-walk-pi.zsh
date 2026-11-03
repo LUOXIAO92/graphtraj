@@ -36,8 +36,29 @@ if (( ${#SESSION} )); then
   NOTICES=$(grep -c 'agents notice from' $OUT/pi-session.jsonl || true)
   grep -q 'graphtraj:agent-communication' $OUT/pi-session.jsonl && check PASS "pi.md: a notice message appears in the Session ($NOTICES lines naming it); status below" \
     || check FAIL "pi.md: no agents notice in the Session; read pi-session.jsonl"
+  # The model may read status while the end is still queueing, so the record itself is polled, at most 60 s,
+  # until delivered. Only the notification states are printed, in the order seen.
+  SEQUENCE=$($PY -I -c 'import json, pathlib, sys, time
+seen, end = [], time.monotonic() + 60
+while True:
+    states = []
+    for path in sorted(pathlib.Path(sys.argv[1]).glob("*.json")):
+        try:
+            executions = json.loads(path.read_text()).get("executions") or []
+        except (OSError, ValueError):
+            continue
+        states += [execution.get("notification") for execution in executions[-1:] if execution.get("notification")]
+    if not seen or seen[-1] != states:
+        seen.append(states)
+    if (states and all(state == "delivered" for state in states)) or time.monotonic() > end:
+        break
+    time.sleep(2)
+print(" -> ".join(",".join(states) or "none" for states in seen))' $WORK/data/control/agents)
+  [[ ${SEQUENCE##* -> } == delivered ]] \
+    && check PASS "pi.md: the child's notification reached delivered; states seen: $SEQUENCE" \
+    || check FAIL "pi.md: the child's notification never reached delivered within 60 s; states seen: $SEQUENCE"
   grep -Eq 'notification[\\": ]+delivered' $OUT/pi-session.jsonl \
-    && check PASS "pi.md: status shows notification delivered" || check FAIL "pi.md: status did not show notification delivered"
+    && note "the Session's own status read already said delivered" || note "the Session's own status read did not say delivered (it may have read it while queueing)"
 else
   check FAIL "pi.md: no Session file in $WORK/sessions"
 fi

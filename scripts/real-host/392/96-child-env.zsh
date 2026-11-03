@@ -16,7 +16,8 @@ mkdir -p $FAKE_Z
 for file in zshenv zprofile zlogin zshrc; do
   print -r -- "export FAKE_${file:u}_API_KEY=fake-433-$file-not-a-key" > $FAKE_Z/.$file
 done
-NAMES_CMD="echo NAMES-BEGIN; env | cut -d= -f1 | grep -E 'KEY|TOKEN|SECRET|PASSWORD|CREDENTIAL|^FAKE' | sort | tr '\n' ' '; echo; echo FLAGS=\$-; echo NAMES-END"
+# The markers come from printf, so a copy of the command text is never read as its output.
+NAMES_CMD="printf '%s-%s\\n' NAMES BEGIN; env | cut -d= -f1 | grep -E 'KEY|TOKEN|SECRET|PASSWORD|CREDENTIAL|^FAKE' | sort | tr '\n' ' '; echo; echo FLAGS=\$-; printf '%s-%s\\n' NAMES END"
 
 # `seen <file>`: the names between the markers of the LAST block in a host's answer, one line.
 seen() {
@@ -51,9 +52,11 @@ fi
 
 say "433 item 5: Claude's Bash tool, with the fake dotfiles (one -p call, no dialog)"
 CODE=0
+# The prompt goes on stdin: --allowedTools takes every later word, so a prompt argument after it was lost.
+print -r -- "Run exactly this one command with your Bash tool, once, and reply with only its output: $NAMES_CMD" \
+  > $RUN/claude-dotfiles-prompt.txt
 (cd $RUN && bounded 240 env ZDOTDIR=$FAKE_Z $CLAUDE -p --model $CLAUDE_MODEL --allowedTools Bash \
-  "Run exactly this one command with your Bash tool, once, and reply with only its output: $NAMES_CMD" \
-  </dev/null > $OUT/claude-dotfiles.txt 2> $OUT/claude-dotfiles.stderr.txt) || CODE=$?
+  < $RUN/claude-dotfiles-prompt.txt > $OUT/claude-dotfiles.txt 2> $OUT/claude-dotfiles.stderr.txt) || CODE=$?
 judge_names "433 item 5: Claude Bash tool after dotfile reload (exit $CODE)" $OUT/claude-dotfiles.txt
 
 say "433 items 1 and 6, 439 item 1: a host on each Runtime and its child of the same Runtime"

@@ -3,60 +3,87 @@
 Run by 96-child-env.zsh as `python -E -s child_env.py`, from $RUN, after prepare_checks. Imports rh392 read-only.
 Every command a model runs here prints variable names only: `cut -d= -f1` drops each value before anything
 is printed, and `ps -E` output goes through the same cut. FAKE439_TOKEN is a fake marker the step exports.
+The markers are printed with printf, so the command's own text never holds NAMES-BEGIN or NAMES-END and a
+copy of the command in a saved session cannot be read as its output.
 """
 from __future__ import annotations
 
 import re
 import sys
 
-from rh392 import Host, call, check, connection, judge, last_result, note
+from rh392 import CHILD_CHOICE, Host, call, check, connection, judge, last_result, note, script_prompt
 
 PATTERN = 'KEY|TOKEN|SECRET|PASSWORD|CREDENTIAL|^FAKE'
-NAMES = (f"echo NAMES-BEGIN; env | cut -d= -f1 | grep -E '{PATTERN}' | sort | tr '\\n' ' '; echo; "
-         f"if ps -E -p $PPID >/dev/null 2>&1; then echo PSE-ALLOWED; "
+NAMES = ("printf '%s-%s\\n' NAMES BEGIN; "
+         f"env | cut -d= -f1 | grep -E '{PATTERN}' | sort | tr '\\n' ' '; echo; "
+         "if ps -E -p $PPID >/dev/null 2>&1; then echo PSE-ALLOWED; "
          f"ps -E -p $PPID | tr ' ' '\\n' | grep -E '^[A-Za-z_][A-Za-z0-9_]*=' | cut -d= -f1 | grep -E '{PATTERN}' "
-         f"| sort -u | tr '\\n' ' '; echo; else echo PSE-DENIED; fi; echo NAMES-END")
+         "| sort -u | tr '\\n' ' '; echo; else echo PSE-DENIED; fi; printf '%s-%s\\n' NAMES END")
 ALLOWED = {'DEEPSEEK_API_KEY'}
+CHILD_INSTRUCTION = ('Run exactly this one command with your shell tool, once: ' + NAMES +
+                     ' Then end with a final reply that repeats the command output exactly, nothing else.')
 
 
 def names(text: str) -> tuple[list[str], list[str], str] | None:
-    """Return (environment names, parent names through ps -E, ps state) between the markers, or None."""
-    match = re.search(r'NAMES-BEGIN(.*?)NAMES-END', text or '', re.S)
-    if not match:
+    """Return (environment names, parent names through ps -E, ps state) of the last marked block, or None."""
+    text = (text or '').replace('\\n', '\n')
+    blocks = re.findall(r'NAMES-BEGIN(.*?)NAMES-END', text, re.S)
+    if not blocks:
         return None
-    lines = [line.strip() for line in match.group(1).strip().splitlines()]
+    lines = [line.strip() for line in blocks[-1].strip().splitlines()]
     words = lambda line: [word for word in line.split() if re.fullmatch(r'[A-Za-z_][A-Za-z0-9_]*', word)]
     state = next((line for line in lines if line.startswith('PSE-')), 'PSE-unknown')
-    after = lines[lines.index(state) + 1] if state in lines and lines.index(state) + 1 < len(lines) else ''
+    position = lines.index(state) if state in lines else -1
+    after = lines[position + 1] if 0 <= position < len(lines) - 1 else ''
     return words(lines[0]) if lines else [], words(after) if state == 'PSE-ALLOWED' else [], state
 
 
+def saved_text(host: Host) -> str:
+    """Return the text of the host's saved data, where a child's own session holds its tool output."""
+    parts = []
+    for path in sorted(host.data.rglob('*')):
+        if path.is_file() and not path.is_symlink() and path.stat().st_size < 20_000_000:
+            try:
+                parts.append(path.read_text(errors='replace'))
+            except OSError:
+                continue
+    return '\n'.join(parts)
+
+
+def host_shell(kind: str, host: Host, name: str) -> None:
+    """439 item 1: the top-level Codex host's own tool shell keeps the user environment."""
+    own = host.work / f'host-names-{kind}.txt'
+    own.unlink(missing_ok=True)
+    host.turn(f'{name}-own', f'Run exactly this with your shell tool, once: ( {NAMES} ) > {own} '
+              'Then reply with one line and stop.', limit=240)
+    try:
+        parsed = names(own.read_text(errors='replace'))
+        own.unlink()
+    except OSError:
+        parsed = None
+    if parsed is None:
+        check('CANNOT', f'439 item 1: the {kind} host did not run the names command')
+        return
+    environment, _, state = parsed
+    note(f'{kind} host shell sees: {environment}; ps -E {state}')
+    judge('FAKE439_TOKEN' in environment, '439 item 1: the top-level Codex host keeps the user environment',
+          'FAKE439_TOKEN present' if 'FAKE439_TOKEN' in environment else 'FAKE439_TOKEN absent')
+
+
 def one(kind: str) -> None:
-    """One host of ``kind`` runs the command itself, then has a child of the same Runtime run it."""
+    """One host of ``kind`` creates a child of the same Runtime, which runs the names command."""
     name = f'child-env-{kind}'
     host = Host(kind, name, {kind: None}, {'connections': {f'local-{kind}': connection(kind)}})
-    own = f'host-names-{kind}.txt'
-    prompt = ('Do these in order, using only your shell tool and the agents tool. Do not print environment values. '
-              f'1) Run exactly this with your shell tool: ( {NAMES} ) > {own} '
-              f'2) Use the agents tool: {call("create", runtime=kind, connection=f"local-{kind}", instruction="Run exactly this one command with your shell tool, once, and reply with only its output: " + NAMES)} '
-              '3) Wait for that child with the wait feature, timeout_seconds 240. If it asks permission to run that '
-              'command, allow it with the agents tool and wait again, until it has finished. 4) Reply with one line: done.')
-    turn = host.turn(name, prompt, limit=420)
+    if kind == 'codex':
+        host_shell(kind, host, name)
+    model, effort = CHILD_CHOICE[kind]
+    turn = host.turn(name, script_prompt([
+        call('create', runtime=kind, model=model, reasoning_effort=effort, name=f'env-{kind}', instruction=CHILD_INSTRUCTION),
+        call('wait', agent='<agent from 1>', timeout_seconds=240),
+        call('status', agent='<agent from 1>'),
+    ], 'If the child asks permission to run that command, allow it with the agents tool and wait again until it has '
+       'finished. Then reply with one line and stop.'), limit=480)
     host.keep_data()
-    try:
-        own_text = (host.work / own).read_text(errors='replace')
-        (host.work / own).unlink()
-    except OSError:
-        own_text = ''
-    parsed = names(own_text)
-    if parsed is None:
-        check('CANNOT', f'{kind} host shell: the host did not run the names command')
-    else:
-        environment, _, state = parsed
-        note(f'{kind} host shell sees: {environment}; ps -E {state}')
-        if kind == 'codex':
-            judge('FAKE439_TOKEN' in environment, '439 item 1: the top-level Codex host keeps the user environment',
-                  'FAKE439_TOKEN present' if 'FAKE439_TOKEN' in environment else 'FAKE439_TOKEN absent')
     created = turn.created(kind)
     if not created:
         check('CANNOT', f'{kind} child: no child was created in {turn.seconds:.0f} s (exit {turn.exit_code})')
@@ -64,12 +91,16 @@ def one(kind: str) -> None:
     agent = created['agent']
     replies = [str(last_result(d).get('last_message') or '') for d in turn.of('wait', agent) + turn.of('status', agent)]
     parsed = next((item for item in map(names, replies) if item is not None), None)
+    source = 'its reply'
     if parsed is None:
-        check('CANNOT', f'{kind} child: its reply held no names output')
+        parsed, source = names(saved_text(host)), 'its own saved session'
+    if parsed is None:
+        check('CANNOT', f'{kind} child: neither its reply nor its saved session held the names output')
         return
     environment, parent, state = parsed
     extra = sorted(set(environment) - ALLOWED)
-    judge(not extra, f'433 item 1: a {kind} child environment holds no credential name but its own key', extra or environment)
+    judge(not extra, f'433 item 1: a {kind} child environment holds no credential name but its own key (from {source})',
+          extra or environment)
     judge('FAKE439_TOKEN' not in environment, f'439 item 1: a {kind} child does not see FAKE439_TOKEN',
           'absent' if 'FAKE439_TOKEN' not in environment else 'present')
     if state == 'PSE-DENIED':

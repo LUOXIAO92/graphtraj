@@ -370,6 +370,8 @@ def reviewed_child_case(kind: str, child: str) -> None:
     host = Host(kind, name, {child: writable(child, RUN / name / 'work')}, reviewed_config(child, stub.entry))
     target = target_of(child, host.work, f'{name}.txt')
     target.parent.mkdir(parents=True, exist_ok=True)
+    # A Claude host's work directory is the shared claude-project, so an earlier run's line would remain.
+    target.unlink(missing_ok=True)
     try:
         turn = host.turn(name, script_prompt(review_calls(child, command_instruction(target, child), 'accept')))
         created = turn.created(child)
@@ -650,6 +652,8 @@ def unanswered_review(kind: str, child: str) -> None:
     host = Host(kind, name, {child: writable(child, RUN / name / 'work')}, reviewed_config(child, stub.entry))
     target = target_of(child, host.work, f'{name}.txt')
     target.parent.mkdir(parents=True, exist_ok=True)
+    # A Claude host's work directory is the shared claude-project, so an earlier run's line would remain.
+    target.unlink(missing_ok=True)
     seen: dict = {}
     mcp_before = mcp_processes()
     try:

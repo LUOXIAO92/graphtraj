@@ -181,16 +181,14 @@ def ask_parent(runtime: str) -> None:
     replies = [d for d in turn.of('reply', agent) if not error_code(d)]
     judge(bool(replies), f'{name} the parent answers once with reply', [(d.get('result') or {}).get('reply_status') for d in replies])
     told = [notice['id'] for notice in host.notices_of(agent) if notice['event'] == 'request']
-    if runtime == 'claude':
-        # wait ends early on a request, so one can be read through requests before its notice is due.
-        asked = {item.get('request_token') for d in turn.of('requests', agent) for item in (d.get('result') or {}).get('requests') or []}
-        waits = turn.of('wait', agent)
-        pending = (waits[-1].get('result') or {}).get('pending_requests') if waits else None
-        judge(len(told) == len(set(told)), f'{name} no request notifies the parent more than once', told)
-        judge(len(replies) >= len(asked) > 0 and not pending, f'{name} every request is answered',
-              f'{len(asked)} requests, {len(replies)} replies, pending after the last wait: {pending}')
-    else:
-        judge(len(told) == 1, f'{name} each permission request notifies the parent once', told)
+    # On both Runtimes wait ends early on a request, so one can be read through requests before its notice
+    # is due (Claude in the first rerun, Pi in the second): no notice twice, and every request answered.
+    asked = {item.get('request_token') for d in turn.of('requests', agent) for item in (d.get('result') or {}).get('requests') or []}
+    waits = turn.of('wait', agent)
+    pending = (waits[-1].get('result') or {}).get('pending_requests') if waits else None
+    judge(len(told) == len(set(told)), f'{name} no request notifies the parent more than once', told)
+    judge(len(replies) >= len(asked) > 0 and not pending, f'{name} every request is answered',
+          f'{len(asked)} requests, {len(replies)} replies, pending after the last wait: {pending}')
     count = shown_count(host, [turn], agent, 'BLUE392')
     judge(count == 1, f'{name} the child goes on with the answer and its answer reaches the parent once', f'COLOUR=BLUE392 shown {count}')
     host.keep_data()

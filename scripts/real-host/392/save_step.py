@@ -57,7 +57,7 @@ def scan(evidence: Path, value: bytes) -> tuple[set[Path], list[str]]:
     if matched:
         lines = [f'FAIL secret: {len(matched)} files hold the DeepSeek value and were not saved: {names(matched)}']
     elif value:
-        lines = ['PASS secret: no saved file holds the DeepSeek value']
+        lines = ['PASS secret: no file this step saved holds the DeepSeek value']
     else:
         lines = ['note: no DeepSeek key was loaded in this step']
     others, failed = shell_values()
@@ -76,7 +76,7 @@ def scan(evidence: Path, value: bytes) -> tuple[set[Path], list[str]]:
             lines.append(f'FAIL secret: {len(files)} files hold the value of {name} and were not saved: {names(files)}')
         elif name not in clean:
             clean.append(name)
-    lines.append(f'PASS secret: no saved file holds the value of these variables from ~/.zshrc, plain and interactive: {clean}')
+    lines.append(f'PASS secret: no file this step saved holds the value of these variables from ~/.zshrc, plain and interactive: {clean}')
     return left_out, lines
 
 

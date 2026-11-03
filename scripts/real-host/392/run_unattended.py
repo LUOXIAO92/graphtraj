@@ -281,7 +281,11 @@ def main() -> int:
         try:
             elapsed[step] = run_step(step)
         except KeyboardInterrupt:
-            print('\nInterrupted. Run the same command again to continue.', flush=True)
+            # Never with --restart, which would start over and drop what is finished.
+            again = ' '.join(['zsh', str(STEPS_DIRECTORY / 'run-unattended.zsh')]
+                             + (['--despite-dsh'] if os.environ.get('AGENTS_392_DESPITE_DSH') else [])
+                             + (['--rerun'] if RERUN else []))
+            print(f'\nInterrupted. To continue where it stopped, run:\n  {again}', flush=True)
             return 130
         except Exception as error:
             print(f'{step}: the runner could not run it: {type(error).__name__}: {error}; going on.', flush=True)

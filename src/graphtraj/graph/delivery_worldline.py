@@ -133,6 +133,20 @@ def read_worldline(
         os.close(lock_descriptor)
 
 
+def latest_task_event(events: list[dict[str, Any]], task_id: str) -> str | None:
+    """Return the ID of the latest event that records a fact about one Task.
+
+    ``task-registered`` and the delivery and state events name their Task in
+    ``task_id``. A ``task-graph-revised`` event names every Task it created or
+    changed in ``affected_task_ids`` instead, so a Task that only a revision
+    created is still found. ``None`` means no retained event names the Task.
+    """
+    for event in reversed(events):
+        if event.get("task_id") == task_id or task_id in event.get("affected_task_ids", ()):
+            return event["event_id"]
+    return None
+
+
 def _read_shards(
     state_directory: Path,
 ) -> tuple[list[tuple[Path, list[dict[str, Any]]]], list[dict[str, Any]]]:

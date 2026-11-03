@@ -187,9 +187,12 @@ def run(job_file: Path) -> int:
                 if assignment is not None:
                     try:
                         _register_created_member(launch_file, mapping, created=operation == "launch")
-                    except (RunnerError, OSError, ValueError, KeyError, TypeError, yaml.YAMLError) as error:
+                    except Exception as error:
+                        # Any failure here must end as this execution's terminal
+                        # record; an escaping error would kill the Worker after
+                        # mapping.yml was written, leaving no terminal record.
                         raise RuntimeAdapterError(
-                            "MEMBER_REGISTRATION_FAILED", str(error), terminal_confirmed=True,
+                            "MEMBER_REGISTRATION_FAILED", f"{type(error).__name__}: {error}", terminal_confirmed=True,
                         ) from error
 
                 if budget_monitor is not None:
@@ -416,7 +419,7 @@ def _register_created_member(
     from graphtraj.execution.runner_heartbeat import ownership_is_held
     from graphtraj.execution.runner_status import read_alias_mapping
     from graphtraj.graph.delivery_state import apply_delivery_state_request, read_team
-    from graphtraj.graph.delivery_worldline import read_worldline
+    from graphtraj.graph.delivery_worldline import latest_task_event, read_worldline
     from graphtraj.graph.task_graph import _load_states
     from graphtraj.workspace.runner_project import discover_project, discover_project_root
 
@@ -449,10 +452,9 @@ def _register_created_member(
                            for member in read_team(team_file)["members"].values())):
             raise ValueError("A resumed task Session must already be a registered member")
         return
-    predecessor = next(
-        event["event_id"] for event in reversed(read_worldline(project.state_directory, project.harness_root))
-        if event.get("task_id") == mapping["task_id"]
-    )
+    predecessor = latest_task_event(read_worldline(project.state_directory, project.harness_root), mapping["task_id"])
+    if predecessor is None:
+        raise ValueError("The Project Worldline records no event for Task " + str(mapping["task_id"]))
     request = {
         "task_id": mapping["task_id"], "caused_by_event_ids": [predecessor],
         "evidence_refs": [(directory / "mapping.yml").relative_to(project.harness_root).as_posix()],

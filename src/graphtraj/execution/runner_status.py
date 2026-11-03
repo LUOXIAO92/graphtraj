@@ -948,6 +948,10 @@ def _status_session(
     identity = {"alias": alias}
     if "execution_id" in mapping:
         identity.update(session=mapping["session"], execution_id=mapping["execution_id"])
+    crash = crashed_start(mapping, session_directory)
+    if crash is not None:
+        identity.update(session=mapping["session"], execution_id=crash["execution_id"])
+        return {**identity, "activity": "idle", "last_outcome": "runtime-error", "crash": crash}
     execution_file = session_directory / "execution.yml"
     if os.path.lexists(str(execution_file)):
         return {**identity, **_retained_activity(mapping, session_directory)}
@@ -971,6 +975,70 @@ def _status_session(
     if "last_outcome" in mapping and "last_outcome" not in status:
         status["last_outcome"] = mapping["last_outcome"]
     return {**identity, **status}
+
+
+def crashed_start(mapping: Mapping[str, Any], session_directory: Path) -> Dict[str, Any] | None:
+    """Recognize a Worker that died after binding its native Session, and how.
+
+    The Worker writes mapping.yml without ``execution_id`` when the native
+    Session is created and adds it only when the execution is recorded. A
+    Worker that crashed in between, for example during member registration,
+    left no terminal record, so readers would otherwise wait for an execution
+    that no mapping names. Such a start counts as stopped only when every
+    retained and live fact agrees that nothing still runs it:
+
+    - mapping.yml has no ``execution_id`` and no execution.yml exists;
+    - no process holds the recorded Worker's ownership lock;
+    - heartbeat.yml names this alias, Worker and Runtime process, the
+      execution, and a ``process_outcome`` with ``terminal_confirmed: true``;
+    - the recorded Runtime process identifier no longer resolves.
+
+    Nothing is written; the Worker's own records stay the evidence.
+
+    Returns
+    -------
+    ``None`` unless all of the above hold; otherwise the crash facts:
+    ``execution_id``, ``runtime_exit_code``, ``message`` (the last line the
+    Worker wrote to worker-stderr.log) and ``evidence_refs`` (file names in
+    the Session directory).
+    """
+    if "execution_id" in mapping or os.path.lexists(str(session_directory / "execution.yml")):
+        return None
+    if ownership_is_held(session_directory, mapping["worker_pid"]):
+        return None
+    heartbeat = read_heartbeat(session_directory)
+    outcome = None if heartbeat is None else heartbeat.get("process_outcome")
+    if (
+        heartbeat is None
+        or any(heartbeat.get(key) != mapping[key] for key in ("alias", "worker_pid", "runtime_pid"))
+        or not isinstance(heartbeat.get("execution_id"), str) or not heartbeat["execution_id"]
+        or not isinstance(outcome, dict) or outcome.get("terminal_confirmed") is not True
+    ):
+        return None
+    try:
+        os.kill(mapping["runtime_pid"], 0)
+    except ProcessLookupError:
+        pass
+    except OSError:
+        return None
+    else:
+        return None
+
+    # The Worker's own traceback ends with the exception that stopped it.
+    stderr_file = session_directory / "worker-stderr.log"
+    try:
+        lines = [] if stderr_file.is_symlink() else stderr_file.read_text(
+            encoding="utf-8", errors="replace"
+        ).splitlines()
+    except OSError:
+        lines = []
+    cause = next((line.strip() for line in reversed(lines) if line.strip()), "no Worker diagnostic")
+    return {
+        "execution_id":      heartbeat["execution_id"],
+        "runtime_exit_code": outcome.get("runtime_exit_code"),
+        "message":           "The Worker exited before recording its execution: " + cause,
+        "evidence_refs":     ["worker-stderr.log", "heartbeat.yml"],
+    }
 
 
 def _status_summary(

@@ -18,6 +18,9 @@ else
   print -r -- $COMMIT > $GT/installed-commit
 fi
 $GT/bin/python -m pip list --disable-pip-version-check 2>/dev/null > $OUT/pip-list.txt
+installed_versions $GT
+$GT/bin/python -m pip check > $OUT/pip-check.txt 2>&1 && check PASS "pip check: graphtraj's agent-swarm range is met: $(tail -1 $OUT/pip-check.txt)" \
+  || check FAIL "pip check: $(tail -1 $OUT/pip-check.txt)"
 for tool in graphtraj agent-runner graphtraj-session; do
   [[ -x $GT/bin/$tool ]] && check PASS "$tool beside the venv Python" || check FAIL "$tool missing from $GT/bin"
 done

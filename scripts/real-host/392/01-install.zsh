@@ -36,6 +36,7 @@ else
 fi
 
 say "what is in the venv"
+installed_versions $VENV
 $VENV/bin/python -m pip list --disable-pip-version-check 2>/dev/null | tee $OUT/pip-list.txt
 EXTRA=$(tail -n +3 $OUT/pip-list.txt | awk '{print tolower($1)}' | grep -vxE 'agent-swarm|pyyaml|websockets|pip' | tr '\n' ' ' || true)
 [[ -z $EXTRA ]] && check PASS "only agents, its two dependencies and pip are installed" || check FAIL "the venv also holds: $EXTRA"

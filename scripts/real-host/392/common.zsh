@@ -318,3 +318,17 @@ step_end() {
   grep -q '^FAIL ' $OUT/summary.txt 2>/dev/null && failed=1
   exit $failed
 }
+
+# PASS when the venv was built from COMMIT and holds the versions that commit declares; names them either way.
+installed_versions() {
+  local venv=$1 expected got
+  expected=$(git -C $WT show ${COMMIT}:src/agent_swarm/__init__.py | sed -n 's/^__version__ = "\(.*\)"$/\1/p')
+  got=$($venv/bin/python -I -c 'import importlib.metadata as m
+names = ["agent-swarm", "graphtraj"]
+print(" ".join(f"{n}={m.version(n)}" for n in names if any(d.metadata["Name"] == n for d in m.distributions())))' 2>&1 || true)
+  if [[ -f $venv/installed-commit && $(<$venv/installed-commit) == $COMMIT && " $got " == *" agent-swarm=$expected "* ]]; then
+    check PASS "installed in $venv from $COMMIT: $got"
+  else
+    check FAIL "$venv: expected agent-swarm=$expected from $COMMIT, found: $got (built from $(cat $venv/installed-commit 2>/dev/null || print nothing))"
+  fi
+}

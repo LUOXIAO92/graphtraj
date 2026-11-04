@@ -4,9 +4,9 @@ from uuid import uuid4
 
 import pytest
 
-from agent_swarm import AgentControl, Caller, bind
-from agent_swarm.claude import ClaudeDriver
-from agent_swarm.claude.host import IndependentCalls
+from graftling import AgentControl, Caller, bind
+from graftling.claude import ClaudeDriver
+from graftling.claude.host import IndependentCalls
 from test_claude_runtime import claude_environment  # noqa: F401
 
 
@@ -176,7 +176,7 @@ def test_refused_host_start_is_readable_in_calls_and_log(tmp_path: Path, case: s
     import subprocess
     import sys
 
-    import agent_swarm
+    import graftling
 
     project, elsewhere = tmp_path / 'project', tmp_path / 'elsewhere'
     root = project / '.agents-control'
@@ -192,10 +192,10 @@ def test_refused_host_start_is_readable_in_calls_and_log(tmp_path: Path, case: s
                 {'jsonrpc': '2.0', 'id': 2, 'method': 'tools/call',
                  'params': {'name': 'agents', 'arguments': {'action': 'discover'}}}]
     launcher = ('import subprocess, sys\n'
-                'done = subprocess.run([sys.executable, "-m", "agent_swarm.claude.host", "serve", "--config",'
+                'done = subprocess.run([sys.executable, "-m", "graftling.claude.host", "serve", "--config",'
                 ' sys.argv[1]], input=sys.stdin.read(), capture_output=True, text=True, timeout=30)\n'
                 'sys.stdout.write(done.stdout); sys.stderr.write(done.stderr)\n')
-    source = str(Path(agent_swarm.__file__).parents[1])
+    source = str(Path(graftling.__file__).parents[1])
     finished = subprocess.run(
         [sys.executable, '-c', launcher, str(config)], cwd=elsewhere if case == 'elsewhere' else project,
         input=''.join(json.dumps(message) + '\n' for message in messages), capture_output=True, text=True,
@@ -228,7 +228,7 @@ def test_session_end_is_logged_as_a_stop_not_a_traceback(tmp_path: Path, case: s
     import subprocess
     import sys
 
-    import agent_swarm
+    import graftling
 
     project, elsewhere = tmp_path / 'project', tmp_path / 'elsewhere'
     root = project / '.agents-control'
@@ -242,7 +242,7 @@ def test_session_end_is_logged_as_a_stop_not_a_traceback(tmp_path: Path, case: s
     # Like Claude Code it starts the host with the default SIGINT disposition: a
     # suite run as a background job would otherwise pass SIGINT ignored (372).
     launcher = ('import json, signal, subprocess, sys\n'
-                'host = subprocess.Popen([sys.executable, "-m", "agent_swarm.claude.host", "serve", "--config",'
+                'host = subprocess.Popen([sys.executable, "-m", "graftling.claude.host", "serve", "--config",'
                 ' sys.argv[1]], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True,'
                 ' preexec_fn=lambda: signal.signal(signal.SIGINT, signal.SIG_DFL))\n'
                 'host.stdin.write(json.dumps({"jsonrpc": "2.0", "id": 1, "method": "initialize",'
@@ -250,7 +250,7 @@ def test_session_end_is_logged_as_a_stop_not_a_traceback(tmp_path: Path, case: s
                 'print(host.stdout.readline().strip())\n'
                 'host.send_signal(signal.SIGINT)\n'
                 'print(host.wait(timeout=30))\n')
-    source = str(Path(agent_swarm.__file__).parents[1])
+    source = str(Path(graftling.__file__).parents[1])
     finished = subprocess.run(
         [sys.executable, '-c', launcher, str(config)], cwd=elsewhere if case == 'refused' else project,
         capture_output=True, text=True, timeout=60,
@@ -274,7 +274,7 @@ def test_context_reports_a_refused_host_in_one_line(tmp_path: Path) -> None:
     import subprocess
     import sys
 
-    import agent_swarm
+    import graftling
 
     project, elsewhere = tmp_path / 'project', tmp_path / 'elsewhere'
     root = project / '.agents-control'
@@ -283,19 +283,19 @@ def test_context_reports_a_refused_host_in_one_line(tmp_path: Path) -> None:
     config = root / 'claude-host.json'
     config.write_text(json.dumps({'root': str(root), 'cwd': str(project), 'claude': sys.executable,
                                   'channel_file': str(root / 'live' / 'channel.json'), 'settings': {}}))
-    env = {**os.environ, 'PYTHONPATH': str(Path(agent_swarm.__file__).parents[1]) + os.pathsep
+    env = {**os.environ, 'PYTHONPATH': str(Path(graftling.__file__).parents[1]) + os.pathsep
            + os.environ.get('PYTHONPATH', '')}
 
     def context() -> subprocess.CompletedProcess:
         """Run the mod's context entry as the hook does, with one request on stdin."""
-        return subprocess.run([sys.executable, '-m', 'agent_swarm.claude.host', 'context', '--config', str(config)],
+        return subprocess.run([sys.executable, '-m', 'graftling.claude.host', 'context', '--config', str(config)],
                               input='{}', capture_output=True, text=True, timeout=30, env=env)
 
     idle = context()
     assert idle.returncode == 1 and 'Traceback' not in idle.stderr
     assert idle.stderr.splitlines() == [f"The agents host for this project is not running; see {root / 'host.log'}."]
     launcher = ('import json, signal, subprocess, sys\n'
-                'host = subprocess.Popen([sys.executable, "-m", "agent_swarm.claude.host", "serve", "--config",'
+                'host = subprocess.Popen([sys.executable, "-m", "graftling.claude.host", "serve", "--config",'
                 ' sys.argv[1]], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True,'
                 ' preexec_fn=lambda: signal.signal(signal.SIGINT, signal.SIG_DFL))\n'
                 'host.stdin.write(json.dumps({"jsonrpc": "2.0", "id": 1, "method": "initialize",'

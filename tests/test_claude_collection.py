@@ -233,7 +233,7 @@ def test_claude_command_hook_output(tmp_path: Path, monkeypatch: pytest.MonkeyPa
              'transcript_path': str(tmp_path / 'not-created-yet.jsonl'), 'cwd': str(tmp_path)}
     result = CliRunner().invoke(main, ['claude'], input=json.dumps(event))
     assert result.exit_code == 0 and json.loads(result.output) == {}
-    from agent_swarm.sessions.archive import JsonlSessionStore, archive_path
+    from graftling.sessions.archive import JsonlSessionStore, archive_path
 
     store = JsonlSessionStore(archive_path(tmp_path / '.graphtraj/swarm', 'claude:new'))
     assert store.page()['events'] == []

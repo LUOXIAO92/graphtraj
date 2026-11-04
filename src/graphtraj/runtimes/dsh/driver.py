@@ -6,8 +6,8 @@ import sys
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from agent_swarm import Run
-from agent_swarm.dsh import bind_run
+from graftling import Run
+from graftling.dsh import bind_run
 
 if TYPE_CHECKING:
     from graphtraj.execution.agent_driver import AdapterDriver
@@ -22,9 +22,9 @@ def bind_agents(turn: DshExecution, run: Run, driver: AdapterDriver) -> None:
     # this owner as the child. GraphTraj's own entry reads only GRAPHTRAJ_CLI_CONNECTION;
     # without it, it ran the call inside the MCP server, as the member, with an
     # environment DSH had stripped of every key (440).
-    turn.request['mcp'] = {'command': str(Path(sys.executable).absolute()), 'args': ['-I', '-m', 'agent_swarm.mcp']}
+    turn.request['mcp'] = {'command': str(Path(sys.executable).absolute()), 'args': ['-I', '-m', 'graftling.mcp']}
     if run.archive is not None:
-        from agent_swarm.sessions import DshArchive
+        from graftling.sessions import DshArchive
 
         from graphtraj.interfaces.agents import graphtraj_fields
 

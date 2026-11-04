@@ -17,7 +17,7 @@ from pathlib import Path
 import sqlite3
 from typing import Iterator
 
-from agent_swarm.sessions import (
+from graftling.sessions import (
     INITIAL_COLLECTION_TYPE, append_stream_record, snapshot_event, upgrade_event, upgrade_header,
     validate_header, validate_session,
 )

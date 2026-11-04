@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from agent_swarm import Caller
+from graftling import Caller
 from graphtraj.configuration.project_configuration import default_configuration_content
 from graphtraj.interfaces.agents import agents_callback
 from graphtraj.runtimes.codex.app_server import CodexAppServer, CodexServerRequest
@@ -60,11 +60,11 @@ def test_connection_only_role_preserves_configuration_and_archive_policy(
     configuration: str | None,
 ) -> None:
     """The public agents function resolves connections and binds the chosen archive."""
-    from agent_swarm import write_config, read_config
+    from graftling import write_config, read_config
     from graphtraj.configuration import runtime_connections
     from graphtraj.interfaces.agents import swarm_root
     from graphtraj.interfaces.local_tool import bind
-    from agent_swarm.sessions.archive import JsonlSessionStore, archive_path
+    from graftling.sessions.archive import JsonlSessionStore, archive_path
     from graphtraj.workspace import runner_project
 
     root = tmp_path / 'project'
@@ -226,10 +226,10 @@ def test_resume_settings_are_live_without_history_backfill(
     tmp_path: Path, peer: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Resume-generated settings must not become an excluded historical prefix."""
-    from agent_swarm import write_config
+    from graftling import write_config
     from graphtraj.interfaces.agents import swarm_root
-    from agent_swarm.sessions.archive import JsonlSessionStore, archive_path
-    from agent_swarm.sessions.protocol import native_record
+    from graftling.sessions.archive import JsonlSessionStore, archive_path
+    from graftling.sessions.protocol import native_record
     from graphtraj.workspace import runner_project
 
     root = tmp_path / 'project'
@@ -299,10 +299,10 @@ def test_independent_codex_host_accepts_archiving(tmp_path: Path) -> None:
     (tmp_path / 'config.yml').write_text('save_normalized_sessions: true\n')
     settings = tmp_path / 'settings.json'
     settings.write_text('{}')
-    import agent_swarm
+    import graftling
 
-    source = str(Path(agent_swarm.__file__).parents[1])
-    finished = subprocess.run([sys.executable, '-m', 'agent_swarm.codex.host', '--settings', str(settings),
+    source = str(Path(graftling.__file__).parents[1])
+    finished = subprocess.run([sys.executable, '-m', 'graftling.codex.host', '--settings', str(settings),
                                '--directory', str(tmp_path), 'hi'], capture_output=True, text=True, timeout=60,
                               env={**os.environ, 'PYTHONPATH': source})
     # The empty settings still fail, but for their own reason, not archiving.

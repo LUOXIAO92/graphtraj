@@ -7,7 +7,7 @@ from inspect import signature
 from pathlib import Path
 from typing import Any, Collection
 
-from agent_swarm import ENVELOPE_SCHEMA as INPUT_SCHEMA, validate_envelope, validate_schema as _validate
+from graftling import ENVELOPE_SCHEMA as INPUT_SCHEMA, validate_envelope, validate_schema as _validate
 
 from graphtraj.interfaces.tools import TOOLS, ToolResult
 

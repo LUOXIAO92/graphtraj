@@ -114,8 +114,8 @@ def test_a_failed_codex_push_is_named(tmp_path: Path, sent: list, failure, expec
 
 def _finish(tmp_path: Path) -> dict:
     """End one Main-created root through the core and return its status document."""
-    from agent_swarm import AgentControl
-    from agent_swarm.control import ExecutionEvents
+    from graftling import AgentControl
+    from graftling.control import ExecutionEvents
 
     control = AgentControl(tmp_path / 'swarm', {}, event_receiver=_agents(tmp_path)._main_notice)
     record = {'agent': 'agent-probe', 'name': 'probe', 'runtime': 'claude', 'host': 'graphtraj',

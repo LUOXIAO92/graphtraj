@@ -16,12 +16,12 @@ import time
 
 import pytest
 
-import agent_swarm
-from agent_swarm import AgentControl, Caller
-from agent_swarm.approval import REVIEW_METHOD, approves, check_reply, review_failed
-from agent_swarm.claude.driver import ClaudeDriver
-from agent_swarm.claude.execution import AGENTS_TOOL, REVIEW_HOOK_MIN_SECONDS, ClaudeExecution
-from agent_swarm import review as review_core
+import graftling
+from graftling import AgentControl, Caller
+from graftling.approval import REVIEW_METHOD, approves, check_reply, review_failed
+from graftling.claude.driver import ClaudeDriver
+from graftling.claude.execution import AGENTS_TOOL, REVIEW_HOOK_MIN_SECONDS, ClaudeExecution
+from graftling import review as review_core
 
 # A reviewer process: it refuses Write and allows everything else, the connectivity check included.
 REVIEWER_SCRIPT = """
@@ -54,7 +54,7 @@ class Harness:
         self.control = AgentControl(root / 'agents', {'claude': ClaudeDriver(root, {
             'model': 'claude-opus-5-5', 'permission_mode': 'default'})},
             event_receiver=self.notices.append, request_notices=True)
-        self.call = agent_swarm.bind(self.control, Caller('review-test', 'actual-parent', 'parent-session', 'claude'))
+        self.call = graftling.bind(self.control, Caller('review-test', 'actual-parent', 'parent-session', 'claude'))
 
     def invoke(self, action: str, **arguments: object) -> dict:
         """Fail at the public result rather than reading driver internals."""
@@ -188,9 +188,9 @@ def test_no_review_keeps_initialize_hooks_and_settings_unchanged(native: None, t
     agent = plain.start(steps=[{**WRITE, 'ask': True}])
     assert plain.wait(agent)['pending_requests'] == 1
     assert json.loads((tmp_path / 'native-initialize.json').read_text()) == {
-        'UserPromptSubmit': [{'matcher': None, 'hookCallbackIds': ['graphtraj_start']}],
-        'SubagentStop': [{'matcher': None, 'hookCallbackIds': ['graphtraj_collect_child']}],
-        'PostToolUse': [{'matcher': 'mcp__agents__agents', 'hookCallbackIds': ['graphtraj_agents_display']}],
+        'UserPromptSubmit': [{'matcher': None, 'hookCallbackIds': ['graftling_start']}],
+        'SubagentStop': [{'matcher': None, 'hookCallbackIds': ['graftling_collect_child']}],
+        'PostToolUse': [{'matcher': 'mcp__agents__agents', 'hookCallbackIds': ['graftling_agents_display']}],
     }
     [request] = plain.pending(agent)
     assert request['method'] == 'claude/can_use_tool'
@@ -456,7 +456,7 @@ def test_reply_rules_are_consistent() -> None:
     assert not approves(request, {'decision': 'acceptForSession'})
     check_reply(request, {'decision': 'accept'})
     check_reply(request, {'decision': 'decline'})
-    with pytest.raises(agent_swarm.AgentsError):
+    with pytest.raises(graftling.AgentsError):
         check_reply(request, {'behavior': 'allow'})
 
 

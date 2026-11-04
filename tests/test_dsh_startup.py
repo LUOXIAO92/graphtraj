@@ -5,8 +5,8 @@ import sys
 
 import pytest
 
-from agent_swarm.dsh.errors import DshError
-from agent_swarm.dsh.service import DshService
+from graftling.dsh.errors import DshError
+from graftling.dsh.service import DshService
 
 
 def test_failed_startup_retains_reason_and_redacts_credentials(tmp_path: Path) -> None:
@@ -41,7 +41,7 @@ def test_actual_startup_without_model() -> None:
     request = record['settings']
     directory = root / 'native' / record['agent']
     environment = dict(os.environ)
-    for name in ('AGENTS_CONNECTION', 'AGENT_SWARM_CONNECTION', 'GRAPHTRAJ_CLI_CONNECTION'):
+    for name in ('AGENTS_CONNECTION', 'GRAFTLING_CONNECTION', 'GRAPHTRAJ_CLI_CONNECTION'):
         environment.pop(name, None)
     environment.update(DSH_HOME=str(directory / 'dsh-home'), DSH_AGENT_PACKAGE=request['package'],
                        DSH_PERMISSION_MODE=request['sandbox'], NO_COLOR='1')

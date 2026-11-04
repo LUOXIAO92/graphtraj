@@ -8,8 +8,8 @@ phase=${1:-prepare}
 mkdir -p "$CLAUDE352_PROJECT/evidence"
 case "$phase" in
   prepare)
-    "$CLAUDE352_PYTHON" -I -c 'import importlib.util,sys,agent_swarm; assert importlib.util.find_spec("graphtraj") is None; print(sys.executable); print(agent_swarm.__file__)' > "$CLAUDE352_PROJECT/evidence/installation.txt"
-    "$CLAUDE352_PYTHON" -I -m agent_swarm.claude.host configuration --project "$CLAUDE352_PROJECT" --claude "$CLAUDE352_EXECUTABLE" --write > "$CLAUDE352_PROJECT/evidence/configuration.txt"
+    "$CLAUDE352_PYTHON" -I -c 'import importlib.util,sys,graftling; assert importlib.util.find_spec("graphtraj") is None; print(sys.executable); print(graftling.__file__)' > "$CLAUDE352_PROJECT/evidence/installation.txt"
+    "$CLAUDE352_PYTHON" -I -m graftling.claude.host configuration --project "$CLAUDE352_PROJECT" --claude "$CLAUDE352_EXECUTABLE" --write > "$CLAUDE352_PROJECT/evidence/configuration.txt"
     "$CLAUDE352_EXECUTABLE" plugin validate "$CLAUDE352_PROJECT/.claude/skills/agents-claude-host" > "$CLAUDE352_PROJECT/evidence/plugin-validation.txt" 2>&1
     ;;
   lifecycle)

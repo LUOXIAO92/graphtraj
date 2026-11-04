@@ -12,14 +12,14 @@ from pathlib import Path
 import sys
 import tempfile
 
-from agent_swarm import __file__ as agents_file
+from graftling import __file__ as agents_file
 from graphtraj.runtimes.pi.managed_session import PiManagedExecution
 from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError
 
 
-SCRUBBED = ('GRAPHTRAJ_', 'AGENT_SWARM_', 'AGENTS_', 'DSH_', 'GIT_')
+SCRUBBED = ('GRAPHTRAJ_', 'GRAFTLING_', 'AGENTS_', 'DSH_', 'GIT_')
 # Removed from a child's environment; their removal is part of the capture.
-AMBIENT = {'GRAPHTRAJ_PARITY': '1', 'AGENT_SWARM_PARITY': '1', 'AGENTS_PARITY': '1',
+AMBIENT = {'GRAPHTRAJ_PARITY': '1', 'GRAFTLING_PARITY': '1', 'AGENTS_PARITY': '1',
            'DSH_SESSION_ID': 'parity', 'DSH_AGENT_SOURCE': 'parity', 'PARITY_KEY': 'parity-key-value'}
 
 

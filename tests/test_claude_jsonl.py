@@ -8,10 +8,10 @@ import subprocess
 
 import pytest
 
-from agent_swarm.claude.collection import collect_hook_event
-from agent_swarm.sessions.claude_history import conversation, message_id
-from agent_swarm.sessions.claude import ClaudeJsonlCollector
-from agent_swarm.sessions.archive import JsonlSessionStore, SessionArchive, archive_path
+from graftling.claude.collection import collect_hook_event
+from graftling.sessions.claude_history import conversation, message_id
+from graftling.sessions.claude import ClaudeJsonlCollector
+from graftling.sessions.archive import JsonlSessionStore, SessionArchive, archive_path
 
 
 def message(uid: str, parent: str | None, text: str, *, role: str = 'user', **fields: object) -> dict:
@@ -238,7 +238,7 @@ def test_prebind_input_and_resume_cut_use_native_input_uuid(tmp_path: Path) -> N
     write(path, [old, current])
     archive = SessionArchive(tmp_path / 'swarm', save_normalized_sessions=True, backfill_history=False)
     c = ClaudeJsonlCollector(archive, 's', tmp_path, 'execution', resumed=True)
-    sent = {'type': 'user', 'uuid': 'current', 'session_id': 's', 'graphtraj_direction': 'sent',
+    sent = {'type': 'user', 'uuid': 'current', 'session_id': 's', 'graftling_direction': 'sent',
             'message': current['message']}
     c.accept(sent, 0)
     c.bind(path, {'current'})
@@ -250,7 +250,7 @@ def test_prebind_input_and_resume_cut_use_native_input_uuid(tmp_path: Path) -> N
 
 def test_history_size_is_measured_only_when_a_cut_is_needed(tmp_path: Path) -> None:
     """The run loop gets a file size, or nothing when no history cut applies."""
-    from agent_swarm.sessions.claude_history import NO_HISTORY_SIZE
+    from graftling.sessions.claude_history import NO_HISTORY_SIZE
 
     path = tmp_path / 'native.jsonl'
     path.write_bytes(b'not parsed here')
@@ -342,7 +342,7 @@ def test_bind_at_a_size_treats_a_torn_prefix_as_unreadable(tmp_path: Path) -> No
 
 def test_bind_with_no_size_measured_keeps_the_cut_unknown(tmp_path: Path) -> None:
     """A transcript the hook could not measure stays unknown, even if it now exists."""
-    from agent_swarm.sessions.claude_history import NO_HISTORY_SIZE
+    from graftling.sessions.claude_history import NO_HISTORY_SIZE
 
     c, path, _ = cut_collector(tmp_path)
     write(path, [message('current', None, 'current'), message('reply', 'current', 'reply', role='assistant')])
@@ -490,7 +490,7 @@ def test_resume_without_an_archive_keeps_its_gap_after_a_torn_line_completes(tmp
 
 def test_a_gap_from_an_earlier_activation_survives_a_later_torn_read(tmp_path: Path) -> None:
     """A later activation finding its own history archived does not clear an older gap."""
-    from agent_swarm.sessions.claude_history import NO_HISTORY_SIZE
+    from graftling.sessions.claude_history import NO_HISTORY_SIZE
 
     current, reply = message('current', None, 'current'), message('reply', 'current', 'reply', role='assistant')
     first, path, archive = cut_collector(tmp_path)
@@ -901,7 +901,7 @@ def test_a_bad_line_before_the_last_stays_reported(tmp_path: Path, resumed: bool
 
 def test_a_final_line_of_another_session_is_not_a_torn_write(tmp_path: Path) -> None:
     """A whole value that fails the Session check is rejected, not awaited."""
-    from agent_swarm.sessions.claude_history import read_with_torn_tail
+    from graftling.sessions.claude_history import read_with_torn_tail
 
     path = tmp_path / 'native.jsonl'
     write(path, [message('q', None, 'q'), {**message('n', 'q', 'n'), 'sessionId': 'other'}])

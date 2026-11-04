@@ -2,7 +2,7 @@
 
 Everything here runs a real ``DshService`` on a stub ``dsh`` executable. The stub
 starts in its own process group, starts a child holding a pipe on stdin the way
-``dsh web`` holds ``agent_swarm.mcp``, and sleeps without printing a URL, so
+``dsh web`` holds ``graftling.mcp``, and sleeps without printing a URL, so
 ``start`` is waiting on a real process tree and needs no port. No network, model
 or real DSH.
 """
@@ -24,13 +24,13 @@ import urllib.request
 
 import pytest
 
-from agent_swarm.dsh.errors import DshError
-from agent_swarm.dsh.service import DshService
+from graftling.dsh.errors import DshError
+from graftling.dsh.service import DshService
 from test_claude_codex_host_shutdown import RECORDED, SESSION, SOURCE, locate, tool_call
 
 # The three signal steps of 5 seconds each, and room for a loaded machine.
 STOP_BOUND = 25.0
-RECOGNISABLE_CHILD = 'agent_swarm_mcp_stand_in'
+RECOGNISABLE_CHILD = 'graftling_mcp_stand_in'
 STOPPED = 'stopped the DSH process group'
 COULD_NOT_STOP = 'could not stop the DSH process group'
 WATCHER_LINE = 'DSH watcher'
@@ -56,14 +56,14 @@ if os.environ.get('STUB_URL'):
 time.sleep(600)
 '''
 
-# Stays until the pipe closes, as agent_swarm.mcp does: mcp.py reads stdin to its end.
+# Stays until the pipe closes, as graftling.mcp does: mcp.py reads stdin to its end.
 CHILD = 'import sys\nsys.stdin.read()\n'
 
 # The smallest process that owns a service.
 OWNER = r'''
 import json, os, sys
 from pathlib import Path
-from agent_swarm.dsh.service import DshService
+from graftling.dsh.service import DshService
 
 service = DshService(sys.argv[1], Path.cwd(), json.loads(os.environ['TEST_DSH_ENVIRONMENT']))
 service.start()
@@ -75,8 +75,8 @@ HOST = r'''
 import importlib, json, os, sys, threading, time
 from pathlib import Path
 
-from agent_swarm.dsh.errors import DshError
-from agent_swarm.dsh.service import DshService
+from graftling.dsh.errors import DshError
+from graftling.dsh.service import DshService
 
 where = Path(os.environ['TEST_WHERE'])
 
@@ -131,7 +131,7 @@ class Driver:
         return {}
 
 
-host = importlib.import_module('agent_swarm.claude.host')
+host = importlib.import_module('graftling.claude.host')
 host.native_parent = lambda *_, **__: os.getppid()
 host.runtime_drivers = lambda *_: {'claude': Driver()}
 real_calls, made = host.IndependentCalls, []
@@ -247,7 +247,7 @@ def test_a_host_killed_during_its_stop_leaves_no_dsh_process(tmp_path: Path, sty
     """What 392 step 83 saw: SIGINT, then a kill while the stop is unfinished. The group ends anyway.
 
     The service has no notion of review. What a reviewed child brings to the
-    service is its launch: a profile patch and a held ``agent_swarm.mcp`` child.
+    service is its launch: a profile patch and a held ``graftling.mcp`` child.
     ``plain`` has neither, so the trigger needs neither.
     """
     reviewed    = style == 'reviewed'
@@ -320,7 +320,7 @@ try:
 finally:
     print(json.dumps(sent))
 '''
-    path   = SOURCE / 'agent_swarm' / 'dsh' / 'watcher.py'
+    path   = SOURCE / 'graftling' / 'dsh' / 'watcher.py'
     result = subprocess.run([sys.executable, '-I', '-S', '-c', probe, str(path)], stdin=subprocess.DEVNULL,
                             capture_output=True, text=True, env={}, timeout=15)
     assert json.loads(result.stdout) == [[4242424, int(sig)] for sig in (signal.SIGINT, signal.SIGTERM, signal.SIGKILL)]

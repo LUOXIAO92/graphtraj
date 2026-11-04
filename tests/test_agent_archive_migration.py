@@ -10,9 +10,9 @@ from click.testing import CliRunner
 import pytest
 import yaml
 
-from agent_swarm.sessions.archive import JsonlSessionStore, SessionArchive, archive_path
-from agent_swarm.sessions.migration import import_native, import_sqlite, verify_sqlite
-from agent_swarm.sessions.protocol import retain_native, upgrade_header
+from graftling.sessions.archive import JsonlSessionStore, SessionArchive, archive_path
+from graftling.sessions.migration import import_native, import_sqlite, verify_sqlite
+from graftling.sessions.protocol import retain_native, upgrade_header
 from graphtraj.interfaces.cli.graphtraj import main
 from graphtraj.sessions.storage import SessionStore, session_path
 from test_session_storage import header
@@ -208,18 +208,18 @@ def test_snapshot_captures_swarm_configuration_and_can_clone(tmp_path: Path, mon
 
 def test_archive_collectors_work_with_no_graphtraj_package(tmp_path: Path) -> None:
     """Isolated Python loads and enables all collectors from the independent package."""
-    source = Path(__file__).resolve().parents[1] / 'src/agent_swarm'
-    shutil.copytree(source, tmp_path / 'agent_swarm', ignore=shutil.ignore_patterns('__pycache__'))
+    source = Path(__file__).resolve().parents[1] / 'src/graftling'
+    shutil.copytree(source, tmp_path / 'graftling', ignore=shutil.ignore_patterns('__pycache__'))
     program = '''
 import sys
 from pathlib import Path
 sys.path.insert(0, sys.argv[1])
-from agent_swarm import write_config
-from agent_swarm.sessions.archive import ConfiguredSessionArchive
-from agent_swarm.sessions.codex import CodexJsonlArchive
-from agent_swarm.sessions.claude import ClaudeJsonlCollector
-from agent_swarm.sessions.pi import PiArchive
-from agent_swarm.sessions.dsh import collect_jsonl
+from graftling import write_config
+from graftling.sessions.archive import ConfiguredSessionArchive
+from graftling.sessions.codex import CodexJsonlArchive
+from graftling.sessions.claude import ClaudeJsonlCollector
+from graftling.sessions.pi import PiArchive
+from graftling.sessions.dsh import collect_jsonl
 root = Path(sys.argv[1]) / 'data'
 write_config(root, save_normalized_sessions=True)
 archive = ConfiguredSessionArchive(root)
@@ -346,7 +346,7 @@ def test_partition_preserves_current_and_historical_member_queries(
 
 def test_imported_stopped_and_retired_agents_keep_identity_and_parents(tmp_path: Path) -> None:
     """Independent import is repeatable and never turns retired history active."""
-    from agent_swarm import AgentControl, Binding, Caller, AgentsError
+    from graftling import AgentControl, Binding, Caller, AgentsError
 
     control = AgentControl(tmp_path, {})
     caller = Caller('retained-host', 'actual-parent')
@@ -406,7 +406,7 @@ def test_claude_native_hooks_keep_activation_boundary_between_processes(
 
 def _history_archive(root: Path, events: list[tuple]) -> None:
     """Publish native records and Codex graphtraj/history selections in the given order."""
-    from agent_swarm.sessions.codex import _response
+    from graftling.sessions.codex import _response
 
     store = JsonlSessionStore.create(archive_path(root / '.graphtraj/swarm', 'retained'),
                                      upgrade_header(header('retained')))

@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from agent_swarm import AgentControl, Caller, bind
+from graftling import AgentControl, Caller, bind
 
 
 class Driver:

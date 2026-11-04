@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from agent_swarm import Caller
+from graftling import Caller
 from graphtraj.configuration.project_configuration import default_configuration_content
 from graphtraj.interfaces.agents import agents_callback
 from graphtraj.runtimes.codex import main_session

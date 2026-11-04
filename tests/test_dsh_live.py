@@ -11,8 +11,8 @@ import sys
 import pytest
 from conftest import unsupported_dsh
 
-from agent_swarm.sessions.dsh_live import DshLiveFrames
-from agent_swarm.sessions.protocol import snapshot_event
+from graftling.sessions.dsh_live import DshLiveFrames
+from graftling.sessions.protocol import snapshot_event
 
 
 def test_interrupted_stream_replay_and_native_final_link() -> None:
@@ -71,7 +71,7 @@ def test_installed_native_relay_without_duplicate_model_content() -> None:
     root = Path(__file__).resolve().parents[1]
     result = subprocess.run([
         node, str(root / 'tests/fixtures/dsh_communication.mjs'), str(Path(dsh).resolve()),
-        str(root / 'src/agent_swarm/dsh/communication.mjs'),
+        str(root / 'src/graftling/dsh/communication.mjs'),
     ], capture_output=True, text=True, timeout=10)
     assert result.returncode == 0, result.stdout + result.stderr
     native = json.loads(result.stdout.strip().splitlines()[-1])
@@ -94,7 +94,7 @@ def test_standalone_driver_with_only_independent_package(tmp_path: Path) -> None
         pytest.skip(reason)
     root = Path(__file__).resolve().parents[1]
     modules = tmp_path / 'modules'
-    shutil.copytree(root / 'src/agent_swarm', modules / 'agent_swarm')
+    shutil.copytree(root / 'src/graftling', modules / 'graftling')
     working = tmp_path / 'working'
     working.mkdir()
     result = subprocess.run([

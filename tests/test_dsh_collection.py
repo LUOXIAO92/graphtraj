@@ -15,9 +15,9 @@ from conftest import unsupported_dsh
 from graphtraj.configuration.project_configuration import default_configuration_content
 from graphtraj.execution.main_finalize import session_binding
 from graphtraj.runtimes.native_entry import main
-from agent_swarm.sessions.protocol import native_record
-from agent_swarm.sessions.archive import JsonlSessionStore, archive_path
-from agent_swarm.sessions.protocol import validate_session
+from graftling.sessions.protocol import native_record
+from graftling.sessions.archive import JsonlSessionStore, archive_path
+from graftling.sessions.protocol import validate_session
 
 
 @pytest.fixture
@@ -198,8 +198,8 @@ def test_installed_dsh_append_flush_and_resume(project: Path) -> None:
     assert facts['count'] == 5
     # Compare Python reconstruction to the installed Runtime's own projection,
     # including the native fork seed and the event drained during disposal.
-    from agent_swarm.sessions.dsh import collect_jsonl
-    from agent_swarm.sessions.archive import SessionArchive, JsonlSessionStore, archive_path
+    from graftling.sessions.dsh import collect_jsonl
+    from graftling.sessions.archive import SessionArchive, JsonlSessionStore, archive_path
 
     archive = SessionArchive(project / 'optional', save_normalized_sessions=True, backfill_history=True)
     for sample in (facts, facts['child']):
@@ -222,8 +222,8 @@ def test_installed_dsh_append_flush_and_resume(project: Path) -> None:
 
 def test_optional_jsonl_uses_native_order_and_backfill_policy(tmp_path: Path) -> None:
     """Archive only mapped supplied history; native seq wins over timestamps."""
-    from agent_swarm.sessions.dsh import collect_jsonl
-    from agent_swarm.sessions.archive import SessionArchive, JsonlSessionStore, archive_path
+    from graftling.sessions.dsh import collect_jsonl
+    from graftling.sessions.archive import SessionArchive, JsonlSessionStore, archive_path
 
     header = {'version': 4, 'id': 'optional', 'createdAt': 1, 'isSeeded': False}
     rows = [event('user/message', index, {
@@ -251,8 +251,8 @@ def test_optional_jsonl_uses_native_order_and_backfill_policy(tmp_path: Path) ->
 
 def test_native_gap_backfill_and_disk_confirmation(tmp_path: Path) -> None:
     """Retain new content with a gap, then resolve it using the same native log."""
-    from agent_swarm.sessions.dsh import DshArchive
-    from agent_swarm.sessions.archive import SessionArchive, JsonlSessionStore, archive_path
+    from graftling.sessions.dsh import DshArchive
+    from graftling.sessions.archive import SessionArchive, JsonlSessionStore, archive_path
 
     header = {'version': 4, 'id': 'gap', 'createdAt': 1, 'isSeeded': False}
     old = event('user/message', 0, {
@@ -291,8 +291,8 @@ def test_native_gap_backfill_and_disk_confirmation(tmp_path: Path) -> None:
 @pytest.mark.parametrize('end_before_event', [False, True])
 def test_live_frames_resolve_only_native_terminal_seq(tmp_path: Path, end_before_event: bool) -> None:
     """Live/final arrival variations retain native order and one final message."""
-    from agent_swarm.sessions.dsh import DshArchive
-    from agent_swarm.sessions.archive import SessionArchive, JsonlSessionStore, archive_path
+    from graftling.sessions.dsh import DshArchive
+    from graftling.sessions.archive import SessionArchive, JsonlSessionStore, archive_path
 
     header = {'version': 4, 'id': 'live', 'createdAt': 1, 'isSeeded': False}
     archive = SessionArchive(tmp_path / 'archive', save_normalized_sessions=True)
@@ -337,8 +337,8 @@ def test_live_frames_resolve_only_native_terminal_seq(tmp_path: Path, end_before
 
 def test_terminal_observation_survives_gap_and_later_backfill(tmp_path: Path) -> None:
     """A saved end(seq) survives interruption before final publication."""
-    from agent_swarm.sessions.dsh import DshArchive
-    from agent_swarm.sessions.archive import SessionArchive, JsonlSessionStore, archive_path
+    from graftling.sessions.dsh import DshArchive
+    from graftling.sessions.archive import SessionArchive, JsonlSessionStore, archive_path
 
     header = {'version': 4, 'id': 'resume-live', 'createdAt': 1, 'isSeeded': False}
     first = event('turn/start', 0, {'turn': 0})

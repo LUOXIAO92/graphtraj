@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from agent_swarm import AgentsResult
+from graftling import AgentsResult
 from graphtraj.execution.approved_recovery import review_proposal
 from graphtraj.execution.runner_models import RunnerError
 from graphtraj.interfaces import mcp

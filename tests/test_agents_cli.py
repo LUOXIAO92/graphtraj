@@ -7,9 +7,9 @@ import sys
 
 import pytest
 
-from agent_swarm import AgentControl, Caller, bind
-from agent_swarm.connection import agents_connection
-from agent_swarm.process import authenticate_process
+from graftling import AgentControl, Caller, bind
+from graftling.connection import agents_connection
+from graftling.process import authenticate_process
 from test_agent_control import ScriptedDriver
 
 
@@ -22,7 +22,7 @@ def test_independent_entry_controls_same_core(tmp_path: Path, surface: str) -> N
     child = None
     with agents_connection(tmp_path / 'pipe', callback,
                            lambda pid: authenticate_process(child, pid)) as address:
-        env = {**os.environ, 'AGENT_SWARM_CONNECTION': address,
+        env = {**os.environ, 'GRAFTLING_CONNECTION': address,
                'PYTHONPATH': str(Path(__file__).resolve().parents[1] / 'src')}
         for key in ('GRAPHTRAJ_CLI_CONNECTION', 'DSH_SESSION_ID', 'DSH_AGENT_SOURCE'):
             env.pop(key, None)
@@ -30,7 +30,7 @@ def test_independent_entry_controls_same_core(tmp_path: Path, surface: str) -> N
         def request(document: dict) -> dict:
             """Exercise the installed module interface, never private control state."""
             nonlocal child
-            command = [sys.executable, '-m', 'agent_swarm.' + surface]
+            command = [sys.executable, '-m', 'graftling.' + surface]
             payload = None
             if surface == 'cli':
                 command.append(json.dumps(document))
@@ -72,15 +72,15 @@ def test_cli_does_not_adopt_graphtraj_owner(tmp_path: Path) -> None:
     """An inherited Task channel goes only to its own host, never to an independent caller."""
     env = {**os.environ, 'GRAPHTRAJ_CLI_CONNECTION': '/unrelated/task/owner',
            'PYTHONPATH': str(Path(__file__).resolve().parents[1] / 'src')}
-    env.pop('AGENT_SWARM_CONNECTION', None)
+    env.pop('GRAFTLING_CONNECTION', None)
     request = '{"action":"execute","feature":"status","arguments":{}}'
-    result = subprocess.run([sys.executable, '-m', 'agent_swarm.cli', request],
+    result = subprocess.run([sys.executable, '-m', 'graftling.cli', request],
                             cwd=tmp_path, env=env, capture_output=True, text=True, timeout=10)
     assert result.returncode == 1
     assert json.loads(result.stdout)['error']['code'] == 'request-not-accepted'
     # Outside GraphTraj, with no channel at all, the independent owner is still required.
     env.pop('GRAPHTRAJ_CLI_CONNECTION')
-    result = subprocess.run([sys.executable, '-m', 'agent_swarm.cli', request],
+    result = subprocess.run([sys.executable, '-m', 'graftling.cli', request],
                             cwd=tmp_path, env=env, capture_output=True, text=True, timeout=10)
     assert result.returncode == 1
     assert json.loads(result.stdout)['error']['code'] == 'authority-denied'

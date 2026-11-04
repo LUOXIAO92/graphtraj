@@ -1724,7 +1724,7 @@ def test_mcp_recovery_waits_for_strict_native_review(
     root, task, _, arguments = accepted_target
     monkeypatch.chdir(root)
     monkeypatch.delenv('GRAPHTRAJ_CLI_CONNECTION', raising=False)
-    monkeypatch.delenv('AGENT_SWARM_CONNECTION', raising=False)
+    monkeypatch.delenv('GRAFTLING_CONNECTION', raising=False)
     monkeypatch.setattr(mcp, '_caller_notices', lambda params: nullcontext(None))
     arguments = {**arguments, 'resume': False}
     budget_file = task / 'execution-budget.yml'
@@ -1814,7 +1814,7 @@ def test_installed_mcp_recovery_uses_client_elicitation(
                     + repr(str(Path(__file__).with_name('codex_stdio_peer.py'))) + ')\n')
     peer.chmod(0o755)
     environment = {key: value for key, value in os.environ.items()
-                   if key not in ('GRAPHTRAJ_CLI_CONNECTION', 'AGENT_SWARM_CONNECTION', 'CODEX_THREAD_ID')}
+                   if key not in ('GRAPHTRAJ_CLI_CONNECTION', 'GRAFTLING_CONNECTION', 'CODEX_THREAD_ID')}
     environment.update(PATH=str(native_bin) + os.pathsep + environment['PATH'],
                        CODEX_HOME=str(tmp_path / 'recovery-native-home'),
                        PEER_MAIN_THREADS='recovery-main')
@@ -1847,7 +1847,7 @@ def test_claude_main_recovery_is_decided_by_claude_code_elicitation(
     """A verified Claude Main's time grant waits for Claude Code's own dialog answer."""
     from io import TextIOBase
 
-    from agent_swarm import AgentControl
+    from graftling import AgentControl
     from conftest import HeldInput
     from graphtraj.execution.main_continuity import MainRoots, current_main
     from graphtraj.runtimes.claude.host import main_calls

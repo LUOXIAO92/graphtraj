@@ -17,8 +17,8 @@ from uuid import uuid4
 import pytest
 import yaml
 
-from agent_swarm import AgentControl, AgentsError, Caller, bind, read_session, write_config
-from agent_swarm.sessions.archive import JsonlSessionStore, SessionArchive, archive_path
+from graftling import AgentControl, AgentsError, Caller, bind, read_session, write_config
+from graftling.sessions.archive import JsonlSessionStore, SessionArchive, archive_path
 from test_claude_runtime import claude_environment  # noqa: F401 - pytest fixture
 from test_codex_independent_control import native_settings  # noqa: F401 - pytest fixture
 from test_pi_runtime import context as pi_context, pi_environment  # noqa: F401 - pytest fixture
@@ -51,7 +51,7 @@ def test_standalone_claude_archives_with_create_fields_and_stops_when_off(
     tmp_path: Path, claude_environment: None,
 ) -> None:
     """On: one v5 Session per native Session with P0 messages. Off: nothing new, history kept."""
-    from agent_swarm.claude.driver import ClaudeDriver
+    from graftling.claude.driver import ClaudeDriver
 
     root = tmp_path / 'agents'
     write_config(root, save_normalized_sessions=True)
@@ -92,8 +92,8 @@ def test_standalone_codex_execution_writes_its_rollout_in_native_order(
     tmp_path: Path, native_settings: dict,
 ) -> None:
     """The Codex execution archives the rollout it owns; saving off writes nothing."""
-    from agent_swarm.codex.driver import CodexDriver
-    from agent_swarm.sessions.protocol import native_record
+    from graftling.codex.driver import CodexDriver
+    from graftling.sessions.protocol import native_record
 
     root = tmp_path / 'agents'
     write_config(root, save_normalized_sessions=True)
@@ -137,7 +137,7 @@ def codex_rollout(path: Path, session: str) -> list[tuple[str, str]]:
 @pytest.mark.parametrize('usage', ['standalone', 'graphtraj'])
 def test_codex_capture_hook_rebuilds_native_messages(tmp_path: Path, usage: str) -> None:
     """The execution's archive hook (no consumer override) keeps P0 in both usages."""
-    from agent_swarm.codex.managed_session import CodexManagedExecution
+    from graftling.codex.managed_session import CodexManagedExecution
     from graphtraj.interfaces.agents import graphtraj_fields
 
     archive = SessionArchive(tmp_path / 'agents', save_normalized_sessions=True)
@@ -169,7 +169,7 @@ def pi_native(root: Path, agent: str) -> list[tuple[str, str]]:
 
 def pi_archived(path: Path) -> list[tuple[str, str]]:
     """Rebuild Pi messages from the written Session with Pi's own native rules."""
-    from agent_swarm.sessions.pi import archive_messages
+    from graftling.sessions.pi import archive_messages
 
     return [(m['role'], text(m)) for m in archive_messages(JsonlSessionStore(path))
             if m['role'] in {'user', 'assistant'}]
@@ -188,7 +188,7 @@ def pi_request(tmp_path: Path, pi_environment: dict) -> dict:
 
 def test_standalone_pi_archives_when_on_and_not_when_off(tmp_path: Path, pi_environment: dict) -> None:
     """The Pi execution builds its own collector from the bound archive."""
-    from agent_swarm.pi import PiDriver
+    from graftling.pi import PiDriver
 
     root = tmp_path / 'data'
     write_config(root, save_normalized_sessions=True)
@@ -248,7 +248,7 @@ def test_graphtraj_pi_writes_graphtraj_fields_and_native_message_order(
 
 def test_dsh_driver_binds_the_archive_with_create_fields(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """DSH executions archive their native log; off binds no collector."""
-    import agent_swarm.dsh.driver as dsh_driver
+    import graftling.dsh.driver as dsh_driver
 
     header = {'version': 4, 'id': 'dsh-native', 'createdAt': 1, 'isSeeded': False}
     native = [{'type': 'user/message', 'seq': 0, 'time': 1, 'surfaceOp': 'append',
@@ -282,7 +282,7 @@ def test_dsh_driver_binds_the_archive_with_create_fields(tmp_path: Path, monkeyp
 
     monkeypatch.setattr(dsh_driver, 'DshExecution', Execution)
     monkeypatch.setattr(dsh_driver, 'prepare', lambda configuration, cwd: {})
-    monkeypatch.setattr('agent_swarm.dsh.binding.bind_run', lambda turn, run: None)
+    monkeypatch.setattr('graftling.dsh.binding.bind_run', lambda turn, run: None)
     root = tmp_path / 'agents'
     write_config(root, save_normalized_sessions=True)
     call = bind(AgentControl(root, {'dsh': dsh_driver.DshDriver(tmp_path, {})}), Caller('host', None))
@@ -315,14 +315,14 @@ def test_create_refuses_an_invalid_extra_fields_container(tmp_path: Path, value:
 
 def _binding():
     """Return a root caller binding for direct backend calls."""
-    from agent_swarm import Binding
+    from graftling import Binding
 
     return Binding(Caller('host', None))
 
 
 def test_claude_native_helper_is_collected_into_the_bound_archive(tmp_path: Path) -> None:
     """A finished native helper keeps its own transcript, scoped beside its parent Session."""
-    from agent_swarm.claude.collection import collect_hook_event
+    from graftling.claude.collection import collect_hook_event
 
     archive = SessionArchive(tmp_path / 'agents', save_normalized_sessions=True, backfill_history=True)
     child = tmp_path / 'child.jsonl'
@@ -342,7 +342,7 @@ def test_claude_native_helper_is_collected_into_the_bound_archive(tmp_path: Path
     header = read_session(path)['header']
     assert header['extra_fields'] == EXTRA and header['native']['agentId'] == 'helper'
     # P0 at the record level: each helper transcript row once, in file order.
-    from agent_swarm.sessions.protocol import native_record
+    from graftling.sessions.protocol import native_record
 
     records = [native_record(event) for event in read_session(path)['events']]
     assert [record for record in records if record.get('uuid')] == rows

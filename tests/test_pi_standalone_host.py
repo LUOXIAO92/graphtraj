@@ -13,16 +13,16 @@ import time
 
 import pytest
 
-import agent_swarm
-from agent_swarm import AgentControl, AgentsError, Caller, bind
-from agent_swarm.pi import host
-from agent_swarm.pi.driver import PiDriver
+import graftling
+from graftling import AgentControl, AgentsError, Caller, bind
+from graftling.pi import host
+from graftling.pi.driver import PiDriver
 
 
 SOURCE = Path(__file__).resolve().parents[1] / 'src'
 MAIN = Caller('pi-native', None, session='pi-main', runtime='pi')
-PARENT = {'AGENT_SWARM_PI_ENTRY': '/opt/pi/cli.js', 'AGENT_SWARM_PI_PROVIDER': 'anthropic',
-          'AGENT_SWARM_PI_MODEL': 'parent-model', 'PATH': '/usr/bin:/bin', 'PI_CODING_AGENT_DIR': '/pi/agent'}
+PARENT = {'GRAFTLING_PI_ENTRY': '/opt/pi/cli.js', 'GRAFTLING_PI_PROVIDER': 'anthropic',
+          'GRAFTLING_PI_MODEL': 'parent-model', 'PATH': '/usr/bin:/bin', 'PI_CODING_AGENT_DIR': '/pi/agent'}
 
 
 @pytest.mark.parametrize(('document', 'message'), [
@@ -75,7 +75,7 @@ def test_default_request_refusals_and_write_access(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match='agents Pi extension'):
         host.pi_request({}, tmp_path, {})
     with pytest.raises(ValueError, match='no selected model'):
-        host.pi_request({}, tmp_path, {**PARENT, 'AGENT_SWARM_PI_MODEL': ''})
+        host.pi_request({}, tmp_path, {**PARENT, 'GRAFTLING_PI_MODEL': ''})
     with pytest.raises(ValueError, match='needs a Git worktree'):
         host.pi_request({'worktree_access': 'write'}, tmp_path, PARENT)
     subprocess.run(['git', 'init', '-q', str(tmp_path)], check=True)
@@ -88,7 +88,7 @@ def test_default_request_refusals_and_write_access(tmp_path: Path) -> None:
 def test_child_model_is_not_bound_to_the_parent_model(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """create's model reaches the Pi child; the parent's model is only the default."""
     # A fake catalog stands in for Pi's native destination lookup.
-    monkeypatch.setattr('agent_swarm.pi.driver.pi_destination', lambda *arguments: 'api.example.com')
+    monkeypatch.setattr('graftling.pi.driver.pi_destination', lambda *arguments: 'api.example.com')
     driver = PiDriver(host.pi_request({}, tmp_path, PARENT))
     assert driver.prepare('pi', MAIN)['adapter_request']['model'] == 'parent-model'
     chosen = driver.prepare('pi', MAIN, selection={'settings': None, 'model': 'child-model',
@@ -129,9 +129,9 @@ class Fake:
 def fakes(monkeypatch: pytest.MonkeyPatch) -> dict:
     """Replace the four public driver constructors inside the host."""
     made: dict = {}
-    for runtime, name, module in (('pi', 'PiDriver', host), ('claude', 'ClaudeDriver', 'agent_swarm.claude.driver'),
-                                  ('codex', 'CodexDriver', 'agent_swarm.codex.driver'),
-                                  ('dsh', 'DshDriver', 'agent_swarm.dsh.driver')):
+    for runtime, name, module in (('pi', 'PiDriver', host), ('claude', 'ClaudeDriver', 'graftling.claude.driver'),
+                                  ('codex', 'CodexDriver', 'graftling.codex.driver'),
+                                  ('dsh', 'DshDriver', 'graftling.dsh.driver')):
         def factory(*arguments, runtime=runtime):
             made[runtime] = Fake(runtime, *arguments)
             return made[runtime]
@@ -353,10 +353,10 @@ def test_each_end_is_pushed_once_and_shutdown_ends_are_held(tmp_path: Path, fake
 
 
 def test_pi_package_manifest_loads_the_extension() -> None:
-    """Pi installs agent_swarm/pi as a package; its version repeats the single version."""
-    directory = SOURCE / 'agent_swarm/pi'
+    """Pi installs graftling/pi as a package; its version repeats the single version."""
+    directory = SOURCE / 'graftling/pi'
     manifest = json.loads((directory / 'package.json').read_text())
-    assert manifest['version'] == agent_swarm.__version__
+    assert manifest['version'] == graftling.__version__
     assert 'pi-package' in manifest['keywords']
     assert [(directory / path).resolve() for path in manifest['pi']['extensions']] == [
         (directory / 'extension.mjs').resolve()]
@@ -365,17 +365,17 @@ def test_pi_package_manifest_loads_the_extension() -> None:
 def host_environment(tmp_path: Path, session: str = 'pi-main') -> dict:
     """The environment the extension gives the host, with this test as the Pi parent."""
     environment = {key: value for key, value in os.environ.items()
-                   if key not in {'AGENT_SWARM_CONNECTION', 'DSH_SESSION_ID', 'DSH_AGENT_SOURCE'}}
-    return {**environment, 'AGENT_SWARM_PI_ENTRY': sys.executable, 'AGENT_SWARM_PI_PROVIDER': 'anthropic',
-            'AGENT_SWARM_PI_MODEL': 'parent-model', 'GRAPHTRAJ_NATIVE_RUNTIME': 'pi',
-            'GRAPHTRAJ_NATIVE_SESSION': session, 'GRAPHTRAJ_NATIVE_SESSION_FILE': str(tmp_path / 's.jsonl'),
+                   if key not in {'GRAFTLING_CONNECTION', 'DSH_SESSION_ID', 'DSH_AGENT_SOURCE'}}
+    return {**environment, 'GRAFTLING_PI_ENTRY': sys.executable, 'GRAFTLING_PI_PROVIDER': 'anthropic',
+            'GRAFTLING_PI_MODEL': 'parent-model', 'GRAFTLING_NATIVE_RUNTIME': 'pi',
+            'GRAFTLING_NATIVE_SESSION': session, 'GRAFTLING_NATIVE_SESSION_FILE': str(tmp_path / 's.jsonl'),
             'PI_CODING_AGENT_DIR': str(tmp_path / 'pi-home'), 'PYTHONPATH': str(SOURCE)}
 
 
 def run_host(tmp_path: Path, configuration: dict, close: bool = True) -> tuple[subprocess.Popen, str]:
     """Start the host as the extension does and return its first stdout line."""
     (tmp_path / 'host.json').write_text(json.dumps(configuration))
-    process = subprocess.Popen([sys.executable, '-m', 'agent_swarm.pi.host', '--config', str(tmp_path / 'host.json')],
+    process = subprocess.Popen([sys.executable, '-m', 'graftling.pi.host', '--config', str(tmp_path / 'host.json')],
                                cwd=tmp_path, env=host_environment(tmp_path), stdin=subprocess.PIPE,
                                stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
     header = {'type': 'session', 'version': 3, 'id': 'pi-main', 'cwd': str(tmp_path)}
@@ -460,10 +460,10 @@ def run_extension(tmp_path: Path, **environment: str) -> tuple[list, list]:
     fake.write_text('#!' + sys.executable + '\n' + FAKE_HOST)
     fake.chmod(0o755)
     env = {key: value for key, value in os.environ.items()
-           if key not in {'AGENT_SWARM_CONNECTION', 'DSH_SESSION_ID', 'DSH_AGENT_SOURCE'}}
-    env.update(AGENT_SWARM_PYTHON=str(fake), TEST_CONFIG=str(tmp_path / 'host.json'),
+           if key not in {'GRAFTLING_CONNECTION', 'DSH_SESSION_ID', 'DSH_AGENT_SOURCE'}}
+    env.update(GRAFTLING_PYTHON=str(fake), TEST_CONFIG=str(tmp_path / 'host.json'),
                TEST_LOG=str(tmp_path / 'acks.json'), **environment)
-    result = subprocess.run([node, '--input-type=module', '-e', EXTENSION, str(SOURCE / 'agent_swarm/pi/extension.mjs')],
+    result = subprocess.run([node, '--input-type=module', '-e', EXTENSION, str(SOURCE / 'graftling/pi/extension.mjs')],
                             cwd=tmp_path, env=env, capture_output=True, text=True, timeout=20)
     assert result.returncode == 0, result.stderr
     return json.loads(result.stdout), json.loads((tmp_path / 'acks.json').read_text())
@@ -474,7 +474,7 @@ def test_extension_injects_each_notice_natively_and_acknowledges_it(tmp_path: Pa
     sent, acknowledgements = run_extension(tmp_path)
     assert [item['options'] for item in sent] == [{'triggerTurn': True, 'deliverAs': 'followUp'}] * 2
     first = sent[0]['message']
-    assert first['customType'] == 'graphtraj:agent-communication' and first['display'] is True
+    assert first['customType'] == 'graftling:agent-communication' and first['display'] is True
     assert first['content'] == '[agents notice from agent-1 · completed]\nthe answer'
     assert first['details']['fact'] == 'notice:exec-1:completed'
     assert sent[1]['message']['content'].endswith('· failed]\nprovider refused')

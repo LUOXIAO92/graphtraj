@@ -15,11 +15,11 @@ import sys
 
 import pytest
 
-from agent_swarm import AgentControl, Caller, bind
-from agent_swarm.codex.host import CodexHost
-from agent_swarm.dsh import host as dsh_host
-from agent_swarm.pi import execution, host as pi_host
-from agent_swarm.pi.driver import PiDriver
+from graftling import AgentControl, Caller, bind
+from graftling.codex.host import CodexHost
+from graftling.dsh import host as dsh_host
+from graftling.pi import execution, host as pi_host
+from graftling.pi.driver import PiDriver
 from test_codex_host_cross_runtime import Running, until
 from test_codex_independent_control import native_settings  # noqa: F401 - pytest fixture
 from test_hosts_pi_children import ENTRY, ClaudeMain, CodexMain, codex_settings, install_node, project  # noqa: F401
@@ -462,9 +462,9 @@ class PiMain:
         self.root = root
         patch = pytest.MonkeyPatch()
         self.patch = patch
-        patch.setenv('AGENT_SWARM_PI_ENTRY', str(project.parent / 'bin' / 'pi'))
-        patch.setenv('AGENT_SWARM_PI_PROVIDER', entry['provider'])
-        patch.setenv('AGENT_SWARM_PI_MODEL', entry['model'])
+        patch.setenv('GRAFTLING_PI_ENTRY', str(project.parent / 'bin' / 'pi'))
+        patch.setenv('GRAFTLING_PI_PROVIDER', entry['provider'])
+        patch.setenv('GRAFTLING_PI_MODEL', entry['model'])
         patch.setattr(pi_host, 'verify_native_parent', lambda *_: None)
         patch.setattr(pi_host, 'current_connection', lambda: {
             'runtime': 'pi', 'session': 'main', 'session_file': str(project.parent / 's.jsonl')})
@@ -499,7 +499,7 @@ class DshMain(PiMain):
     def __init__(self, project: Path, root: Path, entry: dict, log: Path) -> None:  # noqa: F811
         """Start the host through its own ``start`` on the given data root."""
         self.patch = patch = pytest.MonkeyPatch()
-        request = pi_host.pi_request(entry, project, {**os.environ, 'AGENT_SWARM_PI_ENTRY': str(
+        request = pi_host.pi_request(entry, project, {**os.environ, 'GRAFTLING_PI_ENTRY': str(
             project.parent / 'bin' / 'pi')})
         patch.setattr(dsh_host, 'verify_native_parent', lambda *_: None)
         patch.setattr(dsh_host, 'runtime_drivers', lambda *_: {'pi': PiDriver(request)})

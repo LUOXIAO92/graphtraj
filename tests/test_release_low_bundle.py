@@ -12,10 +12,10 @@ import pytest
 import yaml
 from click.testing import CliRunner
 
-from agent_swarm import bind
-from agent_swarm.control import AgentControl
-from agent_swarm.pi.execution import PiExecution
-from agent_swarm.runtime import RuntimeAdapterError
+from graftling import bind
+from graftling.control import AgentControl
+from graftling.pi.execution import PiExecution
+from graftling.runtime import RuntimeAdapterError
 from graphtraj.interfaces.agents import GraphTrajAgents
 from graphtraj.interfaces.cli.graphtraj import main
 from conftest import FakeCodex, InstalledCommands, run_process, wait_for_file
@@ -161,7 +161,7 @@ def test_a_claude_members_archive_names_the_project_not_its_worktree(tmp_path: P
 
 def test_a_claude_native_hooks_archive_names_the_project_from_a_subdirectory(tmp_path: Path) -> None:
     """A native Session working below the project root still belongs to that project."""
-    from agent_swarm.sessions import JsonlSessionStore, archive_path
+    from graftling.sessions import JsonlSessionStore, archive_path
     from graphtraj.configuration.project_configuration import default_configuration_content
     from graphtraj.runtimes.claude.collection import collect_jsonl_hook
 

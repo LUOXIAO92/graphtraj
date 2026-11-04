@@ -107,7 +107,7 @@ class FakeDshService:
         if self.session is None:
             self.session = session
             if not self._log().exists():
-                from agent_swarm.dsh.errors import DshError
+                from graftling.dsh.errors import DshError
                 raise DshError('RUNTIME_REQUEST_FAILED', 'DSH session/follow failed (session/not-found).')
         header = json.loads(self._log().read_text().splitlines()[0])
         return {'type': 'snapshot', 'header': header, 'cursor': -1, 'hasMore': False, 'records': []}

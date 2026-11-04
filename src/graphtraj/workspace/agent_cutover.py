@@ -1,7 +1,7 @@
 """Rehearse the ownership partition on an isolated, retained project snapshot.
 
 Task/Team/Worldline records stay with GraphTraj. Native archives and imported
-stopped Agent identities belong to agent_swarm. The original snapshot remains
+stopped Agent identities belong to graftling. The original snapshot remains
 the backup; this operation never edits a live Harness or activates a Runtime.
 """
 from __future__ import annotations
@@ -13,7 +13,7 @@ import shutil
 
 import yaml
 
-from agent_swarm import AgentControl, AgentsError
+from graftling import AgentControl, AgentsError
 from graphtraj.configuration.project_configuration import configuration_file, load_project_configuration
 from graphtraj.execution.runner_io import write_yaml_durably
 from graphtraj.execution.runner_transport import RUNTIME_DIAGNOSTIC_FILES

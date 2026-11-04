@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import threading
 
-from agent_swarm import AgentControl, Caller, bind
+from graftling import AgentControl, Caller, bind
 
 
 MAIN = Caller('test-host', None, 'main-session', 'claude')

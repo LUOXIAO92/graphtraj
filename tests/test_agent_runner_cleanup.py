@@ -422,7 +422,7 @@ def test_installed_cleanup_uses_only_task_identity_and_preserves_trajectory(
     durable_before = _durable_contents(task)
     mappings = _task_mappings(task)
     assert mappings
-    from agent_swarm.sessions.archive import JsonlSessionStore, SessionArchive, archive_path
+    from graftling.sessions.archive import JsonlSessionStore, SessionArchive, archive_path
 
     archives = {}
     for directory in mappings:

@@ -10,12 +10,12 @@ import time
 
 import pytest
 
-from agent_swarm import AgentControl, Caller, bind
-from agent_swarm.models import pi_destination
-from agent_swarm.pi import PiDriver, execution
-from agent_swarm.pi.execution import PiExecution
-from agent_swarm.runtime import RuntimeAdapterError
-from agent_swarm.child_env import is_credential_name
+from graftling import AgentControl, Caller, bind
+from graftling.models import pi_destination
+from graftling.pi import PiDriver, execution
+from graftling.pi.execution import PiExecution
+from graftling.runtime import RuntimeAdapterError
+from graftling.child_env import is_credential_name
 from pi_parity_scenarios import capture
 from test_pi_runtime import pi_environment  # noqa: F401
 
@@ -84,7 +84,7 @@ def test_generic_execution_needs_no_graphtraj(tmp_path: Path) -> None:
     script = textwrap.dedent(f'''
         import sys
         from pathlib import Path
-        from agent_swarm.pi.execution import PiExecution
+        from graftling.pi.execution import PiExecution
         root = Path({str(tmp_path)!r})
         request = {{'executable': '/bin/pi', 'provider': 'p', 'model': 'm', 'worktree_path': str(root / 'work'),
                     'agent_dir': str(root / 'home'), 'instructions': '', 'sandbox_python': sys.executable,

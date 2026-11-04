@@ -6,11 +6,11 @@ from pathlib import Path
 
 import pytest
 
-from agent_swarm import write_config
+from graftling import write_config
 from graphtraj.interfaces.agents import ConfiguredSessionArchive
-from agent_swarm.sessions.codex import CodexJsonlArchive
-from agent_swarm.sessions.archive import JsonlSessionStore, SessionArchive, archive_path
-from agent_swarm.sessions.protocol import native_record
+from graftling.sessions.codex import CodexJsonlArchive
+from graftling.sessions.archive import JsonlSessionStore, SessionArchive, archive_path
+from graftling.sessions.protocol import native_record
 from graphtraj.runtimes.codex.app_server import CodexAppServer
 from test_codex_app_server import context, peer  # noqa: F401
 

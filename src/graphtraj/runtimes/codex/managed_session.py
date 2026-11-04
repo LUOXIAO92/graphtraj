@@ -25,7 +25,7 @@ from graphtraj.runtimes.codex.approval import approval_route, review_request
 from graphtraj.execution.runner_batch import read_session_task
 from graphtraj.execution.runner_control import notify_direct_parent
 from graphtraj.execution.runner_io import write_yaml_durably
-from agent_swarm.codex import (
+from graftling.codex import (
     CodexAppServer,
     CodexExecution,
     CodexManagedExecution as NativeCodexExecution,
@@ -33,7 +33,7 @@ from agent_swarm.codex import (
 )
 from graphtraj.runtimes.codex.codex_adapter import restore_codex_context
 from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError
-from agent_swarm.sessions import SessionArchive
+from graftling.sessions import SessionArchive
 
 
 def _approval_history_text(value: object) -> object:
@@ -122,6 +122,11 @@ def refresh_approval_route(request: dict, session_directory: Path) -> None:
 class CodexManagedExecution(NativeCodexExecution):
     """Attach GraphTraj task policy to the independent native execution owner."""
 
+    @property
+    def mcp_server(self) -> str:
+        """Keep a formal Worker's ``mcp__graphtraj__*`` tool names; agents alone uses graftling's."""
+        return super().mcp_server if self.independent else 'graphtraj'
+
     def __init__(
         self,
         request: dict,
@@ -180,7 +185,7 @@ class CodexManagedExecution(NativeCodexExecution):
         from graphtraj.interfaces.hosted_cli import CONNECTION_ENV, cli_connection
         from graphtraj.runtimes.codex.access import member_project_reads
         from graphtraj.workspace.runner_project import discover_project_root
-        from agent_swarm import verify_native_context
+        from graftling import verify_native_context
 
         root = discover_project_root(cwd)
         native_context = lambda: {'runtime': 'codex', 'session': self.native_session, 'cwd': str(cwd)}
@@ -386,7 +391,7 @@ async def authorize_mcp_caller(
     the retained finish-check binding is required; fork lineage alone grants
     nothing. Returned identities use the existing Runner caller scope.
     """
-    from agent_swarm import verify_native_context
+    from graftling import verify_native_context
     from graphtraj.execution.runner_models import RunnerError
     from graphtraj.runtimes.codex.session_entry import is_bound_checker, session_source
     from graphtraj.workspace.runner_project import discover_runner_directory

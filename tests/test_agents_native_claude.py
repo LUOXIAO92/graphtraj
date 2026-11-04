@@ -176,9 +176,9 @@ def test_driver_honors_archive_binding_and_native_transcript_on_resume(
     project: Path, claude_environment: None,
 ) -> None:
     """The core Run.archive policy reaches real process transport and JSONL."""
-    from agent_swarm import AgentControl, Caller, bind, write_config
+    from graftling import AgentControl, Caller, bind, write_config
     from graphtraj.execution.agent_driver import AdapterDriver
-    from agent_swarm.sessions.archive import JsonlSessionStore, SessionArchive, archive_path
+    from graftling.sessions.archive import JsonlSessionStore, SessionArchive, archive_path
 
     root = project / '.graphtraj/swarm'
     write_config(root, save_normalized_sessions=True, backfill_history=True)
@@ -295,9 +295,9 @@ def test_real_claude_sdk_registration(
     project: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Verify real native registration separately from successful model inference."""
-    from agent_swarm import AgentControl, Caller, bind, write_config
+    from graftling import AgentControl, Caller, bind, write_config
     from graphtraj.execution.agent_driver import AdapterDriver
-    from agent_swarm.sessions.archive import JsonlSessionStore, SessionArchive, archive_path
+    from graftling.sessions.archive import JsonlSessionStore, SessionArchive, archive_path
 
     binary = Path(os.environ['CLAUDE_REAL_TEST_BINARY'])
     monkeypatch.setenv('PATH', str(binary.parent) + os.pathsep + os.environ['PATH'])
@@ -328,9 +328,9 @@ def test_real_claude_sdk_registration(
 @pytest.mark.skipif(not os.environ.get('CLAUDE_REAL_AUTO_TEST'), reason='Explicit real auto and deny probe only')
 def test_real_claude_auto_and_native_denial(project: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Require actual auto, registered function use and a native denied Read in one turn."""
-    from agent_swarm import AgentControl, Caller, bind, write_config
+    from graftling import AgentControl, Caller, bind, write_config
     from graphtraj.execution.agent_driver import AdapterDriver
-    from agent_swarm.sessions.archive import JsonlSessionStore, SessionArchive, archive_path
+    from graftling.sessions.archive import JsonlSessionStore, SessionArchive, archive_path
 
     binary = Path(os.environ['CLAUDE_REAL_TEST_BINARY'])
     monkeypatch.setenv('PATH', str(binary.parent) + os.pathsep + os.environ['PATH'])
@@ -435,11 +435,11 @@ def test_shared_connection_and_archive_binding_for_claude(
     configuration: str | None,
 ) -> None:
     """Compose the extracted shared seam with Claude's native owner and policy changes."""
-    from agent_swarm import Caller, read_config, write_config
+    from graftling import Caller, read_config, write_config
     from graphtraj.configuration import runtime_connections
     from graphtraj.interfaces.agents import agents_callback, swarm_root
     from graphtraj.interfaces.local_tool import bind
-    from agent_swarm.sessions.archive import JsonlSessionStore, archive_path
+    from graftling.sessions.archive import JsonlSessionStore, archive_path
 
     monkeypatch.setattr(runtime_connections, 'connections_file', lambda: tmp_path / 'connections.yml')
     settings = bind(project, recovery_reviewer=lambda proposal: {'decision': 'accept'})

@@ -5,7 +5,7 @@ import re
 import sys
 from typing import Callable
 
-from agent_swarm.dsh import DshExecution as NativeDshExecution
+from graftling.dsh import DshExecution as NativeDshExecution
 from graphtraj.execution.runner_io import write_yaml_durably
 from graphtraj.runtimes.dsh.service import DshService
 from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError
@@ -86,7 +86,7 @@ class DshExecution(NativeDshExecution):
         from graphtraj.execution.runner_control import notify_direct_parent
         from graphtraj.interfaces.hosted_cli import cli_connection
         from graphtraj.runtimes.codex.managed_session import native_operation_features
-        from agent_swarm.dsh import session_context
+        from graftling.dsh import session_context
 
         def record_session(session: str, pid: int) -> None:
             """Retain GraphTraj's Session receipt before publishing its binding."""
@@ -105,7 +105,7 @@ class DshExecution(NativeDshExecution):
             native_context=lambda: session_context(self),
         )
         self.parent_notice = lambda notice, details: notify_direct_parent(directory, notice, details)
-        from agent_swarm.sessions import DshArchive
+        from graftling.sessions import DshArchive
         from graphtraj.interfaces.agents import configured_archive, graphtraj_fields, mapped_task_ids
 
         self.archive = DshArchive(configured_archive(Path(request['harness_root'])),
@@ -123,6 +123,7 @@ class DshExecution(NativeDshExecution):
         environment = super().prepare_launch()
         environment.update({
             'GRAPHTRAJ_DSH_PACKAGE': self.request['package'],
+            'GRAFTLING_DSH_PACKAGE': self.request['package'],
             'GRAPHTRAJ_DSH_TOOL': self.request['tool'],
             'GRAPHTRAJ_HARNESS_ROOT': self.request['harness_root'],
         })

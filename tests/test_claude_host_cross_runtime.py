@@ -17,9 +17,9 @@ from uuid import uuid4
 
 import pytest
 
-import agent_swarm
-import agent_swarm.control
-from agent_swarm.claude.host import IndependentCalls
+import graftling
+import graftling.control
+from graftling.claude.host import IndependentCalls
 from test_claude_runtime import claude_environment  # noqa: F401
 from test_codex_independent_control import native_settings  # noqa: F401
 
@@ -32,7 +32,7 @@ def catalog(monkeypatch: pytest.MonkeyPatch) -> None:
                 'models': [{'id': 'gpt-5.5', 'alias': 'GPT-5.5', 'provider': 'openai',
                             'supported_efforts': ['low', 'medium', 'high']}]}
 
-    monkeypatch.setattr(agent_swarm.control, '_discover_models', discover)
+    monkeypatch.setattr(graftling.control, '_discover_models', discover)
 
 
 def main_call(host: IndependentCalls, cwd: Path):
@@ -177,7 +177,7 @@ def test_without_a_runtimes_entry_codex_is_unsupported(tmp_path: Path) -> None:
 def test_runtimes_entries_are_checked_when_the_host_is_built(
         tmp_path: Path, runtimes: object, code: str, text: str) -> None:
     """An unsupported or malformed entry refuses the host instead of a later create."""
-    with pytest.raises(agent_swarm.AgentsError) as refused:
+    with pytest.raises(graftling.AgentsError) as refused:
         IndependentCalls(tmp_path / 'agents', tmp_path, {}, runtimes)
     assert refused.value.code == code and text in str(refused.value)
 
@@ -227,10 +227,10 @@ def test_host_start_refusals_keep_their_code(
                 {'jsonrpc': '2.0', 'id': 2, 'method': 'tools/call',
                  'params': {'name': 'agents', 'arguments': {'action': 'discover'}}}]
     launcher = ('import subprocess, sys\n'
-                'done = subprocess.run([sys.executable, "-m", "agent_swarm.claude.host", "serve", "--config",'
+                'done = subprocess.run([sys.executable, "-m", "graftling.claude.host", "serve", "--config",'
                 ' sys.argv[1]], input=sys.stdin.read(), capture_output=True, text=True, timeout=30)\n'
                 'sys.stdout.write(done.stdout); sys.stderr.write(done.stderr)\n')
-    source = str(Path(agent_swarm.__file__).parents[1])
+    source = str(Path(graftling.__file__).parents[1])
     environment = {key: value for key, value in os.environ.items() if key != 'AGENTS_381_UNSET_KEY'}
     # No real claude on PATH: the check reports it not installed without touching this machine's login.
     environment.update(PATH=str(Path(sys.executable).parent), HOME=str(tmp_path / 'home'))

@@ -88,7 +88,7 @@ def project_history_files(root: Path) -> set[Path]:
     contents. A file grant cannot expose unrelated Sessions or credential files
     alongside it. Missing associations remain missing rather than being guessed.
     """
-    from agent_swarm import native_session_files
+    from graftling import native_session_files
     from graphtraj.execution.runner_status import retained_session_directories
     from graphtraj.interfaces.agents import swarm_root
 

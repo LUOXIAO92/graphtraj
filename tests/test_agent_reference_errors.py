@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from agent_swarm import AgentControl, AgentsError, Binding, Caller, bind
+from graftling import AgentControl, AgentsError, Binding, Caller, bind
 from graphtraj.execution.main_continuity import MainRoots, claim_main
 from test_agent_control import ScriptedDriver
 

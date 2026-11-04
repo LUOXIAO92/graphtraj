@@ -18,7 +18,7 @@ commit and whose primary worktree is on `main`.
 Choose a tag or commit to install, replacing `<tag-or-commit>`:
 
 ```sh
-uv tool install --with "agent-swarm @ git+https://github.com/LUOXIAO92/graphtraj.git@<tag-or-commit>#subdirectory=src/agent_swarm" \
+uv tool install --with "graftling @ git+https://github.com/LUOXIAO92/graphtraj.git@<tag-or-commit>#subdirectory=src/graftling" \
   "git+https://github.com/LUOXIAO92/graphtraj.git@<tag-or-commit>"
 cd /path/to/your-project
 graphtraj setup
@@ -26,10 +26,10 @@ graphtraj doctor
 graphtraj task graph
 ```
 
-GraphTraj and `agent-swarm` are separate distributions. GraphTraj declares the
-`agent-swarm` versions it supports (currently `>=0.3.0,<0.4`); building both
+GraphTraj and `graftling` are separate distributions. GraphTraj declares the
+`graftling` versions it supports (currently `>=0.5.0,<0.6`); building both
 from the same revision always satisfies it. From a checkout, build both with
-`python -m pip wheel --no-deps -w dist ./src/agent_swarm .`, then install both
+`python -m pip wheel --no-deps -w dist ./src/graftling .`, then install both
 wheels in your dedicated environment. The independent distribution can also
 be installed on its own; see [Independent agents](#independent-agents-without-graphtraj).
 
@@ -50,13 +50,13 @@ with a separate source repository, or other project conventions, see the
 
 ## Independent agents without GraphTraj
 
-The `agent-swarm` distribution lets the main Agent of Claude Code, Codex, Pi or DSH
+The `graftling` distribution (Graftling) lets the main Agent of Claude Code, Codex, Pi or DSH
 create and control child Agents through one `agents` tool. No GraphTraj installation,
 project, Task or Git repository is needed. Its installation, configuration and
-capability table are in the [agents README](src/agent_swarm/README.md), with one note
+capability table are in the [Graftling README](src/graftling/README.md), with one note
 per host. Its stable interface and version rules are in
-[`PUBLIC_API.md`](src/agent_swarm/PUBLIC_API.md) and its history in the
-[changelog](src/agent_swarm/CHANGELOG.md). The wheel contains all of them.
+[`PUBLIC_API.md`](src/graftling/PUBLIC_API.md) and its history in the
+[changelog](src/graftling/CHANGELOG.md). The wheel contains all of them.
 
 ## Use it with your Agent
 
@@ -156,7 +156,7 @@ Child Agents can use different Runtimes without changing your main Agent's host.
 | --- | --- |
 | Codex (`codex`) | An installed, authenticated Codex CLI. Native permissions and approvals remain in effect. |
 | Claude Code (`claude`) | Official CLI 2.1.299 or later, authenticated separately. Uses structured CLI input/output, native permission prompts and mandatory native sandboxing. Finds `claude` on PATH or `~/.local/bin/claude`. |
-| Pi (`pi`) | An installed Pi backend, existing Pi configuration, a Python that has `agent_sandbox`, and `srt`, `node` and ripgrep on the child's PATH; see [what a Pi child needs](src/agent_swarm/README.md#what-a-pi-child-needs). The role's optional `pi.sandbox_python`, `pi.sandbox_path` and `pi.agent_dir` select those locations. |
+| Pi (`pi`) | An installed Pi backend, existing Pi configuration, a Python that has `agent_sandbox`, and `srt`, `node` and ripgrep on the child's PATH; see [what a Pi child needs](src/graftling/README.md#what-a-pi-child-needs). The role's optional `pi.sandbox_python`, `pi.sandbox_path` and `pi.agent_dir` select those locations. |
 | DeepSeek Harness (`dsh`) | DSH `0.2.0-rc.2` or later for child members and a host that supports its native subprocess sandbox. Members ignore `DEEPSEEK_BASE_URL` and `DEEPSEEK_SEARCH_BASE_URL` in the environment; declare `base_url` on the connection to use another endpoint. With `DEEPSEEK_API_KEY` as that connection's key, web search goes to the same endpoint. Native replacement and recovery approval routes are unavailable; its native file tools can read outside the task worktree. |
 
 A Task member's `create` without `workspace` starts the child in the member's
@@ -356,7 +356,7 @@ It does not provide task execution controls.
 For Apple Silicon macOS, extract the ZIP and open `GraphTraj.app` from the
 extracted folder to try it; copying it to `/Applications` is optional. Electron
 is included, but Python is separate. Install the accompanying GraphTraj and
-agent-swarm wheels in a Python environment, and make `graphtraj-tool` available on the app's
+graftling wheels in a Python environment, and make `graphtraj-tool` available on the app's
 launch `PATH` or set `GRAPHTRAJ_TOOL` to that executable. Use the matching CLI
 package rather than an older global installation. The macOS build is unsigned.
 

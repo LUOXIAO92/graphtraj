@@ -329,7 +329,7 @@ def test_claude_send_and_confirmed_stop(tmp_path: Path, claude_environment: None
 def test_claude_later_prompt_hook_is_answered_behind_a_collection_backlog(
         tmp_path: Path, claude_environment: None, monkeypatch: pytest.MonkeyPatch) -> None:
     """A prompt sent into a live execution is released before its native hook times out."""
-    from agent_swarm.sessions.claude import ClaudeJsonlCollector
+    from graftling.sessions.claude import ClaudeJsonlCollector
 
     result_project(tmp_path)
     hooks = tmp_path / 'hooks.log'
@@ -368,7 +368,7 @@ def test_claude_later_prompt_hook_is_answered_behind_a_collection_backlog(
 def test_claude_later_prompt_hook_is_answered_during_one_slow_collection(
         tmp_path: Path, claude_environment: None, monkeypatch: pytest.MonkeyPatch) -> None:
     """A long Session's single archive collection does not hold a later prompt past its hook timeout."""
-    from agent_swarm.sessions.claude import ClaudeJsonlCollector
+    from graftling.sessions.claude import ClaudeJsonlCollector
 
     result_project(tmp_path)
     hooks = tmp_path / 'hooks.log'
@@ -415,9 +415,9 @@ def test_claude_prompt_during_original_long_history_collection(
     supplied transcript is copied; the original Session is never resumed or edited.
     """
     from graphtraj.interfaces import tools
-    from agent_swarm.sessions.claude_history import conversation, read_records
-    from agent_swarm.sessions.claude import ClaudeJsonlCollector
-    from agent_swarm.sessions.archive import JsonlSessionStore, SessionArchive, archive_path
+    from graftling.sessions.claude_history import conversation, read_records
+    from graftling.sessions.claude import ClaudeJsonlCollector
+    from graftling.sessions.archive import JsonlSessionStore, SessionArchive, archive_path
 
     original = Path(os.environ['CLAUDE_TEST_TRANSCRIPT'])
     native_id = original.stem
@@ -487,7 +487,7 @@ def test_claude_prompt_during_original_long_history_collection(
 def test_claude_interrupt_confirms_within_its_window_behind_a_collection_backlog(
         tmp_path: Path, claude_environment: None, monkeypatch: pytest.MonkeyPatch) -> None:
     """Queued fragments share archive rewrites, so a stop is confirmed inside the operation window."""
-    from agent_swarm.sessions.archive import JsonlSessionStore
+    from graftling.sessions.archive import JsonlSessionStore
 
     result_project(tmp_path)
     monkeypatch.setenv('CLAUDE_FIXTURE_STREAM_FRAGMENTS', '1500')
@@ -527,7 +527,7 @@ def test_claude_reports_physical_stop_before_archive_finishes(
     archive_fails: bool,
 ) -> None:
     """Native stop is confirmed independently; the occupied Worker retains archive work."""
-    from agent_swarm.sessions.claude import ClaudeJsonlCollector
+    from graftling.sessions.claude import ClaudeJsonlCollector
     from graphtraj.interfaces import tools
     from graphtraj.execution.runner_connection import worker_connection
     from graphtraj.execution.runner_models import RunnerError
@@ -606,7 +606,7 @@ def test_collection_progress_is_public_while_native_turn_remains_open(
 ) -> None:
     """Public reports advance without another prompt or native termination."""
     from graphtraj.interfaces import tools
-    from agent_swarm.sessions.claude import ClaudeJsonlCollector as StreamCollector
+    from graftling.sessions.claude import ClaudeJsonlCollector as StreamCollector
 
     result_project(tmp_path)
     blocked, release = threading.Event(), threading.Event()
@@ -1054,7 +1054,7 @@ def test_claude_prompt_hook_reply_after_host_sleep_is_a_retryable_failure(
     """
     from types import SimpleNamespace
 
-    import agent_swarm.claude.execution as claude_execution
+    import graftling.claude.execution as claude_execution
 
     result_project(tmp_path)
     with ExitStack() as stack:
@@ -1134,8 +1134,8 @@ def force_bind_order(monkeypatch: pytest.MonkeyPatch, order: str, reply: str) ->
     finished, so the peer cannot write its reply any earlier. Neither order
     relies on a sleep being long enough.
     """
-    from agent_swarm.claude.execution import ClaudeExecution
-    from agent_swarm.sessions.claude import ClaudeJsonlCollector
+    from graftling.claude.execution import ClaudeExecution
+    from graftling.sessions.claude import ClaudeJsonlCollector
 
     bind, answer = ClaudeJsonlCollector.bind, ClaudeExecution._reply
     bound        = threading.Event()
@@ -1183,14 +1183,14 @@ def surface_ids(store: object) -> list[str]:
 
 def retained_archive(root: Path) -> object:
     """Create the policy under test: saving on and history backfill off."""
-    from agent_swarm.sessions.archive import SessionArchive
+    from graftling.sessions.archive import SessionArchive
 
     return SessionArchive(root / 'archive', save_normalized_sessions=True, backfill_history=False)
 
 
 def retained_store(archive: object, session: str) -> object:
     """Reopen the archive, so assertions read what is durable."""
-    from agent_swarm.sessions.archive import JsonlSessionStore, archive_path
+    from graftling.sessions.archive import JsonlSessionStore, archive_path
 
     return JsonlSessionStore(archive_path(archive.root, 'claude:' + session))
 

@@ -15,8 +15,8 @@ import time
 import pytest
 import yaml
 
-from agent_swarm.models import pi_destination
-from agent_swarm.pi import PiExecution
+from graftling.models import pi_destination
+from graftling.pi import PiExecution
 from graphtraj.configuration.project_roles import RolePreset, parse_inline_role
 from graphtraj.configuration.role_definitions import resolve_child_role
 from graphtraj.execution.runner_heartbeat import hold_ownership
@@ -556,8 +556,8 @@ def test_pi_standalone_root_worktree_refuses_unexpressible_read_denial(
     tmp_path: Path, pi_environment: dict, monkeypatch: pytest.MonkeyPatch, protected: str,
 ) -> None:
     """A project-root worktree cannot re-allow a path its host denies to the child."""
-    from agent_swarm import AgentControl, Caller, bind
-    from agent_swarm.pi import PiDriver
+    from graftling import AgentControl, Caller, bind
+    from graftling.pi import PiDriver
 
     project = tmp_path / 'standalone'
     (project / 'docs').mkdir(parents=True)

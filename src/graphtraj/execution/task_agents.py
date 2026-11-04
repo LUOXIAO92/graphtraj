@@ -1,7 +1,7 @@
 """Task member executions recorded and controlled through the ``agents`` core.
 
 The Runner Worker owns one native execution. It hosts
-:class:`agent_swarm.AgentControl` over the tool's data root with a driver
+:class:`graftling.AgentControl` over the tool's data root with a driver
 around the turn it already runs, so the core records the Agent, its native
 Session and the execution, and only the owning Worker controls it. GraphTraj
 keeps the returned Agent reference in the member's mapping as its Task
@@ -18,7 +18,7 @@ import hashlib
 import threading
 from typing import Any, Mapping
 
-from agent_swarm import DECISION_METHOD, AgentControl, AgentsError, Binding, Caller, Run
+from graftling import DECISION_METHOD, AgentControl, AgentsError, Binding, Caller, Run
 
 from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError, RuntimeTurn
 

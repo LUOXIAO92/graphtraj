@@ -9,7 +9,7 @@ from uuid import uuid4
 import pytest
 import yaml
 
-from agent_swarm.notices import needs_parent
+from graftling.notices import needs_parent
 from graphtraj.configuration.project_configuration import runner_directory
 from graphtraj.execution import main_continuity as mc
 
@@ -215,7 +215,7 @@ def test_a_failed_parent_notice_attempt_is_always_recorded(
 
 def test_a_failed_host_queue_keeps_the_end_readable(tmp_path: Path) -> None:
     """A host receiver that raises never hides the body from wait/status."""
-    from agent_swarm import AgentControl
+    from graftling import AgentControl
 
     def broken(notice: dict) -> bool:
         raise OSError('queue unavailable')
@@ -230,7 +230,7 @@ def test_a_failed_host_queue_keeps_the_end_readable(tmp_path: Path) -> None:
     path = tmp_path / 'control' / 'agents' / 'agent-a.json'
     path.parent.mkdir(parents=True)
     path.write_text(json.dumps(record))
-    from agent_swarm.control import ExecutionEvents
+    from graftling.control import ExecutionEvents
     ExecutionEvents(control, 'agent-a', 'e1').finished('completed', last_message='PONG')
     document = control._document(json.loads(path.read_text()))
     assert document['last_result']['notification'] == 'unavailable'

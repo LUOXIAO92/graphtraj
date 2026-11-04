@@ -9,8 +9,8 @@ from pathlib import Path
 import pytest
 import yaml
 
-from agent_swarm.codex.app_server import CodexAdapterError, CodexAppServer
-from agent_swarm.codex.host import CodexHost
+from graftling.codex.app_server import CodexAdapterError, CodexAppServer
+from graftling.codex.host import CodexHost
 from graphtraj.execution import runner_heartbeat
 
 
@@ -58,7 +58,7 @@ def test_f8_failure_before_write_is_not_delivered(host_loop) -> None:
 
 def test_f8_rpc_rejection_is_not_delivered(host_loop) -> None:
     """A host that refused the event did not show it either."""
-    from agent_swarm.codex.app_server import CodexRPCError
+    from graftling.codex.app_server import CodexRPCError
     error = CodexRPCError('turn/start', 3, {'code': -32600, 'message': 'rejected'})
     assert _host(host_loop, error)._receive_child(dict(_NOTICE)) == 'held'
 

@@ -17,12 +17,12 @@ from types import SimpleNamespace
 
 import pytest
 
-from agent_swarm import AgentControl, AgentsResult, Caller, bind
-from agent_swarm.child_env import is_credential_name
-from agent_swarm.connection import agents_connection
-from agent_swarm.discovery import handle_request
-from agent_swarm.dsh.execution import DshExecution
-from agent_swarm.process import authenticate_process
+from graftling import AgentControl, AgentsResult, Caller, bind
+from graftling.child_env import is_credential_name
+from graftling.connection import agents_connection
+from graftling.discovery import handle_request
+from graftling.dsh.execution import DshExecution
+from graftling.process import authenticate_process
 
 OWN, OTHER = 'CHILD_OWN_KEY', 'OTHER_CONN_KEY'
 
@@ -102,7 +102,7 @@ def child(agents: AgentControl, runtime: str, config: str = 'own') -> Caller:
 
 
 def test_a_graphtraj_dsh_childs_tool_uses_the_channel_it_is_bound_to() -> None:
-    """GraphTraj's DSH child launches the entry that reads AGENT_SWARM_CONNECTION.
+    """GraphTraj's DSH child launches the entry that reads GRAFTLING_CONNECTION.
 
     Before 440 it kept GraphTraj's own entry, which reads only GRAPHTRAJ_CLI_CONNECTION
     and so ran the create inside its MCP server: as the member, in an environment DSH's
@@ -116,8 +116,8 @@ def test_a_graphtraj_dsh_childs_tool_uses_the_channel_it_is_bound_to() -> None:
                           events=SimpleNamespace(receive_children=lambda receive: None))
     bind_agents(turn, run, SimpleNamespace(root=Path('.')))
 
-    assert turn.connection_env == 'AGENT_SWARM_CONNECTION'
-    assert turn.request['mcp']['args'] == ['-I', '-m', 'agent_swarm.mcp']
+    assert turn.connection_env == 'GRAFTLING_CONNECTION'
+    assert turn.request['mcp']['args'] == ['-I', '-m', 'graftling.mcp']
     assert Path(turn.request['mcp']['command']).is_absolute()
 
 
@@ -140,8 +140,8 @@ def test_the_entry_runs_the_create_in_the_owner_holding_the_childs_key(tmp_path:
     environment = {'PATH': os.environ['PATH'], 'HOME': os.environ['HOME'],
                    'PYTHONPATH': str(Path(__file__).resolve().parents[1] / 'src')}
     with agents_connection(tmp_path / 'channel', call, lambda pid: authenticate_process(server, pid)) as address:
-        server = subprocess.Popen([sys.executable, '-I', '-m', 'agent_swarm.mcp'],
-                                  env={**environment, 'AGENT_SWARM_CONNECTION': address}, stdin=subprocess.PIPE,
+        server = subprocess.Popen([sys.executable, '-I', '-m', 'graftling.mcp'],
+                                  env={**environment, 'GRAFTLING_CONNECTION': address}, stdin=subprocess.PIPE,
                                   stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
         output, errors = server.communicate(''.join(json.dumps(m) + '\n' for m in messages), timeout=30)
 

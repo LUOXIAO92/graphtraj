@@ -4,8 +4,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from agent_swarm import AgentControl, Caller, bind
-from agent_swarm.codex.driver import CodexDriver
+from graftling import AgentControl, Caller, bind
+from graftling.codex.driver import CodexDriver
 
 from test_approval_layers import MAIN, Scripted, call
 from test_codex_review_relay import native_settings  # noqa: F401 (fixture)

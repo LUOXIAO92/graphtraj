@@ -41,8 +41,8 @@ import asyncio, json, os, sys, time
 from contextlib import ExitStack
 from pathlib import Path
 import yaml
-from agent_swarm import Caller
-from agent_swarm.connection import verify_native_context
+from graftling import Caller
+from graftling.connection import verify_native_context
 from graphtraj.interfaces.agents import agents_callback
 from graphtraj.interfaces.local_tool import bind
 from graphtraj.interfaces.hosted_cli import CONNECTION_ENV
@@ -280,7 +280,7 @@ def test_owning_host_processes_events_during_and_after_tool_call(
         action = subprocess.run(command,
                                 cwd=os.environ['HOST_PROJECT'], capture_output=True, text=True,
                                 env={**os.environ, 'CODEX_THREAD_ID':thread_id,
-                                     'GRAPHTRAJ_NATIVE_RUNTIME':'codex'})
+                                     'GRAFTLING_NATIVE_RUNTIME':'codex'})
         assert action.returncode == 0, action.stdout + action.stderr
         with open(os.environ['HOST_ACTIONS'], 'a') as stream:
             stream.write(json.dumps({'session':thread_id,'event':event['event'],

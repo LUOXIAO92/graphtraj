@@ -13,7 +13,7 @@ from uuid import uuid4
 
 import pytest
 
-from agent_swarm import AgentsError, AgentsResult
+from graftling import AgentsError, AgentsResult
 from conftest import HeldInput
 from graphtraj.runtimes.claude.host import NativeCalls, native_parent
 from graphtraj.runtimes.claude.mcp import serve
@@ -148,7 +148,7 @@ def test_context_uses_owner_executable_when_launcher_updates(tmp_path: Path, mon
     config.write_text(json.dumps({'root': str(tmp_path), 'cwd': str(tmp_path),
                                  'claude': str(launcher), 'channel_file': str(endpoint)}))
     monkeypatch.setattr(host, 'process_executable', lambda pid: original)
-    monkeypatch.setattr('agent_swarm.claude.host.host_alive', lambda address: True)
+    monkeypatch.setattr('graftling.claude.host.host_alive', lambda address: True)
     parent = host.native_parent(launcher)
     endpoint.write_text(json.dumps({'parent': parent, 'executable': str(launcher.resolve()),
                                     'address': 'owned-channel'}))
@@ -227,7 +227,7 @@ def test_adoption_material_is_the_plugin_layout_and_keeps_settings(tmp_path: Pat
     assert json.loads((plugin / '.claude-plugin/plugin.json').read_text())['name'] == 'graphtraj-claude-host'
     assert 'export function register' in (plugin / 'hooks/host_context.mjs').read_text()
     settings = json.loads((tmp_path / '.claude/settings.local.json').read_text())
-    assert settings['env']['KEEP'] == '1' and 'GRAPHTRAJ_CLAUDE_HOST_CONFIG' in settings['env']
+    assert settings['env']['KEEP'] == '1' and 'GRAFTLING_CLAUDE_HOST_CONFIG' in settings['env']
     assert settings['permissions'] == {'allow': []}
     assert list(json.loads((tmp_path / '.mcp.json').read_text())['mcpServers']) == ['agents']
 
@@ -235,13 +235,13 @@ def test_adoption_material_is_the_plugin_layout_and_keeps_settings(tmp_path: Pat
 def test_generated_hook_context_accepts_the_project_host_configuration(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture,
 ) -> None:
-    """The written hook's agent_swarm context entry reaches the project host's own channel."""
-    from agent_swarm.claude import host as native
+    """The written hook's graftling context entry reaches the project host's own channel."""
+    from graftling.claude import host as native
     from graphtraj.runtimes.claude.host import adoption_material, write_adoption
 
     write_adoption(adoption_material(tmp_path, tmp_path / 'claude'))
     hook = (tmp_path / '.claude/skills/graphtraj-claude-host/hooks/host_context.mjs').read_text()
-    assert "'-m', 'agent_swarm.claude.host'" in hook
+    assert "'-m', 'graftling.claude.host'" in hook
     config = tmp_path / '.graphtraj/claude-host/config.json'
     endpoint = Path(json.loads(config.read_text())['channel_file'])
     endpoint.parent.mkdir(parents=True)
@@ -392,7 +392,7 @@ def test_refused_graphtraj_host_answers_both_tools_with_the_reason(tmp_path: Pat
                 'done = subprocess.run([sys.executable, "-m", "graphtraj.runtimes.claude.host", "serve", "--config",'
                 ' sys.argv[1]], input=sys.stdin.read(), capture_output=True, text=True, timeout=30)\n'
                 'sys.stdout.write(done.stdout); sys.stderr.write(done.stderr)\n')
-    env = _source_env(**({'AGENT_SWARM_CONNECTION': 'bound'} if case == 'bound-child' else {}))
+    env = _source_env(**({'GRAFTLING_CONNECTION': 'bound'} if case == 'bound-child' else {}))
     finished = subprocess.run([sys.executable, '-c', launcher, str(config)],
                               cwd=elsewhere if case == 'elsewhere' else project,
                               input=''.join(json.dumps(message) + '\n' for message in messages),
@@ -467,7 +467,7 @@ def test_graphtraj_session_end_is_one_stop_line(tmp_path: Path, case: str) -> No
         assert 'did not start' not in log
 
 
-@pytest.mark.parametrize('module', ['graphtraj.runtimes.claude.host', 'agent_swarm.claude.host'])
+@pytest.mark.parametrize('module', ['graphtraj.runtimes.claude.host', 'graftling.claude.host'])
 def test_graphtraj_context_reports_a_refused_host_in_one_line(tmp_path: Path, module: str) -> None:
     """Both mod context entries report a GraphTraj host's absence or refusal in one line."""
     import subprocess
@@ -513,7 +513,7 @@ def test_graphtraj_context_reports_a_refused_host_in_one_line(tmp_path: Path, mo
     assert not (config.parent / 'host-refusal.json').exists()
 
 
-HOST_MODULES = ['graphtraj.runtimes.claude.host', 'agent_swarm.claude.host']
+HOST_MODULES = ['graphtraj.runtimes.claude.host', 'graftling.claude.host']
 REPLACED_LINE = 'agents host replaced a stale channel of a dead host'
 # The verified Claude parent: it owns one host and runs the mod's context entry as its direct child.
 CLAUDE_PARENT = '''
@@ -827,7 +827,7 @@ def test_context_from_the_wrong_executable_is_still_denied(
 
 def test_host_alive_reads_only_the_kernel_lock(tmp_path: Path, hold_control) -> None:
     """Gone means dead, a free lock means dead, and what cannot be observed counts as alive."""
-    from agent_swarm.connection import host_alive
+    from graftling.connection import host_alive
 
     assert host_alive(str(tmp_path / 'gone')) is False
     (tmp_path / 'file').touch()
@@ -845,7 +845,7 @@ def test_host_alive_reads_only_the_kernel_lock(tmp_path: Path, hold_control) -> 
 
 def test_killed_owner_lock_is_not_kept_by_its_children(tmp_path: Path) -> None:
     """A host's descendants outlive it (Agents, validations) but cannot keep it looking alive."""
-    from agent_swarm.connection import host_alive
+    from graftling.connection import host_alive
 
     address = tmp_path / 'control-owner'
     address.mkdir()

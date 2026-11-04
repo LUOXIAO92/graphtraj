@@ -17,7 +17,7 @@ from typing import Any, Callable
 
 import pytest
 
-from agent_swarm import AgentsError, AgentsResult, Caller, bind, shutdown
+from graftling import AgentsError, AgentsResult, Caller, bind, shutdown
 import test_pi_dsh_notice_holding as holding
 from test_pi_dsh_notice_holding import CALLERS, Driver, Process, SOURCE, native_host, read_record, wait_until  # noqa: F401
 
@@ -316,14 +316,14 @@ HOST_LIMIT = 30
 HOST = r'''
 import contextlib, importlib, json, os, subprocess, sys, threading, time
 from pathlib import Path
-import agent_swarm
-from agent_swarm import AgentsResult, Caller, bind, shutdown
+import graftling
+from graftling import AgentsResult, Caller, bind, shutdown
 
 kind, where, stubborn = os.environ['TEST_KIND'], Path(os.environ['TEST_WHERE']), os.environ['TEST_STUBBORN']
-host = importlib.import_module(f'agent_swarm.{kind}.host')
+host = importlib.import_module(f'graftling.{kind}.host')
 if os.environ.get('TEST_STOP_SECONDS'):
     shutdown.STOP_SECONDS = float(os.environ['TEST_STOP_SECONDS'])
-facts = {'module': agent_swarm.__file__}
+facts = {'module': graftling.__file__}
 
 
 class Driver:
@@ -497,7 +497,7 @@ time.sleep(600)
 
 CLIENT = '''
 import json, pathlib, sys
-from agent_swarm.connection import connection_operation
+from graftling.connection import connection_operation
 try:
     outcome = json.dumps(connection_operation(sys.argv[1], json.loads(sys.argv[2]), authenticate=True, await_accepted=True))
 except Exception as error:
@@ -527,7 +527,7 @@ def run_host(tmp_path: Path, kind: str, position: str = 'first', stubborn: str =
     # Built, not copied: nothing of the real environment reaches this process or its output.
     env = {'PATH': '/usr/bin:/bin', 'HOME': str(tmp_path), 'PYTHONPATH': str(SOURCE), 'TEST_KIND': kind,
            'TEST_WHERE': str(tmp_path), 'TEST_POSITION': position, 'TEST_STUBBORN': stubborn,
-           'AGENT_SWARM_PI_ENTRY': sys.executable,
+           'GRAFTLING_PI_ENTRY': sys.executable,
            **{f'TEST_{name.upper()}': value for name, value in tests.items()}}
     if stop_seconds is not None:
         env['TEST_STOP_SECONDS'] = str(stop_seconds)

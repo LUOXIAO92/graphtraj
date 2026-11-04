@@ -12,8 +12,8 @@ from pathlib import Path
 
 import pytest
 
-import agent_swarm
-from agent_swarm import AgentControl, AgentsError, Caller, ExecutionEvents
+import graftling
+from graftling import AgentControl, AgentsError, Caller, ExecutionEvents
 
 
 SOURCE = Path(__file__).resolve().parents[1] / 'src'
@@ -104,7 +104,7 @@ def root(tmp_path: Path) -> Path:
 
 def call(control, caller, **request):
     """Invoke the registered function and return its document."""
-    result = agent_swarm.bind(control, caller)(request)
+    result = graftling.bind(control, caller)(request)
     return result.document, result.failed
 
 
@@ -438,20 +438,20 @@ def test_direct_parent_confirms_an_ended_execution_whose_processes_are_gone(root
 
 def test_config_is_owned_by_the_data_root(root: Path) -> None:
     """Standalone defaults are off; consumer defaults respect explicit choices."""
-    assert agent_swarm.read_config(root) == {'save_normalized_sessions': False,
+    assert graftling.read_config(root) == {'save_normalized_sessions': False,
                                              'backfill_history': False}
     assert not (root / 'config.yml').exists()
 
-    assert agent_swarm.default_config(root, save_normalized_sessions=True)['save_normalized_sessions']
-    agent_swarm.write_config(root, save_normalized_sessions=False, backfill_history=True)
-    effective = agent_swarm.default_config(root, save_normalized_sessions=True, backfill_history=False)
+    assert graftling.default_config(root, save_normalized_sessions=True)['save_normalized_sessions']
+    graftling.write_config(root, save_normalized_sessions=False, backfill_history=True)
+    effective = graftling.default_config(root, save_normalized_sessions=True, backfill_history=False)
     assert effective == {'save_normalized_sessions': False, 'backfill_history': True}
     assert (root / 'config.yml').read_text() == ('save_normalized_sessions: false\n'
                                                  'backfill_history: true\n')
 
     (root / 'config.yml').write_text('save_normalized_sessions: yes\n')
     with pytest.raises(ValueError):
-        agent_swarm.read_config(root)
+        graftling.read_config(root)
 
 
 def test_archive_is_bound_only_when_enabled(root: Path) -> None:
@@ -459,10 +459,10 @@ def test_archive_is_bound_only_when_enabled(root: Path) -> None:
     driver  = ScriptedDriver()
     control = AgentControl(root, {'scripted': driver})
     archive = object()
-    bound   = agent_swarm.bind(control, Caller('test-host', None), archive=archive)
+    bound   = graftling.bind(control, Caller('test-host', None), archive=archive)
 
     off = bound({'action': 'create', 'runtime': 'scripted', 'instruction': 'a'}).document
-    agent_swarm.write_config(root, save_normalized_sessions=True)
+    graftling.write_config(root, save_normalized_sessions=True)
     on  = bound({'action': 'create', 'runtime': 'scripted', 'instruction': 'b'}).document
     assert [entry[3] for entry in driver.started] == [None, archive]
     for document in (off, on):
@@ -473,8 +473,8 @@ def test_archive_is_bound_only_when_enabled(root: Path) -> None:
 def test_core_imports_and_runs_without_graphtraj(tmp_path: Path, configuration: str | None) -> None:
     """The control core loads and starts with no GraphTraj module or project."""
     code = (
-        'import sys, agent_swarm\n'
-        'from agent_swarm import AgentControl, Caller, bind\n'
+        'import sys, graftling\n'
+        'from graftling import AgentControl, Caller, bind\n'
         'class D:\n'
         '    def prepare(self, runtime, caller, *, configuration=None):\n'
         '        assert configuration == (sys.argv[2] or None)\n'

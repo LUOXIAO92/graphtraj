@@ -1,6 +1,6 @@
 """GraphTraj as a consumer of the independent ``agents`` control core.
 
-Ordinary Agents are created and controlled by :class:`agent_swarm.AgentControl`
+Ordinary Agents are created and controlled by :class:`graftling.AgentControl`
 over the tool's own data root ``<project>/.graphtraj/swarm``, with GraphTraj's
 :class:`~graphtraj.execution.agent_driver.AdapterDriver` running the native
 Runtime. No Task, Team, Round or Worldline event is needed for any action.
@@ -20,7 +20,7 @@ import time
 from pathlib import Path
 from typing import Any, Callable, Mapping
 
-from agent_swarm import (
+from graftling import (
     DECISION_METHOD,
     AgentControl,
     AgentsError,
@@ -39,7 +39,7 @@ from agent_swarm import (
 
 from graphtraj.execution.runner_models import RunnerError
 from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError
-from agent_swarm.sessions import ConfiguredSessionArchive
+from graftling.sessions import ConfiguredSessionArchive
 
 
 # Core Agent references; anything else is a Runner alias of a Task member.

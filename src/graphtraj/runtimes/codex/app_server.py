@@ -10,7 +10,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Mapping
 from graphtraj.execution.execution_budget import _duration
-from agent_swarm.codex import (
+from graftling.codex import (
     CodexAdapterError,
     CodexAppServer as NativeCodexAppServer,
     CodexExecution,
@@ -348,7 +348,7 @@ class CodexAppServer(NativeCodexAppServer):
 
     async def retain_ordered_history(self, session: CodexSession, archive: object, agent: str) -> None:
         """Construct the existing collector without making native control import it."""
-        from agent_swarm.sessions import CodexHistoryArchive
+        from graftling.sessions import CodexHistoryArchive
         from graphtraj.interfaces.agents import archive_project, graphtraj_fields
 
         await super().retain_ordered_history(

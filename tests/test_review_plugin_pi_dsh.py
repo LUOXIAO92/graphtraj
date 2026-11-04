@@ -20,13 +20,13 @@ import time
 import pytest
 import yaml
 
-import agent_swarm
-from agent_swarm import AgentControl, Caller, bind, control as control_module
-from agent_swarm.dsh import execution as dsh_execution
-from agent_swarm.dsh.driver import DshDriver
-from agent_swarm.dsh.execution import DshExecution
-from agent_swarm.pi import PiDriver
-from agent_swarm.pi import execution as pi_execution
+import graftling
+from graftling import AgentControl, Caller, bind, control as control_module
+from graftling.dsh import execution as dsh_execution
+from graftling.dsh.driver import DshDriver
+from graftling.dsh.execution import DshExecution
+from graftling.pi import PiDriver
+from graftling.pi import execution as pi_execution
 from dsh_standalone_peer import FakeDshService, install_dsh
 from test_pi_runtime import pi_environment  # noqa: F401 - pytest fixture
 
@@ -292,7 +292,7 @@ console.log(JSON.stringify({ prepend: options.prepend,
   tool: await hook(exec('write'), allow), deny: await hook(exec('write'), nativeDeny),
   ask: await hook(exec('write'), nativeAsk), agents: await hook(exec('mcp__agents__agents'), allow),
   inner: await hook({ ...exec('run_code'), parent: Symbol('outer') }, allow) }));
-""" % json.dumps(str(ROOT / 'src/agent_swarm/dsh/review.mjs'))
+""" % json.dumps(str(ROOT / 'src/graftling/dsh/review.mjs'))
 
 
 def ask_frame(tool: str, call_id: str, tool_input: dict) -> dict:
@@ -320,7 +320,7 @@ def test_review_row_asks_only_for_what_dsh_itself_allows(tmp_path: Path) -> None
 REVIEW_HANDLER = """
 import { registerReview } from %s;
 const script = process.argv[1];
-const environment = { AGENT_SWARM_PI_REVIEW: script === 'off' ? '' : 'agents-review:reserved', KEEP: '1' };
+const environment = { GRAFTLING_PI_REVIEW: script === 'off' ? '' : 'agents-review:reserved', KEEP: '1' };
 let handler; const commands = [];
 const pi = { registerCommand: (name) => commands.push(name), on: (event, value) => { if (event === 'tool_call') handler = value; } };
 const active = registerReview(pi, environment);
@@ -338,8 +338,8 @@ try { result = await handler(event('write'), ctx); } catch (error) { failure = e
 const agents = await handler(event('mcp__agents__agents'), { ui: { confirm: async () => { throw new Error('asked'); } } });
 const reloaded = []; registerReview({ registerCommand: (name) => reloaded.push(name), on: () => {} }, environment);
 console.log(JSON.stringify({ active, commands, dialogs, result: result ?? null, failure, agents: agents ?? null,
-  variable: 'AGENT_SWARM_PI_REVIEW' in environment, kept: environment.KEEP, reloaded }));
-""" % json.dumps(str(ROOT / 'src/agent_swarm/pi/extension.mjs'))
+  variable: 'GRAFTLING_PI_REVIEW' in environment, kept: environment.KEEP, reloaded }));
+""" % json.dumps(str(ROOT / 'src/graftling/pi/extension.mjs'))
 
 
 def test_pi_handler_is_inert_without_the_owner(tmp_path: Path) -> None:
@@ -770,7 +770,7 @@ def test_pi_command_reviewer_is_unchanged(tmp_path: Path, pi_listing: dict, revi
     is observed directly rather than from what the listings held.
     """
     asked = []
-    monkeypatch.setattr('agent_swarm.pi.driver.pi_offers', lambda *a, **k: asked.append(a) or True)
+    monkeypatch.setattr('graftling.pi.driver.pi_offers', lambda *a, **k: asked.append(a) or True)
     child = pi_child(tmp_path, pi_listing, reviewer['entry'], {'api_key_env': None, 'home': pi_home(tmp_path, {})})
     assert pi_child_ran(child, pi_listing)[DEFAULT_KEY] is True
     assert asked == []

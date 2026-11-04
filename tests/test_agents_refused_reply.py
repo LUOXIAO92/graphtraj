@@ -22,15 +22,15 @@ from uuid import uuid4
 
 import pytest
 
-import agent_swarm
-from agent_swarm import AgentsResult
-from agent_swarm.claude.driver import ClaudeDriver
-from agent_swarm.claude.execution import ClaudeExecution
-from agent_swarm.codex.host import CodexHost
-from agent_swarm.connection import agents_connection
-from agent_swarm.dsh import execution as dsh_execution
-from agent_swarm.process import authenticate_process
-from agent_swarm.runtime import RuntimeAdapterError
+import graftling
+from graftling import AgentsResult
+from graftling.claude.driver import ClaudeDriver
+from graftling.claude.execution import ClaudeExecution
+from graftling.codex.host import CodexHost
+from graftling.connection import agents_connection
+from graftling.dsh import execution as dsh_execution
+from graftling.process import authenticate_process
+from graftling.runtime import RuntimeAdapterError
 from dsh_standalone_peer import FakeDshService
 from test_claude_runtime import claude_environment  # noqa: F401 - pytest fixture
 from test_codex_independent_control import native_settings  # noqa: F401 - pytest fixture
@@ -41,9 +41,9 @@ from test_pi_dsh_notice_holding import Process
 PROMPT = 10.0
 QUICK = 4.0
 WAIT = 30.0
-AGENT_ENV = ('AGENT_SWARM_CONNECTION', 'GRAPHTRAJ_CLI_CONNECTION', 'GRAPHTRAJ_NATIVE_RUNTIME',
+AGENT_ENV = ('GRAFTLING_CONNECTION', 'GRAPHTRAJ_CLI_CONNECTION', 'GRAFTLING_NATIVE_RUNTIME',
              'DSH_SESSION_ID', 'DSH_AGENT_SOURCE')
-SOURCE = str(Path(agent_swarm.__file__).parents[1])
+SOURCE = str(Path(graftling.__file__).parents[1])
 ALLOWED = {'behavior': 'allow', 'updatedInput': {'command': 'echo approved'}}
 
 
@@ -125,8 +125,8 @@ def channel(directory: Path, operate: Callable, cwd: Path, *, native_context=Non
     holder: list[Client] = []
     with agents_connection(directory, operate, lambda pid: authenticate_process(holder[0].process, pid),
                            native_context=native_context) as address:
-        client = Client([sys.executable, '-m', 'agent_swarm.mcp'],
-                        bounded_environment(AGENT_SWARM_CONNECTION=address, **(env or {})), cwd, meta=meta)
+        client = Client([sys.executable, '-m', 'graftling.mcp'],
+                        bounded_environment(GRAFTLING_CONNECTION=address, **(env or {})), cwd, meta=meta)
         holder.append(client)
         try:
             yield client
@@ -164,7 +164,7 @@ def codex_host(settings: dict, tmp_path: Path) -> Iterator[tuple[Client, CodexHo
         with ExitStack() as connections:
             address, name, module = host.bind_connection(connections, {}, tmp_path)
             client = Client([sys.executable, '-m', module],
-                            bounded_environment(**{name: address, 'GRAPHTRAJ_NATIVE_RUNTIME': 'codex'}),
+                            bounded_environment(**{name: address, 'GRAFTLING_NATIVE_RUNTIME': 'codex'}),
                             tmp_path, meta={'threadId': host.native_session})
             holder.append(client)
             try:
@@ -199,11 +199,11 @@ def claude_host(tmp_path: Path) -> Iterator[tuple[Client, Path]]:
         """The native mod's per-call context step, as a direct child of the same parent."""
         native = {'operation': 'prepare', 'tool': 'agents', 'session': session, 'cwd': str(project),
                   'agent': None, 'request': request}
-        done = subprocess.run([sys.executable, '-m', 'agent_swarm.claude.host', 'context', '--config', str(config)],
+        done = subprocess.run([sys.executable, '-m', 'graftling.claude.host', 'context', '--config', str(config)],
                               input=json.dumps(native), capture_output=True, text=True, timeout=PROMPT, env=env)
         assert done.returncode == 0, done.stderr
 
-    client = Client([sys.executable, '-m', 'agent_swarm.claude.host', 'serve', '--config', str(config)],
+    client = Client([sys.executable, '-m', 'graftling.claude.host', 'serve', '--config', str(config)],
                     env, project)
     try:
         assert client.send({'method': 'initialize', 'params': {}}, WAIT)['result']['serverInfo']['name'] == 'agents'

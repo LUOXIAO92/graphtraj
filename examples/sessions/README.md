@@ -5,7 +5,7 @@ Session protocol. Each example preserves the native record alongside its interpr
 and identifies facts that the source did not expose. The field reference below
 covers the shared representation, provenance, RL observations and stream boundaries.
 
-`agent_swarm.sessions.protocol` implements the value schema in Python.
+`graftling.sessions.protocol` implements the value schema in Python.
 `validate_header`, `validate_content`, `validate_stream`, `validate_event` and
 `validate_session` raise `ValueError` for invalid values without mutating input.
 `snapshot_event` returns a detached validated copy; `retain_native` preserves a

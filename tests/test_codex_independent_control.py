@@ -7,8 +7,8 @@ import sys
 
 import pytest
 
-from agent_swarm import AgentControl, Caller, bind
-from agent_swarm.codex.driver import CodexDriver
+from graftling import AgentControl, Caller, bind
+from graftling.codex.driver import CodexDriver
 
 
 @pytest.fixture
@@ -99,7 +99,7 @@ def test_packaged_host_owns_parent_mcp_and_resume(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """A normal host owns the native process and binds calls to its actual Session."""
-    from agent_swarm.codex.host import CodexHost
+    from graftling.codex.host import CodexHost
 
     monkeypatch.setenv('PEER_MCP_REQUESTS', json.dumps([
         {'jsonrpc': '2.0', 'id': 1, 'method': 'tools/call', 'params': {'name': 'agents',
@@ -153,7 +153,7 @@ def test_lost_parent_acknowledgement_does_not_repeat_child_body(
 ) -> None:
     """A submitted native callback stays unconfirmed after its connection closes."""
     import time
-    from agent_swarm.codex.host import CodexHost
+    from graftling.codex.host import CodexHost
 
     monkeypatch.setenv('PEER_DROP_HOST_REPLY', '1')
     host = CodexHost(native_settings, tmp_path / 'lost-reply', 'mcp-create-child')
@@ -180,7 +180,7 @@ def test_host_cli_reports_native_turn_failure(tmp_path: Path, native_settings: d
     settings.write_text(json.dumps(native_settings))
     output = tmp_path / 'failed-result.json'
     result = subprocess.run([
-        sys.executable, '-m', 'agent_swarm.codex.host', '--settings', str(settings),
+        sys.executable, '-m', 'graftling.codex.host', '--settings', str(settings),
         '--directory', str(tmp_path / 'failed-host'), '--output', str(output), 'failed-turn',
     ], capture_output=True, text=True, timeout=10)
     assert result.returncode == 1, result.stdout + result.stderr

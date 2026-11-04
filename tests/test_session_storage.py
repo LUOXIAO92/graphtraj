@@ -10,7 +10,7 @@ from time import perf_counter
 import pytest
 
 from graphtraj.sessions.storage import SessionStore, StreamWriter, session_path
-from agent_swarm.sessions.protocol import retain_native, upgrade_header
+from graftling.sessions.protocol import retain_native, upgrade_header
 
 
 def header(session_id: str = 'canonical') -> dict:
@@ -236,7 +236,7 @@ def test_public_query_reads_jsonl_with_existing_native_authority(tmp_path: Path)
     from graphtraj.execution.runner_status import runtime_caller
     from graphtraj.interfaces.gateway import handle_request
     from graphtraj.interfaces.agents import swarm_root
-    from agent_swarm.sessions.archive import SessionArchive
+    from graftling.sessions.archive import SessionArchive
     from test_result_submission import result_project
 
     runner, _, _ = result_project(tmp_path)
@@ -260,7 +260,7 @@ def test_main_and_members_read_linked_project_sessions_without_secrets(tmp_path:
     from graphtraj.execution.runner_status import NativeCaller, runtime_caller
     from graphtraj.interfaces.gateway import handle_request
     from graphtraj.interfaces.agents import swarm_root
-    from agent_swarm.sessions.archive import SessionArchive
+    from graftling.sessions.archive import SessionArchive
     from test_result_submission import result_project
 
     runner, _, _ = result_project(tmp_path)
@@ -320,7 +320,7 @@ def test_member_reads_an_unmigrated_codex_session_by_its_bare_native_id(tmp_path
 
 def test_public_query_pages_migrated_evidence_without_claiming_native_order(tmp_path: Path) -> None:
     """Old evidence respects the selected page size and keeps its own cursor."""
-    from agent_swarm.sessions.migration import import_sqlite
+    from graftling.sessions.migration import import_sqlite
     from graphtraj.execution.runner_status import runtime_caller
     from graphtraj.interfaces.gateway import handle_request
     from graphtraj.interfaces.agents import swarm_root
@@ -462,7 +462,7 @@ def test_pending_initial_ancestry_is_portable_atomic_and_one_way(tmp_path: Path)
 
 def test_initial_pending_cannot_be_validated_as_canonical_history() -> None:
     """Ordinary protocol consumers must not treat undecided observations as history."""
-    from agent_swarm.sessions.protocol import INITIAL_COLLECTION_TYPE, validate_session
+    from graftling.sessions.protocol import INITIAL_COLLECTION_TYPE, validate_session
 
     event = {'type': INITIAL_COLLECTION_TYPE, 'seq': 0, 'time': 1, 'data': {}}
     with pytest.raises(ValueError, match='pending-collection'):

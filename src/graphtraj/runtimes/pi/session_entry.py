@@ -6,8 +6,8 @@ import os
 from pathlib import Path
 from typing import Mapping
 
-from agent_swarm.pi import current_connection, session_record
-from agent_swarm.pi import session_source as native_session_source, verify_main as native_verify_main
+from graftling.pi import current_connection, session_record
+from graftling.pi import session_source as native_session_source, verify_main as native_verify_main
 
 __all__ = ['caller_identity', 'current_connection', 'session_record', 'session_source', 'verify_main']
 

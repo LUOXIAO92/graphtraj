@@ -142,7 +142,7 @@ def test_a_caller_without_a_reference_or_execution_is_refused(managed_project: M
                 returncode=1)
     assert main['error']['code'] == 'authority-denied'
 
-    from agent_swarm import Binding, Caller
+    from graftling import Binding, Caller
     from graphtraj.interfaces.agents import GraphTrajAgents
 
     unknown = Binding(Caller('graphtraj-gateway', 'no-such-member'))
@@ -158,7 +158,7 @@ def test_a_caller_without_a_reference_or_execution_is_refused(managed_project: M
 
 def test_a_member_cannot_answer_its_own_question(managed_project: ManagedProject) -> None:
     """Only the direct parent answers; the member's own reply leaves the request pending."""
-    from agent_swarm import Binding, Caller
+    from graftling import Binding, Caller
     from graphtraj.interfaces.agents import GraphTrajAgents
 
     root, _, call, _ = managed_project

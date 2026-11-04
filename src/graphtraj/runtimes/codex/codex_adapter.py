@@ -19,7 +19,7 @@ from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence, Tuple
 import yaml
 
 from graphtraj.runtimes.codex.session_archive import CodexSessionArchive
-from agent_swarm.sessions import CodexJsonlArchive
+from graftling.sessions import CodexJsonlArchive
 
 from graphtraj.runtimes.runtime_adapter import (
     NativeReplacement,
@@ -37,7 +37,7 @@ from graphtraj.runtimes.codex.usage import tool_call_id
 from graphtraj.configuration.project_configuration import configuration_exists, load_project_configuration
 from graphtraj.configuration.role_definitions import ResolvedChildRole
 
-from agent_swarm.codex import (
+from graftling.codex import (
     CodexAdapterError,
     CodexRuntimeContext,
     codex_api_key_env,

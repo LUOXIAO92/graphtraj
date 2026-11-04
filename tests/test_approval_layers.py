@@ -15,16 +15,16 @@ from pathlib import Path
 
 import pytest
 
-import agent_swarm
-from agent_swarm import AgentControl, AgentsError, Caller
-from agent_swarm.approval import check_reply, parse_decision
-from agent_swarm.claude import settings as claude_settings
-from agent_swarm.claude.driver import ClaudeDriver
-from agent_swarm.codex import driver as codex_driver
-from agent_swarm.codex.driver import CodexDriver
-from agent_swarm.discovery import handle_request
-from agent_swarm.dsh.driver import DshDriver
-from agent_swarm.pi.driver import PiDriver
+import graftling
+from graftling import AgentControl, AgentsError, Caller
+from graftling.approval import check_reply, parse_decision
+from graftling.claude import settings as claude_settings
+from graftling.claude.driver import ClaudeDriver
+from graftling.codex import driver as codex_driver
+from graftling.codex.driver import CodexDriver
+from graftling.discovery import handle_request
+from graftling.dsh.driver import DshDriver
+from graftling.pi.driver import PiDriver
 
 MAIN = Caller('test-host', None)
 FAKE_TOKEN = 'ghp_' + 'A' * 36
@@ -34,7 +34,7 @@ BENIGN = 'git fetch https://github.com/example/project.git'
 
 def call(control, caller, **request):
     """Invoke the bound agents function and return its document and failure flag."""
-    result = agent_swarm.bind(control, caller)(request)
+    result = graftling.bind(control, caller)(request)
     return result.document, result.failed
 
 

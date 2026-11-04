@@ -6,7 +6,7 @@ import { pathToFileURL } from 'node:url';
 
 const [nativePackage, pluginPath, python, server] = process.argv.slice(2);
 // A standalone run supplies DSH_AGENT_PACKAGE and no GRAPHTRAJ_* variable (383).
-if (!process.env.DSH_AGENT_PACKAGE) process.env.GRAPHTRAJ_DSH_PACKAGE = nativePackage;
+if (!process.env.DSH_AGENT_PACKAGE) process.env.GRAFTLING_DSH_PACKAGE = nativePackage;
 const require = createRequire(nativePackage);
 const load = name => import(pathToFileURL(require.resolve(name)));
 const { Context } = await load('@deepseek-ai/cordis');
@@ -36,11 +36,11 @@ try {
   await ctx.plugin(DeepSeekLlmApiExtensionRegistry).await();
   await ctx.plugin(inventory, {}).await();
   const extension = await ctx.deepseekLlmApiExtensions.prepare({ body: {}, signal: new AbortController().signal });
-  // The manifest repeats agent_swarm.__version__ (test_mcp_server_version_is_the_single_package_version).
+  // The manifest repeats graftling.__version__ (test_mcp_server_version_is_the_single_package_version).
   const { version } = JSON.parse(readFileSync(new URL('package.json', pathToFileURL(pluginPath)), 'utf8'));
-  assert.ok(extension.fields.dsh_plugin_packages.packages.some(item => item.name === 'agents-dsh' && item.version === version));
+  assert.ok(extension.fields.dsh_plugin_packages.packages.some(item => item.name === 'graftling-dsh' && item.version === version));
   await ctx.plugin(ClientModuleRegistry).await();
-  const entry = ctx.clientModules.graph().entries.find(row => row.id === 'agents-dsh');
+  const entry = ctx.clientModules.graph().entries.find(row => row.id === 'graftling-dsh');
   assert.ok(entry);
   const bundle = await ctx.clientModules.fetchBundle(new Request(new URL(entry.url, 'http://fixture/')));
   assert.equal(bundle.status, 200);

@@ -10,10 +10,10 @@ import shutil
 
 import pytest
 
-from agent_swarm.sessions.archive import (
+from graftling.sessions.archive import (
     ArchiveStream, JsonlSessionStore, SessionArchive, archive_path,
 )
-from agent_swarm.sessions.protocol import append_stream_record, native_record
+from graftling.sessions.protocol import append_stream_record, native_record
 
 
 # Native history deliberately differs from tool-call and completion notice order.
@@ -324,7 +324,7 @@ def test_process_exit_keeps_partial_output_and_requires_resolution(tmp_path: Pat
     source = '''
 import json, os, sys
 from pathlib import Path
-from agent_swarm.sessions.archive import JsonlSessionStore, ArchiveStream
+from graftling.sessions.archive import JsonlSessionStore, ArchiveStream
 path, header, event, run = sys.argv[1:]
 store = JsonlSessionStore.create(Path(path), json.loads(header))
 writer = ArchiveStream(store, 'stream', json.loads(event))

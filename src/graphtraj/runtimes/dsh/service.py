@@ -1,6 +1,6 @@
 """GraphTraj error contract over the independent DSH native service."""
 
-from agent_swarm.dsh import DshService as NativeDshService
+from graftling.dsh import DshService as NativeDshService
 from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError
 
 

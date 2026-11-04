@@ -21,13 +21,13 @@ from uuid import uuid4
 import pytest
 import yaml
 
-from agent_swarm import AgentsError, Caller, bind
-from agent_swarm.claude.host import IndependentCalls
-from agent_swarm.codex.host import CodexHost
-from agent_swarm.dsh import execution
-from agent_swarm.dsh.errors import DshError
-from agent_swarm.dsh.service import DshService
-from agent_swarm.dsh.settings import prepare
+from graftling import AgentsError, Caller, bind
+from graftling.claude.host import IndependentCalls
+from graftling.codex.host import CodexHost
+from graftling.dsh import execution
+from graftling.dsh.errors import DshError
+from graftling.dsh.service import DshService
+from graftling.dsh.settings import prepare
 from dsh_standalone_peer import FakeDshService, install_dsh
 from test_codex_independent_control import native_settings  # noqa: F401 - pytest fixture
 
@@ -258,12 +258,12 @@ def test_dsh_child_launch_needs_no_graphtraj_setting(tmp_path: Path, dsh: dict) 
     environment = service.environment
     assert not [name for name in environment if name.startswith('GRAPHTRAJ_')]
     assert environment['DSH_AGENT_PACKAGE'] == str(Path(dsh['executable']).resolve().parent.parent / 'package.json')
-    assert environment['AGENT_SWARM_CONNECTION'].startswith(str(tmp_path / '.scratch'))
+    assert environment['GRAFTLING_CONNECTION'].startswith(str(tmp_path / '.scratch'))
     [plugin] = [row['insert'][0] for row in service.patches
                 if 'insert' in row and row['insert'][0]['id'] == 'agents-mcp']
-    assert Path(plugin['name']) == ROOT / 'src/agent_swarm/dsh/plugin.mjs'
+    assert Path(plugin['name']) == ROOT / 'src/graftling/dsh/plugin.mjs'
     assert plugin['config'] == {'mcpCommand': str(Path(sys.executable).absolute()),
-                                'mcpArgs': ['-I', '-m', 'agent_swarm.mcp']}
+                                'mcpArgs': ['-I', '-m', 'graftling.mcp']}
 
 
 def refusal_cases(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, dsh: dict) -> list[tuple]:
@@ -304,7 +304,7 @@ def test_codex_host_cli_reports_an_unsupported_dsh(tmp_path: Path, native_settin
     old = install_dsh(tmp_path / 'old-dsh', '0.1.9')
     settings = tmp_path / 'settings.json'
     settings.write_text(json.dumps({**native_settings, 'runtimes': {'dsh': {**dsh, 'executable': str(old)}}}))
-    result = subprocess.run([sys.executable, '-m', 'agent_swarm.codex.host', '--settings', str(settings),
+    result = subprocess.run([sys.executable, '-m', 'graftling.codex.host', '--settings', str(settings),
                              '--directory', str(tmp_path / 'host'), 'never runs'],
                             capture_output=True, text=True, timeout=30)
     assert result.returncode == 1, result.stdout + result.stderr
@@ -379,10 +379,10 @@ class NoGraphTraj:
 sys.meta_path.insert(0, NoGraphTraj())
 assert not [name for name in os.environ if name.startswith('GRAPHTRAJ_')]
 from dsh_standalone_peer import FakeDshService, install_dsh
-from agent_swarm.dsh import execution
-from agent_swarm.claude.host import IndependentCalls
-from agent_swarm.codex.host import runtime_drivers
-from agent_swarm.dsh.driver import DshDriver
+from graftling.dsh import execution
+from graftling.claude.host import IndependentCalls
+from graftling.codex.host import runtime_drivers
+from graftling.dsh.driver import DshDriver
 
 execution.DshExecution.service_type = FakeDshService
 work = Path(work)
@@ -417,7 +417,7 @@ plugin = next(row['insert'][0] for row in first.patches if 'insert' in row)
 print(json.dumps({
     'graphtraj_modules': sorted(name for name in sys.modules if name.split('.')[0] == 'graphtraj'),
     'environment': sorted(name for name in first.environment
-                          if name.startswith(('GRAPHTRAJ_', 'DSH_AGENT_PACKAGE', 'AGENT_SWARM_CONNECTION'))),
+                          if name.startswith(('GRAPHTRAJ_', 'DSH_AGENT_PACKAGE', 'GRAFTLING_CONNECTION'))),
     'plugin': plugin,
 }))
 '''
@@ -432,24 +432,24 @@ def test_dsh_child_runs_with_graphtraj_unimportable(tmp_path: Path) -> None:
     assert result.returncode == 0, result.stdout + result.stderr
     evidence = json.loads(result.stdout.splitlines()[-1])
     assert evidence['graphtraj_modules'] == []
-    assert evidence['environment'] == ['AGENT_SWARM_CONNECTION', 'DSH_AGENT_PACKAGE']
-    assert evidence['plugin']['name'] == str(ROOT / 'src/agent_swarm/dsh/plugin.mjs')
-    assert evidence['plugin']['config']['mcpArgs'] == ['-I', '-m', 'agent_swarm.mcp']
+    assert evidence['environment'] == ['GRAFTLING_CONNECTION', 'DSH_AGENT_PACKAGE']
+    assert evidence['plugin']['name'] == str(ROOT / 'src/graftling/dsh/plugin.mjs')
+    assert evidence['plugin']['config']['mcpArgs'] == ['-I', '-m', 'graftling.mcp']
 
 
 def test_the_dsh_mcp_command_serves_without_graphtraj(tmp_path: Path) -> None:
-    """The child's MCP command (python -I -m agent_swarm.mcp) answers with GraphTraj blocked."""
+    """The child's MCP command (python -I -m graftling.mcp) answers with GraphTraj blocked."""
     program = ('import runpy, sys\n'
                'class NoGraphTraj:\n'
                '    def find_spec(self, name, path=None, target=None):\n'
                "        if name.split('.')[0] == 'graphtraj': raise ModuleNotFoundError(name)\n"
                'sys.meta_path.insert(0, NoGraphTraj())\n'
                f'sys.path.insert(0, {str(ROOT / "src")!r})\n'
-               "runpy.run_module('agent_swarm.mcp', run_name='__main__')\n")
+               "runpy.run_module('graftling.mcp', run_name='__main__')\n")
     messages = [{'jsonrpc': '2.0', 'id': 1, 'method': 'initialize', 'params': {}},
                 {'jsonrpc': '2.0', 'id': 2, 'method': 'tools/list', 'params': {}}]
     environment = {name: value for name, value in os.environ.items()
-                   if not name.startswith(('GRAPHTRAJ_', 'AGENT_SWARM_')) and name != 'PYTHONPATH'}
+                   if not name.startswith(('GRAPHTRAJ_', 'GRAFTLING_')) and name != 'PYTHONPATH'}
     result = subprocess.run([sys.executable, '-I', '-c', program], cwd=tmp_path, env=environment,
                             input=''.join(json.dumps(message) + '\n' for message in messages),
                             capture_output=True, text=True, timeout=30)
@@ -467,13 +467,13 @@ def test_delivered_plugin_loads_from_dsh_agent_package_alone(tmp_path: Path) -> 
     environment = {name: value for name, value in os.environ.items() if not name.startswith('GRAPHTRAJ_')}
     result = subprocess.run([
         node, str(ROOT / 'tests/fixtures/dsh_mcp_plugin.mjs'), str(Path(dsh).resolve()),
-        str(ROOT / 'src/agent_swarm/dsh/plugin.mjs'), sys.executable, str(ROOT / 'tests/fixtures/dsh_mcp_server.py'),
+        str(ROOT / 'src/graftling/dsh/plugin.mjs'), sys.executable, str(ROOT / 'tests/fixtures/dsh_mcp_server.py'),
     ], cwd=tmp_path, env={**environment, 'DSH_AGENT_PACKAGE': str(package), 'PYTHONPATH': str(ROOT / 'src')},
         capture_output=True, text=True, timeout=30)
     assert result.returncode == 0, result.stdout + result.stderr
     evidence = json.loads(result.stdout.strip().splitlines()[-1])
     assert evidence['childSourcePreserved']
-    assert evidence['browserEntry'] == 'agents-dsh'
+    assert evidence['browserEntry'] == 'graftling-dsh'
 
 
 @pytest.mark.parametrize('base_url', [None, DECLARED])

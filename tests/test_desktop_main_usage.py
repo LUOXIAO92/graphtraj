@@ -228,7 +228,7 @@ def test_pi_native_entry_exposes_owned_main_and_excludes_plugin_children(tmp_pat
     child = pi_session(tmp_path, monkeypatch, 'pi-child', [])
     assert native('pi', child) == {'source': 'child'}
     # Switch the controlled test caller to the independent human observer seam.
-    for name in ('GRAPHTRAJ_NATIVE_RUNTIME', 'GRAPHTRAJ_NATIVE_SESSION', 'GRAPHTRAJ_NATIVE_SESSION_FILE', 'PI_SUBAGENT_CHILD'):
+    for name in ('GRAFTLING_NATIVE_RUNTIME', 'GRAFTLING_NATIVE_SESSION', 'GRAFTLING_NATIVE_SESSION_FILE', 'PI_SUBAGENT_CHILD'):
         monkeypatch.delenv(name, raising=False)
     monkeypatch.setattr(replacement, 'caller_runtime', lambda: None)
     monkeypatch.setattr('graphtraj.execution.runner_status.caller_runtime', lambda: None)

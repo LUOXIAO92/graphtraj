@@ -12,7 +12,7 @@ let module;
 vm.runInNewContext(readFileSync(clientPath, 'utf8'), { window: { __ModuleLoader__: {
   load(definition) { module = definition; },
 } } });
-assert.equal(module.id, 'agents-dsh');
+assert.equal(module.id, 'graftling-dsh');
 const views = module.factory(name => {
   assert.equal(name, 'react');
   return { createElement: (tag, props, ...children) => ({ tag, props, children }) };

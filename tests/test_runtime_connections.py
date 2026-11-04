@@ -13,7 +13,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from agent_swarm.models import pi_destination
+from graftling.models import pi_destination
 from graphtraj.configuration.project_roles import load_project_roles
 from graphtraj.configuration.role_definitions import resolve_child_role
 from graphtraj.interfaces.local_tool import bind
@@ -360,7 +360,7 @@ def test_dsh_discovery_uses_only_the_host_catalog(
 ) -> None:
     """Native provider failures stay unknown and no Session/prompt method is called."""
     # Discovery reaches DSH through agents' native service.
-    from agent_swarm.dsh import service
+    from graftling.dsh import service
 
     calls = []
 
@@ -926,7 +926,7 @@ def test_host_operation_os_error_keeps_reply_and_logs_traceback(tmp_path, capsys
     import json
     import os
 
-    from agent_swarm import connection  # e1e3e3a moved the request answerer here
+    from graftling import connection  # e1e3e3a moved the request answerer here
 
     (tmp_path / 'request.json').write_text(json.dumps({'operation': 'recover'}))
 

@@ -39,8 +39,8 @@ from pathlib import Path
 where, kind, case = Path(os.environ['TEST_WHERE']), os.environ['TEST_KIND'], os.environ['TEST_CASE']
 faulthandler.dump_traceback_later(HOST_LIMIT - 3, file=open(where / f'dump-{os.getpid()}.txt', 'w'))
 
-import agent_swarm
-from agent_swarm import Caller, bind, handle_request, shutdown
+import graftling
+from graftling import Caller, bind, handle_request, shutdown
 
 shutdown.STOP_SECONDS = float(os.environ.get('TEST_STOP_SECONDS', shutdown.STOP_SECONDS))
 SESSION = os.environ['TEST_SESSION']
@@ -59,7 +59,7 @@ class Driver:
     def __init__(self):
         self.stops, self.attempts = {}, {}
         self.lock = threading.Lock()
-        self.facts = {'module': agent_swarm.__file__, 'agents': []}
+        self.facts = {'module': graftling.__file__, 'agents': []}
 
     def prepare(self, runtime, caller, **options):
         return {'runtime': runtime}
@@ -118,7 +118,7 @@ class Driver:
 driver = Driver()
 
 if kind == 'agents-claude':
-    host = importlib.import_module('agent_swarm.claude.host')
+    host = importlib.import_module('graftling.claude.host')
     host.native_parent = lambda *_, **__: os.getppid()
     host.runtime_drivers = lambda *_: {'claude': driver}
     real_calls, made = host.IndependentCalls, []
@@ -156,7 +156,7 @@ elif kind == 'graphtraj-claude':
     host.serve = serve
     sys.argv = ['host', 'serve', '--config', str(where / 'config.json')]
 else:
-    host = importlib.import_module('agent_swarm.codex.host')
+    host = importlib.import_module('graftling.codex.host')
     host.runtime_drivers = lambda settings, root: settings.pop('runtimes', None) or {'claude': driver}
     if os.environ.get('TEST_RUN_RAISES'):
         base = host.CodexManagedExecution.run

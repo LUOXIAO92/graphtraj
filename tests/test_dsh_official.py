@@ -13,14 +13,14 @@ import pytest
 @pytest.mark.skipif(os.environ.get('TASK334_OFFICIAL_DSH') != '1', reason='Requires assigned official host slot.')
 def test_installed_dsh_model_mcp_and_same_session(tmp_path: Path) -> None:
     """Use the public Agents API and actual installed DSH, with no controlled peer."""
-    from agent_swarm import AgentControl, Caller, bind
-    from agent_swarm.dsh import DshDriver
+    from graftling import AgentControl, Caller, bind
+    from graftling.dsh import DshDriver
 
     assert os.environ.get('DEEPSEEK_API_KEY'), 'The existing named credential must be available.'
     driver = DshDriver(tmp_path, {
         'model': 'deepseek-flash', 'reasoning_effort': None, 'sandbox': 'workspace-write',
         'base_url': 'https://api.deepseek.com/anthropic', 'api_key_env': 'DEEPSEEK_API_KEY',
-        'mcp': {'command': sys.executable, 'args': ['-I', '-m', 'agent_swarm.mcp']},
+        'mcp': {'command': sys.executable, 'args': ['-I', '-m', 'graftling.mcp']},
     })
     control = AgentControl(tmp_path / 'agents', {'dsh': driver})
     call = bind(control, Caller('official-validation', None))
@@ -58,8 +58,8 @@ def test_installed_dsh_model_mcp_and_same_session(tmp_path: Path) -> None:
 @pytest.mark.skipif(not os.environ.get('TASK334_DSH_TRACE'), reason='Requires one explicitly retained native trace.')
 def test_retained_official_trace_messages(tmp_path: Path) -> None:
     """Compare the actual native projection and JSONL archive without more turns."""
-    from agent_swarm.sessions.dsh import collect_jsonl
-    from agent_swarm.sessions.archive import SessionArchive
+    from graftling.sessions.dsh import collect_jsonl
+    from graftling.sessions.archive import SessionArchive
 
     trace = Path(os.environ['TASK334_DSH_TRACE'])
     header, *events = [json.loads(line) for line in trace.read_text().splitlines()]
@@ -81,13 +81,13 @@ def test_actual_client_interrupt_and_memory(tmp_path: Path) -> None:
     """Capture the official browser and interrupt one real tool before resuming."""
     import time
     from playwright.sync_api import sync_playwright
-    from agent_swarm import AgentControl, Caller, bind
-    from agent_swarm.dsh import DshDriver
+    from graftling import AgentControl, Caller, bind
+    from graftling.dsh import DshDriver
 
     driver = DshDriver(tmp_path, {
         'model': 'deepseek-flash', 'reasoning_effort': None, 'sandbox': 'workspace-write',
         'base_url': 'https://api.deepseek.com/anthropic', 'api_key_env': 'DEEPSEEK_API_KEY',
-        'mcp': {'command': sys.executable, 'args': ['-I', '-m', 'agent_swarm.mcp']},
+        'mcp': {'command': sys.executable, 'args': ['-I', '-m', 'graftling.mcp']},
     })
     control = AgentControl(tmp_path / 'agents', {'dsh': driver})
     call = bind(control, Caller('official-final-validation', None))
@@ -160,8 +160,8 @@ def test_actual_client_interrupt_and_memory(tmp_path: Path) -> None:
 @pytest.mark.skipif(not os.environ.get('TASK334_INTERRUPTED_ROOT'), reason='Requires retained interrupted official Session.')
 def test_continue_actual_interrupted_session() -> None:
     """Resume the interrupted execution through public control, without repeating it."""
-    from agent_swarm import AgentControl, Caller, bind
-    from agent_swarm.dsh import DshDriver
+    from graftling import AgentControl, Caller, bind
+    from graftling.dsh import DshDriver
 
     root = Path(os.environ['TASK334_INTERRUPTED_ROOT'])
     # Read only the explicitly assigned validation Agent's own retained record.
@@ -210,9 +210,9 @@ def test_actual_initial_tool_catalog() -> None:
 def test_actual_pi_reply_resumes_standby_dsh() -> None:
     """Use the existing verified controller caller for one Pi child and its reply."""
     import time
-    from agent_swarm import AgentControl, Caller, bind
-    from agent_swarm.dsh import DshDriver
-    from agent_swarm.pi import PiDriver
+    from graftling import AgentControl, Caller, bind
+    from graftling.dsh import DshDriver
+    from graftling.pi import PiDriver
 
     assert time.time() < float(os.environ['TASK334_UI_DEADLINE']), 'The authorized UI window has ended.'
     root = Path(os.environ['TASK334_CROSS_ROOT'])

@@ -181,7 +181,7 @@ def main() -> None:
             dialog.clear()
             answers.clear()
             emit({'type': 'extension_ui_request', 'id': 'native-dialog-1', 'method': 'confirm',
-                  'title': os.environ.get('AGENT_SWARM_PI_REVIEW', '') if kind == 'review' else 'Allow?',
+                  'title': os.environ.get('GRAFTLING_PI_REVIEW', '') if kind == 'review' else 'Allow?',
                   'message': json.dumps({'tool': 'write', 'call_id': 'call-1', 'input': {'path': target}})})
             dialog.wait(30)
             reviewed = 'blocked'
@@ -319,7 +319,7 @@ def main() -> None:
             dialog.set()
             continue
         elif kind == 'get_commands':
-            hook = (os.environ.get('AGENT_SWARM_PI_REVIEW') and '--extension' in sys.argv
+            hook = (os.environ.get('GRAFTLING_PI_REVIEW') and '--extension' in sys.argv
                     and not os.environ.get('PI_FIXTURE_NO_REVIEW_HOOK'))
             response['data'] = {'commands': [{
                 'name': 'agents-review-hook', 'source': 'extension',

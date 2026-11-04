@@ -22,7 +22,7 @@ from graphtraj.runtimes.codex import finalize
 from graphtraj.runtimes.codex.app_server import CodexAppServer, CodexServerRequest
 from graphtraj.runtimes.codex.stop_hook import main as stop_hook
 from graphtraj.runtimes.runtime_adapter import CheckUsage, finalize_usage, select_runtime_adapter
-from agent_swarm.sessions.archive import JsonlSessionStore, archive_path
+from graftling.sessions.archive import JsonlSessionStore, archive_path
 from graphtraj.interfaces.agents import swarm_root
 
 
@@ -462,7 +462,7 @@ def test_checker_rejects_retired_native_tools(
     assert stop(binding)['systemMessage']
     reply = json.loads((root / 'tool-reply.json').read_text())
     assert reply['result']['success'] is allowed
-    from agent_swarm.sessions.protocol import native_record
+    from graftling.sessions.protocol import native_record
 
     archive = JsonlSessionStore(archive_path(swarm_root(root), 'codex:checker'))
     records = [native_record(event) for event in archive.page()['events']]
@@ -694,7 +694,7 @@ def test_checker_approval_is_left_to_its_native_owner(host: tuple[Path, Path]) -
     assert 'Completion Check · completed' in result['systemMessage']
     wire = [json.loads(line) for line in (root / 'wire.jsonl').read_text().splitlines()]
     assert not any(item.get('id') == 'checker-approval' for item in wire)
-    from agent_swarm.sessions.protocol import native_record
+    from graftling.sessions.protocol import native_record
 
     archive = JsonlSessionStore(archive_path(swarm_root(root), 'codex:checker'))
     records = [native_record(event) for event in archive.page()['events']]
@@ -905,7 +905,7 @@ def test_native_start_resume_and_stop_need_no_main_binding_input(host: tuple[Pat
     assert len(forks) == 1
     assert forks[0]['config']['model_reasoning_effort'] == 'high'
     assert [r['params']['threadId'] for r in wire if r['method'] == 'turn/start'] == ['checker']
-    from agent_swarm.sessions.protocol import native_record
+    from graftling.sessions.protocol import native_record
 
     state = root / '.graphtraj/state'
     archive = JsonlSessionStore(archive_path(swarm_root(root), 'codex:main'))
@@ -975,7 +975,7 @@ def test_native_start_selects_harness_for_external_cwd(
 
 def test_native_session_end_archives_terminal_tail_without_checking(host: tuple[Path, Path]) -> None:
     """The native shutdown flush exposes records written after the Stop hook."""
-    from agent_swarm.sessions.protocol import native_record
+    from graftling.sessions.protocol import native_record
 
     root, _ = host
     rollout(root)
@@ -996,8 +996,8 @@ def test_stop_checks_after_the_session_moves_to_a_new_rollout(host: tuple[Path, 
     The first file's byte cursor lands inside a record of the new file, which
     used to fail every later Stop with a bare JSON decode error.
     """
-    from agent_swarm import write_config
-    from agent_swarm.sessions.protocol import native_record
+    from graftling import write_config
+    from graftling.sessions.protocol import native_record
 
     root, binding = host
     binding.unlink()
@@ -1020,7 +1020,7 @@ def test_stop_checks_after_the_session_moves_to_a_new_rollout(host: tuple[Path, 
     with moved.open('a') as stream:
         stream.write(json.dumps(done) + '\n')
     assert native_hook(root, 'SessionEnd', transcript_path=str(moved)) == {}
-    from agent_swarm.sessions.archive import SessionArchive
+    from graftling.sessions.archive import SessionArchive
 
     archive = SessionArchive(swarm_root(root))
     store = JsonlSessionStore(archive_path(archive.root, archive.native_id('codex', 'main')))
@@ -1033,7 +1033,7 @@ def test_stop_checks_after_the_session_moves_to_a_new_rollout(host: tuple[Path, 
 
 def test_external_hook_remembers_saving_boundary_across_invocations(host: tuple[Path, Path]) -> None:
     """A later hook cannot silently backfill the time when collection was off."""
-    from agent_swarm import write_config
+    from graftling import write_config
 
     root, _ = host
     rollout(root)
@@ -1060,11 +1060,11 @@ def test_external_hook_remembers_saving_boundary_across_invocations(host: tuple[
 def test_native_copied_fork_keeps_own_first_header(host: tuple[Path, Path]) -> None:
     """An inherited Main header cannot replace the current fork's native identity."""
     from graphtraj.execution.main_finalize import session_binding
-    from agent_swarm.sessions.protocol import native_record
+    from graftling.sessions.protocol import native_record
 
     root, binding = host
     original = binding.read_bytes()
-    from agent_swarm import write_config
+    from graftling import write_config
 
     write_config(swarm_root(root), save_normalized_sessions=True, backfill_history=True)
     (root / 'options.json').write_text(json.dumps({'read_id_from_request': True}))
@@ -1166,7 +1166,7 @@ def test_external_checker_cli_identity_needs_metadata_not_rollout(
     connection_fails: bool,
 ) -> None:
     """The real agents CLI verifies its native thread before any target lookup, without history."""
-    from agent_swarm.cli import main as agents_cli
+    from graftling.cli import main as agents_cli
     from graphtraj.runtimes import runtime_adapter
     from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError
 
@@ -1185,7 +1185,7 @@ def test_external_checker_cli_identity_needs_metadata_not_rollout(
                                       'Codex WebSocket Upgrade failed: Connection lost')
         monkeypatch.setattr(finalize, 'proxy', failed_proxy)
     monkeypatch.chdir(root)
-    monkeypatch.delenv('AGENT_SWARM_CONNECTION', raising=False)
+    monkeypatch.delenv('GRAFTLING_CONNECTION', raising=False)
     monkeypatch.setattr(sys, 'argv', ['agents', json.dumps({
         'action': 'execute', 'feature': 'status', 'arguments': {'agent': 'requested-current-alias'},
     })])
@@ -2024,7 +2024,7 @@ def test_ephemeral_fork_excluded_history_is_unknown_not_an_empty_seed(
     host: tuple[Path, Path], history_mode: str | None,
 ) -> None:
     """A valid checker can run without claiming the excluded inherited prefix."""
-    from agent_swarm.sessions.protocol import native_record
+    from graftling.sessions.protocol import native_record
 
     root, binding = host
     binding.unlink()

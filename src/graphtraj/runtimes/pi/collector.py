@@ -16,7 +16,7 @@ import sys
 import time
 import uuid
 
-from agent_swarm.sessions import SESSION_FORMAT_VERSION, retain_native
+from graftling.sessions import SESSION_FORMAT_VERSION, retain_native
 from graphtraj.interfaces.agents import graphtraj_fields
 from graphtraj.sessions.storage import SessionStore, StreamWriter, session_path
 
@@ -482,9 +482,9 @@ def collect_stdio() -> None:
     elif source != 'child':
         raise ValueError('Unknown Pi collection source.')
     configuration = load_project_configuration(cwd)
-    from agent_swarm import default_config
+    from graftling import default_config
     from graphtraj.interfaces.agents import attachment_private_paths, swarm_root
-    from agent_swarm.sessions import PiArchive, SessionArchive
+    from graftling.sessions import PiArchive, SessionArchive
 
     root = swarm_root(configuration.harness_root)
     archive = SessionArchive(root, **default_config(root, save_normalized_sessions=True))

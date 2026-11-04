@@ -16,7 +16,7 @@ from pathlib import Path
 
 from graphtraj.interfaces.agents import graphtraj_fields
 from graphtraj.sessions.storage import SessionStore, session_path
-from agent_swarm.sessions import (
+from graftling.sessions import (
     DshArchive,
     DshLiveFrames,
     SessionArchive,

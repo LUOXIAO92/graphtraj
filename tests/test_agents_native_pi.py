@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from agent_swarm import Caller, write_config
+from graftling import Caller, write_config
 from graphtraj.configuration.project_configuration import default_configuration_content
 from graphtraj.interfaces.agents import agents_callback, swarm_root
 from test_pi_runtime import pi_environment  # noqa: F401

@@ -3,7 +3,7 @@ import { createRequire } from 'node:module';
 import { pathToFileURL } from 'node:url';
 import { spawn } from 'node:child_process';
 import { installCollection } from './collection.mjs';
-import { sessionEnvironment as nativeSessionEnvironment } from '../../../agent_swarm/dsh/plugin.mjs';
+import { sessionEnvironment as nativeSessionEnvironment } from '../../../graftling/dsh/plugin.mjs';
 
 const require = createRequire(process.env.GRAPHTRAJ_DSH_PACKAGE || process.argv[1]);
 const { default: z } = await import(pathToFileURL(require.resolve('@deepseek-ai/schemastery')));

@@ -22,10 +22,10 @@ import threading
 from typing import Callable, TextIO
 from uuid import UUID
 
-from agent_swarm.claude import (REFUSAL_FILE, NativeCalls as NativeCallsBase, claim_channel, claude_host_plugin,
+from graftling.claude import (REFUSAL_FILE, NativeCalls as NativeCallsBase, claim_channel, claude_host_plugin,
                                 context_endpoint, ended_by_claude, kept_host_paths, log_replaced_channel,
                                 require_free_channel, serve_refusal, write_adoption)
-from agent_swarm import (AgentsError, AgentsResult, Caller, bind, connection_operation, exit_if_owned_unconfirmed,
+from graftling import (AgentsError, AgentsResult, Caller, bind, connection_operation, exit_if_owned_unconfirmed,
                          handle_request, on_discard, process_ancestors, stop_owned, stop_requested, worker_connection)
 from graphtraj.configuration.project_configuration import runner_directory
 from graphtraj.execution.runner_process import process_executable
@@ -204,8 +204,8 @@ def adoption_material(root: Path, claude: Path) -> dict[str, object]:
             'args': ['-m', 'graphtraj.runtimes.claude.host', 'serve', '--config', str(config)],
         }}},
         (root / '.claude' / 'settings.local.json').as_posix(): {'env': {
-            'GRAPHTRAJ_CLAUDE_HOST_PYTHON': str(python),
-            'GRAPHTRAJ_CLAUDE_HOST_CONFIG': str(config),
+            'GRAFTLING_CLAUDE_HOST_PYTHON': str(python),
+            'GRAFTLING_CLAUDE_HOST_CONFIG': str(config),
         }},
         **claude_host_plugin(plugin, 'graphtraj-claude-host',
                              'GraphTraj Main host context for the agents and tasks MCP entries.', ADDED_TOOLS),
@@ -268,7 +268,7 @@ def main() -> None:
     directory = channel_file.parent
     try:
         parent = native_parent(executable)
-        if 'AGENT_SWARM_CONNECTION' in os.environ or 'GRAPHTRAJ_CLI_CONNECTION' in os.environ:
+        if 'GRAFTLING_CONNECTION' in os.environ or 'GRAPHTRAJ_CLI_CONNECTION' in os.environ:
             raise AgentsError('authority-denied', 'A bound child must use its existing owner, not adopt Main.')
         if Path.cwd().resolve() != cwd.resolve():
             raise ValueError(f'Claude Code was started in {Path.cwd().resolve()}, but this host is configured '

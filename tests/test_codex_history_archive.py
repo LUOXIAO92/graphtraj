@@ -6,11 +6,11 @@ from pathlib import Path
 
 import pytest
 
-from agent_swarm import write_config
+from graftling import write_config
 from graphtraj.interfaces.agents import ConfiguredSessionArchive
 from graphtraj.runtimes.codex.app_server import CodexAppServer
-from agent_swarm.sessions.archive import JsonlSessionStore, archive_path
-from agent_swarm.sessions.protocol import native_record
+from graftling.sessions.archive import JsonlSessionStore, archive_path
+from graftling.sessions.protocol import native_record
 from test_codex_app_server import peer  # noqa: F401
 
 
@@ -79,8 +79,8 @@ def test_ephemeral_saving_and_backfill_are_effective(tmp_path: Path, peer: Path)
 def test_rejected_session_does_not_register_an_archive_source(tmp_path: Path, peer: Path) -> None:
     """Ownership rejection must precede the collector's public mapping side effect."""
     from graphtraj.runtimes.codex.app_server import CodexSession
-    from agent_swarm.runtime import RuntimeAdapterError
-    from agent_swarm.sessions.archive import SessionArchive
+    from graftling.runtime import RuntimeAdapterError
+    from graftling.sessions.archive import SessionArchive
 
     async def exercise() -> None:
         """Use the public native control and archive capabilities."""

@@ -1,10 +1,10 @@
 /** Pi's session-local GraphTraj entry; loading this file is a native trust step. */
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-// A supported agent-swarm distribution (the range in pyproject.toml) installs beside this package.
-import { loadHostSdk, registerAgents, sessionEnvironment } from '../../../agent_swarm/pi/extension.mjs';
+// A supported graftling distribution (the range in pyproject.toml) installs beside this package.
+import { loadHostSdk, registerAgents, sessionEnvironment } from '../../../graftling/pi/extension.mjs';
 
-export { loadHostSdk, registerAgentDisplay, sessionEnvironment, startAgentHost } from '../../../agent_swarm/pi/extension.mjs';
+export { loadHostSdk, registerAgentDisplay, sessionEnvironment, startAgentHost } from '../../../graftling/pi/extension.mjs';
 
 /** Use a child-process overlay; never change the shared host's process.env. */
 export function nativeEntry(ctx, environment, event, signal) {
@@ -91,7 +91,8 @@ function quote(value) {
 export default function graphtraj(pi) {
   const sessions = new WeakMap();
   const collectors = new WeakMap();
-  const agents = registerAgents(pi);
+  // Members reach agents through GraphTraj's own MCP server as well.
+  const agents = registerAgents(pi, { displayServers: ['graphtraj', 'agents'] });
   const independent = agents.independent;
   // One notice loop for the Session currently associated as Main; a later
   // session_start or shutdown ends the earlier loop.
@@ -114,7 +115,7 @@ export default function graphtraj(pi) {
     // A GraphTraj-bound Session keeps its GraphTraj owner: it adopts neither
     // an inherited independent connection nor a standalone agents host.
     if (Object.hasOwn(process.env, 'GRAPHTRAJ_CLI_CONNECTION')) {
-      if (Object.hasOwn(process.env, 'AGENT_SWARM_CONNECTION')) {
+      if (Object.hasOwn(process.env, 'GRAFTLING_CONNECTION')) {
         throw new Error('Conflicting existing Agent connections; no identity was adopted.');
       }
       if (pi.getFlag?.('agents-config')) {
@@ -176,8 +177,8 @@ export default function graphtraj(pi) {
     const markers = ctx.sessionManager.getEntries();
     if (environment.PI_SUBAGENT_CHILD === '1' || Number(environment.PI_SUBAGENT_DEPTH) > 0 ||
         markers.some(entry => entry.type === 'custom' && (
-          entry.customType === 'graphtraj:completion-checker' && entry.data?.session === environment.GRAPHTRAJ_NATIVE_SESSION ||
-          entry.customType === 'pi-subagent:delegation' && entry.data?.childSessionId === environment.GRAPHTRAJ_NATIVE_SESSION
+          entry.customType === 'graphtraj:completion-checker' && entry.data?.session === environment.GRAFTLING_NATIVE_SESSION ||
+          entry.customType === 'pi-subagent:delegation' && entry.data?.childSessionId === environment.GRAFTLING_NATIVE_SESSION
         ))) return;
     ctx.ui.notify('GraphTraj completion check started.', 'info');
     let checker;

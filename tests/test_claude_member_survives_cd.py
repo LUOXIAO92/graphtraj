@@ -11,11 +11,11 @@ from uuid import uuid4
 
 import pytest
 
-from agent_swarm import AgentControl, AgentsError, AgentsResult, Caller, bind, read_session, write_config
-from agent_swarm.claude import NativeCalls, hook_source
-from agent_swarm.claude.collection import collect_hook_event
-from agent_swarm.claude.driver import ClaudeDriver
-from agent_swarm.sessions.archive import SessionArchive, archive_path
+from graftling import AgentControl, AgentsError, AgentsResult, Caller, bind, read_session, write_config
+from graftling.claude import NativeCalls, hook_source
+from graftling.claude.collection import collect_hook_event
+from graftling.claude.driver import ClaudeDriver
+from graftling.sessions.archive import SessionArchive, archive_path
 from test_claude_runtime import claude_environment  # noqa: F401 - pytest fixture
 
 

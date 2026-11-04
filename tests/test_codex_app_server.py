@@ -153,7 +153,7 @@ def test_terminal_trace_link_failure_keeps_confirmed_execution_status(
 ) -> None:
     """A post-terminal Trace failure keeps the native execution confirmation."""
 
-    from agent_swarm.codex import trace
+    from graftling.codex import trace
 
     original_link = trace._link_native_trace
     failing = False
@@ -205,7 +205,7 @@ def test_trace_collects_delayed_writes_without_reopening_unchanged_archive(
 ) -> None:
     """Silent delayed writes, partial lines and shutdown tails remain collectible."""
     from graphtraj.runtimes.codex.session_archive import CodexSessionArchive
-    from agent_swarm.sessions.protocol import native_record
+    from graftling.sessions.protocol import native_record
     from graphtraj.sessions.storage import SessionStore
 
     class CountedArchive(CodexSessionArchive):

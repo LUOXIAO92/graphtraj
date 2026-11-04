@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "graftling"
+dynamic = ["version"]
+description = "Independent native Agent control and optional native Session archives."
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "PyYAML>=6,<7",
+    "websockets>=15,<17",
+]
+
+[project.scripts]
+agents = "graftling.cli:main"
+agents-mcp = "graftling.mcp:main"
+
+[tool.setuptools]
+packages = ["graftling", "graftling.dsh", "graftling.claude", "graftling.pi", "graftling.codex",
+            "graftling.sessions"]
+package-dir = {graftling = "."}
+
+[tool.setuptools.dynamic]
+version = {attr = "graftling.__version__"}
+
+[tool.setuptools.package-data]
+graftling = ["PUBLIC_API.md", "README.md", "CHANGELOG.md", "install/*.md", "dsh/*.mjs", "dsh/package.json", "dsh/dsh.patch.yml", "claude/*.mjs", "pi/*.mjs", "pi/package.json", "sessions/DSH-LICENSE",
+               "review_policy/*"]

@@ -33,7 +33,7 @@ def test_delivered_plugin_native_scopes(tmp_path: Path) -> None:
     root = Path(__file__).resolve().parents[1]
     result = subprocess.run([
         node, str(root / 'tests/fixtures/dsh_mcp_plugin.mjs'), str(Path(dsh).resolve()),
-        str(root / 'src/agent_swarm/dsh/plugin.mjs'), sys.executable,
+        str(root / 'src/graftling/dsh/plugin.mjs'), sys.executable,
         str(root / 'tests/fixtures/dsh_mcp_server.py'),
     ], cwd=tmp_path, env={**os.environ,
         'GRAPHTRAJ_CLI_CONNECTION': 'controlled-unused', 'GRAPHTRAJ_DSH_AGENTS_ONLY': '1',
@@ -42,7 +42,7 @@ def test_delivered_plugin_native_scopes(tmp_path: Path) -> None:
     assert result.returncode == 0, result.stdout + result.stderr
     evidence = json.loads(result.stdout.strip().splitlines()[-1])
     assert evidence['childSourcePreserved']
-    assert evidence['browserEntry'] == 'agents-dsh'
+    assert evidence['browserEntry'] == 'graftling-dsh'
 
 
 @pytest.mark.parametrize("registration_order", ["ready", "delayed"])
@@ -59,7 +59,7 @@ def test_browser_tool_view_preserves_model_content(registration_order: str) -> N
     root = Path(__file__).resolve().parents[1]
     result = subprocess.run([
         node, str(root / 'tests/fixtures/dsh_client_view.mjs'),
-        str(root / 'src/agent_swarm/dsh/client.mjs'), str(Path(dsh).resolve()),
+        str(root / 'src/graftling/dsh/client.mjs'), str(Path(dsh).resolve()),
         registration_order,
     ], capture_output=True, text=True, timeout=10)
     assert result.returncode == 0, result.stdout + result.stderr

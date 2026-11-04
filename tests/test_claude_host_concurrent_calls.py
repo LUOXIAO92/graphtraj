@@ -16,7 +16,7 @@ from uuid import uuid4
 import pytest
 import yaml
 
-from agent_swarm import AgentsError, AgentsResult
+from graftling import AgentsError, AgentsResult
 from conftest import run_process
 from graphtraj.execution.approved_recovery import review_proposal
 from graphtraj.runtimes.claude.host import NativeCalls, adoption_material
@@ -24,7 +24,7 @@ from graphtraj.runtimes.claude.mcp import serve
 from test_task_integration import accepted_document  # noqa: F401  (fixture)
 
 try:
-    from agent_swarm.calls import Call, CallCancelled, current_call, on_discard, pause, run_stoppable
+    from graftling.calls import Call, CallCancelled, current_call, on_discard, pause, run_stoppable
 except ImportError:  # The code before 404: the tests below fail by behaviour, not by import.
     Call = CallCancelled = current_call = on_discard = run_stoppable = None
     pause = time.sleep
@@ -111,7 +111,7 @@ def test_short_call_returns_while_a_long_call_runs(clients, tmp_path: Path) -> N
 
 def test_independent_host_uses_the_concurrent_loop(tmp_path: Path) -> None:
     """The independent host's entry serves its calls the same way."""
-    from agent_swarm.mcp import respond, result_response, serve_concurrent, tool_documents
+    from graftling.mcp import respond, result_response, serve_concurrent, tool_documents
 
     release = threading.Event()
     native = blocked_until(release)
@@ -207,7 +207,7 @@ def test_input_eof_wakes_every_wait_and_the_host_returns(tmp_path: Path) -> None
 
 def test_call_that_ignores_its_stop_cannot_hold_the_host_past_close(tmp_path: Path, monkeypatch, capfd) -> None:
     """EOF ends serve within its bound, so the host's shutdown still removes its channel file."""
-    from agent_swarm import mcp as agents_mcp
+    from graftling import mcp as agents_mcp
 
     monkeypatch.setattr(agents_mcp, 'CLOSE_SECONDS', 0.2, raising=False)
     release, started = threading.Event(), threading.Event()
@@ -751,7 +751,7 @@ def test_cancelled_main_call_does_not_lose_its_notices(tmp_path: Path) -> None:
 
 def test_independent_host_restores_a_discarded_results_notices(tmp_path: Path) -> None:
     """What a result carried or showed is held and queued again when it is never read."""
-    from agent_swarm.claude.host import IndependentCalls
+    from graftling.claude.host import IndependentCalls
 
     settled = []
 

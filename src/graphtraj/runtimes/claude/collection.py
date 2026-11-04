@@ -12,11 +12,11 @@ import json
 from pathlib import Path
 import time
 
-from agent_swarm.sessions import SESSION_FORMAT_VERSION, retain_native
+from graftling.sessions import SESSION_FORMAT_VERSION, retain_native
 from graphtraj.sessions.storage import SessionStore, StreamWriter, session_path
 
 
-from agent_swarm.claude import collect_hook_event, hook_source
+from graftling.claude import collect_hook_event, hook_source
 from graphtraj.interfaces.agents import graphtraj_fields
 
 

@@ -843,7 +843,7 @@ def test_real_claude_archive_public_query(
 AGENTS_INTERRUPT = """
 import json, sys
 from pathlib import Path
-from agent_swarm import AgentsError, Binding, Caller
+from graftling import AgentsError, Binding, Caller
 from graphtraj.execution.runner_status import runtime_caller
 from graphtraj.interfaces.agents import GraphTrajAgents
 # The agents action as the human caller that dispatched this root member, or,

@@ -1,0 +1,5 @@
+# The agents host row of the graftling-dsh bundle (`dsh plugin --profile <name> add <this directory>`).
+# Inert unless the DSH process has GRAFTLING_DSH_CONFIG; see PUBLIC_API.md 1.7.
+- insert:
+    - id: agents-host
+      name: graftling-dsh

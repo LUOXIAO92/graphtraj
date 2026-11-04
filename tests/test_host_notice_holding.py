@@ -17,12 +17,12 @@ from uuid import uuid4
 
 import pytest
 
-from agent_swarm import AgentControl, Caller, DECISION_METHOD, ExecutionEvents, Run, bind
-from agent_swarm.calls import Call, current_call, on_discard, stop_requested
-from agent_swarm.claude.host import IndependentCalls
-from agent_swarm.codex.app_server import CodexAdapterError, CodexAppServer
-from agent_swarm.codex.host import CodexHost
-from agent_swarm.mcp import result_response, serve_concurrent
+from graftling import AgentControl, Caller, DECISION_METHOD, ExecutionEvents, Run, bind
+from graftling.calls import Call, current_call, on_discard, stop_requested
+from graftling.claude.host import IndependentCalls
+from graftling.codex.app_server import CodexAdapterError, CodexAppServer
+from graftling.codex.host import CodexHost
+from graftling.mcp import result_response, serve_concurrent
 from test_claude_runtime import claude_environment  # noqa: F401 - pytest fixture
 from test_codex_host_cross_runtime import Running, events, host_settings, until  # noqa: F401
 from test_codex_independent_control import native_settings  # noqa: F401 - pytest fixture
@@ -694,7 +694,7 @@ def test_a_result_sent_to_a_client_already_gone_gives_its_notices_back() -> None
 def test_the_mod_acknowledges_a_submission_and_survives_its_failure(tmp_path: Path) -> None:
     """A failed acknowledgement neither requeues nor submits a second prompt."""
     module = tmp_path / 'host_context.mjs'
-    module.write_text(Path('src/agent_swarm/claude/host_context.mjs').read_text())
+    module.write_text(Path('src/graftling/claude/host_context.mjs').read_text())
     program = r'''
 import assert from 'node:assert/strict';
 const {register} = await import(process.argv[1]);

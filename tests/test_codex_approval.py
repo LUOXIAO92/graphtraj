@@ -14,7 +14,7 @@ from urllib.error import HTTPError
 import pytest
 import yaml
 
-from agent_swarm.child_env import CODEX_SHELL_EXCLUDE
+from graftling.child_env import CODEX_SHELL_EXCLUDE
 from graphtraj.configuration.project_configuration import (
     DEFAULT_CONFIG_CONTENT,
     ProjectConfigurationError,

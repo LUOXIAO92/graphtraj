@@ -13,8 +13,8 @@ import time
 
 import pytest
 
-from agent_swarm import AgentControl, AgentsError, Caller, bind
-from agent_swarm.dsh import host
+from graftling import AgentControl, AgentsError, Caller, bind
+from graftling.dsh import host
 
 
 SOURCE = Path(__file__).resolve().parents[1] / 'src'
@@ -103,10 +103,10 @@ class Fake:
 def fakes(monkeypatch: pytest.MonkeyPatch) -> dict:
     """Replace the public driver constructors the host uses."""
     made: dict = {}
-    for runtime, name, module in (('claude', 'ClaudeDriver', 'agent_swarm.claude.driver'),
-                                  ('codex', 'CodexDriver', 'agent_swarm.codex.driver'),
-                                  ('dsh', 'DshDriver', 'agent_swarm.dsh.driver'),
-                                  ('pi', 'PiDriver', 'agent_swarm.pi.driver')):
+    for runtime, name, module in (('claude', 'ClaudeDriver', 'graftling.claude.driver'),
+                                  ('codex', 'CodexDriver', 'graftling.codex.driver'),
+                                  ('dsh', 'DshDriver', 'graftling.dsh.driver'),
+                                  ('pi', 'PiDriver', 'graftling.pi.driver')):
         def factory(*arguments, runtime=runtime):
             made[runtime] = Fake(runtime, *arguments)
             return made[runtime]
@@ -302,7 +302,7 @@ def test_ask_parent_reaches_the_main_once_without_its_question(tmp_path: Path, f
 # does, so the host's kernel parent is this script run by the test's Python.
 FAKE_DSH = '''
 import json, os, subprocess, sys
-host = subprocess.Popen([sys.executable, '-m', 'agent_swarm.dsh.host', '--config', os.environ['TEST_CONFIG']],
+host = subprocess.Popen([sys.executable, '-m', 'graftling.dsh.host', '--config', os.environ['TEST_CONFIG']],
                         stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
 host.stdin.write(os.environ['TEST_LAUNCH'] + '\\n')
 host.stdin.flush()
@@ -311,8 +311,8 @@ calls = []
 if first:
     address = json.loads(first)['connection']
     for session in ('dsh-main', 'other-session'):
-        env = {**os.environ, 'AGENT_SWARM_CONNECTION': address, 'DSH_SESSION_ID': session, 'DSH_AGENT_SOURCE': 'main'}
-        done = subprocess.run([sys.executable, '-m', 'agent_swarm.cli', json.dumps({'action': 'discover'})],
+        env = {**os.environ, 'GRAFTLING_CONNECTION': address, 'DSH_SESSION_ID': session, 'DSH_AGENT_SOURCE': 'main'}
+        done = subprocess.run([sys.executable, '-m', 'graftling.cli', json.dumps({'action': 'discover'})],
                               env=env, capture_output=True, text=True)
         calls.append([done.returncode, done.stdout])
 host.stdin.close()
@@ -335,8 +335,8 @@ def run_host(tmp_path: Path, configuration: dict, launch: dict | None = None, **
     entry = fake_dsh(tmp_path)
     (tmp_path / 'host.json').write_text(json.dumps(configuration))
     env = {key: value for key, value in os.environ.items()
-           if key not in {'AGENT_SWARM_CONNECTION', 'DSH_SESSION_ID', 'DSH_AGENT_SOURCE'}}
-    env.update(AGENT_SWARM_DSH_NODE=sys.executable, AGENT_SWARM_DSH_ENTRY=str(entry),
+           if key not in {'GRAFTLING_CONNECTION', 'DSH_SESSION_ID', 'DSH_AGENT_SOURCE'}}
+    env.update(GRAFTLING_DSH_NODE=sys.executable, GRAFTLING_DSH_ENTRY=str(entry),
                TEST_CONFIG=str(tmp_path / 'host.json'), PYTHONPATH=str(SOURCE),
                TEST_LAUNCH=json.dumps(launch or {'header': header(tmp_path), 'model': 'deepseek-parent'}),
                **environment)
@@ -367,7 +367,7 @@ def test_host_start_refusals(tmp_path: Path) -> None:
     assert refused({'root': str(data), 'roles': {}})['code'] == 'invalid-config'
     assert 'native DSH main Session' in refused(
         {'root': str(data)}, {'header': header(tmp_path, origin='subagent')})['message']
-    assert 'already-bound child' in refused({'root': str(data)}, AGENT_SWARM_CONNECTION='/x')['message']
+    assert 'already-bound child' in refused({'root': str(data)}, GRAFTLING_CONNECTION='/x')['message']
     data.mkdir()
     (data / 'config.yml').write_text('connections:\n  d:\n    runtime: dsh\n    api_key_env: AGENTS_383_UNSET\n')
     assert refused({'root': str(data), 'dsh': {'executable': sys.executable}})['code'] == 'runtime-unavailable'
@@ -388,9 +388,9 @@ def test_host_refuses_a_parent_that_is_not_the_native_dsh(tmp_path: Path) -> Non
     entry = fake_dsh(tmp_path)
     (tmp_path / 'host.json').write_text(json.dumps({'root': str(tmp_path / 'data')}))
     env = {key: value for key, value in os.environ.items()
-           if key not in {'AGENT_SWARM_CONNECTION', 'DSH_SESSION_ID', 'DSH_AGENT_SOURCE'}}
-    env.update(AGENT_SWARM_DSH_NODE=sys.executable, AGENT_SWARM_DSH_ENTRY=str(entry), PYTHONPATH=str(SOURCE))
-    result = subprocess.run([sys.executable, '-m', 'agent_swarm.dsh.host', '--config', str(tmp_path / 'host.json')],
+           if key not in {'GRAFTLING_CONNECTION', 'DSH_SESSION_ID', 'DSH_AGENT_SOURCE'}}
+    env.update(GRAFTLING_DSH_NODE=sys.executable, GRAFTLING_DSH_ENTRY=str(entry), PYTHONPATH=str(SOURCE))
+    result = subprocess.run([sys.executable, '-m', 'graftling.dsh.host', '--config', str(tmp_path / 'host.json')],
                             cwd=tmp_path, env=env, input=json.dumps({'header': header(tmp_path)}) + '\n',
                             capture_output=True, text=True, timeout=30)
     assert result.returncode == 1 and result.stdout == ''
@@ -399,10 +399,10 @@ def test_host_refuses_a_parent_that_is_not_the_native_dsh(tmp_path: Path) -> Non
 
 def test_dsh_package_declares_the_host_bundle() -> None:
     """``dsh plugin add`` reads the bundle patch, which inserts the plugin's host row."""
-    directory = SOURCE / 'agent_swarm' / 'dsh'
+    directory = SOURCE / 'graftling' / 'dsh'
     manifest = json.loads((directory / 'package.json').read_text())
     patch = (directory / manifest['dsh']['bundle']['patch']).read_text()
-    assert 'name: agents-dsh' in patch and 'mcpCommand' not in patch
+    assert 'name: graftling-dsh' in patch and 'mcpCommand' not in patch
     assert manifest['main'] == 'plugin.mjs'
 
 
@@ -460,7 +460,7 @@ for identity, event, message in (('exec-1:completed', 'completed', 'the answer')
 assert sys.stdin.read() == ''
 with open(os.environ['TEST_LOG'], 'w') as log:
     json.dump({'launch': launch, 'environment': {key: os.environ.get(key) for key in (
-        'AGENT_SWARM_DSH_NODE', 'AGENT_SWARM_DSH_ENTRY')}, 'acknowledgements': acknowledgements,
+        'GRAFTLING_DSH_NODE', 'GRAFTLING_DSH_ENTRY')}, 'acknowledgements': acknowledgements,
         'argv': sys.argv[1:]}, log)
 '''
 
@@ -481,10 +481,10 @@ def run_plugin(tmp_path: Path, **environment: str) -> tuple[dict, dict | None]:
     fake.write_text('#!' + sys.executable + '\n' + FAKE_HOST)
     fake.chmod(0o755)
     env = {key: value for key, value in os.environ.items()
-           if key not in {'AGENT_SWARM_CONNECTION', 'DSH_AGENT_PACKAGE', 'GRAPHTRAJ_CLI_CONNECTION'}}
-    env.update(GRAPHTRAJ_DSH_PACKAGE=str(tmp_path / 'stub' / 'entry.js'), AGENT_SWARM_PYTHON=str(fake),
+           if key not in {'GRAFTLING_CONNECTION', 'DSH_AGENT_PACKAGE', 'GRAPHTRAJ_CLI_CONNECTION'}}
+    env.update(GRAFTLING_DSH_PACKAGE=str(tmp_path / 'stub' / 'entry.js'), GRAFTLING_PYTHON=str(fake),
                TEST_LOG=str(tmp_path / 'host.json'), **environment)
-    result = subprocess.run([node, '--input-type=module', '-e', PLUGIN, str(SOURCE / 'agent_swarm/dsh/plugin.mjs')],
+    result = subprocess.run([node, '--input-type=module', '-e', PLUGIN, str(SOURCE / 'graftling/dsh/plugin.mjs')],
                             cwd=tmp_path, env=env, capture_output=True, text=True, timeout=30)
     assert result.returncode == 0, result.stderr
     log = tmp_path / 'host.json'
@@ -493,12 +493,12 @@ def run_plugin(tmp_path: Path, **environment: str) -> tuple[dict, dict | None]:
 
 def test_plugin_host_row_relays_each_notice_to_its_main_session(tmp_path: Path) -> None:
     """Only the main Session gets a host; each notice enters its inbox relay once and is acknowledged."""
-    shown, log = run_plugin(tmp_path, AGENT_SWARM_DSH_CONFIG='/abs/dsh-host.json')
+    shown, log = run_plugin(tmp_path, GRAFTLING_DSH_CONFIG='/abs/dsh-host.json')
     assert [item['id'] for item in shown['attached']] == ['dsh-main']
     options = shown['attached'][0]['options']
-    assert options['serverName'] == 'agents' and options['args'] == ['-I', '-m', 'agent_swarm.mcp']
+    assert options['serverName'] == 'agents' and options['args'] == ['-I', '-m', 'graftling.mcp']
     assert options['env'] == {'DSH_SESSION_ID': 'dsh-main', 'DSH_AGENT_SOURCE': 'main',
-                              'AGENT_SWARM_CONNECTION': '/fake/address'}
+                              'GRAFTLING_CONNECTION': '/fake/address'}
     assert [item['id'] for item in shown['received'][:3]] == [
         'agents-notice:exec-1:completed', 'agents-notice:exec-2:failed', 'agents-notice:exec-3:request:t']
     first = shown['received'][0]
@@ -509,12 +509,12 @@ def test_plugin_host_row_relays_each_notice_to_its_main_session(tmp_path: Path) 
                                        {'ack': 'exec-2:failed', 'shown': False},
                                        {'ack': 'exec-3:request:t', 'shown': True}]
     assert log['launch']['header']['id'] == 'dsh-main' and log['launch']['model'] == 'deepseek-parent'
-    assert log['argv'] == ['-I', '-m', 'agent_swarm.dsh.host', '--config', '/abs/dsh-host.json']
-    assert log['environment']['AGENT_SWARM_DSH_NODE'] and log['environment']['AGENT_SWARM_DSH_ENTRY']
+    assert log['argv'] == ['-I', '-m', 'graftling.dsh.host', '--config', '/abs/dsh-host.json']
+    assert log['environment']['GRAFTLING_DSH_NODE'] and log['environment']['GRAFTLING_DSH_ENTRY']
 
 
 def test_plugin_host_row_is_inert_without_configuration_or_inside_an_agent(tmp_path: Path) -> None:
-    """No host starts without AGENT_SWARM_DSH_CONFIG, or in a DSH that already is an Agent."""
+    """No host starts without GRAFTLING_DSH_CONFIG, or in a DSH that already is an Agent."""
     assert run_plugin(tmp_path / 'a')[0] == {'inert': True}
-    assert run_plugin(tmp_path / 'b', AGENT_SWARM_DSH_CONFIG='/abs/c.json',
-                      AGENT_SWARM_CONNECTION='/bound')[0] == {'inert': True}
+    assert run_plugin(tmp_path / 'b', GRAFTLING_DSH_CONFIG='/abs/c.json',
+                      GRAFTLING_CONNECTION='/bound')[0] == {'inert': True}

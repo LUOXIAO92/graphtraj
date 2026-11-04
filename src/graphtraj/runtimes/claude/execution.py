@@ -13,7 +13,7 @@ from pathlib import Path
 import sys
 import tempfile
 
-from agent_swarm.claude import ClaudeExecution as NativeClaudeExecution
+from graftling.claude import ClaudeExecution as NativeClaudeExecution
 from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError, record_runtime_process
 
 
@@ -24,6 +24,9 @@ class ClaudeExecution(NativeClaudeExecution):
     project archive and GraphTraj's ``extra_fields.graphtraj`` here; the agents
     driver path replaces both through ``configure_independent``.
     """
+
+    # A Runner execution's member reaches the hosted CLI, not graftling's own owner.
+    connection_env = 'GRAPHTRAJ_CLI_CONNECTION'
 
     def __init__(self, *arguments) -> None:
         """Bind the project archive and its GraphTraj header fields to a Runner execution."""

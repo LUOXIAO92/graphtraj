@@ -1,0 +1,383 @@
+"""Run an independent Codex host with authenticated agents CLI and MCP.
+
+Usage: python -m graftling.codex.host --settings native-settings.json
+       --directory /absolute/control-root 'Instruction for the parent Agent'
+Repeat with --resume to continue the exact retained parent Session. The settings
+file contains the existing Run.settings keys: adapter_request (arguments,
+worktree_path, session_parameters), optional evidence, and optional connection
+(base_url, api_key_env, runtime_home). Secrets remain in the native account or
+named environment variable. Settings are launch configuration, never identity.
+
+An optional ``runtimes`` object adds children on other Runtimes: Runtime name
+to that driver's settings (``claude``: the Claude host's ``settings`` keys;
+``dsh``: DshDriver settings such as executable, model, sandbox, api_key_env;
+``pi``: the Pi child settings of PUBLIC_API.md 1.1, which need --directory outside
+the worktree; all run in adapter_request's worktree_path). Without an entry, a
+create for that Runtime fails with ``unsupported-runtime``.
+
+The actual native service owns the parent. Its CLI/MCP descendants authenticate
+by kernel PID and the native Session returned by thread/start or thread/resume.
+No Task, Git repository, GraphTraj package or normalized archive is required.
+"""
+from __future__ import annotations
+
+import argparse
+import asyncio
+import json
+from pathlib import Path
+import sys
+import threading
+import time
+
+import yaml
+
+from graftling import AgentControl, AgentsError, Caller, bind
+from graftling.notices import notice_id
+from graftling.runtime import RuntimeAdapterError
+from graftling.shutdown import exit_if_owned_unconfirmed, stop_owned
+from .app_server import CodexServerRequest
+from .driver import CodexDriver
+from .managed_session import MCP_SERVER, CodexManagedExecution
+
+# Added to the parent only, after the user's own text: the model also has Codex's
+# native spawn_agent, which literally does what "create a child" asks (432).
+GUIDANCE = (
+    f'The MCP tool `agents` (`mcp__{MCP_SERVER}__agents`) is how this host creates and controls child Agents. '
+    'Use it when asked for a child, a subagent or the agents tool. '
+    "Codex's own `spawn_agent` and related tools put a child outside agents' hierarchy, approvals and records; "
+    'use those only when the user names them.'
+)
+
+
+def _claude(settings: dict, cwd: Path, root: Path) -> object:
+    """Check Claude settings at start, then drive Claude children in ``cwd``."""
+    from graftling.claude.driver import ClaudeDriver
+    from graftling.claude.settings import prepare
+
+    prepare(settings, cwd)
+    return ClaudeDriver(cwd, settings)
+
+
+def _dsh(settings: dict, cwd: Path, root: Path) -> object:
+    """Check DSH settings, executable and version at start, then drive DSH children in ``cwd``."""
+    from graftling.dsh.driver import DshDriver
+
+    driver = DshDriver(cwd, settings)
+    driver.prepare('dsh', Caller('codex', None))
+    return driver
+
+
+def _pi(settings: dict, cwd: Path, root: Path) -> object:
+    """Check Pi settings and dependencies at start, then drive Pi children in ``cwd``."""
+    from graftling.pi.host import pi_child_driver
+
+    return pi_child_driver(settings, cwd, root)
+
+
+# Runtimes this host can run as children besides Codex.
+RUNTIMES = {'claude': _claude, 'dsh': _dsh, 'pi': _pi}
+
+
+def runtime_drivers(settings: dict, root: Path) -> dict:
+    """Remove ``runtimes`` from the host settings and build one driver per entry; ``root`` is the data root."""
+    entries = settings.pop('runtimes', {})
+    if not isinstance(entries, dict) or any(not isinstance(value, dict) for value in entries.values()):
+        raise AgentsError('invalid-config', 'runtimes maps a Runtime name to its settings object.')
+    if 'codex' in entries:
+        raise AgentsError('invalid-config', 'Codex children use the host settings, not a runtimes entry.')
+    unsupported = sorted(set(entries) - set(RUNTIMES))
+    if unsupported:
+        raise AgentsError('unsupported-runtime', 'This Codex host does not support Runtime '
+                                                 + ', '.join(unsupported) + ' yet.')
+    cwd = Path(settings['adapter_request']['worktree_path'])
+    return {runtime: RUNTIMES[runtime](entry, cwd, root) for runtime, entry in entries.items()}
+
+
+def _notice_identity(notice: dict) -> str | None:
+    """Return the stable identity of one notice in a receiver's document shape."""
+    return notice_id(notice.get('execution'), notice['outcome'], notice.get('request'))
+
+
+class CodexHost(CodexManagedExecution):
+    """Bind an actual owned native parent to the existing independent controller."""
+
+    user_environment = True
+
+    def __init__(self, settings: dict, directory: Path, instruction: str, resume: bool = False) -> None:
+        """Restore parent identity only from this host's retained native result."""
+        directory.mkdir(parents=True, exist_ok=True)
+        native = directory / 'host'
+        native.mkdir(exist_ok=True)
+        settings = dict(settings)
+        others = runtime_drivers(settings, directory)
+        driver = CodexDriver(settings)
+        settings = driver.prepare('codex', Caller('codex', None))
+        # ``prepare`` returned a copy, so children keep the user's own text.
+        parameters = settings['adapter_request']['session_parameters']
+        parameters['developerInstructions'] = '\n\n'.join(filter(None, (parameters['developerInstructions'], GUIDANCE)))
+        expected = None
+        if resume:
+            previous = yaml.safe_load((native / 'session.yml').read_text())
+            expected = previous['session']
+        elif (native / 'session.yml').exists():
+            raise AgentsError('session-exists', 'Use --resume to continue this host Session.')
+        self.control = AgentControl(directory, {'codex': driver, **others}, event_receiver=self._receive_child,
+                                    request_notices=True, hold_notices=True)
+        self.control.require_connections()
+        self.authentications: list[dict] = []
+        self.calls: list[dict] = []
+        self.deliveries: list[dict] = []
+        self.began_at = time.time()
+        # Held ends this process took to push, and the lock that lets either a
+        # result settle a held end or the flush take it, never both.
+        self.flushed: set[str | None] = set()
+        self.notice_lock = threading.Lock()
+        # Codex's own subagents the parent started, by native item.
+        self.native_subagents: dict[str, dict] = {}
+        # The Agents the last ``run`` could not confirm stopped.
+        self.stop_unconfirmed: list[str] = []
+        super().__init__(settings['adapter_request'], instruction, native,
+                         self._started, settings.get('evidence', {}), native / 'trace.jsonl',
+                         expected_session=expected, connection=settings.get('connection', {}),
+                         agent_call=self._call_agents)
+
+    async def _request(self, request: CodexServerRequest) -> dict:
+        """Present the parent's own native requests to the human CLI operator."""
+        if request.method == 'item/tool/call':
+            return await super()._request(request)
+        print(json.dumps({'native_request': {'method': request.method, 'params': request.params}},
+                         ensure_ascii=False), file=sys.stderr, flush=True)
+        line = await asyncio.to_thread(sys.stdin.readline)
+        if not line:
+            raise RuntimeAdapterError('RUNTIME_REQUEST_UNHANDLED',
+                                      'The parent native request needs an explicit JSON response on stdin.')
+        response = json.loads(line)
+        if not isinstance(response, dict):
+            raise RuntimeAdapterError('RUNTIME_REQUEST_INVALID', 'A native response must be a JSON object.')
+        return response
+
+    def _started(self, session: str, pid: int) -> None:
+        """Publish actual parent provenance after native startup, without credentials."""
+        print(json.dumps({'parent_session': session, 'service_pid': pid,
+                          'source': 'thread/resume' if self.expected_session else 'thread/start'},
+                         ensure_ascii=False), file=sys.stderr, flush=True)
+        for entry in self.native_subagents.values():
+            self._print_native_subagent(entry)
+        if self.expected_session:
+            # As an operation, the turn's owner keeps the connection open for it.
+            flush = asyncio.ensure_future(self._flush_held())
+            self.operations.add(flush)
+            flush.add_done_callback(self.operations.discard)
+
+    def _native_item(self, item: dict) -> None:
+        """Record a subagent Codex started itself, once per native item; its later state replaces the earlier."""
+        if (item.get('type') != 'collabAgentToolCall' or item.get('tool') != 'spawnAgent'
+                or not isinstance(item.get('id'), str)):
+            return
+        first = item['id'] not in self.native_subagents
+        entry = {'id': item['id'], 'sender_thread': item.get('senderThreadId'),
+                 'receiver_threads': item.get('receiverThreadIds'), 'status': item.get('status'),
+                 'model': item.get('model')}
+        self.native_subagents[item['id']] = entry
+        # Before the execution exists parent_session is unprinted; _started prints this after it.
+        if first and self.execution is not None:
+            self._print_native_subagent(entry)
+
+    @staticmethod
+    def _print_native_subagent(entry: dict) -> None:
+        """Say on stderr that this child is outside agents."""
+        print(json.dumps({'native_subagent': {
+            **entry, 'note': "Codex's own subagent, not an agents child: agents has no record or control of it.",
+        }}, ensure_ascii=False), file=sys.stderr, flush=True)
+
+    def _print_summary(self) -> None:
+        """Say what this run did through agents, whatever the parent's last message claims."""
+        # No Session means no run: a refused start reports only its error.
+        if self.native_session is None:
+            return
+        summary: dict = {'agents_calls': len(self.calls), 'native_subagents': len(self.native_subagents)}
+        if not self.calls:
+            summary['note'] = ('This run made no agents call, so any child the parent reports creating '
+                               'in this run was not created through agents.')
+        print(json.dumps({'run_summary': summary}, ensure_ascii=False), file=sys.stderr, flush=True)
+
+    def _authenticate_mcp(self, pid: int) -> None:
+        """Retain only authentication that the actual service owner accepted."""
+        super()._authenticate_mcp(pid)
+        self.authentications.append({'caller_pid': pid, 'service_pid': self.adapter.service_pid,
+                                     'parent_session': self.native_session})
+
+    @staticmethod
+    def _display(sender: str, recipient: str, body: str) -> None:
+        """Render a communication fact without injecting its screen frame into the model."""
+        print(f'┌ {sender} → {recipient}', file=sys.stderr)
+        for line in body.splitlines():
+            print('│ ' + line, file=sys.stderr)
+        print('└', file=sys.stderr, flush=True)
+
+    def _call_agents(self, request: dict) -> object:
+        """Bind only after process authentication and native context verification."""
+        if self.native_session is None:
+            raise AgentsError('authority-denied', 'The native parent Session is not ready.')
+        call = bind(self.control, Caller('codex', None, self.native_session, 'codex'))
+        result = call(request)
+        if not result.failed and request['action'] in {'create', 'send', 'resume'}:
+            body = request.get('instruction') or request.get('message')
+            if body:
+                self._display(self.native_session, result.document['agent'], body)
+        found = result.document.get('result')
+        if isinstance(found, dict):
+            with self.notice_lock:
+                for agent in found.get('agents', [found]):
+                    self._hide_pushed(agent)
+                if not result.failed:
+                    self.control.settle_shown(request, result.document)
+        self.calls.append({'action': request['action'], 'failed': result.failed,
+                           'parent_session': self.native_session, 'result': result.document})
+        return result
+
+    def _hide_pushed(self, document: dict) -> None:
+        """Hide a body this host is pushing, so the parent receives it once.
+
+        AgentControl marks a live end ``queueing`` before calling the receiver,
+        so a concurrent ``wait`` or ``status`` would otherwise show the body the
+        host event carries. A held end being flushed is shown as ``queueing``
+        the same way. Neither is settled as read, so a send refused before
+        anything was written leaves the end readable. Ends of earlier host
+        processes that no flush has taken keep their body.
+        """
+        pending = [document]
+        while pending:
+            agent = pending.pop()
+            last = agent.get('last_result') or {}
+            state = last.get('notification')
+            # The flush may have finished since this result was read, so a
+            # taken end stays hidden unless its send was refused.
+            flushed = notice_id(last.get('id'), last.get('outcome')) in self.flushed
+            live = state == 'queueing' and (last.get('ended_at') or 0) >= self.began_at
+            if agent.get('parent') is None and state in ('held', 'queueing') and (flushed or live):
+                last.update(notification='queueing', last_message=None)
+            pending.extend(agent.get('children', []))
+
+    def _receive_child(self, notice: dict) -> bool | str:
+        """Forward one genuine end or native request notice to this still-owned external parent."""
+        if notice['parent'] is not None:
+            return False
+        # The parent's turn is over or not begun: its next --resume delivers it.
+        if self.native_session is None or self.loop is None or self.loop.is_closed() or self.outcome is not None:
+            return 'held'
+        return asyncio.run_coroutine_threadsafe(self._forward(notice), self.loop).result()
+
+    async def _forward(self, notice: dict) -> bool | str:
+        """Send one notice as a host event; ``'held'`` when it was not written."""
+        # The backend calls this only after retaining the child's native outcome.
+        # No model-provided string or Session ID selects the recipient.
+        message = notice['body'] or (notice.get('error') or {}).get('message') or notice['outcome']
+        event = {'source': 'agents', 'alias': notice['agent'], 'event': notice['outcome'], 'message': message}
+        # Once submitted, a lost acknowledgement is unconfirmed, not held.
+        # Let the existing backend retain that distinction and suppress duplicates.
+        try:
+            await self.adapter.send_host_event(self.native_session, event)
+        except Exception as error:
+            # Only a written request can have shown the body; any earlier
+            # failure leaves it readable through wait/status.
+            return 'unconfirmed' if getattr(error, 'request_written', False) else 'held'
+        self._display(notice['agent'], self.native_session, message)
+        self.deliveries.append({'id': _notice_identity(notice),
+                                'agent': notice['agent'], 'event': notice['outcome'],
+                                'parent_session': self.native_session, 'body': notice['body'], 'accepted': True})
+        return True
+
+    async def _flush_held(self) -> None:
+        """Send what was held while this Session was stopped, each once, into the resumed turn."""
+        caller = Caller('codex', None, self.native_session, 'codex')
+        for notice in await asyncio.to_thread(self.control.held_notices, caller):
+            # A turn that ended first leaves the rest held for the next --resume.
+            if self.result.done() or self.termination_requested:
+                return
+            if await asyncio.to_thread(self._take_held, notice):
+                delivery = await self._forward(notice)
+                if delivery == 'held':
+                    self.flushed.discard(_notice_identity(notice))
+                else:
+                    await asyncio.to_thread(self.control.settle_notice, notice,
+                                            'delivered' if delivery is True else delivery)
+
+    def _take_held(self, notice: dict) -> bool:
+        """Take one held notice to push, unless a result has already shown it."""
+        with self.notice_lock:
+            if not self.control.notice_open(notice):
+                return False
+            self.flushed.add(_notice_identity(notice))
+            return True
+
+    def run(self) -> dict:
+        """Keep one actual parent owner, even across repeated host invocations."""
+        import fcntl
+
+        with (self.directory / 'owner.lock').open('a+b') as ownership:
+            try:
+                fcntl.flock(ownership, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError as error:
+                raise AgentsError('turn-running', 'This parent Session already has an owner.') from error
+            try:
+                result = super().run()
+            finally:
+                # A closing host stops only work its own controller started, and
+                # stays until those ends are recorded for the next invocation.
+                # Native Session records remain available to it.
+                self.stop_unconfirmed = stop_owned(self.control)
+            return {**result, 'parent_session': self.native_session,
+                    'operations': self.calls, 'deliveries': self.deliveries,
+                    'native_subagents': list(self.native_subagents.values()),
+                    'authenticated_callers': self.authentications,
+                    'stop_unconfirmed': self.stop_unconfirmed}
+
+
+def _close(host: CodexHost | None) -> None:
+    """Print the run's summary, then end at once if a stop is unconfirmed."""
+    if host is None:
+        return
+    try:
+        host._print_summary()
+    except OSError:
+        pass  # A closed stderr changes neither the exit status nor the stop report.
+    exit_if_owned_unconfirmed(host.stop_unconfirmed)
+
+
+def main() -> None:
+    """Start the packaged native host; request arguments never supply an identity."""
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--settings', required=True, type=Path, help='Host-selected Run.settings JSON.')
+    parser.add_argument('--directory', required=True, type=Path, help='Independent control and native state root.')
+    parser.add_argument('--output', type=Path, help='Retain the native result and operation evidence as JSON.')
+    parser.add_argument('--resume', action='store_true', help='Continue the retained parent native Session.')
+    parser.add_argument('instruction', help='Instruction for the actual parent Agent.')
+    arguments = parser.parse_args()
+    host = None
+    try:
+        settings = json.loads(arguments.settings.read_text())
+        host = CodexHost(settings, arguments.directory.resolve(), arguments.instruction, arguments.resume)
+        result = host.run()
+    except (AgentsError, RuntimeAdapterError, OSError, ValueError, KeyError) as error:
+        result = {'error': {'code': getattr(error, 'code', 'invalid-input'), 'message': str(error)}}
+        print(json.dumps(result, ensure_ascii=False), flush=True)
+        _close(host)
+        raise SystemExit(1) from error
+    except BaseException:
+        # It would end at the interpreter's exit, which a stuck child's thread can hold up.
+        _close(host)
+        raise
+    if arguments.output is not None:
+        arguments.output.write_text(json.dumps(result, ensure_ascii=False, indent=2) + '\n')
+    # Written out first: a stuck child ends this process without Python's own flush.
+    print(result.get('last_agent_message') or result['outcome'], flush=True)
+    if result.get('error') is not None:
+        print(json.dumps(result['error'], ensure_ascii=False), file=sys.stderr)
+    _close(host)
+    if result.get('error') is not None:
+        raise SystemExit(1)
+
+
+if __name__ == '__main__':
+    main()

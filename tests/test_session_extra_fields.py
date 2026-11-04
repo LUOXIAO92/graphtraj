@@ -5,9 +5,9 @@ from pathlib import Path
 
 import pytest
 
-from agent_swarm.sessions.archive import JsonlSessionStore, SessionArchive, archive_path, read_session
-from agent_swarm.sessions.claude import ClaudeJsonlCollector
-from agent_swarm.sessions.protocol import (
+from graftling.sessions.archive import JsonlSessionStore, SessionArchive, archive_path, read_session
+from graftling.sessions.claude import ClaudeJsonlCollector
+from graftling.sessions.protocol import (
     ARCHIVE_TYPES, native_record, upgrade_event, upgrade_header, validate_event, validate_header,
 )
 from test_claude_jsonl import message, write

@@ -20,9 +20,9 @@ from typing import Any, Callable
 
 import pytest
 
-from agent_swarm import AgentControl, Caller, bind
-from agent_swarm.dsh import host as dsh_host
-from agent_swarm.pi import host as pi_host
+from graftling import AgentControl, Caller, bind
+from graftling.dsh import host as dsh_host
+from graftling.pi import host as pi_host
 
 
 SOURCE = Path(__file__).resolve().parents[1] / 'src'
@@ -118,7 +118,7 @@ class Process:
             # The host keeps sys.stdout as its pipe; pytest gets it back after start.
             started.setattr(sys, 'stdout', self.pipe)
             if kind == 'pi':
-                started.setenv('AGENT_SWARM_PI_ENTRY', sys.executable)
+                started.setenv('GRAFTLING_PI_ENTRY', sys.executable)
                 started.setattr(pi_host, 'pi_request', lambda *_: {})
                 started.setattr(pi_host, 'current_connection', lambda: {
                     'runtime': 'pi', 'session': 'main', 'session_file': str(tmp_path / 's.jsonl')})
@@ -463,20 +463,20 @@ def run_native(tmp_path: Path, kind: str, ready: bool = True, shown: str = 'true
     entry.write_text(NATIVE)
     (tmp_path / 'host.json').write_text(json.dumps({'root': str(tmp_path / 'data')}))
     env = {key: value for key, value in os.environ.items()
-           if key not in {'AGENT_SWARM_CONNECTION', 'DSH_SESSION_ID', 'DSH_AGENT_SOURCE', 'DSH_AGENT_PACKAGE'}}
+           if key not in {'GRAFTLING_CONNECTION', 'DSH_SESSION_ID', 'DSH_AGENT_SOURCE', 'DSH_AGENT_PACKAGE'}}
     env.update(TEST_CONFIG=str(tmp_path / 'host.json'), PYTHONPATH=str(SOURCE), TEST_SHOWN=shown,
                TEST_READY='1' if ready else '0', TEST_EXPECT=str(expect))
     if kind == 'pi':
         header = {'type': 'session', 'version': 3, 'id': 'main', 'cwd': str(tmp_path)}
-        env.update(TEST_MODULE='agent_swarm.pi.host', TEST_LAUNCH=json.dumps({'header': header, 'entries': []}),
-                   AGENT_SWARM_PI_ENTRY=sys.executable, AGENT_SWARM_PI_PROVIDER='anthropic',
-                   AGENT_SWARM_PI_MODEL='parent-model', GRAPHTRAJ_NATIVE_RUNTIME='pi',
-                   GRAPHTRAJ_NATIVE_SESSION='main', GRAPHTRAJ_NATIVE_SESSION_FILE=str(tmp_path / 's.jsonl'),
+        env.update(TEST_MODULE='graftling.pi.host', TEST_LAUNCH=json.dumps({'header': header, 'entries': []}),
+                   GRAFTLING_PI_ENTRY=sys.executable, GRAFTLING_PI_PROVIDER='anthropic',
+                   GRAFTLING_PI_MODEL='parent-model', GRAFTLING_NATIVE_RUNTIME='pi',
+                   GRAFTLING_NATIVE_SESSION='main', GRAFTLING_NATIVE_SESSION_FILE=str(tmp_path / 's.jsonl'),
                    PI_CODING_AGENT_DIR=str(tmp_path / 'pi-home'))
     else:
         header = {'version': 4, 'id': 'main', 'cwd': str(tmp_path), 'isSeeded': False}
-        env.update(TEST_MODULE='agent_swarm.dsh.host', TEST_LAUNCH=json.dumps({'header': header}),
-                   AGENT_SWARM_DSH_NODE=sys.executable, AGENT_SWARM_DSH_ENTRY=str(entry))
+        env.update(TEST_MODULE='graftling.dsh.host', TEST_LAUNCH=json.dumps({'header': header}),
+                   GRAFTLING_DSH_NODE=sys.executable, GRAFTLING_DSH_ENTRY=str(entry))
     result = subprocess.run([sys.executable, str(entry)], cwd=tmp_path, env=env, capture_output=True, text=True, timeout=60)
     assert result.returncode == 0, result.stderr
     return json.loads(result.stdout)
@@ -630,7 +630,7 @@ def run_main(
     (tmp_path / 'host.json').write_text(json.dumps({'root': str(tmp_path / 'data')}))
     monkeypatch.setattr(sys, 'argv', ['host', '--config', str(tmp_path / 'host.json')])
     if kind == 'pi':
-        monkeypatch.setenv('AGENT_SWARM_PI_ENTRY', sys.executable)
+        monkeypatch.setenv('GRAFTLING_PI_ENTRY', sys.executable)
         monkeypatch.setattr(pi_host, 'pi_request', lambda *_: {})
         monkeypatch.setattr(pi_host, 'current_connection', lambda: {
             'runtime': 'pi', 'session': 'main', 'session_file': str(tmp_path / 's.jsonl')})
@@ -688,7 +688,7 @@ const sent = [], handlers = {};
 const entries = JSON.parse(process.env.TEST_ENTRIES);
 const mode = process.env.TEST_MODE;
 const sleep = ms => new Promise(done => setTimeout(done, ms));
-const entry = details => ({type: 'custom_message', customType: 'graphtraj:agent-communication', details});
+const entry = details => ({type: 'custom_message', customType: 'graftling:agent-communication', details});
 const pi = {
   registerFlag() {}, getFlag: name => name === 'agents-config' ? process.env.TEST_CONFIG : undefined,
   on: (event, handler) => { handlers[event] = handler; }, registerMcpServer() {},
@@ -722,8 +722,8 @@ def run_pi(tmp_path: Path, mode: str, entries: list | None = None) -> dict:
     script.write_text(FAKE_PI)
     (tmp_path / 'host.json').write_text(json.dumps({'root': str(tmp_path / 'data')}))
     env = {key: value for key, value in os.environ.items()
-           if key not in {'AGENT_SWARM_CONNECTION', 'DSH_SESSION_ID', 'DSH_AGENT_SOURCE', 'DSH_AGENT_PACKAGE'}}
-    env.update(AGENT_SWARM_PYTHON=sys.executable, TEST_EXTENSION=str(SOURCE / 'agent_swarm/pi/extension.mjs'),
+           if key not in {'GRAFTLING_CONNECTION', 'DSH_SESSION_ID', 'DSH_AGENT_SOURCE', 'DSH_AGENT_PACKAGE'}}
+    env.update(GRAFTLING_PYTHON=sys.executable, TEST_EXTENSION=str(SOURCE / 'graftling/pi/extension.mjs'),
                TEST_CONFIG=str(tmp_path / 'host.json'), TEST_ENTRIES=json.dumps(entries or []), TEST_MODE=mode,
                TEST_SESSION_FILE=str(tmp_path / 's.jsonl'), TEST_RUN_MS='1500',
                PI_CODING_AGENT_DIR=str(tmp_path / 'pi-home'))
@@ -762,7 +762,7 @@ def test_real_extension_and_host_do_not_inject_twice_after_a_crash_before_shown(
     """Pi wrote it and the acknowledgement was lost: the next host settles it with no injection."""
     agent = seed_held(tmp_path, CALLERS['pi'])
     fact = run_pi(tmp_path, 'queue')['sent'][0]
-    persisted = {'type': 'custom_message', 'customType': 'graphtraj:agent-communication', 'details': {'fact': fact}}
+    persisted = {'type': 'custom_message', 'customType': 'graftling:agent-communication', 'details': {'fact': fact}}
     assert read_record(tmp_path, agent)['executions'][-1]['notification'] == 'held'
     assert run_pi(tmp_path, 'queue', [persisted])['sent'] == []
     assert read_record(tmp_path, agent)['executions'][-1]['notification'] == 'delivered'
@@ -823,12 +823,12 @@ def run_extension(tmp_path: Path, *, entries: list | None = None, ui: bool = Fal
     (package / 'index.mjs').write_text('export class CustomMessageComponent {}')
     (package / 'cli.js').write_text('')
     env = {key: value for key, value in os.environ.items()
-           if key not in {'AGENT_SWARM_CONNECTION', 'DSH_SESSION_ID', 'DSH_AGENT_SOURCE'}}
-    env.update(AGENT_SWARM_PYTHON=str(fake), TEST_CONFIG=str(tmp_path / 'host.json'), TEST_LOG=str(tmp_path / 'log.json'),
+           if key not in {'GRAFTLING_CONNECTION', 'DSH_SESSION_ID', 'DSH_AGENT_SOURCE'}}
+    env.update(GRAFTLING_PYTHON=str(fake), TEST_CONFIG=str(tmp_path / 'host.json'), TEST_LOG=str(tmp_path / 'log.json'),
                TEST_ENTRY=str(package / 'cli.js'),
                TEST_ENTRIES=json.dumps(entries or []), TEST_UI='1' if ui else '0', TEST_TURN='1' if turn else '0',
                TEST_NOTICES=notices, TEST_RUN_MS=str(run_ms))
-    result = subprocess.run([node, '--input-type=module', '-e', EXTENSION, str(SOURCE / 'agent_swarm/pi/extension.mjs')],
+    result = subprocess.run([node, '--input-type=module', '-e', EXTENSION, str(SOURCE / 'graftling/pi/extension.mjs')],
                             cwd=tmp_path, env=env, capture_output=True, text=True, timeout=30)
     assert result.returncode == 0, result.stderr
     return json.loads(result.stdout), json.loads((tmp_path / 'log.json').read_text())
@@ -836,7 +836,7 @@ def run_extension(tmp_path: Path, *, entries: list | None = None, ui: bool = Fal
 
 def test_extension_does_not_inject_a_replayed_notice_and_acknowledges_it(tmp_path: Path) -> None:
     """A notice already in the Session's entries (crash before the ack) is shown, not injected again."""
-    persisted = {'type': 'custom_message', 'customType': 'graphtraj:agent-communication', 'id': 'e1',
+    persisted = {'type': 'custom_message', 'customType': 'graftling:agent-communication', 'id': 'e1',
                  'content': 'x', 'display': True, 'details': {'fact': 'notice:exec-1:completed'}}
     sent, received = run_extension(tmp_path, entries=[persisted], notices='exec-1:completed,exec-2:completed')
     assert [item['message']['details']['fact'] for item in sent] == ['notice:exec-2:completed']
@@ -845,10 +845,10 @@ def test_extension_does_not_inject_a_replayed_notice_and_acknowledges_it(tmp_pat
 
 
 @pytest.mark.parametrize('entry', [
-    {'type': 'custom', 'customType': 'graphtraj:agent-communication', 'data': {'fact': 'notice:exec-1:completed'}},
+    {'type': 'custom', 'customType': 'graftling:agent-communication', 'data': {'fact': 'notice:exec-1:completed'}},
     {'type': 'custom_message', 'customType': 'someone-else', 'details': {'fact': 'notice:exec-1:completed'}},
-    {'type': 'custom_message', 'customType': 'graphtraj:agent-communication', 'details': {'fact': 'notice:other'}},
-    {'type': 'custom_message', 'customType': 'graphtraj:agent-communication'},
+    {'type': 'custom_message', 'customType': 'graftling:agent-communication', 'details': {'fact': 'notice:other'}},
+    {'type': 'custom_message', 'customType': 'graftling:agent-communication'},
 ])
 def test_extension_dedupes_only_on_its_own_persisted_notice(tmp_path: Path, entry: dict) -> None:
     """Display entries, other extensions' messages and other notices do not count as this notice."""
@@ -916,7 +916,7 @@ def test_the_dsh_relay_admits_one_id_once_across_processes_and_refuses_an_inacti
     if not node:
         pytest.skip('Node is required')
     result = subprocess.run([node, '--input-type=module', '-e', COMMUNICATION,
-                             str(SOURCE / 'agent_swarm/dsh/communication.mjs')],
+                             str(SOURCE / 'graftling/dsh/communication.mjs')],
                             cwd=tmp_path, capture_output=True, text=True, timeout=30)
     assert result.returncode == 0, result.stderr
     document = json.loads(result.stdout)
@@ -929,7 +929,7 @@ def test_the_dsh_relay_admits_one_id_once_across_processes_and_refuses_an_inacti
 
 def test_a_nested_dsh_parent_gives_each_request_its_own_relay_id(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """The relay admits one id once: a second request, or the end after one, must not share it."""
-    from agent_swarm.dsh import binding
+    from graftling.dsh import binding
 
     messages: list[dict] = []
     receivers: list = []
@@ -1024,10 +1024,10 @@ def run_plugin(tmp_path: Path, **environment: str) -> list:
     fake.write_text('#!' + sys.executable + '\n' + FAKE_PLUGIN_HOST)
     fake.chmod(0o755)
     env = {key: value for key, value in os.environ.items()
-           if key not in {'AGENT_SWARM_CONNECTION', 'DSH_AGENT_PACKAGE', 'GRAPHTRAJ_CLI_CONNECTION'}}
-    env.update(GRAPHTRAJ_DSH_PACKAGE=str(tmp_path / 'stub' / 'entry.js'), AGENT_SWARM_PYTHON=str(fake),
-               AGENT_SWARM_DSH_CONFIG='/abs/dsh-host.json', TEST_LOG=str(tmp_path / 'log.json'), **environment)
-    result = subprocess.run([node, '--input-type=module', '-e', PLUGIN, str(SOURCE / 'agent_swarm/dsh/plugin.mjs')],
+           if key not in {'GRAFTLING_CONNECTION', 'DSH_AGENT_PACKAGE', 'GRAPHTRAJ_CLI_CONNECTION'}}
+    env.update(GRAFTLING_DSH_PACKAGE=str(tmp_path / 'stub' / 'entry.js'), GRAFTLING_PYTHON=str(fake),
+               GRAFTLING_DSH_CONFIG='/abs/dsh-host.json', TEST_LOG=str(tmp_path / 'log.json'), **environment)
+    result = subprocess.run([node, '--input-type=module', '-e', PLUGIN, str(SOURCE / 'graftling/dsh/plugin.mjs')],
                             cwd=tmp_path, env=env, capture_output=True, text=True, timeout=30)
     assert result.returncode == 0, result.stderr
     return json.loads((tmp_path / 'log.json').read_text())

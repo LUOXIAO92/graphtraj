@@ -56,10 +56,10 @@ def test_an_interpreter_without_this_checkout_is_named_with_both_fixes(tmp_path:
     assert problem.returncode == 0, problem.stderr
     assert problem.stdout.strip() == (
         "Test subprocesses would not import this checkout: {0} from a neutral directory resolves "
-        "subprocesses: graphtraj -> None, agent_swarm -> None; "
-        "-I Workers: graphtraj -> None, agent_swarm -> None; expected both under {1}. "
+        "subprocesses: graphtraj -> None, graftling -> None; "
+        "-I Workers: graphtraj -> None, graftling -> None; expected both under {1}. "
         "Use a venv whose site-packages resolves this checkout: install it editable "
-        "(pip install -e {2}/src/agent_swarm -e {2}) or add a .pth naming {1}. "
+        "(pip install -e {2}/src/graftling -e {2}) or add a .pth naming {1}. "
         "PYTHONPATH={1} serves only the subprocesses that do not run -I."
     ).format(interpreter, source, PROJECT_ROOT)
 
@@ -103,7 +103,7 @@ def _metadata_less_venv(tmp_path: Path) -> Path:
                           capture_output=True, text=True, check=True).stdout.strip()
     Path(site, "zz_checkout.pth").write_text(str((PROJECT_ROOT / "src").resolve()) + "\n")
     metadata = subprocess.run([str(python), "-I", "-c", "import importlib.metadata as m; "
-                               "print(len(m.entry_points(group='agent_swarm.hosts', name='graphtraj')))"],
+                               "print(len(m.entry_points(group='graftling.hosts', name='graphtraj')))"],
                               capture_output=True, text=True, check=True).stdout.strip()
     if metadata != "0":
         pytest.skip("the base interpreter already carries graphtraj metadata")
@@ -117,7 +117,7 @@ def test_a_complete_editable_install_passes_the_installation_check() -> None:
 def test_a_missing_graphtraj_session_command_is_named_with_the_fix(tmp_path: Path) -> None:
     assert _installation_problem(Path(sys.executable), tmp_path) == (
         "The test interpreter {0} lacks the graphtraj-session command in {1}. Install this checkout "
-        "editable in a dedicated venv: pip install -e {2}/src/agent_swarm -e {2}; a .pth alone gives neither."
+        "editable in a dedicated venv: pip install -e {2}/src/graftling -e {2}; a .pth alone gives neither."
     ).format(sys.executable, tmp_path, PROJECT_ROOT)
 
 
@@ -125,8 +125,8 @@ def test_missing_distribution_metadata_is_named_with_the_fix(tmp_path: Path) -> 
     python = _metadata_less_venv(tmp_path)
     assert _installation_problem(python, Path(sys.executable).parent) == (
         "The test interpreter {0} lacks the graphtraj distribution metadata (entry point "
-        "agent_swarm.hosts: graphtraj under {1}; found no graphtraj entry). Install this checkout "
-        "editable in a dedicated venv: pip install -e {2}/src/agent_swarm -e {2}; a .pth alone gives neither."
+        "graftling.hosts: graphtraj under {1}; found no graphtraj entry). Install this checkout "
+        "editable in a dedicated venv: pip install -e {2}/src/graftling -e {2}; a .pth alone gives neither."
     ).format(python, (PROJECT_ROOT / "src").resolve(), PROJECT_ROOT)
 
 

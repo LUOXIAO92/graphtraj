@@ -94,7 +94,7 @@ def cli_connection(
         if native_authorizer is not None:
             identity, features = native_authorizer(document.get('native'), document['request'])
         elif native_context is not None:
-            from agent_swarm import AgentsError, verify_native_context
+            from graftling import AgentsError, verify_native_context
 
             try:
                 verify_native_context(document['native'], native_context())
@@ -124,7 +124,7 @@ def agents_dispatch(
 
 
 def agents_host(cwd: Path) -> Callable[[dict], Any] | None:
-    """Claim the independent ``agents`` CLI only inside GraphTraj (``agent_swarm.hosts`` entry).
+    """Claim the independent ``agents`` CLI only inside GraphTraj (``graftling.hosts`` entry).
 
     A process bound to a Task channel, or a caller inside a Harness project,
     uses ``agents_dispatch``; anywhere else the CLI keeps its own owner. The
@@ -138,7 +138,7 @@ def agents_host(cwd: Path) -> Callable[[dict], Any] | None:
 
     def dispatch(request: dict) -> Any:
         """Report a host rejection in the CLI's own error shape."""
-        from agent_swarm import AgentsError, AgentsResult
+        from graftling import AgentsError, AgentsResult
         from graphtraj.configuration.project_configuration import ProjectConfigurationError
         from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError
 
@@ -175,7 +175,7 @@ def forward_request(
     address = os.environ.get(CONNECTION_ENV)
     if address is None:
         return None
-    if 'AGENT_SWARM_CONNECTION' in os.environ:
+    if 'GRAFTLING_CONNECTION' in os.environ:
         raise RunnerError('authority-denied', 'Both independent and GraphTraj connections are present.')
     if not address:
         raise RunnerError('operation-unavailable', 'The Session CLI host connection is unavailable.')
@@ -183,7 +183,7 @@ def forward_request(
     # recovery and writes have no fixed duration once accepted, so the owner's
     # own reply is awaited until it arrives or the host closes the channel.
     # Only a request the host never accepts ends at the ordinary deadline.
-    from agent_swarm import client_native_context
+    from graftling import client_native_context
 
     native = native_context if native_context is not None else client_native_context()
     response = connection_operation(address, {

@@ -9,8 +9,8 @@ import shutil
 import pytest
 import yaml
 
-from agent_swarm.codex.app_server import CodexAppServer
-from agent_swarm.codex.context import CodexAdapterError
+from graftling.codex.app_server import CodexAppServer
+from graftling.codex.context import CodexAdapterError
 from conftest import FakeCodex, InstalledCommands, run_process
 from graphtraj.execution.runner_models import RunnerError
 from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError, select_runtime_adapter

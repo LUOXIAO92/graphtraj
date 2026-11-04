@@ -20,9 +20,9 @@ class NoGraphTraj(importlib.abc.MetaPathFinder):
 
 sys.meta_path.insert(0, NoGraphTraj())
 
-from agent_swarm import AgentControl, Caller, bind
-from agent_swarm.dsh import DshDriver
-from agent_swarm.dsh.execution import DshExecution, _PatchLoader
+from graftling import AgentControl, Caller, bind
+from graftling.dsh import DshDriver
+from graftling.dsh.execution import DshExecution, _PatchLoader
 import yaml
 
 

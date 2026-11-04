@@ -9,8 +9,8 @@ import pytest
 from graphtraj.runtimes.pi.collector import PiCollector
 from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError
 from graphtraj.sessions.storage import SessionStore, session_path
-from agent_swarm.sessions.archive import JsonlSessionStore, archive_path
-from agent_swarm.sessions.protocol import native_record
+from graftling.sessions.archive import JsonlSessionStore, archive_path
+from graftling.sessions.protocol import native_record
 from test_pi_runtime import pi_environment, execution
 from test_result_submission import result_project
 
@@ -164,9 +164,9 @@ def test_main_and_plugin_extension_pipe(tmp_path: Path, monkeypatch: pytest.Monk
     native = tmp_path / 'native.jsonl'
     header = {'type': 'session', 'id': 'main-pipe', 'version': 3, 'timestamp': 0, 'cwd': str(tmp_path)}
     native.write_text(json.dumps(header) + '\n')
-    monkeypatch.setenv('GRAPHTRAJ_NATIVE_RUNTIME', 'pi')
-    monkeypatch.setenv('GRAPHTRAJ_NATIVE_SESSION', header['id'])
-    monkeypatch.setenv('GRAPHTRAJ_NATIVE_SESSION_FILE', str(native))
+    monkeypatch.setenv('GRAFTLING_NATIVE_RUNTIME', 'pi')
+    monkeypatch.setenv('GRAFTLING_NATIVE_SESSION', header['id'])
+    monkeypatch.setenv('GRAFTLING_NATIVE_SESSION_FILE', str(native))
     result = CliRunner().invoke(main, ['pi'], input=json.dumps({
         'event': 'session_start', 'reason': 'startup', 'header': header, 'entries': []}))
     assert json.loads(result.output) == {'source': 'main'}
@@ -185,7 +185,7 @@ def test_main_and_plugin_extension_pipe(tmp_path: Path, monkeypatch: pytest.Monk
 import { pathToFileURL } from 'node:url';
 const { startCollection } = await import(pathToFileURL(process.argv[1]).href);
 const collector = await startCollection({cwd: process.cwd(), sessionManager: {
-  getHeader: () => ({type: 'session', version: 3, id: process.env.GRAPHTRAJ_NATIVE_SESSION,
+  getHeader: () => ({type: 'session', version: 3, id: process.env.GRAFTLING_NATIVE_SESSION,
     cwd: process.cwd(), timestamp: 0}), getEntries: () => [],
 }}, {});
 await collector.write({type: 'message_update', message: {}, assistantMessageEvent:
@@ -196,7 +196,7 @@ await collector.close();
     for session, child in [('main-pipe', False), ('plugin-child', True)]:
         if child:
             native.write_text(json.dumps({**header, 'id': session}) + '\n')
-            monkeypatch.setenv('GRAPHTRAJ_NATIVE_SESSION', session)
+            monkeypatch.setenv('GRAFTLING_NATIVE_SESSION', session)
             monkeypatch.setenv('PI_SUBAGENT_CHILD', '1')
         subprocess.run(['node', '--input-type=module', '-e', script,
                         str(source / 'graphtraj/runtimes/pi/extension.mjs')],

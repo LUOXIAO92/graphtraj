@@ -20,8 +20,8 @@ from typing import Iterator
 import pytest
 import yaml
 
-from agent_swarm.claude.host import IndependentCalls
-from agent_swarm.dsh import execution as native_execution
+from graftling.claude.host import IndependentCalls
+from graftling.dsh import execution as native_execution
 from dsh_standalone_peer import FakeDshService, install_dsh
 from graphtraj.configuration.project_configuration import default_configuration_content
 from graphtraj.configuration.project_roles import RolePreset
@@ -35,7 +35,7 @@ from test_result_submission import result_project
 
 ROOT = Path(__file__).resolve().parents[1]
 GIT = {'GIT_CONFIG_GLOBAL': '/dev/null', 'GIT_CONFIG_NOSYSTEM': '1', 'PATH': os.environ['PATH']}
-FORWARDED = ('AGENT_SWARM_CONNECTION', 'GRAPHTRAJ_CLI_CONNECTION', 'PYTHONPATH')
+FORWARDED = ('GRAFTLING_CONNECTION', 'GRAPHTRAJ_CLI_CONNECTION', 'PYTHONPATH')
 
 
 def run_git(directory: Path, *arguments: str, prefix: tuple[str, ...] = ()) -> subprocess.CompletedProcess:
@@ -275,7 +275,7 @@ def test_a_member_uses_both_tools_and_its_round_completes(tmp_path: Path, monkey
                   if 'insert' in row and row['insert'][0]['id'] == 'agents-mcp')['config']
     assert config == {'mcpCommand': str(Path(sys.executable).absolute()),
                       'mcpArgs': ['-I', '-m', 'graphtraj.interfaces.mcp']}
-    assert 'GRAPHTRAJ_CLI_CONNECTION' in service.environment and 'AGENT_SWARM_CONNECTION' not in service.environment
+    assert 'GRAPHTRAJ_CLI_CONNECTION' in service.environment and 'GRAFTLING_CONNECTION' not in service.environment
 
 
 def test_a_write_member_commits_with_only_the_granted_directories(
@@ -454,12 +454,12 @@ def test_a_standalone_child_keeps_its_own_entry_and_policy(tmp_path: Path, dsh: 
         stop_owned(host.control)
     [service] = FakeDshService.instances
     assert not [name for name in service.environment if name.startswith('GRAPHTRAJ_')]
-    assert 'AGENT_SWARM_CONNECTION' in service.environment
+    assert 'GRAFTLING_CONNECTION' in service.environment
     [plugin] = [row['insert'][0] for row in service.patches
                 if 'insert' in row and row['insert'][0]['id'] == 'agents-mcp']
     assert plugin['config'] == {'mcpCommand': str(Path(sys.executable).absolute()),
-                                'mcpArgs': ['-I', '-m', 'agent_swarm.mcp']}
-    assert Path(plugin['name']).is_relative_to(ROOT / 'src/agent_swarm')
+                                'mcpArgs': ['-I', '-m', 'graftling.mcp']}
+    assert Path(plugin['name']).is_relative_to(ROOT / 'src/graftling')
     # Byte-identical to the row before this change: no extra key at all.
     assert next(row for row in service.patches if row.get('id') == 'sandbox-policy') == {
         'id': 'sandbox-policy', 'config': {'mode': 'workspace-write', 'workspaceRoot': str(tmp_path)}}

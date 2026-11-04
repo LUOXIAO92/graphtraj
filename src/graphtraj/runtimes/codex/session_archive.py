@@ -13,7 +13,7 @@ from pathlib import Path
 import time
 from typing import BinaryIO
 
-from agent_swarm.sessions import SESSION_FORMAT_VERSION, codex_attachments, native_record, retain_native
+from graftling.sessions import SESSION_FORMAT_VERSION, codex_attachments, native_record, retain_native
 from graphtraj.interfaces.agents import graphtraj_fields
 from graphtraj.sessions.storage import SessionStore, StreamWriter, archive_owner, session_path
 

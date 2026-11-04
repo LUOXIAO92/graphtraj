@@ -398,7 +398,7 @@ def test_cleaned_task_member_answers_a_follow_up_in_its_native_session(
                        cwd=root, env=env).stdout == graph_before
 
     # The dispatch and every continuation are executions of one core Agent.
-    from agent_swarm import AgentControl, Binding, Caller
+    from graftling import AgentControl, Binding, Caller
 
     status = AgentControl(root / '.graphtraj/swarm', {}).operate(
         'status', {'agent': mapping['agent']}, Binding(Caller('graphtraj-tasks', None)),

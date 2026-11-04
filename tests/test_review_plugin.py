@@ -23,15 +23,15 @@ import urllib.response
 
 import pytest
 
-import agent_swarm
-from agent_swarm import AgentControl, AgentsError, Caller, read_connections, write_config
-from agent_swarm import review
-from agent_swarm.codex import driver as codex_driver
-from agent_swarm.codex.app_server import CodexAppServer
-from agent_swarm.codex.driver import CodexDriver
-from agent_swarm.codex.managed_session import CodexManagedExecution
-from agent_swarm.control import _request_message
-from agent_swarm.review import REVIEW_TIMEOUT_DEFAULT, build_request, check_reviewer, record_decision, review_call
+import graftling
+from graftling import AgentControl, AgentsError, Caller, read_connections, write_config
+from graftling import review
+from graftling.codex import driver as codex_driver
+from graftling.codex.app_server import CodexAppServer
+from graftling.codex.driver import CodexDriver
+from graftling.codex.managed_session import CodexManagedExecution
+from graftling.control import _request_message
+from graftling.review import REVIEW_TIMEOUT_DEFAULT, build_request, check_reviewer, record_decision, review_call
 
 MAIN = Caller('test-host', None)
 KEY = 'fake-review-key-0123456789'
@@ -44,7 +44,7 @@ ALLOW = json.dumps({'decision': 'allow', 'reason': 'Inside the task.'})
 
 def call(control, caller=MAIN, **request):
     """Invoke the bound agents function and return its document and failure flag."""
-    result = agent_swarm.bind(control, caller)(request)
+    result = graftling.bind(control, caller)(request)
     return result.document, result.failed
 
 
@@ -305,10 +305,10 @@ def test_process_that_cannot_start_is_a_failed_review(tmp_path):
 
 def test_process_holds_no_way_to_control_agents(tmp_path, monkeypatch):
     """The owner connection stays out of the reviewer's environment."""
-    monkeypatch.setenv('AGENT_SWARM_CONNECTION', 'owner-address')
+    monkeypatch.setenv('GRAFTLING_CONNECTION', 'owner-address')
     reviewer = process_reviewer(tmp_path, (
         'import json, os\n'
-        'held = "AGENT_SWARM_CONNECTION" in os.environ\n'
+        'held = "GRAFTLING_CONNECTION" in os.environ\n'
         'print(json.dumps({"decision": "deny" if held else "allow", "reason": "Checked."}))\n'))
     assert review_call(reviewer, REQUEST)['decision'] == 'allow'
 
@@ -345,7 +345,7 @@ def test_record_keeps_the_decision_without_input_or_credentials(tmp_path, monkey
 
 def test_policy_is_a_copy_and_the_plugin_imports_no_graphtraj():
     """The policy files equal their source, unmodified, and agents imports nothing from GraphTraj."""
-    source = Path(agent_swarm.__file__).parent
+    source = Path(graftling.__file__).parent
     copied = source / 'review_policy'
     original = source.parent / 'graphtraj' / 'runtimes' / 'codex' / 'policy'
     for name in ('policy.md', 'policy_template.md', 'LICENSE', 'NOTICE', 'SOURCE.md'):
@@ -829,7 +829,7 @@ def test_what_cannot_be_reviewed_or_accepted_goes_to_the_parent(tmp_path, plugin
 
 def test_failing_record_refuses_the_call(tmp_path, plugin, monkeypatch):
     """An allow that cannot be recorded does not run."""
-    from agent_swarm.codex import managed_session
+    from graftling.codex import managed_session
 
     def broken(*arguments):
         """Fail as a full disk would."""

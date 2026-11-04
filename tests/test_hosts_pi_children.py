@@ -18,12 +18,12 @@ from uuid import uuid4
 import pytest
 import yaml
 
-from agent_swarm import AgentControl, AgentsError, Caller, bind
-import agent_swarm.control
-from agent_swarm.claude.host import IndependentCalls, adoption_material, write_adoption
-from agent_swarm.codex.host import CodexHost
-from agent_swarm.pi import host as pi_host
-from agent_swarm.pi.driver import PiDriver
+from graftling import AgentControl, AgentsError, Caller, bind
+import graftling.control
+from graftling.claude.host import IndependentCalls, adoption_material, write_adoption
+from graftling.codex.host import CodexHost
+from graftling.pi import host as pi_host
+from graftling.pi.driver import PiDriver
 from test_claude_host_cross_runtime import claimed, main_call
 from test_codex_host_cross_runtime import Running, events, until
 from test_codex_independent_control import native_settings  # noqa: F401 - pytest fixture
@@ -180,7 +180,7 @@ def test_model_is_chosen_per_child(
                 'models': [{'id': 'other-model', 'alias': 'Other', 'provider': 'openrouter',
                             'supported_efforts': None}]}
 
-    monkeypatch.setattr(agent_swarm.control, '_discover_models', discover)
+    monkeypatch.setattr(graftling.control, '_discover_models', discover)
     created = main.call('create', runtime='pi', instruction='answer', **selection)
     assert created['result']['model'] == selection.get('model')
     assert ran_with(main.root, created['agent']) == expected
@@ -288,7 +288,7 @@ def test_a_pi_child_stopped_with_the_codex_host_reaches_the_next_resume_once(
 def test_default_claude_layout_fails_on_the_real_driver(project: Path, pi_environment: dict) -> None:
     """Why the host refuses it: a data root inside the worktree fails every Pi child at create."""
     root = project / '.agents-control'
-    request = pi_host.pi_request(ENTRY, project, {**os.environ, 'AGENT_SWARM_PI_ENTRY': str(
+    request = pi_host.pi_request(ENTRY, project, {**os.environ, 'GRAFTLING_PI_ENTRY': str(
         project.parent / 'bin' / 'pi')})
     call = bind(AgentControl(root, {'pi': PiDriver(request)}), Caller('standalone-host', None))
     created = call({'action': 'create', 'runtime': 'pi', 'instruction': 'answer'})
@@ -304,7 +304,7 @@ def serve_claude_host(config: Path, project: Path) -> str:
                 {'jsonrpc': '2.0', 'id': 2, 'method': 'tools/call',
                  'params': {'name': 'agents', 'arguments': {'action': 'discover'}}}]
     launcher = ('import subprocess, sys\n'
-                'done = subprocess.run([sys.executable, "-m", "agent_swarm.claude.host", "serve", "--config",'
+                'done = subprocess.run([sys.executable, "-m", "graftling.claude.host", "serve", "--config",'
                 ' sys.argv[1]], input=sys.stdin.read(), capture_output=True, text=True, timeout=30)\n'
                 'sys.stdout.write(done.stdout)\n')
     finished = subprocess.run([sys.executable, '-c', launcher, str(config)], cwd=project, capture_output=True,

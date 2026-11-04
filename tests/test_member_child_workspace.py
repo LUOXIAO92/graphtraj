@@ -12,7 +12,7 @@ from types import SimpleNamespace
 import pytest
 import yaml
 
-from agent_swarm import Caller, bind
+from graftling import Caller, bind
 from graphtraj.configuration import project_roles, role_definitions
 from graphtraj.configuration.project_configuration import runner_directory
 from graphtraj.execution import agent_driver, main_continuity, runner_status

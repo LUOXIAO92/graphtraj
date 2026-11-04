@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Awaitable, Callable
 
 from graphtraj import file_lock
-from agent_swarm.sessions import CodexJsonlArchive
+from graftling.sessions import CodexJsonlArchive
 from graphtraj.interfaces.agents import archive_project, configured_archive, graphtraj_fields
 from graphtraj.configuration.project_configuration import load_project_configuration
 from graphtraj.execution.runner_models import RunnerError
@@ -80,7 +80,7 @@ async def run_main(
         command = (str(runtime_executable('codex')), 'app-server', '--listen', 'stdio://')
         async with CodexAppServer(cwd=root, command=command, on_request=native_request,
                                   request_handler_timeout=None, experimental_api=True) as adapter:
-            from agent_swarm import Caller
+            from graftling import Caller
             from graphtraj.execution.runner_connection import worker_connection
             from graphtraj.execution.runner_status import runtime_caller
             from graphtraj.interfaces.agents import agents_callback
@@ -134,10 +134,10 @@ async def run_main(
                     'mcp_servers': {'graphtraj': {
                         'command': sys.executable, 'args': ['-m', 'graphtraj.interfaces.mcp'],
                         'cwd': str(root), 'env': {'GRAPHTRAJ_CLI_CONNECTION': address,
-                                                'GRAPHTRAJ_NATIVE_RUNTIME': 'codex'},
+                                                'GRAFTLING_NATIVE_RUNTIME': 'codex'},
                     }},
                     'shell_environment_policy': {'set': {'GRAPHTRAJ_CLI_CONNECTION': address,
-                                                        'GRAPHTRAJ_NATIVE_RUNTIME': 'codex'}},
+                                                        'GRAFTLING_NATIVE_RUNTIME': 'codex'}},
                 },
             })
             if resume is None:

@@ -24,7 +24,7 @@ def test_role_save_uses_strict_native_review(
     """Only a matched native acceptance saves the unchanged reviewed role document."""
     monkeypatch.chdir(project)
     monkeypatch.delenv('GRAPHTRAJ_CLI_CONNECTION', raising=False)
-    monkeypatch.delenv('AGENT_SWARM_CONNECTION', raising=False)
+    monkeypatch.delenv('GRAFTLING_CONNECTION', raising=False)
     monkeypatch.setattr(mcp, '_caller_notices', lambda params: nullcontext(None))
     path = roles_path(project)
     before = path.read_bytes()

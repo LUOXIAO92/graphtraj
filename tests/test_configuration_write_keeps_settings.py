@@ -15,10 +15,10 @@ import sys
 
 import pytest
 
-import agent_swarm
+import graftling
 
 
-SOURCE = Path(agent_swarm.__file__).resolve().parents[1]
+SOURCE = Path(graftling.__file__).resolve().parents[1]
 
 
 @dataclass(frozen=True)
@@ -37,11 +37,11 @@ class Entry:
 
     def default_root(self, project: Path) -> Path:
         """The data root a first install writes."""
-        return (project / self.config).parent if self.module.startswith('agent_swarm') else project
+        return (project / self.config).parent if self.module.startswith('graftling') else project
 
 
 ENTRIES = {
-    'agents': Entry('agent_swarm.claude.host', '.agents-control/claude-host.json', 'agents-claude-host',
+    'agents': Entry('graftling.claude.host', '.agents-control/claude-host.json', 'agents-claude-host',
                     'Native Claude context for independent agents MCP.', ('agents',), (('settings', {}),),
                     (('settings', {'model': 'chosen'}),
                      ('runtimes', {'pi': {'provider': 'deepseek', 'model': 'deepseek-flash'}}))),
@@ -114,7 +114,7 @@ def test_rerun_updates_only_what_the_command_owns(entry: Entry, project: Path, t
         },
     })
     write_json(project / '.claude/settings.local.json', {
-        'env': {'KEEP': '1', 'GRAPHTRAJ_CLAUDE_HOST_PYTHON': '/stale/python'},
+        'env': {'KEEP': '1', 'GRAFTLING_CLAUDE_HOST_PYTHON': '/stale/python'},
         'permissions': {'allow': ['Bash(ls)']},
     })
     write_json(project / entry.config, {
@@ -134,8 +134,8 @@ def test_rerun_updates_only_what_the_command_owns(entry: Entry, project: Path, t
         },
     }
     assert read_json(project / '.claude/settings.local.json') == {
-        'env': {'KEEP': '1', 'GRAPHTRAJ_CLAUDE_HOST_PYTHON': sys.executable,
-                'GRAPHTRAJ_CLAUDE_HOST_CONFIG': str(project / entry.config)},
+        'env': {'KEEP': '1', 'GRAFTLING_CLAUDE_HOST_PYTHON': sys.executable,
+                'GRAFTLING_CLAUDE_HOST_CONFIG': str(project / entry.config)},
         'permissions': {'allow': ['Bash(ls)']},
     }
     assert read_json(project / entry.config) == {
@@ -236,7 +236,7 @@ def test_first_install_content_is_unchanged(entry: Entry, project: Path) -> None
     configure(entry, project, '--write')
 
     config = project / entry.config
-    module = (SOURCE / 'agent_swarm/claude/host_context.mjs').read_text(encoding='utf-8')
+    module = (SOURCE / 'graftling/claude/host_context.mjs').read_text(encoding='utf-8')
     plugin = f'.claude/skills/{entry.plugin}'
     expected = {
         entry.config: json.dumps({
@@ -246,8 +246,8 @@ def test_first_install_content_is_unchanged(entry: Entry, project: Path) -> None
         '.mcp.json': json.dumps({'mcpServers': {'agents': {
             'command': sys.executable, 'args': host_arguments(entry, project)}}}, indent=2) + '\n',
         '.claude/settings.local.json': json.dumps({'env': {
-            'GRAPHTRAJ_CLAUDE_HOST_PYTHON': sys.executable,
-            'GRAPHTRAJ_CLAUDE_HOST_CONFIG': str(config)}}, indent=2) + '\n',
+            'GRAFTLING_CLAUDE_HOST_PYTHON': sys.executable,
+            'GRAFTLING_CLAUDE_HOST_CONFIG': str(config)}}, indent=2) + '\n',
         f'{plugin}/.claude-plugin/plugin.json': json.dumps(
             {'name': entry.plugin, 'version': '1', 'description': entry.description}, indent=2) + '\n',
         f'{plugin}/hooks/hooks.json': json.dumps({'modules': ['./host_context.mjs']}, indent=2) + '\n',
@@ -299,7 +299,7 @@ def test_printing_refuses_a_bad_host_configuration(entry: Entry, project: Path) 
 def test_write_adoption_computes_every_document_first(module: str, tmp_path: Path) -> None:
     """Both hosts share the public function, which writes nothing when a later file is bad."""
     write_adoption = importlib.import_module(module).write_adoption
-    assert write_adoption is importlib.import_module('agent_swarm.claude').write_adoption
+    assert write_adoption is importlib.import_module('graftling.claude').write_adoption
     good, text, bad = tmp_path / 'new/good.json', tmp_path / 'new/text.mjs', tmp_path / 'bad.json'
     bad.write_text('{not json', encoding='utf-8')
 
@@ -319,7 +319,7 @@ def test_write_adoption_computes_every_document_first(module: str, tmp_path: Pat
 ])
 def test_merge_is_recursive_over_objects(tmp_path: Path, existing: dict, update: dict, merged: dict) -> None:
     """Objects merge at any depth; a list or scalar from the command replaces the value."""
-    from agent_swarm.claude import write_adoption
+    from graftling.claude import write_adoption
 
     target = tmp_path / 'document.json'
     target.write_text(json.dumps(existing), encoding='utf-8')

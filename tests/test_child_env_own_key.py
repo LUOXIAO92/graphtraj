@@ -20,18 +20,18 @@ import json
 import pytest
 import yaml
 
-from agent_swarm import AgentControl, AgentsResult, Caller, bind
-from agent_swarm.child_env import CODEX_SHELL_EXCLUDE, child_environment, is_credential_name
-from agent_swarm.claude import ClaudeDriver
-from agent_swarm.claude.execution import ClaudeExecution
-from agent_swarm.codex.managed_session import CodexManagedExecution
-from agent_swarm.config import read_connections
-from agent_swarm.connection import agents_connection
-from agent_swarm.sessions import SessionArchive
-from agent_swarm.dsh.execution import DshExecution
-from agent_swarm.pi.driver import selected as pi_selected
-from agent_swarm.pi.execution import PiExecution
-from agent_swarm.process import authenticate_process
+from graftling import AgentControl, AgentsResult, Caller, bind
+from graftling.child_env import CODEX_SHELL_EXCLUDE, child_environment, is_credential_name
+from graftling.claude import ClaudeDriver
+from graftling.claude.execution import ClaudeExecution
+from graftling.codex.managed_session import CodexManagedExecution
+from graftling.config import read_connections
+from graftling.connection import agents_connection
+from graftling.sessions import SessionArchive
+from graftling.dsh.execution import DshExecution
+from graftling.pi.driver import selected as pi_selected
+from graftling.pi.execution import PiExecution
+from graftling.process import authenticate_process
 from graphtraj.configuration.project_roles import ProjectRolesError, load_project_roles, parse_inline_role
 from graphtraj.configuration.runtime_connections import resolve_connection, validate_catalog
 from graphtraj.configuration.role_definitions import resolve_child_role
@@ -459,7 +459,7 @@ def test_a_childs_create_runs_in_the_owner_with_the_owners_environment(tmp_path:
         return AgentsResult({'action': request['action'], 'result': {}})
 
     script = ('import os, json\n'
-              'from agent_swarm.connection import call_owner\n'
+              'from graftling.connection import call_owner\n'
               'assert "CHILD_KEY" not in os.environ\n'
               'print(json.dumps(call_owner({"action": "execute", "feature": "status", "arguments": {}}).document))\n')
     environment = {'PATH': os.environ['PATH'], 'HOME': os.environ['HOME'],
@@ -467,7 +467,7 @@ def test_a_childs_create_runs_in_the_owner_with_the_owners_environment(tmp_path:
                    'GIT_AUTHOR_NAME': 'write child', 'GIT_CONFIG_GLOBAL': os.devnull}
 
     with agents_connection(tmp_path / 'channel', call, lambda pid: authenticate_process(child, pid)) as address:
-        child = subprocess.Popen([sys.executable, '-c', script], env={**environment, 'AGENT_SWARM_CONNECTION': address},
+        child = subprocess.Popen([sys.executable, '-c', script], env={**environment, 'GRAFTLING_CONNECTION': address},
                                  stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
         output, errors = child.communicate(timeout=20)
 
@@ -705,8 +705,8 @@ def test_pi_another_providers_name_is_not_own(tmp_path: Path, pi_agent: None) ->
 
 def test_pi_reviewer_holding_the_named_key_is_refused(tmp_path: Path, pi_agent: None) -> None:
     """A models.json naming the reviewer's key would leave the child with only that name."""
-    from agent_swarm import AgentsError
-    from agent_swarm.pi.driver import _refuse_key_held_by_reviewer
+    from graftling import AgentsError
+    from graftling.pi.driver import _refuse_key_held_by_reviewer
 
     write_pi_home(tmp_path, 'models.json', {'providers': {'deepseek': {'apiKey': '$' + REVIEW}}})
     request = {'executable': _which('pi'), 'agent_dir': os.environ['PI_TEST_AGENT'], 'provider': 'deepseek',
@@ -829,7 +829,7 @@ def test_codex_withheld_reviewer_key_is_not_set_when_declared(tmp_path: Path) ->
 
 def test_codex_top_level_host_keeps_the_users_environment(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """CodexHost takes the user's environment as before 433: no removal and no shell exclude."""
-    from agent_swarm.codex.host import CodexHost
+    from graftling.codex.host import CodexHost
 
     assert CodexHost.user_environment is True and CodexManagedExecution.user_environment is False
     monkeypatch.setenv('GH_TOKEN', 'FAKE439HOSTVALUE')

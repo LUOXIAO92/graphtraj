@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Dict, Mapping, Protocol, Sequence
 
 # Keep existing consumer imports bound to the independent definitions.
-from agent_swarm import (
+from graftling import (
     RuntimeAdapterError,
     RuntimeContext,
     RuntimeExecutionResult,
@@ -287,7 +287,7 @@ def current_host_connection() -> dict | None:
         import os
 
         if any(os.environ.get(name) for name in (
-            'CODEX_THREAD_ID', 'GRAPHTRAJ_NATIVE_RUNTIME', 'DSH_SESSION_ID',
+            'CODEX_THREAD_ID', 'GRAFTLING_NATIVE_RUNTIME', 'DSH_SESSION_ID',
         )):
             raise RuntimeAdapterError(
                 'authority-unavailable',

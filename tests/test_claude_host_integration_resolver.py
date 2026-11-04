@@ -13,7 +13,7 @@ from uuid import uuid4
 import pytest
 import yaml
 
-from agent_swarm import AgentsResult
+from graftling import AgentsResult
 from conftest import InstalledCommands, run_process
 from test_task_graph import _task
 from test_task_integration import accepted_document  # noqa: F401  (fixture)

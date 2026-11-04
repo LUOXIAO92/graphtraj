@@ -15,7 +15,7 @@ from typing import Callable
 
 import yaml
 
-from agent_swarm import exclusive_lock
+from graftling import exclusive_lock
 from graphtraj.execution.runner_io import write_yaml_durably
 
 
@@ -88,7 +88,7 @@ def _receipt_facts(event: dict, session: str) -> tuple[list[tuple[str, str, str,
 def _agents_facts(event: dict, session: str) -> list[tuple[str, str, str, str]]:
     """Return the request and reply facts of one successful agents call."""
     if (event.get('hook_event_name') != 'PostToolUse'
-            or event.get('tool_name') not in {'mcp__graphtraj__agents', 'mcp__agents__agents'}):
+            or event.get('tool_name') not in {'mcp__graphtraj__agents', 'mcp__graftling__agents', 'mcp__agents__agents'}):
         return []
     request = event.get('tool_input', {})
     response = event.get('tool_response', {})

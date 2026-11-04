@@ -15,11 +15,11 @@ import sys
 
 import pytest
 
-from agent_swarm.codex.host import CodexHost
+from graftling.codex.host import CodexHost
 from test_codex_host_cross_runtime import Running, events, until
 from test_codex_independent_control import native_settings  # noqa: F401 - pytest fixture
 
-INSTALL = Path(__file__).resolve().parents[1] / 'src/agent_swarm/install'
+INSTALL = Path(__file__).resolve().parents[1] / 'src/graftling/install'
 NOTE = (INSTALL / 'codex.md').read_text()
 USER_TEXT = 'Retain native settings.'
 ANSWER = 'The child answered: Ready.'
@@ -57,7 +57,7 @@ def run_host(tmp_path: Path, settings: dict, instruction: str, *extra: str) -> t
     output = tmp_path / 'output.json'
     output.unlink(missing_ok=True)
     process = subprocess.run([
-        sys.executable, '-m', 'agent_swarm.codex.host', '--settings', str(tmp_path / 'settings.json'),
+        sys.executable, '-m', 'graftling.codex.host', '--settings', str(tmp_path / 'settings.json'),
         '--directory', str(tmp_path / 'data'), '--output', str(output), *extra, instruction,
     ], capture_output=True, text=True, timeout=60, stdin=subprocess.DEVNULL)
     lines = [json.loads(line) for line in process.stderr.splitlines() if line.startswith('{')]

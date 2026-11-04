@@ -6,7 +6,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from agent_swarm import AgentControl, AgentsError, Caller, bind
+from graftling import AgentControl, AgentsError, Caller, bind
 from graphtraj.execution import main_continuity
 from graphtraj.execution.main_continuity import (
     MainRoots, claim_main, claimable, current_main, owns_main_root, queue_notice,
@@ -295,7 +295,7 @@ def test_claude_host_serves_agents_and_tasks_as_the_continuing_main(tmp_path: Pa
 
 def test_agents_reads_main_claims_from_the_core_layout_runner(tmp_path: Path) -> None:
     """In the core layout a later Main Session sees and controls an earlier Main's root."""
-    from agent_swarm import Binding
+    from graftling import Binding
     from graphtraj.interfaces.agents import GraphTrajAgents, swarm_root
 
     (tmp_path / '.graphtraj/core').mkdir(parents=True)
@@ -316,7 +316,7 @@ def test_agents_reads_main_claims_from_the_core_layout_runner(tmp_path: Path) ->
 
 def test_continued_main_cannot_control_task_members_through_agents(tmp_path: Path) -> None:
     """agents' Task member path applies the same single-controller decision (S2)."""
-    from agent_swarm import Binding
+    from graftling import Binding
     from graphtraj.interfaces.agents import GraphTrajAgents
 
     runner = tmp_path / '.graphtraj/runner'

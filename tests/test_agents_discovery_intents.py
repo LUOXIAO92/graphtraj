@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import pytest
 
-from agent_swarm.discovery import DESCRIPTIONS, handle_request
+from graftling.discovery import DESCRIPTIONS, handle_request
 
 
 def discovered(query: str) -> list[str]:

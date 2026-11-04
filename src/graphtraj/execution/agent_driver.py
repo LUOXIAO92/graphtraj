@@ -1,6 +1,6 @@
 """Run existing Runtime Adapters' native executions for the ``agents`` core.
 
-:class:`AdapterDriver` is GraphTraj's :class:`agent_swarm.RuntimeDriver`. It
+:class:`AdapterDriver` is GraphTraj's :class:`graftling.RuntimeDriver`. It
 resolves Runtime settings from the project's configured role presets, then
 runs the Adapter's ``managed_execution`` owner (``RuntimeTurn``) on a thread
 of the calling host process. No Task, Team, Round, role_tree, Worldline,
@@ -18,7 +18,7 @@ import threading
 from pathlib import Path
 from typing import Any, Mapping
 
-from agent_swarm import AgentControl, AgentsError, AgentsResult, Caller, Run, within_workspace
+from graftling import AgentControl, AgentsError, AgentsResult, Caller, Run, within_workspace
 
 from graphtraj.runtimes.runtime_adapter import (
     RuntimeAdapterError,
@@ -95,7 +95,7 @@ class AdapterDriver:
         """Bind the project and the host-chosen working directory."""
         self.root = Path(root)
         self.cwd  = Path(cwd)
-        from agent_swarm.codex import CodexDriver
+        from graftling.codex import CodexDriver
         from graphtraj.runtimes.codex.managed_session import CodexManagedExecution
 
         self.codex = CodexDriver(execution=CodexManagedExecution)
@@ -230,7 +230,7 @@ class AdapterDriver:
         from graphtraj.interfaces.agents import graphtraj_fields
 
         if run.runtime == 'claude':
-            from agent_swarm import AgentControl, bind
+            from graftling import AgentControl, bind
 
             child_driver = AdapterDriver(self.root, Path(run.settings['cwd']))
             control = AgentControl(self.root / '.graphtraj/swarm',
@@ -252,8 +252,8 @@ class AdapterDriver:
 
             bind_agents(turn, run, self)
         if run.runtime == 'pi':
-            from agent_swarm import read_config
-            from agent_swarm.sessions import SessionArchive
+            from graftling import read_config
+            from graftling.sessions import SessionArchive
 
             root = run.directory.parent.parent
             choices = read_config(root)

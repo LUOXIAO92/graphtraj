@@ -39,9 +39,9 @@ def pi_session(root: Path, monkeypatch: pytest.MonkeyPatch, session: str, entrie
     header = {'type': 'session', 'version': 3, 'id': session, 'cwd': str(root)}
     path = root / f'{session}.jsonl'
     path.write_text(''.join(json.dumps(row) + '\n' for row in [header, *entries]))
-    monkeypatch.setenv('GRAPHTRAJ_NATIVE_RUNTIME', 'pi')
-    monkeypatch.setenv('GRAPHTRAJ_NATIVE_SESSION', session)
-    monkeypatch.setenv('GRAPHTRAJ_NATIVE_SESSION_FILE', str(path))
+    monkeypatch.setenv('GRAFTLING_NATIVE_RUNTIME', 'pi')
+    monkeypatch.setenv('GRAFTLING_NATIVE_SESSION', session)
+    monkeypatch.setenv('GRAFTLING_NATIVE_SESSION_FILE', str(path))
     monkeypatch.setattr(replacement, 'caller_runtime', lambda: 'pi')
     return {'event': 'session_start', 'reason': 'startup', 'header': header, 'entries': entries}
 
@@ -85,7 +85,7 @@ def test_pi_copied_delegation_does_not_relabel_user_fork(
     event['header']['parentSession'] = '/native/old-session.jsonl'
     assert native('pi', event) == {'source': 'main'}
     assert caller_alias(discover_runner_directory(project)) is None
-    monkeypatch.setenv('GRAPHTRAJ_NATIVE_SESSION', 'stale-main')
+    monkeypatch.setenv('GRAFTLING_NATIVE_SESSION', 'stale-main')
     with pytest.raises(ValueError, match='stale'):
         caller_alias(discover_runner_directory(project))
 
@@ -105,10 +105,10 @@ def test_unverifiable_native_runtime_does_not_become_human_cli(
     from graphtraj.execution.runner_models import RunnerError
 
     monkeypatch.setattr(replacement, 'caller_runtime', lambda: None)
-    monkeypatch.setenv('GRAPHTRAJ_NATIVE_RUNTIME', 'pi')
+    monkeypatch.setenv('GRAFTLING_NATIVE_RUNTIME', 'pi')
     with pytest.raises(RunnerError, match='cannot be verified'):
         caller_alias(discover_runner_directory(project))
-    monkeypatch.delenv('GRAPHTRAJ_NATIVE_RUNTIME')
+    monkeypatch.delenv('GRAFTLING_NATIVE_RUNTIME')
     assert caller_alias(discover_runner_directory(project)) is None
 
 
@@ -120,7 +120,7 @@ def test_unverifiable_caller_returns_mcp_error_without_closing_server(
     from graphtraj.interfaces.mcp import serve
 
     monkeypatch.setattr(replacement, 'caller_runtime', lambda: None)
-    monkeypatch.setenv('GRAPHTRAJ_NATIVE_RUNTIME', 'pi')
+    monkeypatch.setenv('GRAFTLING_NATIVE_RUNTIME', 'pi')
     requests = [
         {'jsonrpc': '2.0', 'id': 1, 'method': 'tools/call', 'params': {
             'name': 'agents', 'arguments': {
@@ -157,8 +157,8 @@ def test_dsh_start_resume_child_and_stale_context(project: Path, monkeypatch: py
     assert native('dsh', {'event': 'agent/created', 'source': 'startup', 'header': {
         **header, 'id': 'child', 'origin': 'subagent', 'parentSession': 'main', 'delegationDepth': 2,
     }}) == {'source': 'child'}
-    monkeypatch.setenv('GRAPHTRAJ_NATIVE_RUNTIME', 'pi')
-    monkeypatch.setenv('GRAPHTRAJ_NATIVE_SESSION', 'inherited-pi-main')
+    monkeypatch.setenv('GRAFTLING_NATIVE_RUNTIME', 'pi')
+    monkeypatch.setenv('GRAFTLING_NATIVE_SESSION', 'inherited-pi-main')
     assert caller_alias(discover_runner_directory(project)) == 'child'
     assert binding.read_bytes() == before
     monkeypatch.setenv('DSH_SESSION_ID', 'another-child')
@@ -184,7 +184,7 @@ def test_pi_shared_process_environment_is_per_session(project: Path) -> None:
     node = shutil.which('node')
     if node is None:
         pytest.skip('Node is not installed')
-    extension = Path(__file__).resolve().parents[1] / 'src/agent_swarm/pi/extension.mjs'
+    extension = Path(__file__).resolve().parents[1] / 'src/graftling/pi/extension.mjs'
     # Load the exact module bytes without asking Node to inspect denied parents
     # of an otherwise readable isolated Worktree.
     extension = Path(shutil.copy2(extension, project / 'extension.mjs'))
@@ -200,8 +200,8 @@ const child = sessionEnvironment(context('child'), inherited);
 inherited.PI_SUBAGENT_CHILD = '';
 assert.equal(main.PI_SUBAGENT_CHILD, '');
 assert.equal(child.PI_SUBAGENT_CHILD, '1');
-assert.equal(main.GRAPHTRAJ_NATIVE_SESSION, 'main');
-assert.equal(child.GRAPHTRAJ_NATIVE_SESSION, 'child');
+assert.equal(main.GRAFTLING_NATIVE_SESSION, 'main');
+assert.equal(child.GRAFTLING_NATIVE_SESSION, 'child');
 '''
     result = subprocess.run([node, '--input-type=module', '-e', script, str(extension)],
                             capture_output=True, text=True, check=False)
@@ -215,13 +215,14 @@ def test_installed_native_session_apis(project: Path, runtime: str) -> None:
     if node is None or executable is None:
         pytest.skip(f'{runtime} native library is not installed')
     package = Path(__file__).resolve().parents[1] / 'src/graphtraj/runtimes'
-    module = (package.parents[1] / 'agent_swarm/pi/extension.mjs' if runtime == 'pi'
+    module = (package.parents[1] / 'graftling/pi/extension.mjs' if runtime == 'pi'
               else package / runtime / 'tool.mjs')
-    # DSH tool.mjs imports its sibling collection and agent_swarm plugin by
+    # DSH tool.mjs imports its sibling collection and graftling plugin by
     # relative path (5debbf4), so it is loaded in place rather than copied.
     if runtime == 'pi':
         module = Path(shutil.copy2(module, project / module.name))
-    environment = {**os.environ, 'GRAPHTRAJ_DSH_PACKAGE': str(Path(executable).resolve())}
+    environment = {**os.environ, 'GRAPHTRAJ_DSH_PACKAGE': str(Path(executable).resolve()),
+                   'GRAFTLING_DSH_PACKAGE': str(Path(executable).resolve())}
     script = '''
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
@@ -233,7 +234,7 @@ if (process.argv[3] === 'pi') {
   const { SessionManager, SettingsManager, DefaultResourceLoader } = await loadHostSdk(process.argv[2]);
   const manager = SessionManager.create(process.cwd(), process.cwd() + '/sessions');
   const env = sessionEnvironment({ sessionManager: manager }, {});
-  assert.equal(env.GRAPHTRAJ_NATIVE_SESSION, manager.getHeader().id);
+  assert.equal(env.GRAFTLING_NATIVE_SESSION, manager.getHeader().id);
   assert.equal(manager.getHeader().version, 3);
   assert.equal(SettingsManager.inMemory({ defaultThinkingLevel: 'high' }).getSettings().defaultThinkingLevel, 'high');
   assert.equal(typeof DefaultResourceLoader, 'function');

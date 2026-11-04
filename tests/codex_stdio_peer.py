@@ -280,7 +280,7 @@ for line in incoming():
         active[thread_id] = turn_id
         if 'toolOutput' in params:
             assert params['input'] == []
-            assert params['toolOutput']['name'] == 'graphtraj'
+            assert params['toolOutput']['name'] == 'graftling'
             prompt = params['toolOutput']['output']
             assert json.loads(prompt)['source'] in {'graphtraj', 'agents'}
             if os.environ.get('PEER_HOST_EVENTS'):
@@ -373,7 +373,7 @@ for line in incoming():
                 """Issue one genuine bound MCP call from the controlled native host."""
                 server = sessions[thread_id]['config']['mcp_servers']['graphtraj']
                 environment = {key: value for key, value in os.environ.items()
-                               if key not in {'AGENT_SWARM_CONNECTION', 'GRAPHTRAJ_CLI_CONNECTION'}}
+                               if key not in {'GRAFTLING_CONNECTION', 'GRAPHTRAJ_CLI_CONNECTION'}}
                 environment.update(server['env'])
                 request = {'jsonrpc': '2.0', 'id': 1, 'method': 'tools/call', 'params': {
                     'name': 'agents', '_meta': {'threadId': thread_id},
@@ -394,7 +394,7 @@ for line in incoming():
                     if entry['method'] == 'tools/call':
                         entry['params']['_meta'] = {'threadId': os.environ.get('PEER_MCP_ISSUER', thread_id)}
                 environment = {key: value for key, value in os.environ.items()
-                               if key not in {'AGENT_SWARM_CONNECTION', 'GRAPHTRAJ_CLI_CONNECTION'}}
+                               if key not in {'GRAFTLING_CONNECTION', 'GRAPHTRAJ_CLI_CONNECTION'}}
                 environment.update(server['env'])
                 response = subprocess.run([server['command'], *server['args']], cwd=server['cwd'],
                                           env=environment, text=True, capture_output=True, timeout=10,
@@ -407,7 +407,7 @@ for line in incoming():
                 """Make each call after the last one's result, as a model does: <agent from N> names call N's."""
                 server = sessions[thread_id]['config']['mcp_servers']['graphtraj']
                 environment = {key: value for key, value in os.environ.items()
-                               if key not in {'AGENT_SWARM_CONNECTION', 'GRAPHTRAJ_CLI_CONNECTION'}}
+                               if key not in {'GRAFTLING_CONNECTION', 'GRAPHTRAJ_CLI_CONNECTION'}}
                 environment.update(server['env'])
                 process = subprocess.Popen([server['command'], *server['args']], cwd=server['cwd'], env=environment,
                                            text=True, stdin=subprocess.PIPE, stdout=subprocess.PIPE)

@@ -100,7 +100,7 @@ def later_prompt(message: dict) -> None:
     timer.daemon = True
     timer.start()
     emit({'type': 'control_request', 'request_id': identity, 'request': {
-        'subtype': 'hook_callback', 'callback_id': 'graphtraj_start', 'input': {
+        'subtype': 'hook_callback', 'callback_id': 'graftling_start', 'input': {
             'hook_event_name': 'UserPromptSubmit', 'session_id': session,
             'transcript_path': str(transcript), 'prompt': message['message']['content']}}})
 
@@ -236,7 +236,7 @@ def helper_stop() -> None:
             'id': 'api-h2', 'role': 'assistant', 'model': model,
             'content': [{'type': 'text', 'text': 'found'}]}}) + '\n')
     emit({'type': 'control_request', 'request_id': 'helper-stop', 'request': {
-        'subtype': 'hook_callback', 'callback_id': 'graphtraj_collect_child', 'input': {
+        'subtype': 'hook_callback', 'callback_id': 'graftling_collect_child', 'input': {
             'hook_event_name': 'SubagentStop', 'agent_id': 'helper', 'agent_transcript_path': str(helper),
             'session_id': os.environ.get('CLAUDE_FIXTURE_HELPER_SESSION', session),
             'transcript_path': str(transcript),
@@ -389,7 +389,7 @@ def startup() -> None:
             time.sleep(0.01)
     hook_sent = time.monotonic()
     emit({'type': 'control_request', 'request_id': 'startup', 'request': {
-        'subtype': 'hook_callback', 'callback_id': 'graphtraj_start', 'input': {
+        'subtype': 'hook_callback', 'callback_id': 'graftling_start', 'input': {
             'hook_event_name': 'UserPromptSubmit', 'session_id': session,
             'source': 'resume' if '--resume' in args else 'startup', 'transcript_path': str(transcript)}}})
 
@@ -504,7 +504,7 @@ for line in sys.stdin:
             if sdk_display:
                 sdk_display_reply = reply
                 emit({'type': 'control_request', 'request_id': 'sdk-display', 'request': {
-                    'subtype': 'hook_callback', 'callback_id': 'graphtraj_agents_display', 'input': {
+                    'subtype': 'hook_callback', 'callback_id': 'graftling_agents_display', 'input': {
                         'hook_event_name': 'PostToolUse', 'session_id': session,
                         'tool_use_id': 'display-' + sdk_request_arguments['feature'],
                         'tool_name': 'mcp__agents__agents', 'tool_input': sdk_request_arguments,

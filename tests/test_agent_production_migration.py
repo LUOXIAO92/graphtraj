@@ -90,7 +90,7 @@ def test_public_cutover_and_restore_preserve_identity_and_git_cwd(
     assert tomllib.loads(request['arguments'][1])['permissions'] == expected
     # The public control resumes the retained native ID under its original host
     # and parent. This is a driver seam, not a claim of real Runtime execution.
-    from agent_swarm import AgentControl, Binding, Caller
+    from graftling import AgentControl, Binding, Caller
 
     class Driver:
         def start(self, run):
@@ -219,7 +219,7 @@ def test_cutover_moves_owned_native_files_and_preserves_external_references(
 
 def test_stopped_settings_update_keeps_identity_and_checks_host(tmp_path: Path) -> None:
     """Migration consumes the independent tool's public API, including its ownership checks."""
-    from agent_swarm import AgentControl, Caller, AgentsError, Binding
+    from graftling import AgentControl, Caller, AgentsError, Binding
 
     control = AgentControl(tmp_path, {})
     owner = Caller('original-host', 'parent')
@@ -237,7 +237,7 @@ def test_stopped_settings_update_keeps_identity_and_checks_host(tmp_path: Path) 
 
 def test_imported_task_control_uses_the_retained_parent_binding(tmp_path: Path) -> None:
     """The Worker consumer can observe an imported child of a legacy parent."""
-    from agent_swarm import AgentControl
+    from graftling import AgentControl
     from graphtraj.execution.task_agents import core_status
     from test_result_submission import result_project
 
@@ -609,8 +609,8 @@ def swarm_agent(
     root: Path, worktree: Path, agent: str, *, worker_pid: int, code: str = 'owner-exited',
     runtime_pid: int | None = -1,
 ) -> Path:
-    """Retain an independent Agent whose last execution agent_swarm ended as unconfirmed."""
-    from agent_swarm import AgentControl
+    """Retain an independent Agent whose last execution graftling ended as unconfirmed."""
+    from graftling import AgentControl
 
     settings = {'cwd': str(worktree), 'adapter_request': {'cwd': str(worktree), 'approval_policy': 'on-request'}}
     execution = {'id': agent + '-run', 'state': 'ended', 'outcome': 'failed', 'terminal_confirmed': False,
@@ -638,7 +638,7 @@ def test_owner_exited_swarm_execution_moves_with_relocated_settings_and_unchange
 
     RUNTIME_WORKER_FAILED is the production shape (B+): a dead worker and no recorded Runtime.
     """
-    from agent_swarm import AgentControl, AgentsError, Caller
+    from graftling import AgentControl, AgentsError, Caller
 
     root = tmp_path / 'project'
     worktree, _ = project(root)

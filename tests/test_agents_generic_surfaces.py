@@ -10,14 +10,14 @@ import sys
 
 import pytest
 
-from agent_swarm import AgentControl, Caller, bind
-from agent_swarm.codex.app_server import CodexAppServer
-from agent_swarm.codex.context import CodexAdapterError
-from agent_swarm.connection import agents_connection
-from agent_swarm.discovery import handle_request
-from agent_swarm.pi.session import session_source
-from agent_swarm.process import authenticate_process
-from agent_swarm.tool import INPUT_SCHEMA
+from graftling import AgentControl, Caller, bind
+from graftling.codex.app_server import CodexAppServer
+from graftling.codex.context import CodexAdapterError
+from graftling.connection import agents_connection
+from graftling.discovery import handle_request
+from graftling.pi.session import session_source
+from graftling.process import authenticate_process
+from graftling.tool import INPUT_SCHEMA
 from graphtraj.execution.runner_models import RunnerError
 from graphtraj.interfaces.hosted_cli import forward_request
 from graphtraj.runtimes.pi import session_entry
@@ -119,10 +119,10 @@ def test_agents_entry_ignores_a_graphtraj_connection(tmp_path: Path) -> None:
         return callback(request)
 
     with agents_connection(tmp_path / 'pipe', call, lambda pid: authenticate_process(child, pid)) as address:
-        env = {**os.environ, 'AGENT_SWARM_CONNECTION': address,
+        env = {**os.environ, 'GRAFTLING_CONNECTION': address,
                'GRAPHTRAJ_CLI_CONNECTION': '/unrelated/other-host', 'PYTHONPATH': str(SOURCE)}
         for surface in ('cli', 'mcp'):
-            command = [sys.executable, '-m', 'agent_swarm.' + surface]
+            command = [sys.executable, '-m', 'graftling.' + surface]
             request = {'action': 'execute', 'feature': 'status', 'arguments': {}}
             payload = None
             if surface == 'cli':
@@ -140,7 +140,7 @@ def test_agents_entry_ignores_a_graphtraj_connection(tmp_path: Path) -> None:
 def test_graphtraj_forwarding_refuses_both_connections(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """GraphTraj, not agents, refuses a process carrying both owners' connections."""
     monkeypatch.setenv('GRAPHTRAJ_CLI_CONNECTION', str(tmp_path / 'graphtraj-host'))
-    monkeypatch.setenv('AGENT_SWARM_CONNECTION', str(tmp_path / 'agents-host'))
+    monkeypatch.setenv('GRAFTLING_CONNECTION', str(tmp_path / 'agents-host'))
     with pytest.raises(RunnerError) as rejected:
         forward_request({'action': 'execute', 'feature': 'agents', 'arguments': {}}, tmp_path)
     assert rejected.value.code == 'authority-denied'
@@ -171,7 +171,7 @@ def start_pi(tmp_path: Path, module: str, entry: str, **environment: str) -> dic
     if not node:
         pytest.skip('Node is required')
     env = {key: value for key, value in os.environ.items()
-           if key not in {'AGENT_SWARM_CONNECTION', 'GRAPHTRAJ_CLI_CONNECTION', 'DSH_SESSION_ID', 'DSH_AGENT_SOURCE'}}
+           if key not in {'GRAFTLING_CONNECTION', 'GRAPHTRAJ_CLI_CONNECTION', 'DSH_SESSION_ID', 'DSH_AGENT_SOURCE'}}
     result = subprocess.run([node, '--input-type=module', '-e', PI_START, str(SOURCE / module), entry],
                             cwd=tmp_path, env={**env, **environment}, capture_output=True, text=True,
                             check=True, timeout=20)
@@ -180,9 +180,9 @@ def start_pi(tmp_path: Path, module: str, entry: str, **environment: str) -> dic
 
 def test_pi_exclusion_moved_to_the_graphtraj_extension(tmp_path: Path) -> None:
     """agents' Pi entry adopts its own connection; GraphTraj's refuses mixing owners."""
-    both = {'AGENT_SWARM_CONNECTION': '/agents-host', 'GRAPHTRAJ_CLI_CONNECTION': '/graphtraj-host',
-            'AGENT_SWARM_PYTHON': sys.executable}
-    assert start_pi(tmp_path, 'agent_swarm/pi/extension.mjs', 'agents', **both) == {
+    both = {'GRAFTLING_CONNECTION': '/agents-host', 'GRAPHTRAJ_CLI_CONNECTION': '/graphtraj-host',
+            'GRAFTLING_PYTHON': sys.executable}
+    assert start_pi(tmp_path, 'graftling/pi/extension.mjs', 'agents', **both) == {
         'owned': True, 'registered': ['agents']}
     refused = start_pi(tmp_path, 'graphtraj/runtimes/pi/extension.mjs', 'graphtraj', **both)
     assert refused['error'].startswith('Conflicting existing Agent connections')

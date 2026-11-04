@@ -274,7 +274,7 @@ def test_managed_worker_grants_only_its_channel_and_closes_it(tmp_path: Path, pe
         assert filesystem.get(str(Path(address).parent)) in (None, 'none')
         result = cli(tmp_path, address, 'submit-result', '--commit', commit,
                      '--result-ref', 'result.md', '--completion', 'Native host adopted',
-                     GRAPHTRAJ_NATIVE_RUNTIME='codex', CODEX_THREAD_ID=session)
+                     GRAFTLING_NATIVE_RUNTIME='codex', CODEX_THREAD_ID=session)
         assert result.returncode == 0, result.stdout + result.stderr
         observed.append(address)
 
@@ -305,7 +305,7 @@ def test_shared_mcp_command_consumes_bound_graphtraj_dsh_channel(tmp_path: Path,
     """The same MCP command preserves the existing Task caller and native Session check."""
     runner, _, _ = result_project(tmp_path)
     directory = own_process(runner)
-    monkeypatch.delenv('AGENT_SWARM_CONNECTION', raising=False)
+    monkeypatch.delenv('GRAFTLING_CONNECTION', raising=False)
     expected = {'runtime': 'dsh', 'session': 'owned-dsh-session', 'source': 'main', 'cwd': str(tmp_path)}
     request = {'jsonrpc': '2.0', 'id': 1, 'method': 'tools/call', 'params': {'name': 'agents',
         'arguments': {'action': 'execute', 'feature': 'status', 'arguments': {}}}}
@@ -421,22 +421,22 @@ def test_cli_host_returns_a_slow_read_result_instead_of_a_timeout(
 
 def test_agents_cli_uses_the_bound_task_channel(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """The independent agents CLI reaches a member's host through the MCP agents dispatch."""
-    from agent_swarm.connection import CONNECTION_ENV as AGENTS_CONNECTION
+    from graftling.connection import CONNECTION_ENV as AGENTS_CONNECTION
 
     runner, _, _ = result_project(tmp_path)
     directory = own_process(runner)
     monkeypatch.delenv(AGENTS_CONNECTION, raising=False)
     status = json.dumps({'action': 'execute', 'feature': 'status', 'arguments': {}})
     with cli_connection(tmp_path, 'research@x1', native_operation_features()) as address:
-        refused = run_cli('agent_swarm.cli', tmp_path, address, status)
+        refused = run_cli('graftling.cli', tmp_path, address, status)
         assert refused.returncode == 1  # the channel locates, it never authorizes
         assert json.loads(refused.stdout)['error']['code'] == 'authority-denied'
     with hold_ownership(directory, os.getpid()), cli_connection(
         tmp_path, 'research@x1', native_operation_features(),
     ) as address:
-        found = run_cli('agent_swarm.cli', tmp_path, address, json.dumps({'action': 'discover'}))
+        found = run_cli('graftling.cli', tmp_path, address, json.dumps({'action': 'discover'}))
         assert found.returncode == 0 and 'status' in found.stdout
-        result = run_cli('agent_swarm.cli', tmp_path, address, status)
+        result = run_cli('graftling.cli', tmp_path, address, status)
         assert result.returncode == 0, result.stdout + result.stderr
         assert 'research@x1' in result.stdout
         # agents does not read GraphTraj's variable; GraphTraj's own CLI refuses both owners.

@@ -2,7 +2,7 @@
 
 agents protects its data root and Codex's directories. GraphTraj declares its own
 ``.graphtraj`` through the public keyword and attribute. The standalone tests import
-only ``agent_swarm``; the GraphTraj tests import it inside their bodies.
+only ``graftling``; the GraphTraj tests import it inside their bodies.
 """
 from __future__ import annotations
 
@@ -15,8 +15,8 @@ import sys
 
 import pytest
 
-from agent_swarm import default_config
-from agent_swarm.sessions import JsonlSessionStore, PiArchive, SessionArchive, archive_path
+from graftling import default_config
+from graftling.sessions import JsonlSessionStore, PiArchive, SessionArchive, archive_path
 
 
 def bound_archive(root: Path) -> SessionArchive:
@@ -85,15 +85,15 @@ def test_standalone_copies_an_attachment_under_graphtraj(tmp_path: Path) -> None
 
 def test_standalone_copies_it_with_no_graphtraj_package(tmp_path: Path) -> None:
     """An isolated Python that cannot import GraphTraj gives the same copy."""
-    source = Path(__file__).resolve().parents[1] / 'src/agent_swarm'
-    shutil.copytree(source, tmp_path / 'agent_swarm', ignore=shutil.ignore_patterns('__pycache__'))
+    source = Path(__file__).resolve().parents[1] / 'src/graftling'
+    shutil.copytree(source, tmp_path / 'graftling', ignore=shutil.ignore_patterns('__pycache__'))
     program = '''
 import sys
 from pathlib import Path
 sys.path.insert(0, sys.argv[1])
-from agent_swarm import write_config
-from agent_swarm.sessions.archive import ConfiguredSessionArchive
-from agent_swarm.sessions.pi import PiArchive
+from graftling import write_config
+from graftling.sessions.archive import ConfiguredSessionArchive
+from graftling.sessions.pi import PiArchive
 base = Path(sys.argv[1])
 project = base / 'project'
 (project / '.graphtraj').mkdir(parents=True)
@@ -218,9 +218,9 @@ def test_graphtraj_collection_entry_protects_its_directory_and_declares_it(
     ordinary = write(tmp_path / 'ordinary')
     in_worktree = write(tmp_path / '.graphtraj/.agent-worktrees/member/x')
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setenv('GRAPHTRAJ_NATIVE_RUNTIME', 'pi')
-    monkeypatch.setenv('GRAPHTRAJ_NATIVE_SESSION', 'attachments')
-    monkeypatch.setenv('GRAPHTRAJ_NATIVE_SESSION_FILE', str(tmp_path / 'native.jsonl'))
+    monkeypatch.setenv('GRAFTLING_NATIVE_RUNTIME', 'pi')
+    monkeypatch.setenv('GRAFTLING_NATIVE_SESSION', 'attachments')
+    monkeypatch.setenv('GRAFTLING_NATIVE_SESSION_FILE', str(tmp_path / 'native.jsonl'))
     monkeypatch.setenv('PI_SUBAGENT_CHILD', '1')
     declared = []
     construct = PiArchive.__init__
@@ -521,13 +521,13 @@ main()
 """)
     command.chmod(0o755)
     source = Path(__file__).resolve().parents[1] / 'src'
-    for name in ('AGENT_SWARM_CONNECTION', 'AGENT_SWARM_PYTHON', 'GRAPHTRAJ_CLI_CONNECTION', 'PI_SUBAGENT_CHILD'):
+    for name in ('GRAFTLING_CONNECTION', 'GRAFTLING_PYTHON', 'GRAPHTRAJ_CLI_CONNECTION', 'PI_SUBAGENT_CHILD'):
         monkeypatch.delenv(name, raising=False)
     monkeypatch.setenv('PATH', str(bin_dir) + os.pathsep + os.environ['PATH'])
     monkeypatch.setenv('PYTHONPATH', str(source))
-    monkeypatch.setenv('GRAPHTRAJ_NATIVE_RUNTIME', 'pi')
-    monkeypatch.setenv('GRAPHTRAJ_NATIVE_SESSION', 'attachments')
-    monkeypatch.setenv('GRAPHTRAJ_NATIVE_SESSION_FILE', str(tmp_path / 'native.jsonl'))
+    monkeypatch.setenv('GRAFTLING_NATIVE_RUNTIME', 'pi')
+    monkeypatch.setenv('GRAFTLING_NATIVE_SESSION', 'attachments')
+    monkeypatch.setenv('GRAFTLING_NATIVE_SESSION_FILE', str(tmp_path / 'native.jsonl'))
     direct = subprocess.run([str(command), 'pi', '--collect'], cwd=worktree, input='', capture_output=True,
                             text=True, timeout=30, check=False)
     assert direct.returncode == 1
@@ -538,8 +538,8 @@ main()
     elif owner == 'runner':
         monkeypatch.setenv('GRAPHTRAJ_CLI_CONNECTION', 'unused')
     else:
-        monkeypatch.setenv('AGENT_SWARM_CONNECTION', 'unused')
-        monkeypatch.setenv('AGENT_SWARM_PYTHON', sys.executable)
+        monkeypatch.setenv('GRAFTLING_CONNECTION', 'unused')
+        monkeypatch.setenv('GRAFTLING_PYTHON', sys.executable)
     script = """
 import { pathToFileURL } from 'node:url';
 const { default: graphtraj } = await import(pathToFileURL(process.argv[1]).href);

@@ -16,11 +16,11 @@ import pytest
 
 SOURCE = Path(__file__).resolve().parents[1] / 'src'
 GRAPHTRAJ = SOURCE / 'graphtraj'
-CONTRACT = SOURCE / 'agent_swarm' / 'PUBLIC_API.md'
+CONTRACT = SOURCE / 'graftling' / 'PUBLIC_API.md'
 
-ROOT = 'agent_swarm'
-RUNTIME_PACKAGES = ('agent_swarm.claude', 'agent_swarm.codex', 'agent_swarm.pi', 'agent_swarm.dsh')
-PACKAGES = (ROOT, *RUNTIME_PACKAGES, 'agent_swarm.sessions')
+ROOT = 'graftling'
+RUNTIME_PACKAGES = ('graftling.claude', 'graftling.codex', 'graftling.pi', 'graftling.dsh')
+PACKAGES = (ROOT, *RUNTIME_PACKAGES, 'graftling.sessions')
 
 
 def published() -> dict[str, set[str]]:
@@ -43,7 +43,7 @@ def import_findings(tree: ast.AST, names: dict[str, set[str]]) -> list[str]:
 
     ``names`` is :func:`published`'s result. A package named by an import is
     public only when it is one of ``PACKAGES``; attributes reached through a
-    plain ``import agent_swarm`` are checked like imported names.
+    plain ``import graftling`` are checked like imported names.
     """
     findings = []
     # Local names bound to a public package, with the package they name.
@@ -173,7 +173,7 @@ def contract_javascript() -> dict[str, set[str]]:
     """Read the JavaScript table of section 1.3: file to its public exports."""
     table = {}
     for line in contract_section().splitlines():
-        match = re.match(r'\| `(agent_swarm/[\w./-]+\.mjs)` \| (.+) \|$', line)
+        match = re.match(r'\| `(graftling/[\w./-]+\.mjs)` \| (.+) \|$', line)
         if match:
             table[match[1]] = set(re.findall(r'`(\w+)`', match[2]))
     return table
@@ -251,7 +251,7 @@ def test_every_public_name_is_listed_in_the_contract() -> None:
     for package in PACKAGES:
         assert names[package], f'{package} has no __all__'
 
-    listed = set(re.findall(r'`(?:agent_swarm\.)?(\w+)\b', section))
+    listed = set(re.findall(r'`(?:graftling\.)?(\w+)\b', section))
     assert not sorted(names[ROOT] - listed)
     for package in PACKAGES[1:]:
         row = next((line for line in section.splitlines() if line.startswith(f'| `{package}` |')), '')
@@ -279,39 +279,39 @@ def test_listed_javascript_exports_exist() -> None:
 
 
 def test_importing_agents_loads_no_runtime_package() -> None:
-    """``import agent_swarm`` starts no Runtime package, and the MCP entry imports once."""
+    """``import graftling`` starts no Runtime package, and the MCP entry imports once."""
     environment = {**os.environ, 'PYTHONPATH': str(SOURCE)}
-    environment.pop('AGENT_SWARM_CONNECTION', None)
-    code = ('import sys, agent_swarm; '
+    environment.pop('GRAFTLING_CONNECTION', None)
+    code = ('import sys, graftling; '
             f'print([name for name in sys.modules if name.startswith({RUNTIME_PACKAGES!r})])')
     result = subprocess.run([sys.executable, '-c', code], env=environment,
                             capture_output=True, text=True, check=True)
     assert result.stdout.strip() == '[]'
 
     # A name loaded early would warn that the module is found twice.
-    subprocess.run([sys.executable, '-W', 'error', '-m', 'agent_swarm.mcp'], env=environment,
+    subprocess.run([sys.executable, '-W', 'error', '-m', 'graftling.mcp'], env=environment,
                    input='', text=True, check=True)
 
 
-SAMPLE_NAMES = {'agent_swarm': {'Run', 'bind'}, 'agent_swarm.codex': {'CodexDriver'}}
+SAMPLE_NAMES = {'graftling': {'Run', 'bind'}, 'graftling.codex': {'CodexDriver'}}
 
 
 @pytest.mark.parametrize('source', [
-    'from agent_swarm.control import AgentControl',
-    'from agent_swarm.control import _scope',
-    'def late():\n    from agent_swarm.control import _alive',
-    'import agent_swarm.control',
-    'import agent_swarm.control as control',
-    'from agent_swarm import _hidden',
-    'from agent_swarm import internal_name',
-    'from agent_swarm.codex import _private',
-    'from agent_swarm.codex import app_server',
-    'import agent_swarm\nagent_swarm.hidden()',
-    'import agent_swarm.codex as codex\ncodex.hidden()',
-    'from agent_swarm import codex\ncodex.hidden()',
-    'import importlib\nimportlib.import_module("agent_swarm.control")',
-    'from importlib import import_module\nimport_module("agent_swarm.sessions.dsh")',
-    '__import__("agent_swarm.control")',
+    'from graftling.control import AgentControl',
+    'from graftling.control import _scope',
+    'def late():\n    from graftling.control import _alive',
+    'import graftling.control',
+    'import graftling.control as control',
+    'from graftling import _hidden',
+    'from graftling import internal_name',
+    'from graftling.codex import _private',
+    'from graftling.codex import app_server',
+    'import graftling\ngraftling.hidden()',
+    'import graftling.codex as codex\ncodex.hidden()',
+    'from graftling import codex\ncodex.hidden()',
+    'import importlib\nimportlib.import_module("graftling.control")',
+    'from importlib import import_module\nimport_module("graftling.sessions.dsh")',
+    '__import__("graftling.control")',
 ])
 def test_import_check_reports_every_form(source: str) -> None:
     """Module-level, local, aliased, dynamic and attribute uses are all reported."""
@@ -319,11 +319,11 @@ def test_import_check_reports_every_form(source: str) -> None:
 
 
 @pytest.mark.parametrize('source', [
-    'from agent_swarm import Run, bind',
-    'from agent_swarm.codex import CodexDriver as Driver',
-    'import agent_swarm\nagent_swarm.bind()',
-    'import agent_swarm.codex as codex\ncodex.CodexDriver()',
-    'import importlib\nimportlib.import_module("agent_swarm.codex")',
+    'from graftling import Run, bind',
+    'from graftling.codex import CodexDriver as Driver',
+    'import graftling\ngraftling.bind()',
+    'import graftling.codex as codex\ncodex.CodexDriver()',
+    'import importlib\nimportlib.import_module("graftling.codex")',
     'import other_package.control',
 ])
 def test_import_check_accepts_published_names(source: str) -> None:
@@ -345,12 +345,12 @@ class Base:
 
 @pytest.fixture
 def sample_base(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Register a small agents class, from a real file, as ``agent_swarm.sample``."""
+    """Register a small agents class, from a real file, as ``graftling.sample``."""
     file = tmp_path / 'sample.py'
     file.write_text(SAMPLE_BASE, encoding='utf-8')
-    specification = importlib.util.spec_from_file_location('agent_swarm.sample', file)
+    specification = importlib.util.spec_from_file_location('graftling.sample', file)
     module = importlib.util.module_from_spec(specification)
-    monkeypatch.setitem(sys.modules, 'agent_swarm.sample', module)
+    monkeypatch.setitem(sys.modules, 'graftling.sample', module)
     specification.loader.exec_module(module)
 
 
@@ -366,7 +366,7 @@ def sample_base(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
 @pytest.mark.usefixtures('sample_base')
 def test_subclass_check_reports_private_members(body: str) -> None:
     """Overriding, replacing, calling or reading a base's underscore member is reported."""
-    tree = ast.parse(f'from agent_swarm.sample import Base\nclass Child(Base):\n    {body}\n')
+    tree = ast.parse(f'from graftling.sample import Base\nclass Child(Base):\n    {body}\n')
 
     assert subclass_findings(tree, 'graphtraj.sample', {'graphtraj.sample': tree})
 
@@ -374,7 +374,7 @@ def test_subclass_check_reports_private_members(body: str) -> None:
 @pytest.mark.usefixtures('sample_base')
 def test_subclass_check_follows_graphtraj_classes() -> None:
     """A class below a GraphTraj subclass of an agents class is checked as well."""
-    middle = ast.parse('from agent_swarm.sample import Base\nclass Middle(Base):\n    pass\n')
+    middle = ast.parse('from graftling.sample import Base\nclass Middle(Base):\n    pass\n')
     child = ast.parse('from graphtraj.middle import Middle\nclass Child(Middle):\n    def _hook(self): pass\n')
 
     assert subclass_findings(child, 'graphtraj.child', {'graphtraj.middle': middle, 'graphtraj.child': child})
@@ -383,7 +383,7 @@ def test_subclass_check_follows_graphtraj_classes() -> None:
 @pytest.mark.usefixtures('sample_base')
 def test_subclass_check_accepts_own_private_members() -> None:
     """A subclass's own underscore members and the base's public ones are its business."""
-    tree = ast.parse('from agent_swarm.sample import Base\n'
+    tree = ast.parse('from graftling.sample import Base\n'
                      'class Child(Base):\n'
                      '    def _own(self): pass\n'
                      '    def run(self): self._own()\n')
@@ -391,19 +391,19 @@ def test_subclass_check_accepts_own_private_members() -> None:
     assert not subclass_findings(tree, 'graphtraj.sample', {'graphtraj.sample': tree})
 
 
-JAVASCRIPT_TABLE = {'agent_swarm/pi/extension.mjs': {'loadHostSdk'}}
+JAVASCRIPT_TABLE = {'graftling/pi/extension.mjs': {'loadHostSdk'}}
 
 
 @pytest.mark.parametrize('source', [
-    "import { hidden } from '../../../agent_swarm/pi/extension.mjs';",
-    "import {\n  loadHostSdk,\n  hidden,\n} from '../../../agent_swarm/pi/extension.mjs';",
-    "export { hidden } from '../../../agent_swarm/pi/extension.mjs';",
-    "import { loadHostSdk } from '../../../agent_swarm/pi/session.mjs';",
-    "import * as all from '../../../agent_swarm/pi/extension.mjs';",
-    "export * from '../../../agent_swarm/pi/extension.mjs';",
-    "import everything from '../../../agent_swarm/pi/extension.mjs';",
-    "import '../../../agent_swarm/pi/extension.mjs';",
-    "const late = await import('../../../agent_swarm/pi/extension.mjs');",
+    "import { hidden } from '../../../graftling/pi/extension.mjs';",
+    "import {\n  loadHostSdk,\n  hidden,\n} from '../../../graftling/pi/extension.mjs';",
+    "export { hidden } from '../../../graftling/pi/extension.mjs';",
+    "import { loadHostSdk } from '../../../graftling/pi/session.mjs';",
+    "import * as all from '../../../graftling/pi/extension.mjs';",
+    "export * from '../../../graftling/pi/extension.mjs';",
+    "import everything from '../../../graftling/pi/extension.mjs';",
+    "import '../../../graftling/pi/extension.mjs';",
+    "const late = await import('../../../graftling/pi/extension.mjs');",
 ])
 def test_javascript_check_reports_unlisted_imports(source: str) -> None:
     """An unlisted file, unlisted export or whole-module import is reported."""
@@ -411,9 +411,9 @@ def test_javascript_check_reports_unlisted_imports(source: str) -> None:
 
 
 @pytest.mark.parametrize('source', [
-    "import { loadHostSdk } from '../../../agent_swarm/pi/extension.mjs';",
-    "import { loadHostSdk as load } from '../../../agent_swarm/pi/extension.mjs';",
-    "export { loadHostSdk } from '../../../agent_swarm/pi/extension.mjs';",
+    "import { loadHostSdk } from '../../../graftling/pi/extension.mjs';",
+    "import { loadHostSdk as load } from '../../../graftling/pi/extension.mjs';",
+    "export { loadHostSdk } from '../../../graftling/pi/extension.mjs';",
     "import { spawn } from 'node:child_process';",
     "import { local } from './collection.mjs';",
 ])
@@ -451,7 +451,7 @@ def recorded_native_files(data_root: Path, outside: Path) -> set[Path]:
 
 def test_native_session_files_returns_recorded_files_and_skips_bad_records(tmp_path: Path) -> None:
     """Only a recorded, absolute, existing ``.jsonl`` counts; a bad record is skipped."""
-    from agent_swarm import native_session_files
+    from graftling import native_session_files
 
     data_root = tmp_path / 'data'
     expected = recorded_native_files(data_root, tmp_path / 'outside')

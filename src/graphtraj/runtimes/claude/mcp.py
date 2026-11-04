@@ -14,7 +14,7 @@ from typing import Callable, TextIO
 
 import yaml
 
-from agent_swarm import (AgentsError, AgentsResult, ConcurrentServer, handle_request as discover_agents,
+from graftling import (AgentsError, AgentsResult, ConcurrentServer, handle_request as discover_agents,
                          mcp_error_response, mcp_respond, mcp_result_response, mcp_tool_documents)
 from graphtraj.execution.runner_models import RunnerError
 from graphtraj.interfaces.gateway import handle_request, INPUT_SCHEMA

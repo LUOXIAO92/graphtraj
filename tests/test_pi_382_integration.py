@@ -33,4 +33,4 @@ def test_runner_member_keeps_the_hosted_cli(tmp_path: Path, monkeypatch: pytest.
     assert turn.connection_environment('address') == {
         'GRAPHTRAJ_CLI_CONNECTION': 'address', 'GRAPHTRAJ_HARNESS_ROOT': str(tmp_path.resolve())}
     turn.independent = True
-    assert 'AGENT_SWARM_CONNECTION' in turn.connection_environment('address')
+    assert 'GRAFTLING_CONNECTION' in turn.connection_environment('address')

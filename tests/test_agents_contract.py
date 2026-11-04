@@ -8,8 +8,8 @@ from pathlib import Path
 
 import pytest
 
-import agent_swarm
-from agent_swarm import AgentsError, Caller, Outcome
+import graftling
+from graftling import AgentsError, Caller, Outcome
 from graphtraj.configuration.project_configuration import default_configuration_content
 from graphtraj.execution.runner_status import runtime_caller
 from graphtraj.interfaces import gateway
@@ -35,7 +35,7 @@ class RecordingBackend:
 
 def test_contract_imports_without_graphtraj() -> None:
     """The package loads with no GraphTraj module in the process."""
-    code = ('import sys, agent_swarm; '
+    code = ('import sys, graftling; '
             'print(sorted(m for m in sys.modules if m.split(".")[0] == "graphtraj"))')
     output = subprocess.run(
         [sys.executable, '-c', code], check=True, capture_output=True, text=True,
@@ -48,7 +48,7 @@ def test_bind_requires_the_host_verified_caller() -> None:
     """A missing or model-shaped caller cannot bind the function."""
     for caller in (None, {'host': 'codex', 'agent': 'main'}, Caller('', 'a1')):
         with pytest.raises(TypeError):
-            agent_swarm.bind(RecordingBackend(), caller)
+            graftling.bind(RecordingBackend(), caller)
 
 
 @pytest.mark.parametrize('request_document', [
@@ -68,7 +68,7 @@ def test_bind_requires_the_host_verified_caller() -> None:
 def test_invalid_requests_never_reach_the_backend(request_document) -> None:
     """Unknown actions, identity fields and implicit or unbounded waits are rejected."""
     backend = RecordingBackend()
-    result = agent_swarm.bind(backend, Caller('test-host', 'a0'))(request_document)
+    result = graftling.bind(backend, Caller('test-host', 'a0'))(request_document)
     assert result.failed
     assert result.document['error']['code'] == 'invalid-input'
     assert backend.calls == []
@@ -78,7 +78,7 @@ def test_valid_requests_carry_host_caller_and_references() -> None:
     """The backend sees only action fields plus the host caller; results carry references."""
     backend = RecordingBackend()
     caller  = Caller('test-host', 'a0', session='s0', runtime='codex')
-    call    = agent_swarm.bind(backend, caller)
+    call    = graftling.bind(backend, caller)
 
     created = call({'action': 'create', 'runtime': 'codex', 'instruction': 'Summarize.'})
     waited  = call({'action': 'wait', 'agent': 'a1', 'timeout_seconds': 1.5})
@@ -121,7 +121,7 @@ def test_gateway_serves_agents_through_the_core(tmp_path: Path, monkeypatch) -> 
     }}, cwd=tmp_path)
 
     assert 'agents' in {item['feature'] for item in discovered.document['features']}
-    assert schema.document['input_schema'] == agent_swarm.INPUT_SCHEMA
+    assert schema.document['input_schema'] == graftling.INPUT_SCHEMA
     assert anonymous.failed and anonymous.document['error']['code'] == 'authority-unavailable'
     assert created.failed
     assert created.document['error']['code'] == 'invalid-config'

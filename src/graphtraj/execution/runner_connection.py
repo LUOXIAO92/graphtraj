@@ -48,7 +48,7 @@ def worker_connection(
     authenticate: Callable[[int], None] | None = None,
 ) -> Iterator[str]:
     """Keep Runner errors and callbacks over the shared file transport."""
-    from agent_swarm import AgentsError, worker_connection as connection
+    from graftling import AgentsError, worker_connection as connection
 
     def invoke(callback: Callable, value: object) -> object:
         """Translate existing host failures at the transport boundary."""
@@ -105,7 +105,7 @@ def connection_operation(
         except RuntimeAdapterError as error:
             raise RunnerError(error.code, error.message) from error
 
-    from agent_swarm import AgentsError, connection_operation as exchange
+    from graftling import AgentsError, connection_operation as exchange
 
     try:
         return exchange(address, document, authenticate=authenticate,
@@ -116,7 +116,7 @@ def connection_operation(
 
 def record_lock_owner(descriptor: int) -> int:
     """Preserve the public Runner import for the shared kernel lock proof."""
-    from agent_swarm import AgentsError, record_lock_owner as owner
+    from graftling import AgentsError, record_lock_owner as owner
 
     try:
         return owner(descriptor)

@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from agent_swarm import Caller, bind
+from graftling import Caller, bind
 from graphtraj.configuration.project_configuration import runner_directory
 from graphtraj.execution.main_continuity import claim_main, claims, current_main, route_notice
 from graphtraj.execution.runner_connection import connection_operation
@@ -44,7 +44,7 @@ def as_pi(project: Path, monkeypatch: pytest.MonkeyPatch, session: str) -> dict:
 
 def as_dsh_mcp(monkeypatch: pytest.MonkeyPatch, session: str) -> None:
     """Use the environment the DSH agents plugin gives its MCP server."""
-    for name in ('GRAPHTRAJ_NATIVE_RUNTIME', 'DSH_GRAPHTRAJ_SESSION', 'DSH_GRAPHTRAJ_SOURCE'):
+    for name in ('GRAFTLING_NATIVE_RUNTIME', 'DSH_GRAPHTRAJ_SESSION', 'DSH_GRAPHTRAJ_SOURCE'):
         monkeypatch.delenv(name, raising=False)
     dsh_session(monkeypatch, session)
     monkeypatch.delenv('DSH_GRAPHTRAJ_SESSION')
@@ -183,12 +183,12 @@ const delivered = [];
 if (runtime === 'pi') {
   const pi = { sendMessage: (message, options) => delivered.push({ message, options }) };
   const ctx = { cwd };
-  const environment = { GRAPHTRAJ_NATIVE_RUNTIME: 'pi', GRAPHTRAJ_NATIVE_SESSION: process.env.GRAPHTRAJ_NATIVE_SESSION,
-    GRAPHTRAJ_NATIVE_SESSION_FILE: process.env.GRAPHTRAJ_NATIVE_SESSION_FILE };
+  const environment = { GRAFTLING_NATIVE_RUNTIME: 'pi', GRAFTLING_NATIVE_SESSION: process.env.GRAFTLING_NATIVE_SESSION,
+    GRAFTLING_NATIVE_SESSION_FILE: process.env.GRAFTLING_NATIVE_SESSION_FILE };
   // A fresh Pi Session has no file until its first conversation message:
   // nothing is delivered and no error is raised; the notice stays queued.
   const { renameSync } = await import('node:fs');
-  const file = environment.GRAPHTRAJ_NATIVE_SESSION_FILE;
+  const file = environment.GRAFTLING_NATIVE_SESSION_FILE;
   renameSync(file, file + '.unwritten');
   assert.equal(await deliverNotices(pi, ctx, environment), 0);
   assert.equal(delivered.length, 0);
@@ -221,7 +221,8 @@ if (runtime === 'pi') {
 '''
     root = Path(__file__).resolve().parents[1]
     environment = {**os.environ, 'PATH': f'{Path(sys.executable).parent}{os.pathsep}{os.environ["PATH"]}',
-                   'GRAPHTRAJ_DSH_PACKAGE': str(Path(shutil.which('dsh') or node).resolve())}
+                   'GRAPHTRAJ_DSH_PACKAGE': str(Path(shutil.which('dsh') or node).resolve()),
+                   'GRAFTLING_DSH_PACKAGE': str(Path(shutil.which('dsh') or node).resolve())}
     result = subprocess.run([node, '--input-type=module', '-e', script, str(root / module), runtime, str(project)],
                             cwd=project, env=environment, capture_output=True, text=True, timeout=60, check=False)
     assert result.returncode == 0, result.stdout + result.stderr

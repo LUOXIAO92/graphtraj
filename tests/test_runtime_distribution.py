@@ -10,13 +10,13 @@ from pathlib import Path
 from packaging.requirements import Requirement
 from packaging.version import Version
 
-import agent_swarm
+import graftling
 from conftest import InstalledCommands
 
 
 def test_independent_wheel_without_graphtraj(built_wheel: Path, tmp_path: Path) -> None:
     """The standalone artifact exposes native values without GraphTraj installed."""
-    agents_wheel = next(built_wheel.parent.glob('agent_swarm-*.whl'))
+    agents_wheel = next(built_wheel.parent.glob('graftling-*.whl'))
     with zipfile.ZipFile(agents_wheel) as archive:
         archive.extractall(tmp_path)
     script = '''
@@ -24,14 +24,14 @@ import importlib.util
 import sys
 sys.path.insert(0, sys.argv[1])
 assert importlib.util.find_spec('graphtraj') is None
-from agent_swarm.runtime import (
+from graftling.runtime import (
     RuntimeAdapterError, RuntimeContext, RuntimeExecutionResult, RuntimeTurn, SessionStarted,
 )
-from agent_swarm import AgentControl, Caller
-from agent_swarm.discovery import handle_request
-from agent_swarm import cli, mcp
-from agent_swarm.pi import PiDriver
-from agent_swarm.pi import execution, host, launch, session
+from graftling import AgentControl, Caller
+from graftling.discovery import handle_request
+from graftling import cli, mcp
+from graftling.pi import PiDriver
+from graftling.pi import execution, host, launch, session
 assert PiDriver({'worktree_path': '/w'}).prepare('pi', Caller('host', None))['cwd'] == '/w'
 error = RuntimeAdapterError('NATIVE_FAILURE', 'native failure', terminal_confirmed=False)
 assert (error.code, error.message, str(error), error.terminal_confirmed) == (
@@ -52,7 +52,7 @@ assert not any(name == 'graphtraj' or name.startswith('graphtraj.') for name in 
 
 def test_wheels_have_separate_owners(built_wheel: Path) -> None:
     """Installation owns each native resource once and declares real dependencies."""
-    agents_wheel = next(built_wheel.parent.glob('agent_swarm-*.whl'))
+    agents_wheel = next(built_wheel.parent.glob('graftling-*.whl'))
     with zipfile.ZipFile(agents_wheel) as archive:
         agents = set(archive.namelist())
         agents_metadata = archive.read(next(n for n in agents if n.endswith('/METADATA'))).decode()
@@ -62,10 +62,10 @@ def test_wheels_have_separate_owners(built_wheel: Path) -> None:
     assert not agents.intersection(graphtraj)
     # GraphTraj declares a range of agents versions, not one pinned release.
     requirement = Requirement(next(line.removeprefix('Requires-Dist: ') for line in metadata.splitlines()
-                                   if line.startswith('Requires-Dist: agent-swarm')))
+                                   if line.startswith('Requires-Dist: graftling')))
     agents_version = next(line.removeprefix('Version: ') for line in agents_metadata.splitlines()
                           if line.startswith('Version: '))
-    assert agents_version == agent_swarm.__version__
+    assert agents_version == graftling.__version__
     assert requirement.specifier.contains(agents_version)
     # Under 0.x an incompatible change raises the minor version (PUBLIC_API section 7).
     major, minor, patch = Version(agents_version).release[:3]
@@ -76,13 +76,13 @@ def test_wheels_have_separate_owners(built_wheel: Path) -> None:
     for text in (metadata, agents_metadata):
         assert 'Requires-Dist: PyYAML' in text
         assert 'Requires-Dist: websockets' in text
-    assert 'agent_swarm/runtime.py' in agents
-    assert 'agent_swarm/PUBLIC_API.md' in agents
-    assert 'agent_swarm/dsh/client.mjs' in agents
-    assert 'agent_swarm/dsh/communication.mjs' in agents
-    assert 'agent_swarm/dsh/package.json' in agents
-    assert 'agent_swarm/claude/host_context.mjs' in agents
-    assert {'agent_swarm/pi/extension.mjs', 'agent_swarm/pi/launch.py', 'agent_swarm/pi/host.py'} <= agents
+    assert 'graftling/runtime.py' in agents
+    assert 'graftling/PUBLIC_API.md' in agents
+    assert 'graftling/dsh/client.mjs' in agents
+    assert 'graftling/dsh/communication.mjs' in agents
+    assert 'graftling/dsh/package.json' in agents
+    assert 'graftling/claude/host_context.mjs' in agents
+    assert {'graftling/pi/extension.mjs', 'graftling/pi/launch.py', 'graftling/pi/host.py'} <= agents
     assert 'graphtraj/runtimes/pi/extension.mjs' in graphtraj
 
 
@@ -91,11 +91,11 @@ def test_combined_native_values_and_adapters(installed_commands: InstalledComman
     script = '''
 import sys
 from pathlib import Path
-import agent_swarm.runtime
-from agent_swarm.runtime import RuntimeAdapterError, RuntimeContext, RuntimeExecutionResult
+import graftling.runtime
+from graftling.runtime import RuntimeAdapterError, RuntimeContext, RuntimeExecutionResult
 from graphtraj.runtimes import runtime_adapter as consumer
 assert Path(consumer.__file__).is_relative_to(sys.prefix)
-assert Path(agent_swarm.runtime.__file__).is_relative_to(sys.prefix)
+assert Path(graftling.runtime.__file__).is_relative_to(sys.prefix)
 from graphtraj.runtimes.codex.codex_adapter import CodexAdapterError
 assert consumer.RuntimeAdapterError is RuntimeAdapterError
 assert consumer.RuntimeContext is RuntimeContext
@@ -107,8 +107,8 @@ except RuntimeAdapterError as error:
 for runtime in ('codex', 'claude', 'pi', 'dsh'):
     consumer.select_runtime_adapter(runtime)
 from graphtraj.runtimes.claude import host
-from agent_swarm.dsh import DshDriver
-from agent_swarm.pi.execution import PiExecution
+from graftling.dsh import DshDriver
+from graftling.pi.execution import PiExecution
 from graphtraj.runtimes.pi.managed_session import PiManagedExecution
 assert issubclass(PiManagedExecution, PiExecution)
 '''

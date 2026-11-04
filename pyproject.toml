@@ -9,7 +9,7 @@ description = "GraphTraj, a task graph and trajectory delivery harness."
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
-    "agent-swarm>=0.4.0,<0.5",
+    "graftling>=0.5.0,<0.6",
     "click>=8.1,<9",
     "PyYAML>=6,<7",
     "websockets>=15,<17",
@@ -22,8 +22,11 @@ graphtraj-tool = "graphtraj.interfaces.local_tool:main"
 graphtraj-session = "graphtraj.runtimes.native_entry:main"
 agent-runner = "graphtraj.interfaces.cli.agent_runner:main"
 
-[project.entry-points."agent_swarm.hosts"]
+[project.entry-points."graftling.hosts"]
 graphtraj = "graphtraj.interfaces.hosted_cli:agents_host"
+
+[project.entry-points."graftling.environment"]
+graphtraj = "graphtraj:GRAFTLING_ENVIRONMENT"
 
 [tool.setuptools]
 package-dir = {"" = "src"}

@@ -1091,7 +1091,7 @@ def run_agents(arguments: Mapping[str, Any], *, cwd: Path | None = None) -> Tool
 
 def _agents_row() -> tuple[str, str, dict[str, Any]]:
     """Reuse the independent function's own name, description and schema."""
-    from agent_swarm import tool_descriptor
+    from graftling import tool_descriptor
 
     descriptor = tool_descriptor()
     return descriptor["name"], descriptor["description"], descriptor["input_schema"]

@@ -7,7 +7,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from agent_swarm import AgentControl, AgentsResult, Binding, Caller, bind
+from graftling import AgentControl, AgentsResult, Binding, Caller, bind
 from graphtraj.configuration.project_configuration import runner_directory
 from graphtraj.execution import agent_driver, main_continuity, runner_status
 from graphtraj.execution.agent_driver import AdapterDriver
@@ -217,7 +217,7 @@ def test_a_claude_agent_asks_through_the_control_holding_its_parents_receiver(
 
 def test_a_pi_agent_uses_the_same_owning_call(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Pi's ask_parent reaches the same core call as its other actions."""
-    from agent_swarm import default_config
+    from graftling import default_config
 
     call = lambda request: AgentsResult({})  # noqa: E731
     default_config(tmp_path)
@@ -292,7 +292,7 @@ def test_a_root_agents_question_reaches_the_main_once_and_native_requests_stay_s
 
 def test_a_root_caller_is_refused_by_graphtraj_without_a_control_check(tmp_path: Path) -> None:
     """authority-denied holds for Main even where its control policy would refuse differently."""
-    from agent_swarm import AgentsError
+    from graftling import AgentsError
 
     agents = graphtraj_agents(tmp_path.resolve(), Scripted())
     with pytest.raises(AgentsError) as refused:

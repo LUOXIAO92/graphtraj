@@ -14,7 +14,7 @@ from pathlib import Path
 
 OPERATION_TIMEOUT_SECONDS = 10.0
 
-from agent_swarm import process_ancestors, process_executable, process_arguments as _process_arguments
+from graftling import process_ancestors, process_executable, process_arguments as _process_arguments
 
 # The Darwin kernel's process information interface (sys/proc_info.h).
 _PROC_PIDT_SHORTBSDINFO   = 13

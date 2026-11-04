@@ -14,7 +14,7 @@ import time
 from pathlib import Path
 from typing import Any, Awaitable, Callable
 
-from agent_swarm import DECISION_METHOD
+from graftling import DECISION_METHOD
 from graphtraj.runtimes.codex.app_server import (
     CHECKER_PERMISSION_PROFILE, CodexAppServer, CodexServerRequest,
 )
@@ -476,7 +476,7 @@ def check(
             created(child_id)
             from graphtraj.configuration.project_configuration import load_project_configuration
             from graphtraj.interfaces.agents import archive_project, configured_archive, graphtraj_fields
-            from agent_swarm.sessions import CodexJsonlArchive
+            from graftling.sessions import CodexJsonlArchive
 
             project = load_project_configuration(Path(binding['cwd']))
             archive = configured_archive(project.harness_root)

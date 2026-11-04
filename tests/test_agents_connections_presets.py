@@ -13,13 +13,13 @@ from pathlib import Path
 
 import pytest
 
-import agent_swarm
-import agent_swarm.control
-from agent_swarm import AgentControl, AgentsError, Caller, explicit_choices, read_connections, write_config
-from agent_swarm.claude.driver import ClaudeDriver
-from agent_swarm.codex.driver import CodexDriver
-from agent_swarm.dsh.driver import DshDriver
-from agent_swarm.pi.driver import PiDriver
+import graftling
+import graftling.control
+from graftling import AgentControl, AgentsError, Caller, explicit_choices, read_connections, write_config
+from graftling.claude.driver import ClaudeDriver
+from graftling.codex.driver import CodexDriver
+from graftling.dsh.driver import DshDriver
+from graftling.pi.driver import PiDriver
 
 
 CALLER = Caller('test-host', None, 'main-session', 'claude')
@@ -98,7 +98,7 @@ def configured(root: Path, text: str = CONFIG) -> Path:
 
 
 def create(control: AgentControl, **arguments) -> tuple[dict, bool]:
-    result = agent_swarm.bind(control, CALLER)({'action': 'create', 'instruction': 'Work.', **arguments})
+    result = graftling.bind(control, CALLER)({'action': 'create', 'instruction': 'Work.', **arguments})
     return result.document, result.failed
 
 
@@ -110,14 +110,14 @@ def catalog(monkeypatch: pytest.MonkeyPatch) -> list[dict]:
     def discover(connection):
         seen.append(dict(connection))
         if connection.get('models') is not None:
-            return agent_swarm.discover_models(connection)
+            return graftling.discover_models(connection)
         return {'runtime': connection['runtime'], 'status': 'available', 'message': 'fake catalog',
                 'models': [{'id': 'gpt-5.5', 'alias': 'GPT-5.5', 'provider': 'openai',
                             'supported_efforts': ['low', 'medium', 'high']},
                            {'id': 'claude-opus-5-5', 'alias': 'Opus', 'provider': 'anthropic',
                             'supported_efforts': None}]}
 
-    monkeypatch.setattr(agent_swarm.control, '_discover_models', discover)
+    monkeypatch.setattr(graftling.control, '_discover_models', discover)
     return seen
 
 
@@ -137,7 +137,7 @@ def test_connections_and_presets_are_read_with_their_names(tmp_path: Path) -> No
         'quick': {'name': 'quick', 'runtime': 'codex', 'model': 'gpt-5.5'}}
     # The booleans keep their own reader and defaults.
     assert explicit_choices(root) == {'save_normalized_sessions': False}
-    assert agent_swarm.read_config(root) == {'save_normalized_sessions': False, 'backfill_history': False}
+    assert graftling.read_config(root) == {'save_normalized_sessions': False, 'backfill_history': False}
 
 
 def test_no_file_and_boolean_only_files_read_as_before(tmp_path: Path) -> None:
@@ -222,7 +222,7 @@ def test_preset_fills_model_and_effort_and_the_document_reports_them(tmp_path: P
     assert (result['preset'], result['connection'], result['model'], result['reasoning_effort']) == (
         'reviewer', 'work-claude', 'claude-sonnet-5-5', 'high')
     # The choice stays visible in later documents.
-    status = agent_swarm.bind(control, CALLER)({'action': 'status', 'agent': result['agent']}).document
+    status = graftling.bind(control, CALLER)({'action': 'status', 'agent': result['agent']}).document
     assert status['result']['model'] == 'claude-sonnet-5-5'
 
 
@@ -262,7 +262,7 @@ def test_invalid_choices_fail_with_a_code_naming_the_field(
 
 
 def test_a_model_discovery_cannot_verify_is_refused(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(agent_swarm.control, '_discover_models', lambda connection: {
+    monkeypatch.setattr(graftling.control, '_discover_models', lambda connection: {
         'runtime': 'codex', 'status': 'unknown', 'models': [], 'message': 'Native metadata query failed.'})
     driver = RecordingDriver()
     control = AgentControl(configured(tmp_path), {'codex': driver})
@@ -323,7 +323,7 @@ def test_a_driver_without_selection_support_refuses_a_choice(tmp_path: Path, cat
 
 
 def test_create_schema_lists_the_new_optional_arguments() -> None:
-    from agent_swarm.discovery import handle_request
+    from graftling.discovery import handle_request
 
     described = handle_request({'action': 'describe', 'feature': 'create', 'schema': True},
                                lambda request: None).document['input_schema']
@@ -460,7 +460,7 @@ def test_pi_driver_applies_model_and_effort_and_resolves_another_provider(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """A changed provider/model/home re-reads the destination; the host key and endpoint stay behind."""
-    from agent_swarm.runtime import RuntimeAdapterError
+    from graftling.runtime import RuntimeAdapterError
 
     catalog = {('/native/pi', 'anthropic', 'claude-opus-5-5'): 'api.anthropic.com',
                ('/host/pi', 'openai', 'host'): 'api.openai.com'}
@@ -473,7 +473,7 @@ def test_pi_driver_applies_model_and_effort_and_resolves_another_provider(
                                                                  'for the selected provider/model.')
         return catalog[home, provider, model]
 
-    monkeypatch.setattr('agent_swarm.pi.driver.pi_destination', destination)
+    monkeypatch.setattr('graftling.pi.driver.pi_destination', destination)
     request = {'executable': '/bin/pi', 'worktree_path': str(tmp_path), 'provider': 'anthropic', 'model': 'host',
                'api_key_env': 'HOST_KEY', 'agent_dir': '/host/pi', 'provider_domain': 'host.example'}
     driver = PiDriver(request)

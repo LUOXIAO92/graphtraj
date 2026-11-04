@@ -33,7 +33,7 @@ const host = {
  tool: {list: async () => [{name: 'mcp__agents__agents'}]},
  env: {get: async key => key.endsWith('PYTHON') ? '/venv/python' : '/host/config'},
  process: {run: async (argv, options) => {
-   assert.deepEqual(argv, ['/venv/python', '-m', 'agent_swarm.claude.host', 'context', '--config', '/host/config']);
+   assert.deepEqual(argv, ['/venv/python', '-m', 'graftling.claude.host', 'context', '--config', '/host/config']);
    contexts.push(JSON.parse(options.stdin));
    return {exitCode: fail ? 1 : 0, stdout: '{}', stderr: fail ? 'native owner unavailable' : ''};
  }},
@@ -170,7 +170,7 @@ DOLLAR_VALUE = re.compile(r'\$\.[A-Za-z_]+\b(?!\.[A-Za-z_]+\()')
 
 def test_mod_spells_every_host_noun_at_its_call_site() -> None:
     """The validator's ``$.noun`` rule holds for the shipped mod; a value probe is caught."""
-    text = Path('src/agent_swarm/claude/host_context.mjs').read_text()
+    text = Path('src/graftling/claude/host_context.mjs').read_text()
     assert DOLLAR_VALUE.findall(text) == []
     assert DOLLAR_VALUE.findall("if (typeof $.prompt?.submit !== 'function') {}") == ['$.prompt']
     assert DOLLAR_VALUE.findall("await $.prompt.submit({text});") == []

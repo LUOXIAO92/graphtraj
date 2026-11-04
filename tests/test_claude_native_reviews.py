@@ -8,7 +8,7 @@ from types import SimpleNamespace
 import pytest
 import yaml
 
-from agent_swarm import AgentsResult
+from graftling import AgentsResult
 
 from conftest import HeldInput
 from graphtraj.execution import approved_recovery, runner_retirement, runner_status

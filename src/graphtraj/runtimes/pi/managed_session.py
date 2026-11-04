@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from agent_swarm.pi import PiExecution
+from graftling.pi import PiExecution
 from graphtraj.runtimes.runtime_adapter import record_runtime_process
 
 
@@ -25,11 +25,13 @@ class PiManagedExecution(PiExecution):
         self.independent = False
         self.packages.append(str(Path(__file__).resolve().parents[2]))
 
-        from agent_swarm import default_config
-        from agent_swarm.sessions import SessionArchive
+        from graftling import default_config
+        from graftling.sessions import SessionArchive
         from graphtraj.interfaces.agents import attachment_private_paths, swarm_root
 
         project = Path(self.request['harness_root'])
+        # The archive resolves attachments against, and keeps private, this project's .codex.
+        self.request.setdefault('project_root', str(project))
         root = swarm_root(project)
         self.archive = SessionArchive(root, **default_config(root, save_normalized_sessions=True))
         self.archive_private_paths = attachment_private_paths(project, self.request.get('worktree_path'))

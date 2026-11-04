@@ -493,8 +493,8 @@ def test_agents_send_carries_an_explicit_reports_only_request(
 ) -> None:
     """agents send forwards reports_only to the one continuation; nothing else adds it."""
     import json
-    from agent_swarm import AgentsError
-    from agent_swarm.tool import validate_request
+    from graftling import AgentsError
+    from graftling.tool import validate_request
     from graphtraj.interfaces import agents
 
     request = json.loads('{"action": "send", "agent": "member", "message": "报告", "reports_only": true}')

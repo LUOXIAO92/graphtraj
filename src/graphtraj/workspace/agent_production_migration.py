@@ -14,7 +14,7 @@ from uuid import uuid4
 
 import yaml
 
-from agent_swarm import AgentControl, Caller
+from graftling import AgentControl, Caller
 from graphtraj.configuration.project_configuration import load_project_configuration, runner_directory
 from graphtraj.execution.runner_heartbeat import ownership_is_held
 from graphtraj.execution.runner_io import write_yaml_durably
@@ -40,7 +40,7 @@ def _terminal_confirmed(turn_file: Path) -> bool:
     return True
 
 
-# agent_swarm ends whose owner or worker vanished without a recorded end
+# graftling ends whose owner or worker vanished without a recorded end
 # (user-approved scheme B: owner-exited; B+: RUNTIME_WORKER_FAILED).
 CARRIED_UNCONFIRMED_CODES = frozenset({'owner-exited', 'RUNTIME_WORKER_FAILED'})
 
@@ -187,12 +187,12 @@ def _stopped(root: Path) -> dict:
 def _relocate_owner_exited(swarm: Path, agent: str, settings: dict) -> None:
     """Replace only the staged copy's settings for an Agent with an accepted owner-exited execution.
 
-    agent_swarm's configure_stopped rightly refuses unconfirmed executions and
+    graftling's configure_stopped rightly refuses unconfirmed executions and
     stays unchanged. Cutover owns this staging copy, so it writes the settings
-    under the same per-Agent lock, atomic replacement and JSON form agent_swarm
+    under the same per-Agent lock, atomic replacement and JSON form graftling
     uses; executions, including terminal_confirmed false and error, are kept.
     """
-    from agent_swarm import exclusive_lock
+    from graftling import exclusive_lock
 
     path = swarm / 'control' / 'agents' / f'{agent}.json'
     with exclusive_lock(swarm / 'live' / 'agents' / f'{agent}.lock'):

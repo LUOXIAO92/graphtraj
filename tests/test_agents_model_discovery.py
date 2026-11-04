@@ -16,8 +16,8 @@ import sys
 import pytest
 import yaml
 
-from agent_swarm import discover_models
-from agent_swarm.dsh.execution import _PatchLoader
+from graftling import discover_models
+from graftling.dsh.execution import _PatchLoader
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -168,7 +168,7 @@ REAL_PI = shutil.which('pi')
 @pytest.fixture
 def dsh_host(monkeypatch: pytest.MonkeyPatch):
     """Replace the owned ``dsh web`` service with a catalog-only host and return its calls."""
-    from agent_swarm.dsh import service
+    from graftling.dsh import service
 
     calls   = []
     catalog = {'value': CATALOG}
@@ -348,7 +348,7 @@ def test_installed_pi_lists_the_home_login_and_leaves_the_home_alone(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Real Pi: the fake login still authenticates its model; stores, lock and packages stay out of the home."""
-    from agent_swarm.pi import pi_destination
+    from graftling.pi import pi_destination
 
     monkeypatch.setenv('HOME', str(tmp_path / 'user'))
     monkeypatch.setenv('PI_OFFLINE', '1')
@@ -407,7 +407,7 @@ class RecordingHost:
 @pytest.fixture
 def dsh_launch(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     """Ambient endpoints set, the service recorded, a stand-in ``dsh`` on PATH; returns the connection's home."""
-    from agent_swarm.dsh import service
+    from graftling.dsh import service
 
     for name, value in AMBIENT.items():
         monkeypatch.setenv(name, value)

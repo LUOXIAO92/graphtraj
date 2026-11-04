@@ -72,7 +72,7 @@ if sys.argv[1:3] == ['app-server', 'proxy']:
                 event = json.loads(params['toolOutput']['output'])
                 assert params['threadId'] == 'original-host'
                 assert set(params) == {'threadId', 'input', 'toolOutput'}
-                assert params['input'] == [] and params['toolOutput']['name'] == 'graphtraj'
+                assert params['input'] == [] and params['toolOutput']['name'] == 'graftling'
                 if event['message'] == 'refuse':
                     result = {'id':request['id'], 'error': {'code':-32600, 'message': 'direct input refused'}}
                 else:

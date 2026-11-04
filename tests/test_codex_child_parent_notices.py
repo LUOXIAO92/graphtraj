@@ -11,10 +11,10 @@ from pathlib import Path
 
 import pytest
 
-from agent_swarm import AgentControl, Caller, bind
-from agent_swarm.codex.driver import CodexDriver
-from agent_swarm.codex.host import CodexHost
-from agent_swarm.codex.managed_session import CodexManagedExecution
+from graftling import AgentControl, Caller, bind
+from graftling.codex.driver import CodexDriver
+from graftling.codex.host import CodexHost
+from graftling.codex.managed_session import CodexManagedExecution
 from test_claude_runtime import claude_environment  # noqa: F401 - pytest fixture
 from test_codex_host_cross_runtime import Running, host_settings, until  # noqa: F401
 from test_codex_independent_control import native_settings  # noqa: F401 - pytest fixture

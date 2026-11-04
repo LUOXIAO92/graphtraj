@@ -264,7 +264,7 @@ def test_agents_control_dsh_without_task_or_archive(
     The service is controlled, so this is development control/bridge evidence,
     not proof of an official model invocation or browser rendering.
     """
-    from agent_swarm import AgentControl, Caller, bind
+    from graftling import AgentControl, Caller, bind
     from graphtraj.execution.agent_driver import AdapterDriver
     from graphtraj.runtimes.dsh import execution
 
@@ -304,8 +304,8 @@ def test_agents_control_dsh_without_task_or_archive(
         'adapter_request': request(tmp_path), 'evidence': {},
     })
     control = AgentControl(tmp_path / '.graphtraj/swarm', {'dsh': driver})
-    from agent_swarm import write_config
-    from agent_swarm.sessions.archive import SessionArchive, JsonlSessionStore, archive_path
+    from graftling import write_config
+    from graftling.sessions.archive import SessionArchive, JsonlSessionStore, archive_path
 
     write_config(control.root, save_normalized_sessions=archiving)
     archive = SessionArchive(control.root, save_normalized_sessions=archiving)
@@ -319,7 +319,7 @@ def test_agents_control_dsh_without_task_or_archive(
     # The actual stdio entry forwards into the registered host's common handler;
     # it receives no Task identity or authority from model arguments.
     result = subprocess.run(
-        [sys.executable, '-m', 'agent_swarm.mcp'],
+        [sys.executable, '-m', 'graftling.mcp'],
         input=json.dumps({'jsonrpc': '2.0', 'id': 1, 'method': 'tools/call', 'params': {
             'name': 'agents', 'arguments': {'action': 'execute', 'feature': 'status', 'arguments': {}}}}) + '\n',
         env={**first.environment, 'DSH_SESSION_ID': first.session, 'DSH_AGENT_SOURCE': 'main',
@@ -386,9 +386,9 @@ class TaggedLoader(yaml.SafeLoader):
 def test_stop_drains_cursorless_terminal_before_native_flush(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """A cancel receipt cannot close before queued final/live frames are collected."""
     from concurrent.futures import ThreadPoolExecutor
-    from agent_swarm.dsh.execution import DshExecution
-    from agent_swarm.sessions.dsh import DshArchive
-    from agent_swarm.sessions.archive import SessionArchive, JsonlSessionStore, archive_path
+    from graftling.dsh.execution import DshExecution
+    from graftling.sessions.dsh import DshArchive
+    from graftling.sessions.archive import SessionArchive, JsonlSessionStore, archive_path
 
     class StreamingPeer(NativePeer):
         """Separate native event commitment, transport delivery and disk flush."""

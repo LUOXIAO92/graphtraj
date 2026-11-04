@@ -14,10 +14,10 @@ import time
 
 import pytest
 
-from agent_swarm import AgentControl, AgentsError, Caller, bind
-from agent_swarm.codex.driver import CodexDriver
-from agent_swarm.codex.host import CodexHost
-from agent_swarm.control import ExecutionEvents
+from graftling import AgentControl, AgentsError, Caller, bind
+from graftling.codex.driver import CodexDriver
+from graftling.codex.host import CodexHost
+from graftling.control import ExecutionEvents
 from test_claude_runtime import claude_environment  # noqa: F401 - pytest fixture
 from test_codex_independent_control import native_settings  # noqa: F401 - pytest fixture
 
@@ -221,7 +221,7 @@ def test_host_start_requires_declared_connections(
     settings = tmp_path / 'settings.json'
     settings.write_text(json.dumps(host_settings))
     result = subprocess.run([
-        sys.executable, '-m', 'agent_swarm.codex.host', '--settings', str(settings),
+        sys.executable, '-m', 'graftling.codex.host', '--settings', str(settings),
         '--directory', str(tmp_path / 'host'), 'never runs',
     ], capture_output=True, text=True, timeout=30)
     assert result.returncode == 1, result.stdout + result.stderr

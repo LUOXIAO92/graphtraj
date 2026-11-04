@@ -101,7 +101,7 @@ def settings_request(request: dict, cwd: Path) -> dict:
         raise ValueError("Choose read, preview, save or archive settings.")
     if request["action"] == "archive":
         # The agents tool owns these switches in its own config.yml; no copy is kept here.
-        from agent_swarm import write_config
+        from graftling import write_config
         from graphtraj.interfaces.agents import archive_choices, swarm_root
 
         choices = request.get("choices", {})

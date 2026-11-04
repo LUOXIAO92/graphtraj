@@ -33,7 +33,7 @@ if os.environ.get("PYTHONPATH"):
 
 _ORIGINS = (
     "import importlib.util\n"
-    "for name in ('graphtraj', 'agent_swarm'):\n"
+    "for name in ('graphtraj', 'graftling'):\n"
     "    print(getattr(importlib.util.find_spec(name), 'origin', None))\n"
 )
 
@@ -54,21 +54,21 @@ def _checkout_import_problem(cwd: Path, executable: str = sys.executable) -> Opt
             origin != "None" and Path(origin).resolve().is_relative_to(source) for origin in origins
         ):
             continue
-        found = ", ".join("{0} -> {1}".format(*pair) for pair in zip(("graphtraj", "agent_swarm"), origins))
+        found = ", ".join("{0} -> {1}".format(*pair) for pair in zip(("graphtraj", "graftling"), origins))
         resolved.append("{0}: {1}".format(form, found or "probe failed: " + probe.stderr.strip()[-300:]))
     if not resolved:
         return None
     return (
         "Test subprocesses would not import this checkout: {0} from a neutral directory resolves {1}; "
         "expected both under {2}. Use a venv whose site-packages resolves this checkout: install it "
-        "editable (pip install -e {3}/src/agent_swarm -e {3}) or add a .pth naming {2}. "
+        "editable (pip install -e {3}/src/graftling -e {3}) or add a .pth naming {2}. "
         "PYTHONPATH={2} serves only the subprocesses that do not run -I."
     ).format(executable, "; ".join(resolved), source, PROJECT_ROOT)
 
 
 _HOSTS = (
     "import importlib.metadata, importlib.util\n"
-    "for entry in importlib.metadata.entry_points(group='agent_swarm.hosts', name='graphtraj'):\n"
+    "for entry in importlib.metadata.entry_points(group='graftling.hosts', name='graphtraj'):\n"
     "    print(getattr(importlib.util.find_spec(entry.module), 'origin', None))\n"
 )
 
@@ -76,7 +76,7 @@ _HOSTS = (
 def _installation_problem(executable: str = sys.executable, scripts: Optional[Path] = None) -> Optional[str]:
     """Say what installed metadata or command the suite's interpreter lacks.
 
-    Hosted agents find GraphTraj through the ``agent_swarm.hosts`` entry point,
+    Hosted agents find GraphTraj through the ``graftling.hosts`` entry point,
     and fixtures run ``graphtraj-session`` beside the interpreter; a .pth that
     only puts the checkout on sys.path gives neither.
     """
@@ -88,7 +88,7 @@ def _installation_problem(executable: str = sys.executable, scripts: Optional[Pa
     if not any(origin != "None" and Path(origin).resolve().is_relative_to(source) for origin in origins):
         found = ", ".join(origins) or "no graphtraj entry" if probe.returncode == 0 else (
             "probe failed: " + probe.stderr.strip()[-300:])
-        missing.append("the graphtraj distribution metadata (entry point agent_swarm.hosts: graphtraj "
+        missing.append("the graphtraj distribution metadata (entry point graftling.hosts: graphtraj "
                        "under {0}; found {1})".format(source, found))
     if not (scripts / "graphtraj-session").is_file():
         missing.append("the graphtraj-session command in {0}".format(scripts))
@@ -96,7 +96,7 @@ def _installation_problem(executable: str = sys.executable, scripts: Optional[Pa
         return None
     return (
         "The test interpreter {0} lacks {1}. Install this checkout editable in a dedicated venv: "
-        "pip install -e {2}/src/agent_swarm -e {2}; a .pth alone gives neither."
+        "pip install -e {2}/src/graftling -e {2}; a .pth alone gives neither."
     ).format(executable, " and ".join(missing), PROJECT_ROOT)
 
 
@@ -212,7 +212,7 @@ def runner_command(commands: "InstalledCommands", *arguments: str) -> list[str]:
 
 def unsupported_dsh() -> Optional[str]:
     """Return why the installed DSH cannot back native tests, using the product check."""
-    from agent_swarm.dsh import dsh_version_refusal
+    from graftling.dsh import dsh_version_refusal
 
     dsh = shutil.which("dsh")
     if dsh is None or shutil.which("node") is None:
@@ -745,7 +745,7 @@ def _build_wheel(build_root: Path) -> Path:
             "--no-deps",
             "-w",
             str(wheelhouse),
-            str(source / "src" / "agent_swarm"),
+            str(source / "src" / "graftling"),
             str(source),
         ],
         cwd=source,
@@ -760,7 +760,7 @@ def _install_commands(environment: Path, wheel: Path) -> InstalledCommands:
     """Install one built wheel into a fresh environment."""
 
     # The agents wheel built beside GraphTraj carries the source checkout's version.
-    from agent_swarm import __version__ as agent_swarm_version
+    from graftling import __version__ as graftling_version
 
     subprocess.run(
         [
@@ -782,7 +782,7 @@ def _install_commands(environment: Path, wheel: Path) -> InstalledCommands:
             "install",
             "--disable-pip-version-check",
             "--no-deps",
-            str(wheel.with_name(f"agent_swarm-{agent_swarm_version}-py3-none-any.whl")),
+            str(wheel.with_name(f"graftling-{graftling_version}-py3-none-any.whl")),
             str(wheel),
         ],
         cwd=wheel.parent,

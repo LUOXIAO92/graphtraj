@@ -55,6 +55,10 @@ for pair in dsh:graftling-dsh pi:graftling-pi; do
     || check FAIL "npm package name in ${pair%%:*}/package.json: $NAME, not ${pair#*:}"
 done
 
+ALONE=$($VENV/bin/python -I -c 'from graftling.child_env import consumer_environment as c; a, b = c(); print(len(a), len(b))' 2>&1 || true)
+[[ $ALONE == '0 0' ]] && check PASS "graftling alone: consumer_environment() declares nothing (0 0)" \
+  || check FAIL "graftling alone: consumer_environment() gives: $ALONE"
+
 say "a plain shell, the one README describes"
 CODE=0
 (cd $RUN && env -u GRAFTLING_CONNECTION $VENV/bin/agents '{"action":"discover"}') > $OUT/plain-discover.txt 2>&1 || CODE=$?
@@ -88,6 +92,10 @@ requires = [r for r in (m.requires('graphtraj') or []) if r.replace('_', '-').lo
 print('requires', ' | '.join(requires))
 print('graftling.hosts', ' '.join(sorted(f'{e.name}={e.value}' for e in m.entry_points(group='graftling.hosts'))))
 print('old hosts group', ' '.join(sorted(e.name for e in m.entry_points(group='agent' + '_swarm.hosts'))) or 'none')
+print('environment entries', ' '.join(sorted(f'{e.name}={e.value}' for e in m.entry_points(group='graftling.environment'))))
+from graftling.child_env import consumer_environment
+connections, prefixes = consumer_environment()
+print('consumer environment', ' '.join(sorted(connections)), '|', ' '.join(prefixes))
 import graftling, graphtraj
 print('imports', graftling.__version__, graftling.__file__)
 PYEOF
@@ -99,6 +107,13 @@ HOSTS=$(sed -n 's/^graftling\.hosts //p' $OUT/gt-metadata.txt)
 [[ $HOSTS == *graphtraj=* ]] && check PASS "entry points graftling.hosts: $HOSTS" || check FAIL "entry points graftling.hosts: '${HOSTS:-none}'"
 OLD=$(sed -n 's/^old hosts group //p' $OUT/gt-metadata.txt)
 [[ $OLD == none ]] && check PASS "entry points of the old group (agent_swarm.hosts): none" || check FAIL "entry points of the old group (agent_swarm.hosts): '${OLD:-unread}'"
+ENVIRONMENT=$(sed -n 's/^environment entries //p' $OUT/gt-metadata.txt)
+[[ " $ENVIRONMENT " == *" GRAPHTRAJ_CLI_CONNECTION=graphtraj:connection "* && " $ENVIRONMENT " == *" GRAPHTRAJ_=graphtraj:prefix "* ]] \
+  && check PASS "entry points graftling.environment: $ENVIRONMENT" || check FAIL "entry points graftling.environment: '${ENVIRONMENT:-none}'"
+CONSUMER=$(sed -n 's/^consumer environment //p' $OUT/gt-metadata.txt)
+[[ $CONSUMER == 'GRAPHTRAJ_CLI_CONNECTION | GRAPHTRAJ_' ]] \
+  && check PASS "graftling.child_env.consumer_environment() with graphtraj installed: $CONSUMER" \
+  || check FAIL "graftling.child_env.consumer_environment() with graphtraj installed: '${CONSUMER:-unread}', not 'GRAPHTRAJ_CLI_CONNECTION | GRAPHTRAJ_'"
 grep -q '^imports ' $OUT/gt-metadata.txt && check PASS "graftling and graphtraj import together: $(sed -n 's/^imports //p' $OUT/gt-metadata.txt)" \
   || check FAIL "graftling and graphtraj do not import together: $(tail -1 $OUT/gt-metadata.txt)"
 for tool in graphtraj agent-runner graphtraj-session agents agents-mcp; do

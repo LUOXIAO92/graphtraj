@@ -83,7 +83,8 @@ def call(feature: str, **arguments: object) -> str:
 
 def script_prompt(calls: list[str], tail: str = 'Then reply with one line and stop.') -> str:
     """Return a prompt asking the parent to make exactly these calls, in order."""
-    lines = ['Use only the agents tool (on Claude Code it is mcp__agents__agents). Make these tool calls one '
+    lines = ['Use only the agents tool (on Claude Code it is mcp__agents__agents, on Codex mcp__graftling__agents). '
+             'Make these tool calls one '
              'at a time, in this order, with exactly these arguments. Where an argument says <agent from N>, '
              'use the "agent" field returned by call N.']
     lines += [f'{number}. {text}' for number, text in enumerate(calls, 1)]

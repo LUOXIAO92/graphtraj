@@ -25,10 +25,10 @@ print -r -- "step $STEP code $COMMIT started $STAMP" > $OUT/run.txt
 commit_check
 check PASS "the Worktree's code is $COMMIT, committed, nothing staged"
 [[ $BRANCH == agent/394-agents-rename-after-naming ]] && check PASS "branch: $BRANCH" || check FAIL "branch: $BRANCH, not agent/394-agents-rename-after-naming"
-VERSION=$(git -C $WT show $COMMIT:src/graftling/__init__.py 2>/dev/null | sed -n 's/^__version__ = "\(.*\)"$/\1/p' || true)
+VERSION=$(git -C $WT show ${COMMIT}:src/graftling/__init__.py 2>/dev/null | sed -n 's/^__version__ = "\(.*\)"$/\1/p' || true)
 [[ $VERSION == $DIST_VERSION ]] && check PASS "$COMMIT holds src/graftling at version $VERSION" \
   || check FAIL "$COMMIT: src/graftling/__init__.py version is '${VERSION:-missing}', not $DIST_VERSION"
-git -C $WT cat-file -e $COMMIT:src/agent_swarm/__init__.py 2>/dev/null \
+git -C $WT cat-file -e ${COMMIT}:src/agent_swarm/__init__.py 2>/dev/null \
   && check FAIL "$COMMIT still has src/agent_swarm" || check PASS "$COMMIT has no src/agent_swarm"
 git -C $WT merge-base --is-ancestor $BASE $COMMIT && check PASS "the base $BASE is an ancestor of $COMMIT" \
   || check FAIL "the base $BASE is not an ancestor of $COMMIT"

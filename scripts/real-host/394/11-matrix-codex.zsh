@@ -8,5 +8,9 @@ step_begin 11-matrix-codex 25 none 'matrix.txt shows PASS (9 of 9) for each of t
 prepare_checks
 need_claude_project
 run_checks matrix codex
+# Item 1 of the rename, seen from the Codex parent: its agents tool comes from the MCP server graftling.
+FOUND=$({ grep -rl -E '"server": *"graftling"|mcp__graftling__agents' --exclude='*.prompt.txt' --exclude=summary.txt --exclude=terminal.log $OUT 2>/dev/null || true; } | wc -l | tr -d ' ')
+(( FOUND > 0 )) && check PASS "files of this row naming the Codex MCP server graftling: $FOUND" \
+  || note "no file of this row names the Codex MCP server graftling; the matrix lines above still show the tool worked"
 old_names
 step_end

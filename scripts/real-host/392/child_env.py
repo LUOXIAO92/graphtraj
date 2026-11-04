@@ -83,12 +83,21 @@ def one(kind: str) -> None:
     if kind == 'codex':
         host_shell(kind, host, name)
     model, effort = CHILD_CHOICE[kind]
-    turn = host.turn(name, script_prompt([
-        call('create', runtime=kind, model=model, reasoning_effort=effort, name=f'env-{kind}', instruction=CHILD_INSTRUCTION),
-        call('wait', agent='<agent from 1>', timeout_seconds=240),
-        call('status', agent='<agent from 1>'),
-    ], 'If the child asks permission to run that command, allow it with the agents tool and wait again until it has '
-       'finished. Then reply with one line and stop.'), limit=480)
+    create = call('create', runtime=kind, model=model, reasoning_effort=effort, name=f'env-{kind}', instruction=CHILD_INSTRUCTION)
+    wait = call('wait', agent='<agent from 1>', timeout_seconds=240)
+    if kind == 'claude':
+        # A Claude child asks (claude/can_use_tool) before its Bash command, and wait ends early on that request,
+        # so the allow is scripted, as in checks.ask_parent (step 20): free text was not followed.
+        allow = ('{{"action":"execute","feature":"reply","arguments":{{"agent":"<agent from 1>","request":<the first '
+                 'claude/can_use_tool request document from call {source}, unchanged>,"response":{{"behavior":"allow"}}}}}}')
+        calls = [create, wait, call('requests', agent='<agent from 1>'), allow.format(source=3), wait,
+                 call('requests', agent='<agent from 1>'), allow.format(source=6), wait, call('status', agent='<agent from 1>')]
+        tail = ('If call 3 or call 6 shows no claude/can_use_tool request, skip the reply that follows it. '
+                'Then reply with one line and stop.')
+    else:
+        calls = [create, wait, call('status', agent='<agent from 1>')]
+        tail = 'Then reply with one line and stop.'
+    turn = host.turn(name, script_prompt(calls, tail), limit=900 if kind == 'claude' else 480)
     host.keep_data()
     created = turn.created(kind)
     if not created:
@@ -101,7 +110,13 @@ def one(kind: str) -> None:
     if parsed is None:
         parsed, source = names(saved_text(host)), 'its own saved session'
     if parsed is None:
-        check('CANNOT', f'{kind} child: neither its reply nor its saved session held the names output')
+        documents = turn.of('wait', agent) + turn.of('status', agent)
+        result = (documents[-1].get('result') or {}) if documents else {}
+        pending = [(item.get('method'), (item.get('params') or {}).get('tool_name'))
+                   for d in turn.of('requests', agent)[-1:] for item in (d.get('result') or {}).get('requests') or []]
+        check('CANNOT', f'{kind} child: neither its reply nor its saved session held the names output; last state '
+              f'{result.get("state")} ({last_result(documents[-1]).get("outcome") if documents else None}), '
+              f'pending requests {pending or result.get("pending_requests")}')
         return
     environment, parent, state = parsed
     bare = lambda word: word.split('(')[0]

@@ -9,6 +9,10 @@
 # whose agents tool creates a Claude child, waits for it and reads its status; then --session-id continues.
 # 392's step 65, which said CANNOT only because pnpm was missing.
 source /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/394-agents-rename-after-naming/scripts/real-host/394/common.zsh
+# Homebrew's pnpm 12.16.1 is a file without a shebang: zsh runs it, Node's spawn (DSH's) gets ENOEXEC.
+# A shim the user made (leader.md update 3, M1) goes before common.zsh's /opt/homebrew/bin, for this step only.
+PNPM_SHIM=$AG/pnpm-shim
+[[ -x $PNPM_SHIM/pnpm ]] && path=($PNPM_SHIM $path)
 step_begin 20-dsh-plugin 10 none 'dsh plugin add exits 0 and lists graftling-dsh; the DSH Session started without a plugin patch creates a Claude child that completes, and status shows it'
 prepare_checks
 AGENTS_VENV=$VENV
@@ -16,8 +20,26 @@ export DSH_HOME=$WORK/dsh-home
 mkdir -p $DSH_HOME $WORK/project $WORK/data
 cd $WORK/project
 git init -q .
+if [[ -x $PNPM_SHIM/pnpm ]]; then
+  note "pnpm shim: $PNPM_SHIM is first on PATH for this step"
+else
+  note "pnpm shim: $PNPM_SHIM/pnpm is not there; the pnpm on PATH is used as it is"
+fi
 PNPM=$(command -v pnpm) || fail "pnpm is not on PATH ($PATH); dsh plugin add needs it"
 note "pnpm: $PNPM $(pnpm --version 2>&1 | tail -1); dsh: $DSH $($DSH --version 2>&1 | tail -1)"
+# DSH starts pnpm through Node's child_process: the same spawn, with this step's PATH, must work.
+NODE=$(command -v node) || fail "node is not on PATH ($PATH); DSH needs it"
+SPAWN=$($NODE -e 'const r = require("child_process").spawnSync("pnpm", ["--version"], {encoding: "utf8"});
+console.log(r.error ? "ERROR " + r.error.code : r.status === 0 ? "OK " + r.stdout.trim() : "EXIT " + r.status + " " + (r.stderr || "").trim().split("\n").pop())' 2>&1 || true)
+print -r -- "$SPAWN" > $OUT/node-spawn-pnpm.txt
+if [[ $SPAWN == OK\ * ]]; then
+  check PASS "Node can spawn the pnpm DSH will use: ${SPAWN#OK } ($PNPM)"
+else
+  check FAIL "Node cannot spawn the pnpm DSH will use ($PNPM): $SPAWN"
+  info "Fallback: create the shim with leader.md update 3's M1 command, then run this step again:"
+  info "  zsh -c 'D=$PNPM_SHIM; mkdir -p \$D; printf \"#!/bin/sh\\nexec /opt/homebrew/bin/node /opt/homebrew/lib/node_modules/pnpm/bin/pnpm.mjs \\\"\\\$@\\\"\\n\" > \$D/pnpm; chmod +x \$D/pnpm; cat \$D/pnpm'"
+  fail "Node's spawn of pnpm gives ${SPAWN:-nothing}; dsh plugin add would fail the same way (spawn ENOEXEC). Create $PNPM_SHIM/pnpm (leader.md update 3, M1) and run: zsh $HERE/20-dsh-plugin.zsh"
+fi
 
 say "dsh.md: dsh plugin add, as written"
 DSH_PACKAGE="$("$AGENTS_VENV/bin/python" -c 'import graftling.dsh, pathlib; print(pathlib.Path(graftling.dsh.__file__).parent)')"

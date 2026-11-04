@@ -1517,7 +1517,7 @@ def _assert_native_budget_stop(
         notice = json.loads(params["toolOutput"]["output"])
         if notice["alias"] == alias and notice["message"] == stop["message"]:
             assert params["input"] == []
-            assert params["toolOutput"]["name"] == "graphtraj"
+            assert params["toolOutput"]["name"] == "graftling"
             assert params["threadId"] == thread_id
             assert notice["source"] == "graphtraj"
             assert notice["event"] == "execution-budget-exceeded"

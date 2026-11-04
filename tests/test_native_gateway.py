@@ -103,4 +103,4 @@ def test_codex_uses_progressive_mcp_with_native_session_authority(
     start = next(json.loads(line)['params'] for line in protocol.read_text().splitlines()
                  if json.loads(line).get('method') == 'thread/start')
     assert not start.get('dynamicTools')
-    assert 'graphtraj' in start['config']['mcp_servers']
+    assert ('graphtraj' if host == 'main' else 'graftling') in start['config']['mcp_servers']

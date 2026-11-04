@@ -16,9 +16,9 @@
    },
    "removed": [
     "AGENTS_PARITY",
-    "GRAFTLING_PARITY",
     "DSH_AGENT_SOURCE",
     "DSH_SESSION_ID",
+    "GRAFTLING_PARITY",
     "GRAPHTRAJ_PARITY"
    ]
   },
@@ -126,9 +126,9 @@
    },
    "removed": [
     "AGENTS_PARITY",
-    "GRAFTLING_PARITY",
     "DSH_AGENT_SOURCE",
     "DSH_SESSION_ID",
+    "GRAFTLING_PARITY",
     "GRAPHTRAJ_PARITY"
    ]
   },
@@ -232,9 +232,9 @@
    },
    "removed": [
     "AGENTS_PARITY",
-    "GRAFTLING_PARITY",
     "DSH_AGENT_SOURCE",
     "DSH_SESSION_ID",
+    "GRAFTLING_PARITY",
     "GRAPHTRAJ_PARITY"
    ]
   },
@@ -352,9 +352,9 @@
    },
    "removed": [
     "AGENTS_PARITY",
-    "GRAFTLING_PARITY",
     "DSH_AGENT_SOURCE",
     "DSH_SESSION_ID",
+    "GRAFTLING_PARITY",
     "GRAPHTRAJ_PARITY"
    ]
   },
@@ -458,9 +458,9 @@
    },
    "removed": [
     "AGENTS_PARITY",
-    "GRAFTLING_PARITY",
     "DSH_AGENT_SOURCE",
     "DSH_SESSION_ID",
+    "GRAFTLING_PARITY",
     "GRAPHTRAJ_PARITY"
    ]
   },
@@ -573,9 +573,9 @@
    },
    "removed": [
     "AGENTS_PARITY",
-    "GRAFTLING_PARITY",
     "DSH_AGENT_SOURCE",
     "DSH_SESSION_ID",
+    "GRAFTLING_PARITY",
     "GRAPHTRAJ_PARITY"
    ]
   },
@@ -678,9 +678,9 @@
    },
    "removed": [
     "AGENTS_PARITY",
-    "GRAFTLING_PARITY",
     "DSH_AGENT_SOURCE",
     "DSH_SESSION_ID",
+    "GRAFTLING_PARITY",
     "GRAPHTRAJ_PARITY"
    ]
   },
@@ -785,9 +785,9 @@
    },
    "removed": [
     "AGENTS_PARITY",
-    "GRAFTLING_PARITY",
     "DSH_AGENT_SOURCE",
     "DSH_SESSION_ID",
+    "GRAFTLING_PARITY",
     "GRAPHTRAJ_PARITY"
    ]
   },
@@ -894,9 +894,9 @@
    },
    "removed": [
     "AGENTS_PARITY",
-    "GRAFTLING_PARITY",
     "DSH_AGENT_SOURCE",
     "DSH_SESSION_ID",
+    "GRAFTLING_PARITY",
     "GRAPHTRAJ_PARITY"
    ]
   },

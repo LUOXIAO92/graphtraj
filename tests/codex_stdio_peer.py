@@ -371,7 +371,7 @@ for line in incoming():
         elif prompt == 'mcp-create-child':
             def create_child(thread_id=thread_id):
                 """Issue one genuine bound MCP call from the controlled native host."""
-                server = sessions[thread_id]['config']['mcp_servers']['graphtraj']
+                servers = sessions[thread_id]['config']['mcp_servers']; server = servers.get('graftling') or servers['graphtraj']
                 environment = {key: value for key, value in os.environ.items()
                                if key not in {'GRAFTLING_CONNECTION', 'GRAPHTRAJ_CLI_CONNECTION'}}
                 environment.update(server['env'])
@@ -388,7 +388,7 @@ for line in incoming():
         elif prompt == 'mcp-requests':
             def run_mcp(thread_id=thread_id, turn_id=turn_id):
                 """Keep the peer available for concurrent native identity reads."""
-                server = sessions[thread_id]['config']['mcp_servers']['graphtraj']
+                servers = sessions[thread_id]['config']['mcp_servers']; server = servers.get('graftling') or servers['graphtraj']
                 requests_to_send = json.loads(os.environ['PEER_MCP_REQUESTS'])
                 for entry in requests_to_send:
                     if entry['method'] == 'tools/call':
@@ -405,7 +405,7 @@ for line in incoming():
         elif prompt == 'mcp-in-turn':
             def run_in_turn(thread_id=thread_id, turn_id=turn_id):
                 """Make each call after the last one's result, as a model does: <agent from N> names call N's."""
-                server = sessions[thread_id]['config']['mcp_servers']['graphtraj']
+                servers = sessions[thread_id]['config']['mcp_servers']; server = servers.get('graftling') or servers['graphtraj']
                 environment = {key: value for key, value in os.environ.items()
                                if key not in {'GRAFTLING_CONNECTION', 'GRAPHTRAJ_CLI_CONNECTION'}}
                 environment.update(server['env'])

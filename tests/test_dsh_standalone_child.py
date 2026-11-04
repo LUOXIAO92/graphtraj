@@ -263,7 +263,8 @@ def test_dsh_child_launch_needs_no_graphtraj_setting(tmp_path: Path, dsh: dict) 
                 if 'insert' in row and row['insert'][0]['id'] == 'agents-mcp']
     assert Path(plugin['name']) == ROOT / 'src/graftling/dsh/plugin.mjs'
     assert plugin['config'] == {'mcpCommand': str(Path(sys.executable).absolute()),
-                                'mcpArgs': ['-I', '-m', 'graftling.mcp']}
+                                'mcpArgs': ['-I', '-m', 'graftling.mcp'],
+                                'mcpEnv': ['GRAFTLING_CONNECTION']}
 
 
 def refusal_cases(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, dsh: dict) -> list[tuple]:
@@ -432,7 +433,7 @@ def test_dsh_child_runs_with_graphtraj_unimportable(tmp_path: Path) -> None:
     assert result.returncode == 0, result.stdout + result.stderr
     evidence = json.loads(result.stdout.splitlines()[-1])
     assert evidence['graphtraj_modules'] == []
-    assert evidence['environment'] == ['GRAFTLING_CONNECTION', 'DSH_AGENT_PACKAGE']
+    assert evidence['environment'] == ['DSH_AGENT_PACKAGE', 'GRAFTLING_CONNECTION']
     assert evidence['plugin']['name'] == str(ROOT / 'src/graftling/dsh/plugin.mjs')
     assert evidence['plugin']['config']['mcpArgs'] == ['-I', '-m', 'graftling.mcp']
 

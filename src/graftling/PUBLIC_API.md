@@ -447,14 +447,21 @@ call. GraphTraj uses it like any other package.
 **A consumer's own variables: the `graftling.environment` entry point (since
 0.5.0).** A package that starts Agents through graftling from its own processes
 names its variables in the group `graftling.environment`, so graftling names none.
-The entry point is a mapping with `connections`, the variables that carry the
-package's own host channel, and `prefixes`, its own variable prefixes. No child
-Runtime, child MCP server or local reviewer receives a `connections` name, as with
-`GRAFTLING_CONNECTION`; a Claude or Pi child also receives no name under a prefix.
-Every installed entry applies in every graftling process. For example
-`{"connections": ["EXAMPLE_CONNECTION"], "prefixes": ["EXAMPLE_"]}` registered as
-`example = "example:GRAFTLING_ENVIRONMENT"`; GraphTraj declares its hosted CLI channel
-and its prefix this way.
+Each entry's name is a variable and its attribute says what it is: `connection`
+for a variable that carries the package's own host channel, `prefix` for a name
+prefix the package owns. No child Runtime, child MCP server or local reviewer
+receives a `connection` variable, as with `GRAFTLING_CONNECTION`; a Claude or Pi
+child also receives no name under a `prefix`. graftling reads only the installed
+metadata and never imports the declaring package. Every installed entry applies in
+every graftling process. For example:
+
+```toml
+[project.entry-points."graftling.environment"]
+EXAMPLE_CONNECTION = "example:connection"
+EXAMPLE_ = "example:prefix"
+```
+
+GraphTraj declares its hosted CLI channel and its prefix this way.
 
 A package that runs its own members on graftling's execution classes keeps its own
 names through these attributes, all since 0.5.0:

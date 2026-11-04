@@ -38,32 +38,34 @@ def consumer_environment() -> tuple[frozenset[str], tuple[str, ...]]:
     """Return the variables installed consumers keep from every child they did not start.
 
     A package that starts Agents through graftling from its own processes declares
-    its own variables in the entry point group ``graftling.environment``. Each entry
-    loads a mapping with ``connections``, the names of the consumer's own host
-    channel, and ``prefixes``, the consumer's own name prefix. No child Runtime,
-    child MCP server or reviewer receives a channel name; Claude and Pi children
-    also receive no name under a prefix. graftling itself names no consumer.
+    its own variables in the entry point group ``graftling.environment``: each
+    entry's name is a variable, and its attribute says what the name is.
+    ``connection`` marks a variable that carries the package's own host channel;
+    ``prefix`` marks a name prefix the package owns. No child Runtime, child MCP
+    server or reviewer receives a channel variable; Claude and Pi children also
+    receive no name under a prefix. Only the installed metadata is read: the
+    declaring package is never imported, and graftling itself names no consumer.
 
     Returns
     -------
     tuple
-        The channel names, and the prefixes, of every installed entry.
+        The channel variables, and the prefixes, of every installed entry.
 
     Examples
     --------
     A consumer's ``pyproject.toml``::
 
         [project.entry-points."graftling.environment"]
-        example = "example.hosts:GRAFTLING_ENVIRONMENT"
-
-    with ``GRAFTLING_ENVIRONMENT = {'connections': ['EXAMPLE_CONNECTION'], 'prefixes': ['EXAMPLE_']}``.
+        EXAMPLE_CONNECTION = "example:connection"
+        EXAMPLE_ = "example:prefix"
     """
     connections: set[str] = set()
     prefixes: list[str] = []
     for entry in entry_points(group='graftling.environment'):
-        declared = entry.load()
-        connections.update(declared.get('connections', ()))
-        prefixes.extend(declared.get('prefixes', ()))
+        if entry.attr == 'connection':
+            connections.add(entry.name)
+        elif entry.attr == 'prefix':
+            prefixes.append(entry.name)
     return frozenset(connections), tuple(prefixes)
 
 

@@ -25,8 +25,11 @@ agent-runner = "graphtraj.interfaces.cli.agent_runner:main"
 [project.entry-points."graftling.hosts"]
 graphtraj = "graphtraj.interfaces.hosted_cli:agents_host"
 
+# GraphTraj's own variables that no graftling child inherits: the hosted CLI
+# channel and the GRAPHTRAJ_ prefix. graftling reads these names, never the module.
 [project.entry-points."graftling.environment"]
-graphtraj = "graphtraj:GRAFTLING_ENVIRONMENT"
+GRAPHTRAJ_CLI_CONNECTION = "graphtraj:connection"
+GRAPHTRAJ_ = "graphtraj:prefix"
 
 [tool.setuptools]
 package-dir = {"" = "src"}

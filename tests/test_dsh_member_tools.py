@@ -274,7 +274,8 @@ def test_a_member_uses_both_tools_and_its_round_completes(tmp_path: Path, monkey
     config = next(row['insert'][0] for row in service.patches
                   if 'insert' in row and row['insert'][0]['id'] == 'agents-mcp')['config']
     assert config == {'mcpCommand': str(Path(sys.executable).absolute()),
-                      'mcpArgs': ['-I', '-m', 'graphtraj.interfaces.mcp']}
+                      'mcpArgs': ['-I', '-m', 'graphtraj.interfaces.mcp'],
+                      'mcpEnv': ['GRAPHTRAJ_CLI_CONNECTION']}
     assert 'GRAPHTRAJ_CLI_CONNECTION' in service.environment and 'GRAFTLING_CONNECTION' not in service.environment
 
 
@@ -458,7 +459,8 @@ def test_a_standalone_child_keeps_its_own_entry_and_policy(tmp_path: Path, dsh: 
     [plugin] = [row['insert'][0] for row in service.patches
                 if 'insert' in row and row['insert'][0]['id'] == 'agents-mcp']
     assert plugin['config'] == {'mcpCommand': str(Path(sys.executable).absolute()),
-                                'mcpArgs': ['-I', '-m', 'graftling.mcp']}
+                                'mcpArgs': ['-I', '-m', 'graftling.mcp'],
+                                'mcpEnv': ['GRAFTLING_CONNECTION']}
     assert Path(plugin['name']).is_relative_to(ROOT / 'src/graftling')
     # Byte-identical to the row before this change: no extra key at all.
     assert next(row for row in service.patches if row.get('id') == 'sandbox-policy') == {

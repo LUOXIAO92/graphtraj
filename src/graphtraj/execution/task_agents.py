@@ -199,6 +199,44 @@ def notify_parent_of_decision(directory: Path, mapping: Mapping[str, Any], notic
     return True
 
 
+def notify_member_of_child_end(root: Path, alias: str, notice: Mapping[str, Any]) -> bool:
+    """Send a Task member's core-created child end to the member's Session once.
+
+    The input takes the Runner's system-notice path, the one
+    ``notify_direct_parent`` uses: it queues into the member's running
+    execution or starts a resumed turn. A busy input lock is retried within
+    one operation window. ``False`` leaves the end readable through the
+    child's status and wait; no replay store is kept.
+    """
+    import json
+    import time
+
+    from graphtraj.configuration.project_configuration import runner_directory
+    from graphtraj.execution.runner_control import _send_session
+    from graphtraj.execution.runner_models import RunnerError
+    from graphtraj.execution.runner_process import OPERATION_TIMEOUT_SECONDS
+    from graphtraj.execution.runner_status import read_alias_mapping
+
+    runner = runner_directory(root)
+    message = json.dumps({'source': 'graphtraj', 'alias': notice['agent'], 'event': notice['outcome'],
+                          'message': notice['body'] or (notice.get('error') or {}).get('message')
+                          or notice['outcome']}, ensure_ascii=False)
+    deadline = time.monotonic() + OPERATION_TIMEOUT_SECONDS
+    while True:
+        try:
+            mapping, directory = read_alias_mapping(runner, alias)
+            _send_session(alias, message, directory, mapping, (), runner_project_root(runner),
+                          system_notice=True)
+            return True
+        except RunnerError as error:
+            remaining = deadline - time.monotonic()
+            if error.code != 'operation-failed' or remaining <= 0:
+                return False
+            time.sleep(min(1, remaining))
+        except Exception:
+            return False
+
+
 def native_directory(root: Path, alias: str, runtime: str) -> Path:
     """Locate host-owned native files in the tool's data root, independent of Traces."""
     from graphtraj.interfaces.agents import swarm_root

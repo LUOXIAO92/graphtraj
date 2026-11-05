@@ -188,14 +188,26 @@ class GraphTrajAgents:
         takes the same Runtime Adapter path as a Task member's, so it follows
         Main continuity and is shown once. A Main host with a push channel
         (Codex) receives the parent event itself, so wait/status hide the body.
+
+        A Task member's Runner-driven execution binds no native receiver, so
+        the failed or interrupted end of a child it created with the agents
+        tool also arrives here. It is sent to the member's Session as a
+        system notice (``notify_member_of_child_end``); any other end of a
+        child with a parent is not delivered (``False``).
         """
         from graphtraj.configuration.project_configuration import runner_directory
         from graphtraj.execution.main_continuity import QUEUED_RUNTIMES, current_main, recorded_by_main, route_notice
+        from graphtraj.execution.task_agents import notify_member_of_child_end
         from graphtraj.runtimes.runtime_adapter import select_runtime_adapter
 
+        if notice['parent'] is not None:
+            member = self._member_alias(notice['parent'])
+            if member is None or notice['outcome'] not in {'failed', 'interrupted'}:
+                return False
+            return notify_member_of_child_end(self.root, member, notice)
         runner = runner_directory(self.root)
         current = current_main(runner)
-        if notice['parent'] is not None or current is None or not recorded_by_main(runner, notice['creator']):
+        if current is None or not recorded_by_main(runner, notice['creator']):
             return False
         address = route_notice(runner, {**current['connection'], 'runtime': current['runtime'],
                                         'session': current['session']})

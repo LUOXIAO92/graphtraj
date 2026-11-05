@@ -80,7 +80,10 @@ advice instead of `graftling <version> at <python>`.
 **Both in one project.** If the project's `.mcp.json` already starts the host through
 `configuration --write`, that host serves the project. The plugin's host refuses with
 `host-busy`, naming the two ways out (`/mcp`, `host.log`, and every call of the plugin's
-tool show it), and the plugin's module stays inactive. Keep one: run
+tool show it), and the plugin's module stays inactive. The module stands aside only when
+`GRAFTLING_CLAUDE_HOST_CONFIG` names this project's `.agents-control/claude-host.json`
+(the Session's directory or one above it); a value inherited from another configured
+project, such as from a shell started in its Claude Code session, is ignored. Keep one: run
 `claude plugin disable graftling@graftling --scope local` in that project, or remove the
 `agents` server from `.mcp.json`, the two `GRAFTLING_CLAUDE_HOST_*` entries from
 `.claude/settings.local.json` and `.claude/skills/agents-claude-host/`.

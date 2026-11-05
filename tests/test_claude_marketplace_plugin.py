@@ -175,8 +175,19 @@ register((name, matcher, fn) => {
  const key = fn && matcher.tool ? `${name}:${matcher.tool}` : name;
  handlers.set(key, fn ?? matcher); return {catch() {}};
 });
-const env = scenario === 'inert' ? {GRAFTLING_CLAUDE_HOST_CONFIG: '/project/config'}
-  : scenario === 'default' ? {} : {GRAFTLING_PYTHON: '/venv/python'};
+// The Session cwd is /project/sub. GRAFTLING_CLAUDE_HOST_CONFIG of this project
+// (the cwd or an ancestor) makes the copy stand aside; any other is foreign.
+const CONFIGS = {
+ same: '/project/sub/.agents-control/claude-host.json',
+ ancestor: '/project/.agents-control/claude-host.json',
+ foreign: '/other/.agents-control/claude-host.json',
+ descendant: '/project/sub/deeper/.agents-control/claude-host.json',
+ sibling: '/project/su/.agents-control/claude-host.json',
+};
+const inert = scenario === 'same' || scenario === 'ancestor';
+const foreign = ['foreign', 'descendant', 'sibling'].includes(scenario);
+const env = scenario === 'default' ? {} : {GRAFTLING_PYTHON: '/venv/python'};
+if (scenario in CONFIGS) env.GRAFTLING_CLAUDE_HOST_CONFIG = CONFIGS[scenario];
 const runs = [], log = [], registrations = [];
 const host = {
  session: {id: async () => 'main', cwd: async () => '/project/sub'},
@@ -196,7 +207,7 @@ assert.ok(!handlers.has('tool.check:mcp__agents__agents'));
 await handlers.get('session.start')(host, {}, async () => 'started');
 const check = handlers.get('tool.check:mcp__plugin_graftling_agents__agents');
 const decided = await check(host, {input: {action: 'discover'}}, async () => ({decision: 'allow'}));
-if (scenario === 'inert') {
+if (inert) {
  assert.equal(registrations.length, 0);
  assert.deepEqual(decided, {decision: 'allow'});
  assert.equal(runs.length, 0);
@@ -207,18 +218,27 @@ if (scenario === 'inert') {
  assert.ok(log.some(line => /cannot import graftling.*set GRAFTLING_PYTHON/.test(line)));
 } else {
  const python = scenario === 'default' ? 'python3' : '/venv/python';
+ assert.equal(registrations[0].name, 'agents-context');
  assert.deepEqual(decided, {decision: 'allow'});
  assert.deepEqual(runs[0], [python, '-m', 'graftling.claude.host', 'context', '--project-from', '/project/sub']);
  await handlers.get('command.run')(host);
  assert.ok(log.includes(`graftling 0.5.0 at ${python}`), log.join('\n'));
  assert.ok(log.includes('MCP agents registered'));
+ const ignored = "GRAFTLING_CLAUDE_HOST_CONFIG names another project's host; the plugin ignored it";
+ assert.equal(log.includes(ignored), foreign, log.join('\n'));
 }
 '''
 
 
-@pytest.mark.parametrize('scenario', ['set', 'default', 'without', 'inert'])
+@pytest.mark.parametrize('scenario', ['set', 'default', 'without', 'same', 'ancestor', 'foreign', 'descendant',
+                                      'sibling'])
 def test_plugin_mod_uses_plugin_tool_names_and_its_python(tmp_path: Path, scenario: str) -> None:
-    """Plugin tool names; GRAFTLING_PYTHON else python3; an explicit missing message; inert beside material."""
+    """Plugin tool names; GRAFTLING_PYTHON else python3; an explicit missing message.
+
+    The copy stands aside only for this project's configuration --write material
+    (same or ancestor directory). An inherited one of another project is ignored
+    and prepare runs (foreign, descendant, and a sibling sharing a name prefix).
+    """
     module = tmp_path / 'host_context.mjs'
     module.write_text(marketplace_module())
     result = subprocess.run(['node', '--input-type=module', '-e', MOD, module.as_uri(), scenario],

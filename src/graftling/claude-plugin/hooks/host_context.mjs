@@ -72,9 +72,21 @@ async function pluginPython($) {
   return (await $.env.get('GRAFTLING_PYTHON')) || 'python3';
 }
 
-// Whether configuration --write material serves this project, so the plugin copy stands aside.
+// Whether configuration --write material serves this Session's project, so the
+// plugin copy stands aside: GRAFTLING_CLAUDE_HOST_CONFIG must name
+// <dir>/.agents-control/claude-host.json for the Session cwd or an ancestor.
+// A value inherited from another configured project (a shell or tool started
+// there) is foreign: 'foreign' is returned and the plugin copy works normally.
 async function projectMaterial($) {
-  return Boolean(await $.env.get('GRAFTLING_CLAUDE_HOST_CONFIG'));
+  const config = await $.env.get('GRAFTLING_CLAUDE_HOST_CONFIG');
+  if (!config) return false;
+  let directory = String(await $.session.cwd()).replace(/\/+$/, '');
+  for (;;) {
+    if (config === `${directory}/.agents-control/claude-host.json`) return true;
+    const cut = directory.lastIndexOf('/');
+    if (cut < 0) return 'foreign';
+    directory = directory.slice(0, cut);
+  }
 }
 
 async function context($, document) {
@@ -200,14 +212,17 @@ function callRequest(event) {
 
 export function register(on) {
   const displayed = new Set();
-  const state = {inert: false, active: 0, pushing: false, inflight: false, stopped: false, pushed: false, pushError: null, ends: []};
+  const state = {inert: false, foreignConfig: false, active: 0, pushing: false, inflight: false, stopped: false, pushed: false, pushError: null, ends: []};
 
   on('session.start', async ($, event, next) => {
     // One host per project: configuration --write material wins over the plugin.
-    if (PLUGIN && await projectMaterial($)) {
+    // Decided once per process, so /agents-context, push and every hook agree.
+    const material = PLUGIN ? await projectMaterial($) : false;
+    if (material === true) {
       state.inert = true;
       return next(event);
     }
+    state.foreignConfig = material === 'foreign';
     await $.command.register({name: 'agents-context',
       description: 'Show current native Session and agents registration without a model turn', immediate: true});
     startPush($, state);
@@ -219,6 +234,9 @@ export function register(on) {
     const tools = await $.tool.list();
     await $.ui.log(`agents · current Session ${session}`);
     if (PLUGIN) await $.ui.log(await pythonReport($));
+    if (state.foreignConfig) {
+      await $.ui.log('GRAFTLING_CLAUDE_HOST_CONFIG names another project\'s host; the plugin ignored it');
+    }
     for (const name of TOOLS) {
       await $.ui.log(tools.some((tool) => tool.name === `${PREFIX}${name}`)
         ? `MCP ${name} registered` : `MCP ${name} missing`);

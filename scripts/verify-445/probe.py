@@ -1,6 +1,6 @@
 """445 probe helper: roles, the probe Task, and what the idle Leader's planned end produced.
 
-Usage (the scratch venv's Python, from the isolated project): python -I probe.py <prepare|observe> PROJECT MODEL
+Usage (the scratch venv's Python): python -I probe.py <prepare|observe> PROJECT MODEL | plugins STREAM - | wait PROJECT SECONDS
 Prints only facts read from the isolated project; it reads no credential.
 """
 from __future__ import annotations
@@ -124,6 +124,44 @@ def observe(project: Path, _model: str) -> int:
     return 0 if ok else 1
 
 
+def plugins(stream: Path, _unused: str) -> int:
+    """Print the init record's plugins; 0 only when graphtraj-claude-host is loaded."""
+    for line in stream.read_text().splitlines():
+        try:
+            record = json.loads(line)
+        except ValueError:
+            continue
+        if record.get('type') == 'system' and record.get('subtype') == 'init':
+            names = [plugin.get('name') for plugin in record.get('plugins', [])]
+            print('init plugins:', names)
+            print('mcp servers:', [(server.get('name'), server.get('status')) for server in record.get('mcp_servers', [])])
+            loaded = 'graphtraj-claude-host' in names
+            print('graphtraj-claude-host loaded:', 'YES' if loaded else 'NO')
+            return 0 if loaded else 1
+    print('graphtraj-claude-host loaded: NO (no init record in the stream)')
+    return 1
+
+
+def wait(project: Path, seconds: str) -> int:
+    """Poll the probe's execution-budget.yml for up to ``seconds`` (< 120) without touching any Agent."""
+    deadline = time.time() + min(float(seconds), 115)
+    while True:
+        files = sorted(project.glob('.graphtraj/state/tasks/1-*/execution-budget.yml'))
+        state = yaml.safe_load(files[0].read_text()) if files else None
+        if state:
+            notice = next((n for n in state.get('parent_notices', []) if n['key'] == 'elapsed_minutes:1'), None)
+            if notice and notice.get('delivered'):
+                print(f'{datetime.now().astimezone().isoformat(timespec="seconds")} elapsed_minutes:1 delivered=True '
+                      f'observer={notice.get("observer")} occurred_at={notice.get("event", {}).get("occurred_at")}')
+                return 0
+        if time.time() >= deadline:
+            print(f'{datetime.now().astimezone().isoformat(timespec="seconds")} not delivered yet; '
+                  f'notifications={state.get("notifications") if state else None}')
+            return 0
+        time.sleep(2)
+
+
 if __name__ == '__main__':
     command, project, model = sys.argv[1], Path(sys.argv[2]), sys.argv[3]
-    raise SystemExit({'prepare': prepare, 'observe': observe}[command](project, model))
+    commands = {'prepare': prepare, 'observe': observe, 'plugins': plugins, 'wait': wait}
+    raise SystemExit(commands[command](project, model))

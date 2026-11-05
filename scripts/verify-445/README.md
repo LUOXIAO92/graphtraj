@@ -7,7 +7,9 @@ expected. Output goes to
 | Step | Who | Command | Success |
 |---|---|---|---|
 | 00 | Main | `zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/445-budget-notice-idle-timed-leader/scripts/verify-445/steps.zsh 00` | `timer module:` under `~/graphtraj-verify-445/src`, `roles OK`, `task 1 ready`, `result: MODEL OK` with `claude-opus-5-5` in `models`. Prints the 01 command. |
+| 00u | USER, once, only if 00 prints `graphtraj-claude-host loaded: NO` | `cd ~/graphtraj-verify-445/project && claude`, choose 'Yes, proceed' on the folder-trust dialog, then `/exit` | Main reruns 00 and sees `graphtraj-claude-host loaded: YES`. |
 | 01 | Main | `zsh …/steps.zsh 01 2>&1 \| tee …/realhost/01.txt` | About 5 minutes. Ends with the 02 output. |
+| 03 | Main | `zsh …/steps.zsh 03` | Starts the full suite at HEAD in the background (~15-20 min); read it with `tail -n 25 …/realhost/03-suite.txt`. |
 | 02 | Main | `zsh …/steps.zsh 02` (01 runs it too) | `CRITERION PASS`: `elapsed_minutes:1 delivered= True observer= …team_leader`, its `occurred_at` later than the Leader's last execution end, and Main inbox or Main stream records of `execution-budget-exceeded`. |
 
 What it does:
@@ -20,7 +22,7 @@ What it does:
   configuration). It checks login and model with one `claude -p` line.
 - 01 makes a `claude -p` Main in the isolated project the root. It dispatches the
   Leader through `mcp__agents__tasks` (`swarm`). The Leader replies `PROBE DONE`
-  and ends its turn. Main then only runs `sleep 100` three times and sends the
+  and ends its turn. Main then only runs `probe.py wait <project> 100` three times (each polls execution-budget.yml for at most 100 s) and sends the
   Leader nothing, past the planned end (started_at + 60 s) plus a margin.
 - Receiver: the root is this `claude -p` Main, through the Leader's
   `parent_connection`. The Runner records Main's received events under

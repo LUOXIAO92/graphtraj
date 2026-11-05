@@ -1,0 +1,860 @@
+
+======== setup: old wheels from 1a648ca32d651ce379dbfaa89040a35745c182af, fake production venv, plugin, configuration, archives
+agent_swarm-0.2.4-py3-none-any.whl
+graphtraj-0.1.0-py3-none-any.whl
+agent_swarm-0.2.4.dist-info
+click-8.5.0.dist-info
+graphtraj-0.1.0.dist-info
+pip-25.3.dist-info
+pyyaml-6.0.3.dist-info
+websockets-16.1.1.dist-info
+WARNING: The directory '/Users/luoxiao/Library/Caches/pip' or its parent directory is not owned or is not writable by the current user. The cache has been disabled. Check the permissions and owner of that directory. If executing pip with sudo, you should use sudo's -H flag.
+No broken requirements found.
+Proposed dev base: d4bc0a2b7c38cd867400b4ae28ef3615ec017e19
+Create dev from d4bc0a2b7c38cd867400b4ae28ef3615ec017e19? [y/N]: Created Integration Worktree on dev.
+GraphTraj project setup complete.
+created aaa version 5
+created bbb version 5
+archives=2 by-version={'5': 2} total-bytes=304
+
+======== step B (rehearsed: real build of the target commit)
+[B] 从 git archive d11f3226422cb7a4de5e59d347f8d211d59350be 构建两个 wheel（不用 Worktree、不联网、不改 Conda 和生产）。无对话框。
+生产 venv 没有 setuptools/wheel，用 /Users/luoxiao/miniconda3/bin/python3.13 构建（不修改 Conda）
+
+### build with /Users/luoxiao/miniconda3/bin/python3.13 (--no-index --no-deps --no-build-isolation)
+Processing /tmp/claude-501/adopt393-rehearsal/project/.graphtraj/core/state/tasks/393-graphtraj-adoption-after-agents-release/adoption/src
+  Preparing metadata (pyproject.toml): started
+  Preparing metadata (pyproject.toml): finished with status 'done'
+Processing /tmp/claude-501/adopt393-rehearsal/project/.graphtraj/core/state/tasks/393-graphtraj-adoption-after-agents-release/adoption/src/src/graftling
+  Preparing metadata (pyproject.toml): started
+  Preparing metadata (pyproject.toml): finished with status 'done'
+Building wheels for collected packages: graphtraj, graftling
+  Building wheel for graphtraj (pyproject.toml): started
+  Building wheel for graphtraj (pyproject.toml): finished with status 'done'
+  Created wheel for graphtraj: filename=graphtraj-0.1.0-py3-none-any.whl size=573473 sha256=4504d4f934db66bf4900dedfbd8bcc692d0d2b1ef3082b86dd9e20c064f4d61f
+  Stored in directory: /private/tmp/claude-501/pip-ephem-wheel-cache-78ytqp84/wheels/7f/11/0a/bb7939d066a733c0222d79e29ffdeebd78a07b4fb04906fd9b
+  Building wheel for graftling (pyproject.toml): started
+  Building wheel for graftling (pyproject.toml): finished with status 'done'
+  Created wheel for graftling: filename=graftling-0.5.0-py3-none-any.whl size=426194 sha256=b7d2b2799bbd0182a13549cb9269cc7e75a1fc98f56001ec41e00e13b82e15b1
+  Stored in directory: /private/tmp/claude-501/pip-ephem-wheel-cache-78ytqp84/wheels/1b/32/8c/b5db063f237c820bc6b26bb916c9f82639dcd1150bbebc2d23
+Successfully built graphtraj graftling
+
+### wheels and sha256 (expect graphtraj-0.1.0 and graftling-0.5.0)
+b7d2b2799bbd0182a13549cb9269cc7e75a1fc98f56001ec41e00e13b82e15b1  graftling-0.5.0-py3-none-any.whl
+4504d4f934db66bf4900dedfbd8bcc692d0d2b1ef3082b86dd9e20c064f4d61f  graphtraj-0.1.0-py3-none-any.whl
+
+### no build/ or __pycache__ inside the wheels (expect 0); no agent_swarm inside (expect 0)
+leaked: 0  agent_swarm entries: 0
+
+----- 复制给 Main 的摘要（B）-----
+b7d2b2799bbd0182a13549cb9269cc7e75a1fc98f56001ec41e00e13b82e15b1  graftling-0.5.0-py3-none-any.whl
+4504d4f934db66bf4900dedfbd8bcc692d0d2b1ef3082b86dd9e20c064f4d61f  graphtraj-0.1.0-py3-none-any.whl
+leaked: 0  agent_swarm entries: 0
+-----
+证明: graphtraj-0.1.0、graftling-0.5.0 各一个 wheel 及 sha256；leaked: 0  agent_swarm entries: 0。
+
+==> 下一步（直接粘贴）: zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/393-graphtraj-adoption-after-agents-release/scripts/adopt-393/steps.zsh V
+REHEARSAL PASS: B exit 0
+REHEARSAL PASS: wheels are graphtraj-0.1.0 and graftling-0.5.0
+
+======== step V with a stub claude (the real plugin validate is NOT rehearsed)
+[V] 安装前校验。无对话框。只读真实项目，不写生产；scratch venv、候选插件与入口文件预测都在生产之外。Main 可以保持运行。
+graftling-0.5.0-py3-none-any.whl: OK
+graphtraj-0.1.0-py3-none-any.whl: OK
+
+### scratch venv: new wheels plus production's click, yaml, websockets
+WARNING: The directory '/Users/luoxiao/Library/Caches/pip' or its parent directory is not owned or is not writable by the current user. The cache has been disabled. Check the permissions and owner of that directory. If executing pip with sudo, you should use sudo's -H flag.
+No broken requirements found.
+scratch venv pip check rc=0
+graftling 0.5.0 /tmp/claude-501/adopt393-rehearsal/home/graphtraj-adoption-393/vvenv/lib/python3.13/site-packages/graphtraj/runtimes/claude/host.py
+
+### candidate plugin: new code writes into a scratch copy of production's plugin
+written: ['/tmp/claude-501/adopt393-rehearsal/project/.graphtraj/core/state/tasks/393-graphtraj-adoption-after-agents-release/adoption/vplug/graphtraj-claude-host/.claude-plugin/plugin.json', '/tmp/claude-501/adopt393-rehearsal/project/.graphtraj/core/state/tasks/393-graphtraj-adoption-after-agents-release/adoption/vplug/graphtraj-claude-host/hooks/hooks.json', '/tmp/claude-501/adopt393-rehearsal/project/.graphtraj/core/state/tasks/393-graphtraj-adoption-after-agents-release/adoption/vplug/graphtraj-claude-host/hooks/host_context.mjs']
+not written here: ['/private/tmp/claude-501/adopt393-rehearsal/project/.claude/settings.local.json', '/private/tmp/claude-501/adopt393-rehearsal/project/.graphtraj/claude-host/config.json', '/private/tmp/claude-501/adopt393-rehearsal/project/.mcp.json']
+SAME    .claude-plugin/plugin.json
+SAME    hooks/hooks.json
+CHANGED hooks/host_context.mjs
+差异: /tmp/claude-501/adopt393-rehearsal/project/.graphtraj/core/state/tasks/393-graphtraj-adoption-after-agents-release/adoption/raw/V-plugin.diff；host_context.mjs 改变，所以 resume 时可能出现一次插件信任框。
+candidate lines reading GRAFTLING_CLAUDE_HOST_*: 2
+candidate lines reading GRAPHTRAJ_CLAUDE_HOST_* (expect 0): 0
+10:const TOOLS = ["agents", "tasks"];
+
+### claude plugin validate: baseline, candidate
+claude: /tmp/claude-501/adopt393-rehearsal/stub/claude (stub-claude 0.0)
+✔ Validation passed (stub)
+baseline rc=0
+✔ Validation passed (stub)
+candidate rc=0
+✘ lines: baseline=0 candidate=0
+
+### entry files: what configuration --write (419's merge) plus the rename would change; predictions only
+SAME    .mcp.json
+    agents.env kept: ['LANGUAGE'] | other servers (names): ['other']
+CHANGES .claude/settings.local.json
+    env.GRAFTLING_CLAUDE_HOST_CONFIG: before="<absent>" after="/private/tmp/claude-501/adopt393-rehearsal/project/.graphtraj/claude-host/config.json"
+    env.GRAFTLING_CLAUDE_HOST_PYTHON: before="<absent>" after="/tmp/claude-501/adopt393-rehearsal/project/.venv-runtime/bin/python"
+    env.GRAPHTRAJ_CLAUDE_HOST_CONFIG: before="/private/tmp/claude-501/adopt393-rehearsal/project/.graphtraj/claude-host/config.json" after="<absent>"
+    env.GRAPHTRAJ_CLAUDE_HOST_PYTHON: before="/tmp/claude-501/adopt393-rehearsal/project/.venv-runtime/bin/python" after="<absent>"
+SAME    .graphtraj/claude-host/config.json
+predictions written to /tmp/claude-501/adopt393-rehearsal/project/.graphtraj/core/state/tasks/393-graphtraj-adoption-after-agents-release/adoption/ventries
+
+### read only against the real project: archives, configuration, roles; Task graph on an APFS clone of state
+read_session by file version: {'5': 2}; failures=0
+configuration loaded; state: /private/tmp/claude-501/adopt393-rehearsal/project/.graphtraj/state
+roles loaded: presets = 0 roots = 0
+task graph of the clone: tasks = 1
+state or archive files changed since the marker (Main may be writing; expect only its own):
+
+### recorded hashes (I checks these did not change before it writes)
+2c487cfce13fa0fabb288c71912a048e73c429be44612134b3fb61a1786d20e2  /tmp/claude-501/adopt393-rehearsal/project/.mcp.json
+dc78529af6d7468aa2cebc21e75daea953eefcc83b49f2f160af4b80780943d0  /tmp/claude-501/adopt393-rehearsal/project/.claude/settings.local.json
+bc5714b6a10542e8b55d55dd80bb8a3ce799f2090981f4b6e38f29164f194189  /tmp/claude-501/adopt393-rehearsal/project/.graphtraj/claude-host/config.json
+
+----- 复制给 Main 的摘要（V）-----
+SAME    .claude-plugin/plugin.json
+SAME    hooks/hooks.json
+CHANGED hooks/host_context.mjs
+candidate lines reading GRAFTLING_CLAUDE_HOST_*: 2
+candidate lines reading GRAPHTRAJ_CLAUDE_HOST_* (expect 0): 0
+✘ lines: baseline=0 candidate=0
+SAME    .mcp.json
+    agents.env kept: ['LANGUAGE'] | other servers (names): ['other']
+CHANGES .claude/settings.local.json
+    env.GRAFTLING_CLAUDE_HOST_CONFIG: before="<absent>" after="/private/tmp/claude-501/adopt393-rehearsal/project/.graphtraj/claude-host/config.json"
+    env.GRAFTLING_CLAUDE_HOST_PYTHON: before="<absent>" after="/tmp/claude-501/adopt393-rehearsal/project/.venv-runtime/bin/python"
+    env.GRAPHTRAJ_CLAUDE_HOST_CONFIG: before="/private/tmp/claude-501/adopt393-rehearsal/project/.graphtraj/claude-host/config.json" after="<absent>"
+    env.GRAPHTRAJ_CLAUDE_HOST_PYTHON: before="/tmp/claude-501/adopt393-rehearsal/project/.venv-runtime/bin/python" after="<absent>"
+SAME    .graphtraj/claude-host/config.json
+read_session by file version: {'5': 2}; failures=0
+configuration loaded; state: /private/tmp/claude-501/adopt393-rehearsal/project/.graphtraj/state
+roles loaded: presets = 0 roots = 0
+task graph of the clone: tasks = 1
+-----
+证明: 候选 ✘ 不多于 baseline；候选读 GRAFTLING_CLAUDE_HOST_*（GRAPHTRAJ_ 为 0）；.mcp.json 与 config.json 为 SAME 或只列出可解释的变化，agents.env kept 含 LANGUAGE；settings.local.json 的 CHANGES 只有 GRAFTLING_CLAUDE_HOST_* 两项新增与 GRAPHTRAJ_CLAUDE_HOST_* 两项移除；read_session failures=0。
+
+==> 下一步（直接粘贴）: zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/393-graphtraj-adoption-after-agents-release/scripts/adopt-393/steps.zsh Vc
+REHEARSAL PASS: V exit 0
+REHEARSAL PASS: V.ok written
+REHEARSAL PASS: production plugin not written by V (still reads GRAPHTRAJ_CLAUDE_HOST_*)
+REHEARSAL PASS: candidate reads GRAFTLING_CLAUDE_HOST_*
+REHEARSAL PASS: candidate no longer reads GRAPHTRAJ_CLAUDE_HOST_*
+REHEARSAL PASS: V predicted settings.local.json
+/tmp/claude-501/adopt393-rehearsal/project/.mcp.json: OK
+/tmp/claude-501/adopt393-rehearsal/project/.claude/settings.local.json: OK
+/tmp/claude-501/adopt393-rehearsal/project/.graphtraj/claude-host/config.json: OK
+REHEARSAL PASS: V wrote nothing to production entry files
+REHEARSAL PASS: candidate declares both tools
+NOT REHEARSED: Vc needs real Claude Code. Its marker is made by hand here so I can be rehearsed.
+
+======== guard: a real process from the fake venv is refused; a listing that cannot be read is refused
+phase_guard:2: nice(5) failed: operation not permitted
+[I] 备份并安装。本步无对话框。需用户已同意，且 Main 已 /exit；Main 退出后不要再打开，直到本步结束。约 3 分钟。
+确认已在 Claude Code Main 里输入 /exit。按回车继续，Ctrl-C 放弃。
+拒绝继续：以下 1 个进程仍在使用 /tmp/claude-501/adopt393-rehearsal/project/.venv-runtime（或是 Main）。先在 Main 里 /exit，并等它们结束。
+22857 /tmp/claude-501/adopt393-rehearsal/project/.venv-runtime/bin/python -c import time; time.sleep(120)
+自行查找: ps -axww -o pid,ppid,etime,command | grep -F .venv-runtime
+REHEARSAL PASS: I refused while a process runs from the venv (rc=1)
+REHEARSAL PASS: the refusal names that process
+REHEARSAL PASS: no backup was made
+--- the same with the sandbox's real, refused ps:
+[I] 备份并安装。本步无对话框。需用户已同意，且 Main 已 /exit；Main 退出后不要再打开，直到本步结束。约 3 分钟。
+确认已在 Claude Code Main 里输入 /exit。按回车继续，Ctrl-C 放弃。
+无法列出进程（ps rc=127: guard:2: operation not permitted: ps），拒绝继续。
+REHEARSAL PASS: I refused when the process list cannot be read (rc=1)
+REHEARSAL PASS: the refusal says the list could not be read
+REHEARSAL PASS: still no backup
+
+======== step I, end to end on the fake production
+[I] 备份并安装。本步无对话框。需用户已同意，且 Main 已 /exit；Main 退出后不要再打开，直到本步结束。约 3 分钟。
+确认已在 Claude Code Main 里输入 /exit。按回车继续，Ctrl-C 放弃。
+guard: 没有进程在使用 /tmp/claude-501/adopt393-rehearsal/project/.venv-runtime，Main 的 host 不在运行。
+I start 2026-11-05 19:40:36
+backup start 2026-11-05 19:40:36
+
+### manifest, then whole venv copy (cp -Rp)
+manifest /tmp/claude-501/adopt393-rehearsal/home/graphtraj-adoption-393/backup/venv.manifest: 979 entries
+
+SAME entries=979 differences=0 (/tmp/claude-501/adopt393-rehearsal/home/graphtraj-adoption-393/backup/venv)
+
+### plugin copy
+manifest /tmp/claude-501/adopt393-rehearsal/home/graphtraj-adoption-393/backup/plugin.manifest: 5 entries
+
+### entry files: copies (mode 600) and hashes
+do_backup:8: no matches found: /tmp/claude-501/adopt393-rehearsal/home/graphtraj-adoption-393/backup/entries/*
+2c487cfce13fa0fabb288c71912a048e73c429be44612134b3fb61a1786d20e2  /tmp/claude-501/adopt393-rehearsal/project/.mcp.json
+dc78529af6d7468aa2cebc21e75daea953eefcc83b49f2f160af4b80780943d0  /tmp/claude-501/adopt393-rehearsal/project/.claude/settings.local.json
+bc5714b6a10542e8b55d55dd80bb8a3ce799f2090981f4b6e38f29164f194189  /tmp/claude-501/adopt393-rehearsal/project/.graphtraj/claude-host/config.json
+
+### archive clones (cp -cRp) and per-file version and sha256
+archives=2 by-version={'5': 2} total-bytes=304
+drwx------  13 luoxiao  wheel  416 11月  5 19:40 /tmp/claude-501/adopt393-rehearsal/home/graphtraj-adoption-393/backup
+backup end 2026-11-05 19:40:37
+
+### wheels (expect 2 x OK)
+d11f3226422cb7a4de5e59d347f8d211d59350be
+graftling-0.5.0-py3-none-any.whl: OK
+graphtraj-0.1.0-py3-none-any.whl: OK
+
+### entry files still as V saw them (expect 3 x OK)
+/tmp/claude-501/adopt393-rehearsal/project/.mcp.json: OK
+/tmp/claude-501/adopt393-rehearsal/project/.claude/settings.local.json: OK
+/tmp/claude-501/adopt393-rehearsal/project/.graphtraj/claude-host/config.json: OK
+
+### remove agent-swarm (the renamed package), then install both wheels
+WARNING: The directory '/Users/luoxiao/Library/Caches/pip' or its parent directory is not owned or is not writable by the current user. The cache has been disabled. Check the permissions and owner of that directory. If executing pip with sudo, you should use sudo's -H flag.
+Found existing installation: agent-swarm 0.2.4
+Uninstalling agent-swarm-0.2.4:
+  Successfully uninstalled agent-swarm-0.2.4
+Processing /tmp/claude-501/adopt393-rehearsal/project/.graphtraj/core/state/tasks/393-graphtraj-adoption-after-agents-release/adoption/wheels/graphtraj-0.1.0-py3-none-any.whl
+Processing /tmp/claude-501/adopt393-rehearsal/project/.graphtraj/core/state/tasks/393-graphtraj-adoption-after-agents-release/adoption/wheels/graftling-0.5.0-py3-none-any.whl
+Installing collected packages: graphtraj, graftling
+  Attempting uninstall: graphtraj
+    Found existing installation: graphtraj 0.1.0
+    Uninstalling graphtraj-0.1.0:
+      Successfully uninstalled graphtraj-0.1.0
+
+Successfully installed graftling-0.5.0 graphtraj-0.1.0
+
+### installed files vs wheels, including data files and leftovers
+graftling-0.5.0-py3-none-any.whl: same=96 changed=0 new=0 extra=0
+graphtraj-0.1.0-py3-none-any.whl: same=148 changed=0 new=0 extra=0
+PASS 244 FAIL 0
+agent_swarm package and dist-info gone
+
+### entry scripts of both wheels point at this venv
+ok agent-runner
+ok graphtraj
+ok graphtraj-mcp
+ok graphtraj-session
+ok graphtraj-tool
+ok agents
+ok agents-mcp
+
+### pip check and imports
+WARNING: The directory '/Users/luoxiao/Library/Caches/pip' or its parent directory is not owned or is not writable by the current user. The cache has been disabled. Check the permissions and owner of that directory. If executing pip with sudo, you should use sudo's -H flag.
+No broken requirements found.
+graftling 0.5.0
+/tmp/claude-501/adopt393-rehearsal/project/.venv-runtime/lib/python3.13/site-packages/graphtraj/runtimes/claude/host.py
+
+### plugin regenerated by the installed code, plugin files only
+written: ['/tmp/claude-501/adopt393-rehearsal/project/.claude/skills/graphtraj-claude-host/.claude-plugin/plugin.json', '/tmp/claude-501/adopt393-rehearsal/project/.claude/skills/graphtraj-claude-host/hooks/hooks.json', '/tmp/claude-501/adopt393-rehearsal/project/.claude/skills/graphtraj-claude-host/hooks/host_context.mjs']
+not written here: ['/private/tmp/claude-501/adopt393-rehearsal/project/.claude/settings.local.json', '/private/tmp/claude-501/adopt393-rehearsal/project/.graphtraj/claude-host/config.json', '/private/tmp/claude-501/adopt393-rehearsal/project/.mcp.json']
+SAME-AS-VALIDATED
+
+### entry files: write what V predicted (graftling write_adoption), before -> after
+UNCHANGED .mcp.json (bytes kept)
+WRITTEN-AS-VALIDATED .claude/settings.local.json
+UNCHANGED .graphtraj/claude-host/config.json (bytes kept)
+bytes unchanged: .mcp.json
+changed: .claude/settings.local.json (before -> after, secret-like values hidden)
+3,4c3,4
+<   "GRAPHTRAJ_CLAUDE_HOST_CONFIG": "/private/tmp/claude-501/adopt393-rehearsal/project/.graphtraj/claude-host/config.json",
+<   "GRAPHTRAJ_CLAUDE_HOST_PYTHON": "/tmp/claude-501/adopt393-rehearsal/project/.venv-runtime/bin/python"
+---
+>   "GRAFTLING_CLAUDE_HOST_CONFIG": "/private/tmp/claude-501/adopt393-rehearsal/project/.graphtraj/claude-host/config.json",
+>   "GRAFTLING_CLAUDE_HOST_PYTHON": "/tmp/claude-501/adopt393-rehearsal/project/.venv-runtime/bin/python"
+bytes unchanged: .graphtraj/claude-host/config.json
+agents: {"command": "/tmp/claude-501/adopt393-rehearsal/project/.venv-runtime/bin/python", "args": ["-m", "graphtraj.runtimes.claude.host", "serve", "--config", "/private/tmp/claude-501/adopt393-rehearsal/project/.graphtraj/claude-host/config.json"], "env": {"LANGUAGE": "zh_CN"}}
+other entries: ['other']
+
+### also unchanged (information; any FAILED means another writer: tell Main)
+
+----- 复制给 Main 的摘要（I）-----
+  Successfully uninstalled agent-swarm-0.2.4
+      Successfully uninstalled graphtraj-0.1.0
+Successfully installed graftling-0.5.0 graphtraj-0.1.0
+PASS 244 FAIL 0
+agent_swarm package and dist-info gone
+graftling 0.5.0
+SAME-AS-VALIDATED
+UNCHANGED .mcp.json (bytes kept)
+WRITTEN-AS-VALIDATED .claude/settings.local.json
+UNCHANGED .graphtraj/claude-host/config.json (bytes kept)
+bytes unchanged: .mcp.json
+changed: .claude/settings.local.json (before -> after, secret-like values hidden)
+bytes unchanged: .graphtraj/claude-host/config.json
+-----
+证明: Successfully installed graftling-0.5.0 graphtraj-0.1.0；PASS n FAIL 0；agent_swarm package and dist-info gone；graftling 0.5.0；SAME-AS-VALIDATED；settings.local.json WRITTEN-AS-VALIDATED；.mcp.json 与 config.json UNCHANGED（或 V 已列出的变化）。
+回退: zsh /tmp/claude-501/adopt393-rehearsal/home/graphtraj-adoption-393/backup/tools/steps.zsh R （任何时候可运行，先在 Main 里 /exit）
+
+重新进入 Main（普通 Terminal）: cd /tmp/claude-501/adopt393-rehearsal/project && claude --resume 1845493c-4a13-43d4-b4ea-c5864f8b22cb
+预期对话框: 至多一个插件/hooks 信任框（host_context.mjs 的字节变了），选信任。其它任何框选拒绝并告诉 Main。
+升级前未确认的通知可能再送达一次（394 Handed on）：只在这一次 resume 时可接受，记下来。
+
+==> 下一步（直接粘贴）: zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/393-graphtraj-adoption-after-agents-release/scripts/adopt-393/steps.zsh M
+REHEARSAL PASS: I exit 0
+PASS 244 FAIL 0
+REHEARSAL PASS: PASS n FAIL 0
+phase_I:7: no matches found: /tmp/claude-501/adopt393-rehearsal/project/.venv-runtime/lib/python3.13/site-packages/agent_swarm*
+REHEARSAL PASS: agent_swarm gone from the venv
+/tmp/claude-501/adopt393-rehearsal/project/.mcp.json: OK
+/tmp/claude-501/adopt393-rehearsal/project/.graphtraj/claude-host/config.json: OK
+REHEARSAL PASS: .mcp.json and config.json keep their bytes
+REHEARSAL PASS: settings.local.json: GRAFTLING_ names added, GRAPHTRAJ_CLAUDE_HOST_ names removed, permissions kept
+REHEARSAL PASS: I printed the before/after of settings.local.json
+agents entry now: agents: {"command": "/tmp/claude-501/adopt393-rehearsal/project/.venv-runtime/bin/python", "args": ["-m", "graphtraj.runtimes.claude.host", "serve", "--config", "/private/tmp/claude-501/adopt393-rehearsal/project/.graphtraj/claude-host/config.json"], "env": {"LANGUAGE": "zh_CN"}}
+REHEARSAL PASS: LANGUAGE survives
+REHEARSAL PASS: the other entry's value is not in the raw evidence
+REHEARSAL PASS: backup mode is 700
+[I] 备份并安装。本步无对话框。需用户已同意，且 Main 已 /exit；Main 退出后不要再打开，直到本步结束。约 3 分钟。
+已存在 /tmp/claude-501/adopt393-rehearsal/home/graphtraj-adoption-393/backup，拒绝覆盖备份。回退: zsh /tmp/claude-501/adopt393-rehearsal/home/graphtraj-adoption-393/backup/tools/steps.zsh R （任何时候可运行，先在 Main 里 /exit）
+REHEARSAL PASS: a second I refuses to overwrite the backup
+REHEARSAL PASS: config.json keys are what the installed host demands
+plugin forwards to: '-m', 'graftling.claude.host'
+context with no host running, rc=1: The agents host for this project is not running; see /private/tmp/claude-501/adopt393-rehearsal/project/.graphtraj/claude-host/host.log.
+REHEARSAL PASS: context accepted the config, then named the missing host or channel
+
+======== graftling 0.5.0 at work on the archives, then step R back to 0.2.4
+rewritten bbb file version now 5
+created ccc version 5
+created ddd version 5
+archives=4 by-version={'5': 3, '99': 1} total-bytes=627
+[R] 回退到安装前（agent-swarm 0.2.4 + graphtraj 1a648ca）。本步无对话框。先在 Main 里 /exit。按回车继续，Ctrl-C 放弃。
+guard: 没有进程在使用 /tmp/claude-501/adopt393-rehearsal/project/.venv-runtime，Main 的 host 不在运行。
+R start 2026-11-05 19:40:39
+
+### before restoring: how the venv differs from the pre-install manifest
+DIFF entries=979 differences=282 (/tmp/claude-501/adopt393-rehearsal/project/.venv-runtime)
+
+### venv restored whole from the backup
+
+### venv equals pre-install bytes? (expect SAME differences=0)
+
+SAME entries=979 differences=0 (/tmp/claude-501/adopt393-rehearsal/project/.venv-runtime)
+
+### plugin restored; the current one kept
+
+SAME entries=5 differences=0 (/tmp/claude-501/adopt393-rehearsal/project/.claude/skills/graphtraj-claude-host)
+
+### entry files restored from the backup copies; the current ones kept
+already as before: .mcp.json
+restored: .claude/settings.local.json
+already as before: .graphtraj/claude-host/config.json
+/tmp/claude-501/adopt393-rehearsal/project/.mcp.json: OK
+/tmp/claude-501/adopt393-rehearsal/project/.claude/settings.local.json: OK
+/tmp/claude-501/adopt393-rehearsal/project/.graphtraj/claude-host/config.json: OK
+
+### archives: graftling 0.5.0 writes version 5, which 0.2.4 also writes and reads; any other version is kept, then restored or moved out
+MOVED-OUT ddd/session.jsonl
+restored-to-pre-install=0 moved-out-of-glob=1 problems=0
+kept copies: /tmp/claude-501/adopt393-rehearsal/home/graphtraj-adoption-393/backup/after-install-20261105T194039/archives
+archives=3 by-version={'5': 3} total-bytes=473
+archives of a version 0.2.4 cannot read, left: 0
+
+### the restored 0.2.4 reads every archive (expect old reader failures: 0)
+old reader failures: 0
+
+### a channel file would make the old host refuse with host-busy, even a stale one
+moved out: /tmp/claude-501/adopt393-rehearsal/project/.graphtraj/claude-host/live/channel.json
+
+### notices still held (information)
+agents with a held notice: 1 ['agent-x']
+
+### also unchanged since the backup? (information)
+
+### versions and pip check
+Name: graphtraj
+Version: 0.1.0
+Name: agent-swarm
+Version: 0.2.4
+WARNING: The directory '/Users/luoxiao/Library/Caches/pip' or its parent directory is not owned or is not writable by the current user. The cache has been disabled. Check the permissions and owner of that directory. If executing pip with sudo, you should use sudo's -H flag.
+No broken requirements found.
+
+回退的代价: 安装后新建或改写的 Session 档案仍是 version 5，0.2.4 照常读；只有 0.2.4 读不了的才移到 /tmp/claude-501/adopt393-rehearsal/home/graphtraj-adoption-393/backup/after-install-20261105T194039/archives。
+
+----- 复制给 Main 的摘要（R）-----
+DIFF entries=979 differences=282 (/tmp/claude-501/adopt393-rehearsal/project/.venv-runtime)
+### venv restored whole from the backup
+SAME entries=979 differences=0 (/tmp/claude-501/adopt393-rehearsal/project/.venv-runtime)
+### plugin restored; the current one kept
+SAME entries=5 differences=0 (/tmp/claude-501/adopt393-rehearsal/project/.claude/skills/graphtraj-claude-host)
+### entry files restored from the backup copies; the current ones kept
+already as before: .mcp.json
+restored: .claude/settings.local.json
+already as before: .graphtraj/claude-host/config.json
+### archives: graftling 0.5.0 writes version 5, which 0.2.4 also writes and reads; any other version is kept, then restored or moved out
+restored-to-pre-install=0 moved-out-of-glob=1 problems=0
+archives of a version 0.2.4 cannot read, left: 0
+### the restored 0.2.4 reads every archive (expect old reader failures: 0)
+old reader failures: 0
+Version: 0.1.0
+Version: 0.2.4
+-----
+证明: venv 与 plugin 都是 SAME differences=0；三个入口文件 OK；old reader failures: 0；agent-swarm 0.2.4；pip check 通过。
+然后: cd /tmp/claude-501/adopt393-rehearsal/project && claude --resume 1845493c-4a13-43d4-b4ea-c5864f8b22cb （插件字节又变了，至多一个插件信任框，选信任；其它框拒绝并告诉 Main）。
+REHEARSAL PASS: R (from the backup's copy of the tools) exit 0
+
+SAME entries=979 differences=0 (/tmp/claude-501/adopt393-rehearsal/project/.venv-runtime)
+REHEARSAL PASS: venv equals the pre-install manifest
+
+SAME entries=5 differences=0 (/tmp/claude-501/adopt393-rehearsal/project/.claude/skills/graphtraj-claude-host)
+REHEARSAL PASS: plugin equals the pre-install manifest
+REHEARSAL PASS: settings.local.json is byte-identical to before the install
+REHEARSAL PASS: stale channel moved out
+kept: /tmp/claude-501/adopt393-rehearsal/home/graphtraj-adoption-393/backup/after-install-20261105T194039
+entries/settings.local.json
+plugin/hooks/hooks.json
+plugin/hooks/host_context.mjs
+plugin/.claude-plugin/plugin.json
+archives/ddd/session.jsonl
+channel.json
+REHEARSAL PASS: the version-99 archive was kept and left the old glob
+REHEARSAL PASS: the graftling-written v5 archive stays in place
+REHEARSAL PASS: the graftling-rewritten archive keeps its post-install event
+REHEARSAL PASS: aaa is byte-identical to the snapshot
+the restored 0.2.4 reads every archive graftling wrote, including the native_header lookup:
+reader expects version 5
+read aaa version 5 events 0
+read bbb version 5 events 0
+read ccc version 5 events 0
+native_header lookup: None
+REHEARSAL PASS: old reader works after R
+agent_swarm 0.2.4
+--- control: put the kept version-99 file back beside them; the old reader must fail, or the check above proves nothing
+ValueError: Invalid Session value: header.version
+REHEARSAL PASS: the old reader refuses a directory holding one unreadable file
+
+======== a failure after the backup: I stops, names R, and R restores
+
+安装或校验失败。不要 resume Main，立刻运行回退:
+  zsh /tmp/claude-501/adopt393-rehearsal/home/graphtraj-adoption-393/backup/tools/steps.zsh R
+REHEARSAL PASS: I failed (rc=1)
+REHEARSAL PASS: I named R as the next step
+REHEARSAL PASS: R after a failed I exit 0
+
+SAME entries=979 differences=0 (/tmp/claude-501/adopt393-rehearsal/project/.venv-runtime)
+REHEARSAL PASS: venv equals the pre-install manifest
+
+======== half-way install, then R: only one wheel installed, a package file removed, a stray file added
+guard: 没有进程在使用 /tmp/claude-501/adopt393-rehearsal/project/.venv-runtime，Main 的 host 不在运行。
+backup start 2026-11-05 19:40:44
+
+### manifest, then whole venv copy (cp -Rp)
+manifest /tmp/claude-501/adopt393-rehearsal/home/graphtraj-adoption-393/backup/venv.manifest: 979 entries
+
+SAME entries=979 differences=0 (/tmp/claude-501/adopt393-rehearsal/home/graphtraj-adoption-393/backup/venv)
+
+### plugin copy
+manifest /tmp/claude-501/adopt393-rehearsal/home/graphtraj-adoption-393/backup/plugin.manifest: 5 entries
+
+### entry files: copies (mode 600) and hashes
+do_backup:8: no matches found: /tmp/claude-501/adopt393-rehearsal/home/graphtraj-adoption-393/backup/entries/*
+2c487cfce13fa0fabb288c71912a048e73c429be44612134b3fb61a1786d20e2  /tmp/claude-501/adopt393-rehearsal/project/.mcp.json
+dc78529af6d7468aa2cebc21e75daea953eefcc83b49f2f160af4b80780943d0  /tmp/claude-501/adopt393-rehearsal/project/.claude/settings.local.json
+bc5714b6a10542e8b55d55dd80bb8a3ce799f2090981f4b6e38f29164f194189  /tmp/claude-501/adopt393-rehearsal/project/.graphtraj/claude-host/config.json
+
+### archive clones (cp -cRp) and per-file version and sha256
+archives=3 by-version={'5': 3} total-bytes=473
+drwx------  13 luoxiao  wheel  416 11月  5 19:40 /tmp/claude-501/adopt393-rehearsal/home/graphtraj-adoption-393/backup
+backup end 2026-11-05 19:40:45
+REHEARSAL PASS: backup alone exit 0
+ADDED lib/python3.13/site-packages/graftling/codex/diagnostics.py
+ADDED lib/python3.13/site-packages/graftling/codex/driver.py
+... and 137 more
+DIFF entries=979 differences=177 (/tmp/claude-501/adopt393-rehearsal/project/.venv-runtime)
+[R] 回退到安装前（agent-swarm 0.2.4 + graphtraj 1a648ca）。本步无对话框。先在 Main 里 /exit。按回车继续，Ctrl-C 放弃。
+guard: 没有进程在使用 /tmp/claude-501/adopt393-rehearsal/project/.venv-runtime，Main 的 host 不在运行。
+R start 2026-11-05 19:40:46
+
+### before restoring: how the venv differs from the pre-install manifest
+DIFF entries=979 differences=177 (/tmp/claude-501/adopt393-rehearsal/project/.venv-runtime)
+
+### venv restored whole from the backup
+
+### venv equals pre-install bytes? (expect SAME differences=0)
+
+SAME entries=979 differences=0 (/tmp/claude-501/adopt393-rehearsal/project/.venv-runtime)
+
+### plugin restored; the current one kept
+
+SAME entries=5 differences=0 (/tmp/claude-501/adopt393-rehearsal/project/.claude/skills/graphtraj-claude-host)
+
+### entry files restored from the backup copies; the current ones kept
+already as before: .mcp.json
+already as before: .claude/settings.local.json
+already as before: .graphtraj/claude-host/config.json
+/tmp/claude-501/adopt393-rehearsal/project/.mcp.json: OK
+/tmp/claude-501/adopt393-rehearsal/project/.claude/settings.local.json: OK
+/tmp/claude-501/adopt393-rehearsal/project/.graphtraj/claude-host/config.json: OK
+
+### archives: graftling 0.5.0 writes version 5, which 0.2.4 also writes and reads; any other version is kept, then restored or moved out
+restored-to-pre-install=0 moved-out-of-glob=0 problems=0
+kept copies: /tmp/claude-501/adopt393-rehearsal/home/graphtraj-adoption-393/backup/after-install-20261105T194046/archives
+archives=3 by-version={'5': 3} total-bytes=473
+archives of a version 0.2.4 cannot read, left: 0
+
+### the restored 0.2.4 reads every archive (expect old reader failures: 0)
+old reader failures: 0
+
+### a channel file would make the old host refuse with host-busy, even a stale one
+no channel file
+
+### notices still held (information)
+agents with a held notice: 1 ['agent-x']
+
+### also unchanged since the backup? (information)
+
+### versions and pip check
+Name: graphtraj
+Version: 0.1.0
+Name: agent-swarm
+Version: 0.2.4
+WARNING: The directory '/Users/luoxiao/Library/Caches/pip' or its parent directory is not owned or is not writable by the current user. The cache has been disabled. Check the permissions and owner of that directory. If executing pip with sudo, you should use sudo's -H flag.
+No broken requirements found.
+
+回退的代价: 安装后新建或改写的 Session 档案仍是 version 5，0.2.4 照常读；只有 0.2.4 读不了的才移到 /tmp/claude-501/adopt393-rehearsal/home/graphtraj-adoption-393/backup/after-install-20261105T194046/archives。
+
+----- 复制给 Main 的摘要（R）-----
+DIFF entries=979 differences=282 (/tmp/claude-501/adopt393-rehearsal/project/.venv-runtime)
+### venv restored whole from the backup
+SAME entries=979 differences=0 (/tmp/claude-501/adopt393-rehearsal/project/.venv-runtime)
+### plugin restored; the current one kept
+SAME entries=5 differences=0 (/tmp/claude-501/adopt393-rehearsal/project/.claude/skills/graphtraj-claude-host)
+### entry files restored from the backup copies; the current ones kept
+already as before: .mcp.json
+restored: .claude/settings.local.json
+already as before: .graphtraj/claude-host/config.json
+### archives: graftling 0.5.0 writes version 5, which 0.2.4 also writes and reads; any other version is kept, then restored or moved out
+restored-to-pre-install=0 moved-out-of-glob=1 problems=0
+archives of a version 0.2.4 cannot read, left: 0
+### the restored 0.2.4 reads every archive (expect old reader failures: 0)
+old reader failures: 0
+Version: 0.1.0
+Version: 0.2.4
+SAME entries=979 differences=0 (/tmp/claude-501/adopt393-rehearsal/project/.venv-runtime)
+### venv restored whole from the backup
+SAME entries=979 differences=0 (/tmp/claude-501/adopt393-rehearsal/project/.venv-runtime)
+### plugin restored; the current one kept
+SAME entries=5 differences=0 (/tmp/claude-501/adopt393-rehearsal/project/.claude/skills/graphtraj-claude-host)
+### entry files restored from the backup copies; the current ones kept
+already as before: .mcp.json
+already as before: .claude/settings.local.json
+already as before: .graphtraj/claude-host/config.json
+### archives: graftling 0.5.0 writes version 5, which 0.2.4 also writes and reads; any other version is kept, then restored or moved out
+restored-to-pre-install=0 moved-out-of-glob=0 problems=0
+archives of a version 0.2.4 cannot read, left: 0
+### the restored 0.2.4 reads every archive (expect old reader failures: 0)
+old reader failures: 0
+Version: 0.1.0
+Version: 0.2.4
+DIFF entries=979 differences=177 (/tmp/claude-501/adopt393-rehearsal/project/.venv-runtime)
+### venv restored whole from the backup
+SAME entries=979 differences=0 (/tmp/claude-501/adopt393-rehearsal/project/.venv-runtime)
+### plugin restored; the current one kept
+SAME entries=5 differences=0 (/tmp/claude-501/adopt393-rehearsal/project/.claude/skills/graphtraj-claude-host)
+### entry files restored from the backup copies; the current ones kept
+already as before: .mcp.json
+already as before: .claude/settings.local.json
+already as before: .graphtraj/claude-host/config.json
+### archives: graftling 0.5.0 writes version 5, which 0.2.4 also writes and reads; any other version is kept, then restored or moved out
+restored-to-pre-install=0 moved-out-of-glob=0 problems=0
+archives of a version 0.2.4 cannot read, left: 0
+### the restored 0.2.4 reads every archive (expect old reader failures: 0)
+old reader failures: 0
+Version: 0.1.0
+Version: 0.2.4
+-----
+证明: venv 与 plugin 都是 SAME differences=0；三个入口文件 OK；old reader failures: 0；agent-swarm 0.2.4；pip check 通过。
+然后: cd /tmp/claude-501/adopt393-rehearsal/project && claude --resume 1845493c-4a13-43d4-b4ea-c5864f8b22cb （插件字节又变了，至多一个插件信任框，选信任；其它框拒绝并告诉 Main）。
+REHEARSAL PASS: R after a half-way install exit 0
+
+SAME entries=979 differences=0 (/tmp/claude-501/adopt393-rehearsal/project/.venv-runtime)
+REHEARSAL PASS: venv equals the pre-install manifest after the half-way install
+REHEARSAL PASS: old code imports again
+phase_half:print:12: bad option: - 
+[R] 回退到安装前（agent-swarm 0.2.4 + graphtraj 1a648ca）。本步无对话框。先在 Main 里 /exit。按回车继续，Ctrl-C 放弃。
+guard: 没有进程在使用 /tmp/claude-501/adopt393-rehearsal/project/.venv-runtime，Main 的 host 不在运行。
+R start 2026-11-05 19:40:48
+
+### before restoring: how the venv differs from the pre-install manifest
+DIFF entries=979 differences=19 (/tmp/claude-501/adopt393-rehearsal/project/.venv-runtime)
+
+### venv restored whole from the backup
+
+### venv equals pre-install bytes? (expect SAME differences=0)
+
+SAME entries=979 differences=0 (/tmp/claude-501/adopt393-rehearsal/project/.venv-runtime)
+
+### plugin restored; the current one kept
+
+SAME entries=5 differences=0 (/tmp/claude-501/adopt393-rehearsal/project/.claude/skills/graphtraj-claude-host)
+
+### entry files restored from the backup copies; the current ones kept
+already as before: .mcp.json
+already as before: .claude/settings.local.json
+already as before: .graphtraj/claude-host/config.json
+/tmp/claude-501/adopt393-rehearsal/project/.mcp.json: OK
+/tmp/claude-501/adopt393-rehearsal/project/.claude/settings.local.json: OK
+/tmp/claude-501/adopt393-rehearsal/project/.graphtraj/claude-host/config.json: OK
+
+### archives: graftling 0.5.0 writes version 5, which 0.2.4 also writes and reads; any other version is kept, then restored or moved out
+restored-to-pre-install=0 moved-out-of-glob=0 problems=0
+kept copies: /tmp/claude-501/adopt393-rehearsal/home/graphtraj-adoption-393/backup/after-install-20261105T194048/archives
+archives=3 by-version={'5': 3} total-bytes=473
+archives of a version 0.2.4 cannot read, left: 0
+
+### the restored 0.2.4 reads every archive (expect old reader failures: 0)
+old reader failures: 0
+
+### a channel file would make the old host refuse with host-busy, even a stale one
+no channel file
+
+### notices still held (information)
+agents with a held notice: 1 ['agent-x']
+
+### also unchanged since the backup? (information)
+
+### versions and pip check
+Name: graphtraj
+Version: 0.1.0
+Name: agent-swarm
+Version: 0.2.4
+WARNING: The directory '/Users/luoxiao/Library/Caches/pip' or its parent directory is not owned or is not writable by the current user. The cache has been disabled. Check the permissions and owner of that directory. If executing pip with sudo, you should use sudo's -H flag.
+No broken requirements found.
+
+回退的代价: 安装后新建或改写的 Session 档案仍是 version 5，0.2.4 照常读；只有 0.2.4 读不了的才移到 /tmp/claude-501/adopt393-rehearsal/home/graphtraj-adoption-393/backup/after-install-20261105T194048/archives。
+
+----- 复制给 Main 的摘要（R）-----
+DIFF entries=979 differences=282 (/tmp/claude-501/adopt393-rehearsal/project/.venv-runtime)
+### venv restored whole from the backup
+SAME entries=979 differences=0 (/tmp/claude-501/adopt393-rehearsal/project/.venv-runtime)
+### plugin restored; the current one kept
+SAME entries=5 differences=0 (/tmp/claude-501/adopt393-rehearsal/project/.claude/skills/graphtraj-claude-host)
+### entry files restored from the backup copies; the current ones kept
+already as before: .mcp.json
+restored: .claude/settings.local.json
+already as before: .graphtraj/claude-host/config.json
+### archives: graftling 0.5.0 writes version 5, which 0.2.4 also writes and reads; any other version is kept, then restored or moved out
+restored-to-pre-install=0 moved-out-of-glob=1 problems=0
+archives of a version 0.2.4 cannot read, left: 0
+### the restored 0.2.4 reads every archive (expect old reader failures: 0)
+old reader failures: 0
+Version: 0.1.0
+Version: 0.2.4
+SAME entries=979 differences=0 (/tmp/claude-501/adopt393-rehearsal/project/.venv-runtime)
+### venv restored whole from the backup
+SAME entries=979 differences=0 (/tmp/claude-501/adopt393-rehearsal/project/.venv-runtime)
+### plugin restored; the current one kept
+SAME entries=5 differences=0 (/tmp/claude-501/adopt393-rehearsal/project/.claude/skills/graphtraj-claude-host)
+### entry files restored from the backup copies; the current ones kept
+already as before: .mcp.json
+already as before: .claude/settings.local.json
+already as before: .graphtraj/claude-host/config.json
+### archives: graftling 0.5.0 writes version 5, which 0.2.4 also writes and reads; any other version is kept, then restored or moved out
+restored-to-pre-install=0 moved-out-of-glob=0 problems=0
+archives of a version 0.2.4 cannot read, left: 0
+### the restored 0.2.4 reads every archive (expect old reader failures: 0)
+old reader failures: 0
+Version: 0.1.0
+Version: 0.2.4
+DIFF entries=979 differences=177 (/tmp/claude-501/adopt393-rehearsal/project/.venv-runtime)
+### venv restored whole from the backup
+SAME entries=979 differences=0 (/tmp/claude-501/adopt393-rehearsal/project/.venv-runtime)
+### plugin restored; the current one kept
+SAME entries=5 differences=0 (/tmp/claude-501/adopt393-rehearsal/project/.claude/skills/graphtraj-claude-host)
+### entry files restored from the backup copies; the current ones kept
+already as before: .mcp.json
+already as before: .claude/settings.local.json
+already as before: .graphtraj/claude-host/config.json
+### archives: graftling 0.5.0 writes version 5, which 0.2.4 also writes and reads; any other version is kept, then restored or moved out
+restored-to-pre-install=0 moved-out-of-glob=0 problems=0
+archives of a version 0.2.4 cannot read, left: 0
+### the restored 0.2.4 reads every archive (expect old reader failures: 0)
+old reader failures: 0
+Version: 0.1.0
+Version: 0.2.4
+DIFF entries=979 differences=19 (/tmp/claude-501/adopt393-rehearsal/project/.venv-runtime)
+### venv restored whole from the backup
+SAME entries=979 differences=0 (/tmp/claude-501/adopt393-rehearsal/project/.venv-runtime)
+### plugin restored; the current one kept
+SAME entries=5 differences=0 (/tmp/claude-501/adopt393-rehearsal/project/.claude/skills/graphtraj-claude-host)
+### entry files restored from the backup copies; the current ones kept
+already as before: .mcp.json
+already as before: .claude/settings.local.json
+already as before: .graphtraj/claude-host/config.json
+### archives: graftling 0.5.0 writes version 5, which 0.2.4 also writes and reads; any other version is kept, then restored or moved out
+restored-to-pre-install=0 moved-out-of-glob=0 problems=0
+archives of a version 0.2.4 cannot read, left: 0
+### the restored 0.2.4 reads every archive (expect old reader failures: 0)
+old reader failures: 0
+Version: 0.1.0
+Version: 0.2.4
+-----
+证明: venv 与 plugin 都是 SAME differences=0；三个入口文件 OK；old reader failures: 0；agent-swarm 0.2.4；pip check 通过。
+然后: cd /tmp/claude-501/adopt393-rehearsal/project && claude --resume 1845493c-4a13-43d4-b4ea-c5864f8b22cb （插件字节又变了，至多一个插件信任框，选信任；其它框拒绝并告诉 Main）。
+REHEARSAL PASS: R with a broken venv exit 0
+
+SAME entries=979 differences=0 (/tmp/claude-501/adopt393-rehearsal/project/.venv-runtime)
+REHEARSAL PASS: venv equals the pre-install manifest after a broken venv
+
+======== R with no complete backup refuses and says production was not touched by the install
+[R] 回退到安装前（agent-swarm 0.2.4 + graphtraj 1a648ca）。本步无对话框。先在 Main 里 /exit。按回车继续，Ctrl-C 放弃。
+/tmp/claude-501/adopt393-rehearsal/home/graphtraj-adoption-393/backup 没有完整备份（没有 COMPLETE）。安装只在备份完成后开始，所以生产没有被安装改动；告诉 Main。
+REHEARSAL PASS: R refused without COMPLETE
+
+======== steps that only print: M, P with and without a Pi sandbox; zsh -n
+REHEARSAL PASS: M prints
+REHEARSAL PASS: no rg anywhere: the note says the Pi launch is expected to fail
+REHEARSAL PASS: and the role is unchanged
+REHEARSAL PASS: rg link present: $PISBX/bin is prepended in the printed role
+REHEARSAL PASS: the note names the rg it finds
+REHEARSAL PASS: the env file is unchanged
+REHEARSAL PASS: already named: not added twice
+[inbox] Main 的通知队列（Claude、Pi、DSH Main 各一个文件）。无对话框。只读。
+== cb87cd7cda1efc437eaea3dff8f7c6a8e220a5132c5202233bd2439de00a392f.jsonl
+records=2 cursor=None
+n1 p completed e
+n1 p completed e
+records without id (not compared): 0
+duplicate ids: 1 {'n1': 2}
+Claude Main 1845493c-4a13-43d4-b4ea-c5864f8b22cb 的文件: cb87cd7cda1efc437eaea3dff8f7c6a8e220a5132c5202233bd2439de00a392f.jsonl
+
+----- 复制给 Main 的摘要（inbox）-----
+== cb87cd7cda1efc437eaea3dff8f7c6a8e220a5132c5202233bd2439de00a392f.jsonl
+records=2 cursor=None
+records without id (not compared): 0
+duplicate ids: 1 {'n1': 2}
+-----
+证明: 每个文件 duplicate ids: 0（无 id 的旧记录不参与比较）。
+REHEARSAL PASS: inbox counts a duplicate id
+[inbox] Main 的通知队列（Claude、Pi、DSH Main 各一个文件）。无对话框。只读。
+== cb87cd7cda1efc437eaea3dff8f7c6a8e220a5132c5202233bd2439de00a392f.jsonl
+records=3 cursor=None
+None old completed None
+None old2 completed None
+n2 p completed e
+records without id (not compared): 2
+duplicate ids: 0 {}
+Claude Main 1845493c-4a13-43d4-b4ea-c5864f8b22cb 的文件: cb87cd7cda1efc437eaea3dff8f7c6a8e220a5132c5202233bd2439de00a392f.jsonl
+
+----- 复制给 Main 的摘要（inbox）-----
+== cb87cd7cda1efc437eaea3dff8f7c6a8e220a5132c5202233bd2439de00a392f.jsonl
+records=3 cursor=None
+records without id (not compared): 2
+duplicate ids: 0 {}
+-----
+证明: 每个文件 duplicate ids: 0（无 id 的旧记录不参与比较）。
+REHEARSAL PASS: 417 fix 1: id-less records are not one shared id
+REHEARSAL PASS: and they are counted
+
+======== printing steps: every one prints, names the next command, and fills real IDs
+REHEARSAL PASS: help prints (rc=0)
+REHEARSAL PASS: M prints (rc=0)
+REHEARSAL PASS: P prints (rc=0)
+REHEARSAL PASS: F prints (rc=0)
+REHEARSAL PASS: H1 prints (rc=0)
+REHEARSAL PASS: H2 prints (rc=0)
+REHEARSAL PASS: H3 prints (rc=0)
+REHEARSAL PASS: H5 prints (rc=0)
+REHEARSAL PASS: 417 fix 2: M has no service block
+REHEARSAL PASS: 417 fix 3: M retires by agent id
+REHEARSAL PASS: every Codex use is gpt-6-luna
+REHEARSAL PASS: codex start passes -m gpt-6-luna
+REHEARSAL PASS: Main swaps print how to get back
+REHEARSAL PASS: no <placeholder> in printed text
+REHEARSAL PASS: the Claude Main inbox key is filled
+
+======== H4a/H4b with a stub dsh that prints a session id in --json
+REHEARSAL PASS: H4b refuses without H4a's session id
+REHEARSAL PASS: H4a runs (rc=0)
+REHEARSAL PASS: H4a saved the real session id
+REHEARSAL PASS: H4b resumes with --session-id dsh-sess-123
+REHEARSAL PASS: zsh -n steps.zsh
+
+======== the shell paths of 0, Vc, Mps and done, with stub hosts: this proves the script runs, nothing about the hosts
+scope: []
+explicit: false
+members: []
+running lines: 0
+
+### Task 393 ready for root dispatch: Team 1 active, budget not stopped
+grep: /tmp/claude-501/adopt393-rehearsal/project/.graphtraj/core/state/tasks/393-graphtraj-adoption-after-agents-release/execution-budget.yml: No such file or directory
+grep: /tmp/claude-501/adopt393-rehearsal/project/.graphtraj/core/state/tasks/393-graphtraj-adoption-after-agents-release/teams/1/team.yml: No such file or directory
+
+### processes using the venv now (information only; Main is expected here)
+guard: 没有进程在使用 /tmp/claude-501/adopt393-rehearsal/project/.venv-runtime，Main 的 host 不在运行。
+
+----- 复制给 Main 的摘要（0）-----
+ZSH_VERSION=5.9
+credential-like exported names (values never printed): ['ALI_BAILIAN_API_KEY', 'CLOUDSDK_PROXY_PASSWORD', 'DEEPSEEK_API_KEY', 'GEMINI_API_KEY', 'HF_TOKEN', 'OPENCODE_API_KEY', 'OPEN_ROUTER_API_KEY']
+Version: 0.1.0
+Version: 0.2.4
+pip check rc=0
+volume ids: 16777233 16777233
+archives=3 by-version={'5': 3} total-bytes=473
+Node spawn pnpm FAILED: ENOEXEC
+claude claude-opus-5-5 OK: {"message":{"content":[{"type":"tool_result","tool_use_id":"1","content":"ok"},{"type":"tool_result","tool_use_id":"2","content":[{"type":"text","text":"ok"}]}]}}
+codex gpt-6-luna OK: stub-host exec --skip-git-repo-check --ephemeral -s read-only -m gpt-6-luna -
+pi deepseek-flash OK: stub-host --print --no-tools --provider deepseek --model deepseek-flash In one line: name the model you are running as, and confirm you are logged in. Do not use any tool or print any key.
+dsh configured model OK: stub-host headless --permission-mode read-only -
+running lines: 0
+-----
+证明: ZSH_VERSION 有值；agent-swarm 0.2.4；pip check rc=0；Node spawn pnpm OK；每个宿主一行 OK（codex 用 gpt-6-luna）；running lines: 0；stopped: false；backup 'No such file'；两个 volume id 相同。
+任一不符，停下告诉 Main。权威的成员检查：在 Main 里粘贴（无对话框），确认没有 running，否则不要做 I：
+  Using only the agents tool: status with no agent. Print, for every agent and Task session, its alias, activity and state, and say whether any is running.
+
+==> 下一步（直接粘贴）: zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/393-graphtraj-adoption-after-agents-release/scripts/adopt-393/steps.zsh B
+REHEARSAL PASS: 0 runs (rc=0)
+--- Vc 1: stopped right after git init; not a terminal: setup is reached, the start is refused
+拒绝启动：本步要显示信任框，stdin 和 stdout 都必须是终端。请在普通 Terminal 里直接运行，不要加管道或重定向。
+
+Vc 不通过，不要做 I，把 /tmp/claude-501/adopt393-rehearsal/project/.graphtraj/core/state/tasks/393-graphtraj-adoption-after-agents-release/adoption/raw/Vc.txt 与 /tmp/claude-501/adopt393-rehearsal/project/.graphtraj/core/state/tasks/393-graphtraj-adoption-after-agents-release/adoption/raw/Vc-stream.jsonl 交给 Main。
+交互启动不在 Vc.txt 里，所以请把屏幕上 Claude Code 的输出也复制给 Main。修好后重新运行本步：已完成的部分不会重做。
+REHEARSAL PASS: Vc refuses when stdin and stdout are not a terminal (rc=1)
+REHEARSAL PASS: it says so, and asks for the screen output
+REHEARSAL PASS: the failure asks for the screen output
+REHEARSAL PASS: no start was made
+REHEARSAL PASS: the two instruction lines are in Vc.txt
+REHEARSAL PASS: this is the user's state: git and setup done, no trust marker, no .mcp.json, no Vc.ok
+--- Vc 2: from that exact state, the start exits 3 and the answer is n
+
+trust start: user answered no
+
+Vc 不通过，不要做 I，把 /tmp/claude-501/adopt393-rehearsal/project/.graphtraj/core/state/tasks/393-graphtraj-adoption-after-agents-release/adoption/raw/Vc.txt 与 /tmp/claude-501/adopt393-rehearsal/project/.graphtraj/core/state/tasks/393-graphtraj-adoption-after-agents-release/adoption/raw/Vc-stream.jsonl 交给 Main。
+交互启动不在 Vc.txt 里，所以请把屏幕上 Claude Code 的输出也复制给 Main。修好后重新运行本步：已完成的部分不会重做。
+REHEARSAL PASS: answering no fails (rc=1)
+REHEARSAL PASS: setup was not repeated
+REHEARSAL PASS: one start, and it was not under the log
+REHEARSAL PASS: Vc.txt has the rc and the answer
+REHEARSAL PASS: no marker, no configuration
+--- Vc 3: the same, with no answer at all (end of input)
+REHEARSAL PASS: no answer counts as no (rc=1)
+--- Vc 4: the start exits 3 and the answer is y: the stream check decides
+trust start rc=3
+trust start: user answered no
+trust start rc=3
+trust start: user answered no
+trust start rc=3
+trust start: user answered yes: the dialog appeared, was accepted and Claude was left with /exit
+PASS mcp__agents__tasks: answers=1 ok=1
+PASS mcp__agents__agents: answers=1 ok=1
+-----
+证明: PASS mcp__agents__tasks 与 PASS mcp__agents__agents。
+
+==> 下一步（直接粘贴）: zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/393-graphtraj-adoption-after-agents-release/scripts/adopt-393/steps.zsh I
+REHEARSAL PASS: answering yes continues (rc=0)
+REHEARSAL PASS: Vc.txt records the yes
+REHEARSAL PASS: Vc.ok, trust marker and configuration written
+REHEARSAL PASS: three starts so far
+--- Vc 5: configuration lost, no terminal: rewritten with no new start
+REHEARSAL PASS: Vc rewrites the configuration without a new start (rc=0)
+REHEARSAL PASS: still three starts
+--- Vc 6: a normal start, rc=0: no question
+REHEARSAL PASS: rc=0 passes without asking (rc=0)
+REHEARSAL PASS: the question did not appear
+FAIL mcp__agents__tasks: answers=1 ok=0
+   error=True denied
+REHEARSAL PASS: a refused tool call does not pass the stream check
+[Mps] 记录运行中的 host 与它的父 claude。无对话框。只读。Main 要保持运行。
+at 2026-11-05 19:40:54
+host: 4242 1 /tmp/claude-501/adopt393-rehearsal/project/.venv-runtime/bin/python -m graphtraj.runtimes.claude.host serve --config /tmp/claude-501/adopt393-rehearsal/project/.graphtraj/claude-host/config.json
+parent claude: 1 /sbin/launchd
+PASS 86 FAIL 158
+archives=3 by-version={'5': 3} total-bytes=473
+PASS 86 FAIL 158
+archives=3 by-version={'5': 3} total-bytes=473
+证明: PASS n FAIL 0；raw 中含密钥的文件数 0。把 /tmp/claude-501/adopt393-rehearsal/project/.graphtraj/core/state/tasks/393-graphtraj-adoption-after-agents-release/adoption/raw 的路径交给 Main。回退: zsh /tmp/claude-501/adopt393-rehearsal/home/graphtraj-adoption-393/backup/tools/steps.zsh R （任何时候可运行，先在 Main 里 /exit）
+REHEARSAL PASS: done runs (rc=0)
+
+======== rehearsal result
+ALL REHEARSAL CHECKS PASS

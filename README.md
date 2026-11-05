@@ -259,8 +259,8 @@ It produces:
   Claude CLI that must launch the host directly;
 - `.mcp.json`: one `agents` server serving both tools (replace earlier
   hand-made `graphtraj`/`agents` entries for this host);
-- `.claude/settings.local.json` `env`: `GRAPHTRAJ_CLAUDE_HOST_PYTHON` and
-  `GRAPHTRAJ_CLAUDE_HOST_CONFIG`;
+- `.claude/settings.local.json` `env`: `GRAFTLING_CLAUDE_HOST_PYTHON` and
+  `GRAFTLING_CLAUDE_HOST_CONFIG`;
 - the plugin `.claude/skills/graphtraj-claude-host/`, which Claude Code loads
   at session start: `.claude-plugin/plugin.json`, `hooks/hooks.json`
   (`{"modules": ["./host_context.mjs"]}`) and `hooks/host_context.mjs`.

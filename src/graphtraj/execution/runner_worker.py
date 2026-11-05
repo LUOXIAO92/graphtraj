@@ -375,6 +375,14 @@ def run(job_file: Path) -> int:
                     from graphtraj.execution.runner_control import release_late_hold
 
                     release_late_hold(session_directory, execution_mapping)
+            if budget_monitor is not None and not budget_stopped.is_set():
+                # Idle members sample nothing; time the next elapsed threshold (445).
+                from graphtraj.execution.budget_idle_timer import start_idle_budget_timer
+
+                try:
+                    start_idle_budget_timer(session_directory, budget_monitor)
+                except (OSError, RunnerError, ValueError, yaml.YAMLError):
+                    pass
             return 0
     finally:
         if startup_lock is not None:

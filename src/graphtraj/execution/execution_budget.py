@@ -203,6 +203,45 @@ class ExecutionBudgetMonitor:
         """Observe elapsed time and return whether Runner selected stopping."""
         return self._observe(role, stage)
 
+    def next_elapsed_threshold_at(self) -> float | None:
+        """Return when the next unnotified elapsed threshold falls (epoch seconds).
+
+        Only the planned end (``elapsed_minutes``) and then the additional
+        allowance are timed; None when both were already notified, the Task
+        has no budget accounting yet, or it is stopped. Reading never starts
+        or changes the accounting.
+        """
+        lock_path = self.task_directory / ".execution-budget.lock"
+        if not (self.task_directory / "execution-budget.yml").is_file():
+            return None
+        with lock_path.open("a+", encoding="utf-8") as lock:
+            file_lock.flock(lock.fileno(), file_lock.LOCK_EX)
+            try:
+                budget = _current_budget(self.task_directory)
+                if budget is None:
+                    return None
+                state, _ = _read_usage(self.task_directory, budget)
+            finally:
+                file_lock.flock(lock.fileno(), file_lock.LOCK_UN)
+        if state["stopped"]:
+            return None
+        definition = budget.definition["execution_budget"]
+        estimated = definition["estimated_minutes"]["total"] + state.get("approved_minutes", 0)
+        allowance = state["allowance_minutes"]
+        window = state.get("approved_window_started_at")
+        planned_end = estimated + (allowance if window is not None else 0)
+        seen = set(state["notifications"])
+        for kind, limit, counted in (("elapsed_minutes", estimated, planned_end),
+                                     ("additional_allowance", allowance, estimated + allowance)):
+            if kind + ":" + json.dumps(limit, sort_keys=True) in seen:
+                continue
+            # Invert _counted_minutes for the instant ``counted`` is reached.
+            if window is None:
+                return state["started_at"] + counted * 60
+            base = definition["estimated_minutes"]["total"] + allowance
+            return window + max(0.0, counted - base) * 60
+        return None
+
     def is_stopped(self) -> bool:
         lock_path = self.task_directory / ".execution-budget.lock"
         with lock_path.open("a+", encoding="utf-8") as lock:

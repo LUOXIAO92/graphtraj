@@ -205,7 +205,7 @@ class GraphTrajAgents:
         from graphtraj.runtimes.runtime_adapter import select_runtime_adapter
 
         if notice['parent'] is not None:
-            member = self._member_alias(notice['parent'])
+            member = self._member_parent(notice['parent'])
             if member is None or notice['outcome'] not in {'completed', 'failed', 'interrupted'}:
                 return False
             return notify_member_of_child_end(self.root, member, notice)
@@ -240,6 +240,8 @@ class GraphTrajAgents:
 
         outcome = self._operate_action(action, arguments, binding)
         caller = binding.caller
+        if action in {"wait", "status"} and not outcome.failed and caller.agent is not None:
+            self._hide_member_queueing(outcome.result, caller.agent)
         if (action in {"wait", "status"} and arguments.get("agent") is not None and not outcome.failed
                 and caller.agent is None and caller.runtime in QUEUED_RUNTIMES and caller.session):
             acknowledge_ends(runner_directory(self.root), caller.runtime, caller.session,
@@ -318,6 +320,44 @@ class GraphTrajAgents:
         control = AgentControl(swarm_root(self.root), {}, request_notices=True, event_receiver=(
             lambda notice: notify_parent_of_decision(directory, mapping, notice)))
         return control.ask_parent(Caller(TASK_HOST, reference), *question)
+
+    def _member_parent(self, parent: str) -> str | None:
+        """Return the Task member alias a child's recorded parent names, if any.
+
+        A member's agents-tool call binds its Runner alias, so its children
+        record that alias; a parent recorded as the member's core Agent
+        reference names the same member.
+        """
+        from graphtraj.configuration.project_configuration import runner_directory
+        from graphtraj.execution.runner_status import read_alias_mapping
+
+        if parent.startswith(AGENT_PREFIX):
+            return self._member_alias(parent)
+        try:
+            read_alias_mapping(runner_directory(self.root), parent)
+        except (RunnerError, OSError, ValueError, KeyError, TypeError):
+            return None
+        return parent
+
+    def _hide_member_queueing(self, result: Any, caller: str) -> None:
+        """Hide the body of a member's child end that is being pushed to that member.
+
+        Section 4: while an end's event is on its way (``queueing``), ``wait``
+        and ``status`` show ``last_message: null``, so the member sees it once.
+        """
+        member = self._member_parent(caller)
+        if member is None or not isinstance(result, Mapping):
+            return
+        pending = list(result["agents"]) if isinstance(result.get("agents"), list) else [result]
+        while pending:
+            node = pending.pop()
+            if not isinstance(node, dict):
+                continue
+            pending.extend(node.get("children") or [])
+            last = node.get("last_result")
+            if (isinstance(last, dict) and last.get("notification") == "queueing"
+                    and isinstance(node.get("parent"), str) and self._member_parent(node["parent"]) == member):
+                last["last_message"] = None
 
     def _member_alias(self, agent: str | None) -> str | None:
         """Return the Runner alias a Task member's core Agent record retains.

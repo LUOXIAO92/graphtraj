@@ -16,6 +16,7 @@ from graphtraj.interfaces.agents import GraphTrajAgents, swarm_root
 from test_result_submission import result_project
 
 MEMBER = 'research@x1'
+GATEWAY = 'graphtraj-gateway'
 
 
 class Driver:
@@ -49,34 +50,46 @@ def project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
 
     def send(alias, message, directory, mapping, caused, cwd, **options):
         sent.append((alias, json.loads(message), directory.name, mapping['alias'], options))
+        if send.during is not None:
+            send.during()
         if send.failure is not None:
             raise send.failure
         return {'session': mapping['session'], 'execution_id': 'x'}
 
-    send.failure = None
+    send.failure = send.during = None
     monkeypatch.setattr(runner_control, '_send_session', send)
     monkeypatch.setattr('graphtraj.execution.runner_process.OPERATION_TIMEOUT_SECONDS', 0.0)
 
-    def child(outcome: str, *, members: int = 0, repeat: bool = False, **end: object) -> dict:
-        """Create the member's child through a control bound to GraphTraj's receiver and end it.
+    def child(outcome: str, *, members: int = 0, repeat: bool = False, parent: str = MEMBER,
+              **end: object) -> dict:
+        """Create the member's child through GraphTraj's agents backend and end it.
 
-        ``members`` grandchildren the child creates stay running; ``repeat``
-        reports the same end a second time.
+        The member's agents call binds its Runner alias, as the gateway does;
+        ``parent`` may instead name the member's core Agent. ``members``
+        grandchildren the child creates stay running; ``repeat`` reports the
+        same end a second time. ``views`` holds the member's reads during the push.
         """
         driver = Driver({})
-        control = AgentControl(swarm_root(root), {'claude': driver}, event_receiver=agents._main_notice,
-                               request_notices='decisions')
-        binding = Binding(Caller('claude', member))
-        reference = control.create('claude', 'probe', binding).result['agent']
+        agents.control = AgentControl(swarm_root(root), {'claude': driver}, event_receiver=agents._main_notice,
+                                      request_notices='decisions')
+        binding = Binding(Caller(GATEWAY, member if parent == 'core' else parent))
+        reference = agents.operate('create', {'runtime': 'claude', 'instruction': 'probe'}, binding).result['agent']
         run = driver.run
         for _ in range(members):
-            control.create('claude', 'grandchild', Binding(Caller('claude', reference)))
+            agents.control.create('claude', 'grandchild', Binding(Caller(GATEWAY, reference)))
+        views = []
+        send.during = lambda: views.append(read(reference, binding))
         run.events.finished(outcome, **end)
         if repeat:
             run.events.finished(outcome, **end)
-        status = control.operate('status', {'agent': reference}, binding).result
-        waited = control.operate('wait', {'agent': reference, 'timeout_seconds': 0}, binding).result
-        return status | {'agent': reference, 'waited': waited}
+        send.during = None
+        return {**read(reference, binding)['status'], 'agent': reference,
+                'waited': read(reference, binding)['wait'], 'views': views}
+
+    def read(reference: str, binding: Binding) -> dict:
+        """The member's own status and wait of its child, through GraphTraj's operate."""
+        return {'status': agents.operate('status', {'agent': reference}, binding).result,
+                'wait': agents.operate('wait', {'agent': reference, 'timeout_seconds': 0}, binding).result}
 
     return root, member, agents, sent, send, child
 
@@ -171,4 +184,54 @@ def test_a_non_member_parent_and_the_main_path_are_unchanged(project) -> None:
     runner = runner_directory(root)
     mc.claim_main(runner, {'runtime': 'claude', 'session': 'main', 'runner': str(runner)}, 'claude:first-control')
     assert agents._main_notice({**notice, 'parent': None}) == 'queued'
+    assert sent == []
+
+
+def test_a_child_recorded_under_the_members_core_reference_also_reaches_the_member(project) -> None:
+    *_, sent, send, child = project
+    status = child('failed', parent='core', error={'code': 'X', 'message': 'broke'})
+    assert [(item[0], item[1]['message']) for item in sent] == [(MEMBER, 'broke')]
+    assert status['parent'].startswith('agent-')
+    assert status['last_result']['notification'] == 'delivered'
+
+
+@pytest.mark.parametrize('outcome', ['completed', 'failed', 'interrupted'])
+def test_the_members_reads_during_the_push_do_not_show_the_body(project, outcome) -> None:
+    *_, sent, send, child = project
+    status = child(outcome, last_message='ANSWER')
+    assert status['parent'] == MEMBER
+    [view] = status['views']
+    for read in (view['status'], view['wait']):
+        assert read['last_result']['notification'] == 'queueing'
+        assert read['last_result']['last_message'] is None
+    assert len(sent) == 1
+    assert status['last_result']['last_message'] is None
+    assert status['waited']['last_result']['last_message'] is None
+
+
+def test_after_an_unavailable_push_the_body_is_readable_again(project) -> None:
+    *_, sent, send, child = project
+    send.failure = RunnerError('invalid-mapping', 'The Runner admission binding is unreadable.')
+    status = child('completed', last_message='ANSWER')
+    assert status['views'][0]['status']['last_result']['last_message'] is None
+    assert status['last_result']['notification'] == 'unavailable'
+    assert status['last_result']['last_message'] == 'ANSWER'
+    assert status['waited']['last_result']['last_message'] == 'ANSWER'
+
+
+def test_a_main_callers_view_of_a_queueing_end_is_unchanged(project) -> None:
+    root, member, agents, sent, send, child = project
+    driver = Driver({})
+    views = []
+    main = Binding(Caller(GATEWAY, None, session='main', runtime='claude'))
+
+    def receiver(notice: dict) -> bool:
+        views.append(agents.operate('status', {'agent': notice['agent']}, main).result)
+        return True
+
+    agents.control = AgentControl(swarm_root(root), {'claude': driver}, event_receiver=receiver)
+    reference = agents.control.create('claude', 'probe', main).result['agent']
+    driver.run.events.finished('completed', last_message='ANSWER')
+    assert views[0]['last_result']['notification'] == 'queueing'
+    assert views[0]['last_result']['last_message'] == 'ANSWER'
     assert sent == []

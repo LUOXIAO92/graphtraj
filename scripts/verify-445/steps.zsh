@@ -39,7 +39,7 @@ step_00() {
   git -C $WT cat-file -e $COMMIT^{commit} || { print "STOP: $COMMIT is not in $WT"; return 1; }
   say "scratch venv from $COMMIT (git archive; editable install; click/yaml/websockets copied read-only from production)"
   rm -rf $SRC $VV; mkdir -p $SRC; git -C $WT archive $COMMIT | tar -x -C $SRC || return 1
-  $CONDA -m venv $VV || return 1
+  $CONDA -m venv --system-site-packages $VV || return 1
   local S=($RT/lib/python*/site-packages(N)) D
   $VV/bin/python -m pip install -q --disable-pip-version-check --no-cache-dir --no-index --no-deps --no-build-isolation \
       -e $SRC/src/graftling -e $SRC 2>&1 | grep -vi cache

@@ -8,8 +8,8 @@ export GRAFTLING_PYTHON=$VENV/bin/python
   "$VENV/bin/python" -m graftling.claude.host configuration --project "$BOTH" --claude "$CLAUDE" --write
   "$CLAUDE" plugin install graftling@graftling --scope project
   print "== claude -p"
-  "$CLAUDE" -p --allowedTools "$TOOL" \
-    "Call the $TOOL tool with action discover and print its result in two lines."
+  print -r -- "Call the $TOOL tool with action discover and print its result in two lines." \
+    | "$CLAUDE" -p --allowedTools "$TOOL"
   print "== host.log"; cat "$BOTH/.agents-control/host.log"
 } 2>&1 | tee "$OUT/04-both.txt"
 cat <<NEXT

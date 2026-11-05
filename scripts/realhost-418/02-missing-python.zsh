@@ -8,8 +8,8 @@ rm -rf "$PROJECT/.agents-control"
   print "== claude mcp list (GRAFTLING_PYTHON=$SCRATCH/no-python)"
   GRAFTLING_PYTHON=$SCRATCH/no-python "$CLAUDE" mcp list
   print "== claude -p"
-  GRAFTLING_PYTHON=$SCRATCH/no-python "$CLAUDE" -p --allowedTools "$TOOL" \
-    "Call the $TOOL tool with action discover and report its result or why it is unavailable, in two lines."
+  print -r -- "Call the $TOOL tool with action discover and report its result or why it is unavailable, in two lines." \
+    | GRAFTLING_PYTHON=$SCRATCH/no-python "$CLAUDE" -p --allowedTools "$TOOL"
   print "== host.log"; cat "$PROJECT/.agents-control/host.log"
 } 2>&1 | tee "$OUT/02-missing-python.txt"
 cat <<NEXT

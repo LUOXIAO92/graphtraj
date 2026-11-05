@@ -8,8 +8,8 @@ export GRAFTLING_PYTHON=$VENV/bin/python
   cd "$PROJECT"
   print "== claude mcp list"; "$CLAUDE" mcp list
   print "== claude -p (stream in $OUT/03-stream.jsonl)"
-  "$CLAUDE" -p --verbose --output-format stream-json --allowedTools "$TOOL" \
-    "Use the $TOOL tool, not your own subagents. Discover its features, create a Claude child that answers exactly one word, then wait for it and print the wait result." \
+  print -r -- "Use the $TOOL tool, not your own subagents. Discover its features, create a Claude child that answers exactly one word, then wait for it and print the wait result." \
+    | "$CLAUDE" -p --verbose --output-format stream-json --allowedTools "$TOOL" \
     > "$OUT/03-stream.jsonl"
   print "exit $?"
   print "== agents results"

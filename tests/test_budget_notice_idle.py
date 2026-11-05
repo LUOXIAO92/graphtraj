@@ -116,6 +116,10 @@ def test_idle_leader_planned_end_reaches_main_once_without_an_execution(team, mo
     monitor("leader-1").check("team_leader", "team_leader")
     monitor("leader-1").deliver_parent_notices(runner / "sessions" / "leader-1")
     assert len(received) == 2
+    # Even a late timer never samples a stop; running executions keep that.
+    clock.now += 3600
+    monitor("leader-1").check_elapsed("team_leader", "team_leader")
+    assert _state(task)["stopping_checks"] == 0 and _state(task)["stopped"] is False
 
 
 def test_idle_engineer_planned_end_reaches_its_leader(team, monkeypatch) -> None:

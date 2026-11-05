@@ -9,8 +9,10 @@ Worker starts one detached timer process for that Session. It runs no
 Runtime or model: it sleeps until the threshold and then exits without
 acting if the Session runs an execution again (that execution's own monitor
 observes it), if a newer timer replaced it, if the Session record was
-removed, or if the Task is stopped. Otherwise it calls the existing
-``check`` and ``deliver_parent_notices`` with the Session as observer, so the
+removed, or if the Task is stopped. Otherwise it observes the thresholds
+with ``check_elapsed`` (no stopping sample: stops stay with running
+executions) and calls ``deliver_parent_notices`` with the Session as
+observer, so the
 existing keys deliver each notice once to the observer's direct parent:
 Main through the root ``parent_connection`` for a Leader, the Leader for an
 Engineer. A replacement, a resume, a stop or a cleanup never waits for it.
@@ -104,7 +106,7 @@ def run_idle_budget_timer(
             if remaining <= 0:
                 break
             sleep(min(SLICE_SECONDS, remaining))
-        monitor.check(role, execution_budget_stage(role))
+        monitor.check_elapsed(role, execution_budget_stage(role))
         if monitor.deliver_parent_notices(session_directory):
             return delivered  # Held for a stopped parent's continuation.
         delivered = True

@@ -202,6 +202,9 @@ def notify_parent_of_decision(directory: Path, mapping: Mapping[str, Any], notic
 def notify_member_of_child_end(root: Path, alias: str, notice: Mapping[str, Any]) -> bool:
     """Send a Task member's core-created child end to the member's Session once.
 
+    The message is the child's final answer, else its error message, else
+    the outcome itself.
+
     The input takes the Runner's system-notice path, the one
     ``notify_direct_parent`` uses: it queues into the member's running
     execution or starts a resumed turn. A busy input lock is retried within

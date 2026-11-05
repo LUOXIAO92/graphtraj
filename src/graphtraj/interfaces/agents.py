@@ -190,10 +190,14 @@ class GraphTrajAgents:
         (Codex) receives the parent event itself, so wait/status hide the body.
 
         A Task member's Runner-driven execution binds no native receiver, so
-        the failed or interrupted end of a child it created with the agents
-        tool also arrives here. It is sent to the member's Session as a
-        system notice (``notify_member_of_child_end``); any other end of a
-        child with a parent is not delivered (``False``).
+        the end of a child it created with the agents tool also arrives here.
+        A ``failed`` or ``interrupted`` end, and a ``completed`` round with the
+        child's final answer, is sent to the member's Session as a system
+        notice (``notify_member_of_child_end``). The core calls this only for
+        an end the parent must handle: a completed round of a child that still
+        has running members is recorded, not pushed, and repeated ends do not
+        call it twice. Any other notice of a child with a parent is not
+        delivered (``False``).
         """
         from graphtraj.configuration.project_configuration import runner_directory
         from graphtraj.execution.main_continuity import QUEUED_RUNTIMES, current_main, recorded_by_main, route_notice
@@ -202,7 +206,7 @@ class GraphTrajAgents:
 
         if notice['parent'] is not None:
             member = self._member_alias(notice['parent'])
-            if member is None or notice['outcome'] not in {'failed', 'interrupted'}:
+            if member is None or notice['outcome'] not in {'completed', 'failed', 'interrupted'}:
                 return False
             return notify_member_of_child_end(self.root, member, notice)
         runner = runner_directory(self.root)

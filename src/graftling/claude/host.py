@@ -23,7 +23,7 @@ from graftling.notices import notice_id
 from graftling.shutdown import exit_if_owned_unconfirmed, stop_owned
 from .native_host import NativeCalls
 from .driver import ClaudeDriver
-from .plugin import claude_host_plugin, kept_host_paths, write_adoption
+from .plugin import _existing_document, claude_host_plugin, kept_host_paths, write_adoption
 
 if os.name != 'nt':
     import fcntl
@@ -395,6 +395,63 @@ def adoption_material(root: Path, claude: Path) -> dict[str, object]:
     }
 
 
+# Where a project's host configuration lives, for configuration --write and the plugin alike.
+HOST_CONFIG = Path('.agents-control') / 'claude-host.json'
+
+
+def project_material(project: Path) -> Path | None:
+    """Return the project's ``.mcp.json`` when configuration --write material starts an agents host there."""
+    path = project / '.mcp.json'
+    try:
+        server = json.loads(path.read_text(encoding='utf-8'))['mcpServers']['agents']
+        return path if 'graftling.claude.host' in server['args'] else None
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
+
+
+def plugin_configuration(project: Path) -> Path:
+    """Create or update the marketplace plugin host's configuration for ``project``; return its path.
+
+    The plugin's MCP server passes Claude Code's project directory. The
+    configuration is the one configuration --write uses, so either path keeps
+    the other's choices: ``cwd`` is set to ``project``; ``root`` and
+    ``channel_file`` are kept as configuration --write keeps them; an existing
+    ``claude`` stays, else the ``claude`` on PATH is recorded; every other key
+    stays. A project whose ``.mcp.json`` starts configuration --write material
+    is refused: that material serves it, and one host serves a project.
+    """
+    project = project.resolve()
+    material = project_material(project)
+    if material is not None:
+        raise AgentsError('host-busy', f'{material} starts this project\'s agents host (configuration --write), '
+                          'so the graftling plugin host stands aside. Keep one: disable the plugin for this '
+                          'project (claude plugin disable graftling@graftling --scope local), or remove the '
+                          'agents server from .mcp.json, the GRAFTLING_CLAUDE_HOST_* entries from '
+                          '.claude/settings.local.json and .claude/skills/agents-claude-host.')
+    config = project / HOST_CONFIG
+    existing = _existing_document(config) or {}
+    claude = existing.get('claude') if isinstance(existing.get('claude'), str) else shutil.which('claude')
+    if claude is None:
+        raise AgentsError('invalid-config', f'No claude on the PATH Claude Code gave this host; set "claude" '
+                          f'in {config} to the Claude Code executable you start.')
+    kept = kept_host_paths(config, project, {'root': str(config.parent),
+                                             'channel_file': str(config.parent / 'live' / 'channel.json')})
+    write_adoption({str(config): {'root': kept['root'], 'cwd': str(project), 'claude': claude,
+                                  'channel_file': kept['channel_file'], 'settings': {}}})
+    return config
+
+
+def found_configuration(start: Path) -> Path:
+    """Return the nearest host configuration at or above ``start``, the plugin mod's Session cwd."""
+    for directory in (start.resolve(), *start.resolve().parents):
+        if (directory / HOST_CONFIG).is_file():
+            return directory / HOST_CONFIG
+    print(f'graftling plugin: no {HOST_CONFIG} at or above {start}, so the agents host has not started '
+          'for this project. See /mcp and .agents-control/host.log in the directory Claude Code started in.',
+          file=sys.stderr)
+    raise SystemExit(1)
+
+
 def main() -> None:
     """Serve the native-owned MCP entry or install/forward its existing mod binding."""
     parser = argparse.ArgumentParser(description=__doc__)
@@ -403,6 +460,7 @@ def main() -> None:
     parser.add_argument('--project', type=Path)
     parser.add_argument('--claude', type=Path)
     parser.add_argument('--write', action='store_true')
+    parser.add_argument('--project-from', type=Path, help='context: find the configuration at or above this directory')
     options = parser.parse_args()
     if options.operation == 'configuration':
         if options.project is None or options.claude is None:
@@ -412,8 +470,17 @@ def main() -> None:
             write_adoption(material)
         print(json.dumps(sorted(material) if options.write else material, ensure_ascii=False, indent=2))
         return
+    if options.operation == 'serve' and options.config is None and options.project is not None:
+        # The marketplace plugin: no configuration --write ran, Claude Code names the project.
+        try:
+            options.config = plugin_configuration(options.project)
+        except Exception as error:
+            serve_refusal(error, options.project.absolute() / HOST_CONFIG.parent / 'host.log')
+            return
+    if options.operation == 'context' and options.config is None and options.project_from is not None:
+        options.config = found_configuration(options.project_from)
     if options.config is None:
-        parser.error('serve/context requires --config')
+        parser.error('serve requires --config or --project; context requires --config or --project-from')
     # Until the configuration names the channel, a refusal is logged beside it.
     log = options.config.absolute().parent / 'host.log'
     try:

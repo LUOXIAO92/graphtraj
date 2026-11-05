@@ -1,0 +1,27 @@
+#!/bin/sh
+# Start graftling's agents host for the graftling Claude Code plugin.
+#
+# The Python is GRAFTLING_PYTHON when set, else python3 on PATH; it must be 3.12
+# or later and import graftling. Without one, this says what to install and set:
+# on stderr, which Claude Code keeps with the failed server in /mcp, and as one
+# line in <project>/.agents-control/host.log. exec keeps this process the one
+# Claude Code started, which the host checks.
+if [ -n "${GRAFTLING_PYTHON:-}" ]; then
+  python=$GRAFTLING_PYTHON
+  named="GRAFTLING_PYTHON=$GRAFTLING_PYTHON"
+else
+  python=python3
+  named="python3 on PATH (GRAFTLING_PYTHON is not set)"
+fi
+if reason=$("$python" -c 'import sys
+if sys.version_info < (3, 12): sys.exit("Python %d.%d is older than 3.12" % sys.version_info[:2])
+import graftling.claude.host' 2>&1); then
+  exec "$python" -m graftling.claude.host "$@"
+fi
+reason=$(printf '%s\n' "$reason" | tail -n 1)
+message="graftling plugin: the agents host did not start: $named cannot run graftling ($reason). Install the graftling wheel into a Python 3.12+ environment (python -m pip install graftling-<version>-py3-none-any.whl) and set GRAFTLING_PYTHON to that python, in your shell or under env in ~/.claude/settings.json; then restart Claude Code."
+printf '%s\n' "$message" >&2
+if [ "$1" = serve ] && [ "$2" = --project ] && [ -d "$3" ]; then
+  mkdir -p "$3/.agents-control" && printf '%s %s\n' "$(date +%Y-%m-%dT%H:%M:%S%z)" "$message" >> "$3/.agents-control/host.log"
+fi
+exit 1

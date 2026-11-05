@@ -12,6 +12,16 @@ version that identifies everything listed under it.
 
 The numbers in parentheses are the project's Task numbers.
 
+## Unreleased (compatible)
+
+- A Claude Code marketplace package (418): `.claude-plugin/marketplace.json` at the
+  repository root lists the plugin `graftling` in `src/graftling/claude-plugin/`. It
+  starts the `agents` host without `configuration --write`, finds its Python through
+  `GRAFTLING_PYTHON` and then `python3` on `PATH`, and says what to install when neither
+  imports `graftling`. `graftling.claude.host serve --project` and
+  `context --project-from` are its entries. A project with `configuration --write`
+  material keeps that host; the plugin's host refuses there. Untried on a real host.
+
 ## 0.5.0 (incompatible)
 
 The distribution is renamed Graftling (394). Every renamed name below is part of the

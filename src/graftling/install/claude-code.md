@@ -26,9 +26,68 @@ WHEELS="$(mktemp -d)"
 
 ## Distribution
 
-No marketplace package exists today: nothing is published to a Claude Code plugin
-marketplace, and this repository holds no marketplace manifest. Generating the plugin
-files, below, is the way to install.
+Two ways install the host. Use one per project:
+
+- **The marketplace plugin** `graftling`, below. Claude Code installs it from this
+  repository's marketplace; nothing is written into your project until the host starts.
+- **Generated plugin files**: `configuration --write`, in the next section, writes them
+  into one project.
+
+Nothing is published to a public marketplace. Add this repository's marketplace from a
+local checkout (or from the repository once it has one).
+
+## Install the marketplace plugin
+
+> Not yet walked on a real host: the steps below are untried until the Task 418 real-host
+> run. Tests cover the host and module with stand-ins.
+
+1. Install the wheel, above. Point the plugin at that environment's Python with
+   `GRAFTLING_PYTHON`, in the shell you start Claude Code from or under `env` in
+   `~/.claude/settings.json`:
+
+   ```json
+   {"env": {"GRAFTLING_PYTHON": "/absolute/agents-venv/bin/python"}}
+   ```
+
+   Without `GRAFTLING_PYTHON` the plugin uses `python3` on `PATH`, if that imports
+   `graftling`. A set `GRAFTLING_PYTHON` is never skipped for `python3`.
+
+2. Add the marketplace and install the plugin:
+
+   ```sh
+   claude plugin marketplace add /absolute/checkout
+   claude plugin install graftling@graftling --scope project
+   ```
+
+   `--scope project` enables it in this project's `.claude/settings.json`. With the
+   default user scope, every directory you start Claude Code in gets a host and its
+   `.agents-control/`.
+
+3. Start Claude Code in the project, as in [Start it](#start-it). The plugin's MCP server
+   is `agents`; Claude Code calls its tool `mcp__plugin_graftling_agents__agents`.
+
+On its first start the host writes `.agents-control/claude-host.json`, the same file
+`configuration --write` writes: `cwd` is the directory Claude Code started in, `claude`
+is the `claude` on `PATH` (an existing value stays), and every other key you set stays
+on later starts. Edit it as under [Minimal configuration](#minimal-configuration).
+
+If the plugin cannot find a Python that imports `graftling`, it says what to install and
+set, in three places: `/mcp` shows the server `plugin:graftling:agents` failed, with the
+message in its error output; `.agents-control/host.log` ends with a line starting
+`graftling plugin: the agents host did not start`; `/agents-context` prints the same
+advice instead of `graftling <version> at <python>`.
+
+**Both in one project.** If the project's `.mcp.json` already starts the host through
+`configuration --write`, that host serves the project. The plugin's host refuses with
+`host-busy`, naming the two ways out (`/mcp`, `host.log`, and every call of the plugin's
+tool show it), and the plugin's module stays inactive. Keep one: run
+`claude plugin disable graftling@graftling --scope local` in that project, or remove the
+`agents` server from `.mcp.json`, the two `GRAFTLING_CLAUDE_HOST_*` entries from
+`.claude/settings.local.json` and `.claude/skills/agents-claude-host/`.
+
+To upgrade, install the new wheel into the same environment, run
+`claude plugin marketplace update graftling` and `claude plugin update graftling@graftling`,
+then start a new Claude Code process.
 
 ## Generate the plugin files
 

@@ -8,6 +8,37 @@ from typing import Iterable
 
 # The one line of host_context.mjs naming its tools; the written copy replaces it.
 TOOLS_LINE = 'const TOOLS = ["agents"];'
+# The one line naming the plugin whose MCP server serves them; the marketplace copy replaces it.
+PLUGIN_LINE = 'const PLUGIN = null;'
+# The marketplace plugin's name, and its directory in a checkout: src/graftling/claude-plugin.
+MARKETPLACE_PLUGIN = 'graftling'
+MARKETPLACE_DIRECTORY = Path(__file__).resolve().parent.parent / 'claude-plugin'
+
+
+def _module() -> str:
+    """Return host_context.mjs, refusing a copy whose replaced lines are not each there once."""
+    module = Path(__file__).with_name('host_context.mjs').read_text(encoding='utf-8')
+    for line in (TOOLS_LINE, PLUGIN_LINE):
+        if module.count(line) != 1:
+            raise RuntimeError(f'host_context.mjs must hold exactly one line {line!r}.')
+    return module
+
+
+def marketplace_module() -> str:
+    """Return the marketplace plugin's ``hooks/host_context.mjs``: host_context.mjs naming its plugin.
+
+    The checked-in copy under ``MARKETPLACE_DIRECTORY`` must equal this text;
+    a test fails on any difference. Regenerate it with
+    ``python -c "from graftling.claude.plugin import write_marketplace_module; write_marketplace_module()"``.
+    """
+    return _module().replace(PLUGIN_LINE, f'const PLUGIN = {json.dumps(MARKETPLACE_PLUGIN)};')
+
+
+def write_marketplace_module(directory: Path = MARKETPLACE_DIRECTORY) -> Path:
+    """Write ``marketplace_module()`` into the plugin at ``directory``; return the file written."""
+    target = Path(directory) / 'hooks' / 'host_context.mjs'
+    target.write_text(marketplace_module(), encoding='utf-8')
+    return target
 
 
 def claude_host_plugin(directory: Path, name: str, description: str, tools: Iterable[str] = ()) -> dict[str, object]:
@@ -44,9 +75,7 @@ def claude_host_plugin(directory: Path, name: str, description: str, tools: Iter
             raise ValueError(f'Not a tool name: {tool!r}.')
     if len({'agents', *tools}) != len(tools) + 1:
         raise ValueError('Declare each added tool once, and not agents itself.')
-    module = Path(__file__).with_name('host_context.mjs').read_text(encoding='utf-8')
-    if module.count(TOOLS_LINE) != 1:
-        raise RuntimeError(f'host_context.mjs must hold exactly one line {TOOLS_LINE!r}.')
+    module = _module()
     directory = Path(directory)
     return {
         str(directory / '.claude-plugin/plugin.json'): {'name': name, 'version': '1', 'description': description},

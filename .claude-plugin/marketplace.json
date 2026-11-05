@@ -1,0 +1,14 @@
+{
+  "name": "graftling",
+  "description": "graftling's Claude Code plugin: the agents tool for child Agents.",
+  "owner": {
+    "name": "graftling"
+  },
+  "plugins": [
+    {
+      "name": "graftling",
+      "source": "./src/graftling/claude-plugin",
+      "description": "Make this Claude Code Session the host of child Agents through the agents tool."
+    }
+  ]
+}

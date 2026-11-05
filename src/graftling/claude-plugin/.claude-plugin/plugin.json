@@ -1,0 +1,11 @@
+{
+  "name": "graftling",
+  "version": "0.5.0",
+  "description": "Make this Claude Code Session the host of child Agents through the agents tool. Needs the graftling wheel installed in a Python 3.12+ environment; set GRAFTLING_PYTHON to its python.",
+  "mcpServers": {
+    "agents": {
+      "command": "sh",
+      "args": ["${CLAUDE_PLUGIN_ROOT}/bin/graftling-host", "serve", "--project", "${CLAUDE_PROJECT_DIR}"]
+    }
+  }
+}

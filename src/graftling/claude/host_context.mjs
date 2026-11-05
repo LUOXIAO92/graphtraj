@@ -8,6 +8,14 @@
 // The tools this module associates. claude_host_plugin() replaces this line in
 // the written copy with the tools a package declares beside agents.
 const TOOLS = ["agents"];
+// The plugin whose MCP server serves these tools. null: the project's own
+// .mcp.json (configuration --write). The marketplace copy names its plugin,
+// whose tools Claude Code calls mcp__plugin_<plugin>_agents__<tool>.
+const PLUGIN = null;
+const PREFIX = PLUGIN ? `mcp__plugin_${PLUGIN}_agents__` : 'mcp__agents__';
+const INSTALL = 'Install the graftling wheel into a Python 3.12+ environment '
+  + '(python -m pip install graftling-<version>-py3-none-any.whl) and set GRAFTLING_PYTHON '
+  + 'to that python, in your shell or under env in ~/.claude/settings.json; then restart Claude Code.';
 
 function noticeFrames(session, document, frame) {
   // Member events queued for this Main arrive with its next tool result.
@@ -58,14 +66,54 @@ function exchangeFrames(session, event, result, seen) {
     : value.slice(0, 9800) + '\n… Display truncated; full text remains in the tool input/result.');
 }
 
+// The Python this copy runs. The plugin copy takes GRAFTLING_PYTHON, else
+// python3 on PATH, as its MCP server's bin/graftling-host does.
+async function pluginPython($) {
+  return (await $.env.get('GRAFTLING_PYTHON')) || 'python3';
+}
+
+// Whether configuration --write material serves this project, so the plugin copy stands aside.
+async function projectMaterial($) {
+  return Boolean(await $.env.get('GRAFTLING_CLAUDE_HOST_CONFIG'));
+}
+
 async function context($, document) {
-  const python = await $.env.get('GRAFTLING_CLAUDE_HOST_PYTHON');
-  const config = await $.env.get('GRAFTLING_CLAUDE_HOST_CONFIG');
-  if (!python || !config) throw new Error('Native agents host configuration is missing.');
-  const result = await $.process.run([python, '-m', 'graftling.claude.host',
-    'context', '--config', config], {stdin: JSON.stringify(document)});
-  if (result.exitCode !== 0) throw new Error('Native agents association failed: ' + result.stderr);
+  let command;
+  if (PLUGIN) {
+    command = [await pluginPython($), '-m', 'graftling.claude.host', 'context',
+      '--project-from', await $.session.cwd()];
+  } else {
+    const python = await $.env.get('GRAFTLING_CLAUDE_HOST_PYTHON');
+    const config = await $.env.get('GRAFTLING_CLAUDE_HOST_CONFIG');
+    if (!python || !config) throw new Error('Native agents host configuration is missing.');
+    command = [python, '-m', 'graftling.claude.host', 'context', '--config', config];
+  }
+  let result;
+  try {
+    result = await $.process.run(command, {stdin: JSON.stringify(document)});
+  } catch (error) {
+    if (!PLUGIN) throw error;
+    throw new Error(`graftling plugin: ${command[0]} did not start (${String(error)}). ${INSTALL}`);
+  }
+  if (result.exitCode !== 0) {
+    if (PLUGIN && /No module named '?graftling/.test(result.stderr)) {
+      throw new Error(`graftling plugin: ${command[0]} cannot import graftling. ${INSTALL}`);
+    }
+    throw new Error('Native agents association failed: ' + result.stderr);
+  }
   return JSON.parse(result.stdout);
+}
+
+// /agents-context's line on the plugin copy's Python: its graftling version, or what to install.
+async function pythonReport($) {
+  const python = await pluginPython($);
+  try {
+    const result = await $.process.run([python, '-c', 'import graftling; print(graftling.__version__)']);
+    if (result.exitCode === 0) return `graftling ${result.stdout.trim()} at ${python}`;
+    return `graftling plugin: ${python} cannot import graftling. ${INSTALL}`;
+  } catch (error) {
+    return `graftling plugin: ${python} did not start (${String(error)}). ${INSTALL}`;
+  }
 }
 
 // Deliver member events into the Main's turn or its idle Session through
@@ -152,9 +200,14 @@ function callRequest(event) {
 
 export function register(on) {
   const displayed = new Set();
-  const state = {active: 0, pushing: false, inflight: false, stopped: false, pushed: false, pushError: null, ends: []};
+  const state = {inert: false, active: 0, pushing: false, inflight: false, stopped: false, pushed: false, pushError: null, ends: []};
 
   on('session.start', async ($, event, next) => {
+    // One host per project: configuration --write material wins over the plugin.
+    if (PLUGIN && await projectMaterial($)) {
+      state.inert = true;
+      return next(event);
+    }
     await $.command.register({name: 'agents-context',
       description: 'Show current native Session and agents registration without a model turn', immediate: true});
     startPush($, state);
@@ -165,8 +218,9 @@ export function register(on) {
     const session = await $.session.id();
     const tools = await $.tool.list();
     await $.ui.log(`agents · current Session ${session}`);
+    if (PLUGIN) await $.ui.log(await pythonReport($));
     for (const name of TOOLS) {
-      await $.ui.log(tools.some((tool) => tool.name === `mcp__agents__${name}`)
+      await $.ui.log(tools.some((tool) => tool.name === `${PREFIX}${name}`)
         ? `MCP ${name} registered` : `MCP ${name} missing`);
     }
     await $.ui.log(state.pushed ? 'notice push: delivered through prompt submission'
@@ -176,9 +230,11 @@ export function register(on) {
   });
 
   for (const name of TOOLS) {
-    const tool = `mcp__agents__${name}`;
+    const tool = `${PREFIX}${name}`;
     // Every tool shares one association; only agents has an exchange to render.
     on('tool.call', {tool}, async ($, event, next) => {
+      // A standing-aside plugin copy leaves its host's refusal to answer.
+      if (state.inert) return next(event);
       // Calls may overlap. Each ends only its own association, named by the
       // exact facts tool.check prepared; the host still consumes each once.
       state.active += 1;
@@ -210,7 +266,7 @@ export function register(on) {
 
     on('tool.check', {tool}, async ($, event, next) => {
       const result = await next(event);
-      if (result.decision === 'deny') return result;
+      if (result.decision === 'deny' || state.inert) return result;
       // agentId is an official host field, never a model argument. Native
       // subagents must use an actual child binding, not inherit Main authority.
       if (event.agentId) return {decision: 'deny', reason: 'This MCP owner is bound to the Main conversation.'};
@@ -225,6 +281,7 @@ export function register(on) {
   }
 
   on('session.end', async ($, event, next) => {
+    if (state.inert) return next(event);
     try { await context($, {operation: 'end'}); state.ends = []; }
     catch (error) { $.ui.log('agents context cleanup failed: ' + String(error)); }
     return next(event);

@@ -67,7 +67,7 @@ step_01() {
   say "[01] Main. probe: dispatch the Leader, then stay idle toward it past the planned end. Dialog: none. ~4 min."
   [[ -x $VV/bin/graphtraj && -f $P/.mcp.json ]] || { print "STOP: run 00 first"; return 1; }
   local C=$(claude_bin)
-  local swarm='{"action":"execute","feature":"swarm","arguments":{"swarm_input":{"tasks":[{"task_id":"1","role":"team_leader","instruction":"Reply with exactly one line, PROBE DONE, and end your turn. Call no tool."}]}}}'
+  local swarm='{"action":"execute","feature":"swarm","arguments":{"tasks":[{"task_id":"1","role":"team_leader","instruction":"Reply with exactly one line, PROBE DONE, and end your turn. Call no tool."}]}}'
   print "dispatch at $(date +%T)"
   (cd $P && print -r -- "Call mcp__agents__tasks once with exactly these arguments: $swarm
 Then send nothing to any Agent. Run the Bash command 'sleep 100' three times, one after another, then print DONE and stop." \

@@ -1,0 +1,237 @@
+
+======== setup: old wheels from 2be27dd664ce2388c969156c8238f63774567246, fake production venv, plugin, configuration
+graftling-0.5.0-py3-none-any.whl
+graphtraj-0.1.0-py3-none-any.whl
+Create dev from f7ce8a4d351e1dc048e91c8e32e244d5a034b777? [y/N]: Created Integration Worktree on dev.
+GraphTraj project setup complete.
+
+======== 00 (host's parent is 'claude --continue'; Main from the newest transcript)
+REHEARSAL PASS: 00 found Main through claude --continue + newest transcript
+REHEARSAL PASS: 00 classified the timer as NON-BLOCKING
+REHEARSAL PASS: 00 reported the inherited 418 variable by name and path
+### 418: inherited GRAFTLING_CLAUDE_HOST_* / GRAPHTRAJ_CLAUDE_HOST_* (name=path; unset for every child command of this script)
+inherited: GRAFTLING_CLAUDE_HOST_CONFIG=/elsewhere/.agents-control/claude-host.json
+credential-like exported names (values never printed): ['CLOUDSDK_PROXY_PASSWORD']
+Version: 0.1.0
+Version: 0.5.0
+agents: {"command": "$TMPDIR/adopt453-rehearsal/project/.venv-runtime/bin/python", "args": ["-m", "graphtraj.runtimes.claude.host", "serve", "--config", "/private$TMPDIR/adopt453-rehearsal/project/.graphtraj/claude-host/config.json"]}
+other entries: []
+scope: []
+members: []
+running lines: 0 (451/452/453 members may run now; I waits for them)
+host pid 4242, parent 4241: claude --continue
+parent is 'claude --continue': id from the newest transcript below
+MAIN=11111111-2222-3333-4444-555555555555 (saved to $TMPDIR/adopt453-rehearsal/home/graphtraj-adoption-453/main.session)
+guard: 1 个 445 预算空闲计时器（NON-BLOCKING，不是成员；安装后醒来最多让该 Session 的一条预算通知推迟，见 README）:
+guard: 450 marked processes (information): none
+guard: BLOCKING 1 个进程在使用 $TMPDIR/adopt453-rehearsal/project/.venv-runtime（或是 Main 11111111-2222-3333-4444-555555555555）:
+  [Main's Claude host] 4242 4241 $TMPDIR/adopt453-rehearsal/project/.venv-runtime/bin/python -m graphtraj.runtimes.claude.host serve --config $TMPDIR/adopt453-rehearsal/project/.graphtraj/claude-host/config.
+### 418: inherited GRAFTLING_CLAUDE_HOST_* / GRAPHTRAJ_CLAUDE_HOST_* (name=path; unset for every child command of this script)
+inherited: GRAFTLING_CLAUDE_HOST_CONFIG=/elsewhere/.agents-control/claude-host.json
+Version: 0.1.0
+Version: 0.5.0
+running lines: 0 (451/452/453 members may run now; I waits for them)
+MAIN=11111111-2222-3333-4444-555555555555 (saved to $TMPDIR/adopt453-rehearsal/home/graphtraj-adoption-453/main.session)
+guard: 1 个 445 预算空闲计时器（NON-BLOCKING，不是成员；安装后醒来最多让该 Session 的一条预算通知推迟，见 README）:
+guard: 450 marked processes (information): none
+guard: BLOCKING 1 个进程在使用 $TMPDIR/adopt453-rehearsal/project/.venv-runtime（或是 Main 11111111-2222-3333-4444-555555555555）:
+成功: ZSH_VERSION 有值；answer 里 models 含 claude-opus-5-5 且 is_error False；graphtraj 0.1.0 与 graftling 0.5.0；pip check rc=0；stopped: false 且 Team 1 active；$TMPDIR/adopt453-rehearsal/home/graphtraj-adoption-453/backup 'No such file'；MAIN=<id>。
+running lines 可以不为 0（451/452/453 的成员）；I 会等它们空闲，不需要现在处理。guard 的 NON-BLOCKING 计时器不影响安装。
+若 'inherited:' 列出名字：本脚本已对所有子命令 unset；记下它来自哪个项目（418 提醒）。
+
+======== B
+REHEARSAL PASS: B exit 0
+  Created wheel for graphtraj: filename=graphtraj-0.1.0-py3-none-any.whl size=579356 sha256=0ec8ec14dee3d724f429c1ec08bdeddd4b013b5c6076096e52b4253af827e4df
+  Created wheel for graftling: filename=graftling-0.5.0-py3-none-any.whl size=434455 sha256=c28c53f47da7d93a3c629729f40842a47d836eebdcfd1ac06f8f874029cca119
+c28c53f47da7d93a3c629729f40842a47d836eebdcfd1ac06f8f874029cca119  graftling-0.5.0-py3-none-any.whl
+0ec8ec14dee3d724f429c1ec08bdeddd4b013b5c6076096e52b4253af827e4df  graphtraj-0.1.0-py3-none-any.whl
+### no build/ or __pycache__ inside the wheels (expect leaked: 0)
+leaked: 0
+c28c53f47da7d93a3c629729f40842a47d836eebdcfd1ac06f8f874029cca119  graftling-0.5.0-py3-none-any.whl
+0ec8ec14dee3d724f429c1ec08bdeddd4b013b5c6076096e52b4253af827e4df  graphtraj-0.1.0-py3-none-any.whl
+### no build/ or __pycache__ inside the wheels (expect leaked: 0)
+leaked: 0
+成功: graphtraj-0.1.0 与 graftling-0.5.0 各一个 wheel 及 sha256；leaked: 0。
+
+======== V (stub plugin validate)
+REHEARSAL PASS: V exit 0
+written: ['$TMPDIR/adopt453-rehearsal/project/.graphtraj/core/state/tasks/453-production-adoption-449-450/adoption/vplug/graphtraj-claude-host/.claude-plugin/plugin.json', '$TMPDIR/adopt453-rehearsal/project/.graphtraj/core/state/tasks/453-production-adoption-449-450/adoption/vplug/graphtraj-claude-host/hooks/hooks.json', '$TMPDIR/adopt453-rehearsal/project/.graphtraj/core/state/tasks/453-production-adoption-449-450/adoption/vplug/graphtraj-claude-host/hooks/host_context.mjs']
+SAME    .claude-plugin/plugin.json
+SAME    hooks/hooks.json
+CHANGED hooks/host_context.mjs
+差异: $TMPDIR/adopt453-rehearsal/project/.graphtraj/core/state/tasks/453-production-adoption-449-450/adoption/raw/V-plugin.diff（3 行）；host_context.mjs 改变，所以 resume 时可能出现一次插件信任框。
+### 449 judgement: the copy keeps 'const PLUGIN = null' (local form) and gains the notice title ' · execution <id>' (display only)
+449 hook change: notice title gains ' · execution <id>' (display only; local form kept)
+✘ lines: baseline=0 candidate=0
+SAME    .mcp.json
+SAME    .claude/settings.local.json
+SAME    .graphtraj/claude-host/config.json
+predictions written to $TMPDIR/adopt453-rehearsal/project/.graphtraj/core/state/tasks/453-production-adoption-449-450/adoption/ventries
+written: ['$TMPDIR/adopt453-rehearsal/project/.graphtraj/core/state/tasks/453-production-adoption-449-450/adoption/vplug/graphtraj-claude-host/.claude-plugin/plugin.json', '$TMPDIR/adopt453-rehearsal/project/.graphtraj/core/state/tasks/453-production-adoption-449-450/adoption/vplug/graphtraj-claude-host/hooks/hooks.json', '$TMPDIR/adopt453-rehearsal/project/.graphtraj/core/state/tasks/453-production-adoption-449-450/adoption/vplug/graphtraj-claude-host/hooks/host_context.mjs']
+SAME    .claude-plugin/plugin.json
+SAME    hooks/hooks.json
+CHANGED hooks/host_context.mjs
+差异: $TMPDIR/adopt453-rehearsal/project/.graphtraj/core/state/tasks/453-production-adoption-449-450/adoption/raw/V-plugin.diff（3 行）；host_context.mjs 改变，所以 resume 时可能出现一次插件信任框。
+### 449 judgement: the copy keeps 'const PLUGIN = null' (local form) and gains the notice title ' · execution <id>' (display only)
+449 hook change: notice title gains ' · execution <id>' (display only; local form kept)
+✘ lines: baseline=0 candidate=0
+SAME    .mcp.json
+SAME    .claude/settings.local.json
+SAME    .graphtraj/claude-host/config.json
+predictions written to $TMPDIR/adopt453-rehearsal/project/.graphtraj/core/state/tasks/453-production-adoption-449-450/adoption/ventries
+成功: 候选 ✘ 不多于 baseline；'449 hook change: notice title gains ...'，无 STOP；入口文件 SAME 或只列出可解释的变化；read_session failures=0。
+==> 下一步 / next（直接粘贴）: zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/453-production-adoption-449-450/scripts/adopt-453/steps.zsh S
+REHEARSAL PASS: V: 449 notice-title change recognised, local form kept
+REHEARSAL PASS: V wrote nothing to production entry files
+<     return `[Graftling notice from ${body.alias ?? 'graftling'} · ${body.event ?? 'event'}]\n${body.message ?? JSON.stringify(body)}`;
+>     const execution = body.execution ? ` · execution ${body.execution}` : '';
+>     return `[Graftling notice from ${body.alias ?? 'graftling'} · ${body.event ?? 'event'}${execution}]\n${body.message ?? JSON.stringify(body)}`;
+NOT REHEARSED: Vc (real Claude Code); marker made by hand.
+
+======== S refuses while another run_test_shards runs (quiet-host check only; the suite itself is not run here)
+REHEARSAL PASS: S refused
+loadavg: 
+other pytest / run_test_shards processes: 7171 1 python scripts/run_test_shards.py --shards 6
+STOP: another run_test_shards is running; the host is not quiet. Main decides when to rerun S.
+S 未启动（见上面 STOP 或 GUARD 行），把 $TMPDIR/adopt453-rehearsal/project/.graphtraj/core/state/tasks/453-production-adoption-449-450/adoption/raw/S-setup.txt 交给 Main；主机不空闲时由 Main 决定何时重跑。
+
+======== I waits while a member Worker and Main's host run, then passes with only the idle timer left
+scripts/adopt-453/rehearse.zsh:104: nice(5) failed: operation not permitted
+REHEARSAL PASS: I exit 0
+REHEARSAL PASS: I waited (printed the waiting line at least once)
+REHEARSAL PASS: I listed the member Worker as BLOCKING
+REHEARSAL PASS: I never listed the timer as BLOCKING
+guard: 1 个 445 预算空闲计时器（NON-BLOCKING，不是成员；安装后醒来最多让该 Session 的一条预算通知推迟，见 README）:
+guard: BLOCKING 2 个进程在使用 $TMPDIR/adopt453-rehearsal/project/.venv-runtime（或是 Main 11111111-2222-3333-4444-555555555555）:
+01:06:58 正在等待：Task 451/452（或其它 Task）的成员还在运行。不要结束（kill）这些进程；它们空闲后本步自动继续。
+guard: 1 个 445 预算空闲计时器（NON-BLOCKING，不是成员；安装后醒来最多让该 Session 的一条预算通知推迟，见 README）:
+guard: BLOCKING 2 个进程在使用 $TMPDIR/adopt453-rehearsal/project/.venv-runtime（或是 Main 11111111-2222-3333-4444-555555555555）:
+01:06:59 正在等待：Task 451/452（或其它 Task）的成员还在运行。不要结束（kill）这些进程；它们空闲后本步自动继续。
+guard: 1 个 445 预算空闲计时器（NON-BLOCKING，不是成员；安装后醒来最多让该 Session 的一条预算通知推迟，见 README）:
+guard: BLOCKING 2 个进程在使用 $TMPDIR/adopt453-rehearsal/project/.venv-runtime（或是 Main 11111111-2222-3333-4444-555555555555）:
+01:07:00 正在等待：Task 451/452（或其它 Task）的成员还在运行。不要结束（kill）这些进程；它们空闲后本步自动继续。
+guard: 1 个 445 预算空闲计时器（NON-BLOCKING，不是成员；安装后醒来最多让该 Session 的一条预算通知推迟，见 README）:
+guard: BLOCKING 0 — 没有成员或 host 在使用 $TMPDIR/adopt453-rehearsal/project/.venv-runtime。
+-rw------- $TMPDIR/adopt453-rehearsal/home/graphtraj-adoption-453/backup/entries/.claude__settings.local.json
+-rw------- $TMPDIR/adopt453-rehearsal/home/graphtraj-adoption-453/backup/entries/.graphtraj__claude-host__config.json
+-rw------- $TMPDIR/adopt453-rehearsal/home/graphtraj-adoption-453/backup/entries/.mcp.json
+guard: 1 个 445 预算空闲计时器（NON-BLOCKING，不是成员；安装后醒来最多让该 Session 的一条预算通知推迟，见 README）:
+guard: BLOCKING 0 — 没有成员或 host 在使用 $TMPDIR/adopt453-rehearsal/project/.venv-runtime。
+      Successfully uninstalled graphtraj-0.1.0
+      Successfully uninstalled graftling-0.5.0
+Successfully installed graftling-0.5.0 graphtraj-0.1.0
+PASS 246 FAIL 0
+450 member_processes: $TMPDIR/adopt453-rehearsal/project/.venv-runtime/lib/python3.13/site-packages/graftling/member_processes.py GRAFTLING_MEMBER_RUN
+SAME-AS-VALIDATED
+449 installed host_context.mjs names body.execution
+bytes unchanged: .mcp.json
+bytes unchanged: .claude/settings.local.json
+bytes unchanged: .graphtraj/claude-host/config.json
+### BLOCKING processes started during the install window (01:07:02 → 01:07:03); information for Main
+guard: 1 个 445 预算空闲计时器（NON-BLOCKING，不是成员；安装后醒来最多让该 Session 的一条预算通知推迟，见 README）:
+guard: BLOCKING 0 — 没有成员或 host 在使用 $TMPDIR/adopt453-rehearsal/project/.venv-runtime。
+-rw------- $TMPDIR/adopt453-rehearsal/home/graphtraj-adoption-453/backup/entries/.claude__settings.local.json
+-rw------- $TMPDIR/adopt453-rehearsal/home/graphtraj-adoption-453/backup/entries/.graphtraj__claude-host__config.json
+-rw------- $TMPDIR/adopt453-rehearsal/home/graphtraj-adoption-453/backup/entries/.mcp.json
+guard: 1 个 445 预算空闲计时器（NON-BLOCKING，不是成员；安装后醒来最多让该 Session 的一条预算通知推迟，见 README）:
+guard: BLOCKING 0 — 没有成员或 host 在使用 $TMPDIR/adopt453-rehearsal/project/.venv-runtime。
+      Successfully uninstalled graphtraj-0.1.0
+      Successfully uninstalled graftling-0.5.0
+Successfully installed graftling-0.5.0 graphtraj-0.1.0
+PASS 246 FAIL 0
+450 member_processes: $TMPDIR/adopt453-rehearsal/project/.venv-runtime/lib/python3.13/site-packages/graftling/member_processes.py GRAFTLING_MEMBER_RUN
+SAME-AS-VALIDATED
+449 installed host_context.mjs names body.execution
+bytes unchanged: .mcp.json
+bytes unchanged: .claude/settings.local.json
+bytes unchanged: .graphtraj/claude-host/config.json
+### BLOCKING processes started during the install window (01:07:02 → 01:07:03); information for Main
+guard: 1 个 445 预算空闲计时器（NON-BLOCKING，不是成员；安装后醒来最多让该 Session 的一条预算通知推迟，见 README）:
+guard: BLOCKING 0 — 没有成员或 host 在使用 $TMPDIR/adopt453-rehearsal/project/.venv-runtime。
+成功: Successfully installed graftling-0.5.0 graphtraj-0.1.0；PASS n FAIL 0；四个 -rw------- 备份入口文件；450 member_processes 在 $TMPDIR/adopt453-rehearsal/project/.venv-runtime；SAME-AS-VALIDATED；449 installed host_context.mjs names body.execution；入口文件 bytes unchanged 或 V 已列出的变化。
+  cd $TMPDIR/adopt453-rehearsal/project && claude --continue
+REHEARSAL PASS: proddiff PASS n FAIL 0
+REHEARSAL PASS: backup entry copies are all -rw-------
+-rw------- $TMPDIR/adopt453-rehearsal/home/graphtraj-adoption-453/backup/entries/.claude__settings.local.json
+-rw------- $TMPDIR/adopt453-rehearsal/home/graphtraj-adoption-453/backup/entries/.graphtraj__claude-host__config.json
+-rw------- $TMPDIR/adopt453-rehearsal/home/graphtraj-adoption-453/backup/entries/.mcp.json
+REHEARSAL PASS: I printed claude --continue
+
+======== R from the backup's own copy of the tools
+REHEARSAL PASS: R exit 0
+DIFF entries=937 differences=31 ($TMPDIR/adopt453-rehearsal/project/.venv-runtime)
+### venv restored whole from the backup
+SAME entries=937 differences=0 ($TMPDIR/adopt453-rehearsal/project/.venv-runtime)
+### plugin restored; the current one kept
+SAME entries=5 differences=0 ($TMPDIR/adopt453-rehearsal/project/.claude/skills/graphtraj-claude-host)
+### entry files restored from the backup copies; the current ones kept
+already as before: .mcp.json
+already as before: .claude/settings.local.json
+already as before: .graphtraj/claude-host/config.json
+### a stale channel file would make the restored host refuse with host-busy
+Version: 0.1.0
+Version: 0.5.0
+DIFF entries=937 differences=31 ($TMPDIR/adopt453-rehearsal/project/.venv-runtime)
+### venv restored whole from the backup
+SAME entries=937 differences=0 ($TMPDIR/adopt453-rehearsal/project/.venv-runtime)
+### plugin restored; the current one kept
+SAME entries=5 differences=0 ($TMPDIR/adopt453-rehearsal/project/.claude/skills/graphtraj-claude-host)
+### entry files restored from the backup copies; the current ones kept
+already as before: .mcp.json
+already as before: .claude/settings.local.json
+already as before: .graphtraj/claude-host/config.json
+### a stale channel file would make the restored host refuse with host-busy
+Version: 0.1.0
+Version: 0.5.0
+然后（USER）: cd $TMPDIR/adopt453-rehearsal/project && claude --continue （插件字节又变了，至多一个插件信任框，选信任；其它框拒绝并告诉 Main）。
+
+SAME entries=937 differences=0 ($TMPDIR/adopt453-rehearsal/project/.venv-runtime)
+REHEARSAL PASS: venv equals the pre-install manifest
+
+======== Mps accepts a host whose parent is claude --continue
+parent claude: claude --continue
+host uses .venv-runtime: yes
+parent is claude --continue or --resume 11111111-2222-3333-4444-555555555555: yes
+host uses .venv-runtime: yes
+parent is claude --continue or --resume 11111111-2222-3333-4444-555555555555: yes
+REHEARSAL PASS: Mps: parent is claude --continue ... yes
+
+======== Nr on synthetic records (member found by alias; swarm agent parsed from raw/N.txt)
+child n453: agent=c1 parent=453-adv executions=2 retired=False
+  CHECK two executions: PASS
+  CHECK execution e1 notification delivered: PASS
+  CHECK execution e2 notification delivered: PASS
+member 453-adv: record=$TMPDIR/adopt453-rehearsal/project/.graphtraj/core/runner/sessions/453-adv/mapping.yml session=sess-m task=453 role=opus_coding_team.advisor
+  archive sess-m: execution e1: lines naming it 1 at [0]; notice-like 1 at [0]
+  CHECK one notice for execution e1 in the archive: PASS
+  archive sess-m: execution e2: lines naming it 1 at [1]; notice-like 1 at [1]
+  CHECK one notice for execution e2 in the archive: PASS
+CHECK swarm result has agent: PASS (agent-453-adv-xyz)
+CHECK Main's notice title names the execution: PASS
+CHECK task_sessions lists the child: BY THE MEMBER'S QUOTED ENTRY (no read-only CLI for agents status; see the Main prompt below)
+child n453: agent=c1 parent=453-adv executions=2 retired=False
+  CHECK two executions: PASS
+  CHECK execution e1 notification delivered: PASS
+  CHECK execution e2 notification delivered: PASS
+member 453-adv: record=$TMPDIR/adopt453-rehearsal/project/.graphtraj/core/runner/sessions/453-adv/mapping.yml session=sess-m task=453 role=opus_coding_team.advisor
+  archive sess-m: execution e1: lines naming it 1 at [0]; notice-like 1 at [0]
+  CHECK one notice for execution e1 in the archive: PASS
+  archive sess-m: execution e2: lines naming it 1 at [1]; notice-like 1 at [1]
+  CHECK one notice for execution e2 in the archive: PASS
+CHECK swarm result has agent: PASS (agent-453-adv-xyz)
+CHECK Main's notice title names the execution: PASS
+CHECK task_sessions lists the child: BY THE MEMBER'S QUOTED ENTRY (no read-only CLI for agents status; see the Main prompt below)
+成功（定义第 3 项）: CHECK two executions PASS；每个 execution 的 'notification delivered: PASS'；成员回复中每个 execution 恰好一条输入且 execution 等于该 id；
+Using only the agents tool: retire with {"agent":"agent-453-adv-xyz"} (the agent value of the N swarm result, not the alias), and print the raw result.
+REHEARSAL PASS: Nr: two executions PASS
+REHEARSAL PASS: Nr: member record found by alias
+REHEARSAL PASS: Nr: one notice per execution
+REHEARSAL PASS: Nr: retire prompt uses the swarm agent, not the alias
+REHEARSAL PASS: Nr: Main notice title names the execution
+
+======== M / N print real values
+M lines naming --continue or 451/452: 2
+N prompt names task 453
+N prompt requires the preset role
+
+REHEARSAL RESULT: ALL PASS

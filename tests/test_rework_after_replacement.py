@@ -1,5 +1,6 @@
 """Current rejections survive member changes without becoming replayable."""
 
+import os
 from pathlib import Path
 
 import pytest
@@ -115,3 +116,60 @@ def test_replacement_member_corrects_current_rejection(
     assert [event['caused_by_event_ids'] for event in corrections] == [
         [rejected['event_id']], [latest['event_id']],
     ]
+
+
+def test_closed_round_keeps_nested_directories_enterable(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Closing a Round freezes every file in its tree and leaves every directory enterable."""
+    runner, team, commit = result_project(tmp_path)
+    child = runner / 'sessions/research@x1/mapping.yml'
+    child.write_text(yaml.safe_dump({**yaml.safe_load(child.read_text()), 'parent': 'research@x3'}))
+    round_directory = team.parent / 'rounds/1'
+    with runtime_caller(runner, 'research@x1'):
+        tools.submit_report({'name': 'researcher-x1.md', 'text': 'Report'}, cwd=tmp_path)
+        submitted = tools.submit_result({
+            'commit': commit, 'result_refs': ['result.md'],
+            'evidence_refs': ['result.md'], 'completion': 'Complete',
+        }, cwd=tmp_path).document
+    nested = round_directory / 'realhost/rerun'
+    nested.mkdir(parents=True)
+    (round_directory / 'realhost/host.log').write_text('host log')
+    (nested / 'output.txt').write_text('nested output')
+    hidden = round_directory / '.claude'
+    hidden.mkdir()
+    hidden_mode = hidden.stat().st_mode & 0o777
+    outside = tmp_path / 'outside.txt'
+    outside.write_text('not part of the Round')
+    (round_directory / 'realhost/link').symlink_to(outside)
+    tree = [round_directory, *sorted(round_directory.rglob('*'))]
+    before = {path: path.lstat().st_mode & 0o777 for path in tree}
+    decision = {
+        'submission_id': submitted['event_id'], 'commit': commit, 'decision': 'accepted',
+        'reason': 'The result meets the task criteria.', 'evidence_refs': submitted['evidence_refs'],
+    }
+    original_open = Path.open
+
+    def fail_append(path: Path, mode: str = 'r', *args: object, **kwargs: object):
+        """Fail the Worldline append after the Round has been frozen."""
+        if mode == 'ab':
+            raise OSError('injected append failure')
+        return original_open(path, mode, *args, **kwargs)
+
+    with runtime_caller(runner, 'research@x3'):
+        with monkeypatch.context() as patch:
+            patch.setattr(Path, 'open', fail_append)
+            with pytest.raises(OSError, match='injected append failure'):
+                tools.decide_result(decision, cwd=tmp_path)
+        # The failed closure restores every mode it changed, nested ones included.
+        assert {path: path.lstat().st_mode & 0o777 for path in tree} == before
+        tools.decide_result(decision, cwd=tmp_path)
+    for directory in (round_directory, round_directory / 'realhost', nested):
+        assert directory.stat().st_mode & 0o777 == 0o555, directory
+    for path in (round_directory / 'researcher-x1.md', round_directory / 'realhost/host.log',
+                 nested / 'output.txt'):
+        assert path.stat().st_mode & 0o777 == 0o444, path
+    assert sorted(os.listdir(nested)) == ['output.txt']
+    assert (nested / 'output.txt').read_text() == 'nested output'
+    assert hidden.stat().st_mode & 0o777 == hidden_mode
+    assert outside.stat().st_mode & 0o222

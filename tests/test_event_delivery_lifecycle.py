@@ -61,10 +61,15 @@ def call(*args):
 def consume(text):
     """Read the received event and perform the parent's report update."""
     notice = json.loads(text)
-    assert set(notice) == {'source', 'alias', 'event', 'message'}
+    # 449: an optional ``execution`` names the execution the notice reports.
+    assert set(notice) - {'execution'} == {'source', 'alias', 'event', 'message'}
     assert notice['source'] == 'graphtraj'
     details = ({} if notice['event'] == 'execution-budget-exceeded' else
                json.loads(notice['message'].split('\n')[-1]))
+    if 'execution' in notice:
+        assert isinstance(notice['execution'], str) and notice['execution']
+        if details.get('execution_id'):
+            assert notice['execution'] == details['execution_id']
     result = call('submit-report', '--name', 'leader.md', '--text', text)
     record({'acted': notice, 'details': details, 'report': result})
     return notice

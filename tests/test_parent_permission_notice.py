@@ -76,11 +76,14 @@ def notice_received():
 def consume(text: str) -> str:
     """Consume the received system message before deciding the native request."""
     notice = json.loads(text)
-    assert set(notice) == {'source', 'alias', 'event', 'message'}
+    # 449: an optional ``execution`` names the execution the notice reports.
+    assert set(notice) - {'execution'} == {'source', 'alias', 'event', 'message'}
     assert all(isinstance(value, str) and value for value in notice.values())
     assert notice['source'] == 'graphtraj'
     assert notice['event'] == 'item/commandExecution/requestApproval'
     details = json.loads(notice['message'].split('\\n')[-1])
+    if 'execution' in notice and details.get('execution_id'):
+        assert notice['execution'] == details['execution_id']
     assert details['params']['command'] == 'printf APPROVAL_121'
     retain({'consumed': notice})
     return notice['alias']
@@ -102,7 +105,8 @@ def consume_budgets() -> None:
         notice = json.loads(text)
         if notice['event'] != 'execution-budget-exceeded' or text in seen_budgets:
             continue
-        assert set(notice) == {'source', 'alias', 'event', 'message'}
+        assert set(notice) - {'execution'} == {'source', 'alias', 'event', 'message'}
+        assert notice.get('execution', 'absent') != ''
         assert notice['source'] == 'graphtraj'
         seen_budgets.add(text)
         retain({'budget_action': notice})

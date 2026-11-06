@@ -203,6 +203,52 @@ class ExecutionBudgetMonitor:
         """Observe elapsed time and return whether Runner selected stopping."""
         return self._observe(role, stage)
 
+    def check_elapsed(self, role: str, stage: str) -> None:
+        """Record elapsed-threshold notices without sampling a stop (445).
+
+        The idle timer uses this: stopping checks stay with running executions.
+        """
+        self._observe(role, stage, sample_stop=False)
+
+    def next_elapsed_threshold_at(self) -> float | None:
+        """Return when the next unnotified elapsed threshold falls (epoch seconds).
+
+        Only the planned end (``elapsed_minutes``) and then the additional
+        allowance are timed; None when both were already notified, the Task
+        has no budget accounting yet, or it is stopped. Reading never starts
+        or changes the accounting.
+        """
+        lock_path = self.task_directory / ".execution-budget.lock"
+        if not (self.task_directory / "execution-budget.yml").is_file():
+            return None
+        with lock_path.open("a+", encoding="utf-8") as lock:
+            file_lock.flock(lock.fileno(), file_lock.LOCK_EX)
+            try:
+                budget = _current_budget(self.task_directory)
+                if budget is None:
+                    return None
+                state, _ = _read_usage(self.task_directory, budget)
+            finally:
+                file_lock.flock(lock.fileno(), file_lock.LOCK_UN)
+        if state["stopped"]:
+            return None
+        definition = budget.definition["execution_budget"]
+        estimated = definition["estimated_minutes"]["total"] + state.get("approved_minutes", 0)
+        allowance = state["allowance_minutes"]
+        window = state.get("approved_window_started_at")
+        planned_end = estimated + (allowance if window is not None else 0)
+        seen = set(state["notifications"])
+        for kind, limit, counted in (("elapsed_minutes", estimated, planned_end),
+                                     ("additional_allowance", allowance, estimated + allowance)):
+            if kind + ":" + json.dumps(limit, sort_keys=True) in seen:
+                continue
+            # Invert _counted_minutes for the instant ``counted`` is reached.
+            if window is None:
+                return state["started_at"] + counted * 60
+            base = definition["estimated_minutes"]["total"] + allowance
+            return window + max(0.0, counted - base) * 60
+        return None
+
     def is_stopped(self) -> bool:
         lock_path = self.task_directory / ".execution-budget.lock"
         with lock_path.open("a+", encoding="utf-8") as lock:
@@ -390,6 +436,7 @@ class ExecutionBudgetMonitor:
         *,
         session: bool = False,
         correction: bool = False,
+        sample_stop: bool = True,
     ) -> bool:
         notices = []
         lock_path = self.task_directory / ".execution-budget.lock"
@@ -421,7 +468,8 @@ class ExecutionBudgetMonitor:
                     state["stopping_checks"], state["stopped"]
                 )
                 notices = _new_notices(
-                    state, budget, self.task_id, self.task_name, role, stage
+                    state, budget, self.task_id, self.task_name, role, stage,
+                    sample_stop=sample_stop,
                 )
                 changed = changed or stochastic_before != (
                     state["stopping_checks"], state["stopped"]
@@ -601,6 +649,8 @@ def _new_notices(
     task_name: str,
     role: str,
     stage: str,
+    *,
+    sample_stop: bool = True,
 ) -> list[dict[str, Any]]:
     definition = budget.definition["execution_budget"]
     observed_at = time.time()
@@ -640,7 +690,7 @@ def _new_notices(
             )
         )
         due = int((counted - estimated - allowance) // STOPPING_INTERVAL_MINUTES)
-        while not state["stopped"] and state["stopping_checks"] < due:
+        while sample_stop and not state["stopped"] and state["stopping_checks"] < due:
             state["stopping_checks"] += 1
             checked_at = state["stopping_checks"] * STOPPING_INTERVAL_MINUTES
             if random.random() >= math.exp(-STOPPING_LAMBDA_PER_MINUTE * checked_at):

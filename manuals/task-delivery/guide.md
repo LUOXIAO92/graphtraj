@@ -185,7 +185,10 @@ focused rather than attaching the entire graph to every check.
 
 Honor the existing Task budget and Runner's enforced stop. Budget notices go to
 the task's actual parent, which coordinates its children; stopping does not wait
-for the notice to be processed. Keep elapsed accounting and stop history. An
+for the notice to be processed. A timed Session's elapsed notices (planned end, then
+additional allowance) also arrive while every member is idle: when its execution
+ends, a light Runner timer that runs no model delivers each once to that
+Session's own direct parent (Main for a Leader, the Leader for an Engineer). Keep elapsed accounting and stop history. An
 interruption, recovery or replacement does not authorize more time.
 
 For a failure, stop or replacement, read [recovery](references/recovery.md).

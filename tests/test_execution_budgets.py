@@ -1455,7 +1455,9 @@ def test_installed_send_collects_reports_without_sampling_the_stop(
         usage = yaml.safe_load(usage_file.read_text(encoding="utf-8"))
         assert usage["stopping_checks"] == 0
         assert usage["stopped"] is False
-        assert usage["notifications"] == []
+        # Only the idle timer's elapsed notices (445) may appear; never a stop.
+        assert all(key.startswith(("elapsed_minutes:", "additional_allowance:"))
+                   for key in usage["notifications"])
         assert usage["sessions"]["team_leader"] == 1
         leader_inputs = [
             json.loads(line)["stdin"]

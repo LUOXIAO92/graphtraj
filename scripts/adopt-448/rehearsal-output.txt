@@ -1,0 +1,157 @@
+
+======== setup: old wheels from d11f3226422cb7a4de5e59d347f8d211d59350be, fake production venv, plugin, configuration
+graftling-0.5.0-py3-none-any.whl
+graphtraj-0.1.0-py3-none-any.whl
+Create dev from 1cf6391c1a95c2c140353aa4e81784d6a418b723? [y/N]: Created Integration Worktree on dev.
+GraphTraj project setup complete.
+
+======== 00 (stub ps lists a host whose parent is claude --resume <id>)
+REHEARSAL PASS: 00 found Main from the host's parent
+REHEARSAL PASS: 00 reported the inherited 418 variable by name and path
+### 418: inherited GRAFTLING_CLAUDE_HOST_* / GRAPHTRAJ_CLAUDE_HOST_* (name=path; unset for every child command of this script)
+inherited: GRAFTLING_CLAUDE_HOST_CONFIG=/elsewhere/.agents-control/claude-host.json
+Version: 0.1.0
+Version: 0.5.0
+### running Task members (expect 'running lines: 0')
+running lines: 0
+MAIN=11111111-2222-3333-4444-555555555555 (saved to /tmp/claude-501/adopt448-rehearsal/home/graphtraj-adoption-448/main.session)
+guard: 1 个进程在使用 /tmp/claude-501/adopt448-rehearsal/project/.venv-runtime（或是 Main 11111111-2222-3333-4444-555555555555）:
+### 418: inherited GRAFTLING_CLAUDE_HOST_* / GRAPHTRAJ_CLAUDE_HOST_* (name=path; unset for every child command of this script)
+inherited: GRAFTLING_CLAUDE_HOST_CONFIG=/elsewhere/.agents-control/claude-host.json
+Version: 0.1.0
+Version: 0.5.0
+### running Task members (expect 'running lines: 0')
+running lines: 0
+MAIN=11111111-2222-3333-4444-555555555555 (saved to /tmp/claude-501/adopt448-rehearsal/home/graphtraj-adoption-448/main.session)
+成功: ZSH_VERSION 有值；answer 里 models 含 claude-opus-5-5 且 is_error False；graphtraj 0.1.0 与 graftling 0.5.0；pip check rc=0；running lines: 0；stopped: false；/tmp/claude-501/adopt448-rehearsal/home/graphtraj-adoption-448/backup 'No such file'；MAIN=<id>。
+若 'inherited:' 列出名字：本脚本已对所有子命令 unset；记下它来自哪个项目（418 提醒）。
+
+======== B
+REHEARSAL PASS: B exit 0
+  Created wheel for graphtraj: filename=graphtraj-0.1.0-py3-none-any.whl size=577883 sha256=ebe212d7afffe592c7032c9e65cedac772829f44c2384193d7432de18e5b7cfc
+  Created wheel for graftling: filename=graftling-0.5.0-py3-none-any.whl size=430336 sha256=4ba843a4461398651e39c45ee206be03b2e8a316dcfc3e0c24277b6032dca0b9
+4ba843a4461398651e39c45ee206be03b2e8a316dcfc3e0c24277b6032dca0b9  graftling-0.5.0-py3-none-any.whl
+ebe212d7afffe592c7032c9e65cedac772829f44c2384193d7432de18e5b7cfc  graphtraj-0.1.0-py3-none-any.whl
+### no build/ or __pycache__ inside the wheels (expect leaked: 0)
+leaked: 0
+4ba843a4461398651e39c45ee206be03b2e8a316dcfc3e0c24277b6032dca0b9  graftling-0.5.0-py3-none-any.whl
+ebe212d7afffe592c7032c9e65cedac772829f44c2384193d7432de18e5b7cfc  graphtraj-0.1.0-py3-none-any.whl
+### no build/ or __pycache__ inside the wheels (expect leaked: 0)
+leaked: 0
+成功: graphtraj-0.1.0 与 graftling-0.5.0 各一个 wheel 及 sha256；leaked: 0。
+
+======== V (stub plugin validate)
+REHEARSAL PASS: V exit 0
+written: ['/tmp/claude-501/adopt448-rehearsal/project/.graphtraj/core/state/tasks/448-production-adoption-418-445-446/adoption/vplug/graphtraj-claude-host/.claude-plugin/plugin.json', '/tmp/claude-501/adopt448-rehearsal/project/.graphtraj/core/state/tasks/448-production-adoption-418-445-446/adoption/vplug/graphtraj-claude-host/hooks/hooks.json', '/tmp/claude-501/adopt448-rehearsal/project/.graphtraj/core/state/tasks/448-production-adoption-418-445-446/adoption/vplug/graphtraj-claude-host/hooks/host_context.mjs']
+SAME    .claude-plugin/plugin.json
+SAME    hooks/hooks.json
+CHANGED hooks/host_context.mjs
+差异: /tmp/claude-501/adopt448-rehearsal/project/.graphtraj/core/state/tasks/448-production-adoption-418-445-446/adoption/raw/V-plugin.diff（95 行）；host_context.mjs 改变，所以 resume 时可能出现一次插件信任框。
+### 418 judgement: production's copy keeps 'const PLUGIN = null', so 3a95423a's projectMaterial() is never called
+418 hook change reaches the copy as bytes only: inert (plugin-only branch)
+✘ lines: baseline=0 candidate=0
+SAME    .mcp.json
+SAME    .claude/settings.local.json
+SAME    .graphtraj/claude-host/config.json
+predictions written to /tmp/claude-501/adopt448-rehearsal/project/.graphtraj/core/state/tasks/448-production-adoption-418-445-446/adoption/ventries
+written: ['/tmp/claude-501/adopt448-rehearsal/project/.graphtraj/core/state/tasks/448-production-adoption-418-445-446/adoption/vplug/graphtraj-claude-host/.claude-plugin/plugin.json', '/tmp/claude-501/adopt448-rehearsal/project/.graphtraj/core/state/tasks/448-production-adoption-418-445-446/adoption/vplug/graphtraj-claude-host/hooks/hooks.json', '/tmp/claude-501/adopt448-rehearsal/project/.graphtraj/core/state/tasks/448-production-adoption-418-445-446/adoption/vplug/graphtraj-claude-host/hooks/host_context.mjs']
+SAME    .claude-plugin/plugin.json
+SAME    hooks/hooks.json
+CHANGED hooks/host_context.mjs
+差异: /tmp/claude-501/adopt448-rehearsal/project/.graphtraj/core/state/tasks/448-production-adoption-418-445-446/adoption/raw/V-plugin.diff（95 行）；host_context.mjs 改变，所以 resume 时可能出现一次插件信任框。
+### 418 judgement: production's copy keeps 'const PLUGIN = null', so 3a95423a's projectMaterial() is never called
+418 hook change reaches the copy as bytes only: inert (plugin-only branch)
+✘ lines: baseline=0 candidate=0
+SAME    .mcp.json
+SAME    .claude/settings.local.json
+SAME    .graphtraj/claude-host/config.json
+predictions written to /tmp/claude-501/adopt448-rehearsal/project/.graphtraj/core/state/tasks/448-production-adoption-418-445-446/adoption/ventries
+成功: 候选 ✘ 不多于 baseline；'418 hook change reaches the copy as bytes only: inert'；入口文件 SAME 或只列出可解释的变化；read_session failures=0。
+==> 下一步 / next（直接粘贴）: zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/448-production-adoption-418-445-446/scripts/adopt-448/steps.zsh S
+REHEARSAL PASS: V wrote nothing to production entry files
+NOT REHEARSED: Vc (real Claude Code); marker made by hand.
+
+======== guard: I refused while the host from the fake venv runs
+REHEARSAL PASS: I refused (host listed)
+REHEARSAL PASS: no backup made
+
+======== I on the fake production
+REHEARSAL PASS: I exit 0
+      Successfully uninstalled graphtraj-0.1.0
+      Successfully uninstalled graftling-0.5.0
+Successfully installed graftling-0.5.0 graphtraj-0.1.0
+PASS 245 FAIL 0
+445 timer: /tmp/claude-501/adopt448-rehearsal/project/.venv-runtime/lib/python3.13/site-packages/graphtraj/execution/budget_idle_timer.py
+SAME-AS-VALIDATED
+bytes unchanged: .mcp.json
+bytes unchanged: .claude/settings.local.json
+bytes unchanged: .graphtraj/claude-host/config.json
+      Successfully uninstalled graphtraj-0.1.0
+      Successfully uninstalled graftling-0.5.0
+Successfully installed graftling-0.5.0 graphtraj-0.1.0
+PASS 245 FAIL 0
+445 timer: /tmp/claude-501/adopt448-rehearsal/project/.venv-runtime/lib/python3.13/site-packages/graphtraj/execution/budget_idle_timer.py
+SAME-AS-VALIDATED
+bytes unchanged: .mcp.json
+bytes unchanged: .claude/settings.local.json
+bytes unchanged: .graphtraj/claude-host/config.json
+成功: Successfully installed graftling-0.5.0 graphtraj-0.1.0；PASS n FAIL 0；graftling 0.5.0；445 timer 在 /tmp/claude-501/adopt448-rehearsal/project/.venv-runtime；SAME-AS-VALIDATED；入口文件 bytes unchanged 或 V 已列出的变化。
+  cd /tmp/claude-501/adopt448-rehearsal/project && claude --resume 11111111-2222-3333-4444-555555555555
+REHEARSAL PASS: proddiff PASS n FAIL 0
+REHEARSAL PASS: I printed the resume command with the real id
+
+======== R from the backup's own copy of the tools
+REHEARSAL PASS: R exit 0
+DIFF entries=936 differences=19 (/tmp/claude-501/adopt448-rehearsal/project/.venv-runtime)
+### venv restored whole from the backup
+SAME entries=936 differences=0 (/tmp/claude-501/adopt448-rehearsal/project/.venv-runtime)
+### plugin restored; the current one kept
+SAME entries=5 differences=0 (/tmp/claude-501/adopt448-rehearsal/project/.claude/skills/graphtraj-claude-host)
+### entry files restored from the backup copies; the current ones kept
+already as before: .mcp.json
+already as before: .claude/settings.local.json
+already as before: .graphtraj/claude-host/config.json
+### a stale channel file would make the restored host refuse with host-busy
+Version: 0.1.0
+Version: 0.5.0
+DIFF entries=936 differences=19 (/tmp/claude-501/adopt448-rehearsal/project/.venv-runtime)
+### venv restored whole from the backup
+SAME entries=936 differences=0 (/tmp/claude-501/adopt448-rehearsal/project/.venv-runtime)
+### plugin restored; the current one kept
+SAME entries=5 differences=0 (/tmp/claude-501/adopt448-rehearsal/project/.claude/skills/graphtraj-claude-host)
+### entry files restored from the backup copies; the current ones kept
+already as before: .mcp.json
+already as before: .claude/settings.local.json
+already as before: .graphtraj/claude-host/config.json
+### a stale channel file would make the restored host refuse with host-busy
+Version: 0.1.0
+Version: 0.5.0
+
+SAME entries=936 differences=0 (/tmp/claude-501/adopt448-rehearsal/project/.venv-runtime)
+REHEARSAL PASS: venv equals the pre-install manifest
+
+======== Nr on synthetic records
+child n448-ok: agent=c2 parent=m@advisor execution=e2 state=ended outcome=completed notification=delivered last_message=null retired=False
+  CHECK notification delivered: PASS
+child n448-stop: agent=c1 parent=m@advisor execution=e1 state=ended outcome=interrupted notification=delivered last_message=null retired=False
+  CHECK notification delivered: PASS
+parent m@advisor: record found=True name=m session=sess-m
+  archive sess-m: lines naming n448-ok execution e2: 1 at [1]
+  archive sess-m: lines naming n448-stop execution e1: 1 at [0]
+child n448-ok: agent=c2 parent=m@advisor execution=e2 state=ended outcome=completed notification=delivered last_message=null retired=False
+  CHECK notification delivered: PASS
+child n448-stop: agent=c1 parent=m@advisor execution=e1 state=ended outcome=interrupted notification=delivered last_message=null retired=False
+  CHECK notification delivered: PASS
+parent m@advisor: record found=True name=m session=sess-m
+  archive sess-m: lines naming n448-ok execution e2: 1 at [1]
+  archive sess-m: lines naming n448-stop execution e1: 1 at [0]
+成功（定义第 3 项）: 两个 child 的 parent 都是成员别名 m@advisor，且该别名出现在上面的 task members 行；两条 'CHECK notification delivered: PASS'；
+Using only the agents tool: retire the agent m@advisor by the agent id the N swarm result returned (not by its alias), and print the raw result.
+REHEARSAL PASS: Nr: two delivered PASS
+REHEARSAL PASS: Nr printed the retire prompt with the member alias
+
+======== M / N print real ids
+M lines with the Main id: 2
+N prompt names task 448
+
+REHEARSAL RESULT: ALL PASS

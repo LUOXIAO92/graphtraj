@@ -226,6 +226,10 @@ class GraphTrajAgents:
         from graphtraj.runtimes.runtime_adapter import select_runtime_adapter
 
         if notice['parent'] is not None:
+            if self._member_alias(notice['agent']) is not None:
+                # A Task member's own end reaches its parent through the Runner;
+                # only a reconciled end of its core record (451) arrives here.
+                return False
             member = self._member_parent(notice['parent'])
             if member is None or notice['outcome'] not in {'completed', 'failed', 'interrupted'}:
                 return False
@@ -343,6 +347,24 @@ class GraphTrajAgents:
         control = AgentControl(swarm_root(self.root), {}, request_notices=True, event_receiver=(
             lambda notice: notify_parent_of_decision(directory, mapping, notice)))
         return control.ask_parent(Caller(TASK_HOST, reference), *question)
+
+    def reconcile_children(self, parents: set[str]) -> None:
+        """Find the lost-owner ends of the Agents whose parent is in ``parents``.
+
+        Taking each record's lock ends an execution whose owner and Runtime are
+        gone (``owner-exited``), and this control, which has a receiver,
+        delivers that end once (PUBLIC_API section 4). A record that cannot be
+        read is skipped until the next call.
+        """
+        for path in sorted((swarm_root(self.root) / "control" / "agents").glob(AGENT_PREFIX + "*.json")):
+            registration = self.control.registration(path.stem)
+            if registration is None or registration["parent"] not in parents:
+                continue
+            try:
+                # A read under the record lock; the lock is what reconciles.
+                self.control.unconfirmed_ends(path.stem)
+            except (AgentsError, OSError, ValueError):
+                continue
 
     def _member_parent(self, parent: str) -> str | None:
         """Return the Task member alias a child's recorded parent names, if any.

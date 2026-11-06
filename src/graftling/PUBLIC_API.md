@@ -1155,7 +1155,16 @@ Delivery rules:
   from <alias> · completed · execution <id>]`. A notice with no execution
   keeps the title without it.
 - A failed or interrupted end notifies immediately, whatever the child's
-  members are doing.
+  members are doing. This includes an end found by reconciliation, with or without
+  `hold_notices` (451). When a call that reads the record (`status`, `wait`, `retire`
+  and the others) finds a running execution whose owner and Runtime are both gone,
+  it ends it `failed` with error `owner-exited` and records it `held` in the same
+  write. Without `hold_notices`, a control with a receiver then calls that receiver
+  once, after the record lock is released. The notice's `body` is the error message
+  for a parent Agent, and a root's notice carries `error`. A control without a
+  receiver leaves it `held` for one that has a receiver. The core looks only when some
+  call reads the record. GraphTraj's Runner Worker reads the records of a running
+  Task member's children every 15 seconds.
 - A completed round of a child that still has running members is recorded,
   not pushed. All rounds stay readable through `status`.
 - A notice its parent cannot receive now is recorded `held`, stays readable
@@ -1448,7 +1457,8 @@ for a host that keeps its children's native requests to `wait` and `requests`.
 GraphTraj's own host does this.
 
 With `hold_notices=True` (since 0.2.1; the default `False` writes no new field or
-value) a notice its parent cannot receive now is kept in the record:
+value, apart from the `held` of a reconciled end above) a notice its parent cannot
+receive now is kept in the record:
 
 - A receiver may return `"held"`. For a root's end, so do a receiver that
   returns `False` or raises, and a control without a receiver. An end a process

@@ -16,7 +16,7 @@ from graphtraj.configuration.project_configuration import runner_project_root
 from pathlib import Path
 import hashlib
 import threading
-from typing import Any, Mapping
+from typing import Any, Callable, Mapping
 
 from graftling import DECISION_METHOD, AgentControl, AgentsError, Binding, Caller, Run
 
@@ -241,6 +241,54 @@ def notify_member_of_child_end(root: Path, alias: str, notice: Mapping[str, Any]
             time.sleep(min(1, remaining))
         except Exception:
             return False
+
+
+# How often a running member's Worker looks for children whose owner died (451).
+CHILD_SWEEP_SECONDS = 15.0
+CHILD_SWEEP_JOIN_SECONDS = 5.0
+
+
+def watch_member_children(root: Path, alias: str, reference: str | None,
+                          interval: float = CHILD_SWEEP_SECONDS) -> Callable[[], None]:
+    """Find a running member's lost-owner child ends within ``interval``; return the stop.
+
+    A child's execution is owned by the process that started it: this
+    member's Worker, an earlier Worker of the same member, or whoever sent or
+    resumed it (for example Main). Without a sweep its loss is found only when
+    some call reads the record. Every ``interval`` a daemon thread reads the
+    records whose parent is ``alias`` or ``reference``; a lost owner's end is
+    then delivered once through ``notify_member_of_child_end``. The first
+    sweep waits one interval, so this execution's Session is recorded first.
+    """
+    from graphtraj.interfaces.agents import GraphTrajAgents
+
+    stop    = threading.Event()
+    parents = {alias} | ({reference} if reference else set())
+
+    def sweep() -> None:
+        """Look again each interval until the Worker stops this watch."""
+        agents = None
+        while not stop.wait(interval):
+            try:
+                agents = agents or GraphTrajAgents(root)
+                agents.reconcile_children(parents)
+            except Exception:
+                # A failed sweep leaves the records for the next one.
+                continue
+
+    thread = threading.Thread(target=sweep, name=f"child-sweep-{alias}", daemon=True)
+    thread.start()
+
+    def close() -> None:
+        """Stop sweeping, waiting briefly for a sweep that is delivering now.
+
+        The wait is bounded so a Worker's stop is never held by a busy parent
+        input; the thread is a daemon and ends with the Worker.
+        """
+        stop.set()
+        thread.join(CHILD_SWEEP_JOIN_SECONDS)
+
+    return close
 
 
 def native_directory(root: Path, alias: str, runtime: str) -> Path:

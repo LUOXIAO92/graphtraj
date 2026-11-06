@@ -23,6 +23,9 @@ from graphtraj.workspace.runner_project import runtime_executable
 from graphtraj.runtimes.codex.session_entry import session_source, event_record
 from graphtraj.runtimes.codex.usage import CodexCheckUsage
 
+# Above the checker wait (540 s), below the default 600 s hook deadline.
+CHECK_WAIT_SECONDS = 570
+
 
 def control_socket(codex_home: str) -> str:
     """Return the daemon control socket as its resolved target.
@@ -565,7 +568,11 @@ def check(
             result = {}
             try:
                 # Leave time for native cancellation before the default 600s hook deadline.
-                finished, _ = await asyncio.wait((stopped, checked, received), return_when=asyncio.FIRST_COMPLETED)
+                finished, _ = await asyncio.wait((stopped, checked, received), timeout=CHECK_WAIT_SECONDS,
+                                                 return_when=asyncio.FIRST_COMPLETED)
+                if not finished:
+                    # The checker's own wait is bounded; this bounds a client that ignores it.
+                    raise TimeoutError(f'The completion checker gave no result within {CHECK_WAIT_SECONDS} s.')
                 accepted = receipt()
                 if stopped in finished or received in finished or accepted is not None:
                     if received in finished:

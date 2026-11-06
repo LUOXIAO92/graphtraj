@@ -27,6 +27,7 @@ from graftling.models import pi_default_keys, write_key_reference
 from graftling.approval import REVIEW_METHOD, review_failed
 from graftling.review import build_request, record_decision, review_call
 from graftling.child_env import child_environment, consumer_environment
+from graftling.member_processes import MEMBER_RUN_ENV, new_marker, stop_marked_processes
 from graftling.runtime import RuntimeAdapterError, SessionStarted, credential_environment
 
 
@@ -81,6 +82,8 @@ class PiExecution:
         self.session: str | None = None
         self.bound = False
         self._execution_id = uuid.uuid4().hex
+        # Inherited by every tool command, even one that leaves the process group.
+        self.member_marker = new_marker()
         self.proc: subprocess.Popen | None = None
         self.events: queue.Queue = queue.Queue()
         self.responses: dict[str, queue.Queue] = {}
@@ -407,6 +410,7 @@ class PiExecution:
             policy['filesystem']['allowRead'].append(str(fd.resolve()))
             policy_file.write_text(json.dumps(policy), encoding='utf-8')
         self.native_trace = native_trace
+        env[MEMBER_RUN_ENV] = self.member_marker
         return [request['sandbox_python'], str(Path(__file__).with_name('launch.py')), str(spec)], env
 
     def provider_domain(self, source: Path, provider: str) -> str:
@@ -606,7 +610,15 @@ class PiExecution:
                         native_idle and self.proc is not None and self.proc.poll() is not None
                     )
                     if self.proc is not None:
-                        self.record_process(self.proc.pid, self.process_exit_evidence(native_idle))
+                        evidence = self.process_exit_evidence(native_idle)
+                        if self.proc.poll() is not None:
+                            # Detached tools leave the owned group; stop those
+                            # still carrying this execution's marker.
+                            from graftling.review import redact
+
+                            evidence['escaped_processes'] = redact(
+                                stop_marked_processes(self.member_marker, {self.proc.pid}))
+                        self.record_process(self.proc.pid, evidence)
                     if self.stderr_reader is not None:
                         self.stderr_reader.join(timeout=5)
                     if reader is not None:

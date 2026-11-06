@@ -119,9 +119,15 @@ def test_replacement_member_corrects_current_rejection(
 
 
 def test_closed_round_keeps_nested_directories_enterable(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, request: pytest.FixtureRequest,
 ) -> None:
     """Closing a Round freezes every file in its tree and leaves every directory enterable."""
+    def writable_again() -> None:
+        """Let pytest remove the frozen tree afterwards, whether or not the test passed."""
+        for directory, _, _ in os.walk(tmp_path):
+            os.chmod(directory, os.stat(directory).st_mode | 0o700)
+
+    request.addfinalizer(writable_again)
     runner, team, commit = result_project(tmp_path)
     child = runner / 'sessions/research@x1/mapping.yml'
     child.write_text(yaml.safe_dump({**yaml.safe_load(child.read_text()), 'parent': 'research@x3'}))

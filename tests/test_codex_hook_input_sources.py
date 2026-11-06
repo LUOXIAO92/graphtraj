@@ -2,6 +2,7 @@
 
 import json
 from pathlib import Path
+import signal
 
 import pytest
 from click.testing import CliRunner
@@ -22,6 +23,20 @@ def test_empty_stdin_names_hook_stdin_and_keeps_stop_error() -> None:
     assert result['continue'] is False
     assert 'Codex hook stdin (0 characters)' in result['stopReason']
     assert 'Completion Check · error' in result['stopReason']
+
+
+def test_hook_restores_the_callers_sigterm_handler() -> None:
+    """An in-process call must not leave SIGTERM raising KeyboardInterrupt inside the hook (450)."""
+    def caller(signum: int, frame: object) -> None:
+        """Stand-in for the caller's own handler."""
+
+    previous = signal.signal(signal.SIGTERM, caller)
+    try:
+        for arguments, stdin in (([], ''), (['--configuration'], None)):
+            CliRunner().invoke(stop_hook, arguments, input=stdin)
+            assert signal.getsignal(signal.SIGTERM) is caller
+    finally:
+        signal.signal(signal.SIGTERM, previous)
 
 
 def test_rollout_parse_failure_names_file_and_offset(tmp_path: Path) -> None:

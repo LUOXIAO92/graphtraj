@@ -26,6 +26,7 @@ from graftling.mcp import tool_documents
 from graftling import SessionArchive
 from graftling.sessions.claude_history import read_records
 from graftling.child_env import child_environment, consumer_environment
+from graftling.member_processes import MEMBER_RUN_ENV, new_marker, stop_marked_processes
 from graftling.connection import CONNECTION_ENV
 from .settings import login_variables
 from .support import write_yaml_durably, credential_environment, redact
@@ -78,6 +79,8 @@ class ClaudeExecution:
         self.session: str | None = None
         self.native_id = expected_session or str(uuid.uuid4())
         self._execution_id = uuid.uuid4().hex
+        # Inherited by every tool command, even one that leaves the process group.
+        self.member_marker = new_marker()
         self.proc: subprocess.Popen | None = None
         self.events: queue.Queue = queue.Queue()
         # Native control requests in arrival order, answered ahead of the
@@ -478,6 +481,7 @@ class ClaudeExecution:
             raise RuntimeAdapterError('RUNTIME_REQUEST_FAILED',
                                       'Requested auto conflicts with explicit Claude subprocess scrub.')
         environment.pop(CONNECTION_ENV, None)
+        environment[MEMBER_RUN_ENV] = self.member_marker
         if address:
             environment[CONNECTION_ENV if self.independent else self.connection_env] = address
         if request.get('explicit_runtime_home'):
@@ -1031,6 +1035,11 @@ class ClaudeExecution:
                     # terminal_confirmed still reports this unconfirmed stop below.
                     failure = failure or error
                 process_group_closed = self.terminal_confirmed
+                # Tool commands run in their own sessions, so the group above
+                # misses ones started with setsid or `(nohup ... &)`; stop
+                # those left with this execution's marker and report them.
+                escaped = (redact(stop_marked_processes(self.member_marker, {self.proc.pid}))
+                           if self.proc is not None and self.proc.poll() is not None else None)
                 if reader is not None:
                     reader.join(timeout=5)
                 if stderr_reader is not None:
@@ -1052,6 +1061,7 @@ class ClaudeExecution:
                         'stdout_eof': self.stdout_eof, 'stderr_eof': self.stderr_eof,
                         'pipes_closed': pipes_drained and self.proc.stdout.closed and self.proc.stderr.closed,
                         'native_idle': self.drained_native_state == 'idle',
+                        'escaped_processes': escaped,
                     }
                     write_yaml_durably(self.directory / f'claude-termination-{self.execution_id}.yml', termination)
                     self.diagnostics['termination'] = termination
@@ -1120,6 +1130,8 @@ class ClaudeExecution:
                                     'session_id': self.session, 'execution_id': self.execution_id,
                                     'permissions': self.permission_evidence(),
                                     'last_agent_message': last}
+                    if escaped and escaped['found']:
+                        self.outcome['escaped_processes'] = escaped
                 self.done.set()
         if failure is not None:
             if isinstance(failure, RuntimeAdapterError):

@@ -56,7 +56,7 @@ credentials. Then follow the note for the host you use:
 
 | Your main Agent runs in | Note | How the host is delivered |
 | --- | --- | --- |
-| Claude Code | [install/claude-code.md](install/claude-code.md) | The `graftling` plugin from this repository's marketplace (untried on a real host), or plugin files generated into your project |
+| Claude Code | [install/claude-code.md](install/claude-code.md) | The `graftling` plugin from this repository's marketplace (real only in print mode, `claude -p`), or plugin files generated into your project |
 | Codex | [install/codex.md](install/codex.md) | A command that runs a headless parent. No plugin |
 | Pi | [install/pi.md](install/pi.md) | `pi install` of the installed package directory, or `-e` for one invocation |
 | DSH | [install/dsh.md](install/dsh.md) | `dsh plugin add` of the installed package directory, or `--patch` for one invocation |
@@ -325,7 +325,7 @@ Tests is expected to work and has not been seen to.
 
 | Capability | Claude Code host | Codex host | Pi host | DSH host |
 | --- | --- | --- | --- | --- |
-| Attach as host | Yes, with `configuration --write`. `/agents-context` shows the binding. Real. The marketplace plugin `graftling`: untried | Yes, a headless parent that runs one instruction per invocation; `--resume` continues it. Real | Yes, as a Pi extension. Real with `-e`; `pi install` untried | Yes, as a DSH plugin. Real with `--patch`; `dsh plugin add` untried |
+| Attach as host | Yes, with `configuration --write`. `/agents-context` shows the binding. Real. The marketplace plugin `graftling`: real in `claude -p` at project scope (`create`, `wait`); interactive use untried | Yes, a headless parent that runs one instruction per invocation; `--resume` continues it. Real | Yes, as a Pi extension. Real with `-e`; `pi install` untried | Yes, as a DSH plugin. Real with `--patch`; `dsh plugin add` untried |
 | `create`, `status`, `wait`, `send`, `interrupt`, `resume`, `retire` | Yes. Real: `create`, `wait`, `send`, `resume`. Tests: `interrupt`, `retire` | Yes. Real: `create`, `wait`, `status`, `send`, `resume`. Tests: `interrupt`, `retire` | Yes. Real: `create`, `status`, `wait`, `resume`. Tests: `send`, `interrupt`, `retire` | Yes. Real: `create`, `wait`, `send`, `resume`. Tests: `interrupt`, `retire` |
 | Choose the child Runtime | `claude` always. `codex`, `dsh`, `pi` with a `runtimes` entry, else `unsupported-runtime` | `codex` always. `claude`, `dsh`, `pi` with a `runtimes` entry, else `unsupported-runtime` | `pi`, `claude` always, `dsh` with a model. `codex` needs a `codex` section, else `invalid-config` | `dsh`, `claude` always. `codex` needs a `codex` section, else `invalid-config`; `pi` needs a `pi` section, else `unsupported-runtime` |
 | Choose model or effort per child | Yes. Real on a Codex child: model equal to its default, effort `low` different from it | Yes. Real: a Claude child's model and effort, a DSH child's effort | Yes. Real: a Claude child's model. Tests: effort | Yes. Real: a Claude child's model. Tests: effort |

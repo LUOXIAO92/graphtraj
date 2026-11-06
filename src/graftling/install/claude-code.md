@@ -38,8 +38,15 @@ local checkout (or from the repository once it has one).
 
 ## Install the marketplace plugin
 
-> Not yet walked on a real host: the steps below are untried until the Task 418 real-host
-> run. Tests cover the host and module with stand-ins.
+> Seen on a real host only in print mode (`claude -p`), with the marketplace added from a
+> local checkout, the plugin installed at project scope and `GRAFTLING_PYTHON` exported in
+> the shell: the plugin loaded, its tool created a Claude child and `wait` returned it
+> completed. A missing Python showed in `host.log` and as a failed server in
+> `claude mcp list`, and a project with both hosts refused with `host-busy`. Not yet
+> seen: interactive Claude Code under the plugin, including `/agents-context` and its
+> advice, and notices pushed into the Session. Not yet run: `GRAFTLING_PYTHON` under
+> `env` in `settings.json`, the `python3` on `PATH` fallback, user scope and the upgrade
+> steps. Tests cover the host and module with stand-ins.
 
 1. Install the wheel, above. Point the plugin at that environment's Python with
    `GRAFTLING_PYTHON`, in the shell you start Claude Code from or under `env` in

@@ -557,12 +557,15 @@ def _deliver_task(
     )
     if parent_alias is not None:
         _run_registered_children(project, task, alias, session, retained_batch, capacity_fd)
+    mapping = read_alias_mapping(project.runner_directory, alias)[0]
     return {"task_id": task.task_id, "task_name": task.task_name,
             "role": task.role, "alias": alias, "session": session,
+            # The member's core Agent reference, which every agents control
+            # (status, wait, send, interrupt, retire) accepts as its alias does.
+            "agent": registered.get("agent") or mapping.get("agent"),
             # This launch's own execution: a parent's send may already have
             # started a successor under the alias (372).
-            "execution_id": registered.get("execution_id")
-            or read_alias_mapping(project.runner_directory, alias)[0]["execution_id"],
+            "execution_id": registered.get("execution_id") or mapping["execution_id"],
             "worktree_path": str(worktree),
             "launch_status": "completed" if parent_alias is not None else "launched"}
 
@@ -1453,6 +1456,7 @@ def _run_session_worker(
         raise RunnerError("RUNTIME_WORKER_FAILED", "The Runtime Session could not be started.")
     if registered is not None:
         registered["execution_id"] = mapping.get("execution_id")
+        registered["agent"] = mapping.get("agent")
     return mapping["session"], (
         "budget-stopped" if terminal.get("budget_stopped") else terminal["outcome"]
     )

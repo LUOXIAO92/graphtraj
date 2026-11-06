@@ -243,7 +243,7 @@ def test_a_launch_reports_its_own_end_when_a_successor_already_replaced_it(
     assert team_round._run_session_worker(
         session, session / 'launch.yml', tmp_path, 'prompt', {}, 3, None, True, registered,
     ) == ('s1', 'completed')
-    assert registered == {'execution_id': 'e1'}
+    assert registered == {'execution_id': 'e1', 'agent': None}
 
 
 def test_a_late_heartbeat_never_recreates_a_retired_session_directory(
@@ -370,7 +370,7 @@ def test_a_launch_ignores_its_workers_early_pid_only_mapping(
     assert team_round._run_session_worker(
         session, session / 'launch.yml', tmp_path, 'prompt', {}, 3, None, True, registered,
     ) == ('s1', 'completed')
-    assert registered == {'execution_id': 'e1'}
+    assert registered == {'execution_id': 'e1', 'agent': None}
 
 
 def test_a_driver_turn_marks_only_its_own_batchs_ends(

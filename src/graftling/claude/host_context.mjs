@@ -33,7 +33,8 @@ function noticePrompt(notices) {
   // One plain-text Main input; the full structured notices stay in the queue history.
   return notices.map((notice) => {
     const body = notice.event ?? {};
-    return `[Graftling notice from ${body.alias ?? 'graftling'} · ${body.event ?? 'event'}]\n${body.message ?? JSON.stringify(body)}`;
+    const execution = body.execution ? ` · execution ${body.execution}` : '';
+    return `[Graftling notice from ${body.alias ?? 'graftling'} · ${body.event ?? 'event'}${execution}]\n${body.message ?? JSON.stringify(body)}`;
   }).join('\n\n');
 }
 

@@ -319,5 +319,6 @@ def test_owning_host_processes_events_during_and_after_tool_call(
     assert any(r['method'] == 'turn/steer' for r in inputs) == active
     for request in inputs:
         event = json.loads(request['params']['input'][0]['text'])
-        assert set(event) == {'source', 'alias', 'event', 'message'}
+        # 449: a notice also names the execution it reports, when its producer names one.
+        assert set(event) - {'execution'} == {'source', 'alias', 'event', 'message'}
         assert event['source'] == 'graphtraj'

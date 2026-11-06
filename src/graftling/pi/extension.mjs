@@ -104,7 +104,8 @@ export function deliverNotice(pi, notice, session, manager) {
   if (noticeInSession(manager, fact)) return true;
   pi.sendMessage({
     customType: 'graftling:agent-communication',
-    content: `[agents notice from ${alias} · ${event}]\n${message}`, display: true,
+    content: `[agents notice from ${alias} · ${event}${execution ? ` · execution ${execution}` : ''}]\n${message}`,
+    display: true,
     details: {fact, sender: alias, recipient: session, body: message,
       agent, execution, event, source: 'agents'},
   }, {triggerTurn: true, deliverAs: 'followUp'});

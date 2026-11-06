@@ -221,9 +221,12 @@ def notify_member_of_child_end(root: Path, alias: str, notice: Mapping[str, Any]
     from graphtraj.execution.runner_status import read_alias_mapping
 
     runner = runner_directory(root)
+    # ``execution`` names the ended execution, as the child's last_result.id.
     message = json.dumps({'source': 'graphtraj', 'alias': notice['agent'], 'event': notice['outcome'],
                           'message': notice['body'] or (notice.get('error') or {}).get('message')
-                          or notice['outcome']}, ensure_ascii=False)
+                          or notice['outcome'],
+                          **({'execution': notice['execution']} if notice.get('execution') else {})},
+                         ensure_ascii=False)
     deadline = time.monotonic() + OPERATION_TIMEOUT_SECONDS
     while True:
         try:

@@ -101,7 +101,7 @@ handler fails with that text, and the Session has no `agents` tool.
 - Ask it to use the `agents` tool, not DSH's own subagents, to create a Claude child that
   answers one word, and to `wait` for it before ending the task.
 - A notice appears in the Session as a relay message `[agents notice from <agent> ·
-  completed]` followed by the answer.
+  completed · execution <execution>]` followed by the answer.
 - `status` shows `last_result.notification: delivered` and `state: standby`.
 
 ## Children on other Runtimes

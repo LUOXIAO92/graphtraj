@@ -33,9 +33,10 @@ export function sessionEnvironment(agent) {
 
 /** The relay request that admits one host notice to its DSH main Session once. */
 export function noticeMessage(notice, session) {
-  const { id, agent, event, message } = notice;
+  const { id, agent, event, message, execution } = notice;
+  const named = execution ? ` · execution ${execution}` : '';
   return { id: `agents-notice:${id}`, sessionId: session, senderSessionId: notice.session || agent,
-    sender: agent, recipient: session, body: `[agents notice from ${agent} · ${event}]\n${message}` };
+    sender: agent, recipient: session, body: `[agents notice from ${agent} · ${event}${named}]\n${message}` };
 }
 
 /**

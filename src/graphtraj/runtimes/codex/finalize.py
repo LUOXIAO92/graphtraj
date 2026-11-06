@@ -245,7 +245,7 @@ def _member_notice(payload: dict) -> bool:
         notice = json.loads(payload['output'])
     except json.JSONDecodeError:
         return False
-    return (isinstance(notice, dict) and set(notice) == {'source', 'alias', 'event', 'message'}
+    return (isinstance(notice, dict) and set(notice) - {'execution'} == {'source', 'alias', 'event', 'message'}
             and notice['source'] == 'graphtraj')
 
 

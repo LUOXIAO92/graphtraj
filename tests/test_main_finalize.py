@@ -2696,7 +2696,7 @@ def test_codex_session_start_takes_an_earlier_claude_mains_undelivered_notices(h
     assert 'associated' in started['systemMessage']
     context = started['hookSpecificOutput']
     assert context['hookEventName'] == 'SessionStart'
-    assert '[GraphTraj notice from pending@l1 · failed]' in context['additionalContext']
+    assert '[GraphTraj notice from pending@l1 · failed · execution e2]' in context['additionalContext']
     assert 'Queued before the handover.' in context['additionalContext']
     assert 'delivered@l1' not in context['additionalContext']
     # Delivered once: neither a later entry of this Main nor the earlier Main gets it again.

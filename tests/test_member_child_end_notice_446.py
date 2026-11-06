@@ -102,7 +102,8 @@ def test_a_member_child_failed_or_interrupted_end_reaches_the_member_once(projec
     root, member, agents, sent, send, child = project
     status = child(outcome, **end)
     assert sent == [(MEMBER, {'source': 'graphtraj', 'alias': status['agent'], 'event': outcome,
-                              'message': text}, MEMBER, MEMBER, {'system_notice': True})]
+                              'message': text, 'execution': status['last_result']['id']},
+                     MEMBER, MEMBER, {'system_notice': True})]
     assert status['last_result']['notification'] == 'delivered'
 
 
@@ -116,7 +117,8 @@ def test_a_member_child_completed_round_without_members_brings_its_final_answer_
     *_, sent, send, child = project
     status = child('completed', last_message='the final answer')
     assert sent == [(MEMBER, {'source': 'graphtraj', 'alias': status['agent'], 'event': 'completed',
-                              'message': 'the final answer'}, MEMBER, MEMBER, {'system_notice': True})]
+                              'message': 'the final answer', 'execution': status['last_result']['id']},
+                     MEMBER, MEMBER, {'system_notice': True})]
     assert status['last_result']['notification'] == 'delivered'
     # Delivered once: the member's own status and wait do not repeat the body.
     assert status['last_result']['last_message'] is None

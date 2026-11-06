@@ -700,8 +700,9 @@ register_tool(
 register_tool(
     "swarm",
     "Activate the roles this swarm input selects and return each Agent's alias, "
-    "so later calls query, steer and continue it by that alias rather than by "
-    "another launch input. Equivalent to `agent-runner --swarm-input`.",
+    "its `agent` reference, Session and `execution_id`, so later calls query, steer, "
+    "stop and retire it by that alias or reference rather than by another launch "
+    "input. Equivalent to `agent-runner --swarm-input`.",
     _SWARM_SCHEMA,
     launch_swarm_tool,
     manual_ref="manuals/task-delivery/guide.md",

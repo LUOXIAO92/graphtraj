@@ -162,7 +162,8 @@ def send_event(connection: Mapping[str, Any], event: dict[str, str]) -> dict:
     from graphtraj.runtimes.codex.app_server import CodexAppServer
     from graphtraj.workspace.runner_project import discover_project_root, runtime_executable
 
-    if (set(event) != {'source', 'alias', 'event', 'message'}
+    # ``execution`` (the reported execution's ID) is the one optional field.
+    if (set(event) - {'execution'} != {'source', 'alias', 'event', 'message'}
             or event['source'] != 'graphtraj'
             or any(not isinstance(value, str) or not value for value in event.values())):
         raise RuntimeAdapterError('operation-failed', 'Invalid parent event')

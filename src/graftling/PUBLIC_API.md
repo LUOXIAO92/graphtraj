@@ -1146,6 +1146,14 @@ Delivery rules:
   `unavailable`. Once the body was delivered (or may have been), `status` and
   `wait` show `last_message: null` instead of repeating it; a queued or held
   body stays readable there.
+- Every end notice names the execution it reports in `execution`: the same
+  ID as that end's `last_result.id` and as the `execution` of the `create`,
+  `send` or `resume` result that started it. A parent whose child ran more
+  than once matches each notice to its run by it (449). Each host below
+  carries it in its notice document, and the text a host shows the model
+  ends its title with `· execution <id>`, for example `[Graftling notice
+  from <alias> · completed · execution <id>]`. A notice with no execution
+  keeps the title without it.
 - A failed or interrupted end notifies immediately, whatever the child's
   members are doing.
 - A completed round of a child that still has running members is recorded,
@@ -1195,7 +1203,7 @@ What the parent sees today:
   id is `<execution>:request:<request>`. It enables `request_notices`, for
   children of every Runtime it runs. The host plugin
   pushes it into the Main Session as `[Graftling notice from <alias> ·
-  <event>]` followed by the message; otherwise it is attached as
+  <event> · execution <execution>]` followed by the message; otherwise it is attached as
   `main_notices` to the next `agents` result. An end already shown by `wait`
   or `status` is not pushed again. It enables `hold_notices`: a notice stays
   held until the plugin acknowledges its submission (`{"operation":
@@ -1211,7 +1219,7 @@ What the parent sees today:
   `graftling.claude.host configuration --write` again: an earlier copy of the
   plugin never acknowledges, so its pushed notices repeat once per host process.
 - **Codex host:** one host event per notice, `{"source": "agents", "alias",
-  "event", "message"}`, sent to the parent Session while its turn runs. It
+  "event", "message", "execution"}` (`execution` since 449), sent to the parent Session while its turn runs. It
   enables `request_notices`, for children of every Runtime it runs (Codex,
   Claude, DSH, Pi). The `--output` document lists the notices in `deliveries` (`id`,
   `agent`, `event`, `parent_session`, `body`, `accepted`). It enables
@@ -1229,7 +1237,7 @@ What the parent sees today:
   of every Runtime it runs. Each notice is injected into the Pi Session with
   Pi's `pi.sendMessage` as a displayed custom message (`customType`
   `graftling:agent-communication`, content `[agents notice from <alias> ·
-  <event>]` and the message, `details.fact` `notice:<id>`, the id as for
+  <event> · execution <execution>]` and the message, `details.execution`, `details.fact` `notice:<id>`, the id as for
   Claude above), with `triggerTurn: true, deliverAs: "followUp"`: an idle
   Session starts a turn with it, a busy one receives it after the current
   turn's work. Pi writes the message to the Session only when a turn takes it
@@ -1338,7 +1346,7 @@ What the parent sees today:
   which hands it to the existing `agentMessages.receive` relay
   (`dsh/communication.mjs`): one native `agent-message` relay message from
   the child's Agent and Session, text `[agents notice from <agent> ·
-  <event>]` followed by the message, communication id `agents-notice:<id>`,
+  <event> · execution <execution>]` followed by the message, communication id `agents-notice:<id>`,
   placed in the Session's next-step inbox with a wake. The relay admits one
   id once per Session, including across processes, by looking for it in the
   Session's persisted events and inbox (`communication.mjs` `deliver`); that is

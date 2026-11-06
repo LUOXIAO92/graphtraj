@@ -14,6 +14,13 @@ The numbers in parentheses are the project's Task numbers.
 
 ## Unreleased (compatible)
 
+- Each end notice names the execution it reports (449). The Codex host event gains
+  `execution`, the same ID as the end's `last_result.id`; the Claude Code queue record,
+  the Pi `details` and the DSH notice already held it. The text shown to the model ends
+  its title with `· execution <id>` on the Claude Code, Pi and DSH hosts, for example
+  `[Graftling notice from <alias> · completed · execution <id>]`. A new field and a longer
+  title are compatible under section 7; a reader matching the title up to the event is
+  unaffected.
 - A Claude Code marketplace package (418): `.claude-plugin/marketplace.json` at the
   repository root lists the plugin `graftling` in `src/graftling/claude-plugin/`. It
   starts the `agents` host without `configuration --write`, finds its Python through

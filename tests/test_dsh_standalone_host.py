@@ -504,7 +504,7 @@ def test_plugin_host_row_relays_each_notice_to_its_main_session(tmp_path: Path) 
     first = shown['received'][0]
     assert (first['sessionId'], first['recipient'], first['sender'], first['senderSessionId']) == (
         'dsh-main', 'dsh-main', 'agent-1', 'child-session')
-    assert first['body'] == '[agents notice from agent-1 · completed]\nthe answer'
+    assert first['body'] == '[agents notice from agent-1 · completed · execution exec-1]\nthe answer'
     assert log['acknowledgements'] == [{'ack': 'exec-1:completed', 'shown': True},
                                        {'ack': 'exec-2:failed', 'shown': False},
                                        {'ack': 'exec-3:request:t', 'shown': True}]

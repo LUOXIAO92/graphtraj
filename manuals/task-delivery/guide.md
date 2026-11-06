@@ -36,7 +36,10 @@ changing the common completion protocol.
 
 Formal dispatch uses MCP `swarm` with the selected role, instruction and ready
 Task ID, following its installed input schema. Reuse the registered definition and
-returned aliases. Supply external role instructions and explicitly selected
+the returned `alias` or `agent`: the `agents` tool's `status`, `wait`, `send`,
+`interrupt` and `retire` accept either, and `execution_id` names the launched
+execution. Each end notice names its execution in `execution`. `agents` `status`
+without an Agent lists a member's `agents` children in its `task_sessions` node. Supply external role instructions and explicitly selected
 resources through the configured Runtime's supported mechanisms; GraphTraj
 does not choose a professional Skill by its name.
 If child dispatch returns `registered`, end that dispatch turn so the existing

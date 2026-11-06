@@ -138,6 +138,8 @@ def notify_direct_parent(
         message = json.dumps({
             "source": "graphtraj", "alias": mapping["alias"],
             "event": event, "message": notice,
+            # The execution the notice reports, when its producer names one.
+            **_execution_field(identity),
         }, ensure_ascii=False)
         record["notice"] = message
         parent = mapping.get("parent")
@@ -179,12 +181,11 @@ def notify_direct_parent(
             # Once the parent's host takes the notice, await its own receipt:
             # a late receipt must not make retries forward the notice twice.
             event = json.loads(message)
-            if isinstance(address, Mapping) and address.get("runner") and (identity or {}).get("execution_id"):
-                # A queued Main host identifies one execution's notice by it,
-                # and one native request's notice also by that request.
-                event["execution"] = identity["execution_id"]
-                if identity.get("request_id") is not None:
-                    event["request_id"] = identity["request_id"]
+            if (isinstance(address, Mapping) and address.get("runner") and "execution" in event
+                    and identity.get("request_id") is not None):
+                # A queued Main host identifies one execution's notice by its
+                # ``execution``, and one native request's notice also by that request.
+                event["request_id"] = identity["request_id"]
             connection_operation(address, event, await_accepted=True)
             record["delivery"] = "received"
     except RunnerError as error:
@@ -481,6 +482,12 @@ def active_members(runner_directory: Path, alias: str) -> int:
     return count
 
 
+def _execution_field(identity: Mapping[str, Any] | None) -> Dict[str, str]:
+    """Return a notice's ``execution`` field: the reported execution's ID, when known."""
+    execution = (identity or {}).get("execution_id")
+    return {"execution": execution} if isinstance(execution, str) and execution else {}
+
+
 def retain_parent_receipt(
     session_directory: Path, notice: str, identity: Mapping[str, Any],
     *, held: str | None = None,
@@ -498,7 +505,8 @@ def retain_parent_receipt(
         **({"held": held} if held is not None else {}),
         "parent": mapping.get("parent") if isinstance(mapping.get("parent"), str) else None,
         "notice": json.dumps({"source": "graphtraj", "alias": mapping["alias"],
-                              "event": identity["type"], "message": notice}, ensure_ascii=False),
+                              "event": identity["type"], "message": notice,
+                              **_execution_field(identity)}, ensure_ascii=False),
     }
     if record["parent"] is None and mapping.get("parent_connection") is not None:
         record["parent_connection"] = _current_main_address(

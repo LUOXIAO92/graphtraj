@@ -399,9 +399,13 @@ def queue_host_notice(connection: Mapping[str, Any], event: Mapping[str, Any]) -
 
 
 def render_notices(notices: list[dict]) -> str:
-    """Return queued notices as one plain-text Main input, as the Claude host shows them."""
+    """Return queued notices as one plain-text Main input, as the Claude host shows them.
+
+    A notice that names its execution shows it after the event.
+    """
     return '\n\n'.join(
-        f"[GraphTraj notice from {item['event'].get('alias', 'graphtraj')} · {item['event'].get('event', 'event')}]\n"
+        f"[GraphTraj notice from {item['event'].get('alias', 'graphtraj')} · {item['event'].get('event', 'event')}"
+        f"{' · execution ' + item['event']['execution'] if item['event'].get('execution') else ''}]\n"
         f"{item['event'].get('message', json.dumps(item['event'], ensure_ascii=False))}"
         for item in notices
     )

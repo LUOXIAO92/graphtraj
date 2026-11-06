@@ -112,7 +112,8 @@ def test_codex_host_runs_a_claude_child_end_to_end(
         assert child['last_result']['last_message'] is None
         selection = json.loads((tmp_path / 'native-selection.json').read_text())
         assert (selection['model'], selection['effort']) == ('claude-sonnet-5-5', 'high')
-        assert events(log) == [{'source': 'agents', 'alias': agent, 'event': 'completed', 'message': 'hello'}]
+        assert events(log) == [{'source': 'agents', 'alias': agent, 'event': 'completed', 'message': 'hello',
+                                'execution': created['execution']}]
 
         # A repeated end report for the same execution notifies nobody again,
         # and reading the result through wait/status does not repeat it either.

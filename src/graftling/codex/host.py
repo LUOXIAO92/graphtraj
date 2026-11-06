@@ -273,7 +273,9 @@ class CodexHost(CodexManagedExecution):
         # The backend calls this only after retaining the child's native outcome.
         # No model-provided string or Session ID selects the recipient.
         message = notice['body'] or (notice.get('error') or {}).get('message') or notice['outcome']
-        event = {'source': 'agents', 'alias': notice['agent'], 'event': notice['outcome'], 'message': message}
+        # ``execution`` names the ended execution, as the child's last_result.id.
+        event = {'source': 'agents', 'alias': notice['agent'], 'event': notice['outcome'], 'message': message,
+                 **({'execution': notice['execution']} if notice.get('execution') else {})}
         # Once submitted, a lost acknowledgement is unconfirmed, not held.
         # Let the existing backend retain that distinction and suppress duplicates.
         try:

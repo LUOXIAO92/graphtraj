@@ -78,7 +78,8 @@ def test_a_root_end_is_pushed_once_to_the_codex_main(tmp_path: Path, sent: list)
     mc.claim_main(runner, _codex(tmp_path), 'codex:SessionStart:startup')
     assert _agents(tmp_path)._main_notice(_notice()) is True
     assert sent == [(str(tmp_path / 'codex-home'), SESSION, {
-        'source': 'graphtraj', 'alias': 'agent-probe', 'event': 'completed', 'message': 'PONG'})]
+        'source': 'graphtraj', 'alias': 'agent-probe', 'event': 'completed', 'message': 'PONG',
+        'execution': 'e1'})]
     # Nothing waits in a pull-only Main queue as well.
     assert _inboxes(runner) == []
     for runtime in mc.QUEUED_RUNTIMES:

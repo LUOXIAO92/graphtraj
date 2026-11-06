@@ -475,9 +475,9 @@ def test_extension_injects_each_notice_natively_and_acknowledges_it(tmp_path: Pa
     assert [item['options'] for item in sent] == [{'triggerTurn': True, 'deliverAs': 'followUp'}] * 2
     first = sent[0]['message']
     assert first['customType'] == 'graftling:agent-communication' and first['display'] is True
-    assert first['content'] == '[agents notice from agent-1 · completed]\nthe answer'
+    assert first['content'] == '[agents notice from agent-1 · completed · execution exec-1]\nthe answer'
     assert first['details']['fact'] == 'notice:exec-1:completed'
-    assert sent[1]['message']['content'].endswith('· failed]\nprovider refused')
+    assert sent[1]['message']['content'].endswith('· failed · execution exec-2]\nprovider refused')
     assert acknowledgements == [{'ack': 'exec-1:completed', 'queued': True},
                                 {'ack': 'exec-2:failed', 'queued': True}]
 

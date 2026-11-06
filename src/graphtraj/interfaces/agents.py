@@ -155,6 +155,27 @@ def mapped_task_ids(directory: Path) -> list[str]:
     return [mapping['task_id']] if isinstance(mapping, dict) and mapping.get('task_id') else []
 
 
+def _list_agent_children(sessions: Mapping[str, Any], agents: Mapping[str, Any]) -> None:
+    """Name each Session's visible agents-tool children in its ``task_sessions`` node.
+
+    A Task member's ``agents`` children record the member's alias as their
+    ``parent``. Its node lists their Agent references after its Session
+    aliases, and their status is the matching node of ``agents``.
+    """
+    under: dict[str, list[str]] = {}
+    pending = list(agents.get("agents") or [])
+    while pending:
+        node = pending.pop()
+        if isinstance(node, Mapping):
+            pending.extend(node.get("children") or [])
+            if isinstance(node.get("parent"), str) and isinstance(node.get("agent"), str):
+                under.setdefault(node["parent"], []).append(node["agent"])
+    for node in sessions.get("agents") or []:
+        if isinstance(node, dict) and node.get("alias") in under:
+            node["children"] = [*node.get("children", []),
+                                *sorted(set(under[node["alias"]]) - set(node.get("children", [])))]
+
+
 class GraphTrajAgents:
     """Run ``agents`` actions through the core, keeping Task member controls.
 
@@ -218,10 +239,12 @@ class GraphTrajAgents:
         message = notice['body'] or (notice.get('error') or {}).get('message') or notice['outcome']
         adapter = select_runtime_adapter(current['runtime'])
         if current['runtime'] not in QUEUED_RUNTIMES:
-            # A push host accepts only the four-field parent event of a Task member's notice.
+            # A push host accepts the parent event of a Task member's notice.
             try:
                 adapter.send_host_event(address, {'source': 'graphtraj', 'alias': notice['agent'],
-                                                  'event': notice['outcome'], 'message': message})
+                                                  'event': notice['outcome'], 'message': message,
+                                                  **({'execution': notice['execution']}
+                                                     if notice.get('execution') else {})})
             except RuntimeAdapterError as error:
                 if error.code == 'delivery-unconfirmed':
                     return 'unconfirmed'
@@ -379,7 +402,9 @@ class GraphTrajAgents:
     def _hierarchy(self, binding: Binding) -> Outcome:
         """Return the caller's own Agents and its real Task member hierarchy.
 
-        A Task member caller adds the Sessions recorded under it. A native
+        A Task member caller adds the Sessions recorded under it; each
+        ``task_sessions`` node also lists the Agent references of its
+        visible ``agents`` children (``_list_agent_children``). A native
         Main adds the top-level Sessions it dispatched, as recorded by their
         ``parent_connection``, with their subtrees. Each in-scope node keeps
         its own error. Unrelated history is never scanned into this view;
@@ -404,6 +429,7 @@ class GraphTrajAgents:
                 current_members=self._current_members())
         else:
             sessions = status_tree(self.root)
+        _list_agent_children(sessions.document, agents.result)
         return Outcome(_preview({**agents.result, "task_sessions": sessions.document}),
                        failed=not sessions.succeeded)
 

@@ -116,8 +116,11 @@ class HostTool:
         directory.mkdir(parents=True, exist_ok=True)
 
         def receive(message: dict) -> dict:
-            """Forward only a four-field event; failures remain retryable by its producer."""
-            if (set(message) != {'source', 'alias', 'event', 'message'}
+            """Forward only a parent event (four fields and an optional ``execution``).
+
+            Failures remain retryable by its producer.
+            """
+            if (set(message) - {'execution'} != {'source', 'alias', 'event', 'message'}
                     or message['source'] != 'graphtraj'
                     or any(not isinstance(value, str) or not value for value in message.values())):
                 raise ValueError('Invalid parent event')

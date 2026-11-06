@@ -18,6 +18,7 @@ from .trace import CodexNativeTrace
 from graftling import __version__
 from graftling.runtime import RuntimeContext, RuntimeExecutionResult
 from graftling.codex.websocket import CodexWebSocket
+from graftling.member_processes import MEMBER_RUN_ENV
 
 
 _DEFAULT_TIMEOUT = object()
@@ -155,6 +156,8 @@ class CodexAppServer:
         self._command = tuple(command)
         self._environment = {key: value for key, value in {**os.environ, **(environment or {})}.items()
                              if value is not None}
+        # A managed child is not the parent member's escaped tool process (450).
+        self._environment.pop(MEMBER_RUN_ENV, None)
         # A variable the caller removed on purpose is no connection mismatch.
         self._default_connection = {
             name: os.environ.get(name) for name in ('OPENAI_BASE_URL', 'OPENAI_API_KEY')

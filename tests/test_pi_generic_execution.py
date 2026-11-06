@@ -1,6 +1,7 @@
 """A Task-free Pi child from the generic request; GraphTraj Pi members unchanged."""
 
 import json
+import re
 from pathlib import Path
 import shutil
 import subprocess
@@ -165,4 +166,9 @@ def test_graphtraj_member_launch_matches_base() -> None:
                 # Since 433 a launch also removes credential-class names; all else matches the base.
                 environment = scenario['environment']
                 environment['removed'] = [name for name in environment['removed'] if not is_credential_name(name)]
+    # Since 450 a member launch adds its own random process marker; check its shape, not its value.
+    for name, scenario in actual.items():
+        if name != 'destinations':
+            marker = scenario['environment']['changed'].pop('GRAFTLING_MEMBER_RUN')
+            assert re.fullmatch(r'[0-9a-f]{32}', marker), name
     assert actual == goldens

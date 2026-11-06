@@ -11,6 +11,18 @@ import uuid
 from datetime import datetime, timezone
 
 
+ESCAPED = """
+import os, sys, time
+if os.fork():
+    os._exit(0)
+os.setsid()
+with open(sys.argv[1] + '.tmp', 'w') as stream:
+    stream.write(str(os.getpid()))
+os.replace(sys.argv[1] + '.tmp', sys.argv[1])
+time.sleep(300)
+"""
+
+
 def emit(value: dict) -> None:
     """Send one native protocol record."""
     global parent_uuid
@@ -290,6 +302,17 @@ def prompt(message: dict) -> None:
         review_log({'answer': text})
         review_steps.extend(review_script.get('on_accept' if 'you may retry' in text else 'on_decline', []))
         next_review_step()
+    elif text.startswith('escape '):
+        # As Claude Code runs a Bash tool command in its own session, a
+        # `(nohup job &)` leaves the Runtime's group and is re-parented to PID 1.
+        record = Path(text.removeprefix('escape '))
+        subprocess.Popen([sys.executable, '-c', ESCAPED, str(record)], start_new_session=True,
+                         stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                         stderr=subprocess.DEVNULL).wait()
+        deadline = time.monotonic() + 10
+        while not record.exists() and time.monotonic() < deadline:
+            time.sleep(0.02)
+        result('escaped')
     elif text == 'helper-stop':
         helper_stop()
     elif text == 'garbage':
@@ -430,12 +453,15 @@ for line in sys.stdin:
             if os.environ.get('CLAUDE_FIXTURE_ESCAPED_PIPE'):
                 # A tool child outside the owned group keeps stdout open until
                 # the test releases it (bounded, so it never outlives the test).
+                # It drops the member marker, as a process started with a
+                # cleared environment would: nothing proves it is the member's.
                 child = subprocess.Popen([sys.executable, '-c', (
                     'import os,sys,time\n'
                     'deadline = time.monotonic() + 120\n'
                     'while not os.path.exists(sys.argv[1]) and time.monotonic() < deadline:\n'
                     '    time.sleep(0.05)\n'), os.environ['CLAUDE_FIXTURE_ESCAPED_PIPE'] + '.release'],
-                    start_new_session=True)
+                    start_new_session=True,
+                    env={key: value for key, value in os.environ.items() if key != 'GRAFTLING_MEMBER_RUN'})
                 Path(os.environ['CLAUDE_FIXTURE_ESCAPED_PIPE']).write_text(str(child.pid))
             if os.environ.get('CLAUDE_FIXTURE_NO_SETTLE'):
                 continue

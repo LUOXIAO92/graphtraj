@@ -13,6 +13,8 @@ from importlib.metadata import entry_points
 import re
 from typing import Iterable, Mapping
 
+from graftling.member_processes import MEMBER_RUN_ENV
+
 # One `_`-separated part of a name ending in a marker: HF_TOKEN, PGPASSWORD, APIKEY.
 _CREDENTIAL_PART = re.compile(r'(?:KEY|TOKEN|SECRET|SECRETS|PASSWORD|CREDENTIAL|CREDENTIALS)$')
 
@@ -134,4 +136,6 @@ def child_environment(
     if review_key and review_key != api_key_env:
         # The reviewer's key stays with this host, away from the child it judges.
         environment.pop(review_key, None)
+    # A managed child is not the parent member's escaped tool process (450).
+    environment.pop(MEMBER_RUN_ENV, None)
     return environment

@@ -8,6 +8,10 @@ from typing import Any, Dict, Optional, Tuple
 
 from graphtraj.configuration.project_roles import ProjectRoles, RolePreset
 
+# Environment name of a member execution's process marker; graftling sets it on each
+# member launch. A managed child or Worker must not inherit it (450).
+MEMBER_RUN_ENV = 'GRAFTLING_MEMBER_RUN'
+
 
 PUBLIC_ERROR_CODES = frozenset(
     {

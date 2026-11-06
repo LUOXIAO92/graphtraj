@@ -68,6 +68,7 @@ from graphtraj.execution.runner_status import (
 from graphtraj.execution.runner_transport import record_runtime_identity
 from graphtraj.runtimes import runtime_adapter
 from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError
+from graphtraj.execution.runner_models import MEMBER_RUN_ENV
 from graphtraj.graph.task_graph import _load_states, _result_complete
 
 
@@ -369,6 +370,7 @@ def _run_batch_workers(
             for index, position in enumerate(positions):
                 try:
                     environment = dict(os.environ)
+                    environment.pop(MEMBER_RUN_ENV, None)  # managed, not escaped (450)
                     environment.pop("GRAPHTRAJ_PARENT_CONNECTION", None)
                     host = current_parent_connection()
                     if not parent_alias and host is not None:
@@ -1324,6 +1326,7 @@ def _run_session_worker(
     )
     error.unlink(missing_ok=True)
     worker_environment = dict(os.environ)
+    worker_environment.pop(MEMBER_RUN_ENV, None)  # managed, not escaped (450)
     worker_environment.update(runtime_environment)
     worker_environment["GRAPHTRAJ_CAPACITY_FD"] = str(capacity_fd)
     notice_fd, close_notice_fd = caller_notice_fd()

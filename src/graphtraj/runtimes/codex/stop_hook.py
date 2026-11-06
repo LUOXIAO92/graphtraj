@@ -179,7 +179,22 @@ def main(
         """Preserve a host cancellation instead of interpreting it as an error."""
         raise KeyboardInterrupt
 
-    signal.signal(signal.SIGTERM, interrupted)
+    # Restored on return: an in-process caller (a test runner) must not keep
+    # turning its own later SIGTERM into a KeyboardInterrupt raised here.
+    previous = signal.signal(signal.SIGTERM, interrupted)
+    try:
+        _main(binding, hook_session, configuration, project_root)
+    finally:
+        signal.signal(signal.SIGTERM, previous)
+
+
+def _main(
+    binding: Path | None,
+    hook_session: str | None,
+    configuration: bool,
+    project_root: Path | None,
+) -> None:
+    """Handle one hook event under main's SIGTERM handler."""
     if configuration:
         from graphtraj.runtimes.codex.finalize import hook
 

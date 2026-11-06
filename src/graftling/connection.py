@@ -112,12 +112,20 @@ def worker_connection(
                     raise
 
         def serve() -> None:
-            """Keep polling until stopped: one failed pass must not refuse every later call."""
+            """Keep polling until stopped: one failed pass must not refuse every later call.
+
+            A removed control directory cannot receive another request, so the
+            service stops once, with its reason, instead of polling a missing path.
+            """
             next_log = 0.0
             while not stop.is_set():
                 try:
                     take_requests()
                 except BaseException as error:  # noqa: BLE001 - this thread's last line of defence
+                    if not os.path.isdir(address):
+                        _log_text(f'Agents control directory {address} no longer exists; '
+                                  'its connection service stopped.')
+                        return
                     if time.monotonic() >= next_log:
                         next_log = time.monotonic() + SERVE_LOG_SECONDS
                         _log_failure(error)
@@ -140,7 +148,7 @@ def worker_connection(
             # A caller removes its request directory after consuming the reply.
             # Keep acknowledged results available across fast native completion.
             deadline = limit if limit is not None else time.monotonic() + OPERATION_TIMEOUT_SECONDS
-            while any(Path(address).iterdir()) and time.monotonic() < deadline:
+            while _has_entries(address) and time.monotonic() < deadline:
                 time.sleep(0.01)
             stop.set()
             thread.join()
@@ -218,6 +226,22 @@ def _answer_request(
     except OSError as error:
         # The caller cannot be told; the host keeps why it was left waiting.
         _log_failure(error)
+
+
+def _has_entries(address: str) -> bool:
+    """Whether requests remain; a removed directory holds none."""
+    try:
+        return any(Path(address).iterdir())
+    except FileNotFoundError:
+        return False
+
+
+def _log_text(text: str) -> None:
+    """Write one line to the host log; an unwritable log never stops the channel."""
+    try:
+        print(text, file=sys.stderr, flush=True)
+    except BaseException:  # noqa: BLE001 - diagnostics only
+        pass
 
 
 def _log_failure(error: BaseException) -> None:

@@ -37,6 +37,7 @@ from graphtraj.execution.execution_budget import (
 )
 from graphtraj.execution.runner_heartbeat import ownership_is_held, read_heartbeat
 from graphtraj.execution.runner_models import RunnerError
+from graftling.member_processes import MEMBER_RUN_ENV
 
 TIMER_FILE_NAME = "budget-timer.yml"
 # Sleep in short slices so a replaced or cleaned Session's timer exits soon.
@@ -57,7 +58,8 @@ def start_idle_budget_timer(session_directory: Path, monitor: ExecutionBudgetMon
         [sys.executable, "-I", "-m", "graphtraj.execution.budget_idle_timer", str(session_directory), token,
          str(os.getpid())],
         stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-        start_new_session=True, close_fds=True, env=os.environ.copy(),
+        start_new_session=True, close_fds=True,
+        env={key: value for key, value in os.environ.items() if key != MEMBER_RUN_ENV},
     )
     return token
 

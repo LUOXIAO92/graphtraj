@@ -59,6 +59,7 @@ from graphtraj.execution.runner_status import (
     _terminal_unestablished_launch,
 )
 from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError
+from graftling.member_processes import MEMBER_RUN_ENV
 
 
 SESSION_IMMUTABLE_MAPPING_FIELDS = SESSION_BINDING_FIELDS + (
@@ -1265,6 +1266,8 @@ def _send_session_locked(
             resume,
         )
         worker_environment = dict(os.environ)
+        # A managed Worker is not the calling member's escaped tool process (450).
+        worker_environment.pop(MEMBER_RUN_ENV, None)
         worker_environment.update(_resume_environment(mapping, connection))
         worker_environment.update(team_environment)
         # Every resumed Session carries its own Agent Entity alias, so its

@@ -99,3 +99,31 @@ def test_claude_member_without_escape_records_none(tmp_path: Path, claude_enviro
     assert 'escaped_processes' not in result
     termination = yaml.safe_load((turn.directory / f'claude-termination-{turn.execution_id}.yml').read_text())
     assert termination['escaped_processes'] == {'found': [], 'stopped': [], 'remaining': []}
+
+
+def test_child_environment_drops_the_parent_member_marker() -> None:
+    """A managed child must not carry its parent member's marker, or it would be stopped with it."""
+    from graftling.child_env import child_environment
+
+    environment = child_environment({MEMBER_RUN_ENV: 'parent-marker', 'PATH': '/usr/bin'})
+    assert MEMBER_RUN_ENV not in environment and environment['PATH'] == '/usr/bin'
+
+
+def test_runner_worker_environment_drops_the_member_marker(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A Worker started from a member's agents tool host is managed, not the member's escapee."""
+    from graphtraj.teams import team_round
+
+    seen: dict = {}
+
+    def refuse(command: object, **options: object) -> None:
+        seen.update(options['env'])
+        raise OSError('observed only')
+
+    monkeypatch.setenv(MEMBER_RUN_ENV, 'parent-marker')
+    monkeypatch.setattr(team_round.subprocess, 'Popen', refuse)
+    session = tmp_path / 'session'
+    session.mkdir()
+    with pytest.raises(Exception):
+        team_round._run_session_worker(session, session / 'launch.yml', tmp_path, 'prompt', {}, 3, None)
+    assert seen and MEMBER_RUN_ENV not in seen and seen['PATH'] == os.environ['PATH']

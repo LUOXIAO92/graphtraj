@@ -346,13 +346,8 @@ def apply_delivery_state_request(
                 (team_directory / "rounds" / str(round_ordinal + 1)).mkdir(parents=True)
             if close_round:
                 round_directory = team_directory / "rounds" / str(round_ordinal)
-                # Freeze the Round's reports. Hidden entries (a Runtime's
-                # ``.claude`` write marker) are foreign and stay untouched.
-                reports = ([path for path in round_directory.iterdir() if not path.name.startswith(".")]
-                           if round_directory.exists() else [])
-                for path in ((*reports, round_directory) if round_directory.exists() else ()):
-                    previous_modes[path] = path.stat().st_mode & 0o777
-                    path.chmod(0o444 if path != round_directory else 0o555)
+                if round_directory.exists():
+                    _freeze_round(round_directory, previous_modes)
         except Exception:
             if retained is not None and retained.exists():
                 shutil.rmtree(retained)
@@ -631,6 +626,29 @@ def _restore_team(
             directory.parent.rmdir()
     else:
         _restore(path, content)
+
+
+def _freeze_round(round_directory: Path, previous_modes: dict[Path, int]) -> None:
+    """Make a closed Round's tree read-only while keeping its directories enterable.
+
+    Files become 0o444 and directories 0o555, recursively. Top-level hidden
+    entries (a Runtime's ``.claude`` write marker) are foreign and stay
+    untouched; symlinks are neither changed nor followed. Each changed path's
+    previous mode is recorded so a failed transition can restore it.
+    """
+    pending = [round_directory]
+    while pending:
+        directory = pending.pop()
+        for path in directory.iterdir():
+            if path.is_symlink() or (directory == round_directory and path.name.startswith(".")):
+                continue
+            if path.is_dir():
+                pending.append(path)
+            elif path.is_file():
+                previous_modes[path] = path.stat().st_mode & 0o777
+                path.chmod(0o444)
+        previous_modes[directory] = directory.stat().st_mode & 0o777
+        directory.chmod(0o555)
 
 
 def _restore_modes(modes: Mapping[Path, int]) -> None:

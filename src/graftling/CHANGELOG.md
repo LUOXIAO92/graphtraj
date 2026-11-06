@@ -20,7 +20,10 @@ The numbers in parentheses are the project's Task numbers.
   `GRAFTLING_PYTHON` and then `python3` on `PATH`, and says what to install when neither
   imports `graftling`. `graftling.claude.host serve --project` and
   `context --project-from` are its entries. A project with `configuration --write`
-  material keeps that host; the plugin's host refuses there. Untried on a real host.
+  material keeps that host; the plugin's host refuses there. Seen on a real host in
+  `claude -p` only: installed from a local marketplace at project scope, it created a
+  Claude child and `wait` returned it completed. Interactive use, `/agents-context` and
+  notice push are untried.
 
 ## 0.5.0 (incompatible)
 

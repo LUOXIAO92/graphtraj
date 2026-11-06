@@ -24,13 +24,15 @@ What it does:
   with one `claude -p` line.
 - 01: the `claude -p` Main dispatches the member through `mcp__agents__tasks`
   (`swarm`) and prints the raw result. The member uses the `agents` tool to create
-  one Claude child (`PONG-449-A`), ends its turn, and on that child's end notice
+  one Claude child (`PONG-449-A`, no `model`: the child takes the native login's default, since the login rejects `claude-opus-5-5` as a child model), ends its turn, and on that child's end notice
   sends it once more (`PONG-449-B`). On the second notice it calls `agents status`
   without an Agent and replies with every parent input verbatim, the create and
   send executions and the raw status. Main polls with `probe.py wait` (each call at
   most 100 s, no standalone sleep), then calls `agents status` and `agents retire`
   with the swarm result's `agent`.
-- 02 checks:
+- 02 reads the member's records where they are: `runner/sessions/<alias>`, or, after Main's
+  retire moved them, `state/tasks/1-*/teams/*/traces/<alias>/runner` (`mapping.yml`, else
+  `session.yml` `retirement.mapping`). It checks:
   1. the swarm result has `agent`, equal to the member's mapping `agent`; the
      member's `task_sessions` node lists the child's Agent reference;
   2. the child has two ended executions; each has exactly one distinct end notice in

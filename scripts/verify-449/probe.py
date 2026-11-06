@@ -104,7 +104,26 @@ def plugins(stream: Path, _unused: str) -> int:
 
 
 def member_sessions(project: Path) -> list[Path]:
-    return sorted(project.glob('.graphtraj/runner/sessions/1-*team_leader*'))
+    """Active member records, then those retirement moved into the Task Traces."""
+    return (sorted(project.glob('.graphtraj/runner/sessions/1-*team_leader*'))
+            + sorted(project.glob('.graphtraj/state/tasks/1-*/teams/*/traces/1-*team_leader*/runner')))
+
+
+def alias_of(directory: Path) -> str:
+    return directory.parent.name if directory.name == 'runner' else directory.name
+
+
+def member_mapping(project: Path, alias: str) -> tuple[dict, Path | None]:
+    """The member's mapping: mapping.yml, else a retired record's session.yml retirement.mapping."""
+    for directory in member_sessions(project):
+        if alias_of(directory) != alias:
+            continue
+        if (directory / 'mapping.yml').is_file():
+            return yaml.safe_load((directory / 'mapping.yml').read_text()) or {}, directory
+        if (directory / 'session.yml').is_file():
+            record = yaml.safe_load((directory / 'session.yml').read_text()) or {}
+            return ((record.get('retirement') or {}).get('mapping') or {}), directory
+    return {}, None
 
 
 def final_report(project: Path) -> tuple[str | None, str | None]:
@@ -114,7 +133,7 @@ def final_report(project: Path) -> tuple[str | None, str | None]:
         if execution.is_file():
             message = (yaml.safe_load(execution.read_text()) or {}).get('last_agent_message') or ''
             if END in message:
-                return directory.name, message
+                return alias_of(directory), message
     return None, None
 
 
@@ -126,9 +145,9 @@ def wait(project: Path, seconds: str) -> int:
             print(f'{now()} MEMBER-DONE {alias}')
             return 0
         if time.time() >= deadline:
-            ends = [(d.name, (yaml.safe_load((d / 'execution.yml').read_text()) or {}).get('outcome'))
+            ends = [(alias_of(d), (yaml.safe_load((d / 'execution.yml').read_text()) or {}).get('outcome'))
                     for d in member_sessions(project) if (d / 'execution.yml').is_file()]
-            print(f'{now()} member not done yet; member sessions: {[d.name for d in member_sessions(project)]} ends: {ends}')
+            print(f'{now()} member not done yet; member sessions: {[str(d.relative_to(project)) for d in member_sessions(project)]} ends: {ends}')
             return 0
         time.sleep(3)
 
@@ -238,8 +257,8 @@ def observe(project: Path, stream_path: str) -> int:
     agent, alias = task.get('agent'), task.get('alias')
     results.append(check('1 swarm result has agent', isinstance(agent, str) and agent.startswith('agent-'),
                          f'agent={agent} alias={alias} execution_id={task.get("execution_id")} launch_status={task.get("launch_status")}'))
-    mapping_file = project / '.graphtraj/runner/sessions' / str(alias) / 'mapping.yml'
-    mapping = yaml.safe_load(mapping_file.read_text()) if mapping_file.is_file() else {}
+    mapping, record_directory = member_mapping(project, str(alias))
+    print('   member record:', record_directory and record_directory.relative_to(project))
     results.append(check('1 swarm agent equals the member mapping agent', bool(agent) and mapping.get('agent') == agent,
                          f'mapping.agent={mapping.get("agent")}'))
     for feature in ('status', 'retire'):
@@ -250,8 +269,9 @@ def observe(project: Path, stream_path: str) -> int:
         body = loads(call and call['result'])
         failed = call is None or call['is_error'] or (isinstance(body, dict) and 'error' in body)
         results.append(check(f'3 Main agents {feature} accepts the swarm agent id', bool(agent) and not failed))
-    retired = (yaml.safe_load(mapping_file.read_text()) or {}).get('retire_status') if mapping_file.is_file() else None
-    print('   member retire_status now:', retired)
+    now_mapping, now_directory = member_mapping(project, str(alias))
+    print('   member retire_status now:', now_mapping.get('retire_status'),
+          '| record:', now_directory and now_directory.relative_to(project))
 
     records = [loads(path.read_text()) for path in sorted((project / '.graphtraj/swarm/control/agents').glob('*.json'))]
     children = [r for r in records if isinstance(r, dict) and r.get('parent') in {alias, agent} and alias]

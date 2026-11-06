@@ -26,7 +26,8 @@ def hanging_suite(tmp_path: Path) -> tuple[Path, Path]:
         'import os, subprocess, sys, time\n'
         'def test_hang():\n'
         '    child = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(300)"])\n'
-        f'    open({str(pids)!r}, "w").write(f"{{os.getpid()}} {{child.pid}}")\n'
+        f'    open({str(pids)!r} + ".tmp", "w").write(f"{{os.getpid()}} {{child.pid}}")\n'
+        f'    os.replace({str(pids)!r} + ".tmp", {str(pids)!r})\n'
         '    time.sleep(300)\n')
     (tests / 'test_quick.py').write_text('def test_quick():\n    assert True\n')
     return tests, pids

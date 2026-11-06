@@ -37,7 +37,7 @@ from graphtraj.execution.execution_budget import (
 )
 from graphtraj.execution.runner_heartbeat import ownership_is_held, read_heartbeat
 from graphtraj.execution.runner_models import RunnerError
-from graftling.member_processes import MEMBER_RUN_ENV
+from graphtraj.execution.runner_models import MEMBER_RUN_ENV
 
 TIMER_FILE_NAME = "budget-timer.yml"
 # Sleep in short slices so a replaced or cleaned Session's timer exits soon.

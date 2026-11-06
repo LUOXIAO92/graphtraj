@@ -616,8 +616,9 @@ class PiExecution:
                             # still carrying this execution's marker.
                             from graftling.review import redact
 
-                            evidence['escaped_processes'] = redact(
-                                stop_marked_processes(self.member_marker, {self.proc.pid}))
+                            escaped = redact(stop_marked_processes(self.member_marker, {self.proc.pid}))
+                            if escaped['found'] or escaped.get('error'):
+                                evidence['escaped_processes'] = escaped
                         self.record_process(self.proc.pid, evidence)
                     if self.stderr_reader is not None:
                         self.stderr_reader.join(timeout=5)

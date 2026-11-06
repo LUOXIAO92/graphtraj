@@ -68,7 +68,7 @@ from graphtraj.execution.runner_status import (
 from graphtraj.execution.runner_transport import record_runtime_identity
 from graphtraj.runtimes import runtime_adapter
 from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError
-from graftling.member_processes import MEMBER_RUN_ENV
+from graphtraj.execution.runner_models import MEMBER_RUN_ENV
 from graphtraj.graph.task_graph import _load_states, _result_complete
 
 

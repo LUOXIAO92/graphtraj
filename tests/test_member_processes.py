@@ -46,11 +46,13 @@ def bystanders():
 def test_detached_grandchild_with_marker_is_stopped_and_others_survive(tmp_path: Path, bystanders) -> None:
     marker = new_marker()
     record = tmp_path / 'pid'
+    # Written to a temporary name and renamed, so a reader never sees a partial pid.
     script = ('import os, sys, time\nif os.fork(): os._exit(0)\nos.setsid()\n'
-              'open(sys.argv[1], "w").write(str(os.getpid()))\ntime.sleep(300)\n')
+              'open(sys.argv[1] + ".tmp", "w").write(str(os.getpid()))\n'
+              'os.replace(sys.argv[1] + ".tmp", sys.argv[1])\ntime.sleep(300)\n')
     subprocess.run([sys.executable, '-c', script, str(record)], env={**os.environ, MEMBER_RUN_ENV: marker},
                    start_new_session=True, check=True)
-    deadline = time.monotonic() + 5
+    deadline = time.monotonic() + 30
     while not record.exists() and time.monotonic() < deadline:
         time.sleep(0.02)
     pid = int(record.read_text())
@@ -127,3 +129,11 @@ def test_runner_worker_environment_drops_the_member_marker(
     with pytest.raises(Exception):
         team_round._run_session_worker(session, session / 'launch.yml', tmp_path, 'prompt', {}, 3, None)
     assert seen and MEMBER_RUN_ENV not in seen and seen['PATH'] == os.environ['PATH']
+
+
+def test_graphtraj_marker_name_matches_graftling() -> None:
+    """GraphTraj names the marker itself (no internal graftling import); both must agree."""
+    from graftling.member_processes import MEMBER_RUN_ENV as graftling_name
+    from graphtraj.execution.runner_models import MEMBER_RUN_ENV as graphtraj_name
+
+    assert graphtraj_name == graftling_name

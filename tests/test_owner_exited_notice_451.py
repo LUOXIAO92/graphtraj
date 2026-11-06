@@ -114,6 +114,21 @@ def test_a_root_agents_reconciled_end_reaches_its_host_receiver_with_the_error(r
     assert status['result']['last_result']['notification'] == 'queued' and len(notices) == 1
 
 
+def test_a_receiver_answering_held_is_called_once_per_read(root: Path) -> None:
+    """Correction 1: an end answered held is not claimed again in the same pass."""
+    caller, child = parent_and_child(root)
+    lose_owner(root, child)
+    notices = []
+    control = AgentControl(root, {'scripted': ScriptedDriver()},
+                           event_receiver=lambda notice: notices.append(notice) or 'held')
+    call(control, caller, action='status', agent=child)
+    assert len(notices) == 1
+    record = json.loads((root / 'control/agents' / f'{child}.json').read_text())
+    assert record['executions'][-1]['notification'] == 'held'
+    call(control, caller, action='status', agent=child)
+    assert len(notices) == 2
+
+
 def test_hold_notices_still_holds_a_reconciled_end_without_calling_a_receiver(root: Path) -> None:
     caller, child = parent_and_child(root)
     lose_owner(root, child)

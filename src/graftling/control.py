@@ -1657,7 +1657,8 @@ class AgentControl:
         ``queueing``) is made in the record write, so exactly one control
         delivers each; the receiver runs after the lock (:meth:`_deliver_lost`).
         """
-        if self.hold_notices or self._closing or record["retired_at"] is not None:
+        if (self.hold_notices or self._closing or record["retired_at"] is not None
+                or self._lost.__dict__.get("settling")):
             return
         native = self._receivers.get(record["parent"])
         receiver = native[1] if native is not None else self.event_receiver
@@ -1688,6 +1689,10 @@ class AgentControl:
                             else "delivered" if accepted is True else "unavailable")
             except Exception:
                 delivery = "unconfirmed" if native else "unavailable"
+            # An end the receiver answered held is not claimed again in this
+            # pass, or a receiver that keeps answering held recurses; the next
+            # ordinary read may claim it again.
+            self._lost.__dict__["settling"] = True
             try:
                 with self._locked(notice["agent"]) as record:
                     for execution in record["executions"]:
@@ -1698,6 +1703,7 @@ class AgentControl:
                 # The record is gone: there is nothing left to settle.
                 pass
             finally:
+                self._lost.__dict__["settling"] = False
                 self._delivering.discard(notice_id(notice["execution"], notice["outcome"]))
 
     # -- Authority --------------------------------------------------------

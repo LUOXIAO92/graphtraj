@@ -13,7 +13,8 @@
 # the user's dotfiles, ~/.claude or ~/.codex. No key value is read or printed.
 set -u
 H=/Users/luoxiao/workspace/you-are-a-product-architect-delivery
-WT=$H/.graphtraj/core/worktrees/449-agent-identity-in-status-notice-swarm
+# VERIFY449_WT: another Worktree holding the commit under test (452 reuses these steps).
+WT=${VERIFY449_WT:-$H/.graphtraj/core/worktrees/449-agent-identity-in-status-notice-swarm}
 SD=${0:A:h}
 THIS=${0:A}
 COMMIT=${VERIFY449_COMMIT:-$(git -C $WT rev-parse HEAD)}

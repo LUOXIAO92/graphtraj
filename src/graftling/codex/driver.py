@@ -182,7 +182,9 @@ class CodexDriver:
                     _TURNS.pop(run.execution, None)
                 ready.set()
 
-        threading.Thread(target=own, name=f'codex-{run.agent}').start()
+        # The owning process must keep an execution's owner until it reports its end,
+        # whichever thread called create: a daemon caller would make it daemon too.
+        threading.Thread(target=own, name=f'codex-{run.agent}', daemon=False).start()
         ready.wait()
         if failure:
             error = failure[0]

@@ -23,6 +23,9 @@ The numbers in parentheses are the project's Task numbers.
   can now be `held` for such an end on a host without `hold_notices`, a value the
   field already had. GraphTraj's Runner Worker now checks a running Task member's
   children every 15 seconds, so such an end reaches the member within about that time.
+  A Task member that is not running holds the end, and its next run receives it once;
+  a read never resumes it. The claimed notice names the end's `error` for a host
+  receiver, as `finished()` does.
 - Each end notice names the execution it reports (449). The Codex host event gains
   `execution`, the same ID as the end's `last_result.id`; the Claude Code queue record,
   the Pi `details` and the DSH notice already held it. The text shown to the model ends

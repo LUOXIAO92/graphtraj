@@ -1670,6 +1670,10 @@ class AgentControl:
                 continue
             # A parent Agent reads a body-less end as its error, as under hold_notices.
             notice = self._notice_document(record, execution)
+            if native is None:
+                # As finished() gives a host receiver: it names the end's error,
+                # which tells a reconciled end (owner-exited) from a reported one.
+                notice["error"] = dict(execution["error"])
             execution["notification"] = "pending" if native is not None else "queueing"
             self._delivering.add(notice_id(execution["id"], execution.get("outcome")))
             self._lost.__dict__.setdefault("claimed", []).append((receiver, notice, native is not None))

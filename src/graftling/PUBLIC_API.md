@@ -1164,7 +1164,9 @@ Delivery rules:
   for a parent Agent, and a root's notice carries `error`. A control without a
   receiver leaves it `held` for one that has a receiver. The core looks only when some
   call reads the record. GraphTraj's Runner Worker reads the records of a running
-  Task member's children every 15 seconds.
+  Task member's children every 15 seconds. A Task member that is not running holds
+  such an end (`held`); its next run receives it once. Reads do not resume the member.
+  A notice to a host receiver carries `error`, as `finished` gives it.
 - A completed round of a child that still has running members is recorded,
   not pushed. All rounds stay readable through `status`.
 - A notice its parent cannot receive now is recorded `held`, stays readable

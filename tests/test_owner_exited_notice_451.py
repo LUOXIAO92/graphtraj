@@ -142,6 +142,8 @@ def test_hold_notices_still_holds_a_reconciled_end_without_calling_a_receiver(ro
 # -- GraphTraj: a running Task member's sweep ---------------------------------
 
 MEMBER = 'research@x1'
+# The member's Runner activity as GraphTraj's read observes it (the fixture patches _status_session).
+ACTIVITY: dict = {}
 
 
 class Driver:
@@ -192,6 +194,16 @@ def project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
         return agents
 
     monkeypatch.setattr('graphtraj.interfaces.agents.GraphTrajAgents', backend)
+    # The member's Runner activity as the read observes it; running unless a test says otherwise.
+    activity = ACTIVITY
+    activity.update(now='running', checks=0)
+
+    def status_session(mapping, directory, alias, *, respond_to_abnormal=True):
+        assert respond_to_abnormal is False, 'a read must not answer an abnormal member'
+        activity['checks'] += 1
+        return {'alias': alias, 'activity': activity['now']}
+
+    monkeypatch.setattr('graphtraj.execution.runner_status._status_session', status_session)
     return root, member, sent
 
 
@@ -243,3 +255,76 @@ def test_a_task_members_own_lost_end_is_left_to_the_runner(project) -> None:
     assert sent == []
     record = json.loads((swarm_root(root) / 'control/agents' / f'{sub}.json').read_text())
     assert record['executions'][-1]['notification'] == 'unavailable'
+
+
+# -- Round 2: a member that is not running holds the reconciled end ----------
+
+def member_child(root: Path) -> tuple[str, str]:
+    """The member's child, created through the member's alias, with its owner lost."""
+    from graftling import Binding
+    from graphtraj.interfaces.agents import swarm_root
+
+    child = AgentControl(swarm_root(root), {'claude': Driver({})}).create(
+        'claude', 'probe', Binding(Caller('graphtraj-gateway', MEMBER))).result['agent']
+    return child, lose_owner(swarm_root(root), child)
+
+
+def notification(root: Path, child: str) -> str | None:
+    from graphtraj.interfaces.agents import swarm_root
+
+    return json.loads((swarm_root(root) / 'control/agents' / f'{child}.json').read_text())['executions'][-1].get('notification')
+
+
+def test_a_member_not_running_holds_the_end_and_its_next_run_gets_it_once(project) -> None:
+    from graphtraj.interfaces import agents
+
+    root, member, sent = project
+    project_activity = ACTIVITY
+    child, execution = member_child(root)
+
+    project_activity['now'] = 'idle'
+    for _ in range(3):
+        agents.GraphTrajAgents(root).reconcile_children({MEMBER, member})
+        assert notification(root, child) == 'held'
+    assert sent == []  # no Runner input: nothing starts or resumes the member
+
+    project_activity['now'] = 'running'
+    agents.GraphTrajAgents(root).reconcile_children({MEMBER, member})
+    assert sent == [(MEMBER, {'source': 'graphtraj', 'alias': child, 'event': 'failed',
+                              'message': MESSAGE, 'execution': execution}, {'system_notice': True})]
+    assert notification(root, child) == 'delivered'
+    for _ in range(2):
+        agents.GraphTrajAgents(root).reconcile_children({MEMBER, member})
+    assert len(sent) == 1
+
+
+def test_a_running_member_whose_push_fails_holds_the_end(project) -> None:
+    from graphtraj.execution import runner_control
+    from graphtraj.execution.runner_models import RunnerError
+    from graphtraj.interfaces import agents
+
+    root, member, sent = project
+    child, _ = member_child(root)
+
+    def refuse(*arguments, **options):
+        raise RunnerError('operation-failed', 'busy')
+
+    original, runner_control._send_session = runner_control._send_session, refuse
+    try:
+        agents.GraphTrajAgents(root).reconcile_children({MEMBER, member})
+    finally:
+        runner_control._send_session = original
+    assert notification(root, child) == 'held'
+
+
+def test_a_retired_member_gets_nothing(project) -> None:
+    from graphtraj.configuration.project_configuration import runner_directory
+    from graphtraj.interfaces import agents
+
+    root, member, sent = project
+    child, _ = member_child(root)
+    # Retirement moves the member's Session record out of the Runner's sessions.
+    sessions = runner_directory(root) / 'sessions'
+    (sessions / MEMBER).rename(sessions.parent / 'retired-member')
+    agents.GraphTrajAgents(root).reconcile_children({MEMBER, member})
+    assert sent == [] and notification(root, child) == 'unavailable'

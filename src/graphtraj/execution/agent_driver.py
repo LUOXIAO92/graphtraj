@@ -272,8 +272,10 @@ class AdapterDriver:
         with _TURNS_LOCK:
             _TURNS[run.execution] = turn
 
+        # Keep the owner until it reports the end, whichever thread called
+        # start: a daemon caller (a Runner member's request) would make it daemon.
         thread = threading.Thread(target=self._own, args=(turn, run, failure),
-                                  name=f"agents-{run.agent}")
+                                  name=f"agents-{run.agent}", daemon=False)
         thread.start()
         while not ready.wait(0.05):
             if not thread.is_alive():

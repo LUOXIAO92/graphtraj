@@ -94,3 +94,68 @@ def test_owner_started_from_daemon_caller_reports_its_end(runtime: str, tmp_path
     finished = tmp_path / 'finished'
     assert finished.is_file(), 'the owner thread died with the process before reporting its end'
     assert finished.read_text() == 'completed'
+
+
+# GraphTraj's AdapterDriver, which runs a Runner member's agents children.
+ADAPTER_SCRIPT = textwrap.dedent('''
+    import sys, threading, time
+    from pathlib import Path
+    from graftling import Run
+    import graphtraj.execution.agent_driver as module
+
+    directory = Path(sys.argv[1])
+    finished = directory / 'finished'
+
+    class Turn:
+        """Confirms its Session at once, then ends about 1.5 s later."""
+
+        def __init__(self, request, message, directory, ready, evidence, *, session_created, **kwargs):
+            self.request, self.directory = request, directory
+            self.ready, self.created = ready, session_created
+            self.native_id = 'session-452'
+
+        def configure_independent(self, **kwargs):
+            pass
+
+        def run(self):
+            self.created('session-452', 0)
+            self.ready('session-452', 0)
+            time.sleep(1.5)
+            return {'outcome': 'completed'}
+
+    class Adapter:
+        managed_execution = Turn
+
+    class Events:
+        def session(self, session): pass
+        def process(self, **fields): pass
+        def request(self, details): pass
+        def finished(self, outcome, **fields):
+            finished.write_text(outcome)
+
+    module.select_runtime_adapter = lambda runtime: Adapter()
+    driver = module.AdapterDriver(directory, directory)
+    run = Run(agent='child', execution='e452', runtime='claude',
+              settings={'adapter_request': {'harness_root': str(directory)}, 'evidence': {},
+                        'cwd': str(directory)},
+              message='hi', session=None, directory=directory, archive=None, events=Events())
+    started = threading.Event()
+    caller = threading.Thread(target=lambda: (driver.start(run), started.set()), daemon=True)
+    caller.start()
+    if not started.wait(10):
+        sys.exit('start did not return')
+    print('started', flush=True)
+''')
+
+
+def test_adapter_owner_started_from_daemon_caller_reports_its_end(tmp_path: Path) -> None:
+    """AdapterDriver's owner keeps the process until it records the end."""
+    result = subprocess.run(
+        [sys.executable, '-c', ADAPTER_SCRIPT, str(tmp_path)],
+        env={'PYTHONPATH': str(SRC), 'PATH': '/usr/bin:/bin', 'HOME': str(tmp_path)},
+        capture_output=True, text=True, timeout=30)
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == 'started'
+    finished = tmp_path / 'finished'
+    assert finished.is_file(), 'the owner thread died with the process before reporting its end'
+    assert finished.read_text() == 'completed'

@@ -3,8 +3,8 @@
 Usage (the scratch venv's Python):
   python -I probe.py prepare PROJECT MODEL     roles (team_leader claude, permission_mode auto) and probe Task 1, ready
   python -I probe.py plugins STREAM -          0 only when graphtraj-claude-host is loaded
-  python -I probe.py child PROJECT SECONDS     poll (<=100 s) until the member's child runs with a runtime_pid: CHILD-RUNNING
-  python -I probe.py kill PROJECT FACTS        SIGKILL the Worker owning the child, then the child's (and member's) Runtime
+  python -I probe.py child PROJECT SECONDS     poll (<=100 s) until the member's turn ended and its child runs: CHILD-RUNNING
+  python -I probe.py kill PROJECT FACTS        member idle: SIGKILL the child's owner and Runtime if alive, then two reads
   python -I probe.py wait PROJECT SECONDS      poll (<=100 s) until the member's records show REPORT-451-END: MEMBER-DONE
   python -I probe.py observe PROJECT FACTS     read only: the four CHECK lines and a summary
   python -I probe.py idle OUT -                0 unless an earlier probe Main (pid files in OUT) or 'sleep 400' lives
@@ -158,6 +158,12 @@ def alive(pid: object) -> bool:
     return True
 
 
+def member_terminal(project: Path) -> bool:
+    """Whether the member's last execution has its terminal record (its turn ended)."""
+    _, _, directory = member(project)
+    return bool(directory) and (directory / 'execution.yml').is_file()
+
+
 def report_text(project: Path) -> str | None:
     """The member's last execution message holding REPORT-451-END, if any."""
     _, _, directory = member(project)
@@ -189,13 +195,18 @@ def child_cmd(project: Path, seconds: str) -> int:
         return alias, mapping, record, execution
 
     def done():
+        # The record still says running (nothing reconciled it yet); its Runtime may or may not live.
         _, _, record, execution = facts()
-        return bool(record) and execution.get('state') == 'running' and alive((execution.get('process') or {}).get('runtime_pid'))
+        return (bool(record) and execution.get('state') == 'running'
+                and bool((execution.get('process') or {}).get('runtime_pid')) and member_terminal(project))
 
     def state():
         alias, mapping, record, execution = facts()
-        return (f'member={alias} worker_pid={mapping.get("worker_pid")} child={record.get("agent")} '
-                f'execution={execution.get("id")} state={execution.get("state")} process={execution.get("process")}')
+        process = execution.get('process') or {}
+        return (f'member={alias} turn ended={member_terminal(project)} worker_pid={mapping.get("worker_pid")} '
+                f'child={record.get("agent")} execution={execution.get("id")} state={execution.get("state")} '
+                f'process={process} worker alive={alive(process.get("worker_pid"))} '
+                f'runtime alive={alive(process.get("runtime_pid"))}')
 
     code = poll(project, seconds, done, 'CHILD-RUNNING', state)
     print(state())
@@ -232,35 +243,50 @@ def kill_group(pid: int, label: str, killed: list) -> None:
 
 
 def kill(project: Path, facts_file: str) -> int:
+    """With the member idle: stop the child's owner and Runtime if alive, then read twice with a receiver."""
     alias, mapping, _ = member(project)
     record = child(project, alias, mapping.get('agent'))
     execution = (record.get('executions') or [{}])[-1]
     process = execution.get('process') or {}
-    worker = mapping.get('worker_pid')
-    print(f'member {alias} worker_pid {worker} runtime_pid {mapping.get("runtime_pid")} agent {mapping.get("agent")}')
+    worker = process.get('worker_pid')
+    print(f'member {alias} agent {mapping.get("agent")} worker_pid {mapping.get("worker_pid")} turn ended {member_terminal(project)}')
     print(f'child {record.get("agent")} execution {execution.get("id")} state {execution.get("state")} process {process}')
-    if execution.get('state') != 'running':
-        print('STOP: the child execution is not running; nothing was killed.')
+    if not member_terminal(project):
+        print('STOP: the member\'s turn has not ended; its Worker is never killed while it runs. Nothing was done.')
         return 1
-    if not isinstance(worker, int) or worker != process.get('worker_pid'):
-        print('STOP: the member mapping worker_pid is not the child execution worker_pid; nothing was killed.')
+    if not record or worker != mapping.get('worker_pid'):
+        print('STOP: no child, or the child\'s owner is not the member\'s last Worker. Nothing was done.')
         return 1
     killed: list = []
-    os.kill(worker, signal.SIGKILL)
-    killed.append({'label': 'worker', 'pid': worker, 'at': time.time()})
-    print(f'worker {worker}: SIGKILL')
-    time.sleep(2)
+    if alive(worker):
+        os.kill(worker, signal.SIGKILL)
+        killed.append({'label': 'worker', 'pid': worker, 'at': time.time()})
+        print(f'worker {worker}: alive after the turn ended (452 behaviour): SIGKILL')
+        time.sleep(2)
+    else:
+        print(f'worker {worker}: already exited at the turn end (base behaviour)')
     kill_group(process.get('runtime_pid'), 'child runtime', killed)
-    # The member's own Runtime loses its Worker too; it is stopped so the Runner can resume the member.
-    kill_group(mapping.get('runtime_pid'), 'member runtime', killed)
     time.sleep(1)
+    print('alive after kill:', {item['label']: alive(item['pid']) for item in killed} or 'nothing was killed')
+
+    from graphtraj.interfaces.agents import GraphTrajAgents
+
+    held = []
+    for read in (1, 2):
+        GraphTrajAgents(project).reconcile_children({alias, mapping.get('agent')})
+        state = (core(project, record['agent']).get('executions') or [{}])[-1]
+        held.append({'read': read, 'at': time.time(), 'state': state.get('state'), 'outcome': state.get('outcome'),
+                     'error': (state.get('error') or {}).get('code'), 'notification': state.get('notification')})
+        print(f'read {read}: child {state.get("state")} {state.get("outcome")} '
+              f'{(state.get("error") or {}).get("code")} notification={state.get("notification")} '
+              f'member turn ended={member_terminal(project)}')
     facts = {'alias': alias, 'member_agent': mapping.get('agent'), 'child': record.get('agent'),
              'execution': execution.get('id'), 'worker_pid': worker, 'child_runtime_pid': process.get('runtime_pid'),
-             'member_runtime_pid': mapping.get('runtime_pid'), 'killed': killed, 'killed_at': time.time()}
+             'killed': killed, 'killed_at': time.time(), 'held': held}
     Path(facts_file).write_text(json.dumps(facts, indent=2))
-    print('alive after kill:', {item['label']: alive(item['pid']) for item in killed})
-    print(f'KILLED child {facts["child"]} execution {facts["execution"]}; facts in {facts_file}')
-    return 0
+    ok = [item['notification'] for item in held] == ['held', 'held']
+    print(('HELD-TWICE' if ok else 'NOT HELD TWICE') + f' child {facts["child"]} execution {facts["execution"]}; facts in {facts_file}')
+    return 0 if ok else 1
 
 
 # -- Observe ------------------------------------------------------------------
@@ -391,26 +417,21 @@ def observe(project: Path, facts_file: str) -> int:
                          f'distinct in records={len(mine)} reported={len(reported)} other executions={sorted(set(distinct) - {execution_id})}'))
 
     member_record = core(project, facts.get('member_agent'))
-    resumed = [item for item in member_record.get('executions', [])
-               if (item.get('started_at') or 0) > facts['killed_at']]
+    held = facts.get('held') or []
+    held_at = max((item['at'] for item in held), default=None)
+    resumed = [item for item in member_record.get('executions', []) if (item.get('started_at') or 0) > (held_at or 0)]
     started = resumed[0].get('started_at') if resumed else None
-    ended = execution.get('ended_at')
-    print(f'   killed at {stamp(facts["killed_at"])}; member resumed execution started {stamp(started)}; '
-          f'child end recorded (reconciled) {stamp(ended)}')
-    if started and ended and ended >= started:
-        delay = ended - started
-        results.append(check(f'3 found and sent within {SWEEP_BOUND} s after the resumed execution started (sweep)',
-                             delay <= SWEEP_BOUND, f'{delay:.1f} s'))
-    else:
-        detail = ('a read before the resumed execution reconciled it' if started and ended
-                  else 'no resumed member execution after the kill' if not started else 'the child has no end')
-        results.append(check('3 found by the resumed member\'s sweep', False, detail +
-                             ' (the reconciling control delivered it; see notification above)'))
+    print(f'   held by the idle-member reads: {[item["notification"] for item in held]} (last at {stamp(held_at)}); '
+          f'member resumed execution started {stamp(started)}; notification now {execution.get("notification")}')
+    results.append(check('3 held while the member was idle, delivered after its resumed execution started',
+                         [item['notification'] for item in held] == ['held', 'held'] and bool(started)
+                         and execution.get('notification') in {'delivered', 'queued'} and len(reported) == 1,
+                         f'held={[item["notification"] for item in held]} resumed={bool(started)}'))
 
     pids = {item['label']: item['pid'] for item in facts.get('killed', [])}
     left = {label: pid for label, pid in pids.items() if alive(pid)}
     sleeping = probe_processes()
-    results.append(check('4 no probe process alive (worker, runtimes, the child\'s sleep 400)',
+    results.append(check('4 no probe process alive (the killed owner and child Runtime, the child\'s sleep 400)',
                          not left and not sleeping, f'alive={left} sleep400={sleeping}'))
     print('== summary:', 'ALL PASS' if all(results) else f'{results.count(False)} FAIL of {len(results)}')
     return 0 if all(results) else 1

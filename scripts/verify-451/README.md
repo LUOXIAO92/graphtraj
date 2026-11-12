@@ -1,4 +1,4 @@
-# 451 real-host check: a child's lost owner reaches the member once, through the 15 s sweep
+# 451 real-host check (round 2): a reconciled end is held while the member is idle, and its next run receives it once
 
 Main runs every step except 00u. Each Main command returns within 10 minutes or starts
 its work in the background. Output goes to
@@ -14,7 +14,7 @@ The base is `~/graphtraj-verify-451`, a new path. `~/graphtraj-verify-449` is no
 | 00 | Main | `S 00` | Shows `451 sweep: True 15.0`, `deps: click 8.5.0`, `roles OK`, `task 1 ready`, `result: MODEL OK` with `claude-opus-5-5`, and `graphtraj-claude-host loaded: YES`. Prints the 01 command. |
 | 00u | USER, once, only if 00 prints `graphtraj-claude-host loaded: NO` | `cd ~/graphtraj-verify-451/project && claude`, choose 'Yes, proceed' on the folder-trust dialog, then `/exit` | Main reruns 00 and sees `loaded: YES`. |
 | 01 | Main | `S 01` | Returns at once. It starts a `claude -p` Main in the background and prints its pid and the 02 command. |
-| 02 | Main | `S 02 2>&1 \| tee …/realhost/02.txt` | Waits up to 9 minutes for 01's Main, then prints `CHILD-RUNNING`, the killed pids and `KILLED child <agent> execution <id>`, and writes `02-kill.json`. Prints the 03 command. |
+| 02 | Main | `S 02 2>&1 \| tee …/realhost/02.txt` | Waits up to 9 minutes for 01's Main. With the member idle, it kills the child's owner and Runtime if alive, then reads twice. Prints `read 1/2: … notification=held` and `HELD-TWICE`, and writes `02-held.json`. Prints the 03 command. |
 | 03 | Main | `S 03` | Returns at once. It starts a `claude -p` Main that resumes the member, and prints the 04 command. |
 | 04 | Main | `S 04 2>&1 \| tee …/realhost/04.txt` | Waits up to 9 minutes for 03's Main, then prints four `CHECK` lines and `summary: ALL PASS`. |
 | 05 | Main | `S 05` | Starts the full suite at HEAD in the background; it stops itself after 25 minutes. Read it with `tail -n 25 …/realhost/05-suite.txt`. It is done when the file shows `== totals:`. |
@@ -35,41 +35,42 @@ It is 449's preflight:
 
 ### 01: start the member and its child
 
-The `claude -p` Main dispatches the member with `swarm`. The member uses only the agents tool:
+The `claude -p` Main dispatches the member with `swarm`. The member uses only the agents tool. It creates a
+Claude child with the instruction `Use the Bash tool once to run exactly: sleep 400 . Then reply DONE-451.`,
+replies `CREATE <agent> <execution>` and ends its turn at once (no `wait`). Main runs `probe.py child` (each
+call at most 100 s, at most 5 calls) until the member's turn has its terminal record and the child's record
+still says `running` with a `runtime_pid` (CHILD-RUNNING). It then stops. It retires nothing.
 
-1. It creates a Claude child with the instruction `Use the Bash tool once to run exactly: sleep 400 . Then reply DONE-451.`
-2. It prints `CREATE <agent> <execution>`.
-3. It calls `wait` on the child with `timeout_seconds: 600`. This keeps the member's turn, and its Worker, alive.
-4. On any input with `source: graphtraj`, it replies with those inputs verbatim and then `REPORT-451-END`.
+### 02: the member is idle; the child loses its owner
 
-Main runs `probe.py child` (each call at most 100 s, at most 5 calls) until the child's record is running with a live `runtime_pid`. It then prints `CHILD-RUNNING` and stops. It retires nothing.
+1. STOP, doing nothing, unless the member's last execution is terminal. A running member's Worker is never
+   killed, and the member's Runtime is never touched (a resume after a killed Worker is Task 456).
+2. The child's owner is the member's ended Worker (`worker_pid` equals the mapping's). If it is still alive
+   (452's daemon=False fix keeps it; that fix is not in this base), SIGKILL it; otherwise print that it
+   already exited at the turn end. Then SIGKILL the child's Runtime group if it is alive.
+3. Two reads with GraphTraj's receiver, while the member is idle:
+   `GraphTrajAgents(project).reconcile_children({alias, member_agent})` from the venv. Each prints the child's
+   notification; both must be `held`, with no Runner call (a read never resumes the member).
+4. It writes `02-held.json`.
 
-### 02: kill the child's owner
-
-1. It reads the member mapping's `worker_pid` and checks that it equals the child execution's `process.worker_pid`. The Worker that serves the member's agents channel owns the child (engineer.md).
-2. It sends SIGKILL to that Worker.
-3. It kills the child's `runtime_pid` and its process group, if it is still alive.
-4. It also kills the member's own `runtime_pid` group, so the Runner can resume the member. A real Worker crash leaves that Runtime alone as well.
-5. It writes `02-kill.json`.
-
-### 03: resume the member
+### 03: resume the member normally
 
 The `claude -p` Main calls `agents` `resume` on the member alias with this message:
 
-> Call no tool. Reply WAITING-451 and end your turn. When an input whose JSON has source graphtraj arrives, reply with every such input verbatim, then REPORT-451-END.
+> Execute agents feature wait with {"agent": "<child>", "timeout_seconds": 60} once. Then reply with every input whose JSON has source graphtraj, verbatim, then REPORT-451-END.
 
-It then polls with `probe.py wait` until the member's `execution.yml` holds `REPORT-451-END`.
-
-Nothing reads the child's record before the new Worker does. The member's new Worker sweeps after 15 s, ends the child as `owner-exited`, and sends the notice through `notify_member_of_child_end`.
+The member's `wait` is a read with a receiver while the member runs, so it claims the held end and the
+member receives it once (or its Worker's 15 s sweep does). Main polls `probe.py wait` until the member's
+`execution.yml` holds `REPORT-451-END`.
 
 ### 04: observe (read only)
 
-It prints four checks:
-
 1. The child execution is `failed`, with error `owner-exited` and `notification` `delivered` (or `queued`).
-2. The project's records hold exactly one distinct notice for that execution. The member's report holds exactly one `failed` input with that execution.
-3. The child's end was recorded, which is the sweep's reconcile, at most 60 s after the member's resumed core execution started. If something else read the child first, the line says so.
-4. No killed pid and no `sleep 400` process is alive.
+2. The project's records hold exactly one distinct notice for that execution, and the member's report holds
+   exactly one `failed` input with that execution.
+3. It was `held` at both idle reads (`02-held.json`), and is delivered after the member's resumed execution
+   started.
+4. No killed process and no `sleep 400` process is alive.
 
 ### 05: full suite
 
@@ -88,21 +89,18 @@ Fallbacks are printed beside each step. If the resume is refused, for example be
 
 `VERIFY451_BASE`, `VERIFY451_OUT`, `VERIFY451_NO_MODEL` and `VERIFY451_CLAUDE` (a stub host) exist for rehearsal only.
 
-## Rehearsed in the sandbox without a model
+## Rehearsed in the sandbox without a model (round 2)
 
 Base and output were under `$TMPDIR`.
 
-- 00 with `VERIFY451_NO_MODEL`: `deps: click 8.5.0`, `451 sweep: True 15.0`, `roles OK`, `task 1 ready`.
-- `probe.py child`, `kill`, `wait` and `observe` on synthetic records, with real `sh -c 'sleep 400'` processes as the Worker and the two Runtimes:
-  - CHILD-RUNNING was found;
-  - the three processes were killed, each Runtime by its own group;
-  - observe before delivery shows FAIL on checks 1–3;
-  - observe after synthetic delivery shows `summary: ALL PASS`, with `12.0 s` for check 3;
-  - no process was left.
+- 00 with `VERIFY451_NO_MODEL` at the round-2 commit: guard passed, `451 sweep: True 15.0`, `roles OK`,
+  `task 1 ready`.
+- 02 against a stub Runner state: the test fixture's valid member mapping under the probe's alias, a terminal
+  `execution.yml`, core member and child records, and two real stand-in processes (reparented, as a real
+  Worker and Runtime are). `probe.py child` printed CHILD-RUNNING; `probe.py kill` killed the stand-in Worker
+  ("alive after the turn ended") and the child Runtime group, and the real `GraphTrajAgents(project)` reads
+  printed `notification=held` twice and `HELD-TWICE`.
+- 04: before any resume, checks 1-3 FAIL and 4 PASS; after a synthetic resume and delivery, ALL PASS.
+- 03 with a stub host: the prompt names the real child in the `wait` message; the pid is in `03-main.pid`.
 
-Not rehearsed:
-
-- the `claude -p` steps 01 and 03;
-- the real Runner resume after a killed Worker;
-- the real sweep;
-- 05.
+Not rehearsed: the `claude -p` steps 01 and 03, the member's real `wait` and delivery into its turn, and 05.

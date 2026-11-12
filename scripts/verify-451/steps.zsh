@@ -1,15 +1,16 @@
 #!/bin/zsh
 [ -n "$ZSH_VERSION" ] || exec /bin/zsh "$0" "$@"
-# Task 451 real-host check: a member's agents-tool child loses its owner (the member's Worker is killed);
-# when the member is resumed, its new Worker's 15 s sweep finds the owner-exited end and the member gets it once.
+# Task 451 real-host check (round 2): a member's agents-tool child loses its owner while the member is idle;
+# reads then hold the owner-exited end without resuming the member, and the member's next run receives it once.
 #   zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/451-owner-exited-child-parent-notice/scripts/verify-451/steps.zsh <00|00u|01|02|03|04|05>
 # 00  Main. preflight: scratch venv from COMMIT, isolated project, one-line model/login answer, probe Task ready.
 # 00u USER, once, only when 00 prints 'graphtraj-claude-host loaded: NO': folder trust.
-# 01  Main. background `claude -p` Main: swarm -> member creates a child that runs `sleep 400` and waits on it;
-#     Main polls until the child runs with a runtime_pid (CHILD-RUNNING) and stops. Nothing is retired.
-# 02  Main. waits (<= 9 min) for 01's Main, then SIGKILLs the Worker owning the child, the child's Runtime
-#     group and the member's Runtime group; writes 02-kill.json.
-# 03  Main. background `claude -p` Main: resume the member; poll until it reports REPORT-451-END.
+# 01  Main. background `claude -p` Main: swarm -> member creates a child that runs `sleep 400` and ends its turn;
+#     Main polls until the member's turn ended and the child runs (CHILD-RUNNING) and stops. Nothing is retired.
+# 02  Main. waits (<= 9 min) for 01's Main; with the member idle, SIGKILLs the child's owner (the member's ended
+#     Worker) and the child's Runtime group if alive, then reads twice with GraphTraj's receiver (expect held,
+#     held); writes 02-held.json. Never kills a running member's Worker or the member's Runtime.
+# 03  Main. background `claude -p` Main: resume the member normally; poll until it reports REPORT-451-END.
 # 04  Main. waits (<= 9 min) for 03's Main, then read-only CHECK lines and a summary.
 # 05  Main. full suite at HEAD in the background (self-terminating after 25 min).
 # Never touches production .venv-runtime (only copies click, yaml and websockets out of it, read only),
@@ -129,13 +130,13 @@ step_01() {
   [[ $(cat $BASE/src-commit 2>/dev/null) == $(git -C $WT rev-parse HEAD) ]] || print "NOTE: venv commit $(cat $BASE/src-commit) is not HEAD; rerun 00 if HEAD is the commit under test."
   local C=$(claude_bin) S=$OUT/01-main-stream.jsonl
   rm -f $PID01 $OUT/01-main-stream.pid
-  local member='Use only the agents tool (mcp__agents__agents). Execute feature create with arguments {"runtime": "claude", "instruction": "Use the Bash tool once to run exactly: sleep 400 . Then reply DONE-451."}. Print one line CREATE <agent> <execution> from its result. Then execute feature wait with arguments {"agent": "<that agent>", "timeout_seconds": 600}. On any input whose JSON has source graphtraj, reply with every such input verbatim, each on its own line, then the line '$END_MARK', and end. Read no files and run no shell command yourself.'
+  local member='Use only the agents tool (mcp__agents__agents). Execute feature create with arguments {"runtime": "claude", "instruction": "Use the Bash tool once to run exactly: sleep 400 . Then reply DONE-451."}. Reply with the one line CREATE <agent> <execution> from its result and end your turn at once. Do not call wait or status. Read no files and run no shell command yourself.'
   local swarm=$($VV/bin/python -I -c 'import json,sys; print(json.dumps({"action":"execute","feature":"swarm","arguments":{"tasks":[{"task_id":"1","role":"team_leader","instruction":sys.argv[1]}]}}))' "$member")
   print -r -- "$swarm" > $OUT/01-swarm-arguments.json
   local W="$VV/bin/python $SD/probe.py child $P 100"
   print -r -- "1. Call mcp__agents__tasks once with exactly these arguments: $swarm
 Print its raw result text on one line starting with SWARM-RESULT.
-2. Send nothing to the member. Run this exact Bash command, one call after another, until one prints CHILD-RUNNING, at most 5 times: $W
+2. Send nothing to the member. Run this exact Bash command, one call after another, until one prints CHILD-RUNNING (the member's turn ended and its child runs), at most 5 times: $W
 3. Print CHILD-RUNNING (or CHILD-NOT-RUNNING after 5 calls) and stop. Do not retire, interrupt or message anything." > $OUT/01-main-prompt.txt
   print "dispatch at $(date +%T); prompt: $OUT/01-main-prompt.txt"
   (cd $P && clean nohup $C -p --model $MODEL --output-format stream-json --verbose --mcp-config $P/.mcp.json --strict-mcp-config \
@@ -146,7 +147,7 @@ Print its raw result text on one line starting with SWARM-RESULT.
 }
 
 step_02() {
-  say "[02] Main. waits for 01's Main (<= 9 min), then kills the child's owner. Dialog: none."
+  say "[02] Main. waits for 01's Main (<= 9 min); member idle: kills the child's owner, then two reads. Dialog: none."
   main_wait $PID01
   case $? in
     0) ;;
@@ -155,17 +156,19 @@ step_02() {
   esac
   grep -o 'CHILD-RUNNING\|CHILD-NOT-RUNNING\|SWARM-RESULT[^"]*' $OUT/01-main-stream.jsonl | sort | uniq -c
   probe child $P 1
-  probe kill $P $OUT/02-kill.json || { print "Fallback: read $OUT/01-main-stream.jsonl (grep SWARM-RESULT) and rerun 01 after 00."; return 1; }
+  probe kill $P $OUT/02-held.json || { print "Fallback: read $OUT/01-main-stream.jsonl (grep SWARM-RESULT|CREATE) and the lines above; rerun 00 and 01 once the guard passes."; return 1; }
+  print "Success: 'HELD-TWICE' (notification=held after each read; the member's turn still ended)."
   next "zsh $THIS 03"
 }
 
 step_03() {
   say "[03] Main. resumes the member in the background (a claude -p Main). Dialog: none. Returns at once; then run 04."
-  [[ -f $OUT/02-kill.json ]] || { print "STOP: run 02 first"; return 1; }
-  local alias=$($VV/bin/python -I -c 'import json,sys; print(json.load(open(sys.argv[1]))["alias"])' $OUT/02-kill.json)
+  [[ -f $OUT/02-held.json ]] || { print "STOP: run 02 first"; return 1; }
+  local alias=$($VV/bin/python -I -c 'import json,sys; print(json.load(open(sys.argv[1]))["alias"])' $OUT/02-held.json)
+  local child=$($VV/bin/python -I -c 'import json,sys; print(json.load(open(sys.argv[1]))["child"])' $OUT/02-held.json)
   local C=$(claude_bin) S=$OUT/03-main-stream.jsonl
   rm -f $PID03 $OUT/03-main-stream.pid
-  local message='Call no tool. Reply WAITING-451 and end your turn. When an input whose JSON has source graphtraj arrives, reply with every such input verbatim, then '$END_MARK'.'
+  local message='Execute agents feature wait with {"agent": "'$child'", "timeout_seconds": 60} once. Then reply with every input whose JSON has source graphtraj, verbatim, then '$END_MARK'.'
   local resume=$($VV/bin/python -I -c 'import json,sys; print(json.dumps({"action":"execute","feature":"resume","arguments":{"agent":sys.argv[1],"message":sys.argv[2]}}))' "$alias" "$message")
   local W="$VV/bin/python $SD/probe.py wait $P 100"
   print -r -- "1. Call mcp__agents__agents once with exactly these arguments: $resume
@@ -190,12 +193,12 @@ step_04() {
     *) return 1 ;;
   esac
   grep -o 'RESUME-RESULT[^"]*\|MEMBER-DONE' $OUT/03-main-stream.jsonl | sort | uniq -c
-  probe observe $P $OUT/02-kill.json
+  probe observe $P $OUT/02-held.json
   local rc=$?
   print ""
   print "Success: 'summary: ALL PASS'. 1 child failed/owner-exited, notification delivered or queued; 2 one notice for"
-  print "that execution in the records and one failed input in the member's report; 3 found <= 60 s after the resumed"
-  print "execution started; 4 no worker, Runtime or 'sleep 400' process alive."
+  print "that execution in the records and one failed input in the member's report; 3 held at both idle reads (02) and"
+  print "delivered after the resumed execution started; 4 no killed process or 'sleep 400' alive."
   next "zsh $THIS 05"
   return $rc
 }

@@ -14,6 +14,9 @@ from typing import Mapping, Optional, Sequence
 
 import pytest
 
+# Session-end reclaim of the processes this run started (454).
+from process_reclaim import pytest_configure, pytest_sessionfinish  # noqa: F401
+
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 

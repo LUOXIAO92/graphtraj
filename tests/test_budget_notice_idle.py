@@ -201,3 +201,46 @@ def test_ended_execution_starts_one_detached_timer_and_a_newer_one_replaces_it(
     (task / "execution-budget.yml").write_text(yaml.safe_dump(state))
     assert timers.start_idle_budget_timer(directory, monitor("leader-1")) is None
     assert len(started) == 2
+    # The timer drops only the member marker; the test-run marker survives (454).
+    assert timers.MEMBER_RUN_ENV not in kwargs["env"]
+    assert kwargs["env"].get("PYTEST_GRAPHTRAJ_RUN") == os.environ.get("PYTEST_GRAPHTRAJ_RUN")
+
+
+def test_timer_life_ends_at_the_last_threshold(team, monkeypatch) -> None:
+    """Even with the Session directory kept, waiting never passes the last threshold (454)."""
+    task, runner, monitor, received = team
+    state = _state(task)
+    clock = Clock(state["started_at"])
+    monkeypatch.setattr(timers.time, "time", clock)
+    assert _run(runner, "leader-1", monitor, clock) is True
+    last = state["started_at"] + (1 + state["allowance_minutes"]) * 60
+    assert clock.now <= last + timers.MARGIN_SECONDS + timers.SLICE_SECONDS
+    assert monitor("leader-1").next_elapsed_threshold_at() is None
+
+
+def test_timer_exits_after_the_task_directory_is_removed(team) -> None:
+    import shutil
+
+    task, runner, monitor, received = team
+    clock = Clock(_state(task)["started_at"])
+    observer = monitor("leader-1")
+    shutil.rmtree(task)
+    assert _run(runner, "leader-1", lambda alias: observer, clock) is False
+    assert received == [] and clock.slept == []
+
+
+def test_a_delivery_that_never_returns_ends_the_timer(team, monkeypatch) -> None:
+    """A parent lock or connection that never answers bounds the timer; the notice stays (454)."""
+    import time as real_time
+
+    task, runner, monitor, received = team
+    clock = Clock(_state(task)["started_at"] + 3600)
+    monkeypatch.setattr(timers.time, "time", clock)
+    monkeypatch.setattr(runner_control, "notify_direct_parent",
+                        lambda *args, **kwargs: real_time.sleep(60))
+    started = real_time.monotonic()
+    assert _run(runner, "leader-1", monitor, clock, delivery_seconds=0.5) is False
+    assert real_time.monotonic() - started < 10
+    assert _state(task)["parent_notices"] and not any(
+        notice["delivered"] for notice in _state(task)["parent_notices"])
+    assert timers.DELIVERY_SECONDS > 0

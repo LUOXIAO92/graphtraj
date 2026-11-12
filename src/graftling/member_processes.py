@@ -7,6 +7,10 @@ Each member launch therefore carries a random per-execution value in
 ``MEMBER_RUN_ENV``; children inherit it through shells, ``setsid`` and
 ``nohup``. Only same-user processes whose environment holds exactly that value
 are signalled. Names and command patterns are never matched.
+
+The same scanner serves any such marker variable: ``variable`` names it (the
+test suite uses its own per-run variable), and ``prefix=True`` matches every
+value that starts with ``marker`` instead of exactly it.
 """
 
 from __future__ import annotations
@@ -89,6 +93,32 @@ def _process_view(pid: int) -> tuple[list[str], list[str]] | None:
         return None
 
 
+def parent_pid(pid: int) -> int | None:
+    """Return the parent of a process, or None when it is gone or unreadable."""
+    try:
+        if sys.platform.startswith('linux'):
+            stat = Path(f'/proc/{pid}/stat').read_text()
+            return int(stat[stat.rindex(')') + 2:].split()[1])
+        libproc = ctypes.CDLL(ctypes.util.find_library('proc') or '/usr/lib/libproc.dylib', use_errno=True)
+        # PROC_PIDTBSDINFO=3: struct proc_bsdinfo, whose pbi_ppid is the fifth uint32.
+        buffer = ctypes.create_string_buffer(136)
+        if libproc.proc_pidinfo(pid, 3, 0, buffer, 136) < 20:
+            return None
+        return int.from_bytes(buffer.raw[16:20], sys.byteorder)
+    except (OSError, ValueError, IndexError):
+        return None
+
+
+def ancestor_pids(pid: int | None = None) -> set[int]:
+    """Return ``pid`` (default: this process) and all its ancestors."""
+    current = os.getpid() if pid is None else pid
+    found = set()
+    while current and current > 1 and current not in found:
+        found.add(current)
+        current = parent_pid(current)
+    return found
+
+
 def _user_pids() -> list[int]:
     if sys.platform.startswith('linux'):
         uid = os.getuid()
@@ -113,13 +143,16 @@ def _user_pids() -> list[int]:
     return [pid for pid in buffer[:count] if pid > 0]
 
 
-def _carries(pid: int, marker: str) -> list[str] | None:
-    """Return the argv when ``pid`` holds exactly this marker, else None."""
+def _carries(pid: int, marker: str, variable: str = MEMBER_RUN_ENV, prefix: bool = False) -> list[str] | None:
+    """Return the argv when ``pid`` holds this marker (exactly, or as a prefix), else None."""
     view = _process_view(pid)
     if view is None:
         return None
     argv, environment = view
-    return argv if f'{MEMBER_RUN_ENV}={marker}' in environment else None
+    entry = f'{variable}={marker}'
+    if prefix:
+        return argv if any(item.startswith(entry) for item in environment) else None
+    return argv if entry in environment else None
 
 
 def _command(argv: list[str]) -> str:
@@ -127,8 +160,9 @@ def _command(argv: list[str]) -> str:
     return text if len(text) <= _COMMAND_LIMIT else text[:_COMMAND_LIMIT] + '...'
 
 
-def find_marked_processes(marker: str, exclude: set[int] | frozenset[int] = frozenset()) -> dict[int, str]:
-    """Map pid to command for same-user processes carrying exactly ``marker``."""
+def find_marked_processes(marker: str, exclude: set[int] | frozenset[int] = frozenset(), *,
+                          variable: str = MEMBER_RUN_ENV, prefix: bool = False) -> dict[int, str]:
+    """Map pid to command for same-user processes carrying ``marker`` in ``variable``."""
     if not marker:
         return {}
     skipped = {os.getpid(), *exclude}
@@ -136,23 +170,24 @@ def find_marked_processes(marker: str, exclude: set[int] | frozenset[int] = froz
     for pid in _user_pids():
         if pid in skipped or pid <= 1:
             continue
-        argv = _carries(pid, marker)
+        argv = _carries(pid, marker, variable, prefix)
         if argv is not None:
             found[pid] = _command(argv)
     return found
 
 
-def _signal_marked(pids: dict[int, str], marker: str, sig: int) -> None:
+def _signal_marked(pids: dict[int, str], marker: str, sig: int, variable: str, prefix: bool) -> None:
     for pid in pids:
         # Re-check right before signalling: the pid may have been reused.
-        if _carries(pid, marker) is not None:
+        if _carries(pid, marker, variable, prefix) is not None:
             try:
                 os.kill(pid, sig)
             except (ProcessLookupError, PermissionError):
                 pass
 
 
-def _wait_gone(pids: dict[int, str], marker: str, seconds: float) -> dict[int, str]:
+def _wait_gone(pids: dict[int, str], marker: str, seconds: float, variable: str,
+               prefix: bool) -> dict[int, str]:
     deadline = time.monotonic() + seconds
     alive = dict(pids)
     while alive:
@@ -161,7 +196,7 @@ def _wait_gone(pids: dict[int, str], marker: str, seconds: float) -> dict[int, s
                 os.waitpid(pid, os.WNOHANG)
             except ChildProcessError:
                 pass
-            if _carries(pid, marker) is None:
+            if _carries(pid, marker, variable, prefix) is None:
                 alive.pop(pid)
         if not alive or time.monotonic() >= deadline:
             break
@@ -170,23 +205,24 @@ def _wait_gone(pids: dict[int, str], marker: str, seconds: float) -> dict[int, s
 
 
 def stop_marked_processes(marker: str, exclude: set[int] | frozenset[int] = frozenset(),
-                          grace: float = 3.0) -> dict:
+                          grace: float = 3.0, *, variable: str = MEMBER_RUN_ENV,
+                          prefix: bool = False) -> dict:
     """Stop processes left with this execution's marker; report what was found.
 
     SIGTERM first, SIGKILL after ``grace`` seconds. A process counts as stopped
     once it no longer exists with the marker (exited, zombie or pid reused).
     """
     try:
-        found = find_marked_processes(marker, exclude)
+        found = find_marked_processes(marker, exclude, variable=variable, prefix=prefix)
     except (OSError, subprocess.SubprocessError) as error:
         return {'found': [], 'stopped': [], 'remaining': [], 'error': str(error)}
     alive = found
     if found:
-        _signal_marked(found, marker, signal.SIGTERM)
-        alive = _wait_gone(found, marker, grace)
+        _signal_marked(found, marker, signal.SIGTERM, variable, prefix)
+        alive = _wait_gone(found, marker, grace, variable, prefix)
         if alive:
-            _signal_marked(alive, marker, signal.SIGKILL)
-            alive = _wait_gone(alive, marker, 2.0)
+            _signal_marked(alive, marker, signal.SIGKILL, variable, prefix)
+            alive = _wait_gone(alive, marker, 2.0, variable, prefix)
     entry = lambda pid: {'pid': pid, 'command': found[pid]}
     return {'found': [entry(pid) for pid in sorted(found)],
             'stopped': [entry(pid) for pid in sorted(found) if pid not in alive],

@@ -775,6 +775,7 @@ def continue_member(
         # reopening Task work, budget or its accepted result.
         reports_only = reports_only or completed_task_member(project, mapping)
         require_active_session(project, alias, reports_only=reports_only)
+        _reconcile_exited_owner(alias, session_directory, mapping)
         with execution_start_lock(runner_directory):
             _continue_after_parent_interrupt(session_directory, alias, runner_directory)
         return _send_session(
@@ -789,32 +790,88 @@ def continue_member(
     raise _not_resumable()
 
 
-def _continue_after_parent_interrupt(session_directory: Path, alias: str, runner_directory: Path) -> None:
-    """Lift only the verified direct parent's own ordinary interrupt of this Session.
+def _reconcile_exited_owner(alias: str, session_directory: Path, mapping: Mapping[str, Any]) -> None:
+    """Let the Runner judge an execution whose owner already released its lock.
 
-    The caller holds the execution startup lock; the send that follows
-    re-checks admission under it. A stop written by anyone
-    else, one without an interrupt origin (Runner recovery, replacement or an
-    abnormal-session answer), an ancestor's stop and a stop whose interrupted
-    execution still runs all remain. The execution budget is separate and
-    unaffected.
+    A recorded execution with no terminal record whose owner released its
+    ownership lock is what the Runner judges abnormal. Reading its activity
+    runs the existing abnormal answer once (owner-exit record, Runtime
+    termination confirmation and one parent notice), so the continuation that
+    follows reads a reconciled record instead of a running one. A held lock -
+    a running, waiting or unreachable owner - is not touched here.
+    """
+    if ("execution_id" not in mapping
+            or os.path.lexists(str(session_directory / "execution.yml"))
+            or ownership_is_held(session_directory, mapping["worker_pid"])):
+        return
+    owning_execution(alias, session_directory, mapping)
+
+
+def _continue_after_parent_interrupt(session_directory: Path, alias: str, runner_directory: Path) -> None:
+    """Lift the verified direct parent's own ordinary interrupt, or the abnormal answer's stop.
+
+    The caller holds the execution startup lock and has verified direct
+    authority; the send that follows re-checks admission under it. A stop
+    the Runner's abnormal-session answer recorded for the currently mapped
+    execution lifts once that execution's end is confirmed (T5c: the direct
+    parent may continue the same Session after the old execution ended; T9c
+    forbids only automatic redispatch). A stop written by anyone else, one
+    without an interrupt or abnormal origin (Runner recovery, replacement),
+    an abnormal stop for another execution or without a confirmed end, an
+    ancestor's stop and a stop whose interrupted execution still runs all
+    remain. The execution budget is separate and unaffected.
     """
     stop_file = session_directory / "stop.yml"
     if stop_file.is_symlink() or not stop_file.is_file():
         return
     record = yaml.safe_load(stop_file.read_text())
     if (not isinstance(record, dict) or record.get("alias") != alias
-            or record.get("kind") != "interrupt" or "by" not in record
-            or record.get("resumed") is True):
+            or record.get("resumed") is True
+            or not (record.get("kind") == "abnormal"
+                    or (record.get("kind") == "interrupt" and "by" in record))):
         return
     caller = caller_alias(runner_directory)
-    if record["by"] != caller or caller == alias:
+    if caller == alias:
+        return
+    if record["kind"] == "abnormal":
+        _continue_after_abnormal_answer(session_directory, alias, runner_directory, record)
+        return
+    if record["by"] != caller:
         return
     mapping, _ = read_alias_mapping(runner_directory, alias)
     owning = owning_execution(alias, session_directory, mapping)
     if owning is not None and owning["activity"] == "running":
         return
     write_yaml_durably(stop_file, {**record, "resumed": True})
+
+
+def _continue_after_abnormal_answer(
+    session_directory: Path, alias: str, runner_directory: Path, record: Mapping[str, Any],
+) -> None:
+    """Lift the abnormal answer's stop once its execution's end is confirmed.
+
+    Only the mapped execution the answer named counts, and only while its
+    owner lock stays released and its retained end (the owner-exit record
+    with the Runtime's termination confirmation) reads as terminal. The
+    answer's claim is kept under that execution's name, so a later execution
+    judged abnormal is answered again.
+    """
+    mapping, _ = read_alias_mapping(runner_directory, alias)
+    execution_file = session_directory / "execution.yml"
+    if (record.get("execution_id") != mapping.get("execution_id")
+            or ownership_is_held(session_directory, mapping["worker_pid"])
+            or execution_file.is_symlink() or not execution_file.is_file()):
+        return
+    try:
+        if read_execution_result(execution_file).get("execution_id") != mapping["execution_id"]:
+            return
+        read_terminal_outcome(execution_file)
+    except RunnerError:
+        return
+    write_yaml_durably(session_directory / "stop.yml", {**record, "resumed": True})
+    claim = session_directory / ABNORMAL_RESPONSE_FILE
+    if claim.is_file() and not claim.is_symlink():
+        claim.rename(session_directory / "abnormal-response-{0}.yml".format(mapping["execution_id"]))
 
 
 def _session_report_paths(alias: str, cwd: Path) -> tuple[Path, ...]:
@@ -1341,15 +1398,20 @@ def _send_session_locked(
     return {**_execution_identity(alias, mapping), "send_status": "sent"}
 
 
-def interrupt_session(alias: str, cwd: Path, *, ordinary: bool = False) -> Dict[str, Any]:
+def interrupt_session(
+    alias: str, cwd: Path, *, ordinary: bool = False, abnormal_execution: str | None = None,
+) -> Dict[str, Any]:
     """Prevent further subtree work and interrupt every recorded descendant.
 
     Each member is addressed directly through its native execution owner.
     Failure to reach one member does not prevent the others being stopped,
     and only native terminal evidence counts as a complete confirmation.
     An ``ordinary`` interrupt (the public ``agents interrupt``) records who
-    issued it, so that same direct parent can continue the Session later. It
-    never rewrites a stop already in force from another origin.
+    issued it, so that same direct parent can continue the Session later.
+    ``abnormal_execution`` names the execution the Runner judged abnormal; its
+    answer records that stop as ``kind: abnormal`` for that execution, so the
+    direct parent can continue the Session once the execution's end is
+    confirmed. Neither rewrites a stop already in force from another origin.
     """
 
     runner_directory = discover_runner_directory(cwd)
@@ -1361,12 +1423,17 @@ def interrupt_session(alias: str, cwd: Path, *, ordinary: bool = False) -> Dict[
     with execution_start_lock(runner_directory):
         mapping, session_directory = read_alias_mapping(runner_directory, alias)
         stop = {"alias": alias}
-        if ordinary:
+        if ordinary or abnormal_execution is not None:
             stop_file = session_directory / "stop.yml"
             previous = yaml.safe_load(stop_file.read_text()) if stop_file.is_file() else None
-            caller = caller_alias(runner_directory)
-            if (not isinstance(previous, dict) or previous.get("resumed") is True
-                    or (previous.get("kind") == "interrupt" and previous.get("by") == caller)):
+            free = not isinstance(previous, dict) or previous.get("resumed") is True
+            caller = None if abnormal_execution is not None else caller_alias(runner_directory)
+            if abnormal_execution is not None:
+                if free:
+                    stop = {"alias": alias, "kind": "abnormal", "execution_id": abnormal_execution}
+                else:
+                    stop = previous  # a stop in force from another origin stays exactly as recorded
+            elif free or (previous.get("kind") == "interrupt" and previous.get("by") == caller):
                 # A native Main caller is a str subclass; the record keeps its plain value.
                 stop = {"alias": alias, "kind": "interrupt",
                         "by": str(caller) if caller is not None else None}
@@ -1717,7 +1784,10 @@ def respond_to_abnormal_session(
         try:
             # A public control entry locates the Runner from a working
             # directory; this Session's own record names that project.
-            stopped = interrupt_session(alias, runner_project_root(runner_directory))
+            stopped = interrupt_session(
+                alias, runner_project_root(runner_directory),
+                abnormal_execution=mapping.get("execution_id"),
+            )
         except RunnerError as error:
             stopped = {
                 "alias": alias, "interrupt_status": "unconfirmed",

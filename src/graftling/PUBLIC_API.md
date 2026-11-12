@@ -225,7 +225,7 @@ its own rules for which Agents it accepts.
 `agent`, `session` and `execution` are stable references or `null`.
 `result` is the **Agent document** plus the feature's own fields:
 
-- `agent`, `name`, `runtime`, `preset`, `connection`, `model`,
+- `agent`, `name`, `runtime`, `preset`, `configuration`, `connection`, `model`,
   `reasoning_effort`, `review` (the choice made at `create`, see 2), `workspace` (the
   assigned directory, `null` for the host's cwd), `state` (`active` or
   `standby`), `parent`, `creator` (`host`, `agent`, `session`), `host`,
@@ -916,6 +916,14 @@ exists; `send` and `resume` do not repeat them.
 reviewer's name) as chosen at `create`; `null` means not chosen (the host's or
 Runtime's default). Agents created before 0.1.1 show `null` for the first four,
 and before 0.2.1 for `review`.
+
+It also carries `configuration`: the name of the configuration the driver
+applied, when its `prepare` reports one as `applied` (`{"configuration",
+"model", "reasoning_effort"}`; the core removes it from the stored launch
+settings). Where `config.yml` chose no model or reasoning effort, `model` and
+`reasoning_effort` show what that configuration chose; an explicit choice
+always wins. `preset` keeps its `config.yml` meaning. A driver that reports
+nothing, and Agents created before this field existed, show `null`.
 
 **Workspace (approval layer 1).** `create`'s optional `workspace` is an
 existing absolute directory the parent assigns to the child. Rules:

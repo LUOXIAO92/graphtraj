@@ -695,7 +695,9 @@ class AgentControl:
                                                     "cannot run unreviewed.")
             check_reviewer(review)
         # Keep the original call shape for drivers whose users select defaults.
-        settings = driver.prepare(runtime, caller, **options)
+        settings = dict(driver.prepare(runtime, caller, **options))
+        # What a driver-resolved configuration chose; recorded, never launched.
+        applied = settings.pop("applied", None) or {}
         # Only the user's file declares this; no create argument can ask for a key.
         passed = self._pass_env(selection)
         if passed:
@@ -716,12 +718,17 @@ class AgentControl:
             "settings":   settings,
             "selection":  {**{name: (selection or {}).get(name) for name in
                               ("preset", "connection", "model", "reasoning_effort")},
-                           "review": review["name"] if review is not None else None},
+                           "review": review["name"] if review is not None else None,
+                           "configuration": applied.get("configuration")},
             "workspace":  str(Path(workspace).resolve()) if workspace is not None else None,
             "created_at": _now(),
             "retired_at": None,
             "executions": [],
         }
+        # An explicit config.yml selection always wins over the driver's.
+        for name in ("model", "reasoning_effort"):
+            if record["selection"][name] is None:
+                record["selection"][name] = applied.get(name)
         if extra_fields is not None:
             record["extra_fields"] = json.loads(json.dumps(extra_fields))
         with self._locked(agent, record) as current:
@@ -1844,7 +1851,7 @@ class AgentControl:
             "name":    record["name"],
             "runtime": record["runtime"],
             **{name: (record.get("selection") or {}).get(name)
-               for name in ("preset", "connection", "model", "reasoning_effort", "review")},
+               for name in ("preset", "configuration", "connection", "model", "reasoning_effort", "review")},
             "workspace": record.get("workspace"),
             "state":   ACTIVE if current is not None else STANDBY,
             "parent":  record["parent"],

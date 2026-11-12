@@ -369,7 +369,8 @@ class GraphTrajAgents:
             mapping, directory = runner_status.read_alias_mapping(runner_directory(self.root), member)
         except (RunnerError, OSError, ValueError, KeyError, TypeError):
             return False
-        if mapping.get('retire_status') == 'retired':
+        # A retired record keeps only session.yml (its retirement mapping), or is moved away.
+        if mapping.get('retire_status') == 'retired' or not (directory / 'mapping.yml').is_file():
             return False
         try:
             # Observation only: an abnormal member is not answered (stopped) by a read.

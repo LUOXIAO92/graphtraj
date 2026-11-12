@@ -317,14 +317,24 @@ def test_a_running_member_whose_push_fails_holds_the_end(project) -> None:
     assert notification(root, child) == 'held'
 
 
-def test_a_retired_member_gets_nothing(project) -> None:
+@pytest.mark.parametrize('retirement', ['moved', 'session-record'])
+def test_a_retired_member_gets_nothing(project, retirement) -> None:
+    import yaml
+
     from graphtraj.configuration.project_configuration import runner_directory
     from graphtraj.interfaces import agents
 
     root, member, sent = project
     child, _ = member_child(root)
-    # Retirement moves the member's Session record out of the Runner's sessions.
     sessions = runner_directory(root) / 'sessions'
-    (sessions / MEMBER).rename(sessions.parent / 'retired-member')
+    if retirement == 'moved':
+        # Retirement moves the member's Session record out of the Runner's sessions.
+        (sessions / MEMBER).rename(sessions.parent / 'retired-member')
+    else:
+        # Or it leaves only session.yml with the retirement mapping.
+        mapping_file = sessions / MEMBER / 'mapping.yml'
+        mapping = yaml.safe_load(mapping_file.read_text())
+        (sessions / MEMBER / 'session.yml').write_text(yaml.safe_dump({'retirement': {'mapping': mapping}}))
+        mapping_file.unlink()
     agents.GraphTrajAgents(root).reconcile_children({MEMBER, member})
     assert sent == [] and notification(root, child) == 'unavailable'

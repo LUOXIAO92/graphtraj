@@ -77,6 +77,13 @@ This is 449's step 03, writing to `05-suite.txt` and `05-shards/`.
 
 ## Fallbacks and rehearsal flags
 
+01 writes its Main's pid to `…/realhost/01-main.pid` and 02 waits on that file; 03 and 04 use `03-main.pid`
+the same way. A missing pid file prints `STOP: no pid file <path>; run the previous step first`.
+
+00 and 01 first stop, changing nothing, if a pid in `01-main.pid`, `01-main-stream.pid`, `03-main.pid` or
+`03-main-stream.pid` is alive, or if a `sleep 400` process runs. They print what is alive. Wait for it to end,
+then rerun; the script never signals it.
+
 Fallbacks are printed beside each step. If the resume is refused, for example because the previous execution is still closing, rerun 03 once.
 
 `VERIFY451_BASE`, `VERIFY451_OUT`, `VERIFY451_NO_MODEL` and `VERIFY451_CLAUDE` (a stub host) exist for rehearsal only.

@@ -7,6 +7,7 @@ Usage (the scratch venv's Python):
   python -I probe.py kill PROJECT FACTS        SIGKILL the Worker owning the child, then the child's (and member's) Runtime
   python -I probe.py wait PROJECT SECONDS      poll (<=100 s) until the member's records show REPORT-451-END: MEMBER-DONE
   python -I probe.py observe PROJECT FACTS     read only: the four CHECK lines and a summary
+  python -I probe.py idle OUT -                0 unless an earlier probe Main (pid files in OUT) or 'sleep 400' lives
 Prints only facts read from the isolated project and process tables; it reads no credential.
 """
 from __future__ import annotations
@@ -328,6 +329,29 @@ def probe_processes() -> dict[int, str]:
     return found
 
 
+PID_FILES = ('01-main.pid', '01-main-stream.pid', '03-main.pid', '03-main-stream.pid')
+
+
+def idle(out: Path, _unused: str) -> int:
+    """0 when no earlier probe Main (pid files in ``out``) and no 'sleep 400' runs; signals nothing."""
+    busy = {}
+    for name in PID_FILES:
+        try:
+            pid = int((out / name).read_text().strip())
+        except (OSError, ValueError):
+            continue
+        if alive(pid):
+            busy[name] = pid
+    sleeping = probe_processes()
+    if not busy and not sleeping:
+        print('no earlier probe process alive')
+        return 0
+    print('STILL ALIVE from an earlier run:', {**{f'pid file {k}': v for k, v in busy.items()},
+                                              **{f'sleep 400 pid {k}': v for k, v in sleeping.items()}})
+    print('STOP: changed nothing. Wait for it to end, then rerun (the child\'s sleep 400 ends 400 s after it started).')
+    return 1
+
+
 def check(label: str, ok: bool, detail: str = '') -> bool:
     print(f'CHECK {"PASS" if ok else "FAIL"}: {label}' + (f' | {detail}' if detail else ''))
     return ok
@@ -395,5 +419,5 @@ def observe(project: Path, facts_file: str) -> int:
 if __name__ == '__main__':
     command, target, extra = sys.argv[1], Path(sys.argv[2]), sys.argv[3]
     commands = {'prepare': prepare, 'plugins': plugins, 'child': child_cmd, 'kill': kill,
-                'wait': wait, 'observe': observe}
+                'wait': wait, 'observe': observe, 'idle': idle}
     raise SystemExit(commands[command](target, extra))

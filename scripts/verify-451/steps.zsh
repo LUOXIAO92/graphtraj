@@ -29,6 +29,9 @@ SRC=$BASE/src
 VV=$BASE/venv
 SV=$BASE/suite-venv
 P=$BASE/project
+# One pid file per background Main, written by its step and read by the next through these names.
+PID01=$OUT/01-main.pid
+PID03=$OUT/03-main.pid
 STEP=${1:-help}
 path=(/opt/homebrew/bin $HOME/.local/bin $path)
 mkdir -p $OUT $BASE
@@ -48,9 +51,14 @@ copy_deps() {
     || { print "STOP: click in $1 is not production's 8.5.0"; return 1; }
 }
 # Wait (<= 9 min) for a background claude -p started by this script; never a standalone sleep.
+# Exit 0: it ended. 1: still running after 9 min. 2: no readable pid file (the previous step did not run).
 main_wait() {
   $VV/bin/python -I -c 'import os, sys, time
-pid = int(open(sys.argv[1]).read().strip()); deadline = time.time() + 540
+try:
+    pid = int(open(sys.argv[1]).read().strip())
+except (OSError, ValueError):
+    print("STOP: no pid file", sys.argv[1] + "; run the previous step first"); sys.exit(2)
+deadline = time.time() + 540
 while time.time() < deadline:
     try: os.kill(pid, 0)
     except ProcessLookupError: print("Main claude -p", pid, "ended"); sys.exit(0)
@@ -58,9 +66,12 @@ while time.time() < deadline:
 print("Main claude -p", pid, "still running after 9 min"); sys.exit(1)' $1
 }
 probe() { (cd $P && clean $VV/bin/python -I $SD/probe.py "$@") }
+# STOP, changing nothing, while an earlier run's Main or its child's 'sleep 400' still lives. Signals nothing.
+guard() { clean $CONDA -I $SD/probe.py idle $OUT - }
 
 step_00() {
   say "[00] Main. preflight. Dialog: none. Output also in $OUT/00.txt"
+  guard || return 1
   print "commit under test: $COMMIT"
   git -C $WT cat-file -e $COMMIT^{commit} || { print "STOP: $COMMIT is not in $WT"; return 1; }
   say "scratch venv from $COMMIT (git archive; editable install; click/yaml/websockets copied read-only from production)"
@@ -114,8 +125,10 @@ step_00u() {
 step_01() {
   say "[01] Main. starts the probe Main in the background. Dialog: none. Returns at once; then run 02."
   [[ -x $VV/bin/graphtraj && -f $P/.mcp.json ]] || { print "STOP: run 00 first"; return 1; }
+  guard || return 1
   [[ $(cat $BASE/src-commit 2>/dev/null) == $(git -C $WT rev-parse HEAD) ]] || print "NOTE: venv commit $(cat $BASE/src-commit) is not HEAD; rerun 00 if HEAD is the commit under test."
   local C=$(claude_bin) S=$OUT/01-main-stream.jsonl
+  rm -f $PID01 $OUT/01-main-stream.pid
   local member='Use only the agents tool (mcp__agents__agents). Execute feature create with arguments {"runtime": "claude", "instruction": "Use the Bash tool once to run exactly: sleep 400 . Then reply DONE-451."}. Print one line CREATE <agent> <execution> from its result. Then execute feature wait with arguments {"agent": "<that agent>", "timeout_seconds": 600}. On any input whose JSON has source graphtraj, reply with every such input verbatim, each on its own line, then the line '$END_MARK', and end. Read no files and run no shell command yourself.'
   local swarm=$($VV/bin/python -I -c 'import json,sys; print(json.dumps({"action":"execute","feature":"swarm","arguments":{"tasks":[{"task_id":"1","role":"team_leader","instruction":sys.argv[1]}]}}))' "$member")
   print -r -- "$swarm" > $OUT/01-swarm-arguments.json
@@ -127,14 +140,19 @@ Print its raw result text on one line starting with SWARM-RESULT.
   print "dispatch at $(date +%T); prompt: $OUT/01-main-prompt.txt"
   (cd $P && clean nohup $C -p --model $MODEL --output-format stream-json --verbose --mcp-config $P/.mcp.json --strict-mcp-config \
       --allowedTools "mcp__agents__tasks,Bash($W)" < $OUT/01-main-prompt.txt > $S 2> $OUT/01-main-stderr.txt &
-   print $! > ${S:r}.pid)
-  print "Main claude -p pid $(cat ${S:r}.pid), stream $S"
+   print $! > $PID01)
+  print "Main claude -p pid $(cat $PID01) (in $PID01), stream $S"
   next "zsh $THIS 02 2>&1 | tee $OUT/02.txt"
 }
 
 step_02() {
   say "[02] Main. waits for 01's Main (<= 9 min), then kills the child's owner. Dialog: none."
-  main_wait $OUT/01-main.pid || { print "STOP: rerun 02 later (01's Main still runs)"; return 1; }
+  main_wait $PID01
+  case $? in
+    0) ;;
+    1) print "STOP: rerun 02 later (01's Main still runs)"; return 1 ;;
+    *) return 1 ;;
+  esac
   grep -o 'CHILD-RUNNING\|CHILD-NOT-RUNNING\|SWARM-RESULT[^"]*' $OUT/01-main-stream.jsonl | sort | uniq -c
   probe child $P 1
   probe kill $P $OUT/02-kill.json || { print "Fallback: read $OUT/01-main-stream.jsonl (grep SWARM-RESULT) and rerun 01 after 00."; return 1; }
@@ -146,6 +164,7 @@ step_03() {
   [[ -f $OUT/02-kill.json ]] || { print "STOP: run 02 first"; return 1; }
   local alias=$($VV/bin/python -I -c 'import json,sys; print(json.load(open(sys.argv[1]))["alias"])' $OUT/02-kill.json)
   local C=$(claude_bin) S=$OUT/03-main-stream.jsonl
+  rm -f $PID03 $OUT/03-main-stream.pid
   local message='Call no tool. Reply WAITING-451 and end your turn. When an input whose JSON has source graphtraj arrives, reply with every such input verbatim, then '$END_MARK'.'
   local resume=$($VV/bin/python -I -c 'import json,sys; print(json.dumps({"action":"execute","feature":"resume","arguments":{"agent":sys.argv[1],"message":sys.argv[2]}}))' "$alias" "$message")
   local W="$VV/bin/python $SD/probe.py wait $P 100"
@@ -156,15 +175,20 @@ Print its raw result text on one line starting with RESUME-RESULT.
   print "resume at $(date +%T) for $alias; prompt: $OUT/03-main-prompt.txt"
   (cd $P && clean nohup $C -p --model $MODEL --output-format stream-json --verbose --mcp-config $P/.mcp.json --strict-mcp-config \
       --allowedTools "mcp__agents__agents,Bash($W)" < $OUT/03-main-prompt.txt > $S 2> $OUT/03-main-stderr.txt &
-   print $! > ${S:r}.pid)
-  print "Main claude -p pid $(cat ${S:r}.pid), stream $S"
+   print $! > $PID03)
+  print "Main claude -p pid $(cat $PID03) (in $PID03), stream $S"
   print "Fallback: if 04 shows RESUME-RESULT with an error (for example the previous execution is still closing), rerun 03 once."
   next "zsh $THIS 04 2>&1 | tee $OUT/04.txt"
 }
 
 step_04() {
   say "[04] Main. observe (read only; waits <= 9 min for 03's Main). Dialog: none."
-  main_wait $OUT/03-main.pid || print "NOTE: 03's Main still runs; checking what exists now (rerun 04 later)."
+  main_wait $PID03
+  case $? in
+    0) ;;
+    1) print "NOTE: 03's Main still runs; checking what exists now (rerun 04 later)." ;;
+    *) return 1 ;;
+  esac
   grep -o 'RESUME-RESULT[^"]*\|MEMBER-DONE' $OUT/03-main-stream.jsonl | sort | uniq -c
   probe observe $P $OUT/02-kill.json
   local rc=$?

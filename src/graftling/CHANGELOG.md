@@ -14,6 +14,9 @@ The numbers in parentheses are the project's Task numbers.
 
 ## Unreleased (compatible)
 
+- A process that runs `create` now keeps the execution's owner until it reports its end
+  (452). The Claude, Codex, Pi and DSH drivers start that owner as a non-daemon thread, so
+  a `create` answered on a daemon thread no longer loses its end when the process exits.
 - Each end notice names the execution it reports (449). The Codex host event gains
   `execution`, the same ID as the end's `last_result.id`; the Claude Code queue record,
   the Pi `details` and the DSH notice already held it. The text shown to the model ends

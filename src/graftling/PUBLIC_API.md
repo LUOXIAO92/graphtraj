@@ -1175,19 +1175,19 @@ Delivery rules:
   Task member's children every 15 seconds. A Task member that is not running holds
   such an end (`held`); its next run receives it once. Reads do not resume the member.
   A notice to a host receiver carries `error`, as `finished` gives it.
-  In that same call, for a Claude execution, it also stops the tool processes that
-  execution left (457). A Claude Code tool shell runs in its own session, outside the
+  In that same call, for a Claude or Codex execution, it also stops the tool processes
+  that execution left (457, 462). A Claude Code or Codex tool shell runs in its own session, outside the
   Runtime's process group, and only the dead owner would have stopped it. The call
   signals only same-user processes whose environment holds exactly that execution's
   `GRAFTLING_MEMBER_RUN` value (SIGTERM, then SIGKILL after 3 seconds), never itself
   or its ancestors. It records what it found on the execution as `escaped_processes`
   (`found`, `stopped`, `remaining`, each a list of `pid` and `command`). The record
   lock is held up to about 5 seconds longer for this. An execution recorded before
-  this change, and Codex, Pi and DSH executions, carry no marker and are not scanned.
+  this change, and Pi and DSH executions, carry no marker and are not scanned.
   On macOS the environment of Apple platform binaries cannot be read, so the marker
   never finds a tool shell running `/bin/zsh` or `/bin/sh`, or commands such as
   `/bin/sleep`; Claude Code's own Bash tool shell is such a process. So, while the
-  Runtime runs, a Claude execution's owner also records the Runtime's descendants
+  Runtime runs, a Claude or Codex execution's owner also records the Runtime's descendants
   about once a second, by parent pid, with each one's pid, process group, uid and
   start time (459). The record is a file in the execution's directory, written without
   the Agent lock; its absolute path is the process fact `tool_descendants`. The call
@@ -1207,6 +1207,14 @@ Delivery rules:
   by the marker, so not when it is a platform binary; a process whose chain of
   ancestors passed through a readable process without the marker is left alone by
   design; Windows is not covered.
+  For a Codex child (462) the Runtime is its owned app-server, which the owner starts
+  with that execution's own `GRAFTLING_MEMBER_RUN` value (never the parent's) and also
+  sets for tool shells through `shell_environment_policy.set`. Codex stops its tool
+  processes itself when its stdin closes, but not when the app-server is killed. The
+  owner's reclaim runs once the app-server has exited and is written to
+  `codex-termination-<turn>.yml` in the execution's directory; a non-empty one is also
+  the result's `escaped_processes`. A Codex host the user started (`CodexHost`), and a
+  service reached through a proxy or an existing WebSocket, are not covered.
 - A completed round of a child that still has running members is recorded,
   not pushed. All rounds stay readable through `status`.
 - A notice its parent cannot receive now is recorded `held`, stays readable

@@ -142,6 +142,25 @@ class RuntimeDriver(Protocol):
         """Answer one pending native request exactly once."""
 
 
+def _stop_escaped(execution: dict) -> None:
+    """Stop and record the tools a reconciled execution left behind (457).
+
+    Tool shells run in their own sessions, outside the Runtime's group, and
+    only the owner stopped them on its way out. Only same-user processes with
+    exactly this execution's marker are signalled; the caller and its
+    ancestors are skipped. SIGTERM, then SIGKILL after 3 s, then up to 2 s:
+    the record lock is held about 5 s at most beyond the scan. A record
+    without the marker (older, or another Runtime) is left as it was.
+    """
+    marker = execution["process"].get("tool_marker")
+    if not isinstance(marker, str) or not marker or os.name == "nt":
+        return
+    from graftling.member_processes import ancestor_pids, stop_marked_processes
+    from graftling.review import redact
+
+    execution["escaped_processes"] = redact(stop_marked_processes(marker, ancestor_pids()))
+
+
 def _now() -> float:
     """Return wall-clock seconds; records keep their own event times."""
     return time.time()
@@ -306,8 +325,12 @@ class ExecutionEvents:
         self._apply(apply)
 
     def process(self, **facts: Any) -> None:
-        """Record process facts such as ``runtime_pid`` and ``owned_at``."""
-        allowed = {"worker_pid", "runtime_pid", "owned_at", "runtime_exit"}
+        """Record process facts such as ``runtime_pid`` and ``owned_at``.
+
+        ``tool_marker`` is the execution's ``GRAFTLING_MEMBER_RUN`` value; tool
+        processes that left the Runtime's group carry it (457).
+        """
+        allowed = {"worker_pid", "runtime_pid", "owned_at", "runtime_exit", "tool_marker"}
         if set(facts) - allowed:
             raise ValueError("unknown process fact")
         self._apply(lambda record, current: current["process"].update(facts))
@@ -1638,6 +1661,8 @@ class AgentControl:
 
         If the Runtime process still lives, the execution stays running with
         a diagnostic, so no second execution can start in the same Session.
+        Otherwise the tool processes still carrying its ``tool_marker`` are
+        stopped, since the dead owner's own reclaim never ran (457).
         """
         current = _running(record)
         if current is None or _alive(current["process"].get("worker_pid")):
@@ -1650,6 +1675,7 @@ class AgentControl:
             error={"code": "owner-exited",
                    "message": "The process owning this execution exited before reporting its end."},
         )
+        _stop_escaped(current)
         # Its owner died before notifying anyone, so nobody else will. Held in the
         # same write, so a control without a receiver that finds it first loses
         # nothing: without hold_notices, a control with one delivers it once

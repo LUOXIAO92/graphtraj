@@ -14,6 +14,13 @@ The numbers in parentheses are the project's Task numbers.
 
 ## Unreleased (compatible)
 
+- Reconciling an owner-exited Claude execution now stops the tool processes it left
+  (457). The Claude driver and GraphTraj's agents driver record the execution's
+  `GRAFTLING_MEMBER_RUN` value as the process fact `tool_marker`. The call that ends
+  the execution `owner-exited` stops same-user processes carrying exactly that value
+  and records them as `escaped_processes`. Before, a killed owner left the child's
+  Bash tool shell and its command running, since they run outside the Runtime's
+  process group. Older records, and Codex, Pi and DSH executions, are unchanged.
 - A process that runs `create` now keeps the execution's owner until it reports its end
   (452). The Claude, Codex, Pi and DSH drivers start that owner as a non-daemon thread, so
   a `create` answered on a daemon thread no longer loses its end when the process exits.

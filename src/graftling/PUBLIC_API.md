@@ -1184,6 +1184,10 @@ Delivery rules:
   (`found`, `stopped`, `remaining`, each a list of `pid` and `command`). The record
   lock is held up to about 5 seconds longer for this. An execution recorded before
   this change, and Codex, Pi and DSH executions, carry no marker and are not scanned.
+  On macOS the environment of Apple platform binaries cannot be read, so a tool shell
+  running `/bin/zsh` or `/bin/sh` and commands such as `/bin/sleep` are neither found
+  nor stopped; Claude Code's own Bash tool shell is such a process. Processes from
+  other executables, such as Python or Node, are.
 - A completed round of a child that still has running members is recorded,
   not pushed. All rounds stay readable through `status`.
 - A notice its parent cannot receive now is recorded `held`, stays readable

@@ -1,8 +1,10 @@
 """463 probe helper: the dsh role, an owner that creates a DSH child, the kill, one reconciling read and the CHECKs.
 
 Usage (the scratch venv's Python, -I):
-  probe.py prepare PROJECT ROLES   copy the source project's dsh role (ROLES = its roles.yml, or '-' for the
-                                   rehearsal's own); prints model, connection and the key variable's NAME only
+  probe.py prepare PROJECT SOURCE  copy the only dsh/ connection preset of SOURCE (a project root, read through the
+                                   installed roles_file, or a roles file) as probe_463.dsh_child; prints the
+                                   connections file path, model and the key variable's NAME only
+  probe.py select PROJECT -        what create will launch (installed AdapterDriver.prepare, runtime dsh)
   probe.py owner PROJECT OUT       the owner: creates one DSH child through GraphTraj's agents control and stays
                                    alive (step 01 starts it in the background); answers only the child's exact Bash
                                    approval if DSH asks for one
@@ -35,7 +37,6 @@ INSTRUCTION = (f'Use the Bash tool exactly once to run exactly this command, unc
                'It runs for a long time; do not wait for it in any other way and run nothing else.')
 MARKER_ENV = 'GRAFTLING_MEMBER_RUN'
 CALLER = 'verify-463'
-REHEARSAL_ROLE = {'runtime': 'dsh', 'model': 'deepseek-flash', 'worktree_access': 'write'}
 
 
 def now() -> str:
@@ -61,42 +62,84 @@ def alive(pid: object) -> bool:
 
 # -- prepare ----------------------------------------------------------------------
 
-def prepare(project: Path, source: str) -> int:
-    """The isolated project's one role: the source project's dsh role, copied unchanged."""
-    if source == '-':
-        role, name = dict(REHEARSAL_ROLE), 'rehearsal'
-    else:
-        roles = (yaml.safe_load(Path(source).read_text()) or {}).get('roles') or {}
-        found = {key: value for key, value in roles.items() if isinstance(value, dict) and value.get('runtime') == 'dsh'}
-        name = 'dsh' if 'dsh' in found else (next(iter(found)) if len(found) == 1 else None)
-        if name is None:
-            print(f'STOP: {source} has {sorted(found) or "no"} roles with runtime dsh; need one named dsh or exactly one.')
-            return 1
-        role = dict(found[name])
-    (project / '.graphtraj/roles.yml').write_text(yaml.safe_dump({'roles': {'dsh': role}, 'role_tree': {}}))
-    key = role.get('api_key_env')
-    if role.get('connection'):
-        from graphtraj.configuration.runtime_connections import resolve_connection
+GROUP, ROLE = 'probe_463', 'dsh_child'
+REFERENCE = f'{GROUP}.{ROLE}'
 
-        try:
-            resolved = resolve_connection(role['connection'], role.get('reasoning_effort'))
-        except Exception as error:  # a broken connection must stop here, not in the model step
-            print(f'STOP: connection {role["connection"]!r} does not resolve: {type(error).__name__}: {error}')
-            return 1
-        key = resolved.get('api_key_env', key)
-        print(f'dsh role (from {name}): model {resolved.get("model", role.get("model"))} | connection '
-              f'{role["connection"]} | base_url set {bool(resolved.get("base_url"))}')
-    else:
-        print(f'dsh role (from {name}): model {role.get("model")} | no connection (DSH defaults)')
-    key = key or ('DEEPSEEK_API_KEY' if not role.get('connection') else None)
-    print(f'key variable (name only): {key or "none (DSH login)"}')
-    (project / '.graphtraj/probe-463').mkdir(exist_ok=True)
-    (project / '.graphtraj/probe-463/keyvar').write_text(key or '')
+
+def dsh_presets(document: dict) -> dict[str, dict]:
+    """Presets whose connection is a DSH one, by reference, in the installed schema
+    (project_roles._roles_from_document: a group maps role names to mappings; a flat entry is its own preset)."""
+    found = {}
+    for name, entry in ((document or {}).get('roles') or {}).items():
+        if isinstance(entry, dict) and entry and all(isinstance(value, dict) for value in entry.values()):
+            items = [(f'{name}.{role}', value) for role, value in entry.items()]
+        else:
+            items = [(name, entry)]
+        for reference, value in items:
+            if isinstance(value, dict) and str(value.get('connection', '')).startswith('dsh/'):
+                found[reference] = value
+    return found
+
+
+def prepare(project: Path, source: str) -> int:
+    """The isolated project's one preset: the source's only DSH connection (and effort), nothing else.
+
+    SOURCE is a project root (its roles file via the installed roles_file) or a roles file (rehearsal fixture).
+    instructions and reports are not copied: their files and paths do not exist in the isolated project."""
+    from graphtraj.configuration.project_roles import roles_file
+    from graphtraj.configuration.runtime_connections import connections_file, resolve_connection
+
+    path = Path(source) if Path(source).is_file() else roles_file(Path(source))
+    print(f'source roles file: {path}')
+    try:
+        found = dsh_presets(yaml.safe_load(path.read_text()))
+    except (OSError, yaml.YAMLError) as error:
+        print(f'STOP: cannot read {path}: {type(error).__name__}')
+        return 1
+    if len(found) != 1:
+        print(f'STOP: need exactly one preset with a dsh/ connection in {path}; found {sorted(found) or "none"}.')
+        return 1
+    (source_ref, entry), = found.items()
+    preset = {key: entry[key] for key in ('connection', 'reasoning_effort') if key in entry}
+    target = roles_file(project)
+    target.write_text(yaml.safe_dump({'roles': {GROUP: {ROLE: preset}}}))
+    print(f'isolated roles file: {target} | preset {REFERENCE} <- {source_ref}: {preset}')
+    catalog = connections_file()
+    print(f'connections file: {catalog} | exists: {catalog.exists()}')
+    try:
+        resolved = resolve_connection(preset['connection'], preset.get('reasoning_effort'))
+    except (OSError, ValueError) as error:
+        print(f'STOP: connection {preset["connection"]} does not resolve from {catalog}: {error}')
+        return 1
+    key = resolved.get('api_key_env')
+    print(f'connection resolves: runtime {resolved["runtime"]} | model {resolved["model"]} | base_url set '
+          f'{bool(resolved.get("base_url"))} | key variable (name only): {key or "none (DSH login)"}')
+    work = project / '.graphtraj/probe-463'
+    work.mkdir(exist_ok=True)
+    (work / 'keyvar').write_text(key or '')
     done = subprocess.run([str(Path(sys.executable).parent / 'graphtraj'), 'doctor'],
                           capture_output=True, text=True, timeout=300)
     ok = 'roles: OK' in done.stdout
     print('roles OK' if ok else 'roles NOT OK: ' + (done.stdout + done.stderr)[-600:])
     return 0 if ok else 1
+
+
+def select(project: Path, _unused: str) -> int:
+    """What the owner's create will launch: the installed AdapterDriver.prepare for runtime dsh and the preset."""
+    from graftling import Caller
+    from graphtraj.execution.agent_driver import AdapterDriver
+
+    try:
+        prepared = AdapterDriver(project, project).prepare('dsh', Caller(CALLER, None), configuration=REFERENCE)
+    except Exception as error:
+        print(f'STOP: create would refuse: {getattr(error, "code", type(error).__name__)}: {error}')
+        return 1
+    request = prepared['adapter_request']
+    print(f'create selects: role {prepared["role"]} | runtime dsh | model {request.get("model")} | connection '
+          f'{request.get("connection")} | DSH home set {bool(request.get("runtime_home"))} | base_url set '
+          f'{bool(request.get("base_url"))} | key variable {request.get("api_key_env") or "none"} | sandbox '
+          f'{request.get("sandbox")} | dsh {request.get("executable")}')
+    return 0
 
 
 # -- owner --------------------------------------------------------------------------
@@ -109,7 +152,8 @@ def owner(project: Path, out: str) -> int:
     agents = GraphTrajAgents(project)
     call = bind(agents.control, Caller(CALLER, None))
     print(now(), 'owner pid', os.getpid(), 'creating the DSH child', flush=True)
-    created = call({'action': 'create', 'runtime': 'dsh', 'instruction': INSTRUCTION}).document
+    created = call({'action': 'create', 'runtime': 'dsh', 'configuration': REFERENCE,
+                    'instruction': INSTRUCTION}).document
     agent = created.get('agent')
     Path(out).write_text(json.dumps({'agent': agent, 'owner_pid': os.getpid(), 'created': created.get('execution')}))
     print(now(), 'CREATED', agent, created.get('execution'), flush=True)
@@ -147,7 +191,9 @@ def facts(project: Path) -> tuple[dict, dict, dict]:
         made = json.loads((project / '.graphtraj/probe-463/owner.json').read_text())
     except (OSError, ValueError):
         return {}, {}, {}
-    path = project / '.graphtraj/swarm/control/agents' / f'{made.get("agent")}.json'
+    from graphtraj.interfaces.agents import swarm_root
+
+    path = swarm_root(project) / 'control/agents' / f'{made.get("agent")}.json'
     try:
         record = json.loads(path.read_text())
     except (OSError, ValueError):
@@ -270,7 +316,9 @@ def kill(project: Path, facts_file: str) -> int:
     try:
         started = time.time()
         GraphTrajAgents(project).control.unconfirmed_ends(record['agent'])
-        state = (json.loads((project / '.graphtraj/swarm/control/agents' / f'{record["agent"]}.json').read_text())
+        from graphtraj.interfaces.agents import swarm_root
+
+        state = (json.loads((swarm_root(project) / 'control/agents' / f'{record["agent"]}.json').read_text())
                  .get('executions') or [{}])[-1]
         escaped = state.get('escaped_processes')
         print(f'read: {time.time() - started:.1f} s; child {state.get("state")} {state.get("outcome")} '
@@ -393,7 +441,9 @@ def stub(project: Path, _unused: str) -> int:
         def interrupt(self, run):
             return True
 
-    root = project / '.graphtraj/swarm'
+    from graphtraj.interfaces.agents import swarm_root
+
+    root = swarm_root(project)
     control = AgentControl(root, {'stub': Driver()})
     agent = bind(control, Caller('stub-host', None))({'action': 'create', 'runtime': 'stub',
                                                       'instruction': 'w'}).document['agent']
@@ -408,5 +458,5 @@ def stub(project: Path, _unused: str) -> int:
 
 if __name__ == '__main__':
     command, target, extra = sys.argv[1], Path(sys.argv[2]), sys.argv[3]
-    commands = {'prepare': prepare, 'owner': owner, 'ready': ready, 'kill': kill, 'idle': idle, 'stub': stub}
+    commands = {'prepare': prepare, 'select': select, 'owner': owner, 'ready': ready, 'kill': kill, 'idle': idle, 'stub': stub}
     raise SystemExit(commands[command](target, extra))

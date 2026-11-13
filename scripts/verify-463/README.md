@@ -11,7 +11,7 @@ The base is `~/graphtraj-verify-463`, a new path. No other verify directory is t
 
 | Step | Who | Command | Success |
 |---|---|---|---|
-| 00 | Main | `S 00` | Shows `463 fix: dsh owner samples: True \| sets the marker: True \| dsh driver records it: True \| agents driver records dsh: True`, `deps: click 8.5.0`, a `dsh role (from …)` line with your model and connection, `key variable (name only): …`, `roles OK`, a `dsh:` version line and `set in this shell: yes` (or `none (DSH login)`). Prints the 01 command. |
+| 00 | Main | `S 00` | Shows `463 fix: dsh owner samples: True \| sets the marker: True \| dsh driver records it: True \| agents driver records dsh: True`, `deps: click 8.5.0`, `source roles file: …/.graphtraj/core/roles.yml`, `preset probe_463.dsh_child <- pi_dsh_trial.engineer: {'connection': 'dsh/deepseek-official/deepseek-flash'}`, `connections file: ~/.graphtraj/connections.yml \| exists: True`, `connection resolves: runtime dsh …`, `roles OK`, `set in this shell: yes` (or `none (DSH login)`), `create selects: role probe_463.dsh_child \| runtime dsh …` and a `dsh:` version line. Prints the 01 command. |
 | 00k | USER, only if 00 prints `STOP: the dsh role's key variable … is not set` | Tell Main which shell or file holds that variable; Main reruns 00 from a shell that has it. The value is never printed. | 00 passes. |
 | 01 | Main | `S 01` | Returns at once. It starts the probe owner in the background, prints its pid and the 02 command. |
 | 02 | Main | `S 02 2>&1 \| tee …/realhost/02.txt` | Waits up to 8 minutes for `CHILD-READY`, refuses (`STOP`, signals nothing) unless the child's descendants record lists a live setsid'd `/bin/sleep 4632`, SIGKILLs only the owner, prints `RESIDUE … still alive: [(<pid>, <pid>, '/bin/sleep 4632')]`, does one reconciling read, prints four `CHECK` lines and `summary: ALL PASS`, writes `02-kill.json`. |
@@ -23,17 +23,27 @@ The base is `~/graphtraj-verify-463`, a new path. No other verify directory is t
 
 A scratch venv from the commit under test (`git archive`, editable install), click 8.5.0, yaml and websockets copied
 read-only from production `.venv-runtime`, and one line proving the fix is in that venv. An isolated project with
-`graphtraj setup` and one role, `dsh`, copied unchanged from this project's `.graphtraj/roles.yml` (the role named
-`dsh`, or the only role with `runtime: dsh`): your connection (resolved from `~/.graphtraj/connections.yml`) and
-model, so the child uses the DSH connection and model you configured. Only the name of the role's key variable is
-printed and passed to the steps' child commands; its value is never printed. The DSH version line comes from the
-installed `dsh`. The model answers for the first time in 01.
+`graphtraj setup` and one preset, `probe_463.dsh_child`. Its source is this project's roles file, found with the
+installed `roles_file()` (`project_roles.py:209-213`: `core_directory()/roles.yml`, here `.graphtraj/core/roles.yml`)
+and parsed in the installed nested schema (`project_roles.py:290-343`: a group maps role names to mappings; a preset
+names its Runtime by `connection: <runtime>/<provider>/<model>`). The one preset whose connection starts with `dsh/`
+(today `pi_dsh_trial.engineer`, `dsh/deepseek-official/deepseek-flash`; more or fewer is a STOP that names them)
+gives only its `connection` (and `reasoning_effort` if present). `instructions` and `reports` are not copied: their
+files and paths do not exist in the isolated project. The isolated preset is written to the isolated project's own
+`roles_file()`. The connection is resolved from the user-level catalog that `resolve_connection` reads
+(`runtime_connections.py:30-31` `connections_file()` = `~/.graphtraj/connections.yml`, `:151-183`); 00 prints that
+path, never values. Then `probe.py select` calls the installed `AdapterDriver.prepare('dsh', …,
+configuration='probe_463.dsh_child')` (`agent_driver.py:135-205`), the same call the owner's `create` makes
+(`control.py:625-631,715-720` pass `configuration` through), and prints what it would launch. A host caller with
+no Session may create a root Agent (`main_continuity.py:529-536`). Only the name of the connection's key variable is
+printed and passed to the steps' child commands; its value is never printed. The model answers first in 01.
 
 ### 01: the owner and its DSH child
 
 The probe owner is one Python process of the scratch venv. Through GraphTraj's own agents control
-(`GraphTrajAgents(project).control`, the path a member's agents tool uses) it creates one DSH child with:
+(`GraphTrajAgents(project).control`, the path a member's agents tool uses) it calls
 
+`create` with `runtime: dsh`, `configuration: probe_463.dsh_child` and the instruction
 `Use the Bash tool exactly once to run exactly this command, unchanged: /usr/bin/perl -MPOSIX -e 'setsid(); exec "/bin/sleep","4632"' & /bin/sleep 4631`
 
 and keeps owning it. DSH starts the tool detached (its own session and group). The tool's `perl` calls setsid and
@@ -70,10 +80,14 @@ As 459's step 03, against the Worktree HEAD, six shards, stopped at 25 minutes.
 ## Rehearsal without a model (sandbox)
 
 `VERIFY463_NO_MODEL=1 VERIFY463_BASE=$TMPDIR/rh463 VERIFY463_OUT=$TMPDIR/rh463-out VERIFY463_DEPS=<site-packages with
-websockets>`, then `S 00` and `S 02`. 00 uses a stand-in role (`deepseek-flash`, no connection) and stops before
-DSH. 02 runs `probe.py stub` first: a child record made through `AgentControl`, and a stand-in owner (Python, own
+websockets>`, then `S 00` and `S 02`. 00 writes two fixtures: a roles file in the installed nested schema with the same
+`pi_dsh_trial` group and `role_tree` as this project's, and a connections catalog under a stand-in HOME
+(`VERIFY463_HOME`) with a stand-in key variable. So prepare's real path runs (nested parse, `roles_file`,
+`resolve_connection`, `graphtraj doctor`, `AdapterDriver.prepare`), and 00 stops before DSH. 02 runs `probe.py stub` first: a child record made through `AgentControl`, and a stand-in owner (Python, own
 session) running the real descendant sampler on a stand-in `dsh web` (Python, own session, the child's marker). The
 stand-in starts the exact tool command in a real `/bin/zsh -c` in its own session and stops that group when its
-owner dies, as DSH does. Rehearsed 2026-11-14 00:00: `RESIDUE … [(…, …, '/bin/sleep 4632')]` and
+owner dies, as DSH does. Rehearsed 2026-11-14 00:12: 00 printed `preset probe_463.dsh_child <-
+pi_dsh_trial.engineer`, `roles OK` and `create selects: role probe_463.dsh_child | runtime dsh | model deepseek-flash
+| connection dsh/deepseek-official/deepseek-flash`; 02 printed `RESIDUE … [(…, …, '/bin/sleep 4632')]` and
 `summary: ALL PASS`. Not rehearsed: copying production's deps, the real `dsh web`, its watcher, the model, an
 approval, and 03.

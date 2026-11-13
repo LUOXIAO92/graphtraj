@@ -4,8 +4,9 @@
 # tool whose /usr/bin/perl setsid's a /bin/sleep 4632 (out of every group DSH knows); the owner alone is SIGKILLed;
 # the residue is printed; one reconciling read must stop it through the recorded descendants, and nothing else.
 #   zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/463-dsh-child-tool-process-reclaim/scripts/verify-463/steps.zsh <00|01|02|03>
-# 00  Main. preflight: scratch venv from COMMIT, the fix-present line, isolated project with the user's dsh role
-#     (copied from this project's roles.yml; connection and model unchanged), the DSH version/model/key-name line.
+# 00  Main. preflight: scratch venv from COMMIT, the fix-present line, isolated project with one preset holding the
+#     only dsh/ connection of this project's roles file (installed roles_file), the connections file path, what
+#     create will launch (installed AdapterDriver.prepare), the key variable's name and the DSH version.
 # 01  Main. starts the probe owner in the background (it creates the DSH child) and returns.
 # 02  Main. waits (<= 8 min) until the child's record lists a live setsid'd sleep 4632; SIGKILLs only the owner;
 #     prints the residue; three bystanders; one reconciling read; CHECK 1-4; stops the bystanders.
@@ -39,7 +40,7 @@ next() { print -r -- ""; print -r -- "==> 下一步 / next (Main pastes): $*"; }
 clean() {
   local K=$(cat $P/.graphtraj/probe-463/keyvar 2>/dev/null) pass=()
   [[ -n $K && -n ${(P)K:-} ]] && pass=("$K=${(P)K}")
-  env -i HOME=$HOME USER=${USER:-luoxiao} PATH=${(j.:.)path} TERM=${TERM:-xterm} TMPDIR=${TMPDIR:-/tmp} \
+  env -i HOME=${VERIFY463_HOME:-$HOME} USER=${USER:-luoxiao} PATH=${(j.:.)path} TERM=${TERM:-xterm} TMPDIR=${TMPDIR:-/tmp} \
       LANG=${LANG:-en_US.UTF-8} $pass "$@"
 }
 # click 8.5.0, yaml and websockets from production, copied (never changed there) into a venv's site-packages.
@@ -52,6 +53,30 @@ copy_deps() {
     || { print "STOP: click in $1 is not production's 8.5.0"; return 1; }
 }
 probe() { (cd $P && clean $VV/bin/python -I $SD/probe.py "$@") }
+# Rehearsal only: a roles file in the installed nested schema (as this project's) and a connections catalog
+# under a stand-in HOME, with a stand-in key variable. No real file is read or changed.
+rehearsal_fixtures() {
+  export VERIFY463_HOME=$BASE/home VERIFY463_FIXTURE_KEY=rehearsal-not-a-key
+  mkdir -p $BASE/fixture $VERIFY463_HOME/.graphtraj
+  print -r -- 'roles:
+  pi_dsh_trial:
+    team_leader: {instructions: docs/agents/roles/team_leader.md, worktree_access: write, reports: [leader.md], connection: pi/zai/glm-5}
+    engineer: {instructions: docs/agents/roles/engineer.md, worktree_access: write, reports: [engineer.md, validation.md], connection: dsh/deepseek-official/deepseek-flash}
+role_tree:
+  pi_dsh_trial.team_leader:
+    pi_dsh_trial.engineer: {}' > $BASE/fixture/roles.yml
+  print -r -- 'version: 1
+runtimes:
+  dsh:
+    runtime: dsh
+    providers:
+      deepseek-official:
+        base_url: https://api.deepseek.com/anthropic
+        api_key_env: VERIFY463_FIXTURE_KEY
+        models:
+          deepseek-flash: {id: deepseek-flash, source: manual}' > $VERIFY463_HOME/.graphtraj/connections.yml
+  print "rehearsal fixtures: $BASE/fixture/roles.yml (nested schema), $VERIFY463_HOME/.graphtraj/connections.yml"
+}
 # STOP, changing nothing, while an earlier owner or a probe sleep still lives. Signals nothing.
 guard() { $CONDA -I $SD/probe.py idle $OUT - }
 
@@ -83,20 +108,24 @@ print("463 fix: dsh owner samples:", "DescendantSampler" in inspect.getsource(e.
   rm -rf $P; mkdir -p $P; (cd $P && git init -q -b main && print -r -- "# 463 probe" > README.md && git add README.md \
       && git -c user.name=463 -c user.email=463@invalid commit -qm "Initial source") || return 1
   (cd $P && print y | clean $VV/bin/graphtraj setup | tail -2) || return 1
-  local roles=$H/.graphtraj/roles.yml
-  [[ -n ${VERIFY463_NO_MODEL:-} ]] && roles=-
-  (cd $P && clean $VV/bin/python -I $SD/probe.py prepare $P $roles) || { print "STOP: the dsh role is not usable (text above)"; return 1; }
-  [[ -n ${VERIFY463_NO_MODEL:-} ]] && { print "VERIFY463_NO_MODEL set: stopping before DSH (rehearsal)."; return 0; }
-  say "DSH: version and the key variable (name only)"
-  print "dsh: $(command -v dsh) $(clean dsh --version 2>&1 | head -1)"
+  # The source is this project: the probe reads its roles file through the installed roles_file().
+  local source=$H
+  [[ -n ${VERIFY463_NO_MODEL:-} ]] && { rehearsal_fixtures || return 1; source=$BASE/fixture/roles.yml; }
+  (cd $P && clean $VV/bin/python -I $SD/probe.py prepare $P $source) || { print "STOP: the dsh preset is not usable (text above)"; return 1; }
   local K=$(cat $P/.graphtraj/probe-463/keyvar)
   print "key variable ${K:-none (DSH login)} set in this shell: $([[ -n $K && -n ${(P)K:-} ]] && print yes || print no)"
   if [[ -n $K && -z ${(P)K:-} ]]; then
-    print "STOP: the dsh role's key variable $K is not set in this shell. Main: run 00 from a shell that has it."
+    print "STOP: the dsh preset's key variable $K is not set in this shell. Main: run 00 from a shell that has it."
     return 1
   fi
+  say "what the owner's create will launch (installed AdapterDriver.prepare, runtime dsh, preset probe_463.dsh_child)"
+  probe select $P - || return 1
+  print "dsh: $(command -v dsh) $(clean dsh --version 2>&1 | head -1)"
+  [[ -n ${VERIFY463_NO_MODEL:-} ]] && { print "VERIFY463_NO_MODEL set: stopping before DSH (rehearsal)."; return 0; }
   print "Success: '463 fix: dsh owner samples: True | sets the marker: True | dsh driver records it: True | agents driver records dsh: True',"
-  print "deps click 8.5.0, a 'dsh role' line with your model and connection, 'roles OK', and a DSH version."
+  print "deps click 8.5.0, 'source roles file: $H/.graphtraj/core/roles.yml', one 'preset probe_463.dsh_child <- ...' line,"
+  print "'connections file: ... exists: True', 'connection resolves: runtime dsh ...', 'roles OK', 'set in this shell: yes',"
+  print "a 'create selects: role probe_463.dsh_child | runtime dsh ...' line and a dsh version."
   print "The model itself first answers in 01 (its log shows CREATED and, if DSH asks, the owner's approval)."
   next "zsh $THIS 01"
 }

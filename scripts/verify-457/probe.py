@@ -223,7 +223,8 @@ def sleeping() -> dict[int, str]:
             command = ' '.join(view[0]) if view else ''
             if CHILD_SLEEP in command and 'probe.py' not in command:
                 found[pid] = command[:160]
-    except (OSError, ValueError):
+    except (ImportError, OSError, ValueError):
+        # Optional: the guard runs before the venv exists; ps alone covers the real host.
         pass
     return found
 

@@ -387,7 +387,10 @@ class CodexManagedExecution:
             raise RuntimeAdapterError(error.code, message) from error
         finally:
             if self.descendants is not None:
-                await asyncio.to_thread(self._reclaim_tools, adapter)
+                # Called directly, not through a worker thread: after the owning
+                # interpreter began shutting down, asyncio.to_thread refuses new
+                # work. Bounded (sampler join up to 5 s, one TERM/KILL cycle).
+                self._reclaim_tools(adapter)
             await asyncio.to_thread(connections.close)
             if observer is not None:
                 observer.cancel()

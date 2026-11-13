@@ -174,6 +174,15 @@ def test_owner_killed_then_reconciliation_stops_the_tool(tmp_path: Path, native_
         owner.wait(5)
         os.killpg(service.pgid, signal.SIGKILL)  # the service's own group, checked above
         assert wait_for(lambda: not is_alive(service), 10)
+
+        def reaped() -> bool:
+            # A killed service stays a zombie until launchd reaps it; control's kill(pid, 0) still sees it.
+            try:
+                os.kill(service.pid, 0)
+            except ProcessLookupError:
+                return True
+            return identity(service.pid) is not None  # reused by another process: not ours, gone for us
+        assert wait_for(reaped, 10)
         assert is_alive(found['shell']) and is_alive(found['sleep']), 'the tool outlived owner and service'
 
         call = bind(AgentControl(root, {'codex': CodexDriver(native_settings)}), Caller(*CALLER))
@@ -181,7 +190,7 @@ def test_owner_killed_then_reconciliation_stops_the_tool(tmp_path: Path, native_
         execution = record(root, agent)
         report = execution.get('escaped_processes')
         print('escaped_processes:', json.dumps(report))
-        assert status['result']['last_result']['error']['code'] == 'owner-exited'
+        assert status['result'].get('last_result', {}).get('error', {}).get('code') == 'owner-exited', (status, execution)
         assert sorted(item['pid'] for item in report['stopped']) == sorted([found['shell'].pid, found['sleep'].pid])
         assert report['remaining'] == [] and 'error' not in report
         assert not is_alive(found['shell']) and not is_alive(found['sleep'])
@@ -207,3 +216,44 @@ def test_the_service_keeps_only_a_fresh_marker(monkeypatch: pytest.MonkeyPatch) 
     assert MEMBER_RUN_ENV not in service()
     assert MEMBER_RUN_ENV not in service(environment={MEMBER_RUN_ENV: 'parent-marker'})
     assert service(environment={MEMBER_RUN_ENV: 'own'})[MEMBER_RUN_ENV] == 'own'
+
+
+def test_reclaim_runs_when_the_interpreter_refuses_new_threads(
+        tmp_path: Path, native_settings: dict, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Correction 2: an owner thread outliving its interpreter's shutdown still stops the tools.
+
+    At shutdown CPython refuses new executor work, so ``asyncio.to_thread`` raises. The real host's child
+    then ended RUNTIME_WORKER_FAILED with no reclaim; the reclaim now runs on the owner's own thread.
+    """
+    import asyncio
+
+    async def refused(*args, **kwargs):
+        raise RuntimeError('cannot schedule new futures after interpreter shutdown')
+
+    monkeypatch.setattr(asyncio, 'to_thread', refused)
+    root = tmp_path / 'agents'
+    since = identity(os.getpid()).start
+    user = subprocess.Popen(['/bin/sleep', '461'], start_new_session=True)
+    found: dict[str, Identity] = {}
+    try:
+        call = bind(AgentControl(root, {'codex': CodexDriver(native_settings)}), Caller(*CALLER))
+        created = call({'action': 'create', 'runtime': 'codex', 'instruction': 'tool-end'}).document
+        found = wait_for(lambda: len(tools(since)) == 3, 10) and tools(since)
+        assert found, 'the peer did not start the tool'
+        facts = record(root, created['agent'])['process']
+        directory = Path(facts['tool_descendants']).parent
+        termination = wait_for(lambda: next(directory.glob('codex-termination-*.yml'), None), 20)
+        assert termination is not None, 'the owner-side reclaim did not run'
+        report = yaml.safe_load(termination.read_text())['escaped_processes']
+        print('escaped_processes:', json.dumps(report))
+        assert sorted(item['pid'] for item in report['stopped']) == sorted([found['shell'].pid, found['sleep'].pid])
+        assert report['remaining'] == [] and 'error' not in report
+        assert not is_alive(found['shell']) and not is_alive(found['sleep'])
+        assert is_alive(found['other']) and user.poll() is None
+        done = call({'action': 'wait', 'agent': created['agent'], 'timeout_seconds': 20}).document
+        print('outcome:', json.dumps(done['result'].get('last_result')))
+    finally:
+        stop_own(list(found.values()) + [i for items in ours(since).values() for i in items
+                                          if argv(i.pid).startswith(('/bin/sleep 303', sys.executable + ' -c'))])
+        user.kill()
+        user.wait(5)

@@ -121,12 +121,41 @@ def plugins(stream: Path, _unused: str) -> int:
 
 # -- Records ------------------------------------------------------------------
 
+_CHOSEN: dict = {}
+
+
 def member(project: Path) -> tuple[str | None, dict, Path | None]:
-    """The member's alias, mapping and session directory (the probe has one team_leader)."""
-    for directory in sorted(project.glob('.graphtraj/runner/sessions/1-*team_leader*')):
-        mapping = directory / 'mapping.yml'
-        return directory.name, (yaml.safe_load(mapping.read_text()) or {}) if mapping.is_file() else {}, directory
-    return None, {}, None
+    """The member 01 created: its alias, mapping and session directory.
+
+    Candidates are every ``1-*team_leader*`` session. The one whose alias appears in 01's Main stream
+    ($PROBE_OUT/01-main-stream.jsonl, the swarm result) is chosen when exactly one does; otherwise the one
+    with the newest mapping.yml. Every candidate and the choice are printed once.
+    """
+    candidates = sorted(project.glob('.graphtraj/runner/sessions/1-*team_leader*'))
+    if not candidates:
+        return None, {}, None
+    key = tuple(candidates)
+    if key not in _CHOSEN:
+        stream = Path(os.environ.get('PROBE_OUT', '/nonexistent')) / '01-main-stream.jsonl'
+        try:
+            text = stream.read_text(encoding='utf-8', errors='replace')
+        except OSError:
+            text = ''
+        named = [directory for directory in candidates if directory.name in text]
+        mtime = lambda d: (d / 'mapping.yml').stat().st_mtime if (d / 'mapping.yml').is_file() else 0.0
+        if len(named) == 1:
+            chosen, why = named[0], f'its alias is in {stream.name}'
+        else:
+            chosen, why = max(candidates, key=mtime), (f'newest mapping.yml ({len(named)} aliases found in '
+                                                       f'{stream.name if text else "no readable 01 stream"})')
+        for directory in candidates:
+            print(f'member candidate: {directory.name} mapping.yml mtime {mtime(directory):.0f} '
+                  f'in 01 stream {directory in named}')
+        print(f'member chosen: {chosen.name} ({why})')
+        _CHOSEN[key] = chosen
+    directory = _CHOSEN[key]
+    mapping = directory / 'mapping.yml'
+    return directory.name, (yaml.safe_load(mapping.read_text()) or {}) if mapping.is_file() else {}, directory
 
 
 def core(project: Path, agent: str | None) -> dict:
@@ -317,6 +346,33 @@ def is_child_sleep(argv: str) -> bool:
     return argv.split()[:2] in (['sleep', CHILD_SLEEP.split()[1]], ['/bin/sleep', CHILD_SLEEP.split()[1]])
 
 
+def ancestry(sleeps: list[dict], marker: str) -> None:
+    """Print each live recorded sleep's ancestors up to pid 1, read only.
+
+    pid, ppid, pgid, argv[:60], whether the environment is readable and whether it holds exactly the
+    child's marker: booleans only, never a value.
+    """
+    from graftling.member_processes import _process_view
+    from graftling.tool_descendants import identity
+
+    for entry in sleeps:
+        print(f"ancestry of recorded '{CHILD_SLEEP}' {entry['pid']} (read only):")
+        pid, seen = entry['pid'], set()
+        while pid > 1 and pid not in seen:
+            seen.add(pid)
+            now = identity(pid)
+            if now is None:
+                print(f'  pid {pid}: gone or unreadable')
+                break
+            view = _process_view(pid)
+            argv = ' '.join(view[0])[:60] if view else ''
+            readable = bool(view and view[1])
+            carries = readable and f'{MARKER_ENV}={marker}' in view[1]
+            print(f'  pid {pid} ppid {now.ppid} pgid {now.pgid} argv {argv!r} env readable {readable} '
+                  f'carries child marker {carries}')
+            pid = now.ppid
+
+
 def kill(project: Path, facts_file: str) -> int:
     """Kill the child's owner and Runtime group, then one reconciling read and the four CHECKs."""
     from graftling.tool_descendants import identity
@@ -350,6 +406,7 @@ def kill(project: Path, facts_file: str) -> int:
         print(f"STOP: the child's descendants record is missing or lists no live '{CHILD_SLEEP}' "
               '(the venv lacks the 462 fix, the sleep ended, or the sampler missed it). Nothing was done.')
         return 1
+    ancestry(sleeps, marker)
     before = marked(marker)
     sleep_before = sleeping()
     print(f'before the kill: {len(before)} processes carry the child marker: '

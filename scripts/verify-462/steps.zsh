@@ -68,7 +68,8 @@ while time.time() < deadline:
     time.sleep(5)
 print("Main claude -p", pid, "still running after 9 min"); sys.exit(1)' $1
 }
-probe() { (cd $P && clean $VV/bin/python -I $SD/probe.py "$@") }
+# PROBE_OUT lets the probe find 01's Main stream (which member 01 created).
+probe() { (cd $P && clean PROBE_OUT=$OUT $VV/bin/python -I $SD/probe.py "$@") }
 # STOP, changing nothing, while an earlier run's Main or a 'sleep 462' still lives. Signals nothing.
 guard() { clean $CONDA -I $SD/probe.py idle $OUT - }
 

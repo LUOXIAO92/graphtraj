@@ -109,8 +109,7 @@ class ClaudeDriver:
         def created(session: str, pid: int) -> None:
             """Publish the exact native Session before model work begins."""
             run.events.session(session)
-            # The marker lets reconciliation stop escaped tools if this owner dies (457).
-            run.events.process(runtime_pid=pid, tool_marker=turn.member_marker)
+            run.events.process(runtime_pid=pid)
 
         settings = dict(run.settings)
         if run.session is not None:
@@ -120,6 +119,9 @@ class ClaudeDriver:
         turn = ClaudeExecution(settings, run.message, run.directory,
                             lambda session, pid: ready.set(), created,
                             run.directory / 'trace.jsonl', run.session)
+        if getattr(turn, 'member_marker', None):
+            # Reconciliation stops this execution's escaped tools if its owner dies (457).
+            run.events.process(tool_marker=turn.member_marker)
         from .binding import bind_run
 
         bind_run(turn, run)

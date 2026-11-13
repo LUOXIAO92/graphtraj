@@ -14,6 +14,15 @@ The numbers in parentheses are the project's Task numbers.
 
 ## Unreleased (compatible)
 
+- A DSH execution's tool processes are reclaimed the same way (463). DSH starts each
+  Bash tool in its own session and on shutdown stops only those groups, so a process a
+  tool moved into yet another session (`setsid`) outlived both a normal end and a
+  killed owner. The `dsh web` service now gets this execution's `GRAFTLING_MEMBER_RUN`
+  marker, its descendants are recorded as for Claude, and both drivers record
+  `tool_marker` and `tool_descendants`. After a normal end or stop the owner stops the
+  survivors once the service has exited and keeps the report in
+  `dsh-termination-<execution>.yml` and the result's `escaped_processes`; reconciling an
+  `owner-exited` execution stops them as for Claude.
 - A Claude execution's tool processes that are Apple platform binaries are now stopped
   too (459): Claude Code's `/bin/zsh` Bash tool shell and commands such as
   `/bin/sleep`, whose environment macOS hides from the 457 marker scan. While the

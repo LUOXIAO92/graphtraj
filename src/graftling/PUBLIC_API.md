@@ -1183,7 +1183,9 @@ Delivery rules:
   or its ancestors. It records what it found on the execution as `escaped_processes`
   (`found`, `stopped`, `remaining`, each a list of `pid` and `command`). The record
   lock is held up to about 5 seconds longer for this. An execution recorded before
-  this change, and Codex, Pi and DSH executions, carry no marker and are not scanned.
+  this change, and Codex and Pi executions, carry no marker and are not scanned. A DSH
+  execution carries both facts (463): its `dsh web` service is the Runtime here, and the
+  process a DSH tool moves into another session is stopped as below.
   On macOS the environment of Apple platform binaries cannot be read, so the marker
   never finds a tool shell running `/bin/zsh` or `/bin/sh`, or commands such as
   `/bin/sleep`; Claude Code's own Bash tool shell is such a process. So, while the

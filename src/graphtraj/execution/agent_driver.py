@@ -237,8 +237,12 @@ class AdapterDriver:
             raise _native_error(error) from None
         marker = getattr(turn, 'member_marker', None) if run.runtime == 'claude' else None
         if marker:
-            # Reconciliation stops this child's escaped tools if its owner dies (457).
-            run.events.process(tool_marker=marker)
+            # Reconciliation stops this child's escaped tools if its owner dies:
+            # by marker (457) and by the descendants recorded in this file (459).
+            facts = {'tool_marker': marker}
+            if getattr(turn, 'tool_descendants', None) is not None:
+                facts['tool_descendants'] = str(Path(turn.tool_descendants).resolve())
+            run.events.process(**facts)
         from graphtraj.interfaces.agents import graphtraj_fields
 
         if run.runtime == 'claude':

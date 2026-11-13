@@ -1184,10 +1184,27 @@ Delivery rules:
   (`found`, `stopped`, `remaining`, each a list of `pid` and `command`). The record
   lock is held up to about 5 seconds longer for this. An execution recorded before
   this change, and Codex, Pi and DSH executions, carry no marker and are not scanned.
-  On macOS the environment of Apple platform binaries cannot be read, so a tool shell
-  running `/bin/zsh` or `/bin/sh` and commands such as `/bin/sleep` are neither found
-  nor stopped; Claude Code's own Bash tool shell is such a process. Processes from
-  other executables, such as Python or Node, are.
+  On macOS the environment of Apple platform binaries cannot be read, so the marker
+  never finds a tool shell running `/bin/zsh` or `/bin/sh`, or commands such as
+  `/bin/sleep`; Claude Code's own Bash tool shell is such a process. So, while the
+  Runtime runs, a Claude execution's owner also records the Runtime's descendants
+  about once a second, by parent pid, with each one's pid, process group, uid and
+  start time (459). The record is a file in the execution's directory, written without
+  the Agent lock; its absolute path is the process fact `tool_descendants`. The call
+  that ends the execution `owner-exited` stops each recorded process still alive with
+  the same uid and start time (so a reused pid is never signalled), and their current
+  descendants, together with the marked processes: one SIGTERM, up to 3 seconds, one
+  SIGKILL, up to 2 seconds. Both appear in `escaped_processes`. A record file that
+  cannot be read, or a failed process scan, is reported in its `error` field rather
+  than as an empty result. Names and commands are never matched. A descendant whose
+  environment is readable and lacks exactly this execution's marker (a Runner Worker,
+  another execution's child Runtime) is neither recorded nor descended into, and this
+  check is repeated before each signal. The owner applies the same stop when the
+  execution ends normally or is stopped, after the Runtime exits. Known limits: a
+  process started and detached between two samples (about one second) is found only
+  by the marker, so not when it is a platform binary; a process whose chain of
+  ancestors passed through a readable process without the marker is left alone by
+  design; Windows is not covered.
 - A completed round of a child that still has running members is recorded,
   not pushed. All rounds stay readable through `status`.
 - A notice its parent cannot receive now is recorded `held`, stays readable

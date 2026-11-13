@@ -120,8 +120,12 @@ class ClaudeDriver:
                             lambda session, pid: ready.set(), created,
                             run.directory / 'trace.jsonl', run.session)
         if getattr(turn, 'member_marker', None):
-            # Reconciliation stops this execution's escaped tools if its owner dies (457).
-            run.events.process(tool_marker=turn.member_marker)
+            # Reconciliation stops this execution's escaped tools if its owner dies:
+            # by marker (457) and by the descendants recorded in this file (459).
+            facts = {'tool_marker': turn.member_marker}
+            if getattr(turn, 'tool_descendants', None) is not None:
+                facts['tool_descendants'] = str(Path(turn.tool_descendants).resolve())
+            run.events.process(**facts)
         from .binding import bind_run
 
         bind_run(turn, run)

@@ -103,13 +103,16 @@ def test_reconciliation_stops_only_the_execution_marked_tools(root: Path) -> Non
     try:
         set_owner(root, child)
         status = call(control, caller, action='status', agent=child)
+        # Read and print the report first, so a failure under load shows what was found (459).
+        execution = record_of(root, child)['executions'][-1]
+        report = execution.get('escaped_processes')
+        print('escaped_processes:', json.dumps(report), '| pids: escaped', escaped.pid,
+              'other', other.pid, 'unmarked', unmarked.pid)
         assert status['result']['last_result']['error']['code'] == 'owner-exited'
 
         assert escaped.poll() is not None, 'the escaped tool process survived reconciliation'
         assert other.poll() is None and unmarked.poll() is None
-        execution = record_of(root, child)['executions'][-1]
         assert execution['process']['tool_marker'] == marker
-        report = execution['escaped_processes']
         assert [item['pid'] for item in report['found']] == [escaped.pid]
         assert [item['pid'] for item in report['stopped']] == [escaped.pid]
         assert report['remaining'] == []

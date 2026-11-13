@@ -26,7 +26,8 @@ from graftling.mcp import tool_documents
 from graftling import SessionArchive
 from graftling.sessions.claude_history import read_records
 from graftling.child_env import child_environment, consumer_environment
-from graftling.member_processes import MEMBER_RUN_ENV, new_marker, stop_marked_processes
+from graftling.member_processes import MEMBER_RUN_ENV, new_marker
+from graftling.tool_descendants import DescendantSampler, stop_tool_processes
 from graftling.connection import CONNECTION_ENV
 from .settings import login_variables
 from .support import write_yaml_durably, credential_environment, redact
@@ -81,6 +82,10 @@ class ClaudeExecution:
         self._execution_id = uuid.uuid4().hex
         # Inherited by every tool command, even one that leaves the process group.
         self.member_marker = new_marker()
+        # The Runtime's descendants, sampled while it lives; macOS hides the
+        # marker of platform binaries such as /bin/zsh (459). Never under the Agent lock.
+        self.tool_descendants = directory / f'tool-descendants-{self._execution_id}.json'
+        self.descendants = DescendantSampler(self.tool_descendants, self.member_marker)
         self.proc: subprocess.Popen | None = None
         self.events: queue.Queue = queue.Queue()
         # Native control requests in arrival order, answered ahead of the
@@ -828,12 +833,14 @@ class ClaudeExecution:
                     raise RuntimeAdapterError('RUNTIME_EXECUTION_INTERRUPTED', 'Claude stopped before process creation.')
                 self.diagnostics['launch'] = launch_projection(argv)
                 self._save_diagnostics()
+                self.descendants.prepare()
                 self.proc = subprocess.Popen(argv, cwd=self.request['worktree_path'], env=environment,
                                              stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                              text=True, bufsize=1, start_new_session=True)
                 self.diagnostics['popen_returned'] = True
                 self._save_diagnostics()
                 self.record_process(self.proc.pid)
+                self.descendants.start(self.proc.pid)
 
                 def drain_stderr() -> None:
                     """Keep native stderr host-owned and separate from conversation records."""
@@ -1028,6 +1035,8 @@ class ClaudeExecution:
             finally:
                 with self.lock:
                     self.accepting = False
+                # One last sample while the Runtime may still live, then stop sampling.
+                descendants = self.descendants.finish()
                 try:
                     self._close()
                 except RuntimeAdapterError as error:
@@ -1036,9 +1045,12 @@ class ClaudeExecution:
                     failure = failure or error
                 process_group_closed = self.terminal_confirmed
                 # Tool commands run in their own sessions, so the group above
-                # misses ones started with setsid or `(nohup ... &)`; stop
-                # those left with this execution's marker and report them.
-                escaped = (redact(stop_marked_processes(self.member_marker, {self.proc.pid}))
+                # misses ones started with setsid or `(nohup ... &)`; stop the
+                # recorded descendants still alive (same uid and start time),
+                # their descendants, and those left with this execution's
+                # marker, and report them.
+                escaped = (redact(stop_tool_processes(descendants, self.member_marker, {self.proc.pid},
+                                                      error=self.descendants.error))
                            if self.proc is not None and self.proc.poll() is not None else None)
                 if reader is not None:
                     reader.join(timeout=5)

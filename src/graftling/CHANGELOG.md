@@ -14,6 +14,22 @@ The numbers in parentheses are the project's Task numbers.
 
 ## Unreleased (compatible)
 
+- A Claude execution's tool processes that are Apple platform binaries are now stopped
+  too (459): Claude Code's `/bin/zsh` Bash tool shell and commands such as
+  `/bin/sleep`, whose environment macOS hides from the 457 marker scan. While the
+  Runtime runs, its owner records the Runtime's descendants about once a second (pid,
+  process group, uid, start time) in a file whose absolute path is the new process fact
+  `tool_descendants`. Reconciling an `owner-exited` execution, and the owner's own
+  reclaim after a normal end or stop, stop the recorded processes still alive with the
+  same uid and start time, and their current descendants, along with the marked ones,
+  and list them in `escaped_processes`. An unreadable record or a failed scan appears
+  in its `error` field. A readable descendant without this execution's marker (another
+  execution's child Runtime, a Runner Worker) is not recorded or followed. Known limits:
+  a process started and detached between two samples (about one second) is found only
+  by the marker, so not when it is a platform binary; a process below a readable
+  process without the marker is left alone by design; Windows is not covered. Older
+  records, and Codex, Pi and DSH executions, are unchanged. The macOS pid listing also
+  retries when its buffer was full, instead of returning a cut-short list.
 - Reconciling an owner-exited Claude execution now stops the tool processes it left
   (457). The Claude driver and GraphTraj's agents driver record the execution's
   `GRAFTLING_MEMBER_RUN` value as the process fact `tool_marker`. The call that ends

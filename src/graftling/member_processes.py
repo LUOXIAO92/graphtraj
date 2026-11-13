@@ -136,11 +136,17 @@ def _user_pids() -> list[int]:
     count = libproc.proc_listallpids(None, 0)
     if count <= 0:
         raise OSError(ctypes.get_errno(), 'proc_listallpids failed')
-    buffer = (ctypes.c_int * (count + 64))()
-    count = libproc.proc_listallpids(buffer, ctypes.sizeof(buffer))
-    if count <= 0:
-        raise OSError(ctypes.get_errno(), 'proc_listallpids failed')
-    return [pid for pid in buffer[:count] if pid > 0]
+    # A full buffer may have been cut short by processes started between the
+    # two calls; retry with more room until the list fits (459).
+    for _ in range(8):
+        capacity = count * 2 + 64
+        buffer = (ctypes.c_int * capacity)()
+        count = libproc.proc_listallpids(buffer, ctypes.sizeof(buffer))
+        if count <= 0:
+            raise OSError(ctypes.get_errno(), 'proc_listallpids failed')
+        if count < capacity:
+            return [pid for pid in buffer[:count] if pid > 0]
+    raise OSError(0, 'proc_listallpids kept filling its buffer')
 
 
 def _carries(pid: int, marker: str, variable: str = MEMBER_RUN_ENV, prefix: bool = False) -> list[str] | None:

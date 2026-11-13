@@ -143,22 +143,39 @@ class RuntimeDriver(Protocol):
 
 
 def _stop_escaped(execution: dict) -> None:
-    """Stop and record the tools a reconciled execution left behind (457).
+    """Stop and record the tools a reconciled execution left behind (457, 459).
 
     Tool shells run in their own sessions, outside the Runtime's group, and
-    only the owner stopped them on its way out. Only same-user processes with
-    exactly this execution's marker are signalled; the caller and its
-    ancestors are skipped. SIGTERM, then SIGKILL after 3 s, then up to 2 s:
-    the record lock is held about 5 s at most beyond the scan. A record
-    without the marker (older, or another Runtime) is left as it was.
+    only the owner stopped them on its way out. Two sources name them: the
+    descendants the owner recorded while the Runtime lived (``tool_descendants``,
+    a sidecar file; only those still alive with the same uid and start time,
+    plus their current descendants, so a reused pid is never signalled), and
+    same-user processes with exactly this execution's marker (``tool_marker``).
+    macOS hides the environment of platform binaries such as ``/bin/zsh``, so
+    only the first reaches them. The caller and its ancestors are skipped.
+    One SIGTERM, up to 3 s, one SIGKILL, up to 2 s for all of them: the record
+    lock is held about 5 s at most beyond the scan. A record with neither fact
+    (older, or another Runtime) is left as it was; an unreadable sidecar is
+    reported in ``escaped_processes.error``.
     """
     marker = execution["process"].get("tool_marker")
-    if not isinstance(marker, str) or not marker or os.name == "nt":
+    sidecar = execution["process"].get("tool_descendants")
+    marker = marker if isinstance(marker, str) and marker else None
+    sidecar = sidecar if isinstance(sidecar, str) and sidecar else None
+    if (marker is None and sidecar is None) or os.name == "nt":
         return
-    from graftling.member_processes import ancestor_pids, stop_marked_processes
+    from graftling.member_processes import ancestor_pids
     from graftling.review import redact
+    from graftling.tool_descendants import read_sidecar, stop_tool_processes
 
-    execution["escaped_processes"] = redact(stop_marked_processes(marker, ancestor_pids()))
+    entries, error = None, None
+    if sidecar is not None:
+        try:
+            entries = read_sidecar(sidecar)
+        except (OSError, ValueError) as failure:
+            error = f"tool descendants record unreadable: {type(failure).__name__}: {failure}"
+    execution["escaped_processes"] = redact(
+        stop_tool_processes(entries, marker, ancestor_pids(), error=error))
 
 
 def _now() -> float:
@@ -329,8 +346,11 @@ class ExecutionEvents:
 
         ``tool_marker`` is the execution's ``GRAFTLING_MEMBER_RUN`` value; tool
         processes that left the Runtime's group carry it (457).
+        ``tool_descendants`` is the absolute path of the owner's record of the
+        Runtime's descendants (459).
         """
-        allowed = {"worker_pid", "runtime_pid", "owned_at", "runtime_exit", "tool_marker"}
+        allowed = {"worker_pid", "runtime_pid", "owned_at", "runtime_exit", "tool_marker",
+                   "tool_descendants"}
         if set(facts) - allowed:
             raise ValueError("unknown process fact")
         self._apply(lambda record, current: current["process"].update(facts))
@@ -1661,8 +1681,9 @@ class AgentControl:
 
         If the Runtime process still lives, the execution stays running with
         a diagnostic, so no second execution can start in the same Session.
-        Otherwise the tool processes still carrying its ``tool_marker`` are
-        stopped, since the dead owner's own reclaim never ran (457).
+        Otherwise its recorded ``tool_descendants`` still alive and the tool
+        processes still carrying its ``tool_marker`` are stopped, since the
+        dead owner's own reclaim never ran (457, 459).
         """
         current = _running(record)
         if current is None or _alive(current["process"].get("worker_pid")):

@@ -313,6 +313,18 @@ def prompt(message: dict) -> None:
         while not record.exists() and time.monotonic() < deadline:
             time.sleep(0.02)
         result('escaped')
+    elif text.startswith('tool-shell '):
+        # 459: a Bash tool shell of real platform binaries in its own session.
+        # macOS hides their environment, so only the recorded descendants reach them.
+        record = Path(text.removeprefix('tool-shell '))
+        subprocess.Popen(['/bin/sh', '-c', 'echo $$ > "$0.tmp" && mv "$0.tmp" "$0"; /bin/sleep 300; :', str(record)],
+                         start_new_session=True, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                         stderr=subprocess.DEVNULL)
+        deadline = time.monotonic() + 10
+        while not record.exists() and time.monotonic() < deadline:
+            time.sleep(0.02)
+        time.sleep(float(os.environ.get('CLAUDE_FIXTURE_TOOL_SECONDS', '2.5')))
+        result('tool-shell')
     elif text == 'helper-stop':
         helper_stop()
     elif text == 'garbage':

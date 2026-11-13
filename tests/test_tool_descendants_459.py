@@ -365,3 +365,23 @@ def test_graphtrajs_claude_owner_inherits_the_sampler(tmp_path: Path) -> None:
     from graftling.claude import ClaudeExecution as Native
 
     assert issubclass(ClaudeExecution, Native)
+
+
+def test_the_sampler_follows_the_runtime_pid_only_with_its_start_time(tmp_path: Path) -> None:
+    """A Runtime pid now held by another process (different start time) is not a root."""
+    from graftling.tool_descendants import DescendantSampler
+
+    tool = subprocess.Popen([SLEEP, '457'])
+    try:
+        me = identity(os.getpid())
+        wait_for(lambda: identity(tool.pid))
+        sampler = DescendantSampler(tmp_path / 'record.json', uuid.uuid4().hex)
+        sampler.runtime_pid, sampler._runtime_start = os.getpid(), me.start - 1
+        sampler.sample()
+        assert sampler.entries == {} and not (tmp_path / 'record.json').exists()
+        sampler._runtime_start = me.start
+        sampler.sample()
+        assert tool.pid in {entry['pid'] for entry in read_sidecar(tmp_path / 'record.json')}
+    finally:
+        tool.kill()
+        tool.wait(5)

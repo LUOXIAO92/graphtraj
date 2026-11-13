@@ -172,6 +172,7 @@ class DescendantSampler:
         self.path = Path(path)
         self.marker = marker
         self.runtime_pid: int | None = None
+        self._runtime_start: int | None = None
         self.entries: dict[tuple[int, int], dict] = {}
         self.error: str | None = None
         self._foreign: set[tuple[int, int]] = set()
@@ -187,6 +188,8 @@ class DescendantSampler:
         self.runtime_pid = runtime_pid
         if not SUPPORTED:
             return
+        runtime = identity(runtime_pid)
+        self._runtime_start = runtime.start if runtime is not None else None
         self._thread = threading.Thread(target=self._loop, daemon=True, name='tool-descendants')
         self._thread.start()
 
@@ -203,7 +206,11 @@ class DescendantSampler:
                 table = _table()
                 live = {key: entry for key, entry in self.entries.items()
                         if (now := table.get(entry['pid'])) is not None and now.start == entry['start']}
-                roots = {self.runtime_pid, *(entry['pid'] for entry in live.values())}
+                # The Runtime is a root only while its pid still has its start time.
+                runtime = table.get(self.runtime_pid)
+                roots = {entry['pid'] for entry in live.values()}
+                if runtime is not None and runtime.start == self._runtime_start:
+                    roots.add(self.runtime_pid)
                 for item in _descend(table, roots, self.marker, self._foreign).values():
                     key = (item.pid, item.start)
                     if key not in live:

@@ -235,6 +235,10 @@ class AdapterDriver:
             )
         except RuntimeAdapterError as error:
             raise _native_error(error) from None
+        marker = getattr(turn, 'member_marker', None) if run.runtime == 'claude' else None
+        if marker:
+            # Reconciliation stops this child's escaped tools if its owner dies (457).
+            run.events.process(tool_marker=marker)
         from graphtraj.interfaces.agents import graphtraj_fields
 
         if run.runtime == 'claude':

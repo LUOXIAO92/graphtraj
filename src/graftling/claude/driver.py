@@ -119,6 +119,9 @@ class ClaudeDriver:
         turn = ClaudeExecution(settings, run.message, run.directory,
                             lambda session, pid: ready.set(), created,
                             run.directory / 'trace.jsonl', run.session)
+        if getattr(turn, 'member_marker', None):
+            # Reconciliation stops this execution's escaped tools if its owner dies (457).
+            run.events.process(tool_marker=turn.member_marker)
         from .binding import bind_run
 
         bind_run(turn, run)

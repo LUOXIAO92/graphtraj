@@ -1175,6 +1175,19 @@ Delivery rules:
   Task member's children every 15 seconds. A Task member that is not running holds
   such an end (`held`); its next run receives it once. Reads do not resume the member.
   A notice to a host receiver carries `error`, as `finished` gives it.
+  In that same call, for a Claude execution, it also stops the tool processes that
+  execution left (457). A Claude Code tool shell runs in its own session, outside the
+  Runtime's process group, and only the dead owner would have stopped it. The call
+  signals only same-user processes whose environment holds exactly that execution's
+  `GRAFTLING_MEMBER_RUN` value (SIGTERM, then SIGKILL after 3 seconds), never itself
+  or its ancestors. It records what it found on the execution as `escaped_processes`
+  (`found`, `stopped`, `remaining`, each a list of `pid` and `command`). The record
+  lock is held up to about 5 seconds longer for this. An execution recorded before
+  this change, and Codex, Pi and DSH executions, carry no marker and are not scanned.
+  On macOS the environment of Apple platform binaries cannot be read, so a tool shell
+  running `/bin/zsh` or `/bin/sh` and commands such as `/bin/sleep` are neither found
+  nor stopped; Claude Code's own Bash tool shell is such a process. Processes from
+  other executables, such as Python or Node, are.
 - A completed round of a child that still has running members is recorded,
   not pushed. All rounds stay readable through `status`.
 - A notice its parent cannot receive now is recorded `held`, stays readable

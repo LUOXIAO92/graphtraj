@@ -204,16 +204,27 @@ def child_cmd(project: Path, seconds: str) -> int:
 # -- Processes (read only unless named) -----------------------------------------
 
 def sleeping() -> dict[int, str]:
-    """Live same-user processes running the child's ``sleep 457`` (read only)."""
+    """Live same-user processes whose command holds ``sleep 457`` (read only): ps, plus argv read
+    through libproc, which also works where ps is not allowed (the sandbox rehearsal)."""
+    found = {}
     try:
         listing = subprocess.run(['ps', '-axo', 'pid=,command='], capture_output=True, text=True, timeout=30).stdout
     except (OSError, subprocess.SubprocessError):
-        return {}
-    found = {}
+        listing = ''
     for line in listing.splitlines():
         pid, _, command = line.strip().partition(' ')
         if CHILD_SLEEP in command and 'probe.py' not in command and pid.isdigit():
             found[int(pid)] = command[:160]
+    try:
+        from graftling.member_processes import _process_view, _user_pids
+
+        for pid in _user_pids():
+            view = _process_view(pid) if pid not in found and pid != os.getpid() else None
+            command = ' '.join(view[0]) if view else ''
+            if CHILD_SLEEP in command and 'probe.py' not in command:
+                found[pid] = command[:160]
+    except (OSError, ValueError):
+        pass
     return found
 
 
@@ -222,6 +233,14 @@ def marked(marker: str) -> dict[int, str]:
     from graftling.member_processes import find_marked_processes
 
     return find_marked_processes(marker)
+
+
+def env_entries(pids) -> dict[int, int | None]:
+    """How many environment entries the marker scan can read per pid (None: unreadable or gone)."""
+    from graftling.member_processes import _process_view
+
+    views = {pid: _process_view(pid) for pid in sorted(pids)}
+    return {pid: (len(view[1]) if view else None) for pid, view in views.items()}
 
 
 def kill_group(pid: int, label: str, killed: list) -> None:
@@ -279,6 +298,11 @@ def kill(project: Path, facts_file: str) -> int:
     print(f'before the kill: {len(before)} processes carry the child marker: '
           f'{[command[:100] for command in before.values()]}')
     print(f"before the kill: '{CHILD_SLEEP}' alive {sorted(sleep_before)}")
+    blind = sorted(pid for pid, count in env_entries(sleep_before).items() if count == 0)
+    print(f"before the kill: env entries the scan reads per '{CHILD_SLEEP}' process: {env_entries(sleep_before)}")
+    if blind:
+        print(f'NOTE: the marker scan saw 0 env entries for {blind} (macOS platform binaries hide their environment); '
+              'the marker cannot match them, so CHECK 2 and 3 are expected to FAIL.')
     if alive(runtime) and runtime not in before:
         print("STOP: the recorded runtime_pid does not carry the child's marker; it is not this child's Runtime. "
               'Nothing was done.')
@@ -328,11 +352,13 @@ def kill(project: Path, facts_file: str) -> int:
         results.append(check("2 escaped_processes lists the tool shell and 'sleep 457' stopped, remaining empty",
                              bool(escaped) and has_sleep and has_shell and escaped.get('remaining') == [],
                              f'stopped={len(stopped)} sleep={has_sleep} shell={has_shell} '
-                             f'remaining={(escaped or {}).get("remaining")} error={(escaped or {}).get("error")}'))
+                             f'remaining={(escaped or {}).get("remaining")} error={(escaped or {}).get("error")} '
+                             f"'{CHILD_SLEEP}' pids before the kill={sorted(sleep_before)} 0-env={blind}"))
         left_marked, left_sleep = marked(marker), sleeping()
         results.append(check("3 no process carries the child's marker and no 'sleep 457' is alive",
                              not left_marked and not left_sleep,
-                             f'marked={[command[:100] for command in left_marked.values()]} sleep457={left_sleep}'))
+                             f'marked={[command[:100] for command in left_marked.values()]} sleep457={left_sleep} '
+                             f'env entries of those left={env_entries(left_sleep)} 0-env before the kill={blind}'))
         results.append(check('4 both control processes alive', other.poll() is None and plain.poll() is None,
                              f'other-marker={other.poll() is None} no-marker={plain.poll() is None}'))
     finally:
@@ -349,6 +375,7 @@ def kill(project: Path, facts_file: str) -> int:
         'alias': alias, 'member_agent': mapping.get('agent'), 'child': record.get('agent'),
         'execution': execution.get('id'), 'worker_pid': worker, 'child_runtime_pid': runtime,
         'tool_marker_recorded': True, 'marked_before_kill': len(before), 'marked_after_kill': len(after_kill),
+        'sleep_pids_before_kill': sorted(sleep_before), 'zero_env_pids': blind,
         'killed': killed, 'read_at': read_at, 'escaped_processes': escaped,
         'checks': results}, indent=2))
     print('== summary:', 'ALL PASS' if all(results) else f'{results.count(False)} FAIL of {len(results)}',
@@ -385,7 +412,8 @@ def stub(project: Path, _unused: str) -> int:
     """Without a model: a member session, its child's record and stand-in processes, as 01 leaves them.
 
     The stand-ins: a 'worker' (own session), a 'Runtime' (own group, child marker) and a 'tool shell'
-    (own session, child marker) running ``/bin/sh -c 'sleep 457; true'``.
+    (own session, child marker) whose child's argv is ``sleep 457``. All are Python: macOS hides the
+    environment of Apple platform binaries (/bin/sh, /bin/sleep) from the marker scan, at least in the sandbox.
     """
     from graftling import AgentControl, Caller, bind
 
@@ -395,7 +423,12 @@ def stub(project: Path, _unused: str) -> int:
     worker = subprocess.Popen([sys.executable, '-I', '-c', 'import time; time.sleep(900)'], env=environment, **detached)
     marked_env = {**environment, MARKER_ENV: marker}
     runtime = subprocess.Popen([sys.executable, '-I', '-c', 'import time; time.sleep(900)'], env=marked_env, **detached)
-    subprocess.Popen(['/bin/sh', '-c', f'{CHILD_SLEEP}; true'], env=marked_env, **detached)
+    work = project / '.graphtraj/probe-457/stub'
+    work.mkdir(parents=True, exist_ok=True)
+    (work / '457').write_text('import time; time.sleep(457)')
+    shell = ('import subprocess, sys; subprocess.run(["sleep", "457"], executable=sys.executable, cwd=sys.argv[1])')
+    subprocess.Popen([sys.executable, '-c', shell, str(work), 'tool-shell-standin', CHILD_SLEEP],
+                     env=marked_env, **detached)
 
     class Driver:
         def prepare(self, runtime_name, caller):

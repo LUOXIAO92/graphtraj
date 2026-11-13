@@ -207,7 +207,7 @@ class DescendantSampler:
                 for item in _descend(table, roots, self.marker, self._foreign).values():
                     key = (item.pid, item.start)
                     if key not in live:
-                        live[key] = {'pid': item.pid, 'pgid': item.pgid, 'uid': item.uid,
+                        live[key] = {'pid': item.pid, 'ppid': item.ppid, 'pgid': item.pgid, 'uid': item.uid,
                                      'start': item.start, 'argv': _command(_argv(item.pid))}
                 if live.keys() != self.entries.keys():
                     self.entries = live

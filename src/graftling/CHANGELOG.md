@@ -23,7 +23,9 @@ The numbers in parentheses are the project's Task numbers.
   reclaim after a normal end or stop, stop the recorded processes still alive with the
   same uid and start time, and their current descendants, along with the marked ones,
   and list them in `escaped_processes`. An unreadable record or a failed scan appears
-  in its `error` field. A readable descendant without this execution's marker (another
+  in its `error` field. Recorded command lines (the record file and `escaped_processes`)
+  are redacted and cut to 300 characters; redaction covers only recognizable
+  credentials. A readable descendant without this execution's marker (another
   execution's child Runtime, a Runner Worker) is not recorded or followed. Known limits:
   a process started and detached between two samples (about one second) is found only
   by the marker, so not when it is a platform binary; a process below a readable

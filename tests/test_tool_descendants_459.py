@@ -385,3 +385,50 @@ def test_the_sampler_follows_the_runtime_pid_only_with_its_start_time(tmp_path: 
     finally:
         tool.kill()
         tool.wait(5)
+
+
+def test_recorded_and_reported_command_lines_are_redacted(tmp_path: Path, monkeypatch) -> None:
+    """A Bash tool shell's argv carries what the model typed; credentials never reach disk or the record."""
+    from graftling.tool_descendants import DescendantSampler
+
+    root, sidecar, marker = tmp_path / 'data-root', tmp_path / 'tool-descendants.json', uuid.uuid4().hex
+    script = ': "Authorization: Bearer abcdef123456" XYZ_API_KEY=supersecret123; /bin/sleep 300; :'
+    shell = subprocess.Popen([SH, '-c', script], env={**os.environ, MEMBER_RUN_ENV: marker})
+    started: list[Identity] = []
+    try:
+        me = identity(os.getpid())
+        sampler = DescendantSampler(sidecar, marker)
+        sampler.runtime_pid, sampler._runtime_start = os.getpid(), me.start
+
+        def recorded():
+            sampler.sample()
+            return [entry for entry in sampler.entries.values() if entry['pid'] == shell.pid] and any(
+                entry['argv'] == f'{SLEEP} 300' for entry in sampler.entries.values())
+
+        assert wait_for(recorded, 10)
+        started = [Identity(entry['pid'], 0, 0, entry['uid'], entry['start'])
+                   for entry in read_sidecar(sidecar)]
+        text = sidecar.read_text()
+        print('sidecar:', text)
+        assert 'abcdef123456' not in text and 'supersecret123' not in text
+        assert '[redacted]' in text and 'XYZ_API_KEY=' in text
+
+        # The reconciling caller's own redact of the whole result is switched off, so this
+        # shows stop_tool_processes redacting its commands by itself.
+        import graftling.review
+
+        monkeypatch.setattr(graftling.review, 'redact', lambda value: value)
+        caller, child, control = child_with(root, {'tool_marker': marker, 'tool_descendants': str(sidecar)})
+        point_at_dead_owner(root, child, dead_pid(), dead_pid())
+        call(control, caller, action='status', agent=child)
+        report = json.loads(record_path(root, child).read_text())['executions'][-1]['escaped_processes']
+        print('escaped_processes:', json.dumps(report))
+        assert shell.pid in [item['pid'] for item in report['stopped']]
+        serialized = json.dumps(report)
+        assert 'abcdef123456' not in serialized and 'supersecret123' not in serialized
+        assert '[redacted]' in serialized
+    finally:
+        stop_own(started)
+        if shell.poll() is None:
+            shell.kill()
+        shell.wait(5)

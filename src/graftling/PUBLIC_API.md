@@ -1196,7 +1196,9 @@ Delivery rules:
   descendants, together with the marked processes: one SIGTERM, up to 3 seconds, one
   SIGKILL, up to 2 seconds. Both appear in `escaped_processes`. A record file that
   cannot be read, or a failed process scan, is reported in its `error` field rather
-  than as an empty result. Names and commands are never matched. A descendant whose
+  than as an empty result. Recorded command lines, in the record file and in
+  `escaped_processes`, are redacted and cut to 300 characters; redaction covers only
+  credentials it can recognize. Names and commands are never matched. A descendant whose
   environment is readable and lacks exactly this execution's marker (a Runner Worker,
   another execution's child Runtime) is neither recorded nor descended into, and this
   check is repeated before each signal. The owner applies the same stop when the

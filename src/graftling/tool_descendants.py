@@ -96,6 +96,19 @@ def _foreign(pid: int, marker: str) -> bool:
     return f'{MEMBER_RUN_ENV}={marker}' not in view[1]
 
 
+def shown_command(argv: list[str] | str) -> str:
+    """A command line as recorded: recognizable credentials redacted first, then cut to 300 characters.
+
+    Tool shells carry whatever the model typed. Redaction covers only credentials it
+    can recognize (Bearer tokens, ``*_KEY=``/``*TOKEN=``-style assignments, URL
+    passwords, known key shapes and this process's own secret variables).
+    """
+    from graftling.codex.diagnostics import redact  # late: keeps ``import graftling`` light
+
+    text = argv if isinstance(argv, str) else ' '.join(argv)
+    return _command([redact(text)])
+
+
 def _argv(pid: int) -> list[str]:
     view = _process_view(pid)
     return view[0] if view is not None else []
@@ -215,7 +228,7 @@ class DescendantSampler:
                     key = (item.pid, item.start)
                     if key not in live:
                         live[key] = {'pid': item.pid, 'ppid': item.ppid, 'pgid': item.pgid, 'uid': item.uid,
-                                     'start': item.start, 'argv': _command(_argv(item.pid))}
+                                     'start': item.start, 'argv': shown_command(_argv(item.pid))}
                 if live.keys() != self.entries.keys():
                     self.entries = live
                     write_sidecar(self.path, self.runtime_pid, list(live.values()))
@@ -299,7 +312,8 @@ def stop_tool_processes(entries: list[dict] | None, marker: str | None,
         except OSError as failure:
             errors.append(f'marker scan: {type(failure).__name__}: {failure}')
     for pid in targets:
-        commands.setdefault(pid, _command(_argv(pid)))
+        argv = _argv(pid)
+        commands[pid] = shown_command(argv) if argv else shown_command(commands.get(pid, ''))
     alive = targets
     if targets:
         _signal(targets, marker or '', signal.SIGTERM)

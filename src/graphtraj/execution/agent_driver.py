@@ -235,7 +235,7 @@ class AdapterDriver:
             )
         except RuntimeAdapterError as error:
             raise _native_error(error) from None
-        marker = getattr(turn, 'member_marker', None) if run.runtime == 'claude' else None
+        marker = getattr(turn, 'member_marker', None) if run.runtime in ('claude', 'codex') else None
         if marker:
             # Reconciliation stops this child's escaped tools if its owner dies:
             # by marker (457) and by the descendants recorded in this file (459).

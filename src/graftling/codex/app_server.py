@@ -157,7 +157,9 @@ class CodexAppServer:
         self._environment = {key: value for key, value in {**os.environ, **(environment or {})}.items()
                              if value is not None}
         # A managed child is not the parent member's escaped tool process (450).
-        self._environment.pop(MEMBER_RUN_ENV, None)
+        # An owner may give its own service a fresh marker of its own (462).
+        if self._environment.get(MEMBER_RUN_ENV) == os.environ.get(MEMBER_RUN_ENV):
+            self._environment.pop(MEMBER_RUN_ENV, None)
         # A variable the caller removed on purpose is no connection mismatch.
         self._default_connection = {
             name: os.environ.get(name) for name in ('OPENAI_BASE_URL', 'OPENAI_API_KEY')

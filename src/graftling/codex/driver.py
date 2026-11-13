@@ -159,6 +159,13 @@ class CodexDriver:
                               lambda session, pid: ready.set(), dict(run.settings.get('evidence', {})),
                               trace_file=run.directory / 'trace.jsonl', expected_session=run.session,
                               session_created=created, **options)
+        if getattr(turn, 'member_marker', None):
+            # Reconciliation stops this execution's escaped tools if its owner dies:
+            # by marker and by the descendants recorded in this file (457, 459, 462).
+            facts = {'tool_marker': turn.member_marker}
+            if getattr(turn, 'tool_descendants', None) is not None:
+                facts['tool_descendants'] = str(Path(turn.tool_descendants).resolve())
+            run.events.process(**facts)
         turn.parent_notice = lambda message, details: (run.events.request(details), {'delivery': 'retained'})[1]
         if self.execution is CodexManagedExecution:
             _receive_children(turn, run)

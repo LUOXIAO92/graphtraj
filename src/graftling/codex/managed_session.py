@@ -23,6 +23,8 @@ from graftling.runtime import RuntimeAdapterError
 from .app_server import CodexAppServer, CodexExecution, CodexServerRequest
 from graftling.child_env import child_environment, consumer_environment, is_credential_name
 from graftling.connection import CONNECTION_ENV
+from graftling.member_processes import MEMBER_RUN_ENV, new_marker
+from graftling.tool_descendants import DescendantSampler, stop_tool_processes
 from .context import exclude_credentials, native_key_names, restore_codex_context, recovery_environment
 
 
@@ -135,6 +137,17 @@ class CodexManagedExecution:
         self.prompt = prompt
         self.directory = session_directory
         self.trace_file = trace_file
+        # A child's tool shells run in their own sessions and outlive a killed
+        # service (462). Its owned service and tools carry this execution's own
+        # marker, never the parent's (450), and the service's descendants are
+        # recorded while it lives (459). A user-started host keeps its own
+        # environment and tools.
+        self.member_marker = None if self.user_environment else new_marker()
+        self.tool_descendants = (None if self.member_marker is None else
+                                 session_directory / f'tool-descendants-{uuid.uuid4().hex}.json')
+        self.descendants = (None if self.tool_descendants is None
+                            else DescendantSampler(self.tool_descendants, self.member_marker))
+        self.escaped_processes: dict | None = None
         self.started = session_started
         self.created = session_created
         self.agent_call = agent_call
@@ -237,6 +250,11 @@ class CodexManagedExecution:
         else:
             environment = self.child_overrides(request, config)
             exclude_credentials(config, environment.get('CODEX_HOME'))
+        if self.descendants is not None:
+            environment[MEMBER_RUN_ENV] = self.member_marker
+            config.setdefault('shell_environment_policy', {}).setdefault('set', {})[MEMBER_RUN_ENV] = \
+                self.member_marker
+            self.descendants.prepare()
         self.context = restore_codex_context(request, self.context.evidence_document())
         session_context = self.declared_context(request, environment)
         adapter = CodexAppServer(cwd=Path(self.context.session_document()['adapter_request']['cwd']),
@@ -249,6 +267,9 @@ class CodexManagedExecution:
         phase = 'initialize'
         try:
             async with adapter:
+                if self.descendants is not None and adapter._process is not None:
+                    # Only an owned service (never a proxy or an existing WebSocket).
+                    self.descendants.start(adapter._process.pid)
                 phase = 'thread/resume' if self.expected_session else 'thread/start'
                 observer = asyncio.create_task(self._observe())
                 if self.termination_requested:
@@ -365,12 +386,37 @@ class CodexManagedExecution:
                     message += '\nStartup stderr: ' + diagnostic.strip()[-4096:]
             raise RuntimeAdapterError(error.code, message) from error
         finally:
+            if self.descendants is not None:
+                await asyncio.to_thread(self._reclaim_tools, adapter)
             await asyncio.to_thread(connections.close)
             if observer is not None:
                 observer.cancel()
                 await asyncio.gather(observer, return_exceptions=True)
             with (self.directory / 'stderr.log').open('a', encoding='utf-8') as stream:
                 stream.write(adapter.stderr_tail)
+
+    def _reclaim_tools(self, adapter: CodexAppServer) -> None:
+        """Stop the tools the service left behind once it has exited, and record them.
+
+        Codex stops its tool shells when its stdin closes, but not when the
+        service itself is killed. Only recorded descendants still alive with the
+        same uid and start time, their descendants, and processes with this
+        execution's marker are stopped; the service pid is skipped.
+        """
+        from .diagnostics import redact
+
+        entries = self.descendants.finish()
+        process = adapter._process
+        if process is None or process.returncode is None:
+            return  # not an owned service, or not confirmed gone: reconciliation covers it
+        self.escaped_processes = redact(stop_tool_processes(
+            entries, self.member_marker, {process.pid}, error=self.descendants.error))
+        execution = self.execution.turn_id if self.execution is not None else 'none'
+        (self.directory / f'codex-termination-{execution}.yml').write_text(yaml.safe_dump(
+            {'runtime_pid': process.pid, 'runtime_exit_code': process.returncode,
+             'escaped_processes': self.escaped_processes}, sort_keys=False))
+        if self.outcome is not None and self.escaped_processes['found']:
+            self.outcome['escaped_processes'] = self.escaped_processes
 
     async def _observe(self) -> None:
         """Drain control notifications for diagnostics separately from native records."""

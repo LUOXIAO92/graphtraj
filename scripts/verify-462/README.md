@@ -9,8 +9,10 @@ or starts its work in the background. Output goes to
 
 The base is `~/graphtraj-verify-462`, a new path. No other verify directory is touched.
 
-The Main and the member are Claude (`claude-opus-5-5`), as in 459. The child is Codex with `gpt-6-luna` only: the
-project's one Codex role (`codex_child`) names it and the member's `create` names it again. One Codex run.
+The Main and the member are Claude (`claude-opus-5-5`), as in 459. The child is Codex with `gpt-6-luna` only: its
+model comes from the project's only Codex preset, `codex_child` (`probe.py prepare`). The member's `create` names no
+model: GraphTraj's agents driver refuses a selected model, connection, preset or reasoning effort (`invalid-config`,
+seen on the first real-host run, Correction 1). One Codex run.
 
 | Step | Who | Command | Success |
 |---|---|---|---|
@@ -25,15 +27,15 @@ project's one Codex role (`codex_child`) names it and the member's `create` name
 ### 00: preflight
 
 As 459's, plus the Codex lines. The Codex login check prints only `YES` or `NO` (it greps `codex login status`
-for `Logged in` and prints nothing of its text). `codex exec -m gpt-6-luna --sandbox read-only --json` answers one
+for `Logged in` and prints nothing of its text). `codex exec -m gpt-6-luna --sandbox read-only --json` (the `codex_child` preset's model) answers one
 line in the isolated project; only its last agent message is printed. No key value, account text or `~/.codex`
 file is read or printed.
 
 ### 01: the member and its Codex child
 
 The `claude -p` Main dispatches the member with `swarm`. The member uses only the agents tool. It creates a child
-with `{"runtime": "codex", "model": "gpt-6-luna", "instruction": "Use your shell tool once to run exactly:
-sleep 462 . Wait for it. Then reply DONE-462."}`, replies `CREATE <agent> <execution>` and ends its turn. Main
+with `{"runtime": "codex", "instruction": "Use your shell tool once to run exactly: sleep 462 . Wait for it.
+Then reply DONE-462."}` (model from the `codex_child` preset: `gpt-6-luna`), replies `CREATE <agent> <execution>` and ends its turn. Main
 runs `probe.py child` until it prints `CHILD-RUNNING`: the member's turn ended, the child record is `running` with
 a `runtime_pid` (the owned Codex app-server, the `codex` launcher), and a `sleep 462` is alive. Its state line says
 `tool_marker recorded=True|False` and `tool_descendants recorded=True|False`; the marker value is never printed.

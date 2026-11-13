@@ -3,12 +3,15 @@
 # Task 462 real-host check: a member's agents-tool Codex child (gpt-6-luna) runs `sleep 462` in its shell tool (own
 # session, below the Codex app-server); its owner Worker and the app-server's group are SIGKILLed; one reconciling
 # read must stop the escaped tool processes through the recorded descendants (tool_descendants), and nothing else.
-# Adapted from scripts/verify-462/steps.zsh (the Main and the member stay Claude, as there).
+# Adapted from scripts/verify-459/steps.zsh (the Main and the member stay Claude, as there).
+# The child's model comes from the project's only Codex preset, codex_child (gpt-6-luna; probe.py prepare): the
+# create names no model, since GraphTraj's agents driver refuses a selected model (invalid-config).
 #   zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/462-codex-child-tool-process-reclaim/scripts/verify-462/steps.zsh <00|00u|01|02|03>
 # 00  Main. preflight: scratch venv from COMMIT, isolated project, Codex login state (yes/no only) and a one-line
-#     gpt-6-luna answer, the Claude Main's one-line answer, probe Task ready, and a line proving the fix is in the venv.
+#     gpt-6-luna (the codex_child preset's model) answer, the Claude Main's one-line answer, probe Task ready, and a line proving the fix is in the venv.
 # 00u USER, once, only when 00 prints 'graphtraj-claude-host loaded: NO': folder trust.
 # 01  Main. background `claude -p` Main: swarm -> member creates a Codex child whose shell runs exactly `sleep 462`
+#     (no model in the create: the codex_child preset gives gpt-6-luna)
 #     and ends its turn; Main polls until CHILD-RUNNING and stops.
 # 02  Main. waits (<= 9 min) for 01's Main; refuses unless the child's descendants record lists a live `sleep 462`;
 #     SIGKILLs only the child's recorded owner Worker and Runtime group (after checking they are this project's),
@@ -156,7 +159,7 @@ step_01() {
   [[ $(cat $BASE/src-commit 2>/dev/null) == $(git -C $WT rev-parse HEAD) ]] || print "NOTE: venv commit $(cat $BASE/src-commit) is not HEAD; rerun 00 if HEAD is the commit under test."
   local C=$(claude_bin) S=$OUT/01-main-stream.jsonl
   rm -f $PID01
-  local member='Use only the agents tool (mcp__agents__agents). Execute feature create with arguments {"runtime": "codex", "model": "gpt-6-luna", "instruction": "Use your shell tool once to run exactly: sleep 462 . Wait for it. Then reply DONE-462."}. Reply with the one line CREATE <agent> <execution> from its result and end your turn at once. Do not call wait or status. Read no files and run no shell command yourself.'
+  local member='Use only the agents tool (mcp__agents__agents). Execute feature create with arguments {"runtime": "codex", "instruction": "Use your shell tool once to run exactly: sleep 462 . Wait for it. Then reply DONE-462."}. Reply with the one line CREATE <agent> <execution> from its result and end your turn at once. Do not call wait or status. Read no files and run no shell command yourself.'
   local swarm=$($VV/bin/python -I -c 'import json,sys; print(json.dumps({"action":"execute","feature":"swarm","arguments":{"tasks":[{"task_id":"1","role":"team_leader","instruction":sys.argv[1]}]}}))' "$member")
   print -r -- "$swarm" > $OUT/01-swarm-arguments.json
   local W="$VV/bin/python $SD/probe.py child $P 100"

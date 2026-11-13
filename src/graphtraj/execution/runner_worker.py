@@ -282,6 +282,12 @@ def run(job_file: Path) -> int:
                 runner_project_root(runner_directory), runner_directory, operation, base_mapping, prompt, turn_handle,
             )
             previous_sigterm = signal.signal(signal.SIGTERM, request_termination)
+            from graphtraj.execution.task_agents import watch_member_children
+
+            # While this member runs, its children's lost-owner ends reach it (451).
+            stop_child_watch = watch_member_children(
+                runner_project_root(runner_directory), base_mapping["alias"],
+                task_agent.run.agent if task_agent is not None else base_mapping.get("agent"))
             if budget_monitor is not None and monitor_stop is not None:
                 monitor_thread = threading.Thread(
                     target=_monitor_execution_budget,
@@ -307,6 +313,7 @@ def run(job_file: Path) -> int:
                     write_yaml_durably(session_directory / "execution.yml", terminal)
                     terminal_published = True
             finally:
+                stop_child_watch()
                 heartbeat_stop.set()
                 heartbeat_thread.join()
                 if monitor_stop is not None:

@@ -24,6 +24,18 @@ The numbers in parentheses are the project's Task numbers.
   the role preset it resolved, so a child created with `configuration` (or the
   Runtime's own preset) no longer shows `null` for its model. Other drivers and older
   records show `null` as before.
+- An end found by reconciliation now notifies the parent once without `hold_notices`
+  too (451). When a call finds a running execution whose owner and Runtime are gone,
+  it ends it `failed` with error `owner-exited` and records it `held` in the same write.
+  A control with a receiver claims it and calls the receiver once, after the record
+  lock is released, as for any other failed end. Before, only `hold_notices` hosts
+  recorded such an end, and other hosts notified nobody. `last_result.notification`
+  can now be `held` for such an end on a host without `hold_notices`, a value the
+  field already had. GraphTraj's Runner Worker now checks a running Task member's
+  children every 15 seconds, so such an end reaches the member within about that time.
+  A Task member that is not running holds the end, and its next run receives it once;
+  a read never resumes it. The claimed notice names the end's `error` for a host
+  receiver, as `finished()` does.
 - Each end notice names the execution it reports (449). The Codex host event gains
   `execution`, the same ID as the end's `last_result.id`; the Claude Code queue record,
   the Pi `details` and the DSH notice already held it. The text shown to the model ends

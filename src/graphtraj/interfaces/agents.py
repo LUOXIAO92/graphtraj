@@ -226,9 +226,15 @@ class GraphTrajAgents:
         from graphtraj.runtimes.runtime_adapter import select_runtime_adapter
 
         if notice['parent'] is not None:
+            if self._member_alias(notice['agent']) is not None:
+                # A Task member's own end reaches its parent through the Runner;
+                # only a reconciled end of its core record (451) arrives here.
+                return False
             member = self._member_parent(notice['parent'])
             if member is None or notice['outcome'] not in {'completed', 'failed', 'interrupted'}:
                 return False
+            if (notice.get('error') or {}).get('code') == 'owner-exited':
+                return self._reconciled_member_notice(member, notice)
             return notify_member_of_child_end(self.root, member, notice)
         runner = runner_directory(self.root)
         current = current_main(runner)
@@ -343,6 +349,56 @@ class GraphTrajAgents:
         control = AgentControl(swarm_root(self.root), {}, request_notices=True, event_receiver=(
             lambda notice: notify_parent_of_decision(directory, mapping, notice)))
         return control.ask_parent(Caller(TASK_HOST, reference), *question)
+
+    def _reconciled_member_notice(self, member: str, notice: dict) -> bool | str:
+        """Deliver a reconciled end (owner-exited) to a running member; hold it otherwise.
+
+        Only the core's reconciliation writes ``owner-exited``, and its notice
+        names that error. A member whose execution runs now gets it queued into
+        that turn; a failed push is held. A member that is not running holds it
+        with no Runner call, so a read never starts or resumes a member: the
+        core claims the held end again at the next read with a receiver, such
+        as the member's own Worker sweep when it next runs. A retired member,
+        whose record the Runner no longer maps, gets nothing (``False``).
+        """
+        from graphtraj.configuration.project_configuration import runner_directory
+        from graphtraj.execution import runner_status
+        from graphtraj.execution.task_agents import notify_member_of_child_end
+
+        try:
+            mapping, directory = runner_status.read_alias_mapping(runner_directory(self.root), member)
+        except (RunnerError, OSError, ValueError, KeyError, TypeError):
+            return False
+        # A retired record keeps only session.yml (its retirement mapping), or is moved away.
+        if mapping.get('retire_status') == 'retired' or not (directory / 'mapping.yml').is_file():
+            return False
+        try:
+            # Observation only: an abnormal member is not answered (stopped) by a read.
+            running = runner_status._status_session(
+                mapping, directory, member, respond_to_abnormal=False)['activity'] == 'running'
+        except Exception:
+            running = False
+        if not running:
+            return 'held'
+        return True if notify_member_of_child_end(self.root, member, notice) else 'held'
+
+    def reconcile_children(self, parents: set[str]) -> None:
+        """Find the lost-owner ends of the Agents whose parent is in ``parents``.
+
+        Taking each record's lock ends an execution whose owner and Runtime are
+        gone (``owner-exited``), and this control, which has a receiver,
+        delivers that end once (PUBLIC_API section 4). A record that cannot be
+        read is skipped until the next call.
+        """
+        for path in sorted((swarm_root(self.root) / "control" / "agents").glob(AGENT_PREFIX + "*.json")):
+            registration = self.control.registration(path.stem)
+            if registration is None or registration["parent"] not in parents:
+                continue
+            try:
+                # A read under the record lock; the lock is what reconciles.
+                self.control.unconfirmed_ends(path.stem)
+            except (AgentsError, OSError, ValueError):
+                continue
 
     def _member_parent(self, parent: str) -> str | None:
         """Return the Task member alias a child's recorded parent names, if any.

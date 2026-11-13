@@ -560,6 +560,8 @@ class AgentControl:
         self.root    = Path(root)
         self.drivers = dict(drivers)
         self._held   = threading.local()
+        # Reconciled ends this thread claimed, delivered once its last record lock is released.
+        self._lost   = threading.local()
         self.event_receiver = event_receiver
         self.roots   = roots
         self.request_notices = request_notices
@@ -1600,29 +1602,36 @@ class AgentControl:
             yield held[agent]
             return
 
+        # Only the outermost lock of this thread delivers what was claimed under it.
+        outermost = not held
         path = self._path(agent)
-        with exclusive(self.root / "live" / "agents" / f"{agent}.lock"):
-            if new is not None:
-                record, before = new, None
-            else:
+        try:
+            with exclusive(self.root / "live" / "agents" / f"{agent}.lock"):
+                if new is not None:
+                    record, before = new, None
+                else:
+                    try:
+                        before = path.read_text(encoding="utf-8")
+                    except FileNotFoundError:
+                        raise AgentsError("not-found", f"No Agent {agent!r} exists.") from None
+                    record = json.loads(before)
+                self._reconcile(record)
+                held[agent] = record
                 try:
-                    before = path.read_text(encoding="utf-8")
-                except FileNotFoundError:
-                    raise AgentsError("not-found", f"No Agent {agent!r} exists.") from None
-                record = json.loads(before)
-            self._reconcile(record)
-            held[agent] = record
-            try:
-                yield record
-            finally:
-                del held[agent]
-                text = json.dumps(record, indent=2, sort_keys=True)
-                if text != before:
-                    path.parent.mkdir(parents=True, exist_ok=True)
-                    descriptor, temporary = tempfile.mkstemp(dir=path.parent, prefix=".record-")
-                    with os.fdopen(descriptor, "w", encoding="utf-8") as stream:
-                        stream.write(text)
-                    os.replace(temporary, path)
+                    yield record
+                finally:
+                    del held[agent]
+                    self._claim_lost(record)
+                    text = json.dumps(record, indent=2, sort_keys=True)
+                    if text != before:
+                        path.parent.mkdir(parents=True, exist_ok=True)
+                        descriptor, temporary = tempfile.mkstemp(dir=path.parent, prefix=".record-")
+                        with os.fdopen(descriptor, "w", encoding="utf-8") as stream:
+                            stream.write(text)
+                        os.replace(temporary, path)
+        finally:
+            if outermost:
+                self._deliver_lost()
 
     def _reconcile(self, record: dict) -> None:
         """End a running execution whose owning process and Runtime are gone.
@@ -1641,9 +1650,72 @@ class AgentControl:
             error={"code": "owner-exited",
                    "message": "The process owning this execution exited before reporting its end."},
         )
-        if self.hold_notices:
-            # Its owner died before notifying anyone, so nobody else will.
-            current["notification"] = "held"
+        # Its owner died before notifying anyone, so nobody else will. Held in the
+        # same write, so a control without a receiver that finds it first loses
+        # nothing: without hold_notices, a control with one delivers it once
+        # (_claim_lost); with hold_notices, the held-notice machinery does.
+        current["notification"] = "held"
+
+    def _claim_lost(self, record: dict) -> None:
+        """Claim, under the lock, the held ``owner-exited`` ends this control can deliver.
+
+        Only without ``hold_notices``, and only ends :meth:`_reconcile` wrote,
+        so no other end changes. The claim (``held`` to ``pending`` or
+        ``queueing``) is made in the record write, so exactly one control
+        delivers each; the receiver runs after the lock (:meth:`_deliver_lost`).
+        """
+        if (self.hold_notices or self._closing or record["retired_at"] is not None
+                or self._lost.__dict__.get("settling")):
+            return
+        native = self._receivers.get(record["parent"])
+        receiver = native[1] if native is not None else self.event_receiver
+        if receiver is None:
+            return
+        for execution in record["executions"]:
+            if (execution.get("notification") != "held"
+                    or (execution.get("error") or {}).get("code") != "owner-exited"):
+                continue
+            # A parent Agent reads a body-less end as its error, as under hold_notices.
+            notice = self._notice_document(record, execution)
+            if native is None:
+                # As finished() gives a host receiver: it names the end's error,
+                # which tells a reconciled end (owner-exited) from a reported one.
+                notice["error"] = dict(execution["error"])
+            execution["notification"] = "pending" if native is not None else "queueing"
+            self._delivering.add(notice_id(execution["id"], execution.get("outcome")))
+            self._lost.__dict__.setdefault("claimed", []).append((receiver, notice, native is not None))
+
+    def _deliver_lost(self) -> None:
+        """Hand each claimed reconciled end to its receiver once, with no Agent lock held.
+
+        Settled as :meth:`ExecutionEvents.finished` settles an end without
+        ``hold_notices``.
+        """
+        claimed = self._lost.__dict__.pop("claimed", [])
+        for receiver, notice, native in claimed:
+            try:
+                accepted = receiver(notice)
+                delivery = ("held" if accepted == "held" else "queued" if accepted == "queued"
+                            else "unconfirmed" if accepted == "unconfirmed"
+                            else "delivered" if accepted is True else "unavailable")
+            except Exception:
+                delivery = "unconfirmed" if native else "unavailable"
+            # An end the receiver answered held is not claimed again in this
+            # pass, or a receiver that keeps answering held recurses; the next
+            # ordinary read may claim it again.
+            self._lost.__dict__["settling"] = True
+            try:
+                with self._locked(notice["agent"]) as record:
+                    for execution in record["executions"]:
+                        if (execution["id"] == notice["execution"]
+                                and execution.get("notification") in ("pending", "queueing")):
+                            execution["notification"] = delivery
+            except AgentsError:
+                # The record is gone: there is nothing left to settle.
+                pass
+            finally:
+                self._lost.__dict__["settling"] = False
+                self._delivering.discard(notice_id(notice["execution"], notice["outcome"]))
 
     # -- Authority --------------------------------------------------------
 

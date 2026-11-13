@@ -182,12 +182,20 @@ class AdapterDriver:
             ).finalize()
         except RuntimeAdapterError as error:
             raise _native_error(error) from None
+        request  = prepared.launch_document()["adapter_request"]
+        evidence = prepared.evidence_document()
+        # Record what launches: the frozen request (or its evidence) first,
+        # then the preset; Codex keeps effort under its native key.
+        model    = request.get("model") or evidence.get("model") or getattr(preset, "model", None)
+        effort   = (request.get("reasoning_effort") or evidence.get("reasoning_effort")
+                    or evidence.get("model_reasoning_effort") or getattr(preset, "reasoning_effort", None))
         return {
             "role":            name,
             "cwd":             str(cwd),
-            "adapter_request": prepared.launch_document()["adapter_request"],
+            "adapter_request": request,
             "connection":      prepared.launch_document().get("connection", {}),
-            "evidence":        prepared.evidence_document(),
+            "evidence":        evidence,
+            "applied":         {"configuration": name, "model": model, "reasoning_effort": effort},
         }
 
     def start(self, run: Run) -> None:

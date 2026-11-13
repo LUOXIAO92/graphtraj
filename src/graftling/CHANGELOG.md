@@ -17,6 +17,13 @@ The numbers in parentheses are the project's Task numbers.
 - A process that runs `create` now keeps the execution's owner until it reports its end
   (452). The Claude, Codex, Pi and DSH drivers start that owner as a non-daemon thread, so
   a `create` answered on a daemon thread no longer loses its end when the process exits.
+- The Agent document gains `configuration`, the configuration a driver applied at
+  `create` (455). A driver may return `applied` (`configuration`, `model`,
+  `reasoning_effort`) from `prepare`; the core records it and fills `model` and
+  `reasoning_effort` only where `config.yml` chose none. GraphTraj's driver reports
+  the role preset it resolved, so a child created with `configuration` (or the
+  Runtime's own preset) no longer shows `null` for its model. Other drivers and older
+  records show `null` as before.
 - Each end notice names the execution it reports (449). The Codex host event gains
   `execution`, the same ID as the end's `last_result.id`; the Claude Code queue record,
   the Pi `details` and the DSH notice already held it. The text shown to the model ends

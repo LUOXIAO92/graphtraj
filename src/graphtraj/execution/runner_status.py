@@ -434,6 +434,7 @@ def require_stopped_subtree(runner_directory: Path, alias: str, *, operation: st
     # The target must always be an established, valid Session. Other allocated
     # directories may precede launch or retain a confirmed startup failure.
     mappings = {alias: read_alias_mapping(runner_directory, alias)}
+    launching: set[str] = set()
     for path in [*(runner_directory / "sessions").iterdir(), *retained_session_directories(runner_directory)]:
         name = path.parent.name if path.name == "runner" else path.name
         if name == alias:
@@ -442,6 +443,12 @@ def require_stopped_subtree(runner_directory: Path, alias: str, *, operation: st
             continue
         if (_unstarted_allocation(path) or _terminal_unestablished_launch(path)
                 or _unestablished_root_launch(path)):
+            continue
+        parent = _launching_child_parent(path)
+        if parent is not None:
+            # Parentage only; walking into it below refuses it as not stopped.
+            launching.add(name)
+            mappings[name] = {"alias": name, "parent": parent}, path
             continue
         mapping, directory = _read_alias_record(runner_directory, name)
         if (not isinstance(mapping, dict) or mapping.get("alias") != name
@@ -461,6 +468,11 @@ def require_stopped_subtree(runner_directory: Path, alias: str, *, operation: st
         if current in seen:
             continue
         seen.add(current)
+        if current in launching:
+            raise RunnerError(
+                "replacement-not-stopped",
+                f"The target and all descendants must be stopped before {operation}; {current} is still launching.",
+            )
         mapping, directory = read_alias_mapping(runner_directory, current)
         if _status_session(mapping, directory, current, respond_to_abnormal=False)["activity"] != "idle":
             raise RunnerError(
@@ -551,6 +563,35 @@ def _unestablished_root_launch(directory: Path) -> bool:
         and launch["mapping"].get("alias") == directory.name
         and "parent" in launch["mapping"] and launch["mapping"]["parent"] is None
     )
+
+
+def _launching_child_parent(directory: Path) -> str | None:
+    """Return the recorded parent of a child allocation that is still launching.
+
+    Runner retains launch.yml (with parentage) and may start events.jsonl
+    before the Session is established. Until mapping.yml or a terminal
+    launch-error.yml exists, launch.yml is its only ownership record (Task 476,
+    production 461 engineer_2). Established, failed or malformed records
+    return None and keep strict validation.
+    """
+    if directory.is_symlink() or any(
+        os.path.lexists(directory / name)
+        for name in ("mapping.yml", "session.yml", "native-session.yml", "execution.yml", "launch-error.yml")
+    ):
+        return None
+    launch_file = directory / "launch.yml"
+    if launch_file.is_symlink() or not launch_file.is_file():
+        return None
+    try:
+        launch = yaml.safe_load(launch_file.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, yaml.YAMLError):
+        return None
+    if (isinstance(launch, dict) and launch.get("operation") == "launch"
+            and isinstance(launch.get("mapping"), dict)
+            and launch["mapping"].get("alias") == directory.name
+            and isinstance(launch["mapping"].get("parent"), str) and launch["mapping"]["parent"]):
+        return launch["mapping"]["parent"]
+    return None
 
 
 def _terminal_unestablished_launch(directory: Path) -> bool:

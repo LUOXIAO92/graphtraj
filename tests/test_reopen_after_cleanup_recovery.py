@@ -161,3 +161,50 @@ def test_missing_worktree_error_names_cause_and_public_operations(
     text = json.dumps(result['error'])
     assert 'alias mapping is invalid' not in text, result
     assert str(worktree) in text and 'swarm' in text, result
+
+
+def _launching_child(root: Path, alias: str, parent: str) -> Path:
+    """Retain a child allocation exactly as Runner leaves it mid-launch (production 461 engineer_2).
+
+    launch.yml and a nonempty events.jsonl exist; mapping.yml, session.yml,
+    native-session.yml, execution.yml and launch-error.yml do not yet.
+    """
+    directory = root / '.graphtraj/runner/sessions' / alias
+    directory.mkdir()
+    (directory / 'launch.yml').write_text(yaml.safe_dump({
+        'operation': 'launch', 'mapping': {'alias': alias, 'parent': parent, 'task_id': '99'}}))
+    (directory / 'events.jsonl').write_text('{"type": "launch-requested"}\n')
+    return directory
+
+
+def test_another_tasks_launching_child_does_not_refuse_recovery(reopened: tuple) -> None:
+    """A launching member outside the target subtree is not an invalid mapping (462, 21:19)."""
+    root, task, worktree, mapping, arguments, _, candidate, history = reopened
+    from graphtraj.runtimes.runtime_adapter import recovery_review
+
+    other = root / '.graphtraj/runner/sessions/99-other-handover0-team_leader@team_leader'
+    other.mkdir()
+    (other / 'mapping.yml').write_text(yaml.safe_dump({'alias': other.name, 'parent': None}))
+    _launching_child(root, '99-other-handover0-engineer@engineer', other.name)
+    with recovery_review(lambda proposal: {'decision': 'accept'}):
+        result = invoke(root, {**arguments, 'resume': False, 'additional_minutes': 60})
+    assert result['recovery_status'] == 'applied', result
+    assert yaml.safe_load((task / 'execution-budget.yml').read_text())['approved_minutes'] == 60
+    _assert_restored(root, worktree, candidate, history)
+
+
+def test_launching_child_inside_the_subtree_is_not_stopped(reopened: tuple) -> None:
+    """The target's own launching child refuses recovery as running, naming it."""
+    from graphtraj.execution.runner_models import RunnerError
+
+    root, task, worktree, mapping, arguments, _, _, _ = reopened
+    from graphtraj.runtimes.runtime_adapter import recovery_review
+
+    child = _launching_child(root, '83-integration-handover0-engineer@engineer_9', mapping['alias'])
+    budget = (task / 'execution-budget.yml').read_bytes()
+    with recovery_review(lambda proposal: {'decision': 'accept'}), pytest.raises(RunnerError) as refused:
+        invoke(root, {**arguments, 'resume': False})
+    assert refused.value.code == 'replacement-not-stopped', refused.value.message
+    assert child.name in refused.value.message
+    assert 'alias mapping is invalid' not in refused.value.message
+    assert (task / 'execution-budget.yml').read_bytes() == budget

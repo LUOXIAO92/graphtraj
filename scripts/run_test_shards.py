@@ -95,26 +95,33 @@ def _shards(files: list[Path], count: int) -> list[list[Path]]:
     return [sorted(shard) for shard in shards if shard]
 
 
+def _signal_group(process: subprocess.Popen, sig: int) -> bool:
+    """Send ``sig`` to the shard's own group; False when no live member is left.
+
+    macOS answers EPERM, not ESRCH, when every remaining member has exited but
+    is not yet reaped (zombies), e.g. a stopped child awaiting launchd (472).
+    """
+    try:
+        os.killpg(process.pid, sig)
+    except (ProcessLookupError, PermissionError):
+        return False
+    return True
+
+
 def _stop_group(process: subprocess.Popen) -> None:
     """Stop a shard's whole process group: SIGTERM, then SIGKILL."""
     for sig in (signal.SIGTERM, signal.SIGKILL):
-        try:
-            os.killpg(process.pid, sig)
-        except ProcessLookupError:
+        if not _signal_group(process, sig):
             break
         try:
             process.wait(timeout=10)
         except subprocess.TimeoutExpired:
             continue
-        try:
-            os.killpg(process.pid, 0)
-        except ProcessLookupError:
+        if not _signal_group(process, 0):
             break
         deadline = time.monotonic() + 2
         while time.monotonic() < deadline:
-            try:
-                os.killpg(process.pid, 0)
-            except ProcessLookupError:
+            if not _signal_group(process, 0):
                 return
             time.sleep(0.05)
     try:

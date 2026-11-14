@@ -92,7 +92,7 @@ print("control:", c.__file__)
 print("462 fix: reconcile reads tool_descendants:", "read_sidecar" in inspect.getsource(c._stop_escaped),
       "| Codex owner samples:", "DescendantSampler" in inspect.getsource(m.CodexManagedExecution.__init__),
       "| Codex owner reclaims:", "stop_tool_processes" in inspect.getsource(m.CodexManagedExecution._reclaim_tools),
-      "| agents driver records Codex:", "(\"claude\", \"codex\")" in inspect.getsource(d.AdapterDriver.start).replace(chr(39), chr(34)))') || return 1
+      "| agents driver records Codex:", "\"codex\"" in inspect.getsource(d.AdapterDriver.start).replace(chr(39), chr(34)).split("member_marker", 1)[1].split("\n", 1)[0])') || return 1
   say "isolated project $P (git, graphtraj setup, Claude host configuration)"
   [[ -f $P/.claude/settings.local.json ]] && cp -p $P/.claude/settings.local.json $BASE/settings.local.json.keep
   rm -rf $P; mkdir -p $P; (cd $P && git init -q -b main && print -r -- "# 462 probe" > README.md && git add README.md \

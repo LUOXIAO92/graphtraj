@@ -255,7 +255,7 @@ def sleeping() -> dict[int, str]:
         listing = ''
     for line in listing.splitlines():
         pid, _, command = line.strip().partition(' ')
-        if CHILD_SLEEP in command and 'probe.py' not in command and pid.isdigit():
+        if CHILD_SLEEP in command and is_tool_command(command) and pid.isdigit():
             found[int(pid)] = command[:160]
     try:
         from graftling.member_processes import _process_view, _user_pids
@@ -263,12 +263,18 @@ def sleeping() -> dict[int, str]:
         for pid in _user_pids():
             view = _process_view(pid) if pid not in found and pid != os.getpid() else None
             command = ' '.join(view[0]) if view else ''
-            if CHILD_SLEEP in command and 'probe.py' not in command:
+            if CHILD_SLEEP in command and is_tool_command(command):
                 found[pid] = command[:160]
     except (ImportError, OSError, ValueError):
         # Optional: the guard runs before the venv exists; ps alone covers the real host.
         pass
     return found
+
+
+def is_tool_command(command: str) -> bool:
+    """A 'sleep 462' itself or a shell running it; never a Python process whose code mentions it."""
+    first = command.split()[0] if command.split() else ''
+    return os.path.basename(first) in {'sleep', 'sh', 'zsh', 'bash'}
 
 
 def marked(marker: str) -> dict[int, str]:
@@ -558,6 +564,7 @@ runtime = subprocess.Popen([sys.executable, "-I", "-c", runtime_code], start_new
                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 sampler.start(runtime.pid)
 code = runtime.wait()
+time.sleep(1.5)  # the Codex owner first closes its connection and joins its sampler (about a second)
 # As the Codex owner: once its service has exited, stop what is left and write the record; stay alive.
 report = stop_tool_processes(sampler.finish(), marker, {runtime.pid}, error=sampler.error)
 target = Path(path).parent / "codex-termination-stub.yml"

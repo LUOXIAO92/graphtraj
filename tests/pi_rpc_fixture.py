@@ -189,7 +189,23 @@ def main() -> None:
                 with open(target, 'a') as stream:
                     stream.write('ran\n')
                 reviewed = 'ran'
-        if text.startswith('wait'):
+        if text.startswith('tool-shell '):
+            # 461: as Pi 1.4.0's bash tool (core/tools/bash.js): a detached shell of
+            # real platform binaries in its own session, outside the Runtime group.
+            # Two readable processes of other executions, each with a /bin/sleep, too.
+            target = Path(text.removeprefix('tool-shell '))
+            own = os.environ['GRAFTLING_MEMBER_RUN']
+            plain = {k: v for k, v in os.environ.items() if k != 'GRAFTLING_MEMBER_RUN'}
+            spawn = "import subprocess; subprocess.Popen(['/bin/sleep', '303']).wait()"
+            others = [subprocess.Popen([sys.executable, '-c', spawn], env=environment, start_new_session=True,
+                                       stdin=subprocess.DEVNULL).pid
+                      for environment in (plain, {**plain, 'GRAFTLING_MEMBER_RUN': own[::-1]})]
+            Path(str(target) + '.others').write_text(json.dumps(others))
+            subprocess.Popen(['/bin/sh', '-c', 'echo $$ > "$0.tmp" && mv "$0.tmp" "$0"; /bin/sleep 461; :',
+                              str(target)], start_new_session=True, stdin=subprocess.DEVNULL,
+                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            stop.wait(float(os.environ.get('PI_FIXTURE_TOOL_SECONDS', '2.5')))
+        elif text.startswith('wait'):
             stop.wait(held_seconds)
         else:
             time.sleep(0.04)

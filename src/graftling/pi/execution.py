@@ -27,7 +27,8 @@ from graftling.models import pi_default_keys, write_key_reference
 from graftling.approval import REVIEW_METHOD, review_failed
 from graftling.review import build_request, record_decision, review_call
 from graftling.child_env import child_environment, consumer_environment
-from graftling.member_processes import MEMBER_RUN_ENV, new_marker, stop_marked_processes
+from graftling.member_processes import MEMBER_RUN_ENV, new_marker
+from graftling.tool_descendants import DescendantSampler, stop_tool_processes
 from graftling.runtime import RuntimeAdapterError, SessionStarted, credential_environment
 
 
@@ -84,6 +85,10 @@ class PiExecution:
         self._execution_id = uuid.uuid4().hex
         # Inherited by every tool command, even one that leaves the process group.
         self.member_marker = new_marker()
+        # The Runtime's descendants, sampled while it lives: Pi starts its bash
+        # tool detached, and macOS hides the marker of /bin/bash (459, 461).
+        self.tool_descendants = directory / f'tool-descendants-{self._execution_id}.json'
+        self.descendants = DescendantSampler(self.tool_descendants, self.member_marker)
         self.proc: subprocess.Popen | None = None
         self.events: queue.Queue = queue.Queue()
         self.responses: dict[str, queue.Queue] = {}
@@ -476,10 +481,12 @@ class PiExecution:
             stderr = resources.enter_context((self.directory / 'stderr.log').open('a', encoding='utf-8'))
             stderr_offset = stderr.tell()
             try:
+                self.descendants.prepare()
                 self.proc = subprocess.Popen(argv, cwd=self.request['worktree_path'], env=env,
                                              stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                              text=True, bufsize=1, start_new_session=True)
                 self.record_process(self.proc.pid)
+                self.descendants.start(self.proc.pid)
 
                 def retain_stderr() -> None:
                     """Keep private log files host-side; Node must be able to stat its stdio."""
@@ -571,6 +578,8 @@ class PiExecution:
                             return self._result('interrupted' if self.stopping.is_set() or native_aborted else 'completed', last)
             finally:
                 original_error = sys.exc_info()[1]
+                # One last sample while the Runtime may still live, then stop sampling.
+                descendants = self.descendants.finish()
                 # Pi ended by itself before any prompt: the launch failed, nobody stopped it.
                 self.start_failed = (self.proc is not None and self.transport_closed.is_set()
                                      and not self.prompt_started and not self.stopping.is_set())
@@ -612,11 +621,13 @@ class PiExecution:
                     if self.proc is not None:
                         evidence = self.process_exit_evidence(native_idle)
                         if self.proc.poll() is not None:
-                            # Detached tools leave the owned group; stop those
-                            # still carrying this execution's marker.
+                            # Detached tools leave the owned group; stop the recorded
+                            # descendants still alive (same uid and start time), their
+                            # descendants, and those carrying this execution's marker.
                             from graftling.review import redact
 
-                            escaped = redact(stop_marked_processes(self.member_marker, {self.proc.pid}))
+                            escaped = redact(stop_tool_processes(descendants, self.member_marker, {self.proc.pid},
+                                                                 error=self.descendants.error))
                             if escaped['found'] or escaped.get('error'):
                                 evidence['escaped_processes'] = escaped
                         self.record_process(self.proc.pid, evidence)

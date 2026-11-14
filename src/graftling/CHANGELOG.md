@@ -14,6 +14,10 @@ The numbers in parentheses are the project's Task numbers.
 
 ## Unreleased (compatible)
 
+- A Pi execution's tool processes are now stopped the same way as a Claude
+  execution's (461): Pi starts its bash tool detached as `/bin/bash`, and on its owner's
+  death it exits without stopping it, so the Pi driver and GraphTraj's agents driver
+  now record `tool_marker` and `tool_descendants` for Pi too.
 - A Claude execution's tool processes that are Apple platform binaries are now stopped
   too (459): Claude Code's `/bin/zsh` Bash tool shell and commands such as
   `/bin/sleep`, whose environment macOS hides from the 457 marker scan. While the

@@ -1206,7 +1206,10 @@ Delivery rules:
   process started and detached between two samples (about one second) is found only
   by the marker, so not when it is a platform binary; a process whose chain of
   ancestors passed through a readable process without the marker is left alone by
-  design; Windows is not covered.
+  design; Windows is not covered. A Pi execution now records `tool_marker` and
+  `tool_descendants` and is stopped the same way (461), so this note's earlier
+  statement that Pi executions are not scanned no longer holds; Pi starts its bash
+  tool detached, outside the Runtime's group, as `/bin/bash`.
 - A completed round of a child that still has running members is recorded,
   not pushed. All rounds stay readable through `status`.
 - A notice its parent cannot receive now is recorded `held`, stays readable

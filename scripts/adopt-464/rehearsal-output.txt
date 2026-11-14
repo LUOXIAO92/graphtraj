@@ -1,0 +1,418 @@
+
+======== setup: old wheels from 4e3aafce010c1bc88353d502714cea5bb5c874bd, fake production venv, plugin, configuration
+graftling-0.5.0-py3-none-any.whl
+graphtraj-0.1.0-py3-none-any.whl
+Create dev from 7bbabcdc7bf2a3df2b91379ea110915d8d802d0b? [y/N]: Created Integration Worktree on dev.
+GraphTraj project setup complete.
+
+======== README 3(a): a timer started under 4e3aafce010c1bc88353d502714cea5bb5c874bd wakes after the 44729d5b9ed59a2a8f3bedc3fdcb54eca3b31d9a files replace it (sandbox import check)
+loaded at timer start: 10
+   graphtraj graphtraj.configuration graphtraj.configuration.project_roles graphtraj.execution graphtraj.execution.budget_idle_timer graphtraj.execution.execution_budget graphtraj.execution.runner_heartbeat graphtraj.execution.runner_io graphtraj.execution.runner_models graphtraj.file_lock
+lazy import at the threshold: OK
+graftling.control from new file (has _stop_escaped): True
+_stop_escaped lazy imports after the install: OK {"found": [], "stopped": [], "remaining": []}
+460 runner_control from new file (has _reclaim_tool_processes): True
+460 _reclaim_tool_processes lazy imports after the install: OK None
+newly imported after the install: 38
+   graftling graftling.approval graftling.calls graftling.child_env graftling.codex graftling.codex.diagnostics graftling.config graftling.connection graftling.control graftling.locks graftling.member_processes graftling.models graftling.notices graftling.process graftling.review graftling.runtime graftling.schema graftling.sessions graftling.sessions.archive graftling.sessions.protocol graftling.tool graftling.tool_descendants graphtraj.configuration.project_configuration graphtraj.execution.runner_capacity graphtraj.execution.runner_connection graphtraj.execution.runner_control graphtraj.execution.runner_process graphtraj.execution.runner_status graphtraj.execution.runner_transport graphtraj.execution.runner_worker graphtraj.graph graphtraj.graph.delivery_worldline graphtraj.runtimes graphtraj.runtimes.replacement graphtraj.runtimes.runtime_adapter graphtraj.workspace graphtraj.workspace.git_repository graphtraj.workspace.runner_project
+changed modules that were OLD in memory before the install: none
+changed modules loaded NEW after the install: ['graftling', 'graftling.control', 'graftling.member_processes', 'graftling.tool_descendants', 'graphtraj.execution.runner_control', 'graphtraj.execution.runner_worker']
+REHEARSAL PASS: timer: the lazy import at the threshold succeeds after the install
+REHEARSAL PASS: timer: graftling.control._stop_escaped's lazy imports (tool_descendants) succeed after the install
+REHEARSAL PASS: timer: no changed module was old in memory
+REHEARSAL PASS: timer: 460's changed runner_control (the threshold's import) and its lazy imports work
+
+======== 00 (host's parent is 'claude --continue'; Main from the newest transcript)
+REHEARSAL PASS: 00 found Main through claude --continue + newest transcript
+REHEARSAL PASS: 00 classified the timer as NON-BLOCKING
+REHEARSAL PASS: 00 reported the inherited 418 variable by name and path
+REHEARSAL PASS: 00: the 464 markers are absent from the old production
+### 418: inherited GRAFTLING_CLAUDE_HOST_* / GRAPHTRAJ_CLAUDE_HOST_* (name=path; unset for every child command of this script)
+inherited: GRAFTLING_CLAUDE_HOST_CONFIG=/elsewhere/.agents-control/claude-host.json
+credential-like exported names (values never printed): ['CLOUDSDK_PROXY_PASSWORD']
+Version: 0.1.0
+Version: 0.5.0
+agents: {"command": "/tmp/claude-501/adopt464-rehearsal/project/.venv-runtime/bin/python", "args": ["-m", "graphtraj.runtimes.claude.host", "serve", "--config", "/private/tmp/claude-501/adopt464-rehearsal/project/.graphtraj/claude-host/config.json"]}
+other entries: []
+### production holds 458's 4e3aafce: the 464 markers (457, 459) must be absent now
+markers expected absent: PASS (25/25)
+scope: []
+members: []
+running lines: 0 (465, 469 or other members may run now; I waits for them)
+host pid 99715, parent 4241: claude --continue
+parent is 'claude --continue': id from the newest transcript below
+MAIN=11111111-2222-3333-4444-555555555555 (saved to /tmp/claude-501/adopt464-rehearsal/home/graphtraj-adoption-464/main.session)
+guard: 1 个 445 预算空闲计时器（NON-BLOCKING，不是成员；安装后醒来时载入新的 runner_control 并照常送达，见 README 3(a)）:
+guard: 450 marked processes (information): none
+guard: BLOCKING 1 个进程在使用 /tmp/claude-501/adopt464-rehearsal/project/.venv-runtime（或是 Main 11111111-2222-3333-4444-555555555555）:
+  [Main's Claude host] 99715 4241 /tmp/claude-501/adopt464-rehearsal/project/.venv-runtime/bin/python -m graphtraj.runtimes.claude.host serve --config /tmp/claude-501/adopt464-rehearsal/project/.graphtraj/claude-host/config
+### 418: inherited GRAFTLING_CLAUDE_HOST_* / GRAPHTRAJ_CLAUDE_HOST_* (name=path; unset for every child command of this script)
+inherited: GRAFTLING_CLAUDE_HOST_CONFIG=/elsewhere/.agents-control/claude-host.json
+Version: 0.1.0
+Version: 0.5.0
+markers expected absent: PASS (25/25)
+running lines: 0 (465, 469 or other members may run now; I waits for them)
+MAIN=11111111-2222-3333-4444-555555555555 (saved to /tmp/claude-501/adopt464-rehearsal/home/graphtraj-adoption-464/main.session)
+guard: 1 个 445 预算空闲计时器（NON-BLOCKING，不是成员；安装后醒来时载入新的 runner_control 并照常送达，见 README 3(a)）:
+guard: 450 marked processes (information): none
+guard: BLOCKING 1 个进程在使用 /tmp/claude-501/adopt464-rehearsal/project/.venv-runtime（或是 Main 11111111-2222-3333-4444-555555555555）:
+成功: ZSH_VERSION 有值；answer 里 models 含 claude-opus-5-5 且 is_error False；graphtraj 0.1.0 与 graftling 0.5.0；pip check rc=0；'markers expected absent: PASS (25/25)'（生产仍是 4e3aafce）；
+  stopped: false 且 Team 1 active；roles 里有 opus_coding_team 的 advisor；/tmp/claude-501/adopt464-rehearsal/home/graphtraj-adoption-464/backup 'No such file'（393/417/448/453/458 的备份只列出，不动）；MAIN=<id>。
+running lines 可以不为 0（例如 Task 465、469 的成员）；I 会等它们结束，不结束它们，不需要现在处理。guard 的 NON-BLOCKING 计时器不影响安装。
+若 'inherited:' 列出名字：本脚本已对所有子命令 unset；记下它来自哪个项目（418 提醒）。
+
+======== B
+REHEARSAL PASS: B exit 0
+  Created wheel for graphtraj: filename=graphtraj-0.1.0-py3-none-any.whl size=583930 sha256=2530c5588614b5a7de0572cb6dc77d57c8c41cbbfbfc9d504e80f37ea43e3b02
+  Created wheel for graftling: filename=graftling-0.5.0-py3-none-any.whl size=449670 sha256=fa124474b637561245bdf8de97567c13907c836fdd8b1fd72ea81ed668c7a5ff
+fa124474b637561245bdf8de97567c13907c836fdd8b1fd72ea81ed668c7a5ff  graftling-0.5.0-py3-none-any.whl
+2530c5588614b5a7de0572cb6dc77d57c8c41cbbfbfc9d504e80f37ea43e3b02  graphtraj-0.1.0-py3-none-any.whl
+### no build/ or __pycache__ inside the wheels (expect leaked: 0)
+leaked: 0
+fa124474b637561245bdf8de97567c13907c836fdd8b1fd72ea81ed668c7a5ff  graftling-0.5.0-py3-none-any.whl
+2530c5588614b5a7de0572cb6dc77d57c8c41cbbfbfc9d504e80f37ea43e3b02  graphtraj-0.1.0-py3-none-any.whl
+### no build/ or __pycache__ inside the wheels (expect leaked: 0)
+leaked: 0
+成功: graphtraj-0.1.0 与 graftling-0.5.0 各一个 wheel 及 sha256；leaked: 0。
+
+======== V (stub plugin validate)
+REHEARSAL PASS: V exit 0
+SAME    .claude-plugin/plugin.json
+SAME    hooks/hooks.json
+SAME    hooks/host_context.mjs
+### source diff 4e3aafce..44729d5b9ed59a2a8f3bedc3fdcb54eca3b31d9a of the plugin and hook sources (expect empty)
+source diff: empty
+plugin unchanged: no plugin/hooks trust dialog is expected at resume.
+ok  457 claude driver records the tool marker: present in /tmp/claude-501/adopt464-rehearsal/home/graphtraj-adoption-464/vvenv-44729d5b/lib/python3.13/site-packages/graftling/claude/driver.py
+ok  457 agents driver records the tool marker: present in /tmp/claude-501/adopt464-rehearsal/home/graphtraj-adoption-464/vvenv-44729d5b/lib/python3.13/site-packages/graphtraj/execution/agent_driver.py
+ok  457 reconcile stops the escaped tools: present in /tmp/claude-501/adopt464-rehearsal/home/graphtraj-adoption-464/vvenv-44729d5b/lib/python3.13/site-packages/graftling/control.py
+ok  457 owner-exited reconcile calls it: present in /tmp/claude-501/adopt464-rehearsal/home/graphtraj-adoption-464/vvenv-44729d5b/lib/python3.13/site-packages/graftling/control.py
+ok  459 sampling period: present in /tmp/claude-501/adopt464-rehearsal/home/graphtraj-adoption-464/vvenv-44729d5b/lib/python3.13/site-packages/graftling/tool_descendants.py
+ok  459 descendant sampler: present in /tmp/claude-501/adopt464-rehearsal/home/graphtraj-adoption-464/vvenv-44729d5b/lib/python3.13/site-packages/graftling/tool_descendants.py
+ok  459 owner samples the Runtime: present in /tmp/claude-501/adopt464-rehearsal/home/graphtraj-adoption-464/vvenv-44729d5b/lib/python3.13/site-packages/graftling/claude/execution.py
+ok  459 agents driver records the descendants file: present in /tmp/claude-501/adopt464-rehearsal/home/graphtraj-adoption-464/vvenv-44729d5b/lib/python3.13/site-packages/graphtraj/execution/agent_driver.py
+ok  459 tool_descendants process fact allowed: present in /tmp/claude-501/adopt464-rehearsal/home/graphtraj-adoption-464/vvenv-44729d5b/lib/python3.13/site-packages/graftling/control.py
+ok  459 pid list retried when the buffer fills: present in /tmp/claude-501/adopt464-rehearsal/home/graphtraj-adoption-464/vvenv-44729d5b/lib/python3.13/site-packages/graftling/member_processes.py
+ok  459 correction (b3d522ad): recorded argv redacted: present in /tmp/claude-501/adopt464-rehearsal/home/graphtraj-adoption-464/vvenv-44729d5b/lib/python3.13/site-packages/graftling/tool_descendants.py
+ok  460 Worker records the tool processes: present in /tmp/claude-501/adopt464-rehearsal/home/graphtraj-adoption-464/vvenv-44729d5b/lib/python3.13/site-packages/graphtraj/execution/runner_worker.py
+ok  460 Worker writes it for the turn: present in /tmp/claude-501/adopt464-rehearsal/home/graphtraj-adoption-464/vvenv-44729d5b/lib/python3.13/site-packages/graphtraj/execution/runner_worker.py
+ok  460 Runner reclaims on confirmed termination: present in /tmp/claude-501/adopt464-rehearsal/home/graphtraj-adoption-464/vvenv-44729d5b/lib/python3.13/site-packages/graphtraj/execution/runner_control.py
+ok  460 receipt reports it: present in /tmp/claude-501/adopt464-rehearsal/home/graphtraj-adoption-464/vvenv-44729d5b/lib/python3.13/site-packages/graphtraj/execution/runner_control.py
+ok  460 published names used: present in /tmp/claude-501/adopt464-rehearsal/home/graphtraj-adoption-464/vvenv-44729d5b/lib/python3.13/site-packages/graftling/__init__.py
+ok  461 Pi owner samples its Runtime: present in /tmp/claude-501/adopt464-rehearsal/home/graphtraj-adoption-464/vvenv-44729d5b/lib/python3.13/site-packages/graftling/pi/execution.py
+ok  461 Pi driver records the facts: present in /tmp/claude-501/adopt464-rehearsal/home/graphtraj-adoption-464/vvenv-44729d5b/lib/python3.13/site-packages/graftling/pi/driver.py
+ok  462 Codex reclaim thread: present in /tmp/claude-501/adopt464-rehearsal/home/graphtraj-adoption-464/vvenv-44729d5b/lib/python3.13/site-packages/graftling/codex/managed_session.py
+ok  462 Codex reclaim: present in /tmp/claude-501/adopt464-rehearsal/home/graphtraj-adoption-464/vvenv-44729d5b/lib/python3.13/site-packages/graftling/codex/managed_session.py
+ok  462 Codex driver records the facts: present in /tmp/claude-501/adopt464-rehearsal/home/graphtraj-adoption-464/vvenv-44729d5b/lib/python3.13/site-packages/graftling/codex/driver.py
+ok  463 DSH owner samples its service: present in /tmp/claude-501/adopt464-rehearsal/home/graphtraj-adoption-464/vvenv-44729d5b/lib/python3.13/site-packages/graftling/dsh/execution.py
+ok  463 DSH stops escaped tools: present in /tmp/claude-501/adopt464-rehearsal/home/graphtraj-adoption-464/vvenv-44729d5b/lib/python3.13/site-packages/graftling/dsh/execution.py
+ok  463 DSH driver records the facts: present in /tmp/claude-501/adopt464-rehearsal/home/graphtraj-adoption-464/vvenv-44729d5b/lib/python3.13/site-packages/graftling/dsh/driver.py
+ok  461-463 agents driver records the facts for four Runtimes: present in /tmp/claude-501/adopt464-rehearsal/home/graphtraj-adoption-464/vvenv-44729d5b/lib/python3.13/site-packages/graphtraj/execution/agent_driver.py
+markers expected present: PASS (25/25)
+ok  457 claude driver records the tool marker: absent in /tmp/claude-501/adopt464-rehearsal/project/.venv-runtime/lib/python3.13/site-packages/graftling/claude/driver.py
+ok  457 agents driver records the tool marker: absent in /tmp/claude-501/adopt464-rehearsal/project/.venv-runtime/lib/python3.13/site-packages/graphtraj/execution/agent_driver.py
+ok  457 reconcile stops the escaped tools: absent in /tmp/claude-501/adopt464-rehearsal/project/.venv-runtime/lib/python3.13/site-packages/graftling/control.py
+ok  457 owner-exited reconcile calls it: absent in /tmp/claude-501/adopt464-rehearsal/project/.venv-runtime/lib/python3.13/site-packages/graftling/control.py
+ok  459 sampling period: absent in /tmp/claude-501/adopt464-rehearsal/project/.venv-runtime/lib/python3.13/site-packages/graftling/tool_descendants.py
+ok  459 descendant sampler: absent in /tmp/claude-501/adopt464-rehearsal/project/.venv-runtime/lib/python3.13/site-packages/graftling/tool_descendants.py
+ok  459 owner samples the Runtime: absent in /tmp/claude-501/adopt464-rehearsal/project/.venv-runtime/lib/python3.13/site-packages/graftling/claude/execution.py
+ok  459 agents driver records the descendants file: absent in /tmp/claude-501/adopt464-rehearsal/project/.venv-runtime/lib/python3.13/site-packages/graphtraj/execution/agent_driver.py
+ok  459 tool_descendants process fact allowed: absent in /tmp/claude-501/adopt464-rehearsal/project/.venv-runtime/lib/python3.13/site-packages/graftling/control.py
+ok  459 pid list retried when the buffer fills: absent in /tmp/claude-501/adopt464-rehearsal/project/.venv-runtime/lib/python3.13/site-packages/graftling/member_processes.py
+ok  459 correction (b3d522ad): recorded argv redacted: absent in /tmp/claude-501/adopt464-rehearsal/project/.venv-runtime/lib/python3.13/site-packages/graftling/tool_descendants.py
+ok  460 Worker records the tool processes: absent in /tmp/claude-501/adopt464-rehearsal/project/.venv-runtime/lib/python3.13/site-packages/graphtraj/execution/runner_worker.py
+ok  460 Worker writes it for the turn: absent in /tmp/claude-501/adopt464-rehearsal/project/.venv-runtime/lib/python3.13/site-packages/graphtraj/execution/runner_worker.py
+ok  460 Runner reclaims on confirmed termination: absent in /tmp/claude-501/adopt464-rehearsal/project/.venv-runtime/lib/python3.13/site-packages/graphtraj/execution/runner_control.py
+ok  460 receipt reports it: absent in /tmp/claude-501/adopt464-rehearsal/project/.venv-runtime/lib/python3.13/site-packages/graphtraj/execution/runner_control.py
+ok  460 published names used: absent in /tmp/claude-501/adopt464-rehearsal/project/.venv-runtime/lib/python3.13/site-packages/graftling/__init__.py
+ok  461 Pi owner samples its Runtime: absent in /tmp/claude-501/adopt464-rehearsal/project/.venv-runtime/lib/python3.13/site-packages/graftling/pi/execution.py
+ok  461 Pi driver records the facts: absent in /tmp/claude-501/adopt464-rehearsal/project/.venv-runtime/lib/python3.13/site-packages/graftling/pi/driver.py
+ok  462 Codex reclaim thread: absent in /tmp/claude-501/adopt464-rehearsal/project/.venv-runtime/lib/python3.13/site-packages/graftling/codex/managed_session.py
+ok  462 Codex reclaim: absent in /tmp/claude-501/adopt464-rehearsal/project/.venv-runtime/lib/python3.13/site-packages/graftling/codex/managed_session.py
+ok  462 Codex driver records the facts: absent in /tmp/claude-501/adopt464-rehearsal/project/.venv-runtime/lib/python3.13/site-packages/graftling/codex/driver.py
+ok  463 DSH owner samples its service: absent in /tmp/claude-501/adopt464-rehearsal/project/.venv-runtime/lib/python3.13/site-packages/graftling/dsh/execution.py
+ok  463 DSH stops escaped tools: absent in /tmp/claude-501/adopt464-rehearsal/project/.venv-runtime/lib/python3.13/site-packages/graftling/dsh/execution.py
+ok  463 DSH driver records the facts: absent in /tmp/claude-501/adopt464-rehearsal/project/.venv-runtime/lib/python3.13/site-packages/graftling/dsh/driver.py
+ok  461-463 agents driver records the facts for four Runtimes: absent in /tmp/claude-501/adopt464-rehearsal/project/.venv-runtime/lib/python3.13/site-packages/graphtraj/execution/agent_driver.py
+markers expected absent: PASS (25/25)
+✘ lines: baseline=0 candidate=0
+SAME    .mcp.json
+SAME    .claude/settings.local.json
+SAME    .graphtraj/claude-host/config.json
+SAME    .claude-plugin/plugin.json
+SAME    hooks/hooks.json
+SAME    hooks/host_context.mjs
+### source diff 4e3aafce..44729d5b9ed59a2a8f3bedc3fdcb54eca3b31d9a of the plugin and hook sources (expect empty)
+source diff: empty
+plugin unchanged: no plugin/hooks trust dialog is expected at resume.
+markers expected present: PASS (25/25)
+markers expected absent: PASS (25/25)
+✘ lines: baseline=0 candidate=0
+SAME    .mcp.json
+SAME    .claude/settings.local.json
+SAME    .graphtraj/claude-host/config.json
+成功: SAME ×3 与 'plugin unchanged: no plugin/hooks trust dialog is expected'；'source diff: empty'；'markers expected present: PASS (25/25)' 与 'markers expected absent: PASS (25/25)'；
+  候选 ✘ 不多于 baseline；无 STOP；入口文件 SAME 或只列出可解释的变化；read_session failures=0。
+REHEARSAL PASS: V: plugin files SAME x3, no trust dialog predicted
+REHEARSAL PASS: V: plugin source diff 4e3aafce..44729d5b empty
+REHEARSAL PASS: V: markers present in the candidate, absent in production
+REHEARSAL PASS: V wrote nothing to production entry files
+NOT REHEARSED: Vc (real Claude Code); marker made by hand.
+
+======== S refuses while another run_test_shards runs (quiet-host check only; the suite itself is not run here)
+REHEARSAL PASS: S refused
+Worktree HEAD d47be7f7: src, tests, pyproject.toml equal 44729d5b9ed59a2a8f3bedc3fdcb54eca3b31d9a and clean
+loadavg: 
+other pytest / run_test_shards processes: 7171 1 python scripts/run_test_shards.py --shards 6
+STOP: another run_test_shards is running (for example a 465 or 469 suite); the host is not quiet. Main queues S and reruns it later.
+S 未启动（见上面 STOP 或 GUARD 行），把 /tmp/claude-501/adopt464-rehearsal/project/.graphtraj/core/state/tasks/464-production-adoption-457-459/adoption/raw-44729d5b/S-setup.txt 交给 Main；主机不空闲时由 Main 决定何时重跑。
+REHEARSAL PASS: S: Worktree src/tests/pyproject equal the target
+
+======== S2 counts leftovers of a finished suite (synthetic suite output; ps -E stub), never signals
+REHEARSAL PASS: S2 exit 0
+run id: abcdef0123456789; suite base temporary directories: pytest-4 .. pytest-1882 under /tmp/claude-501/pytest-of-luoxiao
+leftover processes of the suite (never signalled): 2
+  8181 1 1:00 /usr/bin/python3 -m graphtraj.execution.budget_idle_timer x PYTEST_GRAPHTRAJ_RUN=abcdef0123456789-2 HOME=/h
+REHEARSAL PASS: S2 counted 2 (run marker, suite venv; not an older basetemp)
+
+======== I waits while a Task 465 member Worker and Main's host run, then passes with only the idle timer left
+scripts/adopt-464/rehearse.zsh:134: nice(5) failed: operation not permitted
+REHEARSAL PASS: I exit 0
+REHEARSAL PASS: I waited and named Tasks 465 and 469, no kill, Ctrl-C safe
+REHEARSAL PASS: I listed the Worker as BLOCKING with its Task
+REHEARSAL PASS: I never listed the timer as BLOCKING
+guard: 1 个 445 预算空闲计时器（NON-BLOCKING，不是成员；安装后醒来时载入新的 runner_control 并照常送达，见 README 3(a)）:
+guard: BLOCKING 2 个进程在使用 /tmp/claude-501/adopt464-rehearsal/project/.venv-runtime（或是 Main 11111111-2222-3333-4444-555555555555）:
+18:15:05 正在等待：Task 465、469（或其它 Task）的成员还在运行（上面列出的 BLOCKING 进程）。不要结束（kill）这些进程；它们结束后本步自动继续。
+         Waiting for Task 465, 469 (or other Task) members listed above. Do not kill them; this step continues by itself.
+guard: 1 个 445 预算空闲计时器（NON-BLOCKING，不是成员；安装后醒来时载入新的 runner_control 并照常送达，见 README 3(a)）:
+guard: BLOCKING 2 个进程在使用 /tmp/claude-501/adopt464-rehearsal/project/.venv-runtime（或是 Main 11111111-2222-3333-4444-555555555555）:
+18:15:07 正在等待：Task 465、469（或其它 Task）的成员还在运行（上面列出的 BLOCKING 进程）。不要结束（kill）这些进程；它们结束后本步自动继续。
+         Waiting for Task 465, 469 (or other Task) members listed above. Do not kill them; this step continues by itself.
+guard: 1 个 445 预算空闲计时器（NON-BLOCKING，不是成员；安装后醒来时载入新的 runner_control 并照常送达，见 README 3(a)）:
+guard: BLOCKING 2 个进程在使用 /tmp/claude-501/adopt464-rehearsal/project/.venv-runtime（或是 Main 11111111-2222-3333-4444-555555555555）:
+18:15:08 正在等待：Task 465、469（或其它 Task）的成员还在运行（上面列出的 BLOCKING 进程）。不要结束（kill）这些进程；它们结束后本步自动继续。
+         Waiting for Task 465, 469 (or other Task) members listed above. Do not kill them; this step continues by itself.
+guard: 1 个 445 预算空闲计时器（NON-BLOCKING，不是成员；安装后醒来时载入新的 runner_control 并照常送达，见 README 3(a)）:
+guard: BLOCKING 0 — 没有成员或 host 在使用 /tmp/claude-501/adopt464-rehearsal/project/.venv-runtime。
+-rw------- /tmp/claude-501/adopt464-rehearsal/home/graphtraj-adoption-464/backup/entries/.claude__settings.local.json
+-rw------- /tmp/claude-501/adopt464-rehearsal/home/graphtraj-adoption-464/backup/entries/.graphtraj__claude-host__config.json
+-rw------- /tmp/claude-501/adopt464-rehearsal/home/graphtraj-adoption-464/backup/entries/.mcp.json
+guard: 1 个 445 预算空闲计时器（NON-BLOCKING，不是成员；安装后醒来时载入新的 runner_control 并照常送达，见 README 3(a)）:
+guard: BLOCKING 0 — 没有成员或 host 在使用 /tmp/claude-501/adopt464-rehearsal/project/.venv-runtime。
+      Successfully uninstalled graphtraj-0.1.0
+      Successfully uninstalled graftling-0.5.0
+Successfully installed graftling-0.5.0 graphtraj-0.1.0
+PASS 247 FAIL 0
+457 _stop_escaped | 459 SAMPLE_SECONDS 1.0 DescendantSampler | 459 correction shown_command
+460 tool-processes-{0}.yml _reclaim_tool_processes | 461 PiExecution | 462 _reclaim_tools | 463 _stop_escaped
+markers expected present: PASS (25/25)
+SAME-AS-VALIDATED
+plugin bytes as before the install: no trust dialog expected
+bytes unchanged: .mcp.json
+bytes unchanged: .claude/settings.local.json
+bytes unchanged: .graphtraj/claude-host/config.json
+### BLOCKING processes started during the install window (18:15:09 → 18:15:11); information for Main
+guard: 1 个 445 预算空闲计时器（NON-BLOCKING，不是成员；安装后醒来时载入新的 runner_control 并照常送达，见 README 3(a)）:
+guard: BLOCKING 0 — 没有成员或 host 在使用 /tmp/claude-501/adopt464-rehearsal/project/.venv-runtime。
+-rw------- /tmp/claude-501/adopt464-rehearsal/home/graphtraj-adoption-464/backup/entries/.claude__settings.local.json
+-rw------- /tmp/claude-501/adopt464-rehearsal/home/graphtraj-adoption-464/backup/entries/.graphtraj__claude-host__config.json
+-rw------- /tmp/claude-501/adopt464-rehearsal/home/graphtraj-adoption-464/backup/entries/.mcp.json
+guard: 1 个 445 预算空闲计时器（NON-BLOCKING，不是成员；安装后醒来时载入新的 runner_control 并照常送达，见 README 3(a)）:
+guard: BLOCKING 0 — 没有成员或 host 在使用 /tmp/claude-501/adopt464-rehearsal/project/.venv-runtime。
+      Successfully uninstalled graphtraj-0.1.0
+      Successfully uninstalled graftling-0.5.0
+Successfully installed graftling-0.5.0 graphtraj-0.1.0
+PASS 247 FAIL 0
+457 _stop_escaped | 459 SAMPLE_SECONDS 1.0 DescendantSampler | 459 correction shown_command
+460 tool-processes-{0}.yml _reclaim_tool_processes | 461 PiExecution | 462 _reclaim_tools | 463 _stop_escaped
+markers expected present: PASS (25/25)
+SAME-AS-VALIDATED
+plugin bytes as before the install: no trust dialog expected
+bytes unchanged: .mcp.json
+bytes unchanged: .claude/settings.local.json
+bytes unchanged: .graphtraj/claude-host/config.json
+### BLOCKING processes started during the install window (18:15:09 → 18:15:11); information for Main
+guard: 1 个 445 预算空闲计时器（NON-BLOCKING，不是成员；安装后醒来时载入新的 runner_control 并照常送达，见 README 3(a)）:
+guard: BLOCKING 0 — 没有成员或 host 在使用 /tmp/claude-501/adopt464-rehearsal/project/.venv-runtime。
+成功: Successfully installed graftling-0.5.0 graphtraj-0.1.0；PASS n FAIL 0；三个 -rw------- 备份入口文件；'markers expected present: PASS (25/25)'；'457 _stop_escaped | 459 SAMPLE_SECONDS 1.0 DescendantSampler | 459 correction shown_command' 与 '460 tool-processes-{0}.yml _reclaim_tool_processes | 461 PiExecution | 462 _reclaim_tools | 463 _stop_escaped'；SAME-AS-VALIDATED；
+  'plugin bytes as before the install: no trust dialog expected'；入口文件 bytes unchanged 或 V 已列出的变化。
+  cd /tmp/claude-501/adopt464-rehearsal/project && claude --continue
+预期对话框: 无（插件字节没有变）。若出现任何框: 选拒绝（Esc）并告诉 Main 标题；若 I 打印 'plugin bytes CHANGED'，至多一个插件/hooks 信任框，选信任。
+REHEARSAL PASS: proddiff PASS n FAIL 0
+REHEARSAL PASS: I: markers present in the installed site-packages
+REHEARSAL PASS: I: the import line prints 457/459 names from .venv-runtime
+REHEARSAL PASS: I: the import line prints 460-463 names from .venv-runtime
+REHEARSAL PASS: I: plugin bytes as before (no trust dialog)
+REHEARSAL PASS: backup entry copies are all -rw-------
+-rw------- /tmp/claude-501/adopt464-rehearsal/home/graphtraj-adoption-464/backup/entries/.claude__settings.local.json
+-rw------- /tmp/claude-501/adopt464-rehearsal/home/graphtraj-adoption-464/backup/entries/.graphtraj__claude-host__config.json
+-rw------- /tmp/claude-501/adopt464-rehearsal/home/graphtraj-adoption-464/backup/entries/.mcp.json
+REHEARSAL PASS: backup tools include markers.py, nr459.py and watch459.py
+REHEARSAL PASS: I printed claude --continue
+
+======== R from the backup's own copy of the tools
+REHEARSAL PASS: R exit 0
+DIFF entries=938 differences=22 (/tmp/claude-501/adopt464-rehearsal/project/.venv-runtime)
+### venv restored whole from the backup
+SAME entries=938 differences=0 (/tmp/claude-501/adopt464-rehearsal/project/.venv-runtime)
+### plugin restored; the current one kept
+SAME entries=5 differences=0 (/tmp/claude-501/adopt464-rehearsal/project/.claude/skills/graphtraj-claude-host)
+### entry files restored from the backup copies; the current ones kept
+already as before: .mcp.json
+already as before: .claude/settings.local.json
+already as before: .graphtraj/claude-host/config.json
+### a stale channel file would make the restored host refuse with host-busy
+Version: 0.1.0
+Version: 0.5.0
+DIFF entries=938 differences=22 (/tmp/claude-501/adopt464-rehearsal/project/.venv-runtime)
+### venv restored whole from the backup
+SAME entries=938 differences=0 (/tmp/claude-501/adopt464-rehearsal/project/.venv-runtime)
+### plugin restored; the current one kept
+SAME entries=5 differences=0 (/tmp/claude-501/adopt464-rehearsal/project/.claude/skills/graphtraj-claude-host)
+### entry files restored from the backup copies; the current ones kept
+already as before: .mcp.json
+already as before: .claude/settings.local.json
+already as before: .graphtraj/claude-host/config.json
+### a stale channel file would make the restored host refuse with host-busy
+Version: 0.1.0
+Version: 0.5.0
+然后（USER）: cd /tmp/claude-501/adopt464-rehearsal/project && claude --continue （插件字节与安装前相同，预期无对话框；出现任何框选拒绝并告诉 Main）。
+
+SAME entries=938 differences=0 (/tmp/claude-501/adopt464-rehearsal/project/.venv-runtime)
+REHEARSAL PASS: venv equals the pre-install manifest
+ok  457 claude driver records the tool marker: absent in /tmp/claude-501/adopt464-rehearsal/project/.venv-runtime/lib/python3.13/site-packages/graftling/claude/driver.py
+ok  457 agents driver records the tool marker: absent in /tmp/claude-501/adopt464-rehearsal/project/.venv-runtime/lib/python3.13/site-packages/graphtraj/execution/agent_driver.py
+ok  457 reconcile stops the escaped tools: absent in /tmp/claude-501/adopt464-rehearsal/project/.venv-runtime/lib/python3.13/site-packages/graftling/control.py
+ok  457 owner-exited reconcile calls it: absent in /tmp/claude-501/adopt464-rehearsal/project/.venv-runtime/lib/python3.13/site-packages/graftling/control.py
+ok  459 sampling period: absent in /tmp/claude-501/adopt464-rehearsal/project/.venv-runtime/lib/python3.13/site-packages/graftling/tool_descendants.py
+ok  459 descendant sampler: absent in /tmp/claude-501/adopt464-rehearsal/project/.venv-runtime/lib/python3.13/site-packages/graftling/tool_descendants.py
+ok  459 owner samples the Runtime: absent in /tmp/claude-501/adopt464-rehearsal/project/.venv-runtime/lib/python3.13/site-packages/graftling/claude/execution.py
+ok  459 agents driver records the descendants file: absent in /tmp/claude-501/adopt464-rehearsal/project/.venv-runtime/lib/python3.13/site-packages/graphtraj/execution/agent_driver.py
+ok  459 tool_descendants process fact allowed: absent in /tmp/claude-501/adopt464-rehearsal/project/.venv-runtime/lib/python3.13/site-packages/graftling/control.py
+ok  459 pid list retried when the buffer fills: absent in /tmp/claude-501/adopt464-rehearsal/project/.venv-runtime/lib/python3.13/site-packages/graftling/member_processes.py
+ok  459 correction (b3d522ad): recorded argv redacted: absent in /tmp/claude-501/adopt464-rehearsal/project/.venv-runtime/lib/python3.13/site-packages/graftling/tool_descendants.py
+ok  460 Worker records the tool processes: absent in /tmp/claude-501/adopt464-rehearsal/project/.venv-runtime/lib/python3.13/site-packages/graphtraj/execution/runner_worker.py
+ok  460 Worker writes it for the turn: absent in /tmp/claude-501/adopt464-rehearsal/project/.venv-runtime/lib/python3.13/site-packages/graphtraj/execution/runner_worker.py
+ok  460 Runner reclaims on confirmed termination: absent in /tmp/claude-501/adopt464-rehearsal/project/.venv-runtime/lib/python3.13/site-packages/graphtraj/execution/runner_control.py
+ok  460 receipt reports it: absent in /tmp/claude-501/adopt464-rehearsal/project/.venv-runtime/lib/python3.13/site-packages/graphtraj/execution/runner_control.py
+ok  460 published names used: absent in /tmp/claude-501/adopt464-rehearsal/project/.venv-runtime/lib/python3.13/site-packages/graftling/__init__.py
+ok  461 Pi owner samples its Runtime: absent in /tmp/claude-501/adopt464-rehearsal/project/.venv-runtime/lib/python3.13/site-packages/graftling/pi/execution.py
+ok  461 Pi driver records the facts: absent in /tmp/claude-501/adopt464-rehearsal/project/.venv-runtime/lib/python3.13/site-packages/graftling/pi/driver.py
+ok  462 Codex reclaim thread: absent in /tmp/claude-501/adopt464-rehearsal/project/.venv-runtime/lib/python3.13/site-packages/graftling/codex/managed_session.py
+ok  462 Codex reclaim: absent in /tmp/claude-501/adopt464-rehearsal/project/.venv-runtime/lib/python3.13/site-packages/graftling/codex/managed_session.py
+ok  462 Codex driver records the facts: absent in /tmp/claude-501/adopt464-rehearsal/project/.venv-runtime/lib/python3.13/site-packages/graftling/codex/driver.py
+ok  463 DSH owner samples its service: absent in /tmp/claude-501/adopt464-rehearsal/project/.venv-runtime/lib/python3.13/site-packages/graftling/dsh/execution.py
+ok  463 DSH stops escaped tools: absent in /tmp/claude-501/adopt464-rehearsal/project/.venv-runtime/lib/python3.13/site-packages/graftling/dsh/execution.py
+ok  463 DSH driver records the facts: absent in /tmp/claude-501/adopt464-rehearsal/project/.venv-runtime/lib/python3.13/site-packages/graftling/dsh/driver.py
+ok  461-463 agents driver records the facts for four Runtimes: absent in /tmp/claude-501/adopt464-rehearsal/project/.venv-runtime/lib/python3.13/site-packages/graphtraj/execution/agent_driver.py
+markers expected absent: PASS (25/25)
+REHEARSAL PASS: after R the 464 markers are absent again
+
+======== Mps accepts a host whose parent is claude --continue
+parent claude: claude --continue
+host uses .venv-runtime: yes
+parent is claude --continue or --resume 11111111-2222-3333-4444-555555555555: yes
+host uses .venv-runtime: yes
+parent is claude --continue or --resume 11111111-2222-3333-4444-555555555555: yes
+REHEARSAL PASS: Mps: parent is claude --continue ... yes
+
+======== Nw: the read-only watcher copies the descendants record while the child runs, then ends by itself
+REHEARSAL PASS: Nw exit 0 and started in the background
+18:15:14 start: watching /tmp/claude-501/adopt464-rehearsal/project/.graphtraj/swarm/control/agents for n464 (read only; at most 900 s)
+18:15:14 child n464 found: agent c1
+18:15:14 execution e1: record changed, 1 entries
+18:15:15 execution e1: record changed, 0 entries
+18:15:15 execution e2: record changed, 0 entries
+18:15:15 == END (both executions ended); snapshots: 3
+REHEARSAL PASS: Nw ended by itself when both executions ended (no background process left)
+REHEARSAL PASS: Nw snapshot kept the Bash tool command
+REHEARSAL PASS: Nw never copied the marker value
+
+======== Nr on synthetic records (455 configuration, 452 ends, one user/message input per execution)
+child n464: agent=c1 parent=464-production_adoption_457_459-handover0-advisor@advisor executions=2 retired=True record=/tmp/claude-501/adopt464-rehearsal/project/.graphtraj/swarm/control/agents/c1.json
+  stored selection: configuration='opus_coding_team.advisor' preset=None model='claude-opus-5-5' reasoning_effort=None
+CHECK 455 stored record: configuration and model not null: PASS (configuration='opus_coding_team.advisor' model='claude-opus-5-5')
+CHECK 455 create/status result quoted by the member: configuration and model not null: PASS (configuration values ['"opus_coding_team.advisor"'] model values ['"claude-opus-5-5"'])
+CHECK two child executions (create, send): PASS (2)
+CHECK 452 child execution e1 ended completed, not owner-exited: PASS (outcome=completed error=None)
+CHECK execution e1 notification delivered: PASS (delivered)
+CHECK 452 child execution e2 ended completed, not owner-exited: PASS (outcome=completed error=None)
+CHECK execution e2 notification delivered: PASS (delivered)
+member 464-production_adoption_457_459-handover0-advisor@advisor: record=/tmp/claude-501/adopt464-rehearsal/project/.graphtraj/core/runner/sessions/464-production_adoption_457_459-handover0-advisor@advisor/mapping.yml session=sess-m task=464 role=advisor execution=m1
+  member end: execution.yml execution_id=m1 outcome=completed terminal_confirmed=True
+CHECK 452 member execution ended and recorded (execution.yml terminal, same execution as the mapping): PASS (outcome=completed)
+CHECK 452 member reported its end to Main (raw/N-main-notice.txt names completed): PASS (/tmp/claude-501/adopt464-rehearsal/project/.graphtraj/core/state/tasks/464-production-adoption-457-459/adoption/raw-44729d5b/N-main-notice.txt)
+  archive sess-m: execution e1: events naming it by type {'tool/result': 1, 'user/message': 1, 'assistant/message': 1}; user/message inputs naming it with graphtraj: 1
+CHECK 449/451 one parent input for execution e1: PASS
+  archive sess-m: execution e2: events naming it by type {'tool/result': 1, 'user/message': 1, 'assistant/message': 1}; user/message inputs naming it with graphtraj: 1
+CHECK 449/451 one parent input for execution e2: PASS
+CHECK 459 create execution recorded tool_marker and tool_descendants: PASS (tool_marker=True tool_descendants=True)
+CHECK 459 descendants record lists the Bash tool command: PASS (1 entries name n464-tool or sleep 3)
+CHECK 459 no recorded tool process alive after the end: PASS (0 alive, 0 named; never signalled)
+CHECK swarm result has agent: PASS (agent-464-adv-xyz)
+CHECK 452 no runner_worker of the member alive after its end: PASS
+CHECK task_sessions lists the child: BY THE MEMBER'S QUOTED ENTRY in /tmp/claude-501/adopt464-rehearsal/project/.graphtraj/core/state/tasks/464-production-adoption-457-459/adoption/raw-44729d5b/N-reply.txt
+child n464: agent=c1 parent=464-production_adoption_457_459-handover0-advisor@advisor executions=2 retired=True record=/tmp/claude-501/adopt464-rehearsal/project/.graphtraj/swarm/control/agents/c1.json
+  stored selection: configuration='opus_coding_team.advisor' preset=None model='claude-opus-5-5' reasoning_effort=None
+CHECK 455 stored record: configuration and model not null: PASS (configuration='opus_coding_team.advisor' model='claude-opus-5-5')
+CHECK 455 create/status result quoted by the member: configuration and model not null: PASS (configuration values ['"opus_coding_team.advisor"'] model values ['"claude-opus-5-5"'])
+CHECK two child executions (create, send): PASS (2)
+CHECK 452 child execution e1 ended completed, not owner-exited: PASS (outcome=completed error=None)
+CHECK execution e1 notification delivered: PASS (delivered)
+CHECK 452 child execution e2 ended completed, not owner-exited: PASS (outcome=completed error=None)
+CHECK execution e2 notification delivered: PASS (delivered)
+member 464-production_adoption_457_459-handover0-advisor@advisor: record=/tmp/claude-501/adopt464-rehearsal/project/.graphtraj/core/runner/sessions/464-production_adoption_457_459-handover0-advisor@advisor/mapping.yml session=sess-m task=464 role=advisor execution=m1
+  member end: execution.yml execution_id=m1 outcome=completed terminal_confirmed=True
+CHECK 452 member execution ended and recorded (execution.yml terminal, same execution as the mapping): PASS (outcome=completed)
+CHECK 452 member reported its end to Main (raw/N-main-notice.txt names completed): PASS (/tmp/claude-501/adopt464-rehearsal/project/.graphtraj/core/state/tasks/464-production-adoption-457-459/adoption/raw-44729d5b/N-main-notice.txt)
+  archive sess-m: execution e1: events naming it by type {'tool/result': 1, 'user/message': 1, 'assistant/message': 1}; user/message inputs naming it with graphtraj: 1
+CHECK 449/451 one parent input for execution e1: PASS
+  archive sess-m: execution e2: events naming it by type {'tool/result': 1, 'user/message': 1, 'assistant/message': 1}; user/message inputs naming it with graphtraj: 1
+CHECK 449/451 one parent input for execution e2: PASS
+CHECK 459 create execution recorded tool_marker and tool_descendants: PASS (tool_marker=True tool_descendants=True)
+CHECK 459 descendants record lists the Bash tool command: PASS (1 entries name n464-tool or sleep 3)
+CHECK 459 no recorded tool process alive after the end: PASS (0 alive, 0 named; never signalled)
+CHECK swarm result has agent: PASS (agent-464-adv-xyz)
+CHECK 452 no runner_worker of the member alive after its end: PASS
+CHECK task_sessions lists the child: BY THE MEMBER'S QUOTED ENTRY in /tmp/claude-501/adopt464-rehearsal/project/.graphtraj/core/state/tasks/464-production-adoption-457-459/adoption/raw-44729d5b/N-reply.txt
+成功（定义第 3 项）: 每一行 CHECK 都是 PASS（459 三行；455 两行；452 子级两行、成员结束、成员报告、无残留 Worker；449/451 每个 execution 一条输入）。
+  CHECK BY HAND 的那一行用下面的 session_read 由 Main 按事件类型计数（453 的做法）。PENDING: 子级还在运行，稍后重跑 Nr。不成立的交 Main 登记缺陷 Task。
+Using only the agents tool: retire with {"agent":"agent-464-adv-xyz"} (the agent value of the N swarm result, not the alias), and print the raw result.
+REHEARSAL PASS: Nr: no CHECK line is FAIL, BY HAND or PENDING
+REHEARSAL PASS: Nr: 455 stored record PASS
+REHEARSAL PASS: Nr: one parent input per execution counted by event type
+REHEARSAL PASS: Nr: retire prompt uses the swarm agent, not the alias
+REHEARSAL PASS: Nr: 459 facts recorded PASS
+REHEARSAL PASS: Nr: 459 record lists the Bash tool command (from the Nw snapshot) PASS
+REHEARSAL PASS: Nr: 459 no recorded tool process alive PASS (the recorded one has ended)
+REHEARSAL PASS: Nr: the owner's normal-end escaped_processes printed with its file
+REHEARSAL PASS: Nr: the marker value is never printed
+
+======== Nr negative: a null configuration, an owner-exited end and a live member Worker are reported
+scripts/adopt-464/rehearse.zsh:219: nice(5) failed: operation not permitted
+CHECK 455 stored record: configuration and model not null: FAIL (configuration=None model=None)
+CHECK 455 create/status result quoted by the member: configuration and model not null: FAIL (configuration values ['null'] model values ['null'])
+CHECK 452 child execution e1 ended completed, not owner-exited: FAIL (outcome=failed error=owner-exited)
+CHECK 459 create execution recorded tool_marker and tool_descendants: FAIL (tool_marker=False tool_descendants=True)
+CHECK 459 descendants record lists the Bash tool command: FAIL (no record of the create execution named n464-tool or sleep 3 (1 snapshots))
+CHECK 459 no recorded tool process alive after the end: FAIL (1 alive, 1 named; never signalled)
+CHECK 452 no runner_worker of the member alive after its end: FAIL if the member's end was already reported (rerun Nr in a minute; never kill it)
+REHEARSAL PASS: Nr negative: 455 FAIL, 452 owner-exited FAIL, live Worker FAIL
+REHEARSAL PASS: Nr negative 459: no tool_marker recorded gives FAIL
+REHEARSAL PASS: Nr negative 459: Nw ran but no record named the command gives FAIL
+REHEARSAL PASS: Nr negative 459: a recorded entry alive with its start time (and a process naming n464-tool) gives FAIL
+REHEARSAL PASS: Nr negative 459: the record's escaped_processes (owner-exited reconcile) printed
+REHEARSAL PASS: Nr never signalled the live recorded process
+
+======== M / N print real values
+REHEARSAL PASS: M names Tasks 465 and 469 (may arrive once, must not repeat)
+REHEARSAL PASS: N prompt names task 464, the preset role and the exact Bash command
+REHEARSAL PASS: N prompt forbids submit_result and submit_report
+REHEARSAL PASS: N prompt asks for source graphtraj inputs verbatim
+
+======== the b3d522ad evidence (raw/, wheels/, src/, vvenv/, svenv/, S-basetemp-before, entries.sha256) is unchanged
+REHEARSAL PASS: b3d522ad evidence unchanged and nothing added to raw/
+entries-44729d5b.sha256 entries.sha256 raw raw-44729d5b S-basetemp-before S-basetemp-before-44729d5b src src-44729d5b V-marker-44729d5b ventries-44729d5b vplug-44729d5b wheels wheels-44729d5b 
+
+REHEARSAL RESULT: ALL PASS

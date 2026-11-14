@@ -217,46 +217,130 @@ def settings_counts(directory: Path) -> dict:
             'seeded paths present': sum('seed-465' in line for line in path.read_text().splitlines())}
 
 
-def run_member(project: Path, facts_file: str) -> int:
-    from graphtraj.configuration.project_configuration import runner_directory
-    from graphtraj.execution.runner_status import runtime_caller, status_aliases
+def member_aliases(runner: Path, task: str) -> list[str]:
+    """Existing member Session directories of one probe Task (read only)."""
+    return sorted(path.name for path in (runner / 'sessions').glob(f'{task}-*team_leader*') if path.is_dir())
+
+
+def read_all(project: Path, runner: Path, alias: str, session_id: str) -> tuple[list[str], int, int]:
+    """Read every page (limit 1000, the archive's maximum) as the member; return strings, pages, events."""
+    from graphtraj.execution.runner_status import runtime_caller
     from graphtraj.sessions.query import read_session
+
+    texts, after, pages, events = [], -1, 0, 0
+    with runtime_caller(runner, alias):
+        while True:
+            page = read_session(project, session_id, after, 1000)
+            pages += 1
+            events += len(page.get('events', []))
+            # Every page carries the header and the unfinished output ('pending').
+            texts.extend(strings(page))
+            if not page.get('has_more') or page.get('after', after) == after:
+                return texts, pages, events
+            after = page['after']
+
+
+def check_version(facts: dict) -> str | None:
     from graphtraj.runtimes.claude.adapter import current_cli
 
-    facts = json.loads(Path(facts_file).read_text())
     binary, version = current_cli()
     print(f'member Claude Code (Runner resolves claude on PATH): {binary} | {version}')
     if facts['expect_version'] not in version:
-        print(f"STOP: expected {facts['expect_version']}; nothing was dispatched")
-        return 1
+        print(f"STOP: expected {facts['expect_version']}; nothing was dispatched or collected")
+        return None
+    return version
+
+
+def run_member(project: Path, facts_file: str) -> int:
+    """Dispatch one fresh member for facts['task'], then collect it. Refuses if the Task already has a member."""
+    from graphtraj.configuration.project_configuration import runner_directory
+
+    facts = json.loads(Path(facts_file).read_text())
     runner = runner_directory(project)
-    seeded = len(list((runner / 'sessions').glob('seed-465-*')))
-    print(f'associated seeded Sessions now: {seeded}')
+    existing = member_aliases(runner, facts['task'])
+    if existing:
+        print(f"STOP: Task {facts['task']} already has a member {existing}; nothing was dispatched. "
+              f"Use the collect-only step for it.")
+        return 2
+    if check_version(facts) is None:
+        return 1
     batch = Path(facts_file).with_suffix('.swarm.yml')
     batch.write_text(yaml.safe_dump({'tasks': [{'task_id': facts['task'], 'role': 'team_leader',
                                                 'instruction': instruction(facts['target'], facts['unassociated'],
                                                                            facts['credential'])}]}))
     done = run(str(Path(sys.executable).parent / 'agent-runner'), '--swarm-input', str(batch), cwd=project)
+    Path(facts_file).with_suffix('.dispatch.yml').write_text(done.stdout)
     if done.returncode:
         return 1
-    alias = yaml.safe_load(done.stdout)['tasks'][0]['alias']
-    print(f'{now()} dispatched {alias}; waiting (<= 9 min)')
+    task = yaml.safe_load(done.stdout)['tasks'][0]
+    print(f"{now()} agent-runner returned: alias={task.get('alias')} execution_id={task.get('execution_id')} "
+          f"session={task.get('session')}")
+    return collect_member(project, facts_file, task)
+
+
+def collect(project: Path, facts_file: str) -> int:
+    """Collect-only: the existing member of facts['task']; dispatches nothing."""
+    from graphtraj.configuration.project_configuration import runner_directory
+
+    facts = json.loads(Path(facts_file).read_text())
+    dispatch = Path(facts_file).with_suffix('.dispatch.yml')
+    if dispatch.is_file() and dispatch.read_text().strip():
+        task = yaml.safe_load(dispatch.read_text())['tasks'][0]
+        print(f"dispatch record {dispatch.name}: alias={task.get('alias')} execution_id={task.get('execution_id')} "
+              f"session={task.get('session')}")
+    else:
+        aliases = member_aliases(runner_directory(project), facts['task'])
+        if len(aliases) != 1:
+            print(f"STOP: Task {facts['task']} has members {aliases}; expected exactly one. Nothing was collected.")
+            return 1
+        # No saved agent-runner stdout (the first 02 run did not keep it): the expected native
+        # Session is the one that run printed ('settled: ... native=...'), passed by steps.zsh.
+        task = {'alias': aliases[0], 'session': facts.get('expect_session') or None}
+        print(f"no dispatch record; the Task's only member alias={task['alias']} expected session={task['session']}")
+        if not task['session']:
+            print('STOP: no expected session to match; nothing was collected.')
+            return 1
+    return collect_member(project, facts_file, task)
+
+
+def collect_member(project: Path, facts_file: str, task: dict) -> int:
+    from graphtraj.configuration.project_configuration import runner_directory
+    from graphtraj.execution.runner_status import runtime_caller, status_aliases
+    from graphtraj.sessions.query import read_session
+
+    facts = json.loads(Path(facts_file).read_text())
+    version = check_version(facts)
+    if version is None:
+        return 1
+    runner = runner_directory(project)
+    seeded = len(list((runner / 'sessions').glob('seed-465-*')))
+    print(f'associated seeded Sessions now: {seeded}')
+    alias = task['alias']
+    mapping_file = runner / 'sessions' / alias / 'mapping.yml'
+    print(f'{now()} waiting (<= 9 min) for {alias}')
     deadline = time.time() + 540
     value = {}
     while time.time() < deadline:
         value = status_aliases([alias], project).document['aliases'][0]
-        if value.get('activity') != 'running' and (runner / 'sessions' / alias / 'mapping.yml').is_file():
+        if value.get('activity') != 'running' and mapping_file.is_file():
             break
         time.sleep(5)
     else:
-        print(f'STOP: {alias} still running after 9 min: activity={value.get("activity")}. Rerun this step later.')
+        print(f'STOP: {alias} still running after 9 min: activity={value.get("activity")}. Rerun the collect-only step later.')
         return 1
-    mapping = yaml.safe_load((runner / 'sessions' / alias / 'mapping.yml').read_text()) or {}
+    mapping = yaml.safe_load(mapping_file.read_text()) or {}
     native = mapping.get('session')
-    print(f'{now()} settled: activity={value.get("activity")} last_outcome={value.get("last_outcome")} native={native}')
-    with runtime_caller(runner, alias):
-        document = read_session(project, native, -1, 2000) if native else {}
-    texts = list(strings(document))
+    print(f'{now()} settled: activity={value.get("activity")} last_outcome={value.get("last_outcome")}')
+    # The settle must belong to this dispatch, not to an earlier execution of the alias.
+    print(f"identity: dispatched execution_id={task.get('execution_id')} session={task.get('session')} | "
+          f"mapping execution_id={mapping.get('execution_id')} session={native}")
+    same = ((task.get('execution_id') is not None and task.get('execution_id') == mapping.get('execution_id'))
+            or (task.get('session') is not None and task.get('session') == native))
+    if not same:
+        print('STOP: mapping.yml names another execution and Session than the dispatch; nothing was checked.')
+        return 1
+    texts, pages, events = read_all(project, runner, alias, native)
+    print(f'member Session read: {pages} page(s), {events} events')
     joined = '\n'.join(texts)
     results = [m for text in texts for m in RESULT.finditer(text)]
     result = results[-1].groups() if results else None
@@ -280,7 +364,8 @@ def run_member(project: Path, facts_file: str) -> int:
     for number, (label, ok) in enumerate(checks, 1):
         print(f'CHECK {number} {"PASS" if ok else "FAIL"}: {label}')
     Path(facts_file).with_suffix('.out.json').write_text(json.dumps({
-        'alias': alias, 'native': native, 'version': version, 'seeded': seeded, 'settings': counts,
+        'alias': alias, 'execution_id': mapping.get('execution_id'), 'native': native, 'version': version,
+        'seeded': seeded, 'settings': counts,
         'result': results[-1].group(0) if results else None, 'checks': dict(checks)}, indent=2))
     summary = all(ok for _, ok in checks)
     print('== summary:', 'ALL PASS' if summary else f'{sum(not ok for _, ok in checks)} FAIL of {len(checks)}')
@@ -289,5 +374,6 @@ def run_member(project: Path, facts_file: str) -> int:
 
 if __name__ == '__main__':
     command, target, extra = sys.argv[1], Path(sys.argv[2]), sys.argv[3]
-    commands = {'prepare': prepare, 'isolation': isolation, 'seed': seed, 'plugins': plugins, 'run': run_member}
+    commands = {'prepare': prepare, 'isolation': isolation, 'seed': seed, 'plugins': plugins,
+                'run': run_member, 'collect': collect}
     raise SystemExit(commands[command](target, extra))

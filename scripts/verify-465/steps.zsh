@@ -3,12 +3,14 @@
 # Task 465 real-host check: with >= 1000 associated Sessions, a Runner-launched Claude member starts Bash under
 # Claude Code 2.1.323 and 2.1.325, reads an associated Session through session_read, and cannot read an unassociated
 # production Session file or a ~/.codex credential file. Its claude-settings.yml has no per-Session entry.
-#   zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/465-bounded-team-history-read-grants/scripts/verify-465/steps.zsh <00|00u|01|02|03|04>
+#   zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/465-bounded-team-history-read-grants/scripts/verify-465/steps.zsh <00|00u|01|02|02c|03|04>
 # 00  Main. preflight: scratch venv from COMMIT, isolated project (own git, own .graphtraj), isolation facts,
 #     the fix line, and each binary's version and one-line model/login answer.
 # 00u USER, only if a member step reports a folder-trust or login refusal.
 # 01  Main. seeds N (default 1000) associated Sessions + one Claude and one Codex Session in the isolated archive.
-# 02  Main. one member under 2.1.323 (`claude` on PATH); it session_reads the seeded Claude Session.
+# 02  Main. fresh project only: one member under 2.1.323 (`claude` on PATH); it session_reads the seeded Claude
+#     Session. Refuses (STOP, nothing dispatched) when Task 1 already has a member; then run 02c.
+# 02c Main. collect-only for Task 1's existing member: same CHECKs, writes 02-facts.out.json for 03.
 # 03  Main. adds 500 more associations, then one member under 2.1.325 (explicit path through a link directory under
 #     the base; ~/.local/bin/claude is never changed); it session_reads the 02 member's Session.
 # 04  Main. full suite at HEAD in the background (self-stopping after 25 min; ends with '== totals:').
@@ -139,7 +141,30 @@ step_02() {
   member_step 1 02 2.1.323 $T ${$(command -v claude):h}
   local rc=$?
   print ""
+  if (( rc == 2 )); then
+    print "Task 1 already has its 2.1.323 member: collect it without dispatching."
+    next Main "zsh $THIS 02c 2>&1 | tee $OUT/02c.txt"
+    return $rc
+  fi
   print "Success: '== summary: ALL PASS' (CHECK 1-7), and the settings line (allowRead, allow, deny, bytes) with 'seeded paths present': 0."
+  next Main "zsh $THIS 03 2>&1 | tee $OUT/03.txt"
+  return $rc
+}
+
+step_02c() {
+  say "[02c] Main. collect-only for Task 1's existing 2.1.323 member: dispatches nothing; checks; writes 02-facts.out.json. Dialog: none."
+  [[ -f $OUT/02-facts.json ]] || { print "STOP: no $OUT/02-facts.json; run 02 on a fresh project instead"; return 1; }
+  # The first 02 run did not keep agent-runner's stdout; its 'settled: ... native=...' line names the Session.
+  local E=${VERIFY465_EXPECT_SESSION:-$(grep -o 'native=[0-9a-f-]*' $OUT/02.txt 2>/dev/null | tail -1 | cut -d= -f2)}
+  print "expected member Session (from 02.txt unless a dispatch record exists): ${E:-none}"
+  $VV/bin/python -I -c 'import json, sys; f = json.load(open(sys.argv[1])); f["expect_session"] = sys.argv[2]; json.dump(f, open(sys.argv[1], "w"))' \
+      $OUT/02-facts.json "$E" || return 1
+  if [[ -n ${VERIFY465_NO_MODEL:-} ]]; then print "VERIFY465_NO_MODEL set: stopping before collect."; cat $OUT/02-facts.json; return 0; fi
+  P465PATH=${$(command -v claude):h}:${(j.:.)path} probe collect $P $OUT/02-facts.json
+  local rc=$?
+  print ""
+  print "Success: the 'identity:' line shows the same session on both sides, '== summary: ALL PASS' (CHECK 1-7),"
+  print "and the settings line with 'seeded paths present': 0."
   next Main "zsh $THIS 03 2>&1 | tee $OUT/03.txt"
   return $rc
 }
@@ -206,8 +231,9 @@ case $STEP in
   00u) step_00u ;;
   01) step_01 ;;
   02) step_02 ;;
+  02c) step_02c ;;
   03) step_03 ;;
   04) step_04 ;;
   _04run) step__04run ;;
-  *) print "usage: zsh ${0:A} <00|00u|01|02|03|04>" ;;
+  *) print "usage: zsh ${0:A} <00|00u|01|02|02c|03|04>" ;;
 esac

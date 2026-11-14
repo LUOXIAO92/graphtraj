@@ -16,7 +16,8 @@ Base: `/Users/luoxiao/workspace/you-are-a-product-architect-delivery/tmp/465/` (
 | 00 | Main | `S 00` | `465 fix loaded: YES`, `deps: click 8.5.0`, `roles OK`, `ready tasks: ['1', '2']`, `isolation: OK`, `2.1.323: 2.1.323 (Claude Code)` and `2.1.325: 2.1.325 (Claude Code)`, each with `result: MODEL OK`, model `claude-opus-5-5` and an `init:` line (apiKeySource is a source name, not a key). |
 | 00u | USER, only if 02 or 03 reports a trust or login refusal | `cd …/tmp/465/project && claude`, 'Yes, proceed', `/exit` | Main reruns the refused step. |
 | 01 | Main | `S 01 2>&1 \| tee …/realhost/01.txt` | `associated JSONL files (project_history_files): 1000` and both `SEEDED_…` IDs. |
-| 02 | Main | `S 02 2>&1 \| tee …/realhost/02.txt` | Waits ≤ 9 min. `== summary: ALL PASS` (CHECK 1–7) and a `settings:` line with `"seeded paths present": 0`. |
+| 02 | Main, fresh project only | `S 02 2>&1 \| tee …/realhost/02.txt` | Refuses (STOP, nothing dispatched, next step 02c) when Task 1 already has a member. Waits ≤ 9 min. `== summary: ALL PASS` (CHECK 1–7) and a `settings:` line with `"seeded paths present": 0`. |
+| 02c | Main, only when 02 refused or crashed after dispatching | `S 02c 2>&1 \| tee …/realhost/02c.txt` | Dispatches nothing. Collects Task 1's existing member: the `identity:` line shows the same session on both sides, `== summary: ALL PASS`, and writes `02-facts.out.json` for 03. |
 | 03 | Main | `S 03 2>&1 \| tee …/realhost/03.txt` | Adds 500 associations (N = 1500), waits ≤ 9 min. `== summary: ALL PASS` and `counts independent of N: True`. |
 | 04 | Main | `S 04` | Full suite at HEAD in the background, six shards, stops itself after 25 min. `tail -n 25 …/realhost/04-suite.txt`; done at `== totals:`. |
 
@@ -80,14 +81,33 @@ size and the counts of `permissions.allow/deny/additionalDirectories` and `sandb
 allowWrite/denyWrite`. 03 first adds 500 associations and finally compares 02's and 03's counts
 (`counts independent of N: True`; the byte sizes differ only by path lengths).
 
+### 02c collect-only, identity and paging
+
+`probe.py collect` dispatches nothing. It takes the alias and `execution_id`/`session` from the saved agent-runner
+stdout (`02-facts.dispatch.yml`, written by `run` since this correction) or, when that record does not exist (the
+first 02 run kept no stdout), from the Task's only member directory and the Session that 02 printed
+(`settled: … native=…` in `02.txt`, or `VERIFY465_EXPECT_SESSION`). Before any check, `run` and `collect` print the
+dispatched `execution_id`/`session` beside `mapping.yml`'s, and STOP unless they match, so a settle cannot come
+from an earlier execution. The member's Session is read in pages of 1000 (the archive's maximum,
+`graftling/sessions/archive.py` `page`), following `after` until `has_more` is false; strings from every page,
+including `pending`, are searched.
+
+Blocking: in Main's 02 run agent-runner returned rc=0 and the very next status read (same second, 18:40:38) showed
+`activity=idle last_outcome=completed`, so `agent-runner --swarm-input` appears to return only after the member's
+first turn has ended. I did not locate the code line that waits (searched `interfaces/cli/agent_runner.py:main` ->
+`invoke_tool("swarm")` -> `execution/runner_launch.py:launch_batch` -> `teams/team_round.launch_team_batch`, not
+followed further); the probe does not depend on it, since it still polls status and checks identity.
+
 ### 04 full suite
 
 As 460's step 03, against the Worktree HEAD.
 
 ## Rehearsal (sandbox, no model)
 
-`VERIFY465_NO_MODEL=1 VERIFY465_BASE=$TMPDIR/rh465 VERIFY465_OUT=$TMPDIR/rh465-out`, then `S 00`, `S 01`, `S 02`.
+`VERIFY465_NO_MODEL=1 VERIFY465_BASE=$TMPDIR/rh465 VERIFY465_OUT=$TMPDIR/rh465-out`, then `S 00`, `S 01`, `S 02`, `S 02c`.
 Rehearsed: 00 (venv, `465 fix loaded: YES`, project, roles, both Tasks ready, `isolation: OK`, 2.1.325 version),
 01 (1000 records, `project_history_files` = 1000, both seeded Sessions readable by native ID through the library
-`read_session`) and 02 up to dispatch. Not rehearsed: the model lines, the dispatch, the members' tool calls, 03's
+`read_session`), 02 up to dispatch, 02's refusal with a placeholder member directory (STOP, rc 2), 02c up to collect
+(expected session parsed from 02.txt), and the pager on a 2500-event archive Session (3 pages, all events, the
+RESULT line found). Not rehearsed: the model lines, the dispatch, the members' tool calls, 03's
 comparison, 00u and 04. In the sandbox `~/.local/bin/claude` and `~/.claude/projects` are not reachable.

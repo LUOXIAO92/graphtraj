@@ -109,15 +109,14 @@ def test_only_the_parent_gets_the_guidance_after_the_users_text_on_start_and_res
     try:
         child = running.call('create', runtime='codex', instruction='configuration')['agent']
         done = running.call('wait', agent=child, timeout_seconds=10)
-        # The running host pushes the child's reply to its parent once (431), so wait
-        # shows that body hidden; the reply is what the parent's Session received.
-        try:
-            [reply] = until(lambda: [event for event in events(received) if event.get('alias') == child])
-        except (AssertionError, ValueError):
-            raise AssertionError(json.dumps({'wait': done, 'parent_received': events(received)}, indent=1))
-        observed = json.loads(reply['message'])
+        # 477: the parent was waiting, so its wait returns the child's reply once
+        # and the host pushes no event for it.
+        last = done['result']['last_result']
+        assert last['notification'] == 'delivered', json.dumps({'wait': done}, indent=1)
+        observed = json.loads(last['last_message'])
     finally:
         running.stop()
+    assert [event for event in events(received) if event.get('alias') == child] == []
     assert observed['developerInstructions'] == USER_TEXT
 
     Running(CodexHost(native_settings, tmp_path / 'host', 'hold', resume=True)).stop()

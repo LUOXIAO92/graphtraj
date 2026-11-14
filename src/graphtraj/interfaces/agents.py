@@ -208,7 +208,9 @@ class GraphTrajAgents:
         ``ask_parent`` request, whose body never holds the question. The notice
         takes the same Runtime Adapter path as a Task member's, so it follows
         Main continuity and is shown once. A Main host with a push channel
-        (Codex) receives the parent event itself, so wait/status hide the body.
+        (Codex) receives the parent event itself. wait/status always show the
+        body; an end the parent was waiting on is returned by that wait and
+        never reaches this receiver (477).
 
         A Task member's Runner-driven execution binds no native receiver, so
         the end of a child it created with the agents tool also arrives here.
@@ -269,8 +271,6 @@ class GraphTrajAgents:
 
         outcome = self._operate_action(action, arguments, binding)
         caller = binding.caller
-        if action in {"wait", "status"} and not outcome.failed and caller.agent is not None:
-            self._hide_member_queueing(outcome.result, caller.agent)
         if (action in {"wait", "status"} and arguments.get("agent") is not None and not outcome.failed
                 and caller.agent is None and caller.runtime in QUEUED_RUNTIMES and caller.session):
             acknowledge_ends(runner_directory(self.root), caller.runtime, caller.session,
@@ -417,26 +417,6 @@ class GraphTrajAgents:
         except (RunnerError, OSError, ValueError, KeyError, TypeError):
             return None
         return parent
-
-    def _hide_member_queueing(self, result: Any, caller: str) -> None:
-        """Hide the body of a member's child end that is being pushed to that member.
-
-        Section 4: while an end's event is on its way (``queueing``), ``wait``
-        and ``status`` show ``last_message: null``, so the member sees it once.
-        """
-        member = self._member_parent(caller)
-        if member is None or not isinstance(result, Mapping):
-            return
-        pending = list(result["agents"]) if isinstance(result.get("agents"), list) else [result]
-        while pending:
-            node = pending.pop()
-            if not isinstance(node, dict):
-                continue
-            pending.extend(node.get("children") or [])
-            last = node.get("last_result")
-            if (isinstance(last, dict) and last.get("notification") == "queueing"
-                    and isinstance(node.get("parent"), str) and self._member_parent(node["parent"]) == member):
-                last["last_message"] = None
 
     def _member_alias(self, agent: str | None) -> str | None:
         """Return the Runner alias a Task member's core Agent record retains.

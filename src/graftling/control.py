@@ -183,6 +183,21 @@ def _now() -> float:
     return time.time()
 
 
+def _waited(execution: Mapping[str, Any]) -> bool:
+    """Whether a live process still waits on this execution for the Agent's parent."""
+    return any(_alive(pid) for pid in (execution.get("waiters") or {}).values())
+
+
+def _release_reserved(execution: dict) -> None:
+    """Return an end reserved for a wait that is gone to the ordinary delivery, as ``held``.
+
+    Without ``hold_notices`` a control with a receiver claims it at once
+    (``_claim_lost``); with it, the held-notice machinery delivers it.
+    """
+    execution.pop("waiters", None)
+    execution.update(notification="held", wait_released=True)
+
+
 def _alive(pid: object) -> bool:
     """Return whether a process with ``pid`` still exists.
 
@@ -468,8 +483,11 @@ class ExecutionEvents:
                 # body; a host receiver also announces ends without one.
                 notify = (receiver is not None and (bool(last_message) or native is None)
                           and needs_parent(outcome, active_members=control._active_children(self._agent)))
+            if notify and _waited(current):
+                # The parent is waiting on this execution: its wait returns the
+                # reply and settles it delivered, so nothing is pushed (477).
+                current['notification'], notify = 'waiting', False
             if notify:
-                # Only a native parent's pending reply hides the body meanwhile.
                 current['notification'] = 'pending' if native is not None else 'queueing'
                 identity = notice_id(self._execution, outcome)
                 control._delivering.add(identity)
@@ -481,10 +499,9 @@ class ExecutionEvents:
         if notify:
             try:
                 # A receiver that only queued the notice for its host returns
-                # 'queued': the body stays readable, and wait/status showing it
-                # acknowledges the queued notice instead of hiding the result.
+                # 'queued': wait/status showing it acknowledges the queued notice.
                 # A receiver that submitted the body natively but lost the
-                # acknowledgement returns 'unconfirmed', so it is not shown again.
+                # acknowledgement returns 'unconfirmed', so it is not pushed again.
                 # A receiver that could not reach a stopped parent returns 'held'.
                 accepted = receiver(notice)
                 delivery = ('held' if accepted == 'held'
@@ -494,8 +511,8 @@ class ExecutionEvents:
                             else 'held' if control.hold_notices else 'unavailable')
             except Exception:
                 # A native parent may have received the body before its transport
-                # failed: do not re-inject it through wait/status. A host queue
-                # that failed keeps the body readable there instead.
+                # failed: do not push it again. A host queue that failed is
+                # left to wait/status, or held for the next run.
                 delivery = ('unconfirmed' if native is not None
                             else 'held' if control.hold_notices else 'unavailable')
             with control._locked(self._agent) as record:
@@ -999,18 +1016,56 @@ class AgentControl:
         An Agent waiting for a native approval does not reach standby by
         itself, so a retained unanswered request also ends the wait; the
         document then carries ``pending_requests``.
+
+        The Agent's parent waiting on a running execution is recorded on it
+        (``waiters``). An end that would be pushed to that parent while it
+        waits is reserved for this wait instead (``waiting``), and this wait
+        settles it ``delivered`` under the same lock it returns from, so the
+        parent receives the reply once, in this result, not also as a notice
+        (477). A wait that leaves without taking its reservation releases it
+        to the ordinary push.
         """
         deadline = time.monotonic() + timeout_seconds
-        while True:
+        token = uuid.uuid4().hex
+        try:
+            while True:
+                with self._locked(agent) as record:
+                    self._require_view(record, caller)
+                    current = _running(record)
+                    if current is None or _unanswered(current):
+                        for execution in record["executions"]:
+                            if token in (execution.get("waiters") or {}) and execution.get("notification") == "waiting":
+                                execution["notification"] = "delivered"
+                                del execution["waiters"]
+                        return self._outcome(record, result={"timed_out": False})
+                    remaining = deadline - time.monotonic()
+                    if remaining <= 0:
+                        return self._outcome(record, result={"timed_out": True})
+                    if caller.agent == record["parent"]:
+                        current.setdefault("waiters", {})[token] = os.getpid()
+                pause(min(WAIT_INTERVAL_SECONDS, remaining))
+        finally:
+            self._release_wait(agent, token)
+
+    def _release_wait(self, agent: str, token: str) -> None:
+        """Drop one wait's mark; an end still reserved only for it goes to the ordinary push."""
+        released = False
+        try:
             with self._locked(agent) as record:
-                self._require_view(record, caller)
-                current = _running(record)
-                if current is None or _unanswered(current):
-                    return self._outcome(record, result={"timed_out": False})
-            remaining = deadline - time.monotonic()
-            if remaining <= 0:
-                return self._outcome(record, result={"timed_out": True})
-            pause(min(WAIT_INTERVAL_SECONDS, remaining))
+                for execution in record["executions"]:
+                    waiters = execution.get("waiters") or {}
+                    if waiters.pop(token, None) is None:
+                        continue
+                    if not waiters:
+                        execution.pop("waiters", None)
+                    if execution.get("notification") == "waiting" and not _waited(execution):
+                        _release_reserved(execution)
+                        released = True
+                parent = record["parent"]
+        except AgentsError:
+            return
+        if released and parent is not None:
+            self._flush_children(parent)
 
     def requests(self, agent: str, caller: Caller, execution: str | None = None) -> Outcome:
         """Return the running execution's pending native requests."""
@@ -1384,7 +1439,7 @@ class AgentControl:
         hierarchy form of ``status`` and its nested ``children`` count. Only an
         end addressed to ``reader`` (the root caller by default) is settled: an
         ancestor reading a grandchild does not consume its parent's notice,
-        which ``delivered`` would hide from that parent. Runs only where a host
+        which ``delivered`` would keep from that parent. Runs only where a host
         calls it, so a host's own internal ``wait`` settles nothing. Returns
         what it settled, for :meth:`settle_notice` ``reopen``.
         """
@@ -1400,14 +1455,16 @@ class AgentControl:
             last = node.get("last_result")
             if node.get("parent") != reader or not isinstance(last, Mapping):
                 continue
-            # A body being pushed may be hidden from this result: then it was not shown.
-            shown = last.get("notification") == "held" or (
-                last.get("notification") == "queueing" and last.get("last_message") is not None)
-            if not shown:
+            if last.get("notification") not in ("held", "queueing"):
                 continue
             with self._locked(node["agent"]) as record:
                 execution = next(item for item in record["executions"] if item["id"] == last["id"])
-                if execution.get("notification") in ("held", "queueing"):
+                # The body is always in the result (477). An end a host shows
+                # ``queueing`` while it pushes it, live or from a held flush, is
+                # not settled as read: its push delivers it.
+                pushing = last.get("notification") == "queueing" and (
+                    execution.get("notification") != "queueing" or self._in_flight(execution))
+                if execution.get("notification") in ("held", "queueing") and not pushing:
                     execution["notification"] = "delivered"
                     settled.append(self._notice_document(record, execution))
         return settled
@@ -1685,6 +1742,10 @@ class AgentControl:
         processes still carrying its ``tool_marker`` are stopped, since the
         dead owner's own reclaim never ran (457, 459).
         """
+        for execution in record["executions"]:
+            # A wait whose process died before taking its reserved end (477).
+            if execution.get("notification") == "waiting" and not _waited(execution):
+                _release_reserved(execution)
         current = _running(record)
         if current is None or _alive(current["process"].get("worker_pid")):
             return
@@ -1701,7 +1762,8 @@ class AgentControl:
         # same write, so a control without a receiver that finds it first loses
         # nothing: without hold_notices, a control with one delivers it once
         # (_claim_lost); with hold_notices, the held-notice machinery does.
-        current["notification"] = "held"
+        # A parent waiting on it takes it in its wait instead (477).
+        current["notification"] = "waiting" if _waited(current) else "held"
 
     def _claim_lost(self, record: dict) -> None:
         """Claim, under the lock, the held ``owner-exited`` ends this control can deliver.
@@ -1719,15 +1781,17 @@ class AgentControl:
         if receiver is None:
             return
         for execution in record["executions"]:
+            # Also an end a wait reserved and released untaken (477).
             if (execution.get("notification") != "held"
-                    or (execution.get("error") or {}).get("code") != "owner-exited"):
+                    or ((execution.get("error") or {}).get("code") != "owner-exited"
+                        and not execution.get("wait_released"))):
                 continue
             # A parent Agent reads a body-less end as its error, as under hold_notices.
             notice = self._notice_document(record, execution)
             if native is None:
                 # As finished() gives a host receiver: it names the end's error,
                 # which tells a reconciled end (owner-exited) from a reported one.
-                notice["error"] = dict(execution["error"])
+                notice["error"] = dict(execution["error"]) if execution.get("error") else None
             execution["notification"] = "pending" if native is not None else "queueing"
             self._delivering.add(notice_id(execution["id"], execution.get("outcome")))
             self._lost.__dict__.setdefault("claimed", []).append((receiver, notice, native is not None))
@@ -1994,10 +2058,10 @@ class AgentControl:
             runtime_exit = last.get("process", {}).get("runtime_exit")
             if runtime_exit is not None:
                 document["last_result"]["runtime_exit"] = deepcopy(runtime_exit)
+            # The stored last message is always shown (477); notification alone
+            # says whether, and how, the end reached the parent.
             if last.get('notification'):
                 document['last_result']['notification'] = last['notification']
-                if last['notification'] in ('pending', 'delivered', 'unconfirmed'):
-                    document['last_result']['last_message'] = None
         if record["retired_at"] is not None:
             document["retired_at"] = record["retired_at"]
         return document

@@ -135,7 +135,7 @@ def test_the_core_records_a_codex_push_as_delivered(tmp_path: Path, sent: list) 
     mc.claim_main(runner_directory(tmp_path), _codex(tmp_path), 'codex:SessionStart:startup')
     result = _finish(tmp_path)
     assert result['notification'] == 'delivered'
-    assert result['last_message'] is None
+    assert result['last_message'] == 'PONG'  # 477: still shown
     assert len(sent) == 1
 
 

@@ -233,7 +233,8 @@ its own rules for which Agents it accepts.
 - while running: `execution`, and when present `stopping`, `diagnostic`,
   `pending_requests` (count of unanswered native and decision requests);
 - after an execution has ended: `last_result` with `id`, `outcome`
-  (`completed`, `interrupted`, `failed`), `last_message`, `error` (`code`,
+  (`completed`, `interrupted`, `failed`), `last_message` (always the stored last
+  message, whatever `notification` says, 477), `error` (`code`,
   `message`), `terminal_confirmed`, `ended_at`, and when present
   `termination_confirmation`, `runtime_exit`, `notification` (see 4);
 - `retired_at` once retired.
@@ -1158,10 +1159,27 @@ only these notify the parent:
 Delivery rules:
 
 - Each event reaches the parent once. `last_result.notification` records it:
-  `pending`, `queueing`, `queued`, `held`, `delivered`, `unconfirmed` or
-  `unavailable`. Once the body was delivered (or may have been), `status` and
-  `wait` show `last_message: null` instead of repeating it; a queued or held
-  body stays readable there.
+  `pending`, `queueing`, `queued`, `held`, `waiting`, `delivered`,
+  `unconfirmed` or `unavailable`. `status`, `wait` and `retire` always show the
+  child's stored `last_message`, whatever the notification state (477; before,
+  a delivered body was shown as `null`).
+- A parent that is waiting on its child gets the end in that `wait` result,
+  not also as a notice (477). While the parent's `wait` runs on the child's
+  running execution, it is recorded there (`waiters`, with the waiting
+  process). An end that would be pushed to the parent is then recorded
+  `waiting` instead of being pushed, in the same record write as the end, and
+  the wait settles it `delivered` under the record lock when it returns. Only
+  the parent's own wait counts: an ancestor waiting on a grandchild takes
+  nothing from the grandchild's parent. The push and the wait claim the end
+  under the same lock, so one of them delivers it: a wait that starts after
+  the push claimed the end (`pending` or `queueing`) still shows the body, and
+  the push still delivers it once. A wait that returns without the end (timed
+  out, or a pending request) leaves nothing reserved. A wait that leaves
+  without taking its reservation (an exception), or whose process died, gives
+  the end back as `held`: without `hold_notices` a control with a receiver
+  pushes it once at the next read; with it, the held-notice machinery below
+  delivers it. An end that is not pushed (held for a stopped parent, or a
+  completed round with running members) is unchanged.
 - Every end notice names the execution it reports in `execution`: the same
   ID as that end's `last_result.id` and as the `execution` of the `create`,
   `send` or `resume` result that started it. A parent whose child ran more
@@ -1285,8 +1303,8 @@ What the parent sees today:
   "acknowledge", "session", "position": 0, "ids"}`) or a result carries it. A
   result the caller cancelled, or sent to a client already gone, gives it back.
   A child that ends before its own `create`, `send` or `resume` returns can have
-  its notice on that very result; the `wait` that follows then shows
-  `last_message: null`. The host interrupts its children when
+  its notice on that very result; the `wait` that follows still shows the
+  body, already `delivered` (477). The host interrupts its children when
   Claude Code ends the Session, and those ends are held. The first time a
   Session binds in a host process, whether by a call or the plugin's claim,
   what was held for it is queued, so `claude --resume` of the same Session
@@ -1304,10 +1322,10 @@ What the parent sees today:
   the children it runs and waits up to 10 seconds for their ends, which are
   held (*Claude Code and Codex host shutdown* below). `--resume` sends what was held for that Session once, into the resumed
   turn; a notice not yet sent when that turn ends waits for the next `--resume`.
-  While an end's event is on its way (`notification: queueing`), `wait` and
-  `status` show `last_message: null`, so they do not repeat the body the event
-  carries. An event that could not be written leaves the end `held` and its body
-  readable there.
+  While an end's event is on its way, `wait` and `status` show it
+  `notification: queueing` with its body (477) and do not settle it, so the
+  event delivers it once. An event that could not be written leaves the end
+  `held`.
 - **Pi host:** it enables `request_notices` and `hold_notices`, for children
   of every Runtime it runs. Each notice is injected into the Pi Session with
   Pi's `pi.sendMessage` as a displayed custom message (`customType`
@@ -1320,17 +1338,18 @@ What the parent sees today:
   extension finds its entry there after Pi's `message_end`; until then it stays
   `held`. It is `unconfirmed` when no acknowledgement of any kind comes within
   10 seconds (it may have been shown, so it is never repeated), and `held` when
-  it could not be written or injected. While a notice is on its way
-  (`notification: queueing`), `wait` and `status` also show `last_message:
-  null`, so a `wait` that ends with the child, or a `status` during the turn,
-  does not repeat the body the notice carries. A permission request does not
+  it could not be written or injected. While a notice is on its way, `wait`
+  and `status` also show it `notification: queueing` with its body (477) and
+  do not settle it; the notice delivers it once. A `wait` already running when
+  the child ends takes the end itself and nothing is pushed (see the delivery
+  rules above). A permission request does not
   wait for that turn: its child and `ask_parent` go on at once. Before
   injecting, the extension looks for the same `details.fact` among the Session's
   `custom_message` entries; when it is there (a crash after Pi wrote it and
   before the acknowledgement), it acknowledges without injecting again. A notice
   Pi took but never wrote, because the Session stopped or its turn failed to
   start, is delivered by the next host process for this Session; until then the
-  host hides its body. A notice to a Pi parent that is mid-turn is taken at the
+  host shows it `queueing`. A notice to a Pi parent that is mid-turn is taken at the
   end of that turn, so a permission-request notice can arrive after the parent
   has already answered the request through `wait`, `requests` and `reply`; it
   then costs one more model turn and is still delivered once (observed once on
@@ -1477,8 +1496,8 @@ What the parent sees today:
   turn has just stopped accepting input continues it once when that turn ends,
   unless the parent ended `failed` or `interrupted`, or was retired. A parent
   reading its child's end through its own `wait` or `status` settles it; an
-  ancestor reading a grandchild does not, since `delivered` would hide the body
-  from that child's parent.
+  ancestor reading a grandchild does not, since `delivered` would keep the
+  notice from that child's parent.
 - A Pi parent Agent gets a notice through RPC `prompt` with
   `streamingBehavior: "steer"`. Pi acknowledges when it queues the text, and
   takes it before its next model call (`message_start` of the user message); the
@@ -1497,7 +1516,7 @@ What the parent sees today:
     stays `held`, or continues a standby parent as above. An acknowledgement not
     received in 30 seconds may have been taken: `unconfirmed`, never repeated.
   - Remaining windows. A killed host process cannot return what Pi dropped: it
-    stays `delivered`, its body hidden. A Pi extension whose `input` handler
+    stays `delivered`. A Pi extension whose `input` handler
     rewrites or handles the notice hides it from this check, so a stop returns it
     and it can arrive twice. A stop that ends the parent between its receiver
     returning and the core recording `delivered` keeps `delivered`.
@@ -1554,8 +1573,10 @@ receive now is kept in the record:
   form's `children`, and returns those notices. It settles only ends addressed
   to the root caller; the core does the same for a parent Agent's own calls. It
   runs only where a host calls it, so a host's own internal `wait` settles
-  nothing. Hide a body before calling it: a `queueing` end whose `last_message`
-  is hidden is not settled.
+  nothing. A `queueing` end is settled only when nothing is pushing it: an end
+  whose push is under way, or a `held` end a host shows as `queueing` while it
+  flushes it, is left to that push (477; before, a host hid such a body and an
+  end with a hidden body was not settled).
 - `close_notices()` stops delivery for a host about to stop its children: later
   ends and requests are held in the same record write, no receiver runs and no
   parent is continued. `interrupt_owned()` calls it; a host stopping children
@@ -1902,6 +1923,14 @@ Consumers must ignore result fields and archive fields they do not know.
 
 Recorded classifications:
 
+- 477 (unreleased): `status`, `wait` and `retire` always return the stored
+  `last_message`, which was `null` once the body had been delivered; a parent's
+  running `wait` takes its child's end instead of the push, and
+  `last_result.notification` gains `waiting` for that. A consumer that read the
+  `null` as "already delivered" now reads `notification`, so this changes the
+  meaning of a result field and is incompatible. The version number is not
+  raised in this change; the release that ships it raises the minor version
+  and GraphTraj's range with it.
 - 394 (0.5.0): the distribution, Python package, entry point group, npm packages,
   environment variables and native names are renamed Graftling (CHANGELOG 0.5.0). Old
   names are not read, so the change is incompatible and raises the minor version. New:

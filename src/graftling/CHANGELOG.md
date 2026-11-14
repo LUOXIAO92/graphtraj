@@ -14,6 +14,24 @@ The numbers in parentheses are the project's Task numbers.
 
 ## Unreleased (compatible)
 
+- **Incompatible, not yet numbered (477; see section 7 of the public interface).**
+  `status`, `wait` and `retire` always return the child's stored
+  `last_result.last_message`. Before, once the body had been delivered (or might
+  have been: `pending`, `delivered`, `unconfirmed`), it was shown as `null`, and the
+  Codex, Pi and DSH hosts and GraphTraj's Task member path also hid it while it was
+  `queueing`. `notification` still reports the delivery state. In exchange, a reply
+  is not pushed to a parent that is waiting for it: while the parent's own `wait`
+  runs on the child's running execution it is recorded there (`waiters`), the end
+  is recorded with the new `notification` value `waiting` instead of being pushed,
+  and the wait settles it `delivered` under the record lock when it returns. So
+  "create, then wait" gives the parent the reply once, in the wait result. An end
+  nobody waited for is pushed once, as before; a wait that starts after the push
+  claimed the end shows the body and the push still delivers it once. A wait that
+  leaves without its reserved end, or whose process died, gives it back `held`, and
+  it is pushed once (without `hold_notices`, at the next read) or delivered by the
+  held-notice rules. `settle_shown` no longer relies on a hidden body: a `queueing`
+  end is settled only when no push is under way and the host is not flushing it.
+  The version number is not raised here.
 - A DSH execution's tool processes are reclaimed the same way (463). DSH starts each
   Bash tool in its own session and on shutdown stops only those groups, so a process a
   tool moved into yet another session (`setsid`) outlived both a normal end and a

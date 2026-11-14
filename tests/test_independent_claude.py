@@ -30,7 +30,8 @@ def test_standalone_claude_lifecycle(tmp_path: Path, claude_environment: None) -
     execute('send', agent=agent, message='go')
     done = execute('wait', agent=agent, timeout_seconds=20)
     assert done['result']['last_result']['outcome'] == 'completed'
-    assert notices[-1]['body'] == 'wait-first|go'
+    # 477: each end the parent waited on is returned by that wait, not also pushed.
+    assert done['result']['last_result']['last_message'] == 'wait-first|go'
     waiting = execute('send', agent=agent, message='wait-second')
     assert waiting['session'] == session
     execute('interrupt', agent=agent)
@@ -38,8 +39,9 @@ def test_standalone_claude_lifecycle(tmp_path: Path, claude_environment: None) -
     assert stopped['result']['last_result']['outcome'] == 'interrupted'
     assert execute('resume', agent=agent, message='recall')['session'] == session
     done = execute('wait', agent=agent, timeout_seconds=20)
-    assert notices[-1]['body'] == 'wait-first|go|wait-second|recall'
+    assert done['result']['last_result']['last_message'] == 'wait-first|go|wait-second|recall'
     assert done['result']['last_result']['notification'] == 'delivered'
+    assert notices == []
     execute('retire', agent=agent)
     assert not execute('status')['result']['agents']
     assert not (tmp_path / 'agents/sessions').exists()
@@ -80,9 +82,10 @@ def test_native_main_notice_is_scoped_and_acknowledged(tmp_path: Path, claude_en
         'arguments': {'agent': created.document['agent'], 'timeout_seconds': 20}})
     assert not wait.failed
     # Once: by this wait, or by the create result when the child ended before it returned.
+    # The wait shows the stored body either way (477).
     carried = [notice['event']['message'] for notice in created.document.get('main_notices', [])]
-    message = wait.document['result']['last_result']['last_message']
-    assert carried + ([message] if message is not None else []) == ['hello']
+    assert carried in ([], ['hello'])
+    assert wait.document['result']['last_result']['last_message'] == 'hello'
     pending = host.context({'operation': 'notices', 'session': session})
     assert wait.document.get('main_notices', []) + pending['notices'] == []
     assert host.context({'operation': 'notices', 'session': str(uuid4())})['notices'] == []
@@ -119,12 +122,15 @@ def test_native_print_result_delivers_queued_notice_once(tmp_path: Path, claude_
         replies.append(call('agents', {'action': 'execute', 'feature': 'status',
                                       'arguments': {'agent': agent}}).document)
         time.sleep(0.01)
-    # The body reached the Main once, by the wait or by the create result, never both (367 result 2).
+    # The body reached the Main as a notice at most once: on the create result when the
+    # child ended before it returned, else the wait took it and nothing is pushed (367
+    # result 2, 477). Every read shows the stored body (477).
     notices = [notice['event']['message'] for reply in [created.document, *replies]
                for notice in reply.get('main_notices', [])]
     shown = [reply['result']['last_result']['last_message'] for reply in replies
              if reply.get('result', {}).get('last_result')]
-    assert notices + [message for message in shown if message is not None] == ['remembered352']
+    assert notices in ([], ['remembered352'])
+    assert shown and set(shown) == {'remembered352'}
     assert 'main_notices' not in call('agents', {'action': 'discover'}).document
     assert host.context({'operation': 'notices', 'session': session})['notices'] == []
 
@@ -159,9 +165,9 @@ def test_model_change_failure_names_both_models_and_reason(
                          / f"{created.document['agent']}.json").read_text())
     assert record['executions'][-1]['error'] == last['error']
     # A failure needs the parent even without a last message (Task 367 result 3(d)):
-    # the host receives one notice carrying the persisted error.
-    assert [(notice['outcome'], notice['body'], notice['error']) for notice in notices] == [
-        ('failed', None, last['error'])]
+    # the parent was waiting, so its wait carried the persisted error once and the
+    # host receives no notice for it (477).
+    assert notices == []
     assert record['executions'][-1]['notification'] == 'delivered'
 
 

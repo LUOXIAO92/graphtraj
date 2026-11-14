@@ -130,8 +130,8 @@ for line in open(sys.argv[1]):
   mkdir -p $BASE/scratch/pi-home
   local PIB=$(command -v pi); print "pi: $PIB ($($PIB --version 2>&1 | head -1))"
   if [[ -n ${DEEPSEEK_API_KEY:-} ]]; then
-    one_line "pi deepseek-flash" clean PI_CODING_AGENT_DIR=$BASE/scratch/pi-home PI_SKIP_VERSION_CHECK=1 PI_TELEMETRY=0 \
-        $PIB --print --no-tools --no-session --provider deepseek --model deepseek-flash 'Reply with exactly: PI OK'
+    # one_line execs an executable (perl), never a shell function such as clean: run this script's _pi1 step.
+    one_line "pi deepseek-flash" /bin/zsh $THIS _pi1
   else
     print "pi check SKIPPED: DEEPSEEK_API_KEY not set in Main's shell; the child's own login is proven by 01"
   fi
@@ -145,6 +145,12 @@ for line in open(sys.argv[1]):
   print "'roles OK', 'task 1 ready', result 'MODEL OK' with $MODEL, 'pi deepseek-flash OK: PI OK' (or 'pi check SKIPPED'),"
   print "'graphtraj-claude-host loaded: YES'."
   next "zsh $THIS 01"
+}
+
+# Private: 00's one Pi line (scratch agent dir, key from the environment), run through one_line.
+step__pi1() {
+  clean PI_CODING_AGENT_DIR=$BASE/scratch/pi-home PI_SKIP_VERSION_CHECK=1 PI_TELEMETRY=0 \
+      $(command -v pi) --print --no-tools --no-session --provider deepseek --model deepseek-flash 'Reply with exactly: PI OK'
 }
 
 step_00u() {
@@ -250,5 +256,6 @@ case $STEP in
   02) step_02 ;;
   03) step_03 ;;
   _03run) step__03run ;;
+  _pi1) step__pi1 ;;
   *) print "usage: zsh ${0:A} <00|00u|01|02|03>" ;;
 esac

@@ -25,9 +25,9 @@ from pathlib import Path
 import yaml
 
 TASK = '1'
-STEPS = 45
+STEPS = 60  # each Bash output ~4.4 KB (400 lines): ~265 KB in all
 SAMPLE_SECONDS = 10
-WAIT_SECONDS = 540
+WAIT_SECONDS = 520  # plus <= 30 s for agent-runner to return: the step stays under 10 min
 # AFTER passes when its Worker used less than this share of one core while the member worked.
 AFTER_LIMIT = 0.25
 BODY = '''---
@@ -148,7 +148,7 @@ def init(stream: Path, harness: str) -> int:
 
 def instruction() -> str:
     steps = [f'Step {n:02d}: write the sentence "Now step {n:02d}." then call the Bash tool with exactly '
-             f"`seq -f '468-{n:02d}-%g' 1 300`." for n in range(1, STEPS + 1)]
+             f"`seq -f '468-{n:02d}-%g' 1 400`." for n in range(1, STEPS + 1)]
     return ' '.join([
         'This is a scripted probe; do exactly these steps in order and nothing else. Write each step\'s sentence as '
         'its own short text before that step\'s tool call. Use only the Bash tool, one call per step, never in '
@@ -182,6 +182,19 @@ def diagnostics(directory: Path, execution: str | None) -> dict:
         return {}
 
 
+def find_member(runner: Path) -> tuple[Path, int, str] | None:
+    """Task 1's member Session directory and its Worker pid, once a record names it."""
+    for directory in sorted((runner / 'sessions').glob(f'{TASK}-*team_leader*')):
+        for name in ('heartbeat.yml', 'mapping.yml'):
+            try:
+                record = yaml.safe_load((directory / name).read_text()) or {}
+            except (OSError, yaml.YAMLError):
+                continue
+            if isinstance(record, dict) and isinstance(record.get('worker_pid'), int):
+                return directory, record['worker_pid'], name
+    return None
+
+
 def run_member(project: Path, facts_file: str) -> int:
     """Dispatch Task 1's member, sample its Worker's CPU while it works, print the ratio and verdict."""
     from graphtraj.configuration.project_configuration import runner_directory
@@ -198,38 +211,55 @@ def run_member(project: Path, facts_file: str) -> int:
     print(f'member Claude Code (Runner resolves claude on PATH): {binary} | {version}')
     batch = Path(facts_file).with_suffix('.swarm.yml')
     batch.write_text(yaml.safe_dump({'tasks': [{'task_id': TASK, 'role': 'team_leader', 'instruction': instruction()}]}))
-    done = run(str(Path(sys.executable).parent / 'agent-runner'), '--swarm-input', str(batch), cwd=project)
-    if done.returncode:
-        return 1
-    task = yaml.safe_load(done.stdout)['tasks'][0]
-    alias = task['alias']
-    print(f"{now()} agent-runner returned: alias={alias} execution_id={task.get('execution_id')}")
-    directory = runner / 'sessions' / alias
-    mapping = yaml.safe_load((directory / 'mapping.yml').read_text())
-    worker = mapping['worker_pid']
-    print(f"Worker pid {worker} (from {directory / 'mapping.yml'}) | Runtime pid {mapping.get('runtime_pid')}")
+    # agent-runner returns only when the member's turn ends, so it runs in the
+    # background while this samples the member's Worker. It is never signalled.
+    output = Path(facts_file).with_suffix('.agent-runner.txt')
+    with output.open('w') as stream:
+        dispatch = subprocess.Popen([str(Path(sys.executable).parent / 'agent-runner'), '--swarm-input', str(batch)],
+                                    cwd=project, stdout=stream, stderr=subprocess.STDOUT, text=True)
+    print(f'{now()} agent-runner started (pid {dispatch.pid}); its output: {output}')
     raw = Path(facts['out']).with_suffix('.ps.txt')
-    samples = []
+    samples, found, seen_running = [], None, False
     deadline = time.monotonic() + WAIT_SECONDS
     with raw.open('w') as log:
         while time.monotonic() < deadline:
-            sample = ps_sample(worker)
-            stamp = time.monotonic()
-            if sample is None:
-                print(f'{now()} Worker {worker} has exited')
-                break
-            samples.append((stamp, sample[1]))
-            line = f'{now()} {sample[0][:200]}'
-            print(line, flush=True)
-            log.write(line + '\n')
-            activity = status_aliases([alias], project).document['aliases'][0].get('activity')
-            if activity != 'running':
-                print(f'{now()} member activity: {activity} (its turn ended)')
-                break
-            time.sleep(SAMPLE_SECONDS)
+            if found is None:
+                found = find_member(runner)
+                if found is not None:
+                    print(f'{now()} member {found[0].name} | Worker pid {found[1]} (from {found[2]})')
+                elif dispatch.poll() is not None:
+                    print(f'{now()} agent-runner ended (rc {dispatch.returncode}) before a Worker was seen')
+                    break
+            if found is not None:
+                directory, worker, _ = found
+                sample = ps_sample(worker)
+                stamp = time.monotonic()
+                if sample is None:
+                    print(f'{now()} Worker {worker} has exited')
+                    break
+                samples.append((stamp, sample[1]))
+                line = f'{now()} {sample[0][:200]}'
+                print(line, flush=True)
+                log.write(line + '\n')
+                activity = status_aliases([directory.name], project).document['aliases'][0].get('activity')
+                seen_running = seen_running or activity == 'running'
+                if activity != 'running' and (seen_running or dispatch.poll() is not None):
+                    print(f'{now()} member activity: {activity} (its turn ended)')
+                    break
+            time.sleep(SAMPLE_SECONDS if found is not None else 1)
         else:
-            print(f'STOP: {alias} still running after {WAIT_SECONDS} s; the samples so far are used. '
-                  'Nothing was signalled.')
+            print(f'STOP: still running after {WAIT_SECONDS} s; the samples so far are used. Nothing was signalled.')
+    try:
+        dispatch.wait(timeout=30)
+    except subprocess.TimeoutExpired:
+        print(f'agent-runner (pid {dispatch.pid}) still running; not signalled. Its output: {output}')
+    print(f'agent-runner rc {dispatch.returncode}; last output: {output.read_text()[-300:]!r}')
+    if found is None:
+        print('STOP: no member Worker was found')
+        return 1
+    directory, worker, _ = found
+    alias = directory.name
+    mapping = yaml.safe_load((directory / 'mapping.yml').read_text()) or {}
     progress = diagnostics(directory, mapping.get('execution_id'))
     print(f'collection_progress: batches {progress.get("batches")} | elapsed_seconds {progress.get("elapsed_seconds")}')
     working = samples  # (monotonic time, cumulative CPU seconds), taken while the member's turn ran

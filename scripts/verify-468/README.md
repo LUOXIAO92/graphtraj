@@ -17,7 +17,7 @@ BEFORE is `cfd7f688` (dev base of 468); AFTER is the Worktree HEAD when 00 runs 
 |---|---|---|---|---|
 | 00 | Main | `S 00` | `expected 2.1.325: yes`, `launched via zsh: yes`, `468 fix loaded: NO` (BEFORE) and `YES` (AFTER), `deps: click 8.5.0` twice, `roles OK` and `probe Task ready: YES` twice, `isolation: OK` twice, `init: … model claude-opus-5-5 \| apiKeySource <name>`, `cc-plugin-agents-md loaded: NO`, `Harness instruction files loaded: none`, `result: MODEL OK \| MEMORY: NONE`. Prints the 01 command. | none |
 | 00u | USER, only if 01 or 02 reports a trust or login refusal | `cd …/tmp/468/verify/project-before && claude` (or `project-after`), 'Yes, proceed', `/exit` | Main reruns the refused step. | folder trust for the new path: choose 'Yes, proceed' |
-| 01 | Main | `S 01 2>&1 \| tee …/out/01.txt` | ≤ 9.5 min. Raw `ps` lines of the BEFORE Worker every ~10 s, `per-interval CPU-s per wall-s: […]`, `Worker CPU while the member worked: … = <r> CPU-s per wall-s`, `== BEFORE: <r>`. Prints the 02 command. | none (00u if refused) |
+| 01 | Main | `S 01 2>&1 \| tee …/out/01.txt` | < 10 min. Raw `ps` lines of the BEFORE Worker every ~10 s, `per-interval CPU-s per wall-s: […]`, `Worker CPU while the member worked: … = <r> CPU-s per wall-s`, `== BEFORE: <r>`. Prints the 02 command. | none (00u if refused) |
 | 02 | Main | `S 02 2>&1 \| tee …/out/02.txt` | As 01 for AFTER, then `BEFORE:` / `AFTER :` lines and `== verdict: PASS` (AFTER < 0.25 CPU-s per wall-s and below BEFORE). | none (00u if refused) |
 | 03 | Main | `S 03` | Full suite at HEAD in the background, six shards, stops itself after 25 min. `tail -n 25 …/out/03-suite.txt`; done at `== totals:`. | none |
 
@@ -28,7 +28,7 @@ If 01 or 02 says the Task already has a member (a rerun), rerun 00 first: it reb
 | Criterion | Observable |
 |---|---|
 | a real Claude Task member, Runner-dispatched, `claude-opus-5-5`, `permission_mode: auto` | 00 `roles OK`; 01/02 `member Claude Code …` and `agent-runner returned: alias=…` |
-| the member works actively for several minutes | the instruction: 45 steps, each a sentence and one Bash `seq -f '468-NN-%g' 1 300` call (300 output lines), one at a time; 01/02 print the samples while `activity` is `running`, and `collection_progress: batches …` (archive collection batches during the run) |
+| the member works actively for several minutes | the instruction: 60 steps, each a sentence and one Bash `seq -f '468-NN-%g' 1 400` call (400 output lines, ~4.3 KB; ~265 KB in all), one at a time; 01/02 print the samples while `activity` is `running`, and `collection_progress: batches …` (archive collection batches during the run) |
 | Worker CPU sampled with ps cumulative time deltas and pcpu, raw lines kept | each sample prints `ps -o pid,ppid,pcpu,time,etime,command -p <Worker pid>`; also in `…/out/before.ps.txt`, `…/out/after.ps.txt` |
 | before/after CPU-s per wall-s and a verdict | 01 `== BEFORE: <r>`, 02 `== AFTER: <r>`, `== verdict: PASS/FAIL` |
 | the members ran without the Harness instruction files | 00: the projects' own `.claude/settings.local.json` and committed `.claude/settings.json` (claudeMdExcludes for the Harness `CLAUDE.md`/`AGENTS.md`, `cc-plugin-agents-md@builtin: false`); the host's init record `cc-plugin-agents-md loaded: NO` and `Harness instruction files loaded: none` |
@@ -48,11 +48,19 @@ the model, login source name and plugins from its init record.
 
 ### 01 / 02 the member and its Worker
 
-`agent-runner --swarm-input` dispatches Task 1's member with the scripted instruction. The probe reads the Worker pid
-from the member's `mapping.yml` and, every ~10 s while the member's `activity` is `running` (≤ 9 min), prints one raw
-`ps` line for that pid. The ratio is (last − first cumulative CPU time) / (wall time between them). The member's
+`agent-runner --swarm-input` dispatches Task 1's member with the scripted instruction. It returns only when the
+member's turn ends, so the probe starts it in the background (output in `…/out/<label>-facts.agent-runner.txt`) and
+samples meanwhile. (The first run at 922d1083 sampled only after it returned, when the Worker had already exited:
+`samples 0`.) The probe finds the member's Session directory under the project's `runner/sessions` and its Worker pid
+in `heartbeat.yml` or `mapping.yml`, then every ~10 s prints one raw `ps` line for that pid, until the Worker exits or
+the member's `activity` is no longer `running` (≤ 520 s). It then waits ≤ 30 s for agent-runner to return and never
+signals it. The ratio is (last − first cumulative CPU time) / (wall time between them). The member's
 `claude-diagnostics-<execution>.yml` `collection_progress` is printed at the end. Nothing is signalled; if the member
-still runs after 9 min, the samples so far are used and the step says so.
+still runs at the limit, the samples so far are used and the step says so.
+
+Rerun 00 before 01/02 after an earlier run: 01 and 02 refuse a project whose Task already has a member, and 00
+rebuilds both projects. AFTER is the Worktree HEAD, whose product code equals 922d1083 (this commit changes only
+`scripts/verify-468`).
 
 ### 03 full suite
 

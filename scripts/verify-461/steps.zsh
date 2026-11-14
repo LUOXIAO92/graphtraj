@@ -116,8 +116,11 @@ print("461 fix: Pi owner samples:", "DescendantSampler" in inspect.getsource(e.P
       "| GraphTraj Pi owner inherits:", issubclass(m.PiManagedExecution, e.PiExecution))') || return 1
   say "isolated project $P (git, graphtraj setup, a 'pi' role on the user's Pi connection, Claude host configuration)"
   [[ -f $P/.claude/settings.local.json ]] && cp -p $P/.claude/settings.local.json $BASE/settings.local.json.keep
-  rm -rf $P; mkdir -p $P; (cd $P && git init -q -b main && print -r -- "# 461 probe" > README.md && git add README.md \
-      && git -c user.name=461 -c user.email=461@invalid commit -qm "Initial source") || return 1
+  # .claude/settings.json is in the initial commit, so dev (setup) and every member worktree carry it.
+  rm -rf $P; mkdir -p $P; (cd $P && git init -q -b main && print -r -- "# 461 probe" > README.md \
+      && $VV/bin/python -I $SD/probe.py claude_settings $P - && git add README.md .claude/settings.json \
+      && git -c user.name=461 -c user.email=461@invalid commit -qm "Initial source" \
+      && print "committed: $(git ls-files .claude)") || return 1
   (cd $P && print y | clean0 $VV/bin/graphtraj setup | tail -2) || return 1
   say "Pi values the child uses (read only; key variables by name and set/unset only)"
   probe prepare $P $MODEL || { print "STOP: the Pi values, the sandbox or the probe Task are not ready (text above)"; return 1; }
@@ -128,15 +131,13 @@ print("461 fix: Pi owner samples:", "DescendantSampler" in inspect.getsource(e.P
   local C=$(claude_bin)
   [[ -f $BASE/settings.local.json.keep ]] && mkdir -p $P/.claude && cp -p $BASE/settings.local.json.keep $P/.claude/settings.local.json
   (cd $P && clean0 $VV/bin/python -m graphtraj.runtimes.claude.host configuration --project $P --claude $C --write) || return 1
-  say "host answers one line with $MODEL (login check; no tool)"
+  say "host answers MODEL OK and lists its instruction files with $MODEL (login and Claude context check; no tool)"
   (cd $P && clean $C -p --model $MODEL --output-format stream-json --verbose --mcp-config $P/.mcp.json --strict-mcp-config \
-      <<< 'Reply with exactly: MODEL OK' > $OUT/00-model-stream.jsonl 2> $OUT/00-model-stderr.txt)
+      <<< "$($VV/bin/python -I -c 'import sys; sys.path.insert(0, sys.argv[1]); import probe; print(probe.CLAUDE_CHECK_PROMPT)' $SD)" \
+      > $OUT/00-model-stream.jsonl 2> $OUT/00-model-stderr.txt)
   print "claude -p rc=$?"
-  $VV/bin/python -I -c 'import json,sys
-for line in open(sys.argv[1]):
-    d = json.loads(line)
-    if d.get("type") == "result": print("result:", d.get("result"), "| is_error:", d.get("is_error"), "| models:", list((d.get("modelUsage") or {}).keys()))' $OUT/00-model-stream.jsonl \
-      || { print "STOP: claude -p gave no stream. stderr:"; head -c 300 $OUT/00-model-stderr.txt; print "\nIf it says 'login' or 'API key': USER logs in with 'claude' in Terminal, then rerun 00."; return 1; }
+  $VV/bin/python -I $SD/probe.py claude_check $OUT/00-model-stream.jsonl $P \
+      || { print "STOP: no MODEL OK, $P's settings did not turn cc-plugin-agents-md off, or Claude was given a CLAUDE.md/AGENTS.md outside the project (above). stderr:"; head -c 300 $OUT/00-model-stderr.txt; print "\nIf it says 'login' or 'API key': USER logs in with 'claude' in Terminal, then rerun 00."; return 1; }
   say "Pi answers one line with deepseek/deepseek-flash (scratch agent dir, key from the environment; the user's ~/.pi is never written)"
   # Pi's startup migrations write settings.json and auth.json in its agent dir, so never point it at ~/.pi here.
   mkdir -p $BASE/scratch/pi-home
@@ -155,7 +156,7 @@ for line in open(sys.argv[1]):
   fi
   print "Success: claude 2.1.323, pi 1.4.0, the '461 fix:' line all True, deps click 8.5.0, connection resolved, srt listed,"
   print "'sandbox available: YES', 'roles OK', 'task 1 ready', 'isolation: OK', 'Pi child context isolated: YES',"
-  print "result 'MODEL OK' with $MODEL, 'pi deepseek-flash OK: PI OK' (or 'pi check SKIPPED'), 'graphtraj-claude-host loaded: YES'."
+  print "'claude memory from the Harness: none', 'Claude context isolated: YES', 'pi deepseek-flash OK: PI OK' (or 'pi check SKIPPED'), 'graphtraj-claude-host loaded: YES'."
   next "zsh $THIS 01"
 }
 
@@ -222,6 +223,8 @@ step_02() {
     grep -o 'CHILD-RUNNING\|CHILD-NOT-RUNNING' $OUT/01-main-stream.jsonl | sort | uniq -c
   fi
   probe child $P 1
+  say "Claude context facts (read only): 01 Main's and the member's init plugins; settings.json in the member's cwd"
+  probe claude_facts $P $OUT
   probe kill $P $OUT/02-kill.json
   local rc=$?
   print ""

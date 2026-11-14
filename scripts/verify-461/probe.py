@@ -220,6 +220,116 @@ def isolation(project: Path, _unused: str) -> int:
     return 0 if ok and isolated else 1
 
 
+AGENTS_MD_PLUGIN = 'cc-plugin-agents-md'
+CLAUDE_MEMORY_NAMES = ('CLAUDE.md', 'CLAUDE.local.md', 'AGENTS.md', '.claude/CLAUDE.md')
+# 00's one-line check: the model reports the instruction files it was given (as Task 462's reopen 00 did).
+CLAUDE_CHECK_PROMPT = ('Reply with exactly two lines. Line 1: MODEL OK . Line 2: MEMORY: followed by the absolute path '
+                       'of every CLAUDE.md, CLAUDE.local.md or AGENTS.md file whose contents you were given as '
+                       "instructions, separated by ' | ', or NONE if there is none.")
+
+
+def claude_settings(project: Path, _unused: str) -> int:
+    """Write the project's committed .claude/settings.json (00, before the initial commit, so dev and every member
+    worktree carry it): the builtin AGENTS.md plugin off, and claudeMdExcludes for every CLAUDE.md, CLAUDE.local.md,
+    .claude/CLAUDE.md and AGENTS.md found above the project (computed now). settings.local.json is left to the host
+    configuration. Never ~/.claude or ~/.claude.json."""
+    project = project.resolve()
+    excludes = [str(directory / name) for directory in project.parents for name in CLAUDE_MEMORY_NAMES
+                if (directory / name).is_file()]
+    settings = {'enabledPlugins': {f'{AGENTS_MD_PLUGIN}@builtin': False}, 'claudeMdExcludes': excludes}
+    path = project / '.claude/settings.json'
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(settings, indent=2) + '\n')
+    print(f'claude settings (committed with the initial source) {path}: {json.dumps(settings)}')
+    return 0
+
+
+def stream_records(stream: Path) -> list[dict]:
+    records = []
+    try:
+        lines = Path(stream).read_text().splitlines()
+    except OSError:
+        return records
+    for line in lines:
+        try:
+            records.append(json.loads(line))
+        except ValueError:
+            continue
+    return records
+
+
+def init_plugins(stream: Path) -> list[str] | None:
+    for record in stream_records(stream):
+        if record.get('type') == 'system' and record.get('subtype') == 'init':
+            return [plugin.get('source') or plugin.get('name') for plugin in record.get('plugins', [])]
+    return None
+
+
+def claude_check(stream: Path, project: str) -> int:
+    """00's fail-closed Claude context check on the one-line stream (read only)."""
+    root = Path(project).resolve()
+    plugins = init_plugins(stream)
+    result = next((record.get('result') for record in stream_records(stream) if record.get('type') == 'result'), None)
+    lines = [line.strip() for line in str(result or '').splitlines() if line.strip()]
+    memory_line = next((line for line in lines if line.upper().startswith('MEMORY:')), None)
+    listed = [] if memory_line is None else [item.strip() for item in memory_line.split(':', 1)[1].split('|')
+                                             if item.strip() and item.strip().upper() != 'NONE']
+    outside = [item for item in listed if not Path(item).is_absolute()
+               or not Path(item).resolve().is_relative_to(root)]
+    print(f'result: {result!r}')
+    print(f'init plugins: {plugins}')
+    model_ok = bool(lines) and lines[0] == 'MODEL OK'
+    plugin_off = plugins is not None and not any(AGENTS_MD_PLUGIN in str(item) for item in plugins)
+    reported = memory_line is not None
+    print(f'MODEL OK first line: {model_ok} | {AGENTS_MD_PLUGIN} absent from init plugins: {plugin_off} | '
+          f'MEMORY line present: {reported}')
+    print('claude memory from the Harness:', outside or 'none')
+    isolated = model_ok and plugin_off and reported and not outside
+    print('Claude context isolated:', 'YES' if isolated else 'NO')
+    return 0 if isolated else 1
+
+
+def claude_facts(project: Path, out: str) -> int:
+    """02, read only: the 01 Main's init plugins and what reaches the member's Claude cwd.
+
+    The member's Claude runs with cwd = its Task worktree (src/graftling/claude/execution.py:837, Popen cwd =
+    request['worktree_path']); the worktree is made from dev's commit (src/graphtraj/workspace/runner_project.py:
+    56-66), and dev is created by setup from the initial commit that holds .claude/settings.json. The member's own
+    init record is not retained: its trace links the native transcript (graftling/claude/execution.py:551-556) and
+    the init event is kept only in memory (:955-964)."""
+    stream = Path(out) / '01-main-stream.jsonl'
+    print(f'01 Main init plugins ({stream}): {init_plugins(stream)}')
+    alias, mapping, directory = member(project)
+    tasks = []
+    try:
+        dispatch = json.loads((project / DISPATCH).read_text())
+        for record in stream_records(Path(dispatch.get('stream') or stream)):
+            for content in ((record.get('message') or {}).get('content') or []) if record.get('type') == 'user' else []:
+                text = content.get('content') if isinstance(content, dict) else None
+                if isinstance(text, str) and '"launch_status"' in text:
+                    try:
+                        tasks += json.loads(text).get('tasks', [])
+                    except ValueError:
+                        pass
+    except (OSError, ValueError):
+        pass
+    worktree = next((task.get('worktree_path') for task in tasks if task.get('alias') == alias), None)
+    found = []
+    for path in sorted(directory.rglob('*.jsonl')) if directory else []:
+        found += [init_plugins(path)] if init_plugins(path) is not None else []
+    print(f"member {alias} init plugins: {found[0] if found else 'not in its records (init is kept only in memory)'}")
+    if worktree:
+        settings = Path(worktree) / '.claude/settings.json'
+        tracked = subprocess.run(['git', '-C', worktree, 'ls-files', '.claude/settings.json'],
+                                 capture_output=True, text=True).stdout.strip()
+        content = settings.read_text() if settings.is_file() else None
+        print(f"member Claude cwd (its worktree): {worktree} | .claude/settings.json tracked: {bool(tracked)} | "
+              f"{AGENTS_MD_PLUGIN} off: {bool(content) and json.loads(content).get('enabledPlugins', {}).get(AGENTS_MD_PLUGIN + '@builtin') is False}")
+    else:
+        print('member Claude cwd: not found in the swarm result')
+    return 0
+
+
 def plugins(stream: Path, _unused: str) -> int:
     for line in stream.read_text().splitlines():
         try:
@@ -833,6 +943,7 @@ def stub(project: Path, case: str) -> int:
 
 if __name__ == '__main__':
     command, target, extra = sys.argv[1], Path(sys.argv[2]), sys.argv[3]
-    commands = {'prepare': prepare, 'isolation': isolation, 'plugins': plugins, 'dispatch': dispatch_cmd,
+    commands = {'prepare': prepare, 'isolation': isolation, 'claude_settings': claude_settings,
+                'claude_check': claude_check, 'claude_facts': claude_facts, 'plugins': plugins, 'dispatch': dispatch_cmd,
                 'child': child_cmd, 'kill': kill, 'idle': idle, 'stub': stub}
     raise SystemExit(commands[command](target, extra))

@@ -13,10 +13,10 @@ production `.venv-runtime` is changed. No key value is printed; step 03 and the 
 
 | Step | Who | Command | Expected time | Success |
 |---|---|---|---|---|
-| 00 | Main | `S 00` | 2-4 min | `claude --version` 2.1.323, `pi --version` 1.4.0, the `461 fix:` line all True, `deps: click 8.5.0`, Pi values (key variables by name only), `pi.deny_read` lists the context files above the project, `sandbox available …: YES`, `roles OK`, `task 1 ready`, `isolation: OK`, `Pi child context isolated: YES`, `result: MODEL OK`, `pi deepseek-flash OK: PI OK` (or `SKIPPED`), `graphtraj-claude-host loaded: YES`. |
+| 00 | Main | `S 00` | 2-4 min | `claude --version` 2.1.323, `pi --version` 1.4.0, the `461 fix:` line all True, `deps: click 8.5.0`, Pi values (key variables by name only), `pi.deny_read` lists the context files above the project, `sandbox available …: YES`, `roles OK`, `task 1 ready`, `committed: .claude/settings.json`, `isolation: OK`, `Pi child context isolated: YES`, `MODEL OK first line: True \| cc-plugin-agents-md absent from init plugins: True \| MEMORY line present: True`, `claude memory from the Harness: none`, `Claude context isolated: YES` (NO stops 00), `pi deepseek-flash OK: PI OK` (or `SKIPPED`), `graphtraj-claude-host loaded: YES`. |
 | 00u | USER, once, only if 00 prints `graphtraj-claude-host loaded: NO` | `cd …/tmp/461/project && claude`, 'Yes, proceed' on folder trust, `/exit` | 1 min | Main reruns 00 and sees `loaded: YES`. |
 | 01 | Main | `S 01` | returns at once | Records the dispatch, starts the background `claude -p` Main, prints its pid, the timeline and the 02 command. |
-| 02 | Main | `S 02 2>&1 \| tee …/r2/02.txt` | <= 9.5 min (waits for 01's Main) | The `member:` line names the member created by 01's dispatch; `CHECK PASS: 0` (the orphan alive after the kill, outside the Runtime group), CHECK 1-4 PASS, `summary: ALL PASS`; facts in `02-kill.json`. If it prints `still running`, rerun 02 once. |
+| 02 | Main | `S 02 2>&1 \| tee …/r2/02.txt` | <= 9.5 min (waits for 01's Main) | `01 Main init plugins:` without `cc-plugin-agents-md`; `member Claude cwd (its worktree): … \| .claude/settings.json tracked: True \| cc-plugin-agents-md off: True`; the `member:` line names the member created by 01's dispatch; `CHECK PASS: 0` (the orphan alive after the kill, outside the Runtime group), CHECK 1-4 PASS, `summary: ALL PASS`; facts in `02-kill.json`. If it prints `still running`, rerun 02 once. |
 | 03 | Main | `S 03` | starts in background; 25 min max | Full suite at HEAD; `tail -n 25 …/r2/03-suite.txt`; done at `== totals:`. |
 
 No step opens a dialog except 00u.
@@ -61,6 +61,25 @@ at or above the project (none), then the Pi facts:
   cannot read (a warning). This does not touch the reclaim path.
 - `Pi child context isolated: YES` when every listed file is denied; `NO` stops 00. The user's own global
   `~/.pi/agent` context file is printed separately (not the Harness).
+
+## Claude context (00 and 02)
+
+Task 462's reopened 00 (Claude Code 2.1.323, project under Harness tmp) was given the Harness AGENTS.md; its init
+record listed `cc-plugin-agents-md@builtin`, and `claudeMdExcludes` alone did not stop it. Here:
+
+- 00 writes `<project>/.claude/settings.json` before the initial commit (`probe.py claude_settings`):
+  `enabledPlugins {"cc-plugin-agents-md@builtin": false}` and `claudeMdExcludes` for every `CLAUDE.md`,
+  `CLAUDE.local.md`, `.claude/CLAUDE.md` and `AGENTS.md` found above the project, computed at 00. It is committed, so
+  `dev` (made by setup from that commit) and every member worktree carry it. `settings.local.json` stays as the host
+  configuration writes it. `~/.claude` and `~/.claude.json` are never written.
+- 00's one `claude -p` asks for `MODEL OK` and a `MEMORY:` line naming every CLAUDE.md/CLAUDE.local.md/AGENTS.md it
+  was given (`probe.py claude_check`). It fails closed unless the first line is `MODEL OK`, the init plugins lack
+  `cc-plugin-agents-md` and no listed file is outside the project.
+- 02 prints, read only (`probe.py claude_facts`), the 01 Main's init plugins and the member's Claude cwd. The member's
+  Claude runs with cwd = its Task worktree (`src/graftling/claude/execution.py:837`, `Popen(cwd=worktree_path)`),
+  made from dev's commit (`src/graphtraj/workspace/runner_project.py:56-66`), so the committed settings.json is
+  there; 02 shows it tracked and the plugin off. The member's own init record is not retained (its trace links the
+  native transcript, `graftling/claude/execution.py:551-556`; the init event is kept only in memory, :955-964).
 
 ## 02: kill, CHECK 0, one read, CHECK 1-4
 

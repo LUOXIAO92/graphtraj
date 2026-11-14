@@ -65,6 +65,11 @@ the record's entries (pid, argv): expected the native `codex` app-server, the to
 A normal-end observation is not part of this run (it would need a second Codex turn). The dev tests cover it, and
 a model-free probe showed Codex stops its tools itself when its stdin closes (engineer report).
 
+Real-host run 3 showed the same for a model turn: after the owner Worker was killed, the app-server saw stdin EOF
+and stopped its tool processes itself before the group kill and the reconciling read. So CHECK 2 can legitimately
+find nothing to stop (`escaped_processes` empty) while CHECK 3 still shows no `sleep 462` alive. The reclaim
+matters when the app-server itself dies without closing its tools (the dev tests and the model-free probe).
+
 ### 03: full suite
 
 As 459's step 03, against the Worktree HEAD, six shards, stopped at 25 minutes. Base for comparison: `b3d522ad`.

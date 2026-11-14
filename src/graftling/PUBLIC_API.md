@@ -1211,9 +1211,10 @@ Delivery rules:
   with that execution's own `GRAFTLING_MEMBER_RUN` value (never the parent's) and also
   sets for tool shells through `shell_environment_policy.set`. Codex stops its tool
   processes itself when its stdin closes, but not when the app-server is killed. The
-  owner's reclaim runs once the app-server has exited and is written to
-  `codex-termination-<turn>.yml` in the execution's directory; a non-empty one is also
-  the result's `escaped_processes`. A Codex host the user started (`CodexHost`), and a
+  owner's reclaim runs once the app-server has exited, on its own thread so the
+  execution's end is not delayed, and is written to `codex-termination-<turn>.yml` in
+  the execution's directory (it may appear after the end is reported; the result does
+  not carry it). A Codex host the user started (`CodexHost`), and a
   service reached through a proxy or an existing WebSocket, are not covered.
 - A completed round of a child that still has running members is recorded,
   not pushed. All rounds stay readable through `status`.

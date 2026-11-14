@@ -8,6 +8,7 @@ import os
 import json
 import re
 import sys
+import threading
 import uuid
 from concurrent.futures import CancelledError
 from contextlib import ExitStack
@@ -387,10 +388,18 @@ class CodexManagedExecution:
             raise RuntimeAdapterError(error.code, message) from error
         finally:
             if self.descendants is not None:
-                # Called directly, not through a worker thread: after the owning
-                # interpreter began shutting down, asyncio.to_thread refuses new
-                # work. Bounded (sampler join up to 5 s, one TERM/KILL cycle).
-                self._reclaim_tools(adapter)
+                # Off the path that ends the execution: a stop's caller reads the
+                # end record as soon as the native turn is interrupted, so it must
+                # not wait for the scans (sampler join, process table, every
+                # process's environment, one TERM/KILL cycle). A non-daemon thread
+                # keeps the process until it finishes. Once the interpreter is
+                # shutting down no thread can start (asyncio.to_thread refuses
+                # too), so then it runs here.
+                try:
+                    threading.Thread(target=self._reclaim_tools, args=(adapter,),
+                                     name='codex-tool-reclaim', daemon=False).start()
+                except RuntimeError:
+                    self._reclaim_tools(adapter)
             await asyncio.to_thread(connections.close)
             if observer is not None:
                 observer.cancel()
@@ -415,11 +424,14 @@ class CodexManagedExecution:
         self.escaped_processes = redact(stop_tool_processes(
             entries, self.member_marker, {process.pid}, error=self.descendants.error))
         execution = self.execution.turn_id if self.execution is not None else 'none'
-        (self.directory / f'codex-termination-{execution}.yml').write_text(yaml.safe_dump(
+        # Written whole and then renamed: a reader never sees a partial record. The
+        # outcome is not changed, since it may already have been returned and read.
+        target = self.directory / f'codex-termination-{execution}.yml'
+        partial = target.with_name(target.name + '.partial')
+        partial.write_text(yaml.safe_dump(
             {'runtime_pid': process.pid, 'runtime_exit_code': process.returncode,
              'escaped_processes': self.escaped_processes}, sort_keys=False))
-        if self.outcome is not None and self.escaped_processes['found']:
-            self.outcome['escaped_processes'] = self.escaped_processes
+        os.replace(partial, target)
 
     async def _observe(self) -> None:
         """Drain control notifications for diagnostics separately from native records."""

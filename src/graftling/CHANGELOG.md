@@ -20,8 +20,8 @@ The numbers in parentheses are the project's Task numbers.
   running. The Codex owner now starts its owned app-server with the execution's own
   `GRAFTLING_MEMBER_RUN` value (the parent's is still removed, 450) and sets it for
   tool shells, records the app-server's descendants as 459 does, and stops what is left
-  once the app-server has exited (`codex-termination-<turn>.yml`; a non-empty result is
-  also `escaped_processes` in the outcome). The Codex driver and GraphTraj's agents
+  once the app-server has exited, on its own thread so the end is not delayed
+  (`codex-termination-<turn>.yml`, possibly written after the end is reported). The Codex driver and GraphTraj's agents
   driver record `tool_marker` and `tool_descendants`, so reconciling an `owner-exited`
   Codex execution stops them too. Limits are 459's; in addition a user-started
   `CodexHost` and a service reached through a proxy or an existing WebSocket are not

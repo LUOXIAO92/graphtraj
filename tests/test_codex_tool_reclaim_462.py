@@ -125,11 +125,14 @@ def test_normal_end_owner_stops_the_tool_the_service_left(tmp_path: Path, native
         execution = record(root, created['agent'])
         facts = execution['process']
         assert facts['tool_marker'] and facts['tool_descendants'].endswith('.json')
+        # The owner reclaims on its own thread after the end is recorded (Correction 3).
+        directory = Path(facts['tool_descendants']).parent
+        termination = wait_for(lambda: next(directory.glob('codex-termination-*.yml'), None), 20)
+        assert termination is not None, 'the owner-side reclaim did not run'
         entries = read_sidecar(facts['tool_descendants'])
         print('sidecar:', json.dumps(entries))
         assert {found['shell'].pid, found['sleep'].pid} <= {entry['pid'] for entry in entries}
         assert found['other'].pid not in {entry['pid'] for entry in entries}, 'another marker is foreign'
-        [termination] = Path(facts['tool_descendants']).parent.glob('codex-termination-*.yml')
         report = yaml.safe_load(termination.read_text())['escaped_processes']
         print('escaped_processes:', json.dumps(report))
         assert sorted(item['pid'] for item in report['stopped']) == sorted([found['shell'].pid, found['sleep'].pid])
@@ -223,14 +226,25 @@ def test_reclaim_runs_when_the_interpreter_refuses_new_threads(
     """Correction 2: an owner thread outliving its interpreter's shutdown still stops the tools.
 
     At shutdown CPython refuses new executor work, so ``asyncio.to_thread`` raises. The real host's child
-    then ended RUNTIME_WORKER_FAILED with no reclaim; the reclaim now runs on the owner's own thread.
+    then ended RUNTIME_WORKER_FAILED with no reclaim. No new thread can start then either (Correction 3),
+    so the reclaim runs on the owner's own thread.
     """
     import asyncio
+    import graftling.codex.managed_session as owner
 
     async def refused(*args, **kwargs):
         raise RuntimeError('cannot schedule new futures after interpreter shutdown')
 
+    class Shutdown:
+        class Thread:
+            def __init__(self, *args, **kwargs):
+                pass
+
+            def start(self):
+                raise RuntimeError("can't create new thread at interpreter shutdown")
+
     monkeypatch.setattr(asyncio, 'to_thread', refused)
+    monkeypatch.setattr(owner, 'threading', Shutdown)
     root = tmp_path / 'agents'
     since = identity(os.getpid()).start
     user = subprocess.Popen(['/bin/sleep', '461'], start_new_session=True)
@@ -257,3 +271,43 @@ def test_reclaim_runs_when_the_interpreter_refuses_new_threads(
                                           if argv(i.pid).startswith(('/bin/sleep 303', sys.executable + ' -c'))])
         user.kill()
         user.wait(5)
+
+
+def test_a_slow_reclaim_does_not_delay_the_end(
+        tmp_path: Path, native_settings: dict, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Correction 3: the end is recorded without waiting for the owner-side reclaim.
+
+    A stop's caller reads the end record as soon as the native turn is interrupted
+    (tests/test_team_replacement.py). With the reclaim on the path that ends the
+    execution, its scans made that record late. Here the reclaim takes 3 s more.
+    """
+    import graftling.codex.managed_session as owner
+
+    real = owner.stop_tool_processes
+
+    def slow(*args, **kwargs):
+        time.sleep(3)
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(owner, 'stop_tool_processes', slow)
+    root = tmp_path / 'agents'
+    since = identity(os.getpid()).start
+    found: dict[str, Identity] = {}
+    try:
+        call = bind(AgentControl(root, {'codex': CodexDriver(native_settings)}), Caller(*CALLER))
+        created = call({'action': 'create', 'runtime': 'codex', 'instruction': 'tool-end'}).document
+        found = wait_for(lambda: len(tools(since)) == 3, 10) and tools(since)
+        assert found, 'the peer did not start the tool'
+        done = call({'action': 'wait', 'agent': created['agent'], 'timeout_seconds': 20}).document
+        assert done['result']['last_result']['outcome'] == 'completed', done
+        directory = Path(record(root, created['agent'])['process']['tool_descendants']).parent
+        assert next(directory.glob('codex-termination-*.yml'), None) is None, \
+            'the end was recorded only after the reclaim'
+        termination = wait_for(lambda: next(directory.glob('codex-termination-*.yml'), None), 20)
+        assert termination is not None, 'the owner-side reclaim did not run'
+        report = yaml.safe_load(termination.read_text())['escaped_processes']
+        assert sorted(item['pid'] for item in report['stopped']) == sorted([found['shell'].pid, found['sleep'].pid])
+        assert is_alive(found['other'])
+    finally:
+        stop_own(list(found.values()) + [i for items in ours(since).values() for i in items
+                                          if argv(i.pid).startswith(('/bin/sleep 303', sys.executable + ' -c'))])

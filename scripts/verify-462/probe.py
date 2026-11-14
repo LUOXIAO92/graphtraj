@@ -131,7 +131,9 @@ def member(project: Path) -> tuple[str | None, dict, Path | None]:
     ($PROBE_OUT/01-main-stream.jsonl, the swarm result) is chosen when exactly one does; otherwise the one
     with the newest mapping.yml. Every candidate and the choice are printed once.
     """
-    candidates = sorted(project.glob('.graphtraj/runner/sessions/1-*team_leader*'))
+    # A reserved second alias ('...@team_leader_2') is never the dispatched member.
+    candidates = sorted(d for d in project.glob('.graphtraj/runner/sessions/1-*team_leader*')
+                        if not d.name.endswith('@team_leader_2'))
     if not candidates:
         return None, {}, None
     key = tuple(candidates)
@@ -373,8 +375,22 @@ def ancestry(sleeps: list[dict], marker: str) -> None:
             pid = now.ppid
 
 
+def termination_records(directory: Path, since: float) -> list[Path]:
+    """The owner's codex-termination-*.yml written at or after ``since`` (read only)."""
+    return sorted(path for path in directory.glob('codex-termination-*.yml') if path.stat().st_mtime >= since - 1)
+
+
 def kill(project: Path, facts_file: str) -> int:
-    """Kill the child's owner and Runtime group, then one reconciling read and the four CHECKs."""
+    """Kill only the child's app-server group; the owner stays alive and must reclaim. CHECK A-D.
+
+    CHECK A: a recorded 'sleep 462' is alive right after the app-server is gone (the residue was observed).
+    CHECK B: the owner's codex-termination record (or, after 30 s without one, one reconciling read) lists that
+             sleep, same pid, in ``stopped``; ``remaining`` is empty; no error. Nothing to act on fails.
+    CHECK C: no recorded descendant and no 'sleep 462' alive afterwards.
+    CHECK D: the three bystanders (started here, stopped here) are alive.
+    Signals only the child's app-server process group (pid and start time checked, it leads its own group and
+    carries the child's marker) and the probe's own bystanders.
+    """
     from graftling.tool_descendants import identity
 
     alias, mapping, record, execution = facts_of(project)
@@ -386,101 +402,103 @@ def kill(project: Path, facts_file: str) -> int:
     print(f'child {record.get("agent")} execution {execution.get("id")} state {execution.get("state")} '
           f'worker_pid {worker} runtime_pid {runtime} tool_marker recorded {bool(marker)} '
           f'tool_descendants {sidecar}')
-    if not member_terminal(project):
-        print("STOP: the member's turn has not ended; its Worker is never killed while it runs. Nothing was done.")
+    if not record or execution.get('state') != 'running':
+        print('STOP: no running child. Nothing was done.')
         return 1
-    if not record or execution.get('state') != 'running' or worker != mapping.get('worker_pid'):
-        print("STOP: no running child, or its owner is not the member's last Worker. Nothing was done.")
-        return 1
-    if not marker:
-        print('STOP: the child record has no tool_marker. Nothing was done.')
+    if not marker or not sidecar:
+        print('STOP: the child record has no tool_marker or tool_descendants. Nothing was done.')
         return 1
     entries, error = recorded(sidecar)
     print('before the kill: the descendants record lists', len(entries), 'entries:',
           [(entry['pid'], entry.get('argv', '')[:100]) for entry in entries], f'(error: {error})' if error else '')
-    sleeps = [entry for entry in entries if is_child_sleep(entry.get('argv', '')) and live(entry)]
-    shells = [entry for entry in entries if sleeps and entry['pid'] in {item.get('ppid') for item in sleeps}]
-    print(f"before the kill: recorded live '{CHILD_SLEEP}': {[entry['pid'] for entry in sleeps]}; "
-          f"its recorded parent (the tool shell): {[(entry['pid'], entry.get('argv', '')[:60]) for entry in shells]}")
-    if error or not sleeps:
-        print(f"STOP: the child's descendants record is missing or lists no live '{CHILD_SLEEP}' "
-              '(the venv lacks the 462 fix, the sleep ended, or the sampler missed it). Nothing was done.')
+    recorded_sleeps = [entry for entry in entries if is_child_sleep(entry.get('argv', ''))]
+    if error or not recorded_sleeps:
+        print(f"STOP: the child's descendants record lists no '{CHILD_SLEEP}' (the venv lacks the fix, the tool has not "
+              'started, or the sampler missed it). Nothing was done.')
         return 1
-    ancestry(sleeps, marker)
-    before = marked(marker)
-    sleep_before = sleeping()
-    print(f'before the kill: {len(before)} processes carry the child marker: '
-          f'{[command[:100] for command in before.values()]}')
-    print(f"before the kill: '{CHILD_SLEEP}' alive (ps/argv, read only) {sorted(sleep_before)}")
-    print(f"before the kill: env entries readable per '{CHILD_SLEEP}' process: {env_entries(sleep_before)}")
-    if alive(runtime) and runtime not in before:
-        print("STOP: the recorded runtime_pid does not carry the child's marker; it is not this child's Runtime. "
+    ancestry([entry for entry in recorded_sleeps if live(entry)], marker)
+    service = identity(runtime) if isinstance(runtime, int) else None
+    if service is None:
+        print(f'STOP: the recorded app-server {runtime} is not alive. Nothing was done.')
+        return 1
+    if service.pgid != service.pid:
+        print(f'STOP: the app-server {runtime} does not lead its own process group ({service.pgid}). Nothing was done.')
+        return 1
+    if runtime not in marked(marker):
+        print("STOP: the recorded runtime_pid does not carry the child's marker; it is not this child's app-server. "
               'Nothing was done.')
         return 1
-    worker_identity, runtime_identity = identity(worker), identity(runtime)
-
-    killed: list = []
-    # Re-check pid and start time right before each signal: never a bare pid after the fact.
-    if worker_identity is not None and identity(worker) == worker_identity:
-        os.kill(worker, signal.SIGKILL)
-        killed.append({'label': 'worker', 'pid': worker, 'at': time.time()})
-        print(f'worker {worker}: SIGKILL')
-        time.sleep(2)
-    else:
-        print(f'worker {worker}: already exited')
-    if runtime_identity is not None and (now := identity(runtime)) is not None and now.start == runtime_identity.start:
-        kill_group(runtime, 'child runtime', killed)
-    else:
-        print(f'child runtime {runtime}: already gone')
-    time.sleep(1)
-    print('alive after kill:', {item['label']: alive(item['pid']) for item in killed} or 'nothing was killed')
-    escaped_before = [entry for entry in entries if live(entry)]
-    print('after the kill, before any read: recorded descendants alive (the escaped tools):',
-          [(entry['pid'], entry.get('argv', '')[:60]) for entry in escaped_before])
+    owner = identity(worker) if isinstance(worker, int) else None
+    print(f'owner Worker {worker} alive {owner is not None} (it is kept alive)')
 
     other = control_process(uuid.uuid4().hex)
     plain = control_process(None)
     mine = user_sleep()
-    time.sleep(0.5)
-    print(f'bystanders: other-marker pid {other.pid} alive {other.poll() is None}, '
-          f'no-marker pid {plain.pid} alive {plain.poll() is None}, own /bin/sleep 901 pid {mine.pid} '
-          f'alive {mine.poll() is None}')
     results: list = []
-    escaped = None
-    read_at = time.time()
+    report, path, termination = None, None, None
     try:
-        from graphtraj.interfaces.agents import GraphTrajAgents
+        time.sleep(0.5)
+        print(f'bystanders: other-marker pid {other.pid}, no-marker pid {plain.pid}, own /bin/sleep 901 pid {mine.pid}')
+        # Re-check pid and start time right before the signal: never a bare pid after the fact.
+        now = identity(runtime)
+        if now is None or now.start != service.start:
+            print(f'STOP: the app-server {runtime} changed or ended before the kill. Nothing was signalled.')
+            return 1
+        killed_at = time.time()
+        os.killpg(service.pgid, signal.SIGKILL)
+        print(f'app-server {runtime}: SIGKILL process group {service.pgid} at {killed_at:.1f}; owner {worker} not signalled')
+        deadline = time.time() + 10
+        while time.time() < deadline and (identity(runtime) or None) is not None \
+                and identity(runtime).start == service.start:
+            time.sleep(0.05)
+        gone = identity(runtime) is None or identity(runtime).start != service.start
+        residue = [entry for entry in entries if live(entry)]
+        residue_sleeps = [entry for entry in residue if is_child_sleep(entry.get('argv', ''))]
+        print(f'app-server gone: {gone} ({time.time() - killed_at:.2f} s after the kill)')
+        print('right after the app-server is gone, recorded descendants alive (the residue):',
+              [(entry['pid'], entry.get('argv', '')[:60]) for entry in residue])
+        results.append(check(f"A a recorded '{CHILD_SLEEP}' is alive after the app-server is gone",
+                             gone and bool(residue_sleeps),
+                             f'app-server gone={gone} live recorded sleeps={[e["pid"] for e in residue_sleeps]}'))
 
-        GraphTrajAgents(project).reconcile_children({alias, mapping.get('agent')})
-        read_done = time.time()
-        state = (core(project, record['agent']).get('executions') or [{}])[-1]
-        escaped = state.get('escaped_processes')
-        print(f'read: {read_done - read_at:.1f} s; child {state.get("state")} {state.get("outcome")} '
-              f'{(state.get("error") or {}).get("code")} ended_at {state.get("ended_at")} '
-              f'(read started {read_at:.0f})')
-        print('escaped_processes:', json.dumps(escaped, ensure_ascii=False))
-        results.append(check('1 child execution failed / owner-exited',
-                             state.get('outcome') == 'failed'
-                             and (state.get('error') or {}).get('code') == 'owner-exited'))
-        stopped = {item.get('pid'): item.get('command', '') for item in (escaped or {}).get('stopped', [])}
-        has_sleep = all(entry['pid'] in stopped for entry in sleeps)
-        # Codex's shell may exec 'sleep 462' itself; then the escaped tools are just the sleep.
-        has_escaped = bool(escaped_before) and all(entry['pid'] in stopped for entry in escaped_before)
-        results.append(check(f"2 escaped_processes lists every recorded tool process alive after the kill "
-                             f"(incl. '{CHILD_SLEEP}') as stopped, remaining empty",
-                             bool(escaped) and has_sleep and has_escaped and escaped.get('remaining') == []
-                             and not escaped.get('error'),
-                             f'stopped={sorted(stopped)} sleep={has_sleep} escaped before the read='
-                             f'{[(e["pid"], e.get("argv", "")[:60]) for e in escaped_before]} '
-                             f'remaining={(escaped or {}).get("remaining")} error={(escaped or {}).get("error")}'))
+        directory = Path(sidecar).parent
+        deadline = time.time() + 30
+        while time.time() < deadline and not termination_records(directory, killed_at):
+            time.sleep(0.25)
+        found = termination_records(directory, killed_at)
+        if found:
+            termination = found[-1]
+            path = 'owner-side reclaim'
+            report = (yaml.safe_load(termination.read_text()) or {}).get('escaped_processes')
+            print(f'owner termination record {termination.name} after {time.time() - killed_at:.1f} s')
+        else:
+            path = 'reconcile'
+            print('no owner termination record within 30 s; one reconciling read')
+            from graphtraj.interfaces.agents import GraphTrajAgents
+
+            GraphTrajAgents(project).reconcile_children({alias, mapping.get('agent')})
+            report = ((core(project, record['agent']).get('executions') or [{}])[-1]).get('escaped_processes')
+        print(f'escaped_processes ({path}):', json.dumps(report, ensure_ascii=False))
+        stopped = {item.get('pid') for item in (report or {}).get('stopped', [])}
+        ok_b = (bool(report) and bool(residue_sleeps) and all(e['pid'] in stopped for e in residue_sleeps)
+                and all(e['pid'] in stopped for e in residue) and report.get('remaining') == []
+                and not report.get('error'))
+        results.append(check(f"B {path}: the residue (incl. '{CHILD_SLEEP}', same pid) is stopped, remaining [], no error",
+                             ok_b, f'stopped={sorted(p for p in stopped if p is not None)} '
+                                   f'residue={[e["pid"] for e in residue]} remaining={(report or {}).get("remaining")} '
+                                   f'error={(report or {}).get("error")}'))
         left = [(entry['pid'], entry.get('argv', '')[:60]) for entry in entries if live(entry)]
         left_sleep = sleeping()
-        results.append(check(f"3 none of the recorded descendants and no '{CHILD_SLEEP}' alive",
+        results.append(check(f"C no recorded descendant and no '{CHILD_SLEEP}' alive",
                              not left and not left_sleep, f'recorded alive={left} {CHILD_SLEEP}={left_sleep}'))
-        results.append(check('4 the three bystanders alive',
+        results.append(check('D the three bystanders alive',
                              other.poll() is None and plain.poll() is None and mine.poll() is None,
                              f'other-marker={other.poll() is None} no-marker={plain.poll() is None} '
                              f'own /bin/sleep={mine.poll() is None}'))
+        state = (core(project, record['agent']).get('executions') or [{}])[-1]
+        print(f'child execution {state.get("id")}: state {state.get("state")} outcome {state.get("outcome")} '
+              f'error {(state.get("error") or {}).get("code")}; owner Worker {worker} alive '
+              f'{owner is not None and identity(worker) is not None and identity(worker).start == owner.start}')
     finally:
         for bystander in (other, plain, mine):
             if bystander.poll() is None:
@@ -494,11 +512,10 @@ def kill(project: Path, facts_file: str) -> int:
               f'own sleep {mine.poll() is not None}')
     Path(facts_file).write_text(json.dumps({
         'alias': alias, 'member_agent': mapping.get('agent'), 'child': record.get('agent'),
-        'execution': execution.get('id'), 'worker_pid': worker, 'child_runtime_pid': runtime,
-        'tool_descendants': sidecar, 'recorded_before_kill': entries, 'escaped_before_read': escaped_before,
-        'marked_before_kill': len(before), 'sleep_pids_before_kill': sorted(sleep_before),
-        'killed': killed, 'read_at': read_at, 'escaped_processes': escaped,
-        'checks': results}, indent=2))
+        'execution': execution.get('id'), 'worker_pid': worker, 'app_server_pid': runtime,
+        'tool_descendants': sidecar, 'recorded_before_kill': entries, 'path': path,
+        'termination_record': str(termination) if termination else None,
+        'escaped_processes': report, 'checks': results}, indent=2))
     print('== summary:', 'ALL PASS' if results and all(results) else f'{results.count(False)} FAIL of {len(results)}',
           f'| facts in {facts_file}')
     return 0 if results and all(results) else 1
@@ -530,8 +547,9 @@ def idle(out: Path, _unused: str) -> int:
 # -- Rehearsal only -------------------------------------------------------------
 
 STUB_OWNER = r"""
-import os, subprocess, sys
-from graftling.tool_descendants import DescendantSampler
+import json, os, subprocess, sys, time
+from pathlib import Path
+from graftling.tool_descendants import DescendantSampler, stop_tool_processes
 path, marker, runtime_code = sys.argv[1], sys.argv[2], sys.argv[3]
 sampler = DescendantSampler(path, marker)
 sampler.prepare()
@@ -539,8 +557,12 @@ runtime = subprocess.Popen([sys.executable, "-I", "-c", runtime_code], start_new
                            env={**os.environ, "GRAFTLING_MEMBER_RUN": marker},
                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 sampler.start(runtime.pid)
-runtime.wait()
-sampler.finish()
+code = runtime.wait()
+# As the Codex owner: once its service has exited, stop what is left and write the record; stay alive.
+report = stop_tool_processes(sampler.finish(), marker, {runtime.pid}, error=sampler.error)
+target = Path(path).parent / "codex-termination-stub.yml"
+target.write_text(json.dumps({"runtime_pid": runtime.pid, "runtime_exit_code": code, "escaped_processes": report}))
+time.sleep(900)
 """
 STUB_RUNTIME = r"""
 import subprocess, sys, time
@@ -584,6 +606,17 @@ def stub(project: Path, _unused: str) -> int:
     if runtime is None:
         print('STOP: the stand-in owner did not start its Runtime')
         return 1
+    if os.environ.get('VERIFY462_STUB_TOOL_GONE'):
+        # Negative rehearsal: the tool ends before the kill, so there is nothing to act on.
+        from graftling.tool_descendants import identity
+
+        for entry in entries:
+            if (entry.get('argv', '').startswith('/bin/zsh') or is_child_sleep(entry.get('argv', ''))) \
+                    and (now := identity(entry['pid'])) is not None \
+                    and now.start == entry['start']:
+                os.kill(entry['pid'], signal.SIGKILL)
+        time.sleep(1.5)
+        print('stub: VERIFY462_STUB_TOOL_GONE set; the tool shell and its sleep were stopped before the kill')
 
     class Driver:
         def prepare(self, runtime_name, caller):

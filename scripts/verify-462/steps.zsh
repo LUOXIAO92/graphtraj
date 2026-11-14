@@ -13,9 +13,10 @@
 # 01  Main. background `claude -p` Main: swarm -> member creates a Codex child whose shell runs exactly `sleep 462`
 #     (no model in the create: the codex_child preset gives gpt-6-luna)
 #     and ends its turn; Main polls until CHILD-RUNNING and stops.
-# 02  Main. waits (<= 9 min) for 01's Main; refuses unless the child's descendants record lists a live `sleep 462`;
-#     SIGKILLs only the child's recorded owner Worker and Runtime group (after checking they are this project's),
-#     starts three bystanders, one reconciling read, CHECK 1-4, stops the bystanders.
+# 02  Main. waits (<= 9 min) for 01's Main; refuses unless the child's descendants record lists a `sleep 462`;
+#     starts three bystanders, SIGKILLs ONLY the child's app-server process group (start time checked, own group,
+#     carries the child's marker); the owner stays alive. CHECK A residue alive, B owner-side reclaim (or, after
+#     30 s, one reconciling read) stopped it, C nothing left, D bystanders alive. Nothing to act on fails.
 # 03  Main. full suite at HEAD in the background (self-terminating after 25 min).
 # Never touches production .venv-runtime (only copies click, yaml and websockets out of it, read only),
 # the user's dotfiles, ~/.claude or ~/.codex. No key value is read or printed.
@@ -26,8 +27,8 @@ WT=$H/.graphtraj/core/worktrees/462-codex-child-tool-process-reclaim
 SD=${0:A:h}
 THIS=${0:A}
 COMMIT=${VERIFY462_COMMIT:-$(git -C $WT rev-parse HEAD)}
-BASE=${VERIFY462_BASE:-$HOME/graphtraj-verify-462}
-OUT=${VERIFY462_OUT:-$H/.graphtraj/core/state/tasks/462-codex-child-tool-process-reclaim/realhost}
+BASE=${VERIFY462_BASE:-$H/tmp/462/verify}
+OUT=${VERIFY462_OUT:-$H/.graphtraj/core/state/tasks/462-codex-child-tool-process-reclaim/realhost/reopen}
 RT=$H/.venv-runtime
 CONDA=/Users/luoxiao/miniconda3/bin/python3.13
 MODEL=claude-opus-5-5
@@ -69,7 +70,7 @@ while time.time() < deadline:
 print("Main claude -p", pid, "still running after 9 min"); sys.exit(1)' $1
 }
 # PROBE_OUT lets the probe find 01's Main stream (which member 01 created).
-probe() { (cd $P && clean PROBE_OUT=$OUT $VV/bin/python -I $SD/probe.py "$@") }
+probe() { (cd $P && clean PROBE_OUT=$OUT VERIFY462_STUB_TOOL_GONE=${VERIFY462_STUB_TOOL_GONE:-} $VV/bin/python -I $SD/probe.py "$@") }
 # STOP, changing nothing, while an earlier run's Main or a 'sleep 462' still lives. Signals nothing.
 guard() { clean $CONDA -I $SD/probe.py idle $OUT - }
 
@@ -98,6 +99,16 @@ print("462 fix: reconcile reads tool_descendants:", "read_sidecar" in inspect.ge
       && git -c user.name=462 -c user.email=462@invalid commit -qm "Initial source") || return 1
   (cd $P && print y | clean $VV/bin/graphtraj setup | tail -2) || return 1
   probe prepare $P $MODEL || { print "STOP: probe Task is not ready (text above)"; return 1; }
+  say "isolation: GraphTraj resolves the project's own .graphtraj, not the Harness's"
+  (cd $P && clean $VV/bin/python -I -c 'import sys
+from pathlib import Path
+from graphtraj.workspace.runner_project import discover_runner_directory
+found = Path(discover_runner_directory(Path.cwd())).resolve()
+own = (Path.cwd() / ".graphtraj/runner").resolve()
+print("graphtraj runner directory:", found, "| project own:", found == own)
+sys.exit(0 if found == own else 1)') || { print "STOP: GraphTraj does not resolve the project's own .graphtraj"; return 1; }
+  print "claude --version: $(clean $(claude_bin) --version 2>&1 | tail -1)   (expected 2.1.323)"
+  print "codex --version: $(clean $(command -v codex) --version 2>&1 | tail -1)"
   [[ -n ${VERIFY462_NO_MODEL:-} ]] && { print "VERIFY462_NO_MODEL set: stopping before Codex and Claude Code (rehearsal)."; return 0; }
   say "Codex: version, login state (yes/no only; no account or key text) and one line from $CODEX_MODEL"
   local X=$(command -v codex)
@@ -105,7 +116,7 @@ print("462 fix: reconcile reads tool_descendants:", "read_sidecar" in inspect.ge
   print "codex: $X $(clean $X --version 2>/dev/null | tail -1)"
   if clean $X login status 2>&1 | grep -q 'Logged in'; then print "codex logged in: YES"; else
     print "codex logged in: NO"; print "STOP: USER logs in with 'codex login' in Terminal, then Main reruns 00."; return 1; fi
-  (cd $P && clean $X exec -m $CODEX_MODEL --skip-git-repo-check --sandbox read-only --json 'Reply with exactly: MODEL OK' \
+  (cd $P && clean $X exec -m $CODEX_MODEL --skip-git-repo-check --sandbox read-only --json 'Reply with exactly two lines. Line 1: MODEL OK. Line 2: AGENTS: then the absolute directory of every AGENTS.md whose instructions you were given, separated by spaces, or NONE. Use no tool.' \
       < /dev/null > $OUT/00-codex-stream.jsonl 2> $OUT/00-codex-stderr.txt)
   print "codex exec rc=$? model requested: $CODEX_MODEL"
   $VV/bin/python -I -c 'import json,sys
@@ -117,20 +128,39 @@ for line in open(sys.argv[1]):
     if item.get("type") == "agent_message": texts.append(item.get("text"))
     if isinstance(d.get("model"), str): models.add(d["model"])
 print("codex result:", texts[-1] if texts else None, "| models seen in stream:", sorted(models) or "(not reported)")
-sys.exit(0 if texts and "MODEL OK" in texts[-1] else 1)' $OUT/00-codex-stream.jsonl \
+harness, project = sys.argv[2], sys.argv[3]
+leaked = [w for w in (texts[-1] if texts else "").split() if w.startswith(harness) and not w.startswith(project)]
+print("codex AGENTS.md from the Harness:", leaked or "none")
+sys.exit(0 if texts and "MODEL OK" in texts[-1] and not leaked else 1)' $OUT/00-codex-stream.jsonl $H $P \
       || { print "STOP: Codex gave no MODEL OK. stderr (last 300 chars):"; tail -c 300 $OUT/00-codex-stderr.txt; return 1; }
   local C=$(claude_bin)
   [[ -f $BASE/settings.local.json.keep ]] && mkdir -p $P/.claude && cp -p $BASE/settings.local.json.keep $P/.claude/settings.local.json
   (cd $P && clean $VV/bin/python -m graphtraj.runtimes.claude.host configuration --project $P --claude $C --write) || return 1
+  # Claude Code also loads CLAUDE.md files from every parent directory; exclude the Harness's (claudeMdExcludes).
+  $VV/bin/python -I -c 'import json, sys
+from pathlib import Path
+harness, path = sys.argv[1], Path(sys.argv[2])
+settings = json.loads(path.read_text()) if path.is_file() else {}
+settings["claudeMdExcludes"] = sorted({*settings.get("claudeMdExcludes", []), harness + "/CLAUDE.md",
+    harness + "/CLAUDE.local.md", harness + "/.claude/CLAUDE.md", harness + "/**/CLAUDE.md", harness + "/**/CLAUDE.local.md"})
+path.parent.mkdir(parents=True, exist_ok=True)
+path.write_text(json.dumps(settings, indent=2) + "\n")
+print("claudeMdExcludes in", path, ":", settings["claudeMdExcludes"])' $H $P/.claude/settings.local.json || return 1
   say "host answers one line with $MODEL (login check; no tool)"
   (cd $P && clean $C -p --model $MODEL --output-format stream-json --verbose --mcp-config $P/.mcp.json --strict-mcp-config \
-      <<< 'Reply with exactly: MODEL OK' > $OUT/00-model-stream.jsonl 2> $OUT/00-model-stderr.txt)
+      <<< 'Reply with exactly two lines. Line 1: MODEL OK. Line 2: MEMORY: then the absolute path of every CLAUDE.md or AGENTS.md file whose contents were given to you as instructions, separated by spaces, or NONE. Use no tool.' > $OUT/00-model-stream.jsonl 2> $OUT/00-model-stderr.txt)
   print "claude -p rc=$?"
   $VV/bin/python -I -c 'import json,sys
 for line in open(sys.argv[1]):
     d = json.loads(line)
-    if d.get("type") == "result": print("result:", d.get("result"), "| is_error:", d.get("is_error"), "| models:", list((d.get("modelUsage") or {}).keys()))' $OUT/00-model-stream.jsonl \
-      || { print "STOP: claude -p gave no stream. stderr:"; head -c 300 $OUT/00-model-stderr.txt; print "\nIf it says 'login' or 'API key': USER logs in with 'claude' in Terminal, then rerun 00."; return 1; }
+    if d.get("type") == "result":
+        text = d.get("result") or ""
+        print("result:", text, "| is_error:", d.get("is_error"), "| models:", list((d.get("modelUsage") or {}).keys()))
+        leaked = [w for w in text.split() if w.startswith(sys.argv[2]) and not w.startswith(sys.argv[3])]
+        print("claude memory from the Harness:", leaked or "none")
+        sys.exit(1 if leaked or "MODEL OK" not in text else 0)
+sys.exit(1)' $OUT/00-model-stream.jsonl $H $P \
+      || { print "STOP: claude -p gave no MODEL OK, or loaded a Harness CLAUDE.md/AGENTS.md (above). stderr:"; head -c 300 $OUT/00-model-stderr.txt; print "\nIf it says 'login' or 'API key': USER logs in with 'claude' in Terminal, then rerun 00."; return 1; }
   say "plugin check: the init record must list graphtraj-claude-host"
   if ! $VV/bin/python -I $SD/probe.py plugins $OUT/00-model-stream.jsonl -; then
     print "STOP: graphtraj-claude-host is not loaded in $P. Claude Code loads project plugins only in a trusted folder."
@@ -139,7 +169,8 @@ for line in open(sys.argv[1]):
   fi
   print "Success: '462 fix: reconcile reads tool_descendants: True | Codex owner samples: True | Codex owner reclaims: True |"
   print "agents driver records Codex: True', deps click 8.5.0, 'roles OK', 'task 1 ready', 'codex logged in: YES',"
-  print "'codex result: MODEL OK', result 'MODEL OK' with $MODEL, 'graphtraj-claude-host loaded: YES'."
+  print "'codex result: MODEL OK', 'codex AGENTS.md from the Harness: none', 'claude memory from the Harness: none',"
+  print "'graphtraj runner directory: ... | project own: True', result 'MODEL OK' with $MODEL, 'graphtraj-claude-host loaded: YES'."
   next "zsh $THIS 01"
 }
 
@@ -163,7 +194,7 @@ step_01() {
   local member='Use only the agents tool (mcp__agents__agents). Execute feature create with arguments {"runtime": "codex", "instruction": "Use your shell tool once to run exactly: sleep 462 . Wait for it. Then reply DONE-462."}. Reply with the one line CREATE <agent> <execution> from its result and end your turn at once. Do not call wait or status. Read no files and run no shell command yourself.'
   local swarm=$($VV/bin/python -I -c 'import json,sys; print(json.dumps({"action":"execute","feature":"swarm","arguments":{"tasks":[{"task_id":"1","role":"team_leader","instruction":sys.argv[1]}]}}))' "$member")
   print -r -- "$swarm" > $OUT/01-swarm-arguments.json
-  local W="$VV/bin/python $SD/probe.py child $P 100"
+  local W="env PROBE_OUT=$OUT $VV/bin/python $SD/probe.py child $P 100"
   print -r -- "1. Call mcp__agents__tasks once with exactly these arguments: $swarm
 Print its raw result text on one line starting with SWARM-RESULT.
 2. Send nothing to the member. Run this exact Bash command, one call after another, until one prints CHILD-RUNNING (the member's turn ended and its child's sleep 462 runs), at most 5 times: $W
@@ -178,7 +209,7 @@ Print its raw result text on one line starting with SWARM-RESULT.
 }
 
 step_02() {
-  say "[02] Main. waits for 01's Main (<= 9 min); kills the child's owner and Runtime, one reconciling read, CHECK 1-4. Dialog: none."
+  say "[02] Main. waits for 01's Main (<= 9 min); kills ONLY the child's app-server group, waits <= 30 s for the owner's reclaim, CHECK A-D. Dialog: none."
   if [[ -n ${VERIFY462_NO_MODEL:-} ]]; then
     print "VERIFY462_NO_MODEL set: stub member and child instead of 01 (rehearsal)."
     probe stub $P - || return 1
@@ -195,9 +226,9 @@ step_02() {
   probe kill $P $OUT/02-kill.json
   local rc=$?
   print ""
-  print "Success: 'summary: ALL PASS'. 1 child failed/owner-exited; 2 escaped_processes lists every recorded tool process"
-  print "alive after the kill (the shell, if Codex kept one, and 'sleep 462') stopped, remaining []; 3 none of the recorded"
-  print "descendants and no 'sleep 462' alive; 4 the three bystanders alive (then stopped by the probe)."
+  print "Success: 'summary: ALL PASS'. A a recorded 'sleep 462' alive right after the app-server is gone; B the owner's"
+  print "codex-termination record (or the reconcile path, labelled) lists it, same pid, in stopped, remaining [], no error;"
+  print "C no recorded descendant and no 'sleep 462' alive; D the three bystanders alive. Nothing to act on is a FAIL."
   print "A STOP line means nothing was signalled."
   next "zsh $THIS 03"
   return $rc

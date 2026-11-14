@@ -1183,7 +1183,7 @@ Delivery rules:
   or its ancestors. It records what it found on the execution as `escaped_processes`
   (`found`, `stopped`, `remaining`, each a list of `pid` and `command`). The record
   lock is held up to about 5 seconds longer for this. An execution recorded before
-  this change, and Codex, Pi and DSH executions, carry no marker and are not scanned.
+  this change, and Codex and DSH executions, carry no marker and are not scanned.
   On macOS the environment of Apple platform binaries cannot be read, so the marker
   never finds a tool shell running `/bin/zsh` or `/bin/sh`, or commands such as
   `/bin/sleep`; Claude Code's own Bash tool shell is such a process. So, while the
@@ -1206,10 +1206,9 @@ Delivery rules:
   process started and detached between two samples (about one second) is found only
   by the marker, so not when it is a platform binary; a process whose chain of
   ancestors passed through a readable process without the marker is left alone by
-  design; Windows is not covered. A Pi execution now records `tool_marker` and
-  `tool_descendants` and is stopped the same way (461), so this note's earlier
-  statement that Pi executions are not scanned no longer holds; Pi starts its bash
-  tool detached, outside the Runtime's group, as `/bin/bash`.
+  design; Windows is not covered. A Pi execution records `tool_marker` and
+  `tool_descendants` too and is stopped the same way (461); Pi starts its bash tool
+  detached, outside the Runtime's group, as `/bin/bash`.
 - A completed round of a child that still has running members is recorded,
   not pushed. All rounds stay readable through `status`.
 - A notice its parent cannot receive now is recorded `held`, stays readable

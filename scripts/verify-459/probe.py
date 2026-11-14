@@ -166,6 +166,14 @@ def core(project: Path, agent: str | None) -> dict:
         return {}
 
 
+def _stream_at() -> float | None:
+    """Creation time of this run's 01 Main stream ($PROBE_OUT/01-main-stream.jsonl), or None (471)."""
+    try:
+        return born(Path(os.environ.get('PROBE_OUT', '/nonexistent')) / '01-main-stream.jsonl')
+    except OSError:
+        return None
+
+
 def child(project: Path, alias: str | None, reference: str | None) -> dict:
     """The member's one agents-tool child record (its parent is the alias or the core reference)."""
     found = []
@@ -176,8 +184,17 @@ def child(project: Path, alias: str | None, reference: str | None) -> dict:
             continue
         if alias and record.get('parent') in {alias, reference} and record.get('host') != 'graphtraj-tasks':
             found.append(record)
+    # 471: a child created before this dispatch (e.g. an earlier member under a reused alias) is not this member's.
+    at = _stream_at()
+    stale = [r.get('agent') for r in found
+             if at is None or not isinstance(r.get('created_at'), (int, float)) or r['created_at'] < at]
+    if stale:
+        print('  children created before this dispatch, ignored:', stale)
+    found = [r for r in found if r.get('agent') not in stale]
     if len(found) > 1:
-        print('NOTE: more than one child of the member:', [record['agent'] for record in found])
+        print('STOP: more than one child of the member created after this dispatch:', [r['agent'] for r in found],
+              '- none is used; nothing is signalled.')
+        return {}
     return found[0] if found else {}
 
 
@@ -528,6 +545,11 @@ def stub(project: Path, _unused: str) -> int:
     so the tool shell and its ``sleep 459`` are Apple platform binaries, as on the real host.
     """
     from graftling import AgentControl, Caller, bind
+    if os.environ.get('PROBE_OUT'):
+        # 471: member() needs this run's dispatch: a fresh 01 stream (born now) naming the stub alias, as 01's would.
+        stream = Path(os.environ['PROBE_OUT']) / '01-main-stream.jsonl'
+        stream.unlink(missing_ok=True)
+        stream.write_text('SWARM-RESULT {"tasks": [{"task_id": "1", "alias": "1-stub-team_leader"}]}\n')
     from graftling.tool_descendants import read_sidecar
 
     marker = uuid.uuid4().hex
@@ -577,11 +599,6 @@ def stub(project: Path, _unused: str) -> int:
     data = json.loads(path.read_text())
     data['executions'][-1]['process']['worker_pid'] = worker.pid
     path.write_text(json.dumps(data, indent=2, sort_keys=True))
-    if os.environ.get('PROBE_OUT'):
-        # 471: member() needs this run's dispatch: a fresh 01 stream (born now) naming the stub alias, as 01's would.
-        stream = Path(os.environ['PROBE_OUT']) / '01-main-stream.jsonl'
-        stream.unlink(missing_ok=True)
-        stream.write_text('SWARM-RESULT {"tasks": [{"task_id": "1", "alias": "1-stub-team_leader"}]}\n')
     session = project / '.graphtraj/runner/sessions/1-stub-team_leader'
     session.mkdir(parents=True, exist_ok=True)
     (session / 'mapping.yml').write_text(yaml.safe_dump({'agent': lead_agent, 'worker_pid': worker.pid}))

@@ -100,14 +100,18 @@ step_01() {
   local tool="($VV/bin/python -c 'import time; time.sleep(600)' probe450-$NONCE >/dev/null 2>&1 &); echo started"
   local member="Run exactly one Bash command, exactly as written: $tool -- then reply with exactly STARTED and end your turn. Run nothing else."
   local swarm=$($VV/bin/python -I -c 'import json,sys; print(json.dumps({"action":"execute","feature":"swarm","arguments":{"tasks":[{"task_id":"1","role":"team_leader","instruction":sys.argv[1]}]}}))' "$member")
+  # 471: a fresh 01 stream (its creation time is this dispatch's time); PROBE_OUT lets the probe find it
+  # and the swarm result (which member this dispatch created).
+  local W="env PROBE_OUT=$OUT $VV/bin/python $SD/probe.py wait $P 100"
+  rm -f $OUT/01-main-stream.jsonl
   print "nonce: $NONCE; dispatch at $(date +%T)"
   (cd $P && print -r -- "Call mcp__agents__tasks once with exactly these arguments: $swarm
 Then send nothing to any Agent. Run this exact Bash command, one run after another, at most three times, and stop
 running it as soon as its output says 'termination record present':
-$VV/bin/python $SD/probe.py wait $P 100
+$W
 Then print DONE and stop." \
     | clean $C -p --model $MODEL --output-format stream-json --verbose --mcp-config $P/.mcp.json --strict-mcp-config \
-        --allowedTools "mcp__agents__tasks,Bash($VV/bin/python $SD/probe.py wait $P 100)" > $OUT/01-main-stream.jsonl 2> $OUT/01-main-stderr.txt)
+        --allowedTools "mcp__agents__tasks,Bash($W)" > $OUT/01-main-stream.jsonl 2> $OUT/01-main-stderr.txt)
   print "claude -p rc=$? at $(date +%T); Main stream: $OUT/01-main-stream.jsonl"
   step_02
 }
@@ -115,7 +119,7 @@ Then print DONE and stop." \
 step_02() {
   say "[02] Main. observe (read only; signals nothing). Dialog: none."
   [[ -f $BASE/nonce ]] || { print "STOP: no nonce; run 01 first"; return 1; }
-  (cd $P && clean $VV/bin/python -I $SD/probe.py observe $P probe450-$(cat $BASE/nonce)) | tee $OUT/02.txt
+  (cd $P && clean PROBE_OUT=$OUT $VV/bin/python -I $SD/probe.py observe $P probe450-$(cat $BASE/nonce)) | tee $OUT/02.txt
   local rc=${pipestatus[1]}
   print ""
   print "Success: 'CRITERION PASS': the tagged pid is in escaped_processes.found and .stopped, and no tagged process is alive."

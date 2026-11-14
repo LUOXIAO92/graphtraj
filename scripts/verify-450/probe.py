@@ -7,6 +7,8 @@ Prints only facts read from the isolated project and process argv; it reads no c
 from __future__ import annotations
 
 import json
+import os
+import re
 import subprocess
 import sys
 import time
@@ -94,21 +96,74 @@ def plugins(stream: Path, _unused: str) -> int:
     return 1
 
 
-def _records(project: Path) -> list[Path]:
-    return sorted(project.glob('.graphtraj/**/claude-termination-*.yml'))
+# -- This dispatch's member (471) ---------------------------------------------
+
+_CHOSEN: dict = {}
+
+
+def born(path: Path) -> float:
+    """Creation time (macOS st_birthtime; elsewhere st_ctime)."""
+    status = path.stat()
+    return getattr(status, 'st_birthtime', status.st_ctime)
+
+
+def member(project: Path) -> tuple[str | None, dict, Path | None]:
+    """The member this run's 01 dispatched: its alias, mapping and session directory, or (None, {}, None).
+
+    471: the same isolated project can hold earlier dispatches' members ('...@team_leader', then
+    '...@team_leader_2'), so neither the first nor a fixed alias is taken. The dispatch is 01's Main stream
+    ($PROBE_OUT/01-main-stream.jsonl; its creation time is the dispatch time). Candidates are task 1's
+    team_leader sessions created at/after it; when the stream holds the swarm result, only its exact alias
+    (PROBE_ALIAS, if set, overrides). Exactly one must remain; otherwise a STOP line names the candidates and
+    the caller does nothing.
+    """
+    directories = sorted(project.glob('.graphtraj/runner/sessions/1-*team_leader*'))
+    stream = Path(os.environ.get('PROBE_OUT', '/nonexistent')) / '01-main-stream.jsonl'
+    try:
+        text, at = stream.read_text(encoding='utf-8', errors='replace'), born(stream)
+    except OSError:
+        text, at = None, None
+    aliases = ([os.environ['PROBE_ALIAS']] if os.environ.get('PROBE_ALIAS') else
+               sorted(set(re.findall(r'\\*"alias\\*"\s*:\s*\\*"(1-[^"\\]*team_leader[^"\\]*)', text or ''))))
+    after = [d for d in directories if at is not None and born(d) >= at]
+    chosen = [d for d in after if not aliases or d.name in aliases]
+    reason = (f"dispatch {stream if text is not None else f'NOT READABLE ({stream})'}; task 1 team_leader sessions "
+              f"{[d.name for d in directories]}; created at/after the dispatch {[d.name for d in after]}; "
+              f"swarm result alias {aliases or 'not in the stream'}")
+    line = (f'member chosen: {chosen[0].name} ({reason})' if len(chosen) == 1 else
+            f'STOP: no single member of this dispatch, {len(chosen)} match ({reason}). Nothing is signalled.')
+    if _CHOSEN.get('line') != line:
+        print(line)
+        _CHOSEN['line'] = line
+    if len(chosen) != 1:
+        return None, {}, None
+    directory = chosen[0]
+    mapping = directory / 'mapping.yml'
+    return directory.name, (yaml.safe_load(mapping.read_text()) or {}) if mapping.is_file() else {}, directory
+
+
+def _records(project: Path) -> list[Path] | None:
+    """Termination records of this dispatch's member only (471), or None when that member is uncertain (STOP printed).
+
+    Its Runner session directory holds claude-termination-<execution_id>.yml; with a mapped execution, only that one."""
+    _alias, mapping, directory = member(project)
+    if directory is None:
+        return None
+    execution = mapping.get('execution_id')
+    return sorted(directory.glob(f'claude-termination-{execution}.yml' if execution else 'claude-termination-*.yml'))
 
 
 def wait(project: Path, seconds: str) -> int:
-    """Poll for the Leader's termination record for up to ``seconds`` (< 120) without touching any Agent."""
+    """Poll for this dispatch's Leader's termination record for up to ``seconds`` (< 120); touches no Agent."""
     deadline = time.time() + min(float(seconds), 115)
     while True:
-        found = [path for path in _records(project) if 'team_leader' in str(path)]
+        found = _records(project) or []
         now = datetime.now().astimezone().isoformat(timespec='seconds')
         if found:
             print(f'{now} termination record present: {found[-1]}')
             return 0
         if time.time() >= deadline:
-            print(f'{now} no termination record yet')
+            print(f"{now} no termination record of this dispatch's member yet")
             return 0
         time.sleep(2)
 
@@ -134,8 +189,11 @@ def tagged_alive(tag: str) -> dict[int, str]:
 def observe(project: Path, tag: str) -> int:
     """Print escaped_processes per termination record; PASS when the tagged pid was found and stopped."""
     records = _records(project)
+    if records is None:
+        print("CRITERION NOT SHOWN (no single member of this dispatch; see the STOP line above)")
+        return 1
     if not records:
-        print('NO termination record under', project / '.graphtraj')
+        print("NO termination record of this dispatch's member under", project / '.graphtraj/runner/sessions')
         return 1
     stopped_tagged = set()
     for path in records:

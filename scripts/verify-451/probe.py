@@ -167,6 +167,14 @@ def core(project: Path, agent: str | None) -> dict:
         return {}
 
 
+def _stream_at() -> float | None:
+    """Creation time of this run's 01 Main stream ($PROBE_OUT/01-main-stream.jsonl), or None (471)."""
+    try:
+        return born(Path(os.environ.get('PROBE_OUT', '/nonexistent')) / '01-main-stream.jsonl')
+    except OSError:
+        return None
+
+
 def child(project: Path, alias: str | None, reference: str | None) -> dict:
     """The member's one agents-tool child record (its parent is the alias or the core reference)."""
     found = []
@@ -177,8 +185,17 @@ def child(project: Path, alias: str | None, reference: str | None) -> dict:
             continue
         if alias and record.get('parent') in {alias, reference} and record.get('host') != 'graphtraj-tasks':
             found.append(record)
+    # 471: a child created before this dispatch (e.g. an earlier member under a reused alias) is not this member's.
+    at = _stream_at()
+    stale = [r.get('agent') for r in found
+             if at is None or not isinstance(r.get('created_at'), (int, float)) or r['created_at'] < at]
+    if stale:
+        print('  children created before this dispatch, ignored:', stale)
+    found = [r for r in found if r.get('agent') not in stale]
     if len(found) > 1:
-        print('NOTE: more than one child of the member:', [record['agent'] for record in found])
+        print('STOP: more than one child of the member created after this dispatch:', [r['agent'] for r in found],
+              '- none is used; nothing is signalled.')
+        return {}
     return found[0] if found else {}
 
 

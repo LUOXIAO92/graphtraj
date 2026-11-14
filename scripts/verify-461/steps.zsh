@@ -1,22 +1,26 @@
 #!/bin/zsh
 [ -n "$ZSH_VERSION" ] || exec /bin/zsh "$0" "$@"
-# Task 461 real-host check: a member's agents-tool Pi child runs `sleep 461` in its bash tool (/bin/bash, detached,
-# its environment hidden by macOS); its owner Worker and Runtime group are SIGKILLed; one reconciling read must stop
-# the escaped tool process through the recorded descendants (tool_descendants), and nothing else.
+# Task 461 real-host check (round 2): a member's agents-tool Pi child leaves `sleep 1461` as a background job of one
+# bash call, then runs a second, still-running bash call (`sleep 1200`); its owner Worker and Runtime group are
+# SIGKILLed; the orphan must still be alive then (CHECK 0, else NOT OBSERVED); one reconciling read must stop it
+# through the recorded descendants (tool_descendants), and nothing else.
 #   zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/461-pi-child-tool-process-reclaim/scripts/verify-461/steps.zsh <00|00u|01|02|03>
-# 00  Main. preflight: scratch venv from COMMIT, the fix is in it, isolated project with a 'pi' role on the user's
-#     Pi connection and settings (values printed, never a key), srt/sandbox available, one-line answers from the
-#     Claude host and from Pi (scratch agent dir, key from the environment; skipped when DEEPSEEK_API_KEY is unset;
-#     the user's ~/.pi is never written), probe Task ready, plugin loaded YES/NO; prints the 01 command.
+# Timeline (t0 = 01's dispatch): the orphan starts about t0+2 min and lives 24 min (to >= t0+26); the second call
+# starts about t0+3 min and runs 20 min (to >= t0+23); 01's Main ends by about t0+10; 02 waits <= 9 min for it and
+# kills at once (<= t0+9, or <= t0+18 when 02 is rerun once after 'still running'). Both are alive at the kill.
+# 00  Main. preflight: claude/pi versions, scratch venv from COMMIT, the fix is in it, isolated project (isolation
+#     and Pi context-file facts) with a 'pi' role on the user's Pi connection and settings (values printed, never a
+#     key), srt/sandbox available, one-line answers from the Claude host and from Pi (scratch agent dir; skipped when
+#     DEEPSEEK_API_KEY is unset; the user's ~/.pi is never written), probe Task ready, plugin loaded YES/NO.
 # 00u USER, once, only when 00 prints 'graphtraj-claude-host loaded: NO': folder trust.
-# 01  Main. background `claude -p` Main: swarm -> Claude member creates a Pi child whose bash runs exactly
-#     `sleep 461` and ends its turn; Main polls until CHILD-RUNNING and stops. Returns at once.
-# 02  Main. waits (<= 9 min) for 01's Main; refuses unless the child's descendants record lists a live `sleep 461`;
-#     prints the recorded chain; SIGKILLs only the child's recorded owner Worker and Runtime group (start times
-#     unchanged), starts three bystanders, one reconciling read, CHECK 1-4, stops the bystanders.
-# 03  Main. full suite at HEAD in the background (self-terminating after 25 min).
+# 01  Main. records the dispatch, starts a background `claude -p` Main: swarm -> Claude member creates the Pi child
+#     and ends its turn; Main polls `probe child` (member of this dispatch only) until CHILD-RUNNING. Returns at once.
+# 02  Main. waits (<= 9 min) for 01's Main; refuses unless the dispatch's member's child record lists a live
+#     `sleep 1461`; SIGKILLs only that child's recorded owner Worker and Runtime group (start times unchanged);
+#     CHECK 0; three bystanders; one reconciling read; CHECK 1-4; stops the bystanders.
+# 03  Main. full suite at HEAD in the background (self-terminating after 25 min), no key variable in its environment.
 # Never touches production .venv-runtime (only copies click, yaml and websockets out of it, read only),
-# ~/.claude, ~/.codex or ~/.pi. No key value is printed.
+# ~/.claude, ~/.codex, ~/.pi or dotfiles. No key value is printed. Signals only processes named above.
 # Rehearsal without a model: VERIFY461_NO_MODEL=1 (00 stops before Claude Code and Pi; 02 runs on a 'probe.py stub').
 set -u
 H=/Users/luoxiao/workspace/you-are-a-product-architect-delivery
@@ -24,8 +28,9 @@ WT=$H/.graphtraj/core/worktrees/461-pi-child-tool-process-reclaim
 SD=${0:A:h}
 THIS=${0:A}
 COMMIT=${VERIFY461_COMMIT:-$(git -C $WT rev-parse HEAD)}
-BASE=${VERIFY461_BASE:-$HOME/graphtraj-verify-461}
-OUT=${VERIFY461_OUT:-$H/.graphtraj/core/state/tasks/461-pi-child-tool-process-reclaim/realhost}
+# Harness tmp (AGENTS.md rule), never the home directory; round 1's realhost/ output is left untouched.
+BASE=${VERIFY461_BASE:-$H/tmp/461}
+OUT=${VERIFY461_OUT:-$H/.graphtraj/core/state/tasks/461-pi-child-tool-process-reclaim/realhost/r2}
 RT=$H/.venv-runtime
 CONDA=/Users/luoxiao/miniconda3/bin/python3.13
 MODEL=claude-opus-5-5
@@ -46,7 +51,9 @@ claude_bin() { [[ -n ${VERIFY461_CLAUDE:-} ]] && { print -r -- $VERIFY461_CLAUDE
 KEEP=(DEEPSEEK_API_KEY ${=VERIFY461_KEEP_ENV:-})
 kept() { local n; for n in $KEEP; do [[ -n ${(P)n:-} ]] && print -r -- "$n=${(P)n}"; done }
 # Child commands run without this shell's GraphTraj Session variables (a Main's own would leak in).
-clean() { env -i HOME=$HOME USER=${USER:-luoxiao} PATH=${(j.:.)path} TERM=${TERM:-xterm} TMPDIR=${TMPDIR:-/tmp} LANG=${LANG:-en_US.UTF-8} ${(f)"$(kept)"} "$@"; }
+# clean0: no key variable at all (setup, probe, suite); clean: plus the kept key variables (claude -p, the Pi line).
+clean0() { env -i HOME=$HOME USER=${USER:-luoxiao} PATH=${(j.:.)path} TERM=${TERM:-xterm} TMPDIR=${TMPDIR:-/tmp} LANG=${LANG:-en_US.UTF-8} "$@"; }
+clean() { clean0 ${(f)"$(kept)"} "$@"; }
 # click 8.5.0, yaml and websockets from production, copied (never changed there) into a venv's site-packages.
 copy_deps() {
   local S=($RT/lib/python*/site-packages(N)) D=($1/lib/python*/site-packages(N))
@@ -78,15 +85,18 @@ while time.time() < deadline:
     time.sleep(5)
 print("Main claude -p", pid, "still running after 9 min"); sys.exit(1)' $1
 }
-probe() { (cd $P && clean VERIFY461_NO_MODEL=${VERIFY461_NO_MODEL:-} VERIFY461_AGENT_DIR=$AGENT_DIR \
+probe() { (cd $P && clean0 VERIFY461_NO_MODEL=${VERIFY461_NO_MODEL:-} VERIFY461_AGENT_DIR=$AGENT_DIR \
     ${VERIFY461_SANDBOX_PYTHON:+VERIFY461_SANDBOX_PYTHON=$VERIFY461_SANDBOX_PYTHON} \
     ${VERIFY461_SANDBOX_PATH:+VERIFY461_SANDBOX_PATH=$VERIFY461_SANDBOX_PATH} $VV/bin/python -I $SD/probe.py "$@") }
-# STOP, changing nothing, while an earlier run's Main or a 'sleep 461' still lives. Signals nothing.
-guard() { clean $CONDA -I $SD/probe.py idle $OUT - }
+# STOP, changing nothing, while an earlier run's Main or a 'sleep 1461' still lives. Signals nothing.
+guard() { clean0 $CONDA -I $SD/probe.py idle $OUT - }
 
 step_00() {
   say "[00] Main. preflight. Dialog: none. Output also in $OUT/00.txt"
   guard || return 1
+  print "claude --version: $($(claude_bin) --version 2>&1 | head -1)   (expected 2.1.323)"
+  print "pi --version: $($(command -v pi || print pi) --version 2>&1 | head -1)   (expected 1.4.0)"
+  print "BASE $BASE | OUT $OUT"
   print "commit under test: $COMMIT"
   git -C $WT cat-file -e $COMMIT^{commit} || { print "STOP: $COMMIT is not in $WT"; return 1; }
   say "scratch venv from $COMMIT (git archive; editable install; click/yaml/websockets copied read-only from production)"
@@ -102,20 +112,22 @@ print("pi execution:", e.__file__)
 print("461 fix: Pi owner samples:", "DescendantSampler" in inspect.getsource(e.PiExecution.__init__),
       "| Pi owner stops recorded:", "stop_tool_processes" in inspect.getsource(e.PiExecution.run),
       "| PiDriver records it:", "tool_descendants" in inspect.getsource(p.PiDriver.start),
-      "| agents driver records it for pi:", "(\"claude\", \"pi\")" in inspect.getsource(d.AdapterDriver.start).replace(chr(39), chr(34)),
+      "| agents driver records it for pi:", "\"pi\") else None" in inspect.getsource(d.AdapterDriver.start).replace(chr(39), chr(34)),
       "| GraphTraj Pi owner inherits:", issubclass(m.PiManagedExecution, e.PiExecution))') || return 1
   say "isolated project $P (git, graphtraj setup, a 'pi' role on the user's Pi connection, Claude host configuration)"
   [[ -f $P/.claude/settings.local.json ]] && cp -p $P/.claude/settings.local.json $BASE/settings.local.json.keep
   rm -rf $P; mkdir -p $P; (cd $P && git init -q -b main && print -r -- "# 461 probe" > README.md && git add README.md \
       && git -c user.name=461 -c user.email=461@invalid commit -qm "Initial source") || return 1
-  (cd $P && print y | clean $VV/bin/graphtraj setup | tail -2) || return 1
+  (cd $P && print y | clean0 $VV/bin/graphtraj setup | tail -2) || return 1
   say "Pi values the child uses (read only; key variables by name and set/unset only)"
   probe prepare $P $MODEL || { print "STOP: the Pi values, the sandbox or the probe Task are not ready (text above)"; return 1; }
+  say "isolation: the project is its own root; context files a Pi child would load (probe-only deny_read)"
+  probe isolation $P - || { print "STOP: the project or the Pi child's context is not isolated (text above)"; return 1; }
   print "key variables passed to the probe's processes (names only): ${(j: :)${(@)${(f)$(kept)}%%=*}:-none}"
   [[ -n ${VERIFY461_NO_MODEL:-} ]] && { print "VERIFY461_NO_MODEL set: stopping before Claude Code and Pi (rehearsal)."; return 0; }
   local C=$(claude_bin)
   [[ -f $BASE/settings.local.json.keep ]] && mkdir -p $P/.claude && cp -p $BASE/settings.local.json.keep $P/.claude/settings.local.json
-  (cd $P && clean $VV/bin/python -m graphtraj.runtimes.claude.host configuration --project $P --claude $C --write) || return 1
+  (cd $P && clean0 $VV/bin/python -m graphtraj.runtimes.claude.host configuration --project $P --claude $C --write) || return 1
   say "host answers one line with $MODEL (login check; no tool)"
   (cd $P && clean $C -p --model $MODEL --output-format stream-json --verbose --mcp-config $P/.mcp.json --strict-mcp-config \
       <<< 'Reply with exactly: MODEL OK' > $OUT/00-model-stream.jsonl 2> $OUT/00-model-stderr.txt)
@@ -141,9 +153,9 @@ for line in open(sys.argv[1]):
     next "USER: zsh $THIS 00u   (then Main: zsh $THIS 00)"
     return 1
   fi
-  print "Success: the '461 fix:' line all True, deps click 8.5.0, connection resolved, srt listed, 'sandbox available: YES',"
-  print "'roles OK', 'task 1 ready', result 'MODEL OK' with $MODEL, 'pi deepseek-flash OK: PI OK' (or 'pi check SKIPPED'),"
-  print "'graphtraj-claude-host loaded: YES'."
+  print "Success: claude 2.1.323, pi 1.4.0, the '461 fix:' line all True, deps click 8.5.0, connection resolved, srt listed,"
+  print "'sandbox available: YES', 'roles OK', 'task 1 ready', 'isolation: OK', 'Pi child context isolated: YES',"
+  print "result 'MODEL OK' with $MODEL, 'pi deepseek-flash OK: PI OK' (or 'pi check SKIPPED'), 'graphtraj-claude-host loaded: YES'."
   next "zsh $THIS 01"
 }
 
@@ -170,14 +182,10 @@ step_01() {
   [[ $(cat $BASE/src-commit 2>/dev/null) == $(git -C $WT rev-parse HEAD) ]] || print "NOTE: venv commit $(cat $BASE/src-commit) is not HEAD; rerun 00 if HEAD is the commit under test."
   local C=$(claude_bin) S=$OUT/01-main-stream.jsonl
   rm -f $PID01
-  # Default: the running tool is `sleep 461`. VERIFY461_BACKGROUND=1: an earlier call leaves `sleep 461` as a background
-  # job, and the running tool at kill time is `sleep 300` (Pi's own shutdown stops the running tool's group, not that job).
-  local child='Use the bash tool once to run exactly: sleep 461 . Then reply DONE-461.' variant=default
-  if [[ -n ${VERIFY461_BACKGROUND:-} ]]; then
-    child='Use the bash tool to run exactly: nohup sleep 461 >/dev/null 2>&1 & sleep 3 . Then use the bash tool again to run exactly: sleep 300 . Then reply DONE-461.'
-    variant='background (VERIFY461_BACKGROUND=1)'
-  fi
-  print "variant: $variant"
+  # Call 1 leaves the orphan in the background and ends (3 s let the 1 s sampler record it); call 2 still runs at
+  # the kill. Pi's own abort on shutdown stops only the running call's group, never the orphan (round 1, 02b).
+  # No nohup: Pi SIGKILLs groups (utils/shell.js:189-213), and macOS nohup fails without a console.
+  local child='Use the bash tool to run exactly: sleep 1461 >/dev/null 2>&1 & sleep 3 . Then use the bash tool again to run exactly: sleep 1200 . Then reply DONE-461.'
   print -r -- "child instruction: $child"
   local member="Use only the agents tool (mcp__agents__agents). Execute feature create with arguments {\"runtime\": \"pi\", \"instruction\": \"$child\"}. Reply with the one line CREATE <agent> <execution> from its result and end your turn at once. Do not call wait or status. Read no files and run no shell command yourself."
   local swarm=$($VV/bin/python -I -c 'import json,sys; print(json.dumps({"action":"execute","feature":"swarm","arguments":{"tasks":[{"task_id":"1","role":"team_leader","instruction":sys.argv[1]}]}}))' "$member")
@@ -185,27 +193,25 @@ step_01() {
   local W="$VV/bin/python $SD/probe.py child $P 100"
   print -r -- "1. Call mcp__agents__tasks once with exactly these arguments: $swarm
 Print its raw result text on one line starting with SWARM-RESULT.
-2. Send nothing to the member. Run this exact Bash command, one call after another, until one prints CHILD-RUNNING (the member's turn ended and its Pi child's sleep 461 runs), at most 5 times: $W
+2. Send nothing to the member. Run this exact Bash command, one call after another, until one prints CHILD-RUNNING (the member created by this dispatch ended its turn, its Pi child runs and the child's background sleep 1461 lives), at most 5 times: $W
 3. Print CHILD-RUNNING (or CHILD-NOT-RUNNING after 5 calls) and stop. Do not retire, interrupt or message anything." > $OUT/01-main-prompt.txt
-  print "dispatch at $(date +%T); prompt: $OUT/01-main-prompt.txt"
+  # The dispatch record (time; the stream holding the swarm result's alias) selects the member in 'probe child/kill'.
+  probe dispatch $P $S | tee $OUT/01-dispatch.txt || return 1
+  print "prompt: $OUT/01-main-prompt.txt"
   (cd $P && clean nohup $C -p --model $MODEL --output-format stream-json --verbose --mcp-config $P/.mcp.json --strict-mcp-config \
       --allowedTools "mcp__agents__tasks,Bash($W)" < $OUT/01-main-prompt.txt > $S 2> $OUT/01-main-stderr.txt &
    print $! > $PID01)
   print "Main claude -p pid $(cat $PID01) (in $PID01), stream $S"
-  if [[ -n ${VERIFY461_BACKGROUND:-} ]]; then
-    print "The child's running 'sleep 300' ends about 5 min after it starts: run 02 right after 01's Main ends."
-    next "zsh $THIS 02 2>&1 | tee $OUT/02b.txt"
-  else
-    print "The child's 'sleep 461' ends by itself about 7.7 min after it starts: run 02 right after 01's Main ends."
-    next "zsh $THIS 02 2>&1 | tee $OUT/02.txt"
-  fi
+  print "Timeline: orphan 'sleep 1461' lives about t0+2..t0+26 min, running 'sleep 1200' about t0+3..t0+23 min (t0 = now)."
+  print "Run 02 now: it waits (<= 9 min) for this Main and kills at once; if it says 'still running', rerun 02 once."
+  next "zsh $THIS 02 2>&1 | tee $OUT/02.txt"
 }
 
 step_02() {
-  say "[02] Main. waits for 01's Main (<= 9 min); prints the recorded chain, kills the child's owner and Runtime, one reconciling read, CHECK 1-4. Dialog: none."
+  say "[02] Main. waits for 01's Main (<= 9 min); prints the recorded chain, kills the child's owner and Runtime, CHECK 0, one reconciling read, CHECK 1-4. Dialog: none."
   if [[ -n ${VERIFY461_NO_MODEL:-} ]]; then
     print "VERIFY461_NO_MODEL set: stub member and child instead of 01 (rehearsal)."
-    probe stub $P - || return 1
+    probe stub $P ${VERIFY461_STUB_CASE:--} || return 1
   else
     main_wait $PID01
     case $? in
@@ -213,16 +219,18 @@ step_02() {
       1) print "STOP: rerun 02 later (01's Main still runs)"; return 1 ;;
       *) return 1 ;;
     esac
-    grep -o 'CHILD-RUNNING\|CHILD-NOT-RUNNING\|SWARM-RESULT[^"]*' $OUT/01-main-stream.jsonl | sort | uniq -c
+    grep -o 'CHILD-RUNNING\|CHILD-NOT-RUNNING' $OUT/01-main-stream.jsonl | sort | uniq -c
   fi
   probe child $P 1
-  probe kill $P $OUT/02${VERIFY461_BACKGROUND:+b}-kill.json
+  probe kill $P $OUT/02-kill.json
   local rc=$?
   print ""
-  print "Success: 'summary: ALL PASS'. 1 child failed/owner-exited; 2 escaped_processes lists 'sleep 461' (and its"
-  print "/bin/bash tool shell when bash did not replace itself) stopped, remaining []; 3 none of the recorded descendants"
-  print "and no 'sleep 461' alive; 4 the three bystanders alive (then stopped by the probe). A STOP line means nothing"
-  print "was signalled; read the 'live process tree' lines: marker 'no' on srt or pi shows where the marker was lost."
+  print "Success: 'summary: ALL PASS' (5 checks). 0 after the owner kill and before the read the recorded 'sleep 1461'"
+  print "is alive outside the Runtime group ('NOT OBSERVED' otherwise: the path was not exercised, not a pass);"
+  print "1 child failed/owner-exited; 2 escaped_processes lists 'sleep 1461' and every recorded process alive after the"
+  print "kill as stopped, remaining []; 3 none of the recorded descendants and no 'sleep 1461' alive; 4 the three"
+  print "bystanders alive (then stopped by the probe). A STOP line means nothing was signalled; the 'member:' line"
+  print "says which member was selected and why."
   next "zsh $THIS 03"
   return $rc
 }
@@ -245,7 +253,7 @@ step_03() {
 step__03run() {
   print "== start $(date +%T) commit $(git -C $WT rev-parse HEAD)"
   # Its own process group, stopped as a whole at the 25-minute limit.
-  clean $SV/bin/python -I -c 'import os, signal, subprocess, sys
+  clean0 $SV/bin/python -I -c 'import os, signal, subprocess, sys
 child = subprocess.Popen(sys.argv[1:], start_new_session=True)
 try:
     sys.exit(child.wait(timeout=1500))

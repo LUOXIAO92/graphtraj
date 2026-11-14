@@ -39,6 +39,12 @@ clean() { env -i HOME=$HOME USER=${USER:-luoxiao} PATH=${(j.:.)path} TERM=${TERM
   LANG=${LANG:-en_US.UTF-8} ${DEEPSEEK_API_KEY:+DEEPSEEK_API_KEY=$DEEPSEEK_API_KEY} "$@"; }
 probe() { (cd $P && clean $PY -I $SD/probe.py "$@") | redact; return ${pipestatus[1]}; }
 # Wait (<= 9 min) for a background host started by this script; never a standalone sleep.
+# The Claude Main's native session id from its stream-json init record.
+session_of() { $PY -I -c 'import json,sys
+for l in open(sys.argv[1], errors="replace"):
+    try: d = json.loads(l)
+    except ValueError: continue
+    if d.get("type") == "system" and d.get("subtype") == "init": print(d.get("session_id") or ""); break' $1 2>/dev/null; }
 wait_pid() { $PY -I -c 'import os, sys, time
 try: pid = int(open(sys.argv[1]).read().strip())
 except (OSError, ValueError): print("STOP: no pid file", sys.argv[1], "- run the previous step first"); sys.exit(2)
@@ -126,7 +132,8 @@ Path(".codex/hooks.json").write_text(json.dumps(hook(Path("."), {}), indent=2) +
   (cd $P && clean $(claude_bin) -p --model $MODEL --output-format json --mcp-config $P/.mcp.json --strict-mcp-config < $OUT/00-ask.txt > $OUT/00-claude.txt 2>&1)
   if clean codex login status 2>&1 | grep -q 'Logged in'; then print "codex logged in: YES"; else print "codex logged in: NO"; fi
   (cd $P && clean codex exec -m $CODEX_MODEL --skip-git-repo-check --sandbox read-only - < $OUT/00-ask.txt > $OUT/00-codex.txt 2>&1)
-  (cd $P && clean $(PI_MAIN) --no-tools "$ASK" < /dev/null > $OUT/00-pi.txt 2>&1)
+  # No --extension: this probe only checks model, login and instruction files and must not claim Main in $P.
+  (cd $P && clean pi --print --no-tools --provider deepseek --model deepseek-flash "$ASK" < /dev/null > $OUT/00-pi.txt 2>&1)
   (cd $P && clean env -u DEEPSEEK_BASE_URL dsh --profile headless --permission-mode read-only "$ASK" < /dev/null > $OUT/00-dsh.txt 2>&1)
   for host in claude codex pi dsh; do
     local f=$OUT/00-$host.txt
@@ -155,7 +162,7 @@ step_00u() {
 # ---- B: Claude Main queues a notice before the swap (397) ------------------------------------------------
 step_B1() {
   say "[B1] background Claude Main in $P creates root agent h397 (90 s) and ends at once. Dialog: none."
-  print -r -- 'Using only the agents tool: execute feature create with arguments {"runtime": "claude", "configuration": "advisor", "alias": "h397", "instruction": "Run the shell command sleep 90 once, then reply with exactly one line: PONG-397."}. Print the raw result on one line starting with CREATE and end your turn at once. Do not wait, do not call status.' > $OUT/B1-prompt.txt
+  print -r -- 'Using only the agents tool: execute feature create with arguments {"runtime": "claude", "configuration": "advisor", "name": "h397", "instruction": "Run the shell command sleep 90 once, then reply with exactly one line: PONG-397."}. Print the raw result on one line starting with CREATE and end your turn at once. Do not wait, do not call status.' > $OUT/B1-prompt.txt
   bg B1 $(claude_bin) $CLAUDE_MAIN
   next "zsh $THIS B2 2>&1 | tee $OUT/B2.txt"
 }
@@ -163,6 +170,9 @@ step_B2() {
   say "[B2] waits for B1's Claude Main, then <= 3 min for h397's end notice in the (now host-less) Claude Main queue. Dialog: none."
   wait_pid $OUT/B1.pid || return 1
   grep -o 'CREATE[^"]*' $OUT/B1-main-stream.jsonl | head -2
+  local s1=$(session_of $OUT/B1-main-stream.jsonl)
+  print "B1 Claude Main session: ${s1:-NONE}"
+  probe current $P claude ${s1:-none} || { print "STOP: the current Main of $P is not B1's Claude session (its first agents control call claims it; see the CREATE line above). Nothing was signalled."; return 1; }
   probe queued $P claude h397 180; local rc=$?
   probe inbox $P | tee $OUT/B2-inbox.txt
   print $([[ $rc == 0 ]] && print PASS || print FAIL) "397 precondition: an undelivered h397 end notice is queued for the exited Claude Main (QUEUED line)"
@@ -173,7 +183,7 @@ step_B2() {
 step_C1() {
   say "[C1] background Codex Main ($CODEX_MODEL, codex exec) in $P. Dialog: none (exec has no UI; approval_policy never)."
   print -r -- "First, before any tool: quote every GraphTraj notice you were given at session start (alias, event, first message line) and print one line H397-COUNT <n> with how many times h397 appears.
-Second, using only the graphtraj agents tool: create a root agent with arguments {\"runtime\": \"claude\", \"configuration\": \"advisor\", \"alias\": \"h401\", \"instruction\": \"Reply with exactly one line: PONG-401. Use no tools.\"}; print one line H401-CREATE <agent id>. Do not wait for it.
+Second, using only the graphtraj agents tool: create a root agent with arguments {\"runtime\": \"claude\", \"configuration\": \"advisor\", \"name\": \"h401\", \"instruction\": \"Reply with exactly one line: PONG-401. Use no tools.\"}; print one line H401-CREATE <agent id>. Do not wait for it.
 Third, using only the graphtraj tasks tool: call it once with exactly $(ASK373 codex) and print its raw result on one line starting with SWARM-RESULT.
 $DENY" > $OUT/C1-prompt.txt
   bg C1 codex $CODEX_MAIN -
@@ -246,6 +256,8 @@ step_E1() {
 step_E2() {
   say "[E2] waits; judges 425. Dialog: none."
   wait_pid $OUT/E1.pid || return 1
+  local s5=$(session_of $OUT/E1-main-stream.jsonl)
+  probe current $P claude ${s5:-none} >/dev/null && print "PASS E entry: E1's Claude Main $s5 claimed Main (its swarm is a control call)" || { print "FAIL E entry: E1's Claude Main ${s5:-NONE} is not the current Main:"; probe current $P claude ${s5:-none}; }
   grep -oE 'E-MISSING[^"\\]*|E-REPLY[^"\\]*|SWARM-RESULT.{0,200}' $OUT/E1-main-stream.jsonl | redact | head -5
   local s=$(probe session $P pi_member)
   print "Pi member session: $s"
@@ -275,7 +287,7 @@ dsh_turn() { print -r -- "{\"root\": \"$BASE/dsh-data\"}" > $BASE/dsh-host.json;
   (cd $P && clean GRAFTLING_PYTHON=$PY GRAFTLING_DSH_CONFIG=$BASE/dsh-host.json env -u DEEPSEEK_BASE_URL nohup dsh --profile headless --json "$@" < /dev/null > $OUT/$STEP-main-stream.jsonl 2> $OUT/$STEP-stderr.txt & print $! > $OUT/$STEP.pid); wait_pid $OUT/$STEP.pid 420; }
 step_D1() {
   say "[D1] headless DSH Main: create g398 (60 s) and exit. Then waits 100 s and checks the notice stays queued (398). Dialog: none."
-  dsh_turn "Using only the agents tool: create a root agent with arguments {\"runtime\": \"claude\", \"configuration\": \"advisor\", \"alias\": \"g398\", \"instruction\": \"Run the shell command sleep 60 once, then reply with exactly one line: PONG-398.\"}. Do not wait. Print CREATE and the agent id, then stop." || return 1
+  dsh_turn "Using only the agents tool: create a root agent with arguments {\"runtime\": \"claude\", \"configuration\": \"advisor\", \"name\": \"g398\", \"instruction\": \"Run the shell command sleep 60 once, then reply with exactly one line: PONG-398.\"}. Do not wait. Print CREATE and the agent id, then stop." || return 1
   $PY -I -c 'import json,sys
 for l in open(sys.argv[1], errors="replace"):
     try: d = json.loads(l)
@@ -321,9 +333,13 @@ step_F() {
   print "PASS/FAIL summary:"; grep -h '^\(PASS\|FAIL\)' $OUT/*.txt(N) | sort | uniq
 }
 
+# Everything runs from this last line and exits on it, so zsh reads nothing after it even if the file changes.
+dispatch() {
 case $STEP in
   00) step_00 2>&1 | redact | tee $OUT/00.txt ;;
   00u) step_00u ;;
   B1|B2|C1|C2|C3|P1|P2|E1|E2|D0|D1|D2|D3|F) step_$STEP ;;
-  *) print "usage: zsh ${0:A} <00|00u|B1|B2|C1|C2|C3|P1|P2|E1|E2|D0|D1|D2|D3|F>" ;;
+  *) print "usage: zsh $THIS <00|00u|B1|B2|C1|C2|C3|P1|P2|E1|E2|D0|D1|D2|D3|F>" ;;
 esac
+}
+dispatch; exit $?

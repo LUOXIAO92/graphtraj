@@ -179,6 +179,35 @@ def current(project: Path, rt: str | None = None) -> dict | None:
     return found[-1] if found else None
 
 
+def keys_for(project: Path, name: str) -> set[str]:
+    """An agents-tool Agent is created with a readable ``name``; notices carry its agent id as ``alias``.
+    Match the name and every agent id whose control record names it."""
+    keys = {name}
+    for f in (project / '.graphtraj/swarm/control/agents').glob('*.json'):
+        try:
+            record = json.loads(f.read_text())
+        except (OSError, ValueError):
+            continue
+        if isinstance(record, dict) and any(v == name for v in (record.get('name'), (record.get('request') or {}).get('name'))):
+            keys.add(f.stem)
+            keys |= {str(record[k]) for k in ('agent', 'id', 'alias') if isinstance(record.get(k), str)}
+    return keys
+
+
+def hit(value: object, keys: set[str]) -> bool:
+    return any(k in str(value or '') for k in keys)
+
+
+def current_is(project: Path, rt: str, session: str) -> int:
+    for c in claims(project):
+        say('claim:', c.get('runtime'), c.get('session'), 'entry', c.get('entry'), 'at', c.get('at'))
+    last = current(project)
+    ok = bool(last) and last.get('runtime') == rt and last.get('session') == session
+    say('current Main:', (last or {}).get('runtime'), (last or {}).get('session'), '| expected', rt, session,
+        '->', 'YES' if ok else 'NO')
+    return 0 if ok else 1
+
+
 def inbox(project: Path) -> int:
     known = {}
     for c in claims(project):
@@ -201,18 +230,26 @@ def inbox(project: Path) -> int:
 
 def queued(project: Path, rt: str, alias: str, seconds: str) -> int:
     deadline = time.time() + float(seconds)
+    keys = keys_for(project, alias)
+    say('matching', alias, 'as', sorted(keys))
     while True:
         main = current(project, rt)
         if main:
             lines, cursor = queue(inbox_path(project, rt, main['session']))
-            hits = [n for n in lines[cursor:] if alias in str(n['event'].get('alias', ''))
+            hits = [n for n in lines[cursor:] if hit(n['event'].get('alias'), keys)
                     and n['event'].get('event') in {'completed', 'failed', 'interrupted'}]
             if hits:
                 say('QUEUED', hits[0]['id'], 'for', rt, main['session'], 'event', hits[0]['event'].get('event'))
                 return 0
+        keys = keys_for(project, alias)
         if time.time() >= deadline:
             say('NOT-QUEUED: no undelivered end notice of', alias, 'for the current', rt, 'Main',
                 (main or {}).get('session'))
+            say('matched as', sorted(keys), '; every queued end notice, raw, for judgement:')
+            for path in (runner(project) / 'main-sessions/inbox').glob('*.jsonl'):
+                for n in queue(path)[0]:
+                    if n['event'].get('event') in END_EVENTS:
+                        say('  raw:', json.dumps(n)[:300])
             return 1
         time.sleep(5)
 
@@ -375,6 +412,8 @@ def ends(project: Path, out: Path, alias: str, *streams: str) -> int:
     Record channel: Codex Main notice-queue entries for ALIAS's end, before the cursor (delivered).
     """
     occurrences: list[tuple[str, str]] = []
+    keys = keys_for(project, alias)
+    say('matching', alias, 'as', sorted(keys))
     for name in streams:
         for number, record in jsonl(out / name):
             view = delivery_view(record)
@@ -382,10 +421,10 @@ def ends(project: Path, out: Path, alias: str, *streams: str) -> int:
                 continue
             text = flat(view)
             for node in walk(view):
-                if (isinstance(node, dict) and alias in str(node.get('alias', '')) and node.get('event') in END_EVENTS):
+                if (isinstance(node, dict) and hit(node.get('alias'), keys) and node.get('event') in END_EVENTS):
                     occurrences.append((f"{node.get('alias')}|{node.get('event')}|{node.get('execution')}", f'{name}:{number} host-event'))
-            for m in re.finditer(r'\[GraphTraj notice from ([^ \]]*' + re.escape(alias) + r'[^ \]]*) · (\w+)(?: · execution ([^\s\]\\]+))?', text):
-                if m.group(2) in END_EVENTS:
+            for m in re.finditer(r'\[GraphTraj notice from ([^ \]]*) · (\w+)(?: · execution ([^\s\]\\]+))?', text):
+                if m.group(2) in END_EVENTS and hit(m.group(1), keys):
                     occurrences.append((f'{m.group(1)}|{m.group(2)}|{m.group(3)}', f'{name}:{number} notice-text'))
     occurrences = sorted(set(occurrences), key=lambda x: x[1])
     recorded: list[tuple[str, str]] = []
@@ -395,7 +434,7 @@ def ends(project: Path, out: Path, alias: str, *streams: str) -> int:
         lines, cursor = queue(inbox_path(project, 'codex', c['session']))
         for i, n in enumerate(lines):
             e = n['event']
-            if alias in str(e.get('alias', '')) and e.get('event') in END_EVENTS:
+            if hit(e.get('alias'), keys) and e.get('event') in END_EVENTS:
                 recorded.append((n['id'], f"codex queue {c['session']} [{i}] {'delivered' if i < cursor else 'PENDING'}"))
     for key, where in occurrences:
         say(f'401 stream delivery: {key} at {where}')
@@ -407,7 +446,7 @@ def ends(project: Path, out: Path, alias: str, *streams: str) -> int:
     if not occurrences and not recorded:
         lines = []
         for name in streams:
-            lines += [f'{name}:{n} {flat(r)}' for n, r in jsonl(out / name) if alias in flat(r)]
+            lines += [f'{name}:{n} {flat(r)}' for n, r in jsonl(out / name) if hit(flat(r), keys)]
         say('no delivery shape recognised; raw lines naming', alias, 'for judgement:')
         raw('401', lines)
     ok = verdict('401 delivered once', total == 1,
@@ -420,11 +459,13 @@ def delivered(project: Path, alias: str) -> int:
     """397: ALIAS's end notice id is delivered exactly once: one entry per queue, never PENDING, no duplicates,
     and the last queue holding it (the continuing Main's) has its cursor past it."""
     found: dict[str, list[str]] = {}
+    keys = keys_for(project, alias)
+    say('matching', alias, 'as', sorted(keys))
     for c in claims(project):
         path = inbox_path(project, c['runtime'], c['session'])
         lines, cursor = queue(path)
         for i, n in enumerate(lines):
-            if alias in str(n['event'].get('alias', '')) and n['event'].get('event') in END_EVENTS:
+            if hit(n['event'].get('alias'), keys) and n['event'].get('event') in END_EVENTS:
                 place = f"{c['runtime']}:{c['session']}[{i}] {'delivered' if i < cursor else 'PENDING'}"
                 if place not in found.setdefault(n['id'], []):
                     found[n['id']].append(place)
@@ -465,6 +506,8 @@ def main() -> int:
         return ends(Path(args[0]), Path(args[1]), args[2], *args[3:])
     if cmd == 'delivered':
         return delivered(Path(args[0]), args[1])
+    if cmd == 'current':
+        return current_is(Path(args[0]), args[1], args[2])
     if cmd == 'main':
         return main_unchanged(Path(args[0]), args[1], args[2])
     say('unknown command', cmd)

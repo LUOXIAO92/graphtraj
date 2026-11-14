@@ -170,7 +170,16 @@ step_01() {
   [[ $(cat $BASE/src-commit 2>/dev/null) == $(git -C $WT rev-parse HEAD) ]] || print "NOTE: venv commit $(cat $BASE/src-commit) is not HEAD; rerun 00 if HEAD is the commit under test."
   local C=$(claude_bin) S=$OUT/01-main-stream.jsonl
   rm -f $PID01
-  local member='Use only the agents tool (mcp__agents__agents). Execute feature create with arguments {"runtime": "pi", "instruction": "Use the bash tool once to run exactly: sleep 461 . Then reply DONE-461."}. Reply with the one line CREATE <agent> <execution> from its result and end your turn at once. Do not call wait or status. Read no files and run no shell command yourself.'
+  # Default: the running tool is `sleep 461`. VERIFY461_BACKGROUND=1: an earlier call leaves `sleep 461` as a background
+  # job, and the running tool at kill time is `sleep 300` (Pi's own shutdown stops the running tool's group, not that job).
+  local child='Use the bash tool once to run exactly: sleep 461 . Then reply DONE-461.' variant=default
+  if [[ -n ${VERIFY461_BACKGROUND:-} ]]; then
+    child='Use the bash tool to run exactly: nohup sleep 461 >/dev/null 2>&1 & sleep 3 . Then use the bash tool again to run exactly: sleep 300 . Then reply DONE-461.'
+    variant='background (VERIFY461_BACKGROUND=1)'
+  fi
+  print "variant: $variant"
+  print -r -- "child instruction: $child"
+  local member="Use only the agents tool (mcp__agents__agents). Execute feature create with arguments {\"runtime\": \"pi\", \"instruction\": \"$child\"}. Reply with the one line CREATE <agent> <execution> from its result and end your turn at once. Do not call wait or status. Read no files and run no shell command yourself."
   local swarm=$($VV/bin/python -I -c 'import json,sys; print(json.dumps({"action":"execute","feature":"swarm","arguments":{"tasks":[{"task_id":"1","role":"team_leader","instruction":sys.argv[1]}]}}))' "$member")
   print -r -- "$swarm" > $OUT/01-swarm-arguments.json
   local W="$VV/bin/python $SD/probe.py child $P 100"
@@ -183,8 +192,13 @@ Print its raw result text on one line starting with SWARM-RESULT.
       --allowedTools "mcp__agents__tasks,Bash($W)" < $OUT/01-main-prompt.txt > $S 2> $OUT/01-main-stderr.txt &
    print $! > $PID01)
   print "Main claude -p pid $(cat $PID01) (in $PID01), stream $S"
-  print "The child's 'sleep 461' ends by itself about 7.7 min after it starts: run 02 right after 01's Main ends."
-  next "zsh $THIS 02 2>&1 | tee $OUT/02.txt"
+  if [[ -n ${VERIFY461_BACKGROUND:-} ]]; then
+    print "The child's running 'sleep 300' ends about 5 min after it starts: run 02 right after 01's Main ends."
+    next "zsh $THIS 02 2>&1 | tee $OUT/02b.txt"
+  else
+    print "The child's 'sleep 461' ends by itself about 7.7 min after it starts: run 02 right after 01's Main ends."
+    next "zsh $THIS 02 2>&1 | tee $OUT/02.txt"
+  fi
 }
 
 step_02() {
@@ -202,7 +216,7 @@ step_02() {
     grep -o 'CHILD-RUNNING\|CHILD-NOT-RUNNING\|SWARM-RESULT[^"]*' $OUT/01-main-stream.jsonl | sort | uniq -c
   fi
   probe child $P 1
-  probe kill $P $OUT/02-kill.json
+  probe kill $P $OUT/02${VERIFY461_BACKGROUND:+b}-kill.json
   local rc=$?
   print ""
   print "Success: 'summary: ALL PASS'. 1 child failed/owner-exited; 2 escaped_processes lists 'sleep 461' (and its"

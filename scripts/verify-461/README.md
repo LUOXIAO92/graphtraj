@@ -57,6 +57,16 @@ never printed.
 
 The child's `sleep 461` ends by itself about 7.7 minutes after it starts, so run 02 as soon as 01's Main ends.
 
+**Background variant** (`VERIFY461_BACKGROUND=1 S 01`, then `VERIFY461_BACKGROUND=1 S 02 2>&1 | tee …/realhost/02b.txt`,
+facts in `02b-kill.json`). On shutdown (also the stdin EOF a killed owner causes) Pi aborts the running bash tool and
+kills its process group itself, so in the default variant the running `sleep 461` is already gone before the read.
+What Pi leaves is a background job of an earlier, completed call. The child instruction becomes exactly
+`Use the bash tool to run exactly: nohup sleep 461 >/dev/null 2>&1 & sleep 3 . Then use the bash tool again to run
+exactly: sleep 300 . Then reply DONE-461.` The 3 s let a 1 s sample record `sleep 461`; at kill time `sleep 300` is
+the running tool, which Pi's abort stops. CHECK 2 still requires the recorded `sleep 461` (and every recorded process
+alive after the kill) to be stopped; a recorded `sleep 300` already gone is fine. Run 02 within about 5 minutes of the
+second call starting. 01 prints which variant ran.
+
 ### 02: kill, one read, the checks
 
 Pi 1.4.0 runs its bash tool as `/bin/bash -c "sleep 461"`, detached (its own session). Bash usually replaces

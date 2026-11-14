@@ -345,7 +345,15 @@ Parts for building a host or a consumer on agents (since 0.2.2), also in
 - notices (section 4): `END_EVENTS`, `needs_parent`, `notice_id`;
 - processes and locks: `process_ancestors`, `process_executable`,
   `process_arguments`, and `exclusive_lock(path)`, the lock agents takes on its
-  own record files;
+  own record files; for an owner that recorded its Runtime's tool descendants
+  (the owner-exited paragraph of section 4 describes the record and the rules),
+  `read_tool_descendants(path)` returns the recorded entries (each a dict with
+  integer `pid`, `uid` and `start`) and raises `OSError` or `ValueError` when the
+  record is unreadable, and `stop_tool_processes(entries, marker, exclude,
+  error=None)` stops those still alive with the same uid and start time, their
+  current descendants and processes carrying exactly `marker`, never a pid in
+  `exclude`, and returns `{found, stopped, remaining[, error]}`, each a list of
+  `{pid, command}` with the command already redacted;
 - `DECISION_METHOD`, the request method of `ask_parent` (section 4), and
   `within_workspace`, the check on `create`'s `workspace` (section 2);
 - `native_session_files(root)`, the native Session files recorded under a data

@@ -274,6 +274,9 @@ def run(job_file: Path) -> int:
                 trace_file=Path(base_mapping["trace_file"]),
                 session_created=record_created,
             )
+            # Durable before the Runtime starts, so a reconcile after this Worker is killed
+            # can still find its tool processes (460).
+            record_tool_processes(session_directory, turn_handle)
             from graphtraj.execution.task_agents import begin_task_agent
 
             # The core records this execution and its Agent before native work.
@@ -406,6 +409,28 @@ def run(job_file: Path) -> int:
             # The continuation-only cwd of a cleaned Task ends with its execution.
             _remove_restored_cwd(session_directory, restored_cwd)
     return 1
+
+
+TOOL_PROCESSES_RECORD = "tool-processes-{0}.yml"
+
+
+def record_tool_processes(session_directory: Path, handle: object) -> None:
+    """Retain an execution's tool marker and descendants record for the Runner (460).
+
+    Only an owner that samples its Runtime's descendants (459) has both facts.
+    The owner's own end stops them; a killed Worker never reaches that end, so
+    the Runner's termination confirmation reads this record instead.
+    """
+    marker = getattr(handle, "member_marker", None)
+    sidecar = getattr(handle, "tool_descendants", None)
+    execution_id = getattr(handle, "execution_id", None)
+    if not (isinstance(marker, str) and marker and sidecar is not None
+            and isinstance(execution_id, str) and execution_id):
+        return
+    write_yaml_durably(session_directory / TOOL_PROCESSES_RECORD.format(execution_id), {
+        "execution_id": execution_id, "tool_marker": marker,
+        "tool_descendants": str(Path(sidecar).resolve()),
+    })
 
 
 def _agent_reference(task_agent: object, session: str, runtime_pid: int) -> dict[str, str]:

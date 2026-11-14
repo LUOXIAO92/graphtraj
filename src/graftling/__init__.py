@@ -114,6 +114,8 @@ __getattr__ = _lazy_names({
     "process_ancestors": ("graftling.process", "process_ancestors"),
     "process_arguments": ("graftling.process", "process_arguments"),
     "process_executable": ("graftling.process", "process_executable"),
+    "read_tool_descendants": ("graftling.tool_descendants", "read_sidecar"),
+    "stop_tool_processes": ("graftling.tool_descendants", "stop_tool_processes"),
     # Runtime executions.
     "RuntimeAdapterError": ("graftling.runtime", "RuntimeAdapterError"),
     "RuntimeContext": ("graftling.runtime", "RuntimeContext"),
@@ -143,6 +145,7 @@ __all__ = [
     "mcp_result_response", "mcp_serve", "mcp_tool_documents",
     "END_EVENTS", "needs_parent", "notice_id",
     "exclusive_lock", "stop_owned", "exit_if_owned_unconfirmed", "process_ancestors", "process_arguments", "process_executable",
+    "read_tool_descendants", "stop_tool_processes",
     "RuntimeAdapterError", "RuntimeContext", "RuntimeExecutionResult", "RuntimeTurn",
     "SessionStarted", "credential_environment", "child_environment", "is_credential_name", "CODEX_SHELL_EXCLUDE",
 ]

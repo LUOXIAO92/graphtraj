@@ -3,14 +3,24 @@
 Usage (the scratch venv's Python):
   python -I probe.py prepare PROJECT MODEL   roles (team_leader claude; a 'pi' role on the user's Pi connection)
                                              and probe Task 1, ready; prints the Pi values used (never a key value)
+  python -I probe.py isolation PROJECT -     the project is its own graphtraj root and git top level, no CLAUDE.md
+                                             at or above it; the context files a Pi child there would load
   python -I probe.py plugins STREAM -        0 only when graphtraj-claude-host is loaded
-  python -I probe.py child PROJECT SECONDS   poll (<=100 s) until the member's turn ended and its Pi child runs:
+  python -I probe.py dispatch PROJECT STREAM record 01's dispatch (time, stream) before the probe Main starts
+  python -I probe.py child PROJECT SECONDS   poll (<=100 s) until the member created by 01's dispatch ended its
+                                             turn, its Pi child runs and the child's background 'sleep 1461' lives:
                                              CHILD-RUNNING
-  python -I probe.py kill PROJECT FACTS      refuse unless the child's descendants record lists a live 'sleep 461';
+  python -I probe.py kill PROJECT FACTS      refuse unless the child's descendants record lists a live 'sleep 1461';
                                              print the recorded chain; SIGKILL the child's owner and Runtime group,
-                                             start three bystanders, one reconciling read, CHECK 1-4, stop them
-  python -I probe.py idle OUT -              0 unless an earlier probe Main (pid file in OUT) or 'sleep 461' lives
-  python -I probe.py stub PROJECT -          rehearsal only: a fake member, child record and processes, no model
+                                             CHECK 0 (the orphan is alive), three bystanders, one reconciling read,
+                                             CHECK 1-4, stop the bystanders
+  python -I probe.py idle OUT -              0 unless an earlier probe Main (pid file in OUT) or 'sleep 1461' lives
+  python -I probe.py stub PROJECT CASE       rehearsal only, no model: CASE '-' an older member, the dispatch, the
+                                             current member with a child record and processes; CASE 'ambiguous'
+                                             two members after the dispatch, no alias, no processes
+The member is the one created by 01's dispatch: its session directory was created at or after the dispatch time
+and, when 01's stream already holds the swarm result, its name is the alias that result returned. Zero or more
+than one such member: STOP, nothing signalled.
 Prints only facts read from the isolated project, the user's connection catalog (names, never values) and
 process tables. It prints whether the child's tool marker is present, never its value. It signals only the
 child's recorded owner Worker and Runtime group (step 02, after checking their start times) and processes it
@@ -32,7 +42,13 @@ import yaml
 
 TASK_ID = '1'
 NAME = 'pi-tool-processes-probe'
-CHILD_SLEEP = 'sleep 461'
+# The child's background job (orphan) and its second, still-running bash call. Timeline (t0 = 01's dispatch):
+# the orphan starts about t0+2 min and lives 1461 s (24 min); the running call starts about t0+3 min and lasts
+# 1200 s (20 min); 01's Main ends by about t0+10 min; 02 kills the owner when 01's Main ended (<= t0+9 min, or
+# <= t0+18 min when 02 is rerun once after a STOP). Both are still alive then.
+CHILD_SLEEP = 'sleep 1461'
+RUNNING_SLEEP = 'sleep 1200'
+DISPATCH = '.graphtraj/probe-461/dispatch.json'
 MARKER_ENV = 'GRAFTLING_MEMBER_RUN'
 # The user's Pi configuration (production roles.yml, preset pi_dsh_trial.team_leader).
 CONNECTION = 'pi/deepseek/deepseek-flash'
@@ -69,17 +85,38 @@ def run(*argv: str) -> subprocess.CompletedProcess:
     return done
 
 
-def pi_role() -> dict:
-    """The child's role: the user's connection (rehearsal: the same model inline) and Pi settings."""
+CONTEXT_NAMES = ('AGENTS.override.md', 'AGENTS.md', 'AGENTS.MD', 'CLAUDE.md', 'CLAUDE.MD')
+
+
+def context_files(project: Path) -> list[str]:
+    """Context files Pi 1.4.0 would consider for cwd at or below ``project``: every candidate name in the project
+    and each parent up to '/' (resource-loader.js loadProjectContextFiles walks cwd -> '/'; loadContextFileFromDir
+    takes the first readable of these names, so all are listed)."""
+    found = []
+    for directory in (project.resolve(), *project.resolve().parents):
+        for name in CONTEXT_NAMES:
+            path = directory / name
+            # One entry per file: AGENTS.md and AGENTS.MD are the same file on a case-insensitive volume.
+            if path.is_file() and not any(os.path.samefile(path, other) for other in found):
+                found.append(str(path))
+    return found
+
+
+def pi_role(project: Path) -> dict:
+    """The child's role: the user's connection (rehearsal: the same model inline) and only the user's production
+    Pi keys. No deny_read: a GraphTraj Pi role refuses it (src/graphtraj/runtimes/pi/pi_adapter.py:136-140,
+    ROLE_CONFIG_UNSUPPORTED, seen on the real host at 01)."""
+    pi = dict(PI)
     if os.environ.get('VERIFY461_NO_MODEL'):
-        return {'runtime': 'pi', 'model': 'deepseek/deepseek-flash', 'worktree_access': 'read', 'pi': PI}
-    return {'connection': CONNECTION, 'worktree_access': 'read', 'pi': PI}
+        return {'runtime': 'pi', 'model': 'deepseek/deepseek-flash', 'worktree_access': 'read', 'pi': pi}
+    return {'connection': CONNECTION, 'worktree_access': 'read', 'pi': pi}
 
 
-def show_pi_values() -> int:
+def show_pi_values(project: Path) -> int:
     """Print, read only, the Pi values the child uses. Key values are never read into the output."""
-    print('pi role:', json.dumps({key: value for key, value in pi_role().items() if key != 'pi'}))
-    for key, value in PI.items():
+    role = pi_role(project)
+    print('pi role:', json.dumps({key: value for key, value in role.items() if key != 'pi'}))
+    for key, value in role['pi'].items():
         print(f'pi.{key}: {value}')
     rc = 0
     if not os.environ.get('VERIFY461_NO_MODEL'):
@@ -121,10 +158,10 @@ def prepare(project: Path, model: str) -> int:
         'roles': {'team_leader': {'runtime': 'claude', 'model': model, 'worktree_access': 'write',
                                   'reports': ['report.md'], 'claude': {'permission_mode': 'auto'}},
                   # The one role using Pi: an agents-tool create with runtime 'pi' selects it.
-                  'pi': pi_role()},
+                  'pi': pi_role(project)},
         'role_tree': {'team_leader': {}},
     }))
-    rc = show_pi_values()
+    rc = show_pi_values(project)
     work = project / '.graphtraj/probe-461'
     work.mkdir(exist_ok=True)
     register = work / 'register.yml'
@@ -152,6 +189,172 @@ def prepare(project: Path, model: str) -> int:
     return rc or (not ready)
 
 
+def isolation(project: Path, _unused: str) -> int:
+    """Print how discovery stops at the isolated project and what a Pi child there would read (read only)."""
+    from graphtraj.workspace.runner_project import discover_project_root
+
+    project = project.resolve()
+    root = discover_project_root(project)
+    top = subprocess.run(['git', '-C', str(project), 'rev-parse', '--show-toplevel'],
+                         capture_output=True, text=True).stdout.strip()
+    upward = [str(p / name) for p in (project, *project.parents) for name in ('CLAUDE.md', 'CLAUDE.local.md')
+              if (p / name).exists()]
+    print(f'graphtraj project root: {root} | isolated: {root == project}')
+    print(f'git top level: {top} | isolated: {Path(top).resolve() == project if top else False}')
+    print(f'CLAUDE.md/CLAUDE.local.md at or above the project: {upward or "none"}')
+    ok = root == project and bool(top) and Path(top).resolve() == project and not upward
+    print('isolation:', 'OK' if ok else 'NOT OK')
+    # Pi 1.4.0 dist/core/resource-loader.js:160-196 loads the agent dir's file, then one file per directory from
+    # cwd up to '/'; only --no-context-files stops it (cli/args.js:197), which graftling's argv never passes
+    # (src/graftling/pi/execution.py:374-380), and a GraphTraj Pi role accepts no deny_read (pi_adapter.py:136-140).
+    seen = context_files(project)
+    print(f'Pi child context files at or above cwd=project (Pi 1.4.0 walks cwd -> /): {seen or "none"}')
+    agent_file = [str(Path(PI['agent_dir']) / name) for name in CONTEXT_NAMES
+                  if (Path(PI['agent_dir']) / name).is_file()] if os.access(PI['agent_dir'], os.R_OK) else ['unreadable here']
+    print(f"Pi agent dir context file (the user's own global Pi context, linked by graftling; not the Harness): "
+          f'{agent_file or "none"}')
+    accepted = not seen or os.environ.get('VERIFY461_ACCEPT_PI_CONTEXT') == '1'
+    print(f'Pi child context: loads {seen or "none"} (no supported deny in GraphTraj Pi roles; '
+          f'{"accepted by Main/user decision" if seen and accepted else "nothing to accept" if not seen else "NOT accepted"})')
+    if not accepted:
+        print('STOP: a Pi child here would load the files above as instructions, and no GraphTraj Pi role setting can '
+              'prevent it. Rerun 00 with VERIFY461_ACCEPT_PI_CONTEXT=1 only after Main/the user accepted that for '
+              'this probe.')
+    return 0 if ok and accepted else 1
+
+
+def pi_role_keys(project: Path, _unused: str) -> int:
+    """No-model check: the probe's 'pi' role keys pass GraphTraj's Pi role key check. The allowed set is a local of
+    PiRuntimeAdapter.preflight_runtime_context (src/graphtraj/runtimes/pi/pi_adapter.py:136-137), read from the
+    installed source with ast, never copied."""
+    import ast
+    import inspect
+    import textwrap
+
+    from graphtraj.runtimes.pi.pi_adapter import PiRuntimeAdapter
+
+    tree = ast.parse(textwrap.dedent(inspect.getsource(PiRuntimeAdapter.preflight_runtime_context)))
+    allowed = next(ast.literal_eval(node.value) for node in ast.walk(tree) if isinstance(node, ast.Assign)
+                   and [getattr(target, 'id', None) for target in node.targets] == ['allowed'])
+    roles = yaml.safe_load((project / '.graphtraj/roles.yml').read_text()) or {}
+    keys = set(((roles.get('roles') or {}).get('pi') or {}).get('pi') or {})
+    ok = keys <= allowed
+    print(f"pi role keys: {sorted(keys)} | allowed (pi_adapter.preflight_runtime_context): {sorted(allowed)} | "
+          f"refused: {sorted(keys - allowed) or 'none'}")
+    print('pi role keys accepted:', ok)
+    return 0 if ok else 1
+
+
+AGENTS_MD_PLUGIN = 'cc-plugin-agents-md'
+CLAUDE_MEMORY_NAMES = ('CLAUDE.md', 'CLAUDE.local.md', 'AGENTS.md', '.claude/CLAUDE.md')
+# 00's one-line check: the model reports the instruction files it was given (as Task 462's reopen 00 did).
+CLAUDE_CHECK_PROMPT = ('Reply with exactly two lines. Line 1: MODEL OK . Line 2: MEMORY: followed by the absolute path '
+                       'of every CLAUDE.md, CLAUDE.local.md or AGENTS.md file whose contents you were given as '
+                       "instructions, separated by ' | ', or NONE if there is none.")
+
+
+def claude_settings(project: Path, _unused: str) -> int:
+    """Write the project's committed .claude/settings.json (00, before the initial commit, so dev and every member
+    worktree carry it): the builtin AGENTS.md plugin off, and claudeMdExcludes for every CLAUDE.md, CLAUDE.local.md,
+    .claude/CLAUDE.md and AGENTS.md found above the project (computed now). settings.local.json is left to the host
+    configuration. Never ~/.claude or ~/.claude.json."""
+    project = project.resolve()
+    excludes = [str(directory / name) for directory in project.parents for name in CLAUDE_MEMORY_NAMES
+                if (directory / name).is_file()]
+    settings = {'enabledPlugins': {f'{AGENTS_MD_PLUGIN}@builtin': False}, 'claudeMdExcludes': excludes}
+    path = project / '.claude/settings.json'
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(settings, indent=2) + '\n')
+    print(f'claude settings (committed with the initial source) {path}: {json.dumps(settings)}')
+    return 0
+
+
+def stream_records(stream: Path) -> list[dict]:
+    records = []
+    try:
+        lines = Path(stream).read_text().splitlines()
+    except OSError:
+        return records
+    for line in lines:
+        try:
+            records.append(json.loads(line))
+        except ValueError:
+            continue
+    return records
+
+
+def init_plugins(stream: Path) -> list[str] | None:
+    for record in stream_records(stream):
+        if record.get('type') == 'system' and record.get('subtype') == 'init':
+            return [plugin.get('source') or plugin.get('name') for plugin in record.get('plugins', [])]
+    return None
+
+
+def claude_check(stream: Path, project: str) -> int:
+    """00's fail-closed Claude context check on the one-line stream (read only)."""
+    root = Path(project).resolve()
+    plugins = init_plugins(stream)
+    result = next((record.get('result') for record in stream_records(stream) if record.get('type') == 'result'), None)
+    lines = [line.strip() for line in str(result or '').splitlines() if line.strip()]
+    memory_line = next((line for line in lines if line.upper().startswith('MEMORY:')), None)
+    listed = [] if memory_line is None else [item.strip() for item in memory_line.split(':', 1)[1].split('|')
+                                             if item.strip() and item.strip().upper() != 'NONE']
+    outside = [item for item in listed if not Path(item).is_absolute()
+               or not Path(item).resolve().is_relative_to(root)]
+    print(f'result: {result!r}')
+    print(f'init plugins: {plugins}')
+    model_ok = bool(lines) and lines[0] == 'MODEL OK'
+    plugin_off = plugins is not None and not any(AGENTS_MD_PLUGIN in str(item) for item in plugins)
+    reported = memory_line is not None
+    print(f'MODEL OK first line: {model_ok} | {AGENTS_MD_PLUGIN} absent from init plugins: {plugin_off} | '
+          f'MEMORY line present: {reported}')
+    print('claude memory from the Harness:', outside or 'none')
+    isolated = model_ok and plugin_off and reported and not outside
+    print('Claude context isolated:', 'YES' if isolated else 'NO')
+    return 0 if isolated else 1
+
+
+def claude_facts(project: Path, out: str) -> int:
+    """02, read only: the 01 Main's init plugins and what reaches the member's Claude cwd.
+
+    The member's Claude runs with cwd = its Task worktree (src/graftling/claude/execution.py:837, Popen cwd =
+    request['worktree_path']); the worktree is made from dev's commit (src/graphtraj/workspace/runner_project.py:
+    56-66), and dev is created by setup from the initial commit that holds .claude/settings.json. The member's own
+    init record is not retained: its trace links the native transcript (graftling/claude/execution.py:551-556) and
+    the init event is kept only in memory (:955-964)."""
+    stream = Path(out) / '01-main-stream.jsonl'
+    print(f'01 Main init plugins ({stream}): {init_plugins(stream)}')
+    alias, mapping, directory = member(project)
+    tasks = []
+    try:
+        dispatch = json.loads((project / DISPATCH).read_text())
+        for record in stream_records(Path(dispatch.get('stream') or stream)):
+            for content in ((record.get('message') or {}).get('content') or []) if record.get('type') == 'user' else []:
+                text = content.get('content') if isinstance(content, dict) else None
+                if isinstance(text, str) and '"launch_status"' in text:
+                    try:
+                        tasks += json.loads(text).get('tasks', [])
+                    except ValueError:
+                        pass
+    except (OSError, ValueError):
+        pass
+    worktree = next((task.get('worktree_path') for task in tasks if task.get('alias') == alias), None)
+    found = []
+    for path in sorted(directory.rglob('*.jsonl')) if directory else []:
+        found += [init_plugins(path)] if init_plugins(path) is not None else []
+    print(f"member {alias} init plugins: {found[0] if found else 'not in its records (init is kept only in memory)'}")
+    if worktree:
+        settings = Path(worktree) / '.claude/settings.json'
+        tracked = subprocess.run(['git', '-C', worktree, 'ls-files', '.claude/settings.json'],
+                                 capture_output=True, text=True).stdout.strip()
+        content = settings.read_text() if settings.is_file() else None
+        print(f"member Claude cwd (its worktree): {worktree} | .claude/settings.json tracked: {bool(tracked)} | "
+              f"{AGENTS_MD_PLUGIN} off: {bool(content) and json.loads(content).get('enabledPlugins', {}).get(AGENTS_MD_PLUGIN + '@builtin') is False}")
+    else:
+        print('member Claude cwd: not found in the swarm result')
+    return 0
+
+
 def plugins(stream: Path, _unused: str) -> int:
     for line in stream.read_text().splitlines():
         try:
@@ -171,12 +374,79 @@ def plugins(stream: Path, _unused: str) -> int:
 
 # -- Records ------------------------------------------------------------------
 
+def dispatch_cmd(project: Path, stream: str) -> int:
+    """Record 01's dispatch (time, stream path) in the project, before the probe Main starts."""
+    record = {'at': time.time(), 'iso': now(), 'stream': stream}
+    path = project / DISPATCH
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(record))
+    print(f'dispatch recorded at {record["iso"]} ({record["at"]:.3f}) in {path}')
+    return 0
+
+
+def swarm_aliases(stream: object) -> list[str]:
+    """Task 1's aliases from the swarm tool result in 01's stream (read only; [] before it arrives)."""
+    found: list[str] = []
+    try:
+        lines = Path(str(stream)).read_text().splitlines()
+    except (OSError, TypeError):
+        return found
+    for line in lines:
+        try:
+            record = json.loads(line)
+        except ValueError:
+            continue
+        for content in ((record.get('message') or {}).get('content') or []) if record.get('type') == 'user' else []:
+            text = content.get('content') if isinstance(content, dict) and content.get('type') == 'tool_result' else None
+            if not isinstance(text, str) or '"launch_status"' not in text:
+                continue
+            try:
+                result = json.loads(text)
+            except ValueError:
+                continue
+            found += [task['alias'] for task in result.get('tasks', [])
+                      if str(task.get('task_id')) == TASK_ID and task.get('alias')]
+    return found
+
+
+def born(path: Path) -> float:
+    """Creation time of a directory (macOS st_birthtime; elsewhere st_ctime)."""
+    status = path.stat()
+    return getattr(status, 'st_birthtime', status.st_ctime)
+
+
+_SELECTED: dict = {}
+
+
 def member(project: Path) -> tuple[str | None, dict, Path | None]:
-    """The member's alias, mapping and session directory (the probe has one team_leader)."""
-    for directory in sorted(project.glob('.graphtraj/runner/sessions/1-*team_leader*')):
-        mapping = directory / 'mapping.yml'
-        return directory.name, (yaml.safe_load(mapping.read_text()) or {}) if mapping.is_file() else {}, directory
-    return None, {}, None
+    """The member created by 01's dispatch: alias, mapping and session directory, or (None, {}, None).
+
+    Candidates are task 1's team_leader session directories created at or after the recorded dispatch time; when
+    01's stream already holds the swarm result, only its alias. Exactly one must match. Prints which and why."""
+    try:
+        dispatch = json.loads((project / DISPATCH).read_text())
+    except (OSError, ValueError):
+        reason = f'no dispatch record {project / DISPATCH} (run 01 first)'
+        dispatch = None
+    directories = sorted(project.glob('.graphtraj/runner/sessions/1-*team_leader*'))
+    chosen: list[Path] = []
+    if dispatch is not None:
+        aliases = dispatch.get('alias') and [dispatch['alias']] or swarm_aliases(dispatch.get('stream'))
+        after = [d for d in directories if born(d) >= dispatch['at']]
+        chosen = [d for d in after if not aliases or d.name in aliases]
+        reason = (f"dispatch at {dispatch.get('iso')}; task 1 team_leader sessions {[d.name for d in directories]}; "
+                  f"created at/after the dispatch {[d.name for d in after]}; swarm result alias "
+                  f"{aliases or 'not yet in the stream'}")
+    line = (f'member: {chosen[0].name} ({reason})' if len(chosen) == 1 else
+            f'member: NONE: {len(chosen)} match ({reason})')
+    if _SELECTED.get('line') != line:
+        print(line)
+        _SELECTED['line'] = line
+    if len(chosen) != 1:
+        return None, {}, None
+    directory = chosen[0]
+    mapping = directory / 'mapping.yml'
+    return directory.name, (yaml.safe_load(mapping.read_text()) or {}) if mapping.is_file() else {}, directory
 
 
 def core(project: Path, agent: str | None) -> dict:
@@ -255,7 +525,7 @@ def child_cmd(project: Path, seconds: str) -> int:
                 f'runtime_pid={process.get("runtime_pid")} tool_marker recorded={bool(process.get("tool_marker"))} '
                 f'tool_descendants recorded={bool(process.get("tool_descendants"))} '
                 f'worker alive={alive(process.get("worker_pid"))} runtime alive={alive(process.get("runtime_pid"))} '
-                f"'{CHILD_SLEEP}' alive={sorted(sleeping())}")
+                f"'{CHILD_SLEEP}' alive={sorted(sleeping())} '{RUNNING_SLEEP}' alive={sorted(sleeping(RUNNING_SLEEP))}")
 
     code = poll(project, seconds, done, 'CHILD-RUNNING', state)
     print(state())
@@ -264,8 +534,8 @@ def child_cmd(project: Path, seconds: str) -> int:
 
 # -- Processes (read only unless named) -----------------------------------------
 
-def sleeping() -> dict[int, str]:
-    """Live same-user processes whose command holds ``sleep 461`` (read only): ps, plus argv read
+def sleeping(text: str = CHILD_SLEEP) -> dict[int, str]:
+    """Live same-user processes whose command holds ``text`` (read only): ps, plus argv read
     through libproc, which also works where ps is not allowed (the sandbox rehearsal)."""
     found = {}
     try:
@@ -274,7 +544,7 @@ def sleeping() -> dict[int, str]:
         listing = ''
     for line in listing.splitlines():
         pid, _, command = line.strip().partition(' ')
-        if CHILD_SLEEP in command and 'probe.py' not in command and pid.isdigit():
+        if text in command and 'probe.py' not in command and pid.isdigit():
             found[int(pid)] = command[:160]
     try:
         from graftling.member_processes import _process_view, _user_pids
@@ -282,7 +552,7 @@ def sleeping() -> dict[int, str]:
         for pid in _user_pids():
             view = _process_view(pid) if pid not in found and pid != os.getpid() else None
             command = ' '.join(view[0]) if view else ''
-            if CHILD_SLEEP in command and 'probe.py' not in command:
+            if text in command and 'probe.py' not in command:
                 found[pid] = command[:160]
     except (ImportError, OSError, ValueError):
         # Optional: the guard runs before the venv exists; ps alone covers the real host.
@@ -392,10 +662,12 @@ def live(entry: dict) -> bool:
 
 
 def is_child_sleep(argv: str) -> bool:
-    """``sleep 461`` itself, or Pi's ``/bin/bash -c sleep 461`` before bash replaced itself with it."""
+    """The orphan ``sleep 1461`` itself (or via ``nohup``), as Pi's bash tool left it in the background."""
+    seconds = CHILD_SLEEP.split()[1]
     words = argv.split()
-    return words[:2] in (['sleep', '461'], ['/bin/sleep', '461']) or words[-2:] == ['sleep', '461'] and (
-        words[:2] in (['/bin/bash', '-c'], ['bash', '-c'], ['/bin/sh', '-c'], ['/bin/zsh', '-c']))
+    if words[:1] == ['nohup']:
+        words = words[1:]
+    return words[:2] in (['sleep', seconds], ['/bin/sleep', seconds])
 
 
 def kill(project: Path, facts_file: str) -> int:
@@ -403,6 +675,9 @@ def kill(project: Path, facts_file: str) -> int:
     from graftling.tool_descendants import identity
 
     alias, mapping, record, execution = facts_of(project)
+    if alias is None:
+        print('STOP: no single member created by 01\'s dispatch (line above). Nothing was done.')
+        return 1
     process = execution.get('process') or {}
     worker, runtime, marker = process.get('worker_pid'), process.get('runtime_pid'), process.get('tool_marker')
     sidecar = process.get('tool_descendants')
@@ -448,6 +723,13 @@ def kill(project: Path, facts_file: str) -> int:
               'Runtime. Nothing was done.')
         return 1
     worker_identity, runtime_identity = identity(worker), identity(runtime)
+    try:
+        runtime_group = os.getpgid(runtime) if isinstance(runtime, int) else None
+    except ProcessLookupError:
+        runtime_group = None
+    running = sleeping(RUNNING_SLEEP)
+    print(f"before the kill: the child's running bash call '{RUNNING_SLEEP}' alive (read only) {sorted(running)}; "
+          f'Runtime process group {runtime_group}')
 
     killed: list = []
     # Re-check pid and start time right before each signal: never a bare pid after the fact.
@@ -467,6 +749,15 @@ def kill(project: Path, facts_file: str) -> int:
     escaped_before = [entry for entry in entries if live(entry)]
     print('after the kill, before any read: recorded descendants alive (the escaped tools):',
           [(entry['pid'], entry.get('argv', '')[:60]) for entry in escaped_before])
+    # The required observation: the orphan outlived the owner kill, outside the Runtime's group (so neither the
+    # group kill nor Pi's own abort of the running call stopped it). Fail-closed.
+    orphans = [entry for entry in sleeps if live(entry) and entry.get('pgid') != runtime_group]
+    observed = check(f"0 after the owner kill and before the reconciling read, the child's recorded '{CHILD_SLEEP}' "
+                     'is alive (outside the Runtime group)', bool(orphans),
+                     f"alive={[(entry['pid'], entry.get('pgid')) for entry in orphans]} runtime group {runtime_group}")
+    if not observed:
+        print(f"NOT OBSERVED: no recorded '{CHILD_SLEEP}' outlived the owner kill outside the Runtime group; the "
+              'reclaim path was not exercised. The summary cannot be ALL PASS.')
 
     other = control_process(uuid.uuid4().hex)
     plain = control_process(None)
@@ -475,7 +766,7 @@ def kill(project: Path, facts_file: str) -> int:
     print(f'bystanders: other-marker pid {other.pid} alive {other.poll() is None}, '
           f'no-marker pid {plain.pid} alive {plain.poll() is None}, own /bin/sleep 901 pid {mine.pid} '
           f'alive {mine.poll() is None}')
-    results: list = []
+    results: list = [observed]
     escaped = None
     read_at = time.time()
     try:
@@ -527,7 +818,8 @@ def kill(project: Path, facts_file: str) -> int:
         'tool_descendants': sidecar, 'recorded_before_kill': entries,
         'marked_before_kill': len(before), 'sleep_pids_before_kill': sorted(sleep_before),
         'killed': killed, 'read_at': read_at, 'escaped_processes': escaped,
-        'checks': results}, indent=2))
+        'orphan_alive_after_kill': [entry['pid'] for entry in orphans], 'runtime_group': runtime_group,
+        'running_call_before_kill': sorted(running), 'checks': results}, indent=2))
     print('== summary:', 'ALL PASS' if results and all(results) else f'{results.count(False)} FAIL of {len(results)}',
           f'| facts in {facts_file}')
     return 0 if results and all(results) else 1
@@ -552,7 +844,7 @@ def idle(out: Path, _unused: str) -> int:
         return 0
     print('STILL ALIVE from an earlier run:', {**{f'pid file {k}': v for k, v in busy.items()},
                                               **{f'{CHILD_SLEEP} pid {k}': v for k, v in found.items()}})
-    print(f"STOP: changed nothing. Wait for it to end, then rerun (a '{CHILD_SLEEP}' ends 461 s after it started).")
+    print(f"STOP: changed nothing. Wait for it to end, then rerun (a '{CHILD_SLEEP}' ends 1461 s after it started).")
     return 1
 
 
@@ -561,41 +853,69 @@ def idle(out: Path, _unused: str) -> int:
 STUB_OWNER = r"""
 import os, subprocess, sys
 from graftling.tool_descendants import DescendantSampler
-path, marker, runtime_code = sys.argv[1], sys.argv[2], sys.argv[3]
+path, marker, runtime_code, case = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4]
 sampler = DescendantSampler(path, marker)
 sampler.prepare()
-runtime = subprocess.Popen([sys.executable, "-I", "-c", runtime_code], start_new_session=True,
+runtime = subprocess.Popen([sys.executable, "-I", "-c", runtime_code, case], start_new_session=True,
                            env={**os.environ, "GRAFTLING_MEMBER_RUN": marker},
                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 sampler.start(runtime.pid)
 runtime.wait()
 sampler.finish()
 """
-# As Pi 1.4.0's bash tool: /bin/bash -c <command>, detached (own session).
+# As Pi 1.4.0's bash tool (/bin/bash -c <command>, detached, own session) running 01's two calls: the first leaves
+# the orphan in the background and ends; the second is still running.
 STUB_RUNTIME = r"""
-import subprocess, time
-subprocess.Popen(["/bin/bash", "-c", "sleep 461"], start_new_session=True,
+import subprocess, sys, time
+first = subprocess.Popen(["/bin/bash", "-c", "sleep 1461 >/dev/null 2>&1 & sleep 3"],
+                         start_new_session=sys.argv[1] != "ingroup",
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+first.wait()
+subprocess.Popen(["/bin/bash", "-c", "sleep 1200"], start_new_session=True,
                  stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 time.sleep(900)
 """
 
 
-def stub(project: Path, _unused: str) -> int:
-    """Without a model: a member session, its Pi child's record and stand-in processes, as 01 leaves them.
+def stub_session(project: Path, name: str, mapping: dict) -> None:
+    session = project / '.graphtraj/runner/sessions' / name
+    session.mkdir(parents=True, exist_ok=True)
+    (session / 'mapping.yml').write_text(yaml.safe_dump(mapping))
+    (session / 'execution.yml').write_text(yaml.safe_dump({'last_agent_message': 'stub'}))
 
+
+def stub(project: Path, case: str) -> int:
+    """Without a model: member sessions, the current member's Pi child record and stand-in processes.
+
+    CASE '-': an older task-1 member (as round 1's run left), then the dispatch record, then the current member.
     A stand-in owner Worker (Python, own session) runs the real descendant sampler on a stand-in Runtime (Python,
-    own group, the child's marker). The Runtime starts a real ``/bin/bash -c 'sleep 461'`` in its own session,
-    as Pi's bash tool does, so the tool process is an Apple platform binary, as on the real host.
+    own group, the child's marker). The Runtime runs 01's two bash calls as Pi's bash tool does (``/bin/bash -c``,
+    own session): the first leaves ``sleep 1461`` in the background and ends, the second (``sleep 1200``) runs.
+    CASE 'ingroup': as '-', but the first call runs in the Runtime's group, so the group kill also stops the
+    orphan: 02 must print NOT OBSERVED and no ALL PASS (fail-closed check of CHECK 0).
+    CASE 'ambiguous': a new dispatch record and two members after it, no alias; no process is started.
     """
     from graftling import AgentControl, Caller, bind
     from graftling.tool_descendants import read_sidecar
 
+    if case == 'ambiguous':
+        dispatch_cmd(project, '')
+        time.sleep(0.05)
+        for name in ('1-stub_ambiguous-team_leader@team_leader_3', '1-stub_ambiguous-team_leader@team_leader_4'):
+            stub_session(project, name, {'agent': 'agent-stub-' + name[-1], 'worker_pid': None})
+        print('stub ambiguous: two task-1 members created after the dispatch, no alias recorded')
+        return 0
+    stub_session(project, '1-stub-team_leader@team_leader', {'agent': 'agent-older-member', 'worker_pid': None})
+    print('stub: older member 1-stub-team_leader@team_leader (before the dispatch)')
+    time.sleep(1.1)
+    dispatch_cmd(project, '')
+    time.sleep(0.05)
     marker = uuid.uuid4().hex
     environment = {key: value for key, value in os.environ.items() if key != MARKER_ENV}
     work = project / '.graphtraj/probe-461/stub'
     work.mkdir(parents=True, exist_ok=True)
-    sidecar = work / 'tool-descendants.json'
-    worker = subprocess.Popen([sys.executable, '-I', '-c', STUB_OWNER, str(sidecar), marker, STUB_RUNTIME],
+    sidecar = work / f'tool-descendants-{marker[:8]}.json'
+    worker = subprocess.Popen([sys.executable, '-I', '-c', STUB_OWNER, str(sidecar), marker, STUB_RUNTIME, case],
                               env=environment, start_new_session=True,
                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     deadline = time.time() + 20
@@ -605,7 +925,9 @@ def stub(project: Path, _unused: str) -> int:
             entries = read_sidecar(sidecar)
         except (OSError, ValueError):
             entries = []
-        if any(is_child_sleep(entry.get('argv', '')) for entry in entries):
+        # As at the real kill: the first call ended (the orphan reparented) and the second call runs.
+        if any(is_child_sleep(entry.get('argv', '')) for entry in entries) and \
+                any(entry.get('argv') == RUNNING_SLEEP for entry in entries):
             break
         time.sleep(0.2)
     runtime = json.loads(sidecar.read_text()).get('runtime_pid') if sidecar.exists() else None
@@ -637,16 +959,16 @@ def stub(project: Path, _unused: str) -> int:
     data = json.loads(path.read_text())
     data['executions'][-1]['process']['worker_pid'] = worker.pid
     path.write_text(json.dumps(data, indent=2, sort_keys=True))
-    session = project / '.graphtraj/runner/sessions/1-stub-team_leader'
-    session.mkdir(parents=True, exist_ok=True)
-    (session / 'mapping.yml').write_text(yaml.safe_dump({'agent': lead_agent, 'worker_pid': worker.pid}))
-    (session / 'execution.yml').write_text(yaml.safe_dump({'last_agent_message': 'stub'}))
-    print(f'stub: member 1-stub-team_leader agent {lead_agent}, child {agent}, worker {worker.pid}, '
-          f'runtime {runtime}; recorded {[(entry["pid"], entry.get("argv")) for entry in entries]}')
+    current = f'1-stub-team_leader@team_leader_{marker[:4]}'
+    stub_session(project, current, {'agent': lead_agent, 'worker_pid': worker.pid})
+    print(f'stub: current member {current} agent {lead_agent}, child {agent}, worker '
+          f'{worker.pid}, runtime {runtime}; recorded {[(entry["pid"], entry.get("argv")) for entry in entries]}')
     return 0
 
 
 if __name__ == '__main__':
     command, target, extra = sys.argv[1], Path(sys.argv[2]), sys.argv[3]
-    commands = {'prepare': prepare, 'plugins': plugins, 'child': child_cmd, 'kill': kill, 'idle': idle, 'stub': stub}
+    commands = {'prepare': prepare, 'isolation': isolation, 'pi_role_keys': pi_role_keys, 'claude_settings': claude_settings,
+                'claude_check': claude_check, 'claude_facts': claude_facts, 'plugins': plugins, 'dispatch': dispatch_cmd,
+                'child': child_cmd, 'kill': kill, 'idle': idle, 'stub': stub}
     raise SystemExit(commands[command](target, extra))

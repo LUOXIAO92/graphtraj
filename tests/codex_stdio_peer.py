@@ -294,6 +294,23 @@ for line in incoming():
                 continue
         else:
             prompt = params['input'][0]['text']
+        if prompt.startswith('tool-') and os.environ.get('PEER_TOOL_COMMAND'):
+            # 462: a tool shell in its own session, as Codex starts one, and a readable
+            # process of another execution (another marker) with a /bin/sleep child.
+            # Codex gives tools their own pipes, never the service's stdio.
+            quiet = {'stdin': subprocess.DEVNULL, 'stdout': subprocess.DEVNULL, 'stderr': subprocess.DEVNULL,
+                     'start_new_session': True}
+            subprocess.Popen(['/bin/sh', '-c', os.environ['PEER_TOOL_COMMAND']], **quiet)
+            other = {**os.environ, 'GRAFTLING_MEMBER_RUN': os.environ.get('GRAFTLING_MEMBER_RUN', 'x')[::-1]}
+            subprocess.Popen([sys.executable, '-c', "import subprocess; subprocess.Popen(['/bin/sleep', '303']).wait()"],
+                             env=other, **quiet)
+            if prompt == 'tool-end':
+                # End the turn after the owner's sampler has seen the tool (about 1 s).
+                emit({'id': message['id'], 'result': result})
+                time.sleep(2.5)
+                complete(thread_id, turn_id, 'tool ran')
+                continue
+            prompt = 'hold'
         if (
             os.environ.get('PEER_REJECT_RETRO')
             and len(params['input']) == 2

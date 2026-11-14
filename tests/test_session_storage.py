@@ -293,6 +293,38 @@ def test_main_and_members_read_linked_project_sessions_without_secrets(tmp_path:
         handle_request({**request, 'arguments': {'session_id': 'codex:other-project-thread'}}, cwd=tmp_path)
 
 
+def test_member_reads_associated_claude_and_codex_sessions_by_native_id(tmp_path: Path) -> None:
+    """Members' only route to other Sessions' history (Task 465): no JSONL file grant."""
+    from graphtraj.execution.runner_status import runtime_caller
+    from graphtraj.interfaces.gateway import handle_request
+    from graphtraj.interfaces.agents import swarm_root
+    from graftling.sessions.archive import SessionArchive
+    from test_result_submission import result_project
+
+    runner, _, _ = result_project(tmp_path)
+    archive = SessionArchive(swarm_root(tmp_path), save_normalized_sessions=True)
+    natives = {'claude': 'feb6a850-45af-4f89-b2cf-a34637d96d18',
+               'codex': '01a1ab78-2618-7ff2-8937-11e6a3e341a8'}
+    for runtime, native in natives.items():
+        linked = upgrade_header(header(f'{runtime}:{native}'))
+        linked['native'].update(runtime=runtime, sessionId=native)
+        archive.map_session(linked)
+        archive.collect(f'{runtime}:{native}', [retain_native(runtime, {
+            'text': f'{runtime} progress', 'api_key': 'private-api-key',
+        }, session_id=native, locator='byte:0', seq=0, time=1)], source='rollout', position=1)
+    request = {'action': 'execute', 'feature': 'session_read'}
+    with runtime_caller(runner, 'research@x1'):
+        for runtime, native in natives.items():
+            document = handle_request({**request, 'arguments': {'session_id': native}}, cwd=tmp_path).document
+            assert document['header']['id'] == f'{runtime}:{native}'
+            assert document['events'][0]['data']['record']['text'] == f'{runtime} progress'
+            assert 'private-api-key' not in json.dumps(document)
+        # A native ID with no association in this project is refused.
+        with pytest.raises(ValueError, match='unavailable'):
+            handle_request({**request, 'arguments': {
+                'session_id': '0e4920c2-c18b-45c1-b6cf-0fbc7ef8d85f'}}, cwd=tmp_path)
+
+
 def test_member_reads_an_unmigrated_codex_session_by_its_bare_native_id(tmp_path: Path) -> None:
     """A bare native ID selects its runtime-prefixed archive; redaction and authority stay."""
     from graphtraj.execution.runner_models import RunnerError

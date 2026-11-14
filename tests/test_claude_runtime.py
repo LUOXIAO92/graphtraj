@@ -885,6 +885,68 @@ def test_project_history_files_keep_native_home_private(
     assert not settings['sandbox']['allowUnsandboxedCommands']
 
 
+def seed_associated_histories(root: Path, homes: Path, start: int, count: int) -> list[Path]:
+    """Associate real JSONL files, half Claude-like and half Codex-like (Task 465)."""
+    files = []
+    for index in range(start, start + count):
+        if index % 2:
+            native = homes / f'codex/sessions/2026/11/14/rollout-{index:05d}.jsonl'
+        else:
+            native = homes / f'claude/projects/-project/{index:05d}.jsonl'
+        native.parent.mkdir(parents=True, exist_ok=True)
+        native.write_text('{"type": "session_meta"}\n')
+        record = root / f'.graphtraj/runner/sessions/associated-{index:05d}/session.yml'
+        record.parent.mkdir(parents=True)
+        record.write_text(yaml.safe_dump({'session': f'native-{index:05d}', 'rollout_path': str(native)}))
+        files.append(native.resolve())
+    return files
+
+
+def grant_counts(settings: dict) -> dict[str, int]:
+    """Count every native permission rule and sandbox path a member receives."""
+    permissions = settings['permissions']
+    filesystem = settings['sandbox']['filesystem']
+    return {**{key: len(permissions[key]) for key in ('allow', 'deny', 'additionalDirectories')},
+            **{key: len(filesystem[key]) for key in ('allowRead', 'denyRead', 'allowWrite', 'denyWrite')}}
+
+
+@pytest.mark.parametrize('access', ['read', 'write'])
+def test_member_history_grants_do_not_grow_with_associated_sessions(
+    tmp_path: Path, claude_environment: None, access: str,
+) -> None:
+    """3 or 1000 associated Sessions yield the same member settings; none is granted.
+
+    Members read associated Sessions through session_read instead. Claude Code
+    2.1.325 expanded per-file grants into thousands of Seatbelt paths (E2BIG).
+    """
+    from graphtraj.configuration.project_configuration import cli_directory
+
+    result_project(tmp_path)
+    homes = tmp_path / 'native-homes'
+    associated = seed_associated_histories(tmp_path, homes, 0, 3)
+    with ExitStack() as stack:
+        turn, _, _ = execution(tmp_path, stack, 'unused', worktree_access=access)
+        address = str(tmp_path / 'connection.sock')
+        small, _ = turn.native_settings(address)
+        associated += seed_associated_histories(tmp_path, homes, 3, 997)
+        from graphtraj.runtimes.codex.access import project_history_files
+
+        assert set(associated) <= project_history_files(tmp_path)
+        large, _ = turn.native_settings(address)
+    assert grant_counts(large) == grant_counts(small)
+    assert large == small
+    text = json.dumps(large)
+    assert not any(str(path) in text for path in associated)
+    assert str(homes) not in text
+    assert getattr(turn, 'resource_settings', None) is None
+    filesystem = large['sandbox']['filesystem']
+    root = tmp_path.resolve()
+    for protected in (str(Path.home() / '.codex'), str(root / '.codex'),
+                      str(cli_directory(root)), str(Path(turn.request['runtime_home']).resolve())):
+        assert protected in filesystem['denyRead']
+        assert f'Read(/{protected})' in large['permissions']['deny']
+
+
 def test_claude_stop_without_native_settlement_confirms_only_exit(
     tmp_path: Path, claude_environment: None, monkeypatch: pytest.MonkeyPatch,
 ) -> None:

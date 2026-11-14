@@ -139,7 +139,7 @@ class _CodexRole:
 
         # Control now runs on the private native callback, not through files
         # writable by an Agent or by a helper inheriting its tool permissions.
-        filesystem.update(private_filesystem(runtime_store, self.runtime_home))
+        filesystem.update(private_filesystem(runtime_store, self.runtime_home, history=False))
         filesystem.update(member_project_reads(runtime_store.parent))
         if filesystem.get(":workspace_roots", {}).get(".") == "write":
             filesystem[str(git_common_directory)] = "write"

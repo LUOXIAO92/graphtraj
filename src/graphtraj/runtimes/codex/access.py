@@ -18,9 +18,11 @@ import yaml
 from graphtraj.configuration.project_configuration import configuration_exists, load_project_configuration
 
 
-def private_filesystem(runtime_store: Path, runtime_home: str | None = None) -> dict[str, str]:
+def private_filesystem(runtime_store: Path, runtime_home: str | None = None,
+                       *, history: bool = True) -> dict[str, str]:
     """Allow project development reads while protecting credentials and control channels.
 
+    ``history=False`` omits exact associated JSONL grants, as for members.
     Exact Worktree, Skill and owned-report grants are added by the caller. No
     account or Runtime configuration is rewritten; these are per-Session native
     filesystem entries. The host-side Runner remains outside the tool sandbox.
@@ -38,7 +40,7 @@ def private_filesystem(runtime_store: Path, runtime_home: str | None = None) -> 
         str(Path(sys.prefix).resolve()): 'read',
         str(Path(__file__).resolve().parents[2]): 'read',
     }
-    filesystem.update(project_development_reads(root))
+    filesystem.update(project_development_reads(root, history=history))
     # Public configuration is readable, but an Agent cannot change its own
     # control or launch policy through a native file tool.
     for path in (project_configuration_file(root), project_core_directory(root) / 'roles.yml'):
@@ -46,8 +48,13 @@ def private_filesystem(runtime_store: Path, runtime_home: str | None = None) -> 
     return filesystem
 
 
-def project_development_reads(root: Path) -> dict[str, str]:
-    """Return project-owned read grants shared by fresh and resumed native Sessions."""
+def project_development_reads(root: Path, *, history: bool = True) -> dict[str, str]:
+    """Return project-owned read grants shared by fresh and resumed native Sessions.
+
+    Main keeps one exact grant per associated native history file. Members
+    pass ``history=False`` and read those Sessions through ``session_read``,
+    so their profile does not grow with the number of associated Sessions.
+    """
     if not configuration_exists(root):
         return {}
     configuration = load_project_configuration(root)
@@ -55,7 +62,8 @@ def project_development_reads(root: Path) -> dict[str, str]:
         configuration.state, configuration.docs, configuration.agent_worktrees,
         project_runner_directory(root),
     )}
-    filesystem.update({str(path): 'read' for path in project_history_files(root)})
+    if history:
+        filesystem.update({str(path): 'read' for path in project_history_files(root)})
     return filesystem
 
 
@@ -77,7 +85,7 @@ def member_project_reads(root: Path) -> dict[str, str]:
         str(project_cli_directory(root)): 'none',
         str(private / 'claude-host'): 'none',
     }
-    filesystem.update(project_development_reads(root))
+    filesystem.update(project_development_reads(root, history=False))
     return filesystem
 
 

@@ -437,7 +437,8 @@ def test_new_native_owner_refreshes_project_reads_from_old_request(
     actual = received['params']['config']
     permissions = actual['permissions'][actual['default_permissions']]['filesystem']
     assert all(permissions[str(path)] == 'read' for path in reads)
-    assert permissions[str(history)] == 'read'
+    # Members read associated histories through session_read (Task 465).
+    assert str(history) not in permissions
     assert permissions[str(native_home)] == 'none'
     assert str(unrelated) not in permissions
     assert permissions[str(root / '.graphtraj')] == 'read'

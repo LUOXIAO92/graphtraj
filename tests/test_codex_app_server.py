@@ -629,27 +629,27 @@ def test_each_session_projects_resolved_role_skills_and_task_access(
                 assert filesystem[str(root / '.graphtraj')] == 'read'
                 assert filesystem[str(root / '.codex')] == 'none'
                 assert filesystem[str(native_home)] == 'none'
-                assert filesystem[str(native_home / f'{name}.jsonl')] == 'read'
-                assert str(native_home / 'unrelated.jsonl') not in filesystem
-                assert str(native_home / f'{["second", "first"][index]}.jsonl') not in filesystem
+                # Members read associated histories through session_read, so
+                # no per-file grant exists, including their own (Task 465).
+                assert not any(key.endswith('.jsonl') for key in filesystem)
                 assert filesystem[str(root / 'evidence/teams/1/rounds/1/report.md')] == 'read'
                 assert (str(root / 'git-common') in filesystem) == (index == 0)
                 assert not any(str(tmp_path / ['second', 'first'][index]) in key for key in filesystem)
-                # A retained launch from before project-history grants gains
-                # only its associated file on resume, without changing the original.
+                # A resumed launch gains no history grant either, and the
+                # retained original request is not changed by the refresh.
                 request = contexts[index].launch_document()['adapter_request']
                 prior = request['session_parameters']['config']
                 prior_files = prior['permissions'][prior['default_permissions']]['filesystem']
-                history = str(native_home / f'{name}.jsonl')
-                del prior_files[history]
+                before = dict(prior_files)
                 resumed = refresh_codex_report_paths(
                     request, worktree=root, evidence=root / 'evidence', report_files=(),
                     role='engineer', session_directory=root / '.graphtraj/runner/sessions/current',
                 )
                 refreshed = resumed['session_parameters']['config']
                 resumed_files = refreshed['permissions'][refreshed['default_permissions']]['filesystem']
-                assert resumed_files[history] == 'read'
-                assert history not in prior_files
+                assert not any(key.endswith('.jsonl') for key in resumed_files)
+                assert resumed_files[str(native_home)] == 'none'
+                assert prior_files == before
                 assert resumed_files[':workspace_roots']['.'] == ['write', 'read'][index]
             different_connection = context(tmp_path / 'third', peer, replace(
                 role, settings=replace(role.settings, base_url='https://different.invalid/v1',

@@ -57,12 +57,11 @@ class ClaudeExecution(NativeClaudeExecution):
         home = Path(request['runtime_home']).resolve()
         resources = [p.resolve() for p in (worktree / 'docs', worktree / 'CONTEXT.md',
                                            worktree / 'AGENTS.md', worktree / '.agents') if p.exists()]
-        resources.extend(Path(path).resolve() for path in request['resources'])
-        from graphtraj.runtimes.codex.access import project_history_files
-
-        history = {path for path in project_history_files(root)
-                   if not path.is_relative_to(project_cli_directory(root).resolve())}
-        resources.extend(sorted(history))
+        # Associated native histories are read through ``session_read``, which
+        # redacts credentials; granting each JSONL file here made the settings
+        # and the native sandbox profile grow with every associated Session.
+        explicit = [Path(path).resolve() for path in request['resources']]
+        resources.extend(explicit)
         # Project development records stay readable for diagnosis across
         # Agents; control channels, Runtime homes and credentials stay denied.
         records = [request['state_directory'], str(project_runner_directory(root))]
@@ -70,12 +69,13 @@ class ClaudeExecution(NativeClaudeExecution):
                        str(root / '.codex'), str(Path.home() / '.codex'), str(home)]
         native_denied_read = []
         for protected in map(Path, denied_read):
-            if not any(path.is_relative_to(protected) for path in history):
+            if not any(path.is_relative_to(protected) for path in explicit):
                 native_denied_read.append(str(protected))
                 continue
             # Native Read deny rules override exact file grants. Restricted
-            # mode instead confines these reads to the declared history files;
-            # sandbox denyRead stays in force with exact allowRead exceptions.
+            # mode instead confines these reads to the role's declared history
+            # files (claude.read_paths); sandbox denyRead stays in force with
+            # exact allowRead exceptions.
             # Never use this arrangement when a working directory exposes the
             # protected home itself or another part of it.
             if any(path.is_relative_to(protected) or protected.is_relative_to(path)

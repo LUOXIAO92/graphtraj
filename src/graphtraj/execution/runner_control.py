@@ -1720,10 +1720,60 @@ def _confirm_termination(alias: str, directory: Path, mapping: dict) -> dict:
             'original_execution': read_execution_result(execution_file),
             'terminal_confirmed': True, 'evidence': evidence,
         }
+        reclaimed = _reclaim_tool_processes(directory, mapping)
+        if reclaimed is not None:
+            receipt['tool_processes'] = reclaimed
         path = directory / f"terminal-confirmation-{mapping['execution_id']}.yml"
         write_yaml_durably(path, receipt)
         read_terminal_outcome(execution_file)
     return {'alias': alias, 'interrupt_status': 'stopped', 'evidence': str(path)}
+
+
+def _reclaim_tool_processes(directory: Path, mapping: Mapping[str, Any]) -> dict | None:
+    """Stop the tool processes a killed owner left, after its Runtime's end is confirmed (460).
+
+    Called by :func:`_confirm_termination` only, under the startup lock, with
+    the mapping unchanged and the owner lock released, after the Adapter
+    confirmed the Runtime stopped. The Worker's record names the execution's
+    marker and descendants sidecar (459); only recorded processes still alive
+    with the same uid and start time, their current descendants, and processes
+    carrying exactly this marker are stopped (``stop_tool_processes``), and
+    the Runner process and its ancestors never are. Each result is appended,
+    redacted, to the record and returned for the confirmation receipt. No
+    record (an older execution or another Runtime) returns None.
+    """
+    from graphtraj.execution.runner_worker import TOOL_PROCESSES_RECORD
+
+    path = directory / TOOL_PROCESSES_RECORD.format(mapping['execution_id'])
+    if path.is_symlink() or not path.is_file() or os.name == 'nt':
+        return None
+    from graftling import process_ancestors, read_tool_descendants, stop_tool_processes
+
+    try:
+        record = yaml.safe_load(path.read_text(encoding='utf-8'))
+    except (OSError, UnicodeError, yaml.YAMLError):
+        record = None
+    marker = record.get('tool_marker') if isinstance(record, dict) else None
+    sidecar = record.get('tool_descendants') if isinstance(record, dict) else None
+    if (not isinstance(record, dict) or record.get('execution_id') != mapping['execution_id']
+            or not isinstance(marker, str) or not marker or not isinstance(sidecar, str)):
+        result = {'found': [], 'stopped': [], 'remaining': [], 'error': 'tool processes record unreadable'}
+    else:
+        entries, error = None, None
+        try:
+            # The sidecar is this Session's own file; anything else is not read.
+            if Path(sidecar).parent != directory.resolve():
+                raise ValueError('record outside the Session directory')
+            entries = read_tool_descendants(sidecar)
+        except (OSError, ValueError) as failure:
+            error = f'tool descendants record unreadable: {type(failure).__name__}: {failure}'
+        # Every reported command is already redacted and cut by stop_tool_processes (459).
+        result = stop_tool_processes(entries, marker, set(process_ancestors(os.getpid())), error=error)
+    result = {**result, 'at': time.time()}
+    if isinstance(record, dict):
+        reclaims = record.get('reclaims') if isinstance(record.get('reclaims'), list) else []
+        write_yaml_durably(path, {**record, 'reclaims': [*reclaims, result]})
+    return result
 
 
 ABNORMAL_RESPONSE_FILE = "abnormal-response.yml"

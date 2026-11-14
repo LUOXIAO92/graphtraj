@@ -512,6 +512,8 @@ def test_resume_refreshes_route_preserving_session_and_work_model(
     # Since 433 an owner adds the credential exclude to its Session, never to the retained request.
     policy = expected['config'].setdefault('shell_environment_policy', {})
     policy['exclude'] = [*policy.get('exclude', []), *CODEX_SHELL_EXCLUDE]
+    # Since 462 its tool shells also carry this execution's own marker.
+    policy.setdefault('set', {})['GRAFTLING_MEMBER_RUN'] = resumed.member_marker
     assert params == expected
     assert params['config']['approvals_reviewer'] == ('auto_review' if native else 'user')
     if native:

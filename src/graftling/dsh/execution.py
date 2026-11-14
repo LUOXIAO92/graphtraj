@@ -21,6 +21,8 @@ from .service import DshService, redact_native, secret_values
 from .errors import DshError
 from graftling.child_env import child_environment, consumer_environment
 from graftling.connection import CONNECTION_ENV
+from graftling.member_processes import MEMBER_RUN_ENV, new_marker
+from graftling.tool_descendants import DescendantSampler, stop_tool_processes
 from .settings import _DEFAULT_KEY_ENV, AMBIENT_ENDPOINTS, credential_environment, resumes_by_address
 
 
@@ -216,6 +218,13 @@ class DshExecution:
         self.logs = (self.native_directory / 'dsh-native' if request.get('native_directory')
                      else trace_file.parent / 'dsh-native')
         self.review_ready = self.native_directory / 'dsh-home' / f'agents-review-{self.execution_id}.ready'
+        # DSH starts each tool in its own session and stops only those groups, so a
+        # process a tool moves into another session outlives both endings. The
+        # service's descendants are sampled while it lives and stopped afterwards (463, 459).
+        self.member_marker = new_marker()
+        self.tool_descendants = directory / f'tool-descendants-{self.execution_id}.json'
+        self.descendants = DescendantSampler(self.tool_descendants, self.member_marker)
+        self.escaped: dict | None = None
 
     def prepare_launch(self) -> dict[str, str]:
         """Compose an isolated native profile, retaining defaults outside this Agent."""
@@ -289,6 +298,9 @@ class DshExecution:
         })
         for ambient in AMBIENT_ENDPOINTS:
             environment.pop(ambient, None)
+        # After child_environment, which drops an inherited marker: this execution's
+        # own, kept by DSH's scrubbedParentEnv for every tool it starts.
+        environment[MEMBER_RUN_ENV] = self.member_marker
         return environment
 
     def _retain_trace(self) -> None:
@@ -577,8 +589,12 @@ class DshExecution:
         self.service = self.service_type(
             self.request['executable'], Path(self.request['worktree_path']), environment, **options,
         )
+        result: dict | None = None
         try:
+            self.descendants.prepare()
             self.service.start()
+            if callable(getattr(self.service.process, 'poll', None)):
+                self.descendants.start(self.service.process.pid)
             self._require_review_hook()
             addressed = self.session is not None and resumes_by_address(self.request.get('package'))
             if addressed:
@@ -686,8 +702,9 @@ class DshExecution:
                         break
             if self.unsupported:
                 raise self.error_type('RUNTIME_REQUEST_UNHANDLED', self.unsupported)
-            return {'outcome': self.outcome, 'session_id': self.session,
-                    'execution_id': self.execution_id, 'last_agent_message': self.last_message}
+            result = {'outcome': self.outcome, 'session_id': self.session,
+                      'execution_id': self.execution_id, 'last_agent_message': self.last_message}
+            return result
         except self.error_type as error:
             with (self.directory / 'stderr.log').open('a', encoding='utf-8') as stream:
                 stream.write(error.code + ': ' + error.message + '\n')
@@ -696,7 +713,14 @@ class DshExecution:
             in_flight = sys.exc_info()[1]
             try:
                 try:
-                    self.service.close()
+                    # One last sample while the service may still live, then stop sampling.
+                    descendants = self.descendants.finish()
+                    try:
+                        self.service.close()
+                    finally:
+                        self._stop_escaped(descendants)
+                        if result is not None and self.escaped and self.escaped['found']:
+                            result['escaped_processes'] = self.escaped
                     with self.lock:
                         self.active = False
                         self.pending.clear()
@@ -729,6 +753,27 @@ class DshExecution:
                     in_flight.terminal_confirmed = False
                 with (self.directory / 'stderr.log').open('a', encoding='utf-8') as stream:
                     stream.write(f"{getattr(closing, 'code', type(closing).__name__)}: {closing}\n")
+
+    def _stop_escaped(self, descendants: list[dict]) -> None:
+        """Stop the recorded tool descendants and marked processes left once the service ended.
+
+        Only after the service's own process ended: DSH and close stop the groups
+        they know first. When anything was found or an error occurred, the redacted
+        report is kept on ``self.escaped`` and in ``dsh-termination-<execution>.yml``,
+        as Claude keeps its own (459).
+        """
+        process = getattr(self.service, 'process', None)
+        if not callable(getattr(process, 'poll', None)) or process.poll() is None:
+            return
+        from graftling.review import redact
+
+        report = redact(stop_tool_processes(descendants, self.member_marker, {process.pid},
+                                            error=self.descendants.error))
+        if report['found'] or report.get('error'):
+            self.escaped = report
+            (self.directory / f'dsh-termination-{self.execution_id}.yml').write_text(
+                yaml.safe_dump({'execution_id': self.execution_id, 'runtime_pid': process.pid,
+                                'escaped_processes': report}, sort_keys=False), encoding='utf-8')
 
     def operate(self, request: dict) -> dict:
         """Use the exact native Session/invocation binding; never accept caller identity."""

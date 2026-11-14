@@ -14,6 +14,36 @@ The numbers in parentheses are the project's Task numbers.
 
 ## Unreleased (compatible)
 
+- A DSH execution's tool processes are reclaimed the same way (463). DSH starts each
+  Bash tool in its own session and on shutdown stops only those groups, so a process a
+  tool moved into yet another session (`setsid`) outlived both a normal end and a
+  killed owner. The `dsh web` service now gets this execution's `GRAFTLING_MEMBER_RUN`
+  marker, its descendants are recorded as for Claude, and both drivers record
+  `tool_marker` and `tool_descendants`. After a normal end or stop the owner stops the
+  survivors once the service has exited and keeps the report in
+  `dsh-termination-<execution>.yml` and the result's `escaped_processes`; reconciling an
+  `owner-exited` execution stops them as for Claude.
+- New public names `read_tool_descendants` and `stop_tool_processes` (section 1.3), so a
+  host can stop a killed owner's recorded tool processes the way owner-exited
+  reconciliation does (460). The functions themselves are unchanged.
+- A Codex child's tool processes are now stopped after its owner or its service ends
+  (462). Codex runs a tool shell in its own session below its app-server and stops it
+  when its stdin closes, but a killed app-server leaves the shell and its command
+  running. The Codex owner now starts its owned app-server with the execution's own
+  `GRAFTLING_MEMBER_RUN` value (the parent's is still removed, 450) and sets it for
+  tool shells, records the app-server's descendants as 459 does, and stops what is left
+  once the app-server has exited, on its own thread so the end is not delayed
+  (`codex-termination-<turn>.yml`, possibly written after the end is reported). The Codex driver and GraphTraj's agents
+  driver record `tool_marker` and `tool_descendants`, so reconciling an `owner-exited`
+  Codex execution stops them too. Limits are 459's; in addition a user-started
+  `CodexHost` and a service reached through a proxy or an existing WebSocket are not
+  covered, and Pi and DSH executions are unchanged.
+- A Pi execution's tool processes are now stopped the same way as a Claude
+  execution's (461): Pi starts its bash tool detached as `/bin/bash` and stops the
+  running tool's process group itself when it shuts down; a background job left by an
+  earlier tool call, or any tool process when Pi is killed without shutting down, is
+  stopped through the recorded descendants. The Pi driver and GraphTraj's agents driver
+  now record `tool_marker` and `tool_descendants` for Pi too.
 - A Claude execution's tool processes that are Apple platform binaries are now stopped
   too (459): Claude Code's `/bin/zsh` Bash tool shell and commands such as
   `/bin/sleep`, whose environment macOS hides from the 457 marker scan. While the
@@ -30,7 +60,7 @@ The numbers in parentheses are the project's Task numbers.
   a process started and detached between two samples (about one second) is found only
   by the marker, so not when it is a platform binary; a process below a readable
   process without the marker is left alone by design; Windows is not covered. Older
-  records, and Codex, Pi and DSH executions, are unchanged. The macOS pid listing also
+  records, and Codex (until 462), Pi and DSH executions, are unchanged. The macOS pid listing also
   retries when its buffer was full, instead of returning a cut-short list.
 - Reconciling an owner-exited Claude execution now stops the tool processes it left
   (457). The Claude driver and GraphTraj's agents driver record the execution's

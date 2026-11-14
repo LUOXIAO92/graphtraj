@@ -27,6 +27,17 @@ seen on the first real-host run, Correction 1). One Codex run.
 
 ### 00: preflight
 
+Isolation from the Harness (the project is nested under its `tmp/`): 00 writes the project's own
+`.claude/settings.local.json` only (never `~/.claude` or another user setting), merging into the keys already there:
+`claudeMdExcludes` for the Harness `CLAUDE.md`, `CLAUDE.local.md`, `AGENTS.md` (and `**/` forms), and
+`enabledPlugins: {"cc-plugin-agents-md@builtin": false}`. In the first reopen run Claude Code 2.1.323 reported the
+Harness `AGENTS.md` among its instructions while `claudeMdExcludes` was set; the init record listed the builtin
+`cc-plugin-agents-md`, which is the likely source (an inference: native memory loads CLAUDE.md, not AGENTS.md).
+00 prints `plugins loaded: [...]` and `cc-plugin-agents-md loaded: YES/NO` from the init record. It STOPs if the model
+reports any Harness file; if the plugin is still listed but no Harness file is reported, it prints a NOTE and goes on.
+The probe Main (01, 02's wait) and the member run in the same project and read this same settings file, so the same
+exclusions apply to them.
+
 As 459's, plus the Codex lines. The Codex login check prints only `YES` or `NO` (it greps `codex login status`
 for `Logged in` and prints nothing of its text). `codex exec -m gpt-6-luna --sandbox read-only --json` (the `codex_child` preset's model) answers one
 line in the isolated project; only its last agent message is printed. No key value, account text or `~/.codex`

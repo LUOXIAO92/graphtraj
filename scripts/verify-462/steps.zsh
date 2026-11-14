@@ -137,27 +137,40 @@ sys.exit(0 if texts and "MODEL OK" in texts[-1] and not leaked else 1)' $OUT/00-
   [[ -f $BASE/settings.local.json.keep ]] && mkdir -p $P/.claude && cp -p $BASE/settings.local.json.keep $P/.claude/settings.local.json
   (cd $P && clean $VV/bin/python -m graphtraj.runtimes.claude.host configuration --project $P --claude $C --write) || return 1
   # Claude Code also loads CLAUDE.md files from every parent directory; exclude the Harness's (claudeMdExcludes).
+  # The builtin plugin cc-plugin-agents-md loaded the Harness AGENTS.md (reopen 00, run 1): disable it for this
+  # project only. The probe Main and member run in this project and read this same file.
   $VV/bin/python -I -c 'import json, sys
 from pathlib import Path
 harness, path = sys.argv[1], Path(sys.argv[2])
 settings = json.loads(path.read_text()) if path.is_file() else {}
 settings["claudeMdExcludes"] = sorted({*settings.get("claudeMdExcludes", []), harness + "/CLAUDE.md",
-    harness + "/CLAUDE.local.md", harness + "/.claude/CLAUDE.md", harness + "/**/CLAUDE.md", harness + "/**/CLAUDE.local.md"})
+    harness + "/CLAUDE.local.md", harness + "/.claude/CLAUDE.md", harness + "/**/CLAUDE.md", harness + "/**/CLAUDE.local.md",
+    harness + "/AGENTS.md", harness + "/**/AGENTS.md"})
+settings["enabledPlugins"] = {**settings.get("enabledPlugins", {}), "cc-plugin-agents-md@builtin": False}
 path.parent.mkdir(parents=True, exist_ok=True)
 path.write_text(json.dumps(settings, indent=2) + "\n")
-print("claudeMdExcludes in", path, ":", settings["claudeMdExcludes"])' $H $P/.claude/settings.local.json || return 1
+print("claudeMdExcludes in", path, ":", settings["claudeMdExcludes"])
+print("enabledPlugins in", path, ":", settings["enabledPlugins"])' $H $P/.claude/settings.local.json || return 1
   say "host answers one line with $MODEL (login check; no tool)"
   (cd $P && clean $C -p --model $MODEL --output-format stream-json --verbose --mcp-config $P/.mcp.json --strict-mcp-config \
       <<< 'Reply with exactly two lines. Line 1: MODEL OK. Line 2: MEMORY: then the absolute path of every CLAUDE.md or AGENTS.md file whose contents were given to you as instructions, separated by spaces, or NONE. Use no tool.' > $OUT/00-model-stream.jsonl 2> $OUT/00-model-stderr.txt)
   print "claude -p rc=$?"
   $VV/bin/python -I -c 'import json,sys
+agents_md = False
 for line in open(sys.argv[1]):
     d = json.loads(line)
+    if d.get("type") == "system" and d.get("subtype") == "init":
+        names = [p.get("name") if isinstance(p, dict) else p for p in d.get("plugins", [])]
+        agents_md = any("cc-plugin-agents-md" in str(name) for name in names)
+        print("plugins loaded:", names)
+        print("cc-plugin-agents-md loaded:", "YES" if agents_md else "NO")
     if d.get("type") == "result":
         text = d.get("result") or ""
         print("result:", text, "| is_error:", d.get("is_error"), "| models:", list((d.get("modelUsage") or {}).keys()))
         leaked = [w for w in text.split() if w.startswith(sys.argv[2]) and not w.startswith(sys.argv[3])]
         print("claude memory from the Harness:", leaked or "none")
+        if not leaked and agents_md:
+            print("NOTE: cc-plugin-agents-md is still listed, but no Harness file was reported; going on.")
         sys.exit(1 if leaked or "MODEL OK" not in text else 0)
 sys.exit(1)' $OUT/00-model-stream.jsonl $H $P \
       || { print "STOP: claude -p gave no MODEL OK, or loaded a Harness CLAUDE.md/AGENTS.md (above). stderr:"; head -c 300 $OUT/00-model-stderr.txt; print "\nIf it says 'login' or 'API key': USER logs in with 'claude' in Terminal, then rerun 00."; return 1; }

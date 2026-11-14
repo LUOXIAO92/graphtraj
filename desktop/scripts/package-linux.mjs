@@ -37,7 +37,7 @@ for (const name of ['dist', 'dist-electron', 'package.json', 'package-lock.json'
 await fs.mkdir(path.join(install, 'wheels'));
 const buildPython = path.join(output, 'build-python/bin/python');
 run(python, ['-m', 'venv', path.join(output, 'build-python')]);
-run(buildPython, ['-m', 'pip', 'install', 'setuptools==75.8.0', 'wheel==0.45.1']);
+run(buildPython, ['-m', 'pip', 'install', 'setuptools==80.9.0', 'wheel==0.45.1']);
 await desktopHostManifest(path.join(install, 'graphtraj-desktop-bin'), app, source);
 run(buildPython, ['-m', 'pip', 'wheel', '--no-build-isolation', '--no-deps',
   '--wheel-dir', path.join(install, 'wheels'), path.join(source, 'src/graftling'), source]);

@@ -434,3 +434,7 @@ validate and select a project directly. Without it, the saved selection is used.
 - [Recovery](manuals/task-delivery/references/recovery.md): interruptions, failures and continuation.
 - [Research](manuals/research/guide.md) and [concept clarification](manuals/concept-clarification/guide.md): optional methods for your project.
 - [Coding Skill examples](examples/coding-skills/README.md): optional development methods, separate from the Runtime installation.
+
+## License
+
+GraphTraj is licensed under the [Apache License, Version 2.0](LICENSE).

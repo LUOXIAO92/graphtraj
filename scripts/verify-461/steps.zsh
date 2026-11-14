@@ -6,7 +6,8 @@
 #   zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/461-pi-child-tool-process-reclaim/scripts/verify-461/steps.zsh <00|00u|01|02|03>
 # 00  Main. preflight: scratch venv from COMMIT, the fix is in it, isolated project with a 'pi' role on the user's
 #     Pi connection and settings (values printed, never a key), srt/sandbox available, one-line answers from the
-#     Claude host and from Pi, probe Task ready, plugin loaded YES/NO; prints the 01 command.
+#     Claude host and from Pi (scratch agent dir, key from the environment; skipped when DEEPSEEK_API_KEY is unset;
+#     the user's ~/.pi is never written), probe Task ready, plugin loaded YES/NO; prints the 01 command.
 # 00u USER, once, only when 00 prints 'graphtraj-claude-host loaded: NO': folder trust.
 # 01  Main. background `claude -p` Main: swarm -> Claude member creates a Pi child whose bash runs exactly
 #     `sleep 461` and ends its turn; Main polls until CHILD-RUNNING and stops. Returns at once.
@@ -124,10 +125,16 @@ for line in open(sys.argv[1]):
     d = json.loads(line)
     if d.get("type") == "result": print("result:", d.get("result"), "| is_error:", d.get("is_error"), "| models:", list((d.get("modelUsage") or {}).keys()))' $OUT/00-model-stream.jsonl \
       || { print "STOP: claude -p gave no stream. stderr:"; head -c 300 $OUT/00-model-stderr.txt; print "\nIf it says 'login' or 'API key': USER logs in with 'claude' in Terminal, then rerun 00."; return 1; }
-  say "Pi answers one line with deepseek/deepseek-flash (agent_dir $AGENT_DIR as configured, read; no tool, no session file)"
+  say "Pi answers one line with deepseek/deepseek-flash (scratch agent dir, key from the environment; the user's ~/.pi is never written)"
+  # Pi's startup migrations write settings.json and auth.json in its agent dir, so never point it at ~/.pi here.
+  mkdir -p $BASE/scratch/pi-home
   local PIB=$(command -v pi); print "pi: $PIB ($($PIB --version 2>&1 | head -1))"
-  one_line "pi deepseek-flash" clean PI_CODING_AGENT_DIR=$AGENT_DIR PI_SKIP_VERSION_CHECK=1 PI_TELEMETRY=0 \
-      $PIB --print --no-tools --no-session --provider deepseek --model deepseek-flash 'Reply with exactly: PI OK'
+  if [[ -n ${DEEPSEEK_API_KEY:-} ]]; then
+    one_line "pi deepseek-flash" clean PI_CODING_AGENT_DIR=$BASE/scratch/pi-home PI_SKIP_VERSION_CHECK=1 PI_TELEMETRY=0 \
+        $PIB --print --no-tools --no-session --provider deepseek --model deepseek-flash 'Reply with exactly: PI OK'
+  else
+    print "pi check SKIPPED: DEEPSEEK_API_KEY not set in Main's shell; the child's own login is proven by 01"
+  fi
   say "plugin check: the init record must list graphtraj-claude-host"
   if ! $VV/bin/python -I $SD/probe.py plugins $OUT/00-model-stream.jsonl -; then
     print "STOP: graphtraj-claude-host is not loaded in $P. Claude Code loads project plugins only in a trusted folder."
@@ -135,7 +142,8 @@ for line in open(sys.argv[1]):
     return 1
   fi
   print "Success: the '461 fix:' line all True, deps click 8.5.0, connection resolved, srt listed, 'sandbox available: YES',"
-  print "'roles OK', 'task 1 ready', result 'MODEL OK' with $MODEL, 'pi deepseek-flash OK: PI OK', 'graphtraj-claude-host loaded: YES'."
+  print "'roles OK', 'task 1 ready', result 'MODEL OK' with $MODEL, 'pi deepseek-flash OK: PI OK' (or 'pi check SKIPPED'),"
+  print "'graphtraj-claude-host loaded: YES'."
   next "zsh $THIS 01"
 }
 

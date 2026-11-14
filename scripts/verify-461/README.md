@@ -12,7 +12,7 @@ The base is `~/graphtraj-verify-461`, a new path. No other verify directory is t
 
 | Step | Who | Command | Expected time | Success |
 |---|---|---|---|---|
-| 00 | Main | `S 00` | 2-4 min | `461 fix: Pi owner samples: True \| Pi owner stops recorded: True \| PiDriver records it: True \| agents driver records it for pi: True \| GraphTraj Pi owner inherits: True`, `deps: click 8.5.0`, the Pi values (connection `pi/deepseek/deepseek-flash` resolved, `pi.sandbox_python`, `pi.sandbox_path`, `pi.agent_dir`; key variables by name only), `srt on sandbox_path:` a path, `sandbox available …: YES`, `roles OK`, `task 1 ready`, `result: MODEL OK` with `claude-opus-5-5`, `pi deepseek-flash OK: PI OK`, `graphtraj-claude-host loaded: YES`. Prints the 01 command. |
+| 00 | Main | `S 00` | 2-4 min | `461 fix: Pi owner samples: True \| Pi owner stops recorded: True \| PiDriver records it: True \| agents driver records it for pi: True \| GraphTraj Pi owner inherits: True`, `deps: click 8.5.0`, the Pi values (connection `pi/deepseek/deepseek-flash` resolved, `pi.sandbox_python`, `pi.sandbox_path`, `pi.agent_dir`; key variables by name only), `srt on sandbox_path:` a path, `sandbox available …: YES`, `roles OK`, `task 1 ready`, `result: MODEL OK` with `claude-opus-5-5`, `pi deepseek-flash OK: PI OK` (scratch agent dir; or `pi check SKIPPED` when `DEEPSEEK_API_KEY` is unset), `graphtraj-claude-host loaded: YES`. Prints the 01 command. |
 | 00u | USER, once, only if 00 prints `graphtraj-claude-host loaded: NO` | `cd ~/graphtraj-verify-461/project && claude`, choose 'Yes, proceed' on the folder-trust dialog, then `/exit` | 1 min | Main reruns 00 and sees `loaded: YES`. |
 | 01 | Main | `S 01` | returns at once | Starts a `claude -p` Main in the background and prints its pid and the 02 command. |
 | 02 | Main | `S 02 2>&1 \| tee …/realhost/02.txt` | 2-9 min (waits for 01's Main) | Refuses (`STOP`, signals nothing) unless the child's descendants record lists a live `sleep 461`; prints the live process tree below the Runtime and the recorded chain (pid, ppid, pgid, uid, argv) before the kill; kills the child's owner and Runtime group; one reconciling read; four `CHECK` lines and `summary: ALL PASS`; writes `02-kill.json`. |
@@ -36,7 +36,10 @@ set to ready, the Claude host configuration, one `claude -p` login/model line an
   variables it names with set/unset only. Never a value;
 - `srt` on `sandbox_path` and `agent_sandbox.is_sandbox_available()` under `sandbox_python`;
 - one Pi line: `pi --print --no-tools --no-session --provider deepseek --model deepseek-flash` with
-  `PI_CODING_AGENT_DIR` = the configured `agent_dir`, bounded to 120 s.
+  `PI_CODING_AGENT_DIR` = a scratch home `~/graphtraj-verify-461/scratch/pi-home` and the key from the
+  environment, bounded to 120 s. Pi's startup migrations write `settings.json` and `auth.json` in its agent dir,
+  so the user's `~/.pi` is never used or written here. When `DEEPSEEK_API_KEY` is unset in Main's shell, 00 prints
+  `pi check SKIPPED: …` instead; the child's own login (through graftling's launch) is then proven by 01.
 
 The steps run their commands with a cleared environment (`env -i`). `DEEPSEEK_API_KEY`, and any names in
 `VERIFY461_KEEP_ENV`, are passed through when set in Main's shell, so a Pi child whose connection names a key

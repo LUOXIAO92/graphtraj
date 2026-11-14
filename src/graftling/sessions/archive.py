@@ -13,9 +13,11 @@ from copy import deepcopy
 from hashlib import sha256
 import fcntl
 import json
+import operator
 import os
 from pathlib import Path
 import tempfile
+import threading
 from typing import Callable, Iterator
 
 from graftling.config import read_config
@@ -107,6 +109,22 @@ def _replace(path: Path, content: bytes) -> None:
     finally:
         if temporary is not None:
             temporary.unlink(missing_ok=True)
+
+
+class _Same:
+    """A list's items, equal to another only if it holds the very same objects."""
+
+    def __init__(self, items: list) -> None:
+        self.items = list(items)
+
+    def __eq__(self, other: object) -> bool:
+        return (isinstance(other, _Same) and len(self.items) == len(other.items)
+                and all(map(operator.is_, self.items, other.items)))
+
+
+def _identity(status: os.stat_result) -> tuple:
+    """Identify one version of a file: replacement or rewriting changes it."""
+    return status.st_dev, status.st_ino, status.st_size, status.st_mtime_ns
 
 
 def _relocate(event: dict, indices: dict[int, int], session_id: str) -> dict:
@@ -218,6 +236,12 @@ class JsonlSessionStore:
         """
         self.path = Path(path)
         self.event_fields = event_fields
+        # The file this snapshot was read from or written as, kept open so
+        # its identity cannot be reused, and its (inode, size, mtime) then.
+        self._held = None
+        self._identity: tuple | None = None
+        self._depth = 0
+        self._observation_lines: dict[int, tuple[dict, str]] = {}
         self._load()
 
     @classmethod
@@ -244,10 +268,22 @@ class JsonlSessionStore:
 
     def _load(self) -> None:
         """Read one atomic snapshot and validate its protocol and identities."""
-        with self.path.open(encoding='utf-8') as stream:
-            metadata = json.loads(next(stream))
-            events = [json.loads(line) for line in stream]
+        stream = self.path.open('rb')
+        try:
+            lines = stream.read().decode('utf-8').split('\n')
+            identity = _identity(os.fstat(stream.fileno()))
+        except BaseException:
+            stream.close()
+            raise
+        self._hold(stream, identity)
+        if lines[-1] == '':
+            lines.pop()
+        metadata = json.loads(lines[0])
+        lines = lines[1:]
+        events = [json.loads(line) for line in lines]
         self._metadata, self._events = _upgrade(metadata, events)
+        # Each event's committed line; an upgraded log is written anew.
+        self._lines = lines if self._events is events else [_encode(event) for event in self._events]
         if self._metadata.get('archiveVersion') != 1:
             raise ValueError('Unsupported Session archive version.')
         validate_header(self._metadata['header'])
@@ -256,29 +292,103 @@ class JsonlSessionStore:
         keys = [_key(event) for event in self._events]
         if len(keys) != len(set(keys)):
             raise ValueError('Duplicate native event identity.')
+        self._keys = keys
+
+    def __del__(self) -> None:
+        held = getattr(self, '_held', None)
+        if held is not None:
+            held.close()
+
+    def _hold(self, stream, identity: tuple) -> None:
+        """Keep the file the snapshot matches open, so its inode is not reused."""
+        if self._held is not None:
+            self._held.close()
+        self._held, self._identity = stream, identity
+
+    def _current(self) -> bool:
+        """Whether the archive file is still exactly the one this snapshot matches.
+
+        Writers replace the file atomically; any replacement or in-place change
+        alters the inode, size or modification time.
+        """
+        try:
+            return self._identity is not None and _identity(os.stat(self.path)) == self._identity
+        except FileNotFoundError:
+            return False
+
+    def refresh(self) -> None:
+        """Reload only when another writer changed the file since this snapshot."""
+        if not self._current():
+            self._load()
 
     @contextmanager
     def _update(self) -> Iterator[None]:
-        """Serialize writers and reload their current committed snapshot."""
+        """Serialize writers and reload their current committed snapshot.
+
+        The snapshot is reused while the file is unchanged, and unchanged
+        events keep their committed lines, so a commit parses and encodes only
+        what changed (468). The file is still written whole: the archive is one
+        atomic snapshot. Inside ``batch`` the outermost update commits.
+        """
+        if self._depth:
+            yield
+            return
         with self.path.with_suffix('.lock').open('a+b') as lock:
             fcntl.flock(lock, fcntl.LOCK_EX)
-            self._load()
-            before = self._bytes()
+            self.refresh()
+            metadata, events, lines = self._metadata_state(), self._events, self._lines
             try:
                 yield
-                if self._bytes() != before:
+                if self._metadata_state() != metadata or self._events is not events and self._lines != lines:
                     self._metadata['revision'] += 1
-                    # ponytail: O(history) per commit; add a derived index or
-                    # segmented JSONL only after measured archive costs need it.
                     _replace(self.path, self._bytes())
+                    stream = self.path.open('rb')
+                    self._hold(stream, _identity(os.fstat(stream.fileno())))
             except BaseException:
                 self._load()
                 raise
 
+    @contextmanager
+    def batch(self) -> Iterator[None]:
+        """Apply several updates under one lock and commit them as one write.
+
+        An error in any of them leaves the archive as it was before the batch.
+        """
+        with self._update():
+            self._depth += 1
+            try:
+                yield
+            finally:
+                self._depth -= 1
+
     def _bytes(self) -> bytes:
         """Serialize exactly one current snapshot, without transport snapshots."""
-        return ''.join(_encode(value) + '\n' for value in
-                       [self._metadata, *self._events]).encode()
+        return ''.join(line + '\n' for line in [self._metadata_line(), *self._lines]).encode()
+
+    def _metadata_state(self) -> tuple:
+        """Compare the first line's content: observations by identity, the rest encoded."""
+        rest = {name: value for name, value in self._metadata.items() if name != 'observations'}
+        return _encode(rest), _Same(self._metadata['observations'])
+
+    def _metadata_line(self) -> str:
+        """Encode the first line exactly as ``_encode`` does, reusing observations.
+
+        Resolved observations only accumulate and are never changed in place,
+        so each keeps the encoding it was first given (468).
+        """
+        encoded = {}
+        parts = []
+        for name, value in self._metadata.items():
+            if name == 'observations':
+                for item in value:
+                    known = self._observation_lines.get(id(item))
+                    encoded[id(item)] = known if known is not None and known[0] is item else (item, _encode(item))
+                value = '[' + ','.join(encoded[id(item)][1] for item in value) + ']'
+            else:
+                value = _encode(value)
+            parts.append(_encode(name) + ':' + value)
+        self._observation_lines = encoded
+        return '{' + ','.join(parts) + '}'
 
     @property
     def header(self) -> dict:
@@ -327,35 +437,44 @@ class JsonlSessionStore:
         exact final event and the observed partial content separately. Final
         content and time are never inferred from receipt time.
         """
-        events = [_redacted(event) for event in deepcopy(events)]
-        validate_session(self.header, events)
-        keys = [_key(event) for event in events]
-        if len(keys) != len(set(keys)):
+        # Events taken unchanged from ``committed()`` are this snapshot's own,
+        # already validated and encoded; only the others are copied (468).
+        held = self._held_prefix(events)
+        events = events[:held] + [_redacted(event) for event in deepcopy(events[held:])]
+        validate_session(self.header, events, validated=held)
+        keys = self._keys[:held] + [_key(event) for event in events[held:]]
+        key_set = set(keys)
+        if len(keys) != len(key_set):
             raise ValueError('Duplicate native event identity.')
         with self._update():
-            stored = {_key(event): event for event in self._events}
-            for key, event in zip(keys, events):
+            # A reload by another writer leaves fewer (or no) events held.
+            held = self._held_prefix(events)
+            stored = dict(zip(self._keys, self._events))
+            for key, event in zip(keys[held:], events[held:]):
                 if key not in stored:
                     self._extend(event)
                 elif 'extra_fields' in stored[key] and 'extra_fields' not in event:
                     event['extra_fields'] = deepcopy(stored[key]['extra_fields'])
             fresh = self._fresh(source, position)
             completing = position == self.position(source) and any(
-                draft['source'] == source and _key(draft['event']) in keys
+                draft['source'] == source and _key(draft['event']) in key_set
                 for draft in self._metadata['pending']
             )
             if not fresh and not completing:
                 return False
             by_key = dict(zip(keys, events))
-            old_keys = [_key(event) for event in self._events]
-            old_key_set = set(old_keys)
-            if [key for key in keys if key in old_key_set] != old_keys:
-                raise ValueError('Projection must retain existing native events in their original order.')
-            indices = {old['seq']: by_key[_key(old)]['seq'] for old in self._events}
-            for old in self._events:
-                current = by_key[_key(old)]
-                if _relocate(old, indices, self.header['id']) != current:
-                    raise ValueError('Final native event identity was reused with different content.')
+            # When every committed event is republished itself in place, order
+            # and content are unchanged by construction; otherwise check them.
+            if held < len(self._events):
+                old_key_set = set(self._keys)
+                if [key for key in keys if key in old_key_set] != self._keys:
+                    raise ValueError('Projection must retain existing native events in their original order.')
+                indices = {old['seq']: by_key[key]['seq'] for key, old in zip(self._keys, self._events)}
+                session_id = self._metadata['header']['id']
+                for key, old in zip(self._keys, self._events):
+                    current = by_key[key]
+                    if current is not old and _relocate(old, indices, session_id) != current:
+                        raise ValueError('Final native event identity was reused with different content.')
             remaining = []
             for draft in self._metadata['pending']:
                 key = _key(draft['event'])
@@ -372,11 +491,26 @@ class JsonlSessionStore:
                     self._metadata['observations'].append({**draft, 'final': list(key)})
                 else:
                     remaining.append(draft)
-            validate_session(self.header, events)
+            validate_session(self.header, events, validated=held)
+            self._lines = self._lines[:held] + [_encode(event) for event in events[held:]]
+            self._keys = keys
             self._events = events
             self._metadata['pending'] = remaining
             self._metadata['sources'][source] = position
         return True
+
+    def committed(self) -> list[dict]:
+        """Return this snapshot's committed events themselves, not copies.
+
+        For a collector that republishes them unchanged with ``publish``, which
+        then neither copies, revalidates nor re-encodes them. Never modify them.
+        """
+        return list(self._events)
+
+    def _held_prefix(self, events: list[dict]) -> int:
+        """Count the leading events that are this snapshot's own, in place."""
+        same = list(map(operator.is_, events, self._events))
+        return same.index(False) if False in same else len(same)
 
     def checkpoint(
         self,
@@ -402,7 +536,7 @@ class JsonlSessionStore:
                 raise ValueError('Source changed; resume from its durable checkpoint.')
             if not self._fresh(source, position):
                 return False
-            if any(_key(final) == key for final in self._events):
+            if key in set(self._keys):
                 # A late live notification cannot create a second final message.
                 self._metadata['sources'][source] = position
                 return False
@@ -479,7 +613,7 @@ class JsonlSessionStore:
                     if tuple(resolved['final']) != final:
                         raise ValueError('Observation already resolves to another native event.')
                     return False
-            if not any(_key(event) == final for event in self._events):
+            if final not in set(self._keys):
                 raise ValueError('The final native event has not been published.')
             for index, pending in enumerate(self._metadata['pending']):
                 if _key(pending['event']) == observation:
@@ -592,6 +726,10 @@ class SessionArchive:
         self.save_normalized_sessions = save_normalized_sessions
         self.backfill_history = backfill_history
         self._mapped: dict[str, dict] = {}
+        # Per thread, the last Session's open store, refreshed on each use, so
+        # live collection reparses an archive only after another writer
+        # changed it (468).
+        self._stores: dict[int, tuple[str, JsonlSessionStore]] = {}
         self._native_headers: dict[tuple, dict[str, dict]] = {}
         self._native_revision: int | None = None
 
@@ -682,8 +820,25 @@ class SessionArchive:
             raise ValueError('Only explicitly mapped Sessions may be collected.')
         if not self.save_normalized_sessions or (historical and not self.backfill_history):
             return None
-        return JsonlSessionStore.create(archive_path(self.root, session_id), self._mapped[session_id],
-                                        event_fields=self.event_fields)
+        # Each thread keeps only the store of the Session it used last: live
+        # collection reuses it, and a caller going through many Sessions holds
+        # one open archive, not one per Session. The file lock still orders
+        # writers, and no thread sees another's uncommitted changes.
+        thread = threading.get_ident()
+        held = self._stores.get(thread)
+        store = held[1] if held is not None and held[0] == session_id else None
+        if store is not None and store._depth:
+            return store  # Inside this thread's own batch, which holds the lock.
+        if store is not None and store.path.exists():
+            store.refresh()
+            if store.header == _redacted(self._mapped[session_id]):
+                store.event_fields = self.event_fields
+                return store
+        self._stores.pop(thread, None)
+        store = JsonlSessionStore.create(archive_path(self.root, session_id), self._mapped[session_id],
+                                         event_fields=self.event_fields)
+        self._stores[thread] = (session_id, store)
+        return store
 
     def collect(
         self,

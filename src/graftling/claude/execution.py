@@ -30,7 +30,7 @@ from graftling.member_processes import MEMBER_RUN_ENV, new_marker
 from graftling.tool_descendants import DescendantSampler, stop_tool_processes
 from graftling.connection import CONNECTION_ENV
 from .settings import login_variables
-from .support import write_yaml_durably, credential_environment, redact
+from .support import write_text_durably, write_yaml_durably, yaml_sections, credential_environment, redact
 
 from graftling.runtime import RuntimeAdapterError, SessionStarted
 from .diagnostics import (
@@ -137,6 +137,7 @@ class ClaudeExecution:
                             'launch': 'unknown', 'popen_returned': False,
                             'initialize': {'reason': 'unknown'}, 'system_init': {'reason': 'unknown'},
                             'warnings': []}
+        self.diagnostic_sections: dict = {}
 
     def record_process(self, pid: int, outcome: dict | None = None) -> None:
         """Let the owning consumer retain process lifecycle observations."""
@@ -316,7 +317,9 @@ class ClaudeExecution:
     def _save_diagnostics(self) -> None:
         """Persist only this execution's allowlisted diagnostic snapshot."""
         with self.lock:
-            write_yaml_durably(self.directory / f'claude-diagnostics-{self.execution_id}.yml', self.diagnostics)
+            # Each batch rewrites it twice; only changed sections are dumped again (468).
+            write_text_durably(self.directory / f'claude-diagnostics-{self.execution_id}.yml',
+                               yaml_sections(self.diagnostics, self.diagnostic_sections))
 
     def _diagnostic_warning(self, source: str, text: object) -> None:
         """Retain at most eight fixed warning labels, with no native free text."""

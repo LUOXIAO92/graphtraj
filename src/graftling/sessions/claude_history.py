@@ -6,7 +6,6 @@ Original records are never modified when applying the native retained links.
 """
 from __future__ import annotations
 
-from copy import deepcopy
 from io import BytesIO
 import json
 from pathlib import Path
@@ -93,6 +92,7 @@ def conversation(records: list[dict]) -> list[dict]:
     parent links. Native compaction explicitly supplies the retained ordering;
     logicalParentUuid is historical provenance, not a link back into context.
     Missing links and ambiguous duplicate UUIDs are errors, not invented roots.
+    The returned records are the given record objects; do not modify them.
     """
     original = {}
     for record in records:
@@ -104,7 +104,9 @@ def conversation(records: list[dict]) -> list[dict]:
         if uid in original and original[uid] != record:
             raise ValueError('Native UUID was reused with different content.')
         original[uid] = record
-    linked = deepcopy(original)
+    # Only top-level parentUuid links are rewritten below: shallow copies keep
+    # the originals unmodified without copying whole transcripts (468).
+    linked = {uid: dict(record) for uid, record in original.items()}
     for record in list(linked.values()):
         if record.get('subtype') != 'compact_boundary':
             continue
@@ -332,10 +334,10 @@ def conversation(records: list[dict]) -> list[dict]:
             ids.add(uid)
             if not isinstance(attachment.get('prompt'), (str, list)):
                 raise ValueError('Native queued input has no prompt.')
-            result.append(deepcopy(record))
+            result.append(record)
         elif record['type'] in {'user', 'assistant'}:
             if not record.get('isMeta') or (record.get('origin') or {}).get('kind') in visible_origins:
-                result.append(deepcopy(record))
+                result.append(record)
     return result
 
 

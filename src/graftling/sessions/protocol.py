@@ -494,13 +494,16 @@ def validate_event(event: dict) -> None:
         _usage(data['usage'])
 
 
-def validate_session(header: dict, events: list[dict], *, reconstruct: bool = False) -> None:
+def validate_session(header: dict, events: list[dict], *, reconstruct: bool = False,
+                     validated: int = 0) -> None:
     """Validate a complete contiguous log, fork cut and surface references.
 
     Archival validation retains unknown required events; reconstruction refuses
     them. Neither mode executes tools, resumes a Runtime, or migrates versions.
     A fork's last inherited marker identifies its exact prefix length. Surface
     replacements must cite every currently shadowed node, not every log event.
+    The first ``validated`` events are unchanged committed ones whose own
+    fields were already validated; the whole log is still checked.
     """
     validate_header(header)
     _require(type(events) is list, 'events')
@@ -509,7 +512,8 @@ def validate_session(header: dict, events: list[dict], *, reconstruct: bool = Fa
     inherited = []
 
     for seq, event in enumerate(events):
-        validate_event(event)
+        if seq >= validated:
+            validate_event(event)
         _require(event['seq'] == seq, 'event.contiguous-seq')
         kind = event['type']
         _require(kind != INITIAL_COLLECTION_TYPE, 'event.pending-collection is not canonical history')

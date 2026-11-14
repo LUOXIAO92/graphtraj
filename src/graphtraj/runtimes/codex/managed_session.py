@@ -31,6 +31,7 @@ from graftling.codex import (
     CodexManagedExecution as NativeCodexExecution,
     CodexServerRequest,
 )
+from graftling.codex.managed_session import in_thread
 from graphtraj.runtimes.codex.codex_adapter import restore_codex_context
 from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError
 from graftling.sessions import SessionArchive
@@ -253,7 +254,7 @@ class CodexManagedExecution(NativeCodexExecution):
         details = {**identity, 'params': summary}
         self.recovery_requests[token] = (details, response)
         try:
-            receipt = await asyncio.to_thread(
+            receipt = await in_thread(
                 notify_direct_parent, self.directory,
                 'Recovery needs an explicit user decision through the pending-request reply:\n'
                 + json.dumps(details, ensure_ascii=False), identity,

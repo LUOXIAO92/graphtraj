@@ -171,8 +171,9 @@ for l in open(sys.argv[1], errors="replace"):
   local n=$(grep -oE 'H397-COUNT [0-9]+' $OUT/C1-main-stream.jsonl | tail -1 | awk '{print $2}')
   local claimed=$(grep -c '"runtime": *"codex"' $P/.graphtraj/runner/main-sessions/continuity.jsonl 2>/dev/null)
   print $([[ $claimed -ge 1 ]] && print PASS || print FAIL) "C entry: continuity.jsonl has a codex claim ($claimed) - Codex SessionStart hook ran (else: hooks not trusted, see 00u)"
-  print $([[ $n == 1 ]] && print PASS || print FAIL) "397: h397 appears exactly once in the Codex Main's session-start notices (H397-COUNT ${n:-none}); the Claude queue above shows it delivered, duplicate ids 0"
-  probe requests $P $OUT C1
+  probe delivered $P h397; local rec=$?
+  print $([[ $n == 1 && $rec == 0 ]] && print PASS || print FAIL) "397: h397's end notice id delivered exactly once in the records (397 record line above) AND H397-COUNT ${n:-none} == 1 in the Codex Main's session-start notices"
+  probe requests $P $OUT C1 codex
   [[ -n $thread ]] || { print "STOP: no Codex thread id; 401 cannot be resumed"; return 1; }
   pause 60
   print -r -- "Before any tool: quote every GraphTraj notice or host event you were given since your previous turn (alias, event, first message line), and print one line H401-COUNT <n> with how many times h401 or PONG-401 appears. Then, using only the graphtraj agents tool, status for agent h401 and print its notification field on one line starting with H401-NOTIFICATION. Stop." > $OUT/C3-prompt.txt
@@ -184,9 +185,9 @@ step_C3() {
   wait_pid $OUT/C3.pid || return 1
   probe count $OUT/C3-main-stream.jsonl PONG-401 H401-COUNT H401-NOTIFICATION
   probe count $OUT/C1-main-stream.jsonl PONG-401
-  local n=$(grep -oE 'H401-COUNT [0-9]+' $OUT/C3-main-stream.jsonl | tail -1 | awk '{print $2}')
-  local early=$(grep -c 'PONG-401' $OUT/C1-main-stream.jsonl)
-  print $([[ $n == 1 && $early == 0 || $n == 0 && $early -ge 1 ]] && print PASS || print FAIL) "401: h401's end reached the Codex Main exactly once (C1 turn mentions ${early}, resume H401-COUNT ${n:-none}; H401-NOTIFICATION above should be delivered)"
+  print "supporting only: H401-COUNT $(grep -oE 'H401-COUNT [0-9]+' $OUT/C3-main-stream.jsonl | tail -1 | awk '{print $2}') (model self-report), H401-NOTIFICATION above"
+  probe ends $P $OUT h401 C1-main-stream.jsonl C3-main-stream.jsonl
+  print "Judged by 'PASS/FAIL 401 delivered once' above: deliveries of h401's end event to the Codex Main, by event identity."
   probe inbox $P | tee $OUT/C3-inbox.txt
   next "zsh $THIS P1"
 }
@@ -206,7 +207,7 @@ step_P2() {
   redact < $OUT/P1-main-stream.jsonl | tail -20
   local claimed=$(grep -c '"runtime": *"pi"' $P/.graphtraj/runner/main-sessions/continuity.jsonl 2>/dev/null)
   print $([[ $claimed -ge 1 ]] && print PASS || print FAIL) "P entry: continuity.jsonl has a pi claim ($claimed) - the Pi extension's session_start continued Main"
-  probe requests $P $OUT P1
+  probe requests $P $OUT P1 pi
   probe inbox $P | tee $OUT/P2-inbox.txt
   next "zsh $THIS E1"
 }
@@ -263,7 +264,7 @@ step_D3() {
   pause 120
   dsh_turn --session-id $(cat $OUT/D.session) "Quote every GraphTraj notice you received at the start of this turn (alias, event, request id). $DENY" || return 1
   cat $OUT/D2-main-stream.jsonl $OUT/D3-main-stream.jsonl > $OUT/D3x-main-stream.jsonl 2>/dev/null  # asker alias is in D2's
-  probe requests $P $OUT D3x
+  probe requests $P $OUT D3x dsh
   probe inbox $P | tee $OUT/D3-inbox.txt
   next "zsh $THIS F 2>&1 | tee $OUT/F.txt"
 }

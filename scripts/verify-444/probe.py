@@ -12,7 +12,9 @@ passes through redact(), which removes the DEEPSEEK_API_KEY value when that vari
                                         poll until the current RUNTIME Main's queue holds an undelivered end
                                         notice of ALIAS; prints QUEUED <id> or NOT-QUEUED
   probe.py count FILE TOKEN...          occurrences of each TOKEN in FILE (a Main stream or rollout)
-  probe.py requests PROJECT OUT LABEL   373: native requests of the asker member dispatched in step LABEL
+  probe.py requests PROJECT OUT LABEL TAG  373 (a)-(d) for the asker dispatched in step LABEL (files 373-TAG-a/-b)
+  probe.py ends PROJECT OUT ALIAS STREAM...  401: deliveries of ALIAS's end to the Codex Main
+  probe.py delivered PROJECT ALIAS      397: ALIAS's end notice id delivered exactly once (records)
   probe.py session PROJECT ALIASPART    the newest member session directory whose name contains ALIASPART
   probe.py main PROJECT_OR_HARNESS EXPECT_RUNTIME EXPECT_SESSION
                                         F: the current Main claim (last continuity record) is unchanged
@@ -217,38 +219,211 @@ def session(project: Path, part: str) -> int:
     return 0 if found else 1
 
 
-def requests(project: Path, out: Path, label: str) -> int:
-    """373: the asker of step LABEL raised >= 2 native requests and every one reached the Main.
+END_EVENTS = {'completed', 'failed', 'interrupted'}
+SKIP_ITEMS = {'agent_message', 'reasoning', 'user_message', 'todo_list'}
 
-    Observables: (1) request ids in the Main's notice queue for the asker's execution (pull-only Mains), or
-    in the Main's own output stream (Codex host events; any Main's tool results); (2) the asker's native
-    archive shows >= 2 permission outcomes for its two shell calls; (3) the Main stream shows a reply per id.
+
+def jsonl(path: Path) -> list[tuple[int, object]]:
+    rows = []
+    if path.is_file():
+        for number, line in enumerate(path.read_text(errors='replace').splitlines(), 1):
+            try:
+                rows.append((number, json.loads(line)))
+            except ValueError:
+                continue
+    return rows
+
+
+def walk(value: object):
+    yield value
+    if isinstance(value, dict):
+        for v in value.values():
+            yield from walk(v)
+    elif isinstance(value, list):
+        for v in value:
+            yield from walk(v)
+
+
+def flat(value: object) -> str:
+    """One string with JSON string escapes removed at any depth, so nested tool results read like plain JSON."""
+    return re.sub(r'\\+"', '"', json.dumps(value, ensure_ascii=False))
+
+
+def delivery_view(record: object) -> object:
+    """A stream record without what the Main or the prompt wrote: model text, reasoning, the user's prompt and
+    tool-call arguments are dropped; tool results, host events and injected notices stay."""
+    if isinstance(record, dict) and isinstance(record.get('item'), dict):
+        item = record['item']
+        if item.get('type') in SKIP_ITEMS:
+            return None
+        return {k: v for k, v in item.items() if k not in {'arguments', 'text', 'command'}}
+    if isinstance(record, dict) and record.get('type') in {'assistant', 'user_prompt'}:
+        return None
+    return record
+
+
+def raw(label: str, lines: list[str]) -> None:
+    for line in lines[:8]:
+        say(f'  raw {label}: {line[:400]}')
+
+
+def asker_aliases(text: str) -> list[str]:
+    return sorted(set(re.findall(r'(1-[A-Za-z0-9_\-]*asker[A-Za-z0-9_\-]*@asker[_0-9]*)', text)))
+
+
+def requests(project: Path, out: Path, label: str, tag: str) -> int:
+    """373: the asker of step LABEL raised >= 2 native requests, each reached the Main, the Main's reply to each
+    was submitted, the asker's two touch calls were refused, and neither file exists.
+
+    (a) request ids for the asker in any Main notice queue, or in tool results/host events of the Main stream
+        (prompt text, model text and tool-call arguments excluded);
+    (b) per id, a Main-stream tool result naming that id with reply_status submitted (reply's result shape:
+        graftling/*/execution.py ``{'request_id': ..., 'reply_status': 'submitted'}``);
+    (c) the asker's native records: each Bash tool_use naming 373-TAG-a/-b has an error/denied tool_result;
+    (d) BASE/373-TAG-a and -b are absent (BASE is the isolated project's parent).
     """
     stream = out / f'{label}-main-stream.jsonl'
-    text = stream.read_text(errors='replace') if stream.is_file() else ''
-    aliases = sorted(set(re.findall(r'(1-[A-Za-z0-9_\-]*asker[A-Za-z0-9_\-]*@asker[_0-9]*)', text)))
+    rows = jsonl(stream)
+    aliases = asker_aliases(stream.read_text(errors='replace') if stream.is_file() else '')
     say('asker aliases in', stream.name, ':', aliases or 'none')
-    ids: set[str] = set()
+    queued: set[str] = set()
     for path in (runner(project) / 'main-sessions/inbox').glob('*.jsonl'):
         for n in queue(path)[0]:
             e = n['event']
-            if e.get('request_id') and any(a == e.get('alias') for a in aliases):
-                ids.add(str(e['request_id']))
-    queued_ids = set(ids)
-    ids |= set(re.findall(r'request_id\\*"\s*:\s*\\*"([^"\\]+)', text))
-    say('request ids queued for a Main:', sorted(queued_ids) or 'none', '| in the Main stream:', sorted(ids - queued_ids) or 'none')
-    replies = len(re.findall(r'deny', text, flags=re.I))
-    member_text = ''
-    for a in aliases:
-        for f in (runner(project) / 'sessions' / a).rglob('*'):
-            if f.is_file() and f.suffix in {'.jsonl', '.yml', '.json', '.md'}:
-                member_text += f.read_text(errors='replace')
-    denials = len(re.findall(r'denied|permission', member_text, flags=re.I))
-    ok1 = verdict(f'373[{label}] raised', len(ids) >= 2, f'{len(ids)} distinct native request ids for the asker (>= 2)')
-    ok2 = verdict(f'373[{label}] answered', replies >= len(ids) and len(ids) >= 2,
-                  f"{replies} 'deny' mentions in the Main stream for {len(ids)} requests")
-    ok3 = verdict(f'373[{label}] member saw answers', denials >= 2, f'{denials} denial/permission mentions in the asker records')
-    return 0 if ok1 and ok2 and ok3 else 1
+            if e.get('request_id') and e.get('alias') in aliases:
+                queued.add(str(e['request_id']))
+    seen: set[str] = set()
+    submitted: set[str] = set()
+    for _, record in rows:
+        view = delivery_view(record)
+        if view is None:
+            continue
+        text = flat(view)
+        seen |= set(re.findall(r'"request_id"\s*:\s*"([^"]+)"', text))
+        for m in re.finditer(r'\{[^{}]*"reply_status"\s*:\s*"submitted"[^{}]*\}', text):
+            submitted |= set(re.findall(r'"request_id"\s*:\s*"([^"]+)"', m.group(0)))
+    ids = queued | seen
+    say('request ids queued for a Main:', sorted(queued) or 'none', '| seen in Main-stream tool results/events:', sorted(seen) or 'none')
+    say('reply results with reply_status submitted, by request id:', sorted(submitted) or 'none')
+    missing = sorted(ids - submitted)
+    say('request ids without a submitted reply result:', missing or 'none')
+    if not rows and stream.is_file():
+        say(stream.name, 'is not a JSON stream; (b) cannot be read from records. Raw lines naming a request id:')
+        raw(stream.name, [x for x in stream.read_text(errors='replace').splitlines()
+                          if any(i in x for i in queued) or 'request' in x.lower()])
+    elif not ids:
+        raw(stream.name, [flat(r) for _, r in rows if 'request' in flat(r)])
+    ok_a = verdict(f'373[{label}] (a) raised and reached Main', len(ids) >= 2, f'{len(ids)} distinct request ids for the asker (>= 2)')
+    ok_b = verdict(f'373[{label}] (b) replies submitted', bool(ids) and not missing,
+                   f'{len(ids) - len(missing)}/{len(ids)} ids have a reply result with reply_status submitted')
+    # (c) the asker's native records
+    targets = {f'373-{tag}-a': None, f'373-{tag}-b': None}
+    uses: dict[str, str] = {}
+    results: dict[str, str] = {}
+    lines: list[str] = []
+    for alias in aliases:
+        for f in sorted((runner(project) / 'sessions' / alias).rglob('*.jsonl')):
+            for _, record in jsonl(f):
+                for node in walk(record):
+                    if not isinstance(node, dict):
+                        continue
+                    if node.get('type') == 'tool_use' and isinstance(node.get('input'), dict):
+                        command = str(node['input'].get('command', ''))
+                        for t in targets:
+                            if t in command:
+                                uses[node.get('id')] = t
+                    if node.get('type') == 'tool_result':
+                        content = flat(node.get('content'))
+                        results[node.get('tool_use_id')] = ('error' if node.get('is_error') else 'ok') + ': ' + content[:160]
+                text = flat(record)
+                if f'373-{tag}' in text:
+                    lines.append(f'{f.name}: {text}')
+    refused = {}
+    for use, t in uses.items():
+        result = results.get(use, 'no tool_result')
+        say(f'asker tool_use {use} for {t}: {redact(result)}')
+        refused[t] = refused.get(t) or (result.startswith('error') and bool(re.search(r'den(y|ied)|reject|not allowed|permission', result, re.I)))
+    if len(uses) == 0:
+        say('asker record shape unknown (no tool_use naming the files); raw lines for judgement:')
+        raw('asker', lines)
+    ok_c = verdict(f'373[{label}] (c) asker refused', all(refused.get(t) for t in targets),
+                   f'denied/rejected tool_result per touch call: {[(t, bool(refused.get(t))) for t in targets]}')
+    base = project.parent
+    states = {t: ('exists' if (base / t).exists() else 'absent') for t in targets}
+    ok_d = verdict(f'373[{label}] (d) files absent', all(v == 'absent' for v in states.values()),
+                   ' '.join(f'{base / t}: {v}' for t, v in states.items()))
+    return 0 if ok_a and ok_b and ok_c and ok_d else 1
+
+
+def ends(project: Path, out: Path, alias: str, *streams: str) -> int:
+    """401: deliveries of ALIAS's end to the Codex Main, by event identity.
+
+    Stream channel: tool results, host events and injected notices in the given Main streams (model text,
+    reasoning, the prompt and tool-call arguments excluded) that carry ALIAS with an end event: either a host-event
+    object {alias, event[, execution]} or the rendered header '[GraphTraj notice from ALIAS · EVENT'.
+    Record channel: Codex Main notice-queue entries for ALIAS's end, before the cursor (delivered).
+    """
+    occurrences: list[tuple[str, str]] = []
+    for name in streams:
+        for number, record in jsonl(out / name):
+            view = delivery_view(record)
+            if view is None:
+                continue
+            text = flat(view)
+            for node in walk(view):
+                if (isinstance(node, dict) and alias in str(node.get('alias', '')) and node.get('event') in END_EVENTS):
+                    occurrences.append((f"{node.get('alias')}|{node.get('event')}|{node.get('execution')}", f'{name}:{number} host-event'))
+            for m in re.finditer(r'\[GraphTraj notice from ([^ \]]*' + re.escape(alias) + r'[^ \]]*) · (\w+)(?: · execution ([^\s\]\\]+))?', text):
+                if m.group(2) in END_EVENTS:
+                    occurrences.append((f'{m.group(1)}|{m.group(2)}|{m.group(3)}', f'{name}:{number} notice-text'))
+    occurrences = sorted(set(occurrences), key=lambda x: x[1])
+    recorded: list[tuple[str, str]] = []
+    for c in claims(project):
+        if c.get('runtime') != 'codex':
+            continue
+        lines, cursor = queue(inbox_path(project, 'codex', c['session']))
+        for i, n in enumerate(lines):
+            e = n['event']
+            if alias in str(e.get('alias', '')) and e.get('event') in END_EVENTS:
+                recorded.append((n['id'], f"codex queue {c['session']} [{i}] {'delivered' if i < cursor else 'PENDING'}"))
+    for key, where in occurrences:
+        say(f'401 stream delivery: {key} at {where}')
+    for key, where in recorded:
+        say(f'401 record: id {key[:16]} {where}')
+    stream_count = len(occurrences)
+    record_count = len([r for r in recorded if 'delivered' in r[1]])
+    total = stream_count if stream_count else record_count
+    if not occurrences and not recorded:
+        lines = []
+        for name in streams:
+            lines += [f'{name}:{n} {flat(r)}' for n, r in jsonl(out / name) if alias in flat(r)]
+        say('no delivery shape recognised; raw lines naming', alias, 'for judgement:')
+        raw('401', lines)
+    ok = verdict('401 delivered once', total == 1,
+                 f'{stream_count} stream deliveries (tool results/host events/notices), {record_count} delivered '
+                 f'Codex-queue entries; judged on {"stream" if stream_count else "records"}: {total} (== 1)')
+    return 0 if ok else 1
+
+
+def delivered(project: Path, alias: str) -> int:
+    """397: ALIAS's end notice id is delivered exactly once: one entry per queue, never PENDING, no duplicates,
+    and the last queue holding it (the continuing Main's) has its cursor past it."""
+    found: dict[str, list[str]] = {}
+    for c in claims(project):
+        path = inbox_path(project, c['runtime'], c['session'])
+        lines, cursor = queue(path)
+        for i, n in enumerate(lines):
+            if alias in str(n['event'].get('alias', '')) and n['event'].get('event') in END_EVENTS:
+                place = f"{c['runtime']}:{c['session']}[{i}] {'delivered' if i < cursor else 'PENDING'}"
+                if place not in found.setdefault(n['id'], []):
+                    found[n['id']].append(place)
+    for key, places in found.items():
+        say(f'397 record: id {key[:16]} in {places}')
+    queues = [p.split('[')[0] for places in found.values() for p in places]
+    ok = (len(found) == 1 and len(queues) == len(set(queues))
+          and all('delivered' in p for places in found.values() for p in places))
+    verdict('397 record delivered once', ok, f'{len(found)} end-notice id(s) for {alias} (== 1), each queue holds it once, none PENDING')
+    return 0 if ok else 1
 
 
 def main_unchanged(root: Path, rt: str, sess: str) -> int:
@@ -274,7 +449,11 @@ def main() -> int:
     if cmd == 'session':
         return session(Path(args[0]), args[1])
     if cmd == 'requests':
-        return requests(Path(args[0]), Path(args[1]), args[2])
+        return requests(Path(args[0]), Path(args[1]), args[2], args[3])
+    if cmd == 'ends':
+        return ends(Path(args[0]), Path(args[1]), args[2], *args[3:])
+    if cmd == 'delivered':
+        return delivered(Path(args[0]), args[1])
     if cmd == 'main':
         return main_unchanged(Path(args[0]), args[1], args[2])
     say('unknown command', cmd)

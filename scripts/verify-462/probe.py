@@ -427,10 +427,13 @@ def kill(project: Path, facts_file: str) -> int:
     print('before the kill: the descendants record lists', len(entries), 'entries:',
           [(entry['pid'], entry.get('argv', '')[:100]) for entry in entries], f'(error: {error})' if error else '')
     recorded_sleeps = [entry for entry in entries if is_child_sleep(entry.get('argv', ''))]
-    if error or not recorded_sleeps:
-        print(f"STOP: the child's descendants record lists no '{CHILD_SLEEP}' (the venv lacks the fix, the tool has not "
-              'started, or the sampler missed it). Nothing was done.')
+    if error:
+        print(f"STOP: the child's descendants record is unreadable ({error}). Nothing was done.")
         return 1
+    if not recorded_sleeps:
+        # Nothing to act on: go on, so CHECK A and B record the FAIL rather than a silent STOP.
+        print(f"NOTE: the record lists no '{CHILD_SLEEP}' (it ended, has not started, or was missed): CHECK A and B "
+              'will FAIL.')
     ancestry([entry for entry in recorded_sleeps if live(entry)], marker)
     service = identity(runtime) if isinstance(runtime, int) else None
     if service is None:

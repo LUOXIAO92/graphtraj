@@ -1191,7 +1191,7 @@ Delivery rules:
   or its ancestors. It records what it found on the execution as `escaped_processes`
   (`found`, `stopped`, `remaining`, each a list of `pid` and `command`). The record
   lock is held up to about 5 seconds longer for this. An execution recorded before
-  this change, and Pi executions, carry no marker and are not scanned. A DSH
+  this change carries no marker and is not scanned. A DSH
   execution carries both facts (463): its `dsh web` service is the Runtime here, and the
   process a DSH tool moves into another session is stopped as below.
   On macOS the environment of Apple platform binaries cannot be read, so the marker
@@ -1216,7 +1216,12 @@ Delivery rules:
   process started and detached between two samples (about one second) is found only
   by the marker, so not when it is a platform binary; a process whose chain of
   ancestors passed through a readable process without the marker is left alone by
-  design; Windows is not covered.
+  design; Windows is not covered. A Pi execution records `tool_marker` and
+  `tool_descendants` too and is stopped the same way (461); Pi starts its bash tool
+  detached, outside the Runtime's group, as `/bin/bash`, and stops the running tool's
+  process group itself when it shuts down. A background job left by an earlier tool
+  call, or any tool process when Pi is killed without shutting down, is stopped through
+  the recorded descendants.
   For a Codex child (462) the Runtime is its owned app-server, which the owner starts
   with that execution's own `GRAFTLING_MEMBER_RUN` value (never the parent's) and also
   sets for tool shells through `shell_environment_policy.set`. Codex stops its tool

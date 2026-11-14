@@ -154,6 +154,13 @@ class PiDriver:
         turn = PiExecution(request, prompt, run.directory,
                            lambda session, pid: ready.set(), created,
                            run.directory / 'trace.jsonl', run.session)
+        # Reconciliation stops this execution's escaped tools if its owner dies:
+        # by marker (457) and by the descendants recorded in this file (459, 461).
+        if getattr(turn, 'member_marker', None):
+            facts = {'tool_marker': turn.member_marker}
+            if getattr(turn, 'tool_descendants', None) is not None:
+                facts['tool_descendants'] = str(Path(turn.tool_descendants).resolve())
+            run.events.process(**facts)
         turn.archive = run.archive
         turn.extra_fields = run.extra_fields
         turn.agent = run.agent

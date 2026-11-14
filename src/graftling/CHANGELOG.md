@@ -38,6 +38,12 @@ The numbers in parentheses are the project's Task numbers.
   Codex execution stops them too. Limits are 459's; in addition a user-started
   `CodexHost` and a service reached through a proxy or an existing WebSocket are not
   covered, and Pi and DSH executions are unchanged.
+- A Pi execution's tool processes are now stopped the same way as a Claude
+  execution's (461): Pi starts its bash tool detached as `/bin/bash` and stops the
+  running tool's process group itself when it shuts down; a background job left by an
+  earlier tool call, or any tool process when Pi is killed without shutting down, is
+  stopped through the recorded descendants. The Pi driver and GraphTraj's agents driver
+  now record `tool_marker` and `tool_descendants` for Pi too.
 - A Claude execution's tool processes that are Apple platform binaries are now stopped
   too (459): Claude Code's `/bin/zsh` Bash tool shell and commands such as
   `/bin/sleep`, whose environment macOS hides from the 457 marker scan. While the

@@ -19,7 +19,7 @@ from graphtraj.execution.runner_status import (
 )
 from graphtraj.graph.delivery_state import apply_delivery_state_request, read_team
 from graphtraj.graph.delivery_worldline import read_worldline
-from graphtraj.graph.task_graph import _load_states
+from graphtraj.graph.task_graph import _load_task_state
 from graphtraj.workspace.runner_project import discover_project
 
 # Longer than a Worker's end needs: its close, then one parent delivery window.
@@ -283,7 +283,7 @@ def retire_stopped_session(project: Project, alias: str) -> dict:
     record_file = directory / "session.yml"
     record = yaml.safe_load(record_file.read_text())
     retirement = record.get("retirement")
-    task_directory, task = _load_states(project.state_directory / "tasks")[mapping["task_id"]]
+    task_directory, task = _load_task_state(project.state_directory / "tasks", mapping["task_id"])
     team_file = task_directory / "teams" / str(mapping["team_generation"]) / "team.yml"
     team = read_team(team_file)
     member = next((name for name, entry in team["members"].items()

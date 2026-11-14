@@ -23,7 +23,7 @@ from graphtraj.teams.team_round import (
     _run_agent,
     _trace_ref,
 )
-from graphtraj.graph.task_graph import _load_states
+from graphtraj.graph.task_graph import _load_task_state
 from graphtraj.graph.delivery_state import read_team
 from graphtraj.graph.delivery_worldline import read_worldline
 from graphtraj.runtimes import runtime_adapter
@@ -38,7 +38,7 @@ def require_active_session(
     record_file = session_directory / "session.yml"
     if record_file.is_file() and yaml.safe_load(record_file.read_text()).get("retirement"):
         raise RunnerError("session-retired", "This Session has retired from its task.")
-    directory, task = _load_states(project.state_directory / "tasks")[mapping["task_id"]]
+    directory, task = _load_task_state(project.state_directory / "tasks", mapping["task_id"])
     if reports_only and completed_task_member(project, mapping):
         # A standby member of a finished Task may answer follow-up questions;
         # report-only continuation reopens no Task work, budget or result.
@@ -70,7 +70,7 @@ def completed_task_member(project: Project, mapping: dict) -> bool:
     Such a member stays a standby Agent: cleanup removed only the Task's
     disposable resources, not its Session or its recorded native cwd.
     """
-    _, task = _load_states(project.state_directory / "tasks")[mapping["task_id"]]
+    _, task = _load_task_state(project.state_directory / "tasks", mapping["task_id"])
     worktree = project.harness_root / task["worktree"]
     return (task["status"] == "integrated"
             and Path(mapping["worktree_path"]) == worktree
@@ -115,7 +115,7 @@ def _replace_member(alias: str, caused_by_event_ids: tuple[str, ...], cwd: Path)
     if not caused_by_event_ids or len(caused_by_event_ids) != len(set(caused_by_event_ids)):
         raise RunnerError("invalid-input", "Replacement requires unique causal Project Worldline event IDs.")
     _require_project_events(cwd, caused_by_event_ids)
-    directory, task_directory = _load_states(project.state_directory / "tasks")[mapping["task_id"]]
+    directory, task_directory = _load_task_state(project.state_directory / "tasks", mapping["task_id"])
     generation = mapping["team_generation"]
     team_file = directory / "teams" / str(generation) / "team.yml"
     team = read_team(team_file)

@@ -340,15 +340,15 @@ def require_task_authority(
     Role names and caller-supplied identity fields confer no authority.
     """
     from graphtraj.graph.delivery_state import read_team
-    from graphtraj.graph.task_graph import _load_states
+    from graphtraj.graph.task_graph import UnknownTask, _load_task_state
 
     mapping, _ = read_alias_mapping(runner_directory, alias)
     if mapping["task_id"] != task_id:
         raise _authority_denied()
-    record = _load_states(state_directory / "tasks").get(task_id)
-    if record is None:
-        raise _authority_denied()
-    directory, task = record
+    try:
+        directory, task = _load_task_state(state_directory / "tasks", task_id)
+    except UnknownTask:
+        raise _authority_denied() from None
     if task["active_team_ordinal"] != mapping["team_generation"]:
         raise _authority_denied()
     team = read_team(directory / "teams" / str(mapping["team_generation"]) / "team.yml")

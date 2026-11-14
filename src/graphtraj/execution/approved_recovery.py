@@ -26,7 +26,7 @@ from graphtraj.execution.runner_status import (
 )
 from graphtraj.graph.delivery_state import read_team
 from graphtraj.graph.delivery_worldline import append_project_worldline_event, read_worldline, _read_shards
-from graphtraj.graph.task_graph import _load_states, _lock, _unlock
+from graphtraj.graph.task_graph import _load_task_state, _lock, _unlock
 from graphtraj.runtimes import runtime_adapter
 from graphtraj.runtimes.replacement import caller_runtime
 from graphtraj.workspace.runner_project import discover_project
@@ -215,7 +215,7 @@ def _snapshot(
 ) -> tuple[dict, dict]:
     """Read the exact target state and derive all paths from registered ownership."""
     mapping, session = read_alias_mapping(project.runner_directory, alias)
-    directory, task = _load_states(project.state_directory / 'tasks')[mapping['task_id']]
+    directory, task = _load_task_state(project.state_directory / 'tasks', mapping['task_id'])
     if task['active_team_ordinal'] != mapping['team_generation']:
         raise RunnerError('seat-replaced', 'Recovery cannot change Session ownership.')
     team_path = directory / 'teams' / str(mapping['team_generation']) / 'team.yml'

@@ -681,3 +681,63 @@ def test_hidden_runtime_marker_beside_tasks_is_not_a_task(tmp_path: Path) -> Non
     graph = read_graph(state)
     assert ".claude" not in str(graph)
     assert (state / "tasks/.claude/.cc-writes").is_dir()
+
+
+def test_one_task_load_ignores_unrelated_half_written_task(tmp_path: Path) -> None:
+    """Reading one Task skips unrelated damage that the full view still reports."""
+    import pytest
+
+    from graphtraj.graph.task_graph import (
+        UnknownTask, _load_states, _load_task_state, register_task,
+    )
+
+    state = tmp_path / "state"
+    tasks = state / "tasks"
+    register_task(state, tmp_path, _task("1", "first"))
+    register_task(state, tmp_path, _task("12", "twelfth"))
+    (tasks / "2-half-written").mkdir()
+
+    directory, record = _load_task_state(tasks, "1")
+    assert directory == tasks / "1-first" and record["task_name"] == "first"
+    with pytest.raises(ValueError, match="Task state is invalid"):
+        _load_states(tasks)
+    with pytest.raises(ValueError, match="Task state is invalid"):
+        _load_task_state(tasks, "2")
+    with pytest.raises(UnknownTask):
+        _load_task_state(tasks, "3")
+
+    own = tasks / "1-first" / "task.yml"
+    _write(own, {**yaml.safe_load(own.read_text(encoding="utf-8")), "status": "unknown"})
+    with pytest.raises(ValueError, match="Task state is invalid"):
+        _load_task_state(tasks, "1")
+
+
+def test_registration_never_shows_a_task_directory_without_its_state(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """A reader without the Task lock sees each new Task only once complete."""
+    from graphtraj.graph import task_graph
+
+    state = tmp_path / "state"
+    task_graph.register_task(state, tmp_path, _task("1", "first"))
+    write = task_graph._write_yaml
+    observed = []
+
+    def read_while_writing(path: Path, value: dict) -> None:
+        observed.append(sorted(task_graph._load_states(state / "tasks")))
+        write(path, value)
+
+    monkeypatch.setattr(task_graph, "_write_yaml", read_while_writing)
+    task_graph.register_task(state, tmp_path, _task("2", "second"))
+    (tmp_path / "revision.md").write_text("Add a Task.\n", encoding="utf-8")
+    task_graph.revise_tasks(state, tmp_path, {
+        "product_preserving": True,
+        "caused_by_event_ids": [],
+        "evidence_refs": ["revision.md"],
+        "tasks": [_revised(_task("3", "third"), None)],
+    })
+    monkeypatch.undo()
+
+    assert observed
+    assert sorted(task_graph._load_states(state / "tasks")) == ["1", "2", "3"]
+    assert not any(path.name.startswith(".staging-") for path in (state / "tasks").iterdir())

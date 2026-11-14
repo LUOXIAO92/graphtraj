@@ -9,7 +9,7 @@ from graphtraj.configuration.project_configuration import load_project_configura
 from graphtraj.execution.runner_batch import parse_swarm, read_swarm
 from graphtraj.execution.runner_models import Batch, LaunchResponse, RunnerError
 from graphtraj.execution.runner_status import caller_alias, read_alias_mapping
-from graphtraj.graph.task_graph import read_graph
+from graphtraj.graph.task_graph import UnknownTask, _load_task_state
 from graphtraj.workspace.runner_project import (
     discover_project_root,
     discover_runner_directory,
@@ -43,7 +43,7 @@ def launch_swarm(document: object, cwd: Path) -> LaunchResponse:
     )
 
 
-def _swarm_context(cwd: Path) -> tuple[str | None, dict[str, str]]:
+def _swarm_context(cwd: Path) -> tuple[str | None, "_RegisteredTaskNames"]:
     """Return the calling Session's Task and the registered Task names.
 
     A caller that runs inside a Task Session already works inside one Task,
@@ -61,22 +61,29 @@ def _swarm_context(cwd: Path) -> tuple[str | None, dict[str, str]]:
         read_alias_mapping(runner_directory, caller)[0]["task_id"]
         if caller is not None else None
     )
-    return caller_task_id, _registered_task_names(configuration.state)
+    return caller_task_id, _RegisteredTaskNames(configuration.state)
 
 
-def _registered_task_names(state_directory: Path) -> dict[str, str]:
-    """Return each registered Task's name, keyed by its stable identity."""
+class _RegisteredTaskNames:
+    """Look up a registered Task's name by its stable identity.
 
-    try:
-        graph = read_graph(state_directory, "full")
-    except (OSError, ValueError, yaml.YAMLError) as error:
-        raise RunnerError(
-            "TASK_FILE_INVALID", "The registered Task state is invalid."
-        ) from error
-    return {
-        task["task_id"]: task["task_name"]
-        for task in graph["tasks"]
-    }
+    Each lookup reads only the selected Task, so an unrelated Task directory
+    that is partly written or damaged cannot refuse this launch.
+    """
+
+    def __init__(self, state_directory: Path) -> None:
+        self._tasks = state_directory / "tasks"
+
+    def get(self, task_id: object, default: str | None = None) -> str | None:
+        """Return the Task's name, or ``default`` when it is not registered."""
+        try:
+            return _load_task_state(self._tasks, task_id)[1]["task_name"]
+        except UnknownTask:
+            return default
+        except (OSError, ValueError, yaml.YAMLError) as error:
+            raise RunnerError(
+                "TASK_FILE_INVALID", "The registered Task state is invalid."
+            ) from error
 
 
 def launch_batch(batch: Batch, cwd: Path) -> LaunchResponse:

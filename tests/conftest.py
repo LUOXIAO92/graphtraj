@@ -19,6 +19,11 @@ from process_reclaim import pytest_configure, pytest_sessionfinish  # noqa: F401
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
+# graftling comes from its own repository. GraphTraj's Pi and DSH runtime modules
+# import it as a sibling package (../../../graftling), as in an installed
+# site-packages, so a development checkout links the graftling checkout's package
+# here (git-ignored): ln -s <graftling checkout>/src/graftling src/graftling
+GRAFTLING_LINK = PROJECT_ROOT / "src" / "graftling"
 
 
 def _absolute_pythonpath(configured: str, cwd: Path) -> str:
@@ -59,8 +64,13 @@ def _checkout_import_problem(cwd: Path, executable: str = sys.executable) -> Opt
             continue
         found = ", ".join("{0} -> {1}".format(*pair) for pair in zip(("graphtraj", "graftling"), origins))
         resolved.append("{0}: {1}".format(form, found or "probe failed: " + probe.stderr.strip()[-300:]))
-    if not resolved:
+    if not resolved and (GRAFTLING_LINK / "pyproject.toml").is_file():
         return None
+    if not resolved:
+        return (
+            "{0} does not link a graftling checkout's package; GraphTraj's Pi and DSH runtime modules "
+            "import graftling beside graphtraj. Link it: ln -s <graftling checkout>/src/graftling {0}"
+        ).format(GRAFTLING_LINK)
     return (
         "Test subprocesses would not import this checkout: {0} from a neutral directory resolves {1}; "
         "expected graphtraj under {2} and an installed graftling. Use a venv whose site-packages resolves "
@@ -749,6 +759,7 @@ def _build_wheel(build_root: Path) -> Path:
             "--no-deps",
             "-w",
             str(wheelhouse),
+            str(GRAFTLING_LINK.resolve()),
             str(source),
         ],
         cwd=source,
@@ -759,30 +770,11 @@ def _build_wheel(build_root: Path) -> Path:
     return artifacts[0]
 
 
-def _graftling_wheel(wheelhouse: Path) -> list[str]:
-    """The graftling wheel for a fresh environment, built from the checkout the suite imports.
-
-    graftling is a separate distribution from its own repository. An editable
-    install (its package directory holds pyproject.toml) is built into a wheel so
-    the fresh environment gets the same code; a regular install is inherited
-    through the dependency path written below, so nothing is installed.
-    """
-    import graftling
-
-    package = Path(graftling.__file__).resolve().parent
-    if not (package / "pyproject.toml").is_file():
-        return []
-    result = run_process(
-        [sys.executable, "-m", "pip", "wheel", "--disable-pip-version-check", "--no-build-isolation",
-         "--no-deps", "-w", str(wheelhouse), str(package)],
-        cwd=wheelhouse.parent,
-    )
-    result.check_returncode()
-    return [str(wheelhouse / "graftling-{0}-py3-none-any.whl".format(graftling.__version__))]
-
-
 def _install_commands(environment: Path, wheel: Path) -> InstalledCommands:
     """Install one built wheel into a fresh environment."""
+
+    # The agents wheel built beside GraphTraj carries the graftling checkout's version.
+    from graftling import __version__ as graftling_version
 
     subprocess.run(
         [
@@ -804,7 +796,7 @@ def _install_commands(environment: Path, wheel: Path) -> InstalledCommands:
             "install",
             "--disable-pip-version-check",
             "--no-deps",
-            *_graftling_wheel(environment.parent / "graftling-wheelhouse"),
+            str(wheel.with_name(f"graftling-{graftling_version}-py3-none-any.whl")),
             str(wheel),
         ],
         cwd=wheel.parent,

@@ -1,7 +1,6 @@
 """GraphTraj uses agents only through the names PUBLIC_API.md section 1.3 lists."""
 from __future__ import annotations
 
-import graftling
 import ast
 import importlib
 import importlib.util
@@ -17,7 +16,7 @@ import pytest
 
 SOURCE = Path(__file__).resolve().parents[1] / 'src'
 GRAPHTRAJ = SOURCE / 'graphtraj'
-CONTRACT = Path(graftling.__file__).resolve().parent / 'PUBLIC_API.md'
+CONTRACT = SOURCE / 'graftling' / 'PUBLIC_API.md'
 
 ROOT = 'graftling'
 RUNTIME_PACKAGES = ('graftling.claude', 'graftling.codex', 'graftling.pi', 'graftling.dsh')

@@ -1,5 +1,4 @@
 """Native mod contract checks; actual load and screen evidence stay separate."""
-import graftling
 from pathlib import Path
 import re
 import subprocess
@@ -171,7 +170,7 @@ DOLLAR_VALUE = re.compile(r'\$\.[A-Za-z_]+\b(?!\.[A-Za-z_]+\()')
 
 def test_mod_spells_every_host_noun_at_its_call_site() -> None:
     """The validator's ``$.noun`` rule holds for the shipped mod; a value probe is caught."""
-    text = Path(graftling.__file__).resolve().parent / 'claude/host_context.mjs'.read_text()
+    text = Path('src/graftling/claude/host_context.mjs').read_text()
     assert DOLLAR_VALUE.findall(text) == []
     assert DOLLAR_VALUE.findall("if (typeof $.prompt?.submit !== 'function') {}") == ['$.prompt']
     assert DOLLAR_VALUE.findall("await $.prompt.submit({text});") == []

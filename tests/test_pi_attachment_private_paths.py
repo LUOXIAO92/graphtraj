@@ -6,7 +6,6 @@ only ``graftling``; the GraphTraj tests import it inside their bodies.
 """
 from __future__ import annotations
 
-import graftling
 import json
 import os
 from pathlib import Path
@@ -86,7 +85,7 @@ def test_standalone_copies_an_attachment_under_graphtraj(tmp_path: Path) -> None
 
 def test_standalone_copies_it_with_no_graphtraj_package(tmp_path: Path) -> None:
     """An isolated Python that cannot import GraphTraj gives the same copy."""
-    source = Path(graftling.__file__).resolve().parent
+    source = Path(__file__).resolve().parents[1] / 'src/graftling'
     shutil.copytree(source, tmp_path / 'graftling', ignore=shutil.ignore_patterns('__pycache__'))
     program = '''
 import sys

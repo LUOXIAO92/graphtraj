@@ -8,7 +8,6 @@ or real DSH.
 """
 from __future__ import annotations
 
-import graftling
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 import http.cookiejar
@@ -321,7 +320,7 @@ try:
 finally:
     print(json.dumps(sent))
 '''
-    path   = Path(graftling.__file__).resolve().parent / 'dsh' / 'watcher.py'
+    path   = SOURCE / 'graftling' / 'dsh' / 'watcher.py'
     result = subprocess.run([sys.executable, '-I', '-S', '-c', probe, str(path)], stdin=subprocess.DEVNULL,
                             capture_output=True, text=True, env={}, timeout=15)
     assert json.loads(result.stdout) == [[4242424, int(sig)] for sig in (signal.SIGINT, signal.SIGTERM, signal.SIGKILL)]

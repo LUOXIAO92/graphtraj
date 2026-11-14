@@ -1,6 +1,5 @@
 """Native lifecycle carriers preserve source and per-Session associations."""
 
-import graftling
 import json
 import os
 from pathlib import Path
@@ -185,7 +184,7 @@ def test_pi_shared_process_environment_is_per_session(project: Path) -> None:
     node = shutil.which('node')
     if node is None:
         pytest.skip('Node is not installed')
-    extension = Path(graftling.__file__).resolve().parent / 'pi/extension.mjs'
+    extension = Path(__file__).resolve().parents[1] / 'src/graftling/pi/extension.mjs'
     # Load the exact module bytes without asking Node to inspect denied parents
     # of an otherwise readable isolated Worktree.
     extension = Path(shutil.copy2(extension, project / 'extension.mjs'))

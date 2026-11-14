@@ -13,6 +13,7 @@ from urllib.error import HTTPError
 from urllib.parse import urlsplit
 from urllib.request import HTTPRedirectHandler, Request, build_opener
 
+from graftling.codex.managed_session import in_thread
 from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError
 
 
@@ -244,7 +245,9 @@ def _completion(route: dict, context: dict) -> dict:
 async def review_request(route: dict, context: dict) -> dict:
     """Return a validated decision; call failures use the native RPC error path."""
     try:
-        result = await asyncio.wait_for(asyncio.to_thread(_completion, route, context), 30)
+        # Not asyncio.to_thread: the Codex owner's loop can outlive its process's
+        # main thread, and executors then refuse new work (473).
+        result = await asyncio.wait_for(in_thread(_completion, route, context), 30)
         # Classify only the failed contract; never interpolate provider values.
         invalid = None
         if not isinstance(result, dict) or set(result) != {'request_id', 'decision', 'rationale'}:

@@ -226,8 +226,9 @@ def test_reclaim_runs_when_the_interpreter_refuses_new_threads(
     """Correction 2: an owner thread outliving its interpreter's shutdown still stops the tools.
 
     At shutdown CPython refuses new executor work, so ``asyncio.to_thread`` raises. The real host's child
-    then ended RUNTIME_WORKER_FAILED with no reclaim. No new thread can start then either (Correction 3),
-    so the reclaim runs on the owner's own thread.
+    then ended RUNTIME_WORKER_FAILED with no reclaim. This test models an interpreter that also refuses
+    new threads, where the reclaim runs on the owner's own thread. CPython 3.13 still starts threads
+    while it joins the non-daemon ones after the main thread has ended (473); only executors refuse then.
     """
     import asyncio
     import graftling.codex.managed_session as owner

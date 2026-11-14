@@ -1,0 +1,446 @@
+#!/bin/bash
+# Task 477 real-host check: a Task member (Claude, graphtraj-gateway) creates a Claude child with the agents tool
+# and waits on it. Expected with the candidate: the member's wait and status show last_result.last_message equal
+# to the child's reply, notification 'delivered', and the member receives NO pushed notice of that reply
+# (no {"source": "graphtraj", ...} input in its Session, no resumed member turn).
+# Modeled on scripts/verify-462 (isolation, venv from the candidate commit) and the verify-471 member selection.
+#
+#   bash scripts/verify-477 <00|00u|01|02|03>
+#
+# 00  Main. preflight: scratch venv from COMMIT (git archive + editable install; click/yaml/websockets copied
+#     read-only from production .venv-runtime, which is never changed), isolated project under Harness tmp/477,
+#     cc-plugin-agents-md disabled and the Harness CLAUDE.md/AGENTS.md excluded (project settings only),
+#     claude --version (expected 2.1.325), a one-line answer from the configured model (login check), no Harness
+#     instruction file loaded, graphtraj-claude-host loaded, probe Task ready, and the 477 fix present in the venv.
+#     Dialog: none.
+# 00u USER, once, only when 00 prints 'graphtraj-claude-host loaded: NO': folder trust dialog (choose 'Yes, proceed').
+# 01  Main. starts a background `claude -p` Main that dispatches the member; returns at once. Dialog: none.
+# 02  Main. waits (<= 9 min) for 01's Main, then a 60 s quiet window for any late push, then CHECK A-E. Dialog: none.
+# 03  Main. full suite at the Worktree HEAD in the background (stops itself after 25 min). Dialog: none.
+#
+# Never touches production .venv-runtime (read-only copy of three packages), other Worktrees, the user's dotfiles,
+# ~/.claude or ~/.codex. Signals no process. No key value is read or printed.
+# Rehearsal without a model: VERIFY477_NO_MODEL=1 bash scripts/verify-477 00 (stops before Claude Code).
+set -u
+H=/Users/luoxiao/workspace/you-are-a-product-architect-delivery
+WT=$H/.graphtraj/core/worktrees/477-gateway-child-last-message
+THIS="$WT/scripts/verify-477"
+COMMIT=${VERIFY477_COMMIT:-$(git -C "$WT" rev-parse HEAD)}
+BASE=${VERIFY477_BASE:-$H/tmp/477/verify}
+OUT=${VERIFY477_OUT:-$H/tmp/477/out}
+RT=$H/.venv-runtime
+CONDA=/Users/luoxiao/miniconda3/bin/python3.13
+MODEL=claude-opus-5-5
+EXPECTED_CLAUDE=2.1.325
+SRC=$BASE/src
+VV=$BASE/venv
+SV=$BASE/suite-venv
+P=$BASE/project
+PROBE=$BASE/probe477.py
+PID01=$OUT/01-main.pid
+STEP=${1:-help}
+export PATH="/opt/homebrew/bin:$HOME/.local/bin:$PATH"
+mkdir -p "$OUT" "$BASE"
+
+say() { printf '\n### %s\n' "$*"; }
+next() { printf '\n==> next (Main pastes): %s\n' "$*"; }
+claude_bin() { if [ -n "${VERIFY477_CLAUDE:-}" ]; then echo "$VERIFY477_CLAUDE"; else command -v claude || echo "$HOME/.local/bin/claude"; fi; }
+# Child commands run without this shell's GraphTraj Session variables (a Main's own would leak in).
+clean() { env -i HOME="$HOME" USER="${USER:-luoxiao}" PATH="$PATH" TERM="${TERM:-xterm}" TMPDIR="${TMPDIR:-/tmp}" LANG="${LANG:-en_US.UTF-8}" "$@"; }
+probe() { (cd "$P" && clean PROBE_OUT="$OUT" "$VV/bin/python" -I "$PROBE" "$@"); }
+
+copy_deps() {  # $1 = venv. click/yaml/websockets copied from production, read only.
+  local S D
+  S=$(ls -d "$RT"/lib/python*/site-packages | head -1); D=$(ls -d "$1"/lib/python*/site-packages | head -1)
+  cp -Rp "$S"/click "$S"/click-*.dist-info "$S"/yaml "$S"/_yaml "$S"/pyyaml-*.dist-info \
+      "$S"/websockets "$S"/websockets-*.dist-info "$D"/ || return 1
+  (cd /tmp && "$1/bin/python" -I -c 'import importlib.metadata as m; print("deps: click", m.version("click"), "| pyyaml", m.version("pyyaml"), "| websockets", m.version("websockets"))')
+}
+
+write_probe() {
+cat > "$PROBE" <<'PY'
+"""477 probe: roles and Task, the dispatch's member, its agents-tool child and the CHECKs. Reads only the isolated project."""
+import json, os, re, subprocess, sys, time
+from datetime import datetime
+from pathlib import Path
+import yaml
+
+TASK_ID, NAME, REPLY = '1', 'wait-handover-probe', 'PONG-477'
+BODY = '''---
+difficulty: low
+difficulty_reason: Scratch probe for 477
+execution_budget:
+  estimated_minutes:
+    total: 30
+  planned_sessions:
+    team_leader: 1
+  correction_rounds: 0
+  estimation_note: One agents-tool Claude child that the member waits on
+  on_exceed: Report only
+---
+Follow the dispatch instruction exactly.
+'''
+
+def now(): return datetime.now().astimezone().isoformat(timespec='seconds')
+
+def run(*argv):
+    done = subprocess.run(argv, capture_output=True, text=True, timeout=300)
+    print(f'$ {" ".join(argv[-3:])} -> rc={done.returncode}')
+    if done.returncode: print(done.stdout[-600:], done.stderr[-600:])
+    return done
+
+def prepare(project, model):
+    graphtraj = str(Path(sys.executable).parent / 'graphtraj')
+    (project / '.graphtraj/roles.yml').write_text(yaml.safe_dump({
+        'roles': {'team_leader': {'runtime': 'claude', 'model': model, 'worktree_access': 'write',
+                                  'reports': ['report.md'], 'claude': {'permission_mode': 'auto'}}},
+        'role_tree': {'team_leader': {}}}))
+    work = project / '.graphtraj/probe-477'; work.mkdir(exist_ok=True)
+    (work / 'register.yml').write_text(yaml.safe_dump({
+        'task_id': TASK_ID, 'task_name': NAME, 'source': 'local:scratch/477', 'title': NAME, 'body': BODY,
+        'dependencies': [], 'schema_version': 2, 'parent_id': None, 'disposition': 'active',
+        'replaced_by': [], 'retirement_reason': None}))
+    (work / 'state.yml').write_text(yaml.safe_dump({
+        'task_id': TASK_ID, 'status': 'ready', 'active_team_ordinal': None, 'worktree': None, 'branch': None,
+        'current_candidate': None, 'caused_by_event_ids': [], 'evidence_refs': ['.graphtraj/probe-477/evidence.md']}))
+    (work / 'evidence.md').write_text('477 probe: ready for one member that waits on one agents-tool child.\n')
+    rc = 0
+    if not list(project.glob('.graphtraj/state/tasks/1-*/task.yml')):
+        rc = run(graphtraj, 'task', 'register', '--task-file', str(work / 'register.yml')).returncode
+    rc = rc or run(graphtraj, 'task', 'update', '--state-file', str(work / 'state.yml')).returncode
+    doctor = run(graphtraj, 'doctor')
+    print('roles OK' if 'roles: OK' in doctor.stdout else 'roles NOT OK: ' + doctor.stdout[-400:])
+    graph = run(graphtraj, 'task', 'graph')
+    ready = any(t['task_id'] == TASK_ID and t['status'] == 'ready'
+                for t in (yaml.safe_load(graph.stdout) or {}).get('tasks', []))
+    print('task 1 ready' if ready else 'task 1 NOT ready: ' + graph.stdout[-400:])
+    return 0 if (rc == 0 and ready and 'roles: OK' in doctor.stdout) else 1
+
+def plugins(stream):
+    for line in stream.read_text().splitlines():
+        try: record = json.loads(line)
+        except ValueError: continue
+        if record.get('type') == 'system' and record.get('subtype') == 'init':
+            names = [p.get('name') if isinstance(p, dict) else p for p in record.get('plugins', [])]
+            print('init plugins:', names)
+            print('cc-plugin-agents-md loaded:', 'YES' if any('cc-plugin-agents-md' in str(n) for n in names) else 'NO')
+            loaded = 'graphtraj-claude-host' in names
+            print('graphtraj-claude-host loaded:', 'YES' if loaded else 'NO')
+            return 0 if loaded else 1
+    print('graphtraj-claude-host loaded: NO (no init record)'); return 1
+
+def born(path):
+    st = path.stat(); return getattr(st, 'st_birthtime', st.st_ctime)
+
+def stream():
+    return Path(os.environ.get('PROBE_OUT', '/nonexistent')) / '01-main-stream.jsonl'
+
+def member(project, quiet=False):
+    """471: the one task-1 team_leader Session created at/after this run's 01 dispatch (else STOP)."""
+    dirs = sorted(project.glob('.graphtraj/runner/sessions/1-*team_leader*'))
+    try: text, at = stream().read_text(errors='replace'), born(stream())
+    except OSError: text, at = None, None
+    aliases = sorted(set(re.findall(r'\\*"alias\\*"\s*:\s*\\*"(1-[^"\\]*team_leader[^"\\]*)', text or '')))
+    after = [d for d in dirs if at is not None and born(d) >= at]
+    chosen = [d for d in after if not aliases or d.name in aliases]
+    if not quiet or len(chosen) != 1:
+        print(f'member: {[d.name for d in chosen]} (sessions {[d.name for d in dirs]}; after dispatch '
+              f'{[d.name for d in after]}; swarm alias {aliases or "not in stream"})')
+    if len(chosen) != 1:
+        print('STOP: not exactly one member of this dispatch.'); return None, {}, None
+    mapping = chosen[0] / 'mapping.yml'
+    return chosen[0].name, (yaml.safe_load(mapping.read_text()) or {}) if mapping.is_file() else {}, chosen[0]
+
+def child(project, alias, reference):
+    at = born(stream()) if stream().exists() else None
+    found = []
+    for path in sorted((project / '.graphtraj/swarm/control/agents').glob('agent-*.json')):
+        try: record = json.loads(path.read_text())
+        except (OSError, ValueError): continue
+        if (alias and record.get('parent') in {alias, reference} and record.get('host') != 'graphtraj-tasks'
+                and at is not None and (record.get('created_at') or 0) >= at):
+            found.append(record)
+    if len(found) != 1:
+        print('children of this member after the dispatch:', [r.get('agent') for r in found])
+        return {}
+    return found[0]
+
+def member_done(project, seconds):
+    deadline = time.time() + min(float(seconds), 100)
+    while True:
+        alias, mapping, directory = member(project, quiet=True)
+        if directory is not None and (directory / 'execution.yml').is_file():
+            print(f'{now()} MEMBER-DONE {alias}'); return 0
+        if time.time() >= deadline:
+            print(f'{now()} not yet: member={alias} turn ended={bool(directory and (directory / "execution.yml").is_file())}')
+            return 0
+        time.sleep(3)
+
+def executions(directory):
+    ids = set()
+    for path in directory.glob('claude-*-*.yml'):
+        match = re.match(r'claude-(?:diagnostics|termination)-([0-9a-f]{32})\.yml$', path.name)
+        if match: ids.add(match.group(1))
+    return sorted(ids)
+
+def session_events(project, session):
+    from graphtraj.interfaces.local_tool import bind
+    call = bind(cwd=project, allowed_features=('session_read',), desktop_observer=True)
+    events, after = [], None
+    for _ in range(50):
+        arguments = {'session_id': session, 'limit': 200, **({'after': after} if after is not None else {})}
+        result = call({'action': 'execute', 'feature': 'session_read', 'arguments': arguments})
+        document = getattr(result, 'document', result)
+        if not isinstance(document, dict) or document.get('error'):
+            print('session_read error:', json.dumps(document)[:400]); return None
+        body = document.get('result', document)
+        batch = body.get('events') or []
+        events.extend(batch)
+        if not body.get('has_more') or not batch: break
+        after = body.get('next_after', body.get('cursor', (batch[-1] or {}).get('seq')))
+    return events
+
+def flat(value):
+    """The event as text with JSON string escapes removed, so nested tool-result JSON matches plainly."""
+    text = json.dumps(value, ensure_ascii=False)
+    for _ in range(3): text = text.replace('\\"', '"').replace('\\\\', '\\')
+    return text
+
+def check(project):
+    results = {}
+    def mark(label, ok, observed):
+        results[label] = ok
+        print(f'CHECK {label}: {"PASS" if ok else "FAIL"} | observed: {observed}')
+    alias, mapping, directory = member(project)
+    if directory is None: return 1
+    record = child(project, alias, mapping.get('agent'))
+    if not record:
+        print('STOP: no single child of this member created after the dispatch.'); return 1
+    agent, last = record['agent'], record['executions'][-1]
+    stored = last.get('last_message')
+    print(f'child {agent} host={record.get("host")} parent={record.get("parent")} model={(record.get("selection") or {}).get("model")}')
+    print(f'child last execution {last.get("id")} state={last.get("state")} outcome={last.get("outcome")} '
+          f'notification={last.get("notification")} wait_released={last.get("wait_released", False)} '
+          f'waiters_left={bool(last.get("waiters"))} stored last_message={stored!r}')
+    mark('A (child via graphtraj-gateway, completed, reply stored)',
+         record.get('host') == 'graphtraj-gateway' and last.get('outcome') == 'completed' and REPLY in (stored or ''),
+         f'host={record.get("host")} outcome={last.get("outcome")} last_message={stored!r}')
+    session = mapping.get('session') or mapping.get('session_id')
+    print('member session:', session, '| member executions (claude-*-<id>.yml):', executions(directory))
+    events = session_events(project, session) if session else None
+    texts = [flat(e) for e in events] if events is not None else []
+    print('member session events read:', None if events is None else len(events))
+    waits = [t for t in texts if agent in t and '"timed_out"' in t and '"last_result"' in t]
+    statuses = [t for t in texts if agent in t and '"last_result"' in t and '"timed_out"' not in t
+                and '"action": "status"' in t]
+    def shown(text):
+        match = re.search(r'"last_message": ("(?:[^"\\]|\\.)*"|null)', text)
+        return json.loads(match.group(1)) if match else 'NOT FOUND'
+    def note(text):
+        match = re.search(r'"notification": "([a-z]+)"', text); return match.group(1) if match else None
+    wait_seen = [(shown(t), note(t)) for t in waits]
+    status_seen = [(shown(t), note(t)) for t in statuses]
+    mark('B (wait last_message == stored reply, delivered)',
+         bool(wait_seen) and all(m == stored and n == 'delivered' for m, n in wait_seen[-1:]),
+         f'wait results (last_message, notification): {wait_seen}')
+    mark('C (status last_message == stored reply)',
+         bool(status_seen) and all(m == stored for m, _ in status_seen[-1:]),
+         f'status results: {status_seen}')
+    notices = [t[:300] for t in texts if '"source": "graphtraj"' in t and agent in t and '"event"' in t
+               and '"timed_out"' not in t]
+    mark('D (no pushed notice of the reply in the member Session)', events is not None and not notices,
+         f'{len(notices)} notice input(s){": " + str(notices) if notices else ""}')
+    mark('E (no resumed member turn; one member execution)', len(executions(directory)) == 1,
+         f'member executions {executions(directory)}')
+    final = [t for t in texts if 'CREATE ' in t or 'WAIT ' in t][-1:]
+    print('member final reply (last matching event, 400 chars):', final[0][:400] if final else None)
+    ok = all(results.values()) and len(results) == 5
+    print('summary:', 'ALL PASS' if ok else 'NOT PASSED (a check not observed does not pass)')
+    return 0 if ok else 1
+
+def quiet_window(seconds):
+    deadline = time.time() + float(seconds)
+    while time.time() < deadline: time.sleep(min(5, max(deadline - time.time(), 0)))
+    print(f'{now()} quiet window of {seconds}s over')
+    return 0
+
+if __name__ == '__main__':
+    command, args = sys.argv[1], sys.argv[2:]
+    if command == 'prepare': sys.exit(prepare(Path(args[0]), args[1]))
+    if command == 'plugins': sys.exit(plugins(Path(args[0])))
+    if command == 'member-done': sys.exit(member_done(Path(args[0]), args[1]))
+    if command == 'check': sys.exit(check(Path(args[0])))
+    if command == 'quiet': sys.exit(quiet_window(args[0]))
+    sys.exit(f'unknown probe command {command}')
+PY
+}
+
+main_wait() {  # <= 9 min for 01's background claude -p; never a standalone sleep
+  "$VV/bin/python" -I -c 'import os, sys, time
+try: pid = int(open(sys.argv[1]).read().strip())
+except (OSError, ValueError): print("STOP: no pid file", sys.argv[1], "- run 01 first"); sys.exit(2)
+deadline = time.time() + 540
+while time.time() < deadline:
+    try: os.kill(pid, 0)
+    except ProcessLookupError: print("Main claude -p", pid, "ended"); sys.exit(0)
+    time.sleep(5)
+print("Main claude -p", pid, "still running after 9 min"); sys.exit(1)' "$1"
+}
+
+step_00() {
+  say "[00] Main. preflight. Dialog: none. Output also in $OUT/00.txt"
+  echo "commit under test: $COMMIT"
+  git -C "$WT" cat-file -e "$COMMIT^{commit}" || { echo "STOP: $COMMIT is not in $WT"; return 1; }
+  say "scratch venv from $COMMIT (git archive; editable; deps copied read-only from production)"
+  rm -rf "$SRC" "$VV"; mkdir -p "$SRC"; git -C "$WT" archive "$COMMIT" | tar -x -C "$SRC" || return 1
+  echo "$COMMIT" > "$BASE/src-commit"
+  "$CONDA" -m venv --system-site-packages "$VV" || return 1
+  "$VV/bin/python" -m pip install -q --disable-pip-version-check --no-cache-dir --no-index --no-deps --no-build-isolation \
+      -e "$SRC/src/graftling" -e "$SRC" 2>&1 | grep -vi cache
+  copy_deps "$VV" || return 1
+  (cd /tmp && "$VV/bin/python" -I -c 'import inspect, graftling.control as c
+print("control:", c.__file__)
+print("477 fix: wait reserves:", "waiters" in inspect.getsource(c.AgentControl.wait),
+      "| document never nulls last_message:", "last_message\x27] = None" not in inspect.getsource(c.AgentControl._document))') || return 1
+  write_probe
+  say "isolated project $P"
+  rm -rf "$P"; mkdir -p "$P"
+  (cd "$P" && git init -q -b main && echo "# 477 probe" > README.md && git add README.md \
+      && git -c user.name=477 -c user.email=477@invalid commit -qm "Initial source") || return 1
+  (cd "$P" && echo y | clean "$VV/bin/graphtraj" setup | tail -2) || return 1
+  probe prepare "$P" "$MODEL" || { echo "STOP: probe Task is not ready (above)"; return 1; }
+  (cd "$P" && clean "$VV/bin/python" -I -c 'import sys
+from pathlib import Path
+from graphtraj.workspace.runner_project import discover_runner_directory
+found = Path(discover_runner_directory(Path.cwd())).resolve(); own = (Path.cwd() / ".graphtraj/runner").resolve()
+print("graphtraj runner directory:", found, "| project own:", found == own); sys.exit(0 if found == own else 1)') \
+      || { echo "STOP: GraphTraj does not resolve the project's own .graphtraj"; return 1; }
+  local C; C=$(claude_bin)
+  echo "claude --version: $(clean "$C" --version 2>&1 | tail -1)   (expected $EXPECTED_CLAUDE)"
+  if [ -n "${VERIFY477_NO_MODEL:-}" ]; then echo "VERIFY477_NO_MODEL set: stopping before Claude Code (rehearsal)."; return 0; fi
+  (cd "$P" && clean "$VV/bin/python" -m graphtraj.runtimes.claude.host configuration --project "$P" --claude "$C" --write) || return 1
+  "$VV/bin/python" -I -c 'import json, sys
+from pathlib import Path
+harness, path = sys.argv[1], Path(sys.argv[2])
+s = json.loads(path.read_text()) if path.is_file() else {}
+s["claudeMdExcludes"] = sorted({*s.get("claudeMdExcludes", []), harness + "/CLAUDE.md", harness + "/CLAUDE.local.md",
+    harness + "/.claude/CLAUDE.md", harness + "/**/CLAUDE.md", harness + "/**/CLAUDE.local.md",
+    harness + "/AGENTS.md", harness + "/**/AGENTS.md"})
+s["enabledPlugins"] = {**s.get("enabledPlugins", {}), "cc-plugin-agents-md@builtin": False}
+path.parent.mkdir(parents=True, exist_ok=True); path.write_text(json.dumps(s, indent=2) + "\n")
+print("claudeMdExcludes:", s["claudeMdExcludes"]); print("enabledPlugins:", s["enabledPlugins"])' "$H" "$P/.claude/settings.local.json" || return 1
+  say "host answers one line with $MODEL (login check; no tool)"
+  (cd "$P" && clean "$C" -p --model "$MODEL" --output-format stream-json --verbose --mcp-config "$P/.mcp.json" --strict-mcp-config \
+      <<< 'Reply with exactly two lines. Line 1: MODEL OK. Line 2: MEMORY: then the absolute path of every CLAUDE.md or AGENTS.md file whose contents were given to you as instructions, separated by spaces, or NONE. Use no tool.' \
+      > "$OUT/00-model-stream.jsonl" 2> "$OUT/00-model-stderr.txt")
+  echo "claude -p rc=$?"
+  "$VV/bin/python" -I -c 'import json, sys
+for line in open(sys.argv[1]):
+    d = json.loads(line)
+    if d.get("type") == "result":
+        text = d.get("result") or ""
+        print("result:", text, "| is_error:", d.get("is_error"), "| models:", list((d.get("modelUsage") or {}).keys()))
+        leaked = [w for w in text.split() if w.startswith(sys.argv[2]) and not w.startswith(sys.argv[3])]
+        print("claude instruction files from the Harness:", leaked or "none")
+        sys.exit(1 if leaked or "MODEL OK" not in text else 0)
+sys.exit(1)' "$OUT/00-model-stream.jsonl" "$H" "$P" \
+      || { echo "STOP: no MODEL OK, or a Harness CLAUDE.md/AGENTS.md was loaded (above). stderr:"; head -c 300 "$OUT/00-model-stderr.txt"; echo; echo "If it says login/API key: USER runs 'claude' in Terminal and logs in, then Main reruns 00."; return 1; }
+  if ! probe plugins "$OUT/00-model-stream.jsonl"; then
+    echo "STOP: graphtraj-claude-host is not loaded in $P (Claude Code loads project plugins only in a trusted folder)."
+    next "USER: bash $THIS 00u   (then Main: bash $THIS 00)"; return 1
+  fi
+  echo "Success: '477 fix: wait reserves: True | document never nulls last_message: True', 'roles OK', 'task 1 ready',"
+  echo "'project own: True', claude --version $EXPECTED_CLAUDE, result 'MODEL OK' with $MODEL,"
+  echo "'claude instruction files from the Harness: none', 'cc-plugin-agents-md loaded: NO', 'graphtraj-claude-host loaded: YES'."
+  next "bash $THIS 01"
+}
+
+step_00u() {
+  say "[00u] USER, once (needs a terminal and a dialog). In a plain macOS Terminal:"
+  echo "  cd $P && claude"
+  echo "Dialog: 'Do you trust the files in this folder?' naming $P. Choice: 'Yes, proceed'."
+  echo "If a second dialog asks about the project's MCP server 'agents' or the plugin: approve it for this project."
+  echo "Then type /exit. Send no message. Any other dialog: press Esc and tell Main its title."
+  next "Main: bash $THIS 00"
+}
+
+step_01() {
+  say "[01] Main. starts the probe Main in the background; returns at once. Dialog: none (no tool needs approval)."
+  [ -x "$VV/bin/graphtraj" ] && [ -f "$P/.mcp.json" ] && [ -f "$PROBE" ] || { echo "STOP: run 00 first"; return 1; }
+  if [ -f "$PID01" ] && kill -0 "$(cat "$PID01")" 2>/dev/null; then echo "STOP: 01's earlier Main $(cat "$PID01") still runs; run 02"; return 1; fi
+  [ "$(cat "$BASE/src-commit" 2>/dev/null)" = "$(git -C "$WT" rev-parse HEAD)" ] || echo "NOTE: venv commit $(cat "$BASE/src-commit") is not HEAD; rerun 00 if HEAD is the commit under test."
+  local C S member swarm W
+  C=$(claude_bin); S=$OUT/01-main-stream.jsonl
+  rm -f "$PID01" "$S"   # a fresh stream: its creation time is this dispatch's time (member selection, 471)
+  member='Use only the agents tool (mcp__agents__agents) for all of this. (1) Execute feature create with arguments {"runtime": "claude", "instruction": "Reply with exactly one line: PONG-477. Use no tools."}. (2) Right away execute feature wait with arguments {"agent": "<the agent id from create>", "timeout_seconds": 300}. (3) Execute feature status with arguments {"agent": "<that agent id>"}. (4) Reply with exactly three lines and end your turn: CREATE <agent> <execution>; WAIT <last_result.notification> <last_result.last_message> from the wait result; STATUS <last_result.notification> <last_result.last_message> from the status result. Do not call send, retire or any other feature, do not call submit_result or submit_report, read no files and run no shell command.'
+  swarm=$("$VV/bin/python" -I -c 'import json,sys; print(json.dumps({"action":"execute","feature":"swarm","arguments":{"tasks":[{"task_id":"1","role":"team_leader","instruction":sys.argv[1]}]}}))' "$member")
+  echo "$swarm" > "$OUT/01-swarm-arguments.json"
+  W="env PROBE_OUT=$OUT $VV/bin/python -I $PROBE member-done $P 100"
+  printf '%s\n' "1. Call mcp__agents__tasks once with exactly these arguments: $swarm
+Print its raw result text on one line starting with SWARM-RESULT.
+2. Send nothing to the member. Run this exact Bash command, one call after another, until one prints MEMBER-DONE, at most 5 times: $W
+3. Print MEMBER-DONE (or MEMBER-NOT-DONE after 5 calls) and stop. Do not retire, interrupt or message anything." > "$OUT/01-main-prompt.txt"
+  echo "dispatch at $(date +%T); prompt: $OUT/01-main-prompt.txt"
+  (cd "$P" && clean nohup "$C" -p --model "$MODEL" --output-format stream-json --verbose --mcp-config "$P/.mcp.json" --strict-mcp-config \
+      --allowedTools "mcp__agents__tasks,Bash($W)" < "$OUT/01-main-prompt.txt" > "$S" 2> "$OUT/01-main-stderr.txt" &
+   echo $! > "$PID01")
+  echo "Main claude -p pid $(cat "$PID01") (in $PID01), stream $S"
+  next "bash $THIS 02 2>&1 | tee $OUT/02.txt"
+}
+
+step_02() {
+  say "[02] Main. waits for 01's Main (<= 9 min), a 60 s quiet window for any late push, then CHECK A-E. Dialog: none."
+  main_wait "$PID01"; case $? in 0) ;; 1) echo "STOP: rerun 02 later (01's Main still runs)"; return 1 ;; *) return 1 ;; esac
+  grep -o 'MEMBER-DONE\|MEMBER-NOT-DONE\|SWARM-RESULT[^"]*' "$OUT/01-main-stream.jsonl" | sort | uniq -c
+  probe quiet 60
+  probe check "$P"
+  local rc=$?
+  echo
+  echo "Success: 'summary: ALL PASS'. A the child was created through graphtraj-gateway, completed, its record holds"
+  echo "PONG-477; B the member's wait result shows that same last_message with notification delivered; C its status"
+  echo "result shows it too; D no {\"source\": \"graphtraj\"} notice of the child in the member's Session; E one member"
+  echo "execution (no turn resumed by a push). A check whose observable is missing does not pass."
+  next "bash $THIS 03"
+  return $rc
+}
+
+step_03() {
+  say "[03] Main. full suite at $(git -C "$WT" rev-parse --short HEAD) in the background (<= 25 min). Dialog: none."
+  [ -z "$(git -C "$WT" status --porcelain -- src tests scripts)" ] || { echo "STOP: the Worktree has uncommitted changes"; return 1; }
+  rm -rf "$SV"; "$CONDA" -m venv --system-site-packages "$SV" || return 1
+  "$SV/bin/python" -m pip install -q --disable-pip-version-check --no-cache-dir --no-index --no-deps --no-build-isolation \
+      -e "$WT/src/graftling" -e "$WT" 2>&1 | grep -vi cache
+  copy_deps "$SV" > "$OUT/03-suite.txt" 2>&1 || { cat "$OUT/03-suite.txt"; return 1; }
+  cat "$OUT/03-suite.txt"
+  rm -rf "$OUT/03-shards"
+  (cd "$WT" && nohup bash "$THIS" _03run >> "$OUT/03-suite.txt" 2>&1 &)
+  echo "started at $(date +%T). Status (any time): tail -n 25 $OUT/03-suite.txt"
+  echo "Done when it shows '== totals:'; failing IDs: $OUT/03-shards/failures.txt"
+}
+
+step__03run() {
+  echo "== start $(date +%T) commit $(git -C "$WT" rev-parse HEAD)"
+  clean "$SV/bin/python" -I -c 'import os, signal, subprocess, sys
+child = subprocess.Popen(sys.argv[1:], start_new_session=True)
+try: sys.exit(child.wait(timeout=1500))
+except subprocess.TimeoutExpired:
+    print("== 25 min limit reached: stopping the suite it started", flush=True)
+    os.killpg(child.pid, signal.SIGTERM)
+    try: child.wait(timeout=10)
+    except subprocess.TimeoutExpired: os.killpg(child.pid, signal.SIGKILL)
+    sys.exit(124)' "$SV/bin/python" "$WT/scripts/run_test_shards.py" --shards 6 --log-dir "$OUT/03-shards"
+  echo "== shards exit $?"
+  echo "== totals: $(grep -hE '^[0-9]+ (failed|errors|passed)' "$OUT/03-suite.txt" | tail -1)"
+  echo "== baseline: dev cfd7f688 (known failing there: tests/test_pi_runtime.py::test_srt_gone_before_launch_is_refused)"
+  echo "== failures:"; cat "$OUT/03-shards/failures.txt" 2>/dev/null
+}
+
+case $STEP in
+  00) step_00 2>&1 | tee "$OUT/00.txt" ;;
+  00u) step_00u ;;
+  01) step_01 2>&1 | tee "$OUT/01.txt" ;;
+  02) step_02 ;;
+  03) step_03 ;;
+  _03run) step__03run ;;
+  *) echo "usage: bash $THIS <00|00u|01|02|03>" ;;
+esac

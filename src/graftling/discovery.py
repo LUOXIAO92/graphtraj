@@ -34,6 +34,8 @@ DESCRIPTIONS = {
     'retire': 'Remove an Agent from the active list while retaining its history.',
     'ask_parent': 'Ask your direct parent for a decision or resources (more time, wider scope) '
                   'and wait a finite time for its answer.',
+    'session_read': "Read or search the archived Session of yourself, an ancestor or a descendant: a Python "
+                    'slice of its ordered events (default the last 5, conversation text only).',
 }
 
 # Intent words a caller may use instead of the action name; discovery matches them too.
@@ -46,6 +48,7 @@ INTENTS = {
     'reply': 'answer approve respond',
     'retire': 'remove delete archive',
     'ask_parent': 'request permission time budget scope extend',
+    'session_read': 'history transcript conversation log events grep page',
 }
 
 # Words that carry no intent; they would otherwise match nearly every description.

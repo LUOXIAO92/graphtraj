@@ -14,6 +14,17 @@ The numbers in parentheses are the project's Task numbers.
 
 ## Unreleased (compatible)
 
+- New feature `session_read` in every entry (MCP `agents`, the `agents` CLI, host
+  functions), 466. It reads one archived Session by `agent` or `session` without a file
+  path: a Python slice (`start`, `stop`, negative from the end; by default the last 5)
+  of the conversation text, or with `content` `tools` or `all` also tool calls and
+  results or every archived record; `search` returns hit positions and snippets to slice
+  around. Credentials and control material are redacted. By default a caller reads its
+  own Session and its ancestors' and descendants'; a host replaces that with
+  `AgentControl(session_reads=...)`. New public names `find_session`, `read_events`,
+  `redact_session` in `graftling.sessions`, and `JsonlSessionStore.events()` and
+  `.revision` (PUBLIC_API 1.2, 1.3). GraphTraj plugs in its project-wide policy, and its
+  `tasks` `session_read` now forwards to this reading as a transitional entry.
 - A DSH execution's tool processes are reclaimed the same way (463). DSH starts each
   Bash tool in its own session and on shutdown stops only those groups, so a process a
   tool moved into yet another session (`setsid`) outlived both a normal end and a

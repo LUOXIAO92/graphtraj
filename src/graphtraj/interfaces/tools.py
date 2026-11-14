@@ -486,7 +486,7 @@ def continue_task_execution(
 
 
 def read_session_archive(arguments: Mapping[str, Any], *, cwd: Path | None = None) -> ToolResult:
-    """Read a bounded canonical Session page through existing Runner authority."""
+    """Forward the transitional ``tasks`` session_read to agents' Session reading."""
     from graphtraj.sessions.query import read_session
 
     return ToolResult(read_session(cwd or Path.cwd(), arguments['session_id'],
@@ -495,7 +495,9 @@ def read_session_archive(arguments: Mapping[str, Any], *, cwd: Path | None = Non
 
 register_tool(
     "session_read",
-    "Read a project-local canonical Session, ordered events and durable unfinished output. "
+    "Transitional: prefer the agents tool's session_read feature, which reads a slice (by default "
+    "the last 5 conversation events) or searches. This forwards to it and keeps the old page: every "
+    "archived event after `after`, at most `limit`, and durable unfinished output. "
     "Verified project callers, including Main and other Agents, read the project's linked Sessions with "
     "credentials and control material redacted; no messaging or control is provided.",
     {"type": "object", "properties": {

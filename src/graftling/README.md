@@ -83,6 +83,7 @@ lists the features, `describe` gives one feature's input, and `execute` runs it.
 | `requests`, `reply` | Read a child's permission requests and answer each once |
 | `retire` | Ends a child for good |
 | `ask_parent` | Called by a child: asks its parent to decide something or grant resources, and waits for the answer |
+| `session_read` | Reads the archived Session of yourself, an ancestor or a descendant by `agent` or `session`: a Python slice of its events (`start`, `stop`; by default the last 5), conversation text unless `content` asks for `tools` or `all`, or a keyword `search` returning hit positions. Credentials are redacted; needs `save_normalized_sessions` on |
 
 `model` must be a known candidate, and agents never silently replaces it. When a
 Runtime answers with another model, as with a safeguard fallback, the child ends

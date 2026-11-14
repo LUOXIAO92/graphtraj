@@ -590,6 +590,14 @@ class AgentControl:
         Whether a notice its parent cannot receive now is kept durably
         (``held``) and delivered when that parent next runs, including across
         host processes. Off by default: records and behaviour stay as they were.
+    session_reads
+        Optional host policy for ``session_read``: ``session_reads(caller,
+        header)`` returns whether the verified ``caller`` may read the archived
+        Session with ``header``, and raises :class:`AgentsError`
+        ``authority-denied`` for a caller it does not recognize. ``header`` is
+        ``None`` when no archive matches, so the caller is checked first either
+        way. Without it a caller reads its own Session and those of its
+        ancestors and descendants (:meth:`may_read`).
     """
 
     def __init__(
@@ -598,6 +606,7 @@ class AgentControl:
         roots: Any = None,
         request_notices: bool | str = False,
         hold_notices: bool = False,
+        session_reads: Callable[[Caller, dict | None], bool] | None = None,
     ) -> None:
         """Bind the data root and the available Runtime drivers."""
         self.root    = Path(root)
@@ -609,6 +618,7 @@ class AgentControl:
         self.roots   = roots
         self.request_notices = request_notices
         self.hold_notices = hold_notices
+        self.session_reads = session_reads or self.may_read
         self._receivers: dict[str, tuple[str, Callable[[dict], bool]]] = {}
         # Notices a receiver in this process is handling now, by notice_id.
         self._delivering: set[str] = set()
@@ -637,6 +647,8 @@ class AgentControl:
                                    arguments["timeout_seconds"])
         if action == "status" and "agent" not in arguments:
             return Outcome({"agents": self.hierarchy(binding.caller)})
+        if action == "session_read":
+            return self.session_read(arguments, binding.caller)
         try:
             return self._operate_agent(action, arguments, binding)
         except AgentsError as error:
@@ -1162,6 +1174,74 @@ class AgentControl:
             record["retired_at"] = _now()
             record["retired_by"] = _scope(caller)
             return self._outcome(record, result={"retired": True})
+
+    def session_read(self, arguments: Mapping[str, Any], caller: Caller) -> Outcome:
+        """Read or search one archived Session the host's policy lets ``caller`` read.
+
+        ``arguments`` names exactly one of ``agent`` (that Agent's current
+        native Session) or ``session`` (an archive ID or native Session ID),
+        plus the optional ``start``, ``stop``, ``content`` and ``search`` of
+        :func:`graftling.sessions.read_events`. The result is redacted. A
+        Session that does not exist and one the caller may not read give the
+        same ``not-found``.
+        """
+        from graftling.sessions.reading import find_session, read_events
+
+        agent = arguments.get("agent")
+        reference = arguments.get("session")
+        if agent is not None:
+            record = self._load(agent)
+            reference = record and (record["session"] or (record["sessions"] or [None])[-1])
+        try:
+            store = find_session(self.root, reference) if reference is not None else None
+            if not self.session_reads(caller, store and store.header) or store is None:
+                raise AgentsError("not-found", f"No archived Session {agent or reference!r} is readable by "
+                                  "you. Archives exist only while normalized Session saving is on.")
+            document = read_events(store, start=arguments.get("start"), stop=arguments.get("stop"),
+                                   content=arguments.get("content", "text"), search=arguments.get("search"))
+        except ValueError as error:
+            raise AgentsError("invalid-input", str(error)) from None
+        return Outcome(document, agent=agent, session=document["session"])
+
+    def may_read(self, caller: Caller, header: dict | None) -> bool:
+        """Default ``session_reads``: the caller's own Session, its ancestors' and its descendants'.
+
+        An Agent caller must have a record here, and a caller without an Agent
+        reference must name its Session; anyone else is ``authority-denied``.
+        A Session belongs to the Agent whose recorded native Sessions include
+        it. A root caller's own Session is the one its host verified, and it is
+        the top ancestor of the Agents it created.
+        """
+        own = self._load(caller.agent) if caller.agent is not None else None
+        verified = own is not None if caller.agent is not None else caller.session is not None
+        if not verified:
+            raise AgentsError("authority-denied", "Reading a Session needs a caller this host verified.")
+        if header is None:
+            return False
+        native = header.get("native") or {}
+        # The root Session: the caller's own, or the one that created the caller's top ancestor.
+        root = (caller.runtime, caller.session) if own is None else (None, self._top(own)["creator"].get("session"))
+        if root[1] is not None and root[1] == native.get("sessionId") and root[0] in (None, native.get("runtime")):
+            return True
+        owner = self._session_owner(native)
+        if owner is None:
+            return False
+        if self._can_view(owner, caller) or owner["agent"] == caller.agent:
+            return True
+        ancestors, current = set(), own
+        while current is not None and current["parent"] is not None and current["parent"] not in ancestors:
+            ancestors.add(current["parent"])
+            current = self._load(current["parent"])
+        return owner["agent"] in ancestors
+
+    def _session_owner(self, native: Mapping[str, Any]) -> dict | None:
+        """Return the Agent record that recorded the native Session ``native`` names."""
+        for path in sorted((self.root / "control" / "agents").glob("*.json")):
+            record = self._load(path.stem)
+            if (record is not None and record["runtime"] == native.get("runtime")
+                    and native.get("sessionId") in record["sessions"]):
+                return record
+        return None
 
     def registration(self, agent: str) -> dict | None:
         """Return who registered ``agent``: its ``host``, ``parent`` and driver ``settings``.

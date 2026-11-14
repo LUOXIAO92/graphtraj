@@ -285,6 +285,15 @@ class JsonlSessionStore:
         """Return detached DSH metadata, including fork provenance."""
         return deepcopy(self._metadata['header'])
 
+    @property
+    def revision(self) -> int:
+        """Return the snapshot revision that ``page`` reports."""
+        return self._metadata['revision']
+
+    def events(self) -> list[dict]:
+        """Return a detached copy of every committed event in native order."""
+        return deepcopy(self._events)
+
     def position(self, source: str) -> int:
         """Return the durable replay cursor, or -1 before this source is read."""
         return self._metadata['sources'].get(source, -1)

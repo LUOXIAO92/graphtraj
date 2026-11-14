@@ -197,6 +197,7 @@ Features and their arguments (`*` = required):
 | `reply` | `agent*`, `request*` (one document from `requests`), `response*` (explicit native response, or `{"answer"}` for a decision request) | the reply receipt; a repeat returns the first receipt with `duplicate: true`. Checked first under section 6 |
 | `retire` | `agent*` | `retired: true`, `duplicate` on repeat |
 | `ask_parent` | `kind*` (`decision` \| `resources`), `question*`, `timeout_seconds*` (finite, > 0) | `request`, `answer` (text or `null`), `timed_out`, on the caller's own Agent document; see 4 |
+| `session_read` | exactly one of `agent` or `session`; `start`, `stop` (integers), `content` (`text` \| `tools` \| `all`, default `text`), `search` (string) | not an Agent document: the read document below (since 466) |
 
 An unknown argument, a missing required one or an empty string is rejected.
 Identity, permissions, working directory and parentage always come from the
@@ -206,6 +207,45 @@ own working directory (section 2).
 `ask_parent` is called by a
 child about itself; a caller without an Agent reference is refused with
 `authority-denied`.
+
+**`session_read`** reads one archived Session (1.5) without a file path.
+`agent` selects that Agent's current native Session; `session` takes an archive
+ID or a native Session ID. `content` chooses the view: `text` keeps message
+events that carry conversation text, as text; `tools` adds tool calls and tool
+results; `all` returns every archived event as stored, attached (ignorable)
+records, reasoning and native copies included. `start` and `stop` take one
+Python slice of that view, negative values counting from the end; without both a
+read returns the last 5 (`[-5:]`). `search` is a case-insensitive literal
+keyword matched against the view's text values; `start` and `stop` then narrow
+the searched range (default: all of it). Positions count within the chosen
+`content`, so read around a hit with the same `content`.
+
+The result's `session` is the archive ID and `agent` the `agent` argument, if
+given. `result` holds `session`, `content`, `total` (events in the view), `start`
+and `stop` (the slice actually taken, normalized as Python does), and `omitted`
+for `text` and `tools`, naming what was left out. A read adds `events` (each with
+`index` in the view and `seq` in the archive; `text` items carry `type` and
+`text`, `tools` items `type` and `content` blocks `text`, `tool-call` (`name`,
+`arguments`) or `tool-result` (`content`, `is_error` when set), `all` items
+`event`), `pending` (unfinished output in the same view; the drafts themselves
+for `all`) and, when earlier events exist, `earlier: {start, stop}`, the page
+before this one. A search adds `search`, `hits_total` and `hits` (`index`,
+`seq`, `type`, `snippet`: the first match with up to 80 characters on each side), the
+last 20 hits in the range, and `earlier_hits: {count, stop}` when more matched.
+`all` adds `header`, `revision` and, for imported old evidence, `legacy` (its
+events sliced the same way, with their `total`). Credentials and control material
+(keys or values naming a control key, socket, directory or request token) are
+redacted everywhere, including what a search sees.
+
+Who may read is the host's policy (`AgentControl(session_reads=...)`, 1.3). By
+default a caller reads its own Session and those of its ancestors and
+descendants: the Agents its parent chain reaches and the Agents it can see in
+`status`, plus the root Session that created its top ancestor. A Session belongs
+to the Agent whose recorded native Sessions include it. A caller with an Agent
+reference that has no record here, or without either an Agent reference or a
+Session, is refused with `authority-denied`. A Session that does not exist, is
+not archived (saving is off) or may not be read is `not-found`, with the same
+message. Malformed slice values are `invalid-input`.
 
 `send`'s `reports_only` (boolean, default false): `true` delivers the message
 only to collect results the Agent already holds; the Agent starts no new work.
@@ -378,7 +418,18 @@ with its own `__all__`:
 | `graftling.codex` | `CodexDriver`, `CodexManagedExecution`, `CodexAppServer`, `CodexExecution`, `CodexSession`, `CodexServerRequest`, `CodexRPCError`, `CodexAdapterError`, `CodexRuntimeContext`, `restore_codex_context`, `validate_codex_launch_request`, `reject_legacy_sandbox_config`, `codex_api_key_env`, `codex_connection_environment`, `find_native_session`, `project_access`, `validate_connection` |
 | `graftling.pi` | `PiDriver`, `PiExecution`, `current_connection`, `session_record`, `session_source`, `verify_main`, `pi_destination` |
 | `graftling.dsh` | `DshDriver`, `DshService`, `DshError`, `DshExecution`, `bind_run`, `session_context`, `dsh_version_refusal` |
-| `graftling.sessions` | `SessionArchive` (the JSONL archive; `graftling.SessionArchive` is the interface a backend expects), `ConfiguredSessionArchive`, `JsonlSessionStore`, `archive_path`, `SESSION_FORMAT_VERSION`, `INITIAL_COLLECTION_TYPE`, `append_stream_record`, `native_record`, `retain_native`, `snapshot_event`, `upgrade_event`, `upgrade_header`, `validate_header`, `validate_session`, `CodexJsonlArchive`, `CodexHistoryArchive`, `NativeInputError`, `rollout_record`, `codex_attachments`, `DshArchive`, `DshLiveFrames`, `attachment_refs`, `attempt_usage`, `collect_jsonl`, `PiArchive`, `import_native`, `import_sqlite`, `verify_sqlite` |
+| `graftling.sessions` | `SessionArchive` (the JSONL archive; `graftling.SessionArchive` is the interface a backend expects), `ConfiguredSessionArchive`, `JsonlSessionStore`, `archive_path`, `find_session`, `read_events`, `redact_session`, `SESSION_FORMAT_VERSION`, `INITIAL_COLLECTION_TYPE`, `append_stream_record`, `native_record`, `retain_native`, `snapshot_event`, `upgrade_event`, `upgrade_header`, `validate_header`, `validate_session`, `CodexJsonlArchive`, `CodexHistoryArchive`, `NativeInputError`, `rollout_record`, `codex_attachments`, `DshArchive`, `DshLiveFrames`, `attachment_refs`, `attempt_usage`, `collect_jsonl`, `PiArchive`, `import_native`, `import_sqlite`, `verify_sqlite` |
+
+Session reading (since 466), the parts of `session_read` (1.2) for a host or a
+consumer that authorizes by itself: `find_session(root, reference)` opens the
+`JsonlSessionStore` under a data root for an archive ID or a native Session ID
+(the latest archive retained for it), or returns `None`; `read_events(store, *,
+start=None, stop=None, content="text", search=None, redacted=True)` returns the
+`result` document of 1.2 and raises `ValueError` for malformed values;
+`redacted=False` is for an owner reading its own files and leaves credentials in
+place, search included. `redact_session(value)` applies the same credential and
+control-material redaction to any JSON value. `JsonlSessionStore` gained
+`events()` (a detached copy of the committed events) and `revision`.
 
 `PiArchive` takes the optional keyword `private_paths` (since 0.2.7): an iterable of
 further directories the caller keeps out of attachment copies (1.5).
@@ -429,8 +480,17 @@ consumer whose children work in a worktree of a larger project sets it to that p
 `registration(agent)` (`{"host", "parent", "settings"}` of an Agent the host
 recorded, or `None` for a missing or unreadable record; it checks no caller),
 `confirm_ended(agent, caller, *, by=None)` (`by` is the identity recorded as
-confirming: `{"host", "agent", "session"}`), `import_agent(record)` and
-`configure_stopped(agent, settings, caller)`.
+confirming: `{"host", "agent", "session"}`), `import_agent(record)`,
+`configure_stopped(agent, settings, caller)`, `session_read(arguments, caller)`
+and `may_read(caller, header)`, the default read policy of 1.2.
+
+A host replaces that policy with `AgentControl(session_reads=policy)` (since
+466). `policy(caller, header)` returns whether the verified `caller` may read the
+archived Session whose header is `header`, and raises `AgentsError`
+`authority-denied` for a caller it does not recognize. It is called with `header`
+`None` when no archive matches, so an unrecognized caller is refused before
+anything about the Session is revealed. GraphTraj's policy lets every verified
+caller of its project read every Session archived in it.
 
 **JavaScript files.** A package that places its own files beside the installed
 `graftling` may import these exports. Everything else in these files, and
@@ -1902,6 +1962,11 @@ Consumers must ignore result fields and archive fields they do not know.
 
 Recorded classifications:
 
+- 466: the feature `session_read`, its arguments `session`, `start`, `stop`, `content`
+  and `search`, `AgentControl(session_reads=...)` with `session_read` and `may_read`,
+  and `find_session`, `read_events`, `redact_session`, `JsonlSessionStore.events()` and
+  `.revision`. All are new, and no existing request changes, so the change is
+  compatible. GraphTraj uses the new names in the same change.
 - 394 (0.5.0): the distribution, Python package, entry point group, npm packages,
   environment variables and native names are renamed Graftling (CHANGELOG 0.5.0). Old
   names are not read, so the change is incompatible and raises the minor version. New:

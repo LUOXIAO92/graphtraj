@@ -198,7 +198,8 @@ class GraphTrajAgents:
         # claims live in the project's current Runner directory.
         self.control = AgentControl(swarm_root(root), {name: driver for name in SUPPORTED_RUNTIMES},
                                     roots=MainRoots(runner_directory(root)),
-                                    event_receiver=self._main_notice, request_notices="decisions")
+                                    event_receiver=self._main_notice, request_notices="decisions",
+                                    session_reads=self._project_reads)
         default_config(swarm_root(root), save_normalized_sessions=True)
 
     def _main_notice(self, notice: dict) -> bool | str:
@@ -283,6 +284,8 @@ class GraphTrajAgents:
         try:
             if action == "ask_parent":
                 return self._ask_parent(arguments, binding.caller)
+            if action == "session_read":
+                return self.control.operate(action, self._member_session(arguments), binding)
             member = self._member_alias(agent)
             core = member is None and (action == "create" or (agent or "").startswith(AGENT_PREFIX))
             if not core and action not in {"status", "wait"} and binding.caller.agent is None:
@@ -309,6 +312,47 @@ class GraphTrajAgents:
             raise AgentsError(error.code, message) from None
         except ValueError as error:
             raise AgentsError("invalid-input", str(error)) from None
+
+    def _project_reads(self, caller: Caller, header: dict | None) -> bool:
+        """Let any verified project caller read every Session archived in this project.
+
+        Main (bound with its native Session), a Task member with a current
+        Runner mapping and an Agent recorded in the project's data root are
+        verified; anyone else is ``authority-denied``. Task members' Sessions
+        are archived in the same data root, so they are readable too.
+        """
+        from graphtraj.execution.runner_status import read_alias_mapping
+        from graphtraj.workspace.runner_project import discover_runner_directory
+
+        if caller.agent is None:
+            verified = caller.session is not None
+        elif caller.agent.startswith(AGENT_PREFIX):
+            verified = self.control.registration(caller.agent) is not None
+        else:
+            try:
+                read_alias_mapping(discover_runner_directory(self.root), caller.agent)
+                verified = True
+            except RunnerError:
+                verified = False
+        if not verified:
+            raise AgentsError("authority-denied", "Project reads require a verified project caller.")
+        return header is not None
+
+    def _member_session(self, arguments: Mapping[str, Any]) -> Mapping[str, Any]:
+        """Name a Task member's Session instead of the member, whose Session the Runner records.
+
+        ``agent`` may be the member's Runner alias or its core reference. A
+        reference that is not a member stays as it is; an alias without a
+        recorded Session is passed on as a Session reference that matches none.
+        """
+        agent = arguments.get("agent")
+        if agent is None:
+            return arguments
+        alias = self._member_alias(agent) if agent.startswith(AGENT_PREFIX) else agent
+        if alias is None:
+            return arguments
+        rest = {name: value for name, value in arguments.items() if name != "agent"}
+        return {**rest, "session": self._references(alias)[0] or alias}
 
     def _member_workspace(self, arguments: Mapping[str, Any], caller: Caller) -> Mapping[str, Any]:
         """Assign a Task member's new child the member's Worktree unless it names a workspace.

@@ -2,7 +2,7 @@
 [ -n "$ZSH_VERSION" ] || exec /bin/zsh "$0" "$@"
 # Task 444: unattended Main-swap checks on real hosts, in an ISOLATED project under the Harness tmp/444.
 # The production Claude Main is never yielded, exited or reconfigured; every probe Main runs in $P.
-#   zsh <this file> <00|00u|B1|B2|C1|C2|C3|P1|P2|E1|E2|D1|D2|D3|F>
+#   zsh <this file> <00|00u|B1|B2|C1|C2|C3|P1|P2|E1|E2|D0|D1|D2|D3|F>
 # Order: 00 -> (00u, USER, only if 00 says so) -> B1 B2 (Claude Main queues h397) -> C1 C2 C3 (Codex Main:
 # 397, 373, 401) -> P1 P2 (Pi Main: 373) -> E1 E2 (Pi member: 425) -> D1 D2 D3 (headless DSH Main: 398, 373) -> F.
 # Every step: no native dialog (headless hosts; requests are answered by the probe Main through the tasks tool),
@@ -20,6 +20,14 @@ MODEL=claude-opus-5-5
 CODEX_MODEL=gpt-6-luna
 STEP=${1:-help}
 path=($RT/bin /opt/homebrew/bin $HOME/.local/bin $path)
+# Homebrew's pnpm has no #! line, so DSH's Node spawn of pnpm fails with ENOEXEC (394; adopt-393 PNPM_SHIM).
+# Use the 394 shim when it exists; otherwise an equivalent shim under $BASE (never a dotfile).
+PNPM_SHIM=/Users/luoxiao/agents-394/pnpm-shim
+if [[ ! -x $PNPM_SHIM/pnpm && -f /opt/homebrew/lib/node_modules/pnpm/bin/pnpm.mjs ]]; then
+  PNPM_SHIM=$BASE/pnpm-shim
+  [[ -x $PNPM_SHIM/pnpm ]] || { mkdir -p $PNPM_SHIM && printf '#!/bin/sh\nexec /opt/homebrew/bin/node /opt/homebrew/lib/node_modules/pnpm/bin/pnpm.mjs "$@"\n' > $PNPM_SHIM/pnpm && chmod +x $PNPM_SHIM/pnpm; }
+fi
+[[ -x $PNPM_SHIM/pnpm ]] && path=($PNPM_SHIM $path)
 mkdir -p $OUT $BASE
 say() { print -r -- ""; print -r -- "### $*"; }
 next() { print -r -- ""; print -r -- "==> next (Main pastes): $*"; }
@@ -50,6 +58,12 @@ PI_MAIN() { print -r -- pi --print --extension $(SITE)/graphtraj/runtimes/pi/ext
 ASK373() { print -r -- "{\"action\":\"execute\",\"feature\":\"swarm\",\"arguments\":{\"tasks\":[{\"task_id\":\"1\",\"role\":\"asker\",\"instruction\":\"Run these two shell commands, one Bash call each, in this order: touch $BASE/373-$1-a and touch $BASE/373-$1-b. Each needs approval; wait for each answer. Then reply with one line saying which were allowed or denied.\"}]}}"; }
 DENY='Then repeat, at most 12 rounds, until the asker execution has ended: using the agents tool, action requests with agent set to the asker alias from SWARM-RESULT; for EVERY pending native request call the agents tool action reply with that agent, request set to the request object exactly as returned, and response {"behavior": "deny", "message": "444 probe denies"}; print one line DENIED <request id> per reply. Between rounds use the agents tool action wait with that agent and timeout_seconds 15 (never a shell command). Finally print the asker final reply on one line starting with ASKER-RESULT and stop. Never allow a request.'
 
+pnpm_check() {
+  print "pnpm shim: $([[ -x $PNPM_SHIM/pnpm ]] && print "$PNPM_SHIM (first on PATH)" || print "none")"
+  clean node -e 'const r=require("child_process").spawnSync("pnpm",["--version"],{encoding:"utf8"}); const w=require("child_process").spawnSync("/bin/sh",["-c","command -v pnpm"],{encoding:"utf8"}); console.log("pnpm Node would spawn: "+(w.stdout||"").trim()+" | "+(r.error ? "Node spawn pnpm FAILED: "+r.error.code : "Node spawn pnpm OK "+r.stdout.trim()))' 2>&1
+}
+dsh_plugins() { clean dsh plugin --profile headless list --depth 0 2>&1 | redact | head -20 | tee $1
+  grep -qE 'graftling-dsh' $1 && print "dsh GraphTraj plugin: YES" || print "dsh GraphTraj plugin: NO"; }
 step_00() {
   say "[00] preflight. Dialog: none. Output also in $OUT/00.txt"
   print "ZSH_VERSION=${ZSH_VERSION:-not-zsh} (launched via /bin/zsh)"
@@ -103,8 +117,8 @@ Path(".codex/hooks.json").write_text(json.dumps(hook(Path("."), {}), indent=2) +
   say "Pi sandbox (roles.yml pi_member = production pi_dsh_trial.team_leader values)"
   probe pisandbox - ; print "pi sandbox rc=$? (non-zero: E is NOT OBSERVED; Pi as Main does not use it: extension.mjs has no sandbox)"
   say "DSH headless profile plugins (D needs the GraphTraj DSH plugin there)"
-  clean dsh plugin --profile headless list 2>&1 | redact | head -20 | tee $OUT/00-dsh-plugins.txt
-  grep -qiE 'graphtraj|graftling' $OUT/00-dsh-plugins.txt && print "dsh GraphTraj plugin: YES" || print "dsh GraphTraj plugin: NO (D is NOT OBSERVED; installing it is the user's decision)"
+  pnpm_check
+  dsh_plugins $OUT/00-dsh-plugins.txt | tail -1 | sed 's/: NO$/: NO (Main runs D0 before D1; the user authorised the headless-profile install)/'
   [[ -n ${VERIFY444_NO_MODEL:-} ]] && { print "VERIFY444_NO_MODEL set: stopping before any model (rehearsal)."; return 0; }
   local ASK='Reply with exactly three lines. Line 1: MODEL OK. Line 2: MODEL: your model name. Line 3: FILES: the absolute path of every AGENTS.md or CLAUDE.md whose contents you were given as instructions, or NONE. Use no tool.'
   print -r -- "$ASK" > $OUT/00-ask.txt
@@ -119,11 +133,12 @@ Path(".codex/hooks.json").write_text(json.dumps(hook(Path("."), {}), indent=2) +
     redact < $f > $f.r && mv $f.r $f
     local ok=NO leak=none; grep -q 'MODEL OK' $f && ok=YES
     grep -oE "$H/[^ \"]*(AGENTS|CLAUDE)\.md" $f | grep -v "^$P/" | head -1 | read leak
+    [[ $host == pi && -n $leak ]] && leak="$leak (known limitation (user-accepted 2026-11-15, as in 461))"
     print "$host answered: $ok | model line: $(grep -oE 'MODEL: [^\"\\]*' $f | head -1) | Harness instruction file loaded: ${leak:-none}"
   done
   grep -q 'graphtraj-claude-host' <(cd $P && clean $(claude_bin) -p --model $MODEL --output-format stream-json --verbose --mcp-config $P/.mcp.json --strict-mcp-config <<< 'Reply OK. Use no tool.' 2>&1) \
     && print "graphtraj-claude-host loaded: YES" || { print "graphtraj-claude-host loaded: NO"; next "USER: zsh $THIS 00u   (then Main: zsh $THIS 00)"; return 1; }
-  print "Success: four 'answered: YES', every 'Harness instruction file loaded: none', 'codex logged in: YES', roles OK, task 1 ready,"
+  print "Success: four 'answered: YES', every 'Harness instruction file loaded: none' (pi: the known limitation is accepted), 'codex logged in: YES', roles OK, task 1 ready,"
   print "'project own: True', 'graphtraj-claude-host loaded: YES', 'pi sandbox missing: nothing', 'dsh GraphTraj plugin: YES'."
   next "zsh $THIS B1"
 }
@@ -132,7 +147,7 @@ step_00u() {
   say "[00u] USER, once, only when 00 says so (Main cannot: these are native trust dialogs). Plain macOS Terminal:"
   print "  cd $P && claude          -> 'Do you trust the files in this folder?' choose 'Yes, proceed'; approve the project MCP 'agents'; /exit"
   print "  cd $P && codex -m $CODEX_MODEL   -> trust this folder and approve the project hooks ($P/.codex/hooks.json) if asked; /exit"
-  print "  cd $P && $(PI_MAIN | sed 's/--print //')   -> trust the folder if Pi asks; Ctrl-C"
+  print "  cd $P && PATH=$RT/bin:\$PATH GRAFTLING_PYTHON=$PY $(PI_MAIN | sed 's/--print //')   -> trust the folder if Pi asks; Ctrl-C"
   print "Send no message. Any other dialog: Esc and tell Main its title. Nothing here touches the production Main."
   next "Main: zsh $THIS 00"
 }
@@ -212,6 +227,8 @@ step_P2() {
   say "[P2] waits for the Pi Main; judges 373 on Pi. Dialog: none."
   wait_pid $OUT/P1.pid || return 1
   redact < $OUT/P1-main-stream.jsonl | tail -20
+  print "P1 stderr lines naming ENOENT or graphtraj-session (raw; empty means none):"
+  grep -E 'ENOENT|graphtraj-session' $OUT/P1-stderr.txt | redact | head -10
   local claimed=$(grep -c '"runtime": *"pi"' $P/.graphtraj/runner/main-sessions/continuity.jsonl 2>/dev/null)
   print $([[ $claimed -ge 1 ]] && print PASS || print FAIL) "P entry: continuity.jsonl has a pi claim ($claimed) - the Pi extension's session_start continued Main"
   probe requests $P $OUT P1 pi
@@ -235,11 +252,27 @@ step_E2() {
   local miss=$( [[ -d $s ]] && grep -rliE '"missing"|missing: *true' $s 2>/dev/null | head -3)
   grep -q 'PONG-425: # 444 probe README first line' $OUT/E1-main-stream.jsonl && local ok=1 || local ok=0
   print $([[ $ok == 1 && -z $miss ]] && print PASS || print FAIL) "425: the Pi member's reply carries README.md's first line, and its session records mark nothing missing (${miss:-no missing marker})"
-  next "zsh $THIS D1 2>&1 | tee $OUT/D1.txt"
+  next "zsh $THIS D0 2>&1 | tee $OUT/D0.txt"
 }
 
 # ---- D: headless DSH Main (398, 373) -----------------------------------------------------------------------
-dsh_turn() { (cd $P && clean env -u DEEPSEEK_BASE_URL nohup dsh --profile headless --json "$@" < /dev/null > $OUT/$STEP-main-stream.jsonl 2> $OUT/$STEP-stderr.txt & print $! > $OUT/$STEP.pid); wait_pid $OUT/$STEP.pid 420; }
+step_D0() {
+  say "[D0] Main, before D1. Installs graftling-dsh into the DSH headless profile ONLY, and only if absent (user-authorised 2026-11-15). Dialog: none."
+  pnpm_check
+  dsh_plugins $OUT/D0-before.txt | tail -1
+  if grep -q graftling-dsh $OUT/D0-before.txt; then print "already installed: nothing changed"; else
+    local pkg=$($PY -I -c 'import graftling.dsh, pathlib; print(pathlib.Path(graftling.dsh.__file__).parent)')
+    print "package (production .venv-runtime): $pkg"
+    (cd $BASE && clean dsh plugin --profile headless add $pkg) 2>&1 | redact | tail -15 | tee $OUT/D0-add.txt
+    print "dsh plugin add rc=${pipestatus[1]}"
+  fi
+  dsh_plugins $OUT/D0-after.txt | tail -1 | tee $OUT/D0-result.txt
+  grep -q ': YES' $OUT/D0-result.txt && print "PASS D0: dsh GraphTraj plugin: YES in --profile headless" || print "FAIL D0: plugin not listed (D0-add.txt; ~/.dsh/profiles/headless/.plugin-manager/logs/)"
+  next "zsh $THIS D1 2>&1 | tee $OUT/D1.txt"
+}
+# graftling-dsh's host row is inert without GRAFTLING_DSH_CONFIG and needs GRAFTLING_PYTHON (graftling/dsh/plugin.mjs:156,167).
+dsh_turn() { print -r -- "{\"root\": \"$BASE/dsh-data\"}" > $BASE/dsh-host.json; mkdir -p $BASE/dsh-data
+  (cd $P && clean GRAFTLING_PYTHON=$PY GRAFTLING_DSH_CONFIG=$BASE/dsh-host.json env -u DEEPSEEK_BASE_URL nohup dsh --profile headless --json "$@" < /dev/null > $OUT/$STEP-main-stream.jsonl 2> $OUT/$STEP-stderr.txt & print $! > $OUT/$STEP.pid); wait_pid $OUT/$STEP.pid 420; }
 step_D1() {
   say "[D1] headless DSH Main: create g398 (60 s) and exit. Then waits 100 s and checks the notice stays queued (398). Dialog: none."
   dsh_turn "Using only the agents tool: create a root agent with arguments {\"runtime\": \"claude\", \"configuration\": \"advisor\", \"alias\": \"g398\", \"instruction\": \"Run the shell command sleep 60 once, then reply with exactly one line: PONG-398.\"}. Do not wait. Print CREATE and the agent id, then stop." || return 1
@@ -291,6 +324,6 @@ step_F() {
 case $STEP in
   00) step_00 2>&1 | redact | tee $OUT/00.txt ;;
   00u) step_00u ;;
-  B1|B2|C1|C2|C3|P1|P2|E1|E2|D1|D2|D3|F) step_$STEP ;;
-  *) print "usage: zsh ${0:A} <00|00u|B1|B2|C1|C2|C3|P1|P2|E1|E2|D1|D2|D3|F>" ;;
+  B1|B2|C1|C2|C3|P1|P2|E1|E2|D0|D1|D2|D3|F) step_$STEP ;;
+  *) print "usage: zsh ${0:A} <00|00u|B1|B2|C1|C2|C3|P1|P2|E1|E2|D0|D1|D2|D3|F>" ;;
 esac

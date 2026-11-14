@@ -1611,6 +1611,7 @@ def _interrupt_session(
     if crashed_start(mapping, session_directory) is not None:
         # The Worker died before recording this execution and nothing runs it.
         return {"alias": alias, "interrupt_status": "stopped"}
+    deadline = time.monotonic() + INTERRUPT_RESPONSE_SECONDS
     try:
         session_operation(mapping, "interrupt", response_timeout=INTERRUPT_RESPONSE_SECONDS)
     except RunnerError:
@@ -1648,7 +1649,15 @@ def _interrupt_session(
         # confirmation, retained separately, can then establish stopping.
         _record_owner_exit(alias, session_directory, mapping)
         return _interrupt_session(alias, session_directory, mapping)
-    return {"alias": alias, "interrupt_status": "interrupted"}
+    # The owner answers once the native turn is interrupted and writes the
+    # terminal record only after its turn returns. Wait for that record within
+    # the same bound, so a returned interrupt can read it (474).
+    while (not os.path.lexists(str(execution_file)) and time.monotonic() < deadline
+           and ownership_is_held(session_directory, mapping["worker_pid"])):
+        time.sleep(0.05)
+    if os.path.lexists(str(execution_file)):
+        return {"alias": alias, "interrupt_status": "interrupted"}
+    return {"alias": alias, "interrupt_status": "interrupted", "execution_record": "pending"}
 
 
 def _running_reports_only(directory: Path) -> bool:

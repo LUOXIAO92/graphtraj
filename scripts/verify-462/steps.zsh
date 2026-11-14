@@ -203,7 +203,7 @@ step_01() {
   guard || return 1
   [[ $(cat $BASE/src-commit 2>/dev/null) == $(git -C $WT rev-parse HEAD) ]] || print "NOTE: venv commit $(cat $BASE/src-commit) is not HEAD; rerun 00 if HEAD is the commit under test."
   local C=$(claude_bin) S=$OUT/01-main-stream.jsonl
-  rm -f $PID01
+  rm -f $PID01 $S  # 471: a fresh stream; its creation time is this dispatch's time (probe.py member)
   local member='Use only the agents tool (mcp__agents__agents). Execute feature create with arguments {"runtime": "codex", "instruction": "Use your shell tool once to run exactly: sleep 462 . Wait for it. Then reply DONE-462."}. Reply with the one line CREATE <agent> <execution> from its result and end your turn at once. Do not call wait or status. Read no files and run no shell command yourself.'
   local swarm=$($VV/bin/python -I -c 'import json,sys; print(json.dumps({"action":"execute","feature":"swarm","arguments":{"tasks":[{"task_id":"1","role":"team_leader","instruction":sys.argv[1]}]}}))' "$member")
   print -r -- "$swarm" > $OUT/01-swarm-arguments.json

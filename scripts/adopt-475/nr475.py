@@ -9,12 +9,14 @@ Where the facts are:
   child record     <project>/.graphtraj/swarm/control/agents/<agent>.json (graftling/control.py): name, session,
                    executions[*].process.tool_descendants (459's record of the child's tool processes).
   Nw snapshots     <raw>/Nw-snapshots.jsonl (watch459.py): the record while the child ran.
-  archives         <project>/.graphtraj/swarm/sessions/<session>/session.jsonl (tool/call, tool/result events), and,
-                   if readable, the native transcript ~/.claude/projects/*/<session>.jsonl. Searched for the error.
+  archives         <project>/.graphtraj/swarm/sessions/<sha256 of '<runtime>:<id>'>/session.jsonl, found by its first
+                   line's header (471: exactly one, else NOT OBSERVED with the candidates); a Bash result is a
+                   tool_result item answering a Bash tool-call. If readable, the native transcript
+                   ~/.claude/projects/*/<session>.jsonl is searched for the error text only.
   member settings  <project>/.graphtraj/core/runner/sessions/<alias>/claude-settings.yml (graftling/claude/execution.py
                    writes it; 465 stops adding one grant per associated history file). After retirement the Session
                    directory may be under the Task's teams/*/traces/<alias>/runner/.
-  member reply     <raw>/N-reply.txt: the line 'SESSION-READ-475 session=<id> events=<n>' and 'member-bash-ok'.
+  member reply     <raw>/N-reply.txt: the line 'SESSION-READ-475 session=[<runtime>:]<id> events=<n>' and 'member-bash-ok'.
 Only counts, sizes and booleans are printed for the settings; never a value.
 """
 import json, re, sys
@@ -66,8 +68,70 @@ def error_text(files: list[Path], extra: list[tuple[str, str]] = ()) -> str:
     return 'no error text found in ' + ', '.join(str(f) for f in files) + (' or ' + ', '.join(w for w, _ in extra) if extra else '')
 
 
-def tool_results_with(evs: list[dict], needle: str) -> list[dict]:
-    return [e for e in evs if e.get('type') == 'tool/result' and needle in json.dumps(e)]
+def _items(event: dict):
+    """Content items of a message event: archive data.content / data.message.content, native message.content."""
+    data = event.get('data') if isinstance(event.get('data'), dict) else {}
+    for content in (data.get('content'), (data.get('message') or {}).get('content'), (event.get('message') or {}).get('content')):
+        if isinstance(content, list):
+            yield from (item for item in content if isinstance(item, dict))
+
+
+def _text(content) -> str:
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        return '\n'.join(i if isinstance(i, str) else str(i.get('text', '')) for i in content if isinstance(i, (str, dict)))
+    return ''
+
+
+def bash_results_with(evs: list[dict], needle: str) -> list[str]:
+    """Bash tool results (not errors) containing needle, as 'seq <n>' labels.
+
+    The archive has no 'tool/result' events: a result is a tool_result content item of a user/message (native: 'user')
+    whose tool_use_id answers a Bash tool-call (native: tool_use) of an assistant/message. Text that merely quotes
+    the needle (instructions, replies) is not a tool_result and does not count."""
+    calls = {i.get('id') for e in evs if e.get('type') in ('assistant/message', 'assistant') for i in _items(e)
+             if i.get('type') in ('tool-call', 'tool_use') and i.get('name') == 'Bash'}
+    found = []
+    for e in evs:
+        if e.get('type') in ('user/message', 'user') and any(
+                i.get('type') == 'tool_result' and i.get('tool_use_id') in calls and i.get('is_error') is not True
+                and needle in _text(i.get('content')) for i in _items(e)):
+            found.append(f"seq {e.get('seq', '?')}")
+    return found
+
+
+def own_archives(session) -> list[Path]:
+    """Swarm archives whose header is this Session's: directories are sha256 of the canonical id ('<runtime>:<id>'),
+    so match the first line's header (native.sessionId without a sub-agent, or id '<runtime>:<id>'), not the name."""
+    out = []
+    for path in sorted((project / '.graphtraj/swarm/sessions').glob('*/session.jsonl')):
+        try:
+            with path.open(encoding='utf-8', errors='replace') as stream:
+                meta = json.loads(stream.readline())
+        except (OSError, ValueError):
+            continue
+        header = meta.get('header', meta) if isinstance(meta, dict) else {}
+        native = header.get('native') or {} if isinstance(header, dict) else {}
+        hid = str(header.get('id', '')) if isinstance(header, dict) else ''
+        if (native.get('sessionId') == session and not native.get('agentId')) or \
+                (':' in hid and hid.split(':', 1)[1] == session):
+            out.append(path)
+    return out
+
+
+def archive_for(session, who: str) -> Path | None:
+    """Exactly one own archive, else print the candidates and return None (the check stays NOT OBSERVED)."""
+    matches = own_archives(str(session)) if session else []
+    if len(matches) != 1:
+        print(f'  {who} archive: {len(matches)} swarm archives with header session {session}: {[str(m) for m in matches]}')
+        return None
+    return matches[0]
+
+
+def bare(session_id: str) -> str:
+    """'claude:<id>' -> '<id>'; a bare id stays as it is."""
+    return session_id.split(':', 1)[1] if ':' in session_id else session_id
 
 
 # --- the child record and its Session ---------------------------------------------------------------------------
@@ -89,9 +153,9 @@ child_session = child.get('session') or next((e.get('session') for e in exs if e
 print(f'475: child {name} agent={child.get("agent")} session={child_session}')
 reply_file = raw / 'N-reply.txt'
 reply = reply_file.read_text(errors='replace') if reply_file.is_file() else ''
-child_files = []
+child_archive = archive_for(bare(str(child_session)), 'child') if child_session else None
+child_files = [child_archive] if child_archive else []
 if child_session:
-    child_files.append(project / '.graphtraj/swarm/sessions' / str(child_session) / 'session.jsonl')
     try:
         child_files += sorted((HOME / '.claude/projects').glob(f'*/{child_session}.jsonl'))
     except OSError:
@@ -113,7 +177,7 @@ if isinstance(sidecar, str) and Path(sidecar).is_file():
         listed += sum(1 for entry in json.loads(Path(sidecar).read_text()).get('entries') or [] if tool.search(str(entry.get('argv', ''))))
     except (OSError, ValueError):
         pass
-child_output = sum(len(tool_results_with(events(f), TOOL_NAME)) for f in child_files if f.name == 'session.jsonl')
+child_output = len(bash_results_with(events(child_archive), TOOL_NAME)) if child_archive else 0
 print(f'  record entries naming {TOOL_NAME} or sleep 3: {listed}; child tool results containing {TOOL_NAME}: {child_output}')
 if listed:
     check('459 child Bash started (record lists the command)', True, f'{listed} record entries')
@@ -158,12 +222,14 @@ else:
     check('465 member claude-settings has no per-session-file grants', not history, f'{len(history)} such entries; values not printed')
 
 # --- 465: the member's session_read returned the child's Session --------------------------------------------------
-quoted = re.findall(r'SESSION-READ-475\s+session=([0-9A-Za-z-]+)\s+events=(\d+)', reply)
+# The member quotes the canonical id, optionally with a Runtime prefix ('claude:<id>'); the record holds the bare id.
+quoted = re.findall(r'SESSION-READ-475\s+session=((?:[A-Za-z][\w.-]*:)?[0-9A-Za-z-]+)\s+events=(\d+)', reply)
 if quoted:
     sid, count = quoted[-1]
-    print(f'  member quoted: session={sid} events={count}; child record session={child_session}')
-    check('465 member session_read returned the child\'s Session (id match)', bool(child_session) and sid == child_session,
-          f'events={count}')
+    print(f'  member quoted: session={sid} (bare {bare(sid)}) events={count}; child record session={child_session} '
+          f'(bare {bare(str(child_session)) if child_session else None})')
+    check('465 member session_read returned the child\'s Session (id match)',
+          bool(child_session) and bare(sid) == bare(str(child_session)), f'events={count}')
 else:
     where = error_text([], [(str(reply_file), reply)] if reply else [])
     print(f"BLOCKED: 465 member session_read not observed - no 'SESSION-READ-475 session=<id> events=<n>' line in "
@@ -180,21 +246,20 @@ for c in (project / '.graphtraj/core/runner/sessions' / alias / 'mapping.yml',
         member_session = m.get('session')
         member_session = member_session.get('id') if isinstance(member_session, dict) else member_session
         break
-member_files = []
+archive = archive_for(bare(str(member_session)), 'member') if member_session else None
+member_files = [archive] if archive else []
 if member_session:
-    member_files.append(project / '.graphtraj/swarm/sessions' / str(member_session) / 'session.jsonl')
     try:
         member_files += sorted((HOME / '.claude/projects').glob(f'*/{member_session}.jsonl'))
     except OSError:
         pass
 member_files = [f for f in member_files if f.is_file()]
-archive = next((f for f in member_files if f.name == 'session.jsonl'), None)
-ok_results = tool_results_with(events(archive), 'member-bash-ok') if archive else []
-ok_results = [e for e in ok_results if not re.search(r'"is_error"\s*:\s*true|"error"\s*:\s*"', json.dumps(e))]
-print(f'  member session={member_session}; archive={archive}; tool results containing member-bash-ok: {len(ok_results)}; '
+ok_results = bash_results_with(events(archive), 'member-bash-ok') if archive else []
+print(f'  member session={member_session}; archive={archive}; Bash tool results containing member-bash-ok: {len(ok_results)} '
+      f'{ok_results}; '
       f'reply quotes it: {"member-bash-ok" in reply}')
 if ok_results:
-    check('member Bash started', True, 'a tool/result in the member archive contains member-bash-ok')
+    check('member Bash started', True, f'a Bash tool_result in the member archive contains member-bash-ok ({ok_results[0]})')
 else:
     where = error_text(member_files, [(str(reply_file), reply)] if reply else [])
     print(f'BLOCKED: member Bash started not observed - {where}')

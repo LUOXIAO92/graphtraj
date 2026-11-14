@@ -1,0 +1,18 @@
+# Task 477 step 0: base reproduction of the null (gateway member path)
+commit: cfd7f688a0fc175997a3f1ff626a1ffcb0380dd4
+time: 2026-11-15T02:12:45+09:00
+interpreter: /tmp/claude-501/v477/bin/python (Python 3.13.11); venv --system-site-packages over miniconda 3.13; pip install --no-deps --no-build-isolation --no-index -e src/graftling -e . (this checkout)
+command: /tmp/claude-501/v477/bin/python -m pytest -p no:cacheprovider -p no:warnings --basetemp=$TMPDIR/pt477 tests/test_member_child_end_notice_446.py -k final_answer_once -vv
+meaning: this test PASSES on the base. It asserts that after the child's reply was pushed to a graphtraj-gateway member (notification=delivered), status and wait return last_result.last_message None (control.py:1997-2000).
+---
+============================= test session starts ==============================
+platform darwin -- Python 3.13.11, pytest-9.1.1, pluggy-1.5.0 -- /tmp/claude-501/v477/bin/python
+rootdir: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/477-gateway-child-last-message
+configfile: pyproject.toml
+plugins: anyio-4.10.0
+collecting ... collected 20 items / 19 deselected / 1 selected
+
+tests/test_member_child_end_notice_446.py::test_a_member_child_completed_round_without_members_brings_its_final_answer_once PASSED [100%]
+
+======================= 1 passed, 19 deselected in 0.33s =======================
+exit: 0

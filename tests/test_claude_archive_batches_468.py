@@ -89,6 +89,25 @@ def test_another_writer_between_batches_is_kept(tmp_path: Path) -> None:
     assert [m['id'] for m in final.messages()] == [str(n) for n in range(8)]
 
 
+def test_many_sessions_through_one_archive_keep_few_files_open(tmp_path: Path) -> None:
+    """Collecting many Sessions with one archive (as migration does) does not hold one file per Session."""
+    import os
+
+    archive = SessionArchive(tmp_path / 'swarm', save_normalized_sessions=True, backfill_history=True)
+    before = len(os.listdir('/dev/fd'))
+    for index in range(40):
+        session = f's{index}'
+        path = tmp_path / f'{session}.jsonl'
+        records = [{**message('q', None, 'user'), 'sessionId': session},
+                   {**message('a', 'q', 'assistant'), 'sessionId': session}]
+        path.write_text(''.join(json.dumps(record) + '\n' for record in records))
+        ClaudeJsonlCollector(archive, session, tmp_path, 'execution').bind(path)
+    assert len(os.listdir('/dev/fd')) - before <= 3
+    for index in range(40):
+        stored = JsonlSessionStore(archive_path(archive.root, f'claude:s{index}'))
+        assert [m['id'] for m in stored.messages()] == ['q', 'a']
+
+
 def test_a_rewritten_transcript_is_read_again(tmp_path: Path) -> None:
     """Only appended lines are parsed incrementally; a rewritten file is read whole."""
     live = Live(tmp_path)

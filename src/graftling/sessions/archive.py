@@ -726,9 +726,10 @@ class SessionArchive:
         self.save_normalized_sessions = save_normalized_sessions
         self.backfill_history = backfill_history
         self._mapped: dict[str, dict] = {}
-        # One open store per Session, refreshed on each use, so collection
-        # reparses an archive only after another writer changed it (468).
-        self._stores: dict[tuple[str, int], JsonlSessionStore] = {}
+        # Per thread, the last Session's open store, refreshed on each use, so
+        # live collection reparses an archive only after another writer
+        # changed it (468).
+        self._stores: dict[int, tuple[str, JsonlSessionStore]] = {}
         self._native_headers: dict[tuple, dict[str, dict]] = {}
         self._native_revision: int | None = None
 
@@ -819,10 +820,13 @@ class SessionArchive:
             raise ValueError('Only explicitly mapped Sessions may be collected.')
         if not self.save_normalized_sessions or (historical and not self.backfill_history):
             return None
-        # Each thread keeps its own store: the file lock still orders writers,
-        # and no thread sees another's uncommitted changes.
-        slot = (session_id, threading.get_ident())
-        store = self._stores.get(slot)
+        # Each thread keeps only the store of the Session it used last: live
+        # collection reuses it, and a caller going through many Sessions holds
+        # one open archive, not one per Session. The file lock still orders
+        # writers, and no thread sees another's uncommitted changes.
+        thread = threading.get_ident()
+        held = self._stores.get(thread)
+        store = held[1] if held is not None and held[0] == session_id else None
         if store is not None and store._depth:
             return store  # Inside this thread's own batch, which holds the lock.
         if store is not None and store.path.exists():
@@ -830,9 +834,10 @@ class SessionArchive:
             if store.header == _redacted(self._mapped[session_id]):
                 store.event_fields = self.event_fields
                 return store
+        self._stores.pop(thread, None)
         store = JsonlSessionStore.create(archive_path(self.root, session_id), self._mapped[session_id],
                                          event_fields=self.event_fields)
-        self._stores[slot] = store
+        self._stores[thread] = (session_id, store)
         return store
 
     def collect(

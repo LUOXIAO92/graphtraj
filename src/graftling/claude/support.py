@@ -1,5 +1,6 @@
 """Native transcript, credential and diagnostic helpers."""
 from __future__ import annotations
+import copy
 import os
 import re
 import tempfile
@@ -55,10 +56,31 @@ def credential_environment(name: str | None) -> dict[str, str]:
 
 def write_yaml_durably(path: Path, value: dict) -> None:
     """Atomically replace one owner's nonsecret diagnostic document."""
+    write_text_durably(path, yaml.safe_dump(value, allow_unicode=True))
+
+
+def yaml_sections(value: dict, known: dict) -> str:
+    """Dump a nonempty mapping as ``yaml.safe_dump`` does, reusing unchanged top-level sections.
+
+    The document is its sorted top-level entries, each dumped on its own;
+    ``known`` keeps each entry's value and text between calls (468). Only an
+    object shared between two entries is written twice instead of as an alias.
+    """
+    parts = []
+    for key in sorted(value):
+        section = known.get(key)
+        if section is None or section[0] != value[key]:
+            section = known[key] = (copy.deepcopy(value[key]), yaml.safe_dump({key: value[key]}, allow_unicode=True))
+        parts.append(section[1])
+    return ''.join(parts)
+
+
+def write_text_durably(path: Path, text: str) -> None:
+    """Atomically replace one owner's nonsecret document with ``text``."""
     with tempfile.NamedTemporaryFile(mode='w', dir=path.parent, delete=False) as stream:
         temporary = Path(stream.name)
         try:
-            yaml.safe_dump(value, stream, allow_unicode=True)
+            stream.write(text)
             stream.flush()
             os.fsync(stream.fileno())
             os.replace(temporary, path)

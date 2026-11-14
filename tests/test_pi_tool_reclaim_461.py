@@ -2,8 +2,11 @@
 
 Pi 1.4.0 starts its bash tool ``detached`` (its own session, outside the
 Runtime group) with ``/bin/bash``, a platform binary whose environment macOS
-hides. It kills those shells only on SIGTERM/SIGHUP or a tool abort, not on
-the stdin EOF a killed owner causes. The stand-in Runtime here is the real
+hides. On shutdown (including the stdin EOF a killed owner causes) Pi stops
+the running tool's process group itself; what remains is a background job
+left by an earlier tool call, or any tool process when Pi is killed without
+shutting down. The fixture's tool shell stands for those: the RPC fixture
+exits on EOF without stopping it. The stand-in Runtime here is the real
 launch chain (launch.py -> srt stand-in -> bash -> Pi RPC fixture) whose
 ``tool-shell`` turn starts real ``/bin/sh`` and ``/bin/sleep`` in their own
 session, plus two readable processes of other executions.
@@ -89,7 +92,8 @@ def test_owner_killed_then_reconciliation_stops_the_pi_tool_shell_and_sleep(
         owner.send_signal(signal.SIGKILL)
         owner.wait(5)
         runtime = process['runtime_pid']
-        # The Runtime reads stdin EOF and exits without stopping its detached tool, as Pi does.
+        # The fixture Runtime exits on stdin EOF and leaves its detached tool shell, as Pi leaves
+        # a background job of an earlier call (or any tool when killed without shutting down).
         assert wait_for(lambda: identity(runtime) is None, 15), 'the Runtime outlived its owner'
         assert is_alive(shell) and is_alive(sleep), 'the tool shell outlived its owner, as on the real host'
 

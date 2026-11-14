@@ -1208,7 +1208,10 @@ Delivery rules:
   ancestors passed through a readable process without the marker is left alone by
   design; Windows is not covered. A Pi execution records `tool_marker` and
   `tool_descendants` too and is stopped the same way (461); Pi starts its bash tool
-  detached, outside the Runtime's group, as `/bin/bash`.
+  detached, outside the Runtime's group, as `/bin/bash`, and stops the running tool's
+  process group itself when it shuts down. A background job left by an earlier tool
+  call, or any tool process when Pi is killed without shutting down, is stopped through
+  the recorded descendants.
 - A completed round of a child that still has running members is recorded,
   not pushed. All rounds stay readable through `status`.
 - A notice its parent cannot receive now is recorded `held`, stays readable

@@ -21,7 +21,7 @@ from graphtraj.execution.runner_io import write_yaml_durably, _sync_directory
 from graphtraj.execution.runner_models import RunnerError
 from graphtraj.execution.runner_status import caller_alias, read_alias_mapping, require_task_authority
 from graphtraj.workspace.runner_project import discover_runner_directory, run_git
-from graphtraj.graph.task_graph import _TRANSITIONS, _load_states
+from graphtraj.graph.task_graph import _TRANSITIONS, UnknownTask, _load_task_state
 from graphtraj.graph.task_protocol import execution_record
 
 
@@ -98,11 +98,11 @@ def apply_delivery_state_request(
     _validate_string_list(request, "evidence_refs", empty=False)
 
     tasks = state_directory / "tasks"
-    current = _load_states(tasks)
     task_id = request["task_id"]
-    if not isinstance(task_id, str) or task_id not in current:
-        raise ValueError("Delivery State request names an unknown Task")
-    task_directory, task = current[task_id]
+    try:
+        task_directory, task = _load_task_state(tasks, task_id)
+    except UnknownTask:
+        raise ValueError("Delivery State request names an unknown Task") from None
     if phase in {"start", "final", "rework"} and not task["active"]:
         raise ValueError("Delivery requires an active Task")
     if phase == "start" and task["status"] == "integrated":
@@ -341,7 +341,7 @@ def apply_delivery_state_request(
                 _validate_team(team_update)
                 write_yaml_durably(team_file, team_update)
             write_yaml_durably(task_directory / "task.yml", execution_record(task_update))
-            _load_states(tasks)
+            _load_task_state(tasks, task_id)
             if open_round:
                 (team_directory / "rounds" / str(round_ordinal + 1)).mkdir(parents=True)
             if close_round:

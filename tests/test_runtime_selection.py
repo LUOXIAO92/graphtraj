@@ -304,3 +304,18 @@ def test_task_failure_uses_selected_runtime_diagnostic(
     assert "quoted by successful command" not in failure.value.message
     assert observed["trace"].read_bytes() == observed["raw"]
     assert observed.get("diagnosed", False) == (runtime == "test-runtime")
+
+
+def test_swarm_task_name_lookup_reads_only_the_selected_task(tmp_path: Path) -> None:
+    """A half-registered unrelated Task cannot refuse resolving the selected Task's name."""
+    from graphtraj.execution.runner_launch import _RegisteredTaskNames
+
+    state = tmp_path / "state"
+    register_task(state, tmp_path, _task("1", "first"))
+    (state / "tasks" / "2-half-written").mkdir()
+    names = _RegisteredTaskNames(state)
+    assert names.get("1") == "first"
+    assert names.get("3") is None
+    with pytest.raises(RunnerError) as failure:
+        names.get("2")
+    assert failure.value.code == "TASK_FILE_INVALID"

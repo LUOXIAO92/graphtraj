@@ -32,7 +32,14 @@ def _observed_runtime(fake: FakeCodex, tmp_path: Path) -> None:
     source = source.replace("        result = {'thread': {'id': session, 'path': str(native)}}", """        result = {'thread': {'id': session, 'path': str(native)}}
         if os.environ.get('FAIL_MEMBER_REGISTRATION') and not resumed:
             (Path(os.environ['GRAPHTRAJ_HARNESS_ROOT']) / '.graphtraj/state/worldline/.lock').chmod(0o444)
+        if os.environ.get('UNRELATED_TASK_DIRECTORY'):
+            # Another Task's directory without task.yml while this member registers.
+            Path(os.environ['UNRELATED_TASK_DIRECTORY']).mkdir(exist_ok=True)
 """)
+    source = source.replace("    elif method == 'turn/start':\n", """    elif method == 'turn/start':
+        if os.environ.get('UNRELATED_TASK_DIRECTORY'):
+            Path(os.environ['UNRELATED_TASK_DIRECTORY']).rmdir()
+""", 1)
     peer.write_text(source)
     scenario = fake.executable.read_text().replace(str(original), str(peer))
     scenario = scenario.replace("lifecycle_action = os.environ.get('FAKE_CODEX_LIFECYCLE_ACTION')", """if os.environ.get('FAIL_MEMBER_ROLE') == os.environ.get('GRAPHTRAJ_ROLE'):
@@ -136,3 +143,56 @@ def test_native_creation_registers_members_before_execution(
         assert attempted.returncode != 0
         assert 'owning Runner creation job' in attempted.stderr
         assert (task / 'teams/1/team.yml').read_bytes() == before
+
+
+def test_member_registration_reads_only_its_own_task(
+    installed_commands: InstalledCommands,
+    temporary_git_repository: Path,
+    fake_codex: FakeCodex,
+    tmp_path: Path,
+) -> None:
+    """An unrelated half-registered Task cannot refuse a member; its own invalid Task does."""
+    root, _, _, env = configure_harness(
+        installed_commands, temporary_git_repository, fake_codex, tmp_path,
+    )
+    _register(installed_commands, root, _task('148', 'creation-order'))
+    _change_status(installed_commands, root, '148', 'ready')
+    _observed_runtime(fake_codex, tmp_path)
+    observation = tmp_path / 'member-observations.jsonl'
+    tasks = root / '.graphtraj/state/tasks'
+    env.update(
+        GRAPHTRAJ_AGENT_RUNNER=str(installed_commands.runner),
+        MEMBER_OBSERVATIONS=str(observation),
+        UNRELATED_TASK_DIRECTORY=str(tasks / '149-half-registered'),
+    )
+    batch = root / 'batch.yml'
+    batch.write_text('tasks:\n  - task_id: "148"\n    task_name: creation-order\n    role: coding-team.team-leader\n')
+    created = run_process(
+        [str(installed_commands.runner), '--swarm-input', str(batch)],
+        cwd=root, env=env, timeout=45,
+    )
+    assert created.returncode == 0, created.stderr
+    [row] = [json.loads(line) for line in observation.read_text().splitlines()]
+    assert row['role'] == 'team-leader' and not row['resumed']
+
+    def resume() -> object:
+        causes = [json.loads(line)['event_id'] for shard in (root / '.graphtraj/state/worldline').glob('*.jsonl')
+                  for line in shard.read_text().splitlines()]
+        return run_process(
+            runner_operation(installed_commands, 'send', row['alias'], '--instruction', 'Continue.',
+                             '--caused-by-event-id', causes[-1]),
+            cwd=root, env=env, timeout=30,
+        )
+
+    resumed = resume()
+    assert resumed.returncode == 0, resumed.stderr
+    rows = [json.loads(line) for line in observation.read_text().splitlines()]
+    assert len(rows) == 2 and rows[1]['alias'] == row['alias'] and rows[1]['resumed']
+
+    own = tasks / '148-creation-order/task.yml'
+    own.write_text(own.read_text().replace('status: implementing', 'status: unknown'))
+    assert 'status: unknown' in own.read_text()
+    refused = resume()
+    assert refused.returncode != 0
+    assert 'Task state is invalid' in refused.stderr
+    assert len(observation.read_text().splitlines()) == 2

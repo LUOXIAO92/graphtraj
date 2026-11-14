@@ -460,7 +460,7 @@ def _register_created_member(
     from graphtraj.execution.runner_status import read_alias_mapping
     from graphtraj.graph.delivery_state import apply_delivery_state_request, read_team
     from graphtraj.graph.delivery_worldline import latest_task_event, read_worldline
-    from graphtraj.graph.task_graph import _load_states
+    from graphtraj.graph.task_graph import _load_task_state
     from graphtraj.workspace.runner_project import discover_project, discover_project_root
 
     project = discover_project(discover_project_root(job_file.parent), require_clean_integration=False)
@@ -484,7 +484,7 @@ def _register_created_member(
     assignment = job["member_registration"]
     if not isinstance(assignment, dict) or set(assignment) != {"member", "replaces"}:
         raise ValueError("Invalid Runner member assignment")
-    task_directory, task = _load_states(project.state_directory / "tasks")[mapping["task_id"]]
+    task_directory, task = _load_task_state(project.state_directory / "tasks", mapping["task_id"])
     team_file = task_directory / "teams" / str(mapping["team_generation"]) / "team.yml"
     if not created:
         if (task["active_team_ordinal"] != mapping["team_generation"] or not team_file.is_file()

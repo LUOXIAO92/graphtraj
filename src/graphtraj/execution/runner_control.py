@@ -635,7 +635,7 @@ def owned_root_undecided_results(harness_root: Path, connection: Mapping[str, An
     """
     from graphtraj.graph.delivery_state import RESULT_DECISION_EVENTS, read_team
     from graphtraj.graph.delivery_worldline import read_worldline
-    from graphtraj.graph.task_graph import _load_states
+    from graphtraj.graph.task_graph import _load_task_state
 
     roots = _owned_roots(discover_runner_directory(harness_root), connection)
     if not roots:
@@ -643,10 +643,9 @@ def owned_root_undecided_results(harness_root: Path, connection: Mapping[str, An
     configuration = load_project_configuration(harness_root)
     events = read_worldline(configuration.state, configuration.harness_root)
     decided = {event['submission_id'] for event in events if event['event'] in RESULT_DECISION_EVENTS}
-    tasks = _load_states(configuration.state / 'tasks')
     undecided = []
     for alias, mapping in roots:
-        directory, _ = tasks[mapping['task_id']]
+        directory, _ = _load_task_state(configuration.state / 'tasks', mapping['task_id'])
         team = read_team(directory / 'teams' / str(mapping['team_generation']) / 'team.yml')
         # Only the latest submission in the current Round can be decided.
         submissions = [event for event in events if event['event'] == 'result-submitted'
@@ -1001,10 +1000,10 @@ def submit_session_report(name: str, text: str, cwd: Path, *, notify_parent: boo
     if len(paths) != 1:
         raise RunnerError('authority-denied', 'The report is not assigned to this Session.')
     from graphtraj.execution.runner_results import RESULT_STATUSES, start_result_correction
-    from graphtraj.graph.task_graph import _load_states
+    from graphtraj.graph.task_graph import _load_task_state
 
     state = load_project_configuration(cwd).state
-    if _load_states(state / 'tasks')[mapping['task_id']][1]['status'] not in RESULT_STATUSES:
+    if _load_task_state(state / 'tasks', mapping['task_id'])[1]['status'] not in RESULT_STATUSES:
         # A Task not accepting results, e.g. finished or blocked, opens no Round;
         # its member, e.g. after a follow-up or a stopped report collection,
         # adds its own report beside the retained one in the closed Round.
@@ -1505,10 +1504,10 @@ def _interrupt_allocation(runner: Path, alias: str) -> dict:
                 or launch.get("operation") != "launch" or mapping.get("alias") != alias
                 or any(field not in mapping for field in SESSION_BINDING_FIELDS)):
             raise _invalid_mapping()
-        from graphtraj.graph.task_graph import _load_states
+        from graphtraj.graph.task_graph import _load_task_state
 
         configuration = load_project_configuration(runner_project_root(runner))
-        task_directory, task = _load_states(configuration.state / "tasks")[mapping["task_id"]]
+        task_directory, task = _load_task_state(configuration.state / "tasks", mapping["task_id"])
         trace = task_directory / "teams" / str(mapping["team_generation"]) / "traces" / alias / "events.jsonl"
         worktree = configuration.agent_worktrees / (mapping["task_id"] + "-" + task["task_name"])
         if (mapping.get("trace_file") != str(trace)

@@ -7,6 +7,7 @@ from graphtraj.configuration.project_configuration import runner_directory as pr
 import os
 import re
 import shutil
+import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -142,10 +143,7 @@ def register_task(state: Path, harness_root: Path, issue: dict[str, Any]) -> Pat
 
         def mutation(_: dict[str, Any]):
             try:
-                directory.mkdir()
-                snapshot_path.write_text(snapshot, encoding="utf-8")
-                snapshot_path.chmod(0o444)
-                _write_yaml(directory / "task.yml", state_record)
+                _create_task_directory(directory, snapshot, state_record)
             except Exception:
                 _remove_task_directory(directory)
                 raise
@@ -327,22 +325,20 @@ def revise_tasks(
                         proposed[task_id]["current_definition"] = (
                             definition_path.relative_to(directory).as_posix()
                         )
+                        _write_yaml(state_path, proposed[task_id])
                     else:
                         directory = tasks / "{0}-{1}".format(
                             task_id, definition["task_name"]
                         )
-                        directory.mkdir()
                         definition_path = directory / "task.md"
                         state_path = directory / "task.yml"
-                        changed.append((state_path, None, definition_path))
-                        definition_path.write_text(
-                            _render_definition(definition), encoding="utf-8"
+                        _create_task_directory(
+                            directory, _render_definition(definition), proposed[task_id]
                         )
-                        definition_path.chmod(0o444)
+                        changed.append((state_path, None, definition_path))
                     definition_refs[task_id] = definition_path.relative_to(
                         harness_root
                     ).as_posix()
-                    _write_yaml(state_path, proposed[task_id])
                 recorded["definition_refs"] = definition_refs
                 recorded["evidence_refs"] = list(
                     dict.fromkeys(
@@ -726,6 +722,39 @@ def _load_states(tasks: Path) -> dict[str, tuple[Path, dict[str, Any]]]:
     return states
 
 
+class UnknownTask(KeyError, ValueError):
+    """The named Task is not registered.
+
+    It is a ValueError like any other refused Task state, and a KeyError so a
+    caller that looked the Task up in ``_load_states`` keeps its handling.
+    """
+
+
+def _load_task_state(tasks: Path, task_id: str) -> tuple[Path, dict[str, Any]]:
+    """Load and fully validate one Task without reading any other Task.
+
+    An unrelated Task directory that is missing, partly written or corrupt
+    cannot refuse this Task; the full views still expose such damage.
+    Raises UnknownTask when no visible directory names the Task, and
+    ValueError when its state is ambiguous or invalid.
+    """
+    if not isinstance(task_id, str) or _TASK_ID.fullmatch(task_id) is None:
+        raise UnknownTask("Task {0!r} is not registered".format(task_id))
+    directories = [
+        path for path in tasks.glob("{0}-*".format(task_id))
+        if path.is_dir() and not path.name.startswith(".")
+    ]
+    if not directories:
+        raise UnknownTask("Task {0} is not registered".format(task_id))
+    path = directories[0] / "task.yml"
+    if len(directories) != 1 or not path.is_file():
+        raise ValueError("Task state is invalid")
+    loaded, record = _load_state(path)
+    if loaded != task_id:
+        raise ValueError("Task state is invalid")
+    return directories[0], record
+
+
 def _load_state(path: Path) -> tuple[str, dict[str, Any]]:
     """Merge one execution record with its single current immutable definition."""
     record = yaml.safe_load(path.read_text(encoding="utf-8"))
@@ -945,6 +974,30 @@ def _rollback_revision(changed: list[tuple[Path, bytes | None, Path]]) -> None:
         if definition_path.exists():
             definition_path.chmod(0o644)
             definition_path.unlink()
+
+
+def _create_task_directory(
+    directory: Path, definition: str, state_record: dict[str, Any]
+) -> None:
+    """Build a new Task directory aside and move it into place complete.
+
+    Readers that do not take the Task lock therefore never see a Task
+    directory without its task.yml. The staging directory is hidden and holds
+    the Task one level down, so no Task view counts it as a Task.
+    """
+    staging = Path(tempfile.mkdtemp(prefix=".staging-", dir=directory.parent))
+    try:
+        built = staging / directory.name
+        built.mkdir()
+        snapshot = built / "task.md"
+        snapshot.write_text(definition, encoding="utf-8")
+        snapshot.chmod(0o444)
+        _write_yaml(built / "task.yml", state_record)
+        if directory.exists():
+            raise ValueError("Task directory {0} already exists".format(directory.name))
+        os.rename(built, directory)
+    finally:
+        shutil.rmtree(staging, ignore_errors=True)
 
 
 def _remove_task_directory(directory: Path) -> None:

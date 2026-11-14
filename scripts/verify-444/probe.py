@@ -92,7 +92,9 @@ def prepare(project: Path) -> int:
                   'claude': {'permission_mode': 'default'}},
         'advisor': {'runtime': 'claude', 'model': CLAUDE_MODEL, 'worktree_access': 'read',
                     'claude': {'permission_mode': 'auto'}},
-        'pi_member': {'runtime': 'pi', 'connection': 'pi/deepseek/deepseek-flash', 'worktree_access': 'read',
+        # A connection reference carries the Runtime; it may not be mixed with runtime/model/base_url/api_key_env
+        # (project_roles.py _role_preset). Same form as verify-461.
+        'pi_member': {'connection': 'pi/deepseek/deepseek-flash', 'worktree_access': 'read',
                       'pi': dict(PI)},
         'codex_root': {'runtime': 'codex', 'model': CODEX_MODEL},
     }
@@ -110,20 +112,29 @@ def prepare(project: Path) -> int:
         'task_id': TASK_ID, 'status': 'ready', 'active_team_ordinal': None, 'worktree': None, 'branch': None,
         'current_candidate': None, 'caused_by_event_ids': [], 'evidence_refs': ['.graphtraj/probe-444/evidence.md']}))
     (work / 'evidence.md').write_text('444 probe: ready.\n')
+    # Exit codes name what failed: 2 register/update, 3 roles (doctor), 4 Task 1 not ready.
+    # A rerun on an existing project registers nothing: Task 1 is looked up in the graph first.
+    def task1() -> dict | None:
+        graph = run(graphtraj, 'task', 'graph', cwd=project)
+        tasks = (yaml.safe_load(graph.stdout) or {}).get('tasks', []) if graph.returncode == 0 else []
+        return next((t for t in tasks if t.get('task_id') == TASK_ID), None)
     rc = 0
-    if not list(project.glob('.graphtraj/state/tasks/1-*/task.yml')):
-        rc = run(graphtraj, 'task', 'register', '--task-file', str(register), cwd=project).returncode
-    for argv in (('task', 'update', '--state-file', str(state)), ('doctor',)):
-        done = run(graphtraj, *argv, cwd=project)
-        rc = rc or done.returncode
-        if argv == ('doctor',):
-            say('roles OK' if 'roles: OK' in done.stdout else 'roles NOT OK: ' + done.stdout[-600:])
-            rc = rc or ('roles: OK' not in done.stdout)
-    graph = run(graphtraj, 'task', 'graph', cwd=project)
-    tasks = (yaml.safe_load(graph.stdout) or {}).get('tasks', [])
-    ready = any(t['task_id'] == TASK_ID and t['status'] == 'ready' for t in tasks)
-    say('task 1 ready' if ready else 'task 1 NOT ready: ' + graph.stdout[-400:])
-    return rc or (not ready)
+    if task1() is None:
+        rc = 2 if run(graphtraj, 'task', 'register', '--task-file', str(register), cwd=project).returncode else 0
+    else:
+        say('task 1 already registered: register skipped')
+    current = task1()
+    if current is not None and current.get('status') != 'ready':
+        rc = rc or (2 if run(graphtraj, 'task', 'update', '--state-file', str(state), cwd=project).returncode else 0)
+    elif current is not None:
+        say('task 1 already ready: update skipped')
+    doctor = run(graphtraj, 'doctor', cwd=project)
+    roles_ok = doctor.returncode == 0 and 'roles: OK' in doctor.stdout
+    say('roles OK' if roles_ok else 'roles NOT OK (doctor): ' + (doctor.stdout + doctor.stderr)[-600:])
+    current = task1()
+    ready = current is not None and current.get('status') == 'ready'
+    say('task 1 ready' if ready else f"task 1 NOT ready: {current}")
+    return rc or (0 if roles_ok else 3) or (0 if ready else 4)
 
 
 def pisandbox(_unused: str) -> int:

@@ -64,12 +64,19 @@ last = [json.loads(l) for l in p.read_text().splitlines() if l.strip()][-1] if p
 print(last.get("runtime", "none"), last.get("session", "none"))') > $OUT/00-production-main.txt
   print "production Main: $(cat $OUT/00-production-main.txt)"
   say "isolated project $P"
-  if [[ ! -d $P/.git ]]; then
+  if [[ -d $P/.git ]]; then print "existing project $P: git init and graphtraj setup skipped (rerun)"; else
     mkdir -p $P; (cd $P && git init -q -b main && print -r -- "# 444 probe README first line" > README.md && git add README.md \
       && git -c user.name=444 -c user.email=444@invalid commit -qm "Initial source") || return 1
     (cd $P && print y | clean $RT/bin/graphtraj setup | tail -2) || return 1
   fi
-  probe prepare $P || { print "STOP: probe Task is not ready (text above)"; return 1; }
+  probe prepare $P; local prc=$?
+  case $prc in
+    0) ;;
+    2) print "STOP: graphtraj task register/update failed (text above)"; return 1 ;;
+    3) print "STOP: roles invalid: graphtraj doctor did not report 'roles: OK' (text above)"; return 1 ;;
+    4) print "STOP: Task 1 is not ready in the task graph (text above)"; return 1 ;;
+    *) print "STOP: probe.py prepare failed rc=$prc (text above)"; return 1 ;;
+  esac
   (cd $P && clean $PY -I -c 'import sys
 from pathlib import Path
 from graphtraj.workspace.runner_project import discover_runner_directory

@@ -273,8 +273,17 @@ def sleeping() -> dict[int, str]:
 
 def is_tool_command(command: str) -> bool:
     """A 'sleep 462' itself or a shell running it; never a Python process whose code mentions it."""
-    first = command.split()[0] if command.split() else ''
-    return os.path.basename(first) in {'sleep', 'sh', 'zsh', 'bash'}
+    tokens = command.split()
+    if not tokens:
+        return False
+    base = os.path.basename(tokens[0])
+    if base == 'sleep':
+        return tokens[1:2] == [CHILD_SLEEP.split()[1]]
+    if base in {'sh', 'zsh', 'bash'}:
+        for index, token in enumerate(tokens[1:], 1):
+            if token.startswith('-') and 'c' in token:
+                return ' '.join(tokens[index + 1:]).lstrip('\'"').startswith(CHILD_SLEEP)
+    return False
 
 
 def marked(marker: str) -> dict[int, str]:

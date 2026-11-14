@@ -84,11 +84,19 @@ class ToolPeer(NativePeer):
 
 
 def escaped_identity(pidfile: Path):
-    """Wait for the setsid'd sleep, then long enough for two samples."""
+    """Wait for the setsid'd sleep, then long enough for two samples.
+
+    ``$!`` is written as soon as perl forks, before it calls setsid(), so the
+    group is polled until perl leads its own (same 10 s deadline).
+    """
     deadline = time.monotonic() + 10
     while not pidfile.exists() and time.monotonic() < deadline:
         time.sleep(0.05)
-    found = identity(int(pidfile.read_text()))
+    pid = int(pidfile.read_text())
+    found = identity(pid)
+    while (found is None or found.pgid != found.pid) and time.monotonic() < deadline:
+        time.sleep(0.05)
+        found = identity(pid)
     assert found is not None and found.pgid == found.pid, 'the tool did not leave its group'
     time.sleep(2.5)
     return found

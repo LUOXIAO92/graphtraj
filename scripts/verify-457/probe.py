@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import signal
 import subprocess
 import sys
@@ -111,12 +112,48 @@ def plugins(stream: Path, _unused: str) -> int:
 
 # -- Records ------------------------------------------------------------------
 
+_CHOSEN: dict = {}
+
+
+def born(path: Path) -> float:
+    """Creation time (macOS st_birthtime; elsewhere st_ctime)."""
+    status = path.stat()
+    return getattr(status, 'st_birthtime', status.st_ctime)
+
+
 def member(project: Path) -> tuple[str | None, dict, Path | None]:
-    """The member's alias, mapping and session directory (the probe has one team_leader)."""
-    for directory in sorted(project.glob('.graphtraj/runner/sessions/1-*team_leader*')):
-        mapping = directory / 'mapping.yml'
-        return directory.name, (yaml.safe_load(mapping.read_text()) or {}) if mapping.is_file() else {}, directory
-    return None, {}, None
+    """The member this run's 01 dispatched: its alias, mapping and session directory, or (None, {}, None).
+
+    471: the same isolated project can hold earlier dispatches' members ('...@team_leader', then
+    '...@team_leader_2'), so neither the first nor a fixed alias is taken. The dispatch is 01's Main stream
+    ($PROBE_OUT/01-main-stream.jsonl; its creation time is the dispatch time). Candidates are task 1's
+    team_leader sessions created at/after it; when the stream holds the swarm result, only its exact alias
+    (PROBE_ALIAS, if set, overrides). Exactly one must remain; otherwise a STOP line names the candidates and
+    the caller does nothing.
+    """
+    directories = sorted(project.glob('.graphtraj/runner/sessions/1-*team_leader*'))
+    stream = Path(os.environ.get('PROBE_OUT', '/nonexistent')) / '01-main-stream.jsonl'
+    try:
+        text, at = stream.read_text(encoding='utf-8', errors='replace'), born(stream)
+    except OSError:
+        text, at = None, None
+    aliases = ([os.environ['PROBE_ALIAS']] if os.environ.get('PROBE_ALIAS') else
+               sorted(set(re.findall(r'\\*"alias\\*"\s*:\s*\\*"(1-[^"\\]*team_leader[^"\\]*)', text or ''))))
+    after = [d for d in directories if at is not None and born(d) >= at]
+    chosen = [d for d in after if not aliases or d.name in aliases]
+    reason = (f"dispatch {stream if text is not None else f'NOT READABLE ({stream})'}; task 1 team_leader sessions "
+              f"{[d.name for d in directories]}; created at/after the dispatch {[d.name for d in after]}; "
+              f"swarm result alias {aliases or 'not in the stream'}")
+    line = (f'member chosen: {chosen[0].name} ({reason})' if len(chosen) == 1 else
+            f'STOP: no single member of this dispatch, {len(chosen)} match ({reason}). Nothing is signalled.')
+    if _CHOSEN.get('line') != line:
+        print(line)
+        _CHOSEN['line'] = line
+    if len(chosen) != 1:
+        return None, {}, None
+    directory = chosen[0]
+    mapping = directory / 'mapping.yml'
+    return directory.name, (yaml.safe_load(mapping.read_text()) or {}) if mapping.is_file() else {}, directory
 
 
 def core(project: Path, agent: str | None) -> dict:
@@ -455,6 +492,11 @@ def stub(project: Path, _unused: str) -> int:
     data = json.loads(path.read_text())
     data['executions'][-1]['process']['worker_pid'] = worker.pid
     path.write_text(json.dumps(data, indent=2, sort_keys=True))
+    if os.environ.get('PROBE_OUT'):
+        # 471: member() needs this run's dispatch: a fresh 01 stream (born now) naming the stub alias, as 01's would.
+        stream = Path(os.environ['PROBE_OUT']) / '01-main-stream.jsonl'
+        stream.unlink(missing_ok=True)
+        stream.write_text('SWARM-RESULT {"tasks": [{"task_id": "1", "alias": "1-stub-team_leader"}]}\n')
     session = project / '.graphtraj/runner/sessions/1-stub-team_leader'
     session.mkdir(parents=True, exist_ok=True)
     (session / 'mapping.yml').write_text(yaml.safe_dump({'agent': lead_agent, 'worker_pid': worker.pid}))

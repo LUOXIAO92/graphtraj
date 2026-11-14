@@ -64,7 +64,8 @@ while time.time() < deadline:
     time.sleep(5)
 print("Main claude -p", pid, "still running after 9 min"); sys.exit(1)' $1
 }
-probe() { (cd $P && clean $VV/bin/python -I $SD/probe.py "$@") }
+# 471: PROBE_OUT lets the probe find 01's Main stream (which member this dispatch created).
+probe() { (cd $P && clean PROBE_OUT=$OUT $VV/bin/python -I $SD/probe.py "$@") }
 # STOP, changing nothing, while an earlier run's Main or a 'sleep 460' still lives. Signals nothing.
 guard() { clean $CONDA -I $SD/probe.py idle $OUT - }
 
@@ -130,11 +131,11 @@ step_01() {
   guard || return 1
   [[ $(cat $BASE/src-commit 2>/dev/null) == $(git -C $WT rev-parse HEAD) ]] || print "NOTE: venv commit $(cat $BASE/src-commit) is not HEAD; rerun 00 if HEAD is the commit under test."
   local C=$(claude_bin) S=$OUT/01-main-stream.jsonl
-  rm -f $PID01
+  rm -f $PID01 $S  # 471: a fresh stream; its creation time is this dispatch's time (probe.py member)
   local member='Use the Bash tool exactly once, with its timeout set to 600000, to run exactly: sleep 460 . Run nothing else, read no files, and call no other tool. After it returns, reply DONE-460.'
   local swarm=$($VV/bin/python -I -c 'import json,sys; print(json.dumps({"action":"execute","feature":"swarm","arguments":{"tasks":[{"task_id":"1","role":"team_leader","instruction":sys.argv[1]}]}}))' "$member")
   print -r -- "$swarm" > $OUT/01-swarm-arguments.json
-  local W="$VV/bin/python $SD/probe.py member $P 100"
+  local W="env PROBE_OUT=$OUT $VV/bin/python $SD/probe.py member $P 100"
   print -r -- "1. Call mcp__agents__tasks once with exactly these arguments: $swarm
 Print its raw result text on one line starting with SWARM-RESULT.
 2. Send nothing to the member. Run this exact Bash command, one call after another, until one prints MEMBER-SLEEPING (the member's Bash tool runs sleep 460), at most 5 times: $W

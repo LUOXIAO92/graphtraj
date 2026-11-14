@@ -18,6 +18,8 @@ if len(sys.argv) > 3:
     sys.path.insert(0, sys.argv[3])
 spec = importlib.util.spec_from_file_location('probe462', probe)
 mod = importlib.util.module_from_spec(spec); spec.loader.exec_module(mod)
+if not hasattr(mod, '_CHOSEN'):   # pre-471 probes (first member, no cache): run them too, for the before output
+    mod._CHOSEN = {}
 LEAD = '1-p-handover0-team_leader@team_leader'
 calls = []
 for name in ('kill', 'killpg'):   # record any signal attempt instead of sending it

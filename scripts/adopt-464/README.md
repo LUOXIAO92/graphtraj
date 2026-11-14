@@ -1,6 +1,6 @@
-# 464 production adoption: dev b3d522ad (457, 459; not 460-463) and the production check
+# 464 production adoption: combined dev 44729d5b (457, 459, 460, 461, 462, 463) and the production check
 
-`steps.zsh` installs the wheels built from `git archive b3d522ad6f1a90c33dad19f81babc9c1d587d24f` (a fixed id,
+`steps.zsh` installs the wheels built from `git archive 44729d5b9ed59a2a8f3bedc3fdcb54eca3b31d9a` (a fixed id,
 not HEAD) into production `.venv-runtime`. Production holds 458's 4e3aafce now. The steps and protections are
 458's (`scripts/adopt-458/`):
 
@@ -13,11 +13,69 @@ The versions do not change (graphtraj 0.1.0, graftling 0.5.0), so versions prove
 Install claims come from `proddiff.py` and from `markers.py`.
 
 Script: `S=/Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/464-production-adoption-457-459/scripts/adopt-464/steps.zsh`
-Raw output: `/Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/state/tasks/464-production-adoption-457-459/adoption/raw/`
-Base: `~/graphtraj-adoption-464` (backup at `backup/`). The 393, 417, 448, 453 and 458 bases are never touched.
-**458's backup (`~/graphtraj-adoption-458/backup`) stays untouched until 464 is accepted.**
+Raw output: `/Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/state/tasks/464-production-adoption-457-459/adoption/raw-44729d5b/`
+(`adoption/raw/` keeps the b3d522ad run's evidence: 00, B, V, Vc, S, S2.)
+Base: `~/graphtraj-adoption-464` (backup at `backup/`; trusted `vproject/` kept). The 393, 417, 448, 453 and 458
+bases are never touched. **458's backup (`~/graphtraj-adoption-458/backup`) stays untouched until 464 is accepted.**
 
-## Changes from adopt-458
+## Revision 2026-11-14: target 44729d5b (this branch merged 44729d5b; src, tests, pyproject.toml equal it)
+
+1. **Target and paths.** `TARGET=44729d5b9ed59a2a8f3bedc3fdcb54eca3b31d9a`; production `OLD` stays 4e3aafce.
+   Everything this target writes has a per-commit name (`C8=44729d5b`), so nothing of the b3d522ad run is
+   overwritten or removed, and Main never needs `rm`:
+
+   | What | b3d522ad run (kept) | 44729d5b run |
+   |---|---|---|
+   | raw output | `adoption/raw/` | `adoption/raw-44729d5b/` |
+   | source (`git archive`) | `adoption/src/` | `adoption/src-44729d5b/` |
+   | wheels | `adoption/wheels/` | `adoption/wheels-44729d5b/` |
+   | candidate plugin, entry predictions | `adoption/vplug/`, `adoption/ventries/` | `adoption/vplug-44729d5b/`, `adoption/ventries-44729d5b/` |
+   | V's entry hashes (I checks them) | `adoption/entries.sha256` | `adoption/entries-44729d5b.sha256` |
+   | candidate venv, suite venv, inner probe venv | `~/graphtraj-adoption-464/{vvenv,svenv,sprobe}` | `…/{vvenv,svenv,sprobe}-44729d5b` |
+   | S's basetemp mark | `adoption/S-basetemp-before` | `adoption/S-basetemp-before-44729d5b` |
+
+   `vproject/` and `main.session` are shared: Vc regenerates vproject's plugin and entries from the 44729d5b
+   candidate venv every run, and 00 rewrites `main.session`. I's `V.ok`/`Vc.ok` checks read `raw-44729d5b/`, so
+   V and Vc must pass again for this target. The backup (I) and R are as designed; no 464 backup exists yet.
+2. **Guard and M.** The waiting line names Tasks 465 and 469, in Chinese and English: wait for their members, never
+   stop them; Ctrl-C gives up safely. M says ends of 465/469 members that arrived while Main was exited may arrive
+   once and must not repeat. 00 lists Task 464/465/469 members.
+3. **Process kinds (4e3aafce..44729d5b): no new process kind.** See the table below.
+4. **Mixed version.** `timer_probe.py` old=4e3aafce new=44729d5b also imports 460's changed `runner_control`
+   (the module the threshold imports) and calls its new `_reclaim_tool_processes` on a directory without a record.
+   Result lines below: delivered normally; timers stay NON-BLOCKING.
+5. **Markers.** 25: the 11 for 457/459 (the 457 agents-driver one shortened, because 461-463 widened that line to
+   four Runtimes), plus 14 for 460-463 from the diff b3d522ad..44729d5b. All present in 44729d5b and absent in
+   4e3aafce. I's import line adds
+   `460 tool-processes-{0}.yml _reclaim_tool_processes | 461 PiExecution | 462 _reclaim_tools | 463 _stop_escaped`.
+6. **Plugin and hooks.** `git diff --stat 4e3aafce 44729d5b -- '*.mjs' '*hooks*' '*plugin*' src/graftling/claude-plugin`
+   lists only `scripts/adopt-458/adopt_plugin.py` (not installed). **Prediction unchanged: no trust dialog at resume.**
+   V and I keep their byte checks.
+7. **S.** Equality guard with 44729d5b. Baseline: this Task's quiet S at b3d522ad, **0 failed, 4025 passed,
+   71 skipped** (`adoption/raw/S-suite.txt`). Every suite failure is printed as `NEW <id> [label]` and counted
+   (`== new failures: n (of which ATTRIBUTED: m)`). Labels only add what is known:
+   - `459-BASELINE`: the two ids of 459's suite at 81fc829e, rerun alone always, as before;
+   - `ATTRIBUTED <task>: <cause>`: ids that 460-463's accepted records attributed to load or environment, not to
+     their change. A recurrence is rerun alone with `-rA`; it stays NEW and counted, Main decides.
+     - 461 (20261114T174504): `test_pi_runtime.py::test_srt_gone_before_launch_is_refused` (environment: a
+       credential-named variable in the suite environment); `test_run_test_shards.py::test_hanging_shard_is_stopped_and_reported`
+       (load: killpg EPERM, inference).
+     - 462 (20261114T173540): `test_claude_runner.py::test_public_interrupt_reconfirms_an_undrained_worker`,
+       `test_agent_runner_cleanup.py::test_native_interrupt_confirms_only_pre_runtime_allocations[absent]`,
+       `test_interrupted_resolver_recovery.py::test_resume_with_restore_active_continues_the_same_session_to_integrated`,
+       `test_mcp_host_tools.py::test_installed_mcp_swarm_returns_after_registration_and_stops_on_the_native_route` (load).
+       Its leader also names load flakes in test_codex_app_server and test_member_processes without ids; those are
+       not listed (a failure there is plain NEW).
+     - 463 (20261114T162929): `test_member_child_end_notice_446.py::test_a_busy_member_input_is_retried_within_the_operation_window`,
+       `test_pi_dsh_notice_holding.py::test_a_request_notice_returns_promptly_while_pi_holds_it` (not attributed to
+       463; passed 3/3 alone).
+     - 460 (20261114T171154): none. Its one suite failure (`test_graphtraj_public_agents_api.py::test_graphtraj_uses_only_published_agents_names`)
+       was a defect fixed by its correction, so a recurrence is plain NEW. Likewise 462's fixed regression
+       `test_team_replacement…` is not listed.
+   - It prints run_test_shards' 454 leftover line; S2 counts leftovers as before.
+8. **N/Nr/Nw.** Unchanged except paths (`raw-44729d5b/`, Nr imports `_alive` from `src-44729d5b/src`).
+
+## Changes from adopt-458 (first version, target b3d522ad; still in force)
 
 1. **Target.** `TARGET=b3d522ad6f1a90c33dad19f81babc9c1d587d24f`, `OLD=4e3aafce…` (production now),
    `TASK=464-production-adoption-457-459`, base `~/graphtraj-adoption-464`. 00 lists the 393/417/448/453/458
@@ -74,12 +132,15 @@ Base: `~/graphtraj-adoption-464` (backup at `backup/`). The 393, 417, 448, 453 a
     real values. Main steps contain no foreground `sleep` and Main runs them as `zsh $S <step>` (not `zsh -c`). No
     step signals a process it did not start. Only rehearse.zsh sets `ADOPT464_*`.
 
-## Guard: process kinds that use `.venv-runtime` (rechecked for 4e3aafce..b3d522ad)
+## Guard: process kinds that use `.venv-runtime` (rechecked for 4e3aafce..44729d5b)
 
-`git diff --quiet 4e3aafce b3d522ad` holds for `budget_idle_timer.py`, `execution_budget.py`, `runner_control.py`,
-`runner_worker.py` and `teams/`: nothing that starts a process changed. The product diff touches only
-`graftling/claude/{driver,execution}.py`, `graftling/control.py`, `graftling/member_processes.py`, the new
-`graftling/tool_descendants.py` and `graphtraj/execution/agent_driver.py`.
+`git diff --quiet 4e3aafce 44729d5b` holds for `budget_idle_timer.py`, `execution_budget.py` and `teams/`. 460
+changes `runner_worker.py` and `runner_control.py`, but no process start in them: the Worker writes one more
+record, and the Runner reads it inside its existing termination confirmation. The product diff (src, `.py`):
+`graftling/__init__.py`, `graftling/claude/{driver,execution}.py`, `graftling/codex/{app_server,driver,managed_session}.py`,
+`graftling/control.py`, `graftling/dsh/{driver,execution}.py`, `graftling/member_processes.py`,
+`graftling/pi/{driver,execution}.py`, the new `graftling/tool_descendants.py`, and
+`graphtraj/execution/{agent_driver,runner_control,runner_worker}.py`.
 
 | Kind (argv) | Started by | Class |
 |---|---|---|
@@ -90,7 +151,7 @@ Base: `~/graphtraj-adoption-464` (backup at `backup/`). The 393, 417, 448, 453 a
 | other `… serve`, the DSH watcher, a CLI call, anything else under `$RT` or naming Main's id | members' own hosts, Main's commands | BLOCKING |
 | 450 marked process (`GRAFTLING_MEMBER_RUN` in `ps -E`) | `graftling/member_processes.py` | information only |
 
-What 457 and 459 change here — **confirmed: no new process kind.**
+What 457, 459 and 460-463 change here — **confirmed: no new process kind.**
 
 - **459** `DescendantSampler` is a daemon thread named `tool-descendants` inside the owner of a Claude execution
   (`graftling/claude/execution.py`: `self.descendants.start(self.proc.pid)`), so inside a Worker, a host or a
@@ -99,31 +160,51 @@ What 457 and 459 change here — **confirmed: no new process kind.**
   `execution.py`) and `_stop_escaped` inside the owner-exited reconcile of `AgentControl` (any record read).
   Those stop only the execution's own recorded or marked tools, never a member Worker.
 - 459's `member_processes._user_pids` retry changes no process.
-- A Worker running 4e3aafce code at install time keeps its old in-memory code; I waits for it (BLOCKING).
+- **460** `runner_worker.record_tool_processes` writes `tool-processes-<execution>.yml` in the member's Session
+  directory; `runner_control._reclaim_tool_processes` runs inside `_confirm_termination` (under the startup lock,
+  after the Adapter confirmed the Runtime stopped) and stops only that execution's recorded or marked tools, never
+  the Runner or its ancestors. No process is started.
+- **461** (Pi) and **463** (DSH): the same 459 sampler thread inside their owners; DSH stops escaped tools after
+  its service ends and writes `dsh-termination-<execution>.yml` when something was found.
+- **462** (Codex): the sampler thread, plus a non-daemon **thread** `codex-tool-reclaim` inside the owner that
+  reclaims after the app-server ends and writes `codex-termination-<turn>.yml`. `app_server.py` drops an inherited
+  parent marker from the app-server environment (450's rule). Threads, not processes.
+- A Worker running 4e3aafce code at install time keeps its old in-memory code; I waits for it (BLOCKING). One
+  started under 4e3aafce and killed later has no `tool-processes-*.yml`, so the new Runner's reclaim returns None
+  for it (as the code says: "an older execution").
 
 ### Judgement on 3(a): a timer started under 4e3aafce that wakes after the install
 
 At start a timer loads 10 modules (`budget_idle_timer`, `execution_budget`, `runner_heartbeat`, `runner_io`,
 `runner_models`, `file_lock`, `configuration.project_roles` and their packages). **None of them changes in
-4e3aafce..b3d522ad**, so its loop is exactly the one a new timer has.
+4e3aafce..44729d5b**, so its loop is exactly the one a new timer has. At the threshold it imports
+`runner_control`, which 460 changes; that module is not in memory before, so it loads whole from the new files.
 
-`timer_probe.py` (run by `rehearse.zsh`): load the 4e3aafce modules as a timer does, replace the package files
-with b3d522ad's as pip does, run the threshold's lazy imports, then call `graftling.control._stop_escaped` on an
-execution whose descendants record is empty (it scans nothing and signals nothing). Result lines:
+`timer_probe.py` old=4e3aafce new=44729d5b (run by `rehearse.zsh`): load the 4e3aafce modules as a timer does,
+replace the package files with 44729d5b's as pip does, run the threshold's lazy imports, call
+`graftling.control._stop_escaped` on an execution whose descendants record is empty, and call 460's
+`runner_control._reclaim_tool_processes` on a directory without a record (both scan nothing and signal nothing),
+after importing `runner_worker.TOOL_PROCESSES_RECORD` and `graftling.{process_ancestors, read_tool_descendants,
+stop_tool_processes}`. Result lines:
 
 ```
+loaded at timer start: 10
 lazy import at the threshold: OK
 graftling.control from new file (has _stop_escaped): True
 _stop_escaped lazy imports after the install: OK {"found": [], "stopped": [], "remaining": []}
+460 runner_control from new file (has _reclaim_tool_processes): True
+460 _reclaim_tool_processes lazy imports after the install: OK None
+newly imported after the install: 38
 changed modules that were OLD in memory before the install: none
-changed modules loaded NEW after the install: ['graftling.control', 'graftling.member_processes', 'graftling.tool_descendants']
+changed modules loaded NEW after the install: ['graftling', 'graftling.control', 'graftling.member_processes', 'graftling.tool_descendants', 'graphtraj.execution.runner_control', 'graphtraj.execution.runner_worker']
 ```
 
 **Such a timer delivers its notice normally, through the new code. Timers stay NON-BLOCKING.**
+(First version, b3d522ad: the same lines without the two 460 lines; none old in memory.)
 
-## Plugin and hooks: 4e3aafce..b3d522ad
+## Plugin and hooks: 4e3aafce..44729d5b
 
-`git diff --stat 4e3aafce b3d522ad -- '*.mjs' '*hooks*' '*plugin*' src/graftling/claude-plugin` lists only
+`git diff --stat 4e3aafce 44729d5b -- '*.mjs' '*hooks*' '*plugin*' src/graftling/claude-plugin` lists only
 `scripts/adopt-458/adopt_plugin.py` (a script, not installed). The rehearsal regenerated the plugin with the new
 code: `SAME` for `plugin.json`, `hooks.json` and `host_context.mjs`, and V's source diff was empty.
 **Prediction: resume shows no plugin/hooks trust dialog.** V checks this on the real production copy, and I checks
@@ -144,8 +225,26 @@ it again against the backup.
 | 459 | `graftling/control.py` | `"tool_descendants"}` (allowed process fact) |
 | 459 | `graftling/member_processes.py` | `raise OSError(0, 'proc_listallpids kept filling its buffer')` |
 | 459 (b3d522ad) | `graftling/tool_descendants.py` | `'argv': shown_command(_argv(item.pid))` (recorded argv redacted) |
+| 460 | `graphtraj/execution/runner_worker.py` | `TOOL_PROCESSES_RECORD = "tool-processes-{0}.yml"` |
+| 460 | `graphtraj/execution/runner_worker.py` | `record_tool_processes(session_directory, turn_handle)` |
+| 460 | `graphtraj/execution/runner_control.py` | `def _reclaim_tool_processes(directory: Path, mapping: Mapping[str, Any]) -> dict \| None:` |
+| 460 | `graphtraj/execution/runner_control.py` | `receipt['tool_processes'] = reclaimed` |
+| 460 | `graftling/__init__.py` | `"read_tool_descendants": ("graftling.tool_descendants", "read_sidecar"),` |
+| 461 | `graftling/pi/execution.py` | `self.descendants.start(self.proc.pid)` |
+| 461 | `graftling/pi/driver.py` | `facts = {'tool_marker': turn.member_marker}` |
+| 462 | `graftling/codex/managed_session.py` | `name='codex-tool-reclaim', daemon=False` |
+| 462 | `graftling/codex/managed_session.py` | `def _reclaim_tools(self, adapter: CodexAppServer) -> None:` |
+| 462 | `graftling/codex/driver.py` | `facts = {'tool_marker': turn.member_marker}` |
+| 463 | `graftling/dsh/execution.py` | `self.descendants.start(self.service.process.pid)` |
+| 463 | `graftling/dsh/execution.py` | `def _stop_escaped(self, descendants: list[dict]) -> None:` |
+| 463 | `graftling/dsh/driver.py` | `facts = {'tool_marker': turn.member_marker}` |
+| 461-463 | `graphtraj/execution/agent_driver.py` | `if run.runtime in ('claude', 'codex', 'dsh', 'pi') else None` |
 
-## Where the normal-end facts are (code at b3d522ad)
+The 457 agents-driver marker is now the prefix `marker = getattr(turn, 'member_marker', None) if run.runtime`,
+because 461-463 changed the rest of that line. Checked on `git archive` trees: `present: PASS (25/25)` for
+44729d5b, `absent: PASS (25/25)` for 4e3aafce.
+
+## Where the normal-end facts are (Claude child; code at b3d522ad, unchanged for Claude in 44729d5b)
 
 - Child record: `.graphtraj/swarm/control/agents/<agent>.json`, `executions[*].process.tool_marker` (457) and
   `.tool_descendants` (459, absolute path), written by `graphtraj/execution/agent_driver.py` through
@@ -159,28 +258,32 @@ it again against the backup.
   record has no `escaped_processes` at a normal end**. Only an owner-exited reconcile (`_stop_escaped`) writes it
   there. Nr prints both: the record's field (expected absent) and the termination file's.
 
-## Steps
+## Steps (44729d5b run)
 
 Each step prints who runs it, its dialog (at most one), how to judge success and the next command with real
-values. 00 detects the Main Session id and saves it to `~/graphtraj-adoption-464/main.session`.
+values. 00 detects the Main Session id and saves it to `~/graphtraj-adoption-464/main.session`. All output of this
+run goes to `…/adoption/raw-44729d5b/` (`…/raw-44729d5b/` below); `…/adoption/raw/` stays as b3d522ad's evidence.
+
+Order. Main reruns 00, B, V, S (queued), Vc, and S2 once S shows `== DONE`. The user then does `/exit`, I and
+`claude --continue`. Main then runs M, Mps, inbox, Nw, N, Nr and done. Vc can run while S is in the background.
 
 | Step | Who | Command | Dialog | Success |
 |---|---|---|---|---|
-| 00 | Main | `zsh $S 00` | none | zsh; `answer:` with `claude-opus-5-5`, `is_error False`; 0.1.0/0.5.0; `pip check rc=0`; `markers expected absent: PASS (11/11)`; member list (460-463 may run); advisor role lines; classified guard (timers NON-BLOCKING); Task 464 `stopped: false`; no 464 backup yet, 393/417/448/453/458 backups listed; `MAIN=<id>` |
-| B | Main | `zsh $S B` | none | two wheels with sha256; `leaked: 0` |
-| V | Main | `zsh $S V` | none | `SAME` ×3 plugin files; `source diff: empty`; `plugin unchanged: no plugin/hooks trust dialog is expected`; `markers expected present: PASS (11/11)` and `absent: PASS (11/11)`; no STOP; ✘ candidate ≤ baseline; `read_session … failures=0` |
-| S | Main (queued: refuses while another run_test_shards runs) | `zsh $S S` (returns at once) | none | `Worktree HEAD … equal b3d522ad… and clean`; `click 8.5.0`; `graphtraj.__file__` under this Worktree; poll `tail -n 25 …/raw/S-suite.txt` until `== DONE`; no `NEW` failure; every failure and both 459 baseline ids have an `… alone: <id> (…in the suite)` line; the 454 leftover line |
+| 00 | Main | `zsh $S 00` | none | zsh; `answer:` with `claude-opus-5-5`, `is_error False`; 0.1.0/0.5.0; `pip check rc=0`; `markers expected absent: PASS (25/25)`; member list (465/469 may run); advisor role lines; classified guard (timers NON-BLOCKING); Task 464 `stopped: false`; no 464 backup yet, 393/417/448/453/458 backups listed; `MAIN=<id>` |
+| B | Main | `zsh $S B` | none | two wheels in `adoption/wheels-44729d5b/` with sha256; `leaked: 0` |
+| V | Main | `zsh $S V` | none | `SAME` ×3 plugin files; `source diff: empty`; `plugin unchanged: no plugin/hooks trust dialog is expected`; `markers expected present: PASS (25/25)` and `absent: PASS (25/25)`; no STOP; ✘ candidate ≤ baseline; `read_session … failures=0` |
+| S | Main (queued: refuses while another run_test_shards runs; one suite at a time) | `zsh $S S` (returns at once) | none | `Worktree HEAD … equal 44729d5b… and clean`; `click 8.5.0`; `graphtraj.__file__` under this Worktree; poll `tail -n 25 …/raw-44729d5b/S-suite.txt` until `== DONE`; `== new failures: 0` (else each `NEW <id> [label]` with an `… alone: <id> (…in the suite) [label]` line; ATTRIBUTED ones are still counted); both 459-BASELINE ids have an `alone` line; the 454 leftover line |
 | S2 | Main, after `== DONE` | `zsh $S S2` | none | `leftover processes of the suite (never signalled): 0` (else the list goes to Main) |
-| Vc | Main | `zsh $S Vc` | none | `graphtraj-claude-host loaded: YES`; `PASS mcp__agents__tasks`, `PASS mcp__agents__agents` |
-| Vu | **USER**, only if Vc says `loaded: NO` | `cd ~/graphtraj-adoption-464/vproject && claude`, then 'Yes, proceed', then `/exit` | folder trust | Main reruns Vc |
+| Vc | Main | `zsh $S Vc` | none | `graphtraj-claude-host loaded: YES` (vproject is already trusted); `PASS mcp__agents__tasks`, `PASS mcp__agents__agents` |
+| Vu | **USER**, only if Vc says `loaded: NO` (not expected: vproject was trusted for b3d522ad) | `cd ~/graphtraj-adoption-464/vproject && claude`, then 'Yes, proceed', then `/exit` | folder trust | Main reruns Vc |
 | — | **USER** | `/exit` in Claude Main | none | |
-| I | **USER** (Main exited) | `zsh $S I` (Enter to confirm) | none | waits while BLOCKING processes (e.g. Tasks 460-463's) run, never kills; `-rw-------` ×3; `Successfully installed`; `PASS n FAIL 0`; `markers expected present: PASS (11/11)`; the 457/459 import line; `SAME-AS-VALIDATED`; `plugin bytes as before the install: no trust dialog expected`; install-window BLOCKING list (information). On failure it prints R |
+| I | **USER** (Main exited) | `zsh $S I` (Enter to confirm) | none | waits while BLOCKING processes (e.g. Tasks 465's or 469's) run, never kills; `-rw-------` ×3; `Successfully installed`; `PASS n FAIL 0`; `markers expected present: PASS (25/25)`; the 457/459 and the 460-463 import lines; `SAME-AS-VALIDATED`; `plugin bytes as before the install: no trust dialog expected`; install-window BLOCKING list (information). On failure it prints R |
 | — | **USER** | `cd /Users/luoxiao/workspace/you-are-a-product-architect-delivery && claude --continue` | none expected (plugin bytes unchanged); any dialog: decline and tell Main | |
-| M | Main | `zsh $S M`, then paste its prompts | none | criterion 4: notices display normally; none seen before the install appears again (460-463 ends during the exit may arrive once) |
+| M | Main | `zsh $S M`, then paste its prompts | none | criterion 4: notices display normally; none seen before the install appears again (465/469 ends during the exit may arrive once) |
 | Mps | Main | `zsh $S Mps` | none | host uses `.venv-runtime`; `parent is claude --continue or --resume <id>: yes`; `outcome=ok` |
 | inbox | Main | `zsh $S inbox` | none | `duplicate ids: 0` |
-| Nw | Main, right before N | `zsh $S Nw` (returns at once) | none | `started at …`; `tail -n 3 …/raw/Nw.txt` shows `start: watching` |
-| N | Main | `zsh $S N`, paste the swarm prompt; save the swarm result to `raw/N.txt`, the member's completion notice to `raw/N-main-notice.txt`, its reply to `raw/N-reply.txt` | none (the child's Bash request, if any, goes to the member) | an `opus_coding_team.advisor` member of Task 464 creates `n464` (configuration `opus_coding_team.advisor`), runs the one Bash command, waits, sends once, waits, quotes status, reports source-graphtraj inputs, retires the child; no submit_result/submit_report |
+| Nw | Main, right before N | `zsh $S Nw` (returns at once) | none | `started at …`; `tail -n 3 …/raw-44729d5b/Nw.txt` shows `start: watching` |
+| N | Main | `zsh $S N`, paste the swarm prompt; save the swarm result to `raw-44729d5b/N.txt`, the member's completion notice to `raw-44729d5b/N-main-notice.txt`, its reply to `raw-44729d5b/N-reply.txt` | none (the child's Bash request, if any, goes to the member) | an `opus_coding_team.advisor` member of Task 464 creates `n464` (configuration `opus_coding_team.advisor`), runs the one Bash command, waits, sends once, waits, quotes status, reports source-graphtraj inputs, retires the child; no submit_result/submit_report |
 | Nr | Main, after the member's end | `zsh $S Nr` | none | CHECK lines all PASS (below); the escaped_processes lines; then the printed session_read, task_sessions and **retire-by-agent** prompts |
 | done | Main | `zsh $S done` | none | `PASS n FAIL 0`; `markers expected present: PASS`; `raw files containing an exported key value: 0`; S `== DONE`; S2 leftover line; `Nw watcher: … == END` |
 | R | **USER** (Main exited), only on failure | `zsh ~/graphtraj-adoption-464/backup/tools/steps.zsh R` | none | waits like I; venv and plugin `SAME differences=0`; entries OK; pip check; then `claude --continue` |
@@ -202,55 +305,59 @@ Nr's CHECK lines (criterion 3):
   `CHECK BY HAND` with the printed session_read prompt, as 453 and 458 did).
 - `CHECK swarm result has agent`.
 
-The user does only these:
+The user does only these (unchanged):
 
-- Vu, only if needed;
+- Vu, only if needed (not expected);
 - `/exit` Main;
-- run I while Main is exited; it may wait for Task 460-463 members to end (do not kill them);
+- run I while Main is exited; it may wait for Task 465 or 469 members to end (do not kill them);
 - `claude --continue`;
 - R, only on failure.
 
 If I is abandoned with Ctrl-C after the backup (during the second wait), production is unchanged, but `backup/`
 exists without `INSTALL-STARTED`. Main renames it aside before I is run again.
 
-## What was rehearsed
+## What was rehearsed (44729d5b)
 
-`rehearse.zsh` ran in the sandbox on a fake production in `$TMPDIR`: old wheels from 4e3aafce, new from b3d522ad;
+`rehearse.zsh` ran in the sandbox on a fake production in `$TMPDIR`: old wheels from 4e3aafce, new from 44729d5b;
 click and yaml from Conda and an import-only websockets stub; `claude` and `ps` stubs. The ps stub lists Main's host
-(parent `claude --continue`), a budget timer, and a Task 460 member Worker that goes away after about 3 s.
+(parent `claude --continue`), a budget timer, and a Task 465 member Worker that goes away after about 3 s. Before
+the steps it seeds fake b3d522ad evidence (`raw/`, `wheels/`, `src/`, `vvenv/`, `svenv/`, `S-basetemp-before`,
+`entries.sha256`).
 
-Result: **ALL PASS (55 checks)**. Output: `rehearsal-output.txt`. These passed:
+Result: **ALL PASS (58 checks)**. Output: `rehearsal-output.txt`. These passed:
 
-- 3(a) timer probe: lazy imports at the threshold and `_stop_escaped`'s lazy imports work after the install; no
-  changed module was old in memory.
-- 00: Main found through `--continue`; timer NON-BLOCKING; the 418 variable reported; markers absent (11/11).
-- B; V (plugin SAME ×3, no-dialog prediction, source diff empty, markers present/absent, no entry-file writes).
-- S: refusal while another run_test_shards runs; Worktree equality with b3d522ad.
-- S2 on a synthetic finished suite: 2 leftovers counted; an older basetemp ignored.
-- I: waited with the Tasks 460-463 line (Chinese and English, no kill, Ctrl-C safe); the Worker shown with its Task
-  460; the timer never BLOCKING. Then `-rw-------` ×3, `PASS n FAIL 0`, markers 11/11, the 457/459 import line,
-  plugin bytes as before, `claude --continue` printed; backup tools include `markers.py`, `nr459.py`, `watch459.py`.
+- 3(a) timer probe: lazy imports at the threshold, `_stop_escaped`'s, and 460's changed `runner_control`
+  (`_reclaim_tool_processes` → None) work after the install; no changed module was old in memory.
+- 00: Main found through `--continue`; timer NON-BLOCKING; the 418 variable reported; markers absent (25/25).
+- B; V (plugin SAME ×3, no-dialog prediction, source diff 4e3aafce..44729d5b empty, markers present/absent 25/25,
+  no entry-file writes).
+- S: refusal while another run_test_shards runs; Worktree equality with 44729d5b.
+- S2 on a synthetic finished suite (suite venv `svenv-44729d5b`): 2 leftovers counted; an older basetemp ignored.
+- I: waited with the Tasks 465/469 line (Chinese and English, no kill, Ctrl-C safe); the Worker shown with its Task
+  465; the timer never BLOCKING. Then `-rw-------` ×3, `PASS n FAIL 0`, markers 25/25, the 457/459 and the
+  `460 tool-processes-{0}.yml _reclaim_tool_processes | 461 PiExecution | 462 _reclaim_tools | 463 _stop_escaped`
+  import lines, plugin bytes as before, `claude --continue` printed; backup tools include `markers.py`,
+  `nr459.py`, `watch459.py`.
 - R from the backup's tools; markers absent again after R.
 - Mps with a `claude --continue` parent.
-- Nw: started in the background, copied the record while the synthetic child "ran" (an entry naming n464-tool),
-  ended by itself with `== END (both executions ended)`, never copied the marker value.
-- Nr on synthetic records, all CHECK lines PASS, including the three 459 lines (the recorded tool process is a real
-  process that had ended) and the termination file's `escaped_processes`; the marker value never printed.
-- Nr negative: null configuration, owner-exited end, live member Worker (458's), and for 459: no `tool_marker`
-  → FAIL; Nw ran but no record named the command → FAIL; a recorded entry still alive with its start time (a real
-  `/bin/sleep` the rehearsal started) and a process naming n464-tool → `FAIL (1 alive, 1 named`; the record's
-  owner-exited `escaped_processes` printed; the live process was not signalled by Nr (the rehearsal stopped its own
-  sleep afterwards).
-- M names Tasks 460-463; N names task 464, the preset role and the exact Bash command, forbids
-  submit_result/submit_report and asks for source-graphtraj inputs verbatim.
+- Nw, Nr positive and negative (459 lines included), as in the first version, now under `raw-44729d5b/`.
+- M names Tasks 465 and 469; N names task 464, the preset role and the exact Bash command.
+- **The b3d522ad evidence is byte-for-byte unchanged, and nothing was added to `raw/`.** All new files have
+  `-44729d5b` names.
+
+Checked outside the rehearsal: S's label function (`label_of`) gives `ATTRIBUTED 461: environment …`,
+`459-BASELINE` and `unattributed`, and the count line reads `== new failures: 2 (of which ATTRIBUTED: 1)` for one
+attributed and one unknown id.
 
 Not rehearsed:
 
 - real `claude -p` (00, Vc), `claude plugin validate`, and Claude Code's own Bash tool shell under a real child;
-- the full suite (S beyond its refusal) and S2 against real processes;
+- the full suite (S beyond its refusal; `_Srun`'s label lines only through the function above) and S2 against real
+  processes;
 - real `ps` and `ps -E` against production, and libproc visibility from Main's shell;
-- the real N dispatch, the child's possible Bash approval request, and Nw against a real sampler's timing (a 3 s
-  `sleep` is sampled about once a second; Nw reads every 0.2 s);
+- the real N dispatch, the child's possible Bash approval request, and Nw against a real sampler's timing;
 - the waiting loop's Ctrl-C path;
-- `nohup` was replaced by zsh `&!` plus SIGHUP ignored in the watcher, because `nohup` cannot detach in the sandbox.
-  S still uses `nohup` as in 458 (it worked in 458's production run).
+- the 460-463 reclaim paths themselves (they are each Task's own accepted real-host checks; criterion 3 checks a
+  Claude child only).
+- `nohup` cannot detach in the sandbox, so Nw starts with zsh `&!` and the watcher ignores SIGHUP. S still uses
+  `nohup` as in 458 (it worked in production for b3d522ad's S).

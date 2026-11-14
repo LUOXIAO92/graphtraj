@@ -1,12 +1,14 @@
 #!/bin/zsh
 [ -n "$ZSH_VERSION" ] || exec /bin/zsh "$0" "$@"
-# Task 464 — production adoption of dev b3d522ad (449-459 integrated; not 460-463) into .venv-runtime;
+# Task 464 — production adoption of the combined dev 44729d5b (449-463: 457, 459, 460, 461, 462, 463) into .venv-runtime;
 # the production check of 459's normal end (no tool process of the child left), 455, 452 and 449/451.
+# Revision 2026-11-14: the target moved from b3d522ad to 44729d5b. b3d522ad's evidence stays in adoption/raw/; this
+# target writes adoption/raw-44729d5b/, and its source, wheels, candidate plugin and venvs have per-commit names.
 # Taken from scripts/adopt-458/steps.zsh. Production holds 458's 4e3aafce. Same package names and versions
 # (graphtraj 0.1.0, graftling 0.5.0), so every install claim is file by file (proddiff.py) against the new wheels.
 #   zsh <absolute path>/steps.zsh <step>
 # Order: 00 → B → V → S (background; Main queues it) → Vc (→ Vu USER once if asked) → [USER /exit Main]
-#        → I (USER, waits for idle members, e.g. Tasks 460-463's) → [USER: claude --continue] → M → Mps → inbox
+#        → I (USER, waits for idle members, e.g. Tasks 465's and 469's) → [USER: claude --continue] → M → Mps → inbox
 #        → Nw (background, read only) → N → Nr
 #        → S2 (after S's '== DONE') → done.     Rollback after the backup: R (USER).
 # Each step prints who runs it, its dialog (at most one) and how to judge success, then the next command.
@@ -21,7 +23,8 @@ BASE=${ADOPT464_BASE:-$HOME/graphtraj-adoption-464}
 RT=${ADOPT464_RT:-$H/.venv-runtime}
 PNPM_SHIM=${ADOPT464_PNPM_SHIM:-/Users/luoxiao/agents-394/pnpm-shim}
 WT=${ADOPT464_WT:-/Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/464-production-adoption-457-459}
-TARGET=b3d522ad6f1a90c33dad19f81babc9c1d587d24f
+TARGET=44729d5b9ed59a2a8f3bedc3fdcb54eca3b31d9a
+C8=${TARGET[1,8]}   # per-commit names: nothing of the b3d522ad run is overwritten or removed
 OLD=4e3aafce010c1bc88353d502714cea5bb5c874bd   # production now: 458's wheels
 TASK=464-production-adoption-457-459
 TASK_ID=464
@@ -29,13 +32,15 @@ CHILD=n464
 CONDA=/Users/luoxiao/miniconda3/bin/python3.13
 MODEL=claude-opus-5-5
 W=$H/.graphtraj/core/state/tasks/$TASK/adoption
-R=$W/raw
-N=$W/wheels
+R=$W/raw-$C8
+N=$W/wheels-$C8
+SRC=$W/src-$C8
 BK=$BASE/backup
-VV=$BASE/vvenv
-SV=$BASE/svenv
-VP=$W/vplug/graphtraj-claude-host
-VE=$W/ventries
+VV=$BASE/vvenv-$C8
+SV=$BASE/svenv-$C8
+VPL=$W/vplug-$C8
+VP=$VPL/graphtraj-claude-host
+VE=$W/ventries-$C8
 VPROJECT=$BASE/vproject
 PDIR=$H/.claude/skills/graphtraj-claude-host
 HOSTCFG=$H/.graphtraj/claude-host/config.json
@@ -162,8 +167,8 @@ wait_idle() {
     guard; g=$?
     (( g == 0 )) && return 0
     (( g == 2 )) && return 2
-    print "$(date +%T) 正在等待：Task 460、461、462、463（或其它 Task）的成员还在运行（上面列出的 BLOCKING 进程）。不要结束（kill）这些进程；它们结束后本步自动继续。"
-    print "         Waiting for Task 460, 461, 462, 463 (or other Task) members listed above. Do not kill them; this step continues by itself."
+    print "$(date +%T) 正在等待：Task 465、469（或其它 Task）的成员还在运行（上面列出的 BLOCKING 进程）。不要结束（kill）这些进程；它们结束后本步自动继续。"
+    print "         Waiting for Task 465, 469 (or other Task) members listed above. Do not kill them; this step continues by itself."
     print "         Ctrl-C 可以安全放弃：$1"
     sleep ${ADOPT464_WAIT:-20}
   done
@@ -196,9 +201,9 @@ for line in open(sys.argv[1], errors="replace"):
   say "backup must be absent; 393/417/448/453/458 backups are listed, never touched (458's is kept until 464 is accepted)"; ls -d $BK 2>&1; ls -d $HOME/graphtraj-adoption-{393,417,448,453,458}/backup 2>&1
   print "volume ids: $(stat -f %d $H) $(stat -f %d $BASE)"; du -sh $RT
   say "production holds 458's 4e3aafce: the 464 markers (457, 459) must be absent now"; $CONDA -I $SD/markers.py $(site) absent | tail -1
-  say "running Task members (460-463 may be running; I waits for them)"; (cd $H && clean $RT/bin/graphtraj task members) 2>&1 | tee $R/00-members.txt | head -60
-  print "running lines: $(grep -c 'running' $R/00-members.txt) (460-463 or other members may run now; I waits for them)"
-  say "Task 460-464 members (information)"; grep -E '(^|[^0-9])46[0-4]([^0-9]|$)' $R/00-members.txt || print "none listed"
+  say "running Task members (465 and 469 may be running; I waits for them)"; (cd $H && clean $RT/bin/graphtraj task members) 2>&1 | tee $R/00-members.txt | head -60
+  print "running lines: $(grep -c 'running' $R/00-members.txt) (465, 469 or other members may run now; I waits for them)"
+  say "Task 464, 465 and 469 members (information)"; grep -E '(^|[^0-9])(464|465|469)([^0-9]|$)' $R/00-members.txt || print "none listed"
   say "N needs role opus_coding_team.advisor for Task $TASK_ID: the role and the role_tree lines naming it (453 and 458 dispatched it)"
   grep -nE 'opus_coding_team|advisor' $H/.graphtraj/core/roles.yml $H/.graphtraj/core/*.yml(N) 2>&1 | grep -iE 'advisor' | head -12
   say "Task $TASK_ID ready for N's root dispatch: Team 1 active, budget not stopped"
@@ -210,12 +215,12 @@ for line in open(sys.argv[1], errors="replace"):
 }
 
 step_B() {
-  rm -rf $W/src $N; mkdir -p $W/src $N
-  git -C $WT archive $TARGET | tar -x -C $W/src || return 1
+  rm -rf $SRC $N; mkdir -p $SRC $N   # this commit's own directories only
+  git -C $WT archive $TARGET | tar -x -C $SRC || return 1
   local BP=$RT/bin/python
   $BP -c 'import setuptools, wheel' 2>/dev/null || { BP=$CONDA; print "生产 venv 没有 setuptools/wheel，用 $BP 构建（不修改 Conda）"; }
   say "build with $BP (--no-index --no-deps --no-build-isolation)"
-  $BP -m pip wheel --disable-pip-version-check --no-cache-dir --no-index --no-deps --no-build-isolation -w $N $W/src $W/src/src/graftling || return 1
+  $BP -m pip wheel --disable-pip-version-check --no-cache-dir --no-index --no-deps --no-build-isolation -w $N $SRC $SRC/src/graftling || return 1
   say "wheels and sha256 (expect graphtraj-0.1.0 and graftling-0.5.0)"; (cd $N && shasum -a 256 *.whl | tee SHA256SUMS)
   print $TARGET > $N/COMMIT
   [[ $(wheel_of graphtraj) == *graphtraj-0.1.0-* && $(wheel_of graftling) == *graftling-0.5.0-* ]] || { print "wheel 名称不符"; return 1; }
@@ -239,7 +244,7 @@ step_V() {
   local rc=0 C=$(claude_bin) P=$VV/bin/python
   say "scratch venv: new wheels plus production's click, yaml, websockets"; scratch_venv || return 1
   say "candidate plugin: new code writes into a scratch copy of production's plugin"
-  rm -rf $W/vplug; mkdir -p $W/vplug; cp -Rp $PDIR $W/vplug/ || return 1
+  rm -rf $VPL; mkdir -p $VPL; cp -Rp $PDIR $VPL/ || return 1
   $P -I $SD/adopt_plugin.py regen $H $C $VP || return 1
   local name differs=0; : > $R/V-plugin.diff
   for name in .claude-plugin/plugin.json hooks/hooks.json hooks/host_context.mjs; do
@@ -253,7 +258,7 @@ step_V() {
   say "local form kept: 'const PLUGIN = null'"
   grep -n '^const PLUGIN' $VP/hooks/host_context.mjs | sed 's/^/candidate: /'
   grep -q '^const PLUGIN = null;' $VP/hooks/host_context.mjs || { print "STOP: candidate is not the local-copy form"; rc=1; }
-  say "464 markers (457, 459 and 459's correction b3d522ad): present in the candidate, absent in production"
+  say "464 markers (457, 459, 459's correction b3d522ad, 460, 461, 462, 463): present in the candidate, absent in production"
   local VS=($VV/lib/python*/site-packages(N))
   $CONDA -I $SD/markers.py $VS[1] present || rc=1
   $CONDA -I $SD/markers.py $(site) absent || rc=1
@@ -263,24 +268,44 @@ step_V() {
   say "entry files: what configuration --write would change; predictions only"
   rm -rf $VE; $P -I $SD/adopt_plugin.py entries $H $C $RT/bin/python $VE || rc=1
   say "read only against the real project: archives, configuration, roles; Task graph on an APFS clone of state"
-  touch $W/V-marker; [[ -e $BASE/vstate ]] && chmod -R u+w $BASE/vstate && rm -rf $BASE/vstate; mkdir -p $BASE/vstate
+  touch $W/V-marker-$C8; [[ -e $BASE/vstate ]] && chmod -R u+w $BASE/vstate && rm -rf $BASE/vstate; mkdir -p $BASE/vstate
   local part; for part in tasks worldline; do [[ -d $H/.graphtraj/core/state/$part ]] && cp -cRp $H/.graphtraj/core/state/$part $BASE/vstate/; done
   $P -I $SD/adopt_plugin.py readcheck $H $BASE/vstate || rc=1
   chmod -R u+w $BASE/vstate; rm -rf $BASE/vstate
-  say "recorded hashes (I checks these did not change before it writes)"; shasum -a 256 $ENTRIES | tee $W/entries.sha256
+  say "recorded hashes (I checks these did not change before it writes)"; shasum -a 256 $ENTRIES | tee $W/entries-$C8.sha256
   return $rc
 }
 
 # S: full suite of TARGET from this Worktree (editable install), 450's method, in the background. Main runs it and
-# queues suites: S refuses while another run_test_shards runs (a 460-463 suite may need the host).
+# queues suites: S refuses while another run_test_shards runs (a 465 or 469 suite may need the host).
 # Venv as scripts/verify-450/steps.zsh: Conda python3.13 --system-site-packages, editable graftling and graphtraj,
 # then production's click, yaml/_yaml/pyyaml and websockets COPIED into its site-packages (they shadow Conda's).
-# Baseline: 459 at 81fc829e (verify-459 03): 2 failed, 4024 passed, 69 skipped. Both are rerun alone always.
-# For comparison: 458's suite at 4e3aafce: 0 failed, 4011 passed, 71 skipped.
+# Baseline: this Task's quiet S at b3d522ad (adoption/raw/S-suite.txt): 0 failed, 4025 passed, 71 skipped.
+# Any suite failure is NEW (counted). Labels only add what is known about an id:
+#   459-BASELINE  the two failures of 459's suite at 81fc829e; rerun alone always, as before;
+#   ATTRIBUTED    a failure that 460-463's accepted records attributed to load or environment, not to their change;
+#                 rerun alone when it recurs. Still NEW and counted, never hidden.
 BASELINE_FAILS=(
   'tests/test_agent_runner_cleanup.py::test_native_interrupt_confirms_only_pre_runtime_allocations[waiting]'
   tests/test_claude_runner.py::test_second_child_batch_starts_while_first_batch_is_running
 )
+# id|source (acceptance records: 461 20261114T174504, 462 20261114T173540, 463 20261114T162929; 460 20261114T171154
+# attributed none: its one suite failure was a defect fixed by its correction, so a recurrence is plain NEW).
+ATTRIBUTED=(
+  'tests/test_pi_runtime.py::test_srt_gone_before_launch_is_refused|461: environment (a credential-named variable in the suite environment)'
+  'tests/test_run_test_shards.py::test_hanging_shard_is_stopped_and_reported|461: load (killpg EPERM under load, inference)'
+  'tests/test_claude_runner.py::test_public_interrupt_reconfirms_an_undrained_worker|462: load (polling deadline missed by 0.23 s)'
+  'tests/test_agent_runner_cleanup.py::test_native_interrupt_confirms_only_pre_runtime_allocations[absent]|462: load'
+  'tests/test_interrupted_resolver_recovery.py::test_resume_with_restore_active_continues_the_same_session_to_integrated|462: load'
+  'tests/test_mcp_host_tools.py::test_installed_mcp_swarm_returns_after_registration_and_stops_on_the_native_route|462: load'
+  'tests/test_member_child_end_notice_446.py::test_a_busy_member_input_is_retried_within_the_operation_window|463: not attributed to 463 (passed 3/3 alone)'
+  'tests/test_pi_dsh_notice_holding.py::test_a_request_notice_returns_promptly_while_pi_holds_it|463: not attributed to 463 (passed 3/3 alone)'
+)
+label_of() {
+  local id=$1 a; (( ${BASELINE_FAILS[(Ie)$id]} )) && { print "459-BASELINE"; return; }
+  for a in $ATTRIBUTED; do [[ ${a%%|*} == $id ]] && { print "ATTRIBUTED ${a#*|}"; return; }; done
+  print "unattributed"
+}
 # The suite's pytest temporary root (under the TMPDIR clean() passes) and its newest pytest-<n> before the run.
 pytest_root() { clean $CONDA -I -c 'import tempfile; print(tempfile.gettempdir())'; }
 basetemp_max() { local d=($(pytest_root)/pytest-of-${USER:-luoxiao}/pytest-<->(N/)); print ${${(n)${d##*/pytest-}}[-1]:-0}; }
@@ -293,7 +318,7 @@ step_S() {
   local others=$(ps -axww -o pid=,etime=,command= 2>/dev/null | grep -E 'pytest|run_test_shards' | grep -vE 'grep|steps.zsh')
   print -r -- "other pytest / run_test_shards processes: ${others:-none}"
   if [[ $others == *run_test_shards* ]]; then
-    print "STOP: another run_test_shards is running (for example a 460-463 suite); the host is not quiet. Main queues S and reruns it later."; return 1
+    print "STOP: another run_test_shards is running (for example a 465 or 469 suite); the host is not quiet. Main queues S and reruns it later."; return 1
   fi
   rm -rf $SV; $CONDA -m venv --system-site-packages $SV || return 1
   $SV/bin/python -m pip install -q --disable-pip-version-check --no-cache-dir --no-index --no-deps --no-build-isolation -e $WT/src/graftling -e $WT 2>&1 | grep -vi cache
@@ -302,11 +327,11 @@ step_S() {
   (cd /tmp && $SV/bin/python -I -c 'import graphtraj, click, yaml, websockets, pytest; from importlib.metadata import version; print("click", version("click"), "(expect 8.5.0) | graphtraj.__file__ =", graphtraj.__file__)') | tee $R/S-setup-imports.txt || return 1
   grep -qF "graphtraj.__file__ = $WT/" $R/S-setup-imports.txt || { print "STOP: graphtraj is not imported from $WT"; return 1; }
   # 447 guard: an inner venv built the way tests/conftest.py builds one must import websockets.
-  rm -rf $BASE/sprobe; $SV/bin/python -m venv --system-site-packages $BASE/sprobe || return 1
-  local PD=($BASE/sprobe/lib/python*/site-packages(N)); print -r -- $D > $PD[1]/graphtraj_test_dependencies.pth
-  $BASE/sprobe/bin/python -I -c 'import websockets; print("inner-style venv: websockets", websockets.__version__)' || { print "GUARD: inner-style venv cannot import websockets"; return 1; }
+  rm -rf $BASE/sprobe-$C8; $SV/bin/python -m venv --system-site-packages $BASE/sprobe-$C8 || return 1
+  local PD=($BASE/sprobe-$C8/lib/python*/site-packages(N)); print -r -- $D > $PD[1]/graphtraj_test_dependencies.pth
+  $BASE/sprobe-$C8/bin/python -I -c 'import websockets; print("inner-style venv: websockets", websockets.__version__)' || { print "GUARD: inner-style venv cannot import websockets"; return 1; }
   print "pytest temporary root: $(pytest_root)/pytest-of-${USER:-luoxiao} (newest before the run: pytest-$(basetemp_max))"
-  basetemp_max > $W/S-basetemp-before
+  basetemp_max > $W/S-basetemp-before-$C8
   rm -rf $R/S-shards; : > $R/S-suite.txt
   (cd $WT && nohup zsh $THIS _Srun >> $R/S-suite.txt 2>&1 &)
   print "started at $(date +%T) in the background (~20-30 min)."
@@ -317,20 +342,22 @@ step__Srun() {
   (cd $WT && clean $SV/bin/python scripts/run_test_shards.py --shards 6 --timeout 1500 --log-dir $R/S-shards); print "== shards exit $?"
   local last=$(grep -E '^[0-9]+ (failed|errors|passed)' $R/S-suite.txt | tail -1)
   print "== totals: $last"
-  print "== baseline 459 81fc829e: 2 failed, 4024 passed, 69 skipped"
-  print "== for comparison 458 4e3aafce: 0 failed, 4011 passed, 71 skipped"
+  print "== baseline: this Task's quiet S at b3d522ad: 0 failed, 4025 passed, 71 skipped (any failure below is NEW)"
+  print "== for comparison: 459 81fc829e 2 failed, 4024 passed, 69 skipped; 458 4e3aafce 0 failed, 4011 passed, 71 skipped"
   print "== 454 line from run_test_shards: $(grep -E '^leftover processes of run' $R/S-suite.txt | tail -1)"
-  print "== failures (BASELINE = also failed in 459's suite; NEW = not):"
+  print "== failures (every one is NEW against b3d522ad's 0 failed; the label says what is already known about the id):"
   local id ids=(${(f)"$(sed -n 's/^FAILED //p; s/^ERROR //p' $R/S-shards/failures.txt 2>/dev/null | sed 's/ - .*//' | sort -u)"})
-  for id in $ids; do (( ${BASELINE_FAILS[(Ie)$id]} )) && print "BASELINE $id" || print "NEW $id"; done
+  local label attributed=0
+  for id in $ids; do label=$(label_of $id); [[ $label == ATTRIBUTED* ]] && (( attributed++ )); print "NEW $id [$label]"; done
+  print "== new failures: ${#ids} (of which ATTRIBUTED: $attributed)"
   (( ${#ids} )) || print "(none)"
-  print "== each failure alone (-rA), and each 459 baseline failure alone even if it passed in the suite:"
+  print "== each failure alone (-rA, ATTRIBUTED ones included), and each 459-BASELINE id alone even if it passed in the suite:"
   local all=(${(u)ids} $BASELINE_FAILS); all=(${(u)all})
   for id in $all; do
     local out=$(cd $WT && clean $SV/bin/python -m pytest -p no:cacheprovider -q -rA "$id" 2>&1)
     local verdict=$(print -r -- "$out" | grep -oE '^(PASSED|FAILED|SKIPPED|ERROR)' | head -1)
     local insuite=$( (( ${ids[(Ie)$id]} )) && print "failed in the suite" || print "passed in the suite")
-    print "${verdict:-UNKNOWN} alone: $id ($insuite)"; print -r -- "$out" | grep -E '^(PASSED|FAILED|SKIPPED|ERROR)|passed|failed|skipped' | tail -2 | sed 's/^/    /'
+    print "${verdict:-UNKNOWN} alone: $id ($insuite) [$(label_of $id)]"; print -r -- "$out" | grep -E '^(PASSED|FAILED|SKIPPED|ERROR)|passed|failed|skipped' | tail -2 | sed 's/^/    /'
   done
   print "== DONE $(date +%T)   (next, Main: zsh $THIS S2)"
 }
@@ -340,7 +367,7 @@ step__Srun() {
 # Listed and counted only; never signalled.
 step_S2() {
   grep -q '^== DONE' $R/S-suite.txt 2>/dev/null || { print "S has not printed '== DONE' yet: tail -n 25 $R/S-suite.txt"; return 1; }
-  local before=$(<$W/S-basetemp-before) root="$(pytest_root)/pytest-of-${USER:-luoxiao}" run n pats=() listing line hits=()
+  local before=$(<$W/S-basetemp-before-$C8) root="$(pytest_root)/pytest-of-${USER:-luoxiao}" run n pats=() listing line hits=()
   run=$(sed -n 's/^test run id: \([0-9a-f]*\).*/\1/p' $R/S-suite.txt | head -1)
   pats=("$SV/" "$SV " "PYTEST_GRAPHTRAJ_RUN=${run:-none}-")
   for n in {$(( before + 1 ))..$(basetemp_max)}; do (( n > before )) && pats+=("$root/pytest-$n/"); done
@@ -420,7 +447,7 @@ do_install() {
   local S=$(site) P=$RT/bin/python w
   say "wheels (expect 2 x OK)"; cat $N/COMMIT; (cd $N && shasum -a 256 -c SHA256SUMS) || return 1
   [[ $(<$N/COMMIT) == $TARGET ]] || { print "COMMIT 不是目标提交"; return 1; }
-  say "entry files still as V saw them (expect 3 x OK)"; shasum -a 256 -c $W/entries.sha256 || { print "入口文件在 V 之后被改过；重新运行 V。"; return 1; }
+  say "entry files still as V saw them (expect 3 x OK)"; shasum -a 256 -c $W/entries-$C8.sha256 || { print "入口文件在 V 之后被改过；重新运行 V。"; return 1; }
   say "install both wheels over the same versions (--force-reinstall)"
   $P -m pip install --disable-pip-version-check --no-cache-dir --no-deps --no-index --force-reinstall $(wheel_of graphtraj) $(wheel_of graftling) || return 1
   say "installed files vs the new wheels, file by file (versions are the same numbers as before)"
@@ -432,8 +459,8 @@ do_install() {
     done
   done
   say "pip check and imports"; $P -m pip check --disable-pip-version-check || return 1
-  $P -c 'import graftling, graphtraj.runtimes.claude.host as h, graftling.control as c, graftling.tool_descendants as td, graftling.claude.execution as ce; print("graftling", graftling.__version__); print(h.__file__); print("457", c._stop_escaped.__name__, "| 459 SAMPLE_SECONDS", td.SAMPLE_SECONDS, td.DescendantSampler.__name__, "| 459 correction", td.shown_command.__name__); assert graftling.__version__ == "0.5.0"' || return 1
-  say "464 markers in the installed site-packages (expect PASS 11/11)"; $CONDA -I $SD/markers.py $S present || return 1
+  $P -c 'import graftling, graphtraj.runtimes.claude.host as h, graftling.control as c, graftling.tool_descendants as td, graftling.claude.execution as ce, graphtraj.execution.runner_worker as rw, graphtraj.execution.runner_control as rc, graftling.pi.execution as pe, graftling.dsh.execution as de, graftling.codex.managed_session as cm; print("graftling", graftling.__version__); print(h.__file__); print("457", c._stop_escaped.__name__, "| 459 SAMPLE_SECONDS", td.SAMPLE_SECONDS, td.DescendantSampler.__name__, "| 459 correction", td.shown_command.__name__); print("460", rw.TOOL_PROCESSES_RECORD, rc._reclaim_tool_processes.__name__, "| 461", pe.PiExecution.__name__, "| 462", cm.CodexManagedExecution._reclaim_tools.__name__, "| 463", de.DshExecution._stop_escaped.__name__); assert graftling.__version__ == "0.5.0"' || return 1
+  say "464 markers in the installed site-packages (expect PASS 25/25)"; $CONDA -I $SD/markers.py $S present || return 1
   say "plugin regenerated by the installed code, plugin files only"; $P -I $SD/adopt_plugin.py regen $H $(claude_bin) $PDIR || return 1
   diff -r $PDIR $VP && print SAME-AS-VALIDATED || { print "插件与 V 的副本不同"; return 1; }
   diff -r $BK/plugin $PDIR > /dev/null && print "plugin bytes as before the install: no trust dialog expected" || print "plugin bytes CHANGED from before the install: one plugin/hooks trust dialog may appear at resume"
@@ -585,9 +612,9 @@ help) print "顺序: 00 → B → V → S（后台，Main 排队）→ Vc（必�
 00) print "[00] Main. 预检。对话框: 无。只写 $BASE/scratch、$BASE/main.session 与 $R。约 2 分钟。"
   logged $R/00.txt step_00
   summary 00 "$(grep -E 'ZSH_VERSION|Node spawn|inherited|answer:|^Version|pip check rc|production copy|markers expected|running lines|^stopped|status|MAIN=|MAIN NOT|volume ids|^guard|advisor' $R/00.txt)"
-  print "成功: ZSH_VERSION 有值；answer 里 models 含 $MODEL 且 is_error False；graphtraj 0.1.0 与 graftling 0.5.0；pip check rc=0；'markers expected absent: PASS (11/11)'（生产仍是 4e3aafce）；"
+  print "成功: ZSH_VERSION 有值；answer 里 models 含 $MODEL 且 is_error False；graphtraj 0.1.0 与 graftling 0.5.0；pip check rc=0；'markers expected absent: PASS (25/25)'（生产仍是 4e3aafce）；"
   print "  stopped: false 且 Team 1 active；roles 里有 opus_coding_team 的 advisor；$BK 'No such file'（393/417/448/453/458 的备份只列出，不动）；MAIN=<id>。"
-  print "running lines 可以不为 0（例如 Task 460、461、462、463 的成员）；I 会等它们结束，不结束它们，不需要现在处理。guard 的 NON-BLOCKING 计时器不影响安装。"
+  print "running lines 可以不为 0（例如 Task 465、469 的成员）；I 会等它们结束，不结束它们，不需要现在处理。guard 的 NON-BLOCKING 计时器不影响安装。"
   print "若 'inherited:' 列出名字：本脚本已对所有子命令 unset；记下它来自哪个项目（418 提醒）。"
   print "若 answer 有 login/API key 字样: USER 在 Terminal 运行 claude 登录后重跑 00。若 MAIN NOT FOUND 或 ps 被拒: 由 USER 在普通 Terminal 运行 00。"
   next "zsh $THIS B" ;;
@@ -602,16 +629,17 @@ V) print "[V] Main. 安装前校验。对话框: 无。只读真实项目；scra
   if logged $R/V.txt step_V; then
     touch $R/V.ok
     summary V "$(grep -E '^(SAME|CHANGE)|source diff|plugin unchanged|markers expected|STOP|✘ lines|    |read_session|loaded|task graph' $R/V.txt)"
-    print "成功: SAME ×3 与 'plugin unchanged: no plugin/hooks trust dialog is expected'；'source diff: empty'；'markers expected present: PASS (11/11)' 与 'markers expected absent: PASS (11/11)'；"
+    print "成功: SAME ×3 与 'plugin unchanged: no plugin/hooks trust dialog is expected'；'source diff: empty'；'markers expected present: PASS (25/25)' 与 'markers expected absent: PASS (25/25)'；"
     print "  候选 ✘ 不多于 baseline；无 STOP；入口文件 SAME 或只列出可解释的变化；read_session failures=0。"
     next "zsh $THIS S"
   else print "\nV 不通过，不要做 I，把 $R/V.txt 交给 Main。本步没有改动生产。"; exit 1; fi ;;
 
-S) print "[S] Main. TARGET 的全套测试（从本 Worktree 导入，6 个 shard，--timeout 1500，后台）。对话框: 无。立即返回。另一个 run_test_shards（例如 460-463 的）在运行时拒绝；Main 排队，一次只跑一个，之后重跑。"
+S) print "[S] Main. TARGET 的全套测试（从本 Worktree 导入，6 个 shard，--timeout 1500，后台）。对话框: 无。立即返回。另一个 run_test_shards（例如 465、469 的）在运行时拒绝；Main 排队，一次只跑一个，之后重跑。"
   if logged $R/S-setup.txt step_S; then
     print "状态（Main 随时）:  tail -n 25 $R/S-suite.txt"
-    print "完成标志: '== DONE'。成功: 没有 'NEW ' 开头的失败（基线 459 81fc829e: 2 failed、4024 passed、69 skipped；对照 458 4e3aafce: 0 failed、4011 passed、71 skipped）；"
-    print "  每个失败及 459 的两项基线失败都有一行 'PASSED/FAILED/SKIPPED alone: <id> (failed|passed in the suite)'。NEW 且单独仍 FAILED 的交 Main。"
+    print "完成标志: '== DONE'。成功: 'new failures: 0'（基线是本 Task 在 b3d522ad 的安静 S: 0 failed、4025 passed、71 skipped；任何失败都是 NEW 并计数）；"
+    print "  每个失败（含 ATTRIBUTED）及 459 的两项 459-BASELINE 都有一行 'PASSED/FAILED/SKIPPED alone: <id> (failed|passed in the suite) [label]'。"
+    print "  ATTRIBUTED = 460-463 的验收记录已归因于负载或环境的同一 id；仍计入，由 Main 判断。单独仍 FAILED 的交 Main。"
     print "  '== 454 line' 给出 run_test_shards 自己的 leftover 计数；'== DONE' 之后 Main 运行 S2 统计遗留进程。"
     print "失败的 ID: $R/S-shards/failures.txt；某 shard 'ABNORMAL' 或 'timed out': 把那一行交给 Main。S 可与 Vc 同时进行。"
     next "zsh $THIS Vc    （S 打印 '== DONE' 之后再: zsh $THIS S2）"
@@ -635,7 +663,7 @@ Vc) print "[Vc] Main. 隔离项目 $VPROJECT 里用新 wheel 的真实 claude -p
     touch $R/Vc.ok
     summary Vc "$(grep -E '^(PASS|FAIL)|loaded:' $R/Vc.txt | tail -4)"
     print "成功: 'graphtraj-claude-host loaded: YES'，PASS mcp__agents__tasks 与 PASS mcp__agents__agents。"
-    print "\n下一步是 USER 的: 先在这个 Claude Main 里输入 /exit，然后在普通 Terminal 运行 I。I 会等 Task 460、461、462、463（或其它 Task）的成员结束（不要结束它们）。S 在后台继续，不受影响（它不用 .venv-runtime 的进程）。"
+    print "\n下一步是 USER 的: 先在这个 Claude Main 里输入 /exit，然后在普通 Terminal 运行 I。I 会等 Task 465、469（或其它 Task）的成员结束（不要结束它们）。S 在后台继续，不受影响（它不用 .venv-runtime 的进程）。"
     next "USER（Main 已 /exit）: zsh $THIS I"
   else print "\nVc 不通过，不要做 I，把 $R/Vc.txt 与 $R/Vc-stream.jsonl 交给 Main。"; exit 1; fi ;;
 
@@ -662,8 +690,8 @@ I) need_main
   touch $R/I.ok
   { say "BLOCKING processes started during the install window ($INSTALL_FROM → $(date +%T)); information for Main"
     guard && print "none" || print "（上面 BLOCKING 列出的进程在安装期间启动，可能载入了新旧混合的文件；告诉 Main。）"; } 2>&1 | tee -a $R/I.txt
-  summary I "$(grep -E 'Successfully|^PASS|^FAIL|^graftling 0|^457 _stop_escaped|markers expected|SAME-AS-VALIDATED|plugin bytes|WRITTEN|UNCHANGED|bytes unchanged|^changed|BLOCKING|-rw-------' $R/I.txt)"
-  print "成功: Successfully installed graftling-0.5.0 graphtraj-0.1.0；PASS n FAIL 0；三个 -rw------- 备份入口文件；'markers expected present: PASS (11/11)'；'457 _stop_escaped | 459 SAMPLE_SECONDS 1.0 DescendantSampler | 459 correction shown_command'；SAME-AS-VALIDATED；"
+  summary I "$(grep -E 'Successfully|^PASS|^FAIL|^graftling 0|^457 _stop_escaped|^460 tool-processes|markers expected|SAME-AS-VALIDATED|plugin bytes|WRITTEN|UNCHANGED|bytes unchanged|^changed|BLOCKING|-rw-------' $R/I.txt)"
+  print "成功: Successfully installed graftling-0.5.0 graphtraj-0.1.0；PASS n FAIL 0；三个 -rw------- 备份入口文件；'markers expected present: PASS (25/25)'；'457 _stop_escaped | 459 SAMPLE_SECONDS 1.0 DescendantSampler | 459 correction shown_command' 与 '460 tool-processes-{0}.yml _reclaim_tool_processes | 461 PiExecution | 462 _reclaim_tools | 463 _stop_escaped'；SAME-AS-VALIDATED；"
   print "  'plugin bytes as before the install: no trust dialog expected'；入口文件 bytes unchanged 或 V 已列出的变化。"
   print "$R_HINT"
   print "\n下一步（USER，普通 Terminal）恢复 Main（同一个 Session）:\n  cd $H && claude --continue"
@@ -677,7 +705,7 @@ M) need_main; cat <<EOF2 | tee $R/M-prompts.txt
 
 [a 定义第 4 项: 安装后第一次 Main 重启，通知正常显示、不重复] 恢复后第一句:
 Before anything else: list every GraphTraj/Graftling notice delivered to you since this resume (alias, event, execution if shown in the title, first line), and for each say whether you had already seen that same notice before this resume. Use no tools.
-  成功: 没有安装前已见过的通知再出现。Main 退出期间结束的 Task 460、461、462、463（或其它 Task）成员的通知可能在恢复时到达一次，这是预期的；它们不能再重复。
+  成功: 没有安装前已见过的通知再出现。Main 退出期间结束的 Task 465、469（或其它 Task）成员的通知可能在恢复时到达一次，这是预期的；它们不能再重复。
   若有重复: 记下 alias/event/execution/次数，由 Main 登记缺陷 Task。
 
 [b 工具与插件] 粘贴:
@@ -732,8 +760,8 @@ EOF2
 
 Nr) print "[Nr] Main. 子级记录、459 的后代记录、成员的结束与 Session 档案（只读，从不发信号）。对话框: 无。"
   nr_read 2>&1 | tee $R/Nr.txt; rc=${pipestatus[1]}
-  [[ -d $W/src/src/graftling ]] || { print "没有 $W/src/src（B 的 git archive）；先运行 B。" | tee -a $R/Nr.txt; rc=1; }
-  $CONDA -I $SD/nr459.py $H $R $W/src/src $HOSTCFG $CHILD 2>&1 | tee -a $R/Nr.txt; (( ${pipestatus[1]} == 0 )) || rc=1
+  [[ -d $SRC/src/graftling ]] || { print "没有 $SRC/src（B 的 git archive）；先运行 B。" | tee -a $R/Nr.txt; rc=1; }
+  $CONDA -I $SD/nr459.py $H $R $SRC/src $HOSTCFG $CHILD 2>&1 | tee -a $R/Nr.txt; (( ${pipestatus[1]} == 0 )) || rc=1
   print "Nw: ${$(grep -E '== END|start:' $R/Nw.txt 2>/dev/null | tail -1):-not run}" | tee -a $R/Nr.txt
   (cd $H && clean $RT/bin/graphtraj task members) 2>&1 | grep -F -- "$TASK_ID" | head -10 | tee -a $R/Nr.txt
   MEMBER=$(sed -n 's/^MEMBER //p' $R/Nr.txt | tail -1); SID=$(sed -n 's/^SESSION //p' $R/Nr.txt | tail -1); CHILDAGENT=$(sed -n 's/^CHILD //p' $R/Nr.txt | tail -1)

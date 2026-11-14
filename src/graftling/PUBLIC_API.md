@@ -232,8 +232,16 @@ for `all`) and, when earlier events exist, `earlier: {start, stop}`, the page
 before this one. A search adds `search`, `hits_total` and `hits` (`index`,
 `seq`, `type`, `snippet`: the first match with up to 80 characters on each side), the
 last 20 hits in the range, and `earlier_hits: {count, stop}` when more matched.
-`all` adds `header`, `revision` and, for imported old evidence, `legacy` (its
-events sliced the same way, with their `total`). Credentials and control material
+Every search also adds `outside_view` and `repeat`, so a narrow view never hides
+matches silently. `outside_view` counts, over every archived event of the Session
+(the scope of grepping its JSONL, whatever `start` and `stop` are, after redaction),
+the matching events that only a wider `content` shows, per wider view: `{"tools":
+n, "all": m}` for `text`, `{"all": m}` for `tools`, `{}` for `all`. `repeat` is one
+sentence naming the `content` to search again with to get their positions, or
+saying that nothing outside the view matches. Unfinished output is not searched.
+`all` adds `header`, `revision` and, for imported old evidence, `legacy`: a read
+returns its events sliced the same way, with their `total`; a search returns only
+`{"total"}`. Credentials and control material
 (keys or values naming a control key, socket, directory or request token) are
 redacted everywhere, including what a search sees.
 
@@ -243,9 +251,10 @@ descendants: the Agents its parent chain reaches and the Agents it can see in
 `status`, plus the root Session that created its top ancestor. A Session belongs
 to the Agent whose recorded native Sessions include it. A caller with an Agent
 reference that has no record here, or without either an Agent reference or a
-Session, is refused with `authority-denied`. A Session that does not exist, is
-not archived (saving is off) or may not be read is `not-found`, with the same
-message. Malformed slice values are `invalid-input`.
+Session, is refused with `authority-denied`, before any Session is looked up. A
+Session that does not exist, is not archived (saving is off), cannot be opened or
+may not be read is `not-found`, with the same message. Malformed slice values are
+`invalid-input`.
 
 `send`'s `reports_only` (boolean, default false): `true` delivers the message
 only to collect results the Agent already holds; the Agent starts no new work.
@@ -487,9 +496,9 @@ and `may_read(caller, header)`, the default read policy of 1.2.
 A host replaces that policy with `AgentControl(session_reads=policy)` (since
 466). `policy(caller, header)` returns whether the verified `caller` may read the
 archived Session whose header is `header`, and raises `AgentsError`
-`authority-denied` for a caller it does not recognize. It is called with `header`
-`None` when no archive matches, so an unrecognized caller is refused before
-anything about the Session is revealed. GraphTraj's policy lets every verified
+`authority-denied` for a caller it does not recognize. It is called first with
+`header` `None`, before any lookup, so an unrecognized caller is refused before
+anything about the Session is revealed; its answer to that call is ignored. GraphTraj's policy lets every verified
 caller of its project read every Session archived in it.
 
 **JavaScript files.** A package that places its own files beside the installed

@@ -64,24 +64,29 @@ step_00() {
   copy_deps $VV || return 1
   (cd /tmp && $VV/bin/python -I $SD/probe.py fix $SRC/src -) || { print "STOP: the venv does not run the commit under test"; return 1; }
   say "isolated project $P (own git init, own .graphtraj from graphtraj setup)"
-  rm -rf $P; mkdir -p $P; (cd $P && git init -q -b main && print -r -- "# 466 probe" > README.md && git add README.md \
-      && git -c user.name=466 -c user.email=466@invalid commit -qm "Initial source") || return 1
+  rm -rf $P; mkdir -p $P
+  say "Claude settings of the project: no Harness CLAUDE.md/AGENTS.md (claudeMdExcludes) and no cc-plugin-agents-md (as verify-462)."
+  print "The same settings go into the tracked .claude/settings.json, committed before graphtraj setup creates dev, so"
+  print "every Task Worktree (branched from dev) carries it; .claude/settings.local.json stays as in verify-462."
+  $VV/bin/python -I -c 'import json, sys
+from pathlib import Path
+harness = sys.argv[1]
+for path in map(Path, sys.argv[2:]):
+    settings = json.loads(path.read_text()) if path.is_file() else {}
+    settings["claudeMdExcludes"] = sorted({*settings.get("claudeMdExcludes", []), harness + "/CLAUDE.md",
+        harness + "/CLAUDE.local.md", harness + "/.claude/CLAUDE.md", harness + "/**/CLAUDE.md", harness + "/**/CLAUDE.local.md",
+        harness + "/AGENTS.md", harness + "/**/AGENTS.md"})
+    settings["enabledPlugins"] = {**settings.get("enabledPlugins", {}), "cc-plugin-agents-md@builtin": False}
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(settings, indent=2) + "\n")
+    print("claudeMdExcludes in", path, ":", settings["claudeMdExcludes"])
+    print("enabledPlugins in", path, ":", settings["enabledPlugins"])' $H $P/.claude/settings.json $P/.claude/settings.local.json || return 1
+  (cd $P && git init -q -b main && print -r -- "# 466 probe" > README.md && git add README.md .claude/settings.json \
+      && git -c user.name=466 -c user.email=466@invalid commit -qm "Initial source with Claude settings") || return 1
+  print "tracked in the initial commit: $(cd $P && git ls-files | tr '\n' ' ')"
   (cd $P && print y | clean $VV/bin/graphtraj setup | tail -2) || return 1
   probe prepare $P $MODEL || { print "STOP: probe Tasks are not ready (text above)"; return 1; }
   probe isolation $P - || { print "STOP: the project is not isolated"; return 1; }
-  say "Claude settings of the project: no Harness CLAUDE.md/AGENTS.md (claudeMdExcludes) and no cc-plugin-agents-md (as verify-462)"
-  $VV/bin/python -I -c 'import json, sys
-from pathlib import Path
-harness, path = sys.argv[1], Path(sys.argv[2])
-settings = json.loads(path.read_text()) if path.is_file() else {}
-settings["claudeMdExcludes"] = sorted({*settings.get("claudeMdExcludes", []), harness + "/CLAUDE.md",
-    harness + "/CLAUDE.local.md", harness + "/.claude/CLAUDE.md", harness + "/**/CLAUDE.md", harness + "/**/CLAUDE.local.md",
-    harness + "/AGENTS.md", harness + "/**/AGENTS.md"})
-settings["enabledPlugins"] = {**settings.get("enabledPlugins", {}), "cc-plugin-agents-md@builtin": False}
-path.parent.mkdir(parents=True, exist_ok=True)
-path.write_text(json.dumps(settings, indent=2) + "\n")
-print("claudeMdExcludes in", path, ":", settings["claudeMdExcludes"])
-print("enabledPlugins in", path, ":", settings["enabledPlugins"])' $H $P/.claude/settings.local.json || return 1
   say "host answers one line with $MODEL (model and login source from the init record; no tool, no MCP)"
   (cd $P && clean claude -p --model $MODEL --output-format stream-json --verbose --strict-mcp-config --mcp-config '{"mcpServers":{}}' \
       <<< 'Reply with exactly two lines. Line 1: MODEL OK. Line 2: MEMORY: then the absolute path of every CLAUDE.md or AGENTS.md file whose contents were given to you as instructions, separated by spaces, or NONE. Use no tool.' \
@@ -111,10 +116,12 @@ facts() {  # $1 task, $2 label; Task 2 also names Task 1's member from 01's outp
   if [[ $1 == 2 ]]; then
     $VV/bin/python -I -c 'import json, sys
 source = json.load(open(sys.argv[2]))
-json.dump({"task": "2", "out": sys.argv[3], "source_alias": source["alias"], "source_native": source["native"]}, open(sys.argv[1], "w"))
-print("Task 1 member:", source["alias"], "| Session:", source["native"])' $F $OUT/01-facts.out.json $OUT/$2-facts.out.json || return 1
+json.dump({"task": "2", "out": sys.argv[3], "harness": sys.argv[4], "source_alias": source["alias"],
+           "source_native": source["native"]}, open(sys.argv[1], "w"))
+print("Task 1 member:", source["alias"], "| Session:", source["native"])' $F $OUT/01-facts.out.json $OUT/$2-facts.out.json $H || return 1
   else
-    $VV/bin/python -I -c 'import json, sys; json.dump({"task": "1", "out": sys.argv[2]}, open(sys.argv[1], "w"))' $F $OUT/$2-facts.out.json
+    $VV/bin/python -I -c 'import json, sys; json.dump({"task": "1", "out": sys.argv[2], "harness": sys.argv[3]}, open(sys.argv[1], "w"))' \
+        $F $OUT/$2-facts.out.json $H
   fi
   print -r -- $F
 }
@@ -128,8 +135,9 @@ step_01() {
   local rc=$?
   print ""
   if (( rc == 2 )); then next Main "zsh $THIS 01c 2>&1 | tee $OUT/01c.txt"; return $rc; fi
-  print "Success: '== summary: ALL PASS' (CHECK 1-4): at least 12 text events and 10 tool calls, the marker before the last page,"
-  print "the fake credential in the raw archive, DONE-466-T1."
+  print "Success: '== summary: ALL PASS' (CHECK 1-5): at least 12 text events and 10 tool calls, the marker before the last page,"
+  print "the fake credential written by the member, DONE-466-T1, and the member's own init record without cc-plugin-agents-md"
+  print "or a Harness instruction path; the 'member Worktree ... .claude/settings.json exists: yes' line."
   next Main "zsh $THIS 02 2>&1 | tee $OUT/02.txt"
   return $rc
 }
@@ -141,7 +149,7 @@ step_01c() {
   probe collect $P $OUT/01-facts.json
   local rc=$?
   print ""
-  print "Success: '== summary: ALL PASS' (CHECK 1-4)."
+  print "Success: '== summary: ALL PASS' (CHECK 1-5)."
   next Main "zsh $THIS 02 2>&1 | tee $OUT/02.txt"
   return $rc
 }
@@ -158,7 +166,8 @@ step_02() {
   if (( rc == 2 )); then next Main "zsh $THIS 02c 2>&1 | tee $OUT/02c.txt"; return $rc; fi
   print "Success: '== summary: ALL PASS': calls A, B, C each with a complete JSON tool_result, not is_error, no over-limit"
   print "notice; A indices == [-5:], B == [-10:-5], C's first hit == the probe's own; the fake credential redacted; no"
-  print "credential value in Task 2's transcript; the member reports no Harness instruction file."
+  print "credential value in Task 2's transcript; the member's own init record without cc-plugin-agents-md or a Harness"
+  print "instruction path (CHECK 10); the 'member Worktree ... .claude/settings.json exists: yes' line."
   next Main "zsh $THIS 03"
   return $rc
 }

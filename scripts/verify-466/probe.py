@@ -269,6 +269,7 @@ def settle_and_check(project: Path, facts: dict, task: dict) -> int:
         print('STOP: mapping.yml names another execution than the dispatch; nothing was checked.')
         return 1
     checks = (source_checks if facts['task'] == '1' else reader_checks)(project, facts, alias, native)
+    checks.append(member_isolation(runner / 'sessions' / alias, mapping, facts['harness']))
     for number, (label, ok) in enumerate(checks, 1):
         print(f'CHECK {number} {"PASS" if ok else "FAIL"}: {label}')
     out = {'alias': alias, 'native': native, 'execution_id': mapping.get('execution_id'),
@@ -277,6 +278,59 @@ def settle_and_check(project: Path, facts: dict, task: dict) -> int:
     summary = all(ok for _, ok in checks)
     print('== summary:', 'ALL PASS' if summary else f'{sum(not ok for _, ok in checks)} FAIL of {len(checks)}')
     return 0 if summary else 1
+
+
+def instruction_paths(value: object, harness: str) -> list[str]:
+    """Harness CLAUDE.md / CLAUDE.local.md / AGENTS.md paths named anywhere in ``value``."""
+    names = ('CLAUDE.md', 'CLAUDE.local.md', 'AGENTS.md')
+    return sorted({match for text in strings(value) for match in re.findall(r'/\S*?(?:CLAUDE(?:\.local)?|AGENTS)\.md', text)
+                   if match.startswith(harness) and '/tmp/466/' not in match and match.endswith(names)})
+
+
+def strings(value: object):
+    if isinstance(value, str):
+        yield value
+    elif isinstance(value, dict):
+        for key, item in value.items():
+            yield str(key)
+            yield from strings(item)
+    elif isinstance(value, list):
+        for item in value:
+            yield from strings(item)
+
+
+def member_isolation(directory: Path, mapping: dict, harness: str) -> tuple[str, bool]:
+    """The member's own init record, as the Runner retained it: plugins and instruction files.
+
+    The Claude execution writes the native ``system/init`` record into the member's
+    ``session.yml`` (``native_init``) and a projection into its diagnostics. A member
+    whose init record is retained nowhere is a FAIL, never a pass by self-report.
+    """
+    worktree = Path(mapping.get('worktree_path') or '')
+    settings = worktree / '.claude/settings.json'
+    disabled = (json.loads(settings.read_text()).get('enabledPlugins', {}).get('cc-plugin-agents-md@builtin')
+                if settings.is_file() else None)
+    print(f'member Worktree {worktree}: .claude/settings.json exists: {"yes" if settings.is_file() else "no"} '
+          f'| cc-plugin-agents-md@builtin: {disabled}')
+    init, source = None, None
+    for path in sorted(directory.glob('*.yml')):
+        document = yaml.safe_load(path.read_text()) or {}
+        if isinstance(document, dict):
+            init = document.get('native_init') or document.get('system_init')
+            if init:
+                source = path.name
+                break
+    if not init:
+        print(f'member init record: NOT RETAINED (no native_init or system_init in {directory}/*.yml)')
+        return ('member init record retained and clean (NOT RETAINED: isolation not observed)', False)
+    plugins = [item.get('name') if isinstance(item, dict) else item for item in init.get('plugins', [])]
+    memory = {key: value for key, value in init.items()
+              if any(word in key.lower() for word in ('memory', 'claude_md', 'instruction'))}
+    leaked = instruction_paths(init, harness)
+    print(f'member init record ({source}): model {init.get("model")} | plugins {plugins} | '
+          f'instruction/memory fields {json.dumps(memory, default=str) if memory else "none"} | Harness instruction paths {leaked or "none"}')
+    clean = not any('cc-plugin-agents-md' in str(name) for name in plugins) and not leaked
+    return ('member init record: cc-plugin-agents-md absent and no Harness CLAUDE.md/AGENTS.md path', clean)
 
 
 def owner_read(project: Path, native: str, **arguments) -> dict:
@@ -388,13 +442,8 @@ def reader_checks(project: Path, facts: dict, alias: str, native: str) -> list[t
     lines = [match for reply in replies for match in RESULT.finditer(reply)]
     line = lines[-1] if lines else None
     print('RESULT line:', line.group(0) if line else 'none')
-    if line:
-        memory = line.group(4).strip()
-        print('member-reported instruction files:', memory)
-        checks.append(('the member reports no Harness CLAUDE.md/AGENTS.md among its instructions',
-                       memory.upper().startswith('NONE') or '/tmp/466/' in memory))
-    else:
-        checks.append(('the member replied with a RESULT-466 line', False))
+    # The member's own claim is printed only; the CHECK uses its retained init record.
+    print('member-reported instruction files (self-report, not a check):', line.group(4).strip() if line else 'none')
     return checks
 
 

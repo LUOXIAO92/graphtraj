@@ -114,7 +114,8 @@ INPUT_SCHEMA: dict[str, Any] = {
         "search": {"type": "string",
                    "description": "Case-insensitive keyword. Returns the matching events' positions and "
                                   "snippets instead of events; read around a hit with start and stop. "
-                                  "start and stop narrow the searched range."},
+                                  "start and stop narrow the searched range. outside_view and repeat tell "
+                                  "you when a wider content holds more matches."},
     },
     "required": ["action"],
     "additionalProperties": False,

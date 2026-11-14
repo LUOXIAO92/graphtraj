@@ -50,7 +50,8 @@ def conversation(session: str) -> list[dict]:
                 {'type': 'text', 'text': f'answer {number}'},
                 {'type': 'tool-call', 'id': f't{number}', 'name': 'Bash', 'arguments': '{"command": "ls"}'}]),
             message(seq + 2, session, 'user', [{'type': 'tool_result', 'tool_use_id': f't{number}',
-                                                'content': f'tool output {number} Bearer {SECRETS[2]}'}]),
+                                                'content': f'tool output {number} Bearer {SECRETS[2]}'
+                                                           + (' ERROR466 permission denied' if number == 5 else '')}]),
             {'type': 'claude/observation', 'seq': seq + 3, 'time': 0, 'data': {}, 'ignorable': True,
              'native': {'runtime': 'claude', 'sessionId': session, 'locator': f'transcript:{seq + 3}',
                         'record': {'type': 'attachment', 'control_key': SECRETS[1],
@@ -197,7 +198,65 @@ def test_no_credential_value_is_returned_or_searchable(control: AgentControl) ->
         serialized = json.dumps(read(control, caller, session=MAIN, content=content, start=0)[0])
         assert not any(secret in serialized for secret in SECRETS), content
         for secret in SECRETS:
-            assert read(control, caller, session=MAIN, content=content, search=secret)[0]['result']['hits_total'] == 0
+            found = read(control, caller, session=MAIN, content=content, search=secret)[0]['result']
+            assert found['hits_total'] == 0 and not any(found['outside_view'].values())
+
+
+def test_search_names_matches_outside_the_view(control: AgentControl) -> None:
+    """An error only in a Bash result: 0 text hits, an outside count naming tools, then found and sliced."""
+    caller = Caller('test-host', 'agent-p')
+    found = read(control, caller, session=MAIN, search='error466')[0]['result']
+    assert found['hits_total'] == 0 and found['outside_view'] == {'tools': 1, 'all': 1}
+    assert "content 'tools' (1 of them)" in found['repeat']
+    tools = read(control, caller, session=MAIN, search='error466', content='tools')[0]['result']
+    assert tools['hits_total'] == 1 and tools['outside_view'] == {'all': 0}
+    index = tools['hits'][0]['index']
+    item = read(control, caller, session=MAIN, content='tools', start=index, stop=index + 1)[0]['result']['events']
+    assert item[0]['content'][0]['type'] == 'tool-result' and 'ERROR466' in item[0]['content'][0]['content']
+    records = read(control, caller, session=MAIN, search='attached record 3')[0]['result']
+    assert records['outside_view'] == {'tools': 0, 'all': 1} and "content 'all'" in records['repeat']
+    everything = read(control, caller, session=MAIN, search='attached record 3', content='all')[0]['result']
+    assert everything['outside_view'] == {} and 'every archived event' in everything['repeat']
+    assert 'No archived event' in read(control, caller, session=MAIN, search='question 1')[0]['result']['repeat']
+
+
+def test_unrecognized_caller_is_refused_before_a_broken_lookup(control: AgentControl) -> None:
+    """A corrupt archive raises on lookup: unknown callers still get authority-denied, known ones not-found."""
+    from graftling.sessions import archive_path
+
+    broken = archive_path(control.root, 'corrupt')
+    broken.parent.mkdir(parents=True)
+    broken.write_text('not json\n')
+    document, failed = read(control, Caller('test-host', 'agent-unknown'), session='corrupt')
+    assert failed and document['error']['code'] == 'authority-denied'
+    document, failed = read(control, Caller('test-host', 'agent-p'), session='corrupt')
+    assert failed and document['error']['code'] == 'not-found'
+
+
+def test_unfinished_output_is_read_redacted(control: AgentControl) -> None:
+    """A pending draft appears in the result's pending, in the chosen view, without the credential."""
+    archive = SessionArchive(control.root, save_normalized_sessions=True)
+    archive.map_session(header('s-c'))
+    draft = message(4 * ROUNDS, 's-c', 'assistant', [{'type': 'text', 'text': 'partial answer api_key: ' + SECRETS[0]}])
+    assert archive.checkpoint('claude:s-c', draft, source='live', position=1)
+    document, failed = read(control, Caller('test-host', 'agent-p'), agent='agent-c')
+    assert not failed
+    pending = document['result']['pending']
+    assert len(pending) == 1 and pending[0]['text'].startswith('partial answer') and pending[0]['seq'] == 4 * ROUNDS
+    assert SECRETS[0] not in json.dumps(document) and '[redacted]' in pending[0]['text']
+
+
+def test_legacy_evidence_is_bounded_in_a_search(control: AgentControl) -> None:
+    """content all: a read slices legacy events; a search returns only their total."""
+    from graftling.sessions import JsonlSessionStore, archive_path
+
+    JsonlSessionStore(archive_path(control.root, 'claude:' + MAIN)).retain_legacy(
+        {'header': header(MAIN), 'events': [{'seq': seq, 'type': 'old'} for seq in range(30)]})
+    caller = Caller('test-host', None, MAIN, 'claude')
+    searched = read(control, caller, session=MAIN, content='all', search='old')[0]['result']
+    assert searched['legacy'] == {'total': 30}
+    page = read(control, caller, session=MAIN, content='all', start=-10, stop=-5)[0]['result']['legacy']
+    assert [event['seq'] for event in page['events']] == list(range(30))[-10:-5] and page['total'] == 30
 
 
 def test_feature_is_discoverable_and_validated(control: AgentControl) -> None:

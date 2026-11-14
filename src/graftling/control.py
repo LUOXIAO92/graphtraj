@@ -594,10 +594,10 @@ class AgentControl:
         Optional host policy for ``session_read``: ``session_reads(caller,
         header)`` returns whether the verified ``caller`` may read the archived
         Session with ``header``, and raises :class:`AgentsError`
-        ``authority-denied`` for a caller it does not recognize. ``header`` is
-        ``None`` when no archive matches, so the caller is checked first either
-        way. Without it a caller reads its own Session and those of its
-        ancestors and descendants (:meth:`may_read`).
+        ``authority-denied`` for a caller it does not recognize. It is called
+        first with ``header`` ``None``, before any lookup, so the caller is
+        checked first. Without it a caller reads its own Session and those of
+        its ancestors and descendants (:meth:`may_read`).
     """
 
     def __init__(
@@ -1181,12 +1181,15 @@ class AgentControl:
         ``arguments`` names exactly one of ``agent`` (that Agent's current
         native Session) or ``session`` (an archive ID or native Session ID),
         plus the optional ``start``, ``stop``, ``content`` and ``search`` of
-        :func:`graftling.sessions.read_events`. The result is redacted. A
-        Session that does not exist and one the caller may not read give the
-        same ``not-found``.
+        :func:`graftling.sessions.read_events`. The result is redacted. The
+        policy first sees the caller alone (``header`` ``None``), so an
+        unrecognized caller is refused before any lookup. A Session that does
+        not exist, cannot be opened or may not be read gives the same
+        ``not-found``.
         """
         from graftling.sessions.reading import find_session, read_events
 
+        self.session_reads(caller, None)
         agent = arguments.get("agent")
         reference = arguments.get("session")
         if agent is not None:
@@ -1194,9 +1197,12 @@ class AgentControl:
             reference = record and (record["session"] or (record["sessions"] or [None])[-1])
         try:
             store = find_session(self.root, reference) if reference is not None else None
-            if not self.session_reads(caller, store and store.header) or store is None:
-                raise AgentsError("not-found", f"No archived Session {agent or reference!r} is readable by "
-                                  "you. Archives exist only while normalized Session saving is on.")
+        except ValueError:
+            store = None
+        if store is None or not self.session_reads(caller, store.header):
+            raise AgentsError("not-found", f"No archived Session {agent or reference!r} is readable by "
+                              "you. Archives exist only while normalized Session saving is on.")
+        try:
             document = read_events(store, start=arguments.get("start"), stop=arguments.get("stop"),
                                    content=arguments.get("content", "text"), search=arguments.get("search"))
         except ValueError as error:

@@ -16,9 +16,9 @@ Base: `/Users/luoxiao/workspace/you-are-a-product-architect-delivery/tmp/466/` (
 |---|---|---|---|---|
 | 00 | Main | `S 00` | `expected 2.1.325: yes`, `launched via zsh: yes`, `466 fix loaded: YES`, `deps: click 8.5.0`, `roles OK`, `ready tasks: ['1', '2']`, `isolation: OK`, `init: … model claude-opus-5-5 \| apiKeySource <name>`, `cc-plugin-agents-md loaded: NO`, `instruction files from the Harness: none`, `result: MODEL OK \| MEMORY: NONE`. Prints the 01 command. | none |
 | 00u | USER, only if 01 or 02 reports a trust or login refusal | `cd …/tmp/466/project && claude`, 'Yes, proceed', `/exit` | Main reruns the refused step. | folder trust for the new path: choose 'Yes, proceed' |
-| 01 | Main | `S 01 2>&1 \| tee …/realhost/01.txt` | Waits ≤ 9 min. `== summary: ALL PASS` (CHECK 1–4), and the Task 1 member's alias and Session in the `identity:` line. Refuses (STOP, rc 2, prints the 01c command) when Task 1 already has a member. | none (00u if refused) |
+| 01 | Main | `S 01 2>&1 \| tee …/realhost/01.txt` | Waits ≤ 9 min. `== summary: ALL PASS` (CHECK 1–5), the Task 1 member's alias and Session in the `identity:` line, its `member init record (session.yml): …` line and `member Worktree … .claude/settings.json exists: yes`. Refuses (STOP, rc 2, prints the 01c command) when Task 1 already has a member. | none (00u if refused) |
 | 01c | Main, only when 01 refused or its wait ran out | `S 01c 2>&1 \| tee …/realhost/01c.txt` | Dispatches nothing. `== summary: ALL PASS`; writes `01-facts.out.json` for 02. | none |
-| 02 | Main | `S 02 2>&1 \| tee …/realhost/02.txt` | Waits ≤ 9 min. The three `call A/B/C:` lines and `== summary: ALL PASS` (CHECK 1–10). Refuses like 01 (then 02c). | none (00u if refused) |
+| 02 | Main | `S 02 2>&1 \| tee …/realhost/02.txt` | Waits ≤ 9 min. The three `call A/B/C:` lines, the member's init-record and Worktree-settings lines as in 01, and `== summary: ALL PASS` (CHECK 1–10). Refuses like 01 (then 02c). | none (00u if refused) |
 | 02c | Main, only when 02 refused or its wait ran out | `S 02c 2>&1 \| tee …/realhost/02c.txt` | Dispatches nothing. As 02. | none |
 | 03 | Main | `S 03` | Full suite at HEAD in the background, six shards, stops itself after 25 min. `tail -n 25 …/realhost/03-suite.txt`; done at `== totals:`. | none |
 
@@ -36,7 +36,7 @@ read, one page back and one keyword search, each returned within its tool output
 | one keyword search with positions | `call C:` line; CHECK 3 and CHECK 7 (first hit index equals the probe's own read) |
 | each result within the member's tool output limit | CHECK 1–3: the tool_result in the member's own transcript is present, not `is_error`, complete JSON (an over-limit or saved-to-file notice is not JSON), with its size in characters |
 | no credential value | CHECK 8 (the fake value Task 1 wrote is `[redacted]` in call A) and CHECK 9 (no fake value, `sk-ant-` or Bearer token anywhere in Task 2's transcript); 01 CHECK 3 shows the value was really written |
-| the member ran without the Harness instruction files | 00 `cc-plugin-agents-md loaded: NO` and `instruction files from the Harness: none`; 02 CHECK 10 (the member's own `memory=` report) |
+| the members ran without the Harness instruction files | 00 `cc-plugin-agents-md loaded: NO` and `instruction files from the Harness: none` (host in the project); 01 CHECK 5 and 02 CHECK 10: each member's own init record, retained by the Runner, lists no `cc-plugin-agents-md` and names no Harness `CLAUDE.md`/`AGENTS.md` path; the `.claude/settings.json exists: yes` line for each member's Worktree. The member's `memory=` self-report is printed as an extra line only |
 | no new failures | 03 `== totals:` compared with Main's last dev baseline |
 
 A check that was not actually observed (for example a member that never made call C) is FAIL, not PASS.
@@ -48,7 +48,18 @@ so graphtraj discovery and Claude Code's project root stop there; 00 prints both
 project's own `.claude/settings.local.json` with `claudeMdExcludes` for the Harness `CLAUDE.md`, `CLAUDE.local.md`,
 `AGENTS.md` (and `**/` forms) and `enabledPlugins: {"cc-plugin-agents-md@builtin": false}`, and checks the init
 record of a `claude -p` in the project. The members run in their Task Worktrees under the project
-(`.graphtraj/.agent-worktrees/`); 02 CHECK 10 asks Task 2's member itself which instruction files it was given.
+(`.graphtraj/.agent-worktrees/`), where an untracked `settings.local.json` does not exist. So 00 also writes the same
+settings into a tracked `.claude/settings.json` and commits it in the project's initial commit, before `graphtraj
+setup` creates `dev`; every Task Worktree branches from it. 01 and 02 print whether that file exists in each member's
+Worktree.
+
+Each member's isolation is observed from its own init record. The Claude execution stores the native `system/init`
+record in the member's Runner directory (`runner/sessions/<alias>/session.yml`, key `native_init`; a projection is in
+its diagnostics as `system_init`). The probe prints its model, plugins and any instruction or memory fields, and
+the CHECK fails when `cc-plugin-agents-md` is listed or a Harness `CLAUDE.md`/`CLAUDE.local.md`/`AGENTS.md` path
+appears anywhere in it. If no init record is retained, the CHECK prints `NOT RETAINED` and FAILs; the member's
+self-report never substitutes for it. Limit: an init record names plugins, not every file Claude Code read, so a
+Harness file loaded without being named there would not be seen.
 The members are dispatched by the Runner (`agent-runner --swarm-input`, as the project's root caller), as in
 verify-465; no Main model session is used.
 
@@ -85,6 +96,13 @@ its own read of Task 1's Session.
 As verify-465's step 04, against the Worktree HEAD.
 
 ## Rehearsal (sandbox, no model)
+
+Correction 1: the settings writer and the initial commit (`git ls-files` shows `.claude/settings.json` and
+`README.md`), `graphtraj setup` from that commit, and `member_isolation` on a synthetic Runner directory: with a
+clean `native_init` (PASS), with `cc-plugin-agents-md` listed (FAIL), with a Harness `AGENTS.md` path (FAIL) and with
+no init record (`NOT RETAINED`, FAIL).
+
+Round 1:
 
 `probe.py fix`, `prepare` and `isolation` ran against a project under `$TMPDIR` (`466 fix loaded: YES`, `roles OK`,
 `ready tasks: ['1', '2']`, `isolation: OK`). The CHECK code of 01 and 02 ran on synthetic Claude-shaped archives:

@@ -19,7 +19,10 @@ The numbers in parentheses are the project's Task numbers.
   path: a Python slice (`start`, `stop`, negative from the end; by default the last 5)
   of the conversation text, or with `content` `tools` or `all` also tool calls and
   results or every archived record; `search` returns hit positions and snippets to slice
-  around. Credentials and control material are redacted. By default a caller reads its
+  around, plus `outside_view`, the count of matching archived events only a wider
+  `content` shows (the scope of grepping the JSONL), and `repeat`, which `content` to
+  search again with. Credentials and control material are redacted, before searching
+  too. An unrecognized caller is refused before any lookup. By default a caller reads its
   own Session and its ancestors' and descendants'; a host replaces that with
   `AgentControl(session_reads=...)`. New public names `find_session`, `read_events`,
   `redact_session` in `graftling.sessions`, and `JsonlSessionStore.events()` and

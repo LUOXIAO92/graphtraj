@@ -12,8 +12,10 @@ covers the shared representation, provenance, RL observations and stream boundar
 native JSON record and `native_record` retrieves it. These remain schema and
 mapping operations. `graphtraj.sessions.storage` provides `SessionStore` for
 project-local archives and `StreamWriter` for compact, checkpointed assistant
-streams. The `session_read` operation exposes authorized ordered pages and
-durable unfinished output. Live Runtime collection and migration are separate
+streams. The agents feature `session_read` (graftling PUBLIC_API 1.2) reads an
+archive's ordered events as a slice or a keyword search, with durable unfinished
+output, redacted; GraphTraj's `tasks` `session_read` is a transitional forwarder
+to it that keeps the old `after`/`limit` pages. Live Runtime collection and migration are separate
 consumers; the structural examples are not live-collection evidence.
 
 ## Fixed upstream and attribution
@@ -308,7 +310,7 @@ model comes from native output; a requested model is not proof of the model used
 Unavailable probability or hidden content carries a missing reason. Intermediate
 message usage and final result usage remain distinguishable, not additive charges.
 
-When ancestry is not yet known, `session_read.pending` can contain
+When ancestry is not yet known, `pending` in a `session_read` result (`content: all`) can contain
 `collection-pending`: durable raw observations, not canonical history.
 The store uses its existing draft and source checkpoints. Before any canonical
 event is published, `finish_initial_collection` confirms the ancestry and orders
@@ -317,7 +319,9 @@ transaction. Identity stays stable and the original Header observation is retain
 This operation cannot rewrite already published history. Unknown ancestry stays
 pending and remains readable from an exported archive if its native source disappears.
 
-`session_read` retains its own-Session or human-project authorization boundary.
-Use bounded pages for large native records; Runtime clients can spill oversized
+Who may call `session_read` is the host's policy: by default a caller's own
+Session and its ancestors' and descendants'; in a GraphTraj project every verified
+project caller reads the project's archived Sessions, and the human desktop reads
+its own project. Use bounded slices for large native records; Runtime clients can spill oversized
 tool results into files outside an Agent's permitted read paths. A successful
 request alone does not mean the Agent observed the returned content.

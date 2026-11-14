@@ -89,7 +89,10 @@ def read_events(
     both, a read returns the last ``DEFAULT_COUNT`` events and a search covers
     the whole view. A search is a case-insensitive literal match on the view's
     text values and returns hits (``index``, ``seq``, ``type``, ``snippet``),
-    at most the last ``SEARCH_HITS`` of them. ``redacted`` False is for an owner
+    at most the last ``SEARCH_HITS`` of them. It also counts, over every
+    archived event as grepping the archive would, the matching events that only
+    a wider ``content`` shows (``outside_view``), and ``repeat`` says which
+    ``content`` to search again with. ``redacted`` False is for an owner
     reading its own files; search then sees the unredacted text too.
     """
     for name, value in (('start', start), ('stop', stop)):
@@ -100,7 +103,8 @@ def read_events(
     if search is not None and (not isinstance(search, str) or not search):
         raise ValueError('search must be a nonempty string.')
     clean = redact_session if redacted else (lambda value: value)
-    view = [item for item in (_view_item(event, content) for event in store.events()) if item is not None]
+    events = store.events()
+    view = [item for item in (_view_item(event, content) for event in events) if item is not None]
     if search is None and start is None and stop is None:
         start = -DEFAULT_COUNT
     selected = range(len(view))[start:stop]
@@ -110,6 +114,7 @@ def read_events(
                 'start': selected.start, 'stop': max(selected.start, selected.stop)}
     if search is not None:
         document.update(_search(picked, selected, search))
+        document.update(_outside_view(events, content, search, clean))
     else:
         document['events'] = [{'index': index, **item} for index, item in zip(selected, picked)]
         if selected.start > 0:
@@ -123,7 +128,10 @@ def read_events(
     else:
         document.update(header=clean(store.header), revision=store.revision)
         legacy = store.legacy()
-        if legacy:
+        if legacy and search is not None:
+            # Old evidence is not searched; a search names its size, and a read slices it.
+            document['legacy'] = {'total': len(legacy['events'])}
+        elif legacy:
             retained = range(len(legacy['events']))[start:stop]
             document['legacy'] = clean({**legacy, 'events': [legacy['events'][index] for index in retained],
                                         'total': len(legacy['events'])})
@@ -146,6 +154,38 @@ def _search(items: list[dict], selected: range, search: str) -> dict:
     if len(hits) > SEARCH_HITS:
         found['earlier_hits'] = {'count': len(hits) - SEARCH_HITS, 'stop': found['hits'][0]['index']}
     return found
+
+
+def _outside_view(events: list[dict], content: str, search: str, clean: Any) -> dict:
+    """Count the archived events that match ``search`` only in a wider view than ``content``.
+
+    The scope is every archived event in the Session, whatever ``start`` and
+    ``stop`` are. Only events whose raw text matches are redacted and checked
+    (all of them when the search matches the redaction mark), so the count
+    stays cheap and a credential value never matches.
+    """
+    pattern = re.compile(re.escape(search), re.IGNORECASE)
+    wider = CONTENTS[CONTENTS.index(content) + 1:]
+    counts = dict.fromkeys(wider, 0)
+    every = bool(pattern.search('[redacted]'))
+
+    def matches(event: dict, view: str) -> bool:
+        item = _view_item(event, view)
+        return item is not None and bool(pattern.search('\n'.join(_strings(clean(item)))))
+
+    for event in events:
+        if (every or any(pattern.search(text) for text in _strings(event))) and not matches(event, content):
+            for view in wider:
+                counts[view] += matches(event, view)
+    if not wider:
+        repeat = 'This search covered every archived event.'
+    elif not any(counts.values()):
+        repeat = f"No archived event outside content '{content}' matches."
+    else:
+        repeat = (f"{max(counts.values())} more archived events match outside content '{content}'. Repeat the "
+                  "search with " + ' or '.join(f"content '{view}' ({count} of them)" for view, count in counts.items()
+                                               if count) + ' to get their positions.')
+    return {'outside_view': counts, 'repeat': repeat}
 
 
 def _strings(value: Any) -> list[str]:

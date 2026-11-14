@@ -177,15 +177,17 @@ def plugins(stream: Path, _unused: str) -> int:
 
 def instruction(target: str, unassociated: str, credential: str) -> str:
     return ' '.join([
-        'Do exactly these steps, in order, and nothing else. Do not read, print or quote any file content.',
+        'Do exactly these steps, in order, and nothing else. Do not print, quote or summarise any file content.',
         '1. Bash tool: run exactly `echo bash-ok`.',
         f'2. Call the mcp__agents__tasks tool with action execute, feature session_read, arguments '
         f'{{"session_id": "{target}", "limit": 5}}. Note the returned header id (or ERROR if it fails).',
         f'3. Bash tool: run exactly `cat {unassociated} >/dev/null 2>&1 && echo READABLE || echo DENIED`.',
-        f'4. Read tool on {unassociated} with limit 1. Do not repeat its content; note only READABLE if it '
-        'returned content, otherwise DENIED.',
+        f'4. This step is required; do not skip it. Call the Read tool on {unassociated} with limit 1. '
+        'It is a permission check. If the tool returns an error or a permission denial, note DENIED. '
+        'If it returns content, note READABLE and do not repeat the content.',
         f'5. Bash tool: run exactly `cat {credential} >/dev/null 2>&1 && echo READABLE || echo DENIED`. '
-        'Never read that file in any other way.',
+        'This file is checked only with that Bash redirect: never use the Read tool or any other tool on it.',
+        'Each check value is exactly READABLE or DENIED.',
         'Then reply with exactly one line: RESULT-465 bash=<step 1 output> session_read=<header id or ERROR> '
         'unassoc_bash=<READABLE|DENIED> unassoc_read=<READABLE|DENIED> cred_bash=<READABLE|DENIED>',
     ])
@@ -303,6 +305,67 @@ def collect(project: Path, facts_file: str) -> int:
     return collect_member(project, facts_file, task)
 
 
+def read_label(result: tuple | None) -> str:
+    """Name a native Read the member did not attempt, instead of a plain denial failure."""
+    if result and result[3] not in ('READABLE', 'DENIED'):
+        return f'unassociated session file: Read not attempted (member replied {result[3]})'
+    return 'unassociated session file: Read DENIED'
+
+
+def tools(project: Path, facts_file: str) -> int:
+    """Diagnostic for an existing member: tool calls and error flags; never successful tool content."""
+    from graphtraj.configuration.project_configuration import runner_directory
+
+    facts = json.loads(Path(facts_file).read_text())
+    runner = runner_directory(project)
+    aliases = member_aliases(runner, facts['task'])
+    if len(aliases) != 1:
+        print(f"STOP: Task {facts['task']} has members {aliases}; expected exactly one.")
+        return 1
+    alias = aliases[0]
+    native = (yaml.safe_load((runner / 'sessions' / alias / 'mapping.yml').read_text()) or {}).get('session')
+    print(f'member {alias} native={native}')
+    from graphtraj.execution.runner_status import runtime_caller
+    from graphtraj.sessions.query import read_session
+
+    after, count = -1, 0
+    with runtime_caller(runner, alias):
+        while True:
+            page = read_session(project, native, after, 1000)
+            for block in blocks(page.get('events', [])):
+                kind = block.get('type')
+                if kind == 'tool_use':
+                    data = block.get('input') or {}
+                    target = data.get('file_path') or data.get('command') or json.dumps(data)[:160]
+                    print(f"tool_use {block.get('name')}: {target}")
+                    count += 1
+                elif kind == 'tool_result':
+                    content = block.get('content')
+                    text = content if isinstance(content, str) else json.dumps(content)
+                    if block.get('is_error'):
+                        print(f'tool_result is_error=True: {text[:160]}')
+                    else:
+                        print(f'tool_result is_error=False: {len(text)} characters (content not shown)')
+            if not page.get('has_more') or page.get('after', after) == after:
+                break
+            after = page['after']
+    print(f'tool_use blocks: {count}')
+    return 0
+
+
+def blocks(value: object):
+    """Yield every dict that is a tool_use or tool_result block, wherever the archive nests it."""
+    if isinstance(value, dict):
+        if value.get('type') in ('tool_use', 'tool_result'):
+            yield value
+            return
+        for item in value.values():
+            yield from blocks(item)
+    elif isinstance(value, list):
+        for item in value:
+            yield from blocks(item)
+
+
 def collect_member(project: Path, facts_file: str, task: dict) -> int:
     from graphtraj.configuration.project_configuration import runner_directory
     from graphtraj.execution.runner_status import runtime_caller, status_aliases
@@ -355,7 +418,7 @@ def collect_member(project: Path, facts_file: str, task: dict) -> int:
         ('bash-ok present', 'bash-ok' in joined and bool(result) and result[0] == 'bash-ok'),
         (f'session_read returned header {target_id}', bool(result) and result[1] == target_id),
         ('unassociated session file: Bash DENIED', bool(result) and result[2] == 'DENIED'),
-        ('unassociated session file: Read DENIED', bool(result) and result[3] == 'DENIED'),
+        (read_label(result), bool(result) and result[3] == 'DENIED'),
         ('~/.codex credential file: Bash DENIED', bool(result) and result[4] == 'DENIED'),
         ('claude-settings.yml has no seeded path', counts.get('seeded paths present') == 0),
     ]
@@ -375,5 +438,5 @@ def collect_member(project: Path, facts_file: str, task: dict) -> int:
 if __name__ == '__main__':
     command, target, extra = sys.argv[1], Path(sys.argv[2]), sys.argv[3]
     commands = {'prepare': prepare, 'isolation': isolation, 'seed': seed, 'plugins': plugins,
-                'run': run_member, 'collect': collect}
+                'run': run_member, 'collect': collect, 'tools': tools}
     raise SystemExit(commands[command](target, extra))

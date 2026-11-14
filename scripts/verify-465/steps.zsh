@@ -3,7 +3,7 @@
 # Task 465 real-host check: with >= 1000 associated Sessions, a Runner-launched Claude member starts Bash under
 # Claude Code 2.1.323 and 2.1.325, reads an associated Session through session_read, and cannot read an unassociated
 # production Session file or a ~/.codex credential file. Its claude-settings.yml has no per-Session entry.
-#   zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/465-bounded-team-history-read-grants/scripts/verify-465/steps.zsh <00|00u|01|02|02c|03|04>
+#   zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/465-bounded-team-history-read-grants/scripts/verify-465/steps.zsh <00|00u|01|02|02c|02t [task]|03|04>
 # 00  Main. preflight: scratch venv from COMMIT, isolated project (own git, own .graphtraj), isolation facts,
 #     the fix line, and each binary's version and one-line model/login answer.
 # 00u USER, only if a member step reports a folder-trust or login refusal.
@@ -11,6 +11,7 @@
 # 02  Main. fresh project only: one member under 2.1.323 (`claude` on PATH); it session_reads the seeded Claude
 #     Session. Refuses (STOP, nothing dispatched) when Task 1 already has a member; then run 02c.
 # 02c Main. collect-only for Task 1's existing member: same CHECKs, writes 02-facts.out.json for 03.
+# 02t Main. diagnostic: an existing member's tool calls and is_error flags (02t 2 for Task 2); no content.
 # 03  Main. adds 500 more associations, then one member under 2.1.325 (explicit path through a link directory under
 #     the base; ~/.local/bin/claude is never changed); it session_reads the 02 member's Session.
 # 04  Main. full suite at HEAD in the background (self-stopping after 25 min; ends with '== totals:').
@@ -169,6 +170,17 @@ step_02c() {
   return $rc
 }
 
+step_02t() {  # $1 task (default 1): diagnostic only; reads the archive, dispatches and signals nothing
+  local T=${1:-1} F=$OUT/02-facts.json
+  [[ $T == 2 ]] && F=$OUT/03-facts.json
+  say "[02t] Main. tool calls of Task $T's existing member (names, file_path/command, is_error; no successful content). Dialog: none."
+  [[ -f $F ]] || { print "STOP: no $F"; return 1; }
+  probe tools $P $F
+  local rc=$?
+  next Main "zsh $THIS 03 2>&1 | tee $OUT/03.txt   (if 03 has not run yet)"
+  return $rc
+}
+
 step_03() {
   say "[03] Main. +500 associations, then one member under 2.1.325 ($C325 via $BIN325/claude); waits <= 9 min. Dialog: none."
   [[ -f $OUT/02-facts.out.json ]] || { print "STOP: run 02 first"; return 1; }
@@ -232,8 +244,9 @@ case $STEP in
   01) step_01 ;;
   02) step_02 ;;
   02c) step_02c ;;
+  02t) step_02t ${2:-1} ;;
   03) step_03 ;;
   04) step_04 ;;
   _04run) step__04run ;;
-  *) print "usage: zsh ${0:A} <00|00u|01|02|02c|03|04>" ;;
+  *) print "usage: zsh ${0:A} <00|00u|01|02|02c|02t [task]|03|04>" ;;
 esac

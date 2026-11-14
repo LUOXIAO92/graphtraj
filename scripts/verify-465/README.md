@@ -18,6 +18,7 @@ Base: `/Users/luoxiao/workspace/you-are-a-product-architect-delivery/tmp/465/` (
 | 01 | Main | `S 01 2>&1 \| tee …/realhost/01.txt` | `associated JSONL files (project_history_files): 1000` and both `SEEDED_…` IDs. |
 | 02 | Main, fresh project only | `S 02 2>&1 \| tee …/realhost/02.txt` | Refuses (STOP, nothing dispatched, next step 02c) when Task 1 already has a member. Waits ≤ 9 min. `== summary: ALL PASS` (CHECK 1–7) and a `settings:` line with `"seeded paths present": 0`. |
 | 02c | Main, only when 02 refused or crashed after dispatching | `S 02c 2>&1 \| tee …/realhost/02c.txt` | Dispatches nothing. Collects Task 1's existing member: the `identity:` line shows the same session on both sides, `== summary: ALL PASS`, and writes `02-facts.out.json` for 03. |
+| 02t | Main, diagnostic | `S 02t 2>&1 \| tee …/realhost/02t.txt` (`S 02t 2` for Task 2) | Prints each tool_use name with its `file_path` or `command`, and each tool_result's `is_error` (first 160 characters only when true; otherwise only the length). Never prints successful tool content. Dispatches nothing. |
 | 03 | Main | `S 03 2>&1 \| tee …/realhost/03.txt` | Adds 500 associations (N = 1500), waits ≤ 9 min. `== summary: ALL PASS` and `counts independent of N: True`. |
 | 04 | Main | `S 04` | Full suite at HEAD in the background, six shards, stops itself after 25 min. `tail -n 25 …/realhost/04-suite.txt`; done at `== totals:`. |
 
@@ -70,7 +71,9 @@ Claude and one Codex Session in the isolated archive (`SEEDED_CLAUDE`, `SEEDED_C
 3. Bash `cat FILE >/dev/null 2>&1 && echo READABLE || echo DENIED` on an unassociated production Session file
    (default `~/.claude/projects/-Users-luoxiao-workspace-you-are-a-product-architect-delivery/f3ce62db-….jsonl`,
    override with `VERIFY465_UNASSOCIATED`);
-4. native Read on the same file, limit 1, reporting only READABLE/DENIED;
+4. native Read on the same file, limit 1 ("required; do not skip it"; an error or permission denial is DENIED,
+   content is READABLE and is not repeated). A reply other than READABLE/DENIED (e.g. SKIPPED, as the 02 member
+   did when the old wording opened with "Do not read … any file content") prints `Read not attempted` in CHECK 5;
 5. Bash redirect form only on `~/.codex/auth.json` (never Read, never `cat` to stdout);
 
 and replies with one `RESULT-465 …` line. The probe reads the member's Session through `session_read` and prints

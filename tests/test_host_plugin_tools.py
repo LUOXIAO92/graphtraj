@@ -1,4 +1,5 @@
 """A host plugin knows agents alone unless a package declares its own tool."""
+import graftling
 import json
 from pathlib import Path
 import subprocess
@@ -49,7 +50,7 @@ def test_a_standalone_plugin_associates_and_lists_only_agents(tmp_path: Path) ->
     """Nothing in the standalone plugin names or handles the tasks tool."""
     text = module_of(agents_material(tmp_path, Path('/claude')))
     assert 'tasks' not in text
-    assert text == Path('src/graftling/claude/host_context.mjs').read_text()
+    assert text == Path(graftling.__file__).resolve().parent / 'claude/host_context.mjs'.read_text()
     run_module(tmp_path, text, r'''
 assert.deepEqual([...handlers.keys()].filter(key => key.startsWith('tool.')).sort(),
                  ['tool.call:mcp__agents__agents', 'tool.check:mcp__agents__agents']);

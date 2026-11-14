@@ -12,6 +12,8 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     env:
+      # graftling tag in GraphTraj's declared range (pyproject.toml).
+      GRAFTLING_REF: v0.5.0
       ADOPTION_ROOT: ${{ github.workspace }}/desktop/test-results/linux-adoption
       ADOPTION_EXECUTABLE: /usr/bin/graphtraj-desktop
       ADOPTION_INSTALL_ROOT: /opt/graphtraj-desktop
@@ -19,6 +21,13 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
+          persist-credentials: false
+      - name: Check out graftling at the version GraphTraj declares
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          repository: LUOXIAO92/graftling
+          ref: ${{ env.GRAFTLING_REF }}
+          path: graftling
           persist-credentials: false
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
@@ -33,7 +42,7 @@ jobs:
         working-directory: desktop
         run: |
           npm ci
-          node scripts/package-linux.mjs "$GITHUB_WORKSPACE/desktop/test-results/linux-package"
+          GRAFTLING_SOURCE="$GITHUB_WORKSPACE/graftling/src/graftling" node scripts/package-linux.mjs "$GITHUB_WORKSPACE/desktop/test-results/linux-package"
       - name: Install the actual Debian artifact
         run: |
           cd desktop/test-results/linux-package

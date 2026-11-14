@@ -14,6 +14,10 @@ const source = path.dirname(desktop);
 const output = path.resolve(process.env.GRAPHTRAJ_WIN_OUTPUT || path.join(desktop, 'test-results/package-win'));
 const python = process.env.GRAPHTRAJ_BUILD_PYTHON;
 assert.ok(python && path.isAbsolute(python), 'Set GRAPHTRAJ_BUILD_PYTHON to the build interpreter');
+// graftling is its own distribution (https://github.com/LUOXIAO92/graftling); its wheel is built
+// from a checkout of that repository at a version in pyproject.toml's declared range.
+const graftlingSource = process.env.GRAFTLING_SOURCE;
+assert.ok(graftlingSource && path.isAbsolute(graftlingSource), 'Set GRAFTLING_SOURCE to the src/graftling directory of a graftling checkout');
 const run = (exe, args, cwd = source) => execFileSync(exe, args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'inherit'] }).trim();
 const commit = run('git', ['rev-parse', 'HEAD']);
 assert.equal(run('git', ['status', '--porcelain', '--untracked-files=no']), '', 'Commit tracked changes before packaging');
@@ -52,7 +56,7 @@ await fs.cp(pythonRoot, runtime, {
 });
 const wheels = path.join(output, 'wheels');
 await desktopHostManifest(path.join(bundle, 'GraphTraj.exe'), app, source);
-run(python, ['-m', 'pip', 'wheel', '--no-deps', '--no-build-isolation', '--wheel-dir', wheels, path.join(source, 'src/graftling'), source]);
+run(python, ['-m', 'pip', 'wheel', '--no-deps', '--no-build-isolation', '--wheel-dir', wheels, graftlingSource, source]);
 const wheel = (await fs.readdir(wheels)).find(name => name.startsWith('graphtraj-') && name.endsWith('.whl'));
 assert.ok(wheel);
 const agentsWheel = (await fs.readdir(wheels)).find(name => name.startsWith('graftling-') && name.endsWith('.whl'));

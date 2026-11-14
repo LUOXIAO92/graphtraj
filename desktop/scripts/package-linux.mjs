@@ -12,6 +12,10 @@ assert.equal(process.platform, 'linux', 'Build this package on Linux');
 assert.equal(process.arch, 'x64', 'This package targets Linux amd64');
 const desktop = fileURLToPath(new URL('..', import.meta.url));
 const source = path.dirname(desktop);
+// graftling is its own distribution (https://github.com/LUOXIAO92/graftling); its wheel is built
+// from a checkout of that repository at a version in pyproject.toml's declared range.
+const graftlingSource = process.env.GRAFTLING_SOURCE;
+assert.ok(graftlingSource && path.isAbsolute(graftlingSource), 'Set GRAFTLING_SOURCE to the src/graftling directory of a graftling checkout');
 const output = path.resolve(process.argv[2] || path.join(desktop, 'test-results/linux-package'));
 const stage = path.join(output, 'stage');
 const install = path.join(stage, 'opt/graphtraj-desktop');
@@ -40,7 +44,7 @@ run(python, ['-m', 'venv', path.join(output, 'build-python')]);
 run(buildPython, ['-m', 'pip', 'install', 'setuptools==80.9.0', 'wheel==0.45.1']);
 await desktopHostManifest(path.join(install, 'graphtraj-desktop-bin'), app, source);
 run(buildPython, ['-m', 'pip', 'wheel', '--no-build-isolation', '--no-deps',
-  '--wheel-dir', path.join(install, 'wheels'), path.join(source, 'src/graftling'), source]);
+  '--wheel-dir', path.join(install, 'wheels'), graftlingSource, source]);
 run(buildPython, ['-m', 'pip', 'download', '--only-binary=:all:', '--no-deps',
   '--dest', path.join(install, 'wheels'), ...pins]);
 await fs.writeFile(path.join(install, 'python-requirements.txt'), pins.join('\n') + '\n');

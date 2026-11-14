@@ -5,6 +5,7 @@ sections below use the controlled Runtimes. No network, no real model.
 """
 from __future__ import annotations
 
+import graftling
 import asyncio
 import io
 import json
@@ -694,7 +695,7 @@ def test_a_result_sent_to_a_client_already_gone_gives_its_notices_back() -> None
 def test_the_mod_acknowledges_a_submission_and_survives_its_failure(tmp_path: Path) -> None:
     """A failed acknowledgement neither requeues nor submits a second prompt."""
     module = tmp_path / 'host_context.mjs'
-    module.write_text(Path('src/graftling/claude/host_context.mjs').read_text())
+    module.write_text(Path(graftling.__file__).resolve().parent / 'claude/host_context.mjs'.read_text())
     program = r'''
 import assert from 'node:assert/strict';
 const {register} = await import(process.argv[1]);

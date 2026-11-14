@@ -7,6 +7,7 @@ where the installed DSH and Node are required and said so.
 """
 from __future__ import annotations
 
+import graftling
 import json
 import os
 from pathlib import Path
@@ -261,7 +262,7 @@ def test_dsh_child_launch_needs_no_graphtraj_setting(tmp_path: Path, dsh: dict) 
     assert environment['GRAFTLING_CONNECTION'].startswith(str(tmp_path / '.scratch'))
     [plugin] = [row['insert'][0] for row in service.patches
                 if 'insert' in row and row['insert'][0]['id'] == 'agents-mcp']
-    assert Path(plugin['name']) == ROOT / 'src/graftling/dsh/plugin.mjs'
+    assert Path(plugin['name']) == Path(graftling.__file__).resolve().parent / 'dsh/plugin.mjs'
     assert plugin['config'] == {'mcpCommand': str(Path(sys.executable).absolute()),
                                 'mcpArgs': ['-I', '-m', 'graftling.mcp'],
                                 'mcpEnv': ['GRAFTLING_CONNECTION']}
@@ -434,7 +435,7 @@ def test_dsh_child_runs_with_graphtraj_unimportable(tmp_path: Path) -> None:
     evidence = json.loads(result.stdout.splitlines()[-1])
     assert evidence['graphtraj_modules'] == []
     assert evidence['environment'] == ['DSH_AGENT_PACKAGE', 'GRAFTLING_CONNECTION']
-    assert evidence['plugin']['name'] == str(ROOT / 'src/graftling/dsh/plugin.mjs')
+    assert evidence['plugin']['name'] == str(Path(graftling.__file__).resolve().parent / 'dsh/plugin.mjs')
     assert evidence['plugin']['config']['mcpArgs'] == ['-I', '-m', 'graftling.mcp']
 
 
@@ -468,7 +469,7 @@ def test_delivered_plugin_loads_from_dsh_agent_package_alone(tmp_path: Path) -> 
     environment = {name: value for name, value in os.environ.items() if not name.startswith('GRAPHTRAJ_')}
     result = subprocess.run([
         node, str(ROOT / 'tests/fixtures/dsh_mcp_plugin.mjs'), str(Path(dsh).resolve()),
-        str(ROOT / 'src/graftling/dsh/plugin.mjs'), sys.executable, str(ROOT / 'tests/fixtures/dsh_mcp_server.py'),
+        str(Path(graftling.__file__).resolve().parent / 'dsh/plugin.mjs'), sys.executable, str(ROOT / 'tests/fixtures/dsh_mcp_server.py'),
     ], cwd=tmp_path, env={**environment, 'DSH_AGENT_PACKAGE': str(package), 'PYTHONPATH': str(ROOT / 'src')},
         capture_output=True, text=True, timeout=30)
     assert result.returncode == 0, result.stdout + result.stderr

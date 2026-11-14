@@ -1,4 +1,5 @@
 """Public migration preserves old evidence and obtains order only from native history."""
+import graftling
 from copy import deepcopy
 import json
 from pathlib import Path
@@ -208,7 +209,7 @@ def test_snapshot_captures_swarm_configuration_and_can_clone(tmp_path: Path, mon
 
 def test_archive_collectors_work_with_no_graphtraj_package(tmp_path: Path) -> None:
     """Isolated Python loads and enables all collectors from the independent package."""
-    source = Path(__file__).resolve().parents[1] / 'src/graftling'
+    source = Path(graftling.__file__).resolve().parent
     shutil.copytree(source, tmp_path / 'graftling', ignore=shutil.ignore_patterns('__pycache__'))
     program = '''
 import sys

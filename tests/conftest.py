@@ -53,9 +53,9 @@ def _checkout_import_problem(cwd: Path, executable: str = sys.executable) -> Opt
         probe = subprocess.run([executable, *flags, "-c", _ORIGINS], cwd=cwd,
                                capture_output=True, text=True, timeout=60)
         origins = probe.stdout.splitlines() if probe.returncode == 0 else []
-        if len(origins) == 2 and all(
-            origin != "None" and Path(origin).resolve().is_relative_to(source) for origin in origins
-        ):
+        # graphtraj comes from this checkout; graftling from its own distribution
+        # (a wheel or a checkout of the graftling repository), wherever installed.
+        if len(origins) == 2 and Path(origins[0]).resolve().is_relative_to(source) and origins[1] != "None":
             continue
         found = ", ".join("{0} -> {1}".format(*pair) for pair in zip(("graphtraj", "graftling"), origins))
         resolved.append("{0}: {1}".format(form, found or "probe failed: " + probe.stderr.strip()[-300:]))
@@ -63,8 +63,9 @@ def _checkout_import_problem(cwd: Path, executable: str = sys.executable) -> Opt
         return None
     return (
         "Test subprocesses would not import this checkout: {0} from a neutral directory resolves {1}; "
-        "expected both under {2}. Use a venv whose site-packages resolves this checkout: install it "
-        "editable (pip install -e {3}/src/graftling -e {3}) or add a .pth naming {2}. "
+        "expected graphtraj under {2} and an installed graftling. Use a venv whose site-packages resolves "
+        "this checkout: install graftling from its repository (pip install <graftling checkout>/src/graftling "
+        "or its wheel) and this checkout editable (pip install -e {3}), or add a .pth naming {2}. "
         "PYTHONPATH={2} serves only the subprocesses that do not run -I."
     ).format(executable, "; ".join(resolved), source, PROJECT_ROOT)
 
@@ -98,8 +99,8 @@ def _installation_problem(executable: str = sys.executable, scripts: Optional[Pa
     if not missing:
         return None
     return (
-        "The test interpreter {0} lacks {1}. Install this checkout editable in a dedicated venv: "
-        "pip install -e {2}/src/graftling -e {2}; a .pth alone gives neither."
+        "The test interpreter {0} lacks {1}. Install this checkout editable in a dedicated venv "
+        "that has graftling: pip install -e {2}; a .pth alone gives neither."
     ).format(executable, " and ".join(missing), PROJECT_ROOT)
 
 
@@ -748,7 +749,6 @@ def _build_wheel(build_root: Path) -> Path:
             "--no-deps",
             "-w",
             str(wheelhouse),
-            str(source / "src" / "graftling"),
             str(source),
         ],
         cwd=source,
@@ -759,11 +759,30 @@ def _build_wheel(build_root: Path) -> Path:
     return artifacts[0]
 
 
+def _graftling_wheel(wheelhouse: Path) -> list[str]:
+    """The graftling wheel for a fresh environment, built from the checkout the suite imports.
+
+    graftling is a separate distribution from its own repository. An editable
+    install (its package directory holds pyproject.toml) is built into a wheel so
+    the fresh environment gets the same code; a regular install is inherited
+    through the dependency path written below, so nothing is installed.
+    """
+    import graftling
+
+    package = Path(graftling.__file__).resolve().parent
+    if not (package / "pyproject.toml").is_file():
+        return []
+    result = run_process(
+        [sys.executable, "-m", "pip", "wheel", "--disable-pip-version-check", "--no-build-isolation",
+         "--no-deps", "-w", str(wheelhouse), str(package)],
+        cwd=wheelhouse.parent,
+    )
+    result.check_returncode()
+    return [str(wheelhouse / "graftling-{0}-py3-none-any.whl".format(graftling.__version__))]
+
+
 def _install_commands(environment: Path, wheel: Path) -> InstalledCommands:
     """Install one built wheel into a fresh environment."""
-
-    # The agents wheel built beside GraphTraj carries the source checkout's version.
-    from graftling import __version__ as graftling_version
 
     subprocess.run(
         [
@@ -785,7 +804,7 @@ def _install_commands(environment: Path, wheel: Path) -> InstalledCommands:
             "install",
             "--disable-pip-version-check",
             "--no-deps",
-            str(wheel.with_name(f"graftling-{graftling_version}-py3-none-any.whl")),
+            *_graftling_wheel(environment.parent / "graftling-wheelhouse"),
             str(wheel),
         ],
         cwd=wheel.parent,

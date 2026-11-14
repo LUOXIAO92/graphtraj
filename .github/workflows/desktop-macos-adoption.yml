@@ -25,6 +25,8 @@ jobs:
     runs-on: macos-latest
     timeout-minutes: 30
     env:
+      # graftling tag in GraphTraj's declared range (pyproject.toml).
+      GRAFTLING_REF: v0.5.0
       SETTINGS_ADOPTION: ${{ inputs.mode == 'settings' || github.ref_name == 'agent/295-desktop-direct-settings-save-macos' }}
       ACTIVITY_ADOPTION: ${{ inputs.mode == 'usage' || inputs.mode == 'activity' || github.ref_name == 'agent/292-desktop-readable-runtime-events' }}
     defaults:
@@ -32,6 +34,13 @@ jobs:
         working-directory: desktop
     steps:
       - uses: actions/checkout@v4
+      - name: Check out graftling at the version GraphTraj declares
+        uses: actions/checkout@v4
+        with:
+          repository: LUOXIAO92/graftling
+          ref: ${{ env.GRAFTLING_REF }}
+          path: graftling
+          persist-credentials: false
 
       # Pinned toolchains: the evidence names the versions that produced it.
       - uses: actions/setup-node@v4
@@ -45,7 +54,7 @@ jobs:
       # runner installs the same GraphTraj package this checkout builds.
       - name: Install the native GraphTraj tool
         working-directory: .
-        run: python -m pip install --disable-pip-version-check .
+        run: python -m pip install --disable-pip-version-check ./graftling/src/graftling .
 
       - name: Install desktop dependencies
         run: npm ci --no-audit --no-fund

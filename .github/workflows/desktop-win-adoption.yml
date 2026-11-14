@@ -12,11 +12,20 @@ jobs:
       run:
         shell: pwsh
     env:
+      # graftling tag in GraphTraj's declared range (pyproject.toml).
+      GRAFTLING_REF: v0.5.0
       PYTHONUTF8: '1'
       PIP_DISABLE_PIP_VERSION_CHECK: '1'
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
+          persist-credentials: false
+      - name: Check out graftling at the version GraphTraj declares
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: LUOXIAO92/graftling
+          ref: ${{ env.GRAFTLING_REF }}
+          path: graftling
           persist-credentials: false
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
@@ -53,6 +62,7 @@ jobs:
       - name: Package pinned runtime and application
         run: |
           $env:GRAPHTRAJ_BUILD_PYTHON = (Get-Command python).Source
+          $env:GRAFTLING_SOURCE = Join-Path $env:GITHUB_WORKSPACE 'graftling/src/graftling'
           node desktop/scripts/package-win.mjs
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Install archive to persistent user directory

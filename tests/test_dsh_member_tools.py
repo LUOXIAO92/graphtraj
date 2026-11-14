@@ -6,6 +6,7 @@ project and Git. A real member round is verified by Task 392's partial rerun.
 """
 from __future__ import annotations
 
+import graftling
 from contextlib import contextmanager
 import json
 import os
@@ -461,7 +462,7 @@ def test_a_standalone_child_keeps_its_own_entry_and_policy(tmp_path: Path, dsh: 
     assert plugin['config'] == {'mcpCommand': str(Path(sys.executable).absolute()),
                                 'mcpArgs': ['-I', '-m', 'graftling.mcp'],
                                 'mcpEnv': ['GRAFTLING_CONNECTION']}
-    assert Path(plugin['name']).is_relative_to(ROOT / 'src/graftling')
+    assert Path(plugin['name']).is_relative_to(Path(graftling.__file__).resolve().parent)
     # Byte-identical to the row before this change: no extra key at all.
     assert next(row for row in service.patches if row.get('id') == 'sandbox-policy') == {
         'id': 'sandbox-policy', 'config': {'mode': 'workspace-write', 'workspaceRoot': str(tmp_path)}}

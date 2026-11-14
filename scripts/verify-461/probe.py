@@ -94,17 +94,19 @@ def context_files(project: Path) -> list[str]:
     takes the first readable of these names, so all are listed)."""
     found = []
     for directory in (project.resolve(), *project.resolve().parents):
-        found += [str(directory / name) for name in CONTEXT_NAMES if (directory / name).is_file()]
+        for name in CONTEXT_NAMES:
+            path = directory / name
+            # One entry per file: AGENTS.md and AGENTS.MD are the same file on a case-insensitive volume.
+            if path.is_file() and not any(os.path.samefile(path, other) for other in found):
+                found.append(str(path))
     return found
 
 
 def pi_role(project: Path) -> dict:
-    """The child's role: the user's connection (rehearsal: the same model inline) and Pi settings.
-
-    Probe-only difference from the user's production role: ``deny_read`` lists every context file at or above the
-    project (computed now, never hard-coded), so the Pi child does not load the Harness's AGENTS.md. Pi skips a
-    file it cannot read (resource-loader.js:115-134, a warning). It does not touch the reclaim path."""
-    pi = {**PI, 'deny_read': context_files(project)}
+    """The child's role: the user's connection (rehearsal: the same model inline) and only the user's production
+    Pi keys. No deny_read: a GraphTraj Pi role refuses it (src/graphtraj/runtimes/pi/pi_adapter.py:136-140,
+    ROLE_CONFIG_UNSUPPORTED, seen on the real host at 01)."""
+    pi = dict(PI)
     if os.environ.get('VERIFY461_NO_MODEL'):
         return {'runtime': 'pi', 'model': 'deepseek/deepseek-flash', 'worktree_access': 'read', 'pi': pi}
     return {'connection': CONNECTION, 'worktree_access': 'read', 'pi': pi}
@@ -203,21 +205,44 @@ def isolation(project: Path, _unused: str) -> int:
     ok = root == project and bool(top) and Path(top).resolve() == project and not upward
     print('isolation:', 'OK' if ok else 'NOT OK')
     # Pi 1.4.0 dist/core/resource-loader.js:160-196 loads the agent dir's file, then one file per directory from
-    # cwd up to '/'; graftling passes no --no-context-files and its srt denyRead is the role's deny_read plus the
-    # source agent dir (src/graftling/pi/execution.py:321-328), so a file is kept out only by the role's deny_read.
+    # cwd up to '/'; only --no-context-files stops it (cli/args.js:197), which graftling's argv never passes
+    # (src/graftling/pi/execution.py:374-380), and a GraphTraj Pi role accepts no deny_read (pi_adapter.py:136-140).
     seen = context_files(project)
-    roles = yaml.safe_load((project / '.graphtraj/roles.yml').read_text()) or {}
-    denied = set(((roles.get('roles') or {}).get('pi') or {}).get('pi', {}).get('deny_read') or [])
     print(f'Pi child context files at or above cwd=project (Pi 1.4.0 walks cwd -> /): {seen or "none"}')
-    print(f"denied by the probe's 'pi' role deny_read (probe-only; production roles untouched): "
-          f'{sorted(denied & set(seen)) or "none"}')
     agent_file = [str(Path(PI['agent_dir']) / name) for name in CONTEXT_NAMES
                   if (Path(PI['agent_dir']) / name).is_file()] if os.access(PI['agent_dir'], os.R_OK) else ['unreadable here']
     print(f"Pi agent dir context file (the user's own global Pi context, linked by graftling; not the Harness): "
           f'{agent_file or "none"}')
-    isolated = set(seen) <= denied
-    print('Pi child context isolated:', 'YES' if isolated else f'NO (not denied: {sorted(set(seen) - denied)})')
-    return 0 if ok and isolated else 1
+    accepted = not seen or os.environ.get('VERIFY461_ACCEPT_PI_CONTEXT') == '1'
+    print(f'Pi child context: loads {seen or "none"} (no supported deny in GraphTraj Pi roles; '
+          f'{"accepted by Main/user decision" if seen and accepted else "nothing to accept" if not seen else "NOT accepted"})')
+    if not accepted:
+        print('STOP: a Pi child here would load the files above as instructions, and no GraphTraj Pi role setting can '
+              'prevent it. Rerun 00 with VERIFY461_ACCEPT_PI_CONTEXT=1 only after Main/the user accepted that for '
+              'this probe.')
+    return 0 if ok and accepted else 1
+
+
+def pi_role_keys(project: Path, _unused: str) -> int:
+    """No-model check: the probe's 'pi' role keys pass GraphTraj's Pi role key check. The allowed set is a local of
+    PiRuntimeAdapter.preflight_runtime_context (src/graphtraj/runtimes/pi/pi_adapter.py:136-137), read from the
+    installed source with ast, never copied."""
+    import ast
+    import inspect
+    import textwrap
+
+    from graphtraj.runtimes.pi.pi_adapter import PiRuntimeAdapter
+
+    tree = ast.parse(textwrap.dedent(inspect.getsource(PiRuntimeAdapter.preflight_runtime_context)))
+    allowed = next(ast.literal_eval(node.value) for node in ast.walk(tree) if isinstance(node, ast.Assign)
+                   and [getattr(target, 'id', None) for target in node.targets] == ['allowed'])
+    roles = yaml.safe_load((project / '.graphtraj/roles.yml').read_text()) or {}
+    keys = set(((roles.get('roles') or {}).get('pi') or {}).get('pi') or {})
+    ok = keys <= allowed
+    print(f"pi role keys: {sorted(keys)} | allowed (pi_adapter.preflight_runtime_context): {sorted(allowed)} | "
+          f"refused: {sorted(keys - allowed) or 'none'}")
+    print('pi role keys accepted:', ok)
+    return 0 if ok else 1
 
 
 AGENTS_MD_PLUGIN = 'cc-plugin-agents-md'
@@ -943,7 +968,7 @@ def stub(project: Path, case: str) -> int:
 
 if __name__ == '__main__':
     command, target, extra = sys.argv[1], Path(sys.argv[2]), sys.argv[3]
-    commands = {'prepare': prepare, 'isolation': isolation, 'claude_settings': claude_settings,
+    commands = {'prepare': prepare, 'isolation': isolation, 'pi_role_keys': pi_role_keys, 'claude_settings': claude_settings,
                 'claude_check': claude_check, 'claude_facts': claude_facts, 'plugins': plugins, 'dispatch': dispatch_cmd,
                 'child': child_cmd, 'kill': kill, 'idle': idle, 'stub': stub}
     raise SystemExit(commands[command](target, extra))

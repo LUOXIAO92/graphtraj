@@ -13,7 +13,7 @@ production `.venv-runtime` is changed. No key value is printed; step 03 and the 
 
 | Step | Who | Command | Expected time | Success |
 |---|---|---|---|---|
-| 00 | Main | `S 00` | 2-4 min | `claude --version` 2.1.323, `pi --version` 1.4.0, the `461 fix:` line all True, `deps: click 8.5.0`, Pi values (key variables by name only), `pi.deny_read` lists the context files above the project, `sandbox available …: YES`, `roles OK`, `task 1 ready`, `committed: .claude/settings.json`, `isolation: OK`, `Pi child context isolated: YES`, `MODEL OK first line: True \| cc-plugin-agents-md absent from init plugins: True \| MEMORY line present: True`, `claude memory from the Harness: none`, `Claude context isolated: YES` (NO stops 00), `pi deepseek-flash OK: PI OK` (or `SKIPPED`), `graphtraj-claude-host loaded: YES`. |
+| 00 | Main | `VERIFY461_ACCEPT_PI_CONTEXT=1 S 00` (only after Main/the user accepted the Pi context; without it 00 STOPs when Pi would load a file above the project) | 2-4 min | `claude --version` 2.1.323, `pi --version` 1.4.0, the `461 fix:` line all True, `deps: click 8.5.0`, Pi values (key variables by name only), no `pi.deny_read`, `pi role keys accepted: True`, `sandbox available …: YES`, `roles OK`, `task 1 ready`, `committed: .claude/settings.json`, `isolation: OK`, `Pi child context: loads ['…/you-are-a-product-architect-delivery/AGENTS.md'] (no supported deny in GraphTraj Pi roles; accepted by Main/user decision)`, `MODEL OK first line: True \| cc-plugin-agents-md absent from init plugins: True \| MEMORY line present: True`, `claude memory from the Harness: none`, `Claude context isolated: YES` (NO stops 00), `pi deepseek-flash OK: PI OK` (or `SKIPPED`), `graphtraj-claude-host loaded: YES`. |
 | 00u | USER, once, only if 00 prints `graphtraj-claude-host loaded: NO` | `cd …/tmp/461/project && claude`, 'Yes, proceed' on folder trust, `/exit` | 1 min | Main reruns 00 and sees `loaded: YES`. |
 | 01 | Main | `S 01` | returns at once | Records the dispatch, starts the background `claude -p` Main, prints its pid, the timeline and the 02 command. |
 | 02 | Main | `S 02 2>&1 \| tee …/r2/02.txt` | <= 9.5 min (waits for 01's Main) | `01 Main init plugins:` without `cc-plugin-agents-md`; `member Claude cwd (its worktree): … \| .claude/settings.json tracked: True \| cc-plugin-agents-md off: True`; the `member:` line names the member created by 01's dispatch; `CHECK PASS: 0` (the orphan alive after the kill, outside the Runtime group), CHECK 1-4 PASS, `summary: ALL PASS`; facts in `02-kill.json`. If it prints `still running`, rerun 02 once. |
@@ -53,14 +53,19 @@ at or above the project (none), then the Pi facts:
 - Pi 1.4.0 loads its agent dir's context file, then one of `AGENTS.override.md`, `AGENTS.md`, `AGENTS.MD`,
   `CLAUDE.md`, `CLAUDE.MD` from every directory from cwd up to `/`
   (`dist/core/resource-loader.js:115-134, 160-196`); only `--no-context-files` turns that off
-  (`resource-loader.js:466`, `cli/args.js:197-198`). graftling passes no such flag, and its srt `denyRead` is the
-  role's `deny_read` plus the source agent dir (`src/graftling/pi/execution.py:321-328`). So under the Harness tmp
-  base the child would load the Harness `AGENTS.md`.
-- Probe-only difference from the user's production role (Leader decision): the probe's `pi` role sets
-  `deny_read` to every such file at or above the project, computed at 00, not hard-coded. Pi skips a file it
-  cannot read (a warning). This does not touch the reclaim path.
-- `Pi child context isolated: YES` when every listed file is denied; `NO` stops 00. The user's own global
-  `~/.pi/agent` context file is printed separately (not the Harness).
+  (`resource-loader.js:466`, `cli/args.js:197-198`). graftling's argv never passes it
+  (`src/graftling/pi/execution.py:374-380`), and a GraphTraj Pi role accepts only `sandbox_python`, `sandbox_path`,
+  `agent_dir`, `read_paths` and `allow_*` (`src/graphtraj/runtimes/pi/pi_adapter.py:136-140`; anything else,
+  such as `deny_read`, is ROLE_CONFIG_UNSUPPORTED at create, as the real 01 of r2 showed). The child cwd is
+  resolved (`pi_adapter.py:337`). So under the Harness tmp base the child loads the Harness `AGENTS.md`, and there is
+  no supported way to stop it within this probe.
+- The probe's `pi` role therefore holds only the user's production Pi keys. 00 checks them without a model against
+  the allowed set read from the installed `PiRuntimeAdapter.preflight_runtime_context` (`probe.py pi_role_keys`):
+  `pi role keys accepted: True`, otherwise STOP.
+- 00 prints `Pi child context: loads [<files>] (no supported deny in GraphTraj Pi roles; accepted by Main/user
+  decision)` and STOPs unless `VERIFY461_ACCEPT_PI_CONTEXT=1` is set (when the list is non-empty). The Claude
+  isolation gate below is unchanged and fail-closed. The user's own global `~/.pi/agent` context file is printed
+  separately (not the Harness).
 
 ## Claude context (00 and 02)
 

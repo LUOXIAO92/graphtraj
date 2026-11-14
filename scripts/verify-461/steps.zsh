@@ -23,6 +23,8 @@
 # ~/.claude, ~/.codex, ~/.pi or dotfiles. No key value is printed. Signals only processes named above.
 # Rehearsal without a model: VERIFY461_NO_MODEL=1 (00 stops before Claude Code and Pi; 02 runs on a 'probe.py stub').
 set -u
+# A step's exit status is its own, not tee's (00's STOP lines then also end in a nonzero status).
+setopt pipefail
 H=/Users/luoxiao/workspace/you-are-a-product-architect-delivery
 WT=$H/.graphtraj/core/worktrees/461-pi-child-tool-process-reclaim
 SD=${0:A:h}
@@ -86,6 +88,7 @@ while time.time() < deadline:
 print("Main claude -p", pid, "still running after 9 min"); sys.exit(1)' $1
 }
 probe() { (cd $P && clean0 VERIFY461_NO_MODEL=${VERIFY461_NO_MODEL:-} VERIFY461_AGENT_DIR=$AGENT_DIR \
+    VERIFY461_ACCEPT_PI_CONTEXT=${VERIFY461_ACCEPT_PI_CONTEXT:-} \
     ${VERIFY461_SANDBOX_PYTHON:+VERIFY461_SANDBOX_PYTHON=$VERIFY461_SANDBOX_PYTHON} \
     ${VERIFY461_SANDBOX_PATH:+VERIFY461_SANDBOX_PATH=$VERIFY461_SANDBOX_PATH} $VV/bin/python -I $SD/probe.py "$@") }
 # STOP, changing nothing, while an earlier run's Main or a 'sleep 1461' still lives. Signals nothing.
@@ -124,8 +127,10 @@ print("461 fix: Pi owner samples:", "DescendantSampler" in inspect.getsource(e.P
   (cd $P && print y | clean0 $VV/bin/graphtraj setup | tail -2) || return 1
   say "Pi values the child uses (read only; key variables by name and set/unset only)"
   probe prepare $P $MODEL || { print "STOP: the Pi values, the sandbox or the probe Task are not ready (text above)"; return 1; }
-  say "isolation: the project is its own root; context files a Pi child would load (probe-only deny_read)"
-  probe isolation $P - || { print "STOP: the project or the Pi child's context is not isolated (text above)"; return 1; }
+  say "pi role keys: the probe's 'pi' role passes GraphTraj's Pi role key check (no model)"
+  probe pi_role_keys $P - || { print "STOP: the probe's 'pi' role would be refused at 01 (ROLE_CONFIG_UNSUPPORTED)"; return 1; }
+  say "isolation: the project is its own root; context files a Pi child will load (no supported deny)"
+  probe isolation $P - || { print "STOP: the project is not isolated, or the Pi child's context files are not accepted (text above)"; return 1; }
   print "key variables passed to the probe's processes (names only): ${(j: :)${(@)${(f)$(kept)}%%=*}:-none}"
   [[ -n ${VERIFY461_NO_MODEL:-} ]] && { print "VERIFY461_NO_MODEL set: stopping before Claude Code and Pi (rehearsal)."; return 0; }
   local C=$(claude_bin)
@@ -155,7 +160,7 @@ print("461 fix: Pi owner samples:", "DescendantSampler" in inspect.getsource(e.P
     return 1
   fi
   print "Success: claude 2.1.323, pi 1.4.0, the '461 fix:' line all True, deps click 8.5.0, connection resolved, srt listed,"
-  print "'sandbox available: YES', 'roles OK', 'task 1 ready', 'isolation: OK', 'Pi child context isolated: YES',"
+  print "'sandbox available: YES', 'roles OK', 'task 1 ready', 'pi role keys accepted: True', 'isolation: OK', 'Pi child context: loads … (accepted …)' (VERIFY461_ACCEPT_PI_CONTEXT=1),"
   print "'claude memory from the Harness: none', 'Claude context isolated: YES', 'pi deepseek-flash OK: PI OK' (or 'pi check SKIPPED'), 'graphtraj-claude-host loaded: YES'."
   next "zsh $THIS 01"
 }

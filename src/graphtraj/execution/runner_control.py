@@ -1747,9 +1747,7 @@ def _reclaim_tool_processes(directory: Path, mapping: Mapping[str, Any]) -> dict
     path = directory / TOOL_PROCESSES_RECORD.format(mapping['execution_id'])
     if path.is_symlink() or not path.is_file() or os.name == 'nt':
         return None
-    from graftling.member_processes import ancestor_pids
-    from graftling.review import redact
-    from graftling.tool_descendants import read_sidecar, stop_tool_processes
+    from graftling import process_ancestors, read_tool_descendants, stop_tool_processes
 
     try:
         record = yaml.safe_load(path.read_text(encoding='utf-8'))
@@ -1766,11 +1764,12 @@ def _reclaim_tool_processes(directory: Path, mapping: Mapping[str, Any]) -> dict
             # The sidecar is this Session's own file; anything else is not read.
             if Path(sidecar).parent != directory.resolve():
                 raise ValueError('record outside the Session directory')
-            entries = read_sidecar(sidecar)
+            entries = read_tool_descendants(sidecar)
         except (OSError, ValueError) as failure:
             error = f'tool descendants record unreadable: {type(failure).__name__}: {failure}'
-        result = stop_tool_processes(entries, marker, ancestor_pids(), error=error)
-    result = redact({**result, 'at': time.time()})
+        # Every reported command is already redacted and cut by stop_tool_processes (459).
+        result = stop_tool_processes(entries, marker, set(process_ancestors(os.getpid())), error=error)
+    result = {**result, 'at': time.time()}
     if isinstance(record, dict):
         reclaims = record.get('reclaims') if isinstance(record.get('reclaims'), list) else []
         write_yaml_durably(path, {**record, 'reclaims': [*reclaims, result]})

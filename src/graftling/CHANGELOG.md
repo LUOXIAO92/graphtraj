@@ -14,6 +14,9 @@ The numbers in parentheses are the project's Task numbers.
 
 ## Unreleased (compatible)
 
+- New public names `read_tool_descendants` and `stop_tool_processes` (section 1.3), so a
+  host can stop a killed owner's recorded tool processes the way owner-exited
+  reconciliation does (460). The functions themselves are unchanged.
 - A Claude execution's tool processes that are Apple platform binaries are now stopped
   too (459): Claude Code's `/bin/zsh` Bash tool shell and commands such as
   `/bin/sleep`, whose environment macOS hides from the 457 marker scan. While the

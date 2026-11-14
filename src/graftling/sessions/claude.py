@@ -8,8 +8,10 @@ needed by this collector.
 from __future__ import annotations
 
 import base64
+from contextlib import nullcontext
 from copy import deepcopy
 import json
+import os
 from pathlib import Path
 import time
 
@@ -32,7 +34,7 @@ def timestamp(record: dict) -> tuple[int, list[dict]]:
     return 0, [{
         'path': 'time', 'reason': 'Native timestamp unavailable; zero is a protocol placeholder.'}]
 from graftling.sessions.claude_history import (
-    NO_HISTORY_SIZE, conversation, message_id, read_records, read_split, read_with_torn_tail,
+    NO_HISTORY_SIZE, _record, conversation, message_id, read_split, read_with_torn_tail,
 )
 
 
@@ -114,6 +116,8 @@ class ClaudeJsonlCollector:
         self.streams: dict[str, dict] = {}
         self.deferred: tuple[dict, int] | None = None
         self.position = 0
+        # (file, end offset, last complete line, its records) of the last read.
+        self.transcript_read: tuple | None = None
 
     def history_size(self, path: Path) -> int | None:
         """Measure the history for ``bind`` while Claude's hook is still unanswered.
@@ -216,6 +220,35 @@ class ClaudeJsonlCollector:
             except (ValueError, KeyError, TypeError):
                 pass
 
+    def _read_records(self) -> list[dict]:
+        """Read the transcript as ``read_records`` does, parsing only what was appended.
+
+        Claude appends to its transcript. Complete lines already read are kept
+        while the file is the same one and still ends them with the same last
+        line; anything else reads it again from the start (468).
+        """
+        with self.path.open('rb') as stream:
+            status = os.fstat(stream.fileno())
+            cached = self.transcript_read
+            if cached is not None and cached[0] == (status.st_dev, status.st_ino) and cached[1] <= status.st_size:
+                stream.seek(cached[1] - len(cached[2]))
+                if stream.read(len(cached[2])) != cached[2]:
+                    cached = None
+            else:
+                cached = None
+            if cached is None:
+                stream.seek(0)
+                cached = ((status.st_dev, status.st_ino), 0, b'', [])
+            tail = stream.read()
+        lines = tail.split(b'\n')
+        partial = lines.pop()
+        records = list(cached[3])
+        records.extend(_record(line + b'\n', self.session) for line in lines)
+        if lines:
+            self.transcript_read = (cached[0], cached[1] + len(tail) - len(partial), lines[-1] + b'\n', records)
+        # A last value without a newline counts, as in read_records, but may still grow.
+        return records + [_record(partial, self.session)] if partial else records
+
     def _store(self) -> JsonlSessionStore | None:
         """Check the policy each time; never retain a store across disablement."""
         if self.archive is None or self.header is None:
@@ -247,16 +280,20 @@ class ClaudeJsonlCollector:
         Keep every record and its position; only existing stream checkpoints
         are deferred. The capability is released before the next batch so
         configuration changes still take effect at each collection operation.
+        The batch's checkpoints and its history resolution commit as one
+        archive write (468); an error leaves the archive as before the batch.
         """
-        self.batch_store = (self._store(),)
+        store = self._store()
+        self.batch_store = (store,)
         try:
-            for index, (record, position) in enumerate(records):
-                self.accept(record, position, defer=index < len(records) - 1)
-            # Every live observation is checkpointed above. Resolve the native
-            # history once after this batch, rather than rebuilding the same
-            # long transcript for every message already waiting in the queue.
-            if any(record.get('type') in {'assistant', 'user', 'result'} for record, _ in records):
-                self.collect()
+            with store.batch() if store is not None else nullcontext():
+                for index, (record, position) in enumerate(records):
+                    self.accept(record, position, defer=index < len(records) - 1)
+                # Every live observation is checkpointed above. Resolve the native
+                # history once after this batch, rather than rebuilding the same
+                # long transcript for every message already waiting in the queue.
+                if any(record.get('type') in {'assistant', 'user', 'result'} for record, _ in records):
+                    self.collect()
         finally:
             del self.batch_store
 
@@ -385,7 +422,7 @@ class ClaudeJsonlCollector:
         if store is None or self.path is None:
             return
         try:
-            records = read_records(self.path, self.session)
+            records = self._read_records()
             desired = conversation(records)
         except (OSError, ValueError, KeyError, TypeError) as error:
             raw = ({'unparsedTranscriptTail': error.doc} if isinstance(error, json.JSONDecodeError) else
@@ -402,7 +439,9 @@ class ClaudeJsonlCollector:
             # The line torn at bind is whole now, and it belongs to the history.
             self.cut_unread = False
             self._apply_cut(records)
-        old = _events(store)
+        # The committed events themselves: unchanged ones are republished
+        # without copying, validating or encoding them again (468).
+        old = store.committed()
         surface = _surface(old)
         originals = {e['native']['record']['uuid']: e['native']['record']
                      for e in old if e['type'] in SURFACE_TYPES}
@@ -413,11 +452,12 @@ class ClaudeJsonlCollector:
             return
         old_ids = [message_id(e['native']['record']) for e in surface]
         if not self.archive.backfill_history:
-            desired = [r for r in desired if r['uuid'] not in self.excluded or message_id(r) in old_ids]
+            old_id_set = set(old_ids)
+            desired = [r for r in desired if r['uuid'] not in self.excluded or message_id(r) in old_id_set]
             if not self.cut_known:
-                desired = [r for r in desired if message_id(r) in self.live_ids or message_id(r) in old_ids]
+                desired = [r for r in desired if message_id(r) in self.live_ids or message_id(r) in old_id_set]
         ids = [message_id(r) for r in desired]
-        events = deepcopy(old)
+        events = list(old)
         locators = {e['native']['locator'] for e in events}
         same_prefix = ids[:len(old_ids)] == old_ids
         added = desired[len(old_ids):] if same_prefix else desired
@@ -447,12 +487,13 @@ class ClaudeJsonlCollector:
 
         # Keep off-chain records and non-message entries as explicitly labelled
         # transcript observations. They never enter the DSH message surface.
+        chain = {r['uuid'] for r in desired}
         for index, record in enumerate(records):
             uid = record.get('uuid')
             if not self.archive.backfill_history and (index < self.history_count
                     or not self.cut_known and uid not in self.live_ids):
                 continue
-            if uid in {r['uuid'] for r in desired} or uid in self.excluded and not self.archive.backfill_history:
+            if uid in chain or uid in self.excluded and not self.archive.backfill_history:
                 continue
             key = 'transcript:' + str(index)
             if key not in locators:

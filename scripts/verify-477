@@ -186,18 +186,21 @@ def executions(directory):
 def session_events(project, session):
     from graphtraj.interfaces.local_tool import bind
     call = bind(cwd=project, allowed_features=('session_read',), desktop_observer=True)
-    events, after = [], None
+    events, after = [], -1
     for _ in range(50):
-        arguments = {'session_id': session, 'limit': 200, **({'after': after} if after is not None else {})}
-        result = call({'action': 'execute', 'feature': 'session_read', 'arguments': arguments})
+        try:
+            result = call({'action': 'execute', 'feature': 'session_read',
+                           'arguments': {'session_id': session, 'after': after, 'limit': 200}})
+        except Exception as error:  # an unreadable archive raises (sessions/query.py)
+            print('session_read error:', type(error).__name__, str(error)[:300]); return None
         document = getattr(result, 'document', result)
-        if not isinstance(document, dict) or document.get('error'):
-            print('session_read error:', json.dumps(document)[:400]); return None
+        if getattr(result, 'failed', False) or not isinstance(document, dict) or document.get('error'):
+            print('session_read error:', json.dumps(document, default=str)[:400]); return None
         body = document.get('result', document)
         batch = body.get('events') or []
         events.extend(batch)
         if not body.get('has_more') or not batch: break
-        after = body.get('next_after', body.get('cursor', (batch[-1] or {}).get('seq')))
+        after = body.get('after', batch[-1].get('seq'))
     return events
 
 def flat(value):

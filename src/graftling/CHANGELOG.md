@@ -14,6 +14,11 @@ The numbers in parentheses are the project's Task numbers.
 
 ## Unreleased (compatible)
 
+- A Codex child whose owning process's main thread has already returned now ends with its
+  own outcome instead of `RUNTIME_WORKER_FAILED` "cannot schedule new futures after
+  interpreter shutdown" (473). The owner's blocking calls no longer use an executor, which
+  refuses work once interpreter shutdown begins. New public name `in_thread` (section 1.3)
+  runs one blocking call on its own thread for code on the Codex owner's loop.
 - A DSH execution's tool processes are reclaimed the same way (463). DSH starts each
   Bash tool in its own session and on shutdown stops only those groups, so a process a
   tool moved into yet another session (`setsid`) outlived both a normal end and a

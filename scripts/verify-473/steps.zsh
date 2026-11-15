@@ -74,10 +74,11 @@ step_2() {
   [[ -x $SV/bin/python ]] || { print "STOP: run 1 first"; return 1; }
   (cd $WT && clean $SV/bin/python -m pytest -p no:cacheprovider -q --basetemp=$T/bt-focused \
       tests/test_codex_child_interpreter_shutdown_473.py tests/test_codex_tool_reclaim_462.py \
-      tests/test_approved_recovery.py 2>&1 \
+      tests/test_approved_recovery.py tests/test_graphtraj_public_agents_api.py 2>&1 \
       | tee $O/02-focused.txt | tail -n 3)
   print "Observable: no failures. test_child_ends_completed_after_the_owner_main_thread_returns passes (outcome completed);"
-  print "tests/test_approved_recovery.py covers the recovery-notice site the team could not run in its sandbox."
+  print "tests/test_approved_recovery.py covers the recovery-notice site the team could not run in its sandbox;"
+  print "test_graphtraj_public_agents_api.py::test_graphtraj_uses_only_published_agents_names passes (published in_thread)."
   print -r -- "Output: $O/02-focused.txt"
   next "zsh $THIS 3"
 }

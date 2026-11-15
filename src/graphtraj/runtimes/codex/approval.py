@@ -13,7 +13,7 @@ from urllib.error import HTTPError
 from urllib.parse import urlsplit
 from urllib.request import HTTPRedirectHandler, Request, build_opener
 
-from graftling.codex.managed_session import in_thread
+from graftling.codex import in_thread
 from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError
 
 

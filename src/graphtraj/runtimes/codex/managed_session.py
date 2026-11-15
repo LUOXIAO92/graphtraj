@@ -30,8 +30,8 @@ from graftling.codex import (
     CodexExecution,
     CodexManagedExecution as NativeCodexExecution,
     CodexServerRequest,
+    in_thread,
 )
-from graftling.codex.managed_session import in_thread
 from graphtraj.runtimes.codex.codex_adapter import restore_codex_context
 from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError
 from graftling.sessions import SessionArchive

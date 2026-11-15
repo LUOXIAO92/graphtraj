@@ -38,6 +38,9 @@ The numbers in parentheses are the project's Task numbers.
   running Task member's child end until the member's own wait takes it or its turn
   ends (then one push); on the real host the member's wait came after the child's end
   and the end was pushed as well.
+  Correction 2: the end records `push_holder`; an untaken end whose holder process died
+  is held again and pushed once by the next read with a receiver. GraphTraj's member
+  Worker makes that read right after the member's turn ends.
 - A DSH execution's tool processes are reclaimed the same way (463). DSH starts each
   Bash tool in its own session and on shutdown stops only those groups, so a process a
   tool moved into yet another session (`setsid`) outlived both a normal end and a

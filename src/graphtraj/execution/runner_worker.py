@@ -317,6 +317,16 @@ def run(job_file: Path) -> int:
                     terminal_published = True
             finally:
                 stop_child_watch()
+                # The turn ended: a child end held for it whose holder process died
+                # is pushed once now, not only at some later read (477).
+                try:
+                    from graphtraj.interfaces.agents import GraphTrajAgents
+
+                    GraphTrajAgents(runner_project_root(runner_directory)).reconcile_children(
+                        {base_mapping["alias"], task_agent.run.agent if task_agent is not None
+                         else base_mapping.get("agent")} - {None})
+                except Exception:
+                    pass  # the 451 sweep and later reads remain the backstop
                 heartbeat_stop.set()
                 heartbeat_thread.join()
                 if monitor_stop is not None:

@@ -492,6 +492,9 @@ class ExecutionEvents:
                 # Not sent yet: until the push is taken (take_push), the parent's
                 # wait may take the end instead, in this same write's terms (477).
                 current['push_deferred'] = True
+                # Who holds it: if this process dies before taking it, a read with a
+                # receiver gives it back as held and pushes it once (_reconcile).
+                current['push_holder'] = os.getpid()
                 identity = notice_id(self._execution, outcome)
                 control._delivering.add(identity)
             # Keep the native receiver while this Agent is in standby so its
@@ -1050,6 +1053,7 @@ class AgentControl:
                                 # A push its receiver deferred has not been sent: this wait takes it.
                                 execution["notification"] = "delivered"
                                 del execution["push_deferred"]
+                                execution.pop("push_holder", None)
                         return self._outcome(record, result={"timed_out": False})
                     remaining = deadline - time.monotonic()
                     if remaining <= 0:
@@ -1078,6 +1082,8 @@ class AgentControl:
         try:
             with self._locked(notice["agent"]) as record:
                 execution = next((item for item in record["executions"] if item["id"] == notice["execution"]), None)
+                if execution is not None:
+                    execution.pop("push_holder", None)
                 if execution is None or not execution.pop("push_deferred", False):
                     return execution is None or execution.get("notification") != "delivered"
                 return execution.get("notification") in ("pending", "queueing")
@@ -1783,6 +1789,13 @@ class AgentControl:
             # A wait whose process died before taking its reserved end (477).
             if execution.get("notification") == "waiting" and not _waited(execution):
                 _release_reserved(execution)
+            # A holder that died before taking its deferred push (477): held again,
+            # claimed once below (_claim_lost) or by the held-notice machinery.
+            if (execution.get("push_deferred") and execution.get("notification") in ("pending", "queueing")
+                    and "push_holder" in execution and not _alive(execution["push_holder"])):
+                execution.pop("push_deferred", None)
+                execution.pop("push_holder", None)
+                execution.update(notification="held", wait_released=True)
         current = _running(record)
         if current is None or _alive(current["process"].get("worker_pid")):
             return
@@ -1818,7 +1831,8 @@ class AgentControl:
         if receiver is None:
             return
         for execution in record["executions"]:
-            # Also an end a wait reserved and released untaken (477).
+            # Also an end a wait reserved and released untaken, or one whose push
+            # holder died untaken (477); a deferring receiver then sends at once.
             if (execution.get("notification") != "held"
                     or ((execution.get("error") or {}).get("code") != "owner-exited"
                         and not execution.get("wait_released"))):

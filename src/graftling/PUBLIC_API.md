@@ -1192,6 +1192,12 @@ Delivery rules:
   no terminal `execution.yml`): the child's end waits for the member's own
   `wait`, else it is sent once when the member's turn ends. An idle member,
   and a Main, are sent the end at once as before (correction 1 of 477).
+  The end also records `push_holder`, the process that will push it. If that
+  process dies before taking the push, the next read under a control with a
+  receiver returns the end to `held` and pushes it once, at once (as
+  `_claim_lost` does for `owner-exited`). GraphTraj's member Worker makes that
+  read of its children right after it writes the turn's terminal record; the
+  451 sweep and any later read are the backstop (correction 2 of 477).
 - Every end notice names the execution it reports in `execution`: the same
   ID as that end's `last_result.id` and as the `execution` of the `create`,
   `send` or `resume` result that started it. A parent whose child ran more

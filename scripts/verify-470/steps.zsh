@@ -70,8 +70,13 @@ step_3() {
   head_line
   [[ -x $SV/bin/python ]] || { print "STOP: run 1 first"; return 1; }
   clean_tree || return 1
+  # 482: pytest temp inside the Harness let a test walk up to the real Harness; keep it outside.
+  local PT=${TMPDIR:-/tmp}
+  print -r -- "== pytest TMPDIR: $PT"
+  [[ ${PT:A}/ != $H/* ]] || { print "STOP: pytest TMPDIR $PT is under $H"; return 1; }
   rm -rf $O/suite-shards
-  print "== suite venv: $(cd /tmp && $SV/bin/python -I -c 'import graphtraj; print(graphtraj.__file__)')" > $O/suite.txt
+  print -r -- "== pytest TMPDIR: $PT" > $O/suite.txt
+  print "== suite venv: $(cd /tmp && $SV/bin/python -I -c 'import graphtraj; print(graphtraj.__file__)')" >> $O/suite.txt
   (cd $WT && nohup zsh $THIS _3run >> $O/suite.txt 2>&1 &)
   print "started at $(date +%T). Done when it shows '== totals:'; failing IDs in $O/suite-shards/failures.txt."
   print "Baseline 461@c4cb357d: 2 failed: tests/test_pi_runtime.py::test_srt_gone_before_launch_is_refused (must now pass)"
@@ -82,7 +87,7 @@ step_3() {
 step__3run() {
   print "== start $(date +%T) commit $(git -C $WT rev-parse HEAD)"
   # Its own process group, stopped as a whole at the 25-minute limit.
-  env -i HOME=$HOME PATH=$SV/bin:/opt/homebrew/bin:/usr/bin:/bin TMPDIR=$B/t $SV/bin/python -I -c 'import os, signal, subprocess, sys
+  env -i HOME=$HOME PATH=$SV/bin:/opt/homebrew/bin:/usr/bin:/bin TMPDIR=${TMPDIR:-/tmp} $SV/bin/python -I -c 'import os, signal, subprocess, sys
 child = subprocess.Popen(sys.argv[1:], start_new_session=True)
 try:
     sys.exit(child.wait(timeout=1500))

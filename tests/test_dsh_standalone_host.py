@@ -261,7 +261,7 @@ def test_each_message_request_and_error_reaches_the_main_once(tmp_path: Path, fa
     call = bind(control, MAIN)
     answered = call({'action': 'create', 'runtime': 'claude', 'instruction': 'hi'}).document['agent']
     assert wait_until(lambda: last_result(call, answered)['notification'] == 'delivered')
-    assert last_result(call, answered)['last_message'] is None
+    assert last_result(call, answered)['last_message'] is not None  # 477: still shown
     fakes['codex'].finish = ('failed', None, {'code': 'RUNTIME_REQUEST_FAILED', 'message': 'login expired'})
     failed = call({'action': 'create', 'runtime': 'codex', 'instruction': 'hi'}).document['agent']
     assert wait_until(lambda: last_result(call, failed)['notification'] == 'delivered')

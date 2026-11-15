@@ -279,7 +279,7 @@ class Notices:
     Each notice is one stdout line; the extension hands it to Pi and
     acknowledges it on stdin. Pi writes a message to the Session only when a
     turn takes it, so handing over only stops the wait: the notice is
-    ``held``, its body hidden, until the extension reports it in the Session,
+    ``held``, shown ``queueing``, until the extension reports it in the Session,
     and then it is ``delivered``. If the Session stops first the next host
     process delivers it. A notice written but not acknowledged at all in time
     is ``unconfirmed``: it may have been shown, so it is never repeated. One
@@ -383,14 +383,14 @@ class Notices:
             self.settling[-1].start()
 
     def hide_pushed(self, document: Mapping[str, Any]) -> None:
-        """Hide a body this host is about to push, so the Main receives it once.
+        """Show an end this host is pushing as ``queueing``; its body stays (477).
 
         AgentControl marks such an end ``queueing`` before calling the
-        receiver, so a concurrent ``wait`` or ``status`` would otherwise show
-        the body and the notice would repeat it. A held end being flushed, or
-        taken by Pi and not yet in the Session, is shown as ``queueing`` the
-        same way, so it is not settled as read. Ends of earlier host processes,
-        and any end once shutdown began, keep their body.
+        receiver; a held end being flushed, or taken by Pi and not yet in the
+        Session, is shown the same way. The result still carries
+        ``last_message``, and ``settle_shown`` settles a shown end
+        ``delivered``. Ends of earlier host processes, and any end once
+        shutdown began, keep their recorded state.
         """
         pending = [document]
         while pending:
@@ -400,7 +400,7 @@ class Notices:
             flushing = identity in self.waiting or identity in self.awaiting
             if (not self.closing and agent.get('parent') is None and (flushing or (
                     last.get('notification') == 'queueing' and (last.get('ended_at') or 0) >= self.started))):
-                last.update(notification='queueing', last_message=None)
+                last.update(notification='queueing')
             pending.extend(agent.get('children', []))
 
     def close(self) -> None:

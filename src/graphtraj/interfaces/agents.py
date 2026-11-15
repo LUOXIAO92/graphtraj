@@ -16,6 +16,8 @@ resolved by ``caller_alias``.
 
 from __future__ import annotations
 
+import os
+import threading
 import time
 from pathlib import Path
 from typing import Any, Callable, Mapping
@@ -47,6 +49,52 @@ AGENT_PREFIX = "agent-"
 
 # Polling interval of a finite wait on a Task member Session.
 WAIT_INTERVAL_SECONDS = 0.2
+
+# How often a child's end held for a running Task member checks the member's turn (477).
+MEMBER_HOLD_POLL_SECONDS = 0.2
+# The longest a running member's child end is held for the member's own wait (477):
+# above a normal member turn; after it the end is sent once even if the turn runs on.
+MEMBER_HOLD_MAX_SECONDS = 3600.0
+# The daemon threads holding such ends in this process (join_holds).
+_HOLDS: list = []
+_HOLDS_LOCK = threading.Lock()
+
+
+def join_holds(timeout: float) -> bool:
+    """Wait up to ``timeout`` for this process's member holds to end; ``True`` when none is left.
+
+    A member's Worker calls it after writing the turn's terminal record, so a
+    hold sends before the Worker exits; tests use it to observe the send.
+    """
+    deadline = time.monotonic() + timeout
+    with _HOLDS_LOCK:
+        holds = list(_HOLDS)
+    for thread in holds:
+        thread.join(max(0.0, deadline - time.monotonic()))
+    with _HOLDS_LOCK:
+        _HOLDS[:] = [thread for thread in _HOLDS if thread.is_alive()]
+        return not _HOLDS
+
+
+def _member_idle(directory: Path) -> bool:
+    """Whether a member's turn is over: its terminal ``execution.yml`` exists, or its Worker is gone."""
+    if (directory / "execution.yml").is_file():
+        return True
+    try:
+        import yaml
+
+        pid = (yaml.safe_load((directory / "mapping.yml").read_text(encoding="utf-8")) or {}).get("worker_pid")
+    except (OSError, ValueError):
+        return False
+    if not isinstance(pid, int) or isinstance(pid, bool) or pid <= 0:
+        return False
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return True
+    except OSError:
+        return False
+    return False
 
 
 PREVIEW_CHARACTERS = 200
@@ -208,7 +256,9 @@ class GraphTrajAgents:
         ``ask_parent`` request, whose body never holds the question. The notice
         takes the same Runtime Adapter path as a Task member's, so it follows
         Main continuity and is shown once. A Main host with a push channel
-        (Codex) receives the parent event itself, so wait/status hide the body.
+        (Codex) receives the parent event itself. wait/status always show the
+        body; an end the parent was waiting on is returned by that wait and
+        never reaches this receiver (477).
 
         A Task member's Runner-driven execution binds no native receiver, so
         the end of a child it created with the agents tool also arrives here.
@@ -235,11 +285,14 @@ class GraphTrajAgents:
                 return False
             if (notice.get('error') or {}).get('code') == 'owner-exited':
                 return self._reconciled_member_notice(member, notice)
-            return notify_member_of_child_end(self.root, member, notice)
+            return self._member_end(member, notice)
         runner = runner_directory(self.root)
         current = current_main(runner)
         if current is None or not recorded_by_main(runner, notice['creator']):
             return False
+        if (notice['outcome'] in {'completed', 'failed', 'interrupted'}
+                and not AgentControl(swarm_root(self.root), {}).take_push(notice)):
+            return True  # the Main's own wait returned it (477)
         address = route_notice(runner, {**current['connection'], 'runtime': current['runtime'],
                                         'session': current['session']})
         message = notice['body'] or (notice.get('error') or {}).get('message') or notice['outcome']
@@ -262,6 +315,9 @@ class GraphTrajAgents:
             **({'request_id': notice['request']} if notice.get('request') is not None else {})})
         return 'queued'
 
+    # It takes each end's push itself (take_push), after holding a running member's (477).
+    _main_notice.defers_push = True
+
     def operate(self, action: str, arguments: Mapping[str, Any], binding: Binding) -> Outcome:
         """Perform one validated action; an end a Main's wait/status shows is not pushed again."""
         from graphtraj.configuration.project_configuration import runner_directory
@@ -269,8 +325,6 @@ class GraphTrajAgents:
 
         outcome = self._operate_action(action, arguments, binding)
         caller = binding.caller
-        if action in {"wait", "status"} and not outcome.failed and caller.agent is not None:
-            self._hide_member_queueing(outcome.result, caller.agent)
         if (action in {"wait", "status"} and arguments.get("agent") is not None and not outcome.failed
                 and caller.agent is None and caller.runtime in QUEUED_RUNTIMES and caller.session):
             acknowledge_ends(runner_directory(self.root), caller.runtime, caller.session,
@@ -400,6 +454,60 @@ class GraphTrajAgents:
             except (AgentsError, OSError, ValueError):
                 continue
 
+    def _member_end(self, member: str, notice: dict) -> bool | str:
+        """Send a child's end to its member: at once when idle, else held off this thread.
+
+        A model calls ``wait`` some seconds after ``create``, so a quick child
+        ends first. While the member's turn runs the end is held by a daemon
+        thread (``'deferred'``: the reporting thread returns at once) until
+        the member's own ``wait`` takes it, or its turn ends, its Worker is
+        gone, or ``MEMBER_HOLD_MAX_SECONDS`` passed; then it is sent once
+        (477). A process that exits while holding leaves ``push_holder`` dead,
+        and the next read with a receiver pushes the end once.
+        """
+        from graphtraj.execution.task_agents import notify_member_of_child_end
+
+        control = AgentControl(swarm_root(self.root), {})
+        directory = self._member_directory(member)
+        # An end with no push_deferred (a recovered one, _claim_lost) is never held again.
+        if directory is None or _member_idle(directory) or not control.push_deferred(notice):
+            if not control.take_push(notice):
+                return True  # the member's own wait returned it
+            return notify_member_of_child_end(self.root, member, notice)
+        thread = threading.Thread(target=self._hold_member_end, args=(member, notice, directory, control),
+                                  name=f"member-hold-{notice['agent']}", daemon=True)
+        with _HOLDS_LOCK:
+            _HOLDS.append(thread)
+        thread.start()
+        return 'deferred'
+
+    def _hold_member_end(self, member: str, notice: dict, directory: Path, control: AgentControl) -> None:
+        """Hold one end until it is taken, the turn ends, the Worker is gone or the bound passes; send once."""
+        from graphtraj.execution.task_agents import notify_member_of_child_end
+
+        deadline = time.monotonic() + MEMBER_HOLD_MAX_SECONDS
+        while not _member_idle(directory) and time.monotonic() < deadline:
+            if not control.push_deferred(notice):
+                return  # the member's own wait took it
+            time.sleep(MEMBER_HOLD_POLL_SECONDS)
+        if not control.take_push(notice):
+            return
+        try:
+            delivered = notify_member_of_child_end(self.root, member, notice)
+        except Exception:
+            delivered = False
+        control.finish_push(notice, 'delivered' if delivered else 'unavailable')
+
+    def _member_directory(self, member: str) -> Path | None:
+        """The member's Runner Session directory, or ``None`` when it cannot be read."""
+        from graphtraj.configuration.project_configuration import runner_directory
+        from graphtraj.execution.runner_status import read_alias_mapping
+
+        try:
+            return read_alias_mapping(runner_directory(self.root), member)[1]
+        except Exception:
+            return None
+
     def _member_parent(self, parent: str) -> str | None:
         """Return the Task member alias a child's recorded parent names, if any.
 
@@ -417,26 +525,6 @@ class GraphTrajAgents:
         except (RunnerError, OSError, ValueError, KeyError, TypeError):
             return None
         return parent
-
-    def _hide_member_queueing(self, result: Any, caller: str) -> None:
-        """Hide the body of a member's child end that is being pushed to that member.
-
-        Section 4: while an end's event is on its way (``queueing``), ``wait``
-        and ``status`` show ``last_message: null``, so the member sees it once.
-        """
-        member = self._member_parent(caller)
-        if member is None or not isinstance(result, Mapping):
-            return
-        pending = list(result["agents"]) if isinstance(result.get("agents"), list) else [result]
-        while pending:
-            node = pending.pop()
-            if not isinstance(node, dict):
-                continue
-            pending.extend(node.get("children") or [])
-            last = node.get("last_result")
-            if (isinstance(last, dict) and last.get("notification") == "queueing"
-                    and isinstance(node.get("parent"), str) and self._member_parent(node["parent"]) == member):
-                last["last_message"] = None
 
     def _member_alias(self, agent: str | None) -> str | None:
         """Return the Runner alias a Task member's core Agent record retains.

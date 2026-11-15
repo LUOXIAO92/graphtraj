@@ -14,6 +14,37 @@ The numbers in parentheses are the project's Task numbers.
 
 ## Unreleased (compatible)
 
+- **Incompatible, not yet numbered (477; see section 7 of the public interface).**
+  `status`, `wait` and `retire` always return the child's stored
+  `last_result.last_message`. Before, once the body had been delivered (or might
+  have been: `pending`, `delivered`, `unconfirmed`), it was shown as `null`, and the
+  Codex, Pi and DSH hosts and GraphTraj's Task member path also hid it while it was
+  `queueing`. `notification` still reports the delivery state. In exchange, a reply
+  is not pushed to a parent that is waiting for it: while the parent's own `wait`
+  runs on the child's running execution it is recorded there (`waiters`), the end
+  is recorded with the new `notification` value `waiting` instead of being pushed,
+  and the wait settles it `delivered` under the record lock when it returns. So
+  "create, then wait" gives the parent the reply once, in the wait result. An end
+  nobody waited for is pushed once, as before; a wait that starts after the push
+  claimed the end shows the body and the push still delivers it once. A wait that
+  leaves without its reserved end, or whose process died, gives it back `held`, and
+  it is pushed once (without `hold_notices`, at the next read) or delivered by the
+  held-notice rules. `settle_shown` no longer relies on a hidden body: a `queueing`
+  end is settled only when no push is under way and the host is not flushing it.
+  The version number is not raised here.
+  Correction 1: a wait that starts after the end also takes it while its push has not
+  been taken. The end is written with `push_deferred`; new `AgentControl.take_push`
+  and `push_deferred`, and a receiver attribute `defers_push`. GraphTraj holds a
+  running Task member's child end until the member's own wait takes it or its turn
+  ends (then one push); on the real host the member's wait came after the child's end
+  and the end was pushed as well.
+  Correction 2: the end records `push_holder`; an untaken end whose holder process died
+  is held again and pushed once by the next read with a receiver. GraphTraj's member
+  Worker makes that read right after the member's turn ends.
+  Correction 3: the hold no longer blocks `finished()` (a single-threaded caller hung):
+  a receiver may return `"deferred"` and settle later with `AgentControl.finish_push`.
+  GraphTraj holds on a daemon thread bounded by `MEMBER_HOLD_MAX_SECONDS` (3600 s); the
+  end is also sent once when the member's Worker is gone.
 - A DSH execution's tool processes are reclaimed the same way (463). DSH starts each
   Bash tool in its own session and on shutdown stops only those groups, so a process a
   tool moved into yet another session (`setsid`) outlived both a normal end and a

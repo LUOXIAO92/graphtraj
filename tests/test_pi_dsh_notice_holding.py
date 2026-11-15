@@ -210,7 +210,8 @@ def test_an_end_arriving_while_stopped_is_held_and_delivered_once_by_the_next_ho
     assert resumed.flush() == written  # the same process's second flush adds nothing
 
     assert native_host().flush() == []
-    assert resumed.last(agent)['last_message'] is None
+    # 477: delivered once by the flush; the stored body is still shown.
+    assert resumed.last(agent)['last_message'] == 'partial work'
 
 
 def test_a_notice_refused_by_the_session_stays_held_for_the_next_host(native_host: Callable, tmp_path: Path) -> None:
@@ -269,20 +270,20 @@ def test_a_body_shown_while_the_flush_runs_is_not_pushed(native_host: Callable) 
     assert len(resumed.flush()) == 1
 
 
-def test_a_held_end_being_flushed_is_hidden_and_not_settled_as_read(native_host: Callable, tmp_path: Path) -> None:
-    """During the push a status shows no body and settles nothing; the push settles it."""
+def test_a_held_end_being_flushed_is_shown_queueing_and_not_settled_as_read(native_host: Callable, tmp_path: Path) -> None:
+    """During the push a status shows the body (477) and settles nothing; the push settles it."""
     agent, _ = stopped_end(native_host)
     resumed = native_host()
     seen: list[dict] = []
     resumed.pipe.on_write = lambda line: seen.append(
         resumed.call({'action': 'status', 'agent': agent}).document['result']['last_result'])
     assert len(resumed.flush()) == 1
-    assert seen[0]['notification'] == 'queueing' and seen[0]['last_message'] is None
+    assert seen[0]['notification'] == 'queueing' and seen[0]['last_message'] == 'partial work'
     assert read_record(tmp_path, agent)['executions'][-1]['notification'] == 'delivered'
 
 
 def test_a_refused_flush_does_not_lose_a_body_read_during_it(native_host: Callable, tmp_path: Path) -> None:
-    """Hidden during the push and then refused: the body is still readable afterwards."""
+    """Read during the push and then refused: the body is still readable afterwards."""
     agent, _ = stopped_end(native_host)
     resumed = native_host(shown=False)
     resumed.pipe.on_write = lambda line: resumed.call({'action': 'status', 'agent': agent})
@@ -569,13 +570,13 @@ def test_a_notice_pi_took_and_never_wrote_is_delivered_by_the_next_host(pi_host_
     assert pi_host_process().flush() == []
 
 
-def test_a_status_while_pi_holds_the_notice_shows_no_body_and_settles_nothing(pi_host_process: Callable, tmp_path: Path) -> None:
-    """During the turn the Main does not read the body twice, and reading does not end the wait."""
+def test_a_status_while_pi_holds_the_notice_shows_the_body_and_settles_nothing(pi_host_process: Callable, tmp_path: Path) -> None:
+    """During the turn the read shows the body (477), and reading does not end the wait."""
     process = pi_host_process(shown='queued')
     agent = process.create()
     wait_until(lambda: read_record(tmp_path, agent)['executions'][-1].get('notification') == 'held')
     shown = process.call({'action': 'status', 'agent': agent}).document['result']['last_result']
-    assert shown['notification'] == 'queueing' and shown['last_message'] is None
+    assert shown['notification'] == 'queueing' and shown['last_message'] == 'the answer'
     assert read_record(tmp_path, agent)['executions'][-1]['notification'] == 'held'
 
 

@@ -222,13 +222,13 @@ class Notices:
             slot[0].set()
 
     def hide_pushed(self, document: Mapping[str, Any]) -> None:
-        """Hide a body this host is about to push, so the Main receives it once.
+        """Show an end this host is pushing as ``queueing``; its body stays (477).
 
         AgentControl marks such an end ``queueing`` before calling the
-        receiver, so a concurrent ``wait`` or ``status`` would otherwise show
-        the body and the notice would repeat it. A held end being flushed is
-        shown as ``queueing`` the same way, so it is not settled as read. Ends
-        of earlier host processes, and any end once shutdown began, keep their body.
+        receiver; a held end being flushed is shown the same way. The result
+        still carries ``last_message``, and ``settle_shown`` settles a shown
+        end ``delivered``. Ends of earlier host processes, and any end once
+        shutdown began, keep their recorded state.
         """
         pending = [document]
         while pending:
@@ -237,7 +237,7 @@ class Notices:
             flushing = notice_id(last.get('id'), last.get('outcome')) in self.waiting
             if (not self.closing and agent.get('parent') is None and (flushing or (
                     last.get('notification') == 'queueing' and (last.get('ended_at') or 0) >= self.started))):
-                last.update(notification='queueing', last_message=None)
+                last.update(notification='queueing')
             pending.extend(agent.get('children', []))
 
     def close(self) -> None:

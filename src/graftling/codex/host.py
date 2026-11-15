@@ -237,14 +237,13 @@ class CodexHost(CodexManagedExecution):
         return result
 
     def _hide_pushed(self, document: dict) -> None:
-        """Hide a body this host is pushing, so the parent receives it once.
+        """Show an end this host is pushing as ``queueing``; its body stays (477).
 
-        AgentControl marks a live end ``queueing`` before calling the receiver,
-        so a concurrent ``wait`` or ``status`` would otherwise show the body the
-        host event carries. A held end being flushed is shown as ``queueing``
-        the same way. Neither is settled as read, so a send refused before
-        anything was written leaves the end readable. Ends of earlier host
-        processes that no flush has taken keep their body.
+        AgentControl marks a live end ``queueing`` before calling the receiver;
+        a held end being flushed is shown the same way. The result still
+        carries ``last_message``, and ``settle_shown`` settles a shown end
+        ``delivered``. Ends of earlier host processes that no flush has taken
+        keep their recorded state.
         """
         pending = [document]
         while pending:
@@ -256,7 +255,7 @@ class CodexHost(CodexManagedExecution):
             flushed = notice_id(last.get('id'), last.get('outcome')) in self.flushed
             live = state == 'queueing' and (last.get('ended_at') or 0) >= self.began_at
             if agent.get('parent') is None and state in ('held', 'queueing') and (flushed or live):
-                last.update(notification='queueing', last_message=None)
+                last.update(notification='queueing')
             pending.extend(agent.get('children', []))
 
     def _receive_child(self, notice: dict) -> bool | str:

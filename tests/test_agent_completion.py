@@ -26,7 +26,7 @@ class Driver:
 
 @pytest.mark.parametrize('delivered', [True, False])
 def test_completion_once_outside_lock_and_no_duplicate_body(tmp_path: Path, delivered: bool) -> None:
-    """Concurrent wait sees no duplicate body while the relay owns delivery."""
+    """A wait that starts after the relay claimed delivery shows the body (477); the relay pushes once."""
     driver = Driver()
     control = AgentControl(tmp_path, {'controlled': driver})
     root = bind(control, Caller('test', None))
@@ -39,7 +39,7 @@ def test_completion_once_outside_lock_and_no_duplicate_body(tmp_path: Path, deli
         """Re-enter public control to prove no child record lock spans delivery."""
         status = parent_run.call({'action': 'status', 'agent': event['agent']})
         assert not status.failed
-        assert status.document['result']['last_result']['last_message'] is None
+        assert status.document['result']['last_result']['last_message'] == 'actual body'
         notices.append(event)
         entered.set()
         assert release.wait(3)
@@ -53,7 +53,8 @@ def test_completion_once_outside_lock_and_no_duplicate_body(tmp_path: Path, deli
     try:
         assert entered.wait(3)
         waiting = parent_run.call({'action': 'wait', 'agent': child['agent'], 'timeout_seconds': 1})
-        assert waiting.document['result']['last_result']['last_message'] is None
+        assert waiting.document['result']['last_result']['last_message'] == 'actual body'
+        assert waiting.document['result']['last_result']['notification'] == 'pending'
     finally:
         release.set()
         thread.join(3)
@@ -64,7 +65,7 @@ def test_completion_once_outside_lock_and_no_duplicate_body(tmp_path: Path, deli
     assert len(notices) == 1
     status = parent_run.call({'action': 'status', 'agent': child['agent']}).document['result']
     assert status['last_result']['notification'] == ('delivered' if delivered else 'unavailable')
-    assert status['last_result']['last_message'] == (None if delivered else 'actual body')
+    assert status['last_result']['last_message'] == 'actual body'  # 477: always shown
     assert child_run.call({'action': 'status'}).failed
 
 
@@ -92,4 +93,4 @@ def test_standby_parent_continues_once_with_real_child_notice(tmp_path: Path) ->
     assert driver.runs[parent['agent']] is resumed
     status = resumed.call({'action': 'status', 'agent': child['agent']}).document['result']
     assert status['last_result']['notification'] == 'delivered'
-    assert status['last_result']['last_message'] is None
+    assert status['last_result']['last_message'] == 'native child reply'  # 477: always shown

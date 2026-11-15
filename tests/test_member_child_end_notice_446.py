@@ -41,6 +41,10 @@ def project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     root = tmp_path / 'project'
     root.mkdir()
     result_project(root)
+    # The member is idle (its turn's terminal record exists), so a child's end is sent
+    # at once; a member mid-turn holds it for its own wait (477, test_wait_handover_477).
+    (runner_directory(root) / 'sessions' / MEMBER / 'execution.yml').write_text(
+        'outcome: completed\nterminal_confirmed: true\n', encoding='utf-8')
     member_driver = Driver({'alias': MEMBER})
     member = AgentControl(swarm_root(root), {'claude': member_driver}).create(
         'claude', 'lead', Binding(Caller(TASK_HOST, None)), name=MEMBER).result['agent']
@@ -120,9 +124,9 @@ def test_a_member_child_completed_round_without_members_brings_its_final_answer_
                               'message': 'the final answer', 'execution': status['last_result']['id']},
                      MEMBER, MEMBER, {'system_notice': True})]
     assert status['last_result']['notification'] == 'delivered'
-    # Delivered once: the member's own status and wait do not repeat the body.
-    assert status['last_result']['last_message'] is None
-    assert status['waited']['last_result']['last_message'] is None
+    # 477: pushed once; the member's own status and wait still return the stored body.
+    assert status['last_result']['last_message'] == 'the final answer'
+    assert status['waited']['last_result']['last_message'] == 'the final answer'
 
 
 def test_a_member_child_completed_round_without_a_body_names_the_outcome(project) -> None:
@@ -198,24 +202,24 @@ def test_a_child_recorded_under_the_members_core_reference_also_reaches_the_memb
 
 
 @pytest.mark.parametrize('outcome', ['completed', 'failed', 'interrupted'])
-def test_the_members_reads_during_the_push_do_not_show_the_body(project, outcome) -> None:
+def test_the_members_reads_during_the_push_show_the_body_and_it_is_pushed_once(project, outcome) -> None:
     *_, sent, send, child = project
     status = child(outcome, last_message='ANSWER')
     assert status['parent'] == MEMBER
     [view] = status['views']
     for read in (view['status'], view['wait']):
         assert read['last_result']['notification'] == 'queueing'
-        assert read['last_result']['last_message'] is None
+        assert read['last_result']['last_message'] == 'ANSWER'
     assert len(sent) == 1
-    assert status['last_result']['last_message'] is None
-    assert status['waited']['last_result']['last_message'] is None
+    assert status['last_result']['last_message'] == 'ANSWER'
+    assert status['waited']['last_result']['last_message'] == 'ANSWER'
 
 
 def test_after_an_unavailable_push_the_body_is_readable_again(project) -> None:
     *_, sent, send, child = project
     send.failure = RunnerError('invalid-mapping', 'The Runner admission binding is unreadable.')
     status = child('completed', last_message='ANSWER')
-    assert status['views'][0]['status']['last_result']['last_message'] is None
+    assert status['views'][0]['status']['last_result']['last_message'] == 'ANSWER'
     assert status['last_result']['notification'] == 'unavailable'
     assert status['last_result']['last_message'] == 'ANSWER'
     assert status['waited']['last_result']['last_message'] == 'ANSWER'

@@ -156,7 +156,9 @@ def test_a_root_end_the_host_cannot_take_is_held_and_survives_a_new_process(
     assert again.settle_notice(notice, 'delivered') is True
     assert again.held_notices(MAIN) == []
     assert again.settle_notice(notice, 'delivered') is False
-    assert last(bind(again, MAIN), agent)['last_message'] is None
+    # 477: delivered, and the stored body is still shown.
+    assert (last(bind(again, MAIN), agent)['notification'], last(bind(again, MAIN), agent)['last_message']) == (
+        'delivered', 'answer')
 
 
 def test_default_control_writes_nothing_new(tmp_path: Path) -> None:
@@ -648,7 +650,7 @@ def test_claude_a_request_answered_before_the_claim_is_dropped(tmp_path: Path, n
 
 
 def test_claude_a_child_ending_before_its_create_returns_reaches_the_main_once(tmp_path: Path) -> None:
-    """Its own create result carries the body, so the wait that follows shows none: once, not twice."""
+    """Its own create result carries the notice once; the wait that follows still shows the body (477)."""
     class Quick(Driver):
         """Ends every execution before ``start`` returns."""
 
@@ -670,7 +672,7 @@ def test_claude_a_child_ending_before_its_create_returns_reaches_the_main_once(t
     assert [notice['event']['message'] for notice in created['main_notices']] == ['quick answer']
     waited = invoke('wait', agent=created['agent'], timeout_seconds=5)
     assert waited['result']['last_result']['notification'] == 'delivered'
-    assert waited['result']['last_result']['last_message'] is None
+    assert waited['result']['last_result']['last_message'] == 'quick answer'
     assert 'main_notices' not in waited
     assert host.context({'operation': 'notices', 'session': session})['notices'] == []
 
@@ -908,7 +910,7 @@ def codex_held_answer(tmp_path: Path, host_settings: dict, monkeypatch: pytest.M
 @pytest.mark.parametrize('form', list(READS))
 def test_codex_a_read_during_a_live_push_does_not_repeat_the_answer(
         tmp_path: Path, host_settings: dict, monkeypatch: pytest.MonkeyPatch, form: str) -> None:
-    """The 392 failure: the read returns during the send, and the event alone carries the answer."""
+    """The 392 case: a read during the send shows the body (477) and is not settled; one event delivers it."""
     log = tmp_path / 'host-events.jsonl'
     monkeypatch.setenv('PEER_HOST_EVENTS', str(log))
     entered, release = gated_sends(monkeypatch)
@@ -922,9 +924,9 @@ def test_codex_a_read_during_a_live_push_does_not_repeat_the_answer(
     until(lambda: record(tmp_path / 'host', agent)['executions'][-1]['notification'] == 'delivered')
     result = running.stop()
 
-    assert received(result, log, 'PONG-431') == {'reads': 0, 'events': 1, 'deliveries': 1}
+    assert received(result, log, 'PONG-431') == {'reads': 1, 'events': 1, 'deliveries': 1}
     assert during == 'queueing'
-    assert (shown['notification'], shown['last_message']) == ('queueing', None)
+    assert (shown['notification'], shown['last_message']) == ('queueing', 'PONG-431')
 
 
 def test_codex_a_push_with_no_read_still_reaches_the_parent(
@@ -938,14 +940,15 @@ def test_codex_a_push_with_no_read_still_reaches_the_parent(
     after = running.call('status', agent=agent)['result']['last_result']
     result = running.stop()
 
-    assert (after['notification'], after['last_message']) == ('delivered', None)
-    assert received(result, log, 'PONG-431') == {'reads': 0, 'events': 1, 'deliveries': 1}
+    assert (after['notification'], after['last_message']) == ('delivered', 'PONG-431')
+    assert received(result, log, 'PONG-431') == {'reads': 1, 'events': 1, 'deliveries': 1}
 
 
 @pytest.mark.parametrize('then', ['status', 'resume'])
 def test_codex_a_refused_send_after_a_hidden_read_still_gives_the_answer(
         tmp_path: Path, host_settings: dict, monkeypatch: pytest.MonkeyPatch, then: str) -> None:
-    """The read hid the body and the event was never written: the next read or resume gives it."""
+    """A read during the send is not settled and the event was never written: the end is held
+    again, and the next read or resume settles or delivers it once (the read shows the body, 477)."""
     log = tmp_path / 'host-events.jsonl'
     monkeypatch.setenv('PEER_HOST_EVENTS', str(log))
     state = lambda: record(tmp_path / 'host', agent)['executions'][-1]['notification']
@@ -957,7 +960,7 @@ def test_codex_a_refused_send_after_a_hidden_read_still_gives_the_answer(
     hidden = running.call('wait', agent=agent, timeout_seconds=10)['result']['last_result']
     release.set()
     try:
-        assert (hidden['notification'], hidden['last_message']) == ('queueing', None)
+        assert (hidden['notification'], hidden['last_message']) == ('queueing', 'PONG-431')
         until(lambda: state() == 'held')
     except AssertionError:
         running.stop()
@@ -969,10 +972,10 @@ def test_codex_a_refused_send_after_a_hidden_read_still_gives_the_answer(
         assert (shown['notification'], shown['last_message']) == ('held', 'PONG-431')
         first = running.stop()
         assert state() == 'delivered'
-        assert received(first, log, 'PONG-431') == {'reads': 1, 'events': 0, 'deliveries': 0}
+        assert received(first, log, 'PONG-431') == {'reads': 2, 'events': 0, 'deliveries': 0}
     else:
         first = running.stop()
-        assert received(first, log, 'PONG-431') == {'reads': 0, 'events': 0, 'deliveries': 0}
+        assert received(first, log, 'PONG-431') == {'reads': 1, 'events': 0, 'deliveries': 0}
         running = Running(CodexHost(host_settings, tmp_path / 'host', 'hold', resume=True))
         until(lambda: state() == 'delivered')
         assert received(running.stop(), log, 'PONG-431') == {'reads': 0, 'events': 1, 'deliveries': 1}
@@ -986,7 +989,7 @@ def test_codex_a_refused_send_after_a_hidden_read_still_gives_the_answer(
 @pytest.mark.parametrize('form', list(READS))
 def test_codex_a_read_during_a_flush_does_not_repeat_the_answer(
         tmp_path: Path, host_settings: dict, monkeypatch: pytest.MonkeyPatch, form: str) -> None:
-    """A held end being sent on ``--resume`` is not shown, nor settled as read."""
+    """A held end being sent on ``--resume`` shows its body (477) but is not settled as read."""
     log = tmp_path / 'host-events.jsonl'
     monkeypatch.setenv('PEER_HOST_EVENTS', str(log))
     agent = codex_held_answer(tmp_path, host_settings, monkeypatch, 'PONG-431')
@@ -1000,9 +1003,9 @@ def test_codex_a_read_during_a_flush_does_not_repeat_the_answer(
     after = running.call('status', agent=agent)['result']['last_result']
     result = running.stop()
 
-    assert received(result, log, 'PONG-431') == {'reads': 0, 'events': 1, 'deliveries': 1}
-    assert (shown['notification'], shown['last_message']) == ('queueing', None)
-    assert (after['notification'], after['last_message']) == ('delivered', None)
+    assert received(result, log, 'PONG-431') == {'reads': 2, 'events': 1, 'deliveries': 1}
+    assert (shown['notification'], shown['last_message']) == ('queueing', 'PONG-431')
+    assert (after['notification'], after['last_message']) == ('delivered', 'PONG-431')
 
 
 def test_codex_a_read_after_a_refused_flush_gives_the_answer(
@@ -1017,14 +1020,15 @@ def test_codex_a_read_after_a_refused_flush_gives_the_answer(
     assert entered.wait(10)
 
     def readable() -> dict | None:
-        """Return the Agent's ``last_result`` once it carries a body."""
+        """Return the Agent's ``last_result`` once the refused flush held it again."""
         last = running.call('status', agent=agent)['result']['last_result']
-        return last if last['last_message'] else None
+        return last if last['notification'] == 'held' else None
 
     hidden = running.call('status', agent=agent)['result']['last_result']
     release.set()
     try:
-        assert (hidden['notification'], hidden['last_message']) == ('queueing', None)
+        # 477: the body is shown while the flush is under way; that read settles nothing.
+        assert (hidden['notification'], hidden['last_message']) == ('queueing', 'PONG-431')
         shown = until(readable)
     finally:
         monkeypatch.setattr(CodexAppServer, 'send_host_event', original)
@@ -1032,7 +1036,8 @@ def test_codex_a_read_after_a_refused_flush_gives_the_answer(
 
     assert (shown['notification'], shown['last_message']) == ('held', 'PONG-431')
     assert record(tmp_path / 'host', agent)['executions'][-1]['notification'] == 'delivered'
-    assert received(result, log, 'PONG-431') == {'reads': 1, 'events': 0, 'deliveries': 0}
+    counted = received(result, log, 'PONG-431')
+    assert (counted['events'], counted['deliveries']) == (0, 0) and counted['reads'] >= 2
 
 
 def test_codex_a_read_while_the_flush_checks_the_notice_does_not_repeat_it(
@@ -1068,7 +1073,8 @@ def test_codex_a_read_while_the_flush_checks_the_notice_does_not_repeat_it(
     result = running.stop()
 
     assert len(shown) == 1
-    assert received(result, log, 'PONG-431') == {'reads': 0, 'events': 1, 'deliveries': 1}
+    # 477: the read shows the body but settles nothing; the flush delivers it once.
+    assert received(result, log, 'PONG-431') == {'reads': 1, 'events': 1, 'deliveries': 1}
 
 
 @pytest.mark.parametrize('left', ['held', 'queueing'])

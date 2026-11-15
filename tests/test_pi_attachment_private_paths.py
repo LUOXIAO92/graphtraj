@@ -520,6 +520,8 @@ from graphtraj.runtimes.native_entry import main
 main()
 """)
     command.chmod(0o755)
+    # The extension registers the MCP server only with a graphtraj-mcp it found (479).
+    (bin_dir / 'graphtraj-mcp').symlink_to(command)
     source = Path(__file__).resolve().parents[1] / 'src'
     for name in ('GRAFTLING_CONNECTION', 'GRAFTLING_PYTHON', 'GRAPHTRAJ_CLI_CONNECTION', 'PI_SUBAGENT_CHILD'):
         monkeypatch.delenv(name, raising=False)

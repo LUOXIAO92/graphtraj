@@ -1,16 +1,39 @@
 /** Pi's session-local GraphTraj entry; loading this file is a native trust step. */
 import { spawn } from 'node:child_process';
+import { accessSync, constants, statSync } from 'node:fs';
+import { delimiter, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 // A supported graftling distribution (the range in pyproject.toml) installs beside this package.
 import { loadHostSdk, registerAgents, sessionEnvironment } from '../../../graftling/pi/extension.mjs';
 
 export { loadHostSdk, registerAgentDisplay, sessionEnvironment, startAgentHost } from '../../../graftling/pi/extension.mjs';
 
+// This installation's scripts: <prefix>/lib/pythonX.Y/site-packages/graphtraj/runtimes/pi
+// -> <prefix>/bin, as in a venv, a `pip install --user` or a framework Python.
+const installedBin = fileURLToPath(new URL('../../../../../../bin/', import.meta.url));
+
+/** Return this installation's command, else one on PATH; name every place looked when absent. */
+export function installedCommand(name, path = process.env.PATH ?? '') {
+  const places = [installedBin, ...path.split(delimiter).filter(Boolean)];
+  for (const place of places) {
+    const candidate = join(place, name);
+    try {
+      if (statSync(candidate).isFile()) {
+        accessSync(candidate, constants.X_OK);
+        return candidate;
+      }
+    } catch {}
+  }
+  throw new Error(`GraphTraj cannot start ${name}: no executable ${name} in this installation's ` +
+    `${installedBin} or on PATH (${places.slice(1).join(delimiter) || 'empty'}).`);
+}
+
 /** Use a child-process overlay; never change the shared host's process.env. */
 export function nativeEntry(ctx, environment, event, signal) {
   return new Promise((resolve, reject) => {
-    const child = spawn('graphtraj-session', ['pi'], {
-      cwd: ctx.cwd, env: { ...process.env, ...environment },
+    const env = { ...process.env, ...environment };
+    const child = spawn(installedCommand('graphtraj-session', env.PATH), ['pi'], {
+      cwd: ctx.cwd, env,
       stdio: ['pipe', 'pipe', 'pipe'], signal,
     });
     let output = '';
@@ -33,8 +56,9 @@ export function nativeEntry(ctx, environment, event, signal) {
 /** Keep one collector pipe per native Session; no per-token subprocess or log. */
 export function startCollection(ctx, environment) {
   return new Promise((resolve, reject) => {
-    const child = spawn('graphtraj-session', ['pi', '--collect'], {
-      cwd: ctx.cwd, env: { ...process.env, ...environment }, stdio: ['pipe', 'pipe', 'pipe'],
+    const env = { ...process.env, ...environment };
+    const child = spawn(installedCommand('graphtraj-session', env.PATH), ['pi', '--collect'], {
+      cwd: ctx.cwd, env, stdio: ['pipe', 'pipe', 'pipe'],
     });
     let diagnostic = '';
     let failure;
@@ -138,9 +162,11 @@ export default function graphtraj(pi) {
     if (!result.error && ['main', 'child'].includes(result.source)) {
       collectors.set(ctx.sessionManager, await startCollection(ctx, environment));
     }
-    pi.registerMcpServer('graphtraj', {
-      command: 'graphtraj-mcp', cwd: ctx.cwd, env: environment, exposure: 'direct',
-    });
+    // A missing MCP command leaves the started Session running and says what is absent.
+    let command;
+    try { command = installedCommand('graphtraj-mcp', environment.PATH ?? process.env.PATH); }
+    catch (error) { ctx.ui.notify(error.message, 'error'); return; }
+    pi.registerMcpServer('graphtraj', { command, cwd: ctx.cwd, env: environment, exposure: 'direct' });
   });
   for (const kind of ['before_agent_start', 'model_select', 'tool_result', 'agent_start', 'turn_start', 'message_start', 'message_update',
     'message_end', 'tool_execution_start', 'tool_execution_update', 'tool_execution_end',

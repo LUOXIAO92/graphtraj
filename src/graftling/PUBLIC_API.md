@@ -204,6 +204,15 @@ Identity, permissions, working directory and parentage always come from the
 host, never from arguments. `create`'s `workspace` only narrows the caller's
 own working directory (section 2).
 
+`interrupt` of a GraphTraj Task member returns the Runner's
+`interrupt_status` for it and each descendant (`members`). A member reported
+`interrupted` has its terminal execution record readable when the call
+returns (`status` shows it idle with that outcome), unless that member also
+carries `execution_record: pending`: its native turn was confirmed
+interrupted, but its Worker had not written the record within the
+interrupt's existing bound (or exited first). Wait for that end with `wait`.
+The bound is not lengthened by this wait (474).
+
 `ask_parent` is called by a
 child about itself; a caller without an Agent reference is refused with
 `authority-denied`.

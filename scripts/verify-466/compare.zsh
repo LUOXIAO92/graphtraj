@@ -1,10 +1,12 @@
 #!/bin/zsh
 [ -n "$ZSH_VERSION" ] || exec /bin/zsh "$0" "$@"
 # Task 466: base d5b9797f vs candidate 11bd4f94 on every test that failed in a 466 full-suite run.
-#   zsh <this> prep    Main, foreground (< 5 min): both trees (git archive -> own git repo) and venvs under tmp/466/compare.
-#   zsh <this> run     Main: starts the alternating runs in the background; stops itself after 40 min.
+#   zsh <this> prep    Main, foreground (< 5 min): both trees (git archive -> own git repo) and venvs under Harness tmp/466/compare.
+#   zsh <this> check   Main, foreground (< 3 min): one test per side, full output shown; must say '1 passed' (or a real failure).
+#   zsh <this> run     Main: starts the alternating rounds in the background; stops itself after 40 min.
 #   zsh <this> tally   Main, any time: per-test failures per side; done at '== compare done'.
-# Writes only under Harness tmp/466/compare and the Task's realhost/compare. Signals only its own process group.
+# pytest temp and cwd live under $TMPDIR, which must be outside the Harness (Task 482). Trees and venvs are in
+# Harness tmp/466/compare; logs in the Task's realhost/compare. Signals only its own process group.
 set -u
 H=/Users/luoxiao/workspace/you-are-a-product-architect-delivery
 WT=$H/.graphtraj/core/worktrees/466-session-read-in-agents
@@ -14,6 +16,7 @@ CAND_C=11bd4f94
 REPS=${VERIFY466_REPS:-5}
 W=$H/tmp/466/compare
 OUT=$H/.graphtraj/core/state/tasks/466-session-read-in-agents/realhost/compare
+PT=${TMPDIR:-/tmp}/graphtraj-466-compare
 RT=$H/.venv-runtime
 CONDA=/Users/luoxiao/miniconda3/bin/python3.13
 TESTS=(
@@ -28,13 +31,24 @@ TESTS=(
   tests/test_resume_after_owner_exit.py::test_unconfirmed_termination_keeps_the_session_stopped
   tests/test_team_replacement.py::test_replacing_parent_keeps_old_descendants_stopped_and_bound_to_old_session
 )
-mkdir -p $W $OUT
+mkdir -p $W $OUT $PT
+if [[ ${PT:A}/ == $H/* ]]; then print "STOP: pytest temp $PT is inside the Harness; set TMPDIR outside $H"; exit 1; fi
 path=(/opt/homebrew/bin $HOME/.local/bin $path)
-clean() { env -i HOME=$HOME USER=${USER:-luoxiao} PATH=${(j.:.)path} TERM=${TERM:-xterm} TMPDIR=${TMPDIR:-/tmp} LANG=${LANG:-en_US.UTF-8} "$@"; }
+clean() { env -i HOME=$HOME USER=${USER:-luoxiao} PATH=${(j.:.)path} TERM=${TERM:-xterm} COLUMNS=250 TMPDIR=${TMPDIR:-/tmp} LANG=${LANG:-en_US.UTF-8} "$@"; }
+
+# One pytest run of tests ($3...) for side $1 with basetemp label $2; cwd and temp outside the Harness.
+side_pytest() {
+  local side=$1 label=$2; shift 2
+  local S=$W/$side/src
+  mkdir -p $PT/cwd
+  (cd $PT/cwd && clean $W/$side/venv/bin/python -m pytest -q -rfE --tb=short -p no:warnings -p no:cacheprovider \
+      --rootdir=$S -c $S/pyproject.toml --basetemp=$PT/bt/$label ${@/#/$S/})
+}
 
 prep() {
   print "claude --version: $(claude --version 2>&1 | head -1)"
   print "load: $(sysctl -n vm.loadavg)"
+  print "pytest temp and cwd: ${PT:A} (outside the Harness: yes)"
   local side commit S D
   for side commit in base $BASE_C cand $CAND_C; do
     print "### $side $(git -C $WT rev-parse $commit)"
@@ -48,21 +62,32 @@ prep() {
     S=($RT/lib/python*/site-packages(N)); D=($W/$side/venv/lib/python*/site-packages(N))
     cp -Rp $S[1]/click $S[1]/click-*.dist-info(N) $S[1]/yaml $S[1]/_yaml(N) $S[1]/pyyaml-*.dist-info(N) \
         $S[1]/websockets $S[1]/websockets-*.dist-info(N) $D[1]/ || return 1
-    (cd /tmp && $W/$side/venv/bin/python -I -c 'import graftling, graphtraj, importlib.metadata as m
+    (cd $PT && $W/$side/venv/bin/python -I -c 'import graftling, graphtraj, importlib.metadata as m
 print("imports:", graftling.__file__, graphtraj.__file__, "| click", m.version("click"), "| websockets", m.version("websockets"))')
   done
-  print "== prep done. Next (Main): zsh $THIS run"
+  print "== prep done. Next (Main): zsh $THIS check"
+}
+
+check() {
+  print "claude --version: $(claude --version 2>&1 | head -1)"
+  print "pytest temp and cwd: ${PT:A}"
+  local side
+  for side in base cand; do
+    print "### check $side: one case, full output"
+    side_pytest $side check-$side 'tests/test_claude_termination.py::test_current_group_requires_original_leader[orphan]' 2>&1 | tail -40
+  done
+  print "== check done. If both say '1 passed', next (Main): zsh $THIS run"
 }
 
 run() {
   [[ -x $W/base/venv/bin/python && -x $W/cand/venv/bin/python ]] || { print "STOP: run prep first"; return 1; }
-  rm -f $OUT/compare.txt
-  (cd $W && nohup zsh $THIS _run >> $OUT/compare.txt 2>&1 &)
+  rm -f $OUT/compare.txt $OUT/round-*.log
+  (cd $PT && nohup zsh $THIS _run >> $OUT/compare.txt 2>&1 &)
   print "started $(date +%T); $REPS rounds x (base, cand), <= 40 min. Status: zsh $THIS tally"
 }
 
 _run() {
-  print "== compare start $(date +%T) reps $REPS load $(sysctl -n vm.loadavg)"
+  print "== compare start $(date +%T) reps $REPS load $(sysctl -n vm.loadavg) pytest temp ${PT:A}"
   clean $W/cand/venv/bin/python -I -c 'import os, signal, subprocess, sys
 child = subprocess.Popen(sys.argv[1:], start_new_session=True)
 try:
@@ -79,19 +104,20 @@ except subprocess.TimeoutExpired:
 }
 
 _rounds() {
-  local rep side
+  local rep side log
   for rep in {1..$REPS}; do
     for side in base cand; do
+      log=$OUT/round-$rep-$side.log
       print "=== round $rep $side $(git -C $W/$side/src log -1 --format=%s) $(date +%T) load $(sysctl -n vm.loadavg)"
-      (cd $W/$side/src && $W/$side/venv/bin/python -m pytest -q -rfE -p no:warnings -p no:cacheprovider \
-          --basetemp=$W/bt/$side-$rep $TESTS 2>&1 | grep -E '^(FAILED|ERROR) |[0-9]+ (passed|failed|error)')
+      side_pytest $side $side-$rep $TESTS > $log 2>&1
+      grep -E '^(FAILED|ERROR) |^E  |[0-9]+ (passed|failed|error)' $log | cut -c1-300 | head -60
     done
   done
 }
 
 tally() {
   [[ -f $OUT/compare.txt ]] || { print "no $OUT/compare.txt yet"; return 1; }
-  grep -E '^(==|===) ' $OUT/compare.txt
+  grep -E '^(==|===) |[0-9]+ (passed|failed|error)' $OUT/compare.txt
   print "== per test: base failures / cand failures (rounds counted: base $(grep -c '^=== round .* base' $OUT/compare.txt), cand $(grep -c '^=== round .* cand' $OUT/compare.txt))"
   local t b c
   for t in $TESTS; do
@@ -103,9 +129,10 @@ tally() {
 
 case ${1:-} in
   prep) prep 2>&1 | tee $OUT/prep.txt ;;
+  check) check 2>&1 | tee $OUT/check.txt ;;
   run) run ;;
   _run) _run ;;
   _rounds) _rounds ;;
   tally) tally ;;
-  *) print "usage: zsh $THIS <prep|run|tally>" ;;
+  *) print "usage: zsh $THIS <prep|check|run|tally>" ;;
 esac

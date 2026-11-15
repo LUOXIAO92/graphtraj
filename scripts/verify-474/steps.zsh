@@ -7,6 +7,8 @@
 # 2  focused acceptance: tests/test_team_replacement.py (about 1 min).
 # 3  full suite in the background (about 20 min).
 # No Runtime host or model is used: the tests run fake Runtimes, so no login prompt is needed.
+# pytest temp stays under ${TMPDIR:-/tmp}, outside the Harness (a temp inside it let a test reach the real Harness,
+# 482); only the suite venv lives in $H/tmp/474.
 # Never changes production .venv-runtime (only copies click, yaml and websockets out of it, read only), deletes
 # nothing, and signals no process it did not start.
 set -u
@@ -21,11 +23,16 @@ RT=$H/.venv-runtime
 CONDA=/Users/luoxiao/miniconda3/bin/python3.13
 EXPECT_CLAUDE=2.1.325
 STEP=${1:-help}
+PT=${TMPDIR:-/tmp}
+if [[ ${PT:A} == $H || ${PT:A} == $H/* ]]; then
+  print -r -- "STOP: pytest temp $PT is inside the Harness"
+  exit 1
+fi
 path=(/opt/homebrew/bin $HOME/.local/bin $path)
 say() { print -r -- ""; print -r -- "### $*"; }
 next() { print -r -- ""; print -r -- "==> next (Main pastes): $1"; }
 # Child commands run without this shell's GraphTraj Session variables (a Main's own would leak in).
-clean() { env -i HOME=$HOME PATH=$SV/bin:/opt/homebrew/bin:/usr/bin:/bin TMPDIR=$B/t "$@"; }
+clean() { env -i HOME=$HOME PATH=$SV/bin:/opt/homebrew/bin:/usr/bin:/bin TMPDIR=$PT "$@"; }
 copy_deps() {
   local S=($RT/lib/python*/site-packages(N)) D=($1/lib/python*/site-packages(N))
   cp -Rp $S[1]/click $S[1]/click-*.dist-info(N) $S[1]/yaml $S[1]/_yaml(N) $S[1]/pyyaml-*.dist-info(N) \
@@ -38,8 +45,9 @@ step_0() {
   print -r -- "claude --version: $V | expected $EXPECT_CLAUDE: $([[ $V == $EXPECT_CLAUDE* ]] && print yes || print NO)"
   print -r -- "launched via zsh: ${ZSH_VERSION:+yes ($ZSH_VERSION)} | script: $THIS"
   print -r -- "commit under test: $COMMIT"
-  mkdir -p $B/t $O || return 1
-  print -r -- "scratch: $B/t | output: $O"
+  mkdir -p $O || return 1
+  print -r -- "output: $O"
+  print -r -- "pytest temp: ${PT:A} (outside the Harness: yes)"
   print "No Runtime host or model is used (fake Runtimes); no login prompt is needed."
   next "zsh $THIS 1"
 }
@@ -62,7 +70,7 @@ step_1() {
 step_2() {
   say "[2] Main. focused acceptance (about 1 min). Dialog: none."
   [[ -x $SV/bin/python ]] || { print "STOP: run 1 first"; return 1; }
-  (cd $WT && clean $SV/bin/python -m pytest -p no:cacheprovider -q --basetemp=$B/bt-focused tests/test_team_replacement.py 2>&1 \
+  (cd $WT && clean $SV/bin/python -m pytest -p no:cacheprovider -q --basetemp=$PT/474-bt-focused tests/test_team_replacement.py 2>&1 \
       | tee $O/02-focused.txt | tail -n 3)
   print "Observable: '3 passed', including test_interrupt_returns_after_slow_terminal_record. Output: $O/02-focused.txt"
   next "zsh $THIS 3"
@@ -71,7 +79,7 @@ step_2() {
 step_3() {
   say "[3] Main. full suite at $COMMIT in the background (about 20 min). Dialog: none."
   [[ -x $SV/bin/python ]] || { print "STOP: run 1 first"; return 1; }
-  (cd $WT && nohup env -i HOME=$HOME PATH=$SV/bin:/opt/homebrew/bin:/usr/bin:/bin TMPDIR=$B/t \
+  (cd $WT && nohup env -i HOME=$HOME PATH=$SV/bin:/opt/homebrew/bin:/usr/bin:/bin TMPDIR=$PT \
       $SV/bin/python scripts/run_test_shards.py --shards 6 --log-dir $O/suite-shards > $O/03-suite.txt 2>&1 &)
   print "started at $(date +%T)."
   print -r -- "Status (any time): tail -n 25 $O/03-suite.txt"

@@ -40,7 +40,7 @@ clean() { env -i HOME=$HOME USER=${USER:-luoxiao} PATH=${(j.:.)path} TERM=${TERM
 side_pytest() {
   local side=$1 label=$2; shift 2
   local S=$W/$side/src
-  mkdir -p $PT/cwd
+  mkdir -p $PT/cwd $PT/bt  # pytest creates --basetemp itself but not its parent
   (cd $PT/cwd && clean $W/$side/venv/bin/python -m pytest -q -rfE --tb=short -p no:warnings -p no:cacheprovider \
       --rootdir=$S -c $S/pyproject.toml --basetemp=$PT/bt/$label ${@/#/$S/})
 }

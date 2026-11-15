@@ -17,6 +17,7 @@ MCP entry is unavailable or failing; use block-style YAML for fallback files.
 | Wait / interrupt / resume / retire Agents | Discover the needed `agents` feature |
 | Handle native Agent permission requests | `agents`: `requests` / `reply` |
 | Deliver / read reports | `submit_report` / `session_reports` |
+| Read or search another project Session's history | `agents`: `session_read` (the last 5 conversation events by default; `start`/`stop` slice, `content`, `search`). `tasks` `session_read` is transitional and forwards to it |
 | Submit / decide a result | `submit_result` / `decide_result` |
 | Repair Task authorization / accounting | Discover the needed `tasks` recovery feature; Agent execution remains in `agents` |
 | Integrate / clean up | `task_integrate` / `cleanup` |

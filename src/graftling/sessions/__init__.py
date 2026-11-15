@@ -9,6 +9,9 @@ __getattr__ = _lazy_names({
     'JsonlSessionStore': ('graftling.sessions.archive', 'JsonlSessionStore'),
     'SessionArchive': ('graftling.sessions.archive', 'SessionArchive'),
     'archive_path': ('graftling.sessions.archive', 'archive_path'),
+    'find_session': ('graftling.sessions.reading', 'find_session'),
+    'read_events': ('graftling.sessions.reading', 'read_events'),
+    'redact_session': ('graftling.sessions.reading', 'redact_session'),
     'INITIAL_COLLECTION_TYPE': ('graftling.sessions.protocol', 'INITIAL_COLLECTION_TYPE'),
     'SESSION_FORMAT_VERSION': ('graftling.sessions.protocol', 'SESSION_FORMAT_VERSION'),
     'append_stream_record': ('graftling.sessions.protocol', 'append_stream_record'),
@@ -37,7 +40,7 @@ __getattr__ = _lazy_names({
 
 __all__ = [
     'ConfiguredSessionArchive', 'JsonlSessionStore', 'SessionArchive',
-    'archive_path', 'INITIAL_COLLECTION_TYPE', 'SESSION_FORMAT_VERSION',
+    'archive_path', 'find_session', 'read_events', 'redact_session', 'INITIAL_COLLECTION_TYPE', 'SESSION_FORMAT_VERSION',
     'append_stream_record', 'native_record', 'retain_native', 'snapshot_event',
     'upgrade_event', 'upgrade_header', 'validate_header', 'validate_session',
     'CodexJsonlArchive', 'NativeInputError', 'rollout_record',

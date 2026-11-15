@@ -54,6 +54,7 @@ ACTION_FIELDS: dict[str, tuple[frozenset[str], frozenset[str]]] = {
     "reply":     (frozenset({"agent", "request", "response"}), frozenset()),
     "retire":    (frozenset({"agent"}), frozenset()),
     "ask_parent": (frozenset({"kind", "question", "timeout_seconds"}), frozenset()),
+    "session_read": (frozenset(), frozenset({"agent", "session", "start", "stop", "content", "search"})),
 }
 
 INPUT_SCHEMA: dict[str, Any] = {
@@ -97,6 +98,24 @@ INPUT_SCHEMA: dict[str, Any] = {
                       "description": "Reject requests from a different execution."},
         "request": {"type": "object", "description": "One request document returned by requests."},
         "response": {"type": "object", "description": "Explicit native response object."},
+        "session": {"type": "string",
+                    "description": "Session to read: its archive ID or native Session ID. Give this or agent "
+                                   "(that Agent's current Session)."},
+        "start": {"type": "integer",
+                  "description": "First position of a Python slice over the selected events; negative counts "
+                                 "from the end. Without start and stop a read returns the last 5."},
+        "stop": {"type": "integer",
+                 "description": "End of the slice, exclusive, as in Python. Page back with the start of the "
+                                "previous read, e.g. start -10, stop -5."},
+        "content": {"type": "string", "enum": ["text", "tools", "all"], "default": "text",
+                    "description": "text: conversation text only. tools: adds tool calls and tool results. "
+                                   "all: every archived event, attached records included. Positions count "
+                                   "within the chosen content."},
+        "search": {"type": "string",
+                   "description": "Case-insensitive keyword. Returns the matching events' positions and "
+                                  "snippets instead of events; read around a hit with start and stop. "
+                                  "start and stop narrow the searched range. outside_view and repeat tell "
+                                  "you when a wider content holds more matches."},
     },
     "required": ["action"],
     "additionalProperties": False,
@@ -108,8 +127,10 @@ TOOL_DESCRIPTION = (
     "(omit agent for your visible hierarchy), wait (explicit finite timeout_seconds), "
     "interrupt (in standby, the direct parent confirms an ended execution whose "
     "recorded processes are verified gone), resume, requests and reply for native "
-    "approval or input requests, retire, and ask_parent to ask your own direct parent for a "
-    "decision or resources and wait for its answer. Your identity comes from the host."
+    "approval or input requests, retire, ask_parent to ask your own direct parent for a "
+    "decision or resources and wait for its answer, and session_read to read or search an "
+    "archived Session of yourself, your ancestors or your descendants (a Python slice of its "
+    "events, by default the last 5, conversation text only). Your identity comes from the host."
 )
 
 
@@ -257,6 +278,8 @@ def validate_request(request: Any) -> tuple[str, dict[str, Any]]:
         if isinstance(value, str) and not value.strip():
             raise AgentsError("invalid-input", f"request.{name}: must not be empty")
 
+    if action == "session_read" and ("agent" in arguments) == ("session" in arguments):
+        raise AgentsError("invalid-input", "request: session_read needs exactly one of agent or session")
     if action in ("wait", "ask_parent"):
         timeout = arguments["timeout_seconds"]
         if not (math.isfinite(timeout) and timeout > 0):

@@ -492,42 +492,14 @@ def _deliver_task(
         team = None
         if generation is not None:
             team = yaml.safe_load((evidence / "teams" / str(generation) / "team.yml").read_text())
-        # Cleanup removes the Task Worktree but keeps its members as standby
-        # Agents and its Team and result history. An explicit reopening may
-        # prepare resources again for fresh members of that same Team.
-        reopened = False
-        if (parent_alias is None and team is not None and team["status"] == "active"
-                and state["status"] == "reworking"
-                and not any(record.get("worktree") == str(project.harness_root / state["worktree"])
-                            for record in registered_worktrees(project.repository))):
-            from graphtraj.graph.delivery_state import current_result_rework_cause
-
-            cause = current_result_rework_cause(
-                read_worldline(project.state_directory, project.harness_root), state, team,
-            )
-            reopened = cause is not None and cause["event"] == "task-graph-revised"
+        reopened = parent_alias is None and reopened_without_worktree(project, state, team)
         if parent_alias is None and (generation is None or reopened):
             # Dependencies and disposition decide readiness above; a stored
             # pending or ready status both mean the Task has not started.
             if not reopened and state["status"] not in {"pending", "ready"}:
                 raise RunnerError("TASK_ALREADY_ACTIVE", "The selected Task has already started.")
             generation = generation or 1
-            worktree = project.worktree_root / (task.task_id + "-" + task.task_name)
-            branch = "agent/" + task.task_id + "-" + task.task_name
-            if os.path.lexists(worktree):
-                # Another selected root may be preparing this same Team.
-                if (
-                    worktree.is_symlink()
-                    or not (worktree / ".state").is_symlink()
-                    or (worktree / ".state").resolve() != evidence
-                    or not preflight_worktree(project, task, branch, worktree)
-                ):
-                    raise RunnerError("WORKTREE_CONFLICT", "The task Worktree belongs to another launch.")
-            else:
-                provision_worktree(project, task, branch, worktree)
-            _link_worktree(project, worktree, evidence)
-            if run_git(worktree, "status", "--porcelain", "--untracked-files=all"):
-                raise RunnerError("WORKTREE_CONFLICT", "The unregistered Task Worktree is not clean.")
+            worktree = prepare_task_worktree(project, task)
         else:
             if team["status"] != "active":
                 raise RunnerError("team-not-active", "The task Team has stopped starting work.")
@@ -1513,6 +1485,52 @@ def _role_report_files(
     else:
         reports = tuple(directory / name for name in selected_reports)
     return assign_session_reports(role, alias, generation, ordinal, reports)
+
+
+def reopened_without_worktree(project: Any, state: dict, team: dict | None) -> bool:
+    """Whether an explicitly reopened Task's active Team lacks its cleaned Worktree.
+
+    Cleanup removes the Task Worktree but keeps its members as standby Agents
+    and its Team and result history. Only a reopening by graph revision
+    (``task-graph-revised``) prepares that Worktree again; swarm and approved
+    recovery share this decision.
+    """
+    if (team is None or team["status"] != "active" or state["status"] != "reworking"
+            or any(record.get("worktree") == str(project.harness_root / state["worktree"])
+                   for record in registered_worktrees(project.repository))):
+        return False
+    from graphtraj.graph.delivery_state import current_result_rework_cause
+
+    cause = current_result_rework_cause(
+        read_worldline(project.state_directory, project.harness_root), state, team,
+    )
+    return cause is not None and cause["event"] == "task-graph-revised"
+
+
+def prepare_task_worktree(project: Any, task: Any) -> Path:
+    """Provision or validate the canonical Task Worktree from current dev.
+
+    The caller holds the execution startup lock. ``task`` needs only
+    ``task_id`` and ``task_name``.
+    """
+    evidence = project.state_directory / "tasks" / (task.task_id + "-" + task.task_name)
+    worktree = project.worktree_root / (task.task_id + "-" + task.task_name)
+    branch = "agent/" + task.task_id + "-" + task.task_name
+    if os.path.lexists(worktree):
+        # Another selected root may be preparing this same Team.
+        if (
+            worktree.is_symlink()
+            or not (worktree / ".state").is_symlink()
+            or (worktree / ".state").resolve() != evidence
+            or not preflight_worktree(project, task, branch, worktree)
+        ):
+            raise RunnerError("WORKTREE_CONFLICT", "The task Worktree belongs to another launch.")
+    else:
+        provision_worktree(project, task, branch, worktree)
+    _link_worktree(project, worktree, evidence)
+    if run_git(worktree, "status", "--porcelain", "--untracked-files=all"):
+        raise RunnerError("WORKTREE_CONFLICT", "The unregistered Task Worktree is not clean.")
+    return worktree
 
 
 def _link_worktree(project: Any, worktree: Path, evidence: Path) -> None:

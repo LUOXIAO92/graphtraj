@@ -15,7 +15,7 @@ import yaml
 
 from graphtraj import file_lock
 from graphtraj.execution.runner_control import (
-    _confirm_termination, _require_project_events, _send_session_locked,
+    _confirm_termination, _require_project_events, _send_session_locked, missing_worktree,
 )
 from graphtraj.execution.runner_heartbeat import execution_start_lock
 from graphtraj.execution.runner_io import write_yaml_durably
@@ -381,8 +381,17 @@ def _resume(project: Any, applied: dict) -> dict:
     result = {'recovery_status': 'resume-failed', 'applied': True,
               'recovery_event_id': applied['event_id'],
               'changes': _differences(applied['proposal']['before'], applied['proposal']['after'])}
+    try:
+        _restore_reopened_worktree(project, applied['alias'])
+    except (RunnerError, OSError) as error:
+        failure = {'code': getattr(error, 'code', 'operation-failed'), 'message': str(error)}
+    else:
+        failure = None
     if not applied['proposal']['request'].get('resume', True):
         result['recovery_status'] = 'applied'
+        if failure is not None:
+            # The applied budget and state stand; only the Worktree is reported.
+            result['worktree_error'] = failure
         before = applied['proposal']['before']['mapping']
         after = applied['proposal']['after']['mapping']
         if before.get('parent_connection') != after.get('parent_connection'):
@@ -406,6 +415,8 @@ def _resume(project: Any, applied: dict) -> dict:
                         )
                     break
         return result
+    if failure is not None:
+        return {**result, 'error': failure}
     try:
         _, directory = read_alias_mapping(project.runner_directory, applied['alias'])
         with (directory / 'launch.yml').open('rb') as lock:
@@ -413,6 +424,38 @@ def _resume(project: Any, applied: dict) -> dict:
             return _resume_locked(project, applied, directory)
     except (RunnerError, runtime_adapter.RuntimeAdapterError, OSError, ValueError) as error:
         return {**result, 'error': {'code': getattr(error, 'code', 'operation-failed'), 'message': str(error)}}
+
+
+def _restore_reopened_worktree(project: Any, alias: str) -> None:
+    """Prepare the cleaned Worktree of a Task reopened by graph revision (Task 476).
+
+    Recovery owns this step after applying: the reopened Task's original Team
+    continues in its canonical Worktree, provisioned from current dev (which
+    contains the integrated candidate) exactly as swarm prepares it. Nothing is
+    done while the recorded Worktree exists; a missing Worktree of any other
+    Task is reported with the public operations that restore work.
+    """
+    from types import SimpleNamespace
+
+    from graphtraj.teams.team_round import prepare_task_worktree, reopened_without_worktree
+
+    mapping, _ = read_alias_mapping(project.runner_directory, alias)
+    worktree = Path(mapping['worktree_path'])
+    if worktree.is_dir():
+        return
+    with execution_start_lock(project.runner_directory):
+        directory, state = _load_task_state(project.state_directory / 'tasks', mapping['task_id'])
+        ordinal = state.get('active_team_ordinal')
+        team = read_team(directory / 'teams' / str(ordinal) / 'team.yml') if ordinal else None
+        task = SimpleNamespace(task_id=state['task_id'], task_name=state['task_name'])
+        if (ordinal != mapping['team_generation']
+                or worktree != project.worktree_root / f"{task.task_id}-{task.task_name}"
+                or not reopened_without_worktree(project, state, team)):
+            raise missing_worktree(worktree)
+        try:
+            prepare_task_worktree(project, task)
+        except RunnerError as error:
+            raise missing_worktree(worktree, error.message) from error
 
 
 def _resume_locked(project: Any, applied: dict, directory: Path) -> dict:

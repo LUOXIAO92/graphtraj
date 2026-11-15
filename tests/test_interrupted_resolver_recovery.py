@@ -262,7 +262,20 @@ def test_resume_with_restore_active_continues_the_same_session_to_integrated(int
     assert yaml.safe_load(stop.read_text()) == {**before, 'resumed': True}
     assert sorted(path.name for path in interrupted.sessions.iterdir()) == launches
     assert interrupted.status == 'resolving-integration'
-    native = json.loads(interrupted.log.read_text())
+    # 'resumed' is returned once the Worker records the new Runtime process,
+    # which can precede the fake Runtime rewriting its log (Task 476: observed
+    # 3 of 12 concurrent runs reading the earlier launch's exec record, on
+    # d5b9797f and 4ffe5563 alike). Wait for that record, then require it to be
+    # a resume of the same Session rather than a new exec.
+    deadline = time.monotonic() + 30
+    while True:
+        try:
+            native = json.loads(interrupted.log.read_text())
+        except ValueError:  # the fake Runtime truncates the log before writing
+            native = {'argv': []}
+        if 'resume' in native['argv'] or time.monotonic() >= deadline:
+            break
+        time.sleep(0.05)
     assert 'resume' in native['argv'] and interrupted.session in native['argv']
     final = interrupted.complete(interrupted.alias)
     assert final['status'] == 'integrated'

@@ -66,7 +66,7 @@ fake_harness() {  # $1 dir: a valid GraphTraj Config and an agents host configur
 from graphtraj.configuration.project_configuration import DEFAULT_CONFIG_CONTENT, configuration_file
 p = configuration_file(Path(sys.argv[1])); p.parent.mkdir(parents=True, exist_ok=True); p.write_text(DEFAULT_CONFIG_CONTENT)' $1
 }
-fake_listing() { (cd $1 && find .graphtraj .agents-control tmp -type f | sort | while read f; do print -r -- "$(shasum -a 256 $f | cut -c1-16) $(stat -f %z $f) $f"; done) }
+fake_listing() { (cd $1 && find .graphtraj .agents-control -type f | sort | while read f; do print -r -- "$(shasum -a 256 $f | cut -c1-16) $(stat -f %z $f) $f"; done) }
 
 step_01() {
   say "[01] gate: fake outer Harness under $BASE (the walk-up stops there, never at $H)"
@@ -81,14 +81,15 @@ step_01() {
     grep -h "moved TMPDIR" $log | head -1
     fake_listing $fake > $OUT/01-$label-fake-after.txt
     if cmp -s $OUT/01-$label-fake-before.txt $OUT/01-$label-fake-after.txt; then
-      print "$label: fake Harness .graphtraj/.agents-control/tmp: UNCHANGED"
+      print "$label: fake Harness .graphtraj/.agents-control: UNCHANGED"
       [[ $label == before ]] && { print "  (expected CHANGED: the reproduction did not reproduce)"; ok=0; }
     else
-      print "$label: fake Harness .graphtraj/.agents-control/tmp: CHANGED"; diff $OUT/01-$label-fake-before.txt $OUT/01-$label-fake-after.txt | sed 's/^/  /'
+      print "$label: fake Harness .graphtraj/.agents-control: CHANGED"; diff $OUT/01-$label-fake-before.txt $OUT/01-$label-fake-after.txt | sed 's/^/  /'
       [[ $label == after ]] && ok=0
     fi
   done
   grep -q "moved TMPDIR" $OUT/01-after.log || { print "after: the move notice is missing"; ok=0; }
+  [[ -z $(ls -A $BASE/fake-after/tmp/t) ]] && print "after: fake tmp/t is empty (pytest temp moved out)" || { print "after: fake tmp/t is NOT empty"; ok=0; }
   $CONDA -I $SD/snap.py take $H $OUT/01-prod-after.json
   $CONDA -I $SD/snap.py compare $OUT/01-prod-before.json $OUT/01-prod-after.json $(markers) || ok=0
   if (( ok )); then print ok > $OUT/01-PASS; print "== 01 verdict: PASS"; next 02

@@ -66,10 +66,11 @@ step_00() {
   grep -q installedCommand $EXT || { print "STOP: the candidate extension lacks the 479 change"; return 1; }
 
   say "isolated project $P"
-  if [[ -d $P/.git ]]; then print "existing project: git init and graphtraj setup skipped (rerun)"; else
-    mkdir -p $P && (cd $P && git init -q -b main && print -r -- "# 479 probe" > README.md && git add README.md \
-      && git -c user.name=479 -c user.email=479@invalid commit -qm "Initial source") || return 1
-    (cd $P && print y | clean $CAND/bin/graphtraj setup | tail -2) || return 1
+  [[ -d $P/.git ]] || { mkdir -p $P && (cd $P && git init -q -b main && print -r -- "# 479 probe" > README.md \
+    && git add README.md && git -c user.name=479 -c user.email=479@invalid commit -qm "Initial source") || return 1; }
+  if [[ -f $P/.graphtraj/config.yml ]]; then print "existing project: graphtraj setup skipped (rerun)"; else
+    (cd $P && print y | clean $CAND/bin/graphtraj setup 2>&1 | tail -2)
+    [[ -f $P/.graphtraj/config.yml ]] || { print "STOP: graphtraj setup did not create $P/.graphtraj/config.yml"; return 1; }
   fi
   # Read-only: the candidate CLI that 01 relies on resolves the project's own .graphtraj, not the Harness one.
   (cd $P && clean $PY -I -c 'import sys
@@ -109,19 +110,27 @@ step_01() {
   print "stderr (redacted, last 10 lines):"; redact < $OUT/01-stderr.txt | tail -10
   local sid=$(native_session $started)
   print "native Pi Session: ${sid:-NONE} (in $SESSIONS)"
+  check_01 ${sid:-none}
+  print "Dialog: none expected; if a native dialog appeared, Main reports its title."
+  next "zsh $THIS 02   (optional)"
+}
 
+# The 01 criteria for one native Pi Session id; also runnable alone as `01c <id>` (no model).
+check_01() {
+  local sid=$1
   ! grep -qE 'ENOENT|cannot start graphtraj' $OUT/01-stderr.txt
   verdict $? "C1 no ENOENT and no 'cannot start' in pi stderr ($OUT/01-stderr.txt)"
-  (cd $P && clean $PY -I -c 'import json, sys
+  (cd $P && clean $PY -I -c 'import sys
 from pathlib import Path
+from graphtraj.execution.main_continuity import current_main
 from graphtraj.execution.main_finalize import session_binding
+from graphtraj.workspace.runner_project import discover_runner_directory
 sid = sys.argv[1]
 binding = session_binding(Path.cwd(), "pi", sid)
-log = Path(".graphtraj/runner/main-sessions/continuity.jsonl")
-last = [json.loads(l) for l in log.read_text().splitlines() if l.strip()][-1] if log.is_file() else {}
-print("Main binding:", binding, "exists:", binding.is_file(), "| continuity last:", last.get("runtime"), last.get("session"))
-sys.exit(0 if binding.is_file() and (last.get("runtime"), last.get("session")) == ("pi", sid) else 1)' ${sid:-none})
-  verdict $? "C2 nativeEntry ran: the Pi Session is bound as Main (binding file, continuity last record = pi $sid)"
+last = current_main(discover_runner_directory(Path.cwd())) or {}
+print("Main binding:", binding, "exists:", binding.is_file(), "| current Main:", last.get("runtime"), last.get("session"))
+sys.exit(0 if binding.is_file() and (last.get("runtime"), last.get("session")) == ("pi", sid) else 1)' $sid)
+  verdict $? "C2 nativeEntry ran: the Pi Session $sid is bound and is the project's current Main"
   (cd $P && clean $PY -I -c 'import sys
 from contextlib import nullcontext
 from pathlib import Path
@@ -134,10 +143,8 @@ with nullcontext(JsonlSessionStore(path)) as store:
                    for record in event["data"].get("stream", []))
     print("canonical Session:", path, "| source:", store.header.get("source"), "| events:", len(events),
           "| types:", sorted({event["type"] for event in events}), "| PONG-479 in attempts:", "PONG-479" in text)
-    sys.exit(0 if store.header.get("source") == "main" and events and "PONG-479" in text else 1)' ${sid:-none})
+    sys.exit(0 if store.header.get("source") == "main" and events and "PONG-479" in text else 1)' $sid)
   verdict $? "C3 startCollection ran: the canonical Session (source main) holds collected events with the PONG-479 reply"
-  print "Dialog: none expected; if a native dialog appeared, Main reports its title."
-  next "zsh $THIS 02   (optional)"
 }
 
 step_02() {
@@ -151,7 +158,8 @@ step_02() {
     'Reply with exactly one line: PONG-479-02. Use no tool.' < /dev/null > $OUT/02-stdout.txt 2> $OUT/02-stderr.txt)
   print "pi exit: $?"; print "stderr (redacted, lines naming graphtraj):"
   redact < $OUT/02-stderr.txt | grep -i graphtraj | head -5
-  grep -qF "no executable graphtraj-session in this installation's $BASE/noinstall/bin/" $OUT/02-stderr.txt \
+  # Node names the resolved path of the extension's directory.
+  grep -qF "no executable graphtraj-session in this installation's ${BASE:A}/noinstall/bin/" $OUT/02-stderr.txt \
     && grep -qF "$HOSTPATH" $OUT/02-stderr.txt && ! grep -q ENOENT $OUT/02-stderr.txt
   verdict $? "C4 the error names graphtraj-session, $BASE/noinstall/bin/ and the PATH searched, without ENOENT"
   next "report steps 00-02 results to the Task 479 Leader"
@@ -159,5 +167,6 @@ step_02() {
 
 case $STEP in
   00|01|02) step_$STEP 2>&1 | redact | tee $OUT/$STEP.txt ;;
-  *) print "usage: zsh $THIS <00|01|02>" ;;
+  01c) check_01 ${2:?native Pi Session id} 2>&1 | redact ;;
+  *) print "usage: zsh $THIS <00|01|02>   (01c <native Pi Session id>: rerun 01's checks only)" ;;
 esac

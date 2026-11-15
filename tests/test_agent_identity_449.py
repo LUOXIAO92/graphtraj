@@ -25,6 +25,11 @@ def member(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     root = tmp_path / 'project'
     root.mkdir()
     result_project(root)
+    # The member is between turns (terminal record present): each child end is pushed at
+    # once, which is what this test reads. A mid-turn member's ends wait for its own wait
+    # or its turn's end (477; tests/test_wait_handover_477.py).
+    (root / '.graphtraj/runner/sessions' / MEMBER / 'execution.yml').write_text(
+        'outcome: completed\nterminal_confirmed: true\n', encoding='utf-8')
     AgentControl(swarm_root(root), {'claude': Driver({'alias': MEMBER})}).create(
         'claude', 'lead', Binding(Caller(TASK_HOST, None)), name=MEMBER)
     agents = GraphTrajAgents.__new__(GraphTrajAgents)

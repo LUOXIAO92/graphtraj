@@ -515,7 +515,10 @@ class ExecutionEvents:
                 # acknowledgement returns 'unconfirmed', so it is not pushed again.
                 # A receiver that could not reach a stopped parent returns 'held'.
                 accepted = receiver(notice)
-                delivery = ('held' if accepted == 'held'
+                # 'deferred': a defers_push receiver holds it on its own thread and
+                # settles it there (finish_push); the end stays on its way (477).
+                delivery = (None if accepted == 'deferred'
+                            else 'held' if accepted == 'held'
                             else 'queued' if accepted == 'queued'
                             else 'unconfirmed' if accepted == 'unconfirmed'
                             else 'delivered' if accepted is True
@@ -530,7 +533,7 @@ class ExecutionEvents:
                 for ended in record['executions']:
                     if ended['id'] == self._execution:
                         # A wait, or the host's acknowledgement, may have settled it meanwhile.
-                        if ended.get('notification') in ('pending', 'queueing'):
+                        if delivery is not None and ended.get('notification') in ('pending', 'queueing'):
                             ended['notification'] = delivery
                         break
             control._delivering.discard(identity)
@@ -1076,6 +1079,16 @@ class AgentControl:
         record = self._load(notice["agent"]) or {"executions": []}
         execution = next((item for item in record["executions"] if item["id"] == notice["execution"]), {})
         return bool(execution.get("push_deferred"))
+
+    def finish_push(self, notice: Mapping[str, Any], delivery: str) -> None:
+        """Record what a deferring receiver's own send did (``delivered``, ``unavailable``...), as ``finished`` would."""
+        try:
+            with self._locked(notice["agent"]) as record:
+                for execution in record["executions"]:
+                    if execution["id"] == notice["execution"] and execution.get("notification") in ("pending", "queueing"):
+                        execution["notification"] = delivery
+        except AgentsError:
+            pass
 
     def take_push(self, notice: Mapping[str, Any]) -> bool:
         """Claim an end for sending under the record lock; ``False`` only when the parent's wait took it."""

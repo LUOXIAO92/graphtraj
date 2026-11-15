@@ -1198,6 +1198,13 @@ Delivery rules:
   `_claim_lost` does for `owner-exited`). GraphTraj's member Worker makes that
   read of its children right after it writes the turn's terminal record; the
   451 sweep and any later read are the backstop (correction 2 of 477).
+  The hold never blocks the call that reports the end: a deferring receiver may
+  return `"deferred"`, which leaves the end on its way, and settles it itself with
+  `finish_push(notice, delivery)`. GraphTraj holds on a daemon thread, which always
+  ends: when the member's wait takes the end, or, with one send, when the member's
+  turn ends, its Worker is gone, or `MEMBER_HOLD_MAX_SECONDS` (3600 s, above a
+  normal turn) passed. The member's Worker joins its holds (up to 5 s) after writing
+  the terminal record (correction 3 of 477).
 - Every end notice names the execution it reports in `execution`: the same
   ID as that end's `last_result.id` and as the `execution` of the `create`,
   `send` or `resume` result that started it. A parent whose child ran more

@@ -41,6 +41,10 @@ The numbers in parentheses are the project's Task numbers.
   Correction 2: the end records `push_holder`; an untaken end whose holder process died
   is held again and pushed once by the next read with a receiver. GraphTraj's member
   Worker makes that read right after the member's turn ends.
+  Correction 3: the hold no longer blocks `finished()` (a single-threaded caller hung):
+  a receiver may return `"deferred"` and settle later with `AgentControl.finish_push`.
+  GraphTraj holds on a daemon thread bounded by `MEMBER_HOLD_MAX_SECONDS` (3600 s); the
+  end is also sent once when the member's Worker is gone.
 - A DSH execution's tool processes are reclaimed the same way (463). DSH starts each
   Bash tool in its own session and on shutdown stops only those groups, so a process a
   tool moved into yet another session (`setsid`) outlived both a normal end and a

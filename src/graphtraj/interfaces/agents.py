@@ -16,6 +16,8 @@ resolved by ``caller_alias``.
 
 from __future__ import annotations
 
+import os
+import threading
 import time
 from pathlib import Path
 from typing import Any, Callable, Mapping
@@ -50,6 +52,49 @@ WAIT_INTERVAL_SECONDS = 0.2
 
 # How often a child's end held for a running Task member checks the member's turn (477).
 MEMBER_HOLD_POLL_SECONDS = 0.2
+# The longest a running member's child end is held for the member's own wait (477):
+# above a normal member turn; after it the end is sent once even if the turn runs on.
+MEMBER_HOLD_MAX_SECONDS = 3600.0
+# The daemon threads holding such ends in this process (join_holds).
+_HOLDS: list = []
+_HOLDS_LOCK = threading.Lock()
+
+
+def join_holds(timeout: float) -> bool:
+    """Wait up to ``timeout`` for this process's member holds to end; ``True`` when none is left.
+
+    A member's Worker calls it after writing the turn's terminal record, so a
+    hold sends before the Worker exits; tests use it to observe the send.
+    """
+    deadline = time.monotonic() + timeout
+    with _HOLDS_LOCK:
+        holds = list(_HOLDS)
+    for thread in holds:
+        thread.join(max(0.0, deadline - time.monotonic()))
+    with _HOLDS_LOCK:
+        _HOLDS[:] = [thread for thread in _HOLDS if thread.is_alive()]
+        return not _HOLDS
+
+
+def _member_idle(directory: Path) -> bool:
+    """Whether a member's turn is over: its terminal ``execution.yml`` exists, or its Worker is gone."""
+    if (directory / "execution.yml").is_file():
+        return True
+    try:
+        import yaml
+
+        pid = (yaml.safe_load((directory / "mapping.yml").read_text(encoding="utf-8")) or {}).get("worker_pid")
+    except (OSError, ValueError):
+        return False
+    if not isinstance(pid, int) or isinstance(pid, bool) or pid <= 0:
+        return False
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return True
+    except OSError:
+        return False
+    return False
 
 
 PREVIEW_CHARACTERS = 200
@@ -240,9 +285,7 @@ class GraphTrajAgents:
                 return False
             if (notice.get('error') or {}).get('code') == 'owner-exited':
                 return self._reconciled_member_notice(member, notice)
-            if not self._held_for_member(member, notice):
-                return True  # the member's own wait returned it (477)
-            return notify_member_of_child_end(self.root, member, notice)
+            return self._member_end(member, notice)
         runner = runner_directory(self.root)
         current = current_main(runner)
         if current is None or not recorded_by_main(runner, notice['creator']):
@@ -411,31 +454,59 @@ class GraphTrajAgents:
             except (AgentsError, OSError, ValueError):
                 continue
 
-    def _held_for_member(self, member: str, notice: dict) -> bool:
-        """Hold a child's end while its member's turn runs; ``False`` when the member's wait took it.
+    def _member_end(self, member: str, notice: dict) -> bool | str:
+        """Send a child's end to its member: at once when idle, else held off this thread.
 
         A model calls ``wait`` some seconds after ``create``, so a quick child
-        ends first. While the member's turn runs (its Session has no terminal
-        ``execution.yml``) the end is deferred and the member's own ``wait``
-        takes it; otherwise it is sent once the turn ends (477). An idle
-        member is sent the end at once.
+        ends first. While the member's turn runs the end is held by a daemon
+        thread (``'deferred'``: the reporting thread returns at once) until
+        the member's own ``wait`` takes it, or its turn ends, its Worker is
+        gone, or ``MEMBER_HOLD_MAX_SECONDS`` passed; then it is sent once
+        (477). A process that exits while holding leaves ``push_holder`` dead,
+        and the next read with a receiver pushes the end once.
         """
-        import time
+        from graphtraj.execution.task_agents import notify_member_of_child_end
 
+        control = AgentControl(swarm_root(self.root), {})
+        directory = self._member_directory(member)
+        # An end with no push_deferred (a recovered one, _claim_lost) is never held again.
+        if directory is None or _member_idle(directory) or not control.push_deferred(notice):
+            if not control.take_push(notice):
+                return True  # the member's own wait returned it
+            return notify_member_of_child_end(self.root, member, notice)
+        thread = threading.Thread(target=self._hold_member_end, args=(member, notice, directory, control),
+                                  name=f"member-hold-{notice['agent']}", daemon=True)
+        with _HOLDS_LOCK:
+            _HOLDS.append(thread)
+        thread.start()
+        return 'deferred'
+
+    def _hold_member_end(self, member: str, notice: dict, directory: Path, control: AgentControl) -> None:
+        """Hold one end until it is taken, the turn ends, the Worker is gone or the bound passes; send once."""
+        from graphtraj.execution.task_agents import notify_member_of_child_end
+
+        deadline = time.monotonic() + MEMBER_HOLD_MAX_SECONDS
+        while not _member_idle(directory) and time.monotonic() < deadline:
+            if not control.push_deferred(notice):
+                return  # the member's own wait took it
+            time.sleep(MEMBER_HOLD_POLL_SECONDS)
+        if not control.take_push(notice):
+            return
+        try:
+            delivered = notify_member_of_child_end(self.root, member, notice)
+        except Exception:
+            delivered = False
+        control.finish_push(notice, 'delivered' if delivered else 'unavailable')
+
+    def _member_directory(self, member: str) -> Path | None:
+        """The member's Runner Session directory, or ``None`` when it cannot be read."""
         from graphtraj.configuration.project_configuration import runner_directory
         from graphtraj.execution.runner_status import read_alias_mapping
 
-        control = AgentControl(swarm_root(self.root), {})
         try:
-            _, directory = read_alias_mapping(runner_directory(self.root), member)
+            return read_alias_mapping(runner_directory(self.root), member)[1]
         except Exception:
-            return control.take_push(notice)
-        terminal = directory / "execution.yml"
-        while not terminal.is_file():
-            if not control.push_deferred(notice):
-                break
-            time.sleep(MEMBER_HOLD_POLL_SECONDS)
-        return control.take_push(notice)
+            return None
 
     def _member_parent(self, parent: str) -> str | None:
         """Return the Task member alias a child's recorded parent names, if any.

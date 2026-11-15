@@ -110,6 +110,27 @@ def _member_turn_ends(root: Path) -> None:
     from graphtraj.configuration.project_configuration import runner_directory
     (runner_directory(root) / 'sessions' / MEMBER / 'execution.yml').write_text(
         'outcome: completed\nterminal_confirmed: true\n', encoding='utf-8')
+    # As the member's Worker does after writing it: this process's holds send first.
+    from graphtraj.interfaces.agents import join_holds
+    assert join_holds(10)
+
+
+def test_a_hold_never_blocks_finished_and_ends_at_its_bound(project, monkeypatch) -> None:
+    """Correction 3: the member's terminal record never appears; finished() returns at
+    once and the end is still pushed exactly once, within MEMBER_HOLD_MAX_SECONDS."""
+    from graphtraj.interfaces import agents as module
+    monkeypatch.setattr(module, 'MEMBER_HOLD_MAX_SECONDS', 0.5)
+    root, agents, sent, binding, reference, run = _member_child(project, running=True)
+    started = time.monotonic()
+    run.events.finished('completed', last_message='BOUND-477')
+    assert time.monotonic() - started < 0.4
+    assert sent == []
+    assert module.join_holds(10)
+    assert [item[1]['message'] for item in sent] == ['BOUND-477']
+    agents.reconcile_children({MEMBER})
+    assert len(sent) == 1
+    final = _record(swarm_root(root), reference)['executions'][-1]
+    assert final['notification'] == 'delivered' and 'push_deferred' not in final
 
 
 def _end_in_thread(run, **end) -> threading.Thread:

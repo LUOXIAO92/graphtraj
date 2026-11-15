@@ -316,3 +316,57 @@ def test_wait_and_push_racing_deliver_the_reply_exactly_once(project, trial: int
         assert [item[1]['message'] for item in sent] == ['RACE']
         if waited['timed_out'] is False:
             assert waited['last_result']['last_message'] == 'RACE'
+
+
+# -- Correction 2: a holder that dies while it holds a running member's end ----
+
+HOLDER = '''
+import sys
+from pathlib import Path
+from graftling import AgentControl
+from graftling.control import ExecutionEvents
+from graphtraj.interfaces.agents import GraphTrajAgents, swarm_root
+root, agent, execution = Path(sys.argv[1]), sys.argv[2], sys.argv[3]
+agents = GraphTrajAgents.__new__(GraphTrajAgents)
+agents.root = root
+agents.control = AgentControl(swarm_root(root), {}, event_receiver=agents._main_notice)
+# The child's owner ends it; the receiver holds the end while the member's turn runs.
+ExecutionEvents(agents.control, agent, execution).finished('completed', last_message='LOST-477')
+'''
+
+
+def _holder_dies_holding(root: Path, reference: str, run) -> None:
+    """A real separate process ends the child and holds its end; it is then killed."""
+    holder = subprocess.Popen([sys.executable, '-c', HOLDER, str(root), reference, run.execution])
+    try:
+        _until(lambda: _record(swarm_root(root), reference)['executions'][-1].get('push_deferred') is True, 20)
+    finally:
+        holder.kill()
+        holder.wait(10)
+
+
+def test_an_end_whose_holder_died_is_pushed_once_when_the_members_turn_ends(project) -> None:
+    root, agents, sent, binding, reference, run = _member_child(project, running=True)
+    _holder_dies_holding(root, reference, run)
+    assert sent == []
+    _member_turn_ends(root)
+    # The member's Worker sweeps its children after writing the terminal record.
+    agents.reconcile_children({MEMBER})
+    assert [item[1]['message'] for item in sent] == ['LOST-477']
+    agents.reconcile_children({MEMBER})
+    agents.operate('status', {'agent': reference}, binding)
+    assert len(sent) == 1
+    final = _record(swarm_root(root), reference)['executions'][-1]
+    assert final['notification'] == 'delivered' and 'push_deferred' not in final
+
+
+def test_a_live_holder_and_the_sweep_send_the_end_once(project) -> None:
+    root, agents, sent, binding, reference, run = _member_child(project, running=True)
+    ender = _end_in_thread(run, last_message='LIVE-477')
+    _until(lambda: _record(swarm_root(root), reference)['executions'][-1].get('push_deferred') is True)
+    agents.reconcile_children({MEMBER})  # the holder lives: nothing is taken from it
+    assert sent == []
+    _member_turn_ends(root)
+    ender.join(10)
+    agents.reconcile_children({MEMBER})
+    assert [item[1]['message'] for item in sent] == ['LIVE-477']

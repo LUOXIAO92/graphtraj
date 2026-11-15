@@ -1,0 +1,13 @@
+# 477 correction 2: a holder process that dies while holding a running member's child end (22c34fe8 code)
+commit: 22c34fe8fd98b239046cb11e51937dec766491a4 + only the two new tests (uncommitted at run time)
+time: 2026-11-15T14:31:25+09:00
+command: /tmp/claude-501/v477/bin/python -m pytest -p no:cacheprovider -p no:warnings --basetemp=$TMPDIR/pt477 tests/test_wait_handover_477.py -k 'holder' -q
+---
+>       assert [item[1]['message'] for item in sent] == ['LOST-477']
+E       AssertionError: assert [] == ['LOST-477']
+E         
+E         Right contains one more item: 'LOST-477'
+E         Use -v to get more diff
+tests/test_wait_handover_477.py:355: AssertionError
+FAILED tests/test_wait_handover_477.py::test_an_end_whose_holder_died_is_pushed_once_when_the_members_turn_ends
+1 failed, 1 passed, 38 deselected in 1.78s

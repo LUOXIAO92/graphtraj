@@ -1180,6 +1180,18 @@ Delivery rules:
   pushes it once at the next read; with it, the held-notice machinery below
   delivers it. An end that is not pushed (held for a stopped parent, or a
   completed round with running members) is unchanged.
+- A wait can also start after the end (a model calls `wait` some seconds
+  after `create`). An end being pushed is written with `push_deferred` in the
+  same record write; until the push is taken, the parent's `wait` takes the
+  end instead (`delivered`, nothing sent). The push is taken under the record
+  lock by `take_push(notice)` (returns `False` when the wait took it): the core
+  takes it right before calling the receiver, unless the receiver function
+  carries `defers_push = True`; such a receiver may wait before sending,
+  polling `push_deferred(notice)`, and takes the push itself. GraphTraj's
+  receiver does this for a Task member whose turn is running (its Session has
+  no terminal `execution.yml`): the child's end waits for the member's own
+  `wait`, else it is sent once when the member's turn ends. An idle member,
+  and a Main, are sent the end at once as before (correction 1 of 477).
 - Every end notice names the execution it reports in `execution`: the same
   ID as that end's `last_result.id` and as the `execution` of the `create`,
   `send` or `resume` result that started it. A parent whose child ran more

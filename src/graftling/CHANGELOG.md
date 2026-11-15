@@ -32,6 +32,12 @@ The numbers in parentheses are the project's Task numbers.
   held-notice rules. `settle_shown` no longer relies on a hidden body: a `queueing`
   end is settled only when no push is under way and the host is not flushing it.
   The version number is not raised here.
+  Correction 1: a wait that starts after the end also takes it while its push has not
+  been taken. The end is written with `push_deferred`; new `AgentControl.take_push`
+  and `push_deferred`, and a receiver attribute `defers_push`. GraphTraj holds a
+  running Task member's child end until the member's own wait takes it or its turn
+  ends (then one push); on the real host the member's wait came after the child's end
+  and the end was pushed as well.
 - A DSH execution's tool processes are reclaimed the same way (463). DSH starts each
   Bash tool in its own session and on shutdown stops only those groups, so a process a
   tool moved into yet another session (`setsid`) outlived both a normal end and a

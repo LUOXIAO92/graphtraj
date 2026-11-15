@@ -48,6 +48,9 @@ AGENT_PREFIX = "agent-"
 # Polling interval of a finite wait on a Task member Session.
 WAIT_INTERVAL_SECONDS = 0.2
 
+# How often a child's end held for a running Task member checks the member's turn (477).
+MEMBER_HOLD_POLL_SECONDS = 0.2
+
 
 PREVIEW_CHARACTERS = 200
 
@@ -237,11 +240,16 @@ class GraphTrajAgents:
                 return False
             if (notice.get('error') or {}).get('code') == 'owner-exited':
                 return self._reconciled_member_notice(member, notice)
+            if not self._held_for_member(member, notice):
+                return True  # the member's own wait returned it (477)
             return notify_member_of_child_end(self.root, member, notice)
         runner = runner_directory(self.root)
         current = current_main(runner)
         if current is None or not recorded_by_main(runner, notice['creator']):
             return False
+        if (notice['outcome'] in {'completed', 'failed', 'interrupted'}
+                and not AgentControl(swarm_root(self.root), {}).take_push(notice)):
+            return True  # the Main's own wait returned it (477)
         address = route_notice(runner, {**current['connection'], 'runtime': current['runtime'],
                                         'session': current['session']})
         message = notice['body'] or (notice.get('error') or {}).get('message') or notice['outcome']
@@ -263,6 +271,9 @@ class GraphTrajAgents:
             'message': message, 'execution': notice['execution'],
             **({'request_id': notice['request']} if notice.get('request') is not None else {})})
         return 'queued'
+
+    # It takes each end's push itself (take_push), after holding a running member's (477).
+    _main_notice.defers_push = True
 
     def operate(self, action: str, arguments: Mapping[str, Any], binding: Binding) -> Outcome:
         """Perform one validated action; an end a Main's wait/status shows is not pushed again."""
@@ -399,6 +410,32 @@ class GraphTrajAgents:
                 self.control.unconfirmed_ends(path.stem)
             except (AgentsError, OSError, ValueError):
                 continue
+
+    def _held_for_member(self, member: str, notice: dict) -> bool:
+        """Hold a child's end while its member's turn runs; ``False`` when the member's wait took it.
+
+        A model calls ``wait`` some seconds after ``create``, so a quick child
+        ends first. While the member's turn runs (its Session has no terminal
+        ``execution.yml``) the end is deferred and the member's own ``wait``
+        takes it; otherwise it is sent once the turn ends (477). An idle
+        member is sent the end at once.
+        """
+        import time
+
+        from graphtraj.configuration.project_configuration import runner_directory
+        from graphtraj.execution.runner_status import read_alias_mapping
+
+        control = AgentControl(swarm_root(self.root), {})
+        try:
+            _, directory = read_alias_mapping(runner_directory(self.root), member)
+        except Exception:
+            return control.take_push(notice)
+        terminal = directory / "execution.yml"
+        while not terminal.is_file():
+            if not control.push_deferred(notice):
+                break
+            time.sleep(MEMBER_HOLD_POLL_SECONDS)
+        return control.take_push(notice)
 
     def _member_parent(self, parent: str) -> str | None:
         """Return the Task member alias a child's recorded parent names, if any.

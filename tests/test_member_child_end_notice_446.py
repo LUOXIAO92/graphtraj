@@ -41,6 +41,10 @@ def project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     root = tmp_path / 'project'
     root.mkdir()
     result_project(root)
+    # The member is idle (its turn's terminal record exists), so a child's end is sent
+    # at once; a member mid-turn holds it for its own wait (477, test_wait_handover_477).
+    (runner_directory(root) / 'sessions' / MEMBER / 'execution.yml').write_text(
+        'outcome: completed\nterminal_confirmed: true\n', encoding='utf-8')
     member_driver = Driver({'alias': MEMBER})
     member = AgentControl(swarm_root(root), {'claude': member_driver}).create(
         'claude', 'lead', Binding(Caller(TASK_HOST, None)), name=MEMBER).result['agent']

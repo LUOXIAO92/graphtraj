@@ -46,8 +46,11 @@ def _wait_in_thread(call, timeout: float = 10.0) -> tuple[threading.Thread, list
 
 # -- graphtraj-gateway: a Task member's child ---------------------------------
 
-def _member_child(project):
+def _member_child(project, running: bool = False):
     root, member, agents, sent, send, child = project
+    if running:  # mid-turn: the member's Session has no terminal record
+        from graphtraj.configuration.project_configuration import runner_directory
+        (runner_directory(root) / 'sessions' / MEMBER / 'execution.yml').unlink()
     driver = Driver({})
     agents.control = AgentControl(swarm_root(root), {'claude': driver}, event_receiver=agents._main_notice,
                                   request_notices='decisions')
@@ -57,7 +60,7 @@ def _member_child(project):
 
 
 def test_gateway_create_then_wait_returns_the_reply_once_and_pushes_nothing(project) -> None:
-    root, agents, sent, binding, reference, run = _member_child(project)
+    root, agents, sent, binding, reference, run = _member_child(project, running=True)
     thread, out = _wait_in_thread(lambda timeout: agents.operate(
         'wait', {'agent': reference, 'timeout_seconds': timeout}, binding).result)
     _until(lambda: _waiting(swarm_root(root), reference))
@@ -116,7 +119,7 @@ def _end_in_thread(run, **end) -> threading.Thread:
 
 
 def test_gateway_member_waiting_after_its_child_ended_gets_the_reply_once_without_a_push(project) -> None:
-    root, agents, sent, binding, reference, run = _member_child(project)
+    root, agents, sent, binding, reference, run = _member_child(project, running=True)
     ender = _end_in_thread(run, last_message='PONG-477')
     _until(lambda: _record(swarm_root(root), reference)['executions'][-1].get('state') == 'ended')
     waited = agents.operate('wait', {'agent': reference, 'timeout_seconds': 5}, binding).result
@@ -129,7 +132,7 @@ def test_gateway_member_waiting_after_its_child_ended_gets_the_reply_once_withou
 
 
 def test_gateway_member_that_never_waits_gets_one_push_when_its_turn_ends(project) -> None:
-    root, agents, sent, binding, reference, run = _member_child(project)
+    root, agents, sent, binding, reference, run = _member_child(project, running=True)
     ender = _end_in_thread(run, last_message='PONG-477')
     _until(lambda: _record(swarm_root(root), reference)['executions'][-1].get('state') == 'ended')
     time.sleep(0.3)
@@ -279,20 +282,33 @@ def test_a_reservation_whose_waiter_died_later_is_pushed_once(tmp_path: Path) ->
 
 # -- Race: wait and push decided once under the record lock --------------------
 
+@pytest.mark.parametrize('running', [False, True])
 @pytest.mark.parametrize('trial', range(12))
-def test_wait_and_push_racing_deliver_the_reply_exactly_once(project, trial: int) -> None:
-    root, agents, sent, binding, reference, run = _member_child(project)
+def test_wait_and_push_racing_deliver_the_reply_exactly_once(project, trial: int, running: bool) -> None:
+    """Idle member: pushed at once unless its wait was registered first. Mid-turn member
+    (correction 1): its wait takes the end whenever it comes, before or after the end;
+    a wait that timed out before the end leaves one push at the turn's end."""
+    root, agents, sent, binding, reference, run = _member_child(project, running=running)
     rng = random.Random(trial)
     thread, out = _wait_in_thread(lambda timeout: agents.operate(
         'wait', {'agent': reference, 'timeout_seconds': timeout}, binding).result, timeout=0.01 + rng.random() * 0.15)
     time.sleep(rng.random() * 0.15)
-    run.events.finished('completed', last_message='RACE')
+    ender = _end_in_thread(run, last_message='RACE')
     thread.join(10)
+    if running:
+        late = agents.operate('wait', {'agent': reference, 'timeout_seconds': 5}, binding).result
+        _member_turn_ends(root)
+    ender.join(10)
+    assert not ender.is_alive()
     [waited] = out
     final = _record(swarm_root(root), reference)['executions'][-1]
     assert final['notification'] == 'delivered'
-    assert 'waiters' not in final
-    if waited['timed_out'] is False and not sent:
+    assert 'waiters' not in final and 'push_deferred' not in final
+    if running:
+        # The member waited again in its turn: that wait or the first one took it; nothing pushed.
+        assert sent == []
+        assert late['last_result']['last_message'] == 'RACE'
+    elif waited['timed_out'] is False and not sent:
         # Handed over in the wait result, never pushed.
         assert waited['last_result']['last_message'] == 'RACE'
     else:

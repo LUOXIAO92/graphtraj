@@ -489,11 +489,19 @@ class ExecutionEvents:
                 current['notification'], notify = 'waiting', False
             if notify:
                 current['notification'] = 'pending' if native is not None else 'queueing'
+                # Not sent yet: until the push is taken (take_push), the parent's
+                # wait may take the end instead, in this same write's terms (477).
+                current['push_deferred'] = True
                 identity = notice_id(self._execution, outcome)
                 control._delivering.add(identity)
             # Keep the native receiver while this Agent is in standby so its
             # children can continue the retained Session after this turn ends.
 
+        # A receiver that defers its push (``defers_push``) takes it itself
+        # right before sending; any other is taken here, before it is called.
+        if notify and not getattr(receiver, 'defers_push', False) and not control.take_push(notice):
+            control._delivering.discard(identity)
+            notify = False  # the parent's wait took it meanwhile
         # Durable completion precedes delivery. No Agent lock spans native I/O,
         # and repeated finished() cannot invoke the receiver a second time.
         if notify:
@@ -1037,6 +1045,11 @@ class AgentControl:
                             if token in (execution.get("waiters") or {}) and execution.get("notification") == "waiting":
                                 execution["notification"] = "delivered"
                                 del execution["waiters"]
+                            elif (caller.agent == record["parent"] and execution.get("push_deferred")
+                                  and execution.get("notification") in ("pending", "queueing")):
+                                # A push its receiver deferred has not been sent: this wait takes it.
+                                execution["notification"] = "delivered"
+                                del execution["push_deferred"]
                         return self._outcome(record, result={"timed_out": False})
                     remaining = deadline - time.monotonic()
                     if remaining <= 0:
@@ -1046,6 +1059,30 @@ class AgentControl:
                 pause(min(WAIT_INTERVAL_SECONDS, remaining))
         finally:
             self._release_wait(agent, token)
+
+    def push_deferred(self, notice: Mapping[str, Any]) -> bool:
+        """Whether an end is still unsent and untaken (``push_deferred``), so its parent's wait may take it.
+
+        ``finished`` writes ``push_deferred`` with the end. A receiver whose
+        function carries ``defers_push = True`` may wait before sending
+        (GraphTraj holds a running Task member's child end until the member's
+        turn ends); it polls this and calls :meth:`take_push` right before it
+        sends (477).
+        """
+        record = self._load(notice["agent"]) or {"executions": []}
+        execution = next((item for item in record["executions"] if item["id"] == notice["execution"]), {})
+        return bool(execution.get("push_deferred"))
+
+    def take_push(self, notice: Mapping[str, Any]) -> bool:
+        """Claim an end for sending under the record lock; ``False`` only when the parent's wait took it."""
+        try:
+            with self._locked(notice["agent"]) as record:
+                execution = next((item for item in record["executions"] if item["id"] == notice["execution"]), None)
+                if execution is None or not execution.pop("push_deferred", False):
+                    return execution is None or execution.get("notification") != "delivered"
+                return execution.get("notification") in ("pending", "queueing")
+        except AgentsError:
+            return True  # no record to take it from: nothing took it either
 
     def _release_wait(self, agent: str, token: str) -> None:
         """Drop one wait's mark; an end still reserved only for it goes to the ordinary push."""

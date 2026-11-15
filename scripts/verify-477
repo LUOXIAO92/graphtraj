@@ -15,8 +15,11 @@
 #     Dialog: none.
 # 00u USER, once, only when 00 prints 'graphtraj-claude-host loaded: NO': folder trust dialog (choose 'Yes, proceed').
 # 01  Main. starts a background `claude -p` Main that dispatches the member; returns at once. Dialog: none.
-# 02  Main. waits (<= 9 min) for 01's Main, then a 60 s quiet window for any late push, then CHECK A-E. Dialog: none.
-# 03  Main. full suite at the Worktree HEAD in the background (stops itself after 25 min). Dialog: none.
+# 02  Main. waits (<= 450 s) for 01's Main, then a 45 s quiet window for any late push, then CHECK A-E; prints its
+#     elapsed time (worst case about 8.5 min, so it runs in the foreground). Dialog: none.
+# 03  Main. full suite at the Worktree HEAD in the background (stops itself after 25 min), with TMPDIR from
+#     `mktemp -d /tmp/verify477-suite.XXXXXX`; STOPs before starting if TMPDIR or pytest's temp root is inside the
+#     Harness. Dialog: none.
 #
 # Never touches production .venv-runtime (read-only copy of three packages), other Worktrees, the user's dotfiles,
 # ~/.claude or ~/.codex. Signals no process. No key value is read or printed.
@@ -278,16 +281,26 @@ if __name__ == '__main__':
 PY
 }
 
-main_wait() {  # <= 9 min for 01's background claude -p; never a standalone sleep
+main_wait() {  # <= 450 s for 01's background claude -p (step 02 stays under 10 min); never a standalone sleep
   "$VV/bin/python" -I -c 'import os, sys, time
 try: pid = int(open(sys.argv[1]).read().strip())
 except (OSError, ValueError): print("STOP: no pid file", sys.argv[1], "- run 01 first"); sys.exit(2)
-deadline = time.time() + 540
+deadline = time.time() + 450
 while time.time() < deadline:
     try: os.kill(pid, 0)
     except ProcessLookupError: print("Main claude -p", pid, "ended"); sys.exit(0)
     time.sleep(5)
-print("Main claude -p", pid, "still running after 9 min"); sys.exit(1)' "$1"
+print("Main claude -p", pid, "still running after 450 s"); sys.exit(1)' "$1"
+}
+
+# pytest temp must never be inside the Harness: a test that falls back to its temp root's parents can
+# otherwise find the production .graphtraj (a full suite with temp under the Harness wrote a production
+# Main claim through test_main_finalize::test_native_start_selects_harness_for_external_cwd).
+outside_harness() {  # $1 = a path; STOP unless it resolves outside $H
+  local real
+  real=$(cd "$1" 2>/dev/null && pwd -P) || { echo "STOP: $1 does not exist"; return 1; }
+  case "$real/" in "$H"/*|"$(cd "$H" && pwd -P)"/*) echo "STOP: $real is inside the Harness $H; nothing started"; return 1 ;; esac
+  echo "$real"
 }
 
 step_00() {
@@ -392,12 +405,14 @@ Print its raw result text on one line starting with SWARM-RESULT.
 }
 
 step_02() {
-  say "[02] Main. waits for 01's Main (<= 9 min), a 60 s quiet window for any late push, then CHECK A-E. Dialog: none."
-  main_wait "$PID01"; case $? in 0) ;; 1) echo "STOP: rerun 02 later (01's Main still runs)"; return 1 ;; *) return 1 ;; esac
+  say "[02] Main. waits for 01's Main (<= 450 s), a 45 s quiet window for any late push, then CHECK A-E (worst case about 8.5 min). Dialog: none."
+  local started=$SECONDS
+  main_wait "$PID01"; case $? in 0) ;; 1) echo "STOP after $((SECONDS - started)) s: rerun 02 later (01's Main still runs)"; return 1 ;; *) return 1 ;; esac
   grep -o 'MEMBER-DONE\|MEMBER-NOT-DONE\|SWARM-RESULT[^"]*' "$OUT/01-main-stream.jsonl" | sort | uniq -c
-  probe quiet 60
+  probe quiet 45
   probe check "$P"
   local rc=$?
+  echo "step 02 elapsed: $((SECONDS - started)) s"
   echo
   echo "Success: 'summary: ALL PASS'. A the child was created through graphtraj-gateway, completed, its record holds"
   echo "PONG-477; B the member's wait result shows that same last_message with notification delivered; C its status"
@@ -410,19 +425,32 @@ step_02() {
 step_03() {
   say "[03] Main. full suite at $(git -C "$WT" rev-parse --short HEAD) in the background (<= 25 min). Dialog: none."
   [ -z "$(git -C "$WT" status --porcelain -- src tests scripts)" ] || { echo "STOP: the Worktree has uncommitted changes"; return 1; }
+  local made suite_tmp
+  made=$(mktemp -d /tmp/verify477-suite.XXXXXX) || { echo "STOP: mktemp -d under /tmp failed; nothing started"; return 1; }
+  suite_tmp=$(outside_harness "$made") || { echo "$suite_tmp"; return 1; }
+  echo "suite TMPDIR: $suite_tmp"
+  echo "suite pytest basetemp root: $suite_tmp/pytest-of-${USER:-luoxiao} (pytest's default under TMPDIR; no shared"
+  echo "  --basetemp: run_test_shards.py hands its extra arguments to all 6 shards, and each shard would clear one shared basetemp)"
   rm -rf "$SV"; "$CONDA" -m venv --system-site-packages "$SV" || return 1
   "$SV/bin/python" -m pip install -q --disable-pip-version-check --no-cache-dir --no-index --no-deps --no-build-isolation \
       -e "$WT/src/graftling" -e "$WT" 2>&1 | grep -vi cache
   copy_deps "$SV" > "$OUT/03-suite.txt" 2>&1 || { cat "$OUT/03-suite.txt"; return 1; }
   cat "$OUT/03-suite.txt"
   rm -rf "$OUT/03-shards"
-  (cd "$WT" && nohup bash "$THIS" _03run >> "$OUT/03-suite.txt" 2>&1 &)
+  (cd "$WT" && TMPDIR="$suite_tmp" nohup bash "$THIS" _03run >> "$OUT/03-suite.txt" 2>&1 &)
   echo "started at $(date +%T). Status (any time): tail -n 25 $OUT/03-suite.txt"
   echo "Done when it shows '== totals:'; failing IDs: $OUT/03-shards/failures.txt"
 }
 
 step__03run() {
   echo "== start $(date +%T) commit $(git -C "$WT" rev-parse HEAD)"
+  local suite_tmp
+  suite_tmp=$(outside_harness "${TMPDIR:-/nonexistent}") || { echo "== $suite_tmp"; return 1; }
+  # What the shards' pytest will use (tempfile.gettempdir under this TMPDIR); STOP if inside the Harness.
+  local effective
+  effective=$(cd /tmp && clean "$SV/bin/python" -I -c 'import tempfile; print(tempfile.gettempdir())')
+  effective=$(outside_harness "$effective") || { echo "== $effective"; return 1; }
+  echo "== TMPDIR $suite_tmp | pytest temp root $effective/pytest-of-${USER:-luoxiao}"
   clean "$SV/bin/python" -I -c 'import os, signal, subprocess, sys
 child = subprocess.Popen(sys.argv[1:], start_new_session=True)
 try: sys.exit(child.wait(timeout=1500))

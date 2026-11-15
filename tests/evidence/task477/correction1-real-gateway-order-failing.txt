@@ -1,0 +1,20 @@
+# 477 correction 1: real gateway member configuration, child ends BEFORE the member's wait (on a2195eca code)
+commit: a2195ecaf563499488a35b62f3e6912c1d43d238 + only the two new tests (uncommitted at run time)
+time: 2026-11-15T13:35:18+09:00
+command: /tmp/claude-501/v477/bin/python -m pytest -p no:cacheprovider -p no:warnings --basetemp=$TMPDIR/pt477 tests/test_wait_handover_477.py -k 'after_its_child_ended or never_waits' -q
+---
+>       assert sent == []
+E       AssertionError: assert [('research@x...tice': True})] == []
+E         
+E         Left contains one more item: ('research@x1', {'source': 'graphtraj', 'alias': 'agent-f3f15192f87040588676202f59bfb8c3', 'event': 'completed', 'message': 'PONG-477', ...}, 'research@x1', 'research@x1', {'system_notice': True})
+E         Use -v to get more diff
+tests/test_wait_handover_477.py:127: AssertionError
+>       assert sent == []  # held for the member while its turn runs
+E       AssertionError: assert [('research@x...tice': True})] == []
+E         
+E         Left contains one more item: ('research@x1', {'source': 'graphtraj', 'alias': 'agent-ff14abe68804412da445a3bb62eb00f0', 'event': 'completed', 'message': 'PONG-477', ...}, 'research@x1', 'research@x1', {'system_notice': True})
+E         Use -v to get more diff
+tests/test_wait_handover_477.py:136: AssertionError
+FAILED tests/test_wait_handover_477.py::test_gateway_member_waiting_after_its_child_ended_gets_the_reply_once_without_a_push
+FAILED tests/test_wait_handover_477.py::test_gateway_member_that_never_waits_gets_one_push_when_its_turn_ends
+2 failed, 24 deselected in 0.78s

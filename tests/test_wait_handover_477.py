@@ -98,6 +98,48 @@ def test_gateway_wait_that_timed_out_leaves_the_end_to_the_push(project) -> None
     assert [item[1]['message'] for item in sent] == ['PONG-477']
 
 
+# -- Correction 1: the real order on a real host --------------------------------
+# A model calls wait seconds after create, so a quick child ends BEFORE the wait
+# starts (real host a2195eca: the wait saw 'queueing' and the member got the notice).
+# The 446 fixture's member has no terminal record (execution.yml): it is mid-turn.
+
+def _member_turn_ends(root: Path) -> None:
+    from graphtraj.configuration.project_configuration import runner_directory
+    (runner_directory(root) / 'sessions' / MEMBER / 'execution.yml').write_text(
+        'outcome: completed\nterminal_confirmed: true\n', encoding='utf-8')
+
+
+def _end_in_thread(run, **end) -> threading.Thread:
+    thread = threading.Thread(target=lambda: run.events.finished('completed', **end))
+    thread.start()
+    return thread
+
+
+def test_gateway_member_waiting_after_its_child_ended_gets_the_reply_once_without_a_push(project) -> None:
+    root, agents, sent, binding, reference, run = _member_child(project)
+    ender = _end_in_thread(run, last_message='PONG-477')
+    _until(lambda: _record(swarm_root(root), reference)['executions'][-1].get('state') == 'ended')
+    waited = agents.operate('wait', {'agent': reference, 'timeout_seconds': 5}, binding).result
+    _member_turn_ends(root)
+    ender.join(10)
+    assert not ender.is_alive()
+    assert (waited['last_result']['last_message'], waited['last_result']['notification']) == ('PONG-477', 'delivered')
+    assert sent == []
+    assert _record(swarm_root(root), reference)['executions'][-1]['notification'] == 'delivered'
+
+
+def test_gateway_member_that_never_waits_gets_one_push_when_its_turn_ends(project) -> None:
+    root, agents, sent, binding, reference, run = _member_child(project)
+    ender = _end_in_thread(run, last_message='PONG-477')
+    _until(lambda: _record(swarm_root(root), reference)['executions'][-1].get('state') == 'ended')
+    time.sleep(0.3)
+    assert sent == []  # held for the member while its turn runs
+    _member_turn_ends(root)
+    ender.join(10)
+    assert [item[1]['message'] for item in sent] == ['PONG-477']
+    assert _record(swarm_root(root), reference)['executions'][-1]['notification'] == 'delivered'
+
+
 # -- A host receiver's root Agent (the claude-native Main shape) ---------------
 
 class Run:

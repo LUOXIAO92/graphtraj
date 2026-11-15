@@ -2,7 +2,7 @@
 [ -n "$ZSH_VERSION" ] || exec /bin/zsh "$0" "$@"
 # Task 444: unattended Main-swap checks on real hosts, in an ISOLATED project under the Harness tmp/444.
 # The production Claude Main is never yielded, exited or reconfigured; every probe Main runs in $P.
-#   zsh <this file> <00|00u|B1|B2|C1|C2|C3|P1|P2|E1|E2|D0|D1|D2|D3|F>
+#   zsh <this file> <00|00u|B1|B2|C0|C1|C2|C3|P1|P2|E1|E2|D0|D1|D2|D3|F>
 # Order: 00 -> (00u, USER, only if 00 says so) -> B1 B2 (Claude Main queues h397) -> C1 C2 C3 (Codex Main:
 # 397, 373, 401) -> P1 P2 (Pi Main: 373) -> E1 E2 (Pi member: 425) -> D1 D2 D3 (headless DSH Main: 398, 373) -> F.
 # Every step: no native dialog (headless hosts; requests are answered by the probe Main through the tasks tool),
@@ -22,12 +22,16 @@ STEP=${1:-help}
 path=($RT/bin /opt/homebrew/bin $HOME/.local/bin $path)
 # Homebrew's pnpm has no #! line, so DSH's Node spawn of pnpm fails with ENOEXEC (394; adopt-393 PNPM_SHIM).
 # Use the 394 shim when it exists; otherwise an equivalent shim under $BASE (never a dotfile).
-PNPM_SHIM=/Users/luoxiao/agents-394/pnpm-shim
-if [[ ! -x $PNPM_SHIM/pnpm && -f /opt/homebrew/lib/node_modules/pnpm/bin/pnpm.mjs ]]; then
-  PNPM_SHIM=$BASE/pnpm-shim
-  [[ -x $PNPM_SHIM/pnpm ]] || { mkdir -p $PNPM_SHIM && printf '#!/bin/sh\nexec /opt/homebrew/bin/node /opt/homebrew/lib/node_modules/pnpm/bin/pnpm.mjs "$@"\n' > $PNPM_SHIM/pnpm && chmod +x $PNPM_SHIM/pnpm; }
+# Use the host's pnpm when Node can spawn it (the user installed pnpm, 2026-11-15); the shim is only the fallback.
+PNPM_USED=host
+if ! PATH=${(j.:.)path} node -e 'process.exit(require("child_process").spawnSync("pnpm",["--version"]).error ? 1 : 0)' 2>/dev/null; then
+  PNPM_SHIM=/Users/luoxiao/agents-394/pnpm-shim
+  if [[ ! -x $PNPM_SHIM/pnpm && -f /opt/homebrew/lib/node_modules/pnpm/bin/pnpm.mjs ]]; then
+    PNPM_SHIM=$BASE/pnpm-shim
+    [[ -x $PNPM_SHIM/pnpm ]] || { mkdir -p $PNPM_SHIM && printf '#!/bin/sh\nexec /opt/homebrew/bin/node /opt/homebrew/lib/node_modules/pnpm/bin/pnpm.mjs "$@"\n' > $PNPM_SHIM/pnpm && chmod +x $PNPM_SHIM/pnpm; }
+  fi
+  [[ -x $PNPM_SHIM/pnpm ]] && { path=($PNPM_SHIM $path); PNPM_USED="shim $PNPM_SHIM (fallback: Node could not spawn the host pnpm)"; }
 fi
-[[ -x $PNPM_SHIM/pnpm ]] && path=($PNPM_SHIM $path)
 mkdir -p $OUT $BASE
 say() { print -r -- ""; print -r -- "### $*"; }
 next() { print -r -- ""; print -r -- "==> next (Main pastes): $*"; }
@@ -57,7 +61,7 @@ print("host pid", pid, "still running; rerun this step later"); sys.exit(1)' $1 
 pause() { $PY -I -c 'import sys, time; time.sleep(float(sys.argv[1]))' $1; }
 bg() { local name=$1; shift; (cd $P && clean nohup "$@" < $OUT/$name-prompt.txt > $OUT/$name-main-stream.jsonl 2> $OUT/$name-stderr.txt & print $! > $OUT/$name.pid); print "$name host pid $(cat $OUT/$name.pid); stream $OUT/$name-main-stream.jsonl"; }
 CLAUDE_MAIN=(-p --model $MODEL --output-format stream-json --verbose --mcp-config $P/.mcp.json --strict-mcp-config --allowedTools "mcp__agents__agents,mcp__agents__tasks")
-CODEX_MAIN=(exec -m $CODEX_MODEL --skip-git-repo-check --json -c "mcp_servers.graphtraj.command=\"$RT/bin/graphtraj-mcp\"" -c "mcp_servers.graphtraj.cwd=\"$P\"" -c 'approval_policy="never"')
+CODEX_MAIN=(exec -m $CODEX_MODEL --skip-git-repo-check --json -c "mcp_servers.graphtraj.command=\"$RT/bin/graphtraj-mcp\"" -c "mcp_servers.graphtraj.cwd=\"$P\"" -c 'mcp_servers.graphtraj.default_tools_approval_mode="approve"' -c 'approval_policy="never"')
 SITE() { print -r -- $($PY -I -c 'import graphtraj, os; print(os.path.dirname(os.path.dirname(graphtraj.__file__)))'); }
 PI_MAIN() { print -r -- pi --print --extension $(SITE)/graphtraj/runtimes/pi/extension.mjs --provider deepseek --model deepseek-flash; }
 # The 373 trigger, shared by C1, P1 and D2: an asker (Claude, permission_mode default) makes two shell calls.
@@ -65,7 +69,7 @@ ASK373() { print -r -- "{\"action\":\"execute\",\"feature\":\"swarm\",\"argument
 DENY='Then repeat, at most 12 rounds, until the asker execution has ended: using the agents tool, action requests with agent set to the asker alias from SWARM-RESULT; for EVERY pending native request call the agents tool action reply with that agent, request set to the request object exactly as returned, and response {"behavior": "deny", "message": "444 probe denies"}; print one line DENIED <request id> per reply. Between rounds use the agents tool action wait with that agent and timeout_seconds 15 (never a shell command). Finally print the asker final reply on one line starting with ASKER-RESULT and stop. Never allow a request.'
 
 pnpm_check() {
-  print "pnpm shim: $([[ -x $PNPM_SHIM/pnpm ]] && print "$PNPM_SHIM (first on PATH)" || print "none")"
+  print "pnpm used: $PNPM_USED"
   clean node -e 'const r=require("child_process").spawnSync("pnpm",["--version"],{encoding:"utf8"}); const w=require("child_process").spawnSync("/bin/sh",["-c","command -v pnpm"],{encoding:"utf8"}); console.log("pnpm Node would spawn: "+(w.stdout||"").trim()+" | "+(r.error ? "Node spawn pnpm FAILED: "+r.error.code : "Node spawn pnpm OK "+r.stdout.trim()))' 2>&1
 }
 dsh_plugins() { clean dsh plugin --profile headless list --depth 0 2>&1 | redact | head -20 | tee $1
@@ -180,8 +184,30 @@ step_B2() {
 }
 
 # ---- C: Codex Main (397, 373, 401) ----------------------------------------------------------------------
+# Codex per-run setting (Correction 5): mcp_servers.<name>.default_tools_approval_mode, enum AppToolApproval
+# {auto, prompt, writes, approve} (codex-cli 0.164.0 config validation: "unknown variant `bogus`, expected one of
+# `auto`, `prompt`, `writes`, `approve` in `mcp_servers.graphtraj.default_tools_approval_mode`"). Scoped to this server
+# and this run (-c); approval_policy stays never; the sandbox is unchanged; ~/.codex is not written.
+step_C0() {
+  say "[C0] preflight: ONE read-only GraphTraj MCP call through codex exec in $P (agents discover; reads never claim through the tool; Codex's SessionStart hook may still claim $P, which C1 re-claims). Dialog: none."
+  print -r -- 'Call the graphtraj agents tool exactly once with {"action": "discover"}. Then reply with one line: MCP-OK if it returned a result, or MCP-BLOCKED followed by the exact error text. Use no other tool.' > $OUT/C0-prompt.txt
+  (cd $P && clean /usr/bin/perl -e 'alarm 540; exec @ARGV' codex $CODEX_MAIN - < $OUT/C0-prompt.txt > $OUT/C0-main-stream.jsonl 2> $OUT/C0-stderr.txt)
+  $PY -I -c 'import json,sys
+res, err = None, None
+for l in open(sys.argv[1], errors="replace"):
+    try: d = json.loads(l)
+    except ValueError: continue
+    it = d.get("item") or {}
+    if it.get("type") == "mcp_tool_call" and d.get("type") == "item.completed":
+        res = it.get("result"); err = it.get("error") or (it.get("status") if it.get("status") not in ("completed", None) else None)
+ok = res is not None and not err
+print("codex MCP call:", "OK" if ok else "BLOCKED", "" if ok else json.dumps(err if err else "no mcp_tool_call item")[:400])
+sys.exit(0 if ok else 1)' $OUT/C0-main-stream.jsonl || { print "STOP: the Codex Main cannot call GraphTraj's MCP tools (raw error above; C0-stderr.txt)"; return 1; }
+  next "zsh $THIS C1"
+}
+
 step_C1() {
-  say "[C1] background Codex Main ($CODEX_MODEL, codex exec) in $P. Dialog: none (exec has no UI; approval_policy never)."
+  say "[C1] background Codex Main ($CODEX_MODEL, codex exec) in $P. Dialog: none (exec has no UI; approval_policy never; only mcp_servers.graphtraj tools approved for this run)."
   print -r -- "First, before any tool: quote every GraphTraj notice you were given at session start (alias, event, first message line) and print one line H397-COUNT <n> with how many times h397 appears.
 Second, using only the graphtraj agents tool: create a root agent with arguments {\"runtime\": \"claude\", \"configuration\": \"advisor\", \"name\": \"h401\", \"instruction\": \"Reply with exactly one line: PONG-401. Use no tools.\"}; print one line H401-CREATE <agent id>. Do not wait for it.
 Third, using only the graphtraj tasks tool: call it once with exactly $(ASK373 codex) and print its raw result on one line starting with SWARM-RESULT.
@@ -204,12 +230,13 @@ for l in open(sys.argv[1], errors="replace"):
   local claimed=$(grep -c '"runtime": *"codex"' $P/.graphtraj/runner/main-sessions/continuity.jsonl 2>/dev/null)
   print $([[ $claimed -ge 1 ]] && print PASS || print FAIL) "C entry: continuity.jsonl has a codex claim ($claimed) - Codex SessionStart hook ran (else: hooks not trusted, see 00u)"
   probe delivered $P h397; local rec=$?
-  print $([[ $n == 1 && $rec == 0 ]] && print PASS || print FAIL) "397: h397's end notice id delivered exactly once in the records (397 record line above) AND H397-COUNT ${n:-none} == 1 in the Codex Main's session-start notices"
+  print "supporting only (397 already observed; depends on B's h397):" $([[ $n == 1 && $rec == 0 ]] && print pass || print fail) "397: h397's end notice id delivered exactly once in the records (397 record line above) AND H397-COUNT ${n:-none} == 1 in the Codex Main's session-start notices"
+  probe current $P codex ${thread:-none} >/dev/null && print "PASS C entry (this run): C1's Codex thread $thread is the current Main of $P" || { print "FAIL C entry (this run): C1's Codex thread ${thread:-NONE} is not the current Main:"; probe current $P codex ${thread:-none}; }
   probe requests $P $OUT C1 codex
   [[ -n $thread ]] || { print "STOP: no Codex thread id; 401 cannot be resumed"; return 1; }
   pause 60
   print -r -- "Before any tool: quote every GraphTraj notice or host event you were given since your previous turn (alias, event, first message line), and print one line H401-COUNT <n> with how many times h401 or PONG-401 appears. Then, using only the graphtraj agents tool, status for agent h401 and print its notification field on one line starting with H401-NOTIFICATION. Stop." > $OUT/C3-prompt.txt
-  bg C3 codex exec resume $thread -m $CODEX_MODEL --skip-git-repo-check --json -c "mcp_servers.graphtraj.command=\"$RT/bin/graphtraj-mcp\"" -c "mcp_servers.graphtraj.cwd=\"$P\"" -c 'approval_policy="never"' -
+  bg C3 codex exec resume $thread -m $CODEX_MODEL --skip-git-repo-check --json -c "mcp_servers.graphtraj.command=\"$RT/bin/graphtraj-mcp\"" -c "mcp_servers.graphtraj.cwd=\"$P\"" -c 'mcp_servers.graphtraj.default_tools_approval_mode="approve"' -c 'approval_policy="never"' -
   next "zsh $THIS C3 2>&1 | tee $OUT/C3.txt"
 }
 step_C3() {
@@ -269,23 +296,42 @@ step_E2() {
 
 # ---- D: headless DSH Main (398, 373) -----------------------------------------------------------------------
 step_D0() {
-  say "[D0] Main, before D1. Installs graftling-dsh into the DSH headless profile ONLY, and only if absent (user-authorised 2026-11-15). Dialog: none."
+  say "[D0] Main, before D1. Preflight for a GraphTraj DSH Main (graftling-dsh stays installed; nothing is installed or removed here unless absent). Dialog: none."
   pnpm_check
   dsh_plugins $OUT/D0-before.txt | tail -1
-  if grep -q graftling-dsh $OUT/D0-before.txt; then print "already installed: nothing changed"; else
+  if ! grep -q graftling-dsh $OUT/D0-before.txt; then
     local pkg=$($PY -I -c 'import graftling.dsh, pathlib; print(pathlib.Path(graftling.dsh.__file__).parent)')
-    print "package (production .venv-runtime): $pkg"
+    print "installing graftling-dsh into --profile headless only (user-authorised): $pkg"
     (cd $BASE && clean dsh plugin --profile headless add $pkg) 2>&1 | redact | tail -15 | tee $OUT/D0-add.txt
-    print "dsh plugin add rc=${pipestatus[1]}"
   fi
-  dsh_plugins $OUT/D0-after.txt | tail -1 | tee $OUT/D0-result.txt
-  grep -q ': YES' $OUT/D0-result.txt && print "PASS D0: dsh GraphTraj plugin: YES in --profile headless" || print "FAIL D0: plugin not listed (D0-add.txt; ~/.dsh/profiles/headless/.plugin-manager/logs/)"
-  next "zsh $THIS D1 2>&1 | tee $OUT/D1.txt"
+  local before=$(grep -c '"runtime": *"dsh"' $P/.graphtraj/runner/main-sessions/continuity.jsonl 2>/dev/null)
+  STEP=D0 dsh_turn "List the exact names of every tool you have, on one line starting with TOOLS:. If a tool named tasks (or ending in __tasks) exists, call it once with {\"action\": \"discover\"} and print TASKS-OK, else print TASKS-MISSING. Use no other tool." || return 1
+  local after=$(grep -c '"runtime": *"dsh"' $P/.graphtraj/runner/main-sessions/continuity.jsonl 2>/dev/null)
+  grep -oE 'TOOLS:[^"\\]*|TASKS-(OK|MISSING)' $OUT/D0-main-stream.jsonl | head -3
+  local tasks=NO; grep -q 'TASKS-OK' $OUT/D0-main-stream.jsonl && tasks=YES
+  print "dsh tasks tool: $tasks"
+  print "dsh claim after agent/created: $([[ ${after:-0} -gt ${before:-0} ]] && print YES || print NO) (dsh claims before ${before:-0}, after ${after:-0})"
+  if [[ $tasks == YES && ${after:-0} -gt ${before:-0} ]]; then
+    print READY > $OUT/D0-ready.txt; print "PASS D0: a headless DSH turn in $P has the tasks tool and claimed Main at agent/created"
+    next "zsh $THIS D1 2>&1 | tee $OUT/D1.txt"
+  else
+    print NOT-READY > $OUT/D0-ready.txt
+    print "STOP D0: no supported GraphTraj DSH Main entry for a user-started DSH. Evidence:"
+    print "  - the Main entry and claim are in graphtraj/runtimes/dsh/tool.mjs (agent/created -> graphtraj-session dsh -> bind_session/claim_main, native_entry.py:104-140);"
+    print "  - GraphTraj loads tool.mjs only for DSH members, in a profile patch it composes itself (runtimes/dsh/execution.py:100; graftling/dsh/execution.py:271-276),"
+    print "    with the tasks MCP graphtraj.interfaces.mcp reached through GRAPHTRAJ_CLI_CONNECTION from the member's Runner host (execution.py:95-104);"
+    print "  - graphtraj bind-finalize returns tool.mjs (dsh/adapter.py:233-235, main_finalize.py:120) only for an already associated Main;"
+    print "  - the documented user forms (graftling install/dsh.md: dsh plugin add / --patch) load only graftling-dsh, a Task-free agents host"
+    print "    (graftling/dsh/host.py: no tasks tool, no GraphTraj claim)."
+    print "D1-D3 (398, 373-DSH) are NOT OBSERVED until a supported form exists (Main's registered documentation defect). Next: F."
+    next "zsh $THIS F 2>&1 | tee $OUT/F.txt"
+  fi
 }
 # graftling-dsh's host row is inert without GRAFTLING_DSH_CONFIG and needs GRAFTLING_PYTHON (graftling/dsh/plugin.mjs:156,167).
 dsh_turn() { print -r -- "{\"root\": \"$BASE/dsh-data\"}" > $BASE/dsh-host.json; mkdir -p $BASE/dsh-data
   (cd $P && clean GRAFTLING_PYTHON=$PY GRAFTLING_DSH_CONFIG=$BASE/dsh-host.json env -u DEEPSEEK_BASE_URL nohup dsh --profile headless --json "$@" < /dev/null > $OUT/$STEP-main-stream.jsonl 2> $OUT/$STEP-stderr.txt & print $! > $OUT/$STEP.pid); wait_pid $OUT/$STEP.pid 420; }
 step_D1() {
+  [[ $(cat $OUT/D0-ready.txt 2>/dev/null) == READY ]] || { print "STOP: D0 did not report READY (no GraphTraj DSH Main entry; see D0.txt). Nothing was run."; return 1; }
   say "[D1] headless DSH Main: create g398 (60 s) and exit. Then waits 100 s and checks the notice stays queued (398). Dialog: none."
   dsh_turn "Using only the agents tool: create a root agent with arguments {\"runtime\": \"claude\", \"configuration\": \"advisor\", \"name\": \"g398\", \"instruction\": \"Run the shell command sleep 60 once, then reply with exactly one line: PONG-398.\"}. Do not wait. Print CREATE and the agent id, then stop." || return 1
   $PY -I -c 'import json,sys
@@ -338,8 +384,8 @@ dispatch() {
 case $STEP in
   00) step_00 2>&1 | redact | tee $OUT/00.txt ;;
   00u) step_00u ;;
-  B1|B2|C1|C2|C3|P1|P2|E1|E2|D0|D1|D2|D3|F) step_$STEP ;;
-  *) print "usage: zsh $THIS <00|00u|B1|B2|C1|C2|C3|P1|P2|E1|E2|D0|D1|D2|D3|F>" ;;
+  B1|B2|C0|C1|C2|C3|P1|P2|E1|E2|D0|D1|D2|D3|F) step_$STEP ;;
+  *) print "usage: zsh $THIS <00|00u|B1|B2|C0|C1|C2|C3|P1|P2|E1|E2|D0|D1|D2|D3|F>" ;;
 esac
 }
 dispatch; exit $?

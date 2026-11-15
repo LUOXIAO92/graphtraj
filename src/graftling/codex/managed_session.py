@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextvars
 import copy
 import os
 import json
@@ -33,6 +34,49 @@ def model_change_message(summary: str, requested: object, observed: object, reas
     """State both models and the Runtime's reason so a stopped child is diagnosable (369)."""
     return (f'{summary}: requested model {requested}, observed model {observed}; Runtime reason: '
             + (reason or 'not provided in the native stream') + '.')
+
+
+async def in_thread(function: Callable, *args: object) -> object:
+    """Run a blocking call on a new thread and return its result to the awaiting loop.
+
+    Use this instead of ``asyncio.to_thread`` on the Codex owner's loop (473).
+    The owner runs on a non-daemon thread that can outlive the owning
+    process's main thread. Once that main thread has ended,
+    ``threading._shutdown`` sets ``concurrent.futures``' global shutdown flag
+    before it joins the non-daemon threads, so every executor, including
+    ``asyncio.to_thread``, refuses work ("cannot schedule new futures after
+    interpreter shutdown"). New threads still start then, and the interpreter
+    joins them too. Like ``asyncio.to_thread``, the call keeps the caller's
+    context variables, and its exception is raised to the awaiting caller.
+    """
+    loop    = asyncio.get_running_loop()
+    result  = loop.create_future()
+    context = contextvars.copy_context()
+
+    def settle(value: object, error: BaseException | None) -> None:
+        """Hand the outcome to an awaiting caller that has not given up."""
+        if result.cancelled():
+            return
+        if error is not None:
+            result.set_exception(error)
+        else:
+            result.set_result(value)
+
+    def call() -> None:
+        """Run the call and report its outcome on the loop's own thread."""
+        try:
+            outcome = (context.run(function, *args), None)
+        except BaseException as error:
+            outcome = (None, error)
+        try:
+            loop.call_soon_threadsafe(settle, *outcome)
+        except RuntimeError:
+            # The loop has closed: its caller has stopped waiting for the result.
+            pass
+
+    threading.Thread(target=call, name=f'codex-owner-{getattr(function, "__name__", "call")}',
+                     daemon=False).start()
+    return await result
 
 
 # Auto-review outcomes Codex reports only as notifications (Codex 0.164
@@ -392,15 +436,15 @@ class CodexManagedExecution:
                 # end record as soon as the native turn is interrupted, so it must
                 # not wait for the scans (sampler join, process table, every
                 # process's environment, one TERM/KILL cycle). A non-daemon thread
-                # keeps the process until it finishes. Once the interpreter is
-                # shutting down no thread can start (asyncio.to_thread refuses
-                # too), so then it runs here.
+                # keeps the process until it finishes; it still starts after the
+                # main thread has ended, while this non-daemon owner runs (473).
+                # Should the interpreter refuse a new thread, it runs here.
                 try:
                     threading.Thread(target=self._reclaim_tools, args=(adapter,),
                                      name='codex-tool-reclaim', daemon=False).start()
                 except RuntimeError:
                     self._reclaim_tools(adapter)
-            await asyncio.to_thread(connections.close)
+            await in_thread(connections.close)
             if observer is not None:
                 observer.cancel()
                 await asyncio.gather(observer, return_exceptions=True)
@@ -607,7 +651,7 @@ class CodexManagedExecution:
                        " again, or decline to keep it refused.")
         notice += "\n" + json.dumps({**identity, "params": request.params}, ensure_ascii=False)
         while self._waiting(token):
-            receipt = await asyncio.to_thread(
+            receipt = await in_thread(
                 self.parent_notice, notice, identity,
             ) if self.parent_notice is not None else {"delivery": "no-direct-parent"}
             if receipt["delivery"] in {"received", "retained", "no-direct-parent"}:
@@ -781,14 +825,14 @@ class CodexManagedExecution:
         elif request.method == 'item/fileChange/requestApproval' and not item:
             decision = review_failed('the file changes are not available for review')
         else:
-            decision = await asyncio.to_thread(review_call, self.review, build_request(
+            decision = await in_thread(review_call, self.review, build_request(
                 'codex', request.method, request.params, cwd=parameters['cwd'], instruction=self.prompt,
                 native={'item': item, 'permissions': parameters['config'].get('permissions'),
                         'default_permissions': parameters['config'].get('default_permissions')},
             ))
         try:
-            await asyncio.to_thread(record_decision, self.directory, 'codex', request.method,
-                                    str(request.request_id), decision)
+            await in_thread(record_decision, self.directory, 'codex', request.method,
+                            str(request.request_id), decision)
         except OSError as error:
             decision = review_failed(f'the decision could not be recorded ({type(error).__name__})')
         if decision['decision'] == 'allow':

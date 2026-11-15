@@ -22,6 +22,7 @@ __getattr__ = _lazy_names({
     'find_native_session': ('graftling.codex.trace', 'find_native_session'),
     'project_access': ('graftling.codex.local_websocket', 'project_access'),
     'validate_connection': ('graftling.codex.local_websocket', 'validate_connection'),
+    'in_thread': ('graftling.codex.managed_session', 'in_thread'),
 })
 
 __all__ = [
@@ -30,5 +31,5 @@ __all__ = [
     'CodexRuntimeContext', 'codex_api_key_env',
     'codex_connection_environment', 'reject_legacy_sandbox_config',
     'restore_codex_context', 'validate_codex_launch_request',
-    'find_native_session', 'project_access', 'validate_connection',
+    'find_native_session', 'project_access', 'validate_connection', 'in_thread',
 ]

@@ -7,6 +7,7 @@
 # 2  focused acceptance: the 473, 462 and approved-recovery tests (about 4 min).
 # 3  full suite in the background (about 20 min).
 # No Runtime host or model is used: the tests run a fake Codex peer, so no login prompt is needed.
+# Harness tmp/473 holds only the suite venv; all pytest temp is under ${TMPDIR:-/tmp}/verify-473.
 # Never changes production .venv-runtime (only copies click, yaml and websockets out of it, read only), deletes
 # nothing, and signals no process it did not start.
 set -u
@@ -15,6 +16,9 @@ WT=$H/.graphtraj/core/worktrees/473-codex-child-interpreter-shutdown
 THIS=${0:A}
 COMMIT=$(git -C $WT rev-parse HEAD)
 B=$H/tmp/473
+# pytest temp stays outside the Harness: a test that walks up from its temp directory
+# must never reach the real Harness (482).
+T=${TMPDIR:-/tmp}/verify-473
 SV=$B/suite-venv
 O=$H/.graphtraj/core/state/tasks/473-codex-child-interpreter-shutdown/realhost
 RT=$H/.venv-runtime
@@ -25,7 +29,7 @@ path=(/opt/homebrew/bin $HOME/.local/bin $path)
 say() { print -r -- ""; print -r -- "### $*"; }
 next() { print -r -- ""; print -r -- "==> next (Main pastes): $1"; }
 # Child commands run without this shell's GraphTraj Session variables (a Main's own would leak in).
-clean() { env -i HOME=$HOME PATH=$SV/bin:/opt/homebrew/bin:/usr/bin:/bin TMPDIR=$B/t "$@"; }
+clean() { env -i HOME=$HOME PATH=$SV/bin:/opt/homebrew/bin:/usr/bin:/bin TMPDIR=$T "$@"; }
 copy_deps() {
   local S=($RT/lib/python*/site-packages(N)) D=($1/lib/python*/site-packages(N))
   cp -Rp $S[1]/click $S[1]/click-*.dist-info(N) $S[1]/yaml $S[1]/_yaml(N) $S[1]/pyyaml-*.dist-info(N) \
@@ -42,8 +46,10 @@ step_0() {
   local EXPECT=$(git -C $WT log -1 --format=%H -- scripts/verify-473/steps.zsh)
   print -r -- "expected HEAD (last commit of this script): $EXPECT | HEAD equals it: $([[ $COMMIT == $EXPECT ]] && print yes || print NO)"
   [[ $COMMIT == $EXPECT ]] || { print "STOP: HEAD is not the commit that adds this script; report to the Leader"; return 1; }
-  mkdir -p $B/t $O || return 1
-  print -r -- "scratch: $B/t | output: $O"
+  mkdir -p $T $O || return 1
+  [[ ${T:A} != $H && ${T:A} != $H/* ]] || { print "STOP: pytest temp $T is inside the Harness"; return 1; }
+  print -r -- "pytest temp (outside the Harness): ${T:A}"
+  print -r -- "suite venv: $SV | output: $O"
   print "No Runtime host or model is used (fake Codex peer); no login prompt is needed."
   next "zsh $THIS 1"
 }
@@ -66,7 +72,7 @@ step_1() {
 step_2() {
   say "[2] Main. focused acceptance (about 4 min). Dialog: none."
   [[ -x $SV/bin/python ]] || { print "STOP: run 1 first"; return 1; }
-  (cd $WT && clean $SV/bin/python -m pytest -p no:cacheprovider -q --basetemp=$B/bt-focused \
+  (cd $WT && clean $SV/bin/python -m pytest -p no:cacheprovider -q --basetemp=$T/bt-focused \
       tests/test_codex_child_interpreter_shutdown_473.py tests/test_codex_tool_reclaim_462.py \
       tests/test_approved_recovery.py 2>&1 \
       | tee $O/02-focused.txt | tail -n 3)
@@ -79,7 +85,7 @@ step_2() {
 step_3() {
   say "[3] Main. full suite at $COMMIT in the background (about 20 min). Dialog: none."
   [[ -x $SV/bin/python ]] || { print "STOP: run 1 first"; return 1; }
-  (cd $WT && nohup env -i HOME=$HOME PATH=$SV/bin:/opt/homebrew/bin:/usr/bin:/bin TMPDIR=$B/t \
+  (cd $WT && nohup env -i HOME=$HOME PATH=$SV/bin:/opt/homebrew/bin:/usr/bin:/bin TMPDIR=$T \
       $SV/bin/python scripts/run_test_shards.py --shards 6 --timeout 1500 --log-dir $O/suite-shards \
       > $O/03-suite.txt 2>&1 &)
   print "started at $(date +%T)."

@@ -537,6 +537,9 @@ class ExecutionEvents:
                         # A wait, or the host's acknowledgement, may have settled it meanwhile.
                         if delivery is not None and ended.get('notification') in ('pending', 'queueing'):
                             ended['notification'] = delivery
+                            # A defers_push receiver that answered settled it: no push is left to take.
+                            ended.pop('push_deferred', None)
+                            ended.pop('push_holder', None)
                             # Status shows why a push that will not be retried
                             # failed, not only its state (a held end is retried).
                             if failure is not None and delivery in ('unavailable', 'unconfirmed'):

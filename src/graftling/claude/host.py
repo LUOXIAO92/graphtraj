@@ -324,6 +324,11 @@ class IndependentCalls(NativeCalls):
                 self.enqueue(session, event)
         return 'held'
 
+    # Queuing sends nothing: a result or the mod hands the notice over later, and
+    # only while it is open. So the core leaves the push untaken here, and the
+    # Main's wait takes the end in the meantime: it is not handed over again (494).
+    receive.defers_push = True
+
     def claim(self, session: str) -> list[dict]:
         """Take this Session's queued notices once, skipping any settled or withdrawn meanwhile. Hold the lock."""
         taken, self.queue[session] = self.queue.get(session, []), []

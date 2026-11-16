@@ -358,3 +358,60 @@ STOP B: no Engineer Session of Task 8 appeared within 6 s. The Leader's last tur
   last_agent_message: 'LAUNCHED'
   Session directory: $TMPDIR/b490/project/.graphtraj/runner/sessions/8-timer_b8-handover0-team_leader@leader
   -> rc 1 after 6 s
+
+
+# CLASSIFY step rehearsal, set -u, 2026-11-16 ~20:03-20:06
+
+## real run: two fast ids present on both sides; the candidate clone was missing (built), the dev clone and venv reused
+
+### [CLASSIFY] SUITE's failing node ids ($TMPDIR/o490c/SUITE-shards/failures.txt), one pytest per side: candidate ($TMPDIR/b490/suite) first, then dev 1524730b ($TMPDIR/b490/dev); clones and venvs reused, only missing ones built. Dialog: none. Limits: 1500 s per side.
+pytest temp base: /private$TMPDIR | outside the Harness /Users/luoxiao/workspace/you-are-a-product-architect-delivery: YES
+ids (2):
+  tests/test_budget_notice_idle.py::test_timer_exits_after_cleanup_removes_the_session
+  tests/test_budget_notice_idle.py::test_timer_delivers_nothing_while_the_task_is_stopped
+clone built: $TMPDIR/b490/suite/src at 95fcdc4a
+venv built: $TMPDIR/b490/suite/venv
+clone reused: $TMPDIR/b490/dev/src at 1524730b
+venv reused: $TMPDIR/b490/dev/venv
+== candidate: 95fcdc4a, PYTEST_GRAPHTRAJ_RUN=classify-candidate-1794826985, TMPDIR $TMPDIR, start 20:03:05
+== candidate: pytest exit 0 at 20:03:06 (2 passed, 22 warnings in 0.31s)
+== dev: 1524730b, PYTEST_GRAPHTRAJ_RUN=classify-dev-1794826986, TMPDIR $TMPDIR, start 20:03:06
+== dev: pytest exit 0 at 20:03:07 (2 passed, 22 warnings in 0.13s)
+
+### per id: candidate | dev | verdict
+tests/test_budget_notice_idle.py::test_timer_exits_after_cleanup_removes_the_session | candidate PASSED | dev PASSED | PASSES-NOW
+tests/test_budget_notice_idle.py::test_timer_delivers_nothing_while_the_task_is_stopped | candidate PASSED | dev PASSED | PASSES-NOW
+
+### leftover-timer reclaim lines (pytest session end; none printed = nothing left)
+candidate: none
+dev: none
+CLASSIFY: NEW 0
+
+==> next: report $TMPDIR/o490c/CLASSIFY.txt to the 490 Leader
+
+## verdicts on fabricated pytest -rA outputs (script sourced, ensure_clone and run_ids replaced; driver $TMPDIR/r6-verdict.zsh). An id that a side did not run (absent, e.g. an alarm or an id missing on dev, which aborts that pytest) is UNCLASSIFIED, not NEW.
+
+### [CLASSIFY] SUITE's failing node ids ($TMPDIR/o490v/SUITE-shards/failures.txt), one pytest per side: candidate ($TMPDIR/b490/suite) first, then dev 1524730b ($TMPDIR/b490/dev); clones and venvs reused, only missing ones built. Dialog: none. Limits: 1500 s per side.
+pytest temp base: /private$TMPDIR | outside the Harness /Users/luoxiao/workspace/you-are-a-product-architect-delivery: YES
+ids (4):
+  t.py::new_one
+  t.py::both[x]
+  t.py::now_passes
+  t.py::dev_not_run
+ensure_clone $TMPDIR/b490/suite (stubbed)
+ensure_clone $TMPDIR/b490/dev (stubbed)
+== candidate: fabricated output
+== dev: fabricated output
+
+### per id: candidate | dev | verdict
+t.py::new_one | candidate FAILED | dev PASSED | NEW
+t.py::both[x] | candidate ERROR | dev FAILED | PRE-EXISTING
+t.py::now_passes | candidate PASSED | dev FAILED | PASSES-NOW
+t.py::dev_not_run | candidate FAILED | dev absent | UNCLASSIFIED
+
+### leftover-timer reclaim lines (pytest session end; none printed = nothing left)
+candidate: leftover test processes of PYTEST_GRAPHTRAJ_RUN=classify-candidate-1: found=1 stopped=1 remaining=0
+dev: none
+CLASSIFY: NEW 1
+
+==> next: report $TMPDIR/o490v/CLASSIFY.txt to the 490 Leader

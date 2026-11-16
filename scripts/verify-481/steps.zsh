@@ -89,7 +89,9 @@ print(last.get("runtime", "none"), last.get("session", "none"))') > $OUT/00-prod
   say "the documented patch, written by the candidate installation"
   clean $PY -m graphtraj.runtimes.dsh.main_entry patch --write $PATCH && cat $PATCH
   say "graftling-dsh in the headless profile and the composed tree (read only; no pnpm; nothing installed or removed)"
-  local prof=$HOME/.dsh/profiles/headless coexist=UNKNOWN source="no $prof/package.json"
+  # One `local` expands all its words before assigning, so prof needs its own line under set -u.
+  local prof=$HOME/.dsh/profiles/headless
+  local coexist=UNKNOWN source="no $prof/package.json"
   if [[ -f $prof/package.json ]]; then
     if $CONDA -I -c 'import json, sys
 d = json.load(open(sys.argv[1]))

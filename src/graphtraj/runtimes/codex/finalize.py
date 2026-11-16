@@ -15,9 +15,7 @@ from pathlib import Path
 from typing import Any, Awaitable, Callable
 
 from graftling import DECISION_METHOD
-from graphtraj.runtimes.codex.app_server import (
-    CHECKER_PERMISSION_PROFILE, CodexAppServer, CodexServerRequest,
-)
+from graphtraj.runtimes.codex.app_server import CodexAppServer, CodexServerRequest
 from graphtraj.runtimes.runtime_adapter import CheckUsage, RuntimeAdapterError
 from graphtraj.workspace.runner_project import runtime_executable
 from graphtraj.runtimes.codex.session_entry import session_source, event_record
@@ -30,9 +28,7 @@ CHECK_WAIT_SECONDS = 570
 def control_socket(codex_home: str) -> str:
     """Return the daemon control socket as its resolved target.
 
-    The published socket may be a symlink. The checker's allowance and the
-    proxy's connect then name the same path, since a sandbox rule matched on
-    the literal symlink would not cover the resolved socket, or vice versa.
+    The published socket may be a symlink; the proxy connects to its target.
     """
     return os.path.realpath(Path(codex_home) / 'app-server-control' / 'app-server-control.sock')
 
@@ -410,8 +406,6 @@ def check(
             # and can differ from actual per-turn model selection.
             parent = {**parent, 'model': context['model'], 'configuration': configuration}
             parent['turn_settings'] = dict(context.get('settings', {}))
-            # Main's own daemon socket, which the checker's CLI must reach.
-            parent['control_socket'] = control_socket(binding['connection']['codex_home'])
             if 'effort' not in parent['turn_settings'] and 'reasoningEffort' in configuration:
                 parent['turn_settings']['effort'] = configuration['reasoningEffort']
             # Register this attempt before requesting its fixed native fork:
@@ -473,8 +467,12 @@ def check(
                     return None  # Already displayed; no second verdict or wakeup.
                 return {'outcome': 'completed', 'decided_before_fork': True,
                         'usage': CheckUsage(0, 0, 0, 0, 0, 0), 'output': json.dumps(reused)}
-            child = await client.fork_session(parent, network_profile=CHECKER_PERMISSION_PROFILE,
-                                              unix_socket=parent['control_socket'])
+            # Main's own permissions, unchanged (485): Codex 0.169.0 fails every
+            # model request of a fork given a custom permission profile through
+            # config ('failed to load workspace requirements'). The checker reads
+            # Task state through the tasks MCP entry, whose server runs outside
+            # its sandbox, so it needs no socket or network beyond Main's.
+            child = await client.fork_session(parent)
             child_id = child.thread_id
             created(child_id)
             from graphtraj.configuration.project_configuration import load_project_configuration
@@ -500,16 +498,6 @@ def check(
                 'parent_configuration': {key: configuration[key] for key in child.configuration
                                          if key != 'thread' and key in configuration},
             }
-            profile = child.configuration.get('activePermissionProfile') or {}
-            if profile.get('id') == CHECKER_PERMISSION_PROFILE:
-                # The checker's authorized difference from Main: managed network.
-                evidence['authorized_difference'] = {
-                    'permission_profile': profile, 'unix_socket': parent['control_socket'],
-                    'network_access': {
-                        'main': (configuration.get('sandbox') or {}).get('networkAccess'),
-                        'checker': (child.configuration.get('sandbox') or {}).get('networkAccess'),
-                    },
-                }
 
             # Stop's turn is still in progress, so native lastTurnId is invalid.
             # The fork itself fixes its history boundary. Reject a superseding

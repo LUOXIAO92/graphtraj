@@ -62,6 +62,9 @@ found = Path(discover_runner_directory(Path.cwd())).resolve(); own = (Path.cwd()
 print("graphtraj runner directory:", found, "| project own:", found == own); sys.exit(0 if found == own else 1)') \
     || { print "STOP: GraphTraj does not resolve $p's own .graphtraj"; return 1; }
   mkdir -p $p/.codex
+  # Existing hook/MCP files are kept byte for byte: a changed hooks.json would ask the user for a new hook review.
+  if [[ -s $p/.codex/hooks.json && -s $p/.codex/config.toml ]]; then
+    print "kept existing $p/.codex/hooks.json and config.toml (venv paths unchanged; no new hook review)"; return 0; fi
   (cd $p && clean $PY -I -c 'import json
 from pathlib import Path
 from graphtraj.runtimes.codex.finalize import hook
@@ -185,8 +188,8 @@ step_R5() {
 step_I1() {
   $PY -I -c 'import time; print(time.time())' > $OUT/I1.start
   print -r -- "Reply with exactly one line: H485-DONE. Use no tool." > $OUT/I1-prompt.txt
-  say "[I1] the only USER step, in your own macOS Terminal. Dialog: Codex's first-launch trust for this fresh project, shown together at the first start:"
-  print "     first 'Do you trust the contents of this directory?' for $P -> 'Yes'; then the hook review for $P/.codex/hooks.json -> approve."
+  say "[I1] the only USER step, in your own macOS Terminal. Dialog: none when $P was already trusted and its hooks approved in an earlier I1"
+  print "     (00 keeps .codex/hooks.json unchanged). Only on a first launch: 'Do you trust the contents of this directory?' -> 'Yes', then the hook review -> approve."
   print "     No other dialog should appear."
   print "  1. cd $P && codex -m $CODEX_MODEL"
   print "     (exactly this: no -c or other options. If Codex prints 'Running without the shared background server: ...', copy that line to Main.)"

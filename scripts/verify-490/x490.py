@@ -50,11 +50,15 @@ execution_budget:
 
 
 def commit_and_submit(task_id: str) -> str:
-    """One Bash commit of probe-<id>.txt, then submit_result (realhost-402 step 2)."""
+    """One Bash commit of probe-<id>.txt that also prints the full hash, then submit_result with it (realhost-402 step 2).
+
+    submit_result refuses a short hash, and no second Bash command or file read can recover the full one (R3).
+    """
     return (f"In your Worktree run exactly one Bash command: echo {task_id} > probe-{task_id}.txt && "
-            f"git add probe-{task_id}.txt && git commit -m 'Add probe {task_id}'. Then submit the result with the "
-            f"GraphTraj tasks tool feature submit_result: commit = the new HEAD, result_refs = [probe-{task_id}.txt], "
-            f"completion = 'probe {task_id} committed'.")
+            f"git add probe-{task_id}.txt && git commit -qm 'Add probe {task_id}' && git rev-parse HEAD. "
+            f"It prints the full 40-character commit hash. Then submit the result with the GraphTraj tasks tool "
+            f"feature submit_result: commit = that full 40-character hash exactly as printed (never a short hash), "
+            f"result_refs = [probe-{task_id}.txt], completion = 'probe {task_id} committed'.")
 
 
 # The registered Task body and the launch instruction are this same text (R3: a body saying otherwise won).

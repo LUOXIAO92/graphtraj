@@ -47,7 +47,9 @@ for r in rows:
     if r.get("runtime") == "dsh" or (r.get("connection") or {}).get("runtime") == "dsh":
         print(r.get("entry"), (r.get("connection") or {}).get("session") or r.get("session"))' $P; }
 # One headless DSH turn of the documented form: dsh --profile headless --patch <file>, from the project directory.
-dsh_turn() { (cd $P && clean nohup dsh --profile headless --json --patch $PATCH "$@" < /dev/null \
+# DSH's launcher reads its own flags (--profile, --patch, --dump-config) first; the first token it does not know
+# starts the app's arguments (bin.js parseDshArgs). So --patch must precede the app flags --json/--session-id.
+dsh_turn() { (cd $P && clean nohup dsh --profile headless --patch $PATCH --json "$@" < /dev/null \
   > $OUT/$STEP-main-stream.jsonl 2> $OUT/$STEP-stderr.txt & print $! > $OUT/$STEP.pid); wait_pid $OUT/$STEP.pid $TURN_LIMIT; }
 ASK373() { print -r -- "{\"action\":\"execute\",\"feature\":\"swarm\",\"arguments\":{\"tasks\":[{\"task_id\":\"1\",\"role\":\"asker\",\"instruction\":\"Run these two shell commands, one Bash call each, in this order: touch $BASE/373-$1-a and touch $BASE/373-$1-b. Each needs approval; wait for each answer. Then reply with one line saying which were allowed or denied.\"}]}}"; }
 DENY='Then repeat, at most 12 rounds, until the asker execution has ended: using the agents tool, action requests with agent set to the asker alias from SWARM-RESULT; for EVERY pending native request call the agents tool action reply with that agent, request set to the request object exactly as returned, and response {"behavior": "deny", "message": "481 probe denies"}; print one line DENIED <request id> per reply. Between rounds use the agents tool action wait with that agent and timeout_seconds 15 (never a shell command). Finally print the asker final reply on one line starting with ASKER-RESULT and stop. Never allow a request.'
@@ -84,13 +86,32 @@ print(last.get("runtime", "none"), last.get("session", "none"))') > $OUT/00-prod
   (cd $BASE && clean dsh --profile headless --permission-mode read-only "Reply with exactly one line: DSH-OK <your model id>. Use no tool." < /dev/null 2>&1 | redact | tail -1) | tee $OUT/00-dsh.txt
   grep -q CLAUDE-OK $OUT/00-claude.txt || { print "STOP: claude did not answer (login?)"; return 1; }
   grep -q DSH-OK $OUT/00-dsh.txt || { print "STOP: dsh did not answer (login/DEEPSEEK_API_KEY?)"; return 1; }
-  say "graftling-dsh in the headless profile (read only; never installed or removed here)"
-  clean dsh plugin --profile headless list --depth 0 2>&1 | redact | head -20 > $OUT/00-dsh-plugins.txt
-  cat $OUT/00-dsh-plugins.txt
-  local coexist=NO; grep -q graftling-dsh $OUT/00-dsh-plugins.txt && coexist=YES
-  print "graftling-dsh installed in headless: $coexist"
   say "the documented patch, written by the candidate installation"
   clean $PY -m graphtraj.runtimes.dsh.main_entry patch --write $PATCH && cat $PATCH
+  say "graftling-dsh in the headless profile and the composed tree (read only; no pnpm; nothing installed or removed)"
+  local prof=$HOME/.dsh/profiles/headless coexist=UNKNOWN source="no $prof/package.json"
+  if [[ -f $prof/package.json ]]; then
+    if $CONDA -I -c 'import json, sys
+d = json.load(open(sys.argv[1]))
+sys.exit(0 if any("graftling-dsh" in (d.get(k) or {}) for k in ("dependencies", "devDependencies", "optionalDependencies")) else 1)' $prof/package.json 2>/dev/null
+    then coexist=YES; source="$prof/package.json dependencies"
+    else coexist=NO; source="$prof/package.json dependencies"; fi
+  fi
+  [[ -e $prof/node_modules/graftling-dsh ]] && source="$source; $prof/node_modules/graftling-dsh present" \
+    || source="$source; $prof/node_modules/graftling-dsh absent"
+  # --dump-config composes the profile with --patch overlays and exits: no session, no model (launcher flags only).
+  clean dsh --profile headless --patch $PATCH --dump-config > $OUT/00-dump-config.txt 2>&1
+  print "dump-config exit $? -> $OUT/00-dump-config.txt"
+  local mainrow=NO hostrow=NO
+  grep -q 'graphtraj-main' $OUT/00-dump-config.txt && mainrow=YES
+  grep -q 'agents-host' $OUT/00-dump-config.txt && hostrow=YES
+  print "composed tree: graphtraj-main row $mainrow; graftling-dsh agents-host row $hostrow"
+  print "graftling-dsh installed in headless: $coexist ($source; composed agents-host row: $hostrow)"
+  if [[ $mainrow != YES ]]; then
+    print "STOP 00: the composed headless profile has no graphtraj-main row; no model turn was started. Evidence (head):"
+    head -40 $OUT/00-dump-config.txt | redact
+    return 1
+  fi
   say "ONE real read-only call through the new entry (judged from records, not model text)"
   local before=$(claims | grep -c .)
   STEP=00e dsh_turn "Call your GraphTraj tasks tool exactly once with the arguments {\"action\": \"discover\"}. Then print one line DISCOVERED and stop. Use no other tool."
@@ -108,7 +129,7 @@ sys.exit(0 if calls and results else 1)' $OUT/00e-main-stream.jsonl; local rec=$
   print "dsh tasks tool call and result in records: $([[ $rec == 0 ]] && print YES || print NO)"
   if [[ $claimed == YES && $rec == 0 ]]; then
     print "PASS 00: the patched headless DSH claimed Main at agent/created and called its tasks tool (graftling-dsh installed in headless: $coexist)"
-    [[ $coexist == YES ]] || print "note: graftling-dsh is not installed in headless, so coexistence is unobserved in this run"
+    [[ $coexist == YES || $hostrow == YES ]] || print "note: graftling-dsh was not shown installed in headless ($coexist), so coexistence is unobserved in this run"
     next D1
   else
     print "FAIL 00: see $OUT/00e-main-stream.jsonl and $OUT/00e-stderr.txt; D1-D3 would not be meaningful. Next: F."

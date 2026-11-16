@@ -154,7 +154,7 @@ step_R0() {
     print "R0 dev owner_killed: not found in $OUT/R0-repeat/counts.txt"
   fi
   print "R0 failures by test (rows with failures):"
-  awk 'NR > 1 && $1 > 0' $OUT/R0-repeat/counts.txt 2>/dev/null
+  awk 'NR > 1 && $4 ~ /::/ && $1 + 0 > 0' $OUT/R0-repeat/counts.txt 2>/dev/null
   print "DONE R0 (information: dev's rate; no PASS/FAIL)"
   next "zsh $THIS R1"
 }
@@ -190,7 +190,8 @@ step_S() {
   [[ -z $(git -C $BASE/suite/src status --porcelain) ]] || { print "STOP: $BASE/suite/src has local changes"; return 1; }
   ensure dev $DEV || return 1
   rm -rf $OUT/S-shards; : > $OUT/S-suite.txt
-  (cd $BASE && nohup zsh $THIS _Srun >> $OUT/S-suite.txt 2>&1 < /dev/null &)
+  # Disowned, SIGHUP ignored (macOS nohup exits with "can't detach from console" without a console).
+  (cd $BASE && trap '' HUP && zsh $THIS _Srun >> $OUT/S-suite.txt 2>&1 < /dev/null &!)
   print "started at $(date +%T) in the background; output $OUT/S-suite.txt"
   next "zsh $THIS SR"
 }
@@ -213,9 +214,16 @@ step__Srun() {
   local src=$BASE/suite/src VT=$BASE/suite/venv L=$OUT/S-shards
   print "== start $(date +%T) commit $(git -C $src rev-parse HEAD) (expect $CAND); $(load)"
   print "== pytest TMPDIR $TMPB (outside the Harness $H: $([[ ${TMPB:A} == ${H:A}/* ]] && print NO || print YES))"
-  (cd $src && clean $VT/bin/python scripts/run_test_shards.py --shards 6 --timeout ${VERIFY496_SUITE_LIMIT:-1500} --log-dir $L \
-     ${VERIFY496_SUITE_ARGS:+--} ${(s: :)${VERIFY496_SUITE_ARGS:-}})
-  local rc=$?
+  local rc
+  if [[ -n ${VERIFY496_FAILURES:-} ]]; then
+    # Rehearsal of the dev comparison only (Main never sets it): no suite, the given failures file.
+    print "REHEARSAL: suite not run; failures from $VERIFY496_FAILURES"
+    mkdir -p $L; cp $VERIFY496_FAILURES $L/failures.txt; rc=1
+  else
+    (cd $src && clean $VT/bin/python scripts/run_test_shards.py --shards 6 --timeout ${VERIFY496_SUITE_LIMIT:-1500} --log-dir $L \
+       ${VERIFY496_SUITE_ARGS:+--} ${(s: :)${VERIFY496_SUITE_ARGS:-}})
+    rc=$?
+  fi
   print "== shards exit $rc at $(date +%T); $(load)"
   touch $L/failures.txt
   print "== failures ($(wc -l < $L/failures.txt | tr -d ' ')):"; cat $L/failures.txt
@@ -241,7 +249,7 @@ step_SR() {
     tail -n 6 $OUT/S-suite.txt
     next "zsh $THIS SR"; return 0
   fi
-  grep -E '^== (quiet at|start|shards exit|failures|dev comparison|STOP)|^(PASS|FAIL) S|^[0-9]+ (failed|passed)|passes on dev|fails on dev|absent' $OUT/S-suite.txt
+  grep -E '^== (quiet at|start|shards exit|failures|dev comparison|STOP)|^(PASS|FAIL) S|^[0-9]+ (failed|passed)|^ABNORMAL|^leftover processes|passes on dev|fails on dev|absent' $OUT/S-suite.txt
   if grep -q '^FAIL S\|^== STOP' $OUT/S-suite.txt; then next "zsh $THIS CHECK   (quiet recheck of S's failing files on the candidate), then report $OUT to the 496 Leader"
   else next "report $OUT (P.txt R0.txt R1.txt S.txt SR.txt S-suite.txt) to the 496 Leader"; fi
 }

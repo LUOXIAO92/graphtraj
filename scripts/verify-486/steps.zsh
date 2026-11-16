@@ -36,6 +36,7 @@ redact() { if [[ -n ${DEEPSEEK_API_KEY:-} ]]; then sed "s|${DEEPSEEK_API_KEY}|[r
 clean() { env -i HOME=$HOME USER=${USER:-luoxiao} PATH=${(j.:.)path} TERM=${TERM:-xterm} TMPDIR=${TMPDIR:-/tmp} \
   LANG=${LANG:-en_US.UTF-8} ${DEEPSEEK_API_KEY:+DEEPSEEK_API_KEY=$DEEPSEEK_API_KEY} "$@"; }
 probe() { (cd $P && clean $PY -I $PROBE "$@") | redact; return ${pipestatus[1]}; }
+iso() { clean $RT/bin/python -I $SRC/scripts/verify-common/claude_isolation.py "$@"; }
 x486() { (cd $P && clean $PY -I $SD/x486.py $P g398 "$@"); }
 limit() { local s=$1; shift; clean /usr/bin/perl -e "alarm $s; exec @ARGV" "$@"; }
 base_python() { print -r -- "$($RT/bin/python -I -c 'import sys; print(sys.base_prefix)')/bin/python3"; }
@@ -104,6 +105,9 @@ print("candidate imports:", graphtraj.__file__, "| from the archived commit:", o
       && git -c user.name=486 -c user.email=486@invalid commit -qm "Initial source") || return 1
     (cd $P && print y | clean $V/bin/graphtraj setup | tail -2) || return 1
   fi
+  # Task 489: the project's OWN .claude/settings.local.json disables cc-plugin-agents-md and excludes the Harness
+  # CLAUDE.md/AGENTS.md (rerun after any `configuration --write`); claude -p below is judged by `check`.
+  iso settings $H $P || { print "STOP 00: project isolation settings refused or failed (text above)"; return 1; }
   (cd $P && clean $PY -I -c 'import sys
 from pathlib import Path
 from graphtraj.workspace.runner_project import discover_runner_directory
@@ -120,18 +124,21 @@ print("graphtraj runner directory:", found, "| project own:", found == own); sys
 
   local ASK='Reply with exactly two lines. Line 1: TAG <your model id>. Line 2: FILES: the absolute path of every AGENTS.md or CLAUDE.md whose contents you were given as instructions, or NONE. Use no tool.'
   say "hosts the steps use, one real read-only call each: claude -p (g398's Runtime; limit 120 s), dsh headless (limit 120 s)"
-  (cd $P && limit 120 claude -p --model $MODEL "${ASK//TAG/CLAUDE-OK}" > $OUT/00-claude.txt 2>&1)
+  # claude: the shared prompt as stream-json, judged from its records (Task 489): STOP when a Harness file is loaded.
+  iso prompt CLAUDE-OK > $OUT/00-claude-prompt.txt || return 1
+  (cd $P && limit 120 claude -p --model $MODEL --output-format stream-json --verbose \
+    < $OUT/00-claude-prompt.txt > $OUT/00-claude.jsonl 2> $OUT/00-claude.err)
   (cd $P && limit 120 dsh --profile headless --permission-mode read-only "${ASK//TAG/DSH-OK}" < /dev/null 2>&1 | redact > $OUT/00-dsh.txt)
-  # The FILES line is last; the answer line is the one before it.
   local ok=0
-  for host in claude dsh; do
-    local tag=${(U)host}-OK f=$OUT/00-$host.txt
-    grep -v '^\s*$' $f | grep -v '^FILES:' > $f.answer
-    answer $f.answer $tag || { ok=1; print "raw $host (tail):"; tail -4 $f | redact; }
-    print "$host instruction files loaded: $(grep -m1 '^FILES:' $f | cut -c8- || print '(no FILES line)')"
-  done
+  iso check $OUT/00-claude.jsonl CLAUDE-OK $H $P $OUT/00-claude-prompt.txt --expect clean \
+    || { ok=1; print "claude -p did not answer cleanly or loaded a Harness instruction file; $OUT/00-claude.err (head):"; head -5 $OUT/00-claude.err | redact; }
+  # dsh: the FILES line is last; the answer line is the one before it.
+  local f=$OUT/00-dsh.txt
+  grep -v '^\s*$' $f | grep -v '^FILES:' > $f.answer
+  answer $f.answer DSH-OK || { ok=1; print "raw dsh (tail):"; tail -4 $f | redact; }
+  print "dsh instruction files loaded: $(grep -m1 '^FILES:' $f | cut -c8- || print '(no FILES line)')"
   print "login: claude $([[ $ok == 0 ]] && print 'answered (logged in)' || print 'see above'); dsh DEEPSEEK_API_KEY $([[ -n ${DEEPSEEK_API_KEY:-} ]] && print set || print 'not set here (dsh profile credentials)')"
-  [[ $ok == 0 ]] || { print "STOP 00: a host did not answer (text above)"; return 1; }
+  [[ $ok == 0 ]] || { print "STOP 00: a host did not answer, or claude -p loaded a Harness instruction file (text above)"; return 1; }
   say "ONE real read-only call through the patched headless DSH Main entry: tasks discover (judged from records)"
   local before=$(claims | grep -c .)
   STEP=00e dsh_turn "Call your GraphTraj tasks tool exactly once with the arguments {\"action\": \"discover\"}. Then print one line DISCOVERED and stop. Use no other tool." || return 1

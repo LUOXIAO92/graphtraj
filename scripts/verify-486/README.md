@@ -22,5 +22,7 @@ Verdicts are read from records:
 | SUITEB | the same for dev `5a451267`; compares failure sets | none | `PASS SUITE no new failures against dev 5a451267` | 1500 s |
 | F | production Main and `.venv-runtime` unchanged; each pid this script started has ended; PASS/FAIL summary | none | `PASS F production Main`, `PASS F production .venv-runtime unchanged` | 0 |
 
+Since Task 489, step 00 runs `scripts/verify-common/claude_isolation.py settings` on the project after its setup and judges `claude -p` (stream-json) with `check --expect clean`: 00 STOPs when a Harness instruction file is loaded (see `scripts/verify-common/README.md`).
+
 `VERIFY486_NO_MODEL=1` stops 00 before any model call, and stops SUITE/SUITEB before the suite runs.
 `VERIFY486_STUB_BIN`, `VERIFY486_BASE` and `VERIFY486_OUT` serve the rehearsal only.

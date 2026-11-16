@@ -1,7 +1,8 @@
 """Task 490 real-host helper, run by steps.zsh with the candidate venv's Python inside the isolated project.
 
-    python -I x490.py prepare <project>            roles + Task 6 (30 minutes, A) and Task 5 (5 minutes, B), ready
+    python -I x490.py prepare <project>            roles + Task 6 (30 minutes, A) and Task 7 (5 minutes, B), ready
     python -I x490.py instruction <project> <id>    the probe Task's instruction: its registered body text
+    python -I x490.py last <project> <alias>        the Session's last execution, outcome, last_agent_message, directory
     python -I x490.py decide <project> <alias> <task id> <s>   the alias's latest submission (agent-runner reports):
                                                    check its commit has probe-<task id>.txt, then decide-result accepted
     python -I x490.py integrate <project> <task id>   graphtraj task integrate -- <check probe-<task id>.txt exists>
@@ -15,7 +16,8 @@
 
 Tasks 1-4 of earlier runs are left registered and unused: Task 1's thresholds pass while the Team runs (R1);
 Task 2 was moved to awaiting-integration without an acceptance (R2); Tasks 3 and 4 carry a body that said
-'Reply with one line DONE. Use no tool.', against the launch instruction (R3).
+'Reply with one line DONE. Use no tool.', against the launch instruction (R3); Task 5's body branched on the role and its
+Leader took the engineer branch (R4).
 
 It never signals a process. Exit status: 0 = the observation passed, 1 = it failed, 2 = could not observe.
 """
@@ -66,14 +68,15 @@ def commit_and_submit(task_id: str) -> str:
 INSTRUCTIONS = {
     # A: one root member.
     '6': commit_and_submit('6') + ' Then reply with one line DONE.',
-    # B: the Leader and the Engineer it launches both read this body; each part names its role.
-    '5': ('If you are the leader: use your GraphTraj agents tool to launch exactly one child with role engineer '
-          'for this Task with the instruction: Reply with one line DONE and do nothing else. Wait for its result. '
-          + commit_and_submit('5') + ' Then reply with one line DONE. If a GraphTraj budget notice arrives later, '
-          'reply with one line NOTED and do nothing else. If you are the engineer: reply with one line DONE and '
-          'do nothing else.'),
+    # B: the Leader's steps, unconditional (R4: a role-branching body let the Leader take the engineer branch).
+    # The Engineer reads this body too; the instruction the Leader passes tells it to ignore these steps.
+    '7': ('Launch exactly one child with role engineer for this Task using your GraphTraj agents tool, with the '
+          'instruction: You are the engineer launched by the leader. Ignore the leader steps in the Task body. '
+          'Reply with one line DONE and do nothing else. Wait for its result. '
+          + commit_and_submit('7') + ' Then reply with one line DONE. If a GraphTraj budget notice arrives later, '
+          'reply with one line NOTED and do nothing else.'),
 }
-TASKS = {'5': ('timer-b5n', 5), '6': ('timer-a6', 30)}
+TASKS = {'6': ('timer-a6', 30), '7': ('timer-b7', 5)}
 
 
 def run(*argv: str, cwd: Path) -> subprocess.CompletedProcess:
@@ -134,6 +137,16 @@ def runner() -> str:
     return str(Path(sys.executable).parent / 'agent-runner')
 
 
+def last(project: Path, alias: str) -> int:
+    """Print the Session's last execution, outcome, last_agent_message and directory."""
+    directory = session_dir(project, alias)
+    terminal = read(directory / 'execution.yml')
+    print(f'  last execution {terminal.get("execution_id")}: outcome {terminal.get("outcome")}')
+    print(f'  last_agent_message: {terminal.get("last_agent_message")!r}')
+    print(f'  Session directory: {directory}')
+    return 0
+
+
 def decide(project: Path, alias: str, task_id: str, seconds: float) -> int:
     """Accept the alias's latest submission through Main's public decision, as realhost-402 step 2 does.
 
@@ -147,12 +160,8 @@ def decide(project: Path, alias: str, task_id: str, seconds: float) -> int:
             break
         time.sleep(5)
     if not submissions:
-        directory = session_dir(project, alias)
-        terminal = read(directory / 'execution.yml')
         print(f'{alias} submitted nothing within {seconds:.0f} s')
-        print(f'  last execution {terminal.get("execution_id")}: outcome {terminal.get("outcome")}')
-        print(f'  last_agent_message: {terminal.get("last_agent_message")!r}')
-        print(f'  Session directory: {directory}')
+        last(project, alias)
         return 2
     latest = submissions[-1]
     probe = f'probe-{task_id}.txt'
@@ -368,6 +377,8 @@ def main() -> int:
     if command == 'instruction':
         print(INSTRUCTIONS[sys.argv[3]])
         return 0
+    if command == 'last':
+        return last(project, sys.argv[3])
     if command == 'decide':
         return decide(project, sys.argv[3], sys.argv[4], float(sys.argv[5]))
     if command == 'integrate':

@@ -308,3 +308,26 @@ B: STOP: launch failed: (stub host)
 $ echo 6 > probe-6.txt && git add probe-6.txt && git commit -qm 'Add probe 6' && git rev-parse HEAD
 701d6bdafa38efd61c345d8e50cddc894fc2b0b2
 printed: 701d6bdafa38efd61c345d8e50cddc894fc2b0b2 | length 40 | full hex hash: YES
+
+
+# Round 4 correction rehearsal (step B only: unconditional Leader body on Task 7; no-Engineer diagnostics), set -u, stubs, 2026-11-16 ~19:23
+
+## step B on the rehearsal project: prepare registers Task 7; stub host -> STOP; then the registered body vs the launch instruction (driver $TMPDIR/r4-check.zsh)
+
+### [B] Task 7 (5-minute budget; planned end about 5:00, allowance about 5:45 after the Leader starts): a Leader launches one Engineer, then commits probe-7.txt and submits it; both end and settle (th
+roles OK
+task 7 timer-b7: budget 5 min, status ready
+STOP: launch failed:
+STOP: launch failed:
+== Task 7: registered body (from task.md) == launch instruction: YES
+  body: Launch exactly one child with role engineer for this Task using your GraphTraj agents tool, with the instruction: You are the engineer launched by the leader. Ignore the leader steps in the Task body. Reply with one line DONE and do nothing else. Wait for its result. In your Worktree run exactly one Bash command: echo 7 > probe-7.txt && git add probe-7.txt && git commit -qm 'Add probe 7' && git rev-parse HEAD. It prints the full 40-character commit hash. Then submit the result with the GraphTraj tasks tool feature submit_result: commit = that full 40-character hash exactly as printed (never a short hash), result_refs = [probe-7.txt], completion = 'probe 7 committed'. Then reply with one line DONE. If a GraphTraj budget notice arrives later, reply with one line NOTED and do nothing else.
+  'Use no tool' anywhere in the body: 0
+  'If you are' (role branching) in the body: 0
+
+## B's no-Engineer lines (taken from steps.zsh) against a fabricated Leader that ended with DONE (driver $TMPDIR/r4-noeng.zsh)
+== no Engineer Session of Task 7 (fabricated Leader that ended with DONE)
+STOP B: no Engineer Session of Task 7 was launched. The Leader's last turn:
+  last execution x7: outcome completed
+  last_agent_message: 'DONE'
+  Session directory: $TMPDIR/b490/project/.graphtraj/runner/sessions/7-timer_b7-handover0-team_leader@leader
+  -> rc 1

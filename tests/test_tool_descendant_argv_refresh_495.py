@@ -118,10 +118,12 @@ def test_a_first_unreadable_command_line_is_refreshed_and_a_later_one_keeps_it(
     shell = subprocess.Popen(['/bin/sh', '-c', SCRIPT], env={**os.environ, MEMBER_RUN_ENV: marker})
     unreadable = {shell.pid}
     real = module._process_view
-    # Under load the real read can itself be unreadable right after exec (495's cause): wait until it
-    # shows the argv, so unreadability below comes only from this test.
-    assert wait_for(lambda: (real(shell.pid) or ([], []))[0], 10)
-    monkeypatch.setattr(module, '_process_view', lambda pid: None if pid in unreadable else real(pid))
+    # Under load the real read can itself be unreadable (495's cause). Take the shell's real view once it
+    # shows /bin/sh and serve that, so only this test decides when the shell is unreadable.
+    view = wait_for(lambda: (found := real(shell.pid)) is not None and found[0][:1] == ['/bin/sh'] and found, 10)
+    assert view
+    monkeypatch.setattr(module, '_process_view',
+                        lambda pid: real(pid) if pid != shell.pid else None if pid in unreadable else view)
     sampler = sampler_under(tmp_path, marker, os.getpid())
     try:
         first = wait_for(lambda: entry_of(sampler, shell.pid), 10)

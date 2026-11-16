@@ -75,7 +75,11 @@ def agents(tid, feature, arguments, answer):
 
 
 last = None if case == 'bad477' else 'DONE-492'
-member = agents('a1', 'create', {'name': 'n492'}, {'agent': 'c1', 'execution': 'e1', 'session': 'claude:sess-c'})
+# 491: as in 492's production archive, the member describes wait before it creates; that call is no wait.
+member = [call('d1', 'mcp__agents__agents', {'action': 'describe', 'feature': 'wait'}),
+          result('d1', [{'type': 'text', 'text': json.dumps({'action': 'describe', 'feature': 'wait',
+                         'input_schema': {'properties': {'agent': {}, 'timeout_seconds': {}}}})}])]
+member += agents('a1', 'create', {'name': 'n492'}, {'agent': 'c1', 'execution': 'e1', 'session': 'claude:sess-c'})
 if case == 'bad487':
     member += agents('a0', 'wait', {'agent': 'c1', 'timeout_seconds': 5}, {'agent': 'c1', 'execution': 'e1', 'state': 'ended', 'last_message': last})
 else:

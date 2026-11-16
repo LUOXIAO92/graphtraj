@@ -100,7 +100,9 @@ tools, a guard that waits, never signals, and is rerun right before `pip install
    seq, type, text}]}}` inside `[{type: text, text}]`); without one it prints a structural diagnostic. New CHECK lines:
    `CHECK 466 credential masked …` (Round 3 rule: a content-tools search result shows an event at a child seq holding
    the value, with `[redacted]`; value 0 in all results, member archive and native transcript; counts only),
-   `CHECK 487 first wait timed out while the child ran …`, `CHECK 487 reply delivered once (DONE-492 through
+   `CHECK 487 first wait timed out while the child ran …` (491: judged on the first `action: execute` wait call; the
+   member's earlier `describe` of wait made 492's production run print FAIL; `rehearse_fixtures.py` now puts that
+   describe call first), `CHECK 487 reply delivered once (DONE-492 through
    wait/status; graphtraj inputs pushed for that execution = 0)`, `CHECK 486 child n492 execution <id> ended
    completed, not interrupted`, `CHECK 486 member end normal (execution.yml outcome completed)`; all 478 CHECKs stay.
 10. **N484 (new, 484):** `ctl492.py snap` records per agent execution: state, outcome, error code, notification,

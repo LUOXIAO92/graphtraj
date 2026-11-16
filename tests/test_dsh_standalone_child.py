@@ -413,11 +413,20 @@ def run(feature, **arguments):
     return document
 
 def answered(agent):
-    # The wait shows the body, unless an earlier result already carried it: once either way.
+    # As answered() above (487, 491): an earlier result may carry the end's notice, at most once; the wait
+    # then shows the same body as delivered, and the wait's own result never carries a notice for it.
+    before = len(shown)
     last = run('wait', agent=agent, timeout_seconds=10)['result']['last_result']
-    bodies = [notice['event']['message'] for notice in shown if notice['event']['execution'] == last['id']]
-    bodies += [last['last_message']] if last['last_message'] is not None else []
-    assert len(bodies) == 1, (last, bodies)
+    ours = lambda notices: [n['event']['message'] for n in notices
+                            if (n['event']['execution'], n['event']['event']) == (last['id'], last['outcome'])]
+    carried = ours(shown[:before])
+    assert not ours(shown[before:]), (last, carried, ours(shown[before:]))
+    assert len(carried) <= 1, (last, carried)
+    if carried:
+        assert last['notification'] == 'delivered', (last, carried)
+        assert last['last_message'] in (None, carried[0]), (last, carried)
+    bodies = carried + ([last['last_message']] if last['last_message'] is not None else [])
+    assert bodies and len(set(bodies)) == 1, (last, bodies)
     return bodies[0]
 
 agent = run('create', runtime='dsh', instruction='hello')['agent']

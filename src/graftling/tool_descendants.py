@@ -88,19 +88,22 @@ def identity(pid: int) -> Identity | None:
     return None
 
 
-def is_zombie(pid: int) -> bool:
-    """Return whether ``pid`` has exited and only waits for its parent to reap it.
+def has_exited(pid: int) -> bool:
+    """Return whether ``pid`` is exiting or has exited and only waits for its parent to reap it.
 
-    Such a zombie still answers ``kill(pid, 0)`` but runs nothing. A process
-    this user cannot read is not reported as a zombie.
+    Such a process still answers ``kill(pid, 0)`` but runs nothing. A process
+    this user cannot read is not reported as exited.
     """
     try:
         if sys.platform == 'darwin':
-            # PROC_PIDTBSDINFO with a nonzero arg includes zombies (XNU findzomb); pbi_status at 4.
-            buffer = ctypes.create_string_buffer(136)
-            if _proc().proc_pidinfo(pid, 3, 1, buffer, 136) < 136:
+            # PROC_PIDT_SHORTBSDINFO=13 (64 bytes) with a nonzero arg includes exiting and zombie
+            # processes (XNU findzomb): pbsi_status at 12 (SZOMB), pbsi_flags at 32 (PROC_FLAG_INEXIT 0x4).
+            buffer = ctypes.create_string_buffer(64)
+            if _proc().proc_pidinfo(pid, 13, 1, buffer, 64) < 64:
                 return False
-            return int.from_bytes(buffer.raw[4:8], sys.byteorder) == _ZOMBIE_DARWIN
+            status = int.from_bytes(buffer.raw[12:16], sys.byteorder)
+            flags  = int.from_bytes(buffer.raw[32:36], sys.byteorder)
+            return status == _ZOMBIE_DARWIN or bool(flags & 0x4)
         if sys.platform.startswith('linux'):
             stat = Path(f'/proc/{pid}/stat').read_text()
             return stat[stat.rindex(')') + 2:].split()[0] in ('Z', 'X')
@@ -149,27 +152,19 @@ def _table() -> dict[int, Identity]:
 
 def _descend(table: dict[int, Identity], roots: set[int], marker: str, foreign: set[tuple[int, int]],
              skip: set[int] | frozenset[int] = frozenset()) -> dict[int, Identity]:
-    """Return the descendants of ``roots`` in ``table`` that pass the boundary rule.
-
-    A child judged foreign is added to ``foreign`` by its (pid, start) and not
-    judged again, unless it still shows exactly its parent's argv and
-    environment: between fork and exec a child is a copy of its parent, so it
-    is left unjudged and a later sample judges what it executes (496).
-    """
+    """Return the descendants of ``roots`` in ``table`` that pass the boundary rule."""
     children: dict[int, list[Identity]] = {}
     for item in table.values():
         children.setdefault(item.ppid, []).append(item)
     found: dict[int, Identity] = {}
     pending = list(roots)
     while pending:
-        parent = pending.pop()
-        for child in children.get(parent, ()):
+        for child in children.get(pending.pop(), ()):
             key = (child.pid, child.start)
             if child.pid in found or child.pid in skip or child.pid in roots or key in foreign:
                 continue
             if _foreign(child.pid, marker):
-                if _process_view(child.pid) != _process_view(parent):
-                    foreign.add(key)
+                foreign.add(key)
                 continue
             found[child.pid] = child
             pending.append(child.pid)

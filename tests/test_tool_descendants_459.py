@@ -200,6 +200,7 @@ def test_owner_killed_then_reconciliation_stops_the_recorded_shell_and_sleep(tmp
         execution = json.loads(record_path(root, child).read_text())['executions'][-1]
         report = execution.get('escaped_processes')
         print('escaped_processes:', json.dumps(report))
+        print('execution:', json.dumps({key: execution.get(key) for key in ('state', 'diagnostic', 'process')}))
         assert status['result']['last_result']['error']['code'] == 'owner-exited'
         assert execution['process']['tool_descendants'] == str(sidecar)
         assert sorted(item['pid'] for item in report['found']) == sorted([shell.pid, sleep.pid])

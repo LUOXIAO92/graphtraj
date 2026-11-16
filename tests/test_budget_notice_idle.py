@@ -253,7 +253,7 @@ def _set_status(path: Path, status: str) -> None:
     path.write_text(yaml.safe_dump({**record, "status": status}))
 
 
-@pytest.mark.parametrize("status", sorted(timers.ENDED_TASK_STATUSES))
+@pytest.mark.parametrize("status", ["awaiting-integration", "integrating", "integrated"])
 def test_timer_exits_once_the_task_was_accepted_or_integrated(team, status) -> None:
     """An accepted, integrated or cleaned Task keeps its status; its timers send nothing (490)."""
     task, runner, monitor, received = team

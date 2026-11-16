@@ -108,37 +108,32 @@ print("graphtraj runner directory:", found, "| project own:", found == own); sys
   next A
 }
 
-# commit_and_submit <task id>: the probe's instruction to commit one file with one Bash command and submit it
-# (realhost-402 step 2). No double quotes: launch() writes it into a YAML double-quoted string.
-commit_and_submit() {
-  print -r -- "In your Worktree run exactly one Bash command: echo $1 > probe-$1.txt && git add probe-$1.txt && git commit -m 'Add probe $1'. Then submit the result with the GraphTraj tasks tool feature submit_result: commit = the new HEAD, result_refs = [probe-$1.txt], completion = 'probe $1 committed'."
-}
 DIALOG_COMMIT="Dialog: expected none (the probe's one Bash commit and its tasks tool submit_result run under permission_mode auto); if a native permission request for that Bash commit or the submit_result call appears, the user approves it."
 
 step_A() {
-  say "[A] Task 4 (30-minute budget): a root member commits probe-4.txt and submits it, then ends -> its idle timer waits; Main's decision accepts the submission (Task awaiting-integration) -> the timer is gone within ~5 s and sent nothing; then task integrate and cleanup. $DIALOG_COMMIT Waits: member <= 300 s, submission <= 120 s, timer <= 30 s."
-  # A project from an earlier run has Task 2 at awaiting-integration without an acceptance: A uses Task 4.
+  say "[A] Task 6 (30-minute budget): a root member commits probe-6.txt and submits it, then ends -> its idle timer waits; Main's decision accepts the submission (Task awaiting-integration) -> the timer is gone within ~5 s and sent nothing; then task integrate and cleanup. $DIALOG_COMMIT Waits: member <= 300 s, submission <= 120 s, timer <= 30 s."
+  # Tasks 2 and 4 of earlier runs cannot be reused (no acceptance; a body saying 'Use no tool'): A uses Task 6.
   x490 prepare > $OUT/A-prepare.txt; local prc=$?
-  grep -E "task 4|roles" $OUT/A-prepare.txt
-  (( prc == 0 )) || { print "STOP A: roles or Task 4 not ready ($OUT/A-prepare.txt)"; return 1; }
-  local alias=$(launch 4 timer-a4 member "$(commit_and_submit 4) Then reply with one line DONE.")
-  [[ -n $alias ]] || { print "STOP: launch failed:"; cat $OUT/A-launch-4.yml; return 1; }
+  grep -E "task 6|roles" $OUT/A-prepare.txt
+  (( prc == 0 )) || { print "STOP A: roles or Task 6 not ready ($OUT/A-prepare.txt)"; return 1; }
+  local alias=$(launch 6 timer-a6 member "$(x490 instruction 6)")
+  [[ -n $alias ]] || { print "STOP: launch failed:"; cat $OUT/A-launch-6.yml; return 1; }
   print "member alias: $alias"
   wait_end $alias 300 || return 1
   sleep 2; x490 timers | tee $OUT/A-timers-before.txt
   grep -q "session $alias" $OUT/A-timers-before.txt || { print "STOP A: no timer was started for $alias (nothing to observe)"; return 1; }
   say "Main's decision: accept the member's submission"
-  x490 decide $alias 4 120 | tee $OUT/A-decide.txt
+  x490 decide $alias 6 120 | tee $OUT/A-decide.txt
   grep -q "^decision: OK" $OUT/A-decide.txt || { print "STOP A: the decision did not set awaiting-integration (above)"; return 1; }
   local t0=$(date +%s) gone=""
   while (( $(date +%s) - t0 < 30 )); do
     x490 timers | grep -q "session $alias" || { gone=$(( $(date +%s) - t0 )); break; }; sleep 1; done
   [[ -n $gone ]] && print "timer of $alias: gone ${gone} s after the decision" || print "timer of $alias: STILL RUNNING 30 s after the decision"
   say "task integrate, then cleanup"
-  x490 integrate 4 | tee $OUT/A-integrate.txt
+  x490 integrate 6 | tee $OUT/A-integrate.txt
   local after=gone; x490 timers | grep -q "session $alias" && after=RUNNING
   print "timer of $alias after integration: $after"
-  cleanup 4
+  cleanup 6
   local crc=$?
   say "budget notices recorded in this project (expected none for $alias)"; x490 notices | tee $OUT/A-notices.txt
   if [[ -n $gone && $after == gone && $crc == 0 ]] && grep -q "^integration: OK" $OUT/A-integrate.txt \
@@ -147,38 +142,38 @@ step_A() {
 }
 
 step_B() {
-  say "[B] Task 3 (5-minute budget; planned end about 5:00, allowance about 5:45 after the Leader starts): a Leader launches one Engineer, then commits probe-3.txt and submits it; both end and settle (the Engineer's completion resumes the Leader once, not through a timer). The steps then remove the Leader's own timer record (that timer's existing exit, no signal) so the Engineer's timer observes the planned end and delivers to the idle Leader, starting the Leader's Worker as the timer's child. Dialog: expected none (the Leader's agents launch of one engineer is inside role_tree, and its Bash commit and submit_result run under permission_mode auto); if a native permission request for launching one engineer, that Bash commit or the submit_result call appears, the user approves it. Waits: Leader start <= 300 s, settle <= 300 s, delivery <= 420 s, collection <= 300 s."
-  # A project from an earlier 00 may lack Task 3 (it had Task 1 at 1 minute, left unused): register what is missing.
+  say "[B] Task 5 (5-minute budget; planned end about 5:00, allowance about 5:45 after the Leader starts): a Leader launches one Engineer, then commits probe-5.txt and submits it; both end and settle (the Engineer's completion resumes the Leader once, not through a timer). The steps then remove the Leader's own timer record (that timer's existing exit, no signal) so the Engineer's timer observes the planned end and delivers to the idle Leader, starting the Leader's Worker as the timer's child. Dialog: expected none (the Leader's agents launch of one engineer is inside role_tree, and its Bash commit and submit_result run under permission_mode auto); if a native permission request for launching one engineer, that Bash commit or the submit_result call appears, the user approves it. Waits: Leader start <= 300 s, settle <= 300 s, delivery <= 420 s, collection <= 300 s."
+  # Tasks 1 and 3 of earlier runs are unused (1-minute budget; a body saying 'Use no tool'): B uses Task 5.
   x490 prepare > $OUT/B-prepare.txt; local prc=$?
-  grep -E "task 3|roles" $OUT/B-prepare.txt
-  (( prc == 0 )) || { print "STOP B: roles or Task 3 not ready ($OUT/B-prepare.txt)"; return 1; }
-  local alias=$(launch 3 timer-b5 leader "Use your GraphTraj agents tool to launch exactly one child with role engineer for this Task and the instruction: Reply with one line DONE. Use no tool. Wait for its result. $(commit_and_submit 3) Then reply with one line DONE. If a GraphTraj budget notice arrives later, reply with one line NOTED and use no tool.")
-  [[ -n $alias ]] || { print "STOP: launch failed:"; cat $OUT/B-launch-3.yml; return 1; }
+  grep -E "task 5|roles" $OUT/B-prepare.txt
+  (( prc == 0 )) || { print "STOP B: roles or Task 5 not ready ($OUT/B-prepare.txt)"; return 1; }
+  local alias=$(launch 5 timer-b5n leader "$(x490 instruction 5)")
+  [[ -n $alias ]] || { print "STOP: launch failed:"; cat $OUT/B-launch-5.yml; return 1; }
   print "Leader alias: $alias"
   wait_end $alias 300 || return 1
-  local eng=$(ls $P/.graphtraj/runner/sessions | grep "^3-" | grep -m1 "engineer")
-  [[ -n $eng ]] || { print "STOP B: no Engineer Session of Task 3 was launched (Leader records: $P/.graphtraj/runner/sessions/$alias)"; return 1; }
+  local eng=$(ls $P/.graphtraj/runner/sessions | grep "^5-" | grep -m1 "engineer")
+  [[ -n $eng ]] || { print "STOP B: no Engineer Session of Task 5 was launched (Leader records: $P/.graphtraj/runner/sessions/$alias)"; return 1; }
   print "Engineer alias: $eng"
   say "settling: both executions ended (by execution_id) and no new execution for 20 s"
   x490 settle $alias $eng 300 || { print "STOP B: the Leader and Engineer did not settle"; return 1; }
   sleep 2; x490 timers | tee $OUT/B-timers.txt
   say "the Engineer's timer before watching"
-  x490 engineer-timer $eng 3 || { print "STOP B: nothing to observe (reason above)"; return 1; }
+  x490 engineer-timer $eng 5 || { print "STOP B: nothing to observe (reason above)"; return 1; }
   rm -f $P/.graphtraj/runner/sessions/$alias/budget-timer.yml && print "removed the Leader's own timer record (it exits at its next 5 s slice)"
   say "watching the Leader for the Worker the Engineer's timer starts"
   x490 watch $alias $eng 420 | tee $OUT/B-watch.txt
   x490 notices | tee $OUT/B-notices.txt
   say "the Engineer's budget notice delivered to the Leader"
   x490 delivered $eng $alias; local drc=$?
-  say "after watch and delivered: Main's decision, task integrate, cleanup of Task 3"
-  x490 decide $alias 3 60 | tee $OUT/B-decide.txt
-  x490 integrate 3 | tee $OUT/B-integrate.txt
-  cleanup 3; local crc=$?
+  say "after watch and delivered: Main's decision, task integrate, cleanup of Task 5"
+  x490 decide $alias 5 60 | tee $OUT/B-decide.txt
+  x490 integrate 5 | tee $OUT/B-integrate.txt
+  cleanup 5; local crc=$?
   sleep 8; x490 timers
   say "B results"
   grep -E "^(parent|collected):" $OUT/B-watch.txt
   print "delivered: $([[ $drc == 0 ]] && print OK || print NO) (Engineer execution-budget-exceeded notice received by $alias)"
-  print "cleanup: $([[ $crc == 0 ]] && print OK || print NO) (Task 3; $(grep -E 'cleanup_status|code:' $OUT/B-cleanup-3.yml | tr -s ' \n' ' '))"
+  print "cleanup: $([[ $crc == 0 ]] && print OK || print NO) (Task 5; $(grep -E 'cleanup_status|code:' $OUT/B-cleanup-5.yml | tr -s ' \n' ' '))"
   if grep -q "^parent: OK" $OUT/B-watch.txt && grep -q "^collected: OK" $OUT/B-watch.txt && [[ $drc == 0 && $crc == 0 ]]; then
     print "PASS B"; else print "FAIL B (a line above is NO)"; fi
   next SUITE

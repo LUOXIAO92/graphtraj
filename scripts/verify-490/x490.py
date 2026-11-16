@@ -1,6 +1,7 @@
 """Task 490 real-host helper, run by steps.zsh with the candidate venv's Python inside the isolated project.
 
-    python -I x490.py prepare <project>            roles + Task 4 (30 minutes, A) and Task 3 (5 minutes, B), ready
+    python -I x490.py prepare <project>            roles + Task 6 (30 minutes, A) and Task 5 (5 minutes, B), ready
+    python -I x490.py instruction <project> <id>    the probe Task's instruction: its registered body text
     python -I x490.py decide <project> <alias> <task id> <s>   the alias's latest submission (agent-runner reports):
                                                    check its commit has probe-<task id>.txt, then decide-result accepted
     python -I x490.py integrate <project> <task id>   graphtraj task integrate -- <check probe-<task id>.txt exists>
@@ -12,8 +13,9 @@
     python -I x490.py delivered <project> <engineer> <leader>   the Engineer's budget notice reached the Leader
     python -I x490.py notices <project>             execution-budget-exceeded records per Session (time, key, delivery)
 
-Task 1 (1 minute) and Task 2 of earlier runs are left registered and unused: Task 1's thresholds pass while the
-Team runs (R1); Task 2 was moved to awaiting-integration by a state update without an acceptance (R2).
+Tasks 1-4 of earlier runs are left registered and unused: Task 1's thresholds pass while the Team runs (R1);
+Task 2 was moved to awaiting-integration without an acceptance (R2); Tasks 3 and 4 carry a body that said
+'Reply with one line DONE. Use no tool.', against the launch instruction (R3).
 
 It never signals a process. Exit status: 0 = the observation passed, 1 = it failed, 2 = could not observe.
 """
@@ -43,9 +45,31 @@ execution_budget:
 ---
 # 490 probe {name}
 
-Reply with one line DONE. Use no tool.
+{instruction}
 '''
-TASKS = {'3': ('timer-b5', 5), '4': ('timer-a4', 30)}
+
+
+def commit_and_submit(task_id: str) -> str:
+    """One Bash commit of probe-<id>.txt, then submit_result (realhost-402 step 2)."""
+    return (f"In your Worktree run exactly one Bash command: echo {task_id} > probe-{task_id}.txt && "
+            f"git add probe-{task_id}.txt && git commit -m 'Add probe {task_id}'. Then submit the result with the "
+            f"GraphTraj tasks tool feature submit_result: commit = the new HEAD, result_refs = [probe-{task_id}.txt], "
+            f"completion = 'probe {task_id} committed'.")
+
+
+# The registered Task body and the launch instruction are this same text (R3: a body saying otherwise won).
+# No double quotes or backslashes: steps.zsh writes it into a YAML double-quoted launch instruction.
+INSTRUCTIONS = {
+    # A: one root member.
+    '6': commit_and_submit('6') + ' Then reply with one line DONE.',
+    # B: the Leader and the Engineer it launches both read this body; each part names its role.
+    '5': ('If you are the leader: use your GraphTraj agents tool to launch exactly one child with role engineer '
+          'for this Task with the instruction: Reply with one line DONE and do nothing else. Wait for its result. '
+          + commit_and_submit('5') + ' Then reply with one line DONE. If a GraphTraj budget notice arrives later, '
+          'reply with one line NOTED and do nothing else. If you are the engineer: reply with one line DONE and '
+          'do nothing else.'),
+}
+TASKS = {'5': ('timer-b5n', 5), '6': ('timer-a6', 30)}
 
 
 def run(*argv: str, cwd: Path) -> subprocess.CompletedProcess:
@@ -87,7 +111,7 @@ def prepare(project: Path) -> int:
         register = work / f'register-{task_id}.yml'
         register.write_text(yaml.safe_dump({
             'task_id': task_id, 'task_name': name, 'source': 'local:scratch/490', 'title': name,
-            'body': BODY.format(total=total, name=name), 'dependencies': [], 'schema_version': 2,
+            'body': BODY.format(total=total, name=name, instruction=INSTRUCTIONS[task_id]), 'dependencies': [], 'schema_version': 2,
             'parent_id': None, 'disposition': 'active', 'replaced_by': [], 'retirement_reason': None}))
         state = work / f'ready-{task_id}.yml'
         state.write_text(yaml.safe_dump({
@@ -119,7 +143,12 @@ def decide(project: Path, alias: str, task_id: str, seconds: float) -> int:
             break
         time.sleep(5)
     if not submissions:
-        print(f'{alias} submitted nothing within {seconds:.0f} s; see its Trace')
+        directory = session_dir(project, alias)
+        terminal = read(directory / 'execution.yml')
+        print(f'{alias} submitted nothing within {seconds:.0f} s')
+        print(f'  last execution {terminal.get("execution_id")}: outcome {terminal.get("outcome")}')
+        print(f'  last_agent_message: {terminal.get("last_agent_message")!r}')
+        print(f'  Session directory: {directory}')
         return 2
     latest = submissions[-1]
     probe = f'probe-{task_id}.txt'
@@ -332,6 +361,9 @@ def main() -> int:
     command, project = sys.argv[1], Path(sys.argv[2])
     if command == 'prepare':
         return prepare(project)
+    if command == 'instruction':
+        print(INSTRUCTIONS[sys.argv[3]])
+        return 0
     if command == 'decide':
         return decide(project, sys.argv[3], sys.argv[4], float(sys.argv[5]))
     if command == 'integrate':

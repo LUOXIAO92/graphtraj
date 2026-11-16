@@ -248,3 +248,43 @@ integration: NO (task 4 status awaiting-integration)
 agent-runner decide-result --submission-id s2 --commit c08327939a8440485744feeef5d372e19402bd34 --decision accepted --reason 490 probe probe-4.txt committed --evidence-ref decision-4.md --evidence-ref .graphtraj/x/trace.md
 graphtraj task integrate --task-id 4 -- $TMPDIR/stubvenv490/bin/python -c from pathlib import Path; assert Path('probe-4.txt').is_file()
 graphtraj task integrate --task-id 4 -- $TMPDIR/stubvenv490/bin/python -c from pathlib import Path; assert Path('probe-4.txt').is_file()
+
+
+# Round 3 correction rehearsal (instruction in the registered Task body; Tasks 6 (A) and 5 (B); decide diagnostics), set -u, 2026-11-16 ~19:17
+
+## step A on the rehearsal project (Tasks 1-4 from earlier runs): prepare registers Tasks 5 and 6; stub host -> STOP
+
+### [A] Task 6 (30-minute budget): a root member commits probe-6.txt and submits it, then ends -> its idle timer waits; Main's decision accepts the submission (Task awaiting-integration) -> the timer is gone within ~5 s and sent nothing; then task integrate and cleanup. Dialog: expected none (the pr
+roles OK
+task 6 timer-a6: budget 30 min, status ready
+STOP: launch failed:
+
+## step B: Task 5 already registered; stub host -> STOP
+
+### [B] Task 5 (5-minute budget; planned end about 5:00, allowance about 5:45 after the Leader starts): a Leader launches one Engineer, then commits probe-5.txt and submits it; both end and settle (the Engineer's completion resumes the Leader once, not through a timer). The steps then remove the Lea
+task 5 already registered (ready): register skipped
+roles OK
+task 5 timer-b5n: budget 5 min, status ready
+STOP: launch failed:
+
+## registered body (task.md after the '# 490 probe' heading) vs the launch instruction written by launch() (YAML-parsed); driver $TMPDIR/r3-check.zsh
+== Task 6: registered body (from task.md) == launch instruction: YES
+  body: In your Worktree run exactly one Bash command: echo 6 > probe-6.txt && git add probe-6.txt && git commit -m 'Add probe 6'. Then submit the result with the GraphTraj tasks tool feature submit_result: commit = the new HEAD, result_refs = [probe-6.txt], completion = 'probe 6 committed'. Then reply with one line DONE.
+  'Use no tool' anywhere in the body: 0
+== Task 5: registered body (from task.md) == launch instruction: YES
+  body: If you are the leader: use your GraphTraj agents tool to launch exactly one child with role engineer for this Task with the instruction: Reply with one line DONE and do nothing else. Wait for its result. In your Worktree run exactly one Bash command: echo 5 > probe-5.txt && git add probe-5.txt && git commit -m 'Add probe 5'. Then submit the result with the GraphTraj tasks tool feature submit_result: commit = the new HEAD, result_refs = [probe-5.txt], completion = 'probe 5 committed'. Then reply with one line DONE. If a GraphTraj budget notice arrives later, reply with one line NOTED and do nothing else. If you are the engineer: reply with one line DONE and do nothing else.
+  'Use no tool' anywhere in the body: 0
+
+## x490 decide without a submission (stub agent-runner reports none; fabricated execution.yml); driver $TMPDIR/r3-drive.zsh
+== decide: no submission -> the member's last message and its Session directory, rc 2
+6-timer_a6-handover0-member@member submitted nothing within 1 s
+  last execution e6: outcome completed
+  last_agent_message: 'DONE (no tool used, as the Task body says)'
+  Session directory: $TMPDIR/fp490/.graphtraj/runner/sessions/6-timer_a6-handover0-member@member
+  -> rc 2
+== decide: no submission and no execution.yml (never ended) -> None fields, rc 2
+6-timer_a6-handover0-member@member submitted nothing within 1 s
+  last execution None: outcome None
+  last_agent_message: None
+  Session directory: $TMPDIR/fp490/.graphtraj/runner/sessions/6-timer_a6-handover0-member@member
+  -> rc 2

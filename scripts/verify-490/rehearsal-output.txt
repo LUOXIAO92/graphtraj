@@ -1,0 +1,71 @@
+# verify-490 rehearsal (Engineer, Claude Code sandbox, set -u, 2026-11-16)
+# env: VERIFY490_BASE=$TMPDIR/b490 VERIFY490_OUT=$TMPDIR/o490 VERIFY490_STUB_BIN=$TMPDIR/stub490 (stub claude prints one CLAUDE-OK line; stub ps lists one timer of another project)
+# Not rehearsable here: real claude Sessions (A launch stops at the stub host's version refusal; B not run), x490 accept/watch, and a real suite.
+
+## 00 (second run; the first run did git init, graphtraj setup and registered Tasks 1/2 ready, roles OK)
+
+### [00] preflight via /bin/zsh. Dialog: none. Waits: claude <= 120 s.
+ZSH_VERSION=5.9; candidate be9774752ca40ebfa0508b449f91498f678cd30c (uncommitted paths in /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/490-budget-idle-timer-reaps-worker: 0); BASE=/tmp/claude-501/b490
+pytest temp base: /private/tmp/claude-501 | outside the Harness /Users/luoxiao/workspace/you-are-a-product-architect-delivery: YES
+
+### candidate venv /tmp/claude-501/b490/venv: commit archived to /tmp/claude-501/b490/candidate and installed editable from there
+venv already holds be9774752ca40ebfa0508b449f91498f678cd30c: install skipped (rerun)
+candidate imports: /private/tmp/claude-501/b490/candidate/src/graphtraj/__init__.py | from the archived commit: True
+
+### isolated project /tmp/claude-501/b490/project (own git and .graphtraj)
+existing project: git init and setup skipped (rerun)
+graphtraj runner directory: /private/tmp/claude-501/b490/project/.graphtraj/runner | project own: True
+task 1 already registered (ready): register skipped
+task 2 already registered (ready): register skipped
+roles OK
+task 1 timer-b: budget 1 min, status ready
+task 2 timer-a: budget 30 min, status ready
+
+### host the steps use, one read-only call: claude -p --model claude-opus-5-5 (limit 120 s)
+claude answer: OK | CLAUDE-OK claude-opus-5-5 (stub) (logged in)
+
+### timers of this project before A (expected 0)
+budget timers of /tmp/claude-501/b490/project: 0
+
+==> next (Main pastes): zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/490-budget-idle-timer-reaps-worker/scripts/verify-490/steps.zsh A 2>&1 | tee /tmp/claude-501/o490/A.txt
+
+## A (stub host: launch refused, step stops)
+
+### [A] Task 2 (30-minute budget): a root member ends -> its idle timer waits; the Task is accepted, integrated and cleaned -> the timer is gone within ~10 s and sent nothing. Dialog: none (the member uses no tool). Waits: member <= 300 s, timer <= 30 s.
+STOP: launch failed:
+retained_batch_file: /private/tmp/claude-501/b490/project/.graphtraj/state/batches/20261116T183131.751805+0900.yml
+tasks:
+- task_id: '2'
+  task_name: timer-a
+  role: member
+  launch_status: failed
+  error:
+    code: invalid-config
+    message: Claude Code 2.1.299 or later is required.
+Claude Code 2.1.299 or later is required.
+
+## SUITE with VERIFY490_FAILURES (fake failure id that passes on dev -> NEW; dev clone 1524730b built then reused)
+
+### [SUITE] full suite of candidate be9774752ca40ebfa0508b449f91498f678cd30c from a fresh clone, 6 shards (scripts/run_test_shards.py), failing files once on dev 1524730b (verify-487 devcheck); then timers left by the suite. Dialog: none. Limits: suite 1500 s, dev recheck 600 s.
+pytest temp base: /private/tmp/claude-501 | outside the Harness /Users/luoxiao/workspace/you-are-a-product-architect-delivery: YES
+REHEARSAL: suite not run; failures from /tmp/claude-501/fake-failures.txt
+== shards exit 1 at 18:42:26; output /tmp/claude-501/o490/SUITE-suite.txt, shard logs /tmp/claude-501/o490/SUITE-shards/
+== failures (1):
+FAILED tests/test_budget_notice_idle.py::test_timer_exits_after_cleanup_removes_the_session
+
+### dev comparison: failing files once on dev 1524730b
+dev clone reused: /tmp/claude-501/b490/dev/src
+candidate failures: 1 ids in 1 files; files on dev: 1; limit 600 s; TMPDIR /tmp/claude-501
+dev pytest rc=0: 9 passed, 22 warnings in 0.93s
+  tests/test_budget_notice_idle.py::test_timer_exits_after_cleanup_removes_the_session: passes on dev -> NEW
+== NEW failures (fail on the candidate, pass or are absent on dev): 1
+  NEW tests/test_budget_notice_idle.py::test_timer_exits_after_cleanup_removes_the_session
+SUITE failures: NEW or unclassified (above)
+
+### timers the suite left: session-end reclaim lines per shard, then a process scan for this run id
+test run id: none
+budget timers the shards' session-end reclaim had to stop: 0
+budget timers of run none still running now: 0
+CHECK SUITE-timers: no run id in /tmp/claude-501/o490/SUITE-suite.txt (scan not meaningful)
+
+==> next: report /tmp/claude-501/o490/00.txt A.txt B.txt SUITE.txt to the 490 Leader

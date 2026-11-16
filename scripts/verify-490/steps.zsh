@@ -191,13 +191,17 @@ step_SUITE() {
   say "timers the suite left: session-end reclaim lines per shard, then a process scan for this run id"
   local run=$(grep -m1 -o "test run id: [0-9a-f]*" $OUT/SUITE-suite.txt | awk '{print $4}')
   print "test run id: ${run:-none}"
-  local found=$(cat $L/shard-*.log(N) 2>/dev/null | grep -c "graphtraj.execution.budget_idle_timer")
-  grep -h "leftover test processes" $L/shard-*.log(N)
+  # /dev/null keeps grep off stdin when there is no shard log (rehearsal).
+  local logs=($L/shard-*.log(N) /dev/null)
+  local found=$(cat $logs | grep -c "graphtraj.execution.budget_idle_timer")
+  grep -h "leftover test processes" $logs
   print "budget timers the shards' session-end reclaim had to stop: $found"
   local left=$(ps -Eww -x -o pid=,command= | grep "graphtraj.execution.budget_idle_timer" | grep -c "PYTEST_GRAPHTRAJ_RUN=${run:-none}-")
   print "budget timers of run ${run:-none} still running now: $left"
-  [[ $left == 0 ]] && print "PASS SUITE-timers (none left)" || print "FAIL SUITE-timers ($left left)"
-  next "report $OUT/*.txt to the 490 Leader"
+  if [[ -z $run ]]; then print "CHECK SUITE-timers: no run id in $OUT/SUITE-suite.txt (scan not meaningful)"
+  elif [[ $left == 0 ]]; then print "PASS SUITE-timers (none left)"
+  else print "FAIL SUITE-timers ($left left)"; fi
+  print ""; print "==> next: report $OUT/00.txt A.txt B.txt SUITE.txt to the 490 Leader"
 }
 
 case $STEP in

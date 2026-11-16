@@ -176,3 +176,34 @@ and 475's E2BIG case, N prompt contents, `done`'s key count.
 Not rehearsed: real Claude Code (Vc's `claude -p`, Vu's dialog, N's real member and child), the real suite, real
 `ps` sampling of a production Worker, 00's real `task graph` call against production (the stub tree has no Task
 graph CLI state of its own).
+
+## Correction (Round 2): 466 production check rerun — N466 / N466r
+
+First production Nr: `CHECK 466 … FAIL (total=None indices=[])`. nr478.py did not unwrap the real result. In the
+member archive, the tool_result content is a JSON string `{action, agent, session, execution, message, result:
+{session, content, total, start, stop, events:[{index, seq, type, text}], earlier, pending, omitted}}` (seen in
+member Session `claude:6d5623bc…` seq 151–152 through tasks session_read). Credential masking was never exercised:
+the reads used content `text`, and the fake key is only in tool output. The 477, 468 and 475 checks stand.
+
+`nr466.py` finds each `mcp__agents__agents` tool_use with feature `session_read` and its matching tool_result. It
+walks nested dicts, lists and JSON strings until it finds a dict with `total`. If it finds none, it prints a
+structural diagnostic (keys, types and lengths only).
+
+| Step | Who | Command | Dialog | Success | Wait limit |
+|---|---|---|---|---|---|
+| N466 | Main | `zsh $S N466`, then paste the swarm prompt; save `N466.txt` (swarm result, has "alias") and `N466-reply.txt` | none | launch_status not failed; the member quotes 5 compact lines | 1 min + member ≤ 5 min |
+| N466r | Main, after the member's completion notice | `zsh $S N466r` | none | four `CHECK 466 …: PASS` lines | 2 min |
+
+The N466 member (Task 478, `opus_coding_team.advisor`, no submit calls) reads the retired probe child by
+`session` `claude:5585dafa-88d0-4ff2-8633-05090a2d9c7d`: (1) default; (2) start -10 stop -5; (3) search
+KW478-ORCHID; (4) content tools, search probe478; (5) content all, start -6.
+
+| Criterion (definition 3, 466) | Observable in N466r |
+|---|---|
+| default = last 5 | `CHECK 466 default read = last 5: PASS (total=… indices=range(total)[-5:])` |
+| one page back | `CHECK 466 page back [-10:-5]: PASS` |
+| keyword search correct | `CHECK 466 keyword hits are child-archive events holding the keyword: PASS` (hit seqs ⊆ child-archive seqs containing KW478-ORCHID) |
+| credentials masked | `CHECK 466 credential masked …: PASS`: in the tools/all results the fake value count is 0, '[redacted]' appears at the events whose seq holds the value in the child archive, and the member archive and native transcript contain the value 0 times (counts only) |
+
+Rehearsal: `rehearse466.py` builds fixtures in the real shape (one masked positive and one leaking negative), and
+the N466 prompt was printed in a fake Harness. Result: ALL PASS, saved in `rehearsal466-output.txt`.

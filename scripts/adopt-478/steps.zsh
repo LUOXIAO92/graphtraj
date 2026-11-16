@@ -29,6 +29,7 @@ OLDBASE=${ADOPT478_OLDBASE:-$H/tmp/475}   # 475's backup: listed only, never tou
 TASK=478-production-adoption-466-477
 TASK_ID=478
 CHILD=n478
+N466_CHILD=${ADOPT478_N466_CHILD:-5585dafa-88d0-4ff2-8633-05090a2d9c7d}   # N's retired probe child Session (2026-11-16)
 CC_EXPECT=2.1.325
 # 478's pytest temporary root: Main's TMPDIR when it lies outside the Harness, else /private/tmp (482: never under $H).
 PYTMP=${ADOPT478_PYTMP:-${TMPDIR:-/private/tmp}}
@@ -834,6 +835,19 @@ Using only the tasks tool: execute swarm with arguments {"tasks":[{"task_id":"$T
   成员结束（Main 收到 completed 通知）后，Main 的 Bash（无对话框）:
 EOF2
   next "zsh $THIS Nr" ;;
+
+N466) print "[N466] Main. $(cv)"; cat <<EOF2 | tee $R/N466-prompts.txt
+[N466] Main. 466 的生产核对（第二次，只读）：一个新的 Task 478 成员用 agents 的 session_read 按 session 读已清退的探针子级 Session。对话框: 无。成员约 2-5 分钟。在 Claude Main 里粘贴这一条:
+Using only the tasks tool: execute swarm with arguments {"tasks":[{"task_id":"$TASK_ID","role":"opus_coding_team.advisor","instruction":"This is a read-only production check. Do NOT call submit_result or submit_report and use no other tools than the agents tool. Call the agents tool (action execute, feature session_read) five times on the Session claude:$N466_CHILD (pass it as the argument session; the child is retired, the read comes from its archive): (1) {session: claude:$N466_CHILD}; (2) {session: claude:$N466_CHILD, start: -10, stop: -5}; (3) {session: claude:$N466_CHILD, search: KW478-ORCHID}; (4) {session: claude:$N466_CHILD, content: tools, search: probe478}; (5) {session: claude:$N466_CHILD, content: all, start: -6}. For each call reply with one compact line: total, start, stop, the event indices (or each hit index and seq), and the result size in characters. For (4) and (5) add the number of occurrences of [redacted] in the result and whether the substring sk-probe478 appears in it (yes or no; never quote any value). If a call is refused, quote the exact error text. Quote no event contents. Then end your turn."}]}. Print the raw result and end your turn. Do not wait.
+  Main 把 swarm 原始结果存为 $R/N466.txt（必须含 "alias"）；成员最终回复原文存为 $R/N466-reply.txt。成员的 completed 通知到达后，Main 的 Bash（无对话框）:
+EOF2
+  next "zsh $THIS N466r" ;;
+
+N466r) print "[N466r] Main. 466 核对：读本次成员的档案（只读，不打印凭据值）。对话框: 无。约 1 分钟。"; cv | tee $R/N466r.txt
+  $CONDA -I $SD/nr466.py $H $R claude:$N466_CHILD $TASK 2>&1 | tee -a $R/N466r.txt; rc=${pipestatus[1]}
+  summary N466r "$(grep -E '^CHECK|^466|structure' $R/N466r.txt)"
+  print "成功: CHECK 466 default read = last 5、page back [-10:-5]、keyword hits、credential masked 四行都是 PASS。BLOCKED/FAIL 交 Main 登记（未观察到的不算通过）。"
+  next "zsh $THIS done"; exit $rc ;;
 
 Nr) print "[Nr] Main. 子级记录、459 的后代记录、Bash 是否真正启动、465 成员设置与 session_read、成员的结束与 Session 档案（只读，从不发信号）。对话框: 无。"
   cv | tee $R/Nr.txt

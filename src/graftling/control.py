@@ -1084,6 +1084,12 @@ class AgentControl:
                         return self._outcome(record, result={"timed_out": False})
                     remaining = deadline - time.monotonic()
                     if remaining <= 0:
+                        # Leave in the same write that decides the timeout: an end
+                        # arriving before _release_wait would otherwise be reserved
+                        # for this gone wait and released to an immediate push (487).
+                        waiters = current.get("waiters") or {}
+                        if waiters.pop(token, None) is not None and not waiters:
+                            current.pop("waiters", None)
                         return self._outcome(record, result={"timed_out": True})
                     if caller.agent == record["parent"]:
                         current.setdefault("waiters", {})[token] = os.getpid()

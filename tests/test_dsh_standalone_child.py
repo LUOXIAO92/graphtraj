@@ -86,16 +86,25 @@ def prompts(service: FakeDshService) -> list[str]:
 
 
 def answered(invoke: Callable, agent: str, shown: Sequence[dict] = ()) -> dict:
-    """Wait for an end and return it with the body the Main got, which it must get exactly once.
+    """Wait for an end and return it with the body the Main got; its notice comes at most once.
 
-    The wait shows it, unless an earlier result already carried it as a notice: a
-    quick child can end before its own create, send or resume returns.
+    A quick child can end before its own create, send or resume returns, so that
+    result may carry its notice. The wait that follows still shows the body (477,
+    PUBLIC_API "Claude Code host"), already ``delivered``: it is not a second push.
     """
+    before  = len(shown)
     last    = invoke('wait', agent=agent, timeout_seconds=10)['result']['last_result']
+    end     = (last['id'], last['outcome'])
     carried = [notice['event']['message'] for notice in shown
-               if (notice['event']['execution'], notice['event']['event']) == (last['id'], last['outcome'])]
-    bodies  = carried + ([last['last_message']] if last['last_message'] is not None else [])
-    assert len(bodies) == 1, (last, carried)
+               if (notice['event']['execution'], notice['event']['event']) == end]
+    earlier = [notice for notice in shown[:before] if (notice['event']['execution'], notice['event']['event']) == end]
+    assert len(carried) <= 1, (last, carried)
+    if earlier:
+        # Carried by an earlier result: settled there, and the wait shows the same body.
+        assert last['notification'] == 'delivered', (last, carried)
+        assert last['last_message'] in (None, carried[0]), (last, carried)
+    bodies = carried + ([last['last_message']] if last['last_message'] is not None else [])
+    assert bodies and len(set(bodies)) == 1, (last, carried)
     return {**last, 'last_message': bodies[0]}
 
 

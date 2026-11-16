@@ -339,6 +339,34 @@ def test_wait_and_push_racing_deliver_the_reply_exactly_once(project, trial: int
             assert waited['last_result']['last_message'] == 'RACE'
 
 
+def test_an_end_right_after_a_wait_timed_out_is_held_for_the_members_next_wait(project, monkeypatch) -> None:
+    """487: the end lands after the first wait decided its timeout but before it left.
+
+    Forced interleaving of the [6-True] suite failure: that end must not be reserved
+    for the gone wait and pushed at once mid-turn; the member's next wait takes it.
+    """
+    root, agents, sent, binding, reference, run = _member_child(project, running=True)
+    release = AgentControl._release_wait
+
+    def end_then_release(self, agent: str, token: str) -> None:
+        if not end_then_release.done:
+            end_then_release.done = True
+            run.events.finished('completed', last_message='RACE')
+        release(self, agent, token)
+
+    end_then_release.done = False
+    monkeypatch.setattr(AgentControl, '_release_wait', end_then_release)
+    first = agents.operate('wait', {'agent': reference, 'timeout_seconds': 0.05}, binding).result
+    assert first['timed_out'] is True and end_then_release.done
+    late = agents.operate('wait', {'agent': reference, 'timeout_seconds': 5}, binding).result
+    _member_turn_ends(root)
+    assert late['last_result']['last_message'] == 'RACE'
+    assert sent == []
+    final = _record(swarm_root(root), reference)['executions'][-1]
+    assert final['notification'] == 'delivered'
+    assert not {'waiters', 'push_deferred', 'wait_released'} & set(final)
+
+
 # -- Correction 2: a holder that dies while it holds a running member's end ----
 
 HOLDER = '''

@@ -14,6 +14,10 @@ The numbers in parentheses are the project's Task numbers.
 
 ## Unreleased (compatible)
 
+- A `wait` that times out drops its `waiters` mark in the same record write that
+  decides the timeout (487). Before, an end arriving in between was reserved for the
+  departed wait, released as `held` and pushed at once, so a deferring receiver
+  (a running Task member's child end) could not hold it for the parent's next `wait`.
 - **Incompatible, not yet numbered (477; see section 7 of the public interface).**
   `status`, `wait` and `retire` always return the child's stored
   `last_result.last_message`. Before, once the body had been delivered (or might

@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import json
+import threading
+import time
 from pathlib import Path
 
 import pytest
@@ -174,7 +176,11 @@ def test_an_undelivered_member_notice_is_unavailable_and_readable(project) -> No
 def test_a_busy_member_input_is_retried_within_the_operation_window(project, monkeypatch) -> None:
     *_, sent, send, child = project
     monkeypatch.setattr('graphtraj.execution.runner_process.OPERATION_TIMEOUT_SECONDS', 5.0)
-    monkeypatch.setattr('time.sleep', lambda seconds: setattr(send, 'failure', None))
+    # Only this test's thread (which sends the notice) is the retry's pause; another
+    # thread of the process (e.g. a member hold left by an earlier test) sleeps for real (487).
+    sleep, this = time.sleep, threading.get_ident()
+    monkeypatch.setattr('time.sleep', lambda seconds: setattr(send, 'failure', None)
+                        if threading.get_ident() == this else sleep(seconds))
     send.failure = RunnerError('operation-failed', 'The parent Session input lock is busy; retry this notice.')
     status = child('interrupted')
     assert len(sent) == 2

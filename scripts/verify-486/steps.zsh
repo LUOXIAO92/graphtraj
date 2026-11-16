@@ -94,7 +94,8 @@ print(last.get("runtime", "none"), last.get("session", "none"))') > $OUT/00-prod
     print -r -- $commit > $V/.candidate
   else print "venv already holds $commit: install skipped (rerun)"; fi
   clean $PY -I -c 'import sys, graphtraj, graftling
-ok = all(m.__file__.startswith(sys.argv[1]) for m in (graphtraj, graftling))
+from pathlib import Path
+ok = all(Path(m.__file__).resolve().is_relative_to(Path(sys.argv[1]).resolve()) for m in (graphtraj, graftling))
 print("candidate imports:", graphtraj.__file__, "| from the archived commit:", ok); sys.exit(0 if ok else 1)' $BASE/candidate \
     || { print "STOP: the venv does not import the candidate"; return 1; }
   say "isolated project $P (own git and .graphtraj; GraphTraj must not resolve the Harness .graphtraj)"
@@ -150,7 +151,11 @@ step_D1() {
   dsh_turn "Using only the agents tool: create a root agent with arguments {\"runtime\": \"claude\", \"configuration\": \"advisor\", \"name\": \"g398\", \"instruction\": \"Run the shell command sleep 60 once, then reply with exactly one line: PONG-398.\"}. Do not wait. Print CREATE and the agent id, then stop." || return 1
   claims | tail -1 | awk '{print $2}' > $OUT/D.session
   local session=$(cat $OUT/D.session)
-  print "DSH Main session (from its continuity claim): $session"
+  print "DSH Main session (from its continuity claim): ${session:-NONE}"
+  if [[ -z $session ]]; then
+    print "FAIL 486 queued: no DSH continuity claim, so the turn did not become Main (see $OUT/D1-stderr.txt)"
+    x486 dump; next X; return 1
+  fi
   grep '"tool_result"' $OUT/D1-main-stream.jsonl | grep -o 'agent: agent-[0-9a-f]*' | head -1 | sed 's/^/created (YAML tool result): /'
   x486 queued $session 60
   probe queued $P dsh g398 5
@@ -198,7 +203,8 @@ suite() {
     || { print "STOP: nested venv imports failed (error above)"; return 1; }
   rm -rf $nest
   clean $VT/bin/python -I -c 'import sys, graphtraj, graftling
-ok = all(m.__file__.startswith(sys.argv[1]) for m in (graphtraj, graftling))
+from pathlib import Path
+ok = all(Path(m.__file__).resolve().is_relative_to(Path(sys.argv[1]).resolve()) for m in (graphtraj, graftling))
 print("test venv imports the checkout:", "OK" if ok else "NO", graphtraj.__file__); sys.exit(0 if ok else 1)' $C/src \
     || { print "STOP: the test venv does not import the checkout"; return 1; }
   local tmp=${TMPDIR:-/tmp}

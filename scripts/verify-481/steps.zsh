@@ -3,7 +3,7 @@
 # Task 481: a user-started headless DSH becomes GraphTraj Main through the documented patch (README "DSH as Main"),
 # in an ISOLATED project under the Harness tmp/481, with the candidate installed in tmp/481/venv.
 # Production .venv-runtime (read only: dependency copies) and the production Main are never changed.
-#   zsh <this file> <00|D1|D2|D3|SUITE|F>       order: 00 -> D1 -> D2 -> D3 -> SUITE -> F
+#   zsh <this file> <00|D1|D2|D3|D3J|X398|SUITE|F>   order: 00 -> D1 -> D2 -> D3 (-> D3J if D3 timed out) -> X398 -> SUITE -> F
 # Every step: no native dialog (headless hosts; the DSH Main answers requests through its tools), bounded waits,
 # signals only processes it started. Reuses verify-444/probe.py (same commit) for the 398/373 judgements.
 set -u
@@ -160,13 +160,32 @@ step_D2() {
   next D3
 }
 step_D3() {
+  local TURN_LIMIT=600  # the denying turn loops up to 12 rounds; dsh_turn sees this (zsh dynamic scope)
   say "[D3] after 120 s, resume the DSH Main: the asker's queued requests arrive; it denies each (373-DSH). Dialog: none. Waits <= $((TURN_LIMIT + 120)) s."
   pause 120
-  dsh_turn --session-id $(cat $OUT/D.session) "Quote every GraphTraj notice you received at the start of this turn (alias, event, request id). $DENY" || return 1
+  dsh_turn --session-id $(cat $OUT/D.session) "Quote every GraphTraj notice you received at the start of this turn (alias, event, request id). $DENY" \
+    || { print "D3's DSH Main is still running; judge later without signalling it:"; next D3J; return 1; }
+  judge_D3
+  next X398
+}
+judge_D3() {
   cat $OUT/D2-main-stream.jsonl $OUT/D3-main-stream.jsonl > $OUT/D3x-main-stream.jsonl 2>/dev/null  # asker alias is in D2's
   probe requests $P $OUT D3x dsh
   for f in $BASE/373-dsh-a $BASE/373-dsh-b; do [[ -e $f ]] && print "FAIL 373-DSH target exists: $f" || print "PASS 373-DSH target absent: $f"; done
   probe inbox $P | tee $OUT/D3-inbox.txt
+}
+step_D3J() {
+  say "[D3J] wait for D3's DSH Main to end by itself, then judge 373-DSH. No model, no host started, nothing signalled. Dialog: none. Waits <= 420 s."
+  if ! wait_pid $OUT/D3.pid 420; then
+    print "STOP D3J: D3's DSH Main pid $(cat $OUT/D3.pid 2>/dev/null) is still running; it was not signalled. Rerun D3J later."
+    next D3J; return 1
+  fi
+  judge_D3
+  next X398
+}
+step_X398() {
+  say "[X398] read only: g398's control record, Runner session, notices and log lines. No model, no host, nothing signalled. Dialog: none. Waits: none."
+  (cd $P && clean $PY -I $SD/x398.py $P g398) | redact
   next SUITE
 }
 step_SUITE() {
@@ -207,7 +226,7 @@ step_F() {
 # Everything runs from this last line and exits on it, so zsh reads nothing after it even if the file changes.
 dispatch() {
 case $STEP in
-  00|D1|D2|D3|SUITE|F) step_$STEP 2>&1 | redact ;;
-  *) print "usage: zsh $THIS <00|D1|D2|D3|SUITE|F>" ;;
+  00|D1|D2|D3|D3J|X398|SUITE|F) step_$STEP 2>&1 | redact ;;
+  *) print "usage: zsh $THIS <00|D1|D2|D3|D3J|X398|SUITE|F>" ;;
 esac
 }; dispatch; exit

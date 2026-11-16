@@ -3,14 +3,17 @@
 # Task 480: a sandboxed Pi member writes its assigned report (.state symlink into the private state).
 # ISOLATED projects under the Harness tmp/480 (own git, own .graphtraj; Harness AGENTS.md is not an ancestor
 # instruction: projects live under tmp/480 and Pi members get only their Worktree's instruction files).
-#   zsh <this file> <00|R|V|T>      order: 00 -> R (production, reproduce) -> V (candidate) -> T (full suite)
+#   zsh <this file> <00|R|V|T|T2>   order: 00 -> R (production, reproduce) -> V (candidate) -> T2 (full suite)
+#   (T is invalid and kept only for its retained output: git-archive sources lack .git; see the note above step_T.)
 # Wait limits (each enforced by alarms/self-stops in the step):
 #   00 <= 20 min  3 offline venv builds (venv <= 2 + pip <= 2 min each), 2 projects (setup <= 1 + prepare <= 1 min
 #                 each), one pi call (<= 4 min); typically ~3 min
 #   R  <= 10 min  dispatch (<= 9 min, the member's turn <= 8 min) + judge (<= 1 min)
 #   V  <= 10 min  same as R with the candidate
 #   T  <= 35 min  8-shard suite (self-stops at 25 min) + reruns of its failures on the base (<= 10 min)
-#   Sum of step limits Main should plan for: 75 min (20 + 10 + 10 + 35).
+#   T2 <= 40 min  git clones + editable venvs (<= 5), 8-shard suite (self-stops at 25 min), base check (<= 10 min)
+#   Sum of step limits Main should plan for: 75 min (20 + 10 + 10 + 35); T2 alone: 40 min.
+#   Rehearsal of T2 up to the suite: VERIFY480_NO_SUITE=1 (Main never sets it).
 # Every step: Dialog: none; signals only the processes it started; never prints the DEEPSEEK_API_KEY value.
 # Venvs are built offline (no PyPI), as verify-482 build(). Rehearsal without a model: VERIFY480_NO_MODEL=1 ... 00
 set -u
@@ -152,6 +155,9 @@ step_V() {
   return $rc
 }
 
+# Step T is INVALID (kept unchanged with its retained output): its git-archive sources have no .git, and
+# tests/conftest.py _export_source runs `git ls-files` at the project root with check_returncode(), so about 604
+# tests errored with exit 128 on both the candidate and the base. Use T2 (standalone git clones) instead.
 step_T() {
   say "[T] full suite on candidate $COMMIT, $SHARDS shards. Dialog: none. Wait limit: 35 min (suite self-stops at 25 min; base reruns <= 10 min)."
   [[ -d $SRC && -x $TESTENV/bin/python && -x $BASEENV/bin/python ]] || { print "STOP: run 00 first"; return 1; }
@@ -174,8 +180,51 @@ step_T() {
   next "report $OUT/{00,R,V,T}.txt to the Task 480 Leader"
 }
 
+clone() {  # clone <commit> <dir>: a standalone git clone checked out (detached) at exactly <commit>
+  local want=$(git -C $REPO rev-parse $1) || return 1
+  if [[ -d $2 ]]; then
+    [[ $(git -C $2 rev-parse HEAD 2>/dev/null) == $want ]] && { print "existing clone $2 kept (HEAD $want)"; return 0; }
+    print "STOP: existing $2 is not at $want (HEAD $(git -C $2 rev-parse HEAD 2>&1)); remove it or choose another BASE"
+    return 1
+  fi
+  $LIMIT2 git clone -q --no-checkout $REPO $2 && git -C $2 checkout -q --detach $want
+}
+
+step_T2() {
+  local CL=$BASE/clone-${COMMIT[1,12]} BCL=$BASE/clone-base-$BASE_COMMIT
+  local TV=$BASE/testenv-git-${COMMIT[1,12]} BV=$BASE/testenv-git-base-$BASE_COMMIT
+  say "[T2] full suite on candidate $COMMIT from a git clone, $SHARDS shards. Dialog: none. Wait limit: 40 min (clones + venvs <= 5, suite 25, base check 10)."
+  print "load average at start: $(sysctl -n vm.loadavg)"
+  clone $COMMIT $CL || return 1
+  clone $BASE_COMMIT $BCL || return 1
+  print "candidate clone $CL HEAD $(git -C $CL rev-parse HEAD)"
+  print "base clone $BCL HEAD $(git -C $BCL rev-parse HEAD)"
+  print "candidate clone git ls-files count (what tests/conftest.py _export_source needs): $(git -C $CL ls-files | wc -l | tr -d ' ')"
+  build $TV $CL editable || return 1
+  build $BV $BCL editable || return 1
+  print "candidate test venv ($TV): $(installed $TV)"
+  print "base test venv ($BV): $(installed $BV)"
+  local T=${TMPDIR:-/tmp} enc
+  enc=$(cd / && $TV/bin/python -I -c 'import sys; sys.path.insert(0, sys.argv[1]); from harness_isolation import enclosing_harness as e; print(e(sys.argv[2]) or "")' $CL/tests $T)
+  if [[ -n $enc || ${T:A} == $H || ${T:A} == $H/* ]]; then print "STOP: TMPDIR $T lies inside a Harness (${enc:-$H})"; return 1; fi
+  print "TMPDIR=$T: pytest's temp directory is outside the Harness (enclosing Harness: none)"
+  [[ -n ${VERIFY480_NO_SUITE:-} ]] && { print "VERIFY480_NO_SUITE set: stopping before the suite (rehearsal)."; return 0; }
+  local R=$OUT/T2; rm -rf $R-shards; mkdir -p $R-shards
+  print "== start $(date +%T)"
+  (cd $CL && group 1500 $TV/bin/python $CL/scripts/run_test_shards.py --shards $SHARDS --log-dir $R-shards) \
+    > $R-suite.txt 2>&1
+  local rc=$?
+  print "== suite exit status $rc at $(date +%T) (124 = 25 min self-stop); output $R-suite.txt, shard logs $R-shards/"
+  tail -n 4 $R-suite.txt
+  touch $R-shards/failures.txt
+  print "== failures ($(wc -l < $R-shards/failures.txt | tr -d ' ')):"; cat $R-shards/failures.txt
+  say "failing ids rechecked on base $BASE_COMMIT ($BCL, $BV), same TMPDIR: one pytest -rA over their files; <= 10 min"
+  (cd $BCL && group 600 $BV/bin/python -I $SD/probe.py basecheck $R-shards/failures.txt 570) 2>&1 | redact
+  next "report $OUT/T2.txt to the Task 480 Leader"
+}
+
 case $STEP in
   00) step_00 2>&1 | tee $OUT/00.txt; exit ${pipestatus[1]} ;;
-  R|V|T) step_$STEP ;;
-  *) print "usage: zsh $THIS <00|R|V|T>" ;;
+  R|V|T|T2) step_$STEP ;;
+  *) print "usage: zsh $THIS <00|R|V|T|T2>" ;;
 esac

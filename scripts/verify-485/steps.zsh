@@ -157,12 +157,23 @@ step_R() {
 }
 
 step_R5() {
-  local proj=${1:-$P}
+  # Default: a fresh project WITHOUT GraphTraj hooks. In a trusted project with approved GraphTraj hooks
+  # (tmp/485/project after I1, tmp/484/project) the SessionStart hook stops an unrecorded ephemeral fork's
+  # turn before the model (stop_hook.native_event -> event_record: no transcript_path -> continue:false),
+  # which made R4 and the first R5 complete without a model reply.
+  local proj=${1:-$BASE/project-r5}
+  if [[ -z ${1:-} && ! -d $proj/.git ]]; then
+    mkdir -p $proj && (cd $proj && git init -q -b main && print -r -- "# 485 R5 probe" > README.md && git add README.md \
+      && git -c user.name=485 -c user.email=485@invalid commit -qm "Initial source") || return 1
+  fi
+  [[ -e $proj/.codex/hooks.json ]] && print "NOTE: $proj has .codex/hooks.json; if trusted, its hooks run for these forks"
+  print "R5 project $proj | GraphTraj hooks: $([[ -e $proj/.codex/hooks.json ]] && print PRESENT || print none)"
   say "[R5] which part of the checker's permission override fails, on ONE project ($proj), through the checker's channel. Dialog: none. No user."
   print "Two base threads (thread/start permissions ':read-only' and ':workspace'), each one trivial turn; per base 5 forks:"
   print "plain (Main's profile), net+sock (today's override), net (no socket), net+lit (literal symlink socket path), sock (socket, network not enabled)."
   print "Each fork's turn runs one command connecting to the control socket: 'socket REACHED' = the checker keeps its access."
-  print "Each turn limit 180 s; whole run 1560 s. Base threads archived; forks ephemeral. Best after I1 (then $P is trusted)."
+  print "Every turn's notices are printed (method, item type, hook output): a turn stopped by a hook shows it there."
+  print "Each turn limit 180 s; whole run 1560 s. Base threads archived; forks ephemeral. A row is valid only with a model reply (not 'None')."
   [[ -n ${VERIFY485_NO_MODEL:-} ]] && { print "VERIFY485_NO_MODEL set: no model or host call (rehearsal)."; return 0; }
   [[ -d $proj ]] || { print "$proj absent"; return 1; }
   (cd $proj && limit 1560 $PY -I $SD/probe.py variants R5 $proj $CODEX_HOME_USED $CODEX_MODEL) || print "[R5] probe rc=$? (1560 s limit is rc 142)"
@@ -179,7 +190,8 @@ step_I1() {
   print "     No other dialog should appear."
   print "  1. cd $P && codex -m $CODEX_MODEL"
   print "     (exactly this: no -c or other options. If Codex prints 'Running without the shared background server: ...', copy that line to Main.)"
-  print "     If after trusting, the startup does not show 'GraphTraj Main Session associated': /exit and run the same command once more."
+  print "     'GraphTraj Main Session associated.' appears after the FIRST prompt (Codex runs SessionStart with the first turn), not at startup."
+  print "     Do not /exit or restart for its absence at startup; if it is still missing after the first reply, tell Main."
   print "  2. paste this one prompt (also in $OUT/I1-prompt.txt):"
   print -r -- "$(cat $OUT/I1-prompt.txt)"
   print "  3. wait until the reply H485-DONE and the Stop hook's 'Completion Check · ...' lines appear (up to 10 minutes);"

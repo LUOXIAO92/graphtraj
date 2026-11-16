@@ -470,8 +470,25 @@ def variants(label: str, project: Path, codex_home: str, model: str) -> int:
             return
         text = str(result.get('last_agent_message'))
         say(f'  [{base} {name}] EXECUTION {result.get("outcome")} | last message {text[:600]!r}')
+        notices(client, thread['id'], f'[{base} {name}]')
+        if result.get('last_agent_message') is None:
+            results.append((tag, name, f"{result.get('outcome')} | NO MODEL REPLY: row invalid (see its notices)"))
+            return
         results.append((tag, name, f"{result.get('outcome')} | socket "
                                     f"{'REACHED' if 'SOCKET-CONNECT-OK' in text else 'NOT reached'} | {text[:200]!r}"))
+
+    def notices(client, thread: str, tag: str) -> None:
+        """Print this thread's received notices: method, item type, hook output; shows a hook-stopped turn."""
+        for notice in client.drain_notifications():
+            params = notice.get('params', {}) if isinstance(notice, dict) else {}
+            if params.get('threadId') != thread or notice.get('method', '').endswith('/delta'):
+                continue
+            item = params.get('item') or params.get('run') or {}
+            detail = {k: item.get(k) for k in ('type', 'status', 'eventName', 'statusMessage', 'entries', 'text',
+                                                'command', 'aggregatedOutput', 'exitCode') if k in item}
+            if notice.get('method') in ('error', 'turn/completed'):
+                detail = params.get('error') or (params.get('turn') or {}).get('error') or detail
+            say(f'  {tag} notice {notice.get("method")}', _short(detail, 500))
 
     async def main() -> None:
         async with proxy({'session': 'verify-485', 'codex_home': codex_home}, refuse) as client:
@@ -492,6 +509,7 @@ def variants(label: str, project: Path, codex_home: str, model: str) -> int:
                     done = await client.wait(await client.start_execution(
                         session, 'Reply with exactly one line: PONG-base. Use no tool.'), timeout=TURN_LIMIT)
                     say(f'  [{base}] base turn {done.get("outcome")} {done.get("last_agent_message")!r}')
+                    notices(client, tid, f'[{base}] base')
                     parent = {**await client.read_thread(tid)}
                     configuration = await client.subscribe_host(tid)
                     for name, override in overrides(applied or base):

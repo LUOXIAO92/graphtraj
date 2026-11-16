@@ -9,9 +9,10 @@
 #     ~2 min.
 # R1: the candidate (this checkout's HEAD, or VERIFY494_CANDIDATE) with 491's method: 6 repeat workers running
 #     the target set (one pytest per pass) up to VERIFY494_PASSES (default 30) times each, plus VERIFY494_SPIN
-#     (default: the CPU count, 8 on this host) CPU-spinning processes; loadavg logged every 15 s. Limit 780 s
-#     (+20 s stop; unfinished passes are not counted). Counts double deliveries and `cannot join thread`
-#     failures separately (classify.py). PASS only when both are 0 and nothing else failed. <= 16 min.
+#     (default: the CPU count, 8 on this host) CPU-spinning processes; loadavg logged every 15 s. A pass takes
+#     ~11 s on a quiet host (rehearsal), so the limit is 900 s (+20 s stop; unfinished passes are not counted;
+#     counts.txt shows how many ran). Counts double deliveries and `cannot join thread` failures separately
+#     (classify.py). PASS only when both are 0 and nothing else failed. <= 18 min.
 # SUITE: candidate full suite, 6 shards (scripts/run_test_shards.py) from a git clone; failing ids once on
 #     dev ad1ccabc (tmp/494/R0, built only then). Limits 1500 s + 600 s: plan 35 min.
 # Each step: a fresh git clone of the exact commit under Harness tmp/494, its own test venv (dependencies linked
@@ -104,7 +105,7 @@ step_P() {
 }
 
 step_R1() {
-  local limit=${VERIFY494_LIMIT:-780} spin=${VERIFY494_SPIN:-$(cpus)} res=$OUT/R1-repeat
+  local limit=${VERIFY494_LIMIT:-900} spin=${VERIFY494_SPIN:-$(cpus)} res=$OUT/R1-repeat
   say "[R1] ${#TARGETS} targets x${VERIFY494_PASSES:-30} passes on each of ${VERIFY494_WORKERS:-6} workers, plus $spin CPU spinners, on $CAND. Dialog: none. Limit $limit s (+20 s stop)."
   print -l -- "  "$^TARGETS
   check_tmp || return 1

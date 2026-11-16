@@ -1,5 +1,5 @@
 {
- "_provenance": "Captured by tests/pi_parity_scenarios.py run under a venv with graphtraj and graftling installed editable from base commit 33c7adb (git worktree add --detach 33c7adb). Task 412 then removed api_key_env and unauthenticated from each process spec and added the name-only auth.json to the overlay of key routes; policies, argv and environments stay as captured. Task 429 then added the Git common directory to allowRead and GIT_CONFIG_GLOBAL to the environment of the write and base-url-with-key scenarios.",
+ "_provenance": "Captured by tests/pi_parity_scenarios.py run under a venv with graphtraj and graftling installed editable from base commit 33c7adb (git worktree add --detach 33c7adb). Task 412 then removed api_key_env and unauthenticated from each process spec and added the name-only auth.json to the overlay of key routes; policies, argv and environments stay as captured. Task 429 then added the Git common directory to allowRead and GIT_CONFIG_GLOBAL to the environment of the write and base-url-with-key scenarios. Task 480 then added each scenario's assigned report file to allowWrite, taken from a tests/pi_parity_scenarios.py capture; nothing else changed.",
  "agents-member": {
   "argv": [
    "<python>",
@@ -56,7 +56,8 @@
     ],
     "allowWrite": [
      "<tmp>/agents-member/project/state/agents-member.pi",
-     "<tmp>/agents-member/data/native/agents-member/agents-socket"
+     "<tmp>/agents-member/data/native/agents-member/agents-socket",
+     "<tmp>/agents-member/evidence/teams/1/rounds/1/engineer.md"
     ],
     "denyRead": [
      "<tmp>/agents-member/project/.graphtraj",
@@ -163,7 +164,8 @@
     ],
     "allowWrite": [
      "<tmp>/base-url-unauthenticated/project/state/base-url-unauthenticated.pi",
-     "/bound/cli"
+     "/bound/cli",
+     "<tmp>/base-url-unauthenticated/evidence/teams/1/rounds/1/engineer.md"
     ],
     "denyRead": [
      "<tmp>/base-url-unauthenticated/project/.graphtraj",
@@ -273,7 +275,8 @@
      "<tmp>/base-url-with-key/project/state/base-url-with-key.pi",
      "/bound/cli",
      "<tmp>/base-url-with-key/project/worktrees/research",
-     "<tmp>/base-url-with-key/project/.git"
+     "<tmp>/base-url-with-key/project/.git",
+     "<tmp>/base-url-with-key/evidence/teams/1/rounds/1/engineer.md"
     ],
     "denyRead": [
      "<tmp>/base-url-with-key/project/.graphtraj",
@@ -391,7 +394,8 @@
     ],
     "allowWrite": [
      "<tmp>/key-only/project/state/key-only.pi",
-     "/bound/cli"
+     "/bound/cli",
+     "<tmp>/key-only/evidence/teams/1/rounds/1/engineer.md"
     ],
     "denyRead": [
      "<tmp>/key-only/project/.graphtraj",
@@ -498,7 +502,8 @@
     ],
     "allowWrite": [
      "<tmp>/native-services/project/state/native-services.pi",
-     "/bound/cli"
+     "/bound/cli",
+     "<tmp>/native-services/evidence/teams/1/rounds/1/engineer.md"
     ],
     "denyRead": [
      "<tmp>/native-services/project/.graphtraj",
@@ -611,7 +616,8 @@
      "<tmp>/no-address/user-agent/bin/fd"
     ],
     "allowWrite": [
-     "<tmp>/no-address/project/state/no-address.pi"
+     "<tmp>/no-address/project/state/no-address.pi",
+     "<tmp>/no-address/evidence/teams/1/rounds/1/engineer.md"
     ],
     "denyRead": [
      "<tmp>/no-address/project/.graphtraj",
@@ -718,7 +724,8 @@
     ],
     "allowWrite": [
      "<tmp>/read/project/state/read.pi",
-     "/bound/cli"
+     "/bound/cli",
+     "<tmp>/read/evidence/teams/1/rounds/1/engineer.md"
     ],
     "denyRead": [
      "<tmp>/read/project/.graphtraj",
@@ -825,7 +832,8 @@
     ],
     "allowWrite": [
      "<tmp>/retained-old-format/project/state/retained-old-format.pi",
-     "/bound/cli"
+     "/bound/cli",
+     "<tmp>/retained-old-format/evidence/teams/1/rounds/1/engineer.md"
     ],
     "denyRead": [
      "<tmp>/retained-old-format/project/.graphtraj",
@@ -937,7 +945,8 @@
      "<tmp>/write/project/state/write.pi",
      "/bound/cli",
      "<tmp>/write/project/worktrees/research",
-     "<tmp>/write/project/.git"
+     "<tmp>/write/project/.git",
+     "<tmp>/write/evidence/teams/1/rounds/1/engineer.md"
     ],
     "denyRead": [
      "<tmp>/write/project/.graphtraj",

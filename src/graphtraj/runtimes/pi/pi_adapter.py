@@ -331,7 +331,8 @@ def member_policy(request: Mapping[str, Any]) -> dict:
     Computed at each launch from the request's project fields, as before the
     agents request became generic: refreshed reports and the Worktree's
     instruction files present at that launch are read-only, and the project's
-    private state, configuration and Codex homes stay unreadable.
+    private state, configuration and Codex homes stay unreadable. The member
+    may write exactly its refreshed assigned report files and no other state.
     """
     root = Path(request['harness_root']).resolve()
     worktree = Path(request['worktree_path']).resolve()
@@ -339,6 +340,7 @@ def member_policy(request: Mapping[str, Any]) -> dict:
                                                worktree / 'CONTEXT.md', worktree / 'docs') if p.exists()]
     return {
         'read_paths': [request['docs_directory'], *request['resources'], *request['reports'], *instructions],
+        'write_paths': list(request['reports']),
         'deny_read': [str(root / '.graphtraj'), str(root / '.codex'), str(Path.home() / '.codex'),
                       request['state_directory']],
         'deny_write': [str(root / '.graphtraj/config.yml'), str(root / '.graphtraj/roles.yml'),

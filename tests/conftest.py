@@ -16,6 +16,8 @@ import pytest
 
 # Session-end reclaim of the processes this run started (454).
 from process_reclaim import mark_test_run, pytest_sessionfinish  # noqa: F401
+# Idle budget timers end with the test that started them (490).
+from process_reclaim import end_test_budget_timers  # noqa: F401
 # Temporary directories outside every enclosing Harness (482).
 import harness_isolation
 

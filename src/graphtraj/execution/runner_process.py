@@ -55,6 +55,28 @@ def process_is_alive(pid: int) -> bool:
     return True
 
 
+def process_is_zombie(pid: int) -> bool:
+    """Return whether the process ended and only waits for its parent to collect it (490).
+
+    Such a zombie still answers ``kill(pid, 0)`` but executes nothing. An
+    identity this user cannot read is not reported as a zombie.
+    """
+    if sys.platform == 'darwin':
+        library = _libproc()
+        if library is None:
+            return False
+        record = ctypes.create_string_buffer(_SHORTBSDINFO_BUFFER_SIZE)
+        # Nonzero arg includes zombies (XNU proc_pidinfo findzomb); SZOMB is 5.
+        if library.proc_pidinfo(pid, _PROC_PIDT_SHORTBSDINFO, 1, record, len(record)) != len(record):
+            return False
+        return int.from_bytes(record.raw[12:16], sys.byteorder) == 5
+    try:
+        state = Path(f'/proc/{pid}/stat').read_text().rpartition(')')[2].split()[0]
+    except (OSError, IndexError):
+        return False
+    return state == 'Z'
+
+
 def stop_worker(pid: int) -> bool:
     """Stop and reap one Runner-owned worker process group."""
 

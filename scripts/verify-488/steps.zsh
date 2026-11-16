@@ -107,7 +107,7 @@ except OSError as error:
     sys.exit(1)
 print(f"_current_user_processes returns {len(rows)} identities without raising")
 print("PASS 00: the precheck (tests/test_agent_runner_cleanup.py::_process_identity_unavailable) will not skip")
-' $P/src || return 1
+' $P/src || { next "report $OUT/00.txt to the 488 Leader before R0 (R0/R1 would skip or cannot run)"; return 1; }
   next "zsh $THIS R0 2>&1 | tee $OUT/R0.txt"
 }
 

@@ -5,11 +5,12 @@
 # instruction: projects live under tmp/480 and Pi members get only their Worktree's instruction files).
 #   zsh <this file> <00|R|V|T>      order: 00 -> R (production, reproduce) -> V (candidate) -> T (full suite)
 # Wait limits (each enforced by alarms/self-stops in the step):
-#   00 <= 10 min  offline venv builds (3 x <= 2 min) + one pi call (<= 4 min)
+#   00 <= 20 min  3 offline venv builds (venv <= 2 + pip <= 2 min each), 2 projects (setup <= 1 + prepare <= 1 min
+#                 each), one pi call (<= 4 min); typically ~3 min
 #   R  <= 10 min  dispatch (<= 9 min, the member's turn <= 8 min) + judge (<= 1 min)
 #   V  <= 10 min  same as R with the candidate
 #   T  <= 35 min  8-shard suite (self-stops at 25 min) + reruns of its failures on the base (<= 10 min)
-#   Sum Main should plan for: 65 min.
+#   Sum of step limits Main should plan for: 75 min (20 + 10 + 10 + 35).
 # Every step: Dialog: none; signals only the processes it started; never prints the DEEPSEEK_API_KEY value.
 # Venvs are built offline (no PyPI), as verify-482 build(). Rehearsal without a model: VERIFY480_NO_MODEL=1 ... 00
 set -u
@@ -91,7 +92,7 @@ project() {  # project <venv> <dir>: git init, graphtraj setup, roles and Task 1
 }
 
 step_00() {
-  say "[00] preflight. Dialog: none. Wait limit: 10 min (3 offline venv builds <= 2 min each, pi call <= 4 min). Output also in $OUT/00.txt"
+  say "[00] preflight. Dialog: none. Wait limit: 20 min (3 offline venv builds <= 4 min each, 2 projects <= 2 min each, pi call <= 4 min). Output also in $OUT/00.txt"
   print "ZSH_VERSION=${ZSH_VERSION:-not-zsh} (launched via /bin/zsh)"
   print "candidate commit: $COMMIT (from $REPO); base commit for failure reruns: $BASE_COMMIT"
   [[ -z $(git -C $REPO status --porcelain --untracked-files=no) ]] || print "NOTE: $REPO has uncommitted tracked changes; the candidate is the commit above."

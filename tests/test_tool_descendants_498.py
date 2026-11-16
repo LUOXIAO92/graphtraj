@@ -70,6 +70,19 @@ os.waitpid(pid, 0)
 '''
 
 
+def _executed(pid: int) -> bool:
+    """The test's own read of the kernel fact (darwin P_EXEC; Linux not PF_FORKNOEXEC), independent of the product."""
+    import ctypes
+    import ctypes.util
+
+    if sys.platform == 'darwin':
+        buffer = ctypes.create_string_buffer(136)
+        libproc = ctypes.CDLL(ctypes.util.find_library('proc') or '/usr/lib/libproc.dylib')
+        return libproc.proc_pidinfo(pid, 3, 0, buffer, 136) == 136 and bool(int.from_bytes(buffer.raw[:4], sys.byteorder) & 0x4000)
+    stat = Path(f'/proc/{pid}/stat').read_text()
+    return not int(stat[stat.rindex(')') + 2:].split()[6]) & 0x40
+
+
 def recorded(sampler: DescendantSampler) -> set[int]:
     return {entry['pid'] for entry in sampler.entries.values()}
 
@@ -163,7 +176,8 @@ def test_a_fork_copy_with_this_marker_that_execs_another_execution_is_not_kept_n
 
         runtime.stdin.write(b'x')
         runtime.stdin.flush()
-        assert wait_for(lambda: 'time.sleep(300)' in ' '.join(argv(launch)), 10), 'exec'
+        # Exec complete by the kernel fact the rule uses: the new arguments read before P_EXEC is set.
+        assert wait_for(lambda: 'time.sleep(300)' in ' '.join(argv(launch)) and _executed(launch), 10), 'exec'
         sampler.sample()
         sampler.sample()
         report = stop_tool_processes(list(sampler.entries.values()), marker, {runtime.pid}, grace=1.0)
@@ -260,7 +274,8 @@ def test_a_provisional_entry_that_settles_foreign_is_dropped_with_everything_rec
 
         runtime.stdin.write(b'x')
         runtime.stdin.flush()
-        assert wait_for(lambda: 'time.sleep(300)' in ' '.join(argv(copy)), 10), 'exec of the copy'
+        # Exec complete by the kernel fact the rule uses (P_EXEC), not only its new arguments.
+        assert wait_for(lambda: 'time.sleep(300)' in ' '.join(argv(copy)) and _executed(copy), 10), 'exec of the copy'
         own = own_tree(runtime.pid)
         sampler.sample()
         report = stop_tool_processes(list(sampler.entries.values()), marker, {runtime.pid}, grace=1.0)

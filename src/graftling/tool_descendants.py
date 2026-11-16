@@ -27,14 +27,13 @@ from kernel facts, never from timing:
 A provisional entry that settles foreign is dropped together with every entry
 recorded beneath it (by recorded parent pid), and all are cached as foreign.
 At stop time the same verdict is taken again, also right before each signal:
-only this execution's processes are signalled; an unsettled one is listed
-under ``remaining``.
+this execution's processes and provisional ones (fork copies of ours, such as
+a shell subshell, which read their parent's settled view) are signalled; one
+whose read is later is never signalled and is listed under ``remaining``.
 
 Known limits: recording can lag one sample (about a second) behind an exec; a
 process that never gives a settled read (a same-user setuid program; on Linux a
-tool started with ``env -i``) is never recorded; a fork copy that never
-executes (a shell subshell) stays provisional, so it is reported, not
-signalled; a process started and detached between two samples is reached only
+tool started with ``env -i``) is never recorded; a process started and detached between two samples is reached only
 through the marker scan (so not a platform binary); a process whose chain of
 ancestors passed through a readable process without the marker is left alone
 by design; the Linux rule is not run on a real host; Windows is not covered.
@@ -367,7 +366,10 @@ class DescendantSampler:
 
 def _targets(entries: list[dict], marker: str, exclude: set[int],
              unsettled: dict[int, Identity] | None = None) -> dict[int, Identity]:
-    """This execution's recorded processes still alive and their descendants; ``unsettled`` gets the rest that is not foreign."""
+    """Recorded processes still alive and their descendants that are ours or provisional; ``unsettled`` gets the later ones.
+
+    A provisional process is a fork copy (a subshell) reading its parent's settled view, not an unsettled read.
+    """
     unsettled = {} if unsettled is None else unsettled
     table = _table()
     recorded = {}
@@ -376,26 +378,23 @@ def _targets(entries: list[dict], marker: str, exclude: set[int],
         if (now is not None and now.start == entry['start'] and now.uid == entry['uid']
                 and now.pid not in exclude):
             verdict = _verdict(now.pid, marker)
-            if verdict == OURS:
+            if verdict in (OURS, PROVISIONAL):
                 recorded[now.pid] = now
-            elif verdict != FOREIGN:
+            elif verdict == LATER:
                 unsettled[now.pid] = now
     verdicts: dict[int, str] = {}
-    for pid, item in _descend(table, set(recorded), marker, set(), exclude, verdicts).items():
-        (recorded if verdicts.get(pid) == OURS else unsettled)[pid] = item
+    recorded.update(_descend(table, set(recorded), marker, set(), exclude, verdicts))
     for pid, verdict in verdicts.items():
         if verdict == LATER and pid in table:
             unsettled[pid] = table[pid]
     return recorded
 
 
-def _signal(targets: dict[int, Identity], marker: str, sig: int,
-            marked: set[int] | frozenset[int] = frozenset()) -> None:
+def _signal(targets: dict[int, Identity], marker: str, sig: int) -> None:
     for item in targets.values():
-        # Re-verify identity and the boundary right before the signal: only this execution's
-        # (a marked process may still be a fork copy carrying the marker).
-        accepted = (OURS, PROVISIONAL) if item.pid in marked else (OURS,)
-        if _alive(item) and _verdict(item.pid, marker) in accepted:
+        # Re-verify identity and the boundary right before the signal: ours, or a fork copy of ours
+        # (provisional); one that executed meanwhile is judged on its settled read, a later one never.
+        if _alive(item) and _verdict(item.pid, marker) in (OURS, PROVISIONAL):
             try:
                 os.kill(item.pid, sig)
             except (ProcessLookupError, PermissionError):
@@ -432,7 +431,6 @@ def stop_tool_processes(entries: list[dict] | None, marker: str | None,
     errors = [error] if error else []
     targets: dict[int, Identity] = {}
     unsettled: dict[int, Identity] = {}
-    marked: set[int] = set()
     commands: dict[int, str] = {}
     if entries and SUPPORTED:
         try:
@@ -445,21 +443,20 @@ def stop_tool_processes(entries: list[dict] | None, marker: str | None,
                 found = identity(pid)
                 if found is not None and pid not in targets:
                     targets[pid] = found
-                    marked.add(pid)
                     commands[pid] = command
         except OSError as failure:
             errors.append(f'marker scan: {type(failure).__name__}: {failure}')
-    # Unsettled processes (provisional or later) are never signalled; they are reported under remaining.
+    # Unsettled processes (later) are never signalled; they are reported under remaining.
     unsettled = {pid: item for pid, item in unsettled.items() if pid not in targets}
     for pid in [*targets, *unsettled]:
         argv = _argv(pid)
         commands[pid] = shown_command(argv) if argv else shown_command(commands.get(pid, ''))
     alive = targets
     if targets:
-        _signal(targets, marker or '', signal.SIGTERM, marked)
+        _signal(targets, marker or '', signal.SIGTERM)
         alive = _wait(targets, grace)
         if alive:
-            _signal(alive, marker or '', signal.SIGKILL, marked)
+            _signal(alive, marker or '', signal.SIGKILL)
             alive = _wait(alive, 2.0)
     entry = lambda pid: {'pid': pid, 'command': commands[pid]}
     report = {'found': [entry(pid) for pid in sorted(targets)],

@@ -1336,13 +1336,13 @@ Delivery rules:
   settled environment lacks exactly this execution's marker (a Runner Worker, another
   execution's child Runtime) is neither recorded nor descended into; a provisional entry
   that settles so is dropped with everything recorded beneath it. The same verdict is
-  taken again before each signal: only this execution's processes are signalled, and an
-  unsettled one is listed under `remaining`. The owner applies the same stop when the
-  execution ends normally or is stopped, after the Runtime exits. Known limits:
-  recording can lag one sample behind an exec; a process that never gives a settled read
-  (a same-user setuid program; on Linux a tool started with `env -i`) is never recorded;
-  a fork copy that never executes (a shell subshell) is reported, not signalled; a
-  process started and detached between two samples (about one second) is found only
+  taken again before each signal: this execution's processes and its fork copies (a
+  shell subshell, which reads its parent's settled view) are signalled; one whose read is
+  not settled is never signalled and is listed under `remaining`. The owner applies the
+  same stop when the execution ends normally or is stopped, after the Runtime exits.
+  Known limits: recording can lag one sample behind an exec; a process that never gives a
+  settled read (a same-user setuid program; on Linux a tool started with `env -i`) is
+  never recorded; a process started and detached between two samples (about one second) is found only
   by the marker, so not when it is a platform binary; a process whose chain of
   ancestors passed through a readable process without the marker is left alone by
   design; Windows is not covered. A Pi execution records `tool_marker` and

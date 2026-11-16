@@ -361,3 +361,29 @@ def test_an_unsettled_recorded_process_is_reported_not_signalled_at_stop(monkeyp
         if process.poll() is None:
             process.kill()
         process.wait(5)
+
+
+# Correction 1 (guard: dev passes; d38da484 failed it): a recorded tool shell's subshell never
+# executes (P_EXEC stays clear); it reads its parent's settled view, so stop finds and stops it.
+def test_guard_a_recorded_tools_subshell_that_never_executes_is_stopped() -> None:
+    marker = uuid.uuid4().hex
+    tool = subprocess.Popen(['/bin/sh', '-c', '( while :; do /bin/sleep 1; done ) & wait'],
+                            env={**os.environ, MEMBER_RUN_ENV: marker})
+    own: list[Identity] = []
+    try:
+        subshell = wait_for(lambda: next((item for item in own_tree(tool.pid)
+                                          if item.ppid == tool.pid and not _executed(item.pid)), None), 10)
+        assert subshell, 'the subshell (a fork copy of the tool shell)'
+        own = [identity(tool.pid), subshell]
+        entries = [{'pid': item.pid, 'ppid': item.ppid, 'pgid': item.pgid, 'uid': item.uid, 'start': item.start,
+                    'argv': '/bin/sh -c ...'} for item in own]
+        report = stop_tool_processes(entries, marker, grace=1.0)
+        print('report:', report)
+        assert subshell.pid in {item['pid'] for item in report['stopped']}
+        assert not is_alive(subshell)
+    finally:
+        own += own_tree(tool.pid)
+        stop_own([item for item in own if item is not None])
+        if tool.poll() is None:
+            tool.kill()
+        tool.wait(5)

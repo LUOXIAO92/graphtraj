@@ -21,8 +21,9 @@ The numbers in parentheses are the project's Task numbers.
   was never recorded. Now kernel facts decide: darwin P_EXEC and csops platform binary;
   Linux PF_FORKNOEXEC, which is not run on a real host. A fork copy carrying the marker
   is provisional, and is dropped with what was recorded beneath it if it settles as
-  another execution's. Stop signals only settled processes of this execution;
-  `stop_tool_processes` lists an unsettled one under `remaining`. Recording can lag one
+  another execution's. Stop signals this execution's processes and their fork copies
+  (subshells); `stop_tool_processes` never signals a process whose read is not settled
+  and lists it under `remaining`. Recording can lag one
   sample. A process that never reads settled (setuid; Linux `env -i`) is not recorded.
 
 - The Claude Code host's receiver carries `defers_push`: it only queues a root

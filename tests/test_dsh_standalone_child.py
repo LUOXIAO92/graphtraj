@@ -7,6 +7,7 @@ where the installed DSH and Node are required and said so.
 """
 from __future__ import annotations
 
+import functools
 import json
 import os
 from pathlib import Path
@@ -237,6 +238,51 @@ def test_a_dsh_childs_end_reaches_the_claude_main_once(tmp_path: Path, dsh: dict
     # Without a choice the host's own DSH settings apply.
     [service] = FakeDshService.instances
     assert (selected(service)['model'], 'reasoningEffort' in selected(service)) == ('deepseek-flash', False)
+
+
+@pytest.mark.parametrize('queued', [False, True])
+def test_a_wait_while_the_host_queues_the_end_is_its_only_delivery(tmp_path: Path, dsh: dict, queued: bool) -> None:
+    """494: the Main's wait runs while the host's receiver is still handling the child's end.
+
+    The receiver is paused just before (``queued=False``) or just after (``True``)
+    it queues the notice, as load did by chance (491 finding A). The wait shows the
+    body; neither that result, nor the mod's claim, nor a later result brings it again.
+    """
+    host = IndependentCalls(tmp_path / 'agents', tmp_path, {}, {'dsh': dsh})
+    invoke, _, session = claude_main(host, tmp_path)
+    receive = host.control.event_receiver
+    created, inside, leave, returned = (threading.Event() for _ in range(4))
+
+    @functools.wraps(receive)
+    def paused(notice: dict) -> bool | str:
+        """Hand the end to the host's own receiver, pausing where the test says."""
+        created.wait(10)  # after create's result: that result cannot carry it
+        try:
+            accepted = receive(notice) if queued else None
+            inside.set()
+            leave.wait(10)
+            return accepted if queued else receive(notice)
+        finally:
+            returned.set()
+
+    host.control.event_receiver = paused
+    try:
+        agent = invoke('create', runtime='dsh', instruction='report once')['agent']
+        created.set()
+        assert inside.wait(10)
+        done = answered(invoke, agent, invoke.shown)
+        assert (done['outcome'], done['last_message']) == ('completed', 'dsh answer: report once')
+        leave.set()
+        assert returned.wait(10)
+        # The mod's claim (the push) comes first, then a later result.
+        claimed = host.context({'operation': 'notices', 'session': session})['notices']
+        status  = invoke('status', agent=agent)
+        again   = [notice for notice in claimed + invoke.shown if notice['event']['execution'] == done['id']]
+        assert again == []
+        assert status['result']['last_result']['notification'] == 'delivered'
+    finally:
+        leave.set()
+        stop_owned(host.control)
 
 
 def test_codex_host_routes_a_dsh_child_with_its_own_choices(

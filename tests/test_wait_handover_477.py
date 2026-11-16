@@ -133,6 +133,49 @@ def test_a_hold_never_blocks_finished_and_ends_at_its_bound(project, monkeypatch
     assert final['notification'] == 'delivered' and 'push_deferred' not in final
 
 
+def test_a_turn_end_join_racing_a_hold_being_started_never_fails(project) -> None:
+    """494 item 3: join_holds runs while a member's hold thread is being started.
+
+    The Worker's turn-end join met a hold between being listed and being started
+    by chance (488: ``cannot join thread before it is started``). Here a join runs
+    on another thread right before the hold starts; it must not fail, and the end
+    held over the turn's end is still sent once.
+    """
+    from graphtraj.interfaces.agents import join_holds
+    root, agents, sent, binding, reference, run = _member_child(project, running=True)
+    start, joined, joiners = threading.Thread.start, [], []
+
+    def join() -> None:
+        try:
+            joined.append(join_holds(0.1))
+        except RuntimeError as error:
+            joined.append(error)
+
+    def join_first(thread: threading.Thread) -> None:
+        """Start a turn-end join first; one kept waiting until this hold started goes on after it."""
+        if thread.name.startswith('member-hold-') and not joiners:
+            joiners.append(threading.Thread(target=join))
+            start(joiners[0])
+            joiners[0].join(1.0)
+        start(thread)
+
+    threading.Thread.start = join_first
+    try:
+        run.events.finished('completed', last_message='HOLD-494')
+    finally:
+        threading.Thread.start = start
+    [joiner] = joiners
+    joiner.join(10)
+    assert [type(item) for item in joined] == [bool], joined
+    assert sent == []  # held while the turn runs
+    _member_turn_ends(root)
+    assert [item[1]['message'] for item in sent] == ['HOLD-494']
+    agents.reconcile_children({MEMBER})
+    assert len(sent) == 1
+    final = _record(swarm_root(root), reference)['executions'][-1]
+    assert final['notification'] == 'delivered' and 'push_deferred' not in final
+
+
 def _end_in_thread(run, **end) -> threading.Thread:
     thread = threading.Thread(target=lambda: run.events.finished('completed', **end))
     thread.start()

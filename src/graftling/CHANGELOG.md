@@ -14,6 +14,13 @@ The numbers in parentheses are the project's Task numbers.
 
 ## Unreleased (compatible)
 
+- The Claude Code host's receiver carries `defers_push`: it only queues a root
+  child's notice, which a result or the mod hands over later (494). Before, the core
+  took the push before calling it, so a Main's `wait` arriving while it queued the
+  end showed the body as `queueing` and did not take it, and the same result's
+  `main_notices` (or the mod's next claim) brought the end a second time. When a
+  `defers_push` receiver's answer settles the end, `push_deferred` and `push_holder`
+  are dropped in that write.
 - A `wait` that times out drops its `waiters` mark in the same record write that
   decides the timeout (487). Before, an end arriving in between was reserved for the
   departed wait, released as `held` and pushed at once, so a deferring receiver

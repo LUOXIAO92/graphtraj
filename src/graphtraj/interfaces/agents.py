@@ -521,8 +521,9 @@ class GraphTrajAgents:
         thread = threading.Thread(target=self._hold_member_end, args=(member, notice, directory, control),
                                   name=f"member-hold-{notice['agent']}", daemon=True)
         with _HOLDS_LOCK:
+            # Started before join_holds can list it: an unstarted thread cannot be joined (494).
             _HOLDS.append(thread)
-        thread.start()
+            thread.start()
         return 'deferred'
 
     def _hold_member_end(self, member: str, notice: dict, directory: Path, control: AgentControl) -> None:

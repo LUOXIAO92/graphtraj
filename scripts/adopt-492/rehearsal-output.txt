@@ -2,7 +2,7 @@
 ======== setup: old wheels from a3fe1b92251d0510b962d8adddb49f690e1d1f07, fake production venv, plugin, configuration
 graftling-0.5.0-py3-none-any.whl
 graphtraj-0.1.0-py3-none-any.whl
-Create dev from 2aff14836531c22571c6be9f227228359515d967? [y/N]: Created Integration Worktree on dev.
+Create dev from 99ef5c118797e8a7c76ca6afbaae1f5f16bdc003? [y/N]: Created Integration Worktree on dev.
 GraphTraj project setup complete.
 
 ======== README 3(a): a timer started under a3fe1b92251d0510b962d8adddb49f690e1d1f07 wakes after the 9faa0274e7eb0102cbc17109869f4b6562d6e680 files replace it (sandbox import check)
@@ -48,6 +48,16 @@ REHEARSAL PASS: 00: answer from the isolated vproject: answer check OK, no Harne
 REHEARSAL PASS: 00: control records snapshot 00.json
 REHEARSAL PASS: 00 reported the inherited 418 variable by name and path
 REHEARSAL PASS: 00: the 492 markers are absent from the old production
+REHEARSAL PASS: 00 with Main's host under $RT: exit 0, 'guard: BLOCKING 1' and the information line, no '00 STOP'
+REHEARSAL PASS: 00 printed its next step (B)
+### Claude answers from the isolated /tmp/claude-501/adopt492-rehearsal/project/tmp/492/vproject (expect model claude-opus-5-5, logged in, no Harness AGENTS.md, not the prompt echoed; 489)
+answer: Reply with exactly two lines. Line 1: MODEL-OK followed by the model id you are running as, and say whether you are logged in. Line 2: FILES: the absolute path  | is_error: False | models: []
+echo of the prompt: YES | distinctive Harness AGENTS.md line in the answer: no
+answer check: STOP
+STOP: claude -p answer check failed (above): no answer, prompt echo, or the Harness AGENTS.md loaded (489). If it says login/API key: USER logs in with 'claude' in Terminal, then rerun 00.
+00 STOP（see the STOP line above / 见上面的 STOP 行）。把 /tmp/claude-501/adopt492-rehearsal/project/.graphtraj/core/state/tasks/492-production-adoption-480-487/adoption/raw-9faa0274/00.txt 交给 Main，不要继续。
+REHEARSAL PASS: 00 with a failing answer check (prompt echo): exit non-zero, STOP line and '00 STOP', no next step
+REHEARSAL PASS: the first 00.txt was kept as 00-first.txt (positive run), the rerun wrote a fresh 00.txt
 REHEARSAL PASS: 00 printed claude --version and the binary
 REHEARSAL PASS: 00 made the read-only production task graph call for Task 492 (stub tree: not registered, rc printed)
 REHEARSAL PASS: 00: isolation OK (vproject has its own git and .graphtraj)
@@ -58,7 +68,7 @@ REHEARSAL PASS: 00 named the Tasks that may run now (466, 470; not 465)
 inherited: GRAFTLING_CLAUDE_HOST_CONFIG=/elsewhere/.agents-control/claude-host.json
 credential-like exported names (values never printed): ['CLOUDSDK_PROXY_PASSWORD']
 ### isolated project /tmp/claude-501/adopt492-rehearsal/project/tmp/492/vproject: own git, own .graphtraj (setup by production graphtraj; Vc regenerates its entries), own settings (489)
-Create dev from b864aa59972f53e431c799ce07cf3ba85a5a76f4? [y/N]: Created Integration Worktree on dev.
+Create dev from 4ca985da9db836cee15e9db51f78b457c2de952b? [y/N]: Created Integration Worktree on dev.
 graphtraj project root: /private/tmp/claude-501/adopt492-rehearsal/project/tmp/492/vproject | isolated: True
 git top level: /private/tmp/claude-501/adopt492-rehearsal/project/tmp/492/vproject | isolated: True
 AGENTS.md above the project (Claude Code does not load AGENTS.md; graphtraj stops at the project): ['/private/tmp/claude-501/adopt492-rehearsal/project/AGENTS.md']
@@ -78,18 +88,37 @@ members: []
 running lines: 0 (other Tasks' members may run now; I waits for them)
 stopped: false
 MAIN=11111111-2222-3333-4444-555555555555 (saved to /tmp/claude-501/adopt492-rehearsal/project/tmp/492/main.session)
-  [Main's Claude host] 36147 4241 /tmp/claude-501/adopt492-rehearsal/project/.venv-runtime/bin/python -m graphtraj.runtimes.claude.host serve --config /tmp/claude-501/adopt492-rehearsal/project/.graphtraj/claude-host/config
+  [Main's Claude host] 39547 4241 /tmp/claude-501/adopt492-rehearsal/project/.venv-runtime/bin/python -m graphtraj.runtimes.claude.host serve --config /tmp/claude-501/adopt492-rehearsal/project/.graphtraj/claude-host/config
+### 418: inherited GRAFTLING_CLAUDE_HOST_* / GRAPHTRAJ_CLAUDE_HOST_* (name=path; unset for every child command of this script)
+inherited: GRAFTLING_CLAUDE_HOST_CONFIG=/elsewhere/.agents-control/claude-host.json
+### isolated project /tmp/claude-501/adopt492-rehearsal/project/tmp/492/vproject: own git, own .graphtraj (setup by production graphtraj; Vc regenerates its entries), own settings (489)
+graphtraj project root: /private/tmp/claude-501/adopt492-rehearsal/project/tmp/492/vproject | isolated: True
+git top level: /private/tmp/claude-501/adopt492-rehearsal/project/tmp/492/vproject | isolated: True
+isolation: OK
+### Claude answers from the isolated /tmp/claude-501/adopt492-rehearsal/project/tmp/492/vproject (expect model claude-opus-5-5, logged in, no Harness AGENTS.md, not the prompt echoed; 489)
+claude: /tmp/claude-501/adopt492-rehearsal/stub/claude -> /private/tmp/claude-501/adopt492-rehearsal/stub/claude | version: 2.1.325 (stub Claude Code) | expected 2.1.325: yes
+plugins in init: [] | cc-plugin-agents-md loaded: NO
+answer: MODEL-OK claude-opus-5-5, logged in | is_error: False | models: ['claude-opus-5-5']
+instruction files reported: ['NONE'] | Harness files among them: none
+markers expected absent: PASS (10/10)
+### Tasks whose members may run now (status not integrated): 466, 470
+running lines: 0 (other Tasks' members may run now; I waits for them)
+stopped: false
+MAIN=11111111-2222-3333-4444-555555555555 (saved to /tmp/claude-501/adopt492-rehearsal/project/tmp/492/main.session)
+成功: 'claude:' 行给出路径与版本（默认 claude，现为 2.1.325）；ZSH_VERSION 有值；'answer check: OK'（answer 以 MODEL-OK 开头、models 含 claude-opus-5-5、is_error False、无 Harness AGENTS.md、不是 prompt 回显）；'control records snapshot 00.json'；'guard: Task 490 timer pid 5151: …'（present 或 absent 都照实记录，不发信号）；graphtraj 0.1.0 与 graftling 0.5.0；pip check rc=0；'markers expected absent: PASS (10/10)'（生产仍是 a3fe1b92）；'task graph rc=0' 且 'Task 492 named' 不为 0；'expected 2.1.325: yes'；
+  'isolation: OK'；stopped: false 且 Team 1 active；roles 里有 opus_coding_team 的 advisor；/tmp/claude-501/adopt492-rehearsal/project/tmp/492/backup 'No such file'（478 的备份 /tmp/claude-501/adopt492-rehearsal/project/tmp/478/backup 只列出，不动）；MAIN=<id>。
+若 'inherited:' 列出名字：本脚本已对所有子命令 unset；记下它来自哪个项目（418 提醒）。
 
 ======== B
 REHEARSAL PASS: B exit 0
-  Created wheel for graphtraj: filename=graphtraj-0.1.0-py3-none-any.whl size=593807 sha256=98764f3989f78f270ab292fcdebfe7068851a9074986ea4a54d784a507e7de44
-  Created wheel for graftling: filename=graftling-0.5.0-py3-none-any.whl size=467341 sha256=409396608c6c9b21842d40c89c94cde402cde034a0d8a6aa5fef868f132911d1
-409396608c6c9b21842d40c89c94cde402cde034a0d8a6aa5fef868f132911d1  graftling-0.5.0-py3-none-any.whl
-98764f3989f78f270ab292fcdebfe7068851a9074986ea4a54d784a507e7de44  graphtraj-0.1.0-py3-none-any.whl
+  Created wheel for graphtraj: filename=graphtraj-0.1.0-py3-none-any.whl size=593807 sha256=768cfe53f2f8053aadac892890c2306796733881bb17eb73c1f514c55f512921
+  Created wheel for graftling: filename=graftling-0.5.0-py3-none-any.whl size=467341 sha256=4a1049ef607c93af986ed40be5e1028e1f870bceb0610bef4d128731dcc91fd7
+4a1049ef607c93af986ed40be5e1028e1f870bceb0610bef4d128731dcc91fd7  graftling-0.5.0-py3-none-any.whl
+768cfe53f2f8053aadac892890c2306796733881bb17eb73c1f514c55f512921  graphtraj-0.1.0-py3-none-any.whl
 ### no build/ or __pycache__ inside the wheels (expect leaked: 0)
 leaked: 0
-409396608c6c9b21842d40c89c94cde402cde034a0d8a6aa5fef868f132911d1  graftling-0.5.0-py3-none-any.whl
-98764f3989f78f270ab292fcdebfe7068851a9074986ea4a54d784a507e7de44  graphtraj-0.1.0-py3-none-any.whl
+4a1049ef607c93af986ed40be5e1028e1f870bceb0610bef4d128731dcc91fd7  graftling-0.5.0-py3-none-any.whl
+768cfe53f2f8053aadac892890c2306796733881bb17eb73c1f514c55f512921  graphtraj-0.1.0-py3-none-any.whl
 ### no build/ or __pycache__ inside the wheels (expect leaked: 0)
 leaked: 0
 成功: graphtraj-0.1.0 与 graftling-0.5.0 各一个 wheel 及 sha256；leaked: 0。
@@ -170,7 +199,7 @@ leftover processes of the suite (never signalled): 2
 REHEARSAL PASS: S2 counted 2 (run marker, suite venv under tmp/492; not an older basetemp)
 
 ======== I waits while a Task 466 member Worker and Main's host run, then passes with only the idle timer left
-/Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/492-production-adoption-480-487/scripts/adopt-492/rehearse.zsh:193: nice(5) failed: operation not permitted
+/Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/492-production-adoption-480-487/scripts/adopt-492/rehearse.zsh:208: nice(5) failed: operation not permitted
 REHEARSAL PASS: I exit 0
 REHEARSAL PASS: I waited and named the active Tasks (466、470 / 466, 470), no kill, Ctrl-C safe, Chinese and English
 REHEARSAL PASS: I listed the Worker as BLOCKING with its Task
@@ -181,17 +210,17 @@ REHEARSAL PASS: I: the 492 import lines (481, 484, 486, 485, 480, 487)
 guard: 1 个 445 预算空闲计时器（NON-BLOCKING，不是成员；安装后醒来时载入新的 runner_control 并照常送达，见 README 3(a)）:
 guard: Task 490 timer pid 5151: present, state S, children 1: 5252(Z) | 5151 1 /tmp/claude-501/adopt492-rehearsal/project/.venv-runtime/bin/python -I -m graphtraj.execution.budget_idle_timer /tmp/claude-501/adopt492-rehearsal/projec (never signalled; NON-BLOCKING timer)
 guard: BLOCKING 2 个进程在使用 /tmp/claude-501/adopt492-rehearsal/project/.venv-runtime（或是 Main 11111111-2222-3333-4444-555555555555）:
-16:41:35 正在等待：可能有成员在运行的 Task（466、470）的成员还在运行（上面列出的 BLOCKING 进程）。不要结束（kill）这些进程；它们结束后本步自动继续。
+16:51:02 正在等待：可能有成员在运行的 Task（466、470）的成员还在运行（上面列出的 BLOCKING 进程）。不要结束（kill）这些进程；它们结束后本步自动继续。
          Waiting for members of Tasks that may run now (466, 470), listed above as BLOCKING. Do not kill them; this step continues by itself.
 guard: 1 个 445 预算空闲计时器（NON-BLOCKING，不是成员；安装后醒来时载入新的 runner_control 并照常送达，见 README 3(a)）:
 guard: Task 490 timer pid 5151: present, state S, children 1: 5252(Z) | 5151 1 /tmp/claude-501/adopt492-rehearsal/project/.venv-runtime/bin/python -I -m graphtraj.execution.budget_idle_timer /tmp/claude-501/adopt492-rehearsal/projec (never signalled; NON-BLOCKING timer)
 guard: BLOCKING 2 个进程在使用 /tmp/claude-501/adopt492-rehearsal/project/.venv-runtime（或是 Main 11111111-2222-3333-4444-555555555555）:
-16:41:36 正在等待：可能有成员在运行的 Task（466、470）的成员还在运行（上面列出的 BLOCKING 进程）。不要结束（kill）这些进程；它们结束后本步自动继续。
+16:51:03 正在等待：可能有成员在运行的 Task（466、470）的成员还在运行（上面列出的 BLOCKING 进程）。不要结束（kill）这些进程；它们结束后本步自动继续。
          Waiting for members of Tasks that may run now (466, 470), listed above as BLOCKING. Do not kill them; this step continues by itself.
 guard: 1 个 445 预算空闲计时器（NON-BLOCKING，不是成员；安装后醒来时载入新的 runner_control 并照常送达，见 README 3(a)）:
 guard: Task 490 timer pid 5151: present, state S, children 1: 5252(Z) | 5151 1 /tmp/claude-501/adopt492-rehearsal/project/.venv-runtime/bin/python -I -m graphtraj.execution.budget_idle_timer /tmp/claude-501/adopt492-rehearsal/projec (never signalled; NON-BLOCKING timer)
 guard: BLOCKING 2 个进程在使用 /tmp/claude-501/adopt492-rehearsal/project/.venv-runtime（或是 Main 11111111-2222-3333-4444-555555555555）:
-16:41:37 正在等待：可能有成员在运行的 Task（466、470）的成员还在运行（上面列出的 BLOCKING 进程）。不要结束（kill）这些进程；它们结束后本步自动继续。
+16:51:04 正在等待：可能有成员在运行的 Task（466、470）的成员还在运行（上面列出的 BLOCKING 进程）。不要结束（kill）这些进程；它们结束后本步自动继续。
          Waiting for members of Tasks that may run now (466, 470), listed above as BLOCKING. Do not kill them; this step continues by itself.
 guard: 1 个 445 预算空闲计时器（NON-BLOCKING，不是成员；安装后醒来时载入新的 runner_control 并照常送达，见 README 3(a)）:
 guard: Task 490 timer pid 5151: present, state S, children 1: 5252(Z) | 5151 1 /tmp/claude-501/adopt492-rehearsal/project/.venv-runtime/bin/python -I -m graphtraj.execution.budget_idle_timer /tmp/claude-501/adopt492-rehearsal/projec (never signalled; NON-BLOCKING timer)
@@ -216,7 +245,7 @@ plugin bytes as before the install: no trust dialog expected
 bytes unchanged: .mcp.json
 bytes unchanged: .claude/settings.local.json
 bytes unchanged: .graphtraj/claude-host/config.json
-### BLOCKING processes started during the install window (16:41:39 → 16:41:41); information for Main
+### BLOCKING processes started during the install window (16:51:06 → 16:51:08); information for Main
 guard: 1 个 445 预算空闲计时器（NON-BLOCKING，不是成员；安装后醒来时载入新的 runner_control 并照常送达，见 README 3(a)）:
 guard: Task 490 timer pid 5151: present, state S, children 1: 5252(Z) | 5151 1 /tmp/claude-501/adopt492-rehearsal/project/.venv-runtime/bin/python -I -m graphtraj.execution.budget_idle_timer /tmp/claude-501/adopt492-rehearsal/projec (never signalled; NON-BLOCKING timer)
 guard: BLOCKING 0 — 没有成员或 host 在使用 /tmp/claude-501/adopt492-rehearsal/project/.venv-runtime。
@@ -240,7 +269,7 @@ plugin bytes as before the install: no trust dialog expected
 bytes unchanged: .mcp.json
 bytes unchanged: .claude/settings.local.json
 bytes unchanged: .graphtraj/claude-host/config.json
-### BLOCKING processes started during the install window (16:41:39 → 16:41:41); information for Main
+### BLOCKING processes started during the install window (16:51:06 → 16:51:08); information for Main
 guard: 1 个 445 预算空闲计时器（NON-BLOCKING，不是成员；安装后醒来时载入新的 runner_control 并照常送达，见 README 3(a)）:
 guard: Task 490 timer pid 5151: present, state S, children 1: 5252(Z) | 5151 1 /tmp/claude-501/adopt492-rehearsal/project/.venv-runtime/bin/python -I -m graphtraj.execution.budget_idle_timer /tmp/claude-501/adopt492-rehearsal/projec (never signalled; NON-BLOCKING timer)
 guard: BLOCKING 0 — 没有成员或 host 在使用 /tmp/claude-501/adopt492-rehearsal/project/.venv-runtime。
@@ -335,12 +364,12 @@ REHEARSAL PASS: Mps negative: an interrupted end across the restart and a grapht
 
 ======== Nw: the read-only watcher copies the descendants record while the child runs, then ends by itself
 REHEARSAL PASS: Nw exit 0 and started in the background
-16:41:49 start: watching /tmp/claude-501/adopt492-rehearsal/project/.graphtraj/swarm/control/agents for n492 (read only; at most 900 s)
-16:41:49 child n492 found: agent c1
-16:41:49 execution e1: record changed, 1 entries
-16:41:50 execution e1: record changed, 0 entries
-16:41:50 execution e2: record changed, 0 entries
-16:41:50 == END (every execution ended); snapshots: 3
+16:51:16 start: watching /tmp/claude-501/adopt492-rehearsal/project/.graphtraj/swarm/control/agents for n492 (read only; at most 900 s)
+16:51:16 child n492 found: agent c1
+16:51:16 execution e1: record changed, 1 entries
+16:51:17 execution e1: record changed, 0 entries
+16:51:17 execution e2: record changed, 0 entries
+16:51:17 == END (every execution ended); snapshots: 3
 REHEARSAL PASS: Nw ended by itself when every execution ended (no background process left)
 REHEARSAL PASS: Nw's 468 sampler started and ended by itself (bounded)
 REHEARSAL PASS: Nw snapshot kept the Bash tool command
@@ -540,4 +569,4 @@ REHEARSAL PASS: 478 backup unchanged
 REHEARSAL PASS: this run's backup is under tmp/492
 entries-9faa0274.sha256 raw-9faa0274 S-basetemp-before-9faa0274 src-9faa0274 V-marker-9faa0274 ventries-9faa0274 vplug-9faa0274 wheels-9faa0274 
 
-REHEARSAL RESULT: ALL PASS (110 checks)
+REHEARSAL RESULT: ALL PASS (114 checks)

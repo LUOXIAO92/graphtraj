@@ -316,7 +316,10 @@ step_00() {
   grep -E 'status|state' $H/.graphtraj/core/state/tasks/$TASK/teams/1/team.yml | head -5
   say "current Claude Main Session"; local id=$(detect_main)
   if [[ -n $id ]]; then print -r -- $id > $BASE/main.session; MAIN=$id; print "MAIN=$id (saved to $BASE/main.session)"; else print "MAIN NOT FOUND"; fi
-  say "processes using the venv now, classified (information only; Main's host is expected here)"; guard
+  # Information only (492 R1 correction): Main's own host is BLOCKING here; step_00 fails only through its STOP returns.
+  say "processes using the venv now, classified (information only; Main's host is expected here)"
+  guard || print "guard: BLOCKING at 00 is information only (Main's own host is expected here; I waits for members)"
+  return 0
 }
 
 step_B() {
@@ -536,7 +539,9 @@ for line in open(sys.argv[1], errors="replace"):
 print("plugins in init:", names)
 print("graphtraj-claude-host loaded:", "YES" if names and any("graphtraj-claude-host" in str(n) for n in names) else "NO")' $R/Vc-stream.jsonl
   tree stream $R/Vc-stream.jsonl mcp__agents__tasks mcp__agents__agents || return 1
-  say "host.log tail"; tail -n 20 $VPROJECT/.graphtraj/claude-host/host.log
+  # Information only: a missing host.log must not turn a passed Vc into a failure (492 R1 audit).
+  say "host.log tail"; tail -n 20 $VPROJECT/.graphtraj/claude-host/host.log || print "no host.log (information)"
+  return 0
 }
 
 do_backup() {
@@ -746,7 +751,10 @@ help) print "顺序: 00 → B → V → S（后台，Main 排队）→ Vu（USER
   next "zsh $THIS 00" ;;
 
 00) print "[00] Main. 预检。对话框: 无。只写 $BASE（scratch、vproject、main.session）与 $R。约 2 分钟。"
-  logged $R/00.txt step_00 || { print "\n00 STOP（见上面的 STOP 行；489 的隔离或回答检查）。把 $R/00.txt 交给 Main，不要继续。"; exit 1; }
+  # Keep the first run's 00.txt (a rerun would append to it): renamed once to 00-first.txt.
+  [[ -e $R/00.txt && ! -e $R/00-first.txt ]] && mv $R/00.txt $R/00-first.txt && print "previous 00.txt kept as $R/00-first.txt"
+  : > $R/00.txt   # later reruns start a fresh 00.txt
+  logged $R/00.txt step_00 || { print "\n00 STOP（see the STOP line above / 见上面的 STOP 行）。把 $R/00.txt 交给 Main，不要继续。"; exit 1; }
   summary 00 "$(grep -E '^claude:|ZSH_VERSION|Node spawn|inherited|answer|instruction files|echo of the prompt|plugins in init|control records|Task 490 timer|zombies|478 backup|^Version|pip check rc|production copy|markers expected|isolat|running lines|may run now|^stopped|status|464 backup|MAIN=|MAIN NOT|volume ids|^guard|advisor' $R/00.txt)"
   print "成功: 'claude:' 行给出路径与版本（默认 claude，现为 $CC_EXPECT）；ZSH_VERSION 有值；'answer check: OK'（answer 以 MODEL-OK 开头、models 含 $MODEL、is_error False、无 Harness AGENTS.md、不是 prompt 回显）；'control records snapshot 00.json'；'guard: Task 490 timer pid $TIMER490: …'（present 或 absent 都照实记录，不发信号）；graphtraj 0.1.0 与 graftling 0.5.0；pip check rc=0；'markers expected absent: PASS (10/10)'（生产仍是 a3fe1b92）；'task graph rc=0' 且 'Task 492 named' 不为 0；'expected 2.1.325: yes'；"
   print "  'isolation: OK'；stopped: false 且 Team 1 active；roles 里有 opus_coding_team 的 advisor；$BK 'No such file'（478 的备份 $OLDBASE/backup 只列出，不动）；MAIN=<id>。"

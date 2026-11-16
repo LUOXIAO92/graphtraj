@@ -165,6 +165,27 @@ user's I time (backup and install ~5 min) is extra, plus any wait for other Task
 | 3 · 480/481/485 | no runtime check (item 12 above): proddiff, markers, I's import lines |
 | 4 restart and notices | M prompt a (no repeated notice), Mps, inbox `duplicate ids: 0`, one completed notice in `N-main-notice.txt` |
 
+## Correction (Round 1): 00's false STOP
+
+On the real host, 00 printed `isolation: OK`, `answer check: OK`, `cc-plugin-agents-md loaded: NO` and
+`Task 490 timer … absent`, but still ended with `00 STOP`. The cause: step_00 ended with `guard`, which returns 1
+because Main's own Claude host is BLOCKING, as expected at 00. The dispatcher turned that return value into a STOP.
+
+Changes:
+- At 00 the guard is information only. It prints `guard: BLOCKING at 00 is information only (…)`, and step_00 fails
+  only through its explicit `STOP:` returns.
+- The STOP message is now generic ("see the STOP line above").
+- 00 keeps the first run's `00.txt` as `00-first.txt` (renamed once), and each rerun starts a fresh `00.txt`.
+
+I checked every dispatcher that tests a step's return value. vc_stream ended on `tail host.log`, which returns 1 when
+the file is missing; it now ends with `return 0`. B, V, S, S2, vc_setup, do_backup, do_install and R end on a real
+check or an explicit return.
+
+New rehearsal checks:
+- 00 with Main's host under `$RT`: exit 0, `guard: BLOCKING 1`, the information line, and no `00 STOP`.
+- 00 with a prompt-echo answer: the `STOP:` line and `00 STOP`.
+- The `00-first.txt` rename.
+
 ## Rehearsal
 
 `zsh scripts/adopt-492/rehearse.zsh` in `$TMPDIR` (stub `claude` and `ps`; fake production venv built from a3fe1b92

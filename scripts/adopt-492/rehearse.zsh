@@ -38,6 +38,12 @@ case "$1" in
   --version) print "2.1.325 (stub Claude Code)" ;;
   plugin) print "✔ Validation passed (stub)" ;;
   -p) in=$(cat); tag=$(print -r -- "$in" | sed -n 's/.*Line 1: \([A-Z-]*\) followed.*/\1/p')
+      # echo mode (a file next to the stub): answer with the prompt itself, as the Task 489 failure did.
+      if [[ -e ${0:A:h}/echo-mode ]]; then
+        print -r -- '{"type":"system","subtype":"init","plugins":[]}'
+        /Users/luoxiao/miniconda3/bin/python3.13 -I -c 'import json, sys; print(json.dumps({"type": "result", "is_error": False, "result": sys.argv[1], "modelUsage": {}}))' "$in"
+        exit 0
+      fi
       print -r -- '{"type":"system","subtype":"init","plugins":[]}'
       print -r -- "{\"type\":\"result\",\"is_error\":false,\"result\":\"${tag:-stub} claude-opus-5-5, logged in\\nFILES: NONE\",\"modelUsage\":{\"claude-opus-5-5\":{}}}" ;;
   *) print "stub claude: $*" ;;
@@ -119,7 +125,7 @@ check "ans492: no result record STOP" grep -q 'answer check: STOP' $F/a-none.out
 head1 "00 (host's parent is 'claude --continue'; Main from the newest transcript; isolated vproject under tmp/492)"
 print -l -- $HOSTLINE $TIMERLINE "5252 5151 $FRT/bin/python <defunct>" > $F/ps.txt
 print -l -- "5151 1 S" "5252 5151 Z" "$$ 1 S" > $F/psstat.txt
-steps 00 > $F/00.out 2>&1
+steps 00 > $F/00.out 2>&1; ZRC=$?
 check "00 found Main through claude --continue + newest transcript" grep -q "MAIN=$MAINID" $F/00.out
 check "00 classified the timer as NON-BLOCKING" grep -q 'NON-BLOCKING' $F/00.out
 check "00: Task 490 timer line names pid, state and its zombie child; the zombie is information only" sh -c "grep -q 'guard: Task 490 timer pid 5151: present, state S, children 1: 5252(Z)' $F/00.out && grep -q 'guard: zombies (ps stat Z; information only.*: 1' $F/00.out && ! grep -q '\] 5252 ' $F/00.out"
@@ -127,6 +133,15 @@ check "00: answer from the isolated vproject: answer check OK, no Harness AGENTS
 check "00: control records snapshot 00.json" grep -q 'control records snapshot 00.json' $F/00.out
 check "00 reported the inherited 418 variable by name and path" grep -q 'inherited: GRAFTLING_CLAUDE_HOST_CONFIG=/elsewhere' $F/00.out
 check "00: the 492 markers are absent from the old production" grep -q 'markers expected absent: PASS (10/10)' $F/00.out
+# 492 R1 correction: Main's own Claude host under $RT is BLOCKING at 00 (information only); 00 must not STOP for it.
+check "00 with Main's host under \$RT: exit 0, 'guard: BLOCKING 1' and the information line, no '00 STOP'" sh -c "[ $ZRC -eq 0 ] && grep -q 'guard: BLOCKING 1 ' $F/00.out && grep -q \"\\[Main's Claude host\\] \" $F/00.out && grep -q 'guard: BLOCKING at 00 is information only' $F/00.out && ! grep -q '00 STOP' $F/00.out"
+check "00 printed its next step (B)" grep -q "next.*: zsh $SD/steps.zsh B" $F/00.out
+touch $F/stub/echo-mode
+steps 00 > $F/00-echo.out 2>&1; ZRC2=$?
+rm -f $F/stub/echo-mode
+grep -E 'answer|echo of the prompt|STOP' $F/00-echo.out
+check "00 with a failing answer check (prompt echo): exit non-zero, STOP line and '00 STOP', no next step" sh -c "[ $ZRC2 -ne 0 ] && grep -q 'echo of the prompt: YES' $F/00-echo.out && grep -q '^STOP: claude -p answer check failed' $F/00-echo.out && grep -q '00 STOP（see the STOP line above' $F/00-echo.out && ! grep -q 'steps.zsh B' $F/00-echo.out"
+check "the first 00.txt was kept as 00-first.txt (positive run), the rerun wrote a fresh 00.txt" sh -c "grep -q 'guard: BLOCKING at 00 is information only' $RW/00-first.txt && grep -q 'echo of the prompt: YES' $RW/00.txt && ! grep -q 'guard: BLOCKING at 00' $RW/00.txt"
 check "00 printed claude --version and the binary" grep -q '^claude: .*stub/claude -> .* | version: 2.1.325' $F/00.out
 check "00 made the read-only production task graph call for Task 492 (stub tree: not registered, rc printed)" sh -c "grep -q 'task graph rc=' $F/00.out && grep -q 'graph --task-id 492' $F/00.out"
 check "00: isolation OK (vproject has its own git and .graphtraj)" grep -q '^isolation: OK' $F/00.out

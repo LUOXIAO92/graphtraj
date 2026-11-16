@@ -14,6 +14,8 @@
 #        of the redaction test. Prints 491's R0 (dev) and R1 counts of it for comparison; dev is not repeated again.
 # SUITE: candidate full suite, 6 shards (scripts/run_test_shards.py) from a fresh git clone, then its failing files
 #        once on dev ad1ccabc (scripts/verify-487/devcheck.py). Limits 1500 s + 600 s: plan 35 min.
+# CHECK: SUITE's failing files once on the candidate (quiet host), devcheck.py method; VERIFY495_CHECK_FAILURES
+#        overrides the failures file. PASS CHECK when every id passes on the candidate. Limit 600 s.
 # Each clone: the exact commit under Harness tmp/495, its own test venv (dependencies linked read-only from
 # production .venv-runtime into the venv's own site-packages, as verify-487/491), pytest temp in ${TMPDIR:-/tmp}
 # (refused if inside the Harness).
@@ -195,8 +197,30 @@ except subprocess.TimeoutExpired:
   next "report $OUT/P.txt, R1.txt, SUITE.txt to the 495 Leader"
 }
 
+# CHECK: SUITE's failing files once on the CANDIDATE (quiet host), by the same method as SUITE's dev recheck,
+# so both sides are compared under equal conditions.
+step_CHECK() {
+  local failures=${VERIFY495_CHECK_FAILURES:-$H/.graphtraj/core/state/tasks/495-tool-descendant-argv-refresh/realhost/SUITE-shards/failures.txt}
+  say "[CHECK] the failing ids' files of $failures once on candidate $CAND ($BASE/R1), same method as SUITE's dev recheck (verify-487/devcheck.py). Dialog: none. Limit 600 s. Output only under $OUT."
+  check_tmp || return 1
+  [[ -s $failures ]] || { print "STOP: no failures file $failures"; return 1; }
+  ensure R1 $CAND || return 1
+  print "NOTE: devcheck.py's words 'dev' / 'on dev' mean THIS CANDIDATE CHECKOUT ($BASE/R1/src at $(git -C $BASE/R1/src rev-parse HEAD)) here;"
+  print "      its 'passes on dev -> NEW' means 'passes on the candidate', its 'fails on dev too' means 'fails on the candidate'."
+  print "== start $(date +%T); $(load)"
+  (cd $BASE/R1/src && clean $BASE/R1/venv/bin/python -I $V487/devcheck.py $failures 600) 2>&1 | tee $OUT/CHECK-devcheck.txt
+  print "== devcheck exit ${pipestatus[1]} at $(date +%T) (exit 1 is expected when ids pass here); output $OUT/CHECK-devcheck.txt"
+  local id failed=()
+  for id in ${(f)"$(awk 'NF > 1 {print $2}' $failures | sort -u)"}; do
+    grep -qF -- "  $id: passes on dev -> NEW" $OUT/CHECK-devcheck.txt || failed+=($id)
+  done
+  if (( ${#failed} == 0 )); then print "PASS CHECK: every id passes on the candidate"
+  else print "FAIL CHECK: ${#failed} id(s) did not pass on the candidate (verdicts above):"; print -l -- "  "$^failed; fi
+  next "report $OUT/CHECK.txt and $OUT/CHECK-devcheck.txt to the 495 Leader"
+}
+
 case $STEP in
-  P|R1|SUITE) step_$STEP ;;
-  *) print "usage: zsh $THIS <P|R1|SUITE>   e.g. zsh $THIS P 2>&1 | tee $OUT/P.txt" ;;
+  P|R1|SUITE|CHECK) step_$STEP ;;
+  *) print "usage: zsh $THIS <P|R1|SUITE|CHECK>   e.g. zsh $THIS P 2>&1 | tee $OUT/P.txt" ;;
 esac
 exit $?

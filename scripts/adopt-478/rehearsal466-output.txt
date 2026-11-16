@@ -23,7 +23,32 @@ CHECK 466 credential masked (tools/all results: value 0, [redacted] at its event
 REHEARSAL PASS: N466r masking negative: credential masked FAIL, exit 1, value not printed
 REHEARSAL PASS: N466r masking negative: the other three still PASS
 REHEARSAL 466 RESULT: ALL PASS
---- N466 prompt (zsh steps.zsh N466, fake Harness) ---
+466: member 478-x-handover0-advisor@advisor session=claude:7777aaaa
+  archive for claude:7777aaaa: ['/tmp/claude-501/r466/b-masked/.graphtraj/swarm/sessions/m/session.jsonl']
+  archive for claude:5585dafa: ['/tmp/claude-501/r466/b-masked/.graphtraj/swarm/sessions/c/session.jsonl']
+466: session_read calls in the member archive: [[('content', 'tools'), ('search', 'api_key'), ('session', 'claude:5585dafa')], [('content', 'tools'), ('search', '[redacted]'), ('session', 'claude:5585dafa')], [('content', 'tools'), ('session', 'claude:5585dafa')]]
+  [('content', 'tools'), ('search', 'api_key'), ('session', 'claude:5585dafa')]: total=131 seqs=[409] at fake-value seqs=[409] '[redacted]'=1 value present=no
+  [('content', 'tools'), ('search', '[redacted]'), ('session', 'claude:5585dafa')]: total=131 seqs=[] at fake-value seqs=[] '[redacted]'=1 value present=no
+  [('content', 'tools'), ('session', 'claude:5585dafa')]: total=131 seqs=[409, 537, 538, 539, 540] at fake-value seqs=[409] '[redacted]'=1 value present=no
+466: child archive seqs holding the fake value: [409]; results with it and [redacted]: [([('content', 'tools'), ('search', 'api_key'), ('session', 'claude:5585dafa')], [409]), ([('content', 'tools'), ('session', 'claude:5585dafa')], [409])]; value in results 0; member archive 0; member native transcript 0 (0 file(s))
+466: default/page back/keyword are not re-checked here (they PASSed in N466r).
+CHECK 466 credential masked (a result shows a fake-value event redacted; value 0 in results, member archive and transcript): PASS (counts above)
+
+REHEARSAL PASS: N466br positive (child event without seq ignored): credential masked PASS, exit 0, no Traceback
+466: member 478-x-handover0-advisor@advisor session=claude:7777aaaa
+  archive for claude:7777aaaa: ['/tmp/claude-501/r466/b-leak/.graphtraj/swarm/sessions/m/session.jsonl']
+  archive for claude:5585dafa: ['/tmp/claude-501/r466/b-leak/.graphtraj/swarm/sessions/c/session.jsonl']
+466: session_read calls in the member archive: [[('content', 'tools'), ('search', 'api_key'), ('session', 'claude:5585dafa')], [('content', 'tools'), ('search', '[redacted]'), ('session', 'claude:5585dafa')], [('content', 'tools'), ('session', 'claude:5585dafa')]]
+  [('content', 'tools'), ('search', 'api_key'), ('session', 'claude:5585dafa')]: total=131 seqs=[409] at fake-value seqs=[409] '[redacted]'=0 value present=yes
+  [('content', 'tools'), ('search', '[redacted]'), ('session', 'claude:5585dafa')]: total=131 seqs=[] at fake-value seqs=[] '[redacted]'=1 value present=no
+  [('content', 'tools'), ('session', 'claude:5585dafa')]: total=131 seqs=[409, 537, 538, 539, 540] at fake-value seqs=[409] '[redacted]'=0 value present=yes
+466: child archive seqs holding the fake value: [409]; results with it and [redacted]: []; value in results 2; member archive 2; member native transcript 0 (0 file(s))
+466: default/page back/keyword are not re-checked here (they PASSed in N466r).
+CHECK 466 credential masked (a result shows a fake-value event redacted; value 0 in results, member archive and transcript): FAIL (counts above)
+
+REHEARSAL PASS: N466br leak negative: credential masked FAIL, exit 1, value not printed
+REHEARSAL 466 RESULT (with N466b): ALL PASS
+--- N466 prompt (earlier round) ---
 [N466] Main. claude: /Users/luoxiao/.local/bin/claude -> /Users/luoxiao/.local/bin/claude | version: cv: operation not permitted: /Users/luoxiao/.local/bin/claude | expected 2.1.325: NO
 [N466] Main. 466 的生产核对（第二次，只读）：一个新的 Task 478 成员用 agents 的 session_read 按 session 读已清退的探针子级 Session。对话框: 无。成员约 2-5 分钟。在 Claude Main 里粘贴这一条:
 Using only the tasks tool: execute swarm with arguments {"tasks":[{"task_id":"478","role":"opus_coding_team.advisor","instruction":"This is a read-only production check. Do NOT call submit_result or submit_report and use no other tools than the agents tool. Call the agents tool (action execute, feature session_read) five times on the Session claude:5585dafa-88d0-4ff2-8633-05090a2d9c7d (pass it as the argument session; the child is retired, the read comes from its archive): (1) {session: claude:5585dafa-88d0-4ff2-8633-05090a2d9c7d}; (2) {session: claude:5585dafa-88d0-4ff2-8633-05090a2d9c7d, start: -10, stop: -5}; (3) {session: claude:5585dafa-88d0-4ff2-8633-05090a2d9c7d, search: KW478-ORCHID}; (4) {session: claude:5585dafa-88d0-4ff2-8633-05090a2d9c7d, content: tools, search: probe478}; (5) {session: claude:5585dafa-88d0-4ff2-8633-05090a2d9c7d, content: all, start: -6}. For each call reply with one compact line: total, start, stop, the event indices (or each hit index and seq), and the result size in characters. For (4) and (5) add the number of occurrences of [redacted] in the result and whether the substring sk-probe478 appears in it (yes or no; never quote any value). If a call is refused, quote the exact error text. Quote no event contents. Then end your turn."}]}. Print the raw result and end your turn. Do not wait.

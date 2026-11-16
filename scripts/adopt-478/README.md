@@ -207,3 +207,7 @@ KW478-ORCHID; (4) content tools, search probe478; (5) content all, start -6.
 
 Rehearsal: `rehearse466.py` builds fixtures in the real shape (one masked positive and one leaking negative), and
 the N466 prompt was printed in a fake Harness. Result: ALL PASS, saved in `rehearsal466-output.txt`.
+
+**Correction (Round 3, masking only).** Search runs on redacted text, and `api_key=sk-…` becomes `api_key="[redacted]"`, so searching for the value can never hit. nr466.py now ignores child events without a seq; before, it crashed with an int-vs-None TypeError.
+`N466b` (Main; 1 min + member ≤ 5 min; no dialog): a new Task 478 member makes three reads with content tools: search api_key, search [redacted], and the default. It reports counts and yes/no only. Save `N466b.txt` and `N466b-reply.txt`.
+`N466br` (Main; 2 min; no dialog): `CHECK 466 credential masked …: PASS` only if one result shows an event at a child seq holding the value with `[redacted]`, and the value appears 0 times in all results, the member archive and the native transcript. Default/page back/keyword are not re-checked (they passed in N466r). Rehearsal: `rehearsal466-output.txt`, ALL PASS.

@@ -849,6 +849,19 @@ N466r) print "[N466r] Main. 466 核对：读本次成员的档案（只读，不
   print "成功: CHECK 466 default read = last 5、page back [-10:-5]、keyword hits、credential masked 四行都是 PASS。BLOCKED/FAIL 交 Main 登记（未观察到的不算通过）。"
   next "zsh $THIS done"; exit $rc ;;
 
+N466b) print "[N466b] Main. $(cv)"; cat <<EOF2 | tee $R/N466b-prompts.txt
+[N466b] Main. 466 凭据遮蔽核对（只读）：搜索在遮蔽后的文本上进行，搜凭据值永远不会命中；改为搜 api_key 与 [redacted]。对话框: 无。成员约 2-5 分钟。在 Claude Main 里粘贴这一条:
+Using only the tasks tool: execute swarm with arguments {"tasks":[{"task_id":"$TASK_ID","role":"opus_coding_team.advisor","instruction":"This is a read-only production check. Do NOT call submit_result or submit_report and use no other tools than the agents tool. Call the agents tool (action execute, feature session_read) three times on the Session claude:$N466_CHILD (pass it as the argument session): (a) {session: claude:$N466_CHILD, content: tools, search: api_key}; (b) {session: claude:$N466_CHILD, content: tools, search: [redacted]}; (c) {session: claude:$N466_CHILD, content: tools}. For each call reply with one compact line: total, each hit index and seq (or the event indices and seqs), the number of occurrences of [redacted] in the result, and whether the substring sk-probe478 appears in it (yes or no; never quote any value). If a call is refused, quote the exact error text. Quote no event contents. Then end your turn."}]}. Print the raw result and end your turn. Do not wait.
+  Main 把 swarm 原始结果存为 $R/N466b.txt（必须含 "alias"）；成员最终回复原文存为 $R/N466b-reply.txt。成员的 completed 通知到达后，Main 的 Bash（无对话框）:
+EOF2
+  next "zsh $THIS N466br" ;;
+
+N466br) print "[N466br] Main. 466 凭据遮蔽：读本次成员的档案（只读，不打印凭据值）。对话框: 无。约 1 分钟。"; cv | tee $R/N466br.txt
+  $CONDA -I $SD/nr466.py $H $R claude:$N466_CHILD $TASK N466b 2>&1 | tee -a $R/N466br.txt; rc=${pipestatus[1]}
+  summary N466br "$(grep -E '^CHECK|^466|structure' $R/N466br.txt)"
+  print "成功: 'CHECK 466 credential masked …: PASS'。BLOCKED/FAIL 交 Main 登记（未观察到的不算通过）。default/page back/keyword 已在 N466r PASS，这里不重查。"
+  next "zsh $THIS done"; exit $rc ;;
+
 Nr) print "[Nr] Main. 子级记录、459 的后代记录、Bash 是否真正启动、465 成员设置与 session_read、成员的结束与 Session 档案（只读，从不发信号）。对话框: 无。"
   cv | tee $R/Nr.txt
   nr_read 2>&1 | tee -a $R/Nr.txt; rc=${pipestatus[1]}

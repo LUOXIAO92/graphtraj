@@ -508,6 +508,7 @@ class ExecutionEvents:
         # Durable completion precedes delivery. No Agent lock spans native I/O,
         # and repeated finished() cannot invoke the receiver a second time.
         if notify:
+            failure = None
             try:
                 # A receiver that only queued the notice for its host returns
                 # 'queued': wait/status showing it acknowledges the queued notice.
@@ -523,18 +524,23 @@ class ExecutionEvents:
                             else 'unconfirmed' if accepted == 'unconfirmed'
                             else 'delivered' if accepted is True
                             else 'held' if control.hold_notices else 'unavailable')
-            except Exception:
+            except Exception as error:
                 # A native parent may have received the body before its transport
                 # failed: do not push it again. A host queue that failed is
                 # left to wait/status, or held for the next run.
                 delivery = ('unconfirmed' if native is not None
                             else 'held' if control.hold_notices else 'unavailable')
+                failure  = _push_error(error)
             with control._locked(self._agent) as record:
                 for ended in record['executions']:
                     if ended['id'] == self._execution:
                         # A wait, or the host's acknowledgement, may have settled it meanwhile.
                         if delivery is not None and ended.get('notification') in ('pending', 'queueing'):
                             ended['notification'] = delivery
+                            # Status shows why a push that will not be retried
+                            # failed, not only its state (a held end is retried).
+                            if failure is not None and delivery in ('unavailable', 'unconfirmed'):
+                                ended['notification_error'] = failure
                         break
             control._delivering.discard(identity)
             # The parent may have started or ended while this one waited.
@@ -565,6 +571,12 @@ def _request_message(details: Mapping[str, Any]) -> str:
     named = f"{method} for {tool}" if isinstance(tool, str) and tool else method
     return (f"Permission request {named} waits for your reply. Read it with requests "
             "and answer once with reply.")
+
+
+def _push_error(error: Exception) -> dict[str, str]:
+    """Name why a receiver's push raised: the error's ``code`` (else its type) and its text."""
+    return {"code": str(getattr(error, "code", None) or type(error).__name__),
+            "message": str(error) or type(error).__name__}
 
 
 def _delivery(accepted: object) -> str:
@@ -1954,13 +1966,15 @@ class AgentControl:
         """
         claimed = self._lost.__dict__.pop("claimed", [])
         for receiver, notice, native in claimed:
+            failure = None
             try:
                 accepted = receiver(notice)
                 delivery = ("held" if accepted == "held" else "queued" if accepted == "queued"
                             else "unconfirmed" if accepted == "unconfirmed"
                             else "delivered" if accepted is True else "unavailable")
-            except Exception:
+            except Exception as error:
                 delivery = "unconfirmed" if native else "unavailable"
+                failure  = _push_error(error)
             # An end the receiver answered held is not claimed again in this
             # pass, or a receiver that keeps answering held recurses; the next
             # ordinary read may claim it again.
@@ -1971,6 +1985,8 @@ class AgentControl:
                         if (execution["id"] == notice["execution"]
                                 and execution.get("notification") in ("pending", "queueing")):
                             execution["notification"] = delivery
+                            if failure is not None:  # unavailable or unconfirmed: final
+                                execution["notification_error"] = failure
             except AgentsError:
                 # The record is gone: there is nothing left to settle.
                 pass
@@ -2212,6 +2228,8 @@ class AgentControl:
             # says whether, and how, the end reached the parent.
             if last.get('notification'):
                 document['last_result']['notification'] = last['notification']
+            if last.get('notification_error'):
+                document['last_result']['notification_error'] = dict(last['notification_error'])
         if record["retired_at"] is not None:
             document["retired_at"] = record["retired_at"]
         return document

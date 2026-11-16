@@ -240,6 +240,21 @@ after that stays queued until the Session is resumed with `--session-id`, or
 until a Claude Code, Pi or DSH Main continues Main and takes the queue over.
 GraphTraj never starts or resumes a DSH process by itself.
 
+A Codex Main's host events go through `codex app-server proxy` to Codex's
+shared background server for its `CODEX_HOME`, so they reach only a Session
+that runs on that server. Start an interactive `codex` Main with the
+`graphtraj` MCP server in `config.toml` (the user's or the trusted project's
+`.codex/config.toml`) and without options that make Codex run the Session
+without the shared background server, such as `-c`, `--enable`, `--disable`,
+`--search`, `--oss` or `--no-daemon`; Codex then prints
+"Running without the shared background server" at startup. `codex exec`
+runs one turn and exits, so as Main it is only for unattended tests: it
+receives no pushes, neither root Agent ends nor member requests, and you check
+them yourself with `agents` `status` and `requests`. When a push fails, the
+Agent's `status` shows `last_result.notification` (for example `unavailable`)
+and `last_result.notification_error`, the failure's `code` and `message`
+(a Session the shared server does not hold gives `thread not found`).
+
 ### Claude Code as Main
 
 The Claude Code host serves both `agents` and `tasks` from one project MCP

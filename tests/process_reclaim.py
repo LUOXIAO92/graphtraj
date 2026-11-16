@@ -17,12 +17,14 @@ cleanup never touches another shard's processes.
 from __future__ import annotations
 
 import os
+import subprocess
+import time
 import uuid
 from pathlib import Path
 
 import pytest
 
-from graftling.member_processes import ancestor_pids, stop_marked_processes
+from graftling.member_processes import ancestor_pids, find_marked_processes, stop_marked_processes
 
 # The name avoids KEY, SECRET and TOKEN, which credential filters drop, and the
 # GRAPHTRAJ_ prefix, which the isolated_runner_environment fixture removes per test.
@@ -71,6 +73,25 @@ def end_test_budget_timers(request: pytest.FixtureRequest):
         end_budget_timers(directory)
 
 
+def await_ended_timers(value: str) -> None:
+    """Give timers whose records the teardowns removed one sleep slice to exit (490).
+
+    Only waits; whatever still runs afterwards is left to the reclaim, whose
+    report then names it.
+    """
+    from graphtraj.execution.budget_idle_timer import SLICE_SECONDS
+
+    deadline = time.monotonic() + SLICE_SECONDS + 1
+    while time.monotonic() < deadline:
+        try:
+            found = find_marked_processes(value, exclude=ancestor_pids(), variable=TEST_RUN_ENV)
+        except (OSError, subprocess.SubprocessError):
+            return  # The reclaim below reports the same error.
+        if not any("graphtraj.execution.budget_idle_timer" in command for command in found.values()):
+            return
+        time.sleep(0.2)
+
+
 def pytest_configure(config: pytest.Config) -> None:
     mark_test_run()
 
@@ -78,6 +99,8 @@ def pytest_configure(config: pytest.Config) -> None:
 @pytest.hookimpl(trylast=True)
 def pytest_sessionfinish(session: pytest.Session) -> None:
     value = os.environ.get(TEST_RUN_ENV, "")
+    if value:
+        await_ended_timers(value)
     report = reclaim_test_run(value)
     if report["found"] or report.get("error"):
         reporter = session.config.pluginmanager.get_plugin("terminalreporter")

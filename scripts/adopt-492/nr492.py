@@ -426,7 +426,8 @@ check('477 child end not pushed to the member after wait delivered it (graphtraj
       (len(pushed) == 0) if archive and exs else 'BLOCKED', f'inputs (execution, seq)={pushed} ({where})')
 
 # --- 492: 487 (wait timeout and push race: the reply reaches the member once) -----------------------------------
-waits = [(c.get('arguments') or {}, deep(t)) for c, t in calls if c.get('feature') == 'wait']
+# Only executed waits (491): the member's earlier {action: describe, feature: wait} call is not a wait.
+waits = [(c.get('arguments') or {}, deep(t)) for c, t in calls if c.get('feature') == 'wait' and c.get('action') == 'execute']
 if waits:
     a0, r0 = waits[0]
     timed = list(values(r0, 'timed_out'))

@@ -197,7 +197,7 @@ def judge(project: Path, out: Path, label: str) -> int:
     say('state report files:', [str(p) for p in reports] or 'NONE')
     ok = verdict('report-written', any(line in p.read_text(errors='replace') for p in reports),
                  f'a teams/1/rounds/1/pi-member.md in the project state contains {line}')
-    listed = run(str(BIN / 'agent-runner'), 'reports', alias, cwd=project) if alias else None
+    listed = run(str(BIN / 'agent-runner'), 'reports', alias, cwd=project, timeout=60) if alias else None
     text = listed.stdout if listed else ''
     (out / f'{label}-reports.txt').write_text(redact(text))
     ok &= verdict('report-listed', 'pi-member.md' in text and line in text,

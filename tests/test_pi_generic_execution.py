@@ -172,3 +172,47 @@ def test_graphtraj_member_launch_matches_base() -> None:
             marker = scenario['environment']['changed'].pop('GRAFTLING_MEMBER_RUN')
             assert re.fullmatch(r'[0-9a-f]{32}', marker), name
     assert actual == goldens
+
+
+@pytest.mark.parametrize('access', ['read', 'write'])
+def test_graphtraj_member_writes_exactly_its_assigned_reports(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, access: str,
+) -> None:
+    """480: each assigned report file is writable; no other state path is, also after a report refresh."""
+    from graphtraj.runtimes.pi.managed_session import PiManagedExecution
+    from graphtraj.runtimes.pi.pi_adapter import PiRuntimeAdapter
+    from pi_parity_scenarios import _layout
+
+    root = tmp_path.resolve()
+    request = {**_layout(root), 'worktree_access': access}
+    monkeypatch.setenv('PATH', str(root / 'bin') + ':' + '/usr/bin:/bin')
+    monkeypatch.setenv('HOME', str(root / 'no-home'))
+    evidence, state = root / 'evidence', Path(request['state_directory'])
+    rounds = evidence / 'teams/1/rounds/1'
+
+    def allowed_writes(request: dict, name: str) -> list[Path]:
+        directory = Path(request['harness_root']) / '.graphtraj/runner/sessions' / name
+        directory.mkdir(parents=True)
+        trace = root / 'traces' / (name + '.jsonl')
+        trace.parent.mkdir(exist_ok=True)
+        PiManagedExecution(request, 'unused', directory, lambda *a: None, lambda *a: None,
+                           trace, None).prepare_launch('/bound/cli')
+        policy = json.loads((directory / 'pi-policy.json').read_text())
+        return [Path(path) for path in policy['filesystem']['allowWrite']]
+
+    def granted(paths: list[Path], target: Path) -> bool:
+        return any(target.is_relative_to(path) for path in paths)
+
+    writes = allowed_writes(request, 'first')
+    assert rounds / 'engineer.md' in writes
+    for target in (rounds / 'other.md', rounds, evidence, evidence / 'task.yml', state, state / 'tasks.yml',
+                   Path(request['harness_root']) / '.graphtraj/roles.yml'):
+        assert not granted(writes, target), target
+
+    refreshed = PiRuntimeAdapter().refresh_report_paths(
+        request, worktree=Path(request['worktree_path']), evidence=evidence,
+        report_files=(Path('.state/teams/1/rounds/1/validation.md'),), role='member', reports_only=True)
+    writes = allowed_writes(refreshed, 'refreshed')
+    assert rounds / 'validation.md' in writes
+    for target in (rounds / 'engineer.md', rounds / 'other.md', rounds, evidence, state):
+        assert not granted(writes, target), target

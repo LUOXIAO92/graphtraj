@@ -12,7 +12,6 @@
 #   Sum Main should plan for: 65 min.
 # Every step: Dialog: none; signals only the processes it started; never prints the DEEPSEEK_API_KEY value.
 # Venvs are built offline (no PyPI), as verify-482 build(). Rehearsal without a model: VERIFY480_NO_MODEL=1 ... 00
-# Rehearsal of T on a subset only: VERIFY480_T_ARGS='tests/<file>.py' (Main never sets it).
 set -u
 H=/Users/luoxiao/workspace/you-are-a-product-architect-delivery
 SD=${0:A:h}
@@ -162,32 +161,15 @@ step_T() {
   print "candidate source $SRC; test venv graphtraj: $(installed $TESTENV)"
   local R=$OUT/T; rm -rf $R-shards; mkdir -p $R-shards
   print "== start $(date +%T)"
-  (cd $SRC && group 1500 $TESTENV/bin/python $SRC/scripts/run_test_shards.py --shards $SHARDS --log-dir $R-shards \
-    ${=VERIFY480_T_ARGS:-}) > $R-suite.txt 2>&1
+  (cd $SRC && group 1500 $TESTENV/bin/python $SRC/scripts/run_test_shards.py --shards $SHARDS --log-dir $R-shards) \
+    > $R-suite.txt 2>&1
   local rc=$?
   print "== suite exit status $rc at $(date +%T) (124 = 25 min self-stop); output $R-suite.txt, shard logs $R-shards/"
   tail -n 4 $R-suite.txt
   touch $R-shards/failures.txt
   print "== failures ($(wc -l < $R-shards/failures.txt | tr -d ' ')):"; cat $R-shards/failures.txt
-  say "rerun each failing test id on base $BASE_COMMIT ($BSRC, $BASEENV), same TMPDIR; <= 10 min in total"
-  local ids=$R-base-ids.txt; awk '{print $2}' $R-shards/failures.txt | sort -u > $ids
-  (cd $BSRC && group 600 $BASEENV/bin/python -I -c 'import subprocess, sys
-new = []
-for node in open(sys.argv[1]).read().split():
-    try:
-        rc = subprocess.run([sys.executable, "-m", "pytest", "-p", "no:cacheprovider", "-q", node],
-                            capture_output=True, text=True, timeout=120).returncode
-    except subprocess.TimeoutExpired:
-        rc = "timeout"
-    verdict = {0: "passes on base -> NEW", 1: "fails on base too", 4: "absent on base -> NEW",
-               5: "absent on base -> NEW"}.get(rc, f"base rc={rc} (unclassified)")
-    print(f"  {node}: {verdict}", flush=True)
-    if "NEW" in verdict:
-        new.append(node)
-print("== NEW failures (fail on the candidate, pass or are absent on the base): %d" % len(new))
-for node in new:
-    print("  NEW", node)
-print("== end of new failures")' $ids) 2>&1 | redact
+  say "failing ids rechecked on base $BASE_COMMIT ($BSRC, $BASEENV), same TMPDIR: one pytest -rA over their files; <= 10 min"
+  (cd $BSRC && group 600 $BASEENV/bin/python -I $SD/probe.py basecheck $R-shards/failures.txt 570) 2>&1 | redact
   next "report $OUT/{00,R,V,T}.txt to the Task 480 Leader"
 }
 

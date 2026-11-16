@@ -219,8 +219,57 @@ def judge(project: Path, out: Path, label: str) -> int:
     return 0 if ok else 1
 
 
+def basecheck(failures: Path, seconds: str) -> int:
+    """Run the base checkout (cwd) once over the files of the candidate's failures; print NEW failures.
+
+    NEW = failing on the candidate and passing on the base or absent from it. One pytest run with -rA over the
+    failing files (an absent node id would abort a run that names it). Runs under the caller's process group.
+    """
+    ids = sorted({line.split()[1] for line in failures.read_text().splitlines() if len(line.split()) > 1})
+    files = sorted({i.split('::')[0] for i in ids})
+    present = [f for f in files if Path(f).is_file()]
+    say(f'candidate failures: {len(ids)} ids in {len(files)} files; files on the base: {len(present)}')
+    outcome: dict[str, str] = {}
+    complete = True
+    if present:
+        try:
+            done = subprocess.run([sys.executable, '-m', 'pytest', '-p', 'no:cacheprovider', '-q', '-rA', *present],
+                                  capture_output=True, text=True, timeout=float(seconds))
+            text = done.stdout
+            say(f'base pytest rc={done.returncode}:', (text.strip().splitlines() or ['no output'])[-1])
+        except subprocess.TimeoutExpired as error:
+            text, complete = (error.stdout or b'').decode(errors='replace') if isinstance(error.stdout, bytes) \
+                else (error.stdout or ''), False
+            say(f'base pytest exceeded {seconds} s: classification incomplete')
+        for line in text.splitlines():
+            parts = line.split()
+            if len(parts) > 1 and parts[0] in {'PASSED', 'FAILED', 'ERROR', 'SKIPPED', 'XFAIL', 'XPASS'}:
+                outcome.setdefault(parts[1], parts[0])
+    new = []
+    for node in ids:
+        seen = outcome.get(node)
+        if seen in {'FAILED', 'ERROR'}:
+            verdict = 'fails on base too'
+        elif seen == 'PASSED' or (seen is None and not Path(node.split('::')[0]).is_file()):
+            verdict = 'passes on base -> NEW' if seen else 'file absent on base -> NEW'
+        elif seen is None and complete:
+            verdict = 'absent on base -> NEW'
+        else:
+            verdict = f'base outcome {seen or "not reached"} (unclassified)'
+        say(f'  {node}: {verdict}')
+        if 'NEW' in verdict:
+            new.append(node)
+    say(f'== NEW failures (fail on the candidate, pass or are absent on the base): {len(new)}')
+    for node in new:
+        say('  NEW', node)
+    say('== end of new failures')
+    return 0 if not new else 1
+
+
 def main() -> int:
     cmd, *args = sys.argv[1:]
+    if cmd == 'basecheck':
+        return basecheck(Path(args[0]), args[1])
     if cmd == 'prepare':
         return prepare(Path(args[0]))
     if cmd == 'pisandbox':

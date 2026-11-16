@@ -308,6 +308,65 @@ acknowledges them only afterwards; until then they are also returned with the
 next `agents`/`tasks` result. Without prompt submission they arrive only with
 that next result.
 
+### DSH as Main
+
+A DSH session you start yourself becomes GraphTraj Main when it loads
+GraphTraj's DSH plugin with a patch for that one invocation. Nothing is
+installed into DSH and no profile is edited. Write the patch from the GraphTraj
+installation, then start DSH from the project directory with it:
+
+```bash
+/path/to/graphtraj-venv/bin/python -m graphtraj.runtimes.dsh.main_entry patch \
+  --write /path/to/project/.graphtraj/dsh-main.patch.yml
+cd /path/to/project
+dsh --profile headless --patch .graphtraj/dsh-main.patch.yml "<task>"
+```
+
+`dsh --profile headless --patch .graphtraj/dsh-main.patch.yml --dump-config`
+prints the composed profile with the row and exits without starting a session.
+The headless profile is the one walked on a real host. Other profiles (`tui`,
+`web`, `acp`, `sdk`) load the same patch the same way, but have not yet been
+walked on a real host. The patch inserts
+one row, `graphtraj-main`, that loads this installation's
+`graphtraj/runtimes/dsh/tool.mjs` with its `python`. Write it again after
+moving or reinstalling GraphTraj. At `agent/created` the plugin:
+
+- continues Main for the project (the entry `dsh:agent/created:startup`, or
+  `resume` with `--session-id`); native subagents never do;
+- attaches the MCP server `graphtraj` (`python -I -m graphtraj.interfaces.mcp`),
+  so the Session has the tools `mcp__graphtraj__agents` and
+  `mcp__graphtraj__tasks`, both acting as this Main;
+- delivers the project's queued notices, including members' native approval
+  requests, as described above, and archives the Session as other Main hooks do.
+
+The venv need not be on `PATH`: the plugin starts the installation's own
+Python. Members' Runtime commands (`claude`, `codex`, `pi`, `dsh`) must still
+be on the `PATH` DSH starts with.
+
+**graftling-dsh.** The `graftling-dsh` bundle (Graftling's agents host, see
+[Independent agents](#independent-agents-without-graphtraj)) gives a DSH
+session a Task-free `agents` tool and its own children; it never makes the
+session GraphTraj Main and has no `tasks` tool. It may stay installed in the
+same profile: without `GRAFTLING_DSH_CONFIG` its row starts no agents host and
+attaches no tool (it still installs its message relay). Do not set
+`GRAFTLING_DSH_CONFIG` when starting a GraphTraj Main; the GraphTraj plugin
+refuses to load with it, because the Session would otherwise have two agents
+hosts. In a shell that exports it, start DSH with:
+
+```bash
+env -u GRAFTLING_DSH_CONFIG dsh --profile headless --patch .graphtraj/dsh-main.patch.yml "<task>"
+```
+
+**Confirm it took effect** from the project's records, not from what the model
+says. After the session starts, the last line of
+`.graphtraj/runner/main-sessions/continuity.jsonl` (`.graphtraj/core/runner/...`
+in the core layout) has `"runtime": "dsh"`, the DSH session id and
+`"entry": "dsh:agent/created:startup"`. With `--json`, the stream shows a
+call of `mcp__graphtraj__tasks` and its result (the exact record shape is to be
+confirmed by the real-host run). A Session without the
+claim line did not load the patch; one with the claim but no `graphtraj`
+tools usually failed to start the MCP server, which DSH reports on stderr.
+
 The execution host needs access to the chosen Runtime executable, credentials,
 project files and subprocess sandbox. Role permissions do not replace the
 Runtime's filesystem restrictions.

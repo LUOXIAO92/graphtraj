@@ -1,16 +1,32 @@
 /** GraphTraj lifecycle/context hooks; Agents MCP belongs to the independent adapter. */
+import { realpathSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { pathToFileURL } from 'node:url';
 import { spawn } from 'node:child_process';
 import { installCollection } from './collection.mjs';
 import { sessionEnvironment as nativeSessionEnvironment } from '../../../graftling/dsh/plugin.mjs';
 
-const require = createRequire(process.env.GRAPHTRAJ_DSH_PACKAGE || process.argv[1]);
+// A user-started DSH sets no package variable: resolve from its real entry file,
+// since an installed `dsh` command is usually a symlink to it.
+const require = createRequire(process.env.GRAPHTRAJ_DSH_PACKAGE || realpathSync(process.argv[1]));
 const { default: z } = await import(pathToFileURL(require.resolve('@deepseek-ai/schemastery')));
 const { createUserMessage } = await import(pathToFileURL(require.resolve('@deepseek-ai/dsh-llm')));
 export const name = 'graphtraj';
 export const inject = ['tools', 'shellEnv', 'sessionQuery', 'agents'];
-export const Config = z.object({ finishCheck: z.boolean().default(false) });
+// python: set only by a user-started Main's patch (`graphtraj.runtimes.dsh.main_entry`).
+// It names the GraphTraj installation whose commands this plugin starts.
+export const Config = z.object({ finishCheck: z.boolean().default(false), python: z.string() });
+
+/** The Main's own tasks/agents MCP server; its Session comes only from the native header. */
+async function attachMain(agent, python) {
+  const mcpClient = await import(pathToFileURL(require.resolve('@deepseek-ai/dsh-mcp-client')));
+  const { DSH_SESSION_ID, DSH_AGENT_SOURCE } = nativeSessionEnvironment(agent);
+  await agent.ctx.plugin(mcpClient, {
+    transport: 'stdio', serverName: 'graphtraj', command: python,
+    args: ['-I', '-m', 'graphtraj.interfaces.mcp'], cwd: agent.session.header.cwd,
+    env: { DSH_SESSION_ID, DSH_AGENT_SOURCE }, toolCallTimeoutMs: 300000, failOnStartupError: true,
+  }).await();
+}
 
 /**
  * Deliver the DSH Main's queued GraphTraj notices through its native inbox,
@@ -35,6 +51,10 @@ export function sessionEnvironment(agent) {
 }
 
 export function apply(ctx, config = { finishCheck: false }) {
+  // graftling-dsh's host row would make this Session a second, Task-free agents host.
+  if (config.python && process.env.GRAFTLING_DSH_CONFIG) {
+    throw new Error('GraphTraj DSH Main: unset GRAFTLING_DSH_CONFIG; graftling-dsh must not host this Session too.');
+  }
   ctx.shellEnv.register({
     name: 'graphtraj',
     variables: {
@@ -45,9 +65,11 @@ export function apply(ctx, config = { finishCheck: false }) {
   });
   async function entry(agent, event, signal) {
     // The native callback owns these facts; no model tool parameter selects them.
-    const executable = process.env.GRAPHTRAJ_DSH_TOOL || 'graphtraj-session';
+    const [executable, args] = config.python
+      ? [config.python, ['-I', '-m', 'graphtraj.runtimes.native_entry', 'dsh']]
+      : [process.env.GRAPHTRAJ_DSH_TOOL || 'graphtraj-session', ['dsh']];
     const result = await new Promise((resolve, reject) => {
-      const child = spawn(executable, ['dsh'], {
+      const child = spawn(executable, args, {
         cwd: agent.session.header.cwd,
         env: { ...process.env, DSH_SESSION_ID: agent.session.id, ...sessionEnvironment(agent) },
         stdio: ['pipe', 'pipe', 'pipe'], signal,
@@ -72,6 +94,7 @@ export function apply(ctx, config = { finishCheck: false }) {
   const collect = agentsOnly ? async () => {} : installCollection(ctx, entry);
   // The Main Session's notice loop: delivered at entry, then every 5 seconds.
   const noticeLoops = new Map();
+  const attached = new Set();
   const stopNotices = id => { clearTimeout(noticeLoops.get(id)); noticeLoops.delete(id); };
   const pullNotices = agent => {
     const id = agent.session.id;
@@ -88,6 +111,11 @@ export function apply(ctx, config = { finishCheck: false }) {
   ctx.on('agent/created', async ({ agent, source, signal }) => {
     if (!agentsOnly && !process.env.GRAPHTRAJ_ROLE) {
       const result = await entry(agent, { event: 'agent/created', source, header: agent.session.header }, signal);
+      // agent/created repeats for one Session (resume, compact); attach its server once.
+      if (result.source === 'main' && config.python && !attached.has(agent.session.id)) {
+        attached.add(agent.session.id);
+        await attachMain(agent, config.python);
+      }
       if (result.source === 'main' && !noticeLoops.has(agent.session.id)) await pullNotices(agent);
     }
     await collect(agent, source);

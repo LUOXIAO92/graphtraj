@@ -84,6 +84,11 @@ print(last.get("runtime", "none"), last.get("session", "none"))') > $OUT/00-prod
   (cd $BASE && clean dsh --profile headless --permission-mode read-only "Reply with exactly one line: DSH-OK <your model id>. Use no tool." < /dev/null 2>&1 | redact | tail -1) | tee $OUT/00-dsh.txt
   grep -q CLAUDE-OK $OUT/00-claude.txt || { print "STOP: claude did not answer (login?)"; return 1; }
   grep -q DSH-OK $OUT/00-dsh.txt || { print "STOP: dsh did not answer (login/DEEPSEEK_API_KEY?)"; return 1; }
+  say "graftling-dsh in the headless profile (read only; never installed or removed here)"
+  clean dsh plugin --profile headless list --depth 0 2>&1 | redact | head -20 > $OUT/00-dsh-plugins.txt
+  cat $OUT/00-dsh-plugins.txt
+  local coexist=NO; grep -q graftling-dsh $OUT/00-dsh-plugins.txt && coexist=YES
+  print "graftling-dsh installed in headless: $coexist"
   say "the documented patch, written by the candidate installation"
   clean $PY -m graphtraj.runtimes.dsh.main_entry patch --write $PATCH && cat $PATCH
   say "ONE real read-only call through the new entry (judged from records, not model text)"
@@ -102,7 +107,8 @@ sys.exit(0 if calls and results else 1)' $OUT/00e-main-stream.jsonl; local rec=$
   print "dsh claim after agent/created: $claimed (dsh claims before ${before:-0}, after ${after:-0})"
   print "dsh tasks tool call and result in records: $([[ $rec == 0 ]] && print YES || print NO)"
   if [[ $claimed == YES && $rec == 0 ]]; then
-    print "PASS 00: the patched headless DSH claimed Main at agent/created and called its tasks tool"
+    print "PASS 00: the patched headless DSH claimed Main at agent/created and called its tasks tool (graftling-dsh installed in headless: $coexist)"
+    [[ $coexist == YES ]] || print "note: graftling-dsh is not installed in headless, so coexistence is unobserved in this run"
     next D1
   else
     print "FAIL 00: see $OUT/00e-main-stream.jsonl and $OUT/00e-stderr.txt; D1-D3 would not be meaningful. Next: F."

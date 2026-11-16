@@ -322,7 +322,11 @@ cd /path/to/project
 dsh --profile headless --patch .graphtraj/dsh-main.patch.yml "<task>"
 ```
 
-Any profile works the same way (`tui`, `web`, `acp`, `sdk`). The patch inserts
+`dsh --profile headless --patch .graphtraj/dsh-main.patch.yml --dump-config`
+prints the composed profile with the row and exits without starting a session.
+The headless profile is the one walked on a real host. Other profiles (`tui`,
+`web`, `acp`, `sdk`) load the same patch the same way, but have not yet been
+walked on a real host. The patch inserts
 one row, `graphtraj-main`, that loads this installation's
 `graphtraj/runtimes/dsh/tool.mjs` with its `python`. Write it again after
 moving or reinstalling GraphTraj. At `agent/created` the plugin:
@@ -343,17 +347,23 @@ be on the `PATH` DSH starts with.
 [Independent agents](#independent-agents-without-graphtraj)) gives a DSH
 session a Task-free `agents` tool and its own children; it never makes the
 session GraphTraj Main and has no `tasks` tool. It may stay installed in the
-same profile: its row does nothing without `GRAFTLING_DSH_CONFIG`. Do not set
+same profile: without `GRAFTLING_DSH_CONFIG` its row starts no agents host and
+attaches no tool (it still installs its message relay). Do not set
 `GRAFTLING_DSH_CONFIG` when starting a GraphTraj Main; the GraphTraj plugin
 refuses to load with it, because the Session would otherwise have two agents
-hosts.
+hosts. In a shell that exports it, start DSH with:
+
+```bash
+env -u GRAFTLING_DSH_CONFIG dsh --profile headless --patch .graphtraj/dsh-main.patch.yml "<task>"
+```
 
 **Confirm it took effect** from the project's records, not from what the model
 says. After the session starts, the last line of
 `.graphtraj/runner/main-sessions/continuity.jsonl` (`.graphtraj/core/runner/...`
 in the core layout) has `"runtime": "dsh"`, the DSH session id and
 `"entry": "dsh:agent/created:startup"`. With `--json`, the stream shows a
-`tool/call` for `mcp__graphtraj__tasks` and its result. A Session without the
+call of `mcp__graphtraj__tasks` and its result (the exact record shape is to be
+confirmed by the real-host run). A Session without the
 claim line did not load the patch; one with the claim but no `graphtraj`
 tools usually failed to start the MCP server, which DSH reports on stderr.
 

@@ -12,7 +12,7 @@ reuse `scripts/verify-444/probe.py`.
 
 | Step | Does | Dialog | Success lines | Wait limit |
 | --- | --- | --- | --- | --- |
-| 00 | production Main recorded; candidate venv; isolated project + probe Task 1 ready; `claude` and `dsh` each answer one line; patch written; ONE real `tasks` discover through the patched headless DSH | none | `PASS 00: the patched headless DSH claimed Main at agent/created and called its tasks tool` (from `continuity.jsonl` and stream records, not model text) | 120 + 120 + 300 s |
+| 00 | production Main recorded; candidate venv; isolated project + probe Task 1 ready; `claude` and `dsh` each answer one line; read-only `dsh plugin --profile headless list --depth 0` (`00-dsh-plugins.txt`, `graftling-dsh installed in headless: YES/NO`; NO does not fail 00 but leaves coexistence unobserved); patch written; ONE real `tasks` discover through the patched headless DSH | none | `PASS 00: the patched headless DSH claimed Main at agent/created and called its tasks tool` (from `continuity.jsonl` and stream records, not model text) | 120 + 120 + 300 s |
 | D1 | DSH Main creates g398 (sleep 60) and exits; 100 s later its end is still queued | none | `PASS 398 part 1` | 300 + 100 + 60 s |
 | D2 | resume (`--session-id`): g398 delivered once (queue cursor); dispatch the asker | none | `PASS 398 part 2`, `397 record delivered once: PASS` (probe label) | 300 s |
 | D3 | wait 120 s, resume: the asker's two requests reach the DSH Main, each denied | none | probe `373[D3x] (a)-(d)` PASS lines, `PASS 373-DSH target absent` x2 | 120 + 300 s |

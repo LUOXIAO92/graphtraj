@@ -393,6 +393,130 @@ def repro(label: str, project: Path, codex_home: str, model: str) -> int:
     return 0
 
 
+def variants(label: str, project: Path, codex_home: str, model: str) -> int:
+    """R5: which part of the checker's permission override makes Codex fail the fork's turn.
+
+    For each base profile (':read-only', ':workspace'; explicit ``permissions`` on thread/start, so both run
+    in the same project and Codex reports what it applied), one base thread with one trivial turn, then
+    forks built like ``fork_session`` but with these overrides of ``permissions.graphtraj_checker``:
+      plain     Main's own profile, no override (control)
+      net+sock  extends Main's profile, network enabled, unix_sockets {realpath socket: allow} (today's form)
+      net       extends Main's profile, network enabled, no unix_sockets
+      net+lit   network enabled, unix_sockets {literal $CODEX_HOME/app-server-control/app-server-control.sock}
+      sock      extends Main's profile, network NOT enabled, unix_sockets {realpath socket: allow}
+    Each fork's one turn asks the model to run one command that connects to the control socket, so a
+    completing variant also shows whether the checker keeps its access (SOCKET-CONNECT-OK).
+    """
+    import os
+    from graftling.codex.app_server import CodexSession
+    from graphtraj.runtimes.codex.finalize import control_socket, proxy
+
+    real = control_socket(codex_home)
+    literal = str(Path(codex_home) / 'app-server-control' / 'app-server-control.sock')
+    command = (f'{sys.executable} -I -c "import socket; s = socket.socket(socket.AF_UNIX); '
+               f"s.connect('{real}'); print('SOCKET-CONNECT-OK')\"")
+    prompt = ('Run exactly this one shell command, once, with no other command and without asking for any '
+              f'approval or escalation, then reply with only its last output line or its error line: {command}')
+    say(f'[{label}] project {project} | CODEX_HOME {codex_home} | socket realpath {real} | literal {literal}'
+        f' (is symlink: {os.path.islink(literal)})')
+    say(f'[{label}] checker command: {command}')
+    results: list[tuple[str, str, str]] = []
+
+    async def refuse(request) -> dict:
+        say(f'  server request {request.method} (refused):', _short(request.params, 400))
+        raise RuntimeError('verify-485 approves nothing')
+
+    def overrides(base: str) -> list[tuple[str, dict | None]]:
+        return [
+            ('plain', None),
+            ('net+sock', {'extends': base, 'network': {'enabled': True, 'unix_sockets': {real: 'allow'}}}),
+            ('net', {'extends': base, 'network': {'enabled': True}}),
+            ('net+lit', {'extends': base, 'network': {'enabled': True, 'unix_sockets': {literal: 'allow'}}}),
+            ('sock', {'extends': base, 'network': {'unix_sockets': {real: 'allow'}}}),
+        ]
+
+    async def one(client, parent: dict, configuration: dict, base: str, name: str, override: dict | None,
+                  tag: str) -> None:
+        params = {'threadId': parent['id'], 'model': model, 'modelProvider': parent['modelProvider'],
+                  'excludeTurns': True, 'ephemeral': True}
+        for key in ('serviceTier', 'cwd', 'runtimeWorkspaceRoots', 'approvalPolicy', 'approvalsReviewer'):
+            if key in configuration:
+                params[key] = configuration[key]
+        params['config'] = ({'model_reasoning_effort': configuration['reasoningEffort']}
+                            if configuration.get('reasoningEffort') else {})
+        if override is None:
+            params['permissions'] = base
+        else:
+            params['permissions'] = 'graphtraj_checker'
+            params['config']['permissions.graphtraj_checker'] = override
+        say(f'  [{base} {name}] -> thread/fork', _short(params, 1500))
+        try:
+            reply = await client.call('thread/fork', params)
+        except Exception as error:
+            say(f'  [{base} {name}] fork ERROR:', type(error).__name__, str(error)[:1200])
+            results.append((tag, name, 'fork error: ' + str(error)[:300]))
+            return
+        thread = reply['thread']
+        say(f'  [{base} {name}] <- fork {thread["id"]}', _short({k: reply.get(k) for k in (
+            'sandbox', 'activePermissionProfile')}, 800))
+        session = CodexSession(thread['id'], None, {}, {}, thread, inherited_history_excluded=True)
+        client._sessions[session.thread_id] = session
+        try:
+            execution = await client.start_execution(session, prompt)
+            result = await client.wait(execution, timeout=TURN_LIMIT)
+        except Exception as error:
+            say(f'  [{base} {name}] EXECUTION ERROR:', type(error).__name__, str(error)[:1200])
+            results.append((tag, name, 'execution error: ' + str(error)[:400]))
+            return
+        text = str(result.get('last_agent_message'))
+        say(f'  [{base} {name}] EXECUTION {result.get("outcome")} | last message {text[:600]!r}')
+        results.append((tag, name, f"{result.get('outcome')} | socket "
+                                    f"{'REACHED' if 'SOCKET-CONNECT-OK' in text else 'NOT reached'} | {text[:200]!r}"))
+
+    async def main() -> None:
+        async with proxy({'session': 'verify-485', 'codex_home': codex_home}, refuse) as client:
+            for base in (':read-only', ':workspace'):
+                try:
+                    started = await client.call('thread/start', {'model': model, 'cwd': str(project),
+                                                                 'permissions': base})
+                except Exception as error:
+                    say(f'  [{base}] thread/start ERROR:', type(error).__name__, str(error)[:800])
+                    results.append((base, 'base', 'thread/start error: ' + str(error)[:300]))
+                    continue
+                tid = started['thread']['id']
+                applied = (started.get('activePermissionProfile') or {}).get('id')
+                say(f'  [{base}] base {tid} | applied profile {applied} | sandbox {_short(started.get("sandbox"), 300)}')
+                try:
+                    session = CodexSession(tid, None, {}, {}, started['thread'])
+                    client._sessions[tid] = session
+                    done = await client.wait(await client.start_execution(
+                        session, 'Reply with exactly one line: PONG-base. Use no tool.'), timeout=TURN_LIMIT)
+                    say(f'  [{base}] base turn {done.get("outcome")} {done.get("last_agent_message")!r}')
+                    parent = {**await client.read_thread(tid)}
+                    configuration = await client.subscribe_host(tid)
+                    for name, override in overrides(applied or base):
+                        await one(client, parent, configuration, applied or base, name, override,
+                                  f'{base}(applied {applied})')
+                except Exception as error:
+                    say(f'  [{base}] ERROR:', type(error).__name__, str(error)[:800])
+                    results.append((base, 'base', 'error: ' + str(error)[:300]))
+                finally:
+                    try:
+                        await client.call('thread/archive', {'threadId': tid})
+                        say(f'  [{base}] base thread archived')
+                    except Exception as error:
+                        say(f'  [{base}] archive FAILED:', type(error).__name__, str(error)[:300])
+
+    try:
+        asyncio.run(asyncio.wait_for(main(), 1500))
+    except Exception as error:  # printed as evidence
+        say(f'[{label}] session ERROR:', type(error).__name__, str(error)[:1200])
+    say(f'[{label}] SUMMARY (base profile, variant: outcome | socket | message):')
+    for base, name, value in results:
+        say(f'  {label} {base} {name}: {value}', '<= SYMPTOM' if SYMPTOM in value else '')
+    return 0
+
+
 def main_unchanged(root: Path, rt: str, sess: str) -> int:
     """F: the last continuity claim is the one recorded at 00."""
     found = claims(root)
@@ -416,6 +540,8 @@ def main() -> int:
         return evidence(Path(args[0]), args[1], float(args[2]) if len(args) > 2 else 0)
     if cmd == 'repro':
         return repro(args[0], Path(args[1]), args[2], args[3])
+    if cmd == 'variants':
+        return variants(args[0], Path(args[1]), args[2], args[3])
     if cmd == 'main':
         return main_unchanged(Path(args[0]), args[1], args[2])
     say('unknown command', cmd)

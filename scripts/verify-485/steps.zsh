@@ -156,6 +156,21 @@ step_R() {
   next "USER step: zsh $THIS I1   (prints what the user runs and pastes)"
 }
 
+step_R5() {
+  local proj=${1:-$P}
+  say "[R5] which part of the checker's permission override fails, on ONE project ($proj), through the checker's channel. Dialog: none. No user."
+  print "Two base threads (thread/start permissions ':read-only' and ':workspace'), each one trivial turn; per base 5 forks:"
+  print "plain (Main's profile), net+sock (today's override), net (no socket), net+lit (literal symlink socket path), sock (socket, network not enabled)."
+  print "Each fork's turn runs one command connecting to the control socket: 'socket REACHED' = the checker keeps its access."
+  print "Each turn limit 180 s; whole run 1560 s. Base threads archived; forks ephemeral. Best after I1 (then $P is trusted)."
+  [[ -n ${VERIFY485_NO_MODEL:-} ]] && { print "VERIFY485_NO_MODEL set: no model or host call (rehearsal)."; return 0; }
+  [[ -d $proj ]] || { print "$proj absent"; return 1; }
+  (cd $proj && limit 1560 $PY -I $SD/probe.py variants R5 $proj $CODEX_HOME_USED $CODEX_MODEL) || print "[R5] probe rc=$? (1560 s limit is rc 142)"
+  print ""
+  print "Observable: 'R5 <base> <variant>: <outcome> | socket REACHED/NOT reached | <message>', '<= SYMPTOM' on 'workspace requirements'."
+  next "zsh $THIS F 2>&1 | tee $OUT/F.txt   (or the step the Leader names)"
+}
+
 step_I1() {
   $PY -I -c 'import time; print(time.time())' > $OUT/I1.start
   print -r -- "Reply with exactly one line: H485-DONE. Use no tool." > $OUT/I1-prompt.txt
@@ -263,7 +278,8 @@ dispatch() {
 case $STEP in
   00) step_00 2>&1 | tee $OUT/00.txt; return ${pipestatus[1]} ;;
   E|R|I1|I2|S|F) step_$STEP ;;
-  *) print "usage: zsh $THIS <00|E|R|I1|I2|S|F>" ;;
+  R5) step_R5 ${2:-} ;;
+  *) print "usage: zsh $THIS <00|E|R|R5 [project]|I1|I2|S|F>" ;;
 esac
 }
-dispatch; exit $?
+dispatch "$@"; exit $?

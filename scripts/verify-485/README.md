@@ -13,6 +13,7 @@ Codex model `gpt-6-luna`. Production Main is never yielded (F checks).
 | 00 | Main | `S 00` (writes `OUT/00.txt` itself) | none | 60 s (MCP) + 300 s (codex exec) + 60 s (proxy) + install | `under venv: True`; `roles OK`; `task 1 ready`; both `project own: True`; `MCP initialize: OK`; `graphtraj tools agents and tasks served: YES`; `task_graph shows probe Task 1: YES`; `codex logged in: YES`; `codex answer: OK` (model line is not the prompt echo) with `loaded: none`; `app-server proxy thread/loaded/list: YES` |
 | E | Main, read only | `S E 2>&1 \| tee OUT/E.txt` | none | none | 484's failed check printed: `outcome`, `error`, `configuration`, `parent_configuration`, `authorized_difference`, trace error lines, Codex log lines naming `requirements` |
 | R | Main, no user | `S R 2>&1 \| tee OUT/R.txt` | none | per project 960 s (each turn 180 s) | per project `[<label>] REPRODUCED (<cases>)` or `[<label>] NOT reproduced`, with each case's status and verbatim error |
+| R5 | Main, no user | `S R5 [project] 2>&1 \| tee OUT/R5.txt` (default `$P`; best after I1, when `$P` is trusted) | none | 1560 s (each turn 180 s) | `R5 <base>(applied <profile>) <variant>: <outcome> \| socket REACHED/NOT reached \| <message>`, `<= SYMPTOM` on the failure |
 | I1 | USER (the only one) | `S I1` prints the command and the prompt | first launch: folder trust → Yes, hook review → approve | user ≤ 10 min | reply `H485-DONE`, then the Stop hook's `Completion Check · …` lines; user copies them to Main; Codex kept open |
 | I2 | Main, Codex still open | `S I2 2>&1 \| tee OUT/I2.txt` | none | 60 s (proxy) | `PASS Main thread loaded in the shared background server`; `PASS I2 completion check reached a conclusion` |
 | S | Main | `S S 2>&1 \| tee OUT/S.txt` | none | 1500 s (stops the process group) | `nested venv imports: OK`; `test venv imports the checkout: OK`; `outside the Harness …: YES`; `PASS S no new failures` |
@@ -30,6 +31,10 @@ Codex model `gpt-6-luna`. Production Main is never yielded (F checks).
   at Stop). Done in `$P` (R), `$P2` (R3, a second fresh project) and `tmp/484/project` (R4, where it was seen).
   Fork requests/responses are printed (`->`/`<-`). The base thread is archived; forks are ephemeral. R can be rerun
   after I1, when `$P` is trusted.
+- **R5**: `probe.py variants`, one project, two base threads (`thread/start` `permissions` `:read-only` and
+  `:workspace`; the applied profile is printed). Per base, forks like `fork_session` with `permissions.graphtraj_checker` =
+  plain (no override) / net+sock (today's) / net (no socket) / net+lit (literal symlink socket path) / sock (socket, network
+  not enabled). Each fork's one turn runs a command that connects to the control socket (`SOCKET-CONNECT-OK`).
 - **I2**: the codex continuity claim since I1, whether that thread is loaded in the shared server, and the newest
   retained check: PASS when its outcome is `completed` with a checker status (`completed`/`waiting`/`actionable`).
 

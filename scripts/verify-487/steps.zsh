@@ -54,8 +54,8 @@ build() {
     && clean $nest/bin/python -I -c 'import websockets, click, yaml' \
     && print "nested venv imports: OK" || { print "STOP: nested venv imports failed (error above)"; return 1; }
   rm -rf $nest
-  clean $venv/bin/python -I -c 'import sys, graphtraj, graftling
-ok = all(m.__file__.startswith(sys.argv[1]) for m in (graphtraj, graftling))
+  clean $venv/bin/python -I -c 'import os, sys, graphtraj, graftling
+ok = all(os.path.realpath(m.__file__).startswith(os.path.realpath(sys.argv[1])) for m in (graphtraj, graftling))
 print("test venv imports the checkout:", "OK" if ok else "NO", graphtraj.__file__, graftling.__file__); sys.exit(0 if ok else 1)' $src/src \
     || { print "STOP: the test venv does not import the checkout"; return 1; }
 }
@@ -73,9 +73,9 @@ run_repeat() {
   print "== end $(date +%T); counts $res/counts.txt; failures $res/failures/; worker logs $res/worker-*.log"
 }
 
-step_R0() { run_repeat R0 $DEV; next "zsh $THIS R1 2>&1 | tee $OUT/R1.txt"; }
+step_R0() { run_repeat R0 $DEV || return 1; next "zsh $THIS R1 2>&1 | tee $OUT/R1.txt"; }
 step_R1() {
-  run_repeat R1 $CAND
+  run_repeat R1 $CAND || return 1
   [[ -f $OUT/R0-repeat/counts.txt ]] && { say "R0 (dev $DEV) counts for comparison"; cat $OUT/R0-repeat/counts.txt; }
   next "zsh $THIS SUITE 2>&1 | tee $OUT/SUITE.txt"
 }

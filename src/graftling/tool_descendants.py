@@ -11,15 +11,33 @@ execution ends, only processes still alive with the same uid and start time
 stopped. Names and commands are never matched.
 
 Boundary rule: managed launches (Runner Workers, nested child Runtimes) drop
-or replace the marker. A descendant whose environment is readable and does not
-hold exactly this execution's marker belongs to another execution or a managed
-process; it is neither recorded nor descended into, and the check is repeated
-right before each signal.
+or replace the marker. A descendant is judged only on a settled read (498),
+from kernel facts, never from timing:
 
-Known limits: a process started and detached between two samples is reached
-only through the marker scan (so not a platform binary); a process whose chain
-of ancestors passed through a readable process without the marker is left
-alone by design; Windows is not covered.
+- a fork copy that has not executed yet (darwin P_EXEC clear; Linux
+  PF_FORKNOEXEC set) whose readable environment lacks the marker, or whose
+  read is unreadable: later, neither recorded nor cached; any other fork copy:
+  provisional, recorded and judged again at every sample;
+- an executed process whose read is unreadable: later (every exec window reads
+  unreadable for a moment);
+- an executed process with an empty environment: this execution's if it is an
+  Apple platform binary (csops), else later;
+- an executed process with a readable environment: the marker decides, finally.
+
+A provisional entry that settles foreign is dropped together with every entry
+recorded beneath it (by recorded parent pid), and all are cached as foreign.
+At stop time the same verdict is taken again, also right before each signal:
+only this execution's processes are signalled; an unsettled one is listed
+under ``remaining``.
+
+Known limits: recording can lag one sample (about a second) behind an exec; a
+process that never gives a settled read (a same-user setuid program; on Linux a
+tool started with ``env -i``) is never recorded; a fork copy that never
+executes (a shell subshell) stays provisional, so it is reported, not
+signalled; a process started and detached between two samples is reached only
+through the marker scan (so not a platform binary); a process whose chain of
+ancestors passed through a readable process without the marker is left alone
+by design; the Linux rule is not run on a real host; Windows is not covered.
 """
 
 from __future__ import annotations
@@ -112,12 +130,47 @@ def has_exited(pid: int) -> bool:
     return False
 
 
-def _foreign(pid: int, marker: str) -> bool:
-    """Whether ``pid``'s environment is readable and lacks exactly this marker (boundary rule)."""
-    view = _process_view(pid)
-    if view is None or not view[1]:
+OURS, FOREIGN, PROVISIONAL, LATER = 'ours', 'foreign', 'provisional', 'later'
+
+
+def _executed(pid: int) -> bool:
+    """Whether ``pid`` has executed an image since its fork (darwin P_EXEC 0x4000; Linux no PF_FORKNOEXEC 0x40)."""
+    try:
+        if sys.platform == 'darwin':
+            buffer = ctypes.create_string_buffer(136)
+            if _proc().proc_pidinfo(pid, 3, 0, buffer, 136) < 136:
+                return False
+            return bool(int.from_bytes(buffer.raw[0:4], sys.byteorder) & 0x4000)  # pbi_flags
+        if sys.platform.startswith('linux'):
+            stat = Path(f'/proc/{pid}/stat').read_text()
+            return not int(stat[stat.rindex(')') + 2:].split()[6]) & 0x40  # flags, field 9
+    except (OSError, ValueError, IndexError):
         return False
-    return f'{MEMBER_RUN_ENV}={marker}' not in view[1]
+    return False
+
+
+def _platform(pid: int) -> bool:
+    """Whether ``pid`` runs an Apple platform binary (csops CS_OPS_STATUS, CS_PLATFORM_BINARY 0x4000000)."""
+    if sys.platform != 'darwin':
+        return False
+    try:
+        value = ctypes.c_uint32(0)
+        return _proc().csops(pid, 0, ctypes.byref(value), 4) == 0 and bool(value.value & 0x4000000)
+    except (OSError, AttributeError):
+        return False
+
+
+def _verdict(pid: int, marker: str) -> str:
+    """The boundary rule on a settled read (module docstring): OURS, FOREIGN, PROVISIONAL or LATER."""
+    executed = _executed(pid)
+    view = _process_view(pid)
+    if view is None:
+        return LATER
+    if not executed:
+        return LATER if view[1] and f'{MEMBER_RUN_ENV}={marker}' not in view[1] else PROVISIONAL
+    if not view[1]:
+        return OURS if _platform(pid) else LATER
+    return OURS if f'{MEMBER_RUN_ENV}={marker}' in view[1] else FOREIGN
 
 
 def shown_command(argv: list[str] | str) -> str:
@@ -151,8 +204,13 @@ def _table() -> dict[int, Identity]:
 
 
 def _descend(table: dict[int, Identity], roots: set[int], marker: str, foreign: set[tuple[int, int]],
-             skip: set[int] | frozenset[int] = frozenset()) -> dict[int, Identity]:
-    """Return the descendants of ``roots`` in ``table`` that pass the boundary rule."""
+             skip: set[int] | frozenset[int] = frozenset(),
+             verdicts: dict[int, str] | None = None) -> dict[int, Identity]:
+    """Return the descendants of ``roots`` in ``table`` that are ours or provisional.
+
+    A foreign one is cached in ``foreign``; a later one is neither returned nor
+    cached. ``verdicts`` (when given) receives every judged pid's verdict.
+    """
     children: dict[int, list[Identity]] = {}
     for item in table.values():
         children.setdefault(item.ppid, []).append(item)
@@ -163,8 +221,12 @@ def _descend(table: dict[int, Identity], roots: set[int], marker: str, foreign: 
             key = (child.pid, child.start)
             if child.pid in found or child.pid in skip or child.pid in roots or key in foreign:
                 continue
-            if _foreign(child.pid, marker):
+            verdict = _verdict(child.pid, marker)
+            if verdicts is not None:
+                verdicts[child.pid] = verdict
+            if verdict == FOREIGN:
                 foreign.add(key)
+            if verdict in (FOREIGN, LATER):
                 continue
             found[child.pid] = child
             pending.append(child.pid)
@@ -213,6 +275,7 @@ class DescendantSampler:
         self.entries: dict[tuple[int, int], dict] = {}
         self.error: str | None = None
         self._foreign: set[tuple[int, int]] = set()
+        self._provisional: set[tuple[int, int]] = set()
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
         self._lock = threading.Lock()
@@ -243,6 +306,7 @@ class DescendantSampler:
                 table = _table()
                 live = {key: entry for key, entry in self.entries.items()
                         if (now := table.get(entry['pid'])) is not None and now.start == entry['start']}
+                self._settle(live)
                 # A first read may come between fork and exec or find argv unreadable: re-read
                 # each recorded command line; an unreadable read keeps the earlier one.
                 for key, entry in list(live.items()):
@@ -253,8 +317,11 @@ class DescendantSampler:
                 roots = {entry['pid'] for entry in live.values()}
                 if runtime is not None and runtime.start == self._runtime_start:
                     roots.add(self.runtime_pid)
-                for item in _descend(table, roots, self.marker, self._foreign).values():
+                verdicts: dict[int, str] = {}
+                for item in _descend(table, roots, self.marker, self._foreign, verdicts=verdicts).values():
                     key = (item.pid, item.start)
+                    if verdicts.get(item.pid) == PROVISIONAL:
+                        self._provisional.add(key)
                     if key not in live:
                         live[key] = {'pid': item.pid, 'ppid': item.ppid, 'pgid': item.pgid, 'uid': item.uid,
                                      'start': item.start, 'argv': shown_command(_argv(item.pid))}
@@ -265,6 +332,30 @@ class DescendantSampler:
             except Exception as error:  # a sampling failure must never break the owner
                 self.error = f'descendant sampling: {type(error).__name__}: {error}'
 
+    def _settle(self, live: dict[tuple[int, int], dict]) -> None:
+        """Judge provisional entries again; a foreign one is dropped with every entry recorded beneath it.
+
+        An unsettled read (later, or still a fork copy) keeps the entry provisional.
+        """
+        self._provisional &= set(live)
+        dropped: set[tuple[int, int]] = set()
+        for key in list(self._provisional):
+            verdict = _verdict(live[key]['pid'], self.marker)
+            if verdict == FOREIGN:
+                dropped.add(key)
+            elif verdict == OURS:
+                self._provisional.discard(key)
+        # Beneath by the recorded parent pid, transitively, even when reparented since.
+        parents = {key[0] for key in dropped}
+        while parents:
+            below = {key for key, entry in live.items() if key not in dropped and entry.get('ppid') in parents}
+            dropped |= below
+            parents = {key[0] for key in below}
+        for key in dropped:
+            live.pop(key, None)
+            self._provisional.discard(key)
+            self._foreign.add(key)
+
     def finish(self) -> list[dict]:
         """Stop sampling after one final sample; return the recorded entries."""
         self._stop.set()
@@ -274,22 +365,37 @@ class DescendantSampler:
         return list(self.entries.values())
 
 
-def _targets(entries: list[dict], marker: str, exclude: set[int]) -> dict[int, Identity]:
+def _targets(entries: list[dict], marker: str, exclude: set[int],
+             unsettled: dict[int, Identity] | None = None) -> dict[int, Identity]:
+    """This execution's recorded processes still alive and their descendants; ``unsettled`` gets the rest that is not foreign."""
+    unsettled = {} if unsettled is None else unsettled
     table = _table()
     recorded = {}
     for entry in entries:
         now = table.get(entry['pid'])
         if (now is not None and now.start == entry['start'] and now.uid == entry['uid']
-                and now.pid not in exclude and not _foreign(now.pid, marker)):
-            recorded[now.pid] = now
-    recorded.update(_descend(table, set(recorded), marker, set(), exclude))
+                and now.pid not in exclude):
+            verdict = _verdict(now.pid, marker)
+            if verdict == OURS:
+                recorded[now.pid] = now
+            elif verdict != FOREIGN:
+                unsettled[now.pid] = now
+    verdicts: dict[int, str] = {}
+    for pid, item in _descend(table, set(recorded), marker, set(), exclude, verdicts).items():
+        (recorded if verdicts.get(pid) == OURS else unsettled)[pid] = item
+    for pid, verdict in verdicts.items():
+        if verdict == LATER and pid in table:
+            unsettled[pid] = table[pid]
     return recorded
 
 
-def _signal(targets: dict[int, Identity], marker: str, sig: int) -> None:
+def _signal(targets: dict[int, Identity], marker: str, sig: int,
+            marked: set[int] | frozenset[int] = frozenset()) -> None:
     for item in targets.values():
-        # Re-verify identity and the boundary right before the signal.
-        if _alive(item) and not _foreign(item.pid, marker):
+        # Re-verify identity and the boundary right before the signal: only this execution's
+        # (a marked process may still be a fork copy carrying the marker).
+        accepted = (OURS, PROVISIONAL) if item.pid in marked else (OURS,)
+        if _alive(item) and _verdict(item.pid, marker) in accepted:
             try:
                 os.kill(item.pid, sig)
             except (ProcessLookupError, PermissionError):
@@ -325,10 +431,12 @@ def stop_tool_processes(entries: list[dict] | None, marker: str | None,
     skipped = {os.getpid(), *exclude}
     errors = [error] if error else []
     targets: dict[int, Identity] = {}
+    unsettled: dict[int, Identity] = {}
+    marked: set[int] = set()
     commands: dict[int, str] = {}
     if entries and SUPPORTED:
         try:
-            targets.update(_targets(entries, marker or '', skipped))
+            targets.update(_targets(entries, marker or '', skipped, unsettled))
         except (OSError, ValueError) as failure:
             errors.append(f'descendant scan: {type(failure).__name__}: {failure}')
     if marker:
@@ -337,23 +445,26 @@ def stop_tool_processes(entries: list[dict] | None, marker: str | None,
                 found = identity(pid)
                 if found is not None and pid not in targets:
                     targets[pid] = found
+                    marked.add(pid)
                     commands[pid] = command
         except OSError as failure:
             errors.append(f'marker scan: {type(failure).__name__}: {failure}')
-    for pid in targets:
+    # Unsettled processes (provisional or later) are never signalled; they are reported under remaining.
+    unsettled = {pid: item for pid, item in unsettled.items() if pid not in targets}
+    for pid in [*targets, *unsettled]:
         argv = _argv(pid)
         commands[pid] = shown_command(argv) if argv else shown_command(commands.get(pid, ''))
     alive = targets
     if targets:
-        _signal(targets, marker or '', signal.SIGTERM)
+        _signal(targets, marker or '', signal.SIGTERM, marked)
         alive = _wait(targets, grace)
         if alive:
-            _signal(alive, marker or '', signal.SIGKILL)
+            _signal(alive, marker or '', signal.SIGKILL, marked)
             alive = _wait(alive, 2.0)
     entry = lambda pid: {'pid': pid, 'command': commands[pid]}
     report = {'found': [entry(pid) for pid in sorted(targets)],
               'stopped': [entry(pid) for pid in sorted(targets) if pid not in alive],
-              'remaining': [entry(pid) for pid in sorted(alive)]}
+              'remaining': [entry(pid) for pid in sorted({*alive, *unsettled})]}
     if errors:
         report['error'] = '; '.join(errors)
     return report

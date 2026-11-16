@@ -126,8 +126,11 @@ def test_a_first_unreadable_command_line_is_refreshed_and_a_later_one_keeps_it(
                         lambda pid: real(pid) if pid != shell.pid else None if pid in unreadable else view)
     sampler = sampler_under(tmp_path, marker, os.getpid())
     try:
-        first = wait_for(lambda: entry_of(sampler, shell.pid), 10)
-        assert first and first['argv'] == ''
+        # Revised by 498 (user decision 2026-11-17 ~01:20, direction A: judge only settled reads).
+        # An unreadable read is not settled, so a first unreadable read no longer records the shell;
+        # before 498 it was recorded with an empty command line, the same rule that recorded another
+        # execution's process read in its exec window. The first settled read below records it.
+        assert entry_of(sampler, shell.pid) is None
 
         unreadable.clear()
         assert entry_of(sampler, shell.pid)['argv'].startswith('/bin/sh -c ')

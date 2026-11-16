@@ -1,6 +1,7 @@
 """498 acceptance tests: how a Runtime's tool descendants are told apart from other executions' processes.
 
-Each test asserts the DESIRED behaviour; on dev 3eb312e7 both fail (design phase).
+Each test asserts the settled-read rule (direction A, user decision 2026-11-17). Every test
+fails on dev 3eb312e7, except the one named ``test_guard_...``, which dev already passes.
 
 1. An unreadable or empty first read counts as this execution. Another
    execution's process (readable, without this marker) whose first sample falls
@@ -212,3 +213,136 @@ def test_a_tool_sampled_as_a_fork_copy_of_a_runtime_without_the_marker_is_record
         stop_own([item for item in own if item is not None])
         runtime.kill()
         runtime.wait(5)
+
+
+# Addition 1 (cascading drop): a fork copy with this marker (provisional) starts a /bin/sh
+# (an Apple platform binary: ours by its own read) before it execs another execution.
+CASCADE = r'''
+import os, sys
+other = sys.argv[1]
+plain = {k: v for k, v in os.environ.items() if k != "GRAFTLING_MEMBER_RUN"}
+copy = os.fork()
+if copy == 0:
+    os.read(0, 1)
+    shell = os.fork()
+    if shell == 0:
+        os.execv("/bin/sh", ["/bin/sh", "-c", "/bin/sleep 300; :"])
+    print(shell, flush=True)
+    os.read(0, 1)
+    os.execve(sys.executable, [sys.executable, "-c", "import time; time.sleep(300)"],
+              {**plain, "GRAFTLING_MEMBER_RUN": other})
+print(copy, flush=True)
+os.waitpid(copy, 0)
+'''
+
+
+def test_a_provisional_entry_that_settles_foreign_is_dropped_with_everything_recorded_beneath_it(
+        tmp_path: Path) -> None:
+    marker, other_marker = uuid.uuid4().hex, uuid.uuid4().hex
+    runtime = subprocess.Popen([sys.executable, '-c', CASCADE, other_marker], env={**os.environ, MEMBER_RUN_ENV: marker},
+                               stdin=subprocess.PIPE, stdout=subprocess.PIPE)
+    own: list[Identity] = []
+    try:
+        copy = int(runtime.stdout.readline())
+        sampler = DescendantSampler(tmp_path / 'tool-descendants.json', marker)
+        sampler.runtime_pid, sampler._runtime_start = runtime.pid, identity(runtime.pid).start
+        assert wait_for(lambda: _process_view(copy) == _process_view(runtime.pid) is not None, 10)
+        sampler.sample()
+        assert copy in recorded(sampler), 'a fork copy carrying this marker is recorded (provisional)'
+
+        runtime.stdin.write(b'x')
+        runtime.stdin.flush()
+        shell = int(runtime.stdout.readline())
+        assert wait_for(lambda: any(item.ppid == shell for item in own_tree(runtime.pid)), 10), 'shell exec'
+        sampler.sample()
+        beneath = {item.pid for item in own_tree(copy)}
+        assert shell in recorded(sampler) and shell in beneath
+
+        runtime.stdin.write(b'x')
+        runtime.stdin.flush()
+        assert wait_for(lambda: 'time.sleep(300)' in ' '.join(argv(copy)), 10), 'exec of the copy'
+        own = own_tree(runtime.pid)
+        sampler.sample()
+        report = stop_tool_processes(list(sampler.entries.values()), marker, {runtime.pid}, grace=1.0)
+        print('entries:', list(sampler.entries.values()), 'report:', report)
+        assert recorded(sampler) & ({copy} | beneath) == set()
+        assert {item['pid'] for item in report['found']} & ({copy} | beneath) == set()
+        assert all(is_alive(item) for item in own if item.pid in {copy} | beneath)
+    finally:
+        own += own_tree(runtime.pid)
+        stop_own([item for item in own if item is not None])
+        runtime.kill()
+        runtime.wait(5)
+
+
+# Addition 2 (guard: dev passes; it guards against dropping on an unsettled read): a provisional
+# tool that reads unreadable right after its exec stays recorded, then is this execution's.
+OWN_FORK = r'''
+import os, sys
+pid = os.fork()
+if pid == 0:
+    os.read(0, 1)
+    os.execv("/bin/sh", ["/bin/sh", "-c", "/bin/sleep 300; :"])
+print(pid, flush=True)
+os.waitpid(pid, 0)
+'''
+
+
+def test_guard_a_provisional_entry_read_unreadable_after_exec_stays_recorded_and_is_stopped(
+        tmp_path: Path, monkeypatch) -> None:
+    marker = uuid.uuid4().hex
+    runtime = subprocess.Popen([sys.executable, '-c', OWN_FORK], env={**os.environ, MEMBER_RUN_ENV: marker},
+                               stdin=subprocess.PIPE, stdout=subprocess.PIPE)
+    own: list[Identity] = []
+    try:
+        tool = int(runtime.stdout.readline())
+        own = [identity(tool)]
+        sampler = DescendantSampler(tmp_path / 'tool-descendants.json', marker)
+        sampler.runtime_pid, sampler._runtime_start = runtime.pid, identity(runtime.pid).start
+        assert wait_for(lambda: _process_view(tool) == _process_view(runtime.pid) is not None, 10)
+        sampler.sample()
+        assert tool in recorded(sampler)
+
+        runtime.stdin.write(b'x')
+        runtime.stdin.flush()
+        assert wait_for(lambda: any(item.ppid == tool for item in own_tree(runtime.pid)), 10), 'exec'
+        own += own_tree(runtime.pid)
+        real = _process_view
+        monkeypatch.setattr(graftling.tool_descendants, '_process_view', lambda pid: None if pid == tool else real(pid))
+        sampler.sample()
+        assert tool in recorded(sampler), 'an unsettled read after exec does not drop a provisional entry'
+        monkeypatch.setattr(graftling.tool_descendants, '_process_view', real)
+        sampler.sample()
+        report = stop_tool_processes(list(sampler.entries.values()), marker, {runtime.pid}, grace=1.0)
+        print('entries:', list(sampler.entries.values()), 'report:', report)
+        assert tool in recorded(sampler) and tool in {item['pid'] for item in report['stopped']}
+    finally:
+        own += own_tree(runtime.pid)
+        stop_own([item for item in own if item is not None])
+        runtime.kill()
+        runtime.wait(5)
+
+
+# Addition 3 (stop-time verdict): a recorded process that reads unreadable, or empty without
+# being a platform binary, at stop time is not signalled and is reported under remaining.
+@pytest.mark.parametrize('stop_read', [None, ([], [])], ids=['unreadable', 'empty'])
+def test_an_unsettled_recorded_process_is_reported_not_signalled_at_stop(monkeypatch, stop_read) -> None:
+    marker = uuid.uuid4().hex
+    plain = {key: value for key, value in os.environ.items() if key != MEMBER_RUN_ENV}
+    process = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(300)'], env=plain)
+    try:
+        now = wait_for(lambda: identity(process.pid), 10)
+        entries = [{'pid': now.pid, 'ppid': now.ppid, 'pgid': now.pgid, 'uid': now.uid, 'start': now.start,
+                    'argv': 'python -c sleep'}]
+        real = _process_view
+        monkeypatch.setattr(graftling.tool_descendants, '_process_view',
+                            lambda pid: stop_read if pid == process.pid else real(pid))
+        report = stop_tool_processes(entries, marker, grace=1.0)
+        print('report:', report)
+        assert process.pid not in {item['pid'] for item in report['found']}
+        assert process.pid in {item['pid'] for item in report['remaining']}
+        assert process.poll() is None, 'not signalled'
+    finally:
+        if process.poll() is None:
+            process.kill()
+        process.wait(5)

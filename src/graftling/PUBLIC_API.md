@@ -1329,11 +1329,19 @@ Delivery rules:
   cannot be read, or a failed process scan, is reported in its `error` field rather
   than as an empty result. Recorded command lines, in the record file and in
   `escaped_processes`, are redacted and cut to 300 characters; redaction covers only
-  credentials it can recognize. Names and commands are never matched. A descendant whose
-  environment is readable and lacks exactly this execution's marker (a Runner Worker,
-  another execution's child Runtime) is neither recorded nor descended into, and this
-  check is repeated before each signal. The owner applies the same stop when the
-  execution ends normally or is stopped, after the Runtime exits. Known limits: a
+  credentials it can recognize. Names and commands are never matched. A descendant is
+  judged only on a settled read (498): after it has executed an image (a fork copy
+  carrying the marker is recorded provisionally and judged again at every sample), with
+  a readable environment, or an empty one when it is an Apple platform binary. One whose
+  settled environment lacks exactly this execution's marker (a Runner Worker, another
+  execution's child Runtime) is neither recorded nor descended into; a provisional entry
+  that settles so is dropped with everything recorded beneath it. The same verdict is
+  taken again before each signal: only this execution's processes are signalled, and an
+  unsettled one is listed under `remaining`. The owner applies the same stop when the
+  execution ends normally or is stopped, after the Runtime exits. Known limits:
+  recording can lag one sample behind an exec; a process that never gives a settled read
+  (a same-user setuid program; on Linux a tool started with `env -i`) is never recorded;
+  a fork copy that never executes (a shell subshell) is reported, not signalled; a
   process started and detached between two samples (about one second) is found only
   by the marker, so not when it is a platform binary; a process whose chain of
   ancestors passed through a readable process without the marker is left alone by

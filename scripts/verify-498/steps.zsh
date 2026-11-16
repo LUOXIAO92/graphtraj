@@ -11,6 +11,9 @@
 #    are scanned for recorded entries that are alive and readable without the marker, or whose recorded command looks
 #    like a managed launch or a Runtime. Never prints an environment value or a marker value; command lines only
 #    redacted (shown_command). Sends no signal; writes only $OUT/F.txt.
+# B, R1, S, SR, CHECK (implementation checks, after F): see scripts/verify-498/run.zsh. B builds tmp/498/dev and
+#    tmp/498/R1 (~3 min); R1 is the loaded repetition of the 459/495/496/498 files (<= 14 min); S/SR/CHECK the full
+#    suite vs dev as in 496. Expected dialog: none in each.
 set -u
 H=${VERIFY498_H:-/Users/luoxiao/workspace/you-are-a-product-architect-delivery}
 SD=${0:A:h}
@@ -39,5 +42,8 @@ F) {
   print "\nF done $(date +%T)"
   next "none; report $OUT/F.txt to the 498 Leader"
 } 2>&1 | tee $OUT/F.txt ;;
-*) print "usage: zsh $THIS <P|F>" ;;
+B|R1|S|SR|CHECK|_Srun)
+  # Implementation checks (run.zsh, derived from verify-496); they write $OUT/<STEP>.txt themselves.
+  VERIFY498_THIS=$THIS exec zsh $SD/run.zsh $STEP ;;
+*) print "usage: zsh $THIS <P|F|B|R1|S|SR|CHECK>" ;;
 esac

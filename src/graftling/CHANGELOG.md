@@ -14,6 +14,17 @@ The numbers in parentheses are the project's Task numbers.
 
 ## Unreleased (compatible)
 
+- Tool descendants are judged only on a settled read (498). Before, a read that was
+  unreadable or empty counted as this execution's. So another execution's process
+  sampled in its exec window was recorded, and its later tool shell was signalled when
+  this execution stopped. A tool sampled as a fork copy of a Runtime without the marker
+  was never recorded. Now kernel facts decide: darwin P_EXEC and csops platform binary;
+  Linux PF_FORKNOEXEC, which is not run on a real host. A fork copy carrying the marker
+  is provisional, and is dropped with what was recorded beneath it if it settles as
+  another execution's. Stop signals only settled processes of this execution;
+  `stop_tool_processes` lists an unsettled one under `remaining`. Recording can lag one
+  sample. A process that never reads settled (setuid; Linux `env -i`) is not recorded.
+
 - The Claude Code host's receiver carries `defers_push`: it only queues a root
   child's notice, which a result or the mod hands over later (494). Before, the core
   took the push before calling it, so a Main's `wait` arriving while it queued the

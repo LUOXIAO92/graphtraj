@@ -239,6 +239,12 @@ plugin's native send starts a turn for it. A headless DSH Main
 after that stays queued until the Session is resumed with `--session-id`, or
 until a Claude Code, Pi or DSH Main continues Main and takes the queue over.
 GraphTraj never starts or resumes a DSH process by itself.
+A root Agent that a DSH Main creates runs inside that Main's GraphTraj tool
+server, so it stops when the DSH Main exits, as a Claude Code Main's root
+Agents stop with its host. When DSH closes the server (input end, then
+SIGTERM) the server interrupts the Agent and records an `interrupted` end.
+That end is queued for the DSH Main, and the resumed Session receives it
+once. A server killed outright (SIGKILL) or crashing records no end.
 
 A Codex Main's host events go through `codex app-server proxy` to Codex's
 shared background server for its `CODEX_HOME`, so they reach only a Session

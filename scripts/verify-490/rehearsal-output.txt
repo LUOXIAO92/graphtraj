@@ -331,3 +331,30 @@ STOP B: no Engineer Session of Task 7 was launched. The Leader's last turn:
   last_agent_message: 'DONE'
   Session directory: $TMPDIR/b490/project/.graphtraj/runner/sessions/7-timer_b7-handover0-team_leader@leader
   -> rc 1
+
+
+# Round 5 correction rehearsal (step B only: Task 8, tasks-tool swarm dispatch, turn ends at LAUNCHED; launch() writes the batch with yaml.safe_dump; Engineer wait 120 s), set -u, stubs, 2026-11-16 ~19:33
+
+## steps A and B to the stub host STOP (A's prepare registered Task 8); registered bodies vs launch instructions; swarm JSON (driver $TMPDIR/r5-check.zsh)
+
+### [B] Task 8 (5-minute budget; planned end about 5:00, allowance about 5:45 after the Leader starts): a Leader dispatches one Engineer through the tasks tool's swarm and ends its turn; on the Engineer's completion notice it commits probe-8.txt and submits it
+task 8 already registered (ready): register skipped
+A: STOP: launch failed:
+B: STOP: launch failed:
+== Task 8: registered body == launch instruction (batch YAML-parsed): YES
+  swarm arguments parse as JSON: YES | {"tasks": [{"task_id": "8", "role": "engineer", "instruction": "You are the engineer launched by the leader. Ignore the leader steps in the Task body. Reply with one line DONE and do nothing else."}]}
+  mentions agents create only as a prohibition: True | ends the turn with LAUNCHED: True
+  body: Step 1, this turn: dispatch exactly one engineer through your GraphTraj tasks tool with action execute, feature swarm and arguments {"tasks": [{"task_id": "8", "role": "engineer", "instruction": "You are the engineer launched by the leader. Ignore the leader steps in the Task body. Reply with one line DONE and do nothing else."}]}. Do not use the agents tool's create, and do not wait in the same turn. When swarm returns launch_status registered, end your turn at once with one line LAUNCHED. The engineer starts after your turn ends, and its completion notice starts your next turn. Step 2, on the engineer's completion notice: In your Worktree run exactly one Bash command: echo 8 > probe-8.txt && git add probe-8.txt && git commit -qm 'Add probe 8' && git rev-parse HEAD. It prints the full 40-character commit hash. Then submit the result with the GraphTraj tasks tool feature submit_result: commit = that full 40-character hash exactly as printed (never a short hash), result_refs = [probe-8.txt], completion = 'probe 8 committed'. Then reply with one line DONE. If a GraphTraj budget notice arrives later, reply with one line NOTED and do nothing else.
+== Task 6: registered body == launch instruction (batch YAML-parsed): YES
+  body: In your Worktree run exactly one Bash command: echo 6 > probe-6.txt && git add probe-6.txt && git commit -qm 'Add probe 6' && git rev-parse HEAD. It prints the full 40-character commit hash. Then submit the result with the GraphTraj tasks tool feature submit_result: commit = that full 40-character hash exactly as printed (never a short hash), result_refs = [probe-6.txt], completion = 'probe 6 committed'. Then reply with one line DONE.
+
+## B's Engineer wait lines (taken from steps.zsh; driver $TMPDIR/r5-wait.zsh)
+== Engineer directory appears 4 s after the Leader's first turn (the step waits up to 120 s)
+Engineer alias: 8-timer_b8-handover0-engineer@engineer
+  -> rc 0 after 4 s
+== no Engineer directory (120 s shortened to 6 s for the rehearsal)
+STOP B: no Engineer Session of Task 8 appeared within 6 s. The Leader's last turn:
+  last execution l8: outcome completed
+  last_agent_message: 'LAUNCHED'
+  Session directory: $TMPDIR/b490/project/.graphtraj/runner/sessions/8-timer_b8-handover0-team_leader@leader
+  -> rc 1 after 6 s

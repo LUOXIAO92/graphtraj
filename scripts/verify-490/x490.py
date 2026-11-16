@@ -1,6 +1,6 @@
 """Task 490 real-host helper, run by steps.zsh with the candidate venv's Python inside the isolated project.
 
-    python -I x490.py prepare <project>            roles + Task 6 (30 minutes, A) and Task 7 (5 minutes, B), ready
+    python -I x490.py prepare <project>            roles + Task 6 (30 minutes, A) and Task 8 (5 minutes, B), ready
     python -I x490.py instruction <project> <id>    the probe Task's instruction: its registered body text
     python -I x490.py last <project> <alias>        the Session's last execution, outcome, last_agent_message, directory
     python -I x490.py decide <project> <alias> <task id> <s>   the alias's latest submission (agent-runner reports):
@@ -17,7 +17,7 @@
 Tasks 1-4 of earlier runs are left registered and unused: Task 1's thresholds pass while the Team runs (R1);
 Task 2 was moved to awaiting-integration without an acceptance (R2); Tasks 3 and 4 carry a body that said
 'Reply with one line DONE. Use no tool.', against the launch instruction (R3); Task 5's body branched on the role and its
-Leader took the engineer branch (R4).
+Leader took the engineer branch (R4); Task 7's Leader used the agents tool's create, not swarm (R5).
 
 It never signals a process. Exit status: 0 = the observation passed, 1 = it failed, 2 = could not observe.
 """
@@ -64,19 +64,22 @@ def commit_and_submit(task_id: str) -> str:
 
 
 # The registered Task body and the launch instruction are this same text (R3: a body saying otherwise won).
-# No double quotes or backslashes: steps.zsh writes it into a YAML double-quoted launch instruction.
+# steps.zsh launch() writes it with yaml.safe_dump, so quotes (B's literal swarm JSON) are kept exactly.
 INSTRUCTIONS = {
     # A: one root member.
     '6': commit_and_submit('6') + ' Then reply with one line DONE.',
-    # B: the Leader's steps, unconditional (R4: a role-branching body let the Leader take the engineer branch).
-    # The Engineer reads this body too; the instruction the Leader passes tells it to ignore these steps.
-    '7': ('Launch exactly one child with role engineer for this Task using your GraphTraj agents tool, with the '
-          'instruction: You are the engineer launched by the leader. Ignore the leader steps in the Task body. '
-          'Reply with one line DONE and do nothing else. Wait for its result. '
-          + commit_and_submit('7') + ' Then reply with one line DONE. If a GraphTraj budget notice arrives later, '
+    # B: formal dispatch through the tasks tool's swarm (R5: the agents tool's create made a plain agent, not a
+    # Task member), ending the turn at once; the engineer's completion notice starts the commit-and-submit turn.
+    '8': ('Step 1, this turn: dispatch exactly one engineer through your GraphTraj tasks tool with action execute, '
+          'feature swarm and arguments {"tasks": [{"task_id": "8", "role": "engineer", "instruction": "You are the '
+          'engineer launched by the leader. Ignore the leader steps in the Task body. Reply with one line DONE and do '
+          'nothing else."}]}. Do not use the agents tool\'s create, and do not wait in the same turn. When swarm returns '
+          'launch_status registered, end your turn at once with one line LAUNCHED. The engineer starts after your turn '
+          'ends, and its completion notice starts your next turn. Step 2, on the engineer\'s completion notice: '
+          + commit_and_submit('8') + ' Then reply with one line DONE. If a GraphTraj budget notice arrives later, '
           'reply with one line NOTED and do nothing else.'),
 }
-TASKS = {'6': ('timer-a6', 30), '7': ('timer-b7', 5)}
+TASKS = {'6': ('timer-a6', 30), '8': ('timer-b8', 5)}
 
 
 def run(*argv: str, cwd: Path) -> subprocess.CompletedProcess:

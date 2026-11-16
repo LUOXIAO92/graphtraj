@@ -211,7 +211,7 @@ class DescendantSampler:
             self.sample()
 
     def sample(self) -> None:
-        """Add current descendants; drop recorded ones that are gone; write on change."""
+        """Add current descendants; drop recorded ones that are gone; refresh command lines; write on change."""
         if not SUPPORTED or self.runtime_pid is None:
             return
         with self._lock:
@@ -219,6 +219,11 @@ class DescendantSampler:
                 table = _table()
                 live = {key: entry for key, entry in self.entries.items()
                         if (now := table.get(entry['pid'])) is not None and now.start == entry['start']}
+                # A first read may come between fork and exec or find argv unreadable: re-read
+                # each recorded command line; an unreadable read keeps the earlier one.
+                for key, entry in list(live.items()):
+                    if argv := _argv(entry['pid']):
+                        live[key] = {**entry, 'argv': shown_command(argv)}
                 # The Runtime is a root only while its pid still has its start time.
                 runtime = table.get(self.runtime_pid)
                 roots = {entry['pid'] for entry in live.values()}
@@ -229,7 +234,7 @@ class DescendantSampler:
                     if key not in live:
                         live[key] = {'pid': item.pid, 'ppid': item.ppid, 'pgid': item.pgid, 'uid': item.uid,
                                      'start': item.start, 'argv': shown_command(_argv(item.pid))}
-                if live.keys() != self.entries.keys():
+                if live != self.entries:
                     self.entries = live
                     write_sidecar(self.path, self.runtime_pid, list(live.values()))
                 self.error = None

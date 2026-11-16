@@ -129,9 +129,20 @@ I's import lines.
 12. **S (full suite).** S makes a fresh `git clone --shared` checkout of 2da634af and links production's dependencies
     into the test venv's own site-packages. It runs the nested-venv check, prints pytest temp `TMPDIR=${TMPDIR:-/tmp}`
     (and STOPs if that is under the Harness), and runs 6 shards with `--timeout 1500`. Each failure is rerun alone.
-    - **Quiet host:** S prints the loadavg and CPU count. It refuses, printing the rerun line, when another `pytest`
-      or `run_test_shards` is running or the 1-minute load is above half the CPU count (`ADOPT497_LOADMAX`
-      overrides).
+    - **Quiet host (Correction 1, `busy497.py`):**
+      - **What counts as a running suite.** It is decided from argv tokens, never from path substrings. A process
+        runs a suite when its executable's basename is `pytest`/`py.test`, when it has `-m pytest`, or when an
+        argument's basename is `run_test_shards.py`. S's own process subtree is excluded.
+      - **Leftovers.** Other processes under `pytest-of-*` paths are listed as `leftover test processes
+        (information; never signalled; not a running suite): n`, with pid, etime and command. On the real host at
+        22:21 these were 5 installed-environment timers and 1 Worker, elapsed 2 days 22h.
+      - **Foreground.** S prints the loadavg, the CPU count and the limit (half the CPU count; `ADOPT497_LOADMAX` is
+        the only override), then sets up and returns. It refuses only while another S of ours runs, meaning its
+        `_Srun` job or a shard runner from its test venv (`ours: n`).
+      - **Background.** The nohup job checks every 30 s, for up to 20 min, for no running suite and a 1-minute load
+        at or below the limit. It logs `quiet check HH:MM:SS loadavg … | running suites n` to `S-suite.txt`, then
+        `== quiet at HH:MM:SS start` and the suite. Otherwise it logs `== STOP not quiet within 20 min (1200 s)` and
+        does not run the suite.
     - **ATTRIBUTED:** the failures named in the accepted suites:
 
       | Task | Accepted full suite | Failing tests named |
@@ -158,7 +169,7 @@ loop.
 | 00 | Main | `zsh $S 00` | none | `expected 2.1.325: yes`; `isolation: OK`; `answer check (expect clean): OK`; `control records snapshot 00.json`; `guard: budget_idle_timer processes: n …` and one line per timer; `task graph rc=0`, `Task 497 named` ≥ 1; `markers expected absent: PASS (11/11)`; `stopped: false`; `tmp/497/backup` No such file; `492 backup COMPLETE marker: present`; `MAIN=<id>` | 5 min |
 | B | Main | `zsh $S B` | none | graphtraj-0.1.0 and graftling-0.5.0 wheels, `leaked: 0` | 3 min |
 | V | Main | `zsh $S V` | none | `SAME` ×3, `plugin unchanged: …`, `source diff: empty`, markers present and absent `PASS (11/11)`, ✘ not above the baseline | 5 min |
-| S | Main | `zsh $S S` (background) | none | `CPUs:`, checkout clean, `test venv imports the checkout: OK`, `nested venv imports: OK`, `pytest temp base TMPDIR=…`; later `== DONE`, `== new failures: 0` | 3 min (+ background ≤ 30 min) |
+| S | Main | `zsh $S S` (background) | none | `CPUs: … load limit …`, `running suites: n`, `leftover test processes …: n` (information), checkout clean, `test venv imports the checkout: OK`, `nested venv imports: OK`, `pytest temp base TMPDIR=…`; later `S-suite.txt` shows `quiet check …` lines, `== quiet at … start`, `== DONE`, `== new failures: 0` (or `== STOP not quiet within 20 min`: Main reruns S later) | 3 min (+ background: quiet wait ≤ 20 min, then ≤ 30 min) |
 | Vu | USER | `cd …/tmp/497/vproject && claude`, then `/exit` | folder trust for `tmp/497/vproject`: **Yes, proceed** | Vc shows `graphtraj-claude-host loaded: YES` | — |
 | Vc | Main | `zsh $S Vc` | none | `isolation: OK`, `answer check (expect clean): OK` (VC-OK), `loaded: YES`, PASS tasks and agents | 3 min |
 | Mpre | Main | `zsh $S Mpre` | none | `control records snapshot Mpre.json` | 1 min |
@@ -205,7 +216,7 @@ failure.
 
 Run `zsh scripts/adopt-497/rehearse.zsh` in `$TMPDIR`. It uses stub `claude` and `ps` (the ps stub serves `lstart`
 listings), a fake production venv built from 9faa0274 wheels, and fixtures written by `rehearse_fixtures.py` in the
-real result shape. Result: **ALL PASS (113 checks)**, in `rehearsal-output.txt`.
+real result shape. Result: **ALL PASS (118 checks)** (Correction 1; Round 1: 113), in `rehearsal-output.txt`.
 
 **Covered:**
 - timer 3(a) for 9faa0274 → 2da634af;
@@ -217,8 +228,17 @@ real result shape. Result: **ALL PASS (113 checks)**, in `rehearsal-output.txt`.
     child Worker labelled BLOCKING;
   - the answer check, the control snapshot, 492's backup, 00-first.txt, and an echo STOP;
 - B; V (`source diff: empty`); Vu; Vc's isolation part;
-- S: refusals for another run_test_shards, a lone pytest and high load; the setup without the suite; the ATTRIBUTED
-  labels (488, 491/495, 492's 459, and `[6-True]` now NEW);
+- S (Correction 1):
+  - `busy497.py` positive: Main's 22:21 shapes (5 timers and 1 Worker under `pytest-of-*`, `grep -E
+    pytest|run_test_shards`, `vim …/pytest.ini`) give `running suites: 0` and 6 leftovers;
+  - `busy497.py` negatives: `-m pytest`, a `run_test_shards.py` argument, `pytest`/`py.test` executables and
+    `-mpytest` are busy; the own subtree is excluded;
+  - the setup with the leftovers present, not refused;
+  - refusal only for our own `_Srun` job or our own test-venv shard runner;
+  - the quiet wait, with a stub `sysctl` load: high, then low (starts); always high with a 2 s limit (STOP); a
+    running suite at low load (STOP);
+  - the ATTRIBUTED labels (488, 491/495, 492's 459, and `[6-True]` now NEW). The rehearsal sandbox cannot read
+    `hw.ncpu`, so it checks only that the printed limit is half of the printed CPU count;
 - S2;
 - I: waiting, timers listed three times with the old class after the install, the install window, the import lines;
 - Nt:

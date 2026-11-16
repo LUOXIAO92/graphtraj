@@ -430,20 +430,27 @@ label_of() {
 # The suite's pytest temporary root (TMPDIR=$PYTMP, outside the Harness, 482) and its newest pytest-<n> before the run.
 pytest_root() { TMPDIR=$PYTMP clean $CONDA -I -c 'import tempfile; print(tempfile.gettempdir())'; }
 basetemp_max() { local d=($(pytest_root)/pytest-of-${USER:-luoxiao}/pytest-<->(N/)); print ${${(n)${d##*/pytest-}}[-1]:-0}; }
+# Quiet host (497 Correction 1). A running suite is decided from argv tokens by busy497.py (pytest/py.test executable,
+# `-m pytest`, a run_test_shards.py argument), never from path substrings: leftover processes under pytest-of-* paths
+# (installed-environment timers and Workers of earlier runs) are listed as information, never signalled. The load
+# limit is half the CPU count; ADOPT497_LOADMAX is the only override.
+ncpus() { sysctl -n hw.ncpu 2>/dev/null || print 8; }
+load_limit() { print ${ADOPT497_LOADMAX:-$(( $(ncpus) / 2 ))}; }
+load1() { local la=$(sysctl -n vm.loadavg 2>/dev/null); print ${${(s: :)${la//[\{\}]/}}[1]:-0}; }
+suites() {   # $1 = file for the ps listing; $2 = own root pid (excluded with its descendants)
+  ps -axww -o pid=,ppid=,etime=,command= > $1 2>&1
+  $CONDA -I $SD/busy497.py $1 $2 "$THIS _Srun" "$SV/bin/"
+}
 step_S() {
-  say "quiet host: load, CPU count and other test runs"
-  local la=$(sysctl -n vm.loadavg 2>/dev/null) ncpu=$(sysctl -n hw.ncpu 2>/dev/null || print 8) l1
-  l1=${${(s: :)${la//[\{\}]/}}[1]:-0}
-  local lmax=${ADOPT497_LOADMAX:-$(( ncpu / 2 ))}
-  print "loadavg: $la | CPUs: $ncpu | 1-minute load limit: $lmax"
-  local others=$(ps -axww -o pid=,etime=,command= 2>/dev/null | grep -E 'pytest|run_test_shards' | grep -vE 'grep|steps.zsh')
-  print -r -- "other pytest / run_test_shards processes: ${others:-none}"
-  if [[ -n $others ]]; then
-    print "STOP: another pytest or run_test_shards is running; the host is not quiet. Main queues S and reruns it later: zsh $THIS S"; return 1
+  say "quiet host: load, CPU count, running suites (argv tokens) and leftover test processes"
+  print "loadavg: $(sysctl -n vm.loadavg 2>/dev/null) | CPUs: $(ncpus) | 1-minute load limit: $(load_limit) (half the CPU count; ADOPT497_LOADMAX overrides)"
+  local out=$(suites $R/S-ps.txt $$)
+  print -r -- "$out"
+  # Kept: refuse while another S of ours (its _Srun job or its test venv's shard runner) runs.
+  if [[ $(print -r -- "$out" | sed -n 's/^ours: //p') != 0 ]]; then
+    print "STOP: another S of ours is running (listed under 'ours:'). Do not start a second one; follow it with: tail -n 25 $R/S-suite.txt"; return 1
   fi
-  if (( l1 > lmax )); then
-    print "STOP: 1-minute load $l1 is above $lmax (half of $ncpu CPUs); the host is not quiet. Rerun when it drops: zsh $THIS S"; return 1
-  fi
+  print "S's background job waits for a quiet host before the suite: every ${ADOPT497_QUIET_STEP:-30} s, up to $(( ${ADOPT497_QUIET_SECONDS:-1200} / 60 )) min, until no pytest/shard runner runs and the 1-minute load <= $(load_limit)."
   say "fresh git checkout of $TARGET at $SC"
   if [[ $(git -C $SC rev-parse HEAD 2>/dev/null) != $TARGET ]]; then
     rm -rf $SC && git clone -q --shared --no-checkout $WT $SC && git -C $SC checkout -q --detach $TARGET || { print "STOP: checkout failed"; return 1; }
@@ -476,10 +483,26 @@ print("test venv imports the checkout:", "OK" if ok else "NO", graphtraj.__file_
   basetemp_max > $W/S-basetemp-before-$C8
   rm -rf $R/S-shards; : > $R/S-suite.txt
   (cd $WT && nohup zsh $THIS _Srun >> $R/S-suite.txt 2>&1 &)
-  print "started at $(date +%T) in the background (~20-30 min)."
+  print "started at $(date +%T) in the background (quiet wait ≤ $(( ${ADOPT497_QUIET_SECONDS:-1200} / 60 )) min, then the suite ~20-30 min)."
 }
 
 step__Srun() {
+  # Quiet wait (497 Correction 1): in the background job, never in Main's foreground.
+  local lim=$(load_limit) step=${ADOPT497_QUIET_STEP:-30} max=${ADOPT497_QUIET_SECONDS:-1200} waited=0 out n l1
+  print "== quiet wait: every $step s, up to $(( max / 60 )) min ($max s): no running pytest/shard runner and 1-minute load <= $lim (CPUs $(ncpus))"
+  while true; do
+    out=$(suites $R/S-quiet-ps.txt $$); n=$(print -r -- "$out" | sed -n 's/^running suites: //p'); l1=$(load1)
+    print "quiet check $(date +%T) loadavg $(sysctl -n vm.loadavg 2>/dev/null) | running suites ${n:-?}"
+    print -r -- "$out" | grep -E '^  running: '
+    if [[ $n == 0 ]] && (( l1 <= lim )); then print "== quiet at $(date +%T) start"; break; fi
+    if (( waited >= max )); then
+      print -r -- "$out" | grep -E '^(leftover|  leftover: )'
+      print "== STOP not quiet within $(( max / 60 )) min ($max s); the suite was not run. Main reruns S later: zsh $THIS S"; return 1
+    fi
+    sleep $step; (( waited += step ))
+  done
+  print -r -- "$out" | grep -E '^(leftover|  leftover: )'
+  [[ -n ${ADOPT497_S_DRYRUN:-} ]] && { print "== DRYRUN: quiet wait done, suite not run (rehearsal)"; return 0; }
   print "== start $(date +%T) checkout $SC commit $(git -C $SC rev-parse HEAD) (expect $TARGET) loadavg $(sysctl -n vm.loadavg 2>/dev/null)"
   print "== pytest TMPDIR $PYTMP (outside the Harness $H: $([[ ${PYTMP:A} == ${H:A}/* ]] && print NO || print yes))"
   (cd $SC && TMPDIR=$PYTMP clean $SV/bin/python scripts/run_test_shards.py --shards 6 --timeout 1500 --log-dir $R/S-shards); print "== shards exit $?"
@@ -798,7 +821,7 @@ V) cv; print "[V] Main. 安装前校验。对话框: 无。只读真实项目；
     next "zsh $THIS S    （然后 USER: zsh $THIS Vu；之后 Main: zsh $THIS Vc）"
   else print "\nV 不通过，不要做 I，把 $R/V.txt 交给 Main。本步没有改动生产。"; exit 1; fi ;;
 
-S) print "[S] Main. TARGET 的全套测试（新 git checkout，6 个 shard，--timeout 1500，后台）。对话框: 无。立即返回（≤ 3 分钟准备）。另一个 pytest/run_test_shards 在运行或负载高时拒绝并打印重跑行；Main 排队，一次只跑一个。"
+S) print "[S] Main. TARGET 的全套测试（新 git checkout，6 个 shard，--timeout 1500，后台）。对话框: 无。立即返回（≤ 3 分钟准备）。只有我们自己的另一个 S 在运行时拒绝；其它正在运行的 pytest/run_test_shards（按 argv 判断）或负载高时，后台任务每 30 秒检查一次、最多等 20 分钟（'quiet check …' 行），安静后才开始（'== quiet at … start'），否则 '== STOP not quiet within 20 min'。pytest-of-* 路径下的遗留进程只列出（信息，不发信号）。"
   if logged $R/S-setup.txt step_S; then
     print "状态（Main 随时）:  tail -n 25 $R/S-suite.txt"
     print "完成标志: '== DONE'。成功: '== new failures: 0'（对比各输入 Task 验收时的全套: 488 1/4152/69；490 3 failed + 2 errors/4146/69；491 3/4137/70；494 0 failed；495 5/4150（负载 68）；492 采用时 459 脱敏测试 1（failed/passed/skipped）；不在 ATTRIBUTED 中的失败是 NEW）；"

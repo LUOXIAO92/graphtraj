@@ -97,6 +97,13 @@ if [[ "\$*" == *"stat="* ]]; then [[ -e $F/psstat.txt ]] && cat $F/psstat.txt; e
 print "1 1 /sbin/launchd"; [[ -e $F/ps.txt ]] && cat $F/ps.txt; exit 0
 EOF2
 chmod +x $F/stub/ps
+# Stub sysctl: vm.loadavg from $F/load.txt when present (S's quiet wait), anything else from the real sysctl.
+cat > $F/stub/sysctl <<EOF2
+#!/bin/zsh
+if [[ "\$*" == *vm.loadavg* && -e $F/load.txt ]]; then cat $F/load.txt; exit 0; fi
+exec /usr/sbin/sysctl "\$@"
+EOF2
+chmod +x $F/stub/sysctl
 # Timer listing fixture: an old production timer 5151 with a zombie child 5252, and a timer from another executable.
 print -l -- "5151 1 S $(lst $T_OLD) $OLDT_CMD" "5252 5151 Z $(lst $T_OLD) <defunct>" "7777 1 S $(lst $T_OLD) $OTHER_CMD" > $F/pstimer.txt
 
@@ -185,19 +192,54 @@ check "Vc: settings re-merged after configuration --write and the answer check O
 check "Vc with the stub claude does not pass (no real plugin load) and asks for Vu" grep -q 'USER: zsh .*steps.zsh Vu' $F/Vc.out
 touch $RW/Vc.ok; print "NOT REHEARSED: Vc's real claude -p (real Claude Code); marker made by hand."
 
-head1 "S refuses while another run_test_shards or pytest runs, and when the load is high (quiet-host check only)"
-print -l -- "7171 1 python scripts/run_test_shards.py --shards 6" >> $F/ps.txt
-steps S > $F/S.out 2>&1; check "S refused (other run)" [ $? -ne 0 ]; grep -E 'loadavg|other pytest|STOP' $F/S.out
-check "S refused before any checkout, printed CPUs and the rerun line" sh -c "grep -q 'STOP: another pytest or run_test_shards is running' $F/S.out && grep -q 'CPUs: ' $F/S.out && grep -q 'zsh $SD/steps.zsh S\$' $F/S.out && ! grep -q 'fresh git checkout' $F/S.out"
-print -l -- $HOSTLINE $TIMERLINE "7272 1 /x/bin/python -m pytest -q tests/test_x.py" > $F/ps.txt
-steps S > $F/S-pytest.out 2>&1; check "S refused (a lone pytest)" sh -c "[ $? -ne 0 ] || true; grep -q 'STOP: another pytest' $F/S-pytest.out"
-print -l -- $HOSTLINE $TIMERLINE > $F/ps.txt
-ADOPT497_LOADMAX=-1 steps S > $F/S-load.out 2>&1; check "S refused on high load (limit forced below the load) with the rerun line" sh -c "grep -q 'STOP: 1-minute load .* is above -1' $F/S-load.out && ! grep -q 'fresh git checkout' $F/S-load.out"
+head1 "S quiet host (Correction 1): running suite from argv tokens only; pytest-of-* leftovers listed, not busy"
+PT=/private/var/folders/xx/T/pytest-of-luoxiao
+LEFT1="51001 1 2-22:01:10 $PT/pytest-968/installed-environment0/venv/bin/python -I -m graphtraj.execution.budget_idle_timer $PT/pytest-968/installed-environment0/project/.graphtraj/core/runner/sessions/1-a@b 0011aabb 4242"
+LEFT2="51006 1 2-22:03:00 $PT/pytest-1794/test_x0/venv/bin/python -I -m graphtraj.execution.runner_worker $PT/pytest-1794/test_x0/project/.graphtraj/core/runner/sessions/1-a@b/resume.yml"
+BUSY1="7272 1 01:00 /x/venv/bin/python -m pytest -q tests/test_x.py"
+BUSY2="7171 1 02:00 /x/venv/bin/python /repo/scripts/run_test_shards.py --shards 6"
+print -l -- "$LEFT1" "51002 1 2-22:01:10 ${LEFT1#* * * }" "51003 1 2-22:01:10 ${LEFT1#* * * }" "51004 1 2-22:01:10 ${LEFT1#* * * }" "51005 1 2-22:01:10 ${LEFT1#* * * }" "$LEFT2" \
+  "7373 1 00:10 grep -E pytest|run_test_shards" "7474 1 00:10 vim /repo/tests/pytest.ini" > $F/busy-pos.txt
+$CONDA -I $SD/busy497.py $F/busy-pos.txt 0 > $F/busy-pos.out; cat $F/busy-pos.out
+check "busy497 positive: Main's 22:21 shapes (5 installed-environment timers, 1 Worker under pytest-of-*) are not a running suite, listed as 6 leftovers" sh -c "grep -q '^running suites: 0' $F/busy-pos.out && grep -q '^leftover test processes (information; never signalled; not a running suite): 6' $F/busy-pos.out && grep -q '  leftover: 51006 2-22:03:00 .*runner_worker' $F/busy-pos.out"
+print -l -- "$BUSY1" "$BUSY2" "7575 1 00:05 /x/venv/bin/pytest -q tests" "7676 1 00:05 /usr/bin/python3 -mpytest tests" "7777 7272 00:01 /x/venv/bin/py.test -q" "9001 1 00:01 /x/venv/bin/python -m pytest own" "9002 9001 00:01 /x/venv/bin/pytest own-child" > $F/busy-neg.txt
+$CONDA -I $SD/busy497.py $F/busy-neg.txt 9001 > $F/busy-neg.out; cat $F/busy-neg.out
+check "busy497 negatives: '-m pytest', run_test_shards.py argument, pytest and py.test executables, -mpytest are running suites (5); own root 9001 and its child excluded" sh -c "grep -q '^running suites: 5' $F/busy-neg.out && ! grep -q ' 900[12] ' $F/busy-neg.out"
+print -l -- $HOSTLINE $TIMERLINE "$LEFT1" "$LEFT2" > $F/ps.txt
 head1 "S setup without the suite (ADOPT497_S_NORUN): fresh checkout of 2da634af, test venv with own site-packages, nested check, TMPDIR outside"
-ADOPT497_LOADMAX=100000 ADOPT497_S_NORUN=1 steps S > $F/S2setup.out 2>&1; SRC_=$?; grep -E 'checkout|imports|nested|TMPDIR|NORUN|STOP' $F/S2setup.out
+ADOPT497_S_NORUN=1 steps S > $F/S2setup.out 2>&1; SRC_=$?; grep -E 'checkout|imports|nested|TMPDIR|NORUN|STOP|running suites|leftover|limit' $F/S2setup.out
+half_cpus() { local l=$(grep -m1 '1-minute load limit:' $1) c lim; c=${${l#*CPUs: }%% *}; lim=${${l#*load limit: }%% *}; [[ $c == <-> ]] && (( lim == c / 2 )) && [[ $l == *'(half the CPU count; ADOPT497_LOADMAX overrides)'* ]]; }
+check "S setup with the real leftover shapes present: not refused; leftovers listed as information; limit printed as half the CPUs" sh -c "grep -q '^running suites: 0' $F/S2setup.out && grep -q '^leftover test processes (information; never signalled; not a running suite): 2' $F/S2setup.out && grep -q 'waits for a quiet host .* every 30 s, up to 20 min' $F/S2setup.out"
+check "S prints CPUs and a load limit of half of them (ADOPT497_LOADMAX unset)" half_cpus $F/S2setup.out
 check "S setup exit 0" [ $SRC_ -eq 0 ]
-check "S: checkout at 2da634af, test venv imports it, nested venv imports, pytest temp printed outside the Harness" sh -c "grep -q 'checkout $FB/checkout-2da634af at $NEW (clean)' $F/S2setup.out && grep -q 'test venv imports the checkout: OK .*/tmp/497/checkout-2da634af/src/graphtraj/' $F/S2setup.out && grep -q 'nested venv imports: OK' $F/S2setup.out && grep -q 'pytest temp base TMPDIR=' $F/S2setup.out && ! grep -q 'STOP' $F/S2setup.out"
+check "S: checkout at 2da634af, test venv imports it, nested venv imports, pytest temp printed outside the Harness" sh -c "grep -q 'checkout $FB/checkout-2da634af at $NEW (clean)' $F/S2setup.out && grep -q 'test venv imports the checkout: OK .*/tmp/497/checkout-2da634af/src/graphtraj/' $F/S2setup.out && grep -q 'nested venv imports: OK' $F/S2setup.out && grep -q 'pytest temp base TMPDIR=' $F/S2setup.out && ! grep -q '^STOP' $F/S2setup.out"
 check "S: production dependencies linked into the test venv's own site-packages, never graphtraj/graftling" sh -c "ls $FB/sdeps | grep -q click && ! ls $FB/sdeps | grep -qE '^(graphtraj|graftling)' && [ -L \$(ls -d $FB/svenv-2da634af/lib/python*/site-packages)/click ]"
+
+head1 "S refuses only while another S of ours runs (its _Srun job or its test venv's shard runner)"
+print -l -- $HOSTLINE "8811 1 05:00 zsh $SD/steps.zsh _Srun" > $F/ps.txt
+steps S > $F/S-ours.out 2>&1; SO=$?
+check "S refused (our _Srun job), before any checkout" sh -c "[ $SO -ne 0 ] && grep -q 'STOP: another S of ours is running' $F/S-ours.out && ! grep -q 'fresh git checkout' $F/S-ours.out"
+print -l -- $HOSTLINE "8812 1 05:00 $FB/svenv-2da634af/bin/python scripts/run_test_shards.py --shards 6" > $F/ps.txt
+steps S > $F/S-ours2.out 2>&1; SO=$?
+check "S refused (our test venv's shard runner)" sh -c "[ $SO -ne 0 ] && grep -q '^ours: 1' $F/S-ours2.out && grep -q 'STOP: another S of ours' $F/S-ours2.out"
+
+head1 "S background quiet wait (_Srun, ADOPT497_S_DRYRUN: the suite itself is not run): high then low load starts; always high or a running suite STOPs"
+QW=(ADOPT497_S_DRYRUN=1 ADOPT497_QUIET_STEP=1 ADOPT497_LOADMAX=4)
+print -l -- $HOSTLINE "$LEFT1" "$LEFT2" > $F/ps.txt
+print '{ 14.74 28.21 19.52 }' > $F/load.txt
+( sleep 2.5; print '{ 1.10 9.00 12.00 }' > $F/load.txt ) &
+env $QW ADOPT497_QUIET_SECONDS=20 zsh $SD/steps.zsh _Srun > $F/Sq-start.out 2>&1; SQ=$?; wait
+cat $F/Sq-start.out
+check "quiet wait: logged 'quiet check HH:MM:SS loadavg { 14.74 … } | running suites 0' while high, then '== quiet at … start'; leftovers listed; exit 0" sh -c "[ $SQ -eq 0 ] && grep -q '^quiet check [0-9:]* loadavg { 14.74 28.21 19.52 } | running suites 0' $F/Sq-start.out && grep -q '^quiet check [0-9:]* loadavg { 1.10 9.00 12.00 } | running suites 0' $F/Sq-start.out && grep -q '^== quiet at [0-9:]* start' $F/Sq-start.out && grep -q '^leftover test processes .*: 2' $F/Sq-start.out && grep -q '== DRYRUN' $F/Sq-start.out && grep -q 'load <= 4 ' $F/Sq-start.out"
+print '{ 14.74 28.21 19.52 }' > $F/load.txt
+env $QW ADOPT497_QUIET_SECONDS=2 zsh $SD/steps.zsh _Srun > $F/Sq-stop.out 2>&1; SQ=$?
+cat $F/Sq-stop.out
+check "quiet wait always high (limit shortened to 2 s): '== STOP not quiet within', exit non-zero, suite not started" sh -c "[ $SQ -ne 0 ] && grep -q '^== STOP not quiet within 0 min (2 s)' $F/Sq-stop.out && ! grep -q '== quiet at\|== DRYRUN\|== start' $F/Sq-stop.out && [ \$(grep -c '^quiet check' $F/Sq-stop.out) -ge 2 ]"
+print '{ 0.50 0.50 0.50 }' > $F/load.txt
+print -l -- $HOSTLINE "$BUSY1" "$BUSY2" > $F/ps.txt
+env $QW ADOPT497_QUIET_SECONDS=2 zsh $SD/steps.zsh _Srun > $F/Sq-busy.out 2>&1; SQ=$?
+check "quiet wait with another suite running at low load: 'running suites 2' listed, STOP" sh -c "[ $SQ -ne 0 ] && grep -q '^quiet check .* | running suites 2' $F/Sq-busy.out && grep -q '  running: 7272 ' $F/Sq-busy.out && grep -q '^== STOP not quiet within' $F/Sq-busy.out"
+rm -f $F/load.txt; print -l -- $HOSTLINE $TIMERLINE > $F/ps.txt
 
 head1 "S's labels on synthetic failures: ATTRIBUTED 488 race [3-True] and 492's 459 redaction test, one NEW; '== new failures: 1'"
 zsh -c "source <(sed -n '/^ATTRIBUTED=(/,/^}/p' $SD/steps.zsh); ids=(tests/test_a.py::test_one 'tests/test_wait_handover_477.py::test_wait_and_push_racing_deliver_the_reply_exactly_once[3-True]' tests/test_tool_descendants_459.py::test_recorded_and_reported_command_lines_are_redacted 'tests/test_host_shutdown_stop.py::test_a_locked_parent_does_not_hide_or_hold_its_descendants[dsh]'); attributed=0; for id in \$ids; do label=\$(label_of \$id); if [[ \$label == ATTRIBUTED* ]]; then (( attributed++ )); print \"ATTRIBUTED \$id [\$label]\"; else print \"NEW \$id [\$label]\"; fi; done; print \"== new failures: \$(( \${#ids} - attributed ))\"" > $F/Slabel.out 2>&1

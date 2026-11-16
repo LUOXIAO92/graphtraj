@@ -86,16 +86,28 @@ def prompts(service: FakeDshService) -> list[str]:
 
 
 def answered(invoke: Callable, agent: str, shown: Sequence[dict] = ()) -> dict:
-    """Wait for an end and return it with the body the Main got, which it must get exactly once.
+    """Wait for an end and return it with the body the Main got; its notice comes at most once.
 
-    The wait shows it, unless an earlier result already carried it as a notice: a
-    quick child can end before its own create, send or resume returns.
+    A quick child can end before its own create, send or resume returns, so that
+    result may carry its notice. The wait that follows still shows the body (477,
+    PUBLIC_API "Claude Code host"), already ``delivered``: it is not a second push.
+    An end the wait shows is never pushed again, so the wait's own result carries
+    no notice for it.
     """
+    before  = len(shown)
     last    = invoke('wait', agent=agent, timeout_seconds=10)['result']['last_result']
-    carried = [notice['event']['message'] for notice in shown
-               if (notice['event']['execution'], notice['event']['event']) == (last['id'], last['outcome'])]
-    bodies  = carried + ([last['last_message']] if last['last_message'] is not None else [])
-    assert len(bodies) == 1, (last, carried)
+    end     = (last['id'], last['outcome'])
+    ours    = lambda notices: [notice['event']['message'] for notice in notices  # noqa: E731
+                               if (notice['event']['execution'], notice['event']['event']) == end]
+    carried = ours(shown[:before])
+    assert not ours(shown[before:]), (last, carried, ours(shown[before:]))
+    assert len(carried) <= 1, (last, carried)
+    if carried:
+        # Carried by the child's own earlier result: settled there, and the wait shows the same body.
+        assert last['notification'] == 'delivered', (last, carried)
+        assert last['last_message'] in (None, carried[0]), (last, carried)
+    bodies = carried + ([last['last_message']] if last['last_message'] is not None else [])
+    assert bodies and len(set(bodies)) == 1, (last, carried)
     return {**last, 'last_message': bodies[0]}
 
 

@@ -376,11 +376,16 @@ def test_claude_later_prompt_hook_is_answered_during_one_slow_collection(
     # A held hook would wait the whole collection; the margin absorbs suite load (368 flake).
     monkeypatch.setenv('CLAUDE_FIXTURE_LATER_HOOK_TIMEOUT', '5')
     collect = ClaudeJsonlCollector.collect
-    history = None
+    turn = None
 
     def long_session(self) -> None:
-        """Stand in for re-reading and rewriting a long Session while the first turn runs."""
-        if history is not None and json.loads(history.read_text()) == ['wait']:
+        """Stand in for re-reading and rewriting a long Session while the first turn runs.
+
+        The Session file is found from the turn itself, not from a name the test thread
+        sets after ``ready``: under load the first collection can come first (487).
+        """
+        history = tmp_path / f'{turn.session}.json' if turn is not None and turn.session else None
+        if history is not None and history.exists() and json.loads(history.read_text()) == ['wait']:
             time.sleep(10)
         return collect(self)
 
@@ -392,7 +397,8 @@ def test_claude_later_prompt_hook_is_answered_during_one_slow_collection(
             assert ready.wait(5)
             history = tmp_path / (turn.session + '.json')
             deadline = time.monotonic() + 5
-            while not (history.exists() and 'wait' in history.read_text()) and time.monotonic() < deadline:
+            while not (history.exists() and 'wait' in history.read_text()):
+                assert time.monotonic() < deadline, 'the first turn wrote no Session'
                 time.sleep(0.01)
             # The first turn's echo is now being collected for ten seconds.
             turn.operate({'operation': 'send', 'session': turn.session, 'execution_id': turn.execution_id,

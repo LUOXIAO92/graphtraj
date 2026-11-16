@@ -1,4 +1,4 @@
-"""Task 488 (from verify-487): repeat the scoped intermittent tests under parallel load and count failures per test.
+"""Task 488 (verify-487 unchanged sets): repeat the scoped intermittent tests under parallel load and count failures per test.
 
     python -I repeat.py <checkout> <out-dir> [--workers 6] [--fast 5] [--slow 2] [--observe 1] [--limit 900] [--tests a,b]
 
@@ -27,11 +27,25 @@ import xml.etree.ElementTree as ET
 from collections import defaultdict
 from pathlib import Path
 
-NATIVE = 'tests/test_agent_runner_cleanup.py::test_native_interrupt_confirms_only_pre_runtime_allocations'
-# Task 488: only the pre-Runtime stop's [absent]/[waiting] cases (487 R0's method, 6 workers x6 = 36 runs each).
-FAST = [f'{NATIVE}[absent]', f'{NATIVE}[waiting]']
-OBSERVE: list[str] = []
-SLOW: list[str] = []
+FAST = [
+    'tests/test_wait_handover_477.py::test_wait_and_push_racing_deliver_the_reply_exactly_once',
+    'tests/test_wait_handover_477.py::test_an_end_right_after_a_wait_timed_out_is_held_for_the_members_next_wait',
+    'tests/test_dsh_standalone_child.py::test_claude_host_routes_a_dsh_child_with_its_own_choices',
+    'tests/test_dsh_standalone_child.py::test_send_and_resume_continue_the_same_dsh_session',
+    'tests/test_agent_runner_cleanup.py::test_native_interrupt_confirms_only_pre_runtime_allocations',
+    'tests/test_resume_after_owner_exit.py::test_unconfirmed_termination_keeps_the_session_stopped',
+    'tests/test_member_child_end_notice_446.py::test_a_busy_member_input_is_retried_within_the_operation_window',
+]
+# Observe only (earlier Tasks' intermittent records); heavy, so run last.
+OBSERVE = [
+    'tests/test_interrupted_resolver_recovery.py',
+    'tests/test_host_shutdown_stop.py',
+    'tests/test_pi_dsh_notice_holding.py',
+]
+SLOW = [
+    'tests/test_claude_runtime.py::test_claude_later_prompt_hook_is_answered_during_one_slow_collection',
+    'tests/test_parent_host_status.py::test_hosted_cli_waits_for_full_parent_observation',
+]
 
 
 def main() -> int:
@@ -64,7 +78,7 @@ def main() -> int:
     fast = [node for node in FAST if node in present]
     slow = [node for node in SLOW if node in present]
     observe = [node for node in OBSERVE if node in present]
-    # A node the checkout lacks is left out, not failed.
+    # A node the checkout lacks (the new 487 test on dev) is left out, not failed.
     run = uuid.uuid4().hex[:16]
     print(f'run id {run}; checkout {checkout}; workers {args.workers}; fast x{args.fast}, slow x{args.slow}, observe x{args.observe}; '
           f'limit {args.limit:.0f} s; TMPDIR {os.environ.get("TMPDIR", "/tmp")}', flush=True)

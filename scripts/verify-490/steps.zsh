@@ -2,7 +2,7 @@
 [ -n "$ZSH_VERSION" ] || exec /bin/zsh "$0" "$@"
 # Task 490: the idle budget timer ends when its work ends and collects the Worker its delivery starts;
 # cleanup does not count an ended (zombie) Worker as executing; tests leave no timer behind.
-#   zsh <this file> <00|A|B|SUITE>      order: 00 -> A -> B -> SUITE (from any directory)
+#   zsh <this file> <00|A|B|SUITE|CLASSIFY>      order: 00 -> A -> B -> SUITE -> CLASSIFY (from any directory)
 # ISOLATED project under the Harness tmp/490 (own git and .graphtraj); candidate commit archived and installed into
 # tmp/490/venv; production .venv-runtime only read (dependencies linked). The steps never signal a process they did
 # not start. pytest temp: ${TMPDIR:-/tmp}, refused if inside the Harness.
@@ -233,7 +233,64 @@ step_SUITE() {
   print ""; print "==> next: report $OUT/00.txt A.txt B.txt SUITE.txt to the 490 Leader"
 }
 
+# CLASSIFY: SUITE's failing node ids once on the candidate, then on dev (SUITE's devcheck reran whole files and hit 600 s).
+# ensure_clone <dir> <commit>: reuse <dir>/src + <dir>/venv when present; build only what is missing.
+ensure_clone() {
+  local dir=$1 commit=$2
+  if [[ -d $dir/src/.git ]]; then print "clone reused: $dir/src at $(git -C $dir/src rev-parse --short HEAD)"
+  else rm -rf $dir/src; mkdir -p $dir
+    git clone -q --no-checkout $SRC $dir/src && git -C $dir/src checkout -q --detach $commit || return 1
+    print "clone built: $dir/src at $(git -C $dir/src rev-parse --short HEAD)"; fi
+  if [[ -x $dir/venv/bin/python ]]; then print "venv reused: $dir/venv"
+  else make_venv $dir/venv -e $dir/src/src/graftling -e $dir/src || { print "STOP: venv install failed in $dir"; return 1; }
+    print "venv built: $dir/venv"; fi
+}
+# run_ids <label> <dir>: one pytest over the ids, 1500 s perl alarm, own PYTEST_GRAPHTRAJ_RUN; output $OUT/CLASSIFY-<label>.txt.
+run_ids() {
+  local label=$1 dir=$2 run=classify-$1-$(date +%s)
+  print "== $label: $(git -C $dir/src rev-parse --short HEAD), PYTEST_GRAPHTRAJ_RUN=$run, TMPDIR $TMPB, start $(date +%T)"
+  (cd $dir/src && env -i HOME=$HOME USER=${USER:-luoxiao} PATH=$dir/venv/bin:/opt/homebrew/bin:/usr/bin:/bin TMPDIR=$TMPB \
+     LANG=${LANG:-en_US.UTF-8} PYTEST_GRAPHTRAJ_RUN=$run /usr/bin/perl -e 'alarm 1500; exec @ARGV' \
+     $dir/venv/bin/python -m pytest -p no:cacheprovider -q -rA $ids) > $OUT/CLASSIFY-$label.txt 2>&1
+  print "== $label: pytest exit $? at $(date +%T) ($(tail -1 $OUT/CLASSIFY-$label.txt))"
+}
+# outcome <label> <id>: FAILED or ERROR if any such line names the id, else PASSED/SKIPPED, else absent (not run).
+outcome() {
+  local f=$OUT/CLASSIFY-$1.txt
+  if grep -qF -- "FAILED $2" $f; then print FAILED; elif grep -qF -- "ERROR $2" $f; then print ERROR
+  elif grep -qF -- "PASSED $2" $f; then print PASSED; elif grep -qF -- "SKIPPED $2" $f; then print SKIPPED
+  else print absent; fi
+}
+
+step_CLASSIFY() {
+  say "[CLASSIFY] SUITE's failing node ids ($OUT/SUITE-shards/failures.txt), one pytest per side: candidate ($BASE/suite) first, then dev $DEV ($BASE/dev); clones and venvs reused, only missing ones built. Dialog: none. Limits: 1500 s per side."
+  check_tmp || return 1
+  local -a ids
+  ids=(${(f)"$(awk 'NF > 1 {print $2}' $OUT/SUITE-shards/failures.txt 2>/dev/null)"})
+  (( $#ids )) || { print "STOP: no failing ids in $OUT/SUITE-shards/failures.txt"; return 1; }
+  print "ids (${#ids}):"; print -l -- "  "${^ids}
+  ensure_clone $BASE/suite $CAND || return 1
+  ensure_clone $BASE/dev $DEV || return 1
+  run_ids candidate $BASE/suite
+  run_ids dev $BASE/dev
+  say "per id: candidate | dev | verdict"
+  local id c d verdict new=0
+  for id in $ids; do
+    c=$(outcome candidate $id); d=$(outcome dev $id)
+    if [[ $c == PASSED ]]; then verdict=PASSES-NOW
+    elif [[ $c == (FAILED|ERROR) && $d == (FAILED|ERROR) ]]; then verdict=PRE-EXISTING
+    elif [[ $c == (FAILED|ERROR) && $d == PASSED ]]; then verdict=NEW; (( new += 1 ))
+    else verdict=UNCLASSIFIED; fi
+    print -r -- "$id | candidate $c | dev $d | $verdict"
+  done
+  say "leftover-timer reclaim lines (pytest session end; none printed = nothing left)"
+  for label in candidate dev; do
+    print "$label: $(grep -h 'leftover test processes' $OUT/CLASSIFY-$label.txt /dev/null || print 'none')"; done
+  print "CLASSIFY: NEW $new"
+  print ""; print "==> next: report $OUT/CLASSIFY.txt to the 490 Leader"
+}
+
 case $STEP in
-  00|A|B|SUITE) step_$STEP ;;
-  *) print "usage: zsh $THIS <00|A|B|SUITE>   e.g. zsh $THIS 00 2>&1 | tee $OUT/00.txt" ;;
+  00|A|B|SUITE|CLASSIFY) step_$STEP ;;
+  *) print "usage: zsh $THIS <00|A|B|SUITE|CLASSIFY>   e.g. zsh $THIS 00 2>&1 | tee $OUT/00.txt" ;;
 esac

@@ -1,7 +1,9 @@
 """Task 490 real-host helper, run by steps.zsh with the candidate venv's Python inside the isolated project.
 
-    python -I x490.py prepare <project>            roles + Task 2 (30 minutes, A) and Task 3 (5 minutes, B), ready
-    python -I x490.py accept <project> <task id>    implementing -> reviewing -> awaiting-integration, then task integrate
+    python -I x490.py prepare <project>            roles + Task 4 (30 minutes, A) and Task 3 (5 minutes, B), ready
+    python -I x490.py decide <project> <alias> <task id> <s>   the alias's latest submission (agent-runner reports):
+                                                   check its commit has probe-<task id>.txt, then decide-result accepted
+    python -I x490.py integrate <project> <task id>   graphtraj task integrate -- <check probe-<task id>.txt exists>
     python -I x490.py timers <project>              budget_idle_timer processes whose Session lies in <project>
     python -I x490.py ended <project> <alias> <s>   the Session's current execution has its terminal record
     python -I x490.py settle <project> <leader> <engineer> <s>   both ended and no new execution for 20 s
@@ -10,7 +12,8 @@
     python -I x490.py delivered <project> <engineer> <leader>   the Engineer's budget notice reached the Leader
     python -I x490.py notices <project>             execution-budget-exceeded records per Session (time, key, delivery)
 
-Task 1 (1 minute) of an earlier 00 is left registered and unused: its thresholds pass while the Team runs (R1).
+Task 1 (1 minute) and Task 2 of earlier runs are left registered and unused: Task 1's thresholds pass while the
+Team runs (R1); Task 2 was moved to awaiting-integration by a state update without an acceptance (R2).
 
 It never signals a process. Exit status: 0 = the observation passed, 1 = it failed, 2 = could not observe.
 """
@@ -42,7 +45,7 @@ execution_budget:
 
 Reply with one line DONE. Use no tool.
 '''
-TASKS = {'2': ('timer-a', 30), '3': ('timer-b5', 5)}
+TASKS = {'3': ('timer-b5', 5), '4': ('timer-a4', 30)}
 
 
 def run(*argv: str, cwd: Path) -> subprocess.CompletedProcess:
@@ -99,34 +102,55 @@ def prepare(project: Path) -> int:
     return 1 if rc or 'roles: OK' not in doctor.stdout else 0
 
 
-def accept(project: Path, task_id: str) -> int:
-    """Stand in for an accepted result: the public state updates, then Main's task integrate."""
-    record = task_record(project, task_id)
-    if record['status'] == 'integrated':
-        print(f'task {task_id} already integrated')
-        return 0
-    worktree = project / record['worktree']
-    candidate = run('git', 'rev-parse', 'HEAD', cwd=worktree).stdout.strip()
-    work = project / '.graphtraj/probe-490'
-    for status in ('reviewing', 'awaiting-integration'):
-        record = task_record(project, task_id)
-        if record['status'] in ('awaiting-integration',) and status == 'reviewing':
-            continue
-        if record['status'] == status:
-            continue
-        change = work / f'{status}-{task_id}.yml'
-        change.write_text(yaml.safe_dump({
-            'task_id': task_id, 'status': status, 'active_team_ordinal': record['active_team_ordinal'],
-            'worktree': record['worktree'], 'branch': record['branch'], 'current_candidate': candidate,
-            'caused_by_event_ids': [], 'evidence_refs': ['.graphtraj/probe-490/evidence.md']}))
-        if run(graphtraj(), 'task', 'update', '--state-file', str(change), cwd=project).returncode:
-            return 2
-        print(f'task {task_id}: {status} (candidate {candidate[:12]})')
-    if run(graphtraj(), 'task', 'integrate', '--task-id', task_id, '--', sys.executable, '-c', 'pass',
-           cwd=project).returncode:
+def runner() -> str:
+    return str(Path(sys.executable).parent / 'agent-runner')
+
+
+def decide(project: Path, alias: str, task_id: str, seconds: float) -> int:
+    """Accept the alias's latest submission through Main's public decision, as realhost-402 step 2 does.
+
+    The decision sets the Task to awaiting-integration: the timer's exit condition this step observes.
+    """
+    deadline = time.time() + seconds
+    while True:
+        shown = run(runner(), 'reports', alias, cwd=project)
+        submissions = ((yaml.safe_load(shown.stdout) or {}) if shown.returncode == 0 else {}).get('submissions') or []
+        if submissions or time.time() >= deadline:
+            break
+        time.sleep(5)
+    if not submissions:
+        print(f'{alias} submitted nothing within {seconds:.0f} s; see its Trace')
         return 2
-    print(f'task {task_id}: {task_record(project, task_id)["status"]}')
-    return 0
+    latest = submissions[-1]
+    probe = f'probe-{task_id}.txt'
+    worktree = project / task_record(project, task_id)['worktree']
+    present = run('git', '-C', str(worktree), 'cat-file', '-e', f'{latest["candidate"]}:{probe}', cwd=project).returncode == 0
+    evidence = f'decision-{task_id}.md'
+    (project / evidence).write_text(f'Submission {latest["event_id"]} candidate {latest["candidate"]}: '
+                                    f'{probe} present in the commit: {"yes" if present else "no"}\n')
+    print(f'submission {latest["event_id"]} candidate {latest["candidate"]} result_refs {latest.get("result_refs")}; '
+          f'{probe} in the commit: {"yes" if present else "no"}')
+    if not present:
+        return 2
+    arguments = ['decide-result', '--submission-id', latest['event_id'], '--commit', latest['candidate'],
+                 '--decision', 'accepted', '--reason', f'490 probe {probe} committed', '--evidence-ref', evidence]
+    for ref in latest.get('evidence_refs') or []:
+        arguments += ['--evidence-ref', ref]
+    decided = run(runner(), *arguments, cwd=project)
+    print(decided.stdout.strip()[-600:])
+    status = task_record(project, task_id)['status']
+    print(f'decision: {"OK" if decided.returncode == 0 else "NO"} (task {task_id} status {status})')
+    return 0 if decided.returncode == 0 and status == 'awaiting-integration' else 2
+
+
+def integrate(project: Path, task_id: str) -> int:
+    """Main's task integrate with a validation that the accepted probe file is in the integrated tree."""
+    check = f"from pathlib import Path; assert Path('probe-{task_id}.txt').is_file()"
+    done = run(graphtraj(), 'task', 'integrate', '--task-id', task_id, '--', sys.executable, '-c', check, cwd=project)
+    print(done.stdout.strip()[-600:])
+    status = task_record(project, task_id)['status']
+    print(f'integration: {"OK" if done.returncode == 0 and status == "integrated" else "NO"} (task {task_id} status {status})')
+    return 0 if done.returncode == 0 and status == 'integrated' else 2
 
 
 def processes() -> list[tuple[int, int, str, str]]:
@@ -308,8 +332,10 @@ def main() -> int:
     command, project = sys.argv[1], Path(sys.argv[2])
     if command == 'prepare':
         return prepare(project)
-    if command == 'accept':
-        return accept(project, sys.argv[3])
+    if command == 'decide':
+        return decide(project, sys.argv[3], sys.argv[4], float(sys.argv[5]))
+    if command == 'integrate':
+        return integrate(project, sys.argv[3])
     if command == 'timers':
         return timers(project)
     if command == 'ended':

@@ -179,3 +179,72 @@ collected: OK (y)
 delivered: OK (Engineer execution-budget-exceeded notice received by L1)
 cleanup: NO (Task 3; cleanup_status: refused code: worktree-busy )
 FAIL B (a line above is NO)
+
+
+# Round 2 correction rehearsal (A/B acceptance through submit_result + decide-result + task integrate), set -u, 2026-11-16 ~19:04-19:07
+
+## step A on the rehearsal project (Tasks 1-3 from earlier runs): prepare registers Task 4; the stub host refuses the launch -> STOP
+
+### [A] Task 4 (30-minute budget): a root member commits probe-4.txt and submits it, then ends -> its idle timer waits; Main's decision accepts the submission (Task awaiting-integration) -> the timer is gone within ~5 s and sent nothing; then task integrate and cleanup. Dialog: expected none (the probe's one Bash commit and its tasks tool submit_result run under permission_mode auto); if a native 
+roles OK
+task 4 timer-a4: budget 30 min, status ready
+STOP: launch failed:
+retained_batch_file: /private/tmp/claude-501/b490/project/.graphtraj/state/batches/20261116T190447.556981+0900.yml
+tasks:
+- task_id: '4'
+  task_name: timer-a4
+  role: member
+  launch_status: failed
+  error:
+    code: invalid-config
+    message: Claude Code 2.1.299 or later is required.
+Claude Code 2.1.299 or later is required.
+
+## step B: Task 3 already registered; stub host -> STOP
+
+### [B] Task 3 (5-minute budget; planned end about 5:00, allowance about 5:45 after the Leader starts): a Leader launches one Engineer, then commits probe-3.txt and submits it; both end and settle (the Engineer's completion resumes the Leader once, not through a timer). The steps then remove the Leader's own timer record (that timer's existing exit, no signal) so the Engineer's timer observes the 
+task 3 already registered (ready): register skipped
+roles OK
+task 3 timer-b5: budget 5 min, status ready
+STOP: launch failed:
+
+## the batch instructions as written (YAML parsed by agent-runner before the host refusal)
+instruction: "In your Worktree run exactly one Bash command: echo 4 > probe-4.txt && git add probe-4.txt && git commit -m 'Add probe 4'. Then submit the result with the GraphTraj tasks tool feature submit_result: commit = the new HEAD, result_refs = [probe-4.txt], completion = 'probe 4 committed'. Then reply with one line DONE."
+instruction: "Use your GraphTraj agents tool to launch exactly one child with role engineer for this Task and the instruction: Reply with one line DONE. Use no tool. Wait for its result. In your Worktree run exactly one Bash command: echo 3 > probe-3.txt && git add probe-3.txt && git commit -m 'Add probe 3'. Then submit the result with the GraphTraj tasks tool feature submit_result: commit = the new HEAD, result_refs = [probe-3.txt], completion = 'probe 3 committed'. Then reply with one line DONE. If a GraphTraj budget notice arrives later, reply with one line NOTED and use no tool."
+
+## x490 decide / integrate on a fabricated project (driver $TMPDIR/r2-drive.zsh): stub agent-runner (reports from a file; decide-result logs and records awaiting-integration) and stub graphtraj (task integrate logs, runs the validation in the worktree, records integrated) beside a link to the candidate venv's python
+== decide: no submission within 1 s -> rc 2
+m1@x submitted nothing within 1 s; see its Trace
+  -> rc 2
+== decide: latest submission's commit lacks probe-4.txt -> rc 2, no decide-result call
+command failed: git -C $TMPDIR/fp490/wt cat-file -e 2705502e30b3556256743ed8f828b6597f1a4451:probe-4.txt 
+ fatal: path 'probe-4.txt' exists on disk, but not in '2705502e30b3556256743ed8f828b6597f1a4451'
+
+submission s1 candidate 2705502e30b3556256743ed8f828b6597f1a4451 result_refs ['probe-4.txt']; probe-4.txt in the commit: no
+  -> rc 2
+== decide: commit has probe-4.txt -> decide-result with the submission, commit and evidence refs -> rc 0
+submission s2 candidate c08327939a8440485744feeef5d372e19402bd34 result_refs ['probe-4.txt']; probe-4.txt in the commit: yes
+decision: accepted
+decision: OK (task 4 status awaiting-integration)
+  -> rc 0
+decision evidence: Submission s2 candidate c08327939a8440485744feeef5d372e19402bd34: probe-4.txt present in the commit: yes
+== integrate: validation finds probe-4.txt -> rc 0
+integration_status: integrated
+integration: OK (task 4 status integrated)
+  -> rc 0
+== integrate: validation fails (probe missing in the tree) -> rc 2
+command failed: $TMPDIR/stubvenv490/bin/graphtraj task integrate --task-id 4 -- $TMPDIR/stubvenv490/bin/python -c from pathlib import Path; assert Path('probe-4.txt').is_file() 
+ validation failed
+Traceback (most recent call last):
+  File "<string>", line 1, in <module>
+    from pathlib import Path; assert Path('probe-4.txt').is_file()
+                                     ~~~~~~~~~~~~~~~~~~~~~~~~~~~^^
+AssertionError
+
+validation failed
+integration: NO (task 4 status awaiting-integration)
+  -> rc 2
+== calls made (stubs):
+agent-runner decide-result --submission-id s2 --commit c08327939a8440485744feeef5d372e19402bd34 --decision accepted --reason 490 probe probe-4.txt committed --evidence-ref decision-4.md --evidence-ref .graphtraj/x/trace.md
+graphtraj task integrate --task-id 4 -- $TMPDIR/stubvenv490/bin/python -c from pathlib import Path; assert Path('probe-4.txt').is_file()
+graphtraj task integrate --task-id 4 -- $TMPDIR/stubvenv490/bin/python -c from pathlib import Path; assert Path('probe-4.txt').is_file()

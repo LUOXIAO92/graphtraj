@@ -214,7 +214,7 @@ step_S() {
 step_F() {
   say "[F] read only. Dialog: none."
   local rt sess; read rt sess < $OUT/00-production-main.txt
-  (cd $H && clean $PY -I $SD/probe.py main $H $rt $sess)
+  (cd $H && clean $PY -I $SD/probe.py main $H ${rt:-none} ${sess:-none})
   if [[ "$(runtime_records)" == "$(cat $OUT/00-production-runtime.txt)" ]]; then print "PASS F production .venv-runtime unchanged: $(runtime_records | tr '\n' ' ')"
   else print "FAIL F production .venv-runtime changed: now $(runtime_records | tr '\n' ' ') / at 00 $(tr '\n' ' ' < $OUT/00-production-runtime.txt)"; fi
   local pids=($OUT/*.pid(N))

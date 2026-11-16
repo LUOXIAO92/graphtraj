@@ -6,7 +6,8 @@
 # Each step: a fresh git clone of the exact commit under Harness tmp/487, its own test venv (dependencies linked
 # read-only from production .venv-runtime into the venv's own site-packages, as verify-482/484), pytest temp in
 # ${TMPDIR:-/tmp} (refused if inside the Harness). Dialog: none (no model, no native host). Run one at a time,
-# not alongside another Task's suite. Bounded waits: R0/R1 900 s + 20 s stop (about 15 min with setup); SUITE 1500 s.
+# not alongside another Task's suite. Bounded waits: R0/R1 900 s + 20 s stop (about 15 min with setup);
+# SUITE 1500 s + a 600 s rerun of its failing files on dev (+ a dev build if R0's clone is missing): plan 35 min.
 # R0/R1 runs: 6 workers x (core set x6 = 36 runs each, slow D/G x2 = 12 each, observe-only files x1 = 6 each, last).
 set -u
 H=/Users/luoxiao/workspace/you-are-a-product-architect-delivery
@@ -81,10 +82,16 @@ step_R1() {
 }
 
 step_SUITE() {
-  say "[SUITE] full suite of candidate $CAND from a fresh clone, 6 shards (scripts/run_test_shards.py). Dialog: none. Limit 1500 s."
+  say "[SUITE] full suite of candidate $CAND from a fresh clone, 6 shards (scripts/run_test_shards.py), then its failing files once on dev $DEV. Dialog: none. Limits: suite 1500 s, dev recheck 600 s (+ dev build if R0's clone is missing)."
   check_tmp || return 1
+  local L=$OUT/SUITE-shards rc
+  if [[ -n ${VERIFY487_FAILURES:-} ]]; then
+    # Rehearsal of the dev comparison only (Main never sets it): no suite, the given failures file.
+    print "REHEARSAL: suite not run; failures from $VERIFY487_FAILURES"
+    rm -rf $L; mkdir -p $L; cp $VERIFY487_FAILURES $L/failures.txt; rc=1; : > $OUT/SUITE-suite.txt
+  else
   build $CAND $BASE/suite || return 1
-  local src=$BASE/suite/src VT=$BASE/suite/venv L=$OUT/SUITE-shards
+  local src=$BASE/suite/src VT=$BASE/suite/venv
   local cmd=(env -i HOME=$HOME USER=${USER:-luoxiao} PATH=$VT/bin:/opt/homebrew/bin:/usr/bin:/bin TMPDIR=$TMPB LANG=${LANG:-en_US.UTF-8}
              $VT/bin/python -I -c 'import os, signal, subprocess, sys
 child = subprocess.Popen(sys.argv[1:], start_new_session=True)
@@ -101,15 +108,28 @@ except subprocess.TimeoutExpired:
   rm -rf $L; mkdir -p $L
   print "== start $(date +%T) commit $(git -C $src rev-parse HEAD)"
   (cd $src && $cmd) > $OUT/SUITE-suite.txt 2>&1
-  local rc=$?
+  rc=$?
+  fi
   print "== shards exit $rc at $(date +%T); output $OUT/SUITE-suite.txt, shard logs $L/"
   tail -n 4 $OUT/SUITE-suite.txt
   touch $L/failures.txt
   print "== failures ($(wc -l < $L/failures.txt | tr -d ' ')):"; cat $L/failures.txt
-  print "== dev comparison: 478/484 suites on dev ancestors had 0 failed (484 S); dev $DEV's intermittent set is R0 above."
-  print "   Any failure listed here that is not one of R0's intermittent tests is NEW. Totals: $(grep -E '[0-9]+ (passed|failed)' $OUT/SUITE-suite.txt | tail -1)"
-  if [[ $rc == 0 && ! -s $L/failures.txt ]]; then print "PASS SUITE no failures"
-  else print "CHECK SUITE (shards exit $rc): compare the failures above with $OUT/R0-repeat/counts.txt"; fi
+  local abnormal=$(grep -c "ABNORMAL" $OUT/SUITE-suite.txt)
+  (( abnormal )) && { print "== ABNORMAL lines in the shard output:"; grep "ABNORMAL" $OUT/SUITE-suite.txt; }
+  if [[ ! -s $L/failures.txt ]]; then
+    if [[ $rc == 0 ]]; then print "PASS SUITE no failures"
+    else print "FAIL SUITE shards exit $rc with no failing id (ABNORMAL above or a stopped run)"; fi
+  else
+    say "dev comparison: the failing ids' files once on dev $DEV, same TMPDIR $TMPB; limit 600 s (stops the run's process group)"
+    local D=$BASE/R0
+    if [[ $(git -C $D/src rev-parse HEAD 2>/dev/null) == $(git -C $SRC rev-parse $DEV) && -x $D/venv/bin/python ]]; then
+      print "dev clone reused: $D/src at $(git -C $D/src rev-parse HEAD)"
+    else build $DEV $D || return 1; fi
+    (cd $D/src && clean $D/venv/bin/python -I $SD/devcheck.py $L/failures.txt 600)
+    local dc=$?
+    if [[ $dc == 0 && $abnormal == 0 ]]; then print "PASS SUITE no NEW failures (every failing id fails on dev too)"
+    else print "FAIL SUITE: NEW or unclassified failures (above) or ABNORMAL shard output ($abnormal)"; fi
+  fi
   next "report $OUT/R0.txt, R1.txt, SUITE.txt to the 487 Leader"
 }
 

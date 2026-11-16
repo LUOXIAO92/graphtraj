@@ -91,16 +91,19 @@ def answered(invoke: Callable, agent: str, shown: Sequence[dict] = ()) -> dict:
     A quick child can end before its own create, send or resume returns, so that
     result may carry its notice. The wait that follows still shows the body (477,
     PUBLIC_API "Claude Code host"), already ``delivered``: it is not a second push.
+    An end the wait shows is never pushed again, so the wait's own result carries
+    no notice for it.
     """
     before  = len(shown)
     last    = invoke('wait', agent=agent, timeout_seconds=10)['result']['last_result']
     end     = (last['id'], last['outcome'])
-    carried = [notice['event']['message'] for notice in shown
-               if (notice['event']['execution'], notice['event']['event']) == end]
-    earlier = [notice for notice in shown[:before] if (notice['event']['execution'], notice['event']['event']) == end]
+    ours    = lambda notices: [notice['event']['message'] for notice in notices  # noqa: E731
+                               if (notice['event']['execution'], notice['event']['event']) == end]
+    carried = ours(shown[:before])
+    assert not ours(shown[before:]), (last, carried, ours(shown[before:]))
     assert len(carried) <= 1, (last, carried)
-    if earlier:
-        # Carried by an earlier result: settled there, and the wait shows the same body.
+    if carried:
+        # Carried by the child's own earlier result: settled there, and the wait shows the same body.
         assert last['notification'] == 'delivered', (last, carried)
         assert last['last_message'] in (None, carried[0]), (last, carried)
     bodies = carried + ([last['last_message']] if last['last_message'] is not None else [])

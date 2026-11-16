@@ -10,17 +10,18 @@ names the venv's Python. Codex model `gpt-6-luna`. Production Main is never yiel
 
 | Step | Who | Command | Dialog | Wait limit | Success line(s) |
 |---|---|---|---|---|---|
-| 00 | Main | `S 00` | none | 300 + 300 + 300 + 60 s (codex ask, claude ask, codex MCP, proxy) + install ≈ 120 s | `under venv: True`; `codex logged in: YES`; both `answer: OK` with `loaded: none`; `roles OK`; `task 1 ready`; `project own: True`; two `MCP … -> OK`; `create schema served: YES`; `task_graph shows probe Task 1: YES`; `app-server proxy thread/loaded/list: YES` (a connect failure is allowed here, see the note it prints); `claimed Main in $P: YES` |
-| 00u | USER, only if 00 says so | printed | Codex folder trust → Yes, hooks → approve; Claude folder → Yes, project MCP → approve | user | 00 then passes |
-| I1 | USER | `S I1` prints the command and one prompt | Codex folder trust → Yes and hooks → approve, only if asked | user ≈ 300 s | TUI prints `H484-CREATE …`, later a turn by itself with `H484-NOTICE …`; Codex kept open |
+| 00 | Main | `S 00` | none (no project trust or Main claim needed) | 60 s (MCP entry) + 300 + 300 s (codex ask, claude ask) + 60 s (proxy) + install ≈ 120 s | `under venv: True`; `roles OK`; `task 1 ready`; `project own: True`; `MCP initialize: OK`; `graphtraj tools agents and tasks served: YES`; `task_graph shows probe Task 1: YES`; `codex logged in: YES`; both `answer: OK` with `loaded: none`; `app-server proxy thread/loaded/list: YES` (a connect failure is allowed here, see the note it prints) |
+| I1 | USER (the only one) | `S I1` prints the command and one prompt | Codex's first-launch trust for the fresh project, shown together at first start: folder trust → Yes, then hook review for `.codex/hooks.json` → approve; no other dialog | user ≈ 300 s | TUI shows `GraphTraj Main Session associated`, prints `H484-CREATE …`, later a turn by itself with `H484-NOTICE …`; Codex kept open (if the association line or the tool is missing after trusting: /exit, run the same command once more) |
 | I2 | Main, Codex still open | `S I2 2>&1 \| tee OUT/I2.txt` | none | 60 s (proxy) | `PASS Main thread loaded in the shared background server`; `NOTIFICATION … delivered \| notification_error null`; `PASS 401 interactive delivered once` |
 | S | Main | `S S 2>&1 \| tee OUT/S.txt` | none | 1800 s | `outside the Harness …: YES`; pytest summary with no new failures; `pytest exit: 0` |
 | F | Main | `S F 2>&1 \| tee OUT/F.txt` | none | none (read only) | `PASS F production Main`; `PASS F production .venv-runtime unchanged`; PASS/FAIL summary |
 
-Main's run-time estimate (sum of limits): 00 ≤ 1080 s + I1 ≈ 300 s (user) + I2 ≤ 60 s + S ≤ 1800 s = **≤ 3240 s ≈ 54 min**
+Main's run-time estimate (sum of limits): 00 ≤ 840 s + I1 ≈ 300 s (user) + I2 ≤ 60 s + S ≤ 1800 s = **≤ 3000 s ≈ 50 min**
 worst case; each host call returns when done, so typically far less (00 a few minutes, S the suite's own duration).
 
 ## What each step observes
+- **MCP entry (00 b)**: `probe.py mcp` starts the server exactly as `$P/.codex/config.toml` names it (command, args,
+  cwd) and makes initialize, tools/list and one read-only `tasks` `task_graph` call; no model and no trust involved.
 - **Cause (I2 first line group)**: `probe.py daemon` makes one read-only `thread/loaded/list` call through
   `codex app-server proxy`, the same channel `send_event` uses (`src/graphtraj/runtimes/codex/host_events.py`), and
   says whether the Main's thread is loaded in the shared background server for its `CODEX_HOME`. If it is not,
@@ -37,5 +38,5 @@ worst case; each host call returns when done, so typically far less (00 a few mi
 
 ## Rehearsal without models
 `VERIFY484_NO_MODEL=1 VERIFY484_BASE=<dir outside the Harness> VERIFY484_OUT=<dir>/out S 00` installs the candidate venv,
-writes the project and stops before any model or host call; `S I1`, `S I2` (fails at the entry check without a claim),
+writes the project, runs the MCP entry check (b) and stops before any model or host call; `S I1`, `S I2` (fails at the entry check without a claim),
 `S S` (prepares the test venv, does not run the suite) and `S F` run as well.

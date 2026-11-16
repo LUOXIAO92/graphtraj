@@ -3,8 +3,9 @@
 # Task 484: 401 for an INTERACTIVE Codex Main started on Codex's shared background server, in a FRESH isolated
 # project under the Harness tmp/484, with the candidate installed into an isolated venv under tmp/484.
 # Production .venv-runtime is only read (its dependencies are linked, never changed); production Main is never yielded.
-#   zsh <this file> <00|00u|I1|I2|S|F>
-# Order: 00 -> (00u, USER, only if 00 says so) -> I1 (USER, interactive Codex) -> I2 (judge, Codex still open) -> S -> F.
+#   zsh <this file> <00|I1|I2|S|F>
+# Order: 00 -> I1 (the only USER step: interactive Codex, one pasted prompt) -> I2 (judge, Codex still open) -> S -> F.
+# 00 needs no project trust and no Main claim; the first trust happens in I1.
 set -u
 H=/Users/luoxiao/workspace/you-are-a-product-architect-delivery
 SD=${0:A:h}
@@ -46,19 +47,6 @@ make_venv() {
   return ${pipestatus[1]}
 }
 CREATE="{\"action\":\"execute\",\"feature\":\"create\",\"arguments\":{\"runtime\":\"claude\",\"configuration\":\"advisor\",\"name\":\"h484\",\"instruction\":\"Reply with exactly one line: PONG-h484. Use no tools.\"}}"
-mcp_calls() { $PY -I -c 'import json,sys
-n = 0
-for l in open(sys.argv[1], errors="replace"):
-    try: d = json.loads(l)
-    except ValueError: continue
-    it = d.get("item") or {}
-    if it.get("type") == "mcp_tool_call" and d.get("type") == "item.completed":
-        n += 1; res = it.get("result"); err = it.get("error") or (it.get("status") if it.get("status") not in ("completed", None) else None)
-        text = "".join(c.get("text", "") for c in ((res or {}).get("content") or []) if isinstance(c, dict))
-        ok = res is not None and not err and "error:" not in text[:400]
-        print("MCP", json.dumps(it.get("arguments"))[:120], "->", "OK" if ok else "BLOCKED", (json.dumps(err) if err else text)[:600].replace("\n", " | "))
-print("mcp calls completed:", n)' $1; }
-
 step_00() {
   say "[00] preflight. Dialog: none. Output also in $OUT/00.txt"
   local commit=$(git -C $SRC rev-parse HEAD) dirty=$(git -C $SRC status --porcelain | wc -l | tr -d ' ')
@@ -123,11 +111,14 @@ args = []
 cwd = \"$P\"
 default_tools_approval_mode = \"approve\"" > $P/.codex/config.toml
   print "wrote $P/.codex/config.toml:"; sed 's/^/    /' $P/.codex/config.toml
+  say "(b) the GraphTraj MCP entry the interactive Main uses: the server exactly as $P/.codex/config.toml names it (initialize, tools/list, tasks task_graph; no model, limit 60 s)"
+  (cd $P && clean /usr/bin/perl -e 'alarm 60; exec @ARGV' $PY -I $SD/probe.py mcp $P/.codex/config.toml) \
+    || { print "STOP: the graphtraj MCP entry does not serve (text above)"; return 1; }
   [[ -n ${VERIFY484_NO_MODEL:-} ]] && { print "VERIFY484_NO_MODEL set: stopping before any model or host call (rehearsal)."; return 0; }
 
   local ASK='Reply with exactly three lines. Line 1: MODEL OK. Line 2: MODEL: your model name. Line 3: FILES: the absolute path of every AGENTS.md or CLAUDE.md whose contents you were given as instructions, or NONE. Use no tool.'
   print -r -- "$ASK" > $OUT/00-ask.txt
-  say "(a) codex login; codex exec $CODEX_MODEL one-line answer (limit 300 s); claude -p (the advisor's host; limit 300 s)"
+  say "(a) codex login; codex exec $CODEX_MODEL one-line answer (limit 300 s); claude -p (the advisor's host; limit 300 s). Neither shows a dialog."
   if clean codex login status 2>&1 | grep -q 'Logged in'; then print "codex logged in: YES"; else print "codex logged in: NO"; fi
   (cd $P && limit 300 codex exec -m $CODEX_MODEL --sandbox read-only - < $OUT/00-ask.txt > $OUT/00-codex.txt 2>&1)
   (cd $P && limit 300 $(claude_bin) -p --model $MODEL --output-format json --mcp-config $P/.mcp.json --strict-mcp-config < $OUT/00-ask.txt > $OUT/00-claude.txt 2>&1)
@@ -138,38 +129,23 @@ default_tools_approval_mode = \"approve\"" > $P/.codex/config.toml
     print "$host answer: $ok | model line: $(grep -oE 'MODEL: [^\"\\]*' $f | head -1) | Harness instruction file loaded: ${leak:-none}"
     [[ $ok == OK ]] || { print "raw $host error (tail):"; tail -5 $f; }
   done
-  say "(b) GraphTraj MCP from the project's .codex/config.toml (the entry the interactive Main uses), via codex exec (limit 300 s)"
-  print -r -- 'Call tools exactly twice, nothing else. 1. The graphtraj agents tool with {"action": "describe", "feature": "create", "schema": true}. 2. The graphtraj tasks tool with {"action": "execute", "feature": "task_graph", "arguments": {}}. Then reply with one line: MCP-DONE.' > $OUT/00-mcp-prompt.txt
-  (cd $P && limit 300 codex exec -m $CODEX_MODEL --json -c 'approval_policy="never"' - < $OUT/00-mcp-prompt.txt > $OUT/00-mcp-stream.jsonl 2> $OUT/00-mcp-stderr.txt)
-  mcp_calls $OUT/00-mcp-stream.jsonl
-  grep '"describe"' $OUT/00-mcp-stream.jsonl | grep item.completed | grep -q 'configuration' && print "create schema served: YES" || print "create schema served: NO"
-  grep 'task_graph' $OUT/00-mcp-stream.jsonl | grep item.completed | grep -q 'codex-main-end-probe' && print "task_graph shows probe Task 1: YES" || print "task_graph shows probe Task 1: NO (raw in 00-mcp-stream.jsonl)"
   say "(c) codex app-server proxy (send_event's channel): one read-only thread/loaded/list, CODEX_HOME $CODEX_HOME_USED (limit 60 s)"
   probe daemon $CODEX_HOME_USED \
     || print "note: a connect failure here can mean the shared background server is not running yet; I1's interactive codex starts it, I2 asks again"
-  say "continuity claims after 00 (the exec probes claim Main here only if the project hooks are trusted)"
-  probe claims $P
-  grep -q '"runtime": *"codex"' $P/.graphtraj/runner/main-sessions/continuity.jsonl 2>/dev/null \
-    && print "00's codex exec probes claimed Main in $P: YES" \
-    || { print "00's codex exec probes claimed Main in $P: NO -> folder/hooks not trusted yet"; next "USER: zsh $THIS 00u   (then Main: zsh $THIS 00)"; return 1; }
-  print "Success: 'under venv: True', 'codex logged in: YES', both 'answer: OK' with 'loaded: none', roles OK, task 1 ready,"
-  print "'project own: True', two MCP lines OK, 'create schema served: YES', 'task_graph shows probe Task 1: YES', claimed Main: YES."
+  print "Success: 'under venv: True', roles OK, task 1 ready, 'project own: True', 'MCP initialize: OK', 'tools agents and tasks served: YES',"
+  print "'task_graph shows probe Task 1: YES', 'codex logged in: YES', both 'answer: OK' with 'loaded: none', and the proxy line (YES, or NO with the note)."
   next "USER step: zsh $THIS I1   (prints what the user runs and pastes)"
-}
-
-step_00u() {
-  say "[00u] USER, once, only when 00 says so. Dialog: Codex folder trust for $P -> 'Yes'; project hooks $P/.codex/hooks.json -> approve; Claude: 'Yes, proceed' and approve the project MCP. Plain macOS Terminal:"
-  print "  cd $P && codex -m $CODEX_MODEL     -> trust the folder, approve the hooks if asked; then /exit"
-  print "  cd $P && claude                    -> 'Yes, proceed'; approve the project MCP 'agents' if asked; then /exit"
-  next "zsh $THIS 00"
 }
 
 step_I1() {
   $PY -I -c 'import time; print(time.time())' > $OUT/I1.start
   print -r -- "Using only the graphtraj agents tool: call it once with exactly $CREATE; print one line H484-CREATE <agent id>. Do not call wait or status for it, and end your turn. When a GraphTraj notice about it arrives later, quote its alias, event and execution on one line starting with H484-NOTICE and stop." > $OUT/I1-prompt.txt
-  say "[I1] USER, in your own macOS Terminal. Dialog: Codex folder trust for $P -> 'Yes' and hook approval for $P/.codex/hooks.json -> approve, each only if asked; nothing else."
+  say "[I1] the only USER step, in your own macOS Terminal. Dialog: Codex's first-launch trust for this fresh project, shown together at the first start (the one unavoidable exception):"
+  print "     first 'Do you trust the contents of this directory?' for $P -> 'Yes'; then the hook review for $P/.codex/hooks.json -> approve."
+  print "     No other dialog should appear (the graphtraj tools are pre-approved in $P/.codex/config.toml)."
   print "  1. cd $P && codex -m $CODEX_MODEL"
   print "     (exactly this: no -c or other options. If Codex prints 'Running without the shared background server: ...', copy that line to Main.)"
+  print "     If after trusting, the startup does not show 'GraphTraj Main Session associated' or the graphtraj tool is missing: /exit and run the same command once more."
   print "  2. paste this one prompt (also in $OUT/I1-prompt.txt):"
   print -r -- "$(cat $OUT/I1-prompt.txt)"
   print "  3. wait until a new turn starts by itself and prints H484-NOTICE, or 3 minutes; wait one more minute (a second delivery would show)."
@@ -230,8 +206,8 @@ step_F() {
 dispatch() {
 case $STEP in
   00) step_00 2>&1 | tee $OUT/00.txt; return ${pipestatus[1]} ;;
-  00u|I1|I2|S|F) step_$STEP ;;
-  *) print "usage: zsh $THIS <00|00u|I1|I2|S|F>" ;;
+  I1|I2|S|F) step_$STEP ;;
+  *) print "usage: zsh $THIS <00|I1|I2|S|F>" ;;
 esac
 }
 dispatch; exit $?

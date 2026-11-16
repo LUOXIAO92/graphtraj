@@ -6,7 +6,8 @@ the Codex shared background server through `codex app-server proxy` (one read-on
 
   probe.py prepare PROJECT              roles.yml (advisor: Claude) and role_tree, a fresh Task 1 ready
   probe.py claims PROJECT               continuity claims
-  probe.py agent PROJECT NAME           NAME's control record: each execution's notification and notification_error
+  probe.py mcp CONFIG_TOML              the graphtraj MCP server as CONFIG names it: initialize, tools/list, task_graph
+  probe.py agent PROJECT NAME          NAME's control record: each execution's notification and notification_error
   probe.py daemon CODEX_HOME [THREAD]   one read-only thread/loaded/list through `codex app-server proxy`; with
                                         THREAD, whether that thread is loaded in the shared background server
   probe.py rollout PROJECT NAME THREAD CODEX_HOME   401: deliveries of NAME's end in THREAD's rollout, by identity
@@ -170,6 +171,53 @@ def daemon(codex_home: str, thread: str | None) -> int:
     return 0
 
 
+def mcp(config: Path) -> int:
+    """One read-only session with the graphtraj MCP server exactly as CONFIG (.codex/config.toml) names it:
+    initialize, tools/list and one ``tasks`` ``task_graph`` call (newline-delimited JSON-RPC over stdio)."""
+    import tomllib
+
+    server = tomllib.loads(config.read_text())['mcp_servers']['graphtraj']
+    argv   = [server['command'], *server.get('args', [])]
+    say('MCP server from', config, ':', argv, 'cwd', server['cwd'])
+    proc = subprocess.Popen(argv, cwd=server['cwd'], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                            stderr=subprocess.PIPE, text=True)
+
+    def request(number: int, method: str, params: dict) -> dict:
+        proc.stdin.write(json.dumps({'jsonrpc': '2.0', 'id': number, 'method': method, 'params': params}) + '\n')
+        proc.stdin.flush()
+        while line := proc.stdout.readline():
+            reply = json.loads(line)
+            if reply.get('id') == number:
+                return reply
+        raise RuntimeError(f'{method}: server closed; stderr {proc.stderr.read()[-600:]}')
+
+    try:
+        init = request(1, 'initialize', {'protocolVersion': '2025-06-18', 'capabilities': {},
+                                         'clientInfo': {'name': 'verify-484', 'version': '1'}})
+        say('MCP initialize:', 'OK' if 'result' in init else 'FAILED', json.dumps(init)[:300])
+        proc.stdin.write(json.dumps({'jsonrpc': '2.0', 'method': 'notifications/initialized'}) + '\n')
+        proc.stdin.flush()
+        tools = [t.get('name') for t in request(2, 'tools/list', {}).get('result', {}).get('tools', [])]
+        say('MCP tools/list:', tools)
+        graph = request(3, 'tools/call', {'name': 'tasks', 'arguments': {
+            'action': 'execute', 'feature': 'task_graph', 'arguments': {}}})
+    except Exception as error:  # printed as evidence
+        say('MCP session FAILED:', type(error).__name__, str(error)[:600])
+        return 1
+    finally:
+        proc.stdin.close()
+        try:
+            proc.wait(10)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+    text = json.dumps(graph)
+    say('MCP tasks task_graph:', 'error' if 'error' in graph or graph.get('result', {}).get('isError') else 'OK', text[:400])
+    ok = {'agents', 'tasks'} <= set(tools) and NAME in text
+    say('graphtraj tools agents and tasks served:', 'YES' if {'agents', 'tasks'} <= set(tools) else 'NO')
+    say('task_graph shows probe Task 1:', 'YES' if NAME in text else 'NO')
+    return 0 if ok else 1
+
+
 def jsonl(path: Path) -> list[tuple[int, object]]:
     """Parsed records of a JSONL file with their line numbers."""
     out = []
@@ -249,6 +297,8 @@ def main() -> int:
         return claims_only(Path(args[0]))
     if cmd == 'agent':
         return agent(Path(args[0]), args[1])
+    if cmd == 'mcp':
+        return mcp(Path(args[0]))
     if cmd == 'daemon':
         return daemon(args[0], args[1] if len(args) > 1 else None)
     if cmd == 'rollout':

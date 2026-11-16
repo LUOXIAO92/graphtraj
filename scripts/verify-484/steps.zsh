@@ -126,7 +126,8 @@ default_tools_approval_mode = \"approve\"" > $P/.codex/config.toml
     local f=$OUT/00-$host.txt ok=BLOCKED leak=""
     grep -q 'MODEL OK' $f && ok=OK
     grep -oE "$H/[^ \"]*(AGENTS|CLAUDE)\.md" $f | grep -v "^$P/" | head -1 | read leak
-    print "$host answer: $ok | model line: $(grep -oE 'MODEL: [^\"\\]*' $f | head -1) | Harness instruction file loaded: ${leak:-none}"
+    # The answer is the last 'MODEL:' line (Codex echoes the prompt first); Codex's header names its model.
+    print "$host answer: $ok | model line: $(grep -oE 'MODEL: [^\"\\]*' $f | tail -1) | header model: $(grep -m1 -E '^model: ' $f | cut -c8- || true) | Harness instruction file loaded: ${leak:-none}"
     [[ $ok == OK ]] || { print "raw $host error (tail):"; tail -5 $f; }
   done
   say "(c) codex app-server proxy (send_event's channel): one read-only thread/loaded/list, CODEX_HOME $CODEX_HOME_USED (limit 60 s)"
@@ -174,16 +175,40 @@ print(c[-1]["session"], (c[-1].get("connection") or {}).get("codex_home", "")) i
 }
 
 step_S() {
-  say "[S] full suite of the candidate checkout $SRC ($(git -C $SRC rev-parse HEAD)) in its own test venv $VT. Dialog: none. Limit 1800 s."
+  say "[S] full suite of the candidate checkout $SRC ($(git -C $SRC rev-parse HEAD)) in its own test venv $VT, 6 shards (scripts/run_test_shards.py). Dialog: none. Limit 1500 s (stops the whole process group)."
   make_venv $VT -e $SRC/src/graftling -e $SRC || { print "STOP: test venv install failed (text above)"; return 1; }
-  local tmp=${TMPDIR:-/tmp}
+  local tmp=${TMPDIR:-/tmp} L=$OUT/S-shards
   print "pytest temp base: ${tmp:A} | outside the Harness $H: $([[ ${tmp:A} != $H* ]] && print YES || print NO)"
   [[ ${tmp:A} != $H* ]] || { print "STOP: TMPDIR is inside the Harness"; return 1; }
+  # A 1500 s self-limit that stops the shard runner's whole process group (verify-482 suite()).
   local cmd=(env -i HOME=$HOME USER=${USER:-luoxiao} PATH=$VT/bin:/opt/homebrew/bin:/usr/bin:/bin TMPDIR=$tmp LANG=${LANG:-en_US.UTF-8}
-             /usr/bin/perl -e 'alarm 1800; exec @ARGV' $VT/bin/python -m pytest -p no:cacheprovider -q)
+             $VT/bin/python -I -c 'import os, signal, subprocess, sys
+child = subprocess.Popen(sys.argv[1:], start_new_session=True)
+try:
+    sys.exit(child.wait(timeout=1500))
+except subprocess.TimeoutExpired:
+    print("== 1500 s limit reached: stopping the suite", flush=True)
+    os.killpg(child.pid, signal.SIGTERM)
+    try:
+        child.wait(timeout=10)
+    except subprocess.TimeoutExpired:
+        os.killpg(child.pid, signal.SIGKILL)
+    sys.exit(124)' $VT/bin/python $SRC/scripts/run_test_shards.py --shards 6 --log-dir $L)
   print "command (in $SRC): ${(q)cmd[@]}"
   [[ -n ${VERIFY484_NO_MODEL:-} ]] && { print "VERIFY484_NO_MODEL set: test venv ready, suite not run (rehearsal)."; return 0; }
-  (cd $SRC && $cmd | tail -40; print "pytest exit: ${pipestatus[1]}")
+  rm -rf $L; mkdir -p $L
+  print "== start $(date +%T) commit $(git -C $SRC rev-parse HEAD)"
+  (cd $SRC && $cmd) > $OUT/S-suite.txt 2>&1
+  local rc=$?
+  print "== shards exit $rc at $(date +%T); output $OUT/S-suite.txt, shard logs $L/"
+  tail -n 4 $OUT/S-suite.txt
+  grep -h "^leftover processes" $OUT/S-suite.txt
+  touch $L/failures.txt
+  print "== failures.txt ($(wc -l < $L/failures.txt | tr -d ' ')):"; cat $L/failures.txt
+  print "== baseline: dev a3fe1b92 (Task 478 adoption/raw-a3fe1b92/S-suite.txt): 0 failed / 4128 passed / 69 skipped;"
+  print "   484's base 6160ed7a = a3fe1b92 + AGENTS.md only. Candidate totals: $(grep -E '[0-9]+ (passed|failed)' $OUT/S-suite.txt | tail -1)"
+  if [[ $rc == 0 && ! -s $L/failures.txt ]]; then print "PASS S no new failures (baseline had none)"
+  else print "FAIL S (shards exit $rc); new failures (the baseline had none):"; sed 's/^/  /' $L/failures.txt; fi
   next "zsh $THIS F 2>&1 | tee $OUT/F.txt"
 }
 
